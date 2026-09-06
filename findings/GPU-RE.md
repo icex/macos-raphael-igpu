@@ -29,7 +29,9 @@ failure has moved through three of them:
 |---|---|
 | `BGM` | **complete** — every stage of `bgm_create`, plus VBIOS init and GDDR6 memory training |
 | `GVM` | **complete** — UMC, VM, HDP and ATHUB all resolve handlers |
-| `PSP` | current blocker — `PSP init/power-up failed` at `EVENT__SW_INIT` |
+| `PSP` | SW_INIT **complete** |
+| `SMU` | SW_INIT **complete** |
+| `PSP` HW_INIT | current blocker — `psp_ring_create: KM ring creation failed`. Apple ships **only** a PSP 11.0 implementation; this silicon needs 13.0. First point where new code is required. |
 
 Getting here took, in order: OpenCore kext injection so the patches land before `start()`;
 removing a self-inflicted conflict between the two patch mechanisms; the ASIC capability entry;
@@ -661,6 +663,123 @@ tr -d '\r' < run/serial.log | sed -n '/deferred diagnostics:/,/deferred diagnost
 
 This is what made the last four findings readable at all; every earlier attempt at a multi-line
 dump was unusable.
+
+### PSP and SMU: past the last version gate, into HW_INIT
+
+With MP0 and MP1 remapped the whole **software** init sequence completes — BGM, GVM, PSP
+and SMU all pass `EVENT__SW_INIT` — and the failure moves to `EVENT__HW_INIT`.
+
+Two gates fell first, both by the same "present what a real Navi 23 reports" rule:
+
+- **MP0/PSP.** `psp_asic_type_init` (`0x4e08d`) dispatches on the MP0 version. For major 13
+  it accepts **only minor 0, revisions 0-3**; this chip is 13.0.5, so it returns 1 and PSP's
+  SW_INIT fails. Its major-11 branch is the Navi 2x family, and upstream `psp_v11_0` handles
+  11.0.7 / 11.0.11 / 11.0.12 / 11.0.13 — Sienna Cichlid, Navy Flounder, Dimgrey Cavefish,
+  Beige Goby. Navi 23 *is* Dimgrey Cavefish, so `MP0 -> 11.0.12`.
+- **MP1/SMU.** `smu_get_hw_version` (`0x726ac`) maps the version to an internal enum and
+  `smu_init_function_pointer_list` (`0x72b33`) handles only enum `<= 0xa`, asserting
+  "Unsupported hw version!" above it. Decoding both jump tables: `13.0.5 -> enum 0x12`
+  (unsupported), `11.0.12 -> enum 0x9`. The enum order across the 11.0.x table is exactly
+  Sienna Cichlid (11.0.7 → 6), Navy Flounder (11.0.11 → 8), Dimgrey Cavefish (11.0.12 → 9),
+  Beige Goby (11.0.13 → 0xa), which confirms the reading.
+
+### Firmware comes from the IORegistry, keyed by device type
+
+HW_INIT then failed on a missing asset, not a gate:
+
+```
+AMD Error: Firmware PP_SMC_UCODE_SBIN not found in directory, for deviceId 0x000073ff
+```
+
+`AmdTtlServices::getFirmware` resolves a blob through `AMDFirmwareDirectory::getFirmware`,
+keyed on **`_AMD_DEVICE_TYPE`**, and then reads the actual bytes out of an **IORegistry
+property** whose name the directory record carries. HWLibs calls `putFirmware` exactly nine
+times, covering five device types:
+
+| `_AMD_DEVICE_TYPE` | registered |
+|---|---|
+| `0x3`, `0x4`, `0x5` | `PP_SMC_UCODE_SBIN`, `ativvaxy_nv.dat` |
+| `0x6` | `PP_SMC_UCODE_SBIN`, `ativvaxy_vcn3.dat` |
+| `0x8` | `ativvaxy_vcn3.dat` only |
+
+Tracing the lookup shows we present device type **`0x8`** — which Apple deliberately gives
+**no SMU image**, because on that part the SMU microcode comes from the VBIOS via PSP rather
+than from the driver (hence the companion property name `SMU_FalconEnableSideLoading` on the
+types that do side-load). `smu_get_fw_constants` already handles that case:
+
+```
+709fd: test byte [smu+0x2d8], 1      ; skip firmware constants entirely
+70a10: call smu_set_fw_entry_info_from_file
+70a17: je   success
+70a19: rcx = [smu+0x7a8]             ; else fall back to the driver's own source
+70a2f: call rcx
+```
+
+and `smu_set_fw_entry_info_from_file` returns 2 without even looking when bit `0x40` of that
+flags word is set. `x4` returns 2, so the fallback is used — the documented "no file firmware
+for this part" answer rather than an error. That cleared the SMU failure entirely.
+
+That the firmware is fetched from IORegistry properties is worth keeping in mind: it means a
+blob **can** be supplied from outside, the same way `ATY,bin_image` supplies the VBIOS.
+
+### The actual wall: Apple ships only a PSP 11.0 implementation
+
+What remains is not a version gate and not a missing asset:
+
+```
+psp_hardware_initialization finished loading PSP FWs
+[DRIVER] psp_ring_create: KM ring creation failed
+AMD Error: cosWaitForFunc: Timeout while waiting for function     (x20)
+```
+
+The PSP mailbox handshake times out. The reason is structural. `psp_init_pfn_ptr` (`0x4e2d4`)
+installs the PSP function pointers, and **every one of them is `*_11_0`**:
+
+```
+$ grep -oE "_psp_(ring|bootloader)_[a-z0-9_]*_(9_0|10_0|11_0|12_0|13_0)" hwlibs.nm | ...
+     20 11_0
+$ grep -cE "_psp_[a-z0-9_]*_13_0" hwlibs.nm
+0
+```
+
+There is exactly one PSP generation in the whole kext. So Apple can only drive an **MP0 11.0**
+mailbox, while this silicon's PSP is **MP0 13.0.5** — and the host's own kernel confirms what
+it really needs:
+
+```
+amdgpu 0000:7b:00.0: detected ip block number 3 <psp_v13_0_0> (psp)
+amdgpu 0000:7b:00.0: detected ip block number 4 <smu_v13_0_0> (smu)
+amdgpu 0000:7b:00.0: reserve 0xa00000 from 0xf41e000000 for PSP TMR
+```
+
+The asic-type gate makes this airtight. `psp_init_pfn_ptr` accepts only
+`asicType <= 0xf` **and** `bt 0xff60, asicType`, i.e. types {5, 6, 8, 9, 10, 11, 12, 13, 14,
+15}; and `psp_asic_type_init` maps 13.0.0 → `0x14`, 13.0.1 → `0xf`, 13.0.2 → fail,
+13.0.3 → `0x13`. Only 13.0.1 survives both — and it still receives the 11_0 pointers. There
+is no path through Apple's code that speaks the 13.0 PSP protocol.
+
+**But the seam is clean.** Apple dispatches its entire PSP through a function-pointer table at
+fixed offsets in the PSP context, all filled in one place:
+
+| offset | pointer | | offset | pointer |
+|---|---|---|---|---|
+| `+0x7da0` | `ring_init` | | `+0x7df8` | `bootloader_load` |
+| `+0x7da8` | `ring_enable_interrupt` | | `+0x7e00` | `bootloader_unload` |
+| `+0x7db0` | `ring_create` | | `+0x7e08` | `bootloader_load_sysdrv` |
+| `+0x7db8` | `ring_stop` | | `+0x7e10` | `bootloader_load_sos` |
+| `+0x7dc0` | `ring_destroy` | | `+0x7e18` | `bootloader_set_ecc_mode` |
+| `+0x7dc8` | `ring_read_hw_status_regs` | | `+0x7e20` | `bootloader_time_table` |
+| `+0x7dd0` | `ring_km_submit` | | `+0x7e28` | `reset` |
+| `+0x7dd8` | `ring_km_response` | | `+0x7e30` | `security_feature_caps_set` |
+| `+0x7de0` | `ring_km_trap_notify` | | `+0x7e38` | `bootloader_is_sos_running` |
+| `+0x7de8` | `ring_um_submit` | | `+0x7e40` | `query_mp0_ras_status` |
+| `+0x7df0` | `ring_um_get_status` | | `+0x7e48` | `hdp_flush` |
+
+So the next step is no longer version archaeology: it is to **implement `psp_v13_0` in the
+plugin** — port Linux's `psp_v13_0.c` ring and mailbox code — and overwrite those pointers
+after `psp_init_pfn_ptr` runs. That is a bounded target (about fifteen functions against a
+small upstream file), and it is the first point in this whole effort where new driver code is
+actually required rather than a redirection to code Apple already ships.
 
 ### Measure with the right instrument, or you will read false zeros
 

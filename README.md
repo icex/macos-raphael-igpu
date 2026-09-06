@@ -16,9 +16,20 @@ TTL's SWIP clients initialise in sequence; the failure has moved through three o
 | patch delivery | **solved** — OpenCore injects Lilu + this plugin into the boot collection, so every patch lands before `start()` |
 | SWIP `BGM` | **complete** — all of `bgm_create`, VBIOS init, GDDR6 memory training |
 | SWIP `GVM` | **complete** — UMC, VM, HDP and ATHUB all resolve handlers |
-| SWIP `PSP` | **current blocker** — `PSP init/power-up failed` at `EVENT__SW_INIT` |
+| SWIP `PSP` | SW_INIT **complete** |
+| SWIP `SMU` | SW_INIT **complete** |
+| `PSP` HW_INIT | **current blocker** — `psp_ring_create: KM ring creation failed` |
 
-Nothing here adds new driver code. Every change either points Apple's stack at an
+The whole **software** init sequence now completes. The remaining blocker is structural
+rather than a version gate: `AMDRadeonX6000HWLibs` contains exactly **one** PSP
+implementation generation, `psp_*_11_0` (20 functions, zero 13.0.x), so it can only drive an
+MP0 11.0 mailbox — while this silicon's PSP is MP0 13.0.5, which the host's own kernel drives
+with `psp_v13_0_0`. Apple dispatches its entire PSP through a function-pointer table at fixed
+offsets (`+0x7da0`…`+0x7e48`), so the next step is to implement `psp_v13_0` in the plugin,
+ported from upstream, and install it there. That is the first point in this effort where new
+driver code is genuinely required.
+
+Up to that point, nothing here adds new driver code. Every change either points Apple's stack at an
 implementation it already ships for a near-identical IP version, or supplies a device
 identity that a real Navi 23 would report. `findings/GPU-RE.md` is the full write-up,
 including the measurement traps that produced wrong conclusions along the way.

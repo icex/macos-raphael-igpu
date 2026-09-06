@@ -73,8 +73,12 @@ PATCHES = {
     "p1": [],
     # x1 wraps check_pcie_link_status via a Lilu route, not a byte patch.
     "x1": [],
-    # x2 wraps DevGetDeviceInfoEntry via a Lilu route, not a byte patch.
+    # x2 wraps ttlSetDeviceCapabilityEntry via a Lilu route, not a byte patch.
     "x2": [],
+    # x3 traces AMDFirmwareDirectory::getFirmware via a Lilu route, not a byte patch.
+    "x3": [],
+    # x4 wraps smu_set_fw_entry_info_from_file via a Lilu route, not a byte patch.
+    "x4": [],
 }
 
 # device properties per set. Value must be bytes.
@@ -98,6 +102,8 @@ DESCR = {
     "r1": "remap IP versions in Apple's internal table at the ipconfig_get_ip_discovery_info chokepoint: NBIF 7.3.0->7.2.0, GC 10.3.6->10.3.4, MMHUB 2.4.1->2.3.0 (guess), ATHUB 2.4.1->2.4.0, SMUIO 13.0.10->13.0.7. Replaces the per-gate byte patches and can populate a version that is ABSENT, which a byte patch cannot.",
     "d1": "diagnostic only: hook ipconfig_get_ip_discovery_info to DUMP Apple's whole internal IP table (id + version per entry) and trace bif_ip_create's arguments. No patching. This is what tells us which IPs Apple actually resolved.",
     "x2": "ASIC capability entry: DevGetDeviceInfoEntry matches _DeviceCapabilityTbl on device id + INTERNAL revision + EXTERNAL revision. Entry 268 is exactly {0x8f, 0x73ff, internal 0, external 0xcb} and 0xcb is this chip's real PCI revision, so only the internal revision id can be missing. A miss makes ipi_bgm_create abort with \"Failed to create bgm context\" regardless of how many BGM stages pass. Retries the lookup with the internal revision Apple's own table uses.",
+    "x4": "SMU microcode: we present _AMD_DEVICE_TYPE 0x8, for which Apple registers no PP_SMC_UCODE_SBIN at all -- on that part the SMU microcode comes from the VBIOS via PSP, not the driver. smu_get_fw_constants already has a fallback path for exactly that case, reached when smu_set_fw_entry_info_from_file returns nonzero (which it does by itself when flag bit 0x40 is set). Returns 2 so the fallback is used instead of erroring.",
+    "x3": "diagnostic only: trace AMDFirmwareDirectory::getFirmware. HW_INIT fails because the firmware directory has no entry for the device type we present; HWLibs registers firmware for only five _AMD_DEVICE_TYPE values (0x3-0x6 and 0x8, the last with no SMU image). This says which one we are.",
     "x1": "PCIe link status: bgm_create's last stage bio_sw_init can only succeed via pcie_ip_sw_init -> check_pcie_link_status, which needs one of device_inf slots 3/1/7 to expose a PCIe capability offset. All it computes is the cached link speed/width at pcie+0x268, which an APU GPU on the internal fabric does not have. Logs the three offsets first, then reports link OK. Expect 0xc00c020b to clear.",
     "m7": "ATHUB 2.4.1 via the 2.4.0 row -- literally one revision byte, and 2.4.0 already shares its handler with 1.3.1.",
 }
@@ -126,7 +132,7 @@ def verify():
     return ok
 
 BITS = {"m1": 1, "m2": 2, "m3": 4, "m4": 8, "m5": 16, "m6": 32, "m7": 64, "d1": 128,
-        "r1": 256, "p1": 512, "x1": 2048, "x2": 4096}
+        "r1": 256, "p1": 512, "x1": 2048, "x2": 4096, "x3": 8192, "x4": 16384}
 BA_UUID = "7C436110-AB2A-4BBB-A880-FE41995C9F82"
 
 def apply(sets_on):

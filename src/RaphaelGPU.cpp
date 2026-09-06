@@ -71,6 +71,8 @@ enum : uint32_t {
     M7 = 1u << 6,   // ATHUB 2.4.1
     X1 = 1u << 11,  // report PCIe link status OK when the chip has no PCIe capability
     X2 = 1u << 12,  // match the ASIC capability entry ignoring the internal revision id
+    X3 = 1u << 13,  // trace the firmware directory lookups
+    X4 = 1u << 14,  // no SMU microcode file for this device type; use the fallback
 };
 
 struct RPatch {
@@ -209,6 +211,8 @@ static constexpr size_t kOffCheckPcie    = 0x246a4e;   // _check_pcie_link_statu
 static constexpr size_t kOffGetDevInf    = 0x234dec;   // _bcs_get_device_inf
 static constexpr size_t kOffTtlSetDevCap = 0xaf02d;    // _ttlSetDeviceCapabilityEntry
 static constexpr size_t kOffGvmGetIpFn   = 0x19258;    // _gvm_get_ip_function
+static constexpr size_t kOffFwDirGet     = 0xb0c10;    // AMDFirmwareDirectory::getFirmware
+static constexpr size_t kOffSmuFwFile    = 0x70961;    // _smu_set_fw_entry_info_from_file
 
 // bgm_create's last stage, bio_sw_init (failure => event_id 0xc00c020b), is
 //     mov eax,1; test byte [bio+8],1; je out; call pcie_ip_sw_init ...
@@ -292,6 +296,25 @@ static const Remap remaps[] {
     // UMC_V8_7_PER_CHANNEL_OFFSET_SIENNA -- so 8.7.0 is what a real Navi 23 reports and
     // what Apple's Navi 23 support is written against.
     {0x46, 8, 7, 0, "UMC 9.5.0 -> 8.7.0 (the Navi 2x UMC; Linux wires only 8.7.0)"},
+    // MP0/PSP. psp_asic_type_init (0x4e08d) dispatches on the MP0 version and, for
+    // major 13, accepts ONLY minor 0 revisions 0-3; this chip is 13.0.5, so it returns
+    // 1 and PSP's SW_INIT fails. Its major-11 branch is the Navi 2x family, and
+    // upstream psp_v11_0 handles 11.0.7 / 11.0.11 / 11.0.12 / 11.0.13 -- Sienna
+    // Cichlid, Navy Flounder, Dimgrey Cavefish and Beige Goby. Navi 23 IS Dimgrey
+    // Cavefish, so 11.0.12 is the MP0 version belonging to the identity we already
+    // present everywhere else, and Apple's table accepts revision 12.
+    {0x4b, 11, 0, 12, "MP0 13.0.5 -> 11.0.12 (Navi 23 is Dimgrey Cavefish = MP0 11.0.12)"},
+    // MP1/SMU, the same story one client further on. smu_get_hw_version (0x726ac) maps
+    // the version to an internal enum and smu_init_function_pointer_list (0x72b33)
+    // handles only enum <= 0xa, asserting "Unsupported hw version!" above that.
+    // Decoding both of its jump tables:
+    //     13.0.5  -> enum 0x12   unsupported
+    //     11.0.12 -> enum 0x9    smu_11_0 function pointer list
+    // and the enum order over the 11.0.x table is exactly Sienna Cichlid (11.0.7 -> 6),
+    // Navy Flounder (11.0.11 -> 8), Dimgrey Cavefish (11.0.12 -> 9), Beige Goby
+    // (11.0.13 -> 0xa). Navi 23 is Dimgrey Cavefish, so 11.0.12 is both the version
+    // belonging to the identity we present and one Apple actually implements.
+    {0x04, 11, 0, 12, "MP1/SMU 13.0.5 -> 11.0.12 (enum 0x12 is unsupported; 0x9 is Navi 23)"},
 };
 
 static mach_vm_address_t orgIpcfgGet {};
@@ -300,6 +323,42 @@ static bool dumpedTable = false;
 
 static mach_vm_address_t orgTtlSetDevCap {};
 static mach_vm_address_t orgGvmGetIpFn {};
+static mach_vm_address_t orgFwDirGet {};
+static mach_vm_address_t orgSmuFwFile {};
+
+// We present _AMD_DEVICE_TYPE 0x8, and HWLibs registers NO PP_SMC_UCODE_SBIN for it --
+// only the VCN blob. That is Apple's own configuration, not a gap we introduced: of the
+// five device types it registers firmware for, 0x8 is deliberately given no SMU image,
+// because on that part the SMU microcode comes from the VBIOS via PSP rather than from
+// the driver ("side loading" is the debug alternative, hence the companion property name
+// SMU_FalconEnableSideLoading). smu_get_fw_constants already handles that:
+//     709fd: test byte [smu+0x2d8], 1     ; skip firmware constants entirely
+//     70a10: call smu_set_fw_entry_info_from_file
+//     70a17: je  success
+//     70a19: rcx = [smu+0x7a8]            ; else fall back to the driver's own source
+//     70a2f: call rcx
+// and smu_set_fw_entry_info_from_file itself returns 2 without even looking when bit
+// 0x40 of that flags word is set. So returning 2 is exactly the documented "no file
+// firmware for this part" answer, and it routes to the fallback instead of erroring.
+static uint32_t wrapSmuFwFile(void *smu, void *out) {
+    if (mask & X4) {
+        RLOG("X4: no SMU microcode file for this device type; using the fallback source");
+        return 2;
+    }
+    return FunctionCast(wrapSmuFwFile, orgSmuFwFile)(smu, out);
+}
+
+// HW_INIT fails with "Firmware PP_SMC_UCODE_SBIN not found in directory, for deviceId
+// 0x000073ff". The directory is keyed on _AMD_DEVICE_TYPE, not the PCI id, and HWLibs
+// only ever registers five of them (putFirmware is called nine times, for device types
+// 0x3, 0x4, 0x5, 0x6 and 0x8 -- and 0x8 gets only the VCN blob, no SMU image). So the
+// question is which device type we present. Log it.
+static void *wrapFwDirGet(void *dir, uint32_t devType, const char *name) {
+    auto r = FunctionCast(wrapFwDirGet, orgFwDirGet)(dir, devType, name);
+    RLOG("fw_dir_get(devType=0x%x, \"%s\") -> %s", devType, name ? name : "(null)",
+         r != nullptr ? "hit" : "MISS");
+    return r;
+}
 static mach_vm_address_t hwlibsBase {};
 
 // gvm_sw_init runs mc_sw_init -> vm_sw_init -> hdp_sw_init -> athub_sw_init and returns
@@ -434,6 +493,16 @@ static void installDiagnostics(KernelPatcher &patcher, mach_vm_address_t base) {
            orgCheckPcieLink ? "ok" : "FAILED", orgCheckPcieLink);
     patcher.clearError();
     hwlibsBase = base;
+    orgSmuFwFile = patcher.routeFunction(base + kOffSmuFwFile,
+                      reinterpret_cast<mach_vm_address_t>(wrapSmuFwFile), true);
+    RLOG("route smu_set_fw_entry_info_from_file -> %s (org=0x%llx)",
+         orgSmuFwFile ? "ok" : "FAILED", orgSmuFwFile);
+    patcher.clearError();
+    orgFwDirGet = patcher.routeFunction(base + kOffFwDirGet,
+                      reinterpret_cast<mach_vm_address_t>(wrapFwDirGet), true);
+    RLOG("route AMDFirmwareDirectory::getFirmware -> %s (org=0x%llx)",
+         orgFwDirGet ? "ok" : "FAILED", orgFwDirGet);
+    patcher.clearError();
     orgGvmGetIpFn = patcher.routeFunction(base + kOffGvmGetIpFn,
                       reinterpret_cast<mach_vm_address_t>(wrapGvmGetIpFn), true);
     RLOG("route gvm_get_ip_function -> %s (org=0x%llx)",
@@ -540,7 +609,7 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
         applyFor(patcher, true);
         RLOG("post-patch: mask=0x%x D1=%d R1=%d base=0x%llx",
                mask, (mask & D1) != 0, (mask & R1) != 0, addr);
-        if (mask & (D1 | R1 | X1 | X2)) installDiagnostics(patcher, addr);
+        if (mask & (D1 | R1 | X1 | X2 | X3 | X4)) installDiagnostics(patcher, addr);
     } else if (kexts[KextFB].loadIndex == index) {
         RLOG("Framebuffer loaded, mask=0x%x", mask);
         applyFor(patcher, false);
