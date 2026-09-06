@@ -33,13 +33,21 @@ static const char *pathFB[] {
     "AMDRadeonX6000Framebuffer"
 };
 
-static KernelPatcher::KextInfo kextHWLibs {
-    "com.apple.kext.AMDRadeonX6000HWLibs", pathHWLibs, arrsize(pathHWLibs),
-    {}, {}, KernelPatcher::KextInfo::Unloaded
-};
-static KernelPatcher::KextInfo kextFB {
-    "com.apple.kext.AMDRadeonX6000Framebuffer", pathFB, arrsize(pathFB),
-    {}, {}, KernelPatcher::KextInfo::Unloaded
+// sys[0] == SysFlags::Loaded: invoke the callback even if the kext is already loaded.
+// Both of these are prelinked into SystemKernelExtensions.kc, so by the time a Lilu
+// plugin in the auxiliary collection starts, their load event is long past. Their
+// IOService start() has NOT run yet though -- the serial log shows rgpu start before
+// the first GPUCAP line -- so patching here is still early enough to matter.
+// LiluAPI::onKextLoadForce takes an ARRAY of KextInfo plus the callback in a
+// SINGLE call. Registering the kexts and the callback separately (and passing
+// nullptr/0 for the callback-only registration) does not work -- pluginStart
+// stopped executing right there, with no further log output.
+enum { KextHWLibs, KextFB };
+static KernelPatcher::KextInfo kexts[] {
+    {"com.apple.kext.AMDRadeonX6000HWLibs", pathHWLibs, arrsize(pathHWLibs),
+     {true}, {}, KernelPatcher::KextInfo::Unloaded},
+    {"com.apple.kext.AMDRadeonX6000Framebuffer", pathFB, arrsize(pathFB),
+     {true}, {}, KernelPatcher::KextInfo::Unloaded},
 };
 
 // ---- the patch table --------------------------------------------------------
@@ -110,7 +118,7 @@ static void applyFor(KernelPatcher &patcher, bool hwlibs) {
     for (auto &p : patches) {
         if (!(p.bit & mask) || p.onHWLibs != hwlibs) continue;
         KernelPatcher::LookupPatch lp {
-            hwlibs ? &kextHWLibs : &kextFB, p.find, p.repl, p.size, 1
+            &kexts[hwlibs ? KextHWLibs : KextFB], p.find, p.repl, p.size, 1
         };
         patcher.applyLookupPatch(&lp);
         auto err = patcher.getError();
@@ -123,11 +131,13 @@ static void applyFor(KernelPatcher &patcher, bool hwlibs) {
 }
 
 static void processKext(void *, KernelPatcher &patcher, size_t index,
-                        mach_vm_address_t, size_t) {
-    if (kextHWLibs.loadIndex == index) {
+                        mach_vm_address_t addr, size_t sz) {
+    SYSLOG("rgpu", "kext callback: index=%lu hwlibs=%lu fb=%lu addr=%llx size=%lu",
+           index, kexts[KextHWLibs].loadIndex, kexts[KextFB].loadIndex, addr, sz);
+    if (kexts[KextHWLibs].loadIndex == index) {
         SYSLOG("rgpu", "HWLibs loaded, mask=0x%x", mask);
         applyFor(patcher, true);
-    } else if (kextFB.loadIndex == index) {
+    } else if (kexts[KextFB].loadIndex == index) {
         SYSLOG("rgpu", "Framebuffer loaded, mask=0x%x", mask);
         applyFor(patcher, false);
     }
@@ -140,9 +150,8 @@ static void pluginStart() {
         SYSLOG("rgpu", "no rgpu= boot-arg, staying inert");
         return;
     }
-    lilu.onKextLoadForce(&kextHWLibs);
-    lilu.onKextLoadForce(&kextFB);
-    lilu.onKextLoadForce(nullptr, 0, processKext, nullptr);
+    lilu.onKextLoadForce(kexts, arrsize(kexts), processKext, nullptr);
+    SYSLOG("rgpu", "registered %lu kexts (Loaded flag set)", arrsize(kexts));
 }
 
 static const char *bootargOff[]   { "-rgpuoff" };

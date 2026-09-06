@@ -82,10 +82,12 @@ classify() {
     local panic;  panic=$(grep -cE 'panic\(' <<<"$s")
     local ttl;    ttl=$(grep -cE 'TTL::initialize\(\) Failed' <<<"$s")
     local accel;  accel=$(grep -cE 'GraphicsAccelerator' <<<"$s")
-    # RaphaelGPU.kext logs one line per patch, so "did it land" is observed, not inferred
-    local applied; applied=$(grep -cE 'rgpu.*APPLIED' <<<"$s")
-    local pfailed; pfailed=$(grep -cE 'rgpu.*FAILED'  <<<"$s")
-    local rgpu;    rgpu=$(grep -E 'rgpu' <<<"$s" | tail -6 | sed 's/^/      /')
+    # The plugin logs one line per patch -- but to os_log, NOT serial. Pull it from
+    # the guest, or every verdict reports a false patches_applied=0.
+    local plog; plog=$(./guest-log.sh rgpu 2>/dev/null | grep -oE 'rgpu: @ .*' || true)
+    local applied; applied=$(grep -c 'APPLIED' <<<"$plog")
+    local pfailed; pfailed=$(grep -c 'FAILED'  <<<"$plog")
+    local rgpu;    rgpu=$(tail -8 <<<"$plog" | sed 's/^/      /')
     printf 'stage=%s patches_applied=%s patches_failed=%s panic=%s ttl_fail=%s accel_mentions=%s serial_bytes=%s\n' \
         "${stage:-none}" "$applied" "$pfailed" "$panic" "$ttl" "$accel" "$(stat -c%s run/serial.log 2>/dev/null || echo 0)"
     [[ -n "$rgpu" ]] && { echo "    plugin:"; echo "$rgpu"; }

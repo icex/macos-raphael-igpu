@@ -333,6 +333,61 @@ routing). Three are not patches at all, because no implementation exists to rout
 dcn302). DCN is the least painful of the three to live without — the guest desktop can stay on
 QEMU's emulated adapter — but MMHUB and SMU sit directly in the compute path.
 
+### Delivery: what it took to get a byte patch into a live AMD kext
+
+**This works now.** Both m1 patches apply at runtime, confirmed from the guest's own log:
+
+```
+rgpu: @ registered 2 kexts (Loaded flag set)
+rgpu: @ kext callback: index=1 hwlibs=1 fb=2 addr=ffffff7fa99d4000 size=28327936
+rgpu: @ HWLibs loaded, mask=0x1
+rgpu: @ APPLIED  m1 bif_ip_create: accept NBIF 7.3.0
+rgpu: @ kext callback: index=2 hwlibs=1 fb=2 addr=ffffff7fa96b5000 size=3244032
+rgpu: @ Framebuffer loaded, mask=0x1
+rgpu: @ APPLIED  m1 doGPUPanic: do not panic on TTL failure
+```
+
+The `doGPUPanic` patch has a measurable effect: **`panics: 0`**, where every previous boot with
+the GPU attached died in `doGPUPanic`. The guest now survives a TTL failure and stays usable,
+which is what makes reading the driver's `os_log` with the GPU attached possible at all. The
+guest also now enumerates the device fully — `Chipset Model: AMD Radeon Navi23`,
+`VRAM (Total): 512 MB` (that VRAM line was previously absent).
+
+The mechanism is a Lilu plugin (`RaphaelGPU.kext`) cross-compiled entirely on Linux, installed
+into the guest's `/Library/Extensions` and linked into the **Auxiliary** kernel collection
+beside Lilu. Getting there required, in the order each error revealed the next:
+
+| # | symptom | actual cause |
+|---|---|---|
+| 1 | patch had no effect | OpenCore `Kernel > Patch` cannot reach `SystemKernelExtensions.kc` |
+| 2 | plugin never ran | Lilu self-disables on Darwin 24; needs `-lilubetaall` |
+| 3 | `Invalid Parameter` | OpenCore's own injector rejects the bundle (binary is fine — `kmutil` links it) |
+| 4 | `Failed to bind '_lilu'` | Lilu must exist **on disk**; `kmutil` resolves only on-disk repositories |
+| 5 | `Missing Developer Kit` | a build-matched KDK must be installed **in the guest** |
+| 6 | `Read-only file system` | `kmutil install --update-all` wants the sealed volume; build only `-n aux` |
+| 7 | `Failed to bind '___cxa_atexit'` | **real bug**: kernel has no `__cxa_atexit`; use `-fno-c++-static-destructors` |
+| 8 | every redeploy silently no-op | **`kmutil` dedupes by bundle id + version** — a fixed `CFBundleVersion` produced a byte-identical collection (same UUID) and the guest kept loading the first binary. Bump the version every build. |
+
+Prerequisites that must all hold: `csrutil` with Kext Signing **disabled**; kexts `root:wheel`;
+`-lilubetaall`; a guest-installed KDK matching the build; and OpenCore's own `Lilu.kext`
+injection **disabled**, or two kexts claim `as.vit9696.Lilu`.
+
+### Measure with the right instrument, or you will read false zeros
+
+Most wrong turns in this work came from broken measurement, not from the system:
+
+- Lilu plugin `SYSLOG` and the AMD drivers' messages go to **`os_log`**, not serial. Only Lilu's
+  early `config:`/`api:` lines and `kprintf` reach the 16550.
+- `log show --last Nm` returns **nothing** when N is less than guest uptime, because the
+  interesting lines are emitted at boot. Derive the window from `kern.boottime`.
+- `dwarfdump`, `shasum` and `strings` are absent without Command Line Tools and exit empty.
+  Use `openssl dgst -sha256` and `grep -a`, which are in base macOS.
+- `tail -N` on a log will silently cut the lines you need. Read the whole set, then filter.
+- A `screendump` that fails leaves the *previous* frame on disk, so a screenshot helper will
+  hand back a stale image unless it deletes the target first and fails loudly.
+
+`guest-log.sh rgpu|amd` and the verdict logic in `autorun.sh` now encode all of this.
+
 ### The milestone ladder
 
 `milestones.py` holds the patch set, re-verifies every find-pattern against the KDK before it will

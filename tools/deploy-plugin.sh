@@ -10,15 +10,26 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 PW=$(cat .guestpw)
 KDK_GUEST=/Library/Developer/KDKs/KDK_15.7.9_24G830.kdk
 
+# kmutil deduplicates kexts by bundle identifier + version. With a fixed
+# CFBundleVersion every rebuild looked like the SAME kext, so the Aux KC came out
+# byte-identical (same collection UUID) and the guest kept loading the original
+# binary no matter how many times we redeployed. Bump the version every build.
+VER="1.0.$(cat .plugin-build 2>/dev/null || echo 0)"
+NEXT=$(( $(cat .plugin-build 2>/dev/null || echo 0) + 1 ))
+echo "$NEXT" > .plugin-build
+VER="1.0.$NEXT"
+echo "### plugin version $VER"
+
 echo "### build"
-(cd build && ./build-kext.sh src-rgpu RaphaelGPU as.rgpu.RaphaelGPU 1.0.0) 2>&1 | tail -2
-python3 - <<'PY'
-import plistlib
+(cd build && ./build-kext.sh src-rgpu RaphaelGPU as.rgpu.RaphaelGPU "$VER") 2>&1 | tail -2
+python3 - "$VER" <<'PY'
+import plistlib, sys
+VER = sys.argv[1]
 p='build/out/RaphaelGPU/RaphaelGPU.kext/Contents/Info.plist'
 d={'CFBundleDevelopmentRegion':'en','CFBundleExecutable':'RaphaelGPU',
    'CFBundleIdentifier':'as.rgpu.RaphaelGPU','CFBundleInfoDictionaryVersion':'6.0',
    'CFBundleName':'RaphaelGPU','CFBundlePackageType':'KEXT','CFBundleSignature':'????',
-   'CFBundleShortVersionString':'1.0.0','CFBundleVersion':'1.0.0',
+   'CFBundleShortVersionString':VER,'CFBundleVersion':VER,
    'CFBundleSupportedPlatforms':['MacOSX'],'OSBundleRequired':'Root',
    'IOKitPersonalities':{'as.rgpu.RaphaelGPU':{
        'CFBundleIdentifier':'as.rgpu.RaphaelGPU','IOClass':'RaphaelGPU',
@@ -44,6 +55,8 @@ GX_TIMEOUT=900 ./gx "cd /tmp && rm -rf RaphaelGPU.kext && curl -sS -o r.tgz http
     -S /System/Library/KernelCollections/SystemKernelExtensions.kc \
     -A /Library/KernelCollections/AuxiliaryKernelExtensions.kc \
     -r /Library/Extensions -b as.vit9696.Lilu -b as.rgpu.RaphaelGPU -x 2>&1 | tail -12
+  echo \"--- aux KC identity (must change between deploys) ---\"
+  kmutil inspect -A /Library/KernelCollections/AuxiliaryKernelExtensions.kc 2>&1 | grep -oE \"[0-9A-F]{8}-[0-9A-F-]{27}\" | head -1
   echo \"--- aux KC contents ---\"
   kmutil inspect -A /Library/KernelCollections/AuxiliaryKernelExtensions.kc 2>&1 | grep -iE \"rgpu|lilu|Raphael\" | head
 '" 2>&1 | tail -20
