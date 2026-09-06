@@ -31,7 +31,8 @@ failure has moved through three of them:
 | `GVM` | **complete** — UMC, VM, HDP and ATHUB all resolve handlers |
 | `PSP` | SW_INIT **complete** |
 | `SMU` | SW_INIT **complete** |
-| `PSP` HW_INIT | current blocker — `psp_ring_create: KM ring creation failed`. The PSP is alive and the mailbox correctly addressed; `C2PMSG_64` is stuck at `0x80020115` (status `0x115`) and ignores the doorbell. Next test needs one host reboot. |
+| `PSP` HW_INIT — mailbox | **solved** — the stale-ring trap; `x7` / `gpu-quiesce.sh` destroy it, ring create and `ENABLE_INT` both return status 0 |
+| `PSP` HW_INIT — firmware | current blocker — the Raphael PSP accepts Navi 23 CP CE but rejects the RLC blobs. Next step: hand it Raphael's own `gc_10_3_6_rlc.bin`. |
 
 Getting here took, in order: OpenCore kext injection so the patches land before `start()`;
 removing a self-inflicted conflict between the two patch mechanisms; the ASIC capability entry;
@@ -848,6 +849,95 @@ ring creation should now proceed; `0x80020115` again means the PSP is genuinely 
 
 This is the single most useful clue for whoever continues: **`C2PMSG_64` does not change on
 write while its immediate neighbours do.**
+
+### The stale-PSP trap, and why one host reboot bought exactly one boot
+
+The `C2PMSG_64 = 0x80020115` wall was **stale state**, confirmed from the host. On a fresh
+boot with `amdgpu` still bound, the mailbox is clean, and it stays clean through the handover:
+
+```
+amdgpu bound      C2PMSG_64 -> 0x80020000   status 0   (amdgpu's own INIT_GPCOM_RING)
+after vfio bind   C2PMSG_64 -> 0x80030000   status 0   (DESTROY_RINGS: amdgpu tore it down)
+```
+
+So `amdgpu` cleans up properly on unbind. The guest does not: QEMU is killed outright, so the
+GPCOM ring it created is never destroyed. And Apple's `psp_ring_create_11_0` only calls
+`psp_ring_stop` on its **TEE** path — for ring type 2 it branches at `0x5bf5e` straight to
+`0x5bfc7` and issues `INIT_GPCOM_RING` against a ring that already exists. Upstream's
+`psp_v11_0_ring_create` calls `psp_v11_0_ring_stop` unconditionally, which is why upstream
+never hits this. Result: exactly one guest boot works per host reboot.
+
+**No reboot is needed to recover.** Two fixes, either sufficient:
+
+- `gpu-quiesce.sh` (host, root) mmaps BAR5 and issues `GFX_CTRL_CMD_ID_DESTROY_GPCOM_RING`.
+  It clears the mailbox in ~2 ms. `redeploy.sh` runs it after stopping the VM and
+  `gpu-restore.sh` before handing the device back to `amdgpu`.
+- Milestone `x7` does the same from **inside the guest**, needing no root at all, by routing
+  `psp_ring_create_11_0` and destroying first.
+
+One trap worth stating, because it made the fix look like it worked when it did not: **a
+status-0 mailbox does not mean there is no ring.** After a boot that reached `ENABLE_INT`,
+`C2PMSG_64` reads `0x80050000` — clean by every "ready" test — while that boot's ring is
+still alive. Gating the destroy on a non-zero status therefore skips it exactly when it is
+needed. Destroy unconditionally. (And when polling for the response, mask bit 31 off before
+comparing the command field, or the wait always runs to timeout.)
+
+### Where the firmware actually comes from, and what the PSP will accept
+
+With a clean mailbox, `INIT_GPCOM_RING` and `ENABLE_INT` both return status 0 and the KM ring
+works. `psp_np_fw_load` then submits IP firmware, and this is where it stops.
+
+Apple is **not** short of firmware. `psp_np_fw_init(psp, descriptors, count)` receives 18
+descriptors of 40 bytes, via an OS-side callback at `[ttlGetExtSvcs() + 0x2a0]`:
+
+| field | meaning |
+|---|---|
+| `+0x00` | `0x28`, the struct size |
+| `+0x04` | firmware type |
+| `+0x10` | kernel VA of the firmware bytes |
+| `+0x18` | size |
+
+The sizes total ~1.7 MB and include three ~263 KB blobs — the full Navi 23 IP firmware set,
+with real pointers into a kext. So the earlier guess that an empty VBIOS PSP directory starved
+it was wrong.
+
+`psp_print_fw_load_failure_msg`'s jump table gives Apple's own type names, and
+`psp_np_fw_load` indexes that table with `type - 1` (`53ab8: lea eax, [r15 - 0x1]`), so the
+family is type `0x17` GPM / `0x18` SRM / `0x19` CNTL. Getting that off-by-one wrong is why a
+first attempt at declining them silently did nothing.
+
+What the Raphael PSP does with Navi 23 microcode, measured:
+
+| type | blob | result |
+|---|---|---|
+| `0x01` | CP CE | **loads** (status 0) |
+| `0x19` | RLC restore list CNTL | rejected, `0x8000030a` |
+| `0x0b` | RLC FW | rejected, `0x80000203` |
+
+`psp_np_fw_load` aborts on the first failure, so only the first item is ever confirmed good.
+It accepts a Navi 23 CP CE blob and refuses the RLC ones. That is consistent with RLC being
+the most ASIC-bound of the set: the restore lists are register lists describing GC 10.3.4's
+register file, and this chip is GC 10.3.6.
+
+Milestone `x8` declines the restore-list family (upstream loads them only when the RLC header
+declares them, so that is a supported configuration; the cost is no GFXOFF power-gating).
+That moves the failure from the CNTL list to the RLC microcode itself with a different status,
+which is progress in position but leaves the same question: this PSP will not take Navi 23 RLC.
+
+The correct answer is almost certainly to hand it **Raphael's own** RLC firmware —
+`/lib/firmware/amdgpu/gc_10_3_6_rlc.bin` is signed for this silicon — by rewriting the
+descriptor's `+0x10`/`+0x18` to point at bytes the plugin carries. That is the next step, and
+it is the first one that requires supplying data rather than redirecting Apple's own code.
+
+### Iterating without paying for a boot
+
+A guest boot costs ~90 s, and most wasted cycles in this work were bad constants or patches
+that could never match — all statically checkable. `preflight.py` asserts, in under a second,
+that every `kOff*` constant still equals the address of the symbol its comment names, that no
+routed function has a rip-relative operand in its first 16 bytes, and that every find pattern
+is still unique in the KDK. `esp-kext.sh` refuses to ship if it fails. Dropping `-c` from the
+`qemu-img convert` in `redeploy.sh` took the deploy step from ~35 s to 7 s, and the dump delay
+is now tunable with `rgpudump=<ms>` rather than baked in.
 
 ### Measure with the right instrument, or you will read false zeros
 

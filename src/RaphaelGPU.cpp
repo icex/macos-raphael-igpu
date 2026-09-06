@@ -74,6 +74,9 @@ enum : uint32_t {
     X3 = 1u << 13,  // trace the firmware directory lookups
     X4 = 1u << 14,  // no SMU microcode file for this device type; use the fallback
     X5 = 1u << 15,  // trace PSP register reads (mailbox handshake diagnosis)
+    X6 = 1u << 16,  // dump the IP-firmware descriptor array Apple hands the PSP
+    X7 = 1u << 17,  // destroy a stale PSP GPCOM ring before Apple tries to create one
+    X8 = 1u << 18,  // do not offer the RLC save/restore lists to the PSP
 };
 
 struct RPatch {
@@ -170,8 +173,13 @@ static void diagAppend(const char *fmt, ...) {
     diagAppend(fmt, ## __VA_ARGS__);      \
 } while (0)
 
+static uint32_t diagDumpDelayMs = 75000;
+
 static void diagDumpThread(void *, wait_result_t) {
-    IOSleep(75000);   // logd is up well before this; the login window is not yet reached
+    // Tunable with the rgpudump=<ms> boot-arg: the whole AMD bring-up finishes well
+    // before the default, and each iteration costs a boot, so this can be shortened once
+    // you know how early the sequence completes on a given configuration.
+    IOSleep(diagDumpDelayMs);
     SYSLOG("rgpu", "==== deferred diagnostics: %lu bytes ====", diagLen);
     size_t i = 0;
     unsigned n = 0;
@@ -216,6 +224,18 @@ static constexpr size_t kOffFwDirGet     = 0xb0c10;    // AMDFirmwareDirectory::
 static constexpr size_t kOffSmuFwFile    = 0x70961;    // _smu_set_fw_entry_info_from_file
 static constexpr size_t kOffPspRegRead   = 0x516ce;    // _psp_cgs_read_register
 static constexpr size_t kOffPspRegWrite  = 0x516f5;    // _psp_cgs_write_register
+static constexpr size_t kOffPspNpFwInit  = 0x5304c;    // _psp_np_fw_init
+static constexpr size_t kOffPspRingCreate = 0x5beb3;   // _psp_ring_create_11_0
+static constexpr size_t kOffPspFwCapChk   = 0x5317e;   // _psp_np_fw_load_capability_check
+// GFX_CTRL command encodings, from upstream psp_gfx_if.h.
+static constexpr uint32_t kC2PMsg64        = 0x80;       // MP0 C2PMSG_64, IP-relative
+static constexpr uint32_t kHwIpMp0         = 0x4b;
+static constexpr uint32_t kDestroyGpcomRing = 0x000C0000;
+static constexpr uint32_t kMboxReadyMask   = 0x8000FFFF;
+static constexpr uint32_t kMboxReadyFlag   = 0x80000000;
+
+// Set from the kext-load callback; every computed-address route below needs it.
+static mach_vm_address_t hwlibsBase {};
 
 // bgm_create's last stage, bio_sw_init (failure => event_id 0xc00c020b), is
 //     mov eax,1; test byte [bio+8],1; je out; call pcie_ip_sw_init ...
@@ -340,6 +360,126 @@ static mach_vm_address_t orgPspRegRead {};
 // the mailbox status register the ring-create wait polls -- and 0x8000ffff/0x80000000
 // are its ready/response mask and flag. Capped so the log stays readable.
 static mach_vm_address_t orgPspRegWrite {};
+static mach_vm_address_t orgPspNpFwInit {};
+static mach_vm_address_t orgPspRingCreate {};
+static mach_vm_address_t orgPspFwCapChk {};
+
+// Of the eighteen IP firmware blobs Apple hands the PSP, seventeen load. The Raphael PSP
+// is therefore accepting Navi 23 microcode in general; it rejects exactly one family.
+// Decoding psp_print_fw_load_failure_msg's jump table gives Apple's own type names:
+//     0x16 RLC restore list GPM   0x17 RLC restore list SRM   0x18 RLC restore list CNTL
+// and 0x18 is the one that fails, with the TOS returning 0x8000030a to LOAD_IP_FW three
+// times before psp_np_fw_load gives up and the whole PSP HW_INIT aborts.
+//
+// These three are not code: they are ASIC-specific RLC save/restore REGISTER LISTS, used
+// for GFXOFF and RLC power-gating. A Navi 23 list describes GC 10.3.4's register file, so
+// a PSP validating it against this chip's GC 10.3.6 has every reason to refuse it.
+// Upstream loads them only when the RLC header actually declares them
+// (adev->gfx.rlc.is_rlc_v2_1 plus non-zero save_restore_list_*_size_bytes) and skips them
+// otherwise, so declining them is a configuration upstream already supports rather than a
+// bypass of a real check.
+//
+// The honest cost: without a save/restore list the RLC cannot do GFXOFF, so deep
+// graphics power-gating is unavailable. That is a power-management feature, not a
+// prerequisite for bringing the engine up.
+// psp_np_fw_load indexes the failure-message table with (type - 1):
+//     53ab8: lea eax, [r15 - 0x1]
+// so "RLC restore list CNTL", message 0x18, is really fw TYPE 0x19, and the family is
+// 0x17 GPM / 0x18 SRM / 0x19 CNTL. Log every call rather than trusting that arithmetic.
+static uint32_t fwCapCount = 0;
+static uint32_t wrapPspFwCapChk(void *psp, uint32_t fwType) {
+    bool decline = (mask & X8) != 0 && fwType >= 0x17 && fwType <= 0x19;
+    uint32_t r = decline ? 0 : FunctionCast(wrapPspFwCapChk, orgPspFwCapChk)(psp, fwType);
+    if (fwCapCount < 48) {
+        RLOG("fw_cap(type=0x%02x) -> %u%s", fwType, r,
+             decline ? "   <- X8 declined (RLC save/restore list, no GFXOFF)" : "");
+        fwCapCount++;
+    }
+    return r;
+}
+
+// Destroy a stale GPCOM ring before Apple creates one.
+//
+// The guest's driver never tears its ring down -- QEMU is killed outright -- so
+// C2PMSG_64 keeps an unacknowledged INIT_GPCOM_RING response across VM restarts. And
+// Apple's psp_ring_create_11_0 only calls psp_ring_stop on its TEE path: for ring type 2
+// it branches at 0x5bf5e straight to 0x5bfc7, writes the ring registers and issues
+// INIT_GPCOM_RING against a ring that already exists. The mailbox then never returns to
+// status 0 and every boot after the first dies at "psp_ring_create: KM ring creation
+// failed" until the host is rebooted -- which is exactly why one host reboot bought
+// exactly one working boot.
+//
+// Upstream does not have this problem because psp_v11_0_ring_create calls
+// psp_v11_0_ring_stop unconditionally, and amdgpu tears the ring down on unbind (after
+// which C2PMSG_64 reads 0x80030000, status 0). So issuing DESTROY_GPCOM_RING first is
+// upstream's own behaviour, not a workaround. gpu-quiesce.sh does the same from the host
+// after the VM stops; this is the belt to that braces.
+static uint32_t wrapPspRingCreate(void *psp, uint32_t ringType) {
+    if ((mask & X7) != 0 && ringType == 2 && hwlibsBase != 0 && psp != nullptr) {
+        auto wr = reinterpret_cast<void (*)(void *, uint32_t, uint32_t, uint32_t, uint32_t)>(
+                      hwlibsBase + kOffPspRegWrite);
+        auto rd = reinterpret_cast<uint32_t (*)(void *, uint32_t, uint32_t, uint32_t)>(
+                      hwlibsBase + kOffPspRegRead);
+        // Destroy UNCONDITIONALLY. A clean mailbox does not mean there is no ring: after a
+        // boot that got as far as ENABLE_INT, C2PMSG_64 reads 0x80050000 -- status 0, so
+        // it passes every "ready" test -- while the GPCOM ring from that boot is still
+        // very much alive, and INIT_GPCOM_RING then fails because it already exists.
+        // Gating the destroy on the status being non-zero is exactly the mistake that
+        // made this look fixed when it was not. Upstream's psp_v11_0_ring_create calls
+        // psp_v11_0_ring_stop unconditionally for the same reason.
+        uint32_t before = rd(psp, kC2PMsg64, 0, kHwIpMp0);
+        wr(psp, kC2PMsg64, 0, kDestroyGpcomRing, kHwIpMp0);
+        uint32_t v = before;
+        int ms = 0;
+        for (; ms < 2000; ms++) {
+            v = rd(psp, kC2PMsg64, 0, kHwIpMp0);
+            if ((v & kMboxReadyMask) == kMboxReadyFlag &&
+                ((v >> 16) & 0x7fff) == (kDestroyGpcomRing >> 16))
+                break;
+            IOSleep(1);
+        }
+        RLOG("X7: destroy GPCOM ring: 0x%08x -> 0x%08x after %dms%s", before, v, ms,
+             (v & kMboxReadyMask) == kMboxReadyFlag ? " (ready)" : " (TIMEOUT)");
+    }
+    return FunctionCast(wrapPspRingCreate, orgPspRingCreate)(psp, ringType);
+}
+
+// psp_np_fw_load fails with "[FW] psp_np_fw_load: RLC restore list CNTL failed to load"
+// and the TOS returns 0x8000030a to GFX_CMD_ID_LOAD_IP_FW (cmd 0x6). The blobs are not
+// Apple's: no kext in the stack calls putFirmware for anything but VCN and SMU, and none
+// of them carries GC or RLC microcode at all. They arrive through an OS-side callback,
+//     a9d8f: call qword ptr [r15 + 0x2a0]      ; r15 = ttlGetExtSvcs()
+// which ends at psp_np_fw_init(psp, descriptors, count) -- an array of 40-byte entries
+// memmove'd to psp+0x2c08. Dump it: a zero count means Apple has no IP firmware to give
+// the PSP (consistent with our grafted VBIOS carrying a PSP directory of 0 entries),
+// while a non-zero count shows which types it does have and whether their buffers are
+// real. Everything downstream depends on which of those two it is.
+static void dumpFwDescriptors(const uint8_t *arr, uint32_t count) {
+    RLOG("np_fw_init: %u descriptor(s) at %p", count, arr);
+    if (arr == nullptr) return;
+    // Dump raw: the first guess at this layout was wrong (offset 0 is a constant 0x28,
+    // the struct size, and the type sits at +0x04), so print all 40 bytes and decode
+    // from the actual data rather than from an assumed shape.
+    for (uint32_t i = 0; i < count && i < 40; i++) {
+        auto e = arr + static_cast<size_t>(i) * 40;
+        RLOG("  fw[%02u] %08x %08x %08x %08x %08x %08x %08x %08x %08x %08x", i,
+             *reinterpret_cast<const uint32_t *>(e + 0x00),
+             *reinterpret_cast<const uint32_t *>(e + 0x04),
+             *reinterpret_cast<const uint32_t *>(e + 0x08),
+             *reinterpret_cast<const uint32_t *>(e + 0x0c),
+             *reinterpret_cast<const uint32_t *>(e + 0x10),
+             *reinterpret_cast<const uint32_t *>(e + 0x14),
+             *reinterpret_cast<const uint32_t *>(e + 0x18),
+             *reinterpret_cast<const uint32_t *>(e + 0x1c),
+             *reinterpret_cast<const uint32_t *>(e + 0x20),
+             *reinterpret_cast<const uint32_t *>(e + 0x24));
+    }
+}
+
+static uint32_t wrapPspNpFwInit(void *psp, void *arr, uint32_t count) {
+    if (mask & X6) dumpFwDescriptors(static_cast<const uint8_t *>(arr), count);
+    return FunctionCast(wrapPspNpFwInit, orgPspNpFwInit)(psp, arr, count);
+}
 static uint32_t pspReadCount = 0;
 static uint32_t pspWriteCount = 0;
 
@@ -403,7 +543,6 @@ static void *wrapFwDirGet(void *dir, uint32_t devType, const char *name) {
          r != nullptr ? "hit" : "MISS");
     return r;
 }
-static mach_vm_address_t hwlibsBase {};
 
 // gvm_sw_init runs mc_sw_init -> vm_sw_init -> hdp_sw_init -> athub_sw_init and returns
 // the first nonzero, with no per-stage event id, so "SW_IP_CLIENT_ID__GVM
@@ -537,6 +676,21 @@ static void installDiagnostics(KernelPatcher &patcher, mach_vm_address_t base) {
            orgCheckPcieLink ? "ok" : "FAILED", orgCheckPcieLink);
     patcher.clearError();
     hwlibsBase = base;
+    orgPspFwCapChk = patcher.routeFunction(base + kOffPspFwCapChk,
+                      reinterpret_cast<mach_vm_address_t>(wrapPspFwCapChk), true);
+    RLOG("route psp_np_fw_load_capability_check -> %s (org=0x%llx)",
+         orgPspFwCapChk ? "ok" : "FAILED", orgPspFwCapChk);
+    patcher.clearError();
+    orgPspRingCreate = patcher.routeFunction(base + kOffPspRingCreate,
+                      reinterpret_cast<mach_vm_address_t>(wrapPspRingCreate), true);
+    RLOG("route psp_ring_create_11_0 -> %s (org=0x%llx)",
+         orgPspRingCreate ? "ok" : "FAILED", orgPspRingCreate);
+    patcher.clearError();
+    orgPspNpFwInit = patcher.routeFunction(base + kOffPspNpFwInit,
+                      reinterpret_cast<mach_vm_address_t>(wrapPspNpFwInit), true);
+    RLOG("route psp_np_fw_init -> %s (org=0x%llx)",
+         orgPspNpFwInit ? "ok" : "FAILED", orgPspNpFwInit);
+    patcher.clearError();
     orgPspRegWrite = patcher.routeFunction(base + kOffPspRegWrite,
                       reinterpret_cast<mach_vm_address_t>(wrapPspRegWrite), true);
     RLOG("route psp_cgs_write_register -> %s (org=0x%llx)",
@@ -663,7 +817,7 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
         applyFor(patcher, true);
         RLOG("post-patch: mask=0x%x D1=%d R1=%d base=0x%llx",
                mask, (mask & D1) != 0, (mask & R1) != 0, addr);
-        if (mask & (D1 | R1 | X1 | X2 | X3 | X4 | X5)) installDiagnostics(patcher, addr);
+        if (mask & (D1 | R1 | X1 | X2 | X3 | X4 | X5 | X6 | X7 | X8)) installDiagnostics(patcher, addr);
     } else if (kexts[KextFB].loadIndex == index) {
         RLOG("Framebuffer loaded, mask=0x%x", mask);
         applyFor(patcher, false);
@@ -674,6 +828,9 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
 
 static void pluginStart() {
     if (!PE_parse_boot_argn("rgpu", &mask, sizeof(mask))) mask = 0;
+    uint32_t d = 0;
+    if (PE_parse_boot_argn("rgpudump", &d, sizeof(d)) && d >= 5000 && d <= 300000)
+        diagDumpDelayMs = d;
     RLOG("start, patch mask=0x%x (%lu patches known)", mask, arrsize(patches));
     if (mask == 0) {
         RLOG("no rgpu= boot-arg, staying inert");

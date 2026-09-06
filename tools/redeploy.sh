@@ -34,9 +34,20 @@ qimg() {
 
 docker rm -f macos-sequoia >/dev/null 2>&1 || true
 sleep 1
+
+# The guest never tears down its PSP GPCOM ring (QEMU is just killed), and Apple's
+# psp_ring_create only calls ring_stop on its TEE path -- so without this every boot
+# after the first fails at "psp_ring_create: KM ring creation failed". Best effort: the
+# in-guest x7 milestone destroys a stale ring too, so a skipped quiesce is not fatal.
+if [[ -n "${SUDO_ASKPASS:-}" ]]; then
+    sudo -A ./gpu-quiesce.sh || echo "NOTE: PSP quiesce failed; x7 should still recover"
+else
+    echo "NOTE: SUDO_ASKPASS unset, skipping PSP quiesce (x7 should still recover)"
+fi
 [[ -f run/oc-raw.img ]] || qimg convert -O raw /run/vm/OpenCore.qcow2 /run/vm/oc-raw.img
 mcopy -o -i "run/oc-raw.img@@${ESP_OFF}" run/config-new.plist ::/EFI/OC/config.plist
-qimg convert -O qcow2 -c /run/vm/oc-raw.img /run/vm/OpenCore-rebuilt.qcow2
+# No -c: compressing a 384 MB image on every deploy costs seconds for no benefit here.
+qimg convert -O qcow2 /run/vm/oc-raw.img /run/vm/OpenCore-rebuilt.qcow2
 
 # Never overwrite a qcow2 that a running QEMU has open -- the container is already
 # stopped above, which is the only safe moment to do this.
