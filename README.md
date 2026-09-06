@@ -18,16 +18,23 @@ TTL's SWIP clients initialise in sequence; the failure has moved through three o
 | SWIP `GVM` | **complete** — UMC, VM, HDP and ATHUB all resolve handlers |
 | SWIP `PSP` | SW_INIT **complete** |
 | SWIP `SMU` | SW_INIT **complete** |
-| `PSP` HW_INIT | **current blocker** — `psp_ring_create: KM ring creation failed` |
+| `PSP` HW_INIT | **current blocker** — `psp_ring_create: KM ring creation failed`; `C2PMSG_64` stuck at `0x80020115` |
 
-The whole **software** init sequence now completes. The remaining blocker is structural
-rather than a version gate: `AMDRadeonX6000HWLibs` contains exactly **one** PSP
-implementation generation, `psp_*_11_0` (20 functions, zero 13.0.x), so it can only drive an
-MP0 11.0 mailbox — while this silicon's PSP is MP0 13.0.5, which the host's own kernel drives
-with `psp_v13_0_0`. Apple dispatches its entire PSP through a function-pointer table at fixed
-offsets (`+0x7da0`…`+0x7e48`), so the next step is to implement `psp_v13_0` in the plugin,
-ported from upstream, and install it there. That is the first point in this effort where new
-driver code is genuinely required.
+The whole **software** init sequence now completes. What is left is a PSP mailbox that
+will not accept a doorbell.
+
+The plumbing has been measured and is sound: the MP0 base (`0x16000`) is right, the C2PMSG
+register numbers are *identical* between MP0 11.0 and MP0 13.0.5, the PSP is alive
+(`C2PMSG_81` is an incrementing sOS heartbeat, `C2PMSG_58` returns a real tOS version), and
+writes land (`C2PMSG_69/70/71` read back what was written). But `C2PMSG_64` is stuck at
+`0x80020115` — an unacknowledged `INIT_GPCOM_RING` response carrying status `0x115` — and does
+not change when the command is rewritten. Both Apple and upstream gate ring creation on that
+register reading status **zero**, so the wait can never pass.
+
+Either that is stale state (the iGPU is never reset between VM restarts) or the SoC's
+platform-owned PSP is refusing to hand its GFX ring interface to a second driver. One host
+reboot distinguishes them: the first `psp_read(idx=0x80)` in the deferred diagnostics tells
+you which. `findings/GPU-RE.md` has the full transcript.
 
 Up to that point, nothing here adds new driver code. Every change either points Apple's stack at an
 implementation it already ships for a near-identical IP version, or supplies a device

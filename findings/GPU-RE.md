@@ -31,7 +31,7 @@ failure has moved through three of them:
 | `GVM` | **complete** — UMC, VM, HDP and ATHUB all resolve handlers |
 | `PSP` | SW_INIT **complete** |
 | `SMU` | SW_INIT **complete** |
-| `PSP` HW_INIT | current blocker — `psp_ring_create: KM ring creation failed`. Apple ships **only** a PSP 11.0 implementation; this silicon needs 13.0. First point where new code is required. |
+| `PSP` HW_INIT | current blocker — `psp_ring_create: KM ring creation failed`. The PSP is alive and the mailbox correctly addressed; `C2PMSG_64` is stuck at `0x80020115` (status `0x115`) and ignores the doorbell. Next test needs one host reboot. |
 
 Getting here took, in order: OpenCore kext injection so the patches land before `start()`;
 removing a self-inflicted conflict between the two patch mechanisms; the ASIC capability entry;
@@ -780,6 +780,74 @@ plugin** — port Linux's `psp_v13_0.c` ring and mailbox code — and overwrite 
 after `psp_init_pfn_ptr` runs. That is a bounded target (about fifteen functions against a
 small upstream file), and it is the first point in this whole effort where new driver code is
 actually required rather than a redirection to code Apple already ships.
+
+### What the PSP mailbox actually does — measured, not inferred
+
+Before concluding anything about Apple's PSP generation, the plumbing was checked by routing
+`psp_cgs_read_register` and `psp_cgs_write_register`. Those resolve an IP-relative index
+against a per-instance base kept in the PSP context:
+
+```
+516e1: add esi, dword ptr [rdi + 4*rdx + 0x5c]     ; index += base[instance]
+```
+
+The result rules out every plumbing explanation:
+
+```
+psp_read(idx=0x91 ...) base=0x16000 abs=0x16091 -> 0x006018ea     C2PMSG_81, sOS heartbeat
+psp_read(idx=0x91 ...)                          -> 0x00601d2a     ... incrementing
+psp_read(idx=0x7a ...) base=0x16000 abs=0x1607a -> 0x00420024     C2PMSG_58, tOS version
+psp_read(idx=0x80 ...) base=0x16000 abs=0x16080 -> 0x80020115     C2PMSG_64
+psp_write(idx=0x85 ...) <- 0x0fbff000                             C2PMSG_69, ring lo
+psp_write(idx=0x86 ...) <- 0x000000f4                             C2PMSG_70, ring hi
+psp_write(idx=0x87 ...) <- 0x00001000                             C2PMSG_71, ring size
+psp_write(idx=0x80 ...) <- 0x00020000                             GFX_CTRL_CMD_ID_INIT_GPCOM_RING
+psp_read(idx=0x80 ...)                          -> 0x80020115     unchanged
+psp_read(idx=0x85 ...)                          -> 0x0fbff000     read-back OK
+```
+
+- The MP0 base `0x16000` is **correct** — `MP0_BASE__INST0_SEG0` is `0x00016000` in both
+  `dimgrey_cavefish_ip_offset.h` and `yellow_carp_offset.h`.
+- The C2PMSG register numbers are **identical** between MP0 11.0 and MP0 13.0.5:
+  `mmMP0_SMN_C2PMSG_64` and `regMP0_SMN_C2PMSG_64` are both `0x0080`, `_69` both `0x0085`.
+  Apple's 11.0 code writes exactly the registers upstream's v13 code writes, in the same
+  order, with the same command encoding. So the earlier assumption that this was a
+  register-layout mismatch was **wrong**.
+- The **PSP is alive**: `C2PMSG_81` is a monotonically incrementing heartbeat (upstream's
+  `psp_v13_0_is_sos_alive` tests exactly this register), and `C2PMSG_58` returns a real tOS
+  version.
+- **Writes reach the device**: `C2PMSG_69/70/71` read back precisely what was written.
+- But `C2PMSG_64` **never changes**, before or after the command write. It holds
+  `0x80020115` throughout: response bit set, command field `0x2`
+  (`GFX_CTRL_CMD_ID_INIT_GPCOM_RING`), status `0x0115` in the low 16 bits
+  (`GFX_CMD_STATUS_MASK`).
+
+So the mailbox is not broken and not misaddressed. The PSP holds an unacknowledged
+`INIT_GPCOM_RING` response with a non-zero status, and does not consume a new doorbell write.
+Both upstream and Apple gate ring creation on `(C2PMSG_64 & 0x8000ffff) == 0x80000000`, i.e.
+status **zero**, so with `0x0115` stuck there the wait can never pass — which is precisely the
+observed `psp_ring_create: KM ring creation failed` plus twenty `cosWaitForFunc` timeouts.
+
+Two candidate explanations remain, and they are distinguishable:
+
+1. **Stale state.** The iGPU is never reset between VM restarts, and this session restarted the
+   guest dozens of times. The first attempt that reached this code would have left exactly this
+   value, and every later boot inherits it. Note that the ring address written back,
+   `0xf4_0fbff000`, sits in the same GPU-MC range as the host kernel's own
+   `reserve 0xa00000 from 0xf41e000000 for PSP TMR`.
+2. **A platform-owned PSP.** On an APU the PSP is the SoC's security processor, already running
+   platform-loaded tOS, and it may simply refuse to hand its GFX ring interface to a second
+   driver.
+
+Distinguishing them needs a genuinely fresh PSP, which means a **host reboot** — not a driver
+rebind: `gpu-bind.sh` records that a `vfio-pci -> amdgpu -> vfio-pci` cycle leaves the bind
+wedged in uninterruptible sleep with only a reboot to recover, so that route must not be taken.
+On the first boot after a host restart, the very first `psp_read(idx=0x80)` in the deferred
+diagnostics answers it: `0x80000000` (or any status-zero value) means the state was stale and
+ring creation should now proceed; `0x80020115` again means the PSP is genuinely refusing.
+
+This is the single most useful clue for whoever continues: **`C2PMSG_64` does not change on
+write while its immediate neighbours do.**
 
 ### Measure with the right instrument, or you will read false zeros
 

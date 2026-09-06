@@ -73,6 +73,7 @@ enum : uint32_t {
     X2 = 1u << 12,  // match the ASIC capability entry ignoring the internal revision id
     X3 = 1u << 13,  // trace the firmware directory lookups
     X4 = 1u << 14,  // no SMU microcode file for this device type; use the fallback
+    X5 = 1u << 15,  // trace PSP register reads (mailbox handshake diagnosis)
 };
 
 struct RPatch {
@@ -213,6 +214,8 @@ static constexpr size_t kOffTtlSetDevCap = 0xaf02d;    // _ttlSetDeviceCapabilit
 static constexpr size_t kOffGvmGetIpFn   = 0x19258;    // _gvm_get_ip_function
 static constexpr size_t kOffFwDirGet     = 0xb0c10;    // AMDFirmwareDirectory::getFirmware
 static constexpr size_t kOffSmuFwFile    = 0x70961;    // _smu_set_fw_entry_info_from_file
+static constexpr size_t kOffPspRegRead   = 0x516ce;    // _psp_cgs_read_register
+static constexpr size_t kOffPspRegWrite  = 0x516f5;    // _psp_cgs_write_register
 
 // bgm_create's last stage, bio_sw_init (failure => event_id 0xc00c020b), is
 //     mov eax,1; test byte [bio+8],1; je out; call pcie_ip_sw_init ...
@@ -325,6 +328,47 @@ static mach_vm_address_t orgTtlSetDevCap {};
 static mach_vm_address_t orgGvmGetIpFn {};
 static mach_vm_address_t orgFwDirGet {};
 static mach_vm_address_t orgSmuFwFile {};
+static mach_vm_address_t orgPspRegRead {};
+
+// psp_ring_create's mailbox handshake times out. Before concluding anything about the
+// PSP itself, check the plumbing: psp_cgs_read_register resolves an IP-relative index
+// against a per-instance base held in the PSP context,
+//     516e1: add esi, dword ptr [rdi + 4*rdx + 0x5c]
+// and then calls out through the COS callback table. If that base is wrong, or the
+// aperture is not mapped, every read returns 0xffffffff or 0 and every wait times out
+// for reasons that have nothing to do with the PSP's state. Index 0x80 is C2PMSG_64 --
+// the mailbox status register the ring-create wait polls -- and 0x8000ffff/0x80000000
+// are its ready/response mask and flag. Capped so the log stays readable.
+static mach_vm_address_t orgPspRegWrite {};
+static uint32_t pspReadCount = 0;
+static uint32_t pspWriteCount = 0;
+
+// Reads alone cannot tell whose command left a status in C2PMSG_64, so log the writes
+// too. The GFX_CTRL command is the top half: 0x10000 INIT_RBI_RING, 0x20000
+// INIT_GPCOM_RING, 0x30000 DESTROY_RINGS, 0x40000 CAN_INIT_RINGS, 0x70000 MODE1_RST.
+static void wrapPspRegWrite(void *psp, uint32_t index, uint32_t instance,
+                            uint32_t value, uint32_t hwip) {
+    if (pspWriteCount < 32) {
+        RLOG("psp_write(idx=0x%x inst=%u ip=0x%x) <- 0x%08x%s", index, instance, hwip, value,
+             index == 0x80 ? "   <- C2PMSG_64 command" : "");
+        pspWriteCount++;
+    }
+    FunctionCast(wrapPspRegWrite, orgPspRegWrite)(psp, index, instance, value, hwip);
+}
+static uint32_t wrapPspRegRead(void *psp, uint32_t index, uint32_t instance, uint32_t hwip) {
+    uint32_t v = FunctionCast(wrapPspRegRead, orgPspRegRead)(psp, index, instance, hwip);
+    if (pspReadCount < 48) {
+        uint32_t regBase = 0;
+        if (psp != nullptr && instance < 8)
+            regBase = *reinterpret_cast<const uint32_t *>(
+                static_cast<const uint8_t *>(psp) + 0x5c + 4 * instance);
+        RLOG("psp_read(idx=0x%x inst=%u ip=0x%x) base=0x%x abs=0x%x -> 0x%08x%s",
+             index, instance, hwip, regBase, regBase + index, v,
+             index == 0x80 ? "   <- C2PMSG_64" : "");
+        pspReadCount++;
+    }
+    return v;
+}
 
 // We present _AMD_DEVICE_TYPE 0x8, and HWLibs registers NO PP_SMC_UCODE_SBIN for it --
 // only the VCN blob. That is Apple's own configuration, not a gap we introduced: of the
@@ -493,6 +537,16 @@ static void installDiagnostics(KernelPatcher &patcher, mach_vm_address_t base) {
            orgCheckPcieLink ? "ok" : "FAILED", orgCheckPcieLink);
     patcher.clearError();
     hwlibsBase = base;
+    orgPspRegWrite = patcher.routeFunction(base + kOffPspRegWrite,
+                      reinterpret_cast<mach_vm_address_t>(wrapPspRegWrite), true);
+    RLOG("route psp_cgs_write_register -> %s (org=0x%llx)",
+         orgPspRegWrite ? "ok" : "FAILED", orgPspRegWrite);
+    patcher.clearError();
+    orgPspRegRead = patcher.routeFunction(base + kOffPspRegRead,
+                      reinterpret_cast<mach_vm_address_t>(wrapPspRegRead), true);
+    RLOG("route psp_cgs_read_register -> %s (org=0x%llx)",
+         orgPspRegRead ? "ok" : "FAILED", orgPspRegRead);
+    patcher.clearError();
     orgSmuFwFile = patcher.routeFunction(base + kOffSmuFwFile,
                       reinterpret_cast<mach_vm_address_t>(wrapSmuFwFile), true);
     RLOG("route smu_set_fw_entry_info_from_file -> %s (org=0x%llx)",
@@ -609,7 +663,7 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
         applyFor(patcher, true);
         RLOG("post-patch: mask=0x%x D1=%d R1=%d base=0x%llx",
                mask, (mask & D1) != 0, (mask & R1) != 0, addr);
-        if (mask & (D1 | R1 | X1 | X2 | X3 | X4)) installDiagnostics(patcher, addr);
+        if (mask & (D1 | R1 | X1 | X2 | X3 | X4 | X5)) installDiagnostics(patcher, addr);
     } else if (kexts[KextFB].loadIndex == index) {
         RLOG("Framebuffer loaded, mask=0x%x", mask);
         applyFor(patcher, false);
