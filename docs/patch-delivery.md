@@ -1,0 +1,88 @@
+# How to actually get a patch into Apple's AMD kexts
+
+Four mechanisms were tried, in order. Three fail, and each fails *silently* — which is the real
+hazard, because a no-op looks exactly like "the patch didn't help".
+
+## 1. OpenCore `Kernel > Patch` — cannot reach these kexts
+
+Verified empirically: an `AMDRadeonX6000HWLibs` patch and an `AMDRadeonX6000Framebuffer` patch,
+both with find-patterns confirmed unique in the target binaries, both `Enabled=True` in the ESP's
+config.plist, produced **zero** effect. The BGM stage code stayed at `0xc00c0203` and
+`doGPUPanic()` still fired.
+
+The reason is structural. The AMD graphics kexts are prelinked into
+`SystemKernelExtensions.kc`, which the OS loads *after* the bootloader has exited. OpenCore only
+patches the **boot** kernel collection. This is the same fact that makes the Kernel Debug Kit
+necessary to disassemble these kexts at all — on an installed system the bundles are stubs — so
+it should have been predictable.
+
+This is also why NootedRed and NootRX are Lilu plugins rather than sets of OpenCore patches.
+
+## 2. Lilu itself — silently disabled on an unknown OS
+
+```
+Lilu config: @ automatically disabling on an unsupported operating system
+Lilu config: @ found a disabling argument or no arguments, exiting
+```
+
+Lilu 1.6.8 predates Sequoia (Darwin 24) and switches itself off, taking every plugin with it.
+`-lilubetaall` is required:
+
+```
+Lilu config: @ force enabling on an unsupported operating system due to beta flag
+Lilu    api: @ force enabling WhateverGreen (167) ... due to beta flag
+```
+
+Note the side-effect: until that flag is set, **WhateverGreen and AppleALC are also inert**, even
+though they are enabled in config.plist. Easy to reason wrongly about the guest while that is true.
+
+## 3. OpenCore-injecting a hand-built Lilu plugin — rejected
+
+```
+OC: Prelinked injection RaphaelGPU.kext (...) - Invalid Parameter
+```
+
+Only visible after routing OpenCore's own log to the serial port (`Misc > Debug > Target |= 8`,
+`DisplayLevel |= 0x40`); by default it logs to screen only, so this was another silent zero.
+
+Ruled out: the ESP copy is byte-identical to the build output, the Info.plist parses, the Mach-O
+magic is valid, and segment layout matches WhateverGreen's shape (`__TEXT` at vmaddr 0,
+`__LINKEDIT` filesize reaching EOF, `LC_SYMTAB` + `LC_DYSYMTAB` with relocations). The
+`OCAK: ... is not a supported executable` message — which is `DEBUG_INFO`, and INFO was
+enabled — never appeared, so the Mach-O parses fine; the failure is later, in
+`KextFindKmodAddress` or the post-`MachoExpandImage` re-init.
+
+Not pursued further, because the next mechanism proved the binary was never the problem.
+
+## 4. Installing into the Auxiliary KC — the working direction
+
+`kmutil` **parsed and attempted to link** the same kext, which exonerates the binary:
+
+```
+Failed to bind '_lilu' as could not find a kext with 'as.vit9696.Lilu' bundle-id
+```
+
+`kextstat` shows Lilu 1.6.8 loaded — but OpenCore injected it into the boot KC, so it exists at
+runtime and *not on disk*, and `kmutil`'s Aux-KC linker only resolves against on-disk kext
+repositories. So an Aux-KC kext cannot link against a bootloader-injected Lilu. Fix: put
+Lilu.kext in `/Library/Extensions` too (and stop OpenCore injecting it, or two Lilus contend for
+one bundle id).
+
+Then rebuilding the collection needs one more thing:
+
+```
+Missing Developer Kit: As of macOS 13.0, you will need to install a KDK
+matching your build 24G830 to rebuild kernel collections.
+```
+
+The same KDK already required for static analysis. Install it in the guest at
+`/Library/Developer/KDKs/` and `kmutil create -n aux` can link.
+
+## Prerequisites that must all hold
+
+- `csrutil`: **Kext Signing disabled** and Filesystem Protections disabled (`csr-active-config`
+  `0x67` gives this). `Authenticated Root` may stay *enabled* — the Aux KC lives on the Data
+  volume, so the sealed system volume is not touched.
+- Kexts in `/Library/Extensions` must be `root:wheel`. Wrong ownership is a silent load refusal.
+- `-lilubetaall` in boot-args.
+- A KDK matching the exact build installed **in the guest**.
