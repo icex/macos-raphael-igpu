@@ -78,14 +78,14 @@ def main():
     if not KDK.exists():
         sys.exit(f"preflight: KDK binary missing: {KDK}")
     data, syms = KDK.read_bytes(), load_symbols()
-    rows = re.findall(r"^static constexpr size_t (kOff\w+)\s*=\s*(0x[0-9a-fA-F]+);\s*//\s*(\S+)",
+    rows = re.findall(r"^static constexpr size_t (kOff\w+)\s*=\s*(0x[0-9a-fA-F]+);\s*//\s*(\S+)(.*)$",
                       SRC.read_text(), re.M)
     if not rows:
         sys.exit("preflight: no kOff* constants found -- did the source layout change?")
 
     bad = 0
     print(f"{'constant':26s} {'offset':>9s}  {'symbol':44s} check")
-    for name, off_s, sym in rows:
+    for name, off_s, sym, sym_note in rows:
         off = int(off_s, 16)
         want = syms.get(sym)
         if want is None and "::" in sym:
@@ -99,6 +99,8 @@ def main():
             note, ok = "SKIP (symbol not in nm; C++ name?)", True
         elif want != off:
             note, ok = f"MISMATCH: symbol is at {want:#x}", False
+        elif "(called" in sym_note:
+            note, ok = "ok (called, not routed)", True
         elif rip_relative_in_prologue(data, off):
             note, ok = "UNSAFE TO ROUTE: rip-relative operand in prologue", False
         else:

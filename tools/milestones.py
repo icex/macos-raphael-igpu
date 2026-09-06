@@ -99,6 +99,7 @@ PATCHES = {
     "xd": [],
     # xe guards AmdTtlServices::cosReleaseMemoryHandle via a Lilu route, not a byte patch.
     "xe": [],
+    "xf": [],
 }
 
 # device properties per set. Value must be bytes.
@@ -122,6 +123,7 @@ DESCR = {
     "r1": "remap IP versions in Apple's internal table at the ipconfig_get_ip_discovery_info chokepoint: NBIF 7.3.0->7.2.0, GC 10.3.6->10.3.4, MMHUB 2.4.1->2.3.0 (guess), ATHUB 2.4.1->2.4.0, SMUIO 13.0.10->13.0.7. Replaces the per-gate byte patches and can populate a version that is ABSENT, which a byte patch cannot.",
     "d1": "diagnostic only: hook ipconfig_get_ip_discovery_info to DUMP Apple's whole internal IP table (id + version per entry) and trace bif_ip_create's arguments. No patching. This is what tells us which IPs Apple actually resolved.",
     "x2": "ASIC capability entry: DevGetDeviceInfoEntry matches _DeviceCapabilityTbl on device id + INTERNAL revision + EXTERNAL revision. Entry 268 is exactly {0x8f, 0x73ff, internal 0, external 0xcb} and 0xcb is this chip's real PCI revision, so only the internal revision id can be missing. A miss makes ipi_bgm_create abort with \"Failed to create bgm context\" regardless of how many BGM stages pass. Retries the lookup with the internal revision Apple's own table uses.",
+    "xf": "hand SMU HW_INIT to Apple's own dummy back end. smu_11_0_7 drives the Navi 2x mailbox (MP1_SMN_C2PMSG_66/82/90 = register indices 0x282/0x292/0x29a); this silicon puts the SMU mailbox at MP1_C2PMSG_2/33/34, SMN 0x3b10508/0x3b10984/0x3b10988, so every message times out and check_fw_version reports a mismatch. On an APU the SMU is the platform's anyway, so the right answer is Apple's own PP_PhmUseDummyBackEnd=1 (a device property, no patch), which swaps hw_init/dpm/thermal/fan/power/gfx_off for dummy_* stubs that return 0. This clears the one slot that property leaves behind: dummy_smu_internal_hw_init still calls [smu+0x798] = smu_11_0_7_dummy_hw_init, which goes straight back into check_fw_status. Requires the property; logs loudly if it did not arrive.",
     "xe": "survive Apple's SMU failure-cleanup. Once PSP HW_INIT completes the failure moves to SMU HW_INIT, whose teardown calls cosReleaseMemoryHandle on a handle with a null vtable and faults on 0x28 -- it null-checks both arguments but not the vtable inside the handle. Adds the missing check so a failed SMU init only logs, keeping the guest bootable and readable (the same role m1's doGPUPanic patch plays for PPLIB).",
     "xd": "decline the tap-delay firmware (Apple types 0x1e/0x1f/0x20 -> wire 27/28/29 GLOBAL/SE0/SE1 TAP_DELAYS). gc_10_3_6_rlc.bin is header v2_2, whose layout stops before the v2_4 tap-delay fields, so this chip's firmware has none; upstream only loads them when a v2_4 header declares them. Apple submits Navi 23's and the PSP answers 0x8000030a. With xb in place every other blob loads with status 0, so this is the last rejected type.",
     "xc": "unload any pre-existing PSP TMR before Apple establishes one. LOAD_TOC is the single root failure (0x8000030a) and everything after it -- SETUP_TMR's TEE_ERROR_BAD_PARAMETERS on size 0, RLC_G's 0x80000203 'context not initialised' -- is a consequence. The leading explanation is ownership: this iGPU cannot be reset, so the PSP may still hold a TOC/TMR from amdgpu or the platform BIOS. Same shape as the stale-ring problem x7 fixes. Calls psp_tmr_unload (DESTROY_TMR) only, not psp_tmr_destroy, which would free allocations that do not exist yet.",
@@ -162,7 +164,7 @@ def verify():
     return ok
 
 BITS = {"m1": 1, "m2": 2, "m3": 4, "m4": 8, "m5": 16, "m6": 32, "m7": 64, "d1": 128,
-        "r1": 256, "p1": 512, "x1": 2048, "x2": 4096, "x3": 8192, "x4": 16384, "x5": 32768, "x6": 65536, "x7": 131072, "x8": 262144, "x9": 524288, "xa": 1048576, "xb": 2097152, "xc": 4194304, "xd": 8388608, "xe": 16777216}
+        "r1": 256, "p1": 512, "x1": 2048, "x2": 4096, "x3": 8192, "x4": 16384, "x5": 32768, "x6": 65536, "x7": 131072, "x8": 262144, "x9": 524288, "xa": 1048576, "xb": 2097152, "xc": 4194304, "xd": 8388608, "xe": 16777216, "xf": 33554432}
 BA_UUID = "7C436110-AB2A-4BBB-A880-FE41995C9F82"
 
 def apply(sets_on):
@@ -211,9 +213,9 @@ if a.cmd == "verify":
     sys.exit(0 if verify() else 1)
 
 head, d = load(VM / "config.plist")
-cur = {str(p.get("Comment",""))[3:].split(":")[0]
-       for p in d.get("Kernel", {}).get("Patch", [])
-       if str(p.get("Comment","")).startswith("MS:") and p.get("Enabled")}
+_ba = d["NVRAM"]["Add"][BA_UUID].get("boot-args", "")
+_m  = re.search(r"rgpu=(\S+)", _ba)
+cur = {n for n, b in BITS.items() if _m and int(_m.group(1), 0) & b}
 if a.cmd == "only":    new = set(a.sets)
 elif a.cmd == "enable":  new = cur | set(a.sets)
 else:                    new = cur - set(a.sets)

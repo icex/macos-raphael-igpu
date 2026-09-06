@@ -10,6 +10,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 export MTOOLS_SKIP_CHECK=1
 IMG="run/oc-raw.img@@1048576"
 [[ -f run/oc-raw.img ]] || { echo "run/oc-raw.img missing; run ./redeploy.sh once first" >&2; exit 1; }
+(( $# )) || { echo "esp-kext: no kext given, e.g. ./esp-kext.sh build/out/RaphaelGPU/RaphaelGPU.kext" >&2; exit 1; }
 # A guest boot costs ~90s; preflight catches bad constants, unsafe routes and
 # non-unique patterns in well under a second. Refuse to ship if it fails.
 if [[ -x ./preflight.py && "${SKIP_PREFLIGHT:-0}" != 1 ]]; then

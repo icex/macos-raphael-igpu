@@ -91,6 +91,7 @@ enum : uint32_t {
     XC = 1u << 22,  // unload any pre-existing PSP TMR before Apple establishes one
     XD = 1u << 23,  // decline the tap-delay blobs this chip's RLC firmware does not have
     XE = 1u << 24,  // survive Apple's SMU failure-cleanup instead of panicking in it
+    XF = 1u << 25,  // hand SMU HW_INIT to Apple's own dummy back end
 };
 
 struct RPatch {
@@ -245,6 +246,8 @@ static constexpr size_t kOffPspBufPrep    = 0x524e9;   // _psp_cmd_km_buf_prep
 static constexpr size_t kOffPspTmrInit    = 0x52bbd;   // _psp_tmr_init
 static constexpr size_t kOffPspTmrUnload  = 0x52ee7;   // _psp_tmr_unload
 static constexpr size_t kOffCosRelMemHnd  = 0xb3670;   // AmdTtlServices::cosReleaseMemoryHandle
+static constexpr size_t kOffSmuInitFnPtrs = 0x72b33;   // _smu_init_function_pointer_list
+static constexpr size_t kOffSmuUpdFnPtrs  = 0x73a2f;   // _smu_update_function_pointers (called, not routed)
 // GFX_CTRL command encodings, from upstream psp_gfx_if.h.
 static constexpr uint32_t kC2PMsg64        = 0x80;       // MP0 C2PMSG_64, IP-relative
 static constexpr uint32_t kHwIpMp0         = 0x4b;
@@ -366,6 +369,7 @@ static mach_vm_address_t orgTtlSetDevCap {};
 static mach_vm_address_t orgGvmGetIpFn {};
 static mach_vm_address_t orgFwDirGet {};
 static mach_vm_address_t orgSmuFwFile {};
+static mach_vm_address_t orgSmuInitFnPtrs {};
 static mach_vm_address_t orgPspRegRead {};
 
 // psp_ring_create's mailbox handshake times out. Before concluding anything about the
@@ -748,6 +752,66 @@ static uint32_t wrapSmuFwFile(void *smu, void *out) {
     return FunctionCast(wrapSmuFwFile, orgSmuFwFile)(smu, out);
 }
 
+// Hand SMU HW_INIT to Apple's own dummy back end.
+//
+// With PSP HW_INIT complete the failure is SW_IP_CLIENT_ID__SMU / EVENT__HW_INIT.
+// The chain is smu_internal_hw_init -> [smu+0x6c8] = smu_11_0_7_internal_hw_init ->
+// smu_11_0_7_core_hw_init -> check_fw_status -> check_fw_version, which sends SMU
+// message 3 (GetSmuVersion) on the Navi 2x mailbox and times out. That mailbox is
+// MP1_SMN_C2PMSG_66/82/90 -- register indices 0x282 (msg), 0x292 (param), 0x29a
+// (response), read straight out of smu_11_0_7_send_message and wait_for_response.
+// This silicon does not have it there: upstream's smu_v13_0_5 uses MP1_C2PMSG_2/33/34
+// at SMN 0x3b10508/0x3b10984/0x3b10988, an entirely different aperture.
+//
+// Retargeting those registers is possible -- smu_cgs_read_register already falls
+// through to an indirect SMN accessor for any byte address above smu+0x2cc (0x80000)
+// -- but it would put Navi 2x PPSMC message ids on the mailbox of the SMU that also
+// governs this machine's CPU cores, whose message enum is completely different. Not
+// something to do casually.
+//
+// It is also the wrong model. On an APU the SMU is the platform's, brought up by the
+// x86 firmware long before macOS exists, and it stays up whether or not a guest driver
+// talks to it. Apple already has a name for a GPU whose power management is somebody
+// else's problem: PP_PhmUseDummyBackEnd. Setting that IORegistry property to 1 makes
+// smu_init_function_pointer_list call smu_update_function_pointers after the 11_0_7
+// list is built, which overwrites hw_init/dpm/thermal/fan/power/ulv/gfx_off and the
+// rest with dummy_* stubs that return 0 -- so nothing downstream times out either.
+//
+// One hardware call survives that: dummy_smu_internal_hw_init still calls [smu+0x798],
+// which the 11_0_7 list set to smu_11_0_7_dummy_hw_init, and that goes back into
+// check_fw_status. smu_update_function_pointers does not clear the slot; nothing else
+// in the SMU context reads it. So clear it here and dummy_smu_internal_hw_init returns
+// 0 on its own (0x73952: xor r14d, r14d).
+static uint32_t wrapSmuInitFnPtrs(void *smu, void *a, void *b) {
+    auto r = FunctionCast(wrapSmuInitFnPtrs, orgSmuInitFnPtrs)(smu, a, b);
+    if ((mask & XF) != 0 && smu != nullptr) {
+        auto ctx = reinterpret_cast<uint8_t *>(smu);
+        uint32_t hwver = *reinterpret_cast<uint32_t *>(ctx + 0x2c8);
+        uint32_t dummy = *reinterpret_cast<uint32_t *>(ctx + 0x338);
+        uint16_t flags = *reinterpret_cast<uint16_t *>(ctx + 0x2d8);
+        auto slot = reinterpret_cast<void **>(ctx + 0x798);
+        RLOG("XF: smu_init_function_pointer_list -> %u  hw_version=%u  flags=0x%04x  "
+             "PP_PhmUseDummyBackEnd=%u  asic_dummy_hw_init=%p",
+             r, hwver, flags, dummy, *slot);
+        // The property does not reach HWLibs -- injected on the IOPCIDevice it reads back
+        // as 0 here -- so do not depend on it. smu_update_function_pointers is what
+        // PP_PhmUseDummyBackEnd would have caused; call it directly. It is idempotent:
+        // it only stores pointers.
+        if (dummy != 1 && hwlibsBase != 0) {
+            auto upd = reinterpret_cast<uint32_t (*)(void *)>(hwlibsBase + kOffSmuUpdFnPtrs);
+            RLOG("XF: PP_PhmUseDummyBackEnd is not set; calling smu_update_function_pointers "
+                 "directly -> %u", upd(smu));
+        }
+        if (*slot != nullptr) {
+            *slot = nullptr;
+            RLOG("XF: cleared [smu+0x798] so the dummy back end makes no hardware call");
+        }
+        RLOG("XF: hw_init is now %p (dummy_smu_internal_hw_init)",
+             *reinterpret_cast<void **>(ctx + 0x6c8));
+    }
+    return r;
+}
+
 // HW_INIT fails with "Firmware PP_SMC_UCODE_SBIN not found in directory, for deviceId
 // 0x000073ff". The directory is keyed on _AMD_DEVICE_TYPE, not the PCI id, and HWLibs
 // only ever registers five of them (putFirmware is called nine times, for device types
@@ -937,6 +1001,11 @@ static void installDiagnostics(KernelPatcher &patcher, mach_vm_address_t base) {
     RLOG("route smu_set_fw_entry_info_from_file -> %s (org=0x%llx)",
          orgSmuFwFile ? "ok" : "FAILED", orgSmuFwFile);
     patcher.clearError();
+    orgSmuInitFnPtrs = patcher.routeFunction(base + kOffSmuInitFnPtrs,
+                      reinterpret_cast<mach_vm_address_t>(wrapSmuInitFnPtrs), true);
+    RLOG("route smu_init_function_pointer_list -> %s (org=0x%llx)",
+         orgSmuInitFnPtrs ? "ok" : "FAILED", orgSmuInitFnPtrs);
+    patcher.clearError();
     orgFwDirGet = patcher.routeFunction(base + kOffFwDirGet,
                       reinterpret_cast<mach_vm_address_t>(wrapFwDirGet), true);
     RLOG("route AMDFirmwareDirectory::getFirmware -> %s (org=0x%llx)",
@@ -1098,7 +1167,7 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
 #if defined(RGPU_HAVE_RLC_FW) && RGPU_HAVE_TOC_FW
         if (mask & XB) substituteToc(patcher);
 #endif
-        if (mask & (D1 | R1 | X1 | X2 | X3 | X4 | X5 | X6 | X7 | X8 | XA | XC | XE)) installDiagnostics(patcher, addr);
+        if (mask & (D1 | R1 | X1 | X2 | X3 | X4 | X5 | X6 | X7 | X8 | XA | XC | XE | XF)) installDiagnostics(patcher, addr);
     } else if (kexts[KextFB].loadIndex == index) {
         RLOG("Framebuffer loaded, mask=0x%x", mask);
         applyFor(patcher, false);

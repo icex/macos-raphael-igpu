@@ -19,7 +19,10 @@ TTL's SWIP clients initialise in sequence; the failure has moved through three o
 | SWIP `PSP` | SW_INIT **complete** |
 | SWIP `SMU` | SW_INIT **complete** |
 | `PSP` HW_INIT | **complete** — TOC accepted, TMR established, every firmware blob loads with status 0 |
-| `SMU` HW_INIT | **current blocker** — Apple implements only `smu_9_0*`/`smu_11_0*`; this silicon needs `smu_13_0_5` |
+| `SMU` HW_INIT | **complete** — via Apple's own dummy power-management back end |
+| `GC` HW_INIT / `TTL::initialize()` | **complete** — the graphics core enumerates itself: `SE=1, numActiveCU=2, numActiveRB=1`, CWSR enabled |
+| accelerator attach | **complete** — "Accelerator successfully registered with controller" |
+| framebuffer aperture | **current blocker** — `FB Base == FB Top`, so the VRAM allocator has 0 bytes and the first command buffer page-faults |
 
 **PSP HW_INIT now completes.** Every IP firmware blob loads with status 0 — the whole RLC
 family and all the CP microcode — and the PSP goes on to `EVENT__HW_UNINIT`.
@@ -39,8 +42,29 @@ The remaining rejection is the tap-delay firmware, and it is *supposed* to be re
 `gc_10_3_6_rlc.bin` is header v2_2, so this chip has no tap-delay payloads, and upstream only
 loads them when a v2_4 header declares them.
 
-The wall is now SMU HW_INIT, which is the one this write-up predicted from the other side:
-`smu_init_function_pointer_list` implements only `smu_9_0*` and `smu_11_0*`.
+**`TTL::initialize()` now completes and the Metal accelerator attaches.** SMU HW_INIT fell
+without porting any SMU-13 code, because the question turned out to be the wrong one. Apple's
+`smu_11_0_7` drives the Navi 2x mailbox — register indices `0x282`/`0x292`/`0x29a`, i.e.
+`MP1_SMN_C2PMSG_66/82/90`, named in the clear by `smu_11_0_7_send_message`. This silicon puts
+its SMU mailbox at `MP1_C2PMSG_2/33/34`, SMN `0x3b10508`/`0x3b10984`/`0x3b10988` — the Zen SMU
+aperture, not the GPU's MMIO window. So every message times out.
+
+Retargeting those registers is mechanically possible and is still the wrong move: on an APU the
+SMU is the *platform's* power controller, governing the CPU cores of the host this VM runs on,
+brought up by the x86 firmware long before macOS exists. Apple already has a name for a GPU
+whose power management belongs to somebody else — `PP_PhmUseDummyBackEnd`, one of 36 settings
+in `_smu_config_name_mapping` — and it swaps hw_init, dpm, thermal, fan, power, ulv and gfx_off
+for `dummy_smu_*` stubs that return 0. Milestone `xf` takes that path and clears the one
+hardware call it leaves behind (`[smu+0x798]`).
+
+What comes back is real hardware: `SE=1, SA/SE=1, numActiveCU=2, numActiveRB=1` is this iGPU's
+actual topology, read out of the graphics core after it initialised.
+
+The wall is now the framebuffer aperture. GPUCAP reports `FB: 512 MB` but
+`FB Base: 0x100000000, Top: 0x100000000` — a zero-wide range — so the VRAM allocator has
+nothing, and WindowServer's first command buffer page-faults in
+`AMDAccelResource::BatchPrepareMappings`. Those values come from the MC/GMC framebuffer-location
+registers, which live in MMHUB, and MMHUB 2.4.1 is currently being reported as 2.3.0.
 
 Iteration is ~90 s end to end and needs no root: `preflight.py` validates every routed offset,
 route safety, patch pattern and the embedded-firmware bytes against the KDK in under a second,
