@@ -87,6 +87,18 @@ PATCHES = {
     "x7": [],
     # x8 wraps psp_np_fw_load_capability_check via a Lilu route, not a byte patch.
     "x8": [],
+    # x9 rewrites the firmware descriptors in the psp_np_fw_init wrapper, not a byte patch.
+    "x9": [],
+    # xa transcribes PSP GPCOM commands via a Lilu route, not a byte patch.
+    "xa": [],
+    # xb replaces _aPSP_TOC_SIGNED via applyLookupPatch over the whole container.
+    "xb": [],
+    # xc calls psp_tmr_unload before psp_tmr_init via a Lilu route, not a byte patch.
+    "xc": [],
+    # xd declines the tap-delay firmware types in the capability-check wrapper.
+    "xd": [],
+    # xe guards AmdTtlServices::cosReleaseMemoryHandle via a Lilu route, not a byte patch.
+    "xe": [],
 }
 
 # device properties per set. Value must be bytes.
@@ -110,6 +122,12 @@ DESCR = {
     "r1": "remap IP versions in Apple's internal table at the ipconfig_get_ip_discovery_info chokepoint: NBIF 7.3.0->7.2.0, GC 10.3.6->10.3.4, MMHUB 2.4.1->2.3.0 (guess), ATHUB 2.4.1->2.4.0, SMUIO 13.0.10->13.0.7. Replaces the per-gate byte patches and can populate a version that is ABSENT, which a byte patch cannot.",
     "d1": "diagnostic only: hook ipconfig_get_ip_discovery_info to DUMP Apple's whole internal IP table (id + version per entry) and trace bif_ip_create's arguments. No patching. This is what tells us which IPs Apple actually resolved.",
     "x2": "ASIC capability entry: DevGetDeviceInfoEntry matches _DeviceCapabilityTbl on device id + INTERNAL revision + EXTERNAL revision. Entry 268 is exactly {0x8f, 0x73ff, internal 0, external 0xcb} and 0xcb is this chip's real PCI revision, so only the internal revision id can be missing. A miss makes ipi_bgm_create abort with \"Failed to create bgm context\" regardless of how many BGM stages pass. Retries the lookup with the internal revision Apple's own table uses.",
+    "xe": "survive Apple's SMU failure-cleanup. Once PSP HW_INIT completes the failure moves to SMU HW_INIT, whose teardown calls cosReleaseMemoryHandle on a handle with a null vtable and faults on 0x28 -- it null-checks both arguments but not the vtable inside the handle. Adds the missing check so a failed SMU init only logs, keeping the guest bootable and readable (the same role m1's doGPUPanic patch plays for PPLIB).",
+    "xd": "decline the tap-delay firmware (Apple types 0x1e/0x1f/0x20 -> wire 27/28/29 GLOBAL/SE0/SE1 TAP_DELAYS). gc_10_3_6_rlc.bin is header v2_2, whose layout stops before the v2_4 tap-delay fields, so this chip's firmware has none; upstream only loads them when a v2_4 header declares them. Apple submits Navi 23's and the PSP answers 0x8000030a. With xb in place every other blob loads with status 0, so this is the last rejected type.",
+    "xc": "unload any pre-existing PSP TMR before Apple establishes one. LOAD_TOC is the single root failure (0x8000030a) and everything after it -- SETUP_TMR's TEE_ERROR_BAD_PARAMETERS on size 0, RLC_G's 0x80000203 'context not initialised' -- is a consequence. The leading explanation is ownership: this iGPU cannot be reset, so the PSP may still hold a TOC/TMR from amdgpu or the platform BIOS. Same shape as the stale-ring problem x7 fixes. Calls psp_tmr_unload (DESTROY_TMR) only, not psp_tmr_destroy, which would free allocations that do not exist yet.",
+    "xb": "substitute this chip's own signed PSP TOC (psp_13_0_5_toc.bin) for Apple's _aPSP_TOC_SIGNED. LOAD_TOC is the FIRST PSP command and the first failure (status 0x8000030a, tmr_size 0), so SETUP_TMR then fails with TEE_ERROR_BAD_PARAMETERS and every later firmware load builds on a TMR that was never established. Both are 0x600-byte $PS1 containers signed with the same key; Apple's is fw_type 0x0000200e version 0, this chip's is 0x0101200e version 3. Same size, straight drop-in. Expect LOAD_TOC to return a non-zero tmr_size.",
+    "xa": "diagnostic only: transcribe every PSP GPCOM command at psp_cmd_km_buf_prep, the single marshalling point. Shows command order, whether SETUP_TMR precedes the firmware loads, and the wire fw_type/address/size actually handed to the PSP. The Apple->wire type map is already known correct (0x0b -> 8 RLC_G etc.), so this answers what is left: ordering and prerequisites.",
+    "x9": "substitute this chip's own RLC firmware (gc_10_3_6_rlc.bin, embedded at build time by mkrlcfw.py) for Apple's Navi 23 blobs, by repointing the descriptor data pointer and length in the psp_np_fw_init wrapper. The header's payload lengths match Apple's descriptor sizes EXACTLY for 4 of 6 RLC types, which is what pins the convention (payload at ucode_array_offset_bytes, length ucode_size_bytes); the two that differ are the ASIC-specific SRM register list and LX6 dram. Mutually exclusive with x8, which declines those types instead of fixing them.",
     "x8": "decline the RLC save/restore lists (Apple types 0x16 GPM / 0x17 SRM / 0x18 CNTL). Seventeen of eighteen IP firmware blobs load, so the Raphael PSP accepts Navi 23 microcode in general; it refuses only these, which are ASIC-specific RLC register lists describing GC 10.3.4 rather than this chip's 10.3.6. Upstream loads them only when the RLC header declares them, so skipping is a supported configuration. Cost: no GFXOFF power-gating.",
     "x7": "destroy a stale PSP GPCOM ring before Apple creates one. The guest never tears its ring down (QEMU is killed) and Apple's psp_ring_create_11_0 only calls ring_stop on its TEE path, so every boot after the first dies at 'psp_ring_create: KM ring creation failed' until the host reboots. Upstream's psp_v11_0_ring_create calls ring_stop unconditionally, so this is upstream behaviour rather than a workaround. gpu-quiesce.sh does the same from the host after the VM stops.",
     "x6": "diagnostic only: dump the 40-byte IP-firmware descriptor array Apple hands psp_np_fw_init. The PSP rejects GFX_CMD_ID_LOAD_IP_FW for RLC restore list CNTL; no Apple kext ships GC/RLC microcode, so the blobs come from the VBIOS PSP directory -- which our grafted ROM declares with 0 entries. A zero count here confirms that.",
@@ -144,7 +162,7 @@ def verify():
     return ok
 
 BITS = {"m1": 1, "m2": 2, "m3": 4, "m4": 8, "m5": 16, "m6": 32, "m7": 64, "d1": 128,
-        "r1": 256, "p1": 512, "x1": 2048, "x2": 4096, "x3": 8192, "x4": 16384, "x5": 32768, "x6": 65536, "x7": 131072, "x8": 262144}
+        "r1": 256, "p1": 512, "x1": 2048, "x2": 4096, "x3": 8192, "x4": 16384, "x5": 32768, "x6": 65536, "x7": 131072, "x8": 262144, "x9": 524288, "xa": 1048576, "xb": 2097152, "xc": 4194304, "xd": 8388608, "xe": 16777216}
 BA_UUID = "7C436110-AB2A-4BBB-A880-FE41995C9F82"
 
 def apply(sets_on):
