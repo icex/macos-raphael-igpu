@@ -10,6 +10,10 @@
 #  2. `log show --last Nm` silently returns nothing when N is smaller than the
 #     guest's uptime, because the interesting lines are emitted at boot. Default
 #     the window from guest uptime, never a guess.
+#  3. Since the plugin moved into the BOOT kernel collection (OpenCore Kernel>Add), its
+#     start-up and kext-callback messages are emitted long before logd exists, so they
+#     NEVER appear here -- `log show` legitimately returns nothing for them. Serial is
+#     the only channel for anything logged before userspace. Use this for late messages.
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 WHAT="${1:-rgpu}"

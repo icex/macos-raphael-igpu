@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Drain the guest serial port into run/serial.log."""
 import socket, sys, time
-p = "/home/bogdan/macos-vm/run/serial.sock"
+import os, os.path
+VM = os.path.dirname(os.path.abspath(__file__))
+p = os.environ.get("VM_SERIAL", os.path.join(VM, "run", "serial.sock"))
 for _ in range(60):
     try:
         s = socket.socket(socket.AF_UNIX); s.connect(p); break
@@ -9,7 +11,7 @@ for _ in range(60):
 else:
     sys.exit("no serial socket")
 s.settimeout(1)
-with open("/home/bogdan/macos-vm/run/serial.log", "ab", buffering=0) as f:
+with open(os.path.join(VM, "run", "serial.log"), "ab", buffering=0) as f:
     while True:
         try:
             d = s.recv(65536)

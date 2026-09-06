@@ -8,7 +8,7 @@
 #   MacKernelSDK-master/                      kernel headers + libkmod.a
 #   liludbg/Lilu.kext/Contents/Resources/     Lilu Headers/ + Library/plugin_start.cpp
 set -euo pipefail
-BUILD="${BUILD:-/home/bogdan/macos-vm/build}"
+BUILD="${BUILD:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 SRC="$1"; NAME="$2"; BUNDLE="$3"; VER="${4:-1.0.0}"
 SDK="$BUILD/MacKernelSDK-master"
 LRES="$BUILD/liludbg/Lilu.kext/Contents/Resources"

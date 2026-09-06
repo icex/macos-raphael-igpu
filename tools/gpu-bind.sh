@@ -4,7 +4,8 @@
 set -euo pipefail
 DEV="${1:-0000:7b:00.0}"
 OWNER="${SUDO_UID:-1000}"
-ROM_OUT="${2:-/home/bogdan/macos-vm/igpu-vbios.rom}"
+VM="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROM_OUT="${2:-$VM/igpu-vbios.rom}"
 
 [[ $EUID -eq 0 ]] || { echo "run me with sudo" >&2; exit 1; }
 
@@ -21,7 +22,7 @@ modprobe vfio-pci
 
 # Snapshot the IP discovery versions -- this is the measurement that decides which
 # of Apple's per-IP version gates can ever match. Cheap, and safe to do first.
-IPD="/home/bogdan/macos-vm/findings/hw/ip_discovery.txt"
+IPD="$VM/findings/hw/ip_discovery.txt"
 if [[ -d "/sys/bus/pci/devices/${DEV}/ip_discovery/die/0" ]]; then
     mkdir -p "$(dirname "${IPD}")"
     ( cd "/sys/bus/pci/devices/${DEV}/ip_discovery/die/0"

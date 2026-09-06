@@ -8,23 +8,20 @@ No Mac hardware, no macOS build host: everything here is produced and driven fro
 
 ## Status
 
+TTL's SWIP clients initialise in sequence; the failure has moved through three of them.
+
 | stage | state |
 |---|---|
-| ATOM / VBIOS acceptance | **solved** — the controller starts and macOS brands the iGPU "AMD Radeon Navi23" |
-| Per-IP version gates | 8 of 11 reduced to one-field byte patches; 5 of 17 IP blocks already pass unmodified |
-| Patch delivery mechanism | in progress — OpenCore `Kernel>Patch` proven unusable; Lilu plugin built |
-| Metal | not yet |
+| VBIOS / ATOM tables | **solved** — the controller starts and brands itself `AMD Radeon Navi23`, 512 MB, 128-bit GDDR6 |
+| patch delivery | **solved** — OpenCore injects Lilu + this plugin into the boot collection, so every patch lands before `start()` |
+| SWIP `BGM` | **complete** — all of `bgm_create`, VBIOS init, GDDR6 memory training |
+| SWIP `GVM` | **complete** — UMC, VM, HDP and ATHUB all resolve handlers |
+| SWIP `PSP` | **current blocker** — `PSP init/power-up failed` at `EVENT__SW_INIT` |
 
-The first real milestone, reached from a stock install:
-
-```
-[GPUCAP] refresh() --- Mem Size: FB: 512 MB, Aper: 256 MB, Reg Aper: 512 KB.
-[GPUCAP] refresh() --- Mem Config: Width: 128, Type: GDDR6.
-[GPUCAP] refresh() --- Branding - family: "Radeon"; device: "Navi23"; model: "AMD Radeon Navi23".
-```
-
-`Width: 128` and `Type: GDDR6` are values synthesised by `tools/mkrom.py`, which is the proof the
-driver is parsing grafted tables rather than reading real ones.
+Nothing here adds new driver code. Every change either points Apple's stack at an
+implementation it already ships for a near-identical IP version, or supplies a device
+identity that a real Navi 23 would report. `findings/GPU-RE.md` is the full write-up,
+including the measurement traps that produced wrong conclusions along the way.
 
 ## The three things worth knowing
 

@@ -2,7 +2,7 @@
 # One-time: assemble a Linux -> macOS kext cross toolchain under $BUILD.
 # Everything lands in $BUILD; nothing is installed system-wide, no root needed.
 set -euo pipefail
-BUILD="${BUILD:-/home/bogdan/macos-vm/build}"
+BUILD="${BUILD:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 mkdir -p "$BUILD"; cd "$BUILD"
 
 # 1. Kernel headers + libkmod.a (acidanthera MacKernelSDK)

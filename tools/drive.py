@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """Absolute mouse/keyboard driving for the macOS guest via the QEMU monitor."""
 import socket, sys, time
-S = "/home/bogdan/macos-vm/run/monitor.sock"
+import os.path
+# Derive the VM directory from this script's own location: a hardcoded home path
+# makes the tooling unusable on any other machine or user.
+VM = os.path.dirname(os.path.abspath(__file__))
+S = os.environ.get("VM_MONITOR", os.path.join(VM, "run", "monitor.sock"))
 _s = socket.socket(socket.AF_UNIX); _s.connect(S); _s.settimeout(0.02)
 def cmd(c, w=0.35):
     _s.sendall((c + "\n").encode()); time.sleep(w)
