@@ -9,6 +9,10 @@ VER="1.0.$NEXT"
 # build-kext.sh does not exit nonzero on a compile error, and the Info.plist step
 # below would then happily stamp a new version onto the PREVIOUS binary. Delete the
 # executable first so its absence is the failure signal.
+# Regenerate the embedded RLC firmware header from /lib/firmware before every build, so
+# the bytes can never drift from what mkrlcfw.py reports. Not fatal if absent: the
+# plugin compiles without RLC substitution via __has_include.
+./mkrlcfw.py >/dev/null || echo "build-plugin: mkrlcfw failed; building without RLC firmware" >&2
 EXE=build/out/RaphaelGPU/RaphaelGPU.kext/Contents/MacOS/RaphaelGPU
 rm -f "$EXE"
 (cd build && ./build-kext.sh src-rgpu RaphaelGPU as.rgpu.RaphaelGPU "$VER") 2>&1 | tail -3

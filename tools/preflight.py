@@ -32,10 +32,47 @@ def load_symbols():
             except ValueError: pass
     return syms
 
+# Opcodes that take a ModRM byte and plausibly appear in a prologue. A rip-relative operand
+# is ModRM with mod=00, rm=101 -- i.e. (modrm & 0xC7) == 0x05.
+_MODRM_OPS = {
+    0x8b,        # mov r, m      <- _psp_cmd_km_resp_check opens with 48 8b 05 (rip+disp32)
+    0x8d,        # lea r, m      <- DevGetDeviceInfoEntry opens with 48 8d 0d
+    0x89,        # mov m, r
+    0x03, 0x2b,  # add/sub r, m
+    0x39, 0x3b,  # cmp
+    0x85,        # test
+    0x63,        # movsxd
+    0xc7,        # mov m, imm32
+    0xff,        # inc/dec/call/jmp m
+    0x8a, 0x88,  # mov r8, m / m, r8
+    0x0f,        # two-byte escape (movzx/movsx/setcc/...)
+}
+
 def rip_relative_in_prologue(data, va, n=16):
-    """True if a lea reg,[rip+disp32] (48 8d /r with mod=00 rm=101) starts within n bytes."""
+    """True if any rip-relative memory operand starts within the first n bytes.
+
+    Lilu's trampoline relocates the instructions it displaces WITHOUT rewriting
+    rip-relative displacements, so routing such a function makes the "original" compute a
+    garbage address. Checking only `lea` was not enough -- a rip-relative `mov` is just as
+    fatal, and _psp_cmd_km_resp_check has one at byte 11.
+    """
     b = data[va:va + n]
-    return any(b[i] == 0x8d and (b[i + 1] & 0xc7) == 0x05 for i in range(len(b) - 2))
+    for i in range(len(b) - 3):
+        j = i
+        if 0x40 <= b[j] <= 0x4f:          # REX prefix
+            j += 1
+        if j + 2 >= len(b):
+            break
+        op = b[j]
+        if op == 0x0f:                     # two-byte opcode: modrm is one further along
+            if j + 3 >= len(b):
+                break
+            if (b[j + 2] & 0xc7) == 0x05:
+                return True
+            continue
+        if op in _MODRM_OPS and (b[j + 1] & 0xc7) == 0x05:
+            return True
+    return False
 
 def main():
     if not KDK.exists():
@@ -68,6 +105,30 @@ def main():
             note, ok = "ok", True
         if not ok: bad += 1
         print(f"{name:26s} {off_s:>9s}  {sym:44s} {note}")
+
+    # If the RLC firmware header was generated, the built kext must actually CONTAIN those
+    # bytes. Without __attribute__((used)) the compiler folds the few bytes read directly and
+    # drops the rest of the array, yielding a kext that looks fine and carries no firmware.
+    fwh = VM / "build/src-rgpu/rlc_fw.h"
+    exe = VM / "build/out/RaphaelGPU/RaphaelGPU.kext/Contents/MacOS/RaphaelGPU"
+    print()
+    if not fwh.exists():
+        print("rlc firmware       not generated (rlc_fw.h absent) -- RLC substitution disabled")
+    elif not exe.exists():
+        print("rlc firmware       kext not built yet; cannot verify embedding")
+    else:
+        import re as _re, subprocess as _sp
+        raw = _sp.run(["zstd", "-dcq", "/lib/firmware/amdgpu/gc_10_3_6_rlc.bin.zst"],
+                      capture_output=True).stdout
+        blob = exe.read_bytes()
+        # Probe three widely separated 64-byte slices of the payload region.
+        probes = [raw[0x100:0x140], raw[0x6300:0x6340], raw[0x1b1d0:0x1b210]]
+        hits = sum(1 for pr in probes if pr and pr in blob)
+        if hits == len(probes):
+            print(f"rlc firmware       ok ({len(raw)} bytes embedded; {hits}/{len(probes)} probes found)")
+        else:
+            print(f"rlc firmware       NOT EMBEDDED: only {hits}/{len(probes)} probes found in the kext")
+            bad += 1
 
     print("\n-- milestones.py verify --")
     r = subprocess.run([sys.executable, str(VM / "milestones.py"), "verify"],

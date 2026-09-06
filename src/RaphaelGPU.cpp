@@ -29,6 +29,14 @@
 #include <Headers/kern_util.hpp>
 #include <Headers/plugin_start.hpp>
 
+// This machine's own RLC firmware, generated at build time by mkrlcfw.py from
+// /lib/firmware/amdgpu/gc_10_3_6_rlc.bin. Not committed: AMD firmware is redistributable
+// only under its own licence. Absent header => build without RLC substitution.
+#if __has_include("rlc_fw.h")
+#include "rlc_fw.h"
+#define RGPU_HAVE_RLC_FW 1
+#endif
+
 static const char *pathHWLibs[] {
     "/System/Library/Extensions/AMDRadeonX6000HWServices.kext/Contents/PlugIns/"
     "AMDRadeonX6000HWLibs.kext/Contents/MacOS/AMDRadeonX6000HWLibs"
@@ -77,6 +85,12 @@ enum : uint32_t {
     X6 = 1u << 16,  // dump the IP-firmware descriptor array Apple hands the PSP
     X7 = 1u << 17,  // destroy a stale PSP GPCOM ring before Apple tries to create one
     X8 = 1u << 18,  // do not offer the RLC save/restore lists to the PSP
+    X9 = 1u << 19,  // substitute this chip's own RLC firmware for Apple's Navi 23 blobs
+    XA = 1u << 20,  // transcribe every PSP GPCOM command as it is marshalled
+    XB = 1u << 21,  // substitute this chip's own signed PSP TOC for Apple's
+    XC = 1u << 22,  // unload any pre-existing PSP TMR before Apple establishes one
+    XD = 1u << 23,  // decline the tap-delay blobs this chip's RLC firmware does not have
+    XE = 1u << 24,  // survive Apple's SMU failure-cleanup instead of panicking in it
 };
 
 struct RPatch {
@@ -227,6 +241,10 @@ static constexpr size_t kOffPspRegWrite  = 0x516f5;    // _psp_cgs_write_registe
 static constexpr size_t kOffPspNpFwInit  = 0x5304c;    // _psp_np_fw_init
 static constexpr size_t kOffPspRingCreate = 0x5beb3;   // _psp_ring_create_11_0
 static constexpr size_t kOffPspFwCapChk   = 0x5317e;   // _psp_np_fw_load_capability_check
+static constexpr size_t kOffPspBufPrep    = 0x524e9;   // _psp_cmd_km_buf_prep
+static constexpr size_t kOffPspTmrInit    = 0x52bbd;   // _psp_tmr_init
+static constexpr size_t kOffPspTmrUnload  = 0x52ee7;   // _psp_tmr_unload
+static constexpr size_t kOffCosRelMemHnd  = 0xb3670;   // AmdTtlServices::cosReleaseMemoryHandle
 // GFX_CTRL command encodings, from upstream psp_gfx_if.h.
 static constexpr uint32_t kC2PMsg64        = 0x80;       // MP0 C2PMSG_64, IP-relative
 static constexpr uint32_t kHwIpMp0         = 0x4b;
@@ -386,9 +404,197 @@ static mach_vm_address_t orgPspFwCapChk {};
 //     53ab8: lea eax, [r15 - 0x1]
 // so "RLC restore list CNTL", message 0x18, is really fw TYPE 0x19, and the family is
 // 0x17 GPM / 0x18 SRM / 0x19 CNTL. Log every call rather than trusting that arithmetic.
+#ifdef RGPU_HAVE_RLC_FW
+// Substitute this chip's own RLC firmware for Apple's Navi 23 blobs.
+//
+// Apple hands the PSP the full Navi 23 IP set and the Raphael PSP rejects the RLC members.
+// The sizes say why, and they also pin the calling convention. rlc_firmware_header_v2_2
+// in gc_10_3_6_rlc.bin (this chip's own signed firmware) declares payloads whose lengths
+// match Apple's descriptor sizes EXACTLY for four of the six RLC types:
+//
+//     type          Apple (Navi 23)   gc_10_3_6      
+//     0x0b RLC_G          0x6200        0x6200   same
+//     0x19 CNTL            0x250         0x250   same
+//     0x17 GPM             0x600         0x600   same
+//     0x1a LX6 iram      0x10200       0x10200   same
+//     0x18 SRM            0x5ec0        0x4480   DIFFERS
+//     0x1b LX6 dram       0x4200       0x10200   DIFFERS
+//
+// Four exact matches establish that Apple passes the PAYLOAD at ucode_array_offset_bytes
+// with length ucode_size_bytes, not the container. And the two that differ are precisely
+// the ASIC-specific ones: the SRM list is a register list over the GC register file, so
+// Navi 23's 32 CUs need 0x5ec0 where this chip's 2 CUs need 0x4480. Handing a PSP a
+// register list for the wrong register file is exactly the kind of thing it should refuse.
+//
+// So: parse the header out of the embedded bytes at runtime -- no offsets baked into the
+// plugin, they cannot drift from the firmware -- and repoint each descriptor's data
+// pointer (+0x10) and length (+0x18) before psp_np_fw_init memmoves the array.
+struct RlcPayload { uint32_t appleType; uint32_t offField; uint32_t sizeField; const char *name; };
+static const RlcPayload kRlcPayloads[] {
+    {0x0b, 0x18, 0x14, "RLC_G"},          // common_firmware_header.ucode_{array_offset,size}_bytes
+    {0x19, 0x78, 0x74, "restore CNTL"},   // save_restore_list_cntl_*
+    {0x17, 0x88, 0x84, "restore GPM"},    // save_restore_list_gpm_*
+    {0x18, 0x98, 0x94, "restore SRM"},    // save_restore_list_srm_*
+    {0x1a, 0xa0, 0x9c, "LX6 iram"},       // rlc_iram_ucode_*
+    {0x1b, 0xa8, 0xa4, "LX6 dram"},       // rlc_dram_ucode_*
+};
+
+static uint32_t rlcField(uint32_t off) {
+    return *reinterpret_cast<const uint32_t *>(kRlcFw + off);
+}
+
+static void substituteRlcFirmware(uint8_t *arr, uint32_t count) {
+    // Refuse to touch anything unless the embedded bytes really are the header we expect.
+    uint16_t hvMaj = *reinterpret_cast<const uint16_t *>(kRlcFw + 0x08);
+    uint16_t hvMin = *reinterpret_cast<const uint16_t *>(kRlcFw + 0x0a);
+    if (rlcField(0x00) != kRlcFwSize || rlcField(0x04) != 0xac || hvMaj != 2 || hvMin != 2) {
+        RLOG("X9: embedded RLC firmware is not rlc_firmware_header_v2_2 "
+             "(size=0x%x hdr=0x%x v%u.%u) -- not substituting",
+             rlcField(0x00), rlcField(0x04), hvMaj, hvMin);
+        return;
+    }
+    for (uint32_t i = 0; i < count; i++) {
+        auto e = arr + static_cast<size_t>(i) * 40;
+        uint32_t type = *reinterpret_cast<const uint32_t *>(e + 0x04);
+        for (auto &p : kRlcPayloads) {
+            if (p.appleType != type) continue;
+            uint32_t off = rlcField(p.offField), len = rlcField(p.sizeField);
+            if (len == 0 || off + len > kRlcFwSize) {
+                RLOG("X9: %s payload out of range (off=0x%x len=0x%x) -- left alone",
+                     p.name, off, len);
+                break;
+            }
+            uint64_t oldPtr = *reinterpret_cast<const uint64_t *>(e + 0x10);
+            uint32_t oldLen = *reinterpret_cast<const uint32_t *>(e + 0x18);
+            *reinterpret_cast<uint64_t *>(e + 0x10) =
+                reinterpret_cast<uint64_t>(kRlcFw + off);
+            *reinterpret_cast<uint32_t *>(e + 0x18) = len;
+            RLOG("X9: type 0x%02x %-12s Apple 0x%llx/0x%-6x -> gc_10_3_6+0x%-6x/0x%-6x%s",
+                 type, p.name, oldPtr, oldLen, off, len,
+                 oldLen == len ? "" : "  (LENGTH CHANGED)");
+            break;
+        }
+    }
+}
+#endif
+
+static mach_vm_address_t orgPspBufPrep {};
+static uint32_t bufPrepCount = 0;
+// psp_gfx_resp sits at command-buffer +864: status +0, fw_addr_lo +8, fw_addr_hi +12,
+// tmr_size +16. buf_prep runs BEFORE submission, so the response to command N only exists
+// by the time command N+1 is marshalled -- carry the previous buffer forward and read it
+// then. Without this we see what Apple asks for but never what the PSP answered.
+static const uint32_t *prevCmdBuf = nullptr;
+static uint32_t prevWireCmd = 0;
+static uint32_t prevWireType = 0;
+
+// Transcribe every PSP GPCOM command. psp_cmd_km_buf_prep is the single point where Apple
+// marshals its internal command descriptor into a psp_gfx_cmd_resp:
+//     524fd: ecx = [rdx]                        ; slot index, < 0x10
+//     52509: edx = [rsi]                        ; Apple's command id
+//     52517: rbx = [rdi + slot*0x38 + 0x760]    ; the GPCOM buffer for that slot
+// and for LOAD_IP_FW it copies [rsi+0x04/0x08/0x0c] to the command's fw_phy_addr_lo/hi and
+// fw_size, then translates [rsi+0x10] through psp_cmd_km_fw_id_map into the wire fw_type.
+// That map is correct -- it produces exactly upstream's GFX_FW_TYPE values (Apple 0x0b -> 8
+// RLC_G, 0x17 -> 20, 0x18 -> 21, 0x19 -> 22, 0x1a -> 26, 0x1b -> 48) -- so the transcript is
+// here to answer what remains: in what ORDER commands are issued, whether SETUP_TMR (wire
+// cmd 5) precedes the firmware loads, and what physical address the PSP is actually given.
+static uint32_t wrapPspBufPrep(void *psp, void *desc, uint32_t *slot) {
+    uint32_t slotIdx = (slot != nullptr) ? *slot : 0xffffffff;
+    uint32_t r = FunctionCast(wrapPspBufPrep, orgPspBufPrep)(psp, desc, slot);
+    if ((mask & XA) != 0 && bufPrepCount < 64 && desc != nullptr && slotIdx < 0x10) {
+        auto dw = static_cast<const uint32_t *>(desc);
+        auto buf = reinterpret_cast<const uint32_t *>(
+            static_cast<const uint8_t *>(psp) + slotIdx * 0x38 + 0x760);
+        // psp_gfx_cmd_resp: +0x08 cmd_id; LOAD_IP_FW: +0x1c/+0x20 addr, +0x24 size, +0x28 type
+        const uint32_t *b = (buf != nullptr) ? *reinterpret_cast<const uint32_t *const *>(buf) : nullptr;
+        if (b != nullptr) {
+            if (prevCmdBuf != nullptr) {
+                uint32_t st = prevCmdBuf[216];           // psp_gfx_resp.status at +864
+                RLOG("   resp cmd_id=%-3u wireType=%-3u status=0x%08x tmr_size=0x%x%s",
+                     prevWireCmd, prevWireType, st, prevCmdBuf[220],
+                     st == 0 ? "" : "   <-- FAILED");
+            }
+            // Log addr/size for EVERY command, not just LOAD_IP_FW: LOAD_TOC (32) and
+            // SETUP_TMR (5) carry them in the same places (+0x1c/+0x20 addr, +0x24 size),
+            // and since LOAD_TOC is the first failure its arguments are what matter.
+            uint32_t wireCmd = b[2];
+            RLOG("cmd[%02u] wire=%-3u apple=%-2u type=%-3u addr=0x%08x%08x size=0x%-8x",
+                 bufPrepCount, wireCmd, dw[0], wireCmd == 6 ? b[10] : 0,
+                 b[8], b[7], b[9]);
+            prevWireType = (wireCmd == 6) ? b[10] : 0;
+            prevCmdBuf = b;
+            prevWireCmd = wireCmd;
+            bufPrepCount++;
+        }
+    }
+    return r;
+}
+
+static mach_vm_address_t orgCosRelMemHnd {};
+
+// Keep the guest alive through Apple's SMU failure-cleanup.
+//
+// With the TOC accepted, PSP HW_INIT completes and the failure moves to SMU HW_INIT. Its
+// teardown then panics the machine:
+//     cosReleaseMemoryHandle(this, handle):
+//         b367e: mov rax, qword ptr [rsi]     ; handle's vtable
+//         b3684: call qword ptr [rax + 0x28]  ; virtual release
+// It null-checks BOTH arguments but not the vtable pointer inside the handle, and on this
+// path the handle is non-null with a null vtable, so it faults on 0x28 (observed: RAX=0,
+// CR2=0x28). That is a latent bug in Apple's cleanup, reachable here because the SMU
+// sequence fails in a way a real Navi 23 never does. Add the missing check so a failed
+// SMU init only logs, the way m1's doGPUPanic patch does for the PPLIB path -- otherwise
+// the guest dies before anything can be read out of it.
+static uint32_t wrapCosRelMemHnd(void *self, void *handle) {
+    if ((mask & XE) != 0 && handle != nullptr &&
+        *reinterpret_cast<void *const *>(handle) == nullptr) {
+        RLOG("XE: cosReleaseMemoryHandle(%p) has a null vtable -- skipping the release", handle);
+        return 0;
+    }
+    return FunctionCast(wrapCosRelMemHnd, orgCosRelMemHnd)(self, handle);
+}
+
+static mach_vm_address_t orgPspTmrInit {};
+
+// Unload any pre-existing TMR before Apple tries to establish one.
+//
+// The whole failure cascade has a single root: LOAD_TOC is rejected with 0x8000030a, so
+// tmr_size comes back 0, so SETUP_TMR is handed size 0 and returns TEE_ERROR_BAD_PARAMETERS,
+// so there is no TMR -- and RLC_G then fails with 0x80000203, which decoding the PSP sys_drv
+// images embedded in HWLibs shows means "required context not initialised", returned before
+// the request is even parsed. Substituting firmware never mattered: the RLC blobs were never
+// the problem.
+//
+// Why LOAD_TOC itself is refused is the open question, and the leading explanation is
+// ownership. This iGPU cannot be reset -- the host's amdgpu drove it first and the platform
+// BIOS before that -- so the PSP may still hold a TOC/TMR from an earlier owner and refuse
+// to establish a second one. That is precisely the shape of the stale-GPCOM-ring problem
+// already fixed in x7, and it has the same style of fix: issue the teardown the previous
+// owner never did. psp_tmr_unload submits DESTROY_TMR (Apple cmd 7 -> wire 7) and nothing
+// else; psp_tmr_destroy also frees allocations that do not exist yet, so call the unload
+// alone.
+static uint32_t wrapPspTmrInit(void *psp) {
+    if ((mask & XC) != 0 && hwlibsBase != 0 && psp != nullptr) {
+        auto unload = reinterpret_cast<uint32_t (*)(void *)>(hwlibsBase + kOffPspTmrUnload);
+        uint32_t u = unload(psp);
+        RLOG("XC: psp_tmr_unload before TMR init -> %u", u);
+    }
+    return FunctionCast(wrapPspTmrInit, orgPspTmrInit)(psp);
+}
+
 static uint32_t fwCapCount = 0;
 static uint32_t wrapPspFwCapChk(void *psp, uint32_t fwType) {
+    // X8 declines the RLC save/restore lists. It is now OBSOLETE and must stay off: with
+    // this chip's own TOC accepted, those three load with status 0.
     bool decline = (mask & X8) != 0 && fwType >= 0x17 && fwType <= 0x19;
+    // XD declines the tap-delay blobs, Apple types 0x1e/0x1f/0x20 (wire 27/28/29 GLOBAL /
+    // SE0 / SE1 TAP_DELAYS). gc_10_3_6_rlc.bin is header v2_2, whose layout stops before
+    // the v2_4 tap-delay fields, so this chip's firmware does not contain them at all --
+    // upstream only loads them when the v2_4 header declares them, so declining is what
+    // upstream does here. Apple submits Navi 23's, and the PSP answers 0x8000030a,
+    // "unrecognised firmware type".
+    if ((mask & XD) != 0 && fwType >= 0x1e && fwType <= 0x21) decline = true;
     uint32_t r = decline ? 0 : FunctionCast(wrapPspFwCapChk, orgPspFwCapChk)(psp, fwType);
     if (fwCapCount < 48) {
         RLOG("fw_cap(type=0x%02x) -> %u%s", fwType, r,
@@ -478,6 +684,16 @@ static void dumpFwDescriptors(const uint8_t *arr, uint32_t count) {
 
 static uint32_t wrapPspNpFwInit(void *psp, void *arr, uint32_t count) {
     if (mask & X6) dumpFwDescriptors(static_cast<const uint8_t *>(arr), count);
+#ifdef RGPU_HAVE_RLC_FW
+    // Before the original memmoves the array to psp+0x2c08, so the substitution is what
+    // gets copied and every later consumer sees it.
+    if ((mask & X9) != 0 && arr != nullptr)
+        substituteRlcFirmware(static_cast<uint8_t *>(arr), count);
+#endif
+    if (mask & X6) {
+        RLOG("np_fw_init: descriptors after substitution --");
+        dumpFwDescriptors(static_cast<const uint8_t *>(arr), count);
+    }
     return FunctionCast(wrapPspNpFwInit, orgPspNpFwInit)(psp, arr, count);
 }
 static uint32_t pspReadCount = 0;
@@ -676,6 +892,21 @@ static void installDiagnostics(KernelPatcher &patcher, mach_vm_address_t base) {
            orgCheckPcieLink ? "ok" : "FAILED", orgCheckPcieLink);
     patcher.clearError();
     hwlibsBase = base;
+    orgCosRelMemHnd = patcher.routeFunction(base + kOffCosRelMemHnd,
+                      reinterpret_cast<mach_vm_address_t>(wrapCosRelMemHnd), true);
+    RLOG("route cosReleaseMemoryHandle -> %s (org=0x%llx)",
+         orgCosRelMemHnd ? "ok" : "FAILED", orgCosRelMemHnd);
+    patcher.clearError();
+    orgPspTmrInit = patcher.routeFunction(base + kOffPspTmrInit,
+                      reinterpret_cast<mach_vm_address_t>(wrapPspTmrInit), true);
+    RLOG("route psp_tmr_init -> %s (org=0x%llx)",
+         orgPspTmrInit ? "ok" : "FAILED", orgPspTmrInit);
+    patcher.clearError();
+    orgPspBufPrep = patcher.routeFunction(base + kOffPspBufPrep,
+                      reinterpret_cast<mach_vm_address_t>(wrapPspBufPrep), true);
+    RLOG("route psp_cmd_km_buf_prep -> %s (org=0x%llx)",
+         orgPspBufPrep ? "ok" : "FAILED", orgPspBufPrep);
+    patcher.clearError();
     orgPspFwCapChk = patcher.routeFunction(base + kOffPspFwCapChk,
                       reinterpret_cast<mach_vm_address_t>(wrapPspFwCapChk), true);
     RLOG("route psp_np_fw_load_capability_check -> %s (org=0x%llx)",
@@ -722,6 +953,53 @@ static void installDiagnostics(KernelPatcher &patcher, mach_vm_address_t base) {
            orgTtlSetDevCap ? "ok" : "FAILED", orgTtlSetDevCap);
     patcher.clearError();
 }
+
+#if defined(RGPU_HAVE_RLC_FW) && RGPU_HAVE_TOC_FW
+// Substitute this chip's own signed PSP TOC for Apple's.
+//
+// LOAD_TOC is the FIRST command Apple sends the PSP and it is the first thing that fails:
+//     cmd[00] wire 32 LOAD_TOC   -> status=0x8000030a  tmr_size=0
+//     cmd[01] wire  5 SETUP_TMR  -> status=0xffff0006  (TEE_ERROR_BAD_PARAMETERS)
+//     cmd[02] wire  4 LOAD_ASD   -> status=0x00000007
+// With no TOC there is no TMR size, so the TMR is never established and every firmware
+// load afterwards is building on nothing. That, not the RLC blobs, is the root failure --
+// the 0x8000030a I had earlier attributed to the RLC restore list is LOAD_TOC's status.
+//
+// Apple's TOC is _aPSP_TOC_SIGNED at HWLibs VMA 0x1155d40: a $PS1 container, total 0x600,
+// fw_type 0x0000200e, fw_version 0. This chip's own psp_13_0_5_toc.bin carries the same
+// 0x600-byte container with fw_type 0x0101200e and fw_version 3, signed with the identical
+// key (30b8865125424499aeff3ac35ce621a6). Same size, so this is a straight drop-in.
+//
+// Note the pattern: Apple's blob has the high half of $PS1+0x58 unstamped and version 0,
+// where this chip's firmware is stamped and versioned. The same difference shows up across
+// Apple's RLC blobs, which is consistent with an MP0 13.0.5 PSP that requires the stamp
+// where MP0 11.0.12 did not.
+//
+// Done through applyLookupPatch rather than a raw memcpy so Lilu handles the kext's
+// memory protection, and matched on the whole 0x600-byte container so it cannot hit
+// anything else.
+static void substituteOneToc(KernelPatcher &patcher, const char *what, const uint8_t *find) {
+    KernelPatcher::LookupPatch lp {&kexts[KextHWLibs], find, kRaphaelToc, kTocSize, 1};
+    patcher.applyLookupPatch(&lp);
+    auto err = patcher.getError();
+    patcher.clearError();
+    RLOG("XB: %s fw_type 0x%x ver %u -> 0x%x ver %u : %s", what,
+         *reinterpret_cast<const uint32_t *>(find + 0x58),
+         *reinterpret_cast<const uint32_t *>(find + 0x60),
+         *reinterpret_cast<const uint32_t *>(kRaphaelToc + 0x58),
+         *reinterpret_cast<const uint32_t *>(kRaphaelToc + 0x60),
+         err == KernelPatcher::Error::NoError ? "substituted" : "NOT FOUND");
+}
+
+static void substituteToc(KernelPatcher &patcher) {
+    // psp_tmr_init reads its TOC from runtime fields psp+0x3588 (pointer) and psp+0x3580
+    // (size), so which of the two 0x600-byte $PS1 containers is actually submitted cannot be
+    // determined statically. Replace both. _TOC_TABLE is the more likely one: its $PS1 FW ID
+    // is 0, and 0x8000030a is precisely "unrecognised firmware type".
+    substituteOneToc(patcher, "_aPSP_TOC_SIGNED", kAppleToc);
+    substituteOneToc(patcher, "_TOC_TABLE      ", kAppleToc2);
+}
+#endif
 
 static void applyFor(KernelPatcher &patcher, bool hwlibs) {
     for (auto &p : patches) {
@@ -817,7 +1095,10 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
         applyFor(patcher, true);
         RLOG("post-patch: mask=0x%x D1=%d R1=%d base=0x%llx",
                mask, (mask & D1) != 0, (mask & R1) != 0, addr);
-        if (mask & (D1 | R1 | X1 | X2 | X3 | X4 | X5 | X6 | X7 | X8)) installDiagnostics(patcher, addr);
+#if defined(RGPU_HAVE_RLC_FW) && RGPU_HAVE_TOC_FW
+        if (mask & XB) substituteToc(patcher);
+#endif
+        if (mask & (D1 | R1 | X1 | X2 | X3 | X4 | X5 | X6 | X7 | X8 | XA | XC | XE)) installDiagnostics(patcher, addr);
     } else if (kexts[KextFB].loadIndex == index) {
         RLOG("Framebuffer loaded, mask=0x%x", mask);
         applyFor(patcher, false);
@@ -832,6 +1113,12 @@ static void pluginStart() {
     if (PE_parse_boot_argn("rgpudump", &d, sizeof(d)) && d >= 5000 && d <= 300000)
         diagDumpDelayMs = d;
     RLOG("start, patch mask=0x%x (%lu patches known)", mask, arrsize(patches));
+#ifdef RGPU_HAVE_RLC_FW
+    RLOG("embedded RLC firmware: %u bytes, size_bytes field 0x%x", kRlcFwSize,
+         *reinterpret_cast<const uint32_t *>(kRlcFw));
+#else
+    RLOG("no embedded RLC firmware (rlc_fw.h absent)");
+#endif
     if (mask == 0) {
         RLOG("no rgpu= boot-arg, staying inert");
         return;

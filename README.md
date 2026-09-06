@@ -18,26 +18,33 @@ TTL's SWIP clients initialise in sequence; the failure has moved through three o
 | SWIP `GVM` | **complete** — UMC, VM, HDP and ATHUB all resolve handlers |
 | SWIP `PSP` | SW_INIT **complete** |
 | SWIP `SMU` | SW_INIT **complete** |
-| `PSP` HW_INIT — mailbox | **solved** — stale-ring trap; ring create + `ENABLE_INT` return status 0 |
-| `PSP` HW_INIT — firmware | **current blocker** — the Raphael PSP takes Navi 23 CP CE but rejects the RLC blobs |
+| `PSP` HW_INIT | **complete** — TOC accepted, TMR established, every firmware blob loads with status 0 |
+| `SMU` HW_INIT | **current blocker** — Apple implements only `smu_9_0*`/`smu_11_0*`; this silicon needs `smu_13_0_5` |
 
-The whole **software** init sequence completes, and so does the PSP mailbox: the KM ring is
-created and interrupts enabled, both with status 0.
+**PSP HW_INIT now completes.** Every IP firmware blob loads with status 0 — the whole RLC
+family and all the CP microcode — and the PSP goes on to `EVENT__HW_UNINIT`.
 
-The `C2PMSG_64 = 0x80020115` wall turned out to be **stale state**, not a platform-owned PSP.
-`amdgpu` destroys its GPCOM ring on unbind; the guest never does, because QEMU is killed
-outright — and Apple's `psp_ring_create_11_0` only calls `ring_stop` on its TEE path, where
-upstream calls it unconditionally. So exactly one guest boot worked per host reboot. Fixed at
-both ends, and no reboot is needed: `gpu-quiesce.sh` clears it from the host in ~2 ms, and
-milestone `x7` does the same from inside the guest with no root at all.
+The unlock was not the RLC firmware, which turned out to be a red herring: substituting this
+chip's own signed RLC changed nothing. Reading the *per-command PSP response status* showed one
+root failure with everything else a consequence — `LOAD_TOC` was rejected, so `tmr_size` came
+back 0, so `SETUP_TMR` was handed size 0, so there was no TMR and the loads that need one
+failed. HWLibs holds two 0x600-byte `$PS1` TOC containers and `_TOC_TABLE`'s `$PS1` FW ID is
+**zero**, while `0x8000030a` decodes (from PSP `sys_drv` images embedded in HWLibs itself) as
+*"unrecognised firmware type"*. Replacing both with the payload of this chip's own
+`psp_13_0_5_toc.bin` — same 0x600 size, same signing key, fw_type `0x0101200e` vs Apple's
+`0x0000200e` — makes `LOAD_TOC` return `tmr_size = 0xa00000`, the same value the host kernel
+reserves for itself.
 
-What remains is firmware. Apple ships the full Navi 23 IP set (18 descriptors, ~1.7 MB) and
-hands the PSP real pointers, so nothing is missing — but this PSP accepts a Navi 23 CP CE blob
-and rejects the RLC ones, which are the most ASIC-bound of the set. The next step is to hand it
-Raphael's own `gc_10_3_6_rlc.bin`, which is signed for this silicon.
+The remaining rejection is the tap-delay firmware, and it is *supposed* to be rejected:
+`gc_10_3_6_rlc.bin` is header v2_2, so this chip has no tap-delay payloads, and upstream only
+loads them when a v2_4 header declares them.
 
-Iteration is ~90 s end to end: `preflight.py` validates every routed offset, route safety and
-patch pattern against the KDK in under a second, without booting.
+The wall is now SMU HW_INIT, which is the one this write-up predicted from the other side:
+`smu_init_function_pointer_list` implements only `smu_9_0*` and `smu_11_0*`.
+
+Iteration is ~90 s end to end and needs no root: `preflight.py` validates every routed offset,
+route safety, patch pattern and the embedded-firmware bytes against the KDK in under a second,
+without booting.
 
 
 ## The three things worth knowing

@@ -31,8 +31,8 @@ failure has moved through three of them:
 | `GVM` | **complete** — UMC, VM, HDP and ATHUB all resolve handlers |
 | `PSP` | SW_INIT **complete** |
 | `SMU` | SW_INIT **complete** |
-| `PSP` HW_INIT — mailbox | **solved** — the stale-ring trap; `x7` / `gpu-quiesce.sh` destroy it, ring create and `ENABLE_INT` both return status 0 |
-| `PSP` HW_INIT — firmware | current blocker — the Raphael PSP accepts Navi 23 CP CE but rejects the RLC blobs. Next step: hand it Raphael's own `gc_10_3_6_rlc.bin`. |
+| `PSP` HW_INIT | **complete** — TOC accepted (`tmr_size=0xa00000`), TMR established, every firmware blob loads with status 0 |
+| `SMU` HW_INIT | current blocker — "SMU init/power-up failed". Apple implements only `smu_9_0*`/`smu_11_0*`; this silicon needs `smu_13_0_5`. |
 
 Getting here took, in order: OpenCore kext injection so the patches land before `start()`;
 removing a self-inflicted conflict between the two patch mechanisms; the ASIC capability entry;
@@ -938,6 +938,109 @@ routed function has a rip-relative operand in its first 16 bytes, and that every
 is still unique in the KDK. `esp-kext.sh` refuses to ship if it fails. Dropping `-c` from the
 `qemu-img convert` in `redeploy.sh` took the deploy step from ~35 s to 7 s, and the dump delay
 is now tunable with `rgpudump=<ms>` rather than baked in.
+
+### PSP HW_INIT completes: it was the TOC all along
+
+The RLC rejections were a red herring, and so was every theory built on them. Substituting
+this chip's own signed RLC firmware changed nothing, because RLC was never the problem.
+
+The break came from reading the **per-command response status**, not just the commands. Apple
+marshals every PSP command through `psp_cmd_km_buf_prep` (`0x524e9`), which writes into the
+GPCOM buffer at `psp + slot*0x38 + 0x760`; `psp_gfx_resp` sits at buffer `+864`. Recording the
+previous command's status when the next one is marshalled gives the whole transcript:
+
+```
+cmd[00] LOAD_TOC   addr=0xf40fc00000 size=0x600    -> 0x8000030a   tmr_size=0
+cmd[01] SETUP_TMR  addr=0xf41fe00000 size=0x0      -> 0xffff0006   TEE_ERROR_BAD_PARAMETERS
+cmd[02] LOAD_ASD                    size=0x29100   -> 0x00000007
+cmd[03] LOAD_TA                     size=0x2100    -> 0
+cmd[05] LOAD_IP_FW type 18 SMU      size=0x3b200   -> 0
+cmd[06] LOAD_IP_FW type 22 CNTL     size=0x250     -> 0x0000000f
+```
+
+One root failure, everything else a consequence: **LOAD_TOC is rejected, so `tmr_size` comes
+back 0, so SETUP_TMR is handed size 0 and fails, so there is no TMR** — and the firmware loads
+that need one fail. Decoding the PSP `sys_drv` images that HWLibs itself embeds gives the
+codes their meaning: `0x8000030a` is the IP-firmware loader's *"unrecognised firmware type"*,
+returned before address, size or signature is examined, and `0x80000203` is *"required context
+not initialised"*, returned before the request is parsed at all. Neither was ever a signature
+verdict.
+
+The fix is the same identity substitution, one layer up. HWLibs holds **two** 0x600-byte `$PS1`
+TOC containers and `psp_tmr_init` takes its TOC from runtime fields (`psp+0x3588` pointer,
+`psp+0x3580` size), so which one is submitted cannot be read statically:
+
+| symbol | `$PS1` fw_type |
+|---|---|
+| `_aPSP_TOC_SIGNED` @ `0x1155d40` | `0x0000200e` |
+| `_TOC_TABLE` @ `0xeb80f0` | **`0x00000000`** |
+
+`_TOC_TABLE`'s FW ID is **zero**, and `0x8000030a` is exactly "unrecognised firmware type".
+Replacing both with the payload of this chip's own `psp_13_0_5_toc.bin` (offset `0x100`, length
+`0x600`, fw_type `0x0101200e`, version 3, same signing key, **same size**) is milestone `xb`:
+
+```
+XB: _aPSP_TOC_SIGNED fw_type 0x200e ver 0 -> 0x101200e ver 3 : substituted
+XB: _TOC_TABLE       fw_type 0x0   ver 0 -> 0x101200e ver 3 : substituted
+cmd[01] LOAD_TOC  -> status=0x00000000  tmr_size=0xa00000
+cmd[02] SETUP_TMR addr=0xf41f400000 size=0xa00000 -> status=0x00000000
+```
+
+`tmr_size = 0xa00000` is the same value the host kernel reports for itself
+(`reserve 0xa00000 from 0xf41e000000 for PSP TMR`), which is a good independent check that the
+TOC was understood rather than merely accepted.
+
+With the TMR established, **every** firmware blob loads with status 0 — the whole RLC family
+including the two whose sizes had to change, and all of the CP microcode:
+
+```
+type 22 CNTL 0x250   -> 0     type  8 RLC_G  0x6200  -> 0
+type 20 GPM  0x600   -> 0     type  1 CP_ME  0x40400 -> 0
+type 21 SRM  0x4480  -> 0     type  3 CP_PFP 0x40380 -> 0
+type 26 IRAM 0x10200 -> 0     type  2 CP_CE  0x40400 -> 0
+type 48 DRAM 0x10200 -> 0     type  4 CP_MEC 0x414b0 -> 0
+type 25 RLC_P 0x2200 -> 0
+type 27 GLOBAL_TAP_DELAYS 0x300 -> 0x8000030a
+```
+
+The tap delays are the one remaining rejection and they are *supposed* to be rejected:
+`gc_10_3_6_rlc.bin` is header **v2_2**, whose layout stops before the v2_4 tap-delay fields, so
+this chip has no such firmware, and upstream only registers them when a v2_4 header declares
+them (`amdgpu_rlc.c`). Declining them (`xd`) is what upstream does. With that,
+**`psp_np_fw_load` reports no failures at all and PSP HW_INIT completes** — the PSP then goes
+on to `EVENT__HW_UNINIT`, which only happens after it initialised.
+
+Two corrections to earlier entries in this document, both from this work:
+
+- Apple's fw type `0x01` is **SMU**, not CP CE. `psp_np_fw_load` indexes the failure-message
+  table with `type - 1`, and index 0 is "SMU FW". So the blob that loaded on the very first
+  attempt was the SMU firmware.
+- `_psp_cmd_km_fw_id_map` (`0x52b90`, table at `0x3cddb4`) translates Apple's internal enum to
+  upstream's wire `GFX_FW_TYPE` **correctly** — `0x0b`→8 RLC_G, `0x17`→20, `0x18`→21,
+  `0x19`→22, `0x1a`→26, `0x1b`→48. There was never a wire-type mismatch to find.
+
+### The next wall: SMU HW_INIT, and a latent Apple bug on the way to it
+
+The failure is now `SW_IP_CLIENT_ID__SMU, EVENT__HW_INIT` — "SMU init/power-up failed" — which
+is the wall this document predicted from the other direction: `smu_init_function_pointer_list`
+implements only `smu_9_0*` and `smu_11_0*`, and this silicon needs `smu_13_0_5`.
+
+Getting there exposed a genuine bug in Apple's cleanup, worth recording because it kills the
+machine rather than the driver:
+
+```
+cosReleaseMemoryHandle(this, handle):
+    b3674: test rdi, rdi / je   ...     ; checks `this`
+    b3679: test rsi, rsi / je   ...     ; checks `handle`
+    b367e: mov  rax, qword ptr [rsi]    ; handle's vtable -- NOT checked
+    b3684: call qword ptr [rax + 0x28]
+```
+
+It null-checks both arguments and then dereferences the vtable pointer inside the handle
+without checking it. On the SMU failure path that pointer is null, so the guest panics with
+`RAX=0, CR2=0x28` in `smu_cos_release_mem_handle`. Milestone `xe` supplies the missing check,
+which restores the survivable-boot property that `m1`'s `doGPUPanic` patch provides for PPLIB —
+without it there is no way to read anything back out of a boot that gets this far.
 
 ### Measure with the right instrument, or you will read false zeros
 

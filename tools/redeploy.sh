@@ -39,10 +39,14 @@ sleep 1
 # psp_ring_create only calls ring_stop on its TEE path -- so without this every boot
 # after the first fails at "psp_ring_create: KM ring creation failed". Best effort: the
 # in-guest x7 milestone destroys a stale ring too, so a skipped quiesce is not fatal.
-if [[ -n "${SUDO_ASKPASS:-}" ]]; then
+# Opt-in only: milestone x7 destroys a stale GPCOM ring from inside the guest with no root
+# at all, so the host-side quiesce is redundant during normal iteration and only earns a
+# password prompt. Use it when the guest cannot get far enough to run x7:
+#     QUIESCE=1 SUDO_ASKPASS=/path/to/askpass ./redeploy.sh
+# gpu-restore.sh still quiesces unconditionally, because handing a dirty PSP back to amdgpu
+# is a different matter.
+if [[ "${QUIESCE:-0}" == 1 && -n "${SUDO_ASKPASS:-}" ]]; then
     sudo -A ./gpu-quiesce.sh || echo "NOTE: PSP quiesce failed; x7 should still recover"
-else
-    echo "NOTE: SUDO_ASKPASS unset, skipping PSP quiesce (x7 should still recover)"
 fi
 [[ -f run/oc-raw.img ]] || qimg convert -O raw /run/vm/OpenCore.qcow2 /run/vm/oc-raw.img
 mcopy -o -i "run/oc-raw.img@@${ESP_OFF}" run/config-new.plist ::/EFI/OC/config.plist
