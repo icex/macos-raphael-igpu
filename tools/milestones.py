@@ -64,6 +64,17 @@ PATCHES = {
         (HWL, "020004000000000033e6030000000000", "020004000100000033e6030000000000",
          "athub_ip_version_mapping: 2.4.0 -> 2.4.1, one revision byte @0x115da18"),
     ],
+    # d1 is pure instrumentation implemented as Lilu function routes inside the
+    # plugin, so it has no find/replace patterns to verify.
+    "d1": [],
+    # r1 is implemented as a Lilu function route inside the plugin, not a byte patch.
+    "r1": [],
+    # p1 is an IOKit re-probe performed by the plugin, not a byte patch.
+    "p1": [],
+    # x1 wraps check_pcie_link_status via a Lilu route, not a byte patch.
+    "x1": [],
+    # x2 wraps DevGetDeviceInfoEntry via a Lilu route, not a byte patch.
+    "x2": [],
 }
 
 # device properties per set. Value must be bytes.
@@ -83,6 +94,11 @@ DESCR = {
     "m4": "GC 10.3.6 accepted via a one-byte range widen; routes to the shared GFX10 pointers that already serve 10.3.4. Expect the next failure at GMC/VM, UMC or ATHUB.",
     "m5": "GMC/VM 10.3.6 via the 10.3.5 table row. Low risk: Linux drives 10.3.0-10.3.6 with the same gfx10 GMC code.",
     "m6": "UMC 9.5.0 by repurposing the 10.0.0 row. Higher risk than m5 -- this is the memory controller and 9.5 is a DDR5 APU UMC, so the borrowed handler is a real guess. Without it mc_sw_init fails outright.",
+    "p1": "after both kexts are patched, call requestProbe(0) on the GPU's IOPCIDevice so IOKit re-matches and AmdRadeonControllerNavi23::start() runs AGAIN -- this time against patched code. Needed because our plugin lives in the AuxKC and cannot load before the AMD stack: measured ordering shows start() failing at serial line 1298 and our patch landing at 1455.",
+    "r1": "remap IP versions in Apple's internal table at the ipconfig_get_ip_discovery_info chokepoint: NBIF 7.3.0->7.2.0, GC 10.3.6->10.3.4, MMHUB 2.4.1->2.3.0 (guess), ATHUB 2.4.1->2.4.0, SMUIO 13.0.10->13.0.7. Replaces the per-gate byte patches and can populate a version that is ABSENT, which a byte patch cannot.",
+    "d1": "diagnostic only: hook ipconfig_get_ip_discovery_info to DUMP Apple's whole internal IP table (id + version per entry) and trace bif_ip_create's arguments. No patching. This is what tells us which IPs Apple actually resolved.",
+    "x2": "ASIC capability entry: DevGetDeviceInfoEntry matches _DeviceCapabilityTbl on device id + INTERNAL revision + EXTERNAL revision. Entry 268 is exactly {0x8f, 0x73ff, internal 0, external 0xcb} and 0xcb is this chip's real PCI revision, so only the internal revision id can be missing. A miss makes ipi_bgm_create abort with \"Failed to create bgm context\" regardless of how many BGM stages pass. Retries the lookup with the internal revision Apple's own table uses.",
+    "x1": "PCIe link status: bgm_create's last stage bio_sw_init can only succeed via pcie_ip_sw_init -> check_pcie_link_status, which needs one of device_inf slots 3/1/7 to expose a PCIe capability offset. All it computes is the cached link speed/width at pcie+0x268, which an APU GPU on the internal fabric does not have. Logs the three offsets first, then reports link OK. Expect 0xc00c020b to clear.",
     "m7": "ATHUB 2.4.1 via the 2.4.0 row -- literally one revision byte, and 2.4.0 already shares its handler with 1.3.1.",
 }
 
@@ -109,7 +125,8 @@ def verify():
             print(f"  [{flag}] {name} {ident.split('.')[-1]:26s} find={nf} replace_present={nr} len={len(f)}")
     return ok
 
-BITS = {"m1": 1, "m2": 2, "m3": 4, "m4": 8, "m5": 16, "m6": 32, "m7": 64}
+BITS = {"m1": 1, "m2": 2, "m3": 4, "m4": 8, "m5": 16, "m6": 32, "m7": 64, "d1": 128,
+        "r1": 256, "p1": 512, "x1": 2048, "x2": 4096}
 BA_UUID = "7C436110-AB2A-4BBB-A880-FE41995C9F82"
 
 def apply(sets_on):

@@ -22,7 +22,19 @@ now succeeds and the GPU brands itself as a Navi 23:
 the driver is parsing the grafted tables. `FB: 512 MB` is read from real hardware and
 agrees with the host (`amdgpu ... VRAM: 512M`, `RAM width 128bits DDR5`).
 
-The blocker is now one layer deeper, inside `AMDRadeonX6000HWLibs`. See "Current blocker".
+The blocker is now several layers deeper. TTL's SWIP clients initialise in sequence and the
+failure has moved through three of them:
+
+| SWIP client | state |
+|---|---|
+| `BGM` | **complete** — every stage of `bgm_create`, plus VBIOS init and GDDR6 memory training |
+| `GVM` | **complete** — UMC, VM, HDP and ATHUB all resolve handlers |
+| `PSP` | current blocker — `PSP init/power-up failed` at `EVENT__SW_INIT` |
+
+Getting here took, in order: OpenCore kext injection so the patches land before `start()`;
+removing a self-inflicted conflict between the two patch mechanisms; the ASIC capability entry;
+the UMC version; and — before any of it could be read at all — a diagnostics channel that
+survives both concurrent serial writers and the absence of `logd`.
 
 ## Method
 
@@ -361,16 +373,294 @@ beside Lilu. Getting there required, in the order each error revealed the next:
 |---|---|---|
 | 1 | patch had no effect | OpenCore `Kernel > Patch` cannot reach `SystemKernelExtensions.kc` |
 | 2 | plugin never ran | Lilu self-disables on Darwin 24; needs `-lilubetaall` |
-| 3 | `Invalid Parameter` | OpenCore's own injector rejects the bundle (binary is fine — `kmutil` links it) |
+| 3 | `Invalid Parameter` | **not the binary.** `RaphaelGPU.kext` declares `as.vit9696.Lilu` in `OSBundleLibraries`, and `Lilu.kext` was `Enabled=false` in `Kernel > Add`, so the dependency could not resolve. Enable **both** and injection succeeds. |
 | 4 | `Failed to bind '_lilu'` | Lilu must exist **on disk**; `kmutil` resolves only on-disk repositories |
 | 5 | `Missing Developer Kit` | a build-matched KDK must be installed **in the guest** |
 | 6 | `Read-only file system` | `kmutil install --update-all` wants the sealed volume; build only `-n aux` |
 | 7 | `Failed to bind '___cxa_atexit'` | **real bug**: kernel has no `__cxa_atexit`; use `-fno-c++-static-destructors` |
 | 8 | every redeploy silently no-op | **`kmutil` dedupes by bundle id + version** — a fixed `CFBundleVersion` produced a byte-identical collection (same UUID) and the guest kept loading the first binary. Bump the version every build. |
 
-Prerequisites that must all hold: `csrutil` with Kext Signing **disabled**; kexts `root:wheel`;
-`-lilubetaall`; a guest-installed KDK matching the build; and OpenCore's own `Lilu.kext`
-injection **disabled**, or two kexts claim `as.vit9696.Lilu`.
+Prerequisites for the AuxKC route: `csrutil` with Kext Signing **disabled**; kexts `root:wheel`;
+`-lilubetaall`; a guest-installed KDK matching the build.
+
+### The AuxKC is the wrong delivery vehicle — use OpenCore injection
+
+The Auxiliary collection loads **after** the collections holding the AMD stack, so
+`AmdRadeonControllerNavi23::start()` has already run and failed before a plugin in the AuxKC
+can patch anything. Measured on one boot: `rgpu start` at serial line 1189, `[GPUCAP]` (i.e.
+`start()` already running) at 1211, the BGM failure at 1309, and our HWLibs patch landing at
+1459 — about 200 lines too late. The only patch that ever worked from there was `doGPUPanic`,
+purely because that call site happens to be reached *after* 1459.
+
+Two escape attempts failed and are worth recording:
+
+- **`onPatcherLoad`** never fired at all, because Lilu's patcher initialises before an AuxKC
+  plugin's `pluginStart` registers the callback.
+- **`requestProbe(0)`** on the GPU's `IOPCIDevice` (milestone `p1`) produced no re-match: zero
+  `reprobe` lines and still exactly one `[GPUCAP] refresh()` block. IOKit does not re-run
+  `start()` for a driver that is already attached.
+
+The fix is to stop working around the load order and put **both** `Lilu.kext` and
+`RaphaelGPU.kext` in `Kernel > Add` so OpenCore injects them into the **boot** collection —
+which is what Lilu is designed for and how WhateverGreen patches these same AMD kexts. With
+that, `rgpu start` moves to line 129 and every patch lands before `TTL::initialize()`:
+
+```
+ 129  rgpu: @ start, patch mask=0x981
+1182  rgpu: @ APPLIED  m1 doGPUPanic
+1200  rgpu: @ SKIPPED  m1 bif_ip_create (R1 already remaps this version)
+1205  rgpu: @ route check_pcie_link_status -> ok
+1221  [0:6:0] [Accel] >>> Calling TTL::initialize()
+```
+
+`esp-kext.sh` pushes a freshly built bundle into the ESP image; `oc-inject.py on|off|list`
+toggles the `Kernel > Add` entries.
+
+**Do not patch from `onPatcherLoad` even once you load early.** `loadKinfo()` there maps the
+kext's *file* so symbols can be solved, but leaves its running address at 0, and the one-argument
+`applyLookupPatch(patch)` dereferences exactly that address. It page-faults with `CR2=0`, `RDI=0`
+inside `KernelPatcher::applyLookupPatch+0x28e`. Patch from the kext-load callback instead.
+
+### The two patch mechanisms cancel each other out
+
+Every `m2`…`m7` byte patch widens a version gate so this chip's *real* version is accepted.
+`r1` solves the same problem from the opposite side: it rewrites the version Apple *sees* to
+one already accepted. Enabling both is not additive, it is destructive — `r1` handed
+`bif_ip_create` 7.2.0 while `m1a` had just patched the comparison to demand 7.3.0, so the
+compare missed and BIF failed with `bif_ip_create returned 1`. `RPatch` now carries an
+`r1Conflict` flag and such patches are skipped, loudly, when `r1` is on. Removing that one
+conflict moved the failure **eight stages** down the ladder.
+
+### `*_ip_version_mapping` cannot be reached by a byte search
+
+`m5`, `m6` and `m7` rewrite rows of the mapping tables, and their find patterns include the
+row's 8-byte function pointers. Those addresses appear in the kext's `DYSYMTAB` **local
+relocation** list (`locreloff`/`nlocrel` — note these are fields 16 and 17 of the command, not
+14 and 15), so the kernel collection rebases them at load and the pattern can never match at
+runtime. The version fields alone are not unique enough to search on. These rows need a
+computed-address edit off the kext base, not `applyLookupPatch`. `milestones.py verify` cannot
+catch this: it checks uniqueness in the on-disk KDK, where the values are still unrelocated.
+
+### Inside `bgm_create`: the stage ↔ `event_id` ladder
+
+`event_id=0xc00c02NN` in the `SW_IP_CLIENT_ID__BGM` error is not a generic "BGM failed" code.
+`bgm_create` (`0x232f2e`) loads a distinct id into `esi` on each stage's failure branch, so the
+id names **exactly which call returned nonzero**. Read off the disassembly:
+
+| `event_id` | failing call | lookup id |
+|---|---|---|
+| `0xc00c0202` | `ipconfig_create` | — |
+| `0xc00c0203` | `bif_ip_create` | `0x42` NBIF |
+| `0xc00c0204` | `bio_create` | `0x3d` PCIE |
+| `0xc00c0205` | `mp0_ip_create` | `0x4b` MP0 |
+| `0xc00c0206` | `sem_ip_create` | `0x21` |
+| `0xc00c0207` | `smuio_ip_create` | `0x07` SMUIO |
+| `0xc00c0208` | `vbs_create` | — |
+| `0xc00c0209` | `smuio_sw_init` | — |
+| `0xc00c020a` | `bif_ip_sw_init` | — |
+| `0xc00c020b` | `bio_sw_init` | — |
+
+This turns every boot into a precise position on the ladder instead of a guess. Fixing the
+`m1a`/`r1` conflict moved it from `0xc00c0203` straight to `0xc00c020b`, i.e. MP0 13.0.5,
+SEM, SMUIO 13.0.10, the whole VBIOS path (`vbs_create`, `vbs_hw_init`, GDDR6 memory training),
+`smuio_sw_init` and `bif_ip_sw_init` **all pass**. The earlier write-up called MP0 "the absolute
+wall"; with `r1` in place it is not one.
+
+### This chip's real IP table, as Apple resolves it
+
+`d1` hooks `ipconfig_get_ip_discovery_info` and dumps Apple's internal table on the first call.
+Apple's ids are its own, not the discovery `hw_id`s. All 19 entries:
+
+| id | version | | id | version | | id | version |
+|---|---|---|---|---|---|---|
+| `0x42` | 7.3.0 NBIF | | `0x1c` | 2.4.1 ATHUB | | `0x4c` | 0.0.0 |
+| `0x3d` | 6.0.0 PCIE | | `0x27` | 4.0.1 | | `0x4d` | 0.0.0 |
+| `0x07` | 13.0.10 SMUIO | | `0x4b` | 13.0.5 MP0 | | `0x4f` | 0.0.0 |
+| `0x21` | 5.2.1 | | `0x04` | 13.0.5 | | `0x0c` | 3.1.2 |
+| `0x0b` | 10.3.6 GC | | `0x23` | 5.2.6 SDMA | | `0x10` | 3.1.5 |
+| `0x1b` | 2.4.1 MMHUB | | `0x24` | 0.0.0 | | | |
+| `0x22` | 5.2.0 | | `0x46` | 9.5.0 UMC | | | |
+
+**Read this table from `os_log`, not from serial.** Serial output from other CPUs interleaves
+mid-line: `id=0x3d` arrived split as `id=0x 3` with the `d` starting the next line, and reading
+it as `0x3` produced a confident, entirely wrong conclusion that PCIE was absent from this chip
+and a patch built on that premise. `pcie_ip_create` opens with `cmp dword ptr [rsi], 0x3d` — had
+the id really been missing, that would have dereferenced NULL and panicked, which it never did.
+When a dump contradicts the code's own control flow, suspect the instrument first.
+
+### Past the ladder: the ASIC capability table
+
+Clearing the BGM stages is not sufficient. `ipi_bgm_create` also calls
+`ttlSetDeviceCapabilityEntry` → `DevGetDeviceInfoEntry` (`0xaf0e0`), which walks a static
+`_DeviceCapabilityTbl` (VMA `0x557240`, 269 entries, stride `0x50`) and requires **three**
+keys to agree:
+
+| offset | key | wildcard |
+|---|---|---|
+| `+0x10` | PCI device id | — |
+| `+0x18` | **internal** revision id (`ttlSetInternalRevisionId`) | `0xdeadcafe` |
+| `+0x20` | **external** revision id (`ttlSetExternalRevisionId`) | `0xdeadcafe` |
+
+A miss makes `ttlSetDeviceCapabilityEntry` log `Could not find device info table entry!`
+(`ttl_device.c:587`) and `ipi_bgm_create` abort with `Failed to create bgm context. Cleaning
+up.` — with **no `event_id` at all**, which is why this failure looks like nothing when you
+grep only for `0xc00c02NN`.
+
+The table's last entries are the interesting ones:
+
+```
+ 261  family 0x8f  devid 0x73ff  internal 0  external 0x40
+ ...
+ 268  family 0x8f  devid 0x73ff  internal 0  external 0xcb
+```
+
+`0xcb` **is this chip's real PCI revision**, and `[GPUCAP]` reports `pciRevNo: cb`. So Apple
+already ships an exact capability entry for the identity we present; only the *internal*
+revision id can be missing it. Milestone `x2` routes `DevGetDeviceInfoEntry` to log all three
+keys and, on a miss, retry with the internal revision values Apple's own table actually uses —
+which is preferable to editing Apple's table, because a wildcard there would apply to every
+`0x73ff` in the system.
+
+### The PCIe root port: OVMF gets it right, macOS undoes it
+
+`check_pcie_link_status` needs one of device-info slots 3, 1 or 7 to expose a PCIe capability
+offset, and all three read 0:
+
+```
+rgpu: @ check_pcie_link_status -> 1  (pcie cap offset: dev3=0x0 dev1=0x0 dev7=0x0)
+```
+
+The cause is topological. `-device vfio-pci,...,bus=pcie.0` makes the GPU a **Root Complex
+Integrated Endpoint**, which has no link and therefore no link registers, so the correct fix
+looks like putting it behind a `pcie-root-port`. That does produce the right topology — the GPU
+lands on bus 1 behind the port — but it is **not usable**, and the reason is worth recording
+because the failure mode is silent: the AMD driver simply never matches.
+
+Polling `info pci` across the boot shows why:
+
+```
+15:52:28  rp0 pref=[0x800000000, 0x8101fffff]      gpu unmapped BARs = 0    <- OVMF, correct
+15:53:18  rp0 pref=[0xfffffffffff00000, 0x000fffff] gpu unmapped BARs = 3    <- macOS took over
+```
+
+OVMF sizes and programs the bridge window correctly (256 MiB + 2 MiB of prefetchable space at
+32 GiB, every BAR mapped); macOS's PCI configurator then disables the window and unmaps every
+BAR. Tested with and without QEMU's resource-reservation hints
+(`io-reserve`/`mem-reserve`/`pref64-reserve`), with `hotplug=off`, and with `npci=0x2000` — the
+teardown happens in all four. The GPU therefore stays directly on `pcie.0` and the missing link
+registers are handled in the driver (`x1`) instead. Do not reintroduce the root port without
+solving the teardown first; `macos-vm.sh` carries this warning at the device line.
+
+### Two more SWIP clients cleared: GVM, and how the readout was fixed first
+
+With the ASIC capability entry found, BGM completes and the failure moves to the next SWIP
+client. The error text names it:
+
+```
+TTL Event source_id=2 event_id=0x900c0401 : swip_client_id=5 : (SW_IP_CLIENT_ID__GVM, EVENT__SW_INIT)
+ASSERT logSwipFailure:       GVM init/power-up failed
+ASSERT TlsExecuteIpEntrySeq: SWIP init/power-up failed
+```
+
+`gvm_sw_init` (`0x192f4`) runs `mc_sw_init` → `vm_sw_init` → `hdp_sw_init` → `athub_sw_init`
+and returns the first nonzero, with **no per-stage event id**, so the id alone cannot say
+which failed. All four resolve handlers through one chokepoint, `gvm_get_ip_function`
+(`0x19258`), whose table argument identifies the caller unambiguously:
+
+| table offset | symbol |
+|---|---|
+| `+0x115c430` | `_mc_ip_version_mapping` |
+| `+0x115c750` | `_hdp_ip_version_mapping` |
+| `+0x115c9e0` | `_vm_ip_version_mapping` |
+| `+0x115d9a0` | `_athub_ip_version_mapping` |
+
+Tracing it named the failure in one boot:
+
+```
+gvm_get_ip_function(9.5.0 fn=0 tbl=+0x115c430 n=18) -> MISS
+```
+
+**UMC.** The host's own IP discovery reports `UMC 9.5.0` and Apple's table has no 9.5.0 row.
+The fix is not a guess: `gmc_v10_0_set_umc_funcs` wires UMC for `IP_VERSION(8, 7, 0)` and
+nothing else across all of Navi 2x — the offset constant is literally
+`UMC_V8_7_PER_CHANNEL_OFFSET_SIENNA` — so 8.7.0 is what a real Navi 23 reports and what
+Apple's Navi 23 support is written against. With `UMC 9.5.0 -> 8.7.0` added to `r1`, all four
+resolve and GVM completes:
+
+```
+gvm_get_ip_function(8.7.0  fn=0 tbl=+0x115c430) -> ok      UMC
+gvm_get_ip_function(10.3.4 fn=0 tbl=+0x115c9e0) -> ok      VM
+gvm_get_ip_function(5.2.0  fn=0 tbl=+0x115c750) -> ok      HDP
+gvm_get_ip_function(2.4.0  fn=0 tbl=+0x115d9a0) -> ok      ATHUB
+```
+
+### A lazy remap is not enough — rewrite the table itself
+
+`r1` originally rewrote a version inside the accessor, on the way out of
+`ipconfig_get_ip_discovery_info`. That cannot work for UMC, because `mc_sw_init` never calls
+the accessor:
+
+```
+1aaec: cmp dword ptr [r15 + rax - 0x10], 0x46      ; walk the entries directly, stride 0x260
+```
+
+It scans a copy of the ipconfig entries itself, and nothing anywhere looks UMC up through the
+accessor, so a lazily-rewritten version never reached it. `r1` now applies every remap to the
+whole ipconfig table the first time it is seen, so accessor and direct walker agree.
+
+### Do not route a function whose prologue has a rip-relative operand
+
+This one produced a completely false conclusion and is worth stating plainly.
+`DevGetDeviceInfoEntry`'s prologue is:
+
+```
+af0e0: push rbp; mov rbp,rsp; lea rcx,[rip + _DeviceCapabilityTbl]; ...
+```
+
+The `lea` sits inside the bytes Lilu overwrites to install its jump. Lilu's trampoline copies
+the displaced instructions to a new address **without rewriting rip-relative displacements**,
+so calling the "original" through it loads a garbage table pointer and every lookup misses —
+including `(0x73ff, 0, 0xcb)`, which is a verbatim entry in the table. The log said
+`no entry at any revision` while the entry was sitting right there on disk.
+
+Check the first 16 bytes of anything before routing it. Of the five functions this work
+routes, only that one is unsafe:
+
+```
+ttlSetDeviceCapabilityEntry    55 48 89 e5 41 57 41 56 ...   safe
+DevGetDeviceInfoEntry          55 48 89 e5 48 8d 0d 55 ...   RIP-RELATIVE lea
+check_pcie_link_status         55 48 89 e5 41 57 41 56 ...   safe
+ipconfig_get_ip_discovery_info 55 48 89 e5 8b 4f 1c 48 ...   safe
+bif_ip_create                  55 48 89 e5 41 57 41 56 ...   safe
+gvm_get_ip_function            55 48 89 e5 41 56 53 45 ...   safe
+```
+
+The fix is to route the **caller** instead. `ttlSetDeviceCapabilityEntry` is safe to route, and
+re-calling it with a different internal revision redoes the whole side effect — it stores the
+entry at `ttl+0xe8` and rebuilds the HWIP→SWIP mappings — rather than half of it.
+
+### Fixing the timing broke the instrument: deferred diagnostics
+
+Moving the plugin into the boot collection cost us the only reliable log channel, and both
+remaining ones fail on their own:
+
+- **Serial** receives everything, but other CPUs write to the 16550 concurrently and our lines
+  come out shredded mid-character. This is what turned `id=0x3d` into `id=0x 3` plus a stray
+  `d` on the next line.
+- **`os_log`** is atomic per line, but the plugin now runs long before `logd` exists, so
+  nothing logged during driver start-up ever reaches the unified log. `log show` returns
+  nothing for it, correctly, and looks exactly like the plugin not running.
+
+So every diagnostic line is now buffered in the kext (`RLOG`) and the whole buffer is
+re-emitted from a thread at t+75 s, once userspace is up. Nothing else is writing to serial by
+then, so that copy is clean, ordered and greppable:
+
+```sh
+tr -d '\r' < run/serial.log | sed -n '/deferred diagnostics:/,/deferred diagnostics end/p'
+```
+
+This is what made the last four findings readable at all; every earlier attempt at a multi-line
+dump was unusable.
 
 ### Measure with the right instrument, or you will read false zeros
 

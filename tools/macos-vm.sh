@@ -181,6 +181,15 @@ if [[ -n "${GPU}" ]]; then
     grp="$(basename "$(readlink -f "/sys/bus/pci/devices/${GPU}/iommu_group")")"
     [[ -r "/dev/vfio/${grp}" && -w "/dev/vfio/${grp}" ]] || die "/dev/vfio/${grp} is not accessible to you"
     GPU_ARGS=(--device /dev/vfio/vfio --device "/dev/vfio/${grp}" --ulimit memlock=-1)
+    # The GPU sits directly on pcie.0, which makes it a Root Complex Integrated
+    # Endpoint. That costs us the PCIe link registers -- Apple's HWLibs then finds no
+    # device-info-table entry with a capability offset (see findings/GPU-RE.md) -- but
+    # the alternative does not work: behind a pcie-root-port, OVMF allocates the bridge
+    # window correctly (pref64 [0x800000000, 0x8101fffff], every BAR mapped) and then
+    # macOS's PCI configurator tears it straight back down the moment the kernel takes
+    # over, leaving every BAR unmapped so the AMD driver never even matches. Measured
+    # with and without resource-reservation hints, with hotplug=off, and with
+    # npci=0x2000. Do not reintroduce the root port without solving that first.
     vf="-device vfio-pci,host=${GPU},bus=pcie.0"
     [[ -n "${GPU_ID}" ]] && vf+=",x-pci-vendor-id=0x1002,x-pci-device-id=${GPU_ID}"
     if [[ -n "${GPU_SUB}" ]]; then

@@ -61,5 +61,14 @@ nohup systemd-inhibit --what=sleep:idle --who="macOS VM" --why="GPU RE run" \
     ./macos-vm.sh run "${GPU_ARGS[@]}" > run/vm-launch.log 2>&1 &
 until [ -S run/serial.sock ]; do sleep 1; done
 (nohup ./sercat.py >/dev/null 2>&1 &)
+# The container is recreated on every boot, so the agent command channel and the file
+# server die with it. Without this, ./gx reports "no response from guest agent" and the
+# guest looks unreachable when it is merely unserved.
+for i in $(seq 1 30); do
+    docker cp agent-server.py macos-sequoia:/tmp/ >/dev/null 2>&1 || { sleep 2; continue; }
+    docker exec -d macos-sequoia python3 /tmp/agent-server.py 2>/dev/null || true
+    docker exec -d macos-sequoia sh -c 'cd /run/vm && exec python3 -m http.server 8889' 2>/dev/null || true
+    break
+done
 echo "VM relaunched; serial draining to run/serial.log"
 ./milestones.py list | tail -5
