@@ -13,6 +13,9 @@ ap.add_argument('--vbios', help='file to inject as ATY,bin_image')
 ap.add_argument('--path', action='append', default=[], help='PCI device path (repeatable)')
 ap.add_argument('--boot-args', help='replace boot-args entirely')
 ap.add_argument('--drop-vbios', action='store_true')
+ap.add_argument('--prop', action='append', default=[],
+                help='KEY=HEXBYTES -- set a DeviceProperties value (OSData, which is what\n                      AmdTtlServices::getRegistryProperty and AmdRegistryUtilities::\n                      parseOSObjectValue both accept). e.g. PP_PhmUseDummyBackEnd=01000000')
+ap.add_argument('--drop-prop', action='append', default=[], help='remove a DeviceProperties key')
 ap.add_argument('--show', action='store_true')
 ap.add_argument('--kext-patch', action='append', default=[],
                 help='id:find_hex:replace_hex:comment -- add a Kernel>Patch entry')
@@ -36,6 +39,14 @@ if a.vbios:
     rom = open(a.vbios, 'rb').read()
     for p in (a.path or ['PciRoot(0x0)/Pci(0x6,0x0)']):
         add.setdefault(p, {})['ATY,bin_image'] = rom
+
+for spec in a.prop:
+    key, val = spec.split('=', 1)
+    for p in (a.path or ['PciRoot(0x0)/Pci(0x6,0x0)']):
+        add.setdefault(p, {})[key] = bytes.fromhex(val)
+for key in a.drop_prop:
+    for props in add.values():
+        props.pop(key, None)
 
 kp = d.setdefault('Kernel', {}).setdefault('Patch', [])
 if a.drop_kext_patches:

@@ -1302,3 +1302,164 @@ Kernel (KDK kernel, x86_64):
   panics hang instead of rebooting. Pick one.
   `panic_restart_timeout=<sec>` is parsed (@0xffffff8000af293f) and exposed as a sysctl, but has
   NO reader anywhere else in this x86_64 kernel -> it does not shorten the panic reboot on Intel.
+
+### TTL::initialize() completes: the SMU was never ours to drive
+
+`SW_IP_CLIENT_ID__SMU, EVENT__HW_INIT` was the last TTL gate, and it fell without a single
+byte of ported SMU-13 code. Reading the chain rather than guessing is what made that possible:
+
+```
+smu_internal_hw_init      0x72d46  -> [smu+0x6c8]
+smu_11_0_7_internal_hw_init 0x7f3af -> smu_11_0_7_core_hw_init   0x83977
+                                     -> smu_11_0_7_check_fw_status 0x805fd
+                                     -> smu_11_0_7_check_fw_version 0x8055b
+                                     -> smu_11_0_7_send_message(3)  0x806ac
+```
+
+`smu_11_0_7_send_message` and `smu_11_0_7_wait_for_response` name their registers in the
+clear:
+
+| use | Apple register index | Navi 2x name |
+|---|---|---|
+| message | `0x282` | `MP1_SMN_C2PMSG_66` |
+| parameter | `0x292` | `MP1_SMN_C2PMSG_82` |
+| response | `0x29a` | `MP1_SMN_C2PMSG_90` |
+
+This silicon does not have its SMU mailbox there. Upstream `smu_v13_0_5_ppt.c` uses
+`MP1_C2PMSG_2 / _33 / _34`, and working the SOC15 arithmetic through
+(`0xbee142 + 0xb00000/4`, plus `MP1_BASE` segment 0 = `0x16000`, times 4) puts them at SMN
+bytes **`0x3b10508` / `0x3b10984` / `0x3b10988`** — the Zen SMU aperture, not the GPU's MMIO
+window at all. Hence every message times out at `PP_WaitOnRegisterTimeout` (2000 ms, and
+`0x7d0` in the `cosWaitForFunc` dumps is exactly that) and `check_fw_version` logs a
+"mismatch" whose version argument was never read.
+
+Retargeting those registers is mechanically possible — `smu_cgs_read_register` (`0x70dd1`)
+compares the resolved byte address against `[smu+0x2cc]`, which `smu_sw_init` sets to
+`0x80000`, and falls through to an indirect SMN accessor at `[[smu+8]+0xc0]` for anything
+above it. It is also the wrong thing to do. On an APU the SMU is the *platform's* power
+controller — it governs the CPU cores of the machine this VM is running on, it was brought up
+by the x86 firmware long before macOS existed, and its PPSMC message enum has nothing to do
+with Navi 2x's. Putting Navi 2x message ids on that mailbox is not a debugging step.
+
+Apple already has a name for a GPU whose power management belongs to somebody else.
+
+#### smu_config_name_mapping: 36 injectable settings
+
+`smu_read_config_space` (`0x72840`) reads its whole configuration by *name* out of an
+IORegistry property, through `smu_cos_read_config_setting` ->
+`AmdTtlServices::cosReadConfigurationSetting` (`0xb4a50`) -> `IORegistryEntry::getProperty`
+-> `getOSObjectData`. The name table is `_smu_config_name_mapping` at `0x13a7a70`: a 4-byte
+header then 36 entries of `{ char name[0x100]; u32 default; u32 id; }`, stride `0x108`.
+
+| name | default | -> context |
+|---|---|---|
+| `SMU_DisableMmhubPowerGating` | 0 | |
+| `SMU_DisableAthubPowerGating` | 0 | |
+| `SMU_DisableACG` | 0 | |
+| `SMU_EnableFwLoading` | 0 | |
+| `SMU_DisallowedFeatures` (8 bytes) | 0 | `+0x2f8` |
+| `SMU_MemoryPoolSize` | 0 | |
+| `SMU_ToolsLogSpaceSize` | 0x19000 | |
+| `PP_LogLevel` | 0 | `+0x308` |
+| `PP_LogSource` | 0xff7fffff | `+0x30c` |
+| `PP_WaitOnRegisterTimeout` | 0x7d0 | `+0x310` |
+| `PP_Run_DcBTC` | 1 | |
+| `PP_SclkDpmDisabled` | 0 | `+0x318` |
+| `PP_MclkDpmDisabled` | 0 | `+0x31c` |
+| `PP_SocclkDpmDisabled` | 0 | `+0x320` |
+| `PP_PcieDpmDisabled` | 0 | `+0x324` |
+| `PP_DisableULV` | 0 | `+0x328` |
+| `PP_GfxOffControl` | 1 | `+0x32c` |
+| `PP_DisallowedVBIOSPPTableFwdstate` | 0 | |
+| `PP_OverrideNumberOfUclkStates` | 0 | |
+| **`PP_PhmUseDummyBackEnd`** | **0** | **`+0x338`** |
+| `SMU_ActivityMonitorTable` | 0 | |
+| `PP_PMLogGfxClkSource` | 3 | `+0x340` |
+| `PP_PMLogPreDsWorkloadsMask` | 0 | |
+| `PP_EnableDummyPstateTable` | 1 | `+0x348` |
+| `SMU_PPtableSource` | 0 | |
+| `PP_EnableSTBLogging` | 1 | `+0x350` |
+| `SMU_IgnoreSmuIfVersion` | 0 | |
+| `PP_GfxDcsSupport` | 1 | |
+| `SMU_EnableVCNPG` | 1 | `+0x35c` |
+| `SMU_EnableJPEGPG` | 1 | `+0x360` |
+| `SMU_EnableISPPG` | 1 | `+0x364` |
+| `SMU_Enable_eGPU_USB_WA` | 0 | |
+| `SMU_Power_Throttle_Indicator_Threshold` | 0x50 | |
+| `SMU_Thermal_Throttle_Indicator_Threshold` | 0x5a | |
+| `SMU_Current_Throttle_Indicator_Threshold` | 0x50 | |
+
+`PP_PhmUseDummyBackEnd = 1` lands in `[smu+0x338]`, and `smu_init_function_pointer_list`
+(`0x72b33`) then calls `smu_update_function_pointers` (`0x73a2f`) *after* the 11_0_7 list is
+built. That overwrites hw_init, notify_event, fullscreen, soft_table, overdrive, thermal,
+fan, dpm, power, ips, azalia, ulv, gfx_off, system_features, i2c, power_feature_caps, pm_log
+and notify_number_of_displays with `dummy_smu_*` stubs that return 0. Nothing downstream is
+left to time out.
+
+**But the property does not arrive.** Injected as `OSData` on `PciRoot(0x0)/Pci(0x6,0x0)`
+alongside the working `ATY,bin_image`, `[smu+0x338]` still read back 0 — TTL's COS context
+resolves a different `IORegistryEntry` (`ctx+8`) than the IOPCIDevice the Framebuffer's
+`AmdRegistryUtilities` uses. Worth chasing later, since 36 settings hang off it. For now the
+plugin calls `smu_update_function_pointers` directly, which is exactly what the property
+would have caused and is idempotent — it only stores pointers.
+
+One hardware call survives the dummy back end: `dummy_smu_internal_hw_init` (`0x738c2`)
+still calls `[smu+0x798]`, which the 11_0_7 list set to `smu_11_0_7_dummy_hw_init`
+(`0x7f4d7`) — and that goes straight back into `check_fw_status`. `smu_update_function_pointers`
+does not clear the slot, and nothing else in the SMU context reads it, so milestone **`xf`**
+nulls it. `dummy_smu_internal_hw_init` then returns 0 on its own at `0x73952`.
+
+Measured, first boot with `xf`:
+
+```
+XF: smu_init_function_pointer_list -> 0  hw_version=9  flags=0x0010
+    PP_PhmUseDummyBackEnd=0  asic_dummy_hw_init=0xffffff7f91e534d7
+XF: calling smu_update_function_pointers directly -> 0
+XF: cleared [smu+0x798] so the dummy back end makes no hardware call
+XF: hw_init is now 0xffffff7f91e478c2 (dummy_smu_internal_hw_init)
+...
+[0:6:0] [Accel] <<< TTL::initialize() Completed successfully.
+==== TTL =====
+SE=1, SA/SE=1
+numActiveRB=1, enabledRbMask=0x00000001, max=1
+numActiveCU=2, max=2, total=2
+[0:6:0]: CWSR is enabled
+Accelerator successfully registered with controller.
+```
+
+`hw_version=9` independently confirms the jump-table decode (`11.0.12` -> enum 9 -> the
+`smu_11_0_7` list, which then swaps in `smu_11_0_12_get_ucode_consts` and
+`smu_11_0_12_check_fw_version`). And **`SE=1, numActiveCU=2`** is this iGPU's real
+topology read back out of the GC block — 1 shader engine, 2 CUs, 1 RB. Nothing about that
+comes from the spoofed device id or the grafted VBIOS; the graphics core was initialised and
+enumerated itself.
+
+### The next wall: the framebuffer aperture is empty
+
+TTL is up and the accelerator registered, but PowerPlay cannot initialise on a dummy SMU
+("Failed Power Play Initialization", "PowerUp Failed. Shut back down."), which `m1`'s
+`doGPUPanic` patch turns into a log line. macOS proceeds to use the GPU anyway — WindowServer
+submits a command buffer — and dies here:
+
+```
+[0:6:0]: AMD ERROR! Failed to allocate size:65536.
+         There is 0 free memory remaining, and 0 fixed-free memory remaining.
+panic: Kernel trap, type 14 = page fault, CR2 0x0, RDI 0x0
+  AMDRadeonX6000: AMDAccelResource::BatchPrepareMappings + 0x1ee
+  AMDRadeonX6000: AMDAccelResource::BatchPrepare + 0xf3
+  IOAcceleratorFamily2: IOAccelCommandQueue::processCommandBuffer + 0x2f8
+```
+
+The allocator has nothing to hand out, and the reason is one line up in GPUCAP:
+
+```
+[GPUCAP] refresh() --- Mem Size: FB: 512 MB, Aper: 256 MB, Reg Aper: 512 KB.
+[GPUCAP] refresh() --- FB Base: 0x100000000, Top: 0x100000000, Offset: 0.
+```
+
+`FB Top == FB Base`, so the framebuffer *range* is zero bytes wide even though the size field
+says 512 MB. Those come from the MC/GMC framebuffer-location registers
+(`MC_VM_FB_LOCATION_BASE` / `TOP`), which live in MMHUB — and `r1` currently reports **MMHUB
+2.4.1 as 2.3.0**, a version whose register offsets are not this chip's. That is the leading
+hypothesis and the next thing to measure, not assume; `2.4` was already flagged in this
+document as one of the two blocks Apple never shipped code for.
