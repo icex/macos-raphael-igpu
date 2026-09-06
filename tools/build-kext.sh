@@ -21,6 +21,10 @@ FLAGS=(-target x86_64-apple-macos10.15 -nostdinc -nostdinc++
   -DPRODUCT_NAME="$NAME" -DMODULE_VERSION="$VER" -DAPPLE_KEXT_ASSERTIONS=1
   -fapple-kext -fno-builtin -fno-common -fno-exceptions -fno-rtti
   -fno-asynchronous-unwind-tables -mkernel -O2
+  # The kernel has no __cxa_atexit, so static objects must not register
+  # destructors; without this the kext fails to link into a collection with
+  # "Failed to bind '___cxa_atexit' ... could not find a kext which exports this symbol".
+  -fno-c++-static-destructors
   -mmmx -msse -msse2 -msse3 -mssse3 -mfpmath=sse)
 
 cat > "$OUT/obj/kmod_info.c" <<EOF

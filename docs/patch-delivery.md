@@ -86,3 +86,35 @@ The same KDK already required for static analysis. Install it in the guest at
 - Kexts in `/Library/Extensions` must be `root:wheel`. Wrong ownership is a silent load refusal.
 - `-lilubetaall` in boot-args.
 - A KDK matching the exact build installed **in the guest**.
+
+## Getting the plugin to link — four fixes, in the order the errors revealed them
+
+1. **`Failed to bind '_lilu'`** — Lilu must exist *on disk* in `/Library/Extensions`, not just at
+   runtime. `kmutil`'s linker resolves only against on-disk kext repositories, so a
+   bootloader-injected Lilu is invisible to it.
+2. **`Missing Developer Kit`** — a KDK matching the exact build must be installed **in the
+   guest** for `kmutil` to rebuild any collection on macOS 13+. Same KDK already needed on the
+   host for disassembly.
+3. **`Read-only file system` (Code=30)** — `kmutil install --update-all` insists on rebuilding
+   the boot and system collections, which live on the sealed volume while `Authenticated Root` is
+   enabled. Build *only* the auxiliary collection instead:
+   ```sh
+   kmutil create -n aux -a x86_64 -z --kdk /Library/Developer/KDKs/KDK_<ver>_<build>.kdk \
+     -B /System/Library/KernelCollections/BootKernelExtensions.kc \
+     -S /System/Library/KernelCollections/SystemKernelExtensions.kc \
+     -A /Library/KernelCollections/AuxiliaryKernelExtensions.kc \
+     -r /Library/Extensions -b as.vit9696.Lilu -b as.rgpu.RaphaelGPU -x
+   ```
+4. **`Failed to bind '___cxa_atexit'`** — the only actual bug in the plugin. The kernel has no
+   `__cxa_atexit`, so static objects must not register destructors. Build with
+   **`-fno-c++-static-destructors`**.
+
+Result:
+
+```
+as.vit9696.Lilu      1.6.8   /Library/Extensions/Lilu.kext
+as.rgpu.RaphaelGPU   1.0.0   /Library/Extensions/RaphaelGPU.kext
+```
+
+Then disable OpenCore's `Lilu.kext` injection (and its dependent plugins), or two kexts claim the
+same bundle id. `tools/deploy-plugin.sh` does the whole rebuild/push/relink cycle in one command.
