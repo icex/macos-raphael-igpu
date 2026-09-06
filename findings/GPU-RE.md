@@ -1463,3 +1463,106 @@ says 512 MB. Those come from the MC/GMC framebuffer-location registers
 2.4.1 as 2.3.0**, a version whose register offsets are not this chip's. That is the leading
 hypothesis and the next thing to measure, not assume; `2.4` was already flagged in this
 document as one of the two blocks Apple never shipped code for.
+
+### Past TTL: the accelerator, the framebuffer aperture, and the graphics ring
+
+With TTL up, the failure moves out of HWLibs entirely and into `AMDRadeonX6000`, the
+accelerator. Four separate things had to be fixed to get from "accelerator attaches, then
+panics" to "the graphics core is initialised and the command processor is being fed".
+
+#### The framebuffer aperture: Apple reads MMHUB, this part programs GFXHUB
+
+`GPUCAP` reported `FB Base: 0x100000000, Top: 0x100000000` -- a zero-wide range -- so the
+VRAM allocator had nothing and WindowServer's first command buffer page-faulted in
+`AMDAccelResource::BatchPrepareMappings`.
+
+`AmdAsicInfoNavi2::populateXGmiConfig` (`0x3b3e0`, Framebuffer) reads five raw MMIO dword
+indices: `0x1a867` xgmi cntl, `0x1a868` xgmi size, `0x1a86c` FB base, `0x1a86d` FB top,
+`0x1a857` FB offset -- MMHUB at Apple's base `0x1a800` with the MMHUB 2.0 offsets
+`0x6c/0x6d/0x57`. Scanning both hub windows in one boot settled it:
+
+```
+0x1a86c=0x100  0x1a86d=0       0x1a857=0        <- MMHUB: not programmed
+0x295c=0xf400  0x295d=0xf41f   0x2947=0x840     <- GFXHUB: correct
+```
+
+`0xf400 << 24` and `(0xf41f << 24) | 0xffffff` are exactly the host kernel's
+`VRAM: 512M 0x000000F400000000 - 0x000000F41FFFFFFF`, which also pins Apple's GC segment-0
+base at `0x1260` (`0x295c - 0x16fc`, and `0x2947 - 0x16e7` agrees). Milestone **`xg`**
+takes the GFXHUB copy. This is *not* the MMHUB version remap: the read never goes through
+TTL's IP dispatch.
+
+#### PowerPlay: "unsupported" is still a failure
+
+Fixing the aperture changed nothing, because `AMDHWMemory::enableAllocations` was never
+reached. The accelerator's own progress bitfield says so:
+
+```
+ttlPowerUp : 0    accelPowerUpHW : 0    hardwarePowerUp : 0
+powerUpHWEngines : 0    startHWEngines : 0
+```
+
+`AmdPowerPlayHelper::powerUp` (`0x101a0`) calls `handleCriticalError("PowerUp Failed. Shut
+back down.")` and then `vtable+0x198` -- powerDown -- whenever PPLIB init fails while
+`[this+0x28f8]` is 1. Clearing that flag takes Apple's own "SKIP: Not Supported" path and
+avoids the powerDown, but it returns `kIOReturnUnsupported`, and the accelerator counts
+that as failure just as much as an error. Milestone **`xi`** clears the flag *and* reports
+success: on this part the GPU is powered and clocked by the platform SMU before macOS
+exists, which is what "powered up" has to mean.
+
+#### A register-base mistake worth recording
+
+`AMDHWMemory::initVRAMInfo` hands two per-pool sizes to `enableAllocations`
+(`canAllocate` indexes them as `[this + 8*pool + 0x40]`), and `AMDHWMemory::init` clamps
+`[0x48] = min([0x48], [0x40])`, so `[0x40]` is the total and `[0x48]` the CPU-visible
+aperture -- 512 MB against a 256 MB BAR0 (`Memory at fc20000000 [size=256M]`, no resizable
+BAR capability). Every Navi 2x Mac has a BAR as large as its VRAM, so `enableAllocations`'
+equal-sizes path is the one Apple ships; milestone **`xh`** equalises on the smaller value
+so the two-argument `IOAccelMemoryAllocator::init_pool(base, size)` is used.
+
+Then the register reads. Chasing "why is the RLC not running" produced this:
+
+```
+RLC_CNTL=0  RLC_STAT=0  RLC_RLCS_BOOTLOAD_STATUS=0     <- WRONG, and plausible
+```
+
+which is exactly the kind of wrong that costs a day. SOC15 register offsets are
+`base_table[BASE_IDX] + reg`, and **`RLC_*` and `SCRATCH_REG0` are `BASE_IDX 1`, not 0**.
+HWLibs says so in the clear: `gc_reg_offset(table, reg, base_idx)` at `0xb197` is
+`reg + table[base_idx]`, and `gc_enter_rlc_safe_mode_10_3` passes `0x4c00` with
+`base_idx 1`. GC segment 1 is `0xa000`. With the right base:
+
+```
+RLC_CNTL=0x1  RLC_RLCS_BOOTLOAD_STATUS=0xc0000001  RLC_GPM_STAT=0xc0016 -> 0x140016
+SCRATCH_REG0: wrote 0xa5a5a5a5, read back 0xa5a5a5a5
+```
+
+The RLC is running, its bootload completed, and register writes work. The control
+experiment is what caught it: a 16-bit-looking truncation (`0xa5a5a5a5` reading back as
+`0xa5a5`) was the giveaway that the address was wrong, not the write path.
+
+#### Where it stands: the KIQ does not complete
+
+`AMDGraphicsAccelerator::powerUpHW` reaches `enableAllocations` only after
+`hardware->powerUp()`, which needs `powerUpHWEngines`, which fails on engine 0, PM4.
+`AMDGFX10PM4Engine::doStart(false)` gets this far:
+
+```
+initComputeMQD(ring=4)                 -> 1        ok
+startKIQ(0xf40b706000, 0xf40b706800)   -> 0        ok
+submitSetResourcesPacket -> submitKIQFrame -> waitForHwStamp(1) -> 0   TIMEOUT
+```
+
+and the graphics core's state across that timeout is:
+
+```
+before:  GRBM_STATUS=0x3028      CP_STAT=0  CP_CPF_STATUS=0          VM_FAULT_STATUS=0
+after:   GRBM_STATUS=0xa0003028  CP_STAT=0  CP_CPF_STATUS=0x88008001 VM_FAULT_STATUS=0
+         CP_ME_CNTL=0  CP_MEC_CNTL=0  RLC_CNTL=0x1  CP_CPC_STATUS=0
+```
+
+So: the CP is unhalted, the RLC is up, the ring lives inside the real framebuffer, the
+doorbell makes GRBM assert GUI_ACTIVE and the CP fetcher go busy -- and there is **no VM
+fault** (the `0x881` seen earlier was latched from before; clearing
+`GCVM_L2_PROTECTION_FAULT_CNTL` bit 0 first leaves it at 0 through the timeout). The
+compute pipe never reports activity (`CP_CPC_STATUS=0`), which is where the KIQ lives.

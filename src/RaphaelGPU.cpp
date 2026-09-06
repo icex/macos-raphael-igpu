@@ -45,6 +45,9 @@ static const char *pathFB[] {
     "/System/Library/Extensions/AMDRadeonX6000Framebuffer.kext/Contents/MacOS/"
     "AMDRadeonX6000Framebuffer"
 };
+static const char *pathX6000[] {
+    "/System/Library/Extensions/AMDRadeonX6000.kext/Contents/MacOS/AMDRadeonX6000"
+};
 
 // sys[0] == SysFlags::Loaded: invoke the callback even if the kext is already loaded.
 // Both of these are prelinked into SystemKernelExtensions.kc, so by the time a Lilu
@@ -55,11 +58,13 @@ static const char *pathFB[] {
 // SINGLE call. Registering the kexts and the callback separately (and passing
 // nullptr/0 for the callback-only registration) does not work -- pluginStart
 // stopped executing right there, with no further log output.
-enum { KextHWLibs, KextFB };
+enum { KextHWLibs, KextFB, KextX6000 };
 static KernelPatcher::KextInfo kexts[] {
     {"com.apple.kext.AMDRadeonX6000HWLibs", pathHWLibs, arrsize(pathHWLibs),
      {true}, {}, KernelPatcher::KextInfo::Unloaded},
     {"com.apple.kext.AMDRadeonX6000Framebuffer", pathFB, arrsize(pathFB),
+     {true}, {}, KernelPatcher::KextInfo::Unloaded},
+    {"com.apple.kext.AMDRadeonX6000", pathX6000, arrsize(pathX6000),
      {true}, {}, KernelPatcher::KextInfo::Unloaded},
 };
 
@@ -92,6 +97,11 @@ enum : uint32_t {
     XD = 1u << 23,  // decline the tap-delay blobs this chip's RLC firmware does not have
     XE = 1u << 24,  // survive Apple's SMU failure-cleanup instead of panicking in it
     XF = 1u << 25,  // hand SMU HW_INIT to Apple's own dummy back end
+    XG = 1u << 26,  // take the framebuffer aperture from the GFXHUB copy
+    XH = 1u << 27,  // give the accelerator's memory pools a range that is not inverted
+    XI = 1u << 28,  // tell PowerPlay it is unsupported instead of letting it power down
+    XJ = 1u << 29,  // trace the accelerator's hardware power-up chain
+    XK = 1u << 30,  // start the RLC microcontroller before the engines power up
 };
 
 struct RPatch {
@@ -248,10 +258,29 @@ static constexpr size_t kOffPspTmrUnload  = 0x52ee7;   // _psp_tmr_unload
 static constexpr size_t kOffCosRelMemHnd  = 0xb3670;   // AmdTtlServices::cosReleaseMemoryHandle
 static constexpr size_t kOffSmuInitFnPtrs = 0x72b33;   // _smu_init_function_pointer_list
 static constexpr size_t kOffSmuUpdFnPtrs  = 0x73a2f;   // _smu_update_function_pointers (called, not routed)
+
+// AMDRadeonX6000Framebuffer, not HWLibs.
+static constexpr size_t kOffFbXgmiConfig = 0x3b3e0;    // AmdAsicInfoNavi2::populateXGmiConfig [fb]
+static constexpr size_t kOffPpPowerUp    = 0x101a0;    // AmdPowerPlayHelper::powerUp [fb]
+
+// AMDRadeonX6000, the accelerator.
+static constexpr size_t kOffHwMemVram   = 0x527a4;    // AMDHWMemory::initVRAMInfo [x6]
+static constexpr size_t kOffHwMemEnable = 0x52a1e;    // AMDHWMemory::enableAllocations [x6]
+static constexpr size_t kOffAccPowerUpHW = 0x4e0c;   // AMDGraphicsAccelerator::powerUpHW [x6]
+static constexpr size_t kOffHwPowerUp    = 0x99618;  // AMDNavi23Hardware::powerUp [x6]
+static constexpr size_t kOffHwEngPowerUp = 0x6fe9a;  // AMDHardware::powerUpHWEngines [x6]
+static constexpr size_t kOffHwEngStart   = 0x6ffd2;  // AMDHardware::startHWEngines [x6]
+static constexpr size_t kOffPm4Mqd       = 0x69362;  // AMDGFX10PM4Engine::initComputeMQD [x6]
+static constexpr size_t kOffKiqStart     = 0x8e670;  // AMDGFX10KIQHWChannel::startKIQ [x6]
+static constexpr size_t kOffPm4GfxMqd    = 0x6952a;  // AMDGFX10PM4Engine::initGraphicsMQD [x6]
+static constexpr size_t kOffKiqMapQ      = 0x8e45e;  // AMDGFX10KIQHWChannel::submitMapQueuesPacket [x6]
+static constexpr size_t kOffKiqSubmit    = 0x5c716;  // AMDKIQHWChannel::submitKIQFrame [x6]
+static constexpr size_t kOffWaitStamp    = 0x4c520;  // AMDHWChannel::waitForHwStamp [x6]
 // GFX_CTRL command encodings, from upstream psp_gfx_if.h.
 static constexpr uint32_t kC2PMsg64        = 0x80;       // MP0 C2PMSG_64, IP-relative
 static constexpr uint32_t kHwIpMp0         = 0x4b;
 static constexpr uint32_t kDestroyGpcomRing = 0x000C0000;
+static constexpr uint32_t kDestroyRings     = 0x00030000;   // destroys RBI/UM *and* GPCOM
 static constexpr uint32_t kMboxReadyMask   = 0x8000FFFF;
 static constexpr uint32_t kMboxReadyFlag   = 0x80000000;
 
@@ -370,6 +399,45 @@ static mach_vm_address_t orgGvmGetIpFn {};
 static mach_vm_address_t orgFwDirGet {};
 static mach_vm_address_t orgSmuFwFile {};
 static mach_vm_address_t orgSmuInitFnPtrs {};
+static mach_vm_address_t orgFbXgmiConfig {};
+static mach_vm_address_t orgHwMemVram {};
+static mach_vm_address_t orgHwMemEnable {};
+static mach_vm_address_t orgAccPowerUpHW {};
+static mach_vm_address_t orgHwPowerUp {};
+static mach_vm_address_t orgHwEngPowerUp {};
+static mach_vm_address_t orgHwEngStart {};
+static mach_vm_address_t orgPm4Mqd {};
+static mach_vm_address_t orgKiqStart {};
+static mach_vm_address_t orgPm4GfxMqd {};
+static mach_vm_address_t orgKiqMapQ {};
+static mach_vm_address_t orgKiqSubmit {};
+static mach_vm_address_t orgWaitStamp {};
+
+// AmdAsicInfoNavi2 keeps the register accessor this whole file uses to read GPU
+// registers: [asicInfo+0x28] is the accessor object and its vtable slot 0x140 is
+// read32(index). Remembered on the first populateXGmiConfig so the accelerator hooks,
+// which have no AsicInfo of their own, can read the graphics core's status registers.
+static void *asicInfo {};
+
+// AmdRegisterAccess vtable: 0x138 writeReg32(index, value), 0x140 hwReadReg32(index).
+static void fbWrite(void *self, uint32_t idx, uint32_t val) {
+    if (self == nullptr) return;
+    auto obj = *reinterpret_cast<void **>(reinterpret_cast<uint8_t *>(self) + 0x28);
+    if (obj == nullptr) return;
+    auto vt = *reinterpret_cast<uint64_t **>(obj);
+    auto wr = reinterpret_cast<void (*)(void *, uint32_t, uint32_t)>(vt[0x138 / 8]);
+    wr(obj, idx, val);
+}
+
+static uint32_t fbRead(void *self, uint32_t idx) {
+    auto obj = *reinterpret_cast<void **>(reinterpret_cast<uint8_t *>(self) + 0x28);
+    if (obj == nullptr) return 0xdeadbeef;
+    auto vt = *reinterpret_cast<uint64_t **>(obj);
+    auto rd = reinterpret_cast<uint32_t (*)(void *, uint32_t)>(vt[0x140 / 8]);
+    return rd(obj, idx);
+}
+static mach_vm_address_t orgPpPowerUp {};
+static mach_vm_address_t fbBase {};
 static mach_vm_address_t orgPspRegRead {};
 
 // psp_ring_create's mailbox handshake times out. Before concluding anything about the
@@ -624,12 +692,28 @@ static uint32_t wrapPspFwCapChk(void *psp, uint32_t fwType) {
 // which C2PMSG_64 reads 0x80030000, status 0). So issuing DESTROY_GPCOM_RING first is
 // upstream's own behaviour, not a workaround. gpu-quiesce.sh does the same from the host
 // after the VM stops; this is the belt to that braces.
+static void pspRingCtrl(void *psp, uint32_t cmd, const char *what) {
+    auto wr = reinterpret_cast<void (*)(void *, uint32_t, uint32_t, uint32_t, uint32_t)>(
+                  hwlibsBase + kOffPspRegWrite);
+    auto rd = reinterpret_cast<uint32_t (*)(void *, uint32_t, uint32_t, uint32_t)>(
+                  hwlibsBase + kOffPspRegRead);
+    uint32_t before = rd(psp, kC2PMsg64, 0, kHwIpMp0);
+    wr(psp, kC2PMsg64, 0, cmd, kHwIpMp0);
+    uint32_t v = before;
+    int ms = 0;
+    for (; ms < 2000; ms++) {
+        v = rd(psp, kC2PMsg64, 0, kHwIpMp0);
+        if ((v & kMboxReadyMask) == kMboxReadyFlag &&
+            ((v >> 16) & 0x7fff) == (cmd >> 16))
+            break;
+        IOSleep(1);
+    }
+    RLOG("X7: %s: 0x%08x -> 0x%08x after %dms%s", what, before, v, ms,
+         (v & kMboxReadyMask) == kMboxReadyFlag ? " (ready)" : " (TIMEOUT)");
+}
+
 static uint32_t wrapPspRingCreate(void *psp, uint32_t ringType) {
     if ((mask & X7) != 0 && ringType == 2 && hwlibsBase != 0 && psp != nullptr) {
-        auto wr = reinterpret_cast<void (*)(void *, uint32_t, uint32_t, uint32_t, uint32_t)>(
-                      hwlibsBase + kOffPspRegWrite);
-        auto rd = reinterpret_cast<uint32_t (*)(void *, uint32_t, uint32_t, uint32_t)>(
-                      hwlibsBase + kOffPspRegRead);
         // Destroy UNCONDITIONALLY. A clean mailbox does not mean there is no ring: after a
         // boot that got as far as ENABLE_INT, C2PMSG_64 reads 0x80050000 -- status 0, so
         // it passes every "ready" test -- while the GPCOM ring from that boot is still
@@ -637,19 +721,18 @@ static uint32_t wrapPspRingCreate(void *psp, uint32_t ringType) {
         // Gating the destroy on the status being non-zero is exactly the mistake that
         // made this look fixed when it was not. Upstream's psp_v11_0_ring_create calls
         // psp_v11_0_ring_stop unconditionally for the same reason.
-        uint32_t before = rd(psp, kC2PMsg64, 0, kHwIpMp0);
-        wr(psp, kC2PMsg64, 0, kDestroyGpcomRing, kHwIpMp0);
-        uint32_t v = before;
-        int ms = 0;
-        for (; ms < 2000; ms++) {
-            v = rd(psp, kC2PMsg64, 0, kHwIpMp0);
-            if ((v & kMboxReadyMask) == kMboxReadyFlag &&
-                ((v >> 16) & 0x7fff) == (kDestroyGpcomRing >> 16))
-                break;
-            IOSleep(1);
-        }
-        RLOG("X7: destroy GPCOM ring: 0x%08x -> 0x%08x after %dms%s", before, v, ms,
-             (v & kMboxReadyMask) == kMboxReadyFlag ? " (ready)" : " (TIMEOUT)");
+        //
+        // DESTROY_RINGS first, because there are TWO rings and DESTROY_GPCOM_RING clears
+        // only one of them. The very first boot to complete TTL::initialize() created a
+        // UM/RBI ring as well (psp_hdcp_initialize, during initialize_bgd_security) and
+        // left it behind; the next boot then died at "psp_ring_create: UM ring creation
+        // failed" -- the same failure as the GPCOM one, one ring type over, and it looked
+        // for a while like a regression from the framebuffer-aperture fix. The KM ring is
+        // created first, so clearing both here is enough for the UM create that follows.
+        pspRingCtrl(psp, kDestroyRings, "destroy all rings");
+        pspRingCtrl(psp, kDestroyGpcomRing, "destroy GPCOM ring");
+    } else if ((mask & X7) != 0 && psp != nullptr) {
+        RLOG("X7: psp_ring_create(type=%u) -- not the KM ring, leaving it alone", ringType);
     }
     return FunctionCast(wrapPspRingCreate, orgPspRingCreate)(psp, ringType);
 }
@@ -1155,6 +1238,410 @@ static void reprobeGpu() {
     RLOG("reprobe: %u AMD device(s) touched", found);
 }
 
+// Find the framebuffer aperture.
+//
+// With TTL up, the accelerator attaches and then dies on the first command buffer:
+//     AMD ERROR! Failed to allocate size:65536. There is 0 free memory remaining
+//     panic: page fault CR2=0 in AMDAccelResource::BatchPrepareMappings
+// because GPUCAP reports "FB Base: 0x100000000, Top: 0x100000000" -- a zero-wide
+// range. The host kernel says where this iGPU's carveout really is:
+//     amdgpu 0000:7b:00.0: VRAM: 512M 0x000000F400000000 - 0x000000F41FFFFFFF
+// so the base should read 0xf400, not 0x100, and the top 0xf41f.
+//
+// It is NOT the MMHUB version remap: this read never goes through TTL's IP dispatch.
+// AmdAsicInfoNavi2::populateXGmiConfig reads five raw MMIO dword indices --
+//     0x1a867 xgmi cntl   -> node count (low nibble), mode (bits 4-7, +1)
+//     0x1a868 xgmi size
+//     0x1a86c FB_LOCATION_BASE >> 24     (masked to 24 bits, then << 24)
+//     0x1a86d FB_LOCATION_TOP  >> 24
+//     0x1a857 FB_OFFSET       >> 24
+// -- i.e. MMHUB at Apple's base 0x1a800 with the MMHUB 2.0 register offsets
+// 0x6c/0x6d/0x57/0x67/0x68. MMHUB 2.4 on this silicon may well put them elsewhere.
+// (Navi1's AmdAsicInfoNavi::populateFbLocation uses 0x2980/0x2981/0x296b instead,
+// which is GC base 0x1260 plus the gc_10_1_0 offsets 0x1720/0x1721/0x170b -- the
+// GFXHUB copy. Worth scanning too, since gc_10_3 moved those to 0x16fc/0x16fd/0x16e7.)
+//
+// Scanning both windows answered it in one boot:
+//     0x1a86c=0x100  0x1a86d=0  0x1a857=0        <- what Apple reads: wrong
+//     0x295c=0xf400  0x295d=0xf41f  0x2947=0x840 <- GC base 0x1260 + gc_10_3 0x16fc/
+//                                                   0x16fd/0x16e7
+// 0xf400 << 24 = 0xF400000000 and (0xf41f << 24) | 0xffffff = 0xF41FFFFFFF -- exactly
+// the host kernel's "VRAM: 512M 0x000000F400000000 - 0x000000F41FFFFFFF". Two
+// independent matches pin the GC base at 0x1260, so 0x2947 is FB_OFFSET (0x840, and
+// 0x2951/0x2952 = 0x840/0x85f, the system aperture, agree).
+//
+// So Apple is not reading the wrong offsets for MMHUB -- it is reading MMHUB at all.
+// The MMHUB copy of the FB location is simply not programmed on this part; the GFXHUB
+// copy is. Take the GFXHUB one.
+static constexpr uint32_t kGcFbBase   = 0x295c;   // GC 0x1260 + gc_10_3 0x16fc
+static constexpr uint32_t kGcFbTop    = 0x295d;   // GC 0x1260 + gc_10_3 0x16fd
+static constexpr uint32_t kGcFbOffset = 0x2947;   // GC 0x1260 + gc_10_3 0x16e7
+
+// Give the accelerator's two memory pools a range that is not inverted.
+//
+// With TTL up and the aperture corrected, the first command buffer still dies on
+//     AMD ERROR! Failed to allocate size:65536. There is 0 free memory remaining
+// AMDHWMemory::initVRAMInfo asks [this+0x10]->vtable[0x2c0]() for a provider and calls
+// its vtable[0x18] with a 0x48-byte out struct, keeping
+//     [this+0x50] = s[0x00]   base        measured 0xf400000000
+//     [this+0x58] = s[0x18]   reserved    measured 0
+//     [this+0x40] = s[0x08]   pool 0 size measured 0x20000000  (512 MB, the whole FB)
+//     [this+0x48] = s[0x10]   pool 1 size measured 0x10000000  (256 MB, the PCI aperture)
+// Those two are per-pool: canAllocate indexes them as [this + 8*pool + 0x40].
+//
+// enableAllocations then branches on whether they are equal:
+//     equal   -> IOAccelMemoryAllocator::init_pool(base, size)          for both pools
+//     unequal -> IOAccelMemoryAllocator::init_pool(base + [0x40],
+//                                                  base + [0x48], 0)    for both pools
+// (names recovered from the external relocations at 0x52a58/0x52a6b/0x52a7e/0x52a9a).
+// The unequal form wants [0x40] <= [0x48]; here it is 512 MB vs 256 MB, so the pool is
+// handed 0xf420000000..0xf410000000 -- backwards, hence a pool with nothing in it.
+//
+// Every Navi 2x Mac has a resizable BAR as large as its VRAM, so on Apple hardware
+// these are always equal and the two-argument path is the one that ships. This iGPU's
+// BAR0 is 256 MB against a 512 MB carveout ("Memory at fc20000000 [size=256M]", no
+// rebar capability), which is why the rarely-taken branch is reached at all.
+//
+// So equalise on the SMALLER of the two. That is the aperture, so every byte the pool
+// hands out is inside the BAR the CPU can actually reach; the cost is half the
+// carveout. Raising it to the full 512 MB is a separate experiment.
+static uint32_t wrapHwMemVram(void *self) {
+    auto r = FunctionCast(wrapHwMemVram, orgHwMemVram)(self);
+    if (self == nullptr) return r;
+    auto f = reinterpret_cast<uint8_t *>(self);
+    auto q = [f](size_t o) -> uint64_t & { return *reinterpret_cast<uint64_t *>(f + o); };
+    RLOG("XH: initVRAMInfo -> %u  base=%#llx reserved=%#llx base-reserved=%#llx "
+         "pool0=%#llx pool1=%#llx",
+         r, q(0x50), q(0x58), q(0x60), q(0x40), q(0x48));
+    if ((mask & XH) != 0 && q(0x40) != q(0x48) && q(0x40) != 0 && q(0x48) != 0) {
+        uint64_t use = q(0x40) < q(0x48) ? q(0x40) : q(0x48);
+        RLOG("XH: pool sizes differ (%#llx vs %#llx) -- enableAllocations would build an "
+             "inverted range; using %#llx (%llu MB) for both",
+             q(0x40), q(0x48), use, use >> 20);
+        q(0x40) = use;
+        q(0x48) = use;
+    }
+    return r;
+}
+
+// Stop PowerPlay from powering the GPU back down.
+//
+// The pools are still empty with the sizes equalised, and the log order says why:
+//     [PPLIB] handleCriticalError() !!! Failed Power Play Initialization.
+//     [PPLIB] handleCriticalError() !!! PowerUp Failed. Shut back down.
+//     AmdRadeonControllerNavi23::powerUp() ??? Power Play Initialization Failed
+//                                              (Safe-Mode?). err:general error.
+//     ... 100 lines later ...
+//     AMD ERROR! Failed to allocate size:65536. There is 0 free memory remaining
+// "Shut back down" is literal. AmdPowerPlayHelper::powerUp (0x101a0) reads
+//     101c0: call [vtable+0x118]        ; isSupported()
+//     10240: cmp  byte [this+0x28f8], 1 ; NOT isSupported() -- the raw flag
+//     1025e: call handleCriticalError("PowerUp Failed. Shut back down.")
+//     10269: call [vtable+0x198]        ; <- powerDown
+//     1026f: mov  byte [this+0x28f8], 0
+// so a GPU whose PowerPlay init fails while the flag is set gets powered down, which is
+// what empties the pools between the accelerator attaching and WindowServer's first
+// command buffer.
+//
+// With the SMU on a dummy back end, PowerPlay genuinely is not supported here, and Apple
+// has a path for exactly that: isSupported() is
+//     [this+0x28f8] == 1 && [this+0x68] != 0
+// and when it is false powerUp logs "SKIP: Not Supported", returns 0xe00002c7 without
+// ever calling into PPLIB, and -- because 0x10240 tests the same flag -- skips
+// handleCriticalError and powerDown as well. The controller already treats 0xe00002c7 as
+// a warning ("Power Play Initialization Failed (Safe-Mode?)") and carries on.
+//
+// The flag comes from controller->getFeatures()->supportsFeature(8) in
+// initWithController, whose prologue has a relative call inside the first 16 bytes and is
+// not safe to route. Clearing it here, before the original runs, has the same effect at
+// the only place it is read.
+// Does enableAllocations even run, and which branch does it take? The pools report
+// zero free with the sizes equalised and with PowerPlay no longer powering the GPU
+// down, so the question is now whether IOAccelMemoryAllocator::init_pool is reached at
+// all. enableAllocations bails silently when either pool pointer is null.
+// Where does the power-up chain actually stop? AMDGraphicsAccelerator::powerUpHW only
+// reaches AMDHWMemory::enableAllocations (its vtable slot 0x118, at 0x5099) after
+//     0x5058  hardware->powerUp()                     (vtable 0x208)
+//     0x5081  hardware->initializeHardwareRegisters() (vtable 0x250, always returns 1)
+// and AMDHardware::powerUp in turn needs powerUpHWEngines (0x608) and startHWEngines
+// (0x618) -- both reported 0 in the accelerator's own progress bitfield. Trace all four
+// rather than keep reading disassembly.
+// PM4 powerUp goes straight to AMDGFX10PM4Engine::doStart(false), which fails if
+// either initComputeMQD(4) returns false or startKIQ returns non-zero. Split them.
+static uint32_t wrapPm4Mqd(void *self, uint32_t ring) {
+    auto r = FunctionCast(wrapPm4Mqd, orgPm4Mqd)(self, ring);
+    RLOG("XJ:   PM4 initComputeMQD(ring=%u) -> %u", ring, r & 0xff);
+    return r;
+}
+
+static uint32_t wrapKiqStart(void *self, uint64_t a, uint64_t b, void *spec, uint32_t *out) {
+    auto r = FunctionCast(wrapKiqStart, orgKiqStart)(self, a, b, spec, out);
+    RLOG("XJ:   PM4 startKIQ(%#llx, %#llx) -> %#x (0 is success)", a, b, r);
+    return r;
+}
+
+// After startKIQ the ring loop runs: for each ring index it builds an MQD (graphics for
+// ring 0, compute for ring 5) and submits a MAP_QUEUES packet, AND-ing the results.
+// submitSetResourcesPacket sits between the two and cannot be routed -- its prologue has
+// a relative call inside the first 16 bytes -- so infer it: if neither of these two fires,
+// that is where doStart stopped.
+static uint32_t wrapPm4GfxMqd(void *self) {
+    auto r = FunctionCast(wrapPm4GfxMqd, orgPm4GfxMqd)(self);
+    RLOG("XJ:   PM4 initGraphicsMQD -> %u", r & 0xff);
+    return r;
+}
+
+static uint32_t wrapKiqMapQ(void *self, uint32_t ring, uint32_t a, uint64_t b,
+                            void *spec, uint64_t c) {
+    auto r = FunctionCast(wrapKiqMapQ, orgKiqMapQ)(self, ring, a, b, spec, c);
+    RLOG("XJ:   PM4 submitMapQueuesPacket(ring=%u) -> %u", ring, r & 0xff);
+    return r;
+}
+
+// The KIQ frame goes: ring enabled? -> commit -> ring the doorbell -> waitForHwStamp.
+// Its two failure messages ("KIQ ring is disabled. Will not submit to ring!" and
+// "Stamp Timeout for KIQ Submission!") never reach the serial console, so log the two
+// steps directly, and dump the graphics core's own status registers alongside -- if the
+// command processor is not executing, GRBM_STATUS and CP_STAT say so.
+// SOC15 register offsets are base_table[BASE_IDX] + reg, and HWLibs uses exactly that:
+// gc_reg_offset(table, reg, base_idx) is reg + table[base_idx] (0xb197), and
+// gc_enter_rlc_safe_mode_10_3 passes RLC_CNTL 0x4c00 with base_idx 1. Getting this wrong
+// is silent: reads land on some other register and come back plausible. RLC_* and
+// SCRATCH_REG0 are BASE_IDX 1; GRBM/CP/GCVM/GCMC are BASE_IDX 0.
+static constexpr uint32_t kGcSeg0 = 0x1260;
+static constexpr uint32_t kGcSeg1 = 0xa000;
+
+static constexpr uint32_t kGcGrbmStatus  = kGcSeg0 + 0x0da4;
+static constexpr uint32_t kGcGrbmStatus2 = kGcSeg0 + 0x0da2;
+static constexpr uint32_t kGcCpStat      = kGcSeg0 + 0x0f40;
+static constexpr uint32_t kGcCpMeCntl    = kGcSeg0 + 0x0f56;
+static constexpr uint32_t kGcCpMecCntl   = kGcSeg0 + 0x0f55;
+static constexpr uint32_t kGcRlcCntl     = kGcSeg1 + 0x4c00;
+static constexpr uint32_t kGcRlcStat     = kGcSeg1 + 0x4c04;
+static constexpr uint32_t kGcRlcBootStat = kGcSeg1 + 0x4e8d;   // RLC_RLCS_BOOTLOAD_STATUS
+static constexpr uint32_t kGcRlcGpmStat  = kGcSeg1 + 0x4e6e;
+static constexpr uint32_t kGcRlcSafeMode = kGcSeg1 + 0x4ca0;
+static constexpr uint32_t kGcCpfStatus   = kGcSeg0 + 0x0e27;
+static constexpr uint32_t kGcCpcStatus   = kGcSeg0 + 0x0e24;
+static constexpr uint32_t kGcVmFaultSts  = kGcSeg0 + 0x15c8;   // GCVM_L2_PROTECTION_FAULT_STATUS
+static constexpr uint32_t kGcVmFaultLo   = kGcSeg0 + 0x15c9;
+static constexpr uint32_t kGcVmFaultHi   = kGcSeg0 + 0x15ca;
+static constexpr uint32_t kGcHqdActive   = kGcSeg0 + 0x1fab;
+static constexpr uint32_t kGcRlcCgcg     = kGcSeg1 + 0x4c49;   // RLC_CGCG_CGLS_CTRL
+static constexpr uint32_t kGcRlcPgCntl   = kGcSeg1 + 0x4c43;   // RLC_PG_CNTL
+static constexpr uint32_t kGcScratch0    = kGcSeg1 + 0x2040;   // SCRATCH_REG0
+static constexpr uint32_t kGcGrbmGfxCntl = kGcSeg0 + 0x0dc2;   // GRBM_GFX_CNTL
+static constexpr uint32_t kGcVmFaultCntl = kGcSeg0 + 0x15c4;   // GCVM_L2_PROTECTION_FAULT_CNTL, bit 0 clears the latched status
+
+static void dumpGfxState(const char *when) {
+    if (asicInfo == nullptr) { RLOG("XJ: %s: no AsicInfo yet", when); return; }
+    RLOG("XJ: %s: GRBM_STATUS=%#x GRBM_STATUS2=%#x CP_STAT=%#x CP_ME_CNTL=%#x "
+         "CP_MEC_CNTL=%#x RLC_CNTL=%#x RLC_STAT=%#x",
+         when, fbRead(asicInfo, kGcGrbmStatus), fbRead(asicInfo, kGcGrbmStatus2),
+         fbRead(asicInfo, kGcCpStat), fbRead(asicInfo, kGcCpMeCntl),
+         fbRead(asicInfo, kGcCpMecCntl), fbRead(asicInfo, kGcRlcCntl),
+         fbRead(asicInfo, kGcRlcStat));
+    RLOG("XJ: %s: RLC_BOOTLOAD_STATUS=%#x RLC_GPM_STAT=%#x RLC_SAFE_MODE=%#x "
+         "CP_CPF_STATUS=%#x CP_CPC_STATUS=%#x HQD_ACTIVE=%#x "
+         "VM_FAULT_STATUS=%#x addr=%#x_%08x",
+         when, fbRead(asicInfo, kGcRlcBootStat), fbRead(asicInfo, kGcRlcGpmStat),
+         fbRead(asicInfo, kGcRlcSafeMode), fbRead(asicInfo, kGcCpfStatus),
+         fbRead(asicInfo, kGcCpcStatus), fbRead(asicInfo, kGcHqdActive),
+         fbRead(asicInfo, kGcVmFaultSts), fbRead(asicInfo, kGcVmFaultHi),
+         fbRead(asicInfo, kGcVmFaultLo));
+}
+
+static uint32_t wrapWaitStamp(void *self, uint32_t stamp) {
+    auto r = FunctionCast(wrapWaitStamp, orgWaitStamp)(self, stamp);
+    RLOG("XJ:   waitForHwStamp(%u) -> %u", stamp, r & 0xff);
+    if (!(r & 0xff)) dumpGfxState("after stamp timeout");
+    return r;
+}
+
+static uint32_t wrapKiqSubmit(void *self) {
+    // The VM fault status reads the same before and after the KIQ submit, so it is
+    // latched from something earlier. Clear it first (FAULT_CNTL bit 0 is
+    // CLEAR_PROTECTION_FAULT_STATUS_ADDR) so that whatever shows up afterwards is
+    // definitely the command processor's.
+    if (mask & XK) {
+        uint32_t c = fbRead(asicInfo, kGcVmFaultCntl);
+        fbWrite(asicInfo, kGcVmFaultCntl, c | 1u);
+        fbWrite(asicInfo, kGcVmFaultCntl, c);
+        RLOG("XK: cleared VM fault latch, status now %#x",
+             fbRead(asicInfo, kGcVmFaultSts));
+    }
+    dumpGfxState("before KIQ submit");
+    auto r = FunctionCast(wrapKiqSubmit, orgKiqSubmit)(self);
+    RLOG("XJ:   submitKIQFrame -> %u", r & 0xff);
+    return r;
+}
+
+static const char *const kEngineNames[] {
+    "PM4", "SDMA0", "SDMA1", "SDMA2", "SDMA3", "UVD0", "UVD1", "VCE", "VCN0", "VCN1", "SAMU",
+};
+
+// powerUpHWEngines walks [this + 8*i + 0x3b0] for i in 0..10 and calls each engine's
+// vtable[0x138], bailing on the first failure -- and its failure message does not reach
+// the serial console. Replicate the loop so every engine's result is logged. Skipping
+// the original is deliberate: calling it as well would power each engine up twice. The
+// only thing not reproduced is the progress-bitfield update at 0x6ff26, which is
+// diagnostic.
+// Start the RLC microcontroller.
+//
+// The KIQ submission times out, and the graphics core's own registers say why:
+//     RLC_CNTL=0  RLC_STAT=0  RLC_GPM_STAT=0  RLC_RLCS_BOOTLOAD_STATUS=0
+// RLC_CNTL bit 0 is RLC_ENABLE_F32, so the RLC's F32 microcontroller is simply not
+// running -- and on GFX10 the command processor cannot execute a ring without it. The
+// CP itself is fine: gc_unhalt_micro_engines_10_3 cleared the halt bits in CP_ME_CNTL
+// and CP_MEC_CNTL (both read 0), and CP_CPF_STATUS goes to 0x88008001 once the doorbell
+// is rung, so the fetcher does start -- it just never gets anywhere.
+//
+// Upstream sets this itself. gfx_v10_0_rlc_resume takes the autoload path only when
+// psp.autoload_supported; otherwise it stops the RLC, clears RLC_CGCG_CGLS_CTRL and
+// RLC_PG_CNTL, and calls gfx_v10_0_rlc_start, which is one field write:
+//     WREG32_FIELD15(GC, 0, RLC_CNTL, RLC_ENABLE_F32, 1)
+// Apple has _gc_unhalt_rlc_10_1 and _gc_setup_rlc_10_1 but no 10_3 equivalent, so on
+// Navi 2x its GC path must be relying on the PSP autoloading and starting the RLC --
+// which this PSP, loading each blob individually via LOAD_IP_FW, does not do.
+//
+// Do it here, before any engine powers up, which is upstream's order (rlc_resume runs
+// ahead of cp_resume).
+static void startRlc() {
+    if (asicInfo == nullptr) { RLOG("XK: no register accessor yet"); return; }
+    dumpGfxState("before RLC start");
+    fbWrite(asicInfo, kGcRlcCgcg, 0);
+    fbWrite(asicInfo, kGcRlcPgCntl, 0);
+    uint32_t cntl = fbRead(asicInfo, kGcRlcCntl);
+    fbWrite(asicInfo, kGcRlcCntl, cntl | 1u);
+    IOSleep(1);
+    RLOG("XK: RLC_CNTL %#x -> %#x", cntl, fbRead(asicInfo, kGcRlcCntl));
+    // Control experiment: is the write path working at all? SCRATCH_REG0/1 are plain
+    // read/write registers in the CP block. If these do not stick either, nothing in the
+    // graphics domain is writable and the block is gated off -- which on an APU is the
+    // SMU's doing, not the driver's.
+    uint32_t s0 = fbRead(asicInfo, kGcScratch0);
+    fbWrite(asicInfo, kGcScratch0, 0xa5a5a5a5u);
+    uint32_t s0b = fbRead(asicInfo, kGcScratch0);
+    fbWrite(asicInfo, kGcScratch0, s0);
+    // ...and one register that is definitely NOT in the graphics domain, as a positive
+    // control: GRBM_GFX_CNTL lives with GRBM, which we know reads back real values.
+    uint32_t gc = fbRead(asicInfo, kGcGrbmGfxCntl);
+    RLOG("XK: SCRATCH_REG0 %#x -> wrote 0xa5a5a5a5 -> %#x (%s) | GRBM_GFX_CNTL=%#x",
+         s0, s0b, s0b == 0xa5a5a5a5u ? "WRITES WORK" : "WRITE DROPPED", gc);
+    dumpGfxState("after RLC start");
+}
+
+static uint32_t wrapHwEngPowerUp(void *self) {
+    if (mask & XK) startRlc();
+    if ((mask & XJ) == 0 || self == nullptr)
+        return FunctionCast(wrapHwEngPowerUp, orgHwEngPowerUp)(self);
+    auto f = reinterpret_cast<uint8_t *>(self);
+    uint32_t ok = 1;
+    for (unsigned i = 0; i < 11; i++) {
+        auto eng = *reinterpret_cast<void **>(f + 0x3b0 + 8 * i);
+        if (eng == nullptr) continue;
+        auto vt = *reinterpret_cast<uint64_t **>(eng);
+        auto up = reinterpret_cast<uint32_t (*)(void *)>(vt[0x138 / 8]);
+        uint32_t r = up(eng) & 0xff;
+        RLOG("XJ:   engine %u %-5s at %p vtable=%p powerUp -> %u",
+             i, kEngineNames[i], eng, reinterpret_cast<void *>(vt), r);
+        if (!r) { ok = 0; break; }
+    }
+    RLOG("XJ: AMDHardware::powerUpHWEngines -> %u", ok);
+    return ok;
+}
+
+static uint32_t wrapHwEngStart(void *self) {
+    auto r = FunctionCast(wrapHwEngStart, orgHwEngStart)(self);
+    RLOG("XJ: AMDHardware::startHWEngines -> %u", r & 0xff);
+    return r;
+}
+
+static uint32_t wrapHwPowerUp(void *self) {
+    uint8_t already = self ? *(reinterpret_cast<uint8_t *>(self) + 0x30f) : 0xff;
+    auto r = FunctionCast(wrapHwPowerUp, orgHwPowerUp)(self);
+    RLOG("XJ: AMDNavi23Hardware::powerUp -> %u (already-powered flag was %u)",
+         r & 0xff, already);
+    return r;
+}
+
+static uint32_t wrapAccPowerUpHW(void *self) {
+    RLOG("XJ: AMDGraphicsAccelerator::powerUpHW entry");
+    auto r = FunctionCast(wrapAccPowerUpHW, orgAccPowerUpHW)(self);
+    RLOG("XJ: AMDGraphicsAccelerator::powerUpHW -> %u", r & 0xff);
+    return r;
+}
+
+static uint32_t wrapHwMemEnable(void *self) {
+    if (self != nullptr) {
+        auto f = reinterpret_cast<uint8_t *>(self);
+        auto q = [f](size_t o) { return *reinterpret_cast<uint64_t *>(f + o); };
+        RLOG("XH: enableAllocations entry: pool0=%p pool1=%p size0=%#llx size1=%#llx "
+             "base=%#llx",
+             reinterpret_cast<void *>(q(0x68)), reinterpret_cast<void *>(q(0x70)),
+             q(0x40), q(0x48), q(0x50));
+    }
+    auto r = FunctionCast(wrapHwMemEnable, orgHwMemEnable)(self);
+    RLOG("XH: enableAllocations -> %u", r);
+    return r;
+}
+
+//
+// Clearing the flag alone is not enough. Apple's SKIP path returns kIOReturnUnsupported
+// (0xe00002c7), and the accelerator's own progress bitfield shows that counts as a
+// failure just as much as an error does:
+//     ttlPowerUp           : 0     <- first thing to fail
+//     accelPowerUpHW       : 0
+//     hardwarePowerUp      : 0
+//     powerUpHWEngines     : 0
+//     startHWEngines       : 0
+// and AMDHWMemory::enableAllocations is never reached at all -- which is the real reason
+// the pools are empty, not the aperture and not the powerDown. So report success: the
+// GPU on this part is powered and clocked by the platform SMU before macOS is even
+// running, which is exactly what "powered up" has to mean here.
+static uint32_t wrapPpPowerUp(void *self) {
+    if ((mask & XI) == 0 || self == nullptr)
+        return FunctionCast(wrapPpPowerUp, orgPpPowerUp)(self);
+    auto flag = reinterpret_cast<uint8_t *>(self) + 0x28f8;
+    uint8_t was = *flag;
+    *flag = 0;
+    auto r = FunctionCast(wrapPpPowerUp, orgPpPowerUp)(self);
+    RLOG("XI: PowerPlay supported flag was %u -- cleared, powerUp returned %#x, "
+         "reporting success so the accelerator powers its engines up", was, r);
+    return 0;
+}
+
+static uint32_t wrapFbXgmiConfig(void *self) {
+    asicInfo = self;
+    auto r = FunctionCast(wrapFbXgmiConfig, orgFbXgmiConfig)(self);
+    if ((mask & XG) != 0 && self != nullptr) {
+        auto f = reinterpret_cast<uint8_t *>(self);
+        auto fld = [f](size_t o) -> uint32_t & {
+            return *reinterpret_cast<uint32_t *>(f + o);
+        };
+        uint32_t gbase = fbRead(self, kGcFbBase)   & 0xffffff;
+        uint32_t gtop  = fbRead(self, kGcFbTop)    & 0xffffff;
+        uint32_t goff  = fbRead(self, kGcFbOffset) & 0xffffff;
+        RLOG("XG: mmhub base=%#x top=%#x offset=%#x | gfxhub base=%#x top=%#x offset=%#x",
+             fld(0x140), fld(0x144), fld(0x14c), gbase, gtop, goff);
+        // Only override when the GFXHUB pair describes a real, non-empty range --
+        // otherwise leave Apple's values alone and say so.
+        if (gtop > gbase) {
+            fld(0x140) = gbase;
+            fld(0x144) = gtop;
+            fld(0x14c) = goff;
+            RLOG("XG: framebuffer aperture -> %#llx..%#llx (%llu MB)",
+                 static_cast<uint64_t>(gbase) << 24,
+                 (static_cast<uint64_t>(gtop) << 24) | 0xffffff,
+                 ((static_cast<uint64_t>(gtop) + 1 - gbase) << 24) >> 20);
+        } else {
+            RLOG("XG: GFXHUB says top(%#x) <= base(%#x) -- leaving Apple's values alone",
+                 gtop, gbase);
+        }
+    }
+    return r;
+}
+
 static void processKext(void *, KernelPatcher &patcher, size_t index,
                         mach_vm_address_t addr, size_t sz) {
     RLOG("kext callback: index=%lu hwlibs=%lu fb=%lu addr=%llx size=%lu",
@@ -1170,9 +1657,68 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
         if (mask & (D1 | R1 | X1 | X2 | X3 | X4 | X5 | X6 | X7 | X8 | XA | XC | XE | XF)) installDiagnostics(patcher, addr);
     } else if (kexts[KextFB].loadIndex == index) {
         RLOG("Framebuffer loaded, mask=0x%x", mask);
+        fbBase = addr;
         applyFor(patcher, false);
+        if (mask & XI) {
+            orgPpPowerUp = patcher.routeFunction(addr + kOffPpPowerUp,
+                             reinterpret_cast<mach_vm_address_t>(wrapPpPowerUp), true);
+            RLOG("route AmdPowerPlayHelper::powerUp -> %s (org=0x%llx)",
+                 orgPpPowerUp ? "ok" : "FAILED", orgPpPowerUp);
+            patcher.clearError();
+        }
+        if (mask & XG) {
+            orgFbXgmiConfig = patcher.routeFunction(addr + kOffFbXgmiConfig,
+                                reinterpret_cast<mach_vm_address_t>(wrapFbXgmiConfig), true);
+            RLOG("route AmdAsicInfoNavi2::populateXGmiConfig -> %s (org=0x%llx)",
+                 orgFbXgmiConfig ? "ok" : "FAILED", orgFbXgmiConfig);
+            patcher.clearError();
+        }
         // Both kexts are patched by now, so this is the moment to retry start().
         if (mask & P1) reprobeGpu();
+    } else if (kexts[KextX6000].loadIndex == index) {
+        RLOG("X6000 loaded, mask=0x%x", mask);
+        if (mask & XH) {
+            orgHwMemVram = patcher.routeFunction(addr + kOffHwMemVram,
+                             reinterpret_cast<mach_vm_address_t>(wrapHwMemVram), true);
+            RLOG("route AMDHWMemory::initVRAMInfo -> %s (org=0x%llx)",
+                 orgHwMemVram ? "ok" : "FAILED", orgHwMemVram);
+            patcher.clearError();
+            orgHwMemEnable = patcher.routeFunction(addr + kOffHwMemEnable,
+                               reinterpret_cast<mach_vm_address_t>(wrapHwMemEnable), true);
+            RLOG("route AMDHWMemory::enableAllocations -> %s (org=0x%llx)",
+                 orgHwMemEnable ? "ok" : "FAILED", orgHwMemEnable);
+            patcher.clearError();
+        }
+        if (mask & XJ) {
+            struct { size_t off; mach_vm_address_t *org; void *fn; const char *name; } t[] {
+                {kOffAccPowerUpHW, &orgAccPowerUpHW,
+                 reinterpret_cast<void *>(wrapAccPowerUpHW), "AMDGraphicsAccelerator::powerUpHW"},
+                {kOffHwPowerUp, &orgHwPowerUp,
+                 reinterpret_cast<void *>(wrapHwPowerUp), "AMDNavi23Hardware::powerUp"},
+                {kOffHwEngPowerUp, &orgHwEngPowerUp,
+                 reinterpret_cast<void *>(wrapHwEngPowerUp), "AMDHardware::powerUpHWEngines"},
+                {kOffHwEngStart, &orgHwEngStart,
+                 reinterpret_cast<void *>(wrapHwEngStart), "AMDHardware::startHWEngines"},
+                {kOffPm4Mqd, &orgPm4Mqd,
+                 reinterpret_cast<void *>(wrapPm4Mqd), "AMDGFX10PM4Engine::initComputeMQD"},
+                {kOffKiqStart, &orgKiqStart,
+                 reinterpret_cast<void *>(wrapKiqStart), "AMDGFX10KIQHWChannel::startKIQ"},
+                {kOffPm4GfxMqd, &orgPm4GfxMqd,
+                 reinterpret_cast<void *>(wrapPm4GfxMqd), "AMDGFX10PM4Engine::initGraphicsMQD"},
+                {kOffKiqMapQ, &orgKiqMapQ,
+                 reinterpret_cast<void *>(wrapKiqMapQ), "AMDGFX10KIQHWChannel::submitMapQueuesPacket"},
+                {kOffKiqSubmit, &orgKiqSubmit,
+                 reinterpret_cast<void *>(wrapKiqSubmit), "AMDKIQHWChannel::submitKIQFrame"},
+                {kOffWaitStamp, &orgWaitStamp,
+                 reinterpret_cast<void *>(wrapWaitStamp), "AMDHWChannel::waitForHwStamp"},
+            };
+            for (auto &e : t) {
+                *e.org = patcher.routeFunction(addr + e.off,
+                             reinterpret_cast<mach_vm_address_t>(e.fn), true);
+                RLOG("route %s -> %s (org=0x%llx)", e.name, *e.org ? "ok" : "FAILED", *e.org);
+                patcher.clearError();
+            }
+        }
     }
 }
 

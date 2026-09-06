@@ -22,7 +22,10 @@ TTL's SWIP clients initialise in sequence; the failure has moved through three o
 | `SMU` HW_INIT | **complete** — via Apple's own dummy power-management back end |
 | `GC` HW_INIT / `TTL::initialize()` | **complete** — the graphics core enumerates itself: `SE=1, numActiveCU=2, numActiveRB=1`, CWSR enabled |
 | accelerator attach | **complete** — "Accelerator successfully registered with controller" |
-| framebuffer aperture | **current blocker** — `FB Base == FB Top`, so the VRAM allocator has 0 bytes and the first command buffer page-faults |
+| framebuffer aperture | **solved** — Apple reads MMHUB, which this part leaves unprogrammed; the GFXHUB copy has the real `0xf400000000..0xf41fffffff` |
+| PowerPlay / power-up | **solved** — reports success instead of powering the GPU back down |
+| RLC microcontroller | **running** — `RLC_CNTL=1`, bootload complete |
+| **graphics ring (KIQ)** | **current blocker** — `waitForHwStamp` times out; CP unhalted, no VM fault, compute pipe idle |
 
 **PSP HW_INIT now completes.** Every IP firmware blob loads with status 0 — the whole RLC
 family and all the CP microcode — and the PSP goes on to `EVENT__HW_UNINIT`.
