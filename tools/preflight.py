@@ -22,10 +22,18 @@ SRC = VM / "build/src-rgpu/RaphaelGPU.cpp"
 KDK = VM / ("kdk/x/System/Library/Extensions/AMDRadeonX6000HWServices.kext"
             "/Contents/PlugIns/AMDRadeonX6000HWLibs.kext/Contents/MacOS/AMDRadeonX6000HWLibs")
 NM  = VM / "re/hwlibs.nm"
+# A kOff* whose comment carries the [fb] marker addresses AMDRadeonX6000Framebuffer
+# instead. Without this the "::" in the symbol name sent it down the C++ fallback,
+# found nothing in the HWLibs nm, and silently SKIPped -- validating nothing.
+FBK = VM / ("kdk/x/System/Library/Extensions/AMDRadeonX6000Framebuffer.kext"
+            "/Contents/MacOS/AMDRadeonX6000Framebuffer")
+FBNM = VM / "re/fb.nm"
+X6K = VM / "kdk/x/System/Library/Extensions/AMDRadeonX6000.kext/Contents/MacOS/AMDRadeonX6000"
+X6NM = VM / "re/x6000.nm"
 
-def load_symbols():
+def load_symbols(path=None):
     syms = {}
-    for line in NM.read_text().splitlines():
+    for line in (path or NM).read_text().splitlines():
         parts = line.split()
         if len(parts) >= 3 and parts[0].strip():
             try: syms[parts[2]] = int(parts[0], 16)
@@ -78,6 +86,8 @@ def main():
     if not KDK.exists():
         sys.exit(f"preflight: KDK binary missing: {KDK}")
     data, syms = KDK.read_bytes(), load_symbols()
+    fbdata, fbsyms = FBK.read_bytes(), load_symbols(FBNM)
+    x6data, x6syms = X6K.read_bytes(), load_symbols(X6NM)
     rows = re.findall(r"^static constexpr size_t (kOff\w+)\s*=\s*(0x[0-9a-fA-F]+);\s*//\s*(\S+)(.*)$",
                       SRC.read_text(), re.M)
     if not rows:
@@ -87,12 +97,14 @@ def main():
     print(f"{'constant':26s} {'offset':>9s}  {'symbol':44s} check")
     for name, off_s, sym, sym_note in rows:
         off = int(off_s, 16)
-        want = syms.get(sym)
+        d, t = ((fbdata, fbsyms) if "[fb]" in sym_note else
+                (x6data, x6syms) if "[x6]" in sym_note else (data, syms))
+        want = t.get(sym)
         if want is None and "::" in sym:
             # C++ symbols appear mangled in nm; match on class + method substrings so a
             # stale offset here is still caught instead of silently skipped.
             cls, meth = sym.split("::", 1)
-            cands = [v for k, v in syms.items() if cls in k and meth in k]
+            cands = [v for k, v in t.items() if cls in k and meth in k]
             if len(cands) == 1:
                 want = cands[0]
         if want is None:
@@ -101,7 +113,7 @@ def main():
             note, ok = f"MISMATCH: symbol is at {want:#x}", False
         elif "(called" in sym_note:
             note, ok = "ok (called, not routed)", True
-        elif rip_relative_in_prologue(data, off):
+        elif rip_relative_in_prologue(d, off):
             note, ok = "UNSAFE TO ROUTE: rip-relative operand in prologue", False
         else:
             note, ok = "ok", True

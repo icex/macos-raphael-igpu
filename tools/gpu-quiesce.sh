@@ -20,6 +20,7 @@ import mmap, os, struct, sys, time
 dev  = "/sys/bus/pci/devices/" + sys.argv[1]
 BASE = 0x16000            # MP0_BASE__INST0_SEG0
 C2PMSG_64 = BASE + 0x80
+DESTROY_RINGS      = 0x00030000   # RBI/UM *and* GPCOM
 DESTROY_GPCOM_RING = 0x000C0000
 READY_MASK, READY_FLAG = 0x8000FFFF, 0x80000000
 
@@ -35,16 +36,22 @@ off = C2PMSG_64 * 4
 # that reached ENABLE_INT, C2PMSG_64 reads 0x80050000 -- clean by every "ready" test --
 # while that boot's GPCOM ring is still alive, so the next INIT_GPCOM_RING fails because
 # the ring already exists.
-before = struct.unpack_from("<I", m, off)[0]
-struct.pack_into("<I", m, off, DESTROY_GPCOM_RING)
-v = before
-for i in range(2000):
-    v = struct.unpack_from("<I", m, off)[0]
-    if (v & READY_MASK) == READY_FLAG and ((v >> 16) & 0x7fff) == (DESTROY_GPCOM_RING >> 16):
-        print(f"gpu-quiesce: C2PMSG_64 0x{before:08x} -> 0x{v:08x} destroyed after {i} ms")
-        break
-    time.sleep(0.001)
-else:
-    print(f"gpu-quiesce: WARNING C2PMSG_64 0x{before:08x} -> 0x{v:08x}, ring not confirmed destroyed")
+# There are TWO rings and DESTROY_GPCOM_RING clears only one: a boot that reaches
+# initialize_bgd_security also creates a UM/RBI ring, and leaving that behind makes the
+# next boot fail at "psp_ring_create: UM ring creation failed".
+def ctrl(cmd, what):
+    before = struct.unpack_from("<I", m, off)[0]
+    struct.pack_into("<I", m, off, cmd)
+    v = before
+    for i in range(2000):
+        v = struct.unpack_from("<I", m, off)[0]
+        if (v & READY_MASK) == READY_FLAG and ((v >> 16) & 0x7fff) == (cmd >> 16):
+            print(f"gpu-quiesce: {what}: 0x{before:08x} -> 0x{v:08x} after {i} ms")
+            return
+        time.sleep(0.001)
+    print(f"gpu-quiesce: WARNING {what}: 0x{before:08x} -> 0x{v:08x}, not confirmed")
+
+ctrl(DESTROY_RINGS, "destroy all rings")
+ctrl(DESTROY_GPCOM_RING, "destroy GPCOM ring")
 m.flush(); m.close(); os.close(fd)
 PY
