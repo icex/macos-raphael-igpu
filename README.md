@@ -18,28 +18,27 @@ TTL's SWIP clients initialise in sequence; the failure has moved through three o
 | SWIP `GVM` | **complete** — UMC, VM, HDP and ATHUB all resolve handlers |
 | SWIP `PSP` | SW_INIT **complete** |
 | SWIP `SMU` | SW_INIT **complete** |
-| `PSP` HW_INIT | **current blocker** — `psp_ring_create: KM ring creation failed`; `C2PMSG_64` stuck at `0x80020115` |
+| `PSP` HW_INIT — mailbox | **solved** — stale-ring trap; ring create + `ENABLE_INT` return status 0 |
+| `PSP` HW_INIT — firmware | **current blocker** — the Raphael PSP takes Navi 23 CP CE but rejects the RLC blobs |
 
-The whole **software** init sequence now completes. What is left is a PSP mailbox that
-will not accept a doorbell.
+The whole **software** init sequence completes, and so does the PSP mailbox: the KM ring is
+created and interrupts enabled, both with status 0.
 
-The plumbing has been measured and is sound: the MP0 base (`0x16000`) is right, the C2PMSG
-register numbers are *identical* between MP0 11.0 and MP0 13.0.5, the PSP is alive
-(`C2PMSG_81` is an incrementing sOS heartbeat, `C2PMSG_58` returns a real tOS version), and
-writes land (`C2PMSG_69/70/71` read back what was written). But `C2PMSG_64` is stuck at
-`0x80020115` — an unacknowledged `INIT_GPCOM_RING` response carrying status `0x115` — and does
-not change when the command is rewritten. Both Apple and upstream gate ring creation on that
-register reading status **zero**, so the wait can never pass.
+The `C2PMSG_64 = 0x80020115` wall turned out to be **stale state**, not a platform-owned PSP.
+`amdgpu` destroys its GPCOM ring on unbind; the guest never does, because QEMU is killed
+outright — and Apple's `psp_ring_create_11_0` only calls `ring_stop` on its TEE path, where
+upstream calls it unconditionally. So exactly one guest boot worked per host reboot. Fixed at
+both ends, and no reboot is needed: `gpu-quiesce.sh` clears it from the host in ~2 ms, and
+milestone `x7` does the same from inside the guest with no root at all.
 
-Either that is stale state (the iGPU is never reset between VM restarts) or the SoC's
-platform-owned PSP is refusing to hand its GFX ring interface to a second driver. One host
-reboot distinguishes them: the first `psp_read(idx=0x80)` in the deferred diagnostics tells
-you which. `findings/GPU-RE.md` has the full transcript.
+What remains is firmware. Apple ships the full Navi 23 IP set (18 descriptors, ~1.7 MB) and
+hands the PSP real pointers, so nothing is missing — but this PSP accepts a Navi 23 CP CE blob
+and rejects the RLC ones, which are the most ASIC-bound of the set. The next step is to hand it
+Raphael's own `gc_10_3_6_rlc.bin`, which is signed for this silicon.
 
-Up to that point, nothing here adds new driver code. Every change either points Apple's stack at an
-implementation it already ships for a near-identical IP version, or supplies a device
-identity that a real Navi 23 would report. `findings/GPU-RE.md` is the full write-up,
-including the measurement traps that produced wrong conclusions along the way.
+Iteration is ~90 s end to end: `preflight.py` validates every routed offset, route safety and
+patch pattern against the KDK in under a second, without booting.
+
 
 ## The three things worth knowing
 

@@ -81,6 +81,12 @@ PATCHES = {
     "x4": [],
     # x5 traces psp_cgs_read_register via a Lilu route, not a byte patch.
     "x5": [],
+    # x6 dumps psp_np_fw_init's descriptor array via a Lilu route, not a byte patch.
+    "x6": [],
+    # x7 wraps psp_ring_create_11_0 via a Lilu route, not a byte patch.
+    "x7": [],
+    # x8 wraps psp_np_fw_load_capability_check via a Lilu route, not a byte patch.
+    "x8": [],
 }
 
 # device properties per set. Value must be bytes.
@@ -104,6 +110,9 @@ DESCR = {
     "r1": "remap IP versions in Apple's internal table at the ipconfig_get_ip_discovery_info chokepoint: NBIF 7.3.0->7.2.0, GC 10.3.6->10.3.4, MMHUB 2.4.1->2.3.0 (guess), ATHUB 2.4.1->2.4.0, SMUIO 13.0.10->13.0.7. Replaces the per-gate byte patches and can populate a version that is ABSENT, which a byte patch cannot.",
     "d1": "diagnostic only: hook ipconfig_get_ip_discovery_info to DUMP Apple's whole internal IP table (id + version per entry) and trace bif_ip_create's arguments. No patching. This is what tells us which IPs Apple actually resolved.",
     "x2": "ASIC capability entry: DevGetDeviceInfoEntry matches _DeviceCapabilityTbl on device id + INTERNAL revision + EXTERNAL revision. Entry 268 is exactly {0x8f, 0x73ff, internal 0, external 0xcb} and 0xcb is this chip's real PCI revision, so only the internal revision id can be missing. A miss makes ipi_bgm_create abort with \"Failed to create bgm context\" regardless of how many BGM stages pass. Retries the lookup with the internal revision Apple's own table uses.",
+    "x8": "decline the RLC save/restore lists (Apple types 0x16 GPM / 0x17 SRM / 0x18 CNTL). Seventeen of eighteen IP firmware blobs load, so the Raphael PSP accepts Navi 23 microcode in general; it refuses only these, which are ASIC-specific RLC register lists describing GC 10.3.4 rather than this chip's 10.3.6. Upstream loads them only when the RLC header declares them, so skipping is a supported configuration. Cost: no GFXOFF power-gating.",
+    "x7": "destroy a stale PSP GPCOM ring before Apple creates one. The guest never tears its ring down (QEMU is killed) and Apple's psp_ring_create_11_0 only calls ring_stop on its TEE path, so every boot after the first dies at 'psp_ring_create: KM ring creation failed' until the host reboots. Upstream's psp_v11_0_ring_create calls ring_stop unconditionally, so this is upstream behaviour rather than a workaround. gpu-quiesce.sh does the same from the host after the VM stops.",
+    "x6": "diagnostic only: dump the 40-byte IP-firmware descriptor array Apple hands psp_np_fw_init. The PSP rejects GFX_CMD_ID_LOAD_IP_FW for RLC restore list CNTL; no Apple kext ships GC/RLC microcode, so the blobs come from the VBIOS PSP directory -- which our grafted ROM declares with 0 entries. A zero count here confirms that.",
     "x5": "diagnostic only: trace psp_cgs_read_register. psp_ring_create's mailbox wait times out; this shows the resolved absolute register offset and the value read, so a broken register base or an unmapped aperture can be told apart from a PSP that is simply not ready. Index 0x80 is C2PMSG_64.",
     "x4": "SMU microcode: we present _AMD_DEVICE_TYPE 0x8, for which Apple registers no PP_SMC_UCODE_SBIN at all -- on that part the SMU microcode comes from the VBIOS via PSP, not the driver. smu_get_fw_constants already has a fallback path for exactly that case, reached when smu_set_fw_entry_info_from_file returns nonzero (which it does by itself when flag bit 0x40 is set). Returns 2 so the fallback is used instead of erroring.",
     "x3": "diagnostic only: trace AMDFirmwareDirectory::getFirmware. HW_INIT fails because the firmware directory has no entry for the device type we present; HWLibs registers firmware for only five _AMD_DEVICE_TYPE values (0x3-0x6 and 0x8, the last with no SMU image). This says which one we are.",
@@ -135,7 +144,7 @@ def verify():
     return ok
 
 BITS = {"m1": 1, "m2": 2, "m3": 4, "m4": 8, "m5": 16, "m6": 32, "m7": 64, "d1": 128,
-        "r1": 256, "p1": 512, "x1": 2048, "x2": 4096, "x3": 8192, "x4": 16384, "x5": 32768}
+        "r1": 256, "p1": 512, "x1": 2048, "x2": 4096, "x3": 8192, "x4": 16384, "x5": 32768, "x6": 65536, "x7": 131072, "x8": 262144}
 BA_UUID = "7C436110-AB2A-4BBB-A880-FE41995C9F82"
 
 def apply(sets_on):
