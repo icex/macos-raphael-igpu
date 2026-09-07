@@ -1566,3 +1566,83 @@ doorbell makes GRBM assert GUI_ACTIVE and the CP fetcher go busy -- and there is
 fault** (the `0x881` seen earlier was latched from before; clearing
 `GCVM_L2_PROTECTION_FAULT_CNTL` bit 0 first leaves it at 0 through the timeout). The
 compute pipe never reports activity (`CP_CPC_STATUS=0`), which is where the KIQ lives.
+
+## The KIQ blocker, fully characterised
+
+`TTL::initialize()` completes and the accelerator registers, then
+`AMDGFX10PM4Engine::doStart` fails because `AMDHWChannel::waitForHwStamp(1)` times out on
+the first KIQ submission. Everything else fails downstream of that: `powerUpHWEngines`
+returns 0, no engine is powered, and when WindowServer submits a command buffer
+`AMDHWVMM::endVMPTUpdate` dereferences null.
+
+What the hardware says, measured with the KIQ's own `GRBM_GFX_CNTL` selector:
+
+| register | value | meaning |
+|---|---|---|
+| `CP_HQD_ACTIVE` | 1 | the queue is live |
+| `CP_MQD_BASE_ADDR` | `0xf40b706000` | in VRAM, and exactly `startKIQ`'s first argument |
+| `CP_HQD_PQ_BASE(_HI)` | `0xFFBFEA0000` | inside context 0's GART window |
+| `CP_HQD_PQ_CONTROL` | `0xc030860d` | 64 KB ring, `PRIV_STATE`, `KMD_QUEUE` |
+| `CP_HQD_PQ_DOORBELL_CONTROL` | `0xc0000000` | offset 0, `DOORBELL_EN=1`, **`DOORBELL_HIT=1`** |
+| `CP_HQD_PQ_WPTR_LO` | `0x20` | 32 dwords submitted |
+| `CP_HQD_PQ_RPTR` | 0 | nothing consumed, ever |
+| `CP_HQD_VMID` | 0 | |
+| `CP_HQD_PERSISTENT_STATE` | `0xbe05300` | `PRELOAD_SIZE=0x53`, upstream's constant |
+| `CP_HQD_ERROR` | 0 | no UTCL1 error on any client |
+| `CP_HQD_HQ_STATUS0` | `0xc0000000` | `QUEUE_IDLE` set |
+| `CP_MEC_ME2_HEADER_DUMP` | `0xdefNdefN` | fill pattern: no packet header ever fetched |
+| `CP_CPC_STATUS` | `0xa0000002` | `MEC2_BUSY` |
+| `CP_MEC2_INSTR_PNTR` | a real address | MEC2 is executing |
+| `CP_MEC_CNTL` | 0 | neither MEC halted |
+| `CP_PQ_STATUS` | `0x3` | `DOORBELL_ENABLE` set |
+| `GCVM_CONTEXT0_CNTL` | `0x1555401` | enabled, depth 0, retry cleared by us |
+| `GCVM_CONTEXT0_PAGE_TABLE_BASE` | `0x0fdfc001` | valid bit set, table at FB offset `0x0FDFC000` |
+| `GCVM_CONTEXT0_PAGE_TABLE_START/END` | `0xffbfa00`/`0xffffe00` | GART `0xFFBFA00000..0xFFFFE00000` |
+| `GCMC_VM_MX_L1_TLB_CNTL` | `0x1d59` | `ENABLE_L1_TLB=1`, `SYSTEM_ACCESS_MODE=3` |
+| `GCVM_L2_CNTL` | `0xc0603` | `ENABLE_L2_CACHE=1` |
+| `GCVM_INVALIDATE_ENG0_REQ/ACK` | `0x2f80001`/`0x10001` | a full VMID-0 invalidate was issued **and acked** |
+| `GCVM_L2_PROTECTION_FAULT_STATUS` | 0 throughout | |
+| `RCC_DEV0_EPF0_RCC_DOORBELL_APER_EN` | `0x1` | at `0xd20 + 0xc0`; `BIF_DOORBELL_APER_EN` set |
+
+So the doorbell store reaches the queue (`DOORBELL_HIT`), the aperture is enabled at the
+NBIO, the CP's own doorbell gate is open, the microengine is running, the ring lives at a
+translatable address, and the MEC still decides there is nothing to run.
+
+Ruled out, each by measurement rather than by argument:
+
+- **The doorbell not reaching the device.** BAR2 is assigned (QEMU reports 2 MB at
+  `0xf0000000`), `AMDHardware::mapDoorbellMemory` maps it via config offset `0x18` and
+  stores the mapping's virtual address at `[hwObj+0x528]`; writing index 0 by hand from the
+  plugin sets `DOORBELL_HIT` and changes nothing else.
+- **`BIF_DOORBELL_APER_EN` never being set.** `_nbio7_2_enable_doorbell_aperture` runs with
+  `enable=1` and the register reads back 1. (The dispatcher is
+  `_bif_doorbell_aperture_control`, which calls `[ctx+0x378]`; the `_bifNN_*` variants are
+  not the ones wired up on this part, the `_nbioN_M_*` family is.)
+- **A VM translation failure on the ring.** Context 0 covers the ring, `PAGE_TABLE_BASE`
+  carries its valid bit, L1 TLB and L2 are enabled, and `GCVM_CONTEXT0_CNTL` bit 7
+  (`RETRY_PERMISSION_OR_INVALID_PAGE_FAULT`) has been cleared so a bad page reports instead
+  of retrying silently. No fault is ever raised, and `CP_HQD_ERROR` stays 0.
+- **The MECs never being started.** Performing upstream's
+  `gfx_v10_0_cp_compute_enable` edge by hand -- halt both, invalidate the instruction
+  cache, unhalt -- restarts MEC2 (its instruction pointer changes) and changes nothing.
+- **Missing microcode.** `CP_{PFP,ME,CE,MEC_ME1,MEC_ME2}_UCODE_ADDR/DATA` read back real
+  instruction words in all five engines.
+- **`CP_HQD_HQ_STATUS0.DB_UPDATED_MSG_EN`.** Setting it sticks and changes nothing; and
+  upstream's `gfx_v10_0` never writes that register at all -- it appears in `gfx_v10_0.c`
+  only inside a register-dump table.
+
+One asymmetry is left, and it is where the next experiment goes. The MEC's authoritative
+write pointer for a doorbell queue comes from memory, at
+`CP_HQD_PQ_WPTR_POLL_ADDR = 0xFFBFDE0050`, with the read-pointer report at
+`0xFFBFDE0048` -- both in the GART, i.e. in guest system memory reached through the GFXHUB
+page tables and then the host IOMMU. If the GPU reads zeros there, every observation above
+is exactly what follows: the doorbell wakes the engine, the engine reads a write pointer of
+0, concludes the queue is empty, sets `QUEUE_IDLE` and goes back to sleep, touching neither
+the ring nor the report address, raising no fault and logging no error.
+
+A secondary oddity points the same way. Writes through this plugin's register accessor land
+for `CP_HQD_QUANTUM`, `CP_HQD_IB_CONTROL` and `CP_HQD_HQ_STATUS0`, but
+`CP_HQD_EOP_BASE_ADDR` and `CP_PQ_WPTR_POLL_CNTL` silently keep their old values -- even
+with `CP_HQD_ACTIVE` forced to 0 first, which is the state upstream reprograms an HQD in.
+EOP stays 0 while `CP_HQD_EOP_CONTROL` reads 6, so Apple did size an EOP buffer it never
+gave an address to.
