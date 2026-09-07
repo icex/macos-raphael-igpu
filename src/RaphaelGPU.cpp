@@ -398,6 +398,7 @@ static constexpr size_t kOffBif50EnableDb  = 0x23ac1b; // _bif50_enable_doorbell
 static constexpr size_t kOffNbio72EnableDb = 0x24137e; // _nbio7_2_enable_doorbell_aperture
 static constexpr size_t kOffNbio23EnableDb = 0x23ddcb; // _nbio2_3_enable_doorbell_aperture
 static constexpr size_t kOffBcsReadMmr     = 0x23579c; // _bcs_read_mmr (called, not routed)
+static constexpr size_t kOffGcCgsRead2     = 0xb598;   // _gc_cgs_read_register_ext2 (called only)
 static constexpr size_t kOffGcCgsWrite2    = 0xb519;   // _gc_cgs_write_register_ext2
 static constexpr size_t kOffGcCgsWrite     = 0xb4de;   // _gc_cgs_write_register
 static constexpr size_t kOffGcCgsWriteExt  = 0xb4a0;   // _gc_cgs_write_register_ext
@@ -593,6 +594,14 @@ static bool cpcWedged = false;
 // A GC context, captured from any TTL register write, so this plugin can use TTL's own
 // register path (_gc_cgs_write_register_ext2) rather than only the framebuffer accessor.
 static void *gcCtx {};
+static bool nativeGcReadVerified = false;
+// GRBM_GFX_CNTL readback is not a reliable queue identity. This shadow records
+// only writes already made by the driver/plugin; it never programs the selector.
+static uint32_t lastSelectorWrite = 0;
+static void *lastSelectorContext = nullptr;
+static bool lastSelectorWasNative = false, selectorWriteSeen = false;
+static void noteSelectorWrite(void *ctx, uint32_t reg, uint32_t val, bool native);
+
 
 // AmdRegisterAccess vtable: 0x138 writeReg32(index, value), 0x140 hwReadReg32(index).
 static void fbWrite(void *self, uint32_t idx, uint32_t val) {
@@ -602,6 +611,7 @@ static void fbWrite(void *self, uint32_t idx, uint32_t val) {
     auto vt = *reinterpret_cast<uint64_t **>(obj);
     auto wr = reinterpret_cast<void (*)(void *, uint32_t, uint32_t)>(vt[0x138 / 8]);
     wr(obj, idx, val);
+    noteSelectorWrite(nullptr, idx, val, false);
 }
 
 static uint32_t fbRead(void *self, uint32_t idx) {
@@ -1393,79 +1403,110 @@ static uint8_t wrapSdmaAutoloadDone(void *ctx) {
     return 1;
 }
 
-// The same halt filter on the other two GC write helpers.
-//
-// _gc_halt_micro_engines_10_3 goes through _gc_cgs_write_register_ext2, and dropping the
-// halt bits there caught exactly one write -- 0x10000000, MEC_ME2_HALT alone -- while
-// CP_MEC_CNTL had already been seen at 0x50000000, both halts. So the other bit arrives
-// through a different helper: HWLibs has three, _gc_cgs_write_register,
-// _gc_cgs_write_register_ext and _gc_cgs_write_register_ext2, all taking (ctx, reg, val,
-// ...) and differing only in which function pointer they forward to. Filter all three.
+// The trace uses the native read ABI at HWLibs0xb598: (ctx, reg, client, flag)
+// forwards via [ctx+8]+0x118, replacing ctx with the callback cookie. Its entry
+// bytes are checked at load; no new function route or trampoline is installed.
+static void noteSelectorWrite(void *ctx, uint32_t reg, uint32_t val, bool native) {
+    if (ptbFixMode != 2 || mqdFixMode != 2 || reg != kGcGrbmGfxCntl) return;
+    lastSelectorWrite = val;
+    lastSelectorContext = ctx;
+    lastSelectorWasNative = native;
+    selectorWriteSeen = true;
+}
+
+static void traceNativeKiqState(unsigned n, const char *stage, void *ctx,
+                                uint32_t client, uint32_t flag) {
+    auto nativeRead = reinterpret_cast<uint32_t (*)(void *, uint32_t, uint32_t, uint32_t)>(
+        hwlibsBase + kOffGcCgsRead2);
+    for (unsigned path = 0; path < 2; path++) {
+        auto read = [=](uint32_t reg) {
+            return path == 0 ? fbRead(asicInfo, reg) : nativeRead(ctx, reg, client, flag);
+        };
+        const uint32_t active = read(kGcHqdActive), error = read(kGcHqdError);
+        const uint32_t eopLo = read(kGcHqdEopBase), eopHi = read(kGcHqdEopBaseHi);
+        const uint32_t eopControl = read(kGcHqdEopControl);
+        const uint32_t ptbLo = read(kGcVmCtx0PtbLo), ptbHi = read(kGcVmCtx0PtbHi);
+        RLOG("XQ3: #%u %s %s ACTIVE=%#x ERROR=%#x EOP=%#x_%08x ctl=%#x PTB=%#x_%08x",
+             n, stage, path == 0 ? "fb" : "gc", active, error, eopHi, eopLo,
+             eopControl, ptbHi, ptbLo);
+    }
+}
+
+static int beginNativeKiqTrace(void *ctx, uint64_t caller, uint32_t reg,
+                               uint32_t val, uint32_t client, uint32_t flag) {
+    if (ptbFixMode != 2 || mqdFixMode != 2) return -1;
+    uint32_t expected = 0;
+    switch (caller) {
+        case 0x15253: expected = kGcHqdEopBase; break;
+        case 0x1527b: expected = kGcHqdEopBaseHi; break;
+        case 0x1533c: expected = kGcHqdEopControl; break;
+        case 0x159e5: expected = kGcHqdActive; break;
+        default: return -1;
+    }
+    // Eight native writes total, including rejected samples. Atomic reservation
+    // keeps the logging/read budget bounded if two callers happen to overlap.
+    static unsigned count = 0;
+    if (__atomic_load_n(&count, __ATOMIC_RELAXED) >= 8) return -1;
+    const unsigned n = __atomic_fetch_add(&count, 1, __ATOMIC_RELAXED);
+    if (n >= 8) return -1;
+    RLOG("XQ3: #%u caller=+%#llx reg=%#x val=%#x client=%#x flag=%#x",
+         n, caller, reg, val, client, flag);
+    RLOG("XQ3: #%u last selector write=%#x seen=%u native=%u sameCtx=%u",
+         n, lastSelectorWrite, selectorWriteSeen, lastSelectorWasNative,
+         lastSelectorContext == ctx);
+    const void *callbacks = ctx == nullptr ? nullptr :
+        *reinterpret_cast<void **>(reinterpret_cast<uint8_t *>(ctx) + 8);
+    const bool hasRead = callbacks != nullptr &&
+        *reinterpret_cast<void *const *>(reinterpret_cast<const uint8_t *>(callbacks) + 0x118);
+    if (reg != expected || client != 0xb || flag != 1 || !nativeGcReadVerified ||
+        !hasRead || asicInfo == nullptr || !selectorWriteSeen ||
+        !lastSelectorWasNative || lastSelectorContext != ctx || lastSelectorWrite != kKiqSelector) {
+        RLOG("XQ3: #%u snapshots skipped: expected=%#x nativeRead=%u callback=%u selector=%#x",
+             n, expected, nativeGcReadVerified, hasRead, lastSelectorWrite);
+        return -1;
+    }
+    traceNativeKiqState(n, "before", ctx, client, flag);
+    return static_cast<int>(n);
+}
+
+// Keep the legacy XL halt experiment in modes0/1. Mode2 forwards the original
+// halt bits, including failure cleanup. Run157's only observed halt interception
+// occurred after the stamp timeout; it did not establish an initial-stall cause.
 static uint32_t wrapGcCgsWrite(void *ctx, uint32_t reg, uint32_t val) {
-    if ((mask & XL) != 0 && reg == kGcCpMecCntl && (val & ((1u << 28) | (1u << 30))) != 0) {
+    if ((mask & XL) != 0 && mqdFixMode != 2 && reg == kGcCpMecCntl && (val & ((1u << 28) | (1u << 30))) != 0) {
         static unsigned n = 0;
         if (n < 4) { n++; RLOG("XK: dropped MEC halt via write_register: %#x", val); }
         val &= ~((1u << 28) | (1u << 30));
     }
-    return FunctionCast(wrapGcCgsWrite, orgGcCgsWrite)(ctx, reg, val);
+    auto r = FunctionCast(wrapGcCgsWrite, orgGcCgsWrite)(ctx, reg, val);
+    noteSelectorWrite(ctx, reg, val, true);
+    return r;
 }
 static uint32_t wrapGcCgsWriteExt(void *ctx, uint32_t reg, uint32_t val, uint32_t client) {
-    if ((mask & XL) != 0 && reg == kGcCpMecCntl && (val & ((1u << 28) | (1u << 30))) != 0) {
+    if ((mask & XL) != 0 && mqdFixMode != 2 && reg == kGcCpMecCntl && (val & ((1u << 28) | (1u << 30))) != 0) {
         static unsigned n = 0;
         if (n < 4) { n++; RLOG("XK: dropped MEC halt via write_register_ext: %#x", val); }
         val &= ~((1u << 28) | (1u << 30));
     }
-    return FunctionCast(wrapGcCgsWriteExt, orgGcCgsWriteExt)(ctx, reg, val, client);
+    auto r = FunctionCast(wrapGcCgsWriteExt, orgGcCgsWriteExt)(ctx, reg, val, client);
+    noteSelectorWrite(ctx, reg, val, true);
+    return r;
 }
 
-// Never let the first HQD dequeue be requested.
-//
-// The decisive measurement: CP_CPC_STALLED_STAT1 already reads 0x210000 --
-// MEC2_DECODING_PACKET | MEC2_WAIT_ON_ROQ_DATA -- *before* Apple submits its first KIQ
-// frame. Sampled from inside submitKIQFrame ahead of the original call, with a ring in VRAM
-// holding a correct PACKET3_SET_RESOURCES and the doorbell rung with the right dword count,
-// the engine is already wedged. So none of it is about Apple's packet, its write pointer's
-// unit, or where the ring lives.
-//
-// What wedges it is the dequeue in _gc_create_kiq_queue_10_3. That function finds a live
-// HQD, writes CP_HQD_DEQUEUE_REQUEST = 1, and waits 500 ms for CP_HQD_ACTIVE to fall. It
-// never falls, and milestone xl then does what upstream does on that timeout -- clear
-// CP_HQD_ACTIVE by hand and carry on. Upstream gets away with it because on real silicon
-// the dequeue retires; here the request is left outstanding, and CP_CPF_BUSY_STAT's
-// HQD_EOP_FETCHER_BUSY and HQD_ROQ_EOP_BUSY are exactly what an unfinished dequeue draining
-// to the end-of-pipe queue looks like. Forcing ACTIVE to 0 underneath a dequeue in flight
-// leaves MEC2 in it forever, and every queue programmed afterwards -- Apple's KIQ included
-// -- waits behind an engine that will never come back.
-//
-// So do not paper over the dequeue: prevent it. Drop the one write that starts it. The wait
-// afterwards still fails, xl still clears CP_HQD_ACTIVE, the queue is still torn down -- but
-// the microengine is never asked to do the thing it cannot finish.
+// Legacy modes suppress dequeue requests; mode2 requires genuine queue shutdown
+// and observes the native EOP programming sequence without changing its writes.
 static uint32_t wrapGcCgsWrite2(void *ctx, uint32_t reg, uint32_t val, uint32_t client,
                                 uint32_t flag) {
     if (gcCtx == nullptr) gcCtx = ctx;
-    // Never let the compute microengines be halted.
-    //
-    // This is the finding the whole KIQ investigation was circling. The wedge detector
-    // caught CP_CPC_STALLED_STAT1 going 0 -> 0x210000 on a routine GRBM_GFX_INDEX = 0
-    // broadcast write -- but with CP_MEC_CNTL reading 0x50000000 at that instant, i.e. TTL
-    // had just set MEC_ME1_HALT | MEC_ME2_HALT. Sampling the register across a deliberate
-    // halt and unhalt afterwards shows 0x210000 in all three states: it does not track the
-    // halt bits, it was latched by the first one. On this part halting the MECs is not
-    // reversible -- MEC2 reports MEC2_DECODING_PACKET | MEC2_WAIT_ON_ROQ_DATA from then on,
-    // CP_MEC1_INSTR_PNTR sits at the same 0x10000 the halted PFP and ME report, and every
-    // queue programmed afterwards waits behind an engine that never comes back.
-    //
-    // Upstream only calls gfx_v10_0_cp_compute_enable(false) on the way down, or before a
-    // direct microcode load. Neither applies here: the microcode is already in the engines,
-    // placed by the PSP's cold-boot autoload, and read back through
-    // CP_MEC_ME{1,2}_UCODE_ADDR/DATA as real instruction words. So drop the halt and keep
-    // the rest of the register -- pipe resets and MEC_INVALIDATE_ICACHE still get through.
-    if ((mask & XL) != 0 && reg == kGcCpMecCntl &&
+    const uint64_t caller = reinterpret_cast<uint64_t>(__builtin_return_address(0)) - hwlibsBase;
+    const int trace = beginNativeKiqTrace(ctx, caller, reg, val, client, flag);
+    // Compatibility experiment only; mode2 preserves native halt/unhalt ordering.
+    if ((mask & XL) != 0 && mqdFixMode != 2 && reg == kGcCpMecCntl &&
         (val & ((1u << 28) | (1u << 30))) != 0) {
         static unsigned nh = 0;
         if (nh < 6) { nh++;
-            RLOG("XK: dropped CP_MEC_CNTL halt bits: %#x -> %#x (halting the MECs on this "
-                 "part is one-way)", val, val & ~((1u << 28) | (1u << 30)));
+            RLOG("XK: legacy dropped CP_MEC_CNTL halt bits: %#x -> %#x",
+                 val, val & ~((1u << 28) | (1u << 30)));
         }
         val &= ~((1u << 28) | (1u << 30));
         return FunctionCast(wrapGcCgsWrite2, orgGcCgsWrite2)(ctx, reg, val, client, flag);
@@ -1473,13 +1514,13 @@ static uint32_t wrapGcCgsWrite2(void *ctx, uint32_t reg, uint32_t val, uint32_t 
     if ((mask & XL) != 0 && mqdFixMode != 2 && reg == kGcHqdDequeue && val != 0) {
         static unsigned n = 0;
         if (n < 4) { n++;
-            RLOG("XK: dropped CP_HQD_DEQUEUE_REQUEST=%#x (client %#x) -- an outstanding "
-                 "dequeue is what leaves MEC2 in WAIT_ON_ROQ_DATA for the rest of the boot",
-                 val, client);
+            RLOG("XK: legacy dropped CP_HQD_DEQUEUE_REQUEST=%#x (client %#x)", val, client);
         }
         return 0;
     }
     auto r = FunctionCast(wrapGcCgsWrite2, orgGcCgsWrite2)(ctx, reg, val, client, flag);
+    noteSelectorWrite(ctx, reg, val, true);
+    if (trace >= 0) traceNativeKiqState(static_cast<unsigned>(trace), "after", ctx, client, flag);
     // Catch the write that wedges the microengine.
     //
     // CP_CPC_STALLED_STAT1 is already 0x210000 before Apple submits anything, and dropping
@@ -2788,10 +2829,11 @@ static void reportGartRoot(const char *when) {
     const uint32_t control = fbRead(asicInfo, kGcVmCtx0Cntl);
     const bool valid = gartApertureInfo(aperture) && gartRange(range) &&
         RaphaelGart::physicalTable(aperture, range, control, root, table);
-    RLOG("XT2: %s CTX0 root=%#llx ctrl=%#x pages=%#llx..%#llx physicalFB=%#llx "
-         "table@BAR0+%#llx bytes=%#llx field58=%#llx delta60=%#llx %s", when, root,
-         control, range.firstPage, range.lastPage, aperture.physicalBase, table.offset,
-         table.bytes, aperture.field58, aperture.delta60,
+    RLOG("XT2: %s CTX0 root=%#llx ctrl=%#x pages=%#llx..%#llx",
+         when, root, control, range.firstPage, range.lastPage);
+    RLOG("XT2: physicalFB=%#llx table@BAR0+%#llx bytes=%#llx",
+         aperture.physicalBase, table.offset, table.bytes);
+    RLOG("XT2: field58=%#llx delta60=%#llx %s", aperture.field58, aperture.delta60,
          valid ? "physical table in bounds" : "unsupported or out of bounds");
 }
 
@@ -4225,6 +4267,16 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
         if (mask & (D1 | R1 | X1 | X2 | X3 | X4 | X5 | X6 | X7 | X8 | XA | XC | XE | XF)) installDiagnostics(patcher, addr);
         if (ptbFixMode == 2) {
             hwlibsBase = addr;
+            if (mqdFixMode == 2) {
+                static const uint8_t readEntry[] = {0x55, 0x48, 0x89, 0xe5, 0x4c, 0x8b, 0x47,
+                    0x08, 0x49, 0x8b, 0x80, 0x18, 0x01, 0x00, 0x00};
+                nativeGcReadVerified = kOffGcCgsRead2 + sizeof(readEntry) <= sz;
+                auto entry = reinterpret_cast<const uint8_t *>(addr + kOffGcCgsRead2);
+                for (size_t i = 0; nativeGcReadVerified && i < sizeof(readEntry); i++)
+                    nativeGcReadVerified = entry[i] == readEntry[i];
+                RLOG("XQ3: native GC read entry verified=%u; EOP trace capped at8 writes",
+                     nativeGcReadVerified);
+            }
             // Verify the exact trampoline footprint before routing this new ABI.
             static const uint8_t prologue[] = {0x55, 0x48, 0x89, 0xe5, 0x41, 0x56, 0x53,
                                                0x48, 0x83, 0xec, 0x10, 0x48, 0x89, 0xfb};
@@ -4361,7 +4413,7 @@ static void pluginStart() {
     if (PE_parse_boot_argn("rgpumqd", &mqdm, sizeof(mqdm)) && mqdm <= 2) {
         mqdFixMode = mqdm;
         RLOG("rgpumqd=%u: %s", mqdm, mqdm == 2
-             ? "validate and prepare KIQ before start; genuine dequeue required"
+             ? "validate KIQ before start; genuine dequeue and native MEC halt writes preserved"
              : mqdm == 1 ? "legacy post-timeout MQD/EOP repair" : "reporting only");
     }
     uint32_t ptbm = 0;
