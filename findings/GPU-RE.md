@@ -7,6 +7,34 @@ device handed over with `vfio-pci` and spoofed as `1002:73ff` (Radeon RX 6600, N
 
 ## Status
 
+Development paused at the user's request on 2026-09-07 after testing 1.0.158.
+The VM is stopped and research agents are halted. Real Metal execution remains
+unproven; the next proposed PSP response-address diagnostic has not been implemented.
+
+### Candidate 1.0.158: EOP writes traced; execution remains blocked
+
+The bounded XQ3 trace observed native EOP low/high/control writes and activation.
+The low write used the expected register `0x322e`, value `0xf40b7068`, client
+`0xb`, flag 1, and last observed native selector 9 from the same context. ACTIVE
+was zero. Both framebuffer and native GC read paths returned EOP zero immediately
+before and after the write. Activation subsequently changed ACTIVE to 1 while
+EOP stayed zero. This narrows the failure to the write/access state at that
+boundary; it does not establish hardware locking or an undocumented clearing rule.
+The real Metal compute test still failed with zero completed work.
+[Complete trace, verification timing and results](metal-tests/20260907T202943Z-28df30cb/notes.md).
+
+Mode2 now preserves native MEC halt bits in all three write helpers, including
+failure cleanup. Legacy suppression remains confined to older modes. Long GART
+diagnostics are split so they no longer lose their newline to the log buffer limit.
+
+The earlier retained-host-IC diagnosis has another concrete counterexample:
+this run's requested TMR maps to physical `[0x85f400000,0x85fe00000)`, and CPC
+IC `0x85f904000` lies inside it at offset `0x504000`. MEC LOAD_IP_FW reports
+success, while AUTOLOAD_RLC reports BUSY. Actual response firmware destinations
+and submitted-image identity are the next observations needed; unchanged IC
+addresses alone cannot distinguish new loading from retention. The TMR lies
+beyond the current 256 MiB BAR mapping and must not be read through that mapping.
+
 ### Candidate 1.0.157: root and queue addresses validated; KIQ still times out
 
 Native memory validation now checks `+0x50 == GC FB_LOCATION_BASE`, `+0x58 == GC
@@ -35,6 +63,18 @@ The remaining halt filter's "halting is one-way" rationale is unsupported. All
 three filters log their first interceptions, and the only interception in this
 run occurs **after** the KIQ stamp timeout. Removing it cannot explain or repair
 this run's initial failure. Do not confuse that stale comment with measured cause.
+
+An independent firmware comparison also corrected the assumption that matching
+payload lengths imply matching MEC code. HWLibs descriptor `0xd6fc48` points to
+Apple's `0x414b0`-byte payload at `0xe602c0`, SHA-256
+`af522dc8b71597f4e5e2e5144debbc6b3f50c29e50389e0d54f1c1c4fa29ff18`.
+The same-length code portion of Linux `gc_10_3_6_mec.bin` (file offset `0x100`)
+has SHA-256 `d8f69e198f8b8607eb35069148100f639b0523c9518fb99f87e6fea421ead2b8`.
+Their executable interiors and separate jump tables differ. This establishes a
+compatibility question, not a cause of the observed stall or a validated firmware fix.
+Linux's direct-load/backdoor paths use GTT GPU addresses for CP_CPC_IC_BASE; PSP
+autoload skips those assignments. The retained PSP address being outside the
+relocated MC aperture alone therefore does not establish that it is invalid.
 
 ### Candidate 1.0.156: native physical root corrected; queue guard rejects
 

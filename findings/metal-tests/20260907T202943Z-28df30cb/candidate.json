@@ -1,0 +1,9 @@
+{
+  "version": "1.0.158",
+  "sha256": "267f3050a7b9efddb6f0596f9f7ccc9cb9d04c1254d5307e9b5897ca8683dc38",
+  "rgpuptb": 2,
+  "rgpumqd": 2,
+  "explicit_stop": true,
+  "native_power_up": 0,
+  "version_verified_via": "guest kmutil showloaded (serial version line interleaved)"
+}
