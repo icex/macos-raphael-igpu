@@ -28,7 +28,7 @@ TTL's SWIP clients initialise in sequence; the failure has moved through three o
 | `GC`/`SDMA` firmware-autoload gates | **solved** — both wait on a `BOOTLOAD_COMPLETE` latch nothing ever sets on this part |
 | RLC safe-mode handshake | **solved** — the RLC never acks; upstream ignores that, Apple hard-fails on it |
 | `TTL::initialize()` on a cold GPU | **complete and deterministic** — was a race on leftover state, now passes on a freshly reset device |
-| **graphics ring (KIQ)** | **current blocker** — one active HQD, valid MQD in VRAM, ring inside the GART range, doorbell enabled at index 0, `CP_PQ_STATUS.DOORBELL_ENABLE=1`, no VM fault — and `waitForHwStamp` still times out with `CP_HQD_PQ_WPTR` at 0 |
+| **graphics ring (KIQ)** | **current blocker** — fully characterised: doorbell proven to reach the HQD (`DOORBELL_HIT=1`), MEC2 executing, ring translatable, no fault, and the MEC still reports `QUEUE_IDLE` |
 | WindowServer | submits command buffers; panics in `AMDHWVMM::endVMPTUpdate` because no engine powered up |
 
 ### GC and SDMA HW_INIT: three gates upstream does not have
@@ -44,8 +44,10 @@ timed-out `cosWaitForFunc` callbacks against the HWLibs symbol table named all t
   liveness sample rather than a latch. Measured here: `RLC_STAT` **is** `0x25`, and
   `BOOTLOAD_COMPLETE` is clear at *both* offsets — 0x4e8d, which Apple reads, and 0x4e7e, the
   one upstream defines as `mmRLC_RLCS_BOOTLOAD_STATUS_Sienna_Cichlid` and uses for every GC
-  10.3.x including 10.3.6. That latch is set by the RLC's backdoor-autoload bootloader; when the
-  PSP places the firmware itself, nothing sets it. Reading the microengines' instruction RAM back
+  10.3.x including 10.3.6. Measured, both read 0 during GC HW_INIT and 0x4e8d reads
+  `0xc0000001` *after* it, so on this part Apple's offset is the live one -- the latch is
+  simply set by the RLC's backdoor-autoload bootloader, and when the PSP places the
+  firmware itself nothing sets it until GC HW_INIT has already run. Reading the microengines' instruction RAM back
   through `CP_{PFP,ME,CE,MEC_ME1,MEC_ME2}_UCODE_ADDR/DATA` shows real instruction words in all
   five, so the microcode *is* there — `GFX_CMD_ID_AUTOLOAD_RLC` returning `0xffff000d`
   (`TEE_ERROR_BUSY`) is not the problem it looks like.

@@ -262,6 +262,13 @@ static constexpr size_t kOffSmuUpdFnPtrs  = 0x73a2f;   // _smu_update_function_p
 static constexpr size_t kOffGcAutoloadDone = 0xf5b1;   // _gc_fw_autoload_is_completed
 static constexpr size_t kOffGcCheckRegEq   = 0xb3a0;   // _gc_check_register_equal_ext
 static constexpr size_t kOffSdmaAutoloadDone = 0x6028c; // _sdma_5_2_fw_autoload_is_completed
+static constexpr size_t kOffBifDbAperCtl   = 0x23a0f2; // _bif_doorbell_aperture_control
+static constexpr size_t kOffBif62EnableDb  = 0x23c22b; // _bif6_2_enable_doorbell_aperture
+static constexpr size_t kOffBif61EnableDb  = 0x23b627; // _bif6_1_enable_doorbell_aperture
+static constexpr size_t kOffBif50EnableDb  = 0x23ac1b; // _bif50_enable_doorbell_aperture
+static constexpr size_t kOffNbio72EnableDb = 0x24137e; // _nbio7_2_enable_doorbell_aperture
+static constexpr size_t kOffNbio23EnableDb = 0x23ddcb; // _nbio2_3_enable_doorbell_aperture
+static constexpr size_t kOffBcsReadMmr     = 0x23579c; // _bcs_read_mmr (called, not routed)
 static constexpr size_t kOffGcCgsWrite2    = 0xb519;   // _gc_cgs_write_register_ext2 (called, not routed)
 
 // AMDRadeonX6000Framebuffer, not HWLibs.
@@ -407,6 +414,12 @@ static mach_vm_address_t orgSmuInitFnPtrs {};
 static mach_vm_address_t orgGcAutoloadDone {};
 static mach_vm_address_t orgGcCheckRegEq {};
 static mach_vm_address_t orgSdmaAutoloadDone {};
+static mach_vm_address_t orgBifDbAperCtl {};
+static mach_vm_address_t orgBif62EnableDb {};
+static mach_vm_address_t orgBif61EnableDb {};
+static mach_vm_address_t orgBif50EnableDb {};
+static mach_vm_address_t orgNbio72EnableDb {};
+static mach_vm_address_t orgNbio23EnableDb {};
 static mach_vm_address_t orgFbXgmiConfig {};
 static mach_vm_address_t orgHwMemVram {};
 static mach_vm_address_t orgHwMemEnable {};
@@ -426,6 +439,11 @@ static mach_vm_address_t orgWaitStamp {};
 // read32(index). Remembered on the first populateXGmiConfig so the accelerator hooks,
 // which have no AsicInfo of their own, can read the graphics core's status registers.
 static void *asicInfo {};
+// AMDRadeonX6000_AMDHardware, captured on the way into powerUpHWEngines. Its
+// mapDoorbellMemory stores the BAR2 mapping at +0x520 and that mapping's virtual address
+// at +0x528, so [hwObj+0x528] is the base of the doorbell aperture as the guest sees it.
+static void *hwObj {};
+static uint64_t kiqEopHint {};
 
 // AmdRegisterAccess vtable: 0x138 writeReg32(index, value), 0x140 hwReadReg32(index).
 static void fbWrite(void *self, uint32_t idx, uint32_t val) {
@@ -515,6 +533,31 @@ static constexpr uint32_t kGcHqdPqBaseHi   = kGcSeg0 + 0x1fb2;
 static constexpr uint32_t kGcHqdVmid       = kGcSeg0 + 0x1fac;
 static constexpr uint32_t kGcHqdPqControl  = kGcSeg0 + 0x1fba;
 static constexpr uint32_t kGcHqdPqWptrHi   = kGcSeg0 + 0x1fe0;
+static constexpr uint32_t kGcHqdPollAddr   = kGcSeg0 + 0x1fb6;   // CP_HQD_PQ_WPTR_POLL_ADDR
+static constexpr uint32_t kGcHqdPollAddrHi = kGcSeg0 + 0x1fb7;
+static constexpr uint32_t kGcHqdRptrRpt    = kGcSeg0 + 0x1fb4;   // CP_HQD_PQ_RPTR_REPORT_ADDR
+static constexpr uint32_t kGcHqdRptrRptHi  = kGcSeg0 + 0x1fb5;
+static constexpr uint32_t kGcHqdEopBase    = kGcSeg0 + 0x1fce;
+static constexpr uint32_t kGcHqdEopBaseHi  = kGcSeg0 + 0x1fcf;
+static constexpr uint32_t kGcHqdEopControl = kGcSeg0 + 0x1fd0;
+static constexpr uint32_t kGcHqdIbControl  = kGcSeg0 + 0x1fbe;
+static constexpr uint32_t kGcRlcSrmCntl    = kGcSeg1 + 0x4c80;
+static constexpr uint32_t kGcRlcCsibLo     = kGcSeg1 + 0x4ca2;
+static constexpr uint32_t kGcRlcCsibLen    = kGcSeg1 + 0x4ca4;
+// Per-queue error and status, and the microengines' instruction pointers. CP_HQD_ERROR
+// carries one UTCL1-error bit per client the queue touches (PQ, IB, EOP, IQ, rptr-report,
+// wptr-poll, ...), and CP_HQD_HQ_STATUS0 has QUEUE_IDLE plus DB_UPDATED_MSG_EN -- the bit
+// that decides whether a doorbell write is even reported to the microengine.
+static constexpr uint32_t kGcHqdError      = kGcSeg0 + 0x1fdc;
+static constexpr uint32_t kGcHqdStatus0    = kGcSeg0 + 0x1fc9;
+static constexpr uint32_t kGcHqdStatus1    = kGcSeg0 + 0x1fcc;
+static constexpr uint32_t kGcMqdControl    = kGcSeg0 + 0x1fcb;
+static constexpr uint32_t kGcHqdQuantum    = kGcSeg0 + 0x1fb0;
+static constexpr uint32_t kGcHqdIqTimer    = kGcSeg0 + 0x1fbf;
+static constexpr uint32_t kGcMec1InstrPntr = kGcSeg0 + 0x0f48;
+static constexpr uint32_t kGcMec2InstrPntr = kGcSeg0 + 0x0f49;
+static constexpr uint32_t kGcPfpInstrPntr  = kGcSeg0 + 0x0f45;
+static constexpr uint32_t kGcMeInstrPntr   = kGcSeg0 + 0x0f46;
 static constexpr uint32_t kGcMqdBase       = kGcSeg0 + 0x1fa9;
 static constexpr uint32_t kGcMqdBaseHi     = kGcSeg0 + 0x1faa;
 static constexpr uint32_t kGcHqdPersist    = kGcSeg0 + 0x1fad;   // CP_HQD_PERSISTENT_STATE
@@ -543,12 +586,30 @@ static constexpr uint32_t kGcVmCtx0Start   = kGcSeg0 + 0x1687;
 static constexpr uint32_t kGcVmCtx0End     = kGcSeg0 + 0x16a7;
 static constexpr uint32_t kGcVmCtx1Cntl    = kGcSeg0 + 0x15fd;
 static constexpr uint32_t kGcVmCtx1PtbLo   = kGcSeg0 + 0x1669;
+// GFXHUB translation enables and the invalidation engine. If the L1 TLB or the L2 cache is
+// not enabled, every CP memory access stalls with no fault raised anywhere -- which is what
+// both rings and the 37 timed-out _vm_10_1_is_eng_ack waits look like.
+static constexpr uint32_t kGcVmL1TlbCntl   = kGcSeg0 + 0x1703;
+static constexpr uint32_t kGcVmL2Cntl      = kGcSeg0 + 0x15bc;
+static constexpr uint32_t kGcVmL2Cntl2     = kGcSeg0 + 0x15bd;
+static constexpr uint32_t kGcVmL2Cntl3     = kGcSeg0 + 0x15be;
+static constexpr uint32_t kGcVmL2Status    = kGcSeg0 + 0x15bf;
+static constexpr uint32_t kGcVmCtxDisable  = kGcSeg0 + 0x160c;
+static constexpr uint32_t kGcVmInvEng0Req  = kGcSeg0 + 0x161f;
+static constexpr uint32_t kGcVmInvEng0Ack  = kGcSeg0 + 0x1631;
+static constexpr uint32_t kGcVmInvEng0Sem  = kGcSeg0 + 0x160d;
 
 // Defined further down; they read the constants above.
 static void dumpGfxState(const char *when);
 static void dumpMecQueues(const char *when);
 static void dumpCpUcode(const char *when);
+// GRBM_GFX_CNTL selector for Apple's KIQ, established by the queue walk: it answers under
+// pipe 1, MEID 2, queue 0 -- the walk's other seven hits are selector aliases of this same
+// HQD, all reporting the identical MQD address.
+static constexpr uint32_t kKiqSelector = 1u | (2u << 2);
 static void dumpGfxHubVm(const char *when);
+static void enableDoorbellMsg(uint64_t mqdAddr, uint64_t eopAddr);
+static void startMecEngines();
 
 static mach_vm_address_t orgPpPowerUp {};
 static mach_vm_address_t fbBase {};
@@ -979,6 +1040,70 @@ static uint32_t wrapSmuFwFile(void *smu, void *out) {
 // check_fw_status. smu_update_function_pointers does not clear the slot; nothing else
 // in the SMU context reads it. So clear it here and dummy_smu_internal_hw_init returns
 // 0 on its own (0x73952: xor r14d, r14d).
+// Is the BIF doorbell aperture ever enabled?
+//
+// The doorbell store lands in a real BAR2 mapping -- QEMU reports the guest's BAR2 as
+// 2 MB at 0xf0000000, AMDHardware::mapDoorbellMemory maps it via config offset 0x18, and
+// writing index 0 by hand from this plugin changes nothing. That leaves the NBIO gate:
+// a doorbell write only reaches the command processor if BIF_DOORBELL_APER_EN is set.
+// CP_PQ_STATUS.DOORBELL_ENABLE, which reads 1, is only the CP's half of it.
+//
+// HWLibs has the code: _bif_doorbell_aperture_control dispatches on its argument's first
+// word and, for 0, calls [ctx+0x378] with 1 -- the per-generation enable. For this
+// generation that is _bif6_2_enable_doorbell_aperture, which is
+//
+//     reg = 0xc0 + [ctx+0x3c]          RCC_DEV0_EPF0_RCC_DOORBELL_APER_EN
+//     val = (bcs_read_mmr(dev, reg, 0x42) & ~1) | enable
+//
+// i.e. bit 0 of one register, addressed through a base the bif context carries at +0x3c
+// rather than through gc_reg_offset. Log every call, from all three generations, with the
+// register it computed -- if none of them fires, nothing has enabled the aperture and the
+// MEC is never being told anything.
+static uint32_t wrapBifDbAperCtl(void *ctx, uint32_t *arg) {
+    auto r = FunctionCast(wrapBifDbAperCtl, orgBifDbAperCtl)(ctx, arg);
+    static unsigned n = 0;
+    if (n < 8) { n++;
+        RLOG("XK: bif_doorbell_aperture_control(op=%u) -> %u", arg ? *arg : 0xffffffff, r);
+    }
+    return r;
+}
+static uint32_t wrapBifEnableDb(void *ctx, uint32_t enable, const char *which,
+                                mach_vm_address_t org) {
+    uint32_t base = 0;
+    void *dev = nullptr;
+    if (ctx != nullptr) {
+        base = *reinterpret_cast<uint32_t *>(reinterpret_cast<uint8_t *>(ctx) + 0x3c);
+        dev  = *reinterpret_cast<void **>(ctx);
+    }
+    auto r = reinterpret_cast<uint32_t (*)(void *, uint32_t)>(org)(ctx, enable);
+    // Read the register back through the same accessor the function itself uses, so the
+    // answer does not depend on guessing how this client's indices map onto BAR5.
+    uint32_t val = 0xdeadbeef;
+    if (dev != nullptr && hwlibsBase != 0) {
+        auto rd = reinterpret_cast<uint32_t (*)(void *, uint32_t, uint32_t)>(
+                      hwlibsBase + kOffBcsReadMmr);
+        val = rd(dev, base + 0xc0, 0x42);
+    }
+    RLOG("XK: %s(enable=%u) -> %u  reg=%#x (base %#x + 0xc0) reads %#x, "
+         "BIF_DOORBELL_APER_EN=%u", which, enable, r, base + 0xc0, base, val, val & 1);
+    return r;
+}
+static uint32_t wrapBif62EnableDb(void *ctx, uint32_t e) {
+    return wrapBifEnableDb(ctx, e, "bif6_2_enable_doorbell_aperture", orgBif62EnableDb);
+}
+static uint32_t wrapBif61EnableDb(void *ctx, uint32_t e) {
+    return wrapBifEnableDb(ctx, e, "bif6_1_enable_doorbell_aperture", orgBif61EnableDb);
+}
+static uint32_t wrapBif50EnableDb(void *ctx, uint32_t e) {
+    return wrapBifEnableDb(ctx, e, "bif50_enable_doorbell_aperture", orgBif50EnableDb);
+}
+static uint32_t wrapNbio72EnableDb(void *ctx, uint32_t e) {
+    return wrapBifEnableDb(ctx, e, "nbio7_2_enable_doorbell_aperture", orgNbio72EnableDb);
+}
+static uint32_t wrapNbio23EnableDb(void *ctx, uint32_t e) {
+    return wrapBifEnableDb(ctx, e, "nbio2_3_enable_doorbell_aperture", orgNbio23EnableDb);
+}
+
 // The SDMA half of the same gate. With GC HW_INIT through, hw_init fails one client
 // later at SDMA, on a predicate that is one register read:
 //
@@ -1398,6 +1523,26 @@ static void installDiagnostics(KernelPatcher &patcher, mach_vm_address_t base) {
     RLOG("route sdma_5_2_fw_autoload_is_completed -> %s (org=0x%llx)",
          orgSdmaAutoloadDone ? "ok" : "FAILED", orgSdmaAutoloadDone);
     patcher.clearError();
+    struct { size_t off; mach_vm_address_t *org; void *fn; const char *name; } dbRoutes[] {
+        {kOffBifDbAperCtl,  &orgBifDbAperCtl,  reinterpret_cast<void *>(wrapBifDbAperCtl),
+         "bif_doorbell_aperture_control"},
+        {kOffBif62EnableDb, &orgBif62EnableDb, reinterpret_cast<void *>(wrapBif62EnableDb),
+         "bif6_2_enable_doorbell_aperture"},
+        {kOffBif61EnableDb, &orgBif61EnableDb, reinterpret_cast<void *>(wrapBif61EnableDb),
+         "bif6_1_enable_doorbell_aperture"},
+        {kOffBif50EnableDb, &orgBif50EnableDb, reinterpret_cast<void *>(wrapBif50EnableDb),
+         "bif50_enable_doorbell_aperture"},
+        {kOffNbio72EnableDb, &orgNbio72EnableDb, reinterpret_cast<void *>(wrapNbio72EnableDb),
+         "nbio7_2_enable_doorbell_aperture"},
+        {kOffNbio23EnableDb, &orgNbio23EnableDb, reinterpret_cast<void *>(wrapNbio23EnableDb),
+         "nbio2_3_enable_doorbell_aperture"},
+    };
+    for (auto &e : dbRoutes) {
+        *e.org = patcher.routeFunction(base + e.off,
+                     reinterpret_cast<mach_vm_address_t>(e.fn), true);
+        RLOG("route %s -> %s (org=0x%llx)", e.name, *e.org ? "ok" : "FAILED", *e.org);
+        patcher.clearError();
+    }
     orgFwDirGet = patcher.routeFunction(base + kOffFwDirGet,
                       reinterpret_cast<mach_vm_address_t>(wrapFwDirGet), true);
     RLOG("route AMDFirmwareDirectory::getFirmware -> %s (org=0x%llx)",
@@ -1686,6 +1831,8 @@ static uint32_t wrapPm4Mqd(void *self, uint32_t ring) {
 static uint32_t wrapKiqStart(void *self, uint64_t a, uint64_t b, void *spec, uint32_t *out) {
     auto r = FunctionCast(wrapKiqStart, orgKiqStart)(self, a, b, spec, out);
     RLOG("XJ:   PM4 startKIQ(%#llx, %#llx) -> %#x (0 is success)", a, b, r);
+    kiqEopHint = b;
+    if (mask & XK) enableDoorbellMsg(a, b);
     // startKIQ is where Apple's own KIQ HQD is written, so this is the first moment the
     // walk can distinguish Apple's queue from the ones TTL left behind.
     if (mask & XJ) dumpMecQueues("after startKIQ");
@@ -1818,6 +1965,15 @@ static void dumpGfxHubVm(const char *when) {
          fbRead(asicInfo, kGcVmCtx0PtbLo), fbRead(asicInfo, kGcVmCtx0Start),
          fbRead(asicInfo, kGcVmCtx0End), fbRead(asicInfo, kGcVmCtx1Cntl),
          fbRead(asicInfo, kGcVmCtx1PtbLo));
+    uint32_t tlb = fbRead(asicInfo, kGcVmL1TlbCntl), l2 = fbRead(asicInfo, kGcVmL2Cntl);
+    RLOG("XM: %s: MX_L1_TLB_CNTL=%#x (l1_tlb_en=%u sys_access_mode=%u) L2_CNTL=%#x "
+         "(l2_cache_en=%u) L2_CNTL2=%#x L2_CNTL3=%#x L2_STATUS=%#x CONTEXTS_DISABLE=%#x",
+         when, tlb, tlb & 1, (tlb >> 3) & 3, l2, l2 & 1,
+         fbRead(asicInfo, kGcVmL2Cntl2), fbRead(asicInfo, kGcVmL2Cntl3),
+         fbRead(asicInfo, kGcVmL2Status), fbRead(asicInfo, kGcVmCtxDisable));
+    RLOG("XM: %s: INVALIDATE_ENG0 req=%#x ack=%#x sem=%#x  L2_FAULT_CNTL=%#x",
+         when, fbRead(asicInfo, kGcVmInvEng0Req), fbRead(asicInfo, kGcVmInvEng0Ack),
+         fbRead(asicInfo, kGcVmInvEng0Sem), fbRead(asicInfo, kGcVmFaultCntl));
 }
 
 static uint32_t wrapWaitStamp(void *self, uint32_t stamp) {
@@ -1832,6 +1988,255 @@ static uint32_t wrapWaitStamp(void *self, uint32_t stamp) {
     return r;
 }
 
+// Start the compute microengines with an explicit halt-to-unhalt transition.
+//
+// CP_MEC_CNTL reads 0 at every point measured -- before TTL, during GC HW_INIT and after
+// the accelerator powers up -- so nothing in this stack ever performs the 1-to-0 edge that
+// releases the MECs from halt. Upstream always does, in gfx_v10_0_cp_compute_enable:
+//
+//     if (enable) {
+//             WREG32_SOC15(GC, 0, mmCP_MEC_CNTL, 0);
+//     } else {
+//             WREG32_SOC15(GC, 0, mmCP_MEC_CNTL, (CP_MEC_CNTL__MEC_ME1_HALT_MASK |
+//                                                 CP_MEC_CNTL__MEC_ME2_HALT_MASK));
+//             ...
+//     }
+//     udelay(50);
+//
+// and it runs cp_compute_enable(true) before kiq_resume, i.e. before any HQD is
+// programmed. The measurements say the engines are in the state that edge is supposed to
+// resolve: CP_MEC1_INSTR_PNTR sits at 0x10000, the same value the halted PFP and ME report,
+// while CP_MEC2_INSTR_PNTR holds a real address and CP_CPC_STATUS reports MEC2_BUSY alone.
+// One of the two engines is executing and the other has never started.
+//
+// Do the full edge -- halt both, invalidate the instruction cache, unhalt -- here, from
+// powerUpHWEngines, which is upstream's ordering: ahead of initComputeMQD and startKIQ, so
+// the queue is programmed onto engines that are already running.
+static void startMecEngines() {
+    if (asicInfo == nullptr) return;
+    uint32_t before = fbRead(asicInfo, kGcCpMecCntl);
+    fbWrite(asicInfo, kGcCpMecCntl, (1u << 30) | (1u << 28));   // ME1_HALT | ME2_HALT
+    IODelay(50);
+    fbWrite(asicInfo, kGcCpMecCntl, (1u << 30) | (1u << 28) | (1u << 27));  // + INVALIDATE_ICACHE
+    IODelay(50);
+    fbWrite(asicInfo, kGcCpMecCntl, 0);
+    IODelay(50);
+    uint32_t p1 = fbRead(asicInfo, kGcMec1InstrPntr), p2 = fbRead(asicInfo, kGcMec2InstrPntr);
+    IODelay(50);
+    RLOG("XK: MEC halt/unhalt: CP_MEC_CNTL %#x -> %#x  CPC_STATUS=%#x  "
+         "MEC1 instr %#x->%#x  MEC2 instr %#x->%#x", before,
+         fbRead(asicInfo, kGcCpMecCntl), fbRead(asicInfo, kGcCpcStatus),
+         p1, fbRead(asicInfo, kGcMec1InstrPntr), p2, fbRead(asicInfo, kGcMec2InstrPntr));
+}
+
+// Tell the MEC when the doorbell moves.
+//
+// This is the whole KIQ blocker, and the queue dump names it exactly:
+//
+//     CP_HQD_ACTIVE      = 1          the queue is live
+//     CP_HQD_PQ_WPTR     = 0x20       the doorbell store reached the hardware
+//     CP_HQD_PQ_RPTR     = 0          nothing has been consumed
+//     CP_HQD_ERROR       = 0          no UTCL1 error on any client
+//     CP_HQD_HQ_STATUS0  = 0          DB_UPDATED_MSG_EN clear
+//     CP_MEC2_INSTR_PNTR = 0x23a, unchanged 20 us later
+//     CP_CPC_STATUS      = 0xa0000002 MEC2_BUSY
+//
+// So the microengine is running and parked in a loop, the write pointer is correct, and
+// nothing tells the engine to look. CP_HQD_HQ_STATUS0.DB_UPDATED_MSG_EN is that
+// notification, and on RDNA2 it is not optional -- upstream added it as an explicitly
+// version-gated step in gfx_v10_0_compute_mqd_init:
+//
+//     if (amdgpu_ip_version(adev, GC_HWIP, 0) >= IP_VERSION(10, 3, 0)) {
+//             tmp = RREG32_SOC15(GC, 0, mmCP_HQD_HQ_STATUS0);
+//             tmp = REG_SET_FIELD(tmp, CP_HQD_HQ_STATUS0, DB_UPDATED_MSG_EN, 1);
+//             mqd->cp_hqd_hq_status0 = tmp;
+//     }
+//
+// Apple's AMDGFX10PM4Engine::initComputeMQD leaves the register at 0, so set it here, on
+// the HQD startKIQ has just programmed and before the frame is submitted, so Apple's own
+// doorbell write is the one that gets delivered.
+static void enableDoorbellMsg(uint64_t mqdAddr, uint64_t eopAddr) {
+    if (asicInfo == nullptr) return;
+    fbWrite(asicInfo, kGcGrbmGfxCntl, kKiqSelector);
+
+    // CP_HQD_HQ_STATUS0.DB_UPDATED_MSG_EN. Recorded as a NEGATIVE result: it does stick
+    // (0 -> 0x80000000) and it changes nothing, and upstream's gfx_v10_0 never writes this
+    // register at all -- CP_HQD_HQ_STATUS0 appears in gfx_v10_0.c only in a register-dump
+    // table. Left in place because it is harmless and the readback is useful evidence.
+    uint32_t st0 = fbRead(asicInfo, kGcHqdStatus0);
+    fbWrite(asicInfo, kGcHqdStatus0, st0 | (1u << 31));
+
+    // The fields Apple leaves at zero. Against upstream's gfx_v10_0_compute_mqd_init and
+    // gfx_v10_0_kiq_init_register, the measured HQD matches on everything that carries an
+    // address or a size -- PQ base, PQ control's QUEUE_SIZE, MQD base, rptr-report and
+    // wptr-poll addresses, VMID, and CP_HQD_PERSISTENT_STATE, whose PRELOAD_SIZE field is
+    // 0x53, exactly upstream's constant. Three things are missing:
+    //
+    //   CP_HQD_EOP_BASE_ADDR/_HI + CP_HQD_EOP_CONTROL   read 0; upstream always points the
+    //       queue at an end-of-pipe buffer of GFX10_MEC_HPD_SIZE (2048) bytes.
+    //   CP_HQD_QUANTUM                                  reads 0; upstream sets QUANTUM_EN
+    //       with scale 1 and duration 1.
+    //   CP_HQD_IB_CONTROL.MIN_IB_AVAIL_SIZE             upstream sets 3.
+    //
+    // startKIQ's two arguments are the MQD address and a second address 0x800 above it,
+    // which is the size of struct v10_compute_mqd and also GFX10_MEC_HPD_SIZE -- an EOP
+    // buffer allocated immediately after the MQD. Program it as upstream would, so the
+    // queue has somewhere to retire to.
+    uint64_t eop = eopAddr >> 8;
+    fbWrite(asicInfo, kGcHqdEopBase, static_cast<uint32_t>(eop));
+    fbWrite(asicInfo, kGcHqdEopBaseHi, static_cast<uint32_t>(eop >> 32));
+    fbWrite(asicInfo, kGcHqdEopControl, 8);          // 2^(8+1) dwords = 2048 bytes
+    fbWrite(asicInfo, kGcHqdQuantum, 1u | (1u << 4) | (1u << 8));
+    uint32_t ib = fbRead(asicInfo, kGcHqdIbControl);
+    fbWrite(asicInfo, kGcHqdIbControl, (ib & ~(0xfu << 20)) | (3u << 20));
+
+    RLOG("XK: HQD gap fill (mqd=%#llx eop=%#llx): HQ_STATUS0=%#x EOP=%#x_%08x "
+         "EOP_CONTROL=%#x QUANTUM=%#x IB_CONTROL=%#x",
+         mqdAddr, eopAddr, fbRead(asicInfo, kGcHqdStatus0),
+         fbRead(asicInfo, kGcHqdEopBaseHi), fbRead(asicInfo, kGcHqdEopBase),
+         fbRead(asicInfo, kGcHqdEopControl), fbRead(asicInfo, kGcHqdQuantum),
+         fbRead(asicInfo, kGcHqdIbControl));
+    fbWrite(asicInfo, kGcGrbmGfxCntl, 0);
+}
+
+// Report a bad page instead of retrying it forever.
+//
+// The KIQ's write pointer does reach the hardware -- read with the right GRBM_GFX_CNTL
+// selector, CP_HQD_PQ_WPTR is 0x20 after submitKIQFrame, so the doorbell store lands
+// through BAR2 exactly as it should -- and CP_CPC_STATUS reads 0xa0000002, MEC2_BUSY, so
+// the microengine is executing. The read pointer still never moves, and
+// GCVM_L2_PROTECTION_FAULT_STATUS stays 0 throughout.
+//
+// A stall with no fault is what retry mode looks like. GCVM_CONTEXT0_CNTL reads 0x1555481,
+// which has bit 7 -- RETRY_PERMISSION_OR_INVALID_PAGE_FAULT -- set, so an invalid or
+// unpermitted page does not raise a fault: the request is retried indefinitely while the
+// hardware waits for someone to fill the page in. Nothing in this guest ever will.
+//
+// Upstream turns this off for context 0 specifically. gfxhub_v2_1_enable_system_domain
+// enables the context, sets PAGE_TABLE_DEPTH to 0 and clears
+// RETRY_PERMISSION_OR_INVALID_PAGE_FAULT; only CONTEXT1..15, the user VMs, get retry (and
+// then only when !adev->gmc.noretry). Do the same, so the next run either fetches or names
+// the address it cannot translate.
+static void disableCtx0Retry() {
+    if (asicInfo == nullptr) return;
+    uint32_t c = fbRead(asicInfo, kGcVmCtx0Cntl);
+    if ((c & (1u << 7)) == 0) return;
+    fbWrite(asicInfo, kGcVmCtx0Cntl, c & ~(1u << 7));
+    RLOG("XK: GCVM_CONTEXT0_CNTL %#x -> %#x (cleared RETRY_PERMISSION_OR_INVALID_PAGE_FAULT, "
+         "as gfxhub_v2_1_enable_system_domain does)", c, fbRead(asicInfo, kGcVmCtx0Cntl));
+}
+
+// Why does the KIQ never run?
+//
+// Everything about the queue reads correct after startKIQ: one active HQD, MQD at
+// 0xf40b706000 in VRAM, ring at 0xFFBFEA0000 -- inside GCVM context 0's window, which the
+// GFXHUB dump puts at 0xFFBFA00000..0xFFFFE00000 with a valid page-table base -- doorbell
+// enabled at index 0 (which is where Navi puts the KIQ: AMDGPU_NAVI10_DOORBELL_KIQ = 0),
+// CP_PQ_STATUS.DOORBELL_ENABLE set, CP_MEC_DOORBELL_RANGE covering it, and no VM fault
+// before or after. Yet CP_HQD_PQ_WPTR stays 0 and CP_MEC_ME2_HEADER_DUMP keeps returning
+// its fill pattern, so the MEC has not fetched a single packet header.
+//
+// Two candidates remain, and one register separates them. A doorbell write is the only
+// thing telling the MEC the write pointer moved; if that write never reaches the device --
+// it is a BAR2 store, and this is a passed-through iGPU -- the queue sits exactly like
+// this. CP_PQ_WPTR_POLL_CNTL.EN is the alternative path: with it set the MEC polls each
+// queue's write pointer out of memory at CP_HQD_PQ_WPTR_POLL_ADDR instead of waiting to be
+// rung. So enable polling and watch the read pointer. If it advances, the doorbell is what
+// is broken; if nothing moves, the microengine is not executing and the doorbell is
+// innocent.
+static void kickKiq(uint64_t eopHint) {
+    if (asicInfo == nullptr) return;
+    fbWrite(asicInfo, kGcGrbmGfxCntl, kKiqSelector);
+    RLOG("XK: KIQ before kick: active=%u rptr=%#x wptr=%#x_%08x poll_addr=%#x_%08x "
+         "rptr_report=%#x_%08x eop=%#x",
+         fbRead(asicInfo, kGcHqdActive) & 1, fbRead(asicInfo, kGcHqdPqRptr),
+         fbRead(asicInfo, kGcHqdPqWptrHi), fbRead(asicInfo, kGcHqdPqWptrLo),
+         fbRead(asicInfo, kGcHqdPollAddrHi), fbRead(asicInfo, kGcHqdPollAddr),
+         fbRead(asicInfo, kGcHqdRptrRptHi), fbRead(asicInfo, kGcHqdRptrRpt),
+         fbRead(asicInfo, kGcHqdEopBase));
+    RLOG("XK: RLC: SRM_CNTL=%#x CSIB_LO=%#x CSIB_LEN=%#x GPM_STAT=%#x STAT=%#x "
+         "BOOTLOAD 0x4e8d=%#x 0x4e7e=%#x",
+         fbRead(asicInfo, kGcRlcSrmCntl), fbRead(asicInfo, kGcRlcCsibLo),
+         fbRead(asicInfo, kGcRlcCsibLen), fbRead(asicInfo, kGcRlcGpmStat),
+         fbRead(asicInfo, kGcRlcStat), fbRead(asicInfo, kGcRlcBootStat),
+         fbRead(asicInfo, kGcRlcBootStatSc));
+    uint32_t st0 = fbRead(asicInfo, kGcHqdStatus0);
+    RLOG("XK: KIQ HQD: ERROR=%#x HQ_STATUS0=%#x (queue_idle=%u db_updated_msg_en=%u) "
+         "HQ_STATUS1=%#x MQD_CONTROL=%#x QUANTUM=%#x IQ_TIMER=%#x DEQUEUE_REQ=%#x",
+         fbRead(asicInfo, kGcHqdError), st0, (st0 >> 30) & 1, (st0 >> 31) & 1,
+         fbRead(asicInfo, kGcHqdStatus1), fbRead(asicInfo, kGcMqdControl),
+         fbRead(asicInfo, kGcHqdQuantum), fbRead(asicInfo, kGcHqdIqTimer),
+         fbRead(asicInfo, kGcHqdDequeue));
+    // Are the microengines advancing or parked? Two samples a few microseconds apart say
+    // which, and an instruction pointer that does not move is a spin loop, not progress.
+    uint32_t m1a = fbRead(asicInfo, kGcMec1InstrPntr), m2a = fbRead(asicInfo, kGcMec2InstrPntr);
+    uint32_t pfa = fbRead(asicInfo, kGcPfpInstrPntr),  mea = fbRead(asicInfo, kGcMeInstrPntr);
+    IODelay(20);
+    RLOG("XK: instr pntr: MEC1 %#x->%#x MEC2 %#x->%#x PFP %#x->%#x ME %#x->%#x CP_MEC_CNTL=%#x",
+         m1a, fbRead(asicInfo, kGcMec1InstrPntr), m2a, fbRead(asicInfo, kGcMec2InstrPntr),
+         pfa, fbRead(asicInfo, kGcPfpInstrPntr), mea, fbRead(asicInfo, kGcMeInstrPntr),
+         fbRead(asicInfo, kGcCpMecCntl));
+    dumpGfxHubVm("at KIQ kick");
+    // Does the doorbell reach the queue, and can the HQD be reprogrammed at all?
+    //
+    // CP_HQD_PQ_DOORBELL_CONTROL carries DOORBELL_HIT in bit 31: hardware sets it when a
+    // doorbell for this queue arrives. Printing the raw register answers whether the store
+    // gets as far as the HQD. And CP_HQD_EOP_BASE_ADDR ignored a write earlier while
+    // CP_HQD_QUANTUM and CP_HQD_IB_CONTROL accepted theirs, which is what an HQD owned by a
+    // live queue looks like -- upstream always deactivates before it reprograms. So try it
+    // upstream's way round: CP_HQD_ACTIVE = 0, write the EOP registers, CP_HQD_ACTIVE = 1.
+    {
+        uint32_t db = fbRead(asicInfo, kGcHqdPqDbCtl);
+        RLOG("XK: DOORBELL_CONTROL=%#x (offset=%#x en=%u hit=%u source=%u schd_hit=%u)",
+             db, (db >> 2) & 0x3ffffff, (db >> 30) & 1, (db >> 31) & 1, (db >> 28) & 1,
+             (db >> 29) & 1);
+        uint64_t eop = eopHint >> 8;
+        fbWrite(asicInfo, kGcHqdActive, 0);
+        IODelay(20);
+        fbWrite(asicInfo, kGcHqdEopBase, static_cast<uint32_t>(eop));
+        fbWrite(asicInfo, kGcHqdEopBaseHi, static_cast<uint32_t>(eop >> 32));
+        fbWrite(asicInfo, kGcHqdEopControl, 8);
+        uint32_t got = fbRead(asicInfo, kGcHqdEopBase);
+        fbWrite(asicInfo, kGcHqdActive, 1);
+        IODelay(20);
+        RLOG("XK: EOP while deactivated: wrote %#llx>>8=%#x, reads %#x, EOP_CONTROL=%#x, "
+             "active back to %u", eopHint, static_cast<uint32_t>(eop), got,
+             fbRead(asicInfo, kGcHqdEopControl), fbRead(asicInfo, kGcHqdActive) & 1);
+    }
+    // Ring the doorbell by hand.
+    //
+    // CP_HQD_PQ_WPTR_LO reading 0x20 does not prove the doorbell landed: upstream's
+    // gfx_v10_0_kiq_init_register writes that register out of the MQD too, so Apple could
+    // have put it there itself. CP_HQD_HQ_STATUS0.QUEUE_IDLE is set, which says the MEC has
+    // looked at the queue and found nothing to run -- and for a doorbell queue the value
+    // the engine acts on comes from the doorbell, not from this register. So write the
+    // doorbell directly, 64-bit, at index 0 (AMDGPU_NAVI10_DOORBELL_KIQ, and the offset the
+    // HQD itself carries), and see whether the read pointer moves. If it does, Apple's own
+    // store is not reaching BAR2; if it does not, the doorbell path is innocent.
+    if (hwObj != nullptr) {
+        auto dbBase = *reinterpret_cast<volatile uint64_t **>(
+                          reinterpret_cast<uint8_t *>(hwObj) + 0x528);
+        uint32_t wptr = fbRead(asicInfo, kGcHqdPqWptrLo);
+        if (dbBase != nullptr) {
+            dbBase[0] = wptr;
+            RLOG("XK: rang doorbell 0 at %p with wptr %#x", dbBase, wptr);
+        } else {
+            RLOG("XK: no doorbell mapping at [hwObj+0x528]");
+        }
+    }
+    for (unsigned i = 0; i < 8; i++) {
+        IODelay(500);
+        RLOG("XK: KIQ +%u00us: rptr=%#x wptr=%#x active=%u ME2_HDR=%#x CP_STAT=%#x "
+             "CPC_STATUS=%#x fault=%#x addr=%#x_%08x", (i + 1) * 5,
+             fbRead(asicInfo, kGcHqdPqRptr), fbRead(asicInfo, kGcHqdPqWptrLo),
+             fbRead(asicInfo, kGcHqdActive) & 1, fbRead(asicInfo, kGcMec2HeaderDump),
+             fbRead(asicInfo, kGcCpStat), fbRead(asicInfo, kGcCpcStatus),
+             fbRead(asicInfo, kGcVmFaultSts), fbRead(asicInfo, kGcVmFaultHi),
+             fbRead(asicInfo, kGcVmFaultLo));
+    }
+    fbWrite(asicInfo, kGcGrbmGfxCntl, 0);
+}
+
 static uint32_t wrapKiqSubmit(void *self) {
     // The VM fault status reads the same before and after the KIQ submit, so it is
     // latched from something earlier. Clear it first (FAULT_CNTL bit 0 is
@@ -1844,9 +2249,11 @@ static uint32_t wrapKiqSubmit(void *self) {
         RLOG("XK: cleared VM fault latch, status now %#x",
              fbRead(asicInfo, kGcVmFaultSts));
     }
+    if (mask & XK) disableCtx0Retry();
     dumpGfxState("before KIQ submit");
     auto r = FunctionCast(wrapKiqSubmit, orgKiqSubmit)(self);
     RLOG("XJ:   submitKIQFrame -> %u", r & 0xff);
+    if (mask & XK) kickKiq(kiqEopHint);
     return r;
 }
 
@@ -1949,6 +2356,7 @@ static void startRlc() {
     // "active=1 after 2000us": CP_HQD_DEQUEUE_REQUEST is serviced by MEC firmware, so a
     // request that never retires is itself evidence that the microengine is not running.
     // That is what dumpCpUcode is here to settle.
+    startMecEngines();
     dumpMecQueues("post-TTL");
     dumpCpUcode("post-TTL");
     dumpGfxHubVm("post-TTL");
@@ -1956,6 +2364,7 @@ static void startRlc() {
 }
 
 static uint32_t wrapHwEngPowerUp(void *self) {
+    hwObj = self;
     if (mask & XK) startRlc();
     if ((mask & XJ) == 0 || self == nullptr)
         return FunctionCast(wrapHwEngPowerUp, orgHwEngPowerUp)(self);
