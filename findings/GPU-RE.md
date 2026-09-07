@@ -2654,6 +2654,54 @@ never reached. The chain remains:
 the empty VRAM heap) and both worked, which is what made the page-table bug visible at all.
 Neither addresses the cause.
 
+### The whole powerUp chain, traced to one failure: the KIQ stamp timeout
+
+Every "graft around a consequence" in this document leads back to a single point. Traced by
+hooking each level and reading the return values, not by guessing:
+
+    Stamp Timeout for KIQ Submission!
+      AMDGFX10KIQHWChannel::startKIQ (x6+0x8e670)  submits MAP_QUEUES, waits, times out
+      AMDGFX10PM4Engine::powerUp     (x6+0x6816a)  -> 0
+      AMDHardware::powerUpHWEngines  (x6+0x6fe9a)  -> 0   engine 0 PM4
+      AMDHardware::powerUp           (x6+0x701ba)  -> 0
+      AMDGFX10Hardware::powerUp      (x6+0x73e68)  -> 0
+      AMDNavi23Hardware::powerUp     (x6+0x99618)  -> 0
+      AMDGraphicsAccelerator::powerUpHW            -> 0
+        => AMDHWMemory::enableAllocations never called   (VRAM heap empty)
+        => AMDHardware::startHWEngines never runs        (channels never started)
+        => HWChannel * Commands Submitted = 0            (nothing ever dispatched)
+
+The branch structure was decoded rather than assumed. `AMDNavi23Hardware::powerUp` fails on
+either (a) the superclass returning false or (b) `[this+0x3b0]` failing a cast to
+`AMDPM4HWEngine`; measurement shows the PM4 engine object is present
+(`[this+0x3b0]=0xffffff99b39cb400`), so it is (a). `AMDHardware::powerUp` needs both
+`AMDGFX10Hardware::setVMRegisters` (vtable 0x608) and `AMDHardware::powerUpHWEngines`
+(vtable 0x618) to return true, and the plugin's own engine walk pins it on engine 0:
+
+    XJ: engine 0 PM4 at 0xffffff99b39cb400 vtable=... powerUp -> 0
+
+So the KIQ blocker documented much earlier in this file was never a side issue. It is *the*
+blocker, and everything else recorded here -- the missing DMA paging channel, the empty VRAM
+heap, the wrong page-table base -- are consequences or independent bugs found on the way to it.
+Three of those were worth fixing on their own merits and are fixed; none of them makes the GPU
+execute.
+
+**Correction, and it matters.** An earlier note in this document read `wptr=8, rptr=0` on the
+me2 queues as "leftover queue-setup state, not stalled client work", on the grounds that
+`Commands Submitted` is a software counter reading zero. That was wrong. Those eight dwords
+*are* the KIQ MAP_QUEUES packet that `startKIQ` submits, and `rptr=0` means the command
+processor genuinely never consumed it. `Commands Submitted` is zero because it counts *client*
+submissions through the started channels, which never start -- precisely because this KIQ
+packet is never consumed. The CP failing to fetch is the real blocker, not an artefact.
+
+**What the page-table repair did and did not buy.** `rgpuptb=1` is correct and holds: CTX0's
+page-table base was `reserved`-relative (`0xebcfdfc000`) instead of an MC address
+(`0x84fdfc000`), the repair sticks, the guard declines every later call, and
+`VM_FAULT_STATUS` goes to 0. It did not make the CP consume the KIQ packet. The obvious next
+question is whether the *contents* of that page table are wrong in the same way -- the KIQ ring
+sits at MC `0xffbfea0000`, inside CTX0's range `0xffbfa00000..0xffffe00000`, so its PTE has to
+be walked and checked. `walkGart()` already exists in the plugin for exactly this.
+
 ### A hypothesis this raises about the hangs themselves
 
 Not established, and recorded as a hypothesis rather than a finding, but it fits better than
