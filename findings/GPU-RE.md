@@ -7,6 +7,75 @@ device handed over with `vfio-pci` and spoofed as `1002:73ff` (Radeon RX 6600, N
 
 ## Status
 
+### Candidate 1.0.157: root and queue addresses validated; KIQ still times out
+
+Native memory validation now checks `+0x50 == GC FB_LOCATION_BASE`, `+0x58 == GC
+FB_OFFSET`, and `+0x60 == +0x50 - +0x58`. The earlier relocation assumption is
+explicitly isolated to legacy modes. The live run accepted the native fields,
+validated the entire `0x202008`-byte flat page table at BAR0+`0xfdfc000`, and
+completed a genuine KIQ dequeue in 50 microseconds. MQD/EOP MC arguments remained
+`0xf40b706000` / `0xf40b706800`. Native startKIQ returned zero; EOP readback stayed
+zero and the first 32-dword submission timed out with RPTR zero.
+
+The physical GART walker and QEMU guest-RAM reads now agree in the same run:
+ring VA `0xffbfea0000` maps to guest PA `0x440744000`, containing SET_RESOURCES
+and the completion WRITE_DATA packet at dwords 16–20. The poll/report page maps
+to `0x450eea000`; `+0x50` holds WPTR 32, while `+0x40` (stamp) and `+0x48` (RPTR)
+remain zero. This verifies the software data behind the GART entries, not that
+the GPU fetched it. HQD_ERROR `0x100` was already present before dequeue;
+its persistence does not prove a new fault from this candidate.
+
+The probe waited for the final native power-up result before running. It found
+Metal 3, compiled shaders, and failed the first compute command with the same
+`e00002bd` error. Zero values/pixels or completed command buffers were verified.
+The exact VM was stopped before its 180-second cap; host logs contain only VFIO
+reset/reset-done for this run. [Full evidence](metal-tests/20260907T200936Z-2e1a5b6f/notes.md).
+
+The remaining halt filter's "halting is one-way" rationale is unsupported. All
+three filters log their first interceptions, and the only interception in this
+run occurs **after** the KIQ stamp timeout. Removing it cannot explain or repair
+this run's initial failure. Do not confuse that stale comment with measured cause.
+
+### Candidate 1.0.156: native physical root corrected; queue guard rejects
+
+The exact HWLibs binary already implements the physical-root conversion. Its void
+`_vm_10_1_get_uma_physical_fb_offset` at `0x33370` stores the physical base at `vm+0x210`.
+The UMA branch reads GC FB_OFFSET (falling back to MMHUB); the non-UMA path queries a
+memory range and can leave zero. Native page-table initialization at `0x37441..0x37449`
+then computes `primaryTableMC - logicalFramebufferBase + physicalFramebufferBase`.
+Correcting the native field preserves Apple's register programming and invalidation order.
+
+`rgpuptb=2` calls the original getter, then accepts only the active VM10.3.4 caller
+(`0x33edc`, return `0x33ee1`), an original GC10.3.6 discovery record, coherent logical
+base/size and GC registers, and a native physical field of zero or the correct value.
+It writes only `vm+0x210`. It neither changes global UMA flags nor manually writes PTB.
+The getter's exact RIP-free 14-byte prologue is checked before routing. Read-only logs
+report the resulting native root and invalidate requests. The GART walker now converts
+physical roots to BAR0 offsets, checks the full inclusive table and 48-bit VA range,
+and accepts zero software `reserved` when the logical relocation is consistent.
+
+Two further corrections to the historical notebook: EOP_CONTROL 6 is intentional for
+Apple's 512-byte KIQ EOP allocation (`startKIQ` at `0x8e6de`, HWLibs `0x152fd..0x15337`).
+The earlier FB base `0x840000000` was explicitly established by `rgpufb=1` in archived
+`serial-152404.log`; it was not the arrival state of the latest run. That experiment
+remains disabled. The candidate builds and passes preflight and address fixtures.
+
+The supervised live run validated the getter and read back Apple's native root
+`0x84fdfc001`. It also disproved the plugin's interpretation of `AMDHWMemory+0x58`:
+that field became `0x840000000`, causing the queue and walker guards to reject.
+The full source chain is `vm_query_mc_address_range` (`0x1e52b..0x1e53a`) exporting
+`vm+0x210` to output `+0x18`, then `_ipi_gvm_set_memory_attributes`, TTL framebuffer
+services, and `AMDHWMemory::initVRAMInfo` (`0x52808..0x52823`). The result is physical
+base at `+0x58` and MC-minus-physical delta at `+0x60`, not the earlier "reserved"
+interpretation. The original review missed this query wrapper export.
+
+XQ2 refused startKIQ, so this run does not establish queue behavior with the repaired
+root. The test queried Metal before initialization completed and reported device absent;
+zero work completed. The exact VM was stopped before its cap and the host remained
+responsive. See [full logs and timing limitations](metal-tests/20260907T195407Z-b3d20f94/notes.md).
+The next candidate must explicitly validate these native memory fields and wait for
+the driver power-up outcome before issuing the probe.
+
 ### 2026-09-07 continuation: real Metal execution test fails
 
 Metal 3 enumeration and a creatable `MTLDevice` are established; successful Metal GPU

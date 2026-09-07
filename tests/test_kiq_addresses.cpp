@@ -15,10 +15,38 @@ int main() {
     constexpr uint64_t mc = 0x840000000ULL;
     constexpr uint64_t top = 0x85fffffffULL;
     constexpr uint64_t visible = 0x10000000ULL;
+    using RaphaelGart::Aperture;
+    using RaphaelGart::MemoryForm;
+    // Historical capture supported the old relocation heuristic. This is an
+    // explicit compatibility fixture, not the meaning of native field+0x58.
+    Aperture legacy {bar, reserved, mc, top, mc, visible, mc, MemoryForm::LegacyRelocation};
+    Aperture native {bar, mc, bar, 0xf41fffffffULL, mc, visible, bar - mc, MemoryForm::NativePhysical};
     RaphaelKiq::Addresses result {};
     auto plan = [&](uint64_t mqd, uint64_t eop) {
-        return RaphaelKiq::planAddresses(bar, reserved, mc, top, visible, mqd, eop, result);
+        return RaphaelKiq::planAddresses(legacy, mqd, eop, result);
     };
+
+    // Run156: the propagated physical base does not relocate canonical MC inputs.
+    require(RaphaelKiq::planAddresses(native, 0xf40b706000ULL, 0xf40b706800ULL, result),
+            "run156 native physical field must not block canonical MC queue");
+    require(result.mqdMc == 0xf40b706000ULL && result.eopMc == 0xf40b706800ULL &&
+            result.imageOffset == 0xb706000, "run156 queue addresses unchanged");
+    require(RaphaelKiq::planAddresses(native, result.mqdMc, result.eopMc, result),
+            "run156 canonical MC preparation is idempotent");
+    require(!RaphaelKiq::planAddresses(native, 0x84b706000ULL, 0x84b706800ULL, result),
+            "physical framebuffer addresses are not native queue MC addresses");
+    auto badNative = native; badNative.field58 += 0x1000; badNative.delta60 -= 0x1000;
+    require(!RaphaelKiq::planAddresses(badNative, bar + 0xb706000, bar + 0xb706800, result),
+            "native physical field must equal GC FB_OFFSET");
+    badNative = native; badNative.delta60 += 0x1000;
+    require(!RaphaelKiq::planAddresses(badNative, bar + 0xb706000, bar + 0xb706800, result),
+            "native initialized delta must agree");
+    badNative = native; badNative.field58 = 0; badNative.delta60 = bar;
+    require(!RaphaelKiq::planAddresses(badNative, bar + 0xb706000, bar + 0xb706800, result),
+            "native mode rejects the old zero field despite legacy predicate matching");
+    badNative = native; badNative.swBase += 0x1000; badNative.delta60 += 0x1000;
+    require(!RaphaelKiq::planAddresses(badNative, bar + 0xb706000, bar + 0xb706800, result),
+            "native software base must equal logical MC base");
 
     // Measured BAR-relative descriptor and EOP, independently calculated MC fixture.
     require(plan(0xf40b706000ULL, 0xf40b706800ULL), "accept measured BAR addresses");
@@ -38,20 +66,20 @@ int main() {
     require(!plan(bar + 0xb706000, bar + 0xb706900), "EOP must follow the 2048-byte MQD");
     require(!plan(bar + 0xb706000, bar + 0xb707000), "reject unrelated EOP allocation");
     require(!plan(UINT64_MAX - 0x7ff, 0), "reject wrapping input");
-    require(!RaphaelKiq::planAddresses(bar, reserved + 1, mc, top, visible,
-                                     bar + 0xb706000, bar + 0xb706800, result),
-            "cross-check software relocation against hardware base");
-    require(!RaphaelKiq::planAddresses(bar, reserved, mc, mc - 1, visible,
-                                     bar + 0xb706000, bar + 0xb706800, result),
+    auto bad = legacy; bad.field58 += 1;
+    require(!RaphaelKiq::planAddresses(bad, bar + 0xb706000, bar + 0xb706800, result),
+            "cross-check legacy relocation against hardware base");
+    bad = legacy; bad.mcTop = mc - 1;
+    require(!RaphaelKiq::planAddresses(bad, bar + 0xb706000, bar + 0xb706800, result),
             "reject inverted hardware aperture");
-    require(!RaphaelKiq::planAddresses(bar, reserved, mc, top, 0,
-                                     bar + 0xb706000, bar + 0xb706800, result),
+    bad = legacy; bad.visibleBytes = 0;
+    require(!RaphaelKiq::planAddresses(bad, bar + 0xb706000, bar + 0xb706800, result),
             "reject absent BAR mapping");
-    require(!RaphaelKiq::planAddresses(bar, bar + 1, mc, top, visible,
-                                     bar + 0xb706000, bar + 0xb706800, result),
-            "reject relocation underflow");
-    require(!RaphaelKiq::planAddresses(bar, reserved, mc, UINT64_MAX, visible,
-                                     bar + 0xb706000, bar + 0xb706800, result),
+    bad = legacy; bad.field58 = bar + 1;
+    require(!RaphaelKiq::planAddresses(bad, bar + 0xb706000, bar + 0xb706800, result),
+            "reject subtraction underflow");
+    bad = legacy; bad.mcTop = UINT64_MAX;
+    require(!RaphaelKiq::planAddresses(bad, bar + 0xb706000, bar + 0xb706800, result),
             "reject framebuffer outside 48-bit MC space");
     std::puts("KIQ address fixtures passed");
 }

@@ -29,6 +29,7 @@
 #include <Headers/kern_util.hpp>
 #include <Headers/plugin_start.hpp>
 #include "KiqAddresses.hpp"
+#include "GartAddresses.hpp"
 
 // This machine's own RLC firmware, generated at build time by mkrlcfw.py from
 // /lib/firmware/amdgpu/gc_10_3_6_rlc.bin. Not committed: AMD firmware is redistributable
@@ -282,34 +283,11 @@ static uint32_t vmmProbeMode = 0;
 // upstream. So mode 1 only reports, and mode 2 acts. Do not skip mode 1.
 static uint32_t memProbeMode = 0;
 
-// rgpuptb: repair GCVM_CONTEXT0_PAGE_TABLE_BASE_ADDR, which is short by FB_OFFSET.
-//
-// This is the root cause of everything downstream, and it is a textbook discrete-GPU
-// assumption breaking on an APU. Measured:
-//
-//     GART page table lives at MC   0xf40fdfc000   (= FB_LOCATION_BASE + 0x0fdfc000)
-//     GPU faults trying to reach    0xf40fdfc000   (VM_FAULT_STATUS=0xd33)
-//     CTX0 PAGE_TABLE_BASE holds    0xebcfdfc000
-//     fault - ptb                 = 0x840000000   == FB_OFFSET, exactly
-//     AMDHWMemory 'reserved'      = 0xebc0000000, and reserved + 0x0fdfc000 == ptb
-//
-// So the page directory pointer was computed from AMDHWMemory's `reserved` field (+0x58)
-// instead of its `base` (+0x50), and base - reserved is precisely FB_OFFSET. On a discrete
-// GPU FB_OFFSET is 0, reserved == base, and the error is invisible. On this APU FB_OFFSET is
-// 0x840000000, so the GPU's page directory pointer lands outside the framebuffer aperture and
-// EVERY GART translation faults.
-//
-// Which explains the whole stall, and retires the theory that the command processor is
-// hardware-locked. The MEC queues are active and work is queued -- me2 pipe1 q0 ACTIVE,
-// ring=0xffbfea0000, wptr=8, rptr=0, doorbell enabled -- the CP simply cannot fetch the ring,
-// because reaching it requires a page table the GPU cannot address. Hence parked microengines
-// (MEC1=0x44a, MEC2=0x44c) and Commands Completed = 0 on every channel. CP_CPC_IC_BASE* being
-// read-only is real but was never the obstacle.
-//
-// Repaired after AMDGFX10VMM::fillVMRegisters and programAndInvalidateVM, both of which write
-// these registers, and only when the arithmetic says so: the value currently in the register
-// must fall OUTSIDE the framebuffer aperture while value+FB_OFFSET falls inside it. If that
-// test fails the register is left alone, because then this diagnosis does not apply.
+// rgpuptb=1 retains the legacy post-invalidation root-register experiment.
+// Mode 2 supplies the GC physical FB_OFFSET to HWLibs' native physical-base
+// getter before it exports memory information and programs the GART. It changes
+// only vm+0x210, with no direct PTB writes or global UMA classification changes.
+// FB_LOCATION_BASE is logical MC; a non-SYSTEM PTB instead uses FB_OFFSET + offset.
 static uint32_t ptbFixMode = 0;
 
 // rgpumqd=0 reports; 1 retains the legacy post-timeout pointer repair experiment.
@@ -395,6 +373,7 @@ static constexpr size_t kOffBifIpCreate  = 0x239931;   // _bif_ip_create
 static constexpr size_t kOffCheckPcie    = 0x246a4e;   // _check_pcie_link_status
 static constexpr size_t kOffGetDevInf    = 0x234dec;   // _bcs_get_device_inf
 static constexpr size_t kOffTtlSetDevCap = 0xaf02d;    // _ttlSetDeviceCapabilityEntry
+static constexpr size_t kOffVmPhysicalFb = 0x33370;   // _vm_10_1_get_uma_physical_fb_offset
 static constexpr size_t kOffGvmGetIpFn   = 0x19258;    // _gvm_get_ip_function
 static constexpr size_t kOffFwDirGet     = 0xb0c10;    // AMDFirmwareDirectory::getFirmware
 static constexpr size_t kOffSmuFwFile    = 0x70961;    // _smu_set_fw_entry_info_from_file
@@ -568,6 +547,8 @@ static bool dumpedTable = false;
 
 static mach_vm_address_t orgTtlSetDevCap {};
 static mach_vm_address_t orgGvmGetIpFn {};
+static mach_vm_address_t orgVmPhysicalFb {};
+static bool raphaelGcSeen = false; // original discovery version, before R1 remaps
 static mach_vm_address_t orgFwDirGet {};
 static mach_vm_address_t orgSmuFwFile {};
 static mach_vm_address_t orgSmuInitFnPtrs {};
@@ -783,7 +764,9 @@ static constexpr uint32_t kGcVmCtx0Cntl    = kGcSeg0 + 0x15fc;
 static constexpr uint32_t kGcVmCtx0PtbLo   = kGcSeg0 + 0x1667;
 static constexpr uint32_t kGcVmCtx0PtbHi   = kGcSeg0 + 0x1668;
 static constexpr uint32_t kGcVmCtx0Start   = kGcSeg0 + 0x1687;
+static constexpr uint32_t kGcVmCtx0StartHi = kGcSeg0 + 0x1688;
 static constexpr uint32_t kGcVmCtx0End     = kGcSeg0 + 0x16a7;
+static constexpr uint32_t kGcVmCtx0EndHi   = kGcSeg0 + 0x16a8;
 static constexpr uint32_t kGcVmCtx1Cntl    = kGcSeg0 + 0x15fd;
 static constexpr uint32_t kGcVmCtx1PtbLo   = kGcSeg0 + 0x1669;
 // GFXHUB translation enables and the invalidation engine. If the L1 TLB or the L2 cache is
@@ -1812,6 +1795,11 @@ static void *wrapIpcfgGet(void *ipconfig, uint32_t id) {
         if (n <= 64) {
             for (uint32_t i = 0; i < n; i++) {
                 auto e = base + 0x20 + static_cast<size_t>(i) * 0x260;
+                if (*reinterpret_cast<const uint32_t *>(e) == 0x0b &&
+                    *reinterpret_cast<const uint16_t *>(e + 0x08) == 10 &&
+                    *reinterpret_cast<const uint16_t *>(e + 0x0c) == 3 &&
+                    *reinterpret_cast<const uint16_t *>(e + 0x10) == 6)
+                    raphaelGcSeen = true;
                 RLOG("  ip[%u] id=0x%x ver=%u.%u.%u", i,
                      *reinterpret_cast<const uint32_t *>(e + 0x00),
                      *reinterpret_cast<const uint16_t *>(e + 0x08),
@@ -2148,7 +2136,8 @@ static constexpr uint32_t kGcFbOffset = 0x2947;   // GC 0x1260 + gc_10_3 0x16e7
 // AMDHWMemory::initVRAMInfo asks [this+0x10]->vtable[0x2c0]() for a provider and calls
 // its vtable[0x18] with a 0x48-byte out struct, keeping
 //     [this+0x50] = s[0x00]   base        measured 0xf400000000
-//     [this+0x58] = s[0x18]   reserved    measured 0
+//     [this+0x58] = s[0x18]   physical FB base (historically 0; corrected to 0x840000000)
+//     [this+0x60] = base - physical FB base, computed at x6+0x52820..0x52823
 //     [this+0x40] = s[0x08]   pool 0 size measured 0x20000000  (512 MB, the whole FB)
 //     [this+0x48] = s[0x10]   pool 1 size measured 0x10000000  (256 MB, the PCI aperture)
 // Those two are per-pool: canAllocate indexes them as [this + 8*pool + 0x40].
@@ -2175,7 +2164,7 @@ static uint32_t wrapHwMemVram(void *self) {
     auto f = reinterpret_cast<uint8_t *>(self);
     auto q = [f](size_t o) -> uint64_t & { return *reinterpret_cast<uint64_t *>(f + o); };
     hwMemObject = self;
-    RLOG("XH: initVRAMInfo -> %u  base=%#llx reserved=%#llx base-reserved=%#llx "
+    RLOG("XH: initVRAMInfo -> %u  base(+50)=%#llx fbPhysical(+58)=%#llx delta(+60)=%#llx "
          "size0=%#llx size1=%#llx | poolA(0x68)=%#llx poolB(0x70)=%#llx",
          r, q(0x50), q(0x58), q(0x60), q(0x40), q(0x48), q(0x68), q(0x70));
     if ((mask & XH) != 0 && q(0x40) != q(0x48) && q(0x40) != 0 && q(0x48) != 0) {
@@ -2679,47 +2668,8 @@ static void disableCtx0Retry() {
          "as gfxhub_v2_1_enable_system_domain does)", c, fbRead(asicInfo, kGcVmCtx0Cntl));
 }
 
-// Why does the KIQ never run?
-//
-// Everything about the queue reads correct after startKIQ: one active HQD, MQD at
-// 0xf40b706000 in VRAM, ring at 0xFFBFEA0000 -- inside GCVM context 0's window, which the
-// GFXHUB dump puts at 0xFFBFA00000..0xFFFFE00000 with a valid page-table base -- doorbell
-// enabled at index 0 (which is where Navi puts the KIQ: AMDGPU_NAVI10_DOORBELL_KIQ = 0),
-// CP_PQ_STATUS.DOORBELL_ENABLE set, CP_MEC_DOORBELL_RANGE covering it, and no VM fault
-// before or after. Yet CP_HQD_PQ_WPTR stays 0 and CP_MEC_ME2_HEADER_DUMP keeps returning
-// its fill pattern, so the MEC has not fetched a single packet header.
-//
-// Two candidates remain, and one register separates them. A doorbell write is the only
-// thing telling the MEC the write pointer moved; if that write never reaches the device --
-// it is a BAR2 store, and this is a passed-through iGPU -- the queue sits exactly like
-// this. CP_PQ_WPTR_POLL_CNTL.EN is the alternative path: with it set the MEC polls each
-// queue's write pointer out of memory at CP_HQD_PQ_WPTR_POLL_ADDR instead of waiting to be
-// rung. So enable polling and watch the read pointer. If it advances, the doorbell is what
-// is broken; if nothing moves, the microengine is not executing and the doorbell is
-// innocent.
-// Walk the GART page table the graphics core is actually using.
-//
-// Every other candidate for the dead KIQ has been eliminated by measurement, and the one
-// asymmetry left is memory the MEC reads rather than memory it is told about. For a
-// doorbell queue the engine takes the authoritative write pointer from
-// CP_HQD_PQ_WPTR_POLL_ADDR (0xFFBFDE0050) and reports the read pointer to
-// CP_HQD_PQ_RPTR_REPORT_ADDR (0xFFBFDE0048) -- both in the GART, i.e. guest system memory
-// reached through the GFXHUB page tables and then the host IOMMU. A GPU that reads zeros
-// there behaves exactly as observed: woken by the doorbell, it sees write pointer 0,
-// concludes the queue is empty, sets QUEUE_IDLE, and touches neither the ring nor the
-// report address -- no fault, no error bit, no header fetched.
-//
-// So read the page table. GCVM_CONTEXT0_CNTL has PAGE_TABLE_DEPTH 0, which means a flat
-// array of 8-byte PTEs indexed by (va - PAGE_TABLE_START) >> 12, based at
-// GCVM_CONTEXT0_PAGE_TABLE_BASE_ADDR with its low bits carrying flags rather than address.
-// That base -- 0x0fdfc000 -- is a framebuffer-relative address inside the 256 MB BAR0
-// aperture, so BAR0 is enough to read it: map it the same way AMDHardware::mapDoorbellMemory
-// maps BAR2, through the IOPCIDevice at [hwObj+0x10] and its mapDeviceMemoryWithRegister,
-// asking for config offset 0x10 instead of 0x18.
-//
-// An invalid PTE would explain the stall, though not the absent fault. A valid PTE gives
-// the guest-physical page the GPU is reading, which is the number to compare against where
-// Apple actually wrote the write pointer.
+// BAR0 maps the visible portion of VRAM. The GART walker below converts a
+// validated physical framebuffer root into an offset within this existing map.
 static volatile uint32_t *fbAperture() {
     static volatile uint32_t *cached {};
     static bool tried = false;
@@ -2739,49 +2689,110 @@ static volatile uint32_t *fbAperture() {
     return cached;
 }
 
-// The physical pages the PTEs name are read from the HOST instead of from here.
-// IOMemoryDescriptor::withPhysicalAddress + map() links against symbols the injected boot
-// collection would not resolve, and the whole plugin then fails to load -- the guest falls
-// back to a stale copy on disk and panics during matching. QEMU's monitor can dump guest
-// physical memory directly ("xp /8x <pa>"), which answers the same question with nothing
-// at risk inside the guest.
-static void walkGart(const char *what, uint64_t va) {
-    auto fb = fbAperture();
-    if (fb == nullptr || asicInfo == nullptr) return;
-    uint64_t start = static_cast<uint64_t>(fbRead(asicInfo, kGcVmCtx0Start)) << 12;
-    uint64_t ptb   = (static_cast<uint64_t>(fbRead(asicInfo, kGcVmCtx0PtbHi)) << 32) |
-                      fbRead(asicInfo, kGcVmCtx0PtbLo);
-    ptb &= ~0xfffULL;
-    if (va < start) { RLOG("XN: %s va %#llx below GART start %#llx", what, va, start); return; }
-    uint64_t idx = (va - start) >> 12;
+// The recorded memory sizes bound the existing 256MiB BAR0 mapping; never infer
+// that a full logical framebuffer aperture is CPU-visible.
+static bool gartApertureInfo(RaphaelGart::Aperture &ap) {
+    if (asicInfo == nullptr || hwMemObject == nullptr) return false;
+    const uint32_t base = fbRead(asicInfo, kGcFbBase);
+    const uint32_t top = fbRead(asicInfo, kGcFbTop);
+    const uint32_t physical = fbRead(asicInfo, kGcFbOffset);
+    if (((base | top | physical) & 0xff000000u) || base == 0 || physical == 0 || top < base)
+        return false;
+    auto memory = reinterpret_cast<const uint8_t *>(hwMemObject);
+    const uint64_t size0 = *reinterpret_cast<const uint64_t *>(memory + 0x40);
+    const uint64_t size1 = *reinterpret_cast<const uint64_t *>(memory + 0x48);
+    if (size0 == 0 || size1 == 0) return false;
+    uint64_t visible = size0 < size1 ? size0 : size1;
+    if (visible > 0x10000000ULL) visible = 0x10000000ULL;
+    ap = {*reinterpret_cast<const uint64_t *>(memory + 0x50),
+          *reinterpret_cast<const uint64_t *>(memory + 0x58),
+          static_cast<uint64_t>(base) << 24,
+          (static_cast<uint64_t>(top) << 24) | 0xffffffULL,
+          static_cast<uint64_t>(physical) << 24, visible,
+          *reinterpret_cast<const uint64_t *>(memory + 0x60),
+          ptbFixMode == 2 ? RaphaelGart::MemoryForm::NativePhysical
+                          : RaphaelGart::MemoryForm::LegacyRelocation};
+    return true;
+}
 
-    // ptb is an MC address; BAR0 is a window onto the framebuffer starting at
-    // GCMC_VM_FB_LOCATION_BASE, so the byte offset into the aperture is ptb - fbBase, not ptb.
-    //
-    // This function previously used ptb directly as a BAR0 offset. With ptb at 0x84fdfc000 and
-    // the aperture 256 MB long, the bounds check below could never pass, so every call printed
-    // "outside the 256 MB BAR0 aperture" and no page table entry was ever actually read. Same
-    // class of mistake as the one that put a reserved-relative address in the page-table base
-    // register: an MC address and an aperture offset are not interchangeable.
-    uint64_t fbBase = static_cast<uint64_t>(fbRead(asicInfo, kGcFbBase) & 0xffffff) << 24;
-    if (ptb < fbBase) {
-        RLOG("XN: %s page table base %#llx is below the framebuffer base %#llx -- it is not an "
-             "MC address into VRAM, so it cannot be read through BAR0", what, ptb, fbBase);
+static bool gartRange(RaphaelGart::Range &range) {
+    return RaphaelGart::rangeFromRegisters(fbRead(asicInfo, kGcVmCtx0Start),
+        fbRead(asicInfo, kGcVmCtx0StartHi), fbRead(asicInfo, kGcVmCtx0End),
+        fbRead(asicInfo, kGcVmCtx0EndHi), range);
+}
+
+// A flat non-SYSTEM root names physical framebuffer memory, not logical MC.
+// No BAR0 access occurs until the complete table and requested VA are bounded.
+static void walkGart(const char *what, uint64_t va) {
+    if (asicInfo == nullptr) return;
+    const uint64_t root = (static_cast<uint64_t>(fbRead(asicInfo, kGcVmCtx0PtbHi)) << 32) |
+                           fbRead(asicInfo, kGcVmCtx0PtbLo);
+    const uint32_t control = fbRead(asicInfo, kGcVmCtx0Cntl);
+    RaphaelGart::Aperture aperture {};
+    RaphaelGart::Range range {};
+    uint64_t off = 0, idx = 0;
+    if (!gartApertureInfo(aperture) || !gartRange(range) ||
+        !RaphaelGart::pteOffset(aperture, range, control, root, va, off, idx)) {
+        RLOG("XN: %s refused GART walk va=%#llx root=%#llx ctrl=%#x "
+             "pages=%#llx..%#llx physicalFB=%#llx visible=%#llx", what, va, root,
+             control, range.firstPage, range.lastPage, aperture.physicalBase, aperture.visibleBytes);
         return;
     }
-    uint64_t off = (ptb - fbBase) + idx * 8;
-    if (off + 8 > 0x10000000ULL) {
-        RLOG("XN: %s PTE at BAR0 offset %#llx (ptb %#llx - fbBase %#llx + idx %#llx * 8) is "
-             "outside the 256 MB aperture", what, off, ptb, fbBase, idx);
-        return;
-    }
-    uint32_t lo = fb[off / 4], hi = fb[off / 4 + 1];
-    uint64_t pte = (static_cast<uint64_t>(hi) << 32) | lo;
+    auto fb = fbAperture();
+    if (fb == nullptr) return;
+    const uint64_t pte = (static_cast<uint64_t>(fb[off / 4 + 1]) << 32) | fb[off / 4];
     RLOG("XN: %s va=%#llx idx=%#llx pte@fb+%#llx = %#llx -> pa %#llx flags%s%s%s%s%s",
          what, va, idx, off, pte, pte & 0x0000fffffffff000ULL,
          (pte & 1) ? " VALID" : " !VALID", (pte & 2) ? " SYSTEM" : "",
          (pte & 4) ? " SNOOPED" : "", (pte & 0x20) ? " READ" : "",
          (pte & 0x40) ? " WRITE" : "");
+}
+
+// HWLibs 0x33370 has a RIP-free 14-byte prologue and a void ABI. Its native UMA
+// branch reads FB_OFFSET then stores vm+0x210. The active VM10.3.4 HW_INIT calls
+// it at 0x33edc and exports that field at 0x33f0d, before native GART programming.
+static void wrapVmPhysicalFb(void *vm) {
+    const uint64_t caller = reinterpret_cast<uint64_t>(__builtin_return_address(0)) - hwlibsBase;
+    FunctionCast(wrapVmPhysicalFb, orgVmPhysicalFb)(vm);
+    static unsigned reports = 0;
+    const bool report = reports++ < 8;
+    if (ptbFixMode != 2 || !raphaelGcSeen || caller != 0x33ee1 || vm == nullptr ||
+        asicInfo == nullptr) {
+        if (report) RLOG("XT2: physical getter skipped: GC10.3.6=%u caller=+%#llx vm=%p asic=%p",
+                         raphaelGcSeen, caller, vm, asicInfo);
+        return;
+    }
+    auto fields = reinterpret_cast<uint8_t *>(vm);
+    const uint64_t logical = *reinterpret_cast<const uint64_t *>(fields + 0x198);
+    const uint64_t bytes = *reinterpret_cast<const uint64_t *>(fields + 0x1a0);
+    auto physical = reinterpret_cast<uint64_t *>(fields + 0x210);
+    const uint64_t before = *physical;
+    const uint32_t base = fbRead(asicInfo, kGcFbBase), top = fbRead(asicInfo, kGcFbTop);
+    const uint32_t offset = fbRead(asicInfo, kGcFbOffset);
+    uint64_t desired = 0;
+    const bool valid = RaphaelGart::physicalFbField(base, top, offset, logical, bytes, before, desired);
+    if (valid) *physical = desired;
+    if (report) RLOG("XT2: physical getter caller=+%#llx flags=%#x logical=%#llx size=%#llx "
+                     "GC=%#x..%#x OFFSET=%#x native=%#llx -> %#llx %s", caller,
+                     *reinterpret_cast<const uint32_t *>(fields + 0xc), logical, bytes,
+                     base, top, offset, before, *physical, valid ? "validated" : "REJECTED");
+}
+
+static void reportGartRoot(const char *when) {
+    if (asicInfo == nullptr) return;
+    RaphaelGart::Aperture aperture {};
+    RaphaelGart::Range range {};
+    RaphaelGart::Table table {};
+    const uint64_t root = (static_cast<uint64_t>(fbRead(asicInfo, kGcVmCtx0PtbHi)) << 32) |
+                           fbRead(asicInfo, kGcVmCtx0PtbLo);
+    const uint32_t control = fbRead(asicInfo, kGcVmCtx0Cntl);
+    const bool valid = gartApertureInfo(aperture) && gartRange(range) &&
+        RaphaelGart::physicalTable(aperture, range, control, root, table);
+    RLOG("XT2: %s CTX0 root=%#llx ctrl=%#x pages=%#llx..%#llx physicalFB=%#llx "
+         "table@BAR0+%#llx bytes=%#llx field58=%#llx delta60=%#llx %s", when, root,
+         control, range.firstPage, range.lastPage, aperture.physicalBase, table.offset,
+         table.bytes, aperture.field58, aperture.delta60,
+         valid ? "physical table in bounds" : "unsupported or out of bounds");
 }
 
 // Dump the MQD image the MEC reloads the HQD from.
@@ -3347,10 +3358,11 @@ static bool wrapVmmInit(void *self, void *hwIface, uint32_t flags) {
 // proved graftable, and it is the natural place to enable allocations: by the time virtual
 // space is ready the pools should exist. Report the pool pointers here, and only act on them
 // under rgpumem=2.
-// Add FB_OFFSET back to CTX0's page-table base if, and only if, the arithmetic says it is
-// short by exactly that. Returns true if it rewrote the register.
+// Legacy mode1 experiment, retained for reproducing previous runs. Its target
+// uses logical FB_LOCATION_BASE and is valid only when that equals FB_OFFSET.
+// Mode2 never invokes it: native HWLibs owns root programming and invalidation.
 static bool repairPageTableBase(const char *when) {
-    if (asicInfo == nullptr) return false;
+    if (ptbFixMode == 2 || asicInfo == nullptr) return false;
     uint64_t fbHW  = static_cast<uint64_t>(fbRead(asicInfo, kGcFbBase) & 0xffffff) << 24;
     uint64_t fbTop = (static_cast<uint64_t>(fbRead(asicInfo, kGcFbTop) & 0xffffff) << 24)
                      | 0xffffffULL;
@@ -3360,23 +3372,8 @@ static bool repairPageTableBase(const char *when) {
     uint64_t flags = ptb & 0xfffULL;
     uint64_t addr = ptb & ~0xfffULL;
 
-    // The offset of the page table inside VRAM comes from AMDHWMemory, because the register
-    // alone cannot yield it.
-    //
-    // The driver keeps two numbers: `base` (+0x50) is the guest BAR0 address, 0xf400000000,
-    // and `reserved` (+0x58) is 0xebc0000000 -- which is exactly base minus the GFXHUB
-    // framebuffer base, i.e. the correction that turns a BAR-relative address into an MC
-    // address. Measured on this part:
-    //
-    //     base - reserved   = 0x840000000  == GFXHUB FB_LOCATION_BASE
-    //     ptb - reserved    = 0x0fdfc000   == the page table's offset inside VRAM
-    //     correct MC        = 0x840000000 + 0x0fdfc000 = 0x84fdfc000
-    //
-    // What actually got written was `reserved + offset` = 0xebcfdfc000, and something else
-    // reached for `base + offset` = 0xf40fdfc000 and faulted (VM_FAULT_STATUS=0xd33 at
-    // 0x0f40fdfc). Three addresses for one page, and only one of them is an MC address the
-    // GFXHUB can translate. On a discrete GPU FB_OFFSET is 0, base == reserved == 0, and all
-    // three collapse to the same value, which is why this has never been hit before.
+    // Historical reserved-relative heuristic. Do not use this path for the
+    // relocated FB_LOCATION_BASE != FB_OFFSET configuration tested by mode2.
     if (hwMemObject == nullptr) {
         RLOG("XT: %s: CTX0 ptb=%#llx but AMDHWMemory has not been seen yet, so the VRAM "
              "offset cannot be derived -- needs the XH hook (rgpu mask bit xh) active", when,
@@ -3492,19 +3489,18 @@ static bool prepareKiq(uint64_t &mqdAddr, uint64_t &eopAddr, const void *spec) {
         RLOG("XQ2: preflight failed: BAR0 mapping unavailable");
         return false;
     }
-    auto memory = reinterpret_cast<const uint8_t *>(hwMemObject);
-    uint64_t swBase = *reinterpret_cast<const uint64_t *>(memory + 0x50);
-    uint64_t reserved = *reinterpret_cast<const uint64_t *>(memory + 0x58);
-    uint64_t fbBase = static_cast<uint64_t>(fbRead(asicInfo, kGcFbBase) & 0xffffff) << 24;
-    uint64_t fbTop = (static_cast<uint64_t>(fbRead(asicInfo, kGcFbTop) & 0xffffff) << 24)
-                     | 0xffffffULL;
-    // fbAperture and the existing MQD walker use this device's 256 MiB BAR0 mapping.
-    constexpr uint64_t visible = 0x10000000ULL;
+    // Native +0x58 is the physical FB base exported by HWLibs, and +0x60
+    // is base minus physical. It is not a queue-address relocation. The old
+    // assumption remains isolated in the legacy form selected by ptb modes0/1.
+    RaphaelGart::Aperture aperture {};
     RaphaelKiq::Addresses planned {};
-    if (!RaphaelKiq::planAddresses(swBase, reserved, fbBase, fbTop, visible,
-                                   mqdAddr, eopAddr, planned)) {
-        RLOG("XQ2: preflight failed: MQD=%#llx EOP=%#llx sw=%#llx reserved=%#llx "
-             "FB=%#llx..%#llx", mqdAddr, eopAddr, swBase, reserved, fbBase, fbTop);
+    if (!gartApertureInfo(aperture) ||
+        !RaphaelKiq::planAddresses(aperture, mqdAddr, eopAddr, planned)) {
+        RLOG("XQ2: preflight failed: MQD=%#llx EOP=%#llx sw=%#llx field58=%#llx "
+             "delta60=%#llx physicalFB=%#llx FB=%#llx..%#llx form=%s", mqdAddr,
+             eopAddr, aperture.swBase, aperture.field58, aperture.delta60,
+             aperture.physicalBase, aperture.mcBase, aperture.mcTop,
+             ptbFixMode == 2 ? "native physical" : "legacy relocation");
         return false;
     }
     auto get = [fb, &planned](uint32_t byteOffset) {
@@ -3514,8 +3510,7 @@ static bool prepareKiq(uint64_t &mqdAddr, uint64_t &eopAddr, const void *spec) {
     uint64_t imageEop = (static_cast<uint64_t>(get(0x298)) << 32) | get(0x294);
     RaphaelKiq::Addresses imagePlan {};
     if (get(0) != 0xc0310800 || get(0x20c) != 0 || imageEop > 0xffffffffffULL ||
-        !RaphaelKiq::planAddresses(swBase, reserved, fbBase, fbTop, visible,
-                                   imageMqd, imageEop << 8, imagePlan) ||
+        !RaphaelKiq::planAddresses(aperture, imageMqd, imageEop << 8, imagePlan) ||
         imagePlan.mqdMc != planned.mqdMc || imagePlan.eopMc != planned.eopMc) {
         RLOG("XQ2: preflight failed: MQD image header=%#x VMID=%#x MQD=%#llx "
              "EOP(encoded)=%#llx disagrees with startKIQ", get(0), get(0x20c),
@@ -3523,8 +3518,10 @@ static bool prepareKiq(uint64_t &mqdAddr, uint64_t &eopAddr, const void *spec) {
         return false;
     }
     RLOG("XQ2: preflight OK: selector=%#x MQD=%#llx->%#llx EOP=%#llx->%#llx "
-         "image=BAR0+%#llx", kKiqSelector, mqdAddr, planned.mqdMc, eopAddr,
-         planned.eopMc, planned.imageOffset);
+         "image=BAR0+%#llx fbPhysical=%#llx field58=%#llx delta60=%#llx form=%s",
+         kKiqSelector, mqdAddr, planned.mqdMc, eopAddr, planned.eopMc, planned.imageOffset,
+         aperture.physicalBase, aperture.field58, aperture.delta60,
+         ptbFixMode == 2 ? "native physical" : "legacy relocation");
 
     fbWrite(asicInfo, kGcGrbmGfxCntl, kKiqSelector);
     reportKiqPreparation("before dequeue");
@@ -3682,13 +3679,26 @@ static void repairMqdPointers() {
 
 static uint32_t wrapVmmFillRegs(void *self) {
     auto r = FunctionCast(wrapVmmFillRegs, orgVmmFillRegs)(self);
-    repairPageTableBase("fillVMRegisters");
+    // fillVMRegisters fills register-number arrays; it does not program PTB.
+    if (ptbFixMode != 2) repairPageTableBase("fillVMRegisters (legacy)");
     return r;
 }
 
 static uint32_t wrapVmmProgInv(void *self, void *info) {
+    static unsigned reports = 0;
+    const bool report = ptbFixMode == 2 && reports++ < 16;
+    if (report && info != nullptr) {
+        // prepareVMInvalidateRequest reads these members; its caller allocates
+        // 0x28 bytes. The +0x24 byte requests root/start/end reprogramming.
+        auto request = reinterpret_cast<const uint8_t *>(info);
+        RLOG("XT2: native invalidate hub=%u vmid=%u root=%#llx reprogram=%u",
+             *reinterpret_cast<const uint32_t *>(request),
+             *reinterpret_cast<const uint32_t *>(request + 4),
+             *reinterpret_cast<const uint64_t *>(request + 0x18), request[0x24]);
+    }
     auto r = FunctionCast(wrapVmmProgInv, orgVmmProgInv)(self, info);
-    repairPageTableBase("programAndInvalidateVM");
+    if (ptbFixMode != 2) repairPageTableBase("programAndInvalidateVM (legacy)");
+    if (report) reportGartRoot("after native invalidate (read only)");
     return r;
 }
 
@@ -4213,6 +4223,21 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
         if (mask & XB) substituteToc(patcher);
 #endif
         if (mask & (D1 | R1 | X1 | X2 | X3 | X4 | X5 | X6 | X7 | X8 | XA | XC | XE | XF)) installDiagnostics(patcher, addr);
+        if (ptbFixMode == 2) {
+            hwlibsBase = addr;
+            // Verify the exact trampoline footprint before routing this new ABI.
+            static const uint8_t prologue[] = {0x55, 0x48, 0x89, 0xe5, 0x41, 0x56, 0x53,
+                                               0x48, 0x83, 0xec, 0x10, 0x48, 0x89, 0xfb};
+            bool matches = kOffVmPhysicalFb + sizeof(prologue) <= sz;
+            auto entry = reinterpret_cast<const uint8_t *>(addr + kOffVmPhysicalFb);
+            for (size_t i = 0; matches && i < sizeof(prologue); i++)
+                matches = entry[i] == prologue[i];
+            if (matches) orgVmPhysicalFb = patcher.routeFunction(addr + kOffVmPhysicalFb,
+                reinterpret_cast<mach_vm_address_t>(wrapVmPhysicalFb), true);
+            RLOG("XT2: route vm_10_1_get_uma_physical_fb_offset -> %s (prologue=%u org=%#llx)",
+                 orgVmPhysicalFb ? "ok" : "FAILED", matches, orgVmPhysicalFb);
+            patcher.clearError();
+        }
     } else if (kexts[KextFB].loadIndex == index) {
         RLOG("Framebuffer loaded, mask=0x%x", mask);
         fbBase = addr;
@@ -4340,11 +4365,11 @@ static void pluginStart() {
              : mqdm == 1 ? "legacy post-timeout MQD/EOP repair" : "reporting only");
     }
     uint32_t ptbm = 0;
-    if (PE_parse_boot_argn("rgpuptb", &ptbm, sizeof(ptbm)) && ptbm <= 1) {
+    if (PE_parse_boot_argn("rgpuptb", &ptbm, sizeof(ptbm)) && ptbm <= 2) {
         ptbFixMode = ptbm;
-        RLOG("rgpuptb=%u: CTX0 PAGE_TABLE_BASE will be %s -- it is short by FB_OFFSET, which "
-             "makes every GART translation fault and is why the CP never fetches its ring",
-             ptbm, ptbm ? "repaired" : "reported only");
+        RLOG("rgpuptb=%u: %s", ptbm, ptbm == 2
+             ? "validated native physical framebuffer getter; no manual PTB writes"
+             : ptbm == 1 ? "legacy post-invalidation PTB experiment" : "reporting only");
     }
     uint32_t mem = 0;
     if (PE_parse_boot_argn("rgpumem", &mem, sizeof(mem)) && mem <= 2) {

@@ -12,6 +12,11 @@ Metal 3 enumerates, but GPU execution is not working yet. The first KIQ submissi
 and prevents the hardware engines from starting. The historical bring-up notes below include
 superseded hypotheses; use the dated corrections in `findings/GPU-RE.md` for the current record.
 
+Version 1.0.157 fixes the native physical framebuffer base and verifies the KIQ's page-table
+entries against actual guest RAM. The automated compute test still fails before completing
+any GPU work; [the latest run](findings/metal-tests/20260907T200936Z-2e1a5b6f/notes.md)
+records the corrected root, genuine queue dequeue, and unchanged submission timeout.
+
 | stage | state |
 |---|---|
 | VBIOS / ATOM tables | **solved** — the controller starts and brands itself `AMD Radeon Navi23`, 512 MB, 128-bit GDDR6 |
@@ -31,7 +36,8 @@ superseded hypotheses; use the dated corrections in `findings/GPU-RE.md` for the
 | RLC safe-mode handshake | **solved** — the RLC never acks; upstream ignores that, Apple hard-fails on it |
 | `TTL::initialize()` on a cold GPU | **complete and deterministic** — was a race on leftover state, now passes on a freshly reset device |
 | VRAM allocation | **256 MB available** with `rgpumem=2` |
-| Metal device enumeration | **Metal 3 advertised; MTLDevice creatable** — execution remains unverified |
+| Initial GART physical root | **verified** — native `0x84fdfc001` with `rgpuptb=2`; user submission paths remain unverified |
+| Metal device enumeration | **Metal 3 advertised; MTLDevice creatable** — native execution test fails |
 | **command processor** | **blocked** — first KIQ SET_RESOURCES submission times out; queue-local translation errors remain under investigation. The previous hardware-lock diagnosis was retracted. |
 | WindowServer | `AMDHWVMM::endVMPTUpdate` NULL dereference repaired; hardware engines still fail to start |
 
