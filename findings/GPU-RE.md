@@ -1794,7 +1794,14 @@ nothing.
 The instrument to trust from here is the read pointer and the ring contents, not
 `CP_CPC_STALLED_STAT1`.
 
-## Why the command processor never executes: its instruction cache points at the host
+## Why the command processor never executes: its instruction cache is an unreachable address
+
+> **Corrected 2026-09-07.** This section originally concluded that the instruction-cache
+> bases hold the *host amdgpu's* addresses, left behind because amdgpu had the device first.
+> That was wrong, and acting on it cost two host hard-hangs. The addresses are written by
+> the **guest's own PSP**, and the reason the microengines never execute is an aperture
+> mismatch, not stale state. See "Correction: BASE != OFFSET" below. The measurements in
+> this section stand; only the attribution changed.
 
 `CP_MEC2_INSTR_PNTR` sampled sixteen times over 320 us reads `0x310` with zero changes;
 `CP_MEC1_INSTR_PNTR` reads `0x10000`, the same value the halted PFP, ME and CE report. The
@@ -1897,7 +1904,7 @@ That closes the last in-guest route. The command processor is the PSP's for the 
 reset, and the only way to get one this guest can drive is to make sure amdgpu never claims
 the device: `tools/enable-early-vfio.sh`.
 
-## Two host hangs, no evidence, and why
+## Three host hangs, no evidence, and why
 
 The host has hard-hung twice during this work. Both times the signature is identical and
 uninformative:
@@ -1932,13 +1939,115 @@ Root cause: **undetermined, and not determinable from what was captured.** Two c
 produced no diagnostic information at all. Everything below is about not being in that
 position a third time.
 
+### The third hang, and what it ruled out
+
+2026-09-07 14:21, the first launch after a reboot, with the iGPU on vfio-pci from boot.
+`sercat.py`'s fsync and journald's 1s sync were both active, so for the first time the
+timeline is trustworthy to the second:
+
+    14:20:07.634  vfio-pci 0000:7b:00.0: resetting / reset done
+    14:21:17.559  last host journal entry (a routine UFW block; these arrive every ~18 s)
+    14:21:21.743  last guest serial byte, fsynced
+    14:21:35      the next periodic UFW block never arrives
+    14:22:09      next boot
+
+So the host was alive at 14:21:21.743 and dead within ~14 s of it, and **still logged
+nothing** -- which retires the explanation that satisfied the second crash. journald was no
+longer holding five minutes of log in RAM; the kernel simply never said anything. The reason
+is on the command line: `nowatchdog`, with `nmi_watchdog`, `watchdog`, `hardlockup_panic` and
+`hung_task_panic` all reading 0, while the kernel is built with
+`CONFIG_HARDLOCKUP_DETECTOR_PERF=y`, `CONFIG_SOFTLOCKUP_DETECTOR=y` and
+`CONFIG_DETECT_HUNG_TASK=y`. Three crashes' worth of "no evidence" has been a configuration
+choice. `tools/enable-lockup-capture.sh` reverses it.
+
+**A refuted hypothesis, recorded because the correlation was seductive.** The guest's last
+two lines before the host died were
+
+    dccg2_get_dccg_ref_freq:89   BREAK_TO_DEBUGGER point !!!.
+    hubbub2_get_dchub_ref_freq:565 BREAK_TO_DEBUGGER point !!!.
+
+which is DCN display-hub initialisation -- a fabric master, on an APU, being programmed by a
+driver that thinks the block is Navi 23 (DCN 2.x/3.0) when Raphael is DCN 3.1.5. A plausible
+way to wedge a fabric, arriving four seconds before the host died. It is not the cause:
+**116 of the 149 archived runs contain those exact two lines** and did not hang the host.
+They are simply where every run's log ends, because the display path is where the driver
+gives up and stops printing. A last-line correlation is worth nothing until you check the
+base rate.
+
+That also means the third hang came *after* the guest had reached the same quiescent end
+state that runs reach routinely. There is no guest-side milestone that predicts the hang, so
+there is nothing to stop at -- only elapsed exposure to bound.
+
+### Correction: BASE != OFFSET, and the instruction-cache bases were never amdgpu's
+
+The one thing this crash bought. With amdgpu confirmed never to have bound the device this
+boot (`journalctl -k -b | grep -c 'amdgpu 0000:7b:00.0'` == 0), the plugin's pre-TTL report
+fires twice in the same run, and the first one is empty:
+
+    XR: pre-TTL: IC bases CPC=0_00000000   cntl=0x10 op=0   | PFP=0_00000000   | ME=0_00000000
+    XR: pre-TTL: IC bases CPC=0x8_5f904000 cntl=0x10 op=0x2 | PFP=0x8_5f87c000 | ME=0x8_5f8c0000
+
+The registers start at zero and acquire those values during the **guest's** initialisation.
+They are not host residue, and `enable-early-vfio.sh` -- whose entire rationale was that
+they were -- has been disabled in place with the refutation written into its header. Two
+host hangs to disprove the reason for taking the risk.
+
+What writes them is the guest's own PSP during firmware autoload, and it writes
+**host-physical** addresses, because the PSP runs against the real memory map:
+
+    0x8_5f904000 - 0x840000000 = 0x1f904000   -> 505 MB into a 512 MB carveout
+
+505 MB into 512 MB is exactly where firmware parks CP microcode. The address is real and the
+microcode behind it is real. The problem is that the CP dereferences that register as an
+**MC** address, through a GMC that Apple's driver has programmed for the guest's BAR0
+window:
+
+    GCMC_VM_FB_LOCATION_BASE = 0xf400000000     GCMC_VM_FB_OFFSET = 0x840000000
+    MC -> phys = MC - BASE + OFFSET
+
+    0x8_5f904000 as MC  ->  phys 0xff1c9f904000     nowhere
+    MC that reaches it  ->  0xf41f904000
+
+`BASE != OFFSET`, so every physical address the PSP programmed is unreachable through the
+guest's own aperture. That is why autoload reports complete (`RLC_RLCS_BOOTLOAD_STATUS`
+`0xc0000001`), both MECs are unhalted (`CP_MEC_CNTL = 0`), and the instruction pointers still
+never move (`MEC2 = 0x44c`, 16 samples, 0 changes; `MEC1 = 0x44a`): the engines are alive and
+idling, fetching from an address that does not resolve.
+
+This is **not** the experiment already recorded under "Pointing the microcode at the register
+instead". That one moved `FB_LOCATION_BASE` so the locked address would land on microcode the
+*plugin* wrote and verified by readback. The correction says the PSP's own microcode is
+already at physical `0x8_5f904000` and is genuinely correct -- so the move to make is
+`GCMC_VM_FB_LOCATION_BASE = GCMC_VM_FB_OFFSET = 0x840000000`, an identity map onto the
+carveout, which is how the host itself runs the GMC. Then every PSP-programmed physical
+address is self-consistent and no register needs to be written that the PSP has locked.
+
+Open question before trying it: Apple's driver reads `FB_LOCATION_BASE` back and derives its
+own MC allocations from it, and BAR0 is at `0xf400000000` in the guest. Under an identity map
+MC == phys and CPU-visible BAR0 offsets are `MC - 0x840000000`, which stays consistent *if*
+the driver uses the base it reads rather than the BAR address it was given. That is the thing
+to check in `AMDHWVMM` before spending a boot on it.
+
 ### What is in place now
 
-`redeploy.sh` refuses to pass the iGPU through when amdgpu has not initialised it this boot
--- one grep of the current boot's kernel log for `amdgpu 0000:7b:00.0`, override
-`RGPU_ALLOW_VIRGIN_IGPU=1`. This makes the configuration that died in 53 seconds unreachable
-by accident, and it is verified rather than assumed: with the early binding still active,
-`./redeploy.sh` stops before starting QEMU.
+**Passthrough is opt-in.** `./redeploy.sh` now runs the guest with no passthrough; `--gpu`
+asks for it. It used to be the other way round, which meant `autorun.sh` -- a loop that calls
+`./redeploy.sh` with no arguments -- held the iGPU across dozens of unattended launches. That
+is the shape of the first crash: ~33 launches over three hours with nobody at the machine.
+`autorun.sh` now needs `AUTORUN_GPU=1` and says which mode it is in, because a GPU-less rung
+cannot produce a verdict about the graphics core and the log should not imply otherwise.
+
+**The virgin-iGPU configuration is refused outright, with no override.** The old
+`RGPU_ALLOW_VIRGIN_IGPU=1` escape hatch is gone: it existed for one experiment, the
+experiment ran twice, it cost two hangs, and it disproved its own premise. Exposure survived
+was ~100 minutes of guest runtime in the amdgpu-first configuration against 53 s and ~74 s
+in the virgin one -- about fifty times, for the same number of crashes. Not a mechanism, but
+far too large to be luck, and the virgin path buys nothing.
+
+**Exposure is capped.** `RGPU_MAX_SECONDS` (default 300) stops the container and releases the
+device. Since the third hang came after the guest reached its normal quiescent state, there
+is no milestone to stop at -- elapsed time is the only thing left to bound, and bounding it in
+the script beats trusting whoever is driving to remember.
 
 `sercat.py` fsyncs every chunk. At a few hundred kilobytes per boot the cost is nothing, and
 it is the difference between knowing where the guest was and guessing.
@@ -1963,5 +2072,16 @@ lasted three hours rather than 53 seconds. Nothing is given up by reverting: the
 before the guest kernel loaded, so that boot never revealed whether the command processor
 would have been usable.
 
-Still open, and deliberately not changed: the kernel command line carries `nowatchdog`, so a
-hang cannot self-recover and needs the reset button.
+`tools/enable-lockup-capture.sh` is the change the third hang argues for, and the one still
+waiting on a reboot. It drops `nowatchdog` from `KERNEL_CMDLINE[default]` and adds
+`nmi_watchdog=1 hardlockup_panic=1 efi_pstore.pstore_disable=0 panic=20`, so a wedged CPU
+panics instead of hanging silently, the dmesg tail lands in EFI variables and survives the
+power cycle, and the box reboots itself instead of needing the reset button. It edits the
+command line only -- no kernel is signed and no image is regenerated, so Secure Boot and
+Limine's blake2b pinning are not involved; `limine-update` rewrites `limine.conf` and the
+previous command line is backed up beside it.
+
+If the failure stops the CPUs or wedges the fabric outright this changes nothing, which is a
+real possibility given the signature. But the hard-lockup detector fires from a performance
+counter NMI, which reaches a CPU spinning with interrupts disabled -- the case that is
+invisible today and the most useful thing left to learn.

@@ -1,50 +1,64 @@
 #!/usr/bin/env bash
 # Claim the iGPU for vfio-pci at boot, so amdgpu never touches it.
 #
-# WHY THIS IS THE FIX
+# DO NOT RUN THIS. IT IS KEPT AS A RECORD OF A REFUTED IDEA.
 #
-# The guest cannot start the GPU's command processor, and the reason is not anything about
-# Apple's driver. On GFX10 a microengine fetches its microcode through an instruction cache
-# whose base address lives in CP_CPC_IC_BASE_LO/HI, and after the host's amdgpu has had the
-# device those registers hold amdgpu's own addresses:
+# The premise was that the CP instruction-cache bases hold the HOST amdgpu's addresses:
 #
 #     CP_CPC_IC_BASE = 0x8_5f904000    CP_PFP_IC_BASE = 0x8_5f87c000
 #     CP_ME_IC_BASE  = 0x8_5f8c0000
 #
-# The host's framebuffer offset is 0x840000000, so those are carveout addresses that meant
-# something under the host's memory-controller layout and nothing under the guest's. They
-# are also locked: writes are ignored through the framebuffer accessor, through TTL's own
-# _gc_cgs_write_register_ext2, with GRBM_GFX_INDEX broadcasting, inside an RLC_SAFE_MODE
-# request, and with both MECs halted -- while CP_MEC_CNTL and every GMC register in reach
-# are writable. The PSP owns the addresses the CP fetches from for the life of the reset,
-# and GFX_CMD_ID_AUTOLOAD_RLC, the command that would hand them back, answers
-# TEE_ERROR_BUSY. Moving the guest's framebuffer aperture so the locked address lands on
-# microcode the plugin writes and verifies by readback is not enough either: the
-# instruction cache will not prime and the engines never execute.
+# and that if amdgpu were never allowed to bind the device, the guest would inherit it as
+# the system firmware left it, with the microengines already running on addresses of the
+# firmware's choosing.
 #
-# So do not let amdgpu have the device in the first place. Bound to vfio-pci from boot, the
-# iGPU reaches the guest exactly as the system firmware left it -- the PSP has already
-# autoloaded the graphics firmware and started the microengines, with addresses of its own
-# choosing, which is the state a working driver expects to inherit.
+# The experiment was run. It cost two host hard-hangs -- 53 seconds into the first launch,
+# then ~74 seconds into the first launch after a reboot -- and it disproved its own premise.
+# With amdgpu confirmed never to have bound the device this boot ("journalctl -k -b | grep
+# -c 'amdgpu 0000:7b:00.0'" == 0), the plugin's own pre-TTL report shows the registers start
+# at ZERO and acquire those values during the GUEST's initialisation:
 #
-# WHAT THIS CHANGES
+#     XR: pre-TTL: IC bases CPC=0_00000000   cntl=0x10 op=0   | PFP=0_00000000   | ME=0_00000000
+#     XR: pre-TTL: IC bases CPC=0x8_5f904000 cntl=0x10 op=0x2 | PFP=0x8_5f87c000 | ME=0x8_5f8c0000
 #
-#   /etc/modprobe.d/vfio-igpu.conf   binds 1002:13c0 to vfio-pci and orders it before amdgpu
-#   /etc/mkinitcpio.conf             adds vfio-pci to MODULES, so it is present early enough
-#   initramfs + /boot/limine.conf    regenerated together by limine-mkinitcpio
+# So those addresses were never amdgpu residue. The guest's own PSP writes them during
+# firmware autoload, and it writes HOST-PHYSICAL addresses, because the PSP runs against the
+# real memory map: 0x8_5f904000 is the host's framebuffer carveout base 0x840000000 plus
+# 0x1f904000, i.e. 505 MB into a 512 MB carveout -- exactly where firmware parks CP
+# microcode. Keeping amdgpu away from the device cannot change any of that, and the guest
+# reaches the same state either way.
 #
-# The initramfs images are hash-pinned in limine.conf, so they can only be regenerated
-# through limine-mkinitcpio -- see the comment at that call. Limine's limine_history entries
-# keep the previous images and their hashes, which is the fallback if the new one misbehaves.
+# WHAT THE REAL PROBLEM TURNED OUT TO BE
 #
-# SAFETY
+# The CP dereferences that register as an MC address, through a GMC that Apple's driver has
+# programmed for the guest's BAR0 window:
 #
-# Only 1002:13c0 is claimed. The display runs on the discrete Navi 48 (1002:7550) and is
-# untouched; the iGPU's IOMMU group 31 contains no other function, so nothing else moves
-# with it. Reverting is: rm the modprobe.d file, undo the MODULES line, regenerate.
+#     GCMC_VM_FB_LOCATION_BASE = 0xf400000000     GCMC_VM_FB_OFFSET = 0x840000000
+#     MC -> phys = MC - BASE + OFFSET
 #
-# Requires a reboot to take effect, and does nothing until then.
+# Treat 0x8_5f904000 as an MC address under that mapping and it resolves to
+# 0xff1c9f904000, which is nowhere. The MC address that would reach the PSP's microcode is
+# 0xf41f904000. So the microengines never execute not because the addresses are stale, but
+# because BASE != OFFSET: every physical address the PSP programmed is unreachable through
+# the guest's own aperture. See findings/GPU-RE.md.
+#
+# This script is left in place, disabled, because the reasoning above is only legible next
+# to the thing it refutes. To read what it used to do, see git history.
+
 set -euo pipefail
+
+cat >&2 <<'REFUSED'
+enable-early-vfio.sh is disabled on purpose.
+
+Its premise -- that the CP instruction-cache bases hold the host amdgpu's addresses -- was
+disproved by running it. On a device amdgpu never bound, those registers start at zero and
+the guest's own PSP writes them. The experiment cost two host hard-hangs and changed
+nothing about how far the guest gets.
+
+If you have a new reason to want the iGPU on vfio-pci from boot, write it in the header
+first, then delete this block. Read the comment above before you do.
+REFUSED
+exit 1
 
 IGPU_ID=1002:13c0
 IAUD_ID=1002:1640      # the iGPU's own HDMI/DP audio function, 7b:00.1

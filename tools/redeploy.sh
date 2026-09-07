@@ -2,20 +2,64 @@
 # Rebuild the grafted VBIOS, push config.plist (device properties + Kernel>Patch)
 # into the OpenCore ESP, and restart the VM.
 #
-#   ./redeploy.sh              # with the iGPU passed through, if it is bound to vfio-pci
-#   ./redeploy.sh --no-gpu     # plain VM, no passthrough
+#   ./redeploy.sh              # plain VM, NO passthrough -- the safe default
+#   ./redeploy.sh --gpu        # pass the iGPU through (see the hazard note below)
+#
+# PASSTHROUGH IS OPT-IN, AND THAT IS DELIBERATE.
+#
+# The host has hard-hung three times, every time with the iGPU passed through to the guest
+# and never otherwise. Passthrough used to be the default here and --no-gpu the opt-out,
+# which meant autorun.sh -- which calls this script with no arguments in a loop -- held the
+# device open across dozens of launches unattended. That is the shape of the first crash:
+# roughly 33 launches over three hours. Nothing else on this machine has ever hung it.
+#
+# So the default is now the safe one. You have to ask for the risky thing, every time, and
+# you should be at the machine when you do.
 #
 # Read the result on serial (no guest login needed, thanks to debug=0x108):
 #   tr -d '\r' < run/serial.log | grep -E 'c00c02|ASSERT|GPUCAP|Accel|panic'
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 export MTOOLS_SKIP_CHECK=1
+
+# sudo has no TTY under this script, so it needs an askpass helper. /tmp is tmpfs here, so
+# a helper written by an earlier session is gone after every reboot -- write it if absent
+# rather than failing on a stale path. kdialog is the Plasma prompt; fall back to
+# systemd-ask-password so this still works outside a KDE session.
+#
+# Setting this unconditionally also makes "QUIESCE=1 ./redeploy.sh" work on its own; it
+# previously needed SUDO_ASKPASS passed in by hand and silently did nothing without it.
+export SUDO_ASKPASS="${SUDO_ASKPASS:-${TMPDIR:-/tmp}/rgpu-askpass.sh}"
+if [[ ! -x "$SUDO_ASKPASS" ]]; then
+    cat > "$SUDO_ASKPASS" <<'ASKPASS'
+#!/bin/sh
+if command -v kdialog >/dev/null 2>&1; then exec kdialog --password "$1"
+else exec systemd-ask-password "$1"; fi
+ASKPASS
+    chmod 700 "$SUDO_ASKPASS"
+fi
+
 ESP_OFF=1048576
 DEV=0000:7b:00.0
 IMAGE="${IMAGE:-sickcodes/docker-osx:latest}"
 
-WANT_GPU=1
-[[ "${1:-}" == --no-gpu ]] && { WANT_GPU=0; shift; }
+WANT_GPU=0
+case "${1:-}" in
+    --gpu)    WANT_GPU=1; shift ;;
+    # Still accepted so iterate.sh / bootonly.sh keep working unchanged; it is now the
+    # default, so it does nothing.
+    --no-gpu) shift ;;
+esac
+
+# Hard cap on how long QEMU may hold the iGPU, in seconds; 0 disables the cap.
+#
+# Every hang so far happened while the guest had the device open, at 53 s, at ~74 s, and
+# somewhere inside a three-hour unattended loop. None of the three is tied to anything
+# visible in the guest log -- the third one hung after the guest had reached the same
+# quiescent state that 116 of 149 archived runs reach without incident -- so there is no
+# milestone to stop at, only elapsed exposure to bound. Five minutes is far longer than any
+# experiment needs and far shorter than an unattended loop.
+RGPU_MAX_SECONDS="${RGPU_MAX_SECONDS:-300}"
 
 python3 mkrom.py --total 0xB600 -o run/gpu-patched.rom "$@"
 python3 ocprop.py config.plist -o run/config-new.plist \
@@ -61,42 +105,76 @@ cp -f run/OpenCore-rebuilt.qcow2 OpenCore.qcow2
 GPU_ARGS=()
 if (( WANT_GPU )); then
     drv="$(basename "$(readlink -f "/sys/bus/pci/devices/${DEV}/driver")" 2>/dev/null || echo none)"
-    # Refuse to pass through an iGPU that amdgpu has never initialised this boot.
+    # Refuse, with no override, to pass through an iGPU that amdgpu has never initialised
+    # this boot.
     #
-    # The host has hard-hung twice, both times with the VM running and the iGPU passed
-    # through, and both times leaving nothing behind: the journal stops mid-line with no
-    # shutdown sequence, no panic, no oops, and /sys/fs/pstore empty. The two differ only in
-    # how long they took. In the configuration where amdgpu binds the iGPU at boot and
-    # gpu-bind.sh hands it over afterwards, it survived roughly 33 VM launches over three
-    # hours before dying. With the iGPU claimed by vfio-pci straight from boot -- so the
-    # device reached the guest exactly as the system firmware left it, never initialised or
-    # quiesced by a driver -- it died 53 seconds into the FIRST launch.
+    # All three host hangs happened with the iGPU passed through, and all three left the
+    # same nothing behind: the journal stops mid-line, no shutdown sequence, no panic, no
+    # oops, pstore empty. What separates the two configurations is exposure survived:
     #
-    # That is not proof of a mechanism, and it is not claimed as one: the evidence needed to
-    # find the mechanism was never captured. It is enough to say the virgin path is far more
-    # dangerous, and there is no reason to take it, so do not start on it by accident. The
-    # check is simply whether amdgpu ever logged anything about this device this boot.
+    #   amdgpu binds at boot, gpu-bind.sh hands the device over afterwards
+    #       ~33 launches over ~3 hours, call it ~100 minutes of guest runtime
+    #
+    #   vfio-pci claims the device from boot, so it reaches the guest exactly as the system
+    #   firmware left it, never POSTed or quiesced by any driver
+    #       53 s into the first launch, then ~74 s into the first launch after a reboot
+    #
+    # About fifty times the runtime for the same number of crashes. That is not a mechanism
+    # and is not offered as one -- with every lockup detector disabled on this kernel's
+    # command line, the evidence needed to find the mechanism has never been capturable --
+    # but the difference is far too large to be luck, and the virgin path buys nothing: the
+    # guest reaches the same state either way.
+    #
+    # This used to be overridable with RGPU_ALLOW_VIRGIN_IGPU=1. That override is gone. It
+    # existed for one experiment, the experiment was run twice, and it cost two hangs and
+    # told us nothing new. If you want passthrough, run ./disable-early-vfio.sh and reboot
+    # so amdgpu owns the device first.
     if [[ "$drv" == vfio-pci ]] && ! journalctl -k -b --no-pager 2>/dev/null |
             grep -q "amdgpu ${DEV}"; then
         cat >&2 <<EOF
 REFUSING to pass through ${DEV}: amdgpu has not initialised it this boot.
 
-The device is on vfio-pci but was never POSTed and quiesced by amdgpu, which is the
-configuration in which the host hard-hung 53 seconds into the first VM launch. Undo the
-early binding (./disable-early-vfio.sh, then reboot) so amdgpu owns the iGPU at boot and
-gpu-bind.sh hands it over afterwards.
+The device is on vfio-pci but was never POSTed and quiesced by amdgpu. That is the
+configuration the host hard-hung in twice, at 53 s and ~74 s into the first launch, versus
+~100 minutes of guest runtime in the amdgpu-first configuration.
 
-Set RGPU_ALLOW_VIRGIN_IGPU=1 to override, and be at the machine when you do.
+To get out of it:
+
+    sudo ./disable-early-vfio.sh && sudo reboot
+    SUDO_ASKPASS=\$SUDO_ASKPASS sudo -A ./gpu-bind.sh
+    ./redeploy.sh --gpu
+
+There is deliberately no override for this.
 EOF
-        [[ "${RGPU_ALLOW_VIRGIN_IGPU:-0}" == 1 ]] || exit 1
-        echo "RGPU_ALLOW_VIRGIN_IGPU=1 -- proceeding against a virgin iGPU anyway" >&2
+        exit 1
     fi
     if [[ "$drv" == vfio-pci ]]; then
+        # Make sure the IOMMU group node is ours to open.
+        #
+        # QEMU opens /dev/vfio/<group>, and a fresh node is root:root 0600. gpu-bind.sh
+        # chowns it as its last step -- but with the iGPU claimed by vfio-pci from boot
+        # gpu-bind.sh is never run, so nothing does, and the launch dies with
+        # "/dev/vfio/31 is not accessible to you" into run/vm-launch.log while the
+        # terminal still says "passing through". Do it here instead, where it holds for
+        # both paths, and only when it is actually needed so an already-owned node costs
+        # no password prompt.
+        #
+        # -A (askpass) rather than a bare sudo: there is no TTY under this script. Never a
+        # "sudo -n" probe first -- a failed non-interactive sudo counts against faillock.
+        grp="$(basename "$(readlink -f "/sys/bus/pci/devices/${DEV}/iommu_group")")"
+        vfio_node="/dev/vfio/${grp}"
+        if [[ ! -r "$vfio_node" || ! -w "$vfio_node" ]]; then
+            echo "${vfio_node} is not accessible; taking ownership"
+            sudo -A chown "$(id -u):$(id -g)" "$vfio_node" || {
+                echo "could not chown ${vfio_node} -- QEMU will not be able to open it" >&2
+                exit 1; }
+        fi
+        echo "iommu group ${grp}: $(ls -l "$vfio_node" | awk '{print $3, $1}')"
         GPU_ARGS=(--gpu "$DEV" --gpu-id 0x73ff --gpu-rom run/gpu-patched.rom)
         echo "passing through ${DEV} (spoofed 0x73ff)"
     else
         echo "NOTE: ${DEV} is bound to '${drv}', not vfio-pci -- starting without passthrough."
-        echo "      run 'SUDO_ASKPASS=/tmp/askpass.sh sudo -A ./gpu-bind.sh' first."
+        echo "      run 'SUDO_ASKPASS=\"\$SUDO_ASKPASS\" sudo -A ./gpu-bind.sh' first."
     fi
 fi
 
@@ -104,8 +182,34 @@ mv -f run/serial.log "run/serial-$(date +%H%M%S).log" 2>/dev/null || true
 : > run/serial.log
 nohup systemd-inhibit --what=sleep:idle --who="macOS VM" --why="GPU RE run" \
     ./macos-vm.sh run "${GPU_ARGS[@]}" > run/vm-launch.log 2>&1 &
-until [ -S run/serial.sock ]; do sleep 1; done
+# Bounded, not "until": if QEMU dies on startup -- a bad ROM, an inaccessible /dev/vfio
+# node -- an unbounded wait here hangs the script forever on a socket that will never
+# appear, and the real error sits unread in run/vm-launch.log.
+for _ in $(seq 1 60); do [ -S run/serial.sock ] && break; sleep 1; done
+if [ ! -S run/serial.sock ]; then
+    echo "QEMU did not come up; run/vm-launch.log says:" >&2
+    tail -5 run/vm-launch.log >&2
+    exit 1
+fi
 (nohup ./sercat.py >/dev/null 2>&1 &)
+
+# Bound how long the guest may hold the iGPU.
+#
+# There is no milestone to stop at: the third hang came after the guest had reached the
+# same quiescent end state that 116 of the 149 archived runs reach without incident, so the
+# guest log cannot tell us when the danger starts. Elapsed exposure is the only thing left
+# to limit, so limit it -- and do it here rather than trusting whoever is driving to
+# remember, because the crash that cost three hours was an unattended loop.
+if (( WANT_GPU )) && (( RGPU_MAX_SECONDS > 0 )); then
+    ( sleep "$RGPU_MAX_SECONDS"
+      docker ps --format '{{.Names}}' | grep -qx macos-sequoia || exit 0
+      echo "RGPU_MAX_SECONDS=${RGPU_MAX_SECONDS} reached; stopping the VM to release the iGPU" \
+          >> run/vm-launch.log
+      docker rm -f macos-sequoia >/dev/null 2>&1
+    ) >/dev/null 2>&1 &
+    disown
+    echo "iGPU exposure capped at ${RGPU_MAX_SECONDS}s (RGPU_MAX_SECONDS=0 to disable)"
+fi
 # The container is recreated on every boot, so the agent command channel and the file
 # server die with it. Without this, ./gx reports "no response from guest agent" and the
 # guest looks unreachable when it is merely unserved.
