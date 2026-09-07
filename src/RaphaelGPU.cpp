@@ -427,6 +427,8 @@ static constexpr size_t kOffVmmFillRegs = 0x62400;    // AMDGFX10VMM::fillVMRegi
 static constexpr size_t kOffVmmProgInv  = 0x6278a;    // AMDGFX10VMM::programAndInvalidateVM [x6]
 static constexpr size_t kOffAccPowerUpHW = 0x4e0c;   // AMDGraphicsAccelerator::powerUpHW [x6]
 static constexpr size_t kOffHwPowerUp    = 0x99618;  // AMDNavi23Hardware::powerUp [x6]
+static constexpr size_t kOffGfx10PowerUp = 0x73e68;  // AMDGFX10Hardware::powerUp [x6]
+static constexpr size_t kOffGfx10SetVMRegs = 0x74320; // AMDGFX10Hardware::setVMRegisters [x6]
 static constexpr size_t kOffHwEngPowerUp = 0x6fe9a;  // AMDHardware::powerUpHWEngines [x6]
 static constexpr size_t kOffHwEngStart   = 0x6ffd2;  // AMDHardware::startHWEngines [x6]
 static constexpr size_t kOffPm4Mqd       = 0x69362;  // AMDGFX10PM4Engine::initComputeMQD [x6]
@@ -575,6 +577,8 @@ static mach_vm_address_t orgHwMemVram {};
 static mach_vm_address_t orgHwMemEnable {};
 static mach_vm_address_t orgAccPowerUpHW {};
 static mach_vm_address_t orgHwPowerUp {};
+static mach_vm_address_t orgGfx10PowerUp {};
+static mach_vm_address_t orgGfx10SetVMRegs {};
 static mach_vm_address_t orgHwEngPowerUp {};
 static mach_vm_address_t orgHwEngStart {};
 static mach_vm_address_t orgPm4Mqd {};
@@ -3860,11 +3864,54 @@ static uint32_t wrapHwEngStart(void *self) {
     return r;
 }
 
+// AMDNavi23Hardware::powerUp returns false on exactly two conditions, decoded at 0x99618:
+//
+//     99621: cmp byte [rdi+0x30f], 0                 already-powered? -> jump to success
+//     99634: call [AMDGFX10Hardware vtable + 0x218]  superclass powerUp (x6+0x73e68)
+//     9963c: je  fail                                (a) superclass returned false
+//     9963e: mov rdi, [r14 + 0x3b0]
+//     9964f: call <safe cast to AMDPM4HWEngine>
+//     99657: je  fail                                (b) [this+0x3b0] is not a PM4HWEngine
+//     99659: mov byte [rax + 0x230], 1               success
+//     99662: xor ebx, ebx                            fail -> returns 0
+//
+// It returns 0 here with the already-powered flag clear, so (a) or (b) is failing and they
+// need telling apart: (a) is a hardware bring-up problem, (b) means the PM4 engine object was
+// never constructed, which is an entirely different repair.
 static uint32_t wrapHwPowerUp(void *self) {
     uint8_t already = self ? *(reinterpret_cast<uint8_t *>(self) + 0x30f) : 0xff;
+    void *pm4 = self ? *reinterpret_cast<void **>(reinterpret_cast<uint8_t *>(self) + 0x3b0)
+                     : nullptr;
     auto r = FunctionCast(wrapHwPowerUp, orgHwPowerUp)(self);
-    RLOG("XJ: AMDNavi23Hardware::powerUp -> %u (already-powered flag was %u)",
-         r & 0xff, already);
+    RLOG("XJ: AMDNavi23Hardware::powerUp -> %u (already-powered=%u, PM4 engine "
+         "[this+0x3b0]=%p%s)", r & 0xff, already, pm4,
+         pm4 == nullptr ? "  <-- NULL: the AMDPM4HWEngine cast fails and this returns 0 "
+                          "whatever the superclass did" : "");
+    return r;
+}
+
+// AMDHardware::powerUp (x6+0x701ba) returns r14d and needs BOTH of these to be true:
+//
+//     7021a: call [vtable + 0x608]   = AMDGFX10Hardware::setVMRegisters   (x6+0x74320)
+//     70222: je  fail                -> r14d = 0
+//     7022a: call [vtable + 0x618]   = AMDHardware::powerUpHWEngines      (x6+0x6fe9a)
+//     70235: je  fail
+//     70237: mov al, 1               both true: sets the powered flags at +0x30c and +0x30f
+//
+// powerUpHWEngines is already routed; setVMRegisters was not, and it is the more interesting
+// of the two here because it programs the very VM registers whose page-table base was found
+// to be wrong.
+static uint32_t wrapGfx10SetVMRegs(void *self) {
+    auto r = FunctionCast(wrapGfx10SetVMRegs, orgGfx10SetVMRegs)(self);
+    RLOG("XJ: AMDGFX10Hardware::setVMRegisters -> %u  <-- check A of AMDHardware::powerUp; 0 "
+         "here fails powerUp before powerUpHWEngines is even reached", r & 0xff);
+    return r;
+}
+
+static uint32_t wrapGfx10PowerUp(void *self) {
+    auto r = FunctionCast(wrapGfx10PowerUp, orgGfx10PowerUp)(self);
+    RLOG("XJ: AMDGFX10Hardware::powerUp -> %u  <-- branch (a): 1 means the failure is the PM4 "
+         "engine cast, 0 means it is here", r & 0xff);
     return r;
 }
 
@@ -4144,6 +4191,10 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
                  reinterpret_cast<void *>(wrapAccPowerUpHW), "AMDGraphicsAccelerator::powerUpHW"},
                 {kOffHwPowerUp, &orgHwPowerUp,
                  reinterpret_cast<void *>(wrapHwPowerUp), "AMDNavi23Hardware::powerUp"},
+                {kOffGfx10PowerUp, &orgGfx10PowerUp,
+                 reinterpret_cast<void *>(wrapGfx10PowerUp), "AMDGFX10Hardware::powerUp"},
+                {kOffGfx10SetVMRegs, &orgGfx10SetVMRegs,
+                 reinterpret_cast<void *>(wrapGfx10SetVMRegs), "AMDGFX10Hardware::setVMRegisters"},
                 {kOffHwEngPowerUp, &orgHwEngPowerUp,
                  reinterpret_cast<void *>(wrapHwEngPowerUp), "AMDHardware::powerUpHWEngines"},
                 {kOffHwEngStart, &orgHwEngStart,
