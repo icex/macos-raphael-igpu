@@ -2131,6 +2131,89 @@ like it is not running. That is the next thing to characterise, and it is a diff
 question from the ones answered so far: not "can we write this register" but "why is the
 RLC's GPM idle after a successful autoload".
 
+### Correction: the microengines DO execute, and the RLC is running
+
+Both of the conclusions in the two sections above are wrong in their strongest form, and the
+correction came from finally reading the registers properly.
+
+**The RLC is running.** `rgpurlc=1` (kext 1.0.142) dumps it, and at probe time:
+
+    RLC_CNTL=0x1  RLC_STAT=0x25  RLC_GPM_STAT=0x140017  RLC_SAFE_MODE=0
+    RLC_SRM_CNTL=0x3  CSIB_ADDR_LO=0xfbc7000  CSIB_LEN=0x3b8
+    RLC_RLCS_BOOTLOAD_STATUS=0xc0000001
+
+`RLC_STAT = 0x25` is `RLC_BUSY | RLC_GPM_BUSY | RLC_THREAD_0_BUSY` -- precisely the value the
+`xl` milestone treats as a live RLC. The save/restore machine is enabled and the clear-state
+indirect buffer is programmed. The earlier `RLC_STAT = 0` readings that prompted "the RLC's
+GPM is idle after a successful autoload" were sampled at a different moment; they were not
+wrong, they were unrepresentative.
+
+**Every RLC register is writable**, with `SCRATCH_REG0` and `CP_MEC_CNTL` as positive
+controls:
+
+    SCRATCH_REG0    0x00000000 ^0xa5a5a5a5 -> 0xa5a5a5a5   WRITABLE
+    CP_MEC_CNTL     0x00000000 ^0x10000000 -> 0x10000000   WRITABLE
+    RLC_CNTL        0x00000001 ^0x00000008 -> 0x00000009   WRITABLE
+    RLC_SAFE_MODE   0x00000000 ^0x00000002 -> 0x00000002   WRITABLE
+    RLC_PG_CNTL     0x00000000 ^0x00004000 -> 0x00004000   WRITABLE
+    RLC_SRM_CNTL    0x00000003 ^0x00000002 -> 0x00000001   WRITABLE
+
+So there is no protected RLC domain. The lock found earlier is narrow: it covers
+`CP_CPC_IC_BASE_LO/HI`, `CP_CPC_IC_BASE_CNTL` and `CP_CPC_IC_OP_CNTL` and nothing else that
+has been tried.
+
+**Do not cycle RLC_ENABLE.** `rgpurlc=2` arms it and it is destructive: `RLC_STAT` went
+`0x25` -> `0x5` with the bit cleared -> `0x0` after setting it again, and stayed 0 for the
+rest of the run. Re-enabling the F32 does not restart it -- the microcontroller has to be
+reloaded, which only the PSP can do -- so the cycle stops the one part of the block that was
+working, and it moved the microengines not at all.
+
+**The microengines executed and parked.** This is the reinterpretation that matters. The
+program counters are *not zero*:
+
+    CP_MEC1_INSTR_PNTR  0x44a      CP_PFP_INSTR_PNTR  0x2aa
+    CP_MEC2_INSTR_PNTR  0x44c      CP_ME_INSTR_PNTR   0xea3
+                                   CP_CE_INSTR_PNTR   0x37
+
+A cold device -- the virgin vfio-from-boot run, before TTL -- reads `0` for all of them. So
+every engine fetched and ran on the order of a thousand instructions of its boot sequence and
+then stopped at a fixed address. The label in the log, `(0 changes -> not executing)`, means
+"not advancing right now"; it has been read throughout this document as "never ran", and that
+is wrong. **The command processor is alive and idle, not dead.**
+
+Which moves the question from "why will the CP not fetch" -- it did fetch, and the icache
+lock is consistent with the PSP having already set the fetch up correctly and having no
+reason to let anyone change it -- to "why does no work ever reach the parked engines". That
+is queue and doorbell territory, which is software we control, and it is a much better place
+to be than a hardware lock.
+
+### A new observability channel: read the registers from the host, through BAR5
+
+`tools/hostregs.py` mmaps `/sys/bus/pci/devices/0000:7b:00.0/resource5` and reads the same
+registers the in-guest plugin reads, using the same SOC15 arithmetic (byte offset =
+`(base + reg) * 4`, GC segment 0 at `0x1260`, segment 1 at `0xa000`; every register of
+interest is inside the 512 KB aperture, so none need the indirect PCIE index/data path).
+
+It works **whatever driver owns the device** -- confirmed against `vfio-pci` -- needs no
+guest, and reads only. Every register value this project had collected until now came from
+inside the guest, where nothing works, while the same silicon runs correctly under amdgpu a
+few seconds after every boot. That reference has never been read, and it is the obvious way
+to settle whether `0x44a` is the normal idle park or a wrong one.
+
+Baseline, device on vfio-pci immediately after a guest run, showing the identity map
+surviving the guest and the parked counters matching what the guest reported:
+
+    GRBM_STATUS 0xa0003028   GRBM_STATUS2 0x10008008   CP_STAT 0
+    CP_MEC_CNTL 0            CP_CPF_BUSY_STAT 0x40000000
+    CP_CPC_IC_BASE = 0x85f904000
+    FB_LOCATION_BASE = 0x840000000   FB_OFFSET = 0x840000000
+
+**Still to capture: the same dump with amdgpu bound and working.** Take it immediately after
+a boot, before `gpu-bind.sh`, so amdgpu has initialised the device from scratch -- do NOT
+reach it by handing a dirty GPU back with `gpu-restore.sh`, both because amdgpu would be
+re-initialising a device whose GMC the guest has rewritten, and because rebinding to
+vfio-pci afterwards is the cycle that wedges the device until a reboot.
+
 ### A hypothesis this raises about the hangs themselves
 
 Not established, and recorded as a hypothesis rather than a finding, but it fits better than

@@ -207,8 +207,27 @@ static uint32_t diagDumpDelayMs = 75000;
 // offset 0x1f904000 and 0x0f904000 is an unrelated page.
 static bool icachePrimeEnabled = false;
 
+// Probe the RLC, from boot-arg rgpurlc=1.
+//
+// The RLC is the microcontroller that primes the CP instruction caches and releases the
+// microengines on a healthy GFX10. Two facts point at it being the real blocker rather than
+// the CP registers being locked, which may be the same thing seen from the other side:
+//
+//   - milestone xl exists because the driver writes RLC_SAFE_MODE and polls its command bit
+//     for the RLC to clear it, and the RLC never does. On real silicon only a running RLC
+//     clears that bit, so that is a positive liveness test with a negative result.
+//   - RLC_STAT reads 0 in every run -- no RLC_BUSY, no RLC_GPM_BUSY, none of the three
+//     thread bits -- while RLC_CNTL reads 0x1 (RLC_ENABLE) and the PSP reports
+//     RLC_RLCS_BOOTLOAD_STATUS = 0xc0000001, autoload complete.
+//
+// So: firmware loaded, enable bit set, microcontroller apparently not running.
+static bool rlcProbeEnabled = false;
+// rgpurlc=2: additionally cycle RLC_ENABLE. Destructive -- see the comment at the cycle.
+static bool rlcProbeEnabled2 = false;
+
 static void reportCpState(const char *when);
 static void primeIcacheOnly();
+static void probeRlc();
 
 static void diagDumpThread(void *, wait_result_t) {
     // Tunable with the rgpudump=<ms> boot-arg: the whole AMD bring-up finishes well
@@ -225,6 +244,7 @@ static void diagDumpThread(void *, wait_result_t) {
     // registered, so poking the CP can no longer derail bring-up -- and the engines have
     // never executed in any run, so there is nothing to interrupt.
     if (icachePrimeEnabled) { primeIcacheOnly(); reportCpState("after-prime"); }
+    if (rlcProbeEnabled) { probeRlc(); reportCpState("after-rlc"); }
     SYSLOG("rgpu", "==== deferred diagnostics: %lu bytes ====", diagLen);
     size_t i = 0;
     unsigned n = 0;
@@ -3276,6 +3296,101 @@ static const char *const kEngineNames[] {
 //                 commands at all
 //
 // Only with both established does "PRIME never completes" mean the fetch itself fails.
+// Is a GC register actually writable? Toggle the given bits, read back, restore.
+//
+// Every "the guest cannot write X" claim in this project needs this, because a write that
+// silently does nothing is indistinguishable from a write that never left the plugin. The
+// controls that matter are the ones known to work: CP_MEC_CNTL and SCRATCH_REG0 both take
+// writes, so a failure here is a property of the register, not of the access path.
+static bool regWritable(const char *name, uint32_t reg, uint32_t xorMask) {
+    uint32_t before = fbRead(asicInfo, reg);
+    fbWrite(asicInfo, reg, before ^ xorMask);
+    uint32_t during = fbRead(asicInfo, reg);
+    fbWrite(asicInfo, reg, before);
+    bool ok = (during != before);
+    RLOG("XS:   %-22s %#010x ^%#010x -> %#010x  %s", name, before, xorMask, during,
+         ok ? "WRITABLE" : "ignored");
+    return ok;
+}
+
+static void probeRlc() {
+    if (asicInfo == nullptr) return;
+
+    RLOG("XS: RLC state ----------------------------------------------");
+    RLOG("XS:   RLC_CNTL=%#x RLC_STAT=%#x RLC_GPM_STAT=%#x RLC_SAFE_MODE=%#x",
+         fbRead(asicInfo, kGcRlcCntl), fbRead(asicInfo, kGcRlcStat),
+         fbRead(asicInfo, kGcRlcGpmStat), fbRead(asicInfo, kGcRlcSafeMode));
+    RLOG("XS:   RLC_SRM_CNTL=%#x RLC_SRM_STAT=%#x RLC_PG_CNTL=%#x RLC_CGCG=%#x",
+         fbRead(asicInfo, kGcRlcSrmCntl), fbRead(asicInfo, kGcRlcSrmStat),
+         fbRead(asicInfo, kGcRlcPgCntl), fbRead(asicInfo, kGcRlcCgcg));
+    RLOG("XS:   BOOTLOAD 0x4e8d=%#x 0x4e7e=%#x CSIB_ADDR_LO=%#x CSIB_LEN=%#x",
+         fbRead(asicInfo, kGcRlcBootStat), fbRead(asicInfo, kGcRlcBootStatSc),
+         fbRead(asicInfo, kGcRlcCsibLo), fbRead(asicInfo, kGcRlcCsibLen));
+    RLOG("XS:   GRBM_STATUS=%#x GRBM_STATUS2=%#x",
+         fbRead(asicInfo, kGcGrbmStatus), fbRead(asicInfo, kGcGrbmStatus2));
+
+    RLOG("XS: writability (CP_MEC_CNTL and SCRATCH_REG0 are the positive controls) -------");
+    bool ctlScratch = regWritable("SCRATCH_REG0", kGcScratch0, 0xa5a5a5a5u);
+    bool ctlMec     = regWritable("CP_MEC_CNTL", kGcCpMecCntl, 1u << 28);
+    bool wRlcCntl   = regWritable("RLC_CNTL", kGcRlcCntl, 1u << 3);
+    bool wSafeMode  = regWritable("RLC_SAFE_MODE", kGcRlcSafeMode, 1u << 1);
+    bool wPgCntl    = regWritable("RLC_PG_CNTL", kGcRlcPgCntl, 1u << 14);
+    bool wSrmCntl   = regWritable("RLC_SRM_CNTL", kGcRlcSrmCntl, 1u << 1);
+    RLOG("XS:   controls: scratch=%u mec_cntl=%u | RLC: cntl=%u safe_mode=%u pg=%u srm=%u",
+         ctlScratch, ctlMec, wRlcCntl, wSafeMode, wPgCntl, wSrmCntl);
+
+    // The liveness test, made explicit and timed. Upstream's enter-safe-mode writes CMD=1
+    // and waits for the RLC to clear it; only a running RLC does that.
+    uint32_t sm0 = fbRead(asicInfo, kGcRlcSafeMode);
+    fbWrite(asicInfo, kGcRlcSafeMode, sm0 | 1u);
+    uint32_t smAfterWrite = fbRead(asicInfo, kGcRlcSafeMode);
+    int ack = 0;
+    for (; ack < 50000; ack++) {
+        if ((fbRead(asicInfo, kGcRlcSafeMode) & 1u) == 0) break;
+        IODelay(1);
+    }
+    RLOG("XS: safe-mode handshake: wrote CMD=1 (%#x -> %#x), RLC %s after %dus -> %s",
+         sm0, smAfterWrite, ack < 50000 ? "ACKNOWLEDGED" : "never acknowledged", ack,
+         ack < 50000 ? "RLC IS RUNNING" : "RLC IS NOT RUNNING");
+    fbWrite(asicInfo, kGcRlcSafeMode, sm0);
+
+    // Most invasive, so last: if RLC_CNTL takes writes, try stopping and restarting the F32
+    // microcontroller and see whether anything wakes up. Bit 0 is RLC_ENABLE_F32.
+    // The RLC_ENABLE cycle is behind rgpurlc=2, because it BREAKS A WORKING RLC.
+    //
+    // Measured: RLC_STAT went 0x25 (RLC_BUSY | RLC_GPM_BUSY | THREAD_0_BUSY) -> 0x5 with
+    // RLC_ENABLE cleared -> 0x0 after setting it again, and it stayed 0 for the rest of the
+    // run. Re-enabling the F32 does not restart it; the microcontroller has to be reloaded,
+    // which only the PSP can do. So this stops the one part of the block that was working,
+    // and it did not move the microengines either.
+    if (wRlcCntl && rlcProbeEnabled2) {
+        uint32_t c0 = fbRead(asicInfo, kGcRlcCntl);
+        fbWrite(asicInfo, kGcRlcCntl, c0 & ~1u);
+        IODelay(1000);
+        uint32_t statOff = fbRead(asicInfo, kGcRlcStat);
+        fbWrite(asicInfo, kGcRlcCntl, c0 | 1u);
+        IOSleep(20);
+        uint32_t statOn = fbRead(asicInfo, kGcRlcStat);
+
+        uint32_t f2 = fbRead(asicInfo, kGcMec2InstrPntr), l2 = f2, ch2 = 0;
+        uint32_t f1 = fbRead(asicInfo, kGcMec1InstrPntr), l1 = f1, ch1 = 0;
+        for (unsigned i = 0; i < 16; i++) {
+            IODelay(20);
+            uint32_t v2 = fbRead(asicInfo, kGcMec2InstrPntr);
+            uint32_t v1 = fbRead(asicInfo, kGcMec1InstrPntr);
+            if (v2 != l2) { ch2++; l2 = v2; }
+            if (v1 != l1) { ch1++; l1 = v1; }
+        }
+        RLOG("XS: RLC_ENABLE cycle: cntl %#x -> off(stat=%#x) -> on(stat=%#x); "
+             "MEC2 %#x..%#x (%u) MEC1 %#x..%#x (%u) -> %s",
+             c0, statOff, statOn, f2, l2, ch2, f1, l1, ch1,
+             (ch1 || ch2) ? "THE CP EXECUTES" : "still not executing");
+    } else {
+        RLOG("XS: RLC_ENABLE cycle skipped (rgpurlc=2 arms it; it breaks a working RLC)");
+    }
+    RLOG("XS: RLC probe end ------------------------------------------");
+}
+
 static void primeIcacheOnly() {
     if (asicInfo == nullptr) return;
 
@@ -3741,6 +3856,16 @@ static void pluginStart() {
     } else {
         RLOG("rgpucp not set: leaving the command processor alone (correct for a device the "
              "firmware still owns)");
+    }
+    uint32_t rlp = 0;
+    if (PE_parse_boot_argn("rgpurlc", &rlp, sizeof(rlp)) && (rlp == 1 || rlp == 2)) {
+        rlcProbeEnabled = true;
+        rlcProbeEnabled2 = (rlp == 2);
+        if (rlp == 2)
+            RLOG("rgpurlc=2: the RLC_ENABLE cycle is ARMED, and it is known to stop a "
+                 "working RLC without restarting it");
+        RLOG("rgpurlc=1: the RLC will be dumped, probed for writability, and asked to "
+             "acknowledge safe mode; if RLC_CNTL is writable the F32 is restarted");
     }
     uint32_t icp = 0;
     if (PE_parse_boot_argn("rgpuic", &icp, sizeof(icp)) && icp == 1) {
