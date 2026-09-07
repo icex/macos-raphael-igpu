@@ -55,8 +55,18 @@ MKI=/etc/mkinitcpio.conf
 
 # Refuse to run if the ids are not what this script was written against -- claiming the
 # wrong device would take the display with it.
-lspci -nn | grep -q "\[${IGPU_ID}\]" || { echo "no ${IGPU_ID} present; aborting" >&2; exit 1; }
-lspci -nn | grep -q "\[${DGPU_ID}\]" || {
+#
+# Uses lspci's own -d filter and a plain string test rather than "lspci -nn | grep -q":
+# that pipeline reported a false negative for the discrete GPU on the first real run, and a
+# guard that can fail for reasons unrelated to what it is guarding is worse than no guard.
+# -d needs no regex, no pipeline and no exit-status plumbing, and both ids are echoed so a
+# future failure says what was actually seen.
+igpu_seen="$(lspci -nn -d "$IGPU_ID" || true)"
+dgpu_seen="$(lspci -nn -d "$DGPU_ID" || true)"
+echo "iGPU (${IGPU_ID}): ${igpu_seen:-<not found>}"
+echo "dGPU (${DGPU_ID}): ${dgpu_seen:-<not found>}"
+[[ -n "$igpu_seen" ]] || { echo "no ${IGPU_ID} present; aborting" >&2; exit 1; }
+[[ -n "$dgpu_seen" ]] || {
     echo "the discrete GPU ${DGPU_ID} is not present -- refusing to hand over the only GPU" >&2
     exit 1; }
 
