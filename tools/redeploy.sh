@@ -210,14 +210,33 @@ fi
 # to limit, so limit it -- and do it here rather than trusting whoever is driving to
 # remember, because the crash that cost three hours was an unattended loop.
 if (( WANT_GPU )) && (( RGPU_MAX_SECONDS > 0 )); then
-    ( sleep "$RGPU_MAX_SECONDS"
-      [[ -n "$(docker ps --format '{{.Names}}' | grep -Fx macos-sequoia || true)" ]] || exit 0
-      echo "RGPU_MAX_SECONDS=${RGPU_MAX_SECONDS} reached; stopping the VM to release the iGPU" \
-          >> run/vm-launch.log
-      docker rm -f macos-sequoia >/dev/null 2>&1
-    ) >/dev/null 2>&1 &
-    disown
-    echo "iGPU exposure capped at ${RGPU_MAX_SECONDS}s (RGPU_MAX_SECONDS=0 to disable)"
+    # Scope the cap to THIS container instance, by id.
+    #
+    # The first version matched on the name "macos-sequoia", which meant a watchdog left over
+    # from an earlier launch killed whatever VM happened to be running when it woke. That is
+    # not hypothetical: a 300 s watchdog from a run started at 17:09 tore down a different
+    # run started at 17:12 with RGPU_MAX_SECONDS=900, and the evidence was a "300 reached"
+    # line in a log file belonging to the 900 s launch. Capturing the id makes a stale
+    # watchdog exit harmlessly instead of sabotaging the next experiment.
+    cid=""
+    for _ in $(seq 1 30); do
+        cid="$(docker inspect -f '{{.Id}}' macos-sequoia 2>/dev/null || true)"
+        [[ -n "$cid" ]] && break
+        sleep 1
+    done
+    if [[ -n "$cid" ]]; then
+        ( sleep "$RGPU_MAX_SECONDS"
+          now="$(docker inspect -f '{{.Id}}' macos-sequoia 2>/dev/null || true)"
+          [[ "$now" == "$cid" ]] || exit 0     # a different run owns the name now
+          echo "RGPU_MAX_SECONDS=${RGPU_MAX_SECONDS} reached; stopping the VM to release the iGPU" \
+              >> run/vm-launch.log
+          docker rm -f "$cid" >/dev/null 2>&1
+        ) >/dev/null 2>&1 &
+        disown
+        echo "iGPU exposure capped at ${RGPU_MAX_SECONDS}s for ${cid:0:12} (RGPU_MAX_SECONDS=0 to disable)"
+    else
+        echo "WARNING: could not identify the container; exposure is NOT capped" >&2
+    fi
 fi
 # The container is recreated on every boot, so the agent command channel and the file
 # server die with it. Without this, ./gx reports "no response from guest agent" and the

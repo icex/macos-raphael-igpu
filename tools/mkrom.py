@@ -17,6 +17,9 @@ Layout requirements were read out of the KDK 24G830 binary, not guessed:
 import struct, sys, argparse
 
 MDT_VRAM_INFO_INDEX = 28          # atom_master_list_of_data_tables_v2_1
+MDT_DISPLAY_OBJECT_INDEX = 22     # displayobjectinfo. NOT 16 -- getting this index wrong once
+                                  # produced the entirely false conclusion that this VBIOS has
+                                  # no display object info table at all.
 MDT_PSP_DIR_INDEX   = 9           # 'sw_datatable9' -- Apple reads the PSP directory from HERE,
                                   # not from ATOM_ROM_HEADER.pspdirtableoffset, which it never loads.
 ROM_HDR_PTR         = 0x48
@@ -28,6 +31,8 @@ ap.add_argument('-o', '--output', default='run/gpu-patched.rom')
 ap.add_argument('--psp-entries', type=int, default=0, help='PSP directory entry count')
 ap.add_argument('--mem-type',  type=lambda s:int(s,0), default=0x70, help='ATOM_DGPU_VRAM_TYPE (0x70=GDDR6)')
 ap.add_argument('--chan-num',  type=int, default=8)
+ap.add_argument('--keep-dead-display-paths', action='store_true',
+                help='do NOT drop display paths whose device_tag is 0 (see fix below)')
 ap.add_argument('--chan-width',type=int, default=4, help='width = chan_num << chan_width')
 ap.add_argument('--mem-size',  type=int, default=8192, help='per-module memory size')
 ap.add_argument('--modules',   type=int, default=1)
@@ -81,6 +86,60 @@ assert vi_off < 0x10000 and pd_off < 0x10000, 'table offsets must fit u16 master
 assert a.total <= 0x10000, 'Apple caps the ATOM image at 64 KiB (validateAtomBiosImage: img[2] <= 128)'
 assert pd_off + PD_LEN <= a.total and vi_off + VI_LEN <= a.total, 'table runs past the declared image size'
 
+# ---- drop display paths with device_tag == 0 --------------------------------
+#
+# Apple's framebuffer kext refuses a path with no device tag:
+#
+#   ATOM: AmdAtomObjectInfo_V1_4::populateConnectorEntry(atom_display_object_path_v2 *,
+#         AtomConnectorEntry &) const: ASSERT(0 != object->device_tag)
+#
+# and then every AmdRadeonFramebuffer reports "Driver is offline", so nothing reaches a
+# screen -- not the emulated display, not a monitor physically attached to the iGPU.
+#
+# This VBIOS declares six paths, and they match amdgpu's connector list exactly:
+#
+#   path[0] objid 0x340c HDMI_TYPE_A enum 4  device_tag 0x0400 DFP3  -> amdgpu HDMI-A-3
+#   path[1] objid 0x0000 (empty)             device_tag 0x0000       -> nothing
+#   path[2] objid 0x3113 DISPLAYPORT enum 1  device_tag 0x0008 DFP1  -> amdgpu DP-3
+#   path[3] objid 0x3213 DISPLAYPORT enum 2  device_tag 0x0080 DFP6  -> amdgpu DP-4
+#   path[4] objid 0x3313 DISPLAYPORT enum 3  device_tag 0x0200 CV2   -> amdgpu DP-5
+#   path[5] objid 0x7103 type 7              device_tag 0x0000       -> amdgpu Writeback-2
+#
+# supporteddevices is 0x0688 = 0x008|0x080|0x200|0x400, i.e. exactly the four real tags, so
+# the firmware itself does not count the two tagless entries as devices. amdgpu tolerates
+# them; Apple asserts on them. Dropping them leaves the four real connectors.
+#
+# The path array is compacted in place and number_of_path reduced. Everything after the
+# array -- the display and encoder records -- is left exactly where it is, because the
+# offsets inside each path entry point at those records absolutely; moving whole 16-byte
+# entries keeps those references valid, and the few bytes freed at the end of the array
+# simply go unused.
+if not a.keep_dead_display_paths:
+    do = struct.unpack_from('<H', d, mdt + 4 + MDT_DISPLAY_OBJECT_INDEX*2)[0]
+    assert do, 'displayobjectinfo master-data entry is 0 -- wrong index, or a different VBIOS'
+    _, dfmt, dcont = struct.unpack_from('<HBB', d, do)
+    assert (dfmt, dcont) == (1, 4), f'expected display_object_info v1.4, got v{dfmt}.{dcont}'
+    supported, npath = struct.unpack_from('<HB', d, do + 4)
+    PATH_LEN = 16                 # sizeof(atom_display_object_path_v2): 7 u16 + 2 u8
+    kept, dropped, tags = [], [], 0
+    for i in range(npath):
+        e = do + 8 + i*PATH_LEN
+        entry = bytes(d[e:e+PATH_LEN])
+        objid, devtag = struct.unpack_from('<H', entry, 0)[0], struct.unpack_from('<H', entry, 12)[0]
+        (kept if devtag else dropped).append((i, objid, devtag, entry))
+        if devtag: tags |= devtag
+    assert kept, 'every display path has device_tag 0 -- refusing to leave an empty table, ' \
+                 'Apple also asserts ASSERT(0 != connectorCount)'
+    for n, (_, _, _, entry) in enumerate(kept):
+        d[do + 8 + n*PATH_LEN : do + 8 + (n+1)*PATH_LEN] = entry
+    d[do + 6] = len(kept)                                  # number_of_path
+    struct.pack_into('<H', d, do + 4, tags)                # supporteddevices
+    disp_note = (f"display paths -> {do:#06x}  kept {len(kept)}/{npath} "
+                 f"(dropped {', '.join(f'path[{i}] objid={o:#06x}' for i,o,_,_ in dropped) or 'none'}), "
+                 f"supporteddevices {supported:#06x} -> {tags:#06x}")
+else:
+    disp_note = 'display paths -> left alone (--keep-dead-display-paths)'
+
 # ---- rewire -----------------------------------------------------------------
 struct.pack_into('<H', d, mdt + 4 + MDT_VRAM_INFO_INDEX*2, vi_off)
 struct.pack_into('<H', d, mdt + 4 + MDT_PSP_DIR_INDEX*2,   pd_off)
@@ -94,5 +153,6 @@ print(f"in  {a.input}: {old} bytes, rom hdr @{hdr:#x}, master data table @{mdt:#
 print(f"vram_info   -> {vi_off:#06x}  v2.6  modules={a.modules} type={a.mem_type:#04x} "
       f"width={a.chan_num<<a.chan_width} size={a.mem_size}")
 print(f"psp dir     -> {pd_off:#06x}  v2.1  entries={a.psp_entries}")
+print(disp_note)
 print(f"out {a.output}: {len(d)} bytes, size byte={d[2]}, checksum byte={d[CKSUM_OFF]:#04x}, "
       f"sum%256={sum(d[:a.total])%256}")
