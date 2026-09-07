@@ -102,6 +102,7 @@ enum : uint32_t {
     XI = 1u << 28,  // tell PowerPlay it is unsupported instead of letting it power down
     XJ = 1u << 29,  // trace the accelerator's hardware power-up chain
     XK = 1u << 30,  // start the RLC microcontroller before the engines power up
+    XL = 1u << 31,  // accept the RLC firmware autoload on BOOTLOAD_COMPLETE alone
 };
 
 struct RPatch {
@@ -258,6 +259,10 @@ static constexpr size_t kOffPspTmrUnload  = 0x52ee7;   // _psp_tmr_unload
 static constexpr size_t kOffCosRelMemHnd  = 0xb3670;   // AmdTtlServices::cosReleaseMemoryHandle
 static constexpr size_t kOffSmuInitFnPtrs = 0x72b33;   // _smu_init_function_pointer_list
 static constexpr size_t kOffSmuUpdFnPtrs  = 0x73a2f;   // _smu_update_function_pointers (called, not routed)
+static constexpr size_t kOffGcAutoloadDone = 0xf5b1;   // _gc_fw_autoload_is_completed
+static constexpr size_t kOffGcCheckRegEq   = 0xb3a0;   // _gc_check_register_equal_ext
+static constexpr size_t kOffSdmaAutoloadDone = 0x6028c; // _sdma_5_2_fw_autoload_is_completed
+static constexpr size_t kOffGcCgsWrite2    = 0xb519;   // _gc_cgs_write_register_ext2 (called, not routed)
 
 // AMDRadeonX6000Framebuffer, not HWLibs.
 static constexpr size_t kOffFbXgmiConfig = 0x3b3e0;    // AmdAsicInfoNavi2::populateXGmiConfig [fb]
@@ -399,6 +404,9 @@ static mach_vm_address_t orgGvmGetIpFn {};
 static mach_vm_address_t orgFwDirGet {};
 static mach_vm_address_t orgSmuFwFile {};
 static mach_vm_address_t orgSmuInitFnPtrs {};
+static mach_vm_address_t orgGcAutoloadDone {};
+static mach_vm_address_t orgGcCheckRegEq {};
+static mach_vm_address_t orgSdmaAutoloadDone {};
 static mach_vm_address_t orgFbXgmiConfig {};
 static mach_vm_address_t orgHwMemVram {};
 static mach_vm_address_t orgHwMemEnable {};
@@ -436,6 +444,112 @@ static uint32_t fbRead(void *self, uint32_t idx) {
     auto rd = reinterpret_cast<uint32_t (*)(void *, uint32_t)>(vt[0x140 / 8]);
     return rd(obj, idx);
 }
+
+// SOC15 register offsets are base_table[BASE_IDX] + reg, and HWLibs uses exactly that:
+// gc_reg_offset(table, reg, base_idx) is reg + table[base_idx] (0xb197), and
+// gc_enter_rlc_safe_mode_10_3 passes RLC_CNTL 0x4c00 with base_idx 1. Getting this wrong
+// is silent: reads land on some other register and come back plausible. RLC_* and
+// SCRATCH_REG0 are BASE_IDX 1; GRBM/CP/GCVM/GCMC are BASE_IDX 0.
+static constexpr uint32_t kGcSeg0 = 0x1260;
+static constexpr uint32_t kGcSeg1 = 0xa000;
+
+static constexpr uint32_t kGcGrbmStatus  = kGcSeg0 + 0x0da4;
+static constexpr uint32_t kGcGrbmStatus2 = kGcSeg0 + 0x0da2;
+static constexpr uint32_t kGcCpStat      = kGcSeg0 + 0x0f40;
+static constexpr uint32_t kGcCpMeCntl    = kGcSeg0 + 0x0f56;
+static constexpr uint32_t kGcCpMecCntl   = kGcSeg0 + 0x0f55;
+static constexpr uint32_t kGcRlcCntl     = kGcSeg1 + 0x4c00;
+static constexpr uint32_t kGcRlcStat     = kGcSeg1 + 0x4c04;
+static constexpr uint32_t kGcRlcBootStat = kGcSeg1 + 0x4e8d;   // RLC_RLCS_BOOTLOAD_STATUS
+// The same register, at the offset the GC 10.3.x parts actually use. Upstream carries
+// both: gfx_v10_0.c defines mmRLC_RLCS_BOOTLOAD_STATUS_Sienna_Cichlid = 0x4e7e (BASE_IDX 1)
+// as a file-local and reads it, not the 0x4e8d in gc_10_3_0_offset.h, for GC 10.3.0/1/3/4/
+// 5/6/7 -- i.e. for every Navi 2x and every RDNA2 APU, this chip included.
+static constexpr uint32_t kGcRlcBootStatSc = kGcSeg1 + 0x4e7e;
+static constexpr uint32_t kGcRlcGpmStat  = kGcSeg1 + 0x4e6e;
+static constexpr uint32_t kGcRlcSafeMode = kGcSeg1 + 0x4ca0;
+static constexpr uint32_t kGcCpfStatus   = kGcSeg0 + 0x0e27;
+static constexpr uint32_t kGcCpcStatus   = kGcSeg0 + 0x0e24;
+static constexpr uint32_t kGcVmFaultSts  = kGcSeg0 + 0x15c8;   // GCVM_L2_PROTECTION_FAULT_STATUS
+static constexpr uint32_t kGcVmFaultLo   = kGcSeg0 + 0x15c9;
+static constexpr uint32_t kGcVmFaultHi   = kGcSeg0 + 0x15ca;
+static constexpr uint32_t kGcHqdActive   = kGcSeg0 + 0x1fab;
+static constexpr uint32_t kGcRlcCgcg     = kGcSeg1 + 0x4c49;   // RLC_CGCG_CGLS_CTRL
+static constexpr uint32_t kGcRlcPgCntl   = kGcSeg1 + 0x4c43;   // RLC_PG_CNTL
+static constexpr uint32_t kGcScratch0    = kGcSeg1 + 0x2040;   // SCRATCH_REG0
+static constexpr uint32_t kGcGrbmGfxCntl = kGcSeg0 + 0x0dc2;   // GRBM_GFX_CNTL
+static constexpr uint32_t kGcVmFaultCntl = kGcSeg0 + 0x15c4;   // GCVM_L2_PROTECTION_FAULT_CNTL, bit 0 clears the latched status
+// The KIQ lives on a compute pipe, and CP_HQD_* are per-queue: GRBM_GFX_CNTL selects
+// which one is visible (PIPEID bits 0-1, MEID bits 2-3, VMID 4-7, QUEUEID 8-10), the
+// same thing upstream's nv_grbm_select does.
+static constexpr uint32_t kGcMecHeaderDump = kGcSeg0 + 0x0e2e;   // CP_MEC_ME1_HEADER_DUMP
+static constexpr uint32_t kGcMecDbLower    = kGcSeg0 + 0x1dfc;
+static constexpr uint32_t kGcMecDbUpper    = kGcSeg0 + 0x1dfd;
+static constexpr uint32_t kGcHqdPqBase     = kGcSeg0 + 0x1fb1;
+static constexpr uint32_t kGcHqdPqRptr     = kGcSeg0 + 0x1fb3;
+static constexpr uint32_t kGcHqdPqDbCtl    = kGcSeg0 + 0x1fb8;
+static constexpr uint32_t kGcHqdPqWptrLo   = kGcSeg0 + 0x1fdf;
+static constexpr uint32_t kGcHqdDequeue    = kGcSeg0 + 0x1fc1;   // CP_HQD_DEQUEUE_REQUEST
+static constexpr uint32_t kGcGrbmSoftReset = kGcSeg0 + 0x0da8;   // GRBM_SOFT_RESET
+
+// The command processor's instruction RAM, readable back through the same address/data
+// pair the direct-load path writes it with. On the PSP load path nothing in the driver
+// writes these -- the RLC's bootloader copies each microengine's ucode out of the
+// PSP-verified copy in the TMR -- so reading them answers the one question the queue
+// dumps cannot: is there any microcode in the CP at all. All BASE_IDX 1.
+static constexpr uint32_t kGcPfpUcodeAddr  = kGcSeg1 + 0x5814;
+static constexpr uint32_t kGcPfpUcodeData  = kGcSeg1 + 0x5815;
+static constexpr uint32_t kGcMeRamRaddr    = kGcSeg1 + 0x5816;
+static constexpr uint32_t kGcMeRamData     = kGcSeg1 + 0x5817;
+static constexpr uint32_t kGcCeUcodeAddr   = kGcSeg1 + 0x5818;
+static constexpr uint32_t kGcCeUcodeData   = kGcSeg1 + 0x5819;
+static constexpr uint32_t kGcMec1UcodeAddr = kGcSeg1 + 0x581a;
+static constexpr uint32_t kGcMec1UcodeData = kGcSeg1 + 0x581b;
+static constexpr uint32_t kGcMec2UcodeAddr = kGcSeg1 + 0x581c;
+static constexpr uint32_t kGcMec2UcodeData = kGcSeg1 + 0x581d;
+static constexpr uint32_t kGcMec2HeaderDump = kGcSeg0 + 0x0e2f;
+
+// The rest of the HQD, so a queue dump says which VMID it runs under and where its
+// MQD is, not just that it is active.
+static constexpr uint32_t kGcHqdPqBaseHi   = kGcSeg0 + 0x1fb2;
+static constexpr uint32_t kGcHqdVmid       = kGcSeg0 + 0x1fac;
+static constexpr uint32_t kGcHqdPqControl  = kGcSeg0 + 0x1fba;
+static constexpr uint32_t kGcHqdPqWptrHi   = kGcSeg0 + 0x1fe0;
+static constexpr uint32_t kGcMqdBase       = kGcSeg0 + 0x1fa9;
+static constexpr uint32_t kGcMqdBaseHi     = kGcSeg0 + 0x1faa;
+static constexpr uint32_t kGcHqdPersist    = kGcSeg0 + 0x1fad;   // CP_HQD_PERSISTENT_STATE
+
+// The two switches that decide whether a doorbell write ever reaches a MEC pipe:
+// CP_PQ_STATUS.DOORBELL_ENABLE (bit 0) gates the whole aperture at the CP, and
+// CP_PQ_WPTR_POLL_CNTL.EN picks the alternative -- polling each queue's write pointer
+// out of memory. Upstream sets the first in gfx_v10_0_enable_doorbell_aperture; if
+// Apple's Navi 2x path leaves it clear on this part, every doorbell is dropped and the
+// symptom is exactly what we see: an active HQD whose MEC fetches nothing.
+static constexpr uint32_t kGcCpPqStatus    = kGcSeg0 + 0x1e58;
+static constexpr uint32_t kGcCpPqWptrPoll  = kGcSeg0 + 0x1e23;
+
+// GFXHUB address translation. Apple programs its GMC through the MMHUB copies, which
+// on this part read back unprogrammed, so these are the registers the graphics core
+// actually walks. All BASE_IDX 0.
+static constexpr uint32_t kGcVmSysApLow    = kGcSeg0 + 0x1701;
+static constexpr uint32_t kGcVmSysApHigh   = kGcSeg0 + 0x1702;
+static constexpr uint32_t kGcVmAgpBase     = kGcSeg0 + 0x1700;
+static constexpr uint32_t kGcVmAgpBot      = kGcSeg0 + 0x16ff;
+static constexpr uint32_t kGcVmAgpTop      = kGcSeg0 + 0x16fe;
+static constexpr uint32_t kGcVmCtx0Cntl    = kGcSeg0 + 0x15fc;
+static constexpr uint32_t kGcVmCtx0PtbLo   = kGcSeg0 + 0x1667;
+static constexpr uint32_t kGcVmCtx0PtbHi   = kGcSeg0 + 0x1668;
+static constexpr uint32_t kGcVmCtx0Start   = kGcSeg0 + 0x1687;
+static constexpr uint32_t kGcVmCtx0End     = kGcSeg0 + 0x16a7;
+static constexpr uint32_t kGcVmCtx1Cntl    = kGcSeg0 + 0x15fd;
+static constexpr uint32_t kGcVmCtx1PtbLo   = kGcSeg0 + 0x1669;
+
+// Defined further down; they read the constants above.
+static void dumpGfxState(const char *when);
+static void dumpMecQueues(const char *when);
+static void dumpCpUcode(const char *when);
+static void dumpGfxHubVm(const char *when);
+
 static mach_vm_address_t orgPpPowerUp {};
 static mach_vm_address_t fbBase {};
 static mach_vm_address_t orgPspRegRead {};
@@ -865,6 +979,186 @@ static uint32_t wrapSmuFwFile(void *smu, void *out) {
 // check_fw_status. smu_update_function_pointers does not clear the slot; nothing else
 // in the SMU context reads it. So clear it here and dummy_smu_internal_hw_init returns
 // 0 on its own (0x73952: xor r14d, r14d).
+// The SDMA half of the same gate. With GC HW_INIT through, hw_init fails one client
+// later at SDMA, on a predicate that is one register read:
+//
+//     6028c: mov esi, 0x4e8d ; mov edx, 1 ; mov ecx, 0xb ; call sdma_cgs_read_register_ext2
+//     602aa: shr eax, 0x1f
+//
+// i.e. bit 31 of RLC_RLCS_BOOTLOAD_STATUS -- the same latch the GC gate wanted, read
+// through the SDMA client instead. Upstream's sdma_v5_2_start has no such wait at all:
+// on the PSP load path it goes straight to sdma_v5_2_enable. Answer it the same way the
+// GC gate is answered, from the same evidence: a live RLC.
+static uint8_t wrapSdmaAutoloadDone(void *ctx) {
+    auto r = FunctionCast(wrapSdmaAutoloadDone, orgSdmaAutoloadDone)(ctx);
+    if ((mask & XL) == 0 || r != 0) return r;
+    if (asicInfo == nullptr || fbRead(asicInfo, kGcRlcStat) != 0x25) return r;
+    static bool told = false;
+    if (!told) { told = true;
+        RLOG("XL: SDMA autoload gate reads the same BOOTLOAD_STATUS latch (still %#x); "
+             "RLC_STAT=0x25, so reporting complete as upstream's sdma_v5_2_start assumes",
+             fbRead(asicInfo, kGcRlcBootStat));
+    }
+    return 1;
+}
+
+// Give up on a compute queue whose dequeue request never retires, the way upstream does.
+//
+// With the autoload gate satisfied, GC HW_INIT gets one block further and dies in
+// _gc_create_kiq_queue_10_3. That function is a faithful copy of upstream's
+// gfx_v10_0_kiq_init_register: clear CP_PQ_WPTR_POLL_CNTL, clear DOORBELL_EN in
+// CP_HQD_PQ_DOORBELL_CONTROL, and if CP_HQD_ACTIVE says the selected queue is live,
+// write CP_HQD_DEQUEUE_REQUEST = 1 and wait for CP_HQD_ACTIVE bit 0 to fall --
+//
+//     15454: mov qword [pred + 0xc], 0x1     mask 1, shift 0
+//     1545d: mov dword [pred + 0x14], 0x0    expected 0
+//     15473: mov ecx, 0x1f4                  500 ms
+//
+// -- and here it never falls. Measured by hand earlier through this plugin's own
+// accessor: every active HQD reports "active=1 after 2000us". CP_HQD_DEQUEUE_REQUEST is
+// serviced by MEC firmware, which has to write the queue's MQD back before it can
+// retire, so a queue whose MQD or ring lies at an address the GPU cannot translate can
+// never finish dequeuing. Every one of these HQDs points at a ring at 0xFFBFEA0000 --
+// outside this part's 0xf400000000-0xf41fffffff carveout, and exactly the address in the
+// latched GCVM fault -- so that is the shape of it.
+//
+// Upstream anticipates this and does not treat it as fatal:
+//
+//     if (j == adev->usec_timeout) {
+//             DRM_DEBUG("KIQ dequeue request failed.\n");
+//             /* Manual disable if dequeue request times out */
+//             WREG32_SOC15(GC, 0, mmCP_HQD_ACTIVE, 0);
+//     }
+//
+// It then writes the whole HQD register set anyway, which overwrites the dead queue.
+// Apple keeps the wait and drops the fallback, so a stuck HQD fails hw_init instead.
+// Restore the fallback: after enough polls to be sure the queue really is wedged, clear
+// CP_HQD_ACTIVE through TTL's own register path -- _gc_cgs_write_register_ext2 with the
+// GC client id and the selector TTL has already programmed -- and answer yes.
+//
+// Deliberately narrow: only the (CP_HQD_ACTIVE, mask 1, shift 0, expect 0) predicate is
+// touched, so the same helper's other callers -- RLC safe mode and RLC logging setup --
+// keep timing out honestly.
+static uint8_t wrapGcCheckRegEq(void *arg) {
+    auto r = FunctionCast(wrapGcCheckRegEq, orgGcCheckRegEq)(arg);
+    if ((mask & XL) == 0 || r != 0 || arg == nullptr) return r;
+    auto a = reinterpret_cast<uint8_t *>(arg);
+    void *ctx      = *reinterpret_cast<void **>(a);
+    uint32_t reg   = *reinterpret_cast<uint32_t *>(a + 0x08);
+    uint32_t msk   = *reinterpret_cast<uint32_t *>(a + 0x0c);
+    uint8_t  shift = *(a + 0x10);
+    uint32_t want  = *reinterpret_cast<uint32_t *>(a + 0x14);
+    if (msk != 1 || shift != 0 || want != 0) return r;
+
+    // reg is already an absolute SOC15 index (gc_reg_offset has been applied), so it can
+    // be compared against this file's constants directly.
+    //   RLC_SAFE_MODE  -- the RLC has not acknowledged the safe-mode request. Upstream
+    //                     proceeds anyway; there is nothing to clear by hand, the whole
+    //                     handshake is advisory.
+    //   CP_HQD_ACTIVE  -- the dequeue never retired. Upstream clears CP_HQD_ACTIVE itself
+    //                     and carries on to write the rest of the HQD, which replaces the
+    //                     dead queue outright.
+    bool isSafeMode = reg == kGcRlcSafeMode;
+    bool isHqd      = reg == kGcHqdActive;
+    if (!isSafeMode && !isHqd) return r;
+
+    // Poll for a while first: both predicates are the normal success path for hardware
+    // that does answer, and conceding early would cut short a wait about to succeed.
+    static uint32_t lastReg = 0;
+    static unsigned polls = 0;
+    if (reg != lastReg) { lastReg = reg; polls = 0; }
+    if (++polls < 64) return r;
+    polls = 0;
+
+    if (isHqd && hwlibsBase != 0 && ctx != nullptr) {
+        auto wr = reinterpret_cast<uint32_t (*)(void *, uint32_t, uint32_t, uint32_t, uint32_t)>(
+                      hwlibsBase + kOffGcCgsWrite2);
+        wr(ctx, reg, 0, 0xb, 1);
+    }
+    static uint32_t told = 0;
+    if ((told & reg) != reg) {
+        told |= reg;
+        if (isHqd)
+            RLOG("XL: CP_HQD_DEQUEUE_REQUEST never retired; wrote CP_HQD_ACTIVE=0 "
+                 "(upstream's manual disable). ring=%#x_%08x doorbell_ctl=%#x",
+                 fbRead(asicInfo, kGcHqdPqBaseHi), fbRead(asicInfo, kGcHqdPqBase),
+                 fbRead(asicInfo, kGcHqdPqDbCtl));
+        else
+            RLOG("XL: RLC never acknowledged safe mode (RLC_SAFE_MODE=%#x, RLC_CNTL=%#x, "
+                 "RLC_STAT=%#x); proceeding as upstream does",
+                 fbRead(asicInfo, kGcRlcSafeMode), fbRead(asicInfo, kGcRlcCntl),
+                 fbRead(asicInfo, kGcRlcStat));
+    }
+    return 1;
+}
+
+// Accept the RLC firmware autoload as complete on BOOTLOAD_COMPLETE alone.
+//
+// GC HW_INIT dies here. _gc_check_ucode_loaded_10_1 spins on this predicate for 50 ms
+// and, when it never becomes true, asserts (GC event 0xc0100206) -- after which
+// _gc_check_register_equal_ext times out too and ttl_hw_init fails with
+// "GC init/power-up failed". The predicate reads two registers, both cached as
+// gc_reg_offset() results at ttl+0xb38 and +0xb3c by the GC context builder:
+//
+//     [ctx+0xb38] = gc_reg_offset(0x4c04, base_idx 1) = RLC_STAT
+//     [ctx+0xb3c] = gc_reg_offset(0x4e8d, base_idx 1) = RLC_RLCS_BOOTLOAD_STATUS
+//
+// and requires BOOTLOAD_STATUS to have BOOTLOAD_COMPLETE (bit 31) -- plus bit 0 unless
+// [ctx+0x326] -- AND RLC_STAT to equal exactly 0x25 on Navi 2x ([ctx+0x329] set):
+// RLC_BUSY | RLC_GPM_BUSY | RLC_THREAD_0_BUSY. Upstream's
+// gfx_v10_0_wait_for_rlc_autoload_complete asks for BOOTLOAD_COMPLETE and CP_STAT == 0
+// and nothing else; the RLC_STAT clause is Apple's own addition, and it is a liveness
+// sample rather than a completion latch. On this part BOOTLOAD_STATUS reads 0xc0000001
+// -- complete -- while RLC_STAT reads 0, so the exact-match clause is what fails, and
+// whether it ever happens to read 0x25 during the 50 ms window is a race: the same
+// binary reached the accelerator on an earlier host boot and fails here on a fresh one.
+//
+// So: run Apple's predicate, and if it says no, fall back to upstream's condition. Log
+// both registers either way, because if the RLC threads really are idle then the CP has
+// no microcode and the KIQ timeout downstream is the same root cause one block later.
+static uint8_t wrapGcAutoloadDone(void *ctx) {
+    auto r = FunctionCast(wrapGcAutoloadDone, orgGcAutoloadDone)(ctx);
+    if ((mask & XL) == 0 || r != 0 || ctx == nullptr) return r;
+    static unsigned logged = 0;
+    uint32_t rlcStat = 0xdeadbeef, bootStat = 0xdeadbeef, bootStatSc = 0xdeadbeef;
+    uint32_t cpStat = 0xdeadbeef;
+    if (asicInfo != nullptr) {
+        rlcStat    = fbRead(asicInfo, kGcRlcStat);
+        bootStat   = fbRead(asicInfo, kGcRlcBootStat);
+        bootStatSc = fbRead(asicInfo, kGcRlcBootStatSc);
+        cpStat     = fbRead(asicInfo, kGcCpStat);
+    }
+    // Measured, not assumed. At this point in GC HW_INIT:
+    //
+    //     RLC_STAT                  = 0x25   RLC_BUSY | RLC_GPM_BUSY | RLC_THREAD_0_BUSY
+    //     RLC_RLCS_BOOTLOAD_STATUS  = 0      at 0x4e8d (Apple's offset)
+    //                               = 0      at 0x4e7e (the Sienna Cichlid offset upstream
+    //                                        uses for every GC 10.3.x, this chip included)
+    //     CP_STAT                   = 0x84028000
+    //     PFP/ME/CE/MEC1/MEC2 instruction RAM: real instruction words, not zeroes
+    //
+    // So the RLC's threads are running and the command processor's microcode is in place --
+    // this PSP loads it whether or not GFX_CMD_ID_AUTOLOAD_RLC is accepted, and here it is
+    // refused with 0xffff000d, TEE_ERROR_BUSY. BOOTLOAD_COMPLETE is a latch the RLC's own
+    // backdoor-autoload bootloader sets; when the PSP places the firmware itself, nothing
+    // sets it, and neither offset ever reads back complete. Apple's gate is therefore
+    // unsatisfiable on this part, and waiting longer would not help.
+    //
+    // Treat a live RLC as the completion signal, which is what the register is standing in
+    // for. Deliberately not unconditional: if RLC_STAT ever stops reading 0x25 the answer
+    // goes back to Apple's, so a genuinely dead RLC still fails here rather than one block
+    // later with no explanation.
+    bool complete = ((bootStat | bootStatSc) & 0x80000000u) != 0 || rlcStat == 0x25;
+    if (logged < 3) {
+        logged++;
+        RLOG("XL: autoload check: RLC_STAT=%#x (Apple wants 0x25) BOOTLOAD_STATUS "
+             "0x4e8d=%#x 0x4e7e=%#x CP_STAT=%#x -> %s", rlcStat, bootStat, bootStatSc,
+             cpStat, complete ? "complete (RLC threads live)" : "not complete");
+        dumpCpUcode("gc hw_init");
+    }
+    return complete ? 1 : r;
+}
+
 static uint32_t wrapSmuInitFnPtrs(void *smu, void *a, void *b) {
     auto r = FunctionCast(wrapSmuInitFnPtrs, orgSmuInitFnPtrs)(smu, a, b);
     if ((mask & XF) != 0 && smu != nullptr) {
@@ -1088,6 +1382,21 @@ static void installDiagnostics(KernelPatcher &patcher, mach_vm_address_t base) {
                       reinterpret_cast<mach_vm_address_t>(wrapSmuInitFnPtrs), true);
     RLOG("route smu_init_function_pointer_list -> %s (org=0x%llx)",
          orgSmuInitFnPtrs ? "ok" : "FAILED", orgSmuInitFnPtrs);
+    patcher.clearError();
+    orgGcAutoloadDone = patcher.routeFunction(base + kOffGcAutoloadDone,
+                      reinterpret_cast<mach_vm_address_t>(wrapGcAutoloadDone), true);
+    RLOG("route gc_fw_autoload_is_completed -> %s (org=0x%llx)",
+         orgGcAutoloadDone ? "ok" : "FAILED", orgGcAutoloadDone);
+    patcher.clearError();
+    orgGcCheckRegEq = patcher.routeFunction(base + kOffGcCheckRegEq,
+                      reinterpret_cast<mach_vm_address_t>(wrapGcCheckRegEq), true);
+    RLOG("route gc_check_register_equal_ext -> %s (org=0x%llx)",
+         orgGcCheckRegEq ? "ok" : "FAILED", orgGcCheckRegEq);
+    patcher.clearError();
+    orgSdmaAutoloadDone = patcher.routeFunction(base + kOffSdmaAutoloadDone,
+                      reinterpret_cast<mach_vm_address_t>(wrapSdmaAutoloadDone), true);
+    RLOG("route sdma_5_2_fw_autoload_is_completed -> %s (org=0x%llx)",
+         orgSdmaAutoloadDone ? "ok" : "FAILED", orgSdmaAutoloadDone);
     patcher.clearError();
     orgFwDirGet = patcher.routeFunction(base + kOffFwDirGet,
                       reinterpret_cast<mach_vm_address_t>(wrapFwDirGet), true);
@@ -1377,6 +1686,9 @@ static uint32_t wrapPm4Mqd(void *self, uint32_t ring) {
 static uint32_t wrapKiqStart(void *self, uint64_t a, uint64_t b, void *spec, uint32_t *out) {
     auto r = FunctionCast(wrapKiqStart, orgKiqStart)(self, a, b, spec, out);
     RLOG("XJ:   PM4 startKIQ(%#llx, %#llx) -> %#x (0 is success)", a, b, r);
+    // startKIQ is where Apple's own KIQ HQD is written, so this is the first moment the
+    // walk can distinguish Apple's queue from the ones TTL left behind.
+    if (mask & XJ) dumpMecQueues("after startKIQ");
     return r;
 }
 
@@ -1403,35 +1715,6 @@ static uint32_t wrapKiqMapQ(void *self, uint32_t ring, uint32_t a, uint64_t b,
 // "Stamp Timeout for KIQ Submission!") never reach the serial console, so log the two
 // steps directly, and dump the graphics core's own status registers alongside -- if the
 // command processor is not executing, GRBM_STATUS and CP_STAT say so.
-// SOC15 register offsets are base_table[BASE_IDX] + reg, and HWLibs uses exactly that:
-// gc_reg_offset(table, reg, base_idx) is reg + table[base_idx] (0xb197), and
-// gc_enter_rlc_safe_mode_10_3 passes RLC_CNTL 0x4c00 with base_idx 1. Getting this wrong
-// is silent: reads land on some other register and come back plausible. RLC_* and
-// SCRATCH_REG0 are BASE_IDX 1; GRBM/CP/GCVM/GCMC are BASE_IDX 0.
-static constexpr uint32_t kGcSeg0 = 0x1260;
-static constexpr uint32_t kGcSeg1 = 0xa000;
-
-static constexpr uint32_t kGcGrbmStatus  = kGcSeg0 + 0x0da4;
-static constexpr uint32_t kGcGrbmStatus2 = kGcSeg0 + 0x0da2;
-static constexpr uint32_t kGcCpStat      = kGcSeg0 + 0x0f40;
-static constexpr uint32_t kGcCpMeCntl    = kGcSeg0 + 0x0f56;
-static constexpr uint32_t kGcCpMecCntl   = kGcSeg0 + 0x0f55;
-static constexpr uint32_t kGcRlcCntl     = kGcSeg1 + 0x4c00;
-static constexpr uint32_t kGcRlcStat     = kGcSeg1 + 0x4c04;
-static constexpr uint32_t kGcRlcBootStat = kGcSeg1 + 0x4e8d;   // RLC_RLCS_BOOTLOAD_STATUS
-static constexpr uint32_t kGcRlcGpmStat  = kGcSeg1 + 0x4e6e;
-static constexpr uint32_t kGcRlcSafeMode = kGcSeg1 + 0x4ca0;
-static constexpr uint32_t kGcCpfStatus   = kGcSeg0 + 0x0e27;
-static constexpr uint32_t kGcCpcStatus   = kGcSeg0 + 0x0e24;
-static constexpr uint32_t kGcVmFaultSts  = kGcSeg0 + 0x15c8;   // GCVM_L2_PROTECTION_FAULT_STATUS
-static constexpr uint32_t kGcVmFaultLo   = kGcSeg0 + 0x15c9;
-static constexpr uint32_t kGcVmFaultHi   = kGcSeg0 + 0x15ca;
-static constexpr uint32_t kGcHqdActive   = kGcSeg0 + 0x1fab;
-static constexpr uint32_t kGcRlcCgcg     = kGcSeg1 + 0x4c49;   // RLC_CGCG_CGLS_CTRL
-static constexpr uint32_t kGcRlcPgCntl   = kGcSeg1 + 0x4c43;   // RLC_PG_CNTL
-static constexpr uint32_t kGcScratch0    = kGcSeg1 + 0x2040;   // SCRATCH_REG0
-static constexpr uint32_t kGcGrbmGfxCntl = kGcSeg0 + 0x0dc2;   // GRBM_GFX_CNTL
-static constexpr uint32_t kGcVmFaultCntl = kGcSeg0 + 0x15c4;   // GCVM_L2_PROTECTION_FAULT_CNTL, bit 0 clears the latched status
 
 static void dumpGfxState(const char *when) {
     if (asicInfo == nullptr) { RLOG("XJ: %s: no AsicInfo yet", when); return; }
@@ -1451,10 +1734,101 @@ static void dumpGfxState(const char *when) {
          fbRead(asicInfo, kGcVmFaultLo));
 }
 
+// Which compute queue, if any, is live? Walk the MEC queues with GRBM_GFX_CNTL and
+// report every one whose HQD is active, plus the ring it points at and its doorbell.
+static void dumpMecQueues(const char *when) {
+    if (asicInfo == nullptr) return;
+    RLOG("XJ: %s: MEC doorbell range %#x..%#x  ME1_HEADER_DUMP=%#x  "
+         "CP_PQ_STATUS=%#x (doorbell_en=%u) CP_PQ_WPTR_POLL_CNTL=%#x", when,
+         fbRead(asicInfo, kGcMecDbLower), fbRead(asicInfo, kGcMecDbUpper),
+         fbRead(asicInfo, kGcMecHeaderDump), fbRead(asicInfo, kGcCpPqStatus),
+         fbRead(asicInfo, kGcCpPqStatus) & 1, fbRead(asicInfo, kGcCpPqWptrPoll));
+    unsigned found = 0;
+    for (uint32_t me = 1; me <= 2; me++)
+        for (uint32_t pipe = 0; pipe < 4; pipe++)
+            for (uint32_t q = 0; q < 8; q++) {
+                fbWrite(asicInfo, kGcGrbmGfxCntl, pipe | (me << 2) | (q << 8));
+                if (fbRead(asicInfo, kGcHqdActive) & 1) {
+                    uint32_t db = fbRead(asicInfo, kGcHqdPqDbCtl);
+                    RLOG("XJ:   me%u pipe%u q%u ACTIVE  ring=%#x_%08x00 rptr=%#x "
+                         "wptr=%#x_%08x vmid=%u ctl=%#x db_off=%#x en=%u",
+                         me, pipe, q, fbRead(asicInfo, kGcHqdPqBaseHi),
+                         fbRead(asicInfo, kGcHqdPqBase), fbRead(asicInfo, kGcHqdPqRptr),
+                         fbRead(asicInfo, kGcHqdPqWptrHi), fbRead(asicInfo, kGcHqdPqWptrLo),
+                         fbRead(asicInfo, kGcHqdVmid) & 0xf,
+                         fbRead(asicInfo, kGcHqdPqControl),
+                         (db >> 2) & 0x3ffffff, (db >> 30) & 1);
+                    RLOG("XJ:     mqd=%#x_%08x persist=%#x", fbRead(asicInfo, kGcMqdBaseHi),
+                         fbRead(asicInfo, kGcMqdBase), fbRead(asicInfo, kGcHqdPersist));
+                    found++;
+                }
+            }
+    fbWrite(asicInfo, kGcGrbmGfxCntl, 0);
+    if (!found) RLOG("XJ:   no active compute queue on any MEC pipe");
+}
+
+// Is there any microcode in the command processor?
+//
+// The queue dumps say the MEC never fetches: CP_MEC_ME1_HEADER_DUMP keeps returning its
+// 0xdefNdefN fill pattern, and CP_HQD_DEQUEUE_REQUEST -- which is serviced by MEC
+// firmware, not by hardware -- never clears CP_HQD_ACTIVE. Both are consistent with the
+// microengines simply having nothing to run.
+//
+// On the PSP load path nobody in the driver writes the ucode: LOAD_IP_FW hands each blob
+// to the PSP, and GFX_CMD_ID_AUTOLOAD_RLC then asks it to have the RLC bootloader copy
+// them into the microengines. In this guest that command is the one PSP command that
+// fails (status 0xffff000d), so this reads the instruction RAM back through the same
+// address/data pair the direct-load path uses. All zeroes means the CP was never loaded
+// and AUTOLOAD_RLC is the blocker; real instruction words mean the ucode is there and
+// the fault is in how the queue is mapped.
+static void dumpCpUcode(const char *when) {
+    if (asicInfo == nullptr) return;
+    struct { const char *name; uint32_t addr, data; } eng[] {
+        { "PFP ", kGcPfpUcodeAddr,  kGcPfpUcodeData  },
+        { "ME  ", kGcMeRamRaddr,    kGcMeRamData     },
+        { "CE  ", kGcCeUcodeAddr,   kGcCeUcodeData   },
+        { "MEC1", kGcMec1UcodeAddr, kGcMec1UcodeData },
+        { "MEC2", kGcMec2UcodeAddr, kGcMec2UcodeData },
+    };
+    for (auto &e : eng) {
+        uint32_t w[6] {};
+        uint32_t nonzero = 0;
+        fbWrite(asicInfo, e.addr, 0);
+        for (unsigned i = 0; i < 6; i++) { w[i] = fbRead(asicInfo, e.data); nonzero |= w[i]; }
+        RLOG("XL: %s: %s ucode[0..5] = %08x %08x %08x %08x %08x %08x  %s", when, e.name,
+             w[0], w[1], w[2], w[3], w[4], w[5], nonzero ? "LOADED" : "EMPTY");
+    }
+    RLOG("XL: %s: ME1_HEADER_DUMP=%#x ME2_HEADER_DUMP=%#x", when,
+         fbRead(asicInfo, kGcMecHeaderDump), fbRead(asicInfo, kGcMec2HeaderDump));
+}
+
+// What does the graphics core's own address translation look like? Apple's GMC drives
+// the MMHUB copies, which read back unprogrammed on this part -- the framebuffer
+// aperture had to be taken from the GFXHUB copy for the same reason. If a ring lives
+// outside the framebuffer aperture it goes through these, so a ring at a virtual
+// address the GFXHUB cannot translate is one explanation for a CP that fetches nothing.
+static void dumpGfxHubVm(const char *when) {
+    if (asicInfo == nullptr) return;
+    RLOG("XM: %s: SYS_APERTURE %#x..%#x  AGP base=%#x bot=%#x top=%#x", when,
+         fbRead(asicInfo, kGcVmSysApLow), fbRead(asicInfo, kGcVmSysApHigh),
+         fbRead(asicInfo, kGcVmAgpBase), fbRead(asicInfo, kGcVmAgpBot),
+         fbRead(asicInfo, kGcVmAgpTop));
+    RLOG("XM: %s: CTX0 cntl=%#x ptb=%#x_%08x start=%#x end=%#x | CTX1 cntl=%#x ptb_lo=%#x",
+         when, fbRead(asicInfo, kGcVmCtx0Cntl), fbRead(asicInfo, kGcVmCtx0PtbHi),
+         fbRead(asicInfo, kGcVmCtx0PtbLo), fbRead(asicInfo, kGcVmCtx0Start),
+         fbRead(asicInfo, kGcVmCtx0End), fbRead(asicInfo, kGcVmCtx1Cntl),
+         fbRead(asicInfo, kGcVmCtx1PtbLo));
+}
+
 static uint32_t wrapWaitStamp(void *self, uint32_t stamp) {
     auto r = FunctionCast(wrapWaitStamp, orgWaitStamp)(self, stamp);
     RLOG("XJ:   waitForHwStamp(%u) -> %u", stamp, r & 0xff);
-    if (!(r & 0xff)) dumpGfxState("after stamp timeout");
+    if (!(r & 0xff)) {
+        dumpGfxState("after stamp timeout");
+        dumpMecQueues("after stamp timeout");
+        dumpCpUcode("after stamp timeout");
+        dumpGfxHubVm("after stamp timeout");
+    }
     return r;
 }
 
@@ -1523,11 +1897,61 @@ static void startRlc() {
     fbWrite(asicInfo, kGcScratch0, 0xa5a5a5a5u);
     uint32_t s0b = fbRead(asicInfo, kGcScratch0);
     fbWrite(asicInfo, kGcScratch0, s0);
-    // ...and one register that is definitely NOT in the graphics domain, as a positive
-    // control: GRBM_GFX_CNTL lives with GRBM, which we know reads back real values.
-    uint32_t gc = fbRead(asicInfo, kGcGrbmGfxCntl);
-    RLOG("XK: SCRATCH_REG0 %#x -> wrote 0xa5a5a5a5 -> %#x (%s) | GRBM_GFX_CNTL=%#x",
-         s0, s0b, s0b == 0xa5a5a5a5u ? "WRITES WORK" : "WRITE DROPPED", gc);
+    RLOG("XK: SCRATCH_REG0 %#x -> wrote 0xa5a5a5a5 -> %#x (%s)",
+         s0, s0b, s0b == 0xa5a5a5a5u ? "writes work" : "WRITE DROPPED");
+
+    // Clear the compute queues the host driver left running.
+    //
+    // Walking the MEC queues after the KIQ timeout found eight "active" HQD selectors,
+    // every one of them reporting the same ring: pq_base 0xffbfea00, i.e. a ring at
+    // 0xFFBFEA0000 -- outside this iGPU's 0xf400000000..0xf41fffffff carveout, and
+    // exactly the address in the latched GCVM_L2_PROTECTION_FAULT_ADDR. That is amdgpu's
+    // KIQ, in the host's GART, still mapped in the MEC from before the device was handed
+    // to vfio-pci, now pointing at memory that no longer exists. Meanwhile
+    // CP_MEC_ME1_HEADER_DUMP reads 0xdef1def1 -- MEC1 has never fetched a packet, so the
+    // queue Apple's startKIQ set up is not the one running.
+    //
+    // Same shape as the stale PSP ring x7 destroys: this GPU is never reset, so whatever
+    // the previous driver left behind is still live. Upstream clears it with one
+    // register -- gfx_v10_0_cp_compute_enable(false) writes CP_MEC_CNTL (0x0f55 on
+    // 10.3.x) with MEC_ME1_HALT | MEC_ME2_HALT, and (true) writes 0.
+    // Halting the MEC is not enough: it stops the microengine but leaves the HQD
+    // registers loaded, so CP_HQD_ACTIVE stays 1. The queue has to be dequeued, which is
+    // what upstream does before writing a new MQD -- if CP_HQD_ACTIVE is set, write
+    // CP_HQD_DEQUEUE_REQUEST and poll until it clears.
+    //
+    // First check that queue selection works at all. Eight selectors reporting byte-identical
+    // HQD contents is equally consistent with "eight queues, all amdgpu's" and with
+    // "GRBM_GFX_CNTL is not sticking and every read hits whichever queue is selected".
+    // GRBM_GFX_CNTL may simply not read back, so test selection FUNCTIONALLY: park two
+    // different values in a per-queue register under two different selectors and see
+    // whether they stay apart. If they do not, every HQD access -- Apple's included --
+    // is landing on whichever queue happens to be selected, which would explain both the
+    // eight byte-identical "queues" and a KIQ that never runs.
+    fbWrite(asicInfo, kGcGrbmGfxCntl, 0x0105u);
+    uint32_t sel = fbRead(asicInfo, kGcGrbmGfxCntl);
+    fbWrite(asicInfo, kGcGrbmGfxCntl, (0u) | (1u << 2) | (0u << 8));
+    fbWrite(asicInfo, kGcHqdPqBase, 0xaaaaaaaau);
+    fbWrite(asicInfo, kGcGrbmGfxCntl, (0u) | (1u << 2) | (1u << 8));
+    fbWrite(asicInfo, kGcHqdPqBase, 0xbbbbbbbbu);
+    fbWrite(asicInfo, kGcGrbmGfxCntl, (0u) | (1u << 2) | (0u << 8));
+    uint32_t qa = fbRead(asicInfo, kGcHqdPqBase);
+    fbWrite(asicInfo, kGcGrbmGfxCntl, (0u) | (1u << 2) | (1u << 8));
+    uint32_t qb = fbRead(asicInfo, kGcHqdPqBase);
+    fbWrite(asicInfo, kGcGrbmGfxCntl, 0);
+    RLOG("XK: GRBM_GFX_CNTL readback %#x; per-queue test q0=%#x q1=%#x (%s)", sel, qa, qb,
+         (qa == 0xaaaaaaaau && qb == 0xbbbbbbbbu) ? "SELECTION WORKS"
+                                                 : "SELECTION BROKEN -- all queues alias");
+
+    // Diagnostic only from here on. The dequeue loop that used to live here did clear
+    // the eight queues TTL leaves behind, and the KIQ timed out exactly the same way
+    // afterwards -- so they are not what blocks it. Worse, every dequeue reported
+    // "active=1 after 2000us": CP_HQD_DEQUEUE_REQUEST is serviced by MEC firmware, so a
+    // request that never retires is itself evidence that the microengine is not running.
+    // That is what dumpCpUcode is here to settle.
+    dumpMecQueues("post-TTL");
+    dumpCpUcode("post-TTL");
+    dumpGfxHubVm("post-TTL");
     dumpGfxState("after RLC start");
 }
 
@@ -1611,8 +2035,58 @@ static uint32_t wrapPpPowerUp(void *self) {
     return 0;
 }
 
+// Soft-reset the command processor before TTL brings the graphics core up.
+//
+// Dequeuing amdgpu's leftover compute queues works -- and they come straight back. The
+// MEC's hardware scheduler is still walking a runlist the host driver left in memory, so
+// every queue it names is re-mapped as fast as it is torn down, and the queue Apple's
+// startKIQ programs never gets to run (CP_MEC_ME1_HEADER_DUMP stays at its 0xdefNdefN
+// fill pattern, so MEC1 fetches nothing). This GPU is never reset between the host driver
+// and the guest one, which is the same root cause as the stale PSP ring and the stale
+// UM ring, one block further in.
+//
+// Upstream's gfx_v10_0_soft_reset is block-scoped, not a device reset: halt the CP, pulse
+// GRBM_SOFT_RESET with SOFT_RESET_CP | SOFT_RESET_GFX, release. Do it here, on the first
+// AsicInfo refresh -- which runs before TTL::initialize -- so TTL's own GC hw_init loads
+// and starts the CP afterwards, on a clean block. Doing it later would leave the CP
+// reset with nobody to re-initialise it.
+static bool cpResetDone = false;
+
+static void softResetCp() {
+    if (cpResetDone || asicInfo == nullptr) return;
+    cpResetDone = true;
+    uint32_t before = fbRead(asicInfo, kGcGrbmStatus);
+    fbWrite(asicInfo, kGcCpMeCntl, (1u << 28) | (1u << 29) | (1u << 30));   // PFP/CE/ME halt
+    fbWrite(asicInfo, kGcCpMecCntl, (1u << 30) | (1u << 28));               // MEC1/2 halt
+    IOSleep(1);
+    uint32_t rst = fbRead(asicInfo, kGcGrbmSoftReset);
+    fbWrite(asicInfo, kGcGrbmSoftReset, rst | (1u << 0) | (1u << 16));      // CP | GFX
+    IODelay(50);
+    fbWrite(asicInfo, kGcGrbmSoftReset, rst);
+    IODelay(50);
+    fbWrite(asicInfo, kGcCpMeCntl, 0);
+    fbWrite(asicInfo, kGcCpMecCntl, 0);
+    IOSleep(1);
+    RLOG("XK: CP soft reset: GRBM_STATUS %#x -> %#x, CP_ME_CNTL=%#x CP_MEC_CNTL=%#x",
+         before, fbRead(asicInfo, kGcGrbmStatus), fbRead(asicInfo, kGcCpMeCntl),
+         fbRead(asicInfo, kGcCpMecCntl));
+    dumpMecQueues("after CP soft reset");
+}
+
 static uint32_t wrapFbXgmiConfig(void *self) {
     asicInfo = self;
+    // NOT calling softResetCp() here. Tried it, and it costs the whole run: the block
+    // reset takes GRBM_STATUS from 0x3028 (idle) to 0xa0003028 (CP_BUSY | GUI_ACTIVE)
+    // and never settles, TTL's GC hw_init then times out in cosWaitForFunc, and
+    // ttl_initialize fails 0x00000004 with SW_IP_CLIENT_ID__GC / EVENT__HW_INIT first
+    // in the SWIP error log -- taking SMU and PSP uninit down with it. Upstream pulses
+    // GRBM_SOFT_RESET only from inside RLC safe mode with the CP already halted and
+    // re-initialised afterwards; a bare pulse here just wedges the block.
+    //
+    // The premise was wrong anyway. On a freshly booted host the pre-TTL walk reports
+    // "no active compute queue on any MEC pipe", so the eight me2 HQDs at
+    // pq_base=0xffbfea00 are not amdgpu's leftovers -- amdgpu does a MODE2 reset on
+    // unbind and vfio-pci resets again on open. They appear during TTL's own GC hw_init.
     auto r = FunctionCast(wrapFbXgmiConfig, orgFbXgmiConfig)(self);
     if ((mask & XG) != 0 && self != nullptr) {
         auto f = reinterpret_cast<uint8_t *>(self);
