@@ -28,7 +28,7 @@ TTL's SWIP clients initialise in sequence; the failure has moved through three o
 | `GC`/`SDMA` firmware-autoload gates | **solved** — both wait on a `BOOTLOAD_COMPLETE` latch nothing ever sets on this part |
 | RLC safe-mode handshake | **solved** — the RLC never acks; upstream ignores that, Apple hard-fails on it |
 | `TTL::initialize()` on a cold GPU | **complete and deterministic** — was a race on leftover state, now passes on a freshly reset device |
-| **graphics ring (KIQ)** | **current blocker** — fully characterised: doorbell proven to reach the HQD (`DOORBELL_HIT=1`), MEC2 executing, ring translatable, no fault, and the MEC still reports `QUEUE_IDLE` |
+| **graphics ring (KIQ)** | **current blocker, now localised** — the queue *is* dispatched on MEC2 pipe 1 and the engine *is* decoding the packet: `CP_CPC_STALLED_STAT1 = MEC2_DECODING_PACKET \| MEC2_WAIT_ON_ROQ_DATA`. It is waiting for a ring fetch that never returns — and it still never returns with the ring relocated into VRAM, so this is the CP↔GL2 data path, not memory visibility |
 | WindowServer | submits command buffers; panics in `AMDHWVMM::endVMPTUpdate` because no engine powered up |
 
 ### GC and SDMA HW_INIT: three gates upstream does not have

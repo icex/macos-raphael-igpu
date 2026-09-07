@@ -541,6 +541,7 @@ static constexpr uint32_t kGcHqdEopBase    = kGcSeg0 + 0x1fce;
 static constexpr uint32_t kGcHqdEopBaseHi  = kGcSeg0 + 0x1fcf;
 static constexpr uint32_t kGcHqdEopControl = kGcSeg0 + 0x1fd0;
 static constexpr uint32_t kGcHqdIbControl  = kGcSeg0 + 0x1fbe;
+static constexpr uint32_t kGcHqdPqBaseHi2  = kGcSeg0 + 0x1fb2;   // same as kGcHqdPqBaseHi
 static constexpr uint32_t kGcRlcSrmCntl    = kGcSeg1 + 0x4c80;
 static constexpr uint32_t kGcRlcCsibLo     = kGcSeg1 + 0x4ca2;
 static constexpr uint32_t kGcRlcCsibLen    = kGcSeg1 + 0x4ca4;
@@ -558,6 +559,24 @@ static constexpr uint32_t kGcMec1InstrPntr = kGcSeg0 + 0x0f48;
 static constexpr uint32_t kGcMec2InstrPntr = kGcSeg0 + 0x0f49;
 static constexpr uint32_t kGcPfpInstrPntr  = kGcSeg0 + 0x0f45;
 static constexpr uint32_t kGcMeInstrPntr   = kGcSeg0 + 0x0f46;
+// What is the command processor stalled ON. CP_STAT only says which blocks are busy;
+// these say which back-pressure signal is holding them, per block.
+static constexpr uint32_t kGcCpStalled1    = kGcSeg0 + 0x0f3d;
+static constexpr uint32_t kGcCpStalled2    = kGcSeg0 + 0x0f3e;
+static constexpr uint32_t kGcCpStalled3    = kGcSeg0 + 0x0f3c;
+static constexpr uint32_t kGcCpBusyStat    = kGcSeg0 + 0x0f3f;
+static constexpr uint32_t kGcCpcBusyStat   = kGcSeg0 + 0x0e25;
+static constexpr uint32_t kGcCpcStalled1   = kGcSeg0 + 0x0e26;
+static constexpr uint32_t kGcCpfBusyStat   = kGcSeg0 + 0x0e28;
+static constexpr uint32_t kGcCpfStalled1   = kGcSeg0 + 0x0e29;
+// The graphics ring, which CP_STAT says has PFP and ME permanently busy.
+static constexpr uint32_t kGcRb0Base       = kGcSeg0 + 0x1de0;
+static constexpr uint32_t kGcRb0BaseHi     = kGcSeg0 + 0x1e51;
+static constexpr uint32_t kGcRb0Cntl       = kGcSeg0 + 0x1de1;
+static constexpr uint32_t kGcRb0Rptr       = kGcSeg0 + 0x0f60;
+static constexpr uint32_t kGcRb0Wptr       = kGcSeg0 + 0x1df4;
+static constexpr uint32_t kGcRbVmid        = kGcSeg0 + 0x1df1;
+static constexpr uint32_t kGcRbDbCtl       = kGcSeg0 + 0x1e8d;
 static constexpr uint32_t kGcMqdBase       = kGcSeg0 + 0x1fa9;
 static constexpr uint32_t kGcMqdBaseHi     = kGcSeg0 + 0x1faa;
 static constexpr uint32_t kGcHqdPersist    = kGcSeg0 + 0x1fad;   // CP_HQD_PERSISTENT_STATE
@@ -609,6 +628,7 @@ static void dumpCpUcode(const char *when);
 static constexpr uint32_t kKiqSelector = 1u | (2u << 2);
 static void dumpGfxHubVm(const char *when);
 static void enableDoorbellMsg(uint64_t mqdAddr, uint64_t eopAddr);
+static void relocateRingToVram();
 static void startMecEngines();
 
 static mach_vm_address_t orgPpPowerUp {};
@@ -1832,7 +1852,15 @@ static uint32_t wrapKiqStart(void *self, uint64_t a, uint64_t b, void *spec, uin
     auto r = FunctionCast(wrapKiqStart, orgKiqStart)(self, a, b, spec, out);
     RLOG("XJ:   PM4 startKIQ(%#llx, %#llx) -> %#x (0 is success)", a, b, r);
     kiqEopHint = b;
-    if (mask & XK) enableDoorbellMsg(a, b);
+    if (mask & XK) {
+        enableDoorbellMsg(a, b);
+        // Before the frame is submitted and the doorbell rung, not after: once MEC2 is
+        // stalled in WAIT_ON_ROQ_DATA the fetch is already outstanding and no TLB
+        // invalidate brings it back.
+        fbWrite(asicInfo, kGcGrbmGfxCntl, kKiqSelector);
+        relocateRingToVram();
+        fbWrite(asicInfo, kGcGrbmGfxCntl, 0);
+    }
     // startKIQ is where Apple's own KIQ HQD is written, so this is the first moment the
     // walk can distinguish Apple's queue from the ones TTL left behind.
     if (mask & XJ) dumpMecQueues("after startKIQ");
@@ -2144,6 +2172,263 @@ static void disableCtx0Retry() {
 // rung. So enable polling and watch the read pointer. If it advances, the doorbell is what
 // is broken; if nothing moves, the microengine is not executing and the doorbell is
 // innocent.
+// Walk the GART page table the graphics core is actually using.
+//
+// Every other candidate for the dead KIQ has been eliminated by measurement, and the one
+// asymmetry left is memory the MEC reads rather than memory it is told about. For a
+// doorbell queue the engine takes the authoritative write pointer from
+// CP_HQD_PQ_WPTR_POLL_ADDR (0xFFBFDE0050) and reports the read pointer to
+// CP_HQD_PQ_RPTR_REPORT_ADDR (0xFFBFDE0048) -- both in the GART, i.e. guest system memory
+// reached through the GFXHUB page tables and then the host IOMMU. A GPU that reads zeros
+// there behaves exactly as observed: woken by the doorbell, it sees write pointer 0,
+// concludes the queue is empty, sets QUEUE_IDLE, and touches neither the ring nor the
+// report address -- no fault, no error bit, no header fetched.
+//
+// So read the page table. GCVM_CONTEXT0_CNTL has PAGE_TABLE_DEPTH 0, which means a flat
+// array of 8-byte PTEs indexed by (va - PAGE_TABLE_START) >> 12, based at
+// GCVM_CONTEXT0_PAGE_TABLE_BASE_ADDR with its low bits carrying flags rather than address.
+// That base -- 0x0fdfc000 -- is a framebuffer-relative address inside the 256 MB BAR0
+// aperture, so BAR0 is enough to read it: map it the same way AMDHardware::mapDoorbellMemory
+// maps BAR2, through the IOPCIDevice at [hwObj+0x10] and its mapDeviceMemoryWithRegister,
+// asking for config offset 0x10 instead of 0x18.
+//
+// An invalid PTE would explain the stall, though not the absent fault. A valid PTE gives
+// the guest-physical page the GPU is reading, which is the number to compare against where
+// Apple actually wrote the write pointer.
+static volatile uint32_t *fbAperture() {
+    static volatile uint32_t *cached {};
+    static bool tried = false;
+    if (tried) return cached;
+    tried = true;
+    if (hwObj == nullptr) return nullptr;
+    auto pci = *reinterpret_cast<void **>(reinterpret_cast<uint8_t *>(hwObj) + 0x10);
+    if (pci == nullptr) return nullptr;
+    auto vt = *reinterpret_cast<uint64_t **>(pci);
+    auto mapFn = reinterpret_cast<void *(*)(void *, uint32_t, uint32_t)>(vt[0x908 / 8]);
+    auto map = mapFn(pci, 0x10, 0);
+    if (map == nullptr) { RLOG("XN: BAR0 map failed"); return nullptr; }
+    auto mvt = *reinterpret_cast<uint64_t **>(map);
+    auto getVA = reinterpret_cast<uint64_t (*)(void *)>(mvt[0x118 / 8]);
+    cached = reinterpret_cast<volatile uint32_t *>(getVA(map));
+    RLOG("XN: BAR0 mapped at %p", cached);
+    return cached;
+}
+
+// The physical pages the PTEs name are read from the HOST instead of from here.
+// IOMemoryDescriptor::withPhysicalAddress + map() links against symbols the injected boot
+// collection would not resolve, and the whole plugin then fails to load -- the guest falls
+// back to a stale copy on disk and panics during matching. QEMU's monitor can dump guest
+// physical memory directly ("xp /8x <pa>"), which answers the same question with nothing
+// at risk inside the guest.
+static void walkGart(const char *what, uint64_t va) {
+    auto fb = fbAperture();
+    if (fb == nullptr || asicInfo == nullptr) return;
+    uint64_t start = static_cast<uint64_t>(fbRead(asicInfo, kGcVmCtx0Start)) << 12;
+    uint64_t ptb   = (static_cast<uint64_t>(fbRead(asicInfo, kGcVmCtx0PtbHi)) << 32) |
+                      fbRead(asicInfo, kGcVmCtx0PtbLo);
+    ptb &= ~0xfffULL;
+    if (va < start) { RLOG("XN: %s va %#llx below GART start %#llx", what, va, start); return; }
+    uint64_t idx = (va - start) >> 12;
+    uint64_t off = ptb + idx * 8;
+    if (off + 8 > 0x10000000ULL) {
+        RLOG("XN: %s PTE at fb offset %#llx is outside the 256 MB BAR0 aperture", what, off);
+        return;
+    }
+    uint32_t lo = fb[off / 4], hi = fb[off / 4 + 1];
+    uint64_t pte = (static_cast<uint64_t>(hi) << 32) | lo;
+    RLOG("XN: %s va=%#llx idx=%#llx pte@fb+%#llx = %#llx -> pa %#llx flags%s%s%s%s%s",
+         what, va, idx, off, pte, pte & 0x0000fffffffff000ULL,
+         (pte & 1) ? " VALID" : " !VALID", (pte & 2) ? " SYSTEM" : "",
+         (pte & 4) ? " SNOOPED" : "", (pte & 0x20) ? " READ" : "",
+         (pte & 0x40) ? " WRITE" : "");
+}
+
+// Dump the MQD image the MEC reloads the HQD from.
+//
+// This is the last place the two views can disagree. The registers say the queue is
+// active, points at a ring holding a valid PACKET3_SET_RESOURCES, and has taken the
+// doorbell; guest memory confirms the packet and a write pointer of 0x20 at the physical
+// page the GART names. Yet the engine reports QUEUE_IDLE and fetches nothing -- and
+// writes to CP_HQD_EOP_BASE_ADDR do not stick even with CP_HQD_ACTIVE forced to 0, which
+// is what an HQD being continuously restored from its MQD looks like. If the MQD image
+// carries different values from the registers, the image is what the engine believes.
+//
+// Field offsets are struct v10_compute_mqd's, and the MQD lives in the framebuffer at
+// CP_MQD_BASE_ADDR, so it is readable through the same BAR0 aperture as the page table.
+static void dumpMqd(uint64_t mqdVa) {
+    auto fb = fbAperture();
+    if (fb == nullptr) return;
+    uint64_t fbBase = static_cast<uint64_t>(fbRead(asicInfo, kGcFbBase) & 0xffffff) << 24;
+    if (mqdVa < fbBase) { RLOG("XN: mqd %#llx below fb base %#llx", mqdVa, fbBase); return; }
+    uint64_t off = mqdVa - fbBase;
+    if (off + 0x800 > 0x10000000ULL) {
+        RLOG("XN: mqd at fb offset %#llx is outside BAR0", off); return;
+    }
+    auto d = [fb, off](uint32_t f) { return fb[(off + f) / 4]; };
+    RLOG("XN: MQD@fb+%#llx: header=%#x mqd_base=%#x active=%#x vmid=%#x persistent=%#x",
+         off, d(0x000), d(0x200), d(0x208), d(0x20c), d(0x210));
+    RLOG("XN: MQD: pq_base=%#x rptr=%#x doorbell_ctl=%#x pq_control=%#x",
+         d(0x220), d(0x228), d(0x23c), d(0x244));
+    RLOG("XN: MQD: eop_base=%#x eop_control=%#x wptr_lo=%#x wptr_hi=%#x",
+         d(0x294), d(0x29c), d(0x2d8), d(0x2dc));
+}
+
+// Program the HQD from the MQD image, the way upstream's kiq_init_register does.
+//
+// The MQD image and the register file disagree, and the MQD is right:
+//
+//     field                   MQD image      HQD register
+//     cp_hqd_eop_base_addr    0xf40b7068     0
+//     cp_hqd_eop_control      0x8            0x6
+//     cp_hqd_pq_control       0xd130860d     0xc030860d   (bits 20, 24, 28 missing)
+//     cp_hqd_persistent_state 0xbe05301      0xbe05300    (PRELOAD_REQ missing)
+//     cp_hqd_active           1              1
+//     cp_hqd_pq_base          0xffbfea00     0xffbfea00
+//     cp_hqd_pq_doorbell_ctl  0x40000000     0x40000000 (+ HIT, set by hardware)
+//
+// So startKIQ built a correct MQD and then did not get all of it into the register file --
+// and the missing fields are exactly the ones this plugin also could not write, including
+// with CP_HQD_ACTIVE forced to 0. Nothing loads the MQD on this path either: on GFX10 the
+// driver writes the HQD itself and the MEC never fetches the image, which is why the
+// register file is what the engine acts on and why a queue with no EOP address and no
+// PRELOAD_REQ sits idle.
+//
+// Copy the image into the registers in upstream's order, with the MECs halted so the
+// writes are not racing the engine, then unhalt and let the caller ring the doorbell.
+// Report every field that still refuses to take, because that list is the finding either
+// way.
+static void loadHqdFromMqd(uint64_t mqdVa) {
+    auto fb = fbAperture();
+    if (fb == nullptr || asicInfo == nullptr) return;
+    uint64_t fbBase = static_cast<uint64_t>(fbRead(asicInfo, kGcFbBase) & 0xffffff) << 24;
+    if (mqdVa < fbBase || (mqdVa - fbBase) + 0x800 > 0x10000000ULL) return;
+    uint64_t off = mqdVa - fbBase;
+    auto d = [fb, off](uint32_t f) { return fb[(off + f) / 4]; };
+
+    uint32_t mecBefore = fbRead(asicInfo, kGcCpMecCntl);
+    fbWrite(asicInfo, kGcCpMecCntl, (1u << 30) | (1u << 28));
+    IODelay(50);
+    fbWrite(asicInfo, kGcGrbmGfxCntl, kKiqSelector);
+
+    struct { uint32_t reg; uint32_t mqd; const char *name; } fields[] {
+        {kGcHqdActive,      0x208, "ACTIVE=0 first"},   // handled specially below
+        {kGcHqdEopBase,     0x294, "EOP_BASE"},
+        {kGcHqdEopBaseHi,   0x298, "EOP_BASE_HI"},
+        {kGcHqdEopControl,  0x29c, "EOP_CONTROL"},
+        {kGcMqdBase,        0x200, "MQD_BASE"},
+        {kGcMqdBaseHi,      0x204, "MQD_BASE_HI"},
+        {kGcMqdControl,     0x288, "MQD_CONTROL"},
+        {kGcHqdPqBase,      0x220, "PQ_BASE"},
+        {kGcHqdPqBaseHi,    0x224, "PQ_BASE_HI"},
+        {kGcHqdPqControl,   0x244, "PQ_CONTROL"},
+        {kGcHqdRptrRpt,     0x22c, "RPTR_REPORT"},
+        {kGcHqdRptrRptHi,   0x230, "RPTR_REPORT_HI"},
+        {kGcHqdPollAddr,    0x234, "WPTR_POLL"},
+        {kGcHqdPollAddrHi,  0x238, "WPTR_POLL_HI"},
+        {kGcHqdPqDbCtl,     0x23c, "DOORBELL_CONTROL"},
+        {kGcHqdIbControl,   0x254, "IB_CONTROL"},
+        {kGcHqdQuantum,     0x21c, "QUANTUM"},
+        {kGcHqdVmid,        0x20c, "VMID"},
+        {kGcHqdPersist,     0x210, "PERSISTENT_STATE"},
+    };
+    fbWrite(asicInfo, kGcHqdActive, 0);
+    IODelay(20);
+    char bad[128];
+    size_t n = 0;
+    for (auto &f : fields) {
+        if (f.reg == kGcHqdActive) continue;
+        uint32_t want = d(f.mqd);
+        fbWrite(asicInfo, f.reg, want);
+        uint32_t got = fbRead(asicInfo, f.reg);
+        if (got != want && n + 24 < sizeof(bad))
+            n += snprintf(bad + n, sizeof(bad) - n, "%s(%#x!=%#x) ", f.name, got, want);
+    }
+    fbWrite(asicInfo, kGcHqdActive, d(0x208));
+    IODelay(20);
+    // Deliberately NOT restoring GRBM_GFX_CNTL here: the caller set the KIQ selector and
+    // goes on reading this queue afterwards. Resetting it to 0 mid-sequence pointed every
+    // later read at me0/pipe0/queue0, an empty HQD, which made a whole run's worth of
+    // measurements read as zeroes.
+    fbWrite(asicInfo, kGcCpMecCntl, 0);
+    IODelay(50);
+    RLOG("XN: HQD loaded from MQD; refused: %s", n ? bad : "(none)");
+    RLOG("XN: after load: active=%u eop=%#x_%08x eop_ctl=%#x pq_control=%#x persistent=%#x "
+         "CP_MEC_CNTL %#x->%#x", fbRead(asicInfo, kGcHqdActive) & 1,
+         fbRead(asicInfo, kGcHqdEopBaseHi), fbRead(asicInfo, kGcHqdEopBase),
+         fbRead(asicInfo, kGcHqdEopControl), fbRead(asicInfo, kGcHqdPqControl),
+         fbRead(asicInfo, kGcHqdPersist), mecBefore, fbRead(asicInfo, kGcCpMecCntl));
+}
+
+// Move the ring into VRAM and see whether the engine then runs it.
+//
+// CP_CPC_STALLED_STAT1 = 0x210000 is MEC2_DECODING_PACKET | MEC2_WAIT_ON_ROQ_DATA, and
+// CP_CPC_BUSY_STAT = 0x8080000 is MEC2_MESSAGE_BUSY | MEC2_PIPE1_BUSY. So the queue is
+// dispatched on the pipe the selector walk found, the engine has begun decoding, and it is
+// stalled waiting for the ring fetch to come back. Neither UTCL2IU_WAITING_ON_FREE/TAGS nor
+// UTCL1_WAITING_ON_TRANS is set, so it is not stuck in translation: the read was issued and
+// the data never arrived. The host logs no AMD-Vi IO_PAGE_FAULT for the device either.
+//
+// Everything this stack has been proven to read so far -- the PSP ring, the TMR, the MQD,
+// the page tables themselves, the RLC clear-state buffer -- lives in the framebuffer, which
+// the hardware reaches through the FB aperture and GCMC_VM_FB_OFFSET without any DMA. The
+// KIQ ring is the first thing it has been asked to fetch from guest system memory, through
+// a SYSTEM|SNOOPED PTE, and that is the fetch that hangs.
+//
+// So test exactly that: copy the ring page into an unused framebuffer page, rewrite its GART
+// PTE to point at VRAM instead of system memory (clearing SYSTEM and SNOOPED and the MTYPE
+// bits), invalidate the TLB the way upstream does, and ring the doorbell. If the engine then
+// consumes the packet, the fault is the GPU's path to guest system memory and not anything
+// about how the queue is programmed.
+static constexpr uint64_t kRingCopyFbOffset = 0x0ff00000;   // 255 MB in, above the page tables
+
+static void relocateRingToVram() {
+    auto fb = fbAperture();
+    if (fb == nullptr || asicInfo == nullptr) return;
+    uint64_t start = static_cast<uint64_t>(fbRead(asicInfo, kGcVmCtx0Start)) << 12;
+    uint64_t ptb   = ((static_cast<uint64_t>(fbRead(asicInfo, kGcVmCtx0PtbHi)) << 32) |
+                       fbRead(asicInfo, kGcVmCtx0PtbLo)) & ~0xfffULL;
+    uint64_t ringVa = static_cast<uint64_t>(fbRead(asicInfo, kGcHqdPqBase)) << 8;
+    if (ringVa < start) return;
+    uint64_t pteOff = ptb + ((ringVa - start) >> 12) * 8;
+    if (pteOff + 8 > 0x10000000ULL) return;
+
+    uint64_t old = (static_cast<uint64_t>(fb[pteOff / 4 + 1]) << 32) | fb[pteOff / 4];
+    if ((old & 1) == 0) { RLOG("XN: ring PTE not valid, not relocating"); return; }
+
+    // The framebuffer aperture is a window onto VRAM, so the copy can be done with plain
+    // dword moves -- but read the source through the PTE's own physical page rather than
+    // through any CPU mapping, which is not available here. The page the PTE names is
+    // already known to hold the packet (confirmed from the host with the QEMU monitor), and
+    // the only copy available in-guest is via the FB aperture, so copy from the ring's
+    // current GART view is impossible: instead reconstruct the one packet Apple submitted.
+    // PACKET3_SET_RESOURCES, 8 dwords, exactly as read from guest RAM at the ring base.
+    static const uint32_t kSetResources[] {
+        0xc006a000, 0x0028ffff, 0xffffffff, 0x00000000,
+        0x00000000, 0x00000000, 0x00000000, 0x00000000,
+    };
+    for (unsigned i = 0; i < sizeof(kSetResources) / 4; i++)
+        fb[(kRingCopyFbOffset / 4) + i] = kSetResources[i];
+    for (unsigned i = sizeof(kSetResources) / 4; i < 0x400; i++)
+        fb[(kRingCopyFbOffset / 4) + i] = 0x80000000u;   // PACKET2 nops
+
+    uint64_t nw = (old & ~0x0000fffffffff000ULL & ~(3ULL << 48)) | kRingCopyFbOffset;
+    nw &= ~0x6ULL;                                        // clear SYSTEM and SNOOPED
+    fb[pteOff / 4]     = static_cast<uint32_t>(nw);
+    fb[pteOff / 4 + 1] = static_cast<uint32_t>(nw >> 32);
+
+    // Invalidate, the way gmc_v10_0_flush_gpu_tlb builds its request: VMID 0, all levels.
+    fbWrite(asicInfo, kGcVmInvEng0Req, 0x00f80001u);
+    int us = 0;
+    for (; us < 2000; us++) {
+        if ((fbRead(asicInfo, kGcVmInvEng0Ack) & 0xffff) != 0) break;
+        IODelay(1);
+    }
+    RLOG("XN: ring PTE %#llx -> %#llx (VRAM fb+%#llx); invalidate acked after %dus, "
+         "ack=%#x; pte reads back %#llx", old, nw, kRingCopyFbOffset, us,
+         fbRead(asicInfo, kGcVmInvEng0Ack),
+         (static_cast<uint64_t>(fb[pteOff / 4 + 1]) << 32) | fb[pteOff / 4]);
+}
+
 static void kickKiq(uint64_t eopHint) {
     if (asicInfo == nullptr) return;
     fbWrite(asicInfo, kGcGrbmGfxCntl, kKiqSelector);
@@ -2154,6 +2439,18 @@ static void kickKiq(uint64_t eopHint) {
          fbRead(asicInfo, kGcHqdPollAddrHi), fbRead(asicInfo, kGcHqdPollAddr),
          fbRead(asicInfo, kGcHqdRptrRptHi), fbRead(asicInfo, kGcHqdRptrRpt),
          fbRead(asicInfo, kGcHqdEopBase));
+    RLOG("XK: CP stalls: STALLED_STAT1=%#x 2=%#x 3=%#x BUSY_STAT=%#x | "
+         "CPC busy=%#x stalled=%#x | CPF busy=%#x stalled=%#x",
+         fbRead(asicInfo, kGcCpStalled1), fbRead(asicInfo, kGcCpStalled2),
+         fbRead(asicInfo, kGcCpStalled3), fbRead(asicInfo, kGcCpBusyStat),
+         fbRead(asicInfo, kGcCpcBusyStat), fbRead(asicInfo, kGcCpcStalled1),
+         fbRead(asicInfo, kGcCpfBusyStat), fbRead(asicInfo, kGcCpfStalled1));
+    RLOG("XK: gfx ring: RB0_BASE=%#x_%08x CNTL=%#x RPTR=%#x WPTR=%#x VMID=%#x "
+         "RB_DOORBELL=%#x ME_CNTL=%#x",
+         fbRead(asicInfo, kGcRb0BaseHi), fbRead(asicInfo, kGcRb0Base),
+         fbRead(asicInfo, kGcRb0Cntl), fbRead(asicInfo, kGcRb0Rptr),
+         fbRead(asicInfo, kGcRb0Wptr), fbRead(asicInfo, kGcRbVmid),
+         fbRead(asicInfo, kGcRbDbCtl), fbRead(asicInfo, kGcCpMeCntl));
     RLOG("XK: RLC: SRM_CNTL=%#x CSIB_LO=%#x CSIB_LEN=%#x GPM_STAT=%#x STAT=%#x "
          "BOOTLOAD 0x4e8d=%#x 0x4e7e=%#x",
          fbRead(asicInfo, kGcRlcSrmCntl), fbRead(asicInfo, kGcRlcCsibLo),
@@ -2177,6 +2474,15 @@ static void kickKiq(uint64_t eopHint) {
          pfa, fbRead(asicInfo, kGcPfpInstrPntr), mea, fbRead(asicInfo, kGcMeInstrPntr),
          fbRead(asicInfo, kGcCpMecCntl));
     dumpGfxHubVm("at KIQ kick");
+    walkGart("ring", (static_cast<uint64_t>(fbRead(asicInfo, kGcHqdPqBase)) << 8));
+    walkGart("wptr poll", (static_cast<uint64_t>(fbRead(asicInfo, kGcHqdPollAddrHi)) << 32) |
+                          fbRead(asicInfo, kGcHqdPollAddr));
+    walkGart("rptr report", (static_cast<uint64_t>(fbRead(asicInfo, kGcHqdRptrRptHi)) << 32) |
+                            fbRead(asicInfo, kGcHqdRptrRpt));
+    uint64_t mqdVa = (static_cast<uint64_t>(fbRead(asicInfo, kGcMqdBaseHi)) << 32) |
+                     fbRead(asicInfo, kGcMqdBase);
+    dumpMqd(mqdVa);
+    loadHqdFromMqd(mqdVa);
     // Does the doorbell reach the queue, and can the HQD be reprogrammed at all?
     //
     // CP_HQD_PQ_DOORBELL_CONTROL carries DOORBELL_HIT in bit 31: hardware sets it when a
