@@ -37,12 +37,25 @@
 # WHAT THIS CHANGES, in KERNEL_CMDLINE[default] in /etc/default/limine
 #
 #   -nowatchdog                  stop disabling the NMI/perf hard-lockup detector
-#   +nmi_watchdog=1              ...and enable it explicitly
-#   +hardlockup_panic=1          a wedged CPU panics instead of hanging silently
+#   +nmi_watchdog=panic          enable it, and panic when it fires, so a wedged CPU dies
+#                                loudly instead of hanging silently
 #   +efi_pstore.pstore_disable=0 the panic's dmesg tail goes to EFI variables, which
 #                                survive the reboot and reappear in /sys/fs/pstore
 #   +panic=20                    reboot 20s after a panic instead of sitting dead, so a
 #                                hang no longer needs the reset button
+#
+# and, because the boot parameters alone did not stick on this kernel, a sysctl drop-in:
+#
+#   /etc/sysctl.d/99-lockup-capture.conf   kernel.nmi_watchdog=1
+#                                          kernel.hardlockup_panic=1
+#
+# The first version of this script wrote "nmi_watchdog=1 hardlockup_panic=1" and both were
+# silently ignored: after the reboot /proc/cmdline carried them but
+# /proc/sys/kernel/nmi_watchdog and .../hardlockup_panic both still read 0. There is no
+# hardlockup_panic= boot parameter -- kernel/watchdog.c registers a single __setup for
+# "nmi_watchdog=" which accepts panic / nopanic / 0 / 1, and that is the only way to reach
+# hardlockup_panic from the command line. The sysctl drop-in is the belt to that braces, and
+# it is the part that is verifiable after the fact.
 #
 # WHAT IT CANNOT DO
 #
@@ -74,7 +87,8 @@
 set -euo pipefail
 
 DEF=/etc/default/limine
-ADD=(nmi_watchdog=1 hardlockup_panic=1 efi_pstore.pstore_disable=0 panic=20)
+ADD=(nmi_watchdog=panic efi_pstore.pstore_disable=0 panic=20)
+SYSCTL=/etc/sysctl.d/99-lockup-capture.conf
 
 [[ $EUID -eq 0 ]] || { echo "run me with sudo" >&2; exit 1; }
 [[ -f "$DEF" ]] || { echo "$DEF not found -- is this still a Limine install?" >&2; exit 1; }
@@ -108,6 +122,29 @@ open(path, 'w').write(src[:m.start()] + new + src[m.end():])
 print("new cmdline:\n    " + ' '.join(toks))
 PY
 
+cat > "$SYSCTL" <<'EOF'
+# Written by macos-vm/enable-lockup-capture.sh
+#
+# The boot parameters alone did not stick on this kernel: /proc/cmdline carried
+# nmi_watchdog=1 and hardlockup_panic=1 after a reboot while both sysctls still read 0.
+# There is no hardlockup_panic= boot parameter at all, and this is the mechanism that can be
+# read back and verified.
+kernel.nmi_watchdog = 1
+kernel.hardlockup_panic = 1
+EOF
+echo "wrote $SYSCTL"
+
+# Apply now as well as at boot, and report the readback rather than assuming: if the
+# perf-based detector is unavailable on this CPU, nmi_watchdog stays 0 and the whole plan
+# needs rethinking, which is worth knowing immediately and not after the next hang.
+sysctl -p "$SYSCTL" >/dev/null 2>&1 || true
+echo "  kernel.nmi_watchdog     = $(cat /proc/sys/kernel/nmi_watchdog)"
+echo "  kernel.hardlockup_panic = $(cat /proc/sys/kernel/hardlockup_panic)"
+if [[ "$(cat /proc/sys/kernel/nmi_watchdog)" != 1 ]]; then
+    echo "  WARNING: the hard-lockup detector did not come up; a wedged CPU will still be" >&2
+    echo "           invisible. Check dmesg for 'perf' or 'watchdog' errors." >&2
+fi
+
 echo
 limine-update
 echo
@@ -115,9 +152,12 @@ echo "Done. Reboot to activate, then confirm it took:"
 cat <<'EOF'
 
     grep -o 'nowatchdog' /proc/cmdline || echo "nowatchdog gone: good"
-    cat /proc/sys/kernel/nmi_watchdog        # expect 1
+    cat /proc/sys/kernel/nmi_watchdog        # expect 1  -- 0 means no hard-lockup detector
     cat /proc/sys/kernel/hardlockup_panic    # expect 1
-    cat /sys/module/pstore/parameters/backend  # expect efi, not (null)
+    cat /sys/module/pstore/parameters/backend  # expect efi_pstore, not (null)
+
+The first two are the ones that were silently 0 the first time round. Do not trust
+/proc/cmdline here: it showed the parameters while the sysctls showed 0.
 
 After any future hang, in this order:
 

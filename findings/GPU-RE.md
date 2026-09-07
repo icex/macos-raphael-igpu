@@ -2042,6 +2042,95 @@ the driver uses the base it reads rather than the BAR address it was given. Wort
 `AMDHWVMM` first, though the run itself answers it: a driver that used the BAR address would
 fail visibly in TTL init, not silently.
 
+### Result: the identity map works, and it changes nothing for the CP
+
+Run 2026-09-07 15:14, kext 1.0.138, `rgpufb=1`, amdgpu-first configuration.
+
+The aperture move took and Apple's driver accepted it, which answers the open question above
+-- the driver uses the base it reads back, not the BAR address it was handed:
+
+    XP: rgpufb=1: FB aperture 0xf400..0xf41f (offset 0x840) -> 0x840..0x85f
+    GPUCAP refresh() --- FB Base: 0x840000000, Top: 0x85fffffff, Offset: 0x840000000
+    TTL::initialize() Completed successfully
+    Accelerator successfully registered with controller
+
+So `MC == physical` across the carveout, and `CP_CPC_IC_BASE = 0x8_5f904000` now resolves to
+physical `0x8_5f904000`, the page the PSP's own autoloaded microcode is on. And:
+
+    XR: post-TTL: BOOTLOAD 0x4e8d=0xc0000001 (complete=1) RLC_CNTL=0x1 RLC_STAT=0
+    XR: post-TTL: MEC2 instr 0x44c ... 0x44c (0 changes -> not executing) MEC1=0x44a CP_MEC_CNTL=0
+
+Identical instruction pointers to every previous run, zero movement across 16 samples, both
+engines unhalted. **Address translation was never what stopped the command processor.** The
+`BASE != OFFSET` mismatch was real and is worth having fixed, but it was not the blocker, and
+the hypothesis in the previous section is refuted as far as the CP is concerned.
+
+One thing to log about the log itself: the `XP: rgpufb=1` line reports "locked IC base 0 now
+resolves to physical 0" because `relocateFbAperture` runs from `populateXGmiConfig`, before
+the PSP has written the instruction-cache bases. The line is cosmetically wrong and cannot be
+used to check the arithmetic; the `XR: post-TTL` report is the one that can.
+
+Also worth recording, because it nearly went down as a breakthrough: the guest panics with a
+NULL dereference in `AMDHWVMM::endVMPTUpdate`, reached from `WindowServer` through
+`IOAccelCommandQueue::submit_command_buffers` -> `AMDAccelResource::BatchPrepareMappings`.
+Seeing WindowServer submit real command buffers looks like enormous progress. It is not new:
+**66 of the 149 archived runs reach exactly that panic.** Check the base rate before
+believing a stack trace is a milestone -- the same mistake as the DCN correlation above.
+
+### The CP microcode-fetch registers are read-only to the guest
+
+Runs 2026-09-07 15:26 and 15:33, kexts 1.0.139 through 1.0.141, `rgpufb=1 rgpuic=1`.
+
+With the address finally resolving, the obvious question was whether the instruction cache
+can be made to prime. `CP_CPC_IC_OP_CNTL` carries `PRIME_ICACHE` (bit 4) and `ICACHE_PRIMED`
+(bit 5), and post-TTL it reads `0x2` -- invalidate-complete set, prime never even requested.
+
+The first two attempts at this test were worthless and are recorded as such. Both polled
+`INVALIDATE_CACHE_COMPLETE` while that bit was **already set on entry**, so the loop exited
+at zero microseconds having proved nothing, and a prime that then failed could not be
+distinguished from a register that ignores writes. The third attempt added the controls that
+make the answer mean something, and the answer is unambiguous:
+
+    XP: controls: writes-land=0 (base_cntl 0x10 ^bit24 -> 0x10) complete-bit-cleared=0
+                  | MEC_CNTL 0 -> halted 0x50000000
+    XP: INVALIDATE completed after 0us | PRIME request-stuck=0 (op=0x2) NEVER COMPLETED
+    XP: MEC2 0x44c..0x44c (0 changes) MEC1 0x44a..0x44a (0 changes) -> still not executing
+
+Read the controls first:
+
+  - `CP_CPC_IC_BASE_CNTL` is `0x10`; writing `0x10 ^ (1<<24)` leaves it `0x10`. Ignored.
+  - `CP_CPC_IC_OP_CNTL` is `0x2`; writing it with bit 1 cleared leaves it `0x2`. Ignored.
+  - Setting bit 4 (`PRIME_ICACHE`) does not stick either -- `request-stuck=0`, still `0x2`.
+  - `CP_MEC_CNTL` is `0`; writing `0x50000000` reads back `0x50000000`. **Accepted.**
+
+That last line is the control that matters. Writes from the plugin do reach this block --
+`CP_MEC_CNTL` is in it and takes them -- so "the writes are ignored" is a property of these
+specific registers and not of how the plugin gets at them. `CP_CPC_IC_BASE_LO/HI`,
+`CP_CPC_IC_BASE_CNTL` and `CP_CPC_IC_OP_CNTL` are read-only to the guest; `CP_MEC_CNTL`,
+three registers away, is not. And the "INVALIDATE completed after 0us" above is void: the
+completion bit was never cleared, so observing it set proves nothing.
+
+So the position is not that priming fails. **The guest cannot issue the command at all.** The
+entire register group that configures where the microengines fetch their microcode is
+hardware-protected for the life of the reset, which is what one would expect of the registers
+that decide what code runs on the GPU, and it is consistent with `GFX_CMD_ID_AUTOLOAD_RLC`
+answering `TEE_ERROR_BUSY`. This retires the whole family of approaches that try to get the
+CP running by programming registers from the guest: the aperture is right, the microcode is
+there, and the fetch configuration is not ours to touch.
+
+**Where that leaves the CP.** The agent that primes the instruction caches and releases the
+microengines on a healthy GFX10 is the RLC, and it reports enabled but idle in every run:
+
+    RLC_CNTL=0x1   RLC_STAT=0   RLC_SAFE_MODE=0   RLC_RLCS_BOOTLOAD_STATUS=0xc0000001
+
+`RLC_CNTL` bit 0 is `RLC_ENABLE`, so it is switched on; `RLC_STAT = 0` means no RLC thread is
+busy -- not `RLC_BUSY`, not `RLC_GPM_BUSY`, not any of the three thread bits. Compare the `xl`
+milestone, which treats `RLC_STAT == 0x25` (`RLC_BUSY | RLC_GPM_BUSY | RLC_THREAD_0_BUSY`) as
+a live RLC. Bootload reports complete, but the microcontroller that would act on it looks
+like it is not running. That is the next thing to characterise, and it is a different kind of
+question from the ones answered so far: not "can we write this register" but "why is the
+RLC's GPM idle after a successful autoload".
+
 ### A hypothesis this raises about the hangs themselves
 
 Not established, and recorded as a hypothesis rather than a finding, but it fits better than
