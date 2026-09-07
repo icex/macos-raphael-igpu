@@ -225,9 +225,48 @@ static bool rlcProbeEnabled = false;
 // rgpurlc=2: additionally cycle RLC_ENABLE. Destructive -- see the comment at the cycle.
 static bool rlcProbeEnabled2 = false;
 
+// rgpuvmm: hook AMDHWVMM's channel setup. 1 = observe, 2 = also clear the guard.
+//
+// This is the panic that actually stops Metal, and it is our bug, not Apple's.
+// WindowServer submits a command buffer, IOAccelCommandQueue reaches
+// AMDAccelResource::BatchPrepareMappings, and AMDHWVMM::endVMPTUpdate dereferences NULL:
+//
+//     589ea: dec dword ptr [rdi + 0x3c]      nesting counter, work only when it hits 0
+//     589f9: mov rdi, qword ptr [rdi + 0x28] the DMA paging channel  -> NULL
+//     589fd: mov rax, qword ptr [rdi]        FAULT (panic RDI=0, CR2=0, +0x13)
+//
+// m_0x28 is written in exactly one place in the whole kext,
+// AMDHWVMM::setMemoryAllocationsEnabled(true) at 0x579a3, right after it creates a channel
+// and immediately before it casts the same pointer to AMDRadeonX6000_AMDDMAHWChannel and
+// stores that at m_0x30. But the creation sits behind an idempotency guard:
+//
+//     57930: test esi, esi
+//     57932: je   0x57a7b        enable == false -> teardown path
+//     57938: cmp  qword ptr [rbx + 0x20], 0x0
+//     5793d: jne  0x57ba8        m_0x20 already set -> SKIP creation entirely
+//
+// and AMDHWVMM::init also writes m_0x20, at 0x56db3, from IAMDHWInterface vtable slot
+// 0x2d8 -- the same value it splatters across m_0x18, m_0x50, m_0x58, m_0x60, m_0x78 and
+// m_0x80. On working hardware that call must return NULL at init time, leaving the guard
+// open so setMemoryAllocationsEnabled builds the channel and sets m_0x20 itself at 0x5795c.
+// If it returns non-NULL here, the guard closes and m_0x28 is never assigned.
+//
+// So: observe first (which of the two is happening), and only then decide.
+static uint32_t vmmProbeMode = 0;
+
 static void reportCpState(const char *when);
 static void primeIcacheOnly();
 static void probeRlc();
+static mach_vm_address_t orgVmmInit = 0;
+static mach_vm_address_t orgVmmSetAlloc = 0;
+static mach_vm_address_t orgVmmSetVSReady = 0;
+// Slide of AMDRadeonX6000, so a captured return address can be reported as a file offset
+// that llvm-nm can name. Static analysis could not identify the caller of
+// setMemoryAllocationsEnabled: it is a virtual call, and vtable slot 0x148 is used by
+// AMDHWEngine, AMDHWChannel, AMDBltMgr and others, so "who calls [rax+0x148]" is unanswerable
+// from the disassembly. The return address is unambiguous.
+static mach_vm_address_t x6Base = 0;
+static void *vmmObject = nullptr;
 
 static void diagDumpThread(void *, wait_result_t) {
     // Tunable with the rgpudump=<ms> boot-arg: the whole AMD bring-up finishes well
@@ -319,6 +358,9 @@ static constexpr size_t kOffPpPowerUp    = 0x101a0;    // AmdPowerPlayHelper::po
 // AMDRadeonX6000, the accelerator.
 static constexpr size_t kOffHwMemVram   = 0x527a4;    // AMDHWMemory::initVRAMInfo [x6]
 static constexpr size_t kOffHwMemEnable = 0x52a1e;    // AMDHWMemory::enableAllocations [x6]
+static constexpr size_t kOffVmmInit     = 0x56d3a;    // AMDHWVMM::init [x6]
+static constexpr size_t kOffVmmSetAlloc = 0x5791e;    // AMDHWVMM::setMemoryAllocationsEnabled [x6]
+static constexpr size_t kOffVmmSetVSReady = 0x578ce;  // AMDHWVMM::setVirtualSpaceReady [x6]
 static constexpr size_t kOffAccPowerUpHW = 0x4e0c;   // AMDGraphicsAccelerator::powerUpHW [x6]
 static constexpr size_t kOffHwPowerUp    = 0x99618;  // AMDNavi23Hardware::powerUp [x6]
 static constexpr size_t kOffHwEngPowerUp = 0x6fe9a;  // AMDHardware::powerUpHWEngines [x6]
@@ -3313,6 +3355,73 @@ static bool regWritable(const char *name, uint32_t reg, uint32_t xorMask) {
     return ok;
 }
 
+static bool wrapVmmInit(void *self, void *hwIface, uint32_t flags) {
+    auto r = FunctionCast(wrapVmmInit, orgVmmInit)(self, hwIface, flags);
+    if (self != nullptr) {
+        auto f = reinterpret_cast<uint8_t *>(self);
+        auto q = [f](size_t o) { return *reinterpret_cast<void **>(f + o); };
+        vmmObject = self;
+        RLOG("XV: AMDHWVMM::init(iface=%p, flags=%u) -> %u | m_0x10=%p m_0x18=%p m_0x20=%p "
+             "m_0x28=%p m_0x30=%p  [caller x6+%#llx]", hwIface, flags, r, q(0x10), q(0x18),
+             q(0x20), q(0x28), q(0x30),
+             reinterpret_cast<uint64_t>(__builtin_return_address(0)) - x6Base);
+        if (q(0x20) != nullptr)
+            RLOG("XV: m_0x20 is NON-NULL after init -- this is what closes the guard in "
+                 "setMemoryAllocationsEnabled and leaves the DMA paging channel unbuilt");
+    }
+    return r;
+}
+
+// setVirtualSpaceReady is slot 0x140, immediately before setMemoryAllocationsEnabled at
+// 0x148 in AMDHWVMM's vtable, so whatever brings virtual memory up is expected to call both.
+// If this one arrives with true and the other never does, that is the ordering to graft onto:
+// mode 3 calls setMemoryAllocationsEnabled(true) right here, which is late enough that the
+// hardware interface is alive and early enough to beat WindowServer's first submission --
+// the deferred diagnostic thread at T+40s is far too late, the guest has already panicked.
+static uint32_t wrapVmmSetVSReady(void *self, uint32_t ready) {
+    auto r = FunctionCast(wrapVmmSetVSReady, orgVmmSetVSReady)(self, ready);
+    if (self == nullptr) return r;
+    vmmObject = self;
+    auto f = reinterpret_cast<uint8_t *>(self);
+    auto q = [f](size_t o) { return *reinterpret_cast<void **>(f + o); };
+    RLOG("XV: setVirtualSpaceReady(%u) -> %u | m_0x20=%p m_0x28=%p  [caller x6+%#llx]",
+         ready, r, q(0x20), q(0x28),
+         reinterpret_cast<uint64_t>(__builtin_return_address(0)) - x6Base);
+    if (ready != 0 && vmmProbeMode >= 3 && q(0x28) == nullptr && orgVmmSetAlloc != 0) {
+        RLOG("XV: driving setMemoryAllocationsEnabled(true) from here, because nothing else "
+             "does and m_0x28 is the DMA paging channel endVMPTUpdate dereferences");
+        reinterpret_cast<uint32_t (*)(void *, uint32_t)>(orgVmmSetAlloc)(self, 1);
+        RLOG("XV: after forced enable: m_0x20=%p m_0x28=%p m_0x30=%p -> %s",
+             q(0x20), q(0x28), *reinterpret_cast<void **>(f + 0x30),
+             q(0x28) != nullptr ? "DMA PAGING CHANNEL PRESENT"
+                                : "still NULL, endVMPTUpdate will panic");
+    }
+    return r;
+}
+
+static uint32_t wrapVmmSetAlloc(void *self, uint32_t enable) {
+    if (self == nullptr)
+        return FunctionCast(wrapVmmSetAlloc, orgVmmSetAlloc)(self, enable);
+    auto f = reinterpret_cast<uint8_t *>(self);
+    auto slot = [f](size_t o) -> void *& { return *reinterpret_cast<void **>(f + o); };
+    vmmObject = self;
+    RLOG("XV: setMemoryAllocationsEnabled(%u) entry: m_0x20=%p m_0x28=%p m_0x30=%p "
+         "nest(0x3c)=%u  [caller x6+%#llx]", enable, slot(0x20), slot(0x28), slot(0x30),
+         *reinterpret_cast<uint32_t *>(f + 0x3c),
+         reinterpret_cast<uint64_t>(__builtin_return_address(0)) - x6Base);
+    if (enable != 0 && vmmProbeMode >= 2 && slot(0x20) != nullptr && slot(0x28) == nullptr) {
+        RLOG("XV: clearing m_0x20 so the guard at 0x5793d falls through and the channel is "
+             "built; setMemoryAllocationsEnabled reassigns m_0x20 itself at 0x5795c");
+        slot(0x20) = nullptr;
+    }
+    auto r = FunctionCast(wrapVmmSetAlloc, orgVmmSetAlloc)(self, enable);
+    RLOG("XV: setMemoryAllocationsEnabled(%u) exit:  m_0x20=%p m_0x28=%p m_0x30=%p -> %s",
+         enable, slot(0x20), slot(0x28), slot(0x30),
+         slot(0x28) != nullptr ? "DMA PAGING CHANNEL PRESENT"
+                               : "still NULL, endVMPTUpdate will panic");
+    return r;
+}
+
 static void probeRlc() {
     if (asicInfo == nullptr) return;
 
@@ -3809,6 +3918,24 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
                  orgHwMemEnable ? "ok" : "FAILED", orgHwMemEnable);
             patcher.clearError();
         }
+        x6Base = addr;
+        if (vmmProbeMode != 0) {
+            orgVmmInit = patcher.routeFunction(addr + kOffVmmInit,
+                           reinterpret_cast<mach_vm_address_t>(wrapVmmInit), true);
+            RLOG("route AMDHWVMM::init -> %s (org=0x%llx)",
+                 orgVmmInit ? "ok" : "FAILED", orgVmmInit);
+            patcher.clearError();
+            orgVmmSetAlloc = patcher.routeFunction(addr + kOffVmmSetAlloc,
+                               reinterpret_cast<mach_vm_address_t>(wrapVmmSetAlloc), true);
+            RLOG("route AMDHWVMM::setMemoryAllocationsEnabled -> %s (org=0x%llx)",
+                 orgVmmSetAlloc ? "ok" : "FAILED", orgVmmSetAlloc);
+            patcher.clearError();
+            orgVmmSetVSReady = patcher.routeFunction(addr + kOffVmmSetVSReady,
+                                 reinterpret_cast<mach_vm_address_t>(wrapVmmSetVSReady), true);
+            RLOG("route AMDHWVMM::setVirtualSpaceReady -> %s (org=0x%llx)",
+                 orgVmmSetVSReady ? "ok" : "FAILED", orgVmmSetVSReady);
+            patcher.clearError();
+        }
         if (mask & XJ) {
             struct { size_t off; mach_vm_address_t *org; void *fn; const char *name; } t[] {
                 {kOffAccPowerUpHW, &orgAccPowerUpHW,
@@ -3856,6 +3983,20 @@ static void pluginStart() {
     } else {
         RLOG("rgpucp not set: leaving the command processor alone (correct for a device the "
              "firmware still owns)");
+    }
+    uint32_t vmp = 0;
+    if (PE_parse_boot_argn("rgpuvmm", &vmp, sizeof(vmp)) && vmp <= 3) {
+        vmmProbeMode = vmp;
+        if (vmp == 1)
+            RLOG("rgpuvmm=1: observing AMDHWVMM::init and setMemoryAllocationsEnabled, to "
+                 "see why the DMA paging channel at m_0x28 is never built");
+        else if (vmp == 2)
+            RLOG("rgpuvmm=2: as 1, and m_0x20 is cleared so the idempotency guard falls "
+                 "through -- UNNECESSARY, m_0x20 was measured as 0 after init, the guard is "
+                 "already open and the real problem is that nobody passes true");
+        else if (vmp == 3)
+            RLOG("rgpuvmm=3: as 1, and setMemoryAllocationsEnabled(true) is driven from "
+                 "setVirtualSpaceReady(true) so the DMA paging channel gets built");
     }
     uint32_t rlp = 0;
     if (PE_parse_boot_argn("rgpurlc", &rlp, sizeof(rlp)) && (rlp == 1 || rlp == 2)) {
