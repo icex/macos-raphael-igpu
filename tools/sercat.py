@@ -21,6 +21,11 @@ s.settimeout(1)
 # the guest actually got. An fsync per chunk costs nothing at these volumes (a few hundred
 # kilobytes over a boot) and is the difference between having evidence and guessing.
 with open(os.path.join(VM, "run", "serial.log"), "ab", buffering=0) as f:
+    # Optional launch-specific proof: published only after connect and log open.
+    ready = os.environ.get("VM_SERIAL_READY")
+    if ready:
+        with open(ready, "w") as marker:
+            marker.write(os.environ["VM_SERIAL_CID"])
     while True:
         try:
             d = s.recv(65536)

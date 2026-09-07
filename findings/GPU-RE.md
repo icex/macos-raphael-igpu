@@ -7,6 +7,102 @@ device handed over with `vfio-pci` and spoofed as `1002:73ff` (Radeon RX 6600, N
 
 ## Status
 
+### 2026-09-07 continuation: real Metal execution test fails
+
+Metal 3 enumeration and a creatable `MTLDevice` are established; successful Metal GPU
+execution is not. This section supersedes the older hardware-lock, malformed-NOP, and
+virgin-VFIO recommendations later in this historical notebook.
+
+Candidate 1.0.155 was loaded and automatically tested at 21:48 local time. It compiled
+the Metal shaders, then failed its first compute command with command-buffer status 5,
+`MTLCommandBufferErrorDomain` code 1, underlying `e00002bd` (`kIOReturnNoMemory`).
+Zero computed values or rendered pixels were verified. The persisted guest log confirms
+the KIQ stamp timeout at 21:47:52.406. See the [actual probe output and run notes](metal-tests/20260907T184850Z-d61f1805/notes.md).
+
+This attempt also exposed a host-tooling lifetime bug: detached `sercat.py` and the
+background `sleep` watchdog disappeared after the launch tool exited. Serial stopped
+before the XQ2 diagnostics, so this run cannot establish whether address preparation
+completed. The exact VM was explicitly stopped. A subsequent GPU-less test established
+that user-systemd serial capture survives the caller and a timer stops the exact container
+at its absolute deadline. The supervision fix subsequently passed 28 tests, independent
+review, and a complete GPU-less launch with post-launch service verification. It is deployed.
+
+The supervised repeat at 22:22 local time also failed the native Metal test (zero completed
+commands), but captured the missing diagnostics. `XQ2: preparation complete` followed a real
+50-microsecond dequeue. Native startKIQ returned zero; EOP stayed zero, EOP_CONTROL stayed 6,
+and the subsequent submission stalled at RPTR 0 / WPTR 32 with HQD_ERROR `0x100` (PQ UTCL1).
+The old doorbell-8 experiment is gone. The exact container was stopped before its cap;
+the host remained responsive. Full evidence is in [this run directory](metal-tests/20260907T192249Z-17682a58/).
+
+This repeat arrived with FB_LOCATION_BASE `0xf400000000`, FB_OFFSET `0x840000000`, and
+software `reserved=0`. The old PTB repair rejected zero `reserved` and left CTX0 PTB at
+`0x0fdfc001`. A further source correction is necessary: VRAM page-directory entries use
+**physical carveout addresses**, while MQD addresses use the MC aperture. Linux's
+`amdgpu_gmc_pd_addr` → `gmc_v10_0_get_vm_pde` → `amdgpu_gmc_vram_mc2pa` chain explicitly
+performs this conversion before `gfxhub_v2_1_init_gart_aperture_regs` programs CTX0.
+The two bases happened to coincide in the earlier `0x840` runs, hiding that distinction.
+For the captured table offset, the expected physical root is `0x84fdfc001`, independent
+of the MC aperture relocation. Implementing and validating that correction is the next
+step; it has not yet established that the rest of KIQ initialization will execute.
+
+Primary source: [Linux GFX10 page-directory conversion](https://github.com/torvalds/linux/blob/master/drivers/gpu/drm/amd/amdgpu/gmc_v10_0.c),
+[root PDE construction](https://github.com/torvalds/linux/blob/master/drivers/gpu/drm/amd/amdgpu/amdgpu_gmc.c),
+and [GFXHUB register programming](https://github.com/torvalds/linux/blob/master/drivers/gpu/drm/amd/amdgpu/gfxhub_v2_1.c).
+
+Re-reading the exact Apple binaries exposed several problems in the experiments:
+
+- `AMDKIQHWChannel::getKIQFrame` initializes **32 dwords**, and `submitKIQFrame` commits
+  that count. The first frame contains SET_RESOURCES (`0xc006a000`), padding, and a
+  completion WRITE_DATA packet at **dwords 16–20**. `0xffff1000` is a valid single-dword
+  NOP; Linux's GFX10 KIQ ring uses the same special NOP. The plugin's doorbell write of
+  **8** excluded the completion stamp. Apple was not confusing byte and dword counts.
+- `repairMqdPointers` ran after the original submission had timed out and returned its
+  failure. It could not repair that power-up attempt. The initial KIQ HQD is programmed
+  directly; continuous restoration from the MQD has not been demonstrated.
+- Apple programs EOP before checking/dequeuing an active KIQ, whereas Linux programs it
+  afterward. Physical-function `WREG32_SOC15_RLC` writes use ordinary MMIO; the special
+  RLC path is for supported SR-IOV VFs. An RLC indirect-write requirement is unsupported.
+- The archived `serial-205047.log` contains `HQD_ERROR=0x80100`, identifying
+  `PQ_UTCL1_ERROR | TC_UTCL1_ERROR`. A clear global fault latch is insufficient to declare
+  queue translation healthy, especially when the plugin explicitly clears that latch.
+- `startRlc` still wrote `0xaaaaaaaa` and `0xbbbbbbbb` into queue base registers without
+  restoring them, despite CP surgery being disabled. That selector test and its scratch
+  write test have been removed. They neither established selector behavior nor belonged
+  in normal bring-up. No causal link to the host hangs has been proven.
+
+Evidence locations in the exact build's disassembly: x6000 `0x5c716`/`0x5c788`
+(submission/frame allocation), `0x8e3ec` (SET_RESOURCES), `0x8e43e`/`0x8e4fd`
+(advance 0x40 bytes to the stamp), `0x8e62a` (WRITE_DATA), `0x8e670` (startKIQ).
+HWLibs `0x1522f..0x15337` programs EOP before the ACTIVE check at `0x15402` and
+dequeue request at `0x15433`. Compare upstream `gfx_v10_0_kiq_init_register`,
+`gfx_v10_0_ring_insert_nop_compute`, and `soc15_common.h`'s RLC macro definitions.
+
+The opt-in `rgpumqd=2` candidate validates queue selector 2/1/0, the complete MQD/EOP
+allocation, software-to-MC relocation, and image contents before changing the queue.
+It then requires genuine dequeue completion within 50 ms, updates the MQD image, and
+calls native startKIQ with corrected MC addresses. It fails closed on mismatch or timeout.
+It disables legacy post-timeout repair and conflicting reset/cache/aperture experiments.
+The earlier XL forced-ACTIVE success is disabled in this mode, including during TTL init;
+therefore a run that never logs `XQ2: preparation complete` has not tested the address fix.
+Basic RLC start and the existing `rgpuptb=1` correction remain enabled.
+
+`tools/metal-test.py` and `tests/metal_probe.m` now provide automatic execution validation.
+The native program compiles in the GPU-less Sequoia guest using its installed Command Line
+Tools. Its negative control returns a failed verdict when the Navi23 device is absent.
+A positive result requires three completed compute passes with 196,608 correct integers
+and an offscreen render/readback of 4,096 coordinate-encoded pixels, with fresh random input
+each run. It checks Metal command-buffer status, managed-resource synchronization, a fresh
+run ID, and the actual guest process exit status. Compilation and execution are separate
+so compilation need not consume GPU exposure time. Permits, delivery expiry, bounded waits,
+and cancellation cleanup prevent treating a timed-out command as safely completed.
+
+Host inspection in this continuation found amdgpu owning the iGPU, watchdog and
+hardlockup panic sysctls enabled, and the pstore backend set to `efi_pstore`. The discrete
+GPU drives the enabled host display. A temporary systemd idle/sleep inhibitor is held for
+the work session. No boot configuration change or VFIO-from-boot override is needed.
+
+### Historical ATOM/VBIOS bring-up
+
 **The ATOM/VBIOS stage is solved.** `AMDRadeonX6000_AmdRadeonControllerNavi23::start()`
 now succeeds and the GPU brands itself as a Navi 23:
 

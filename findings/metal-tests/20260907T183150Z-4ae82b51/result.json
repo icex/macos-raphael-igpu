@@ -1,0 +1,8 @@
+{
+  "run_id": "4ae82b51918b45aebfb91b83ed67ba73",
+  "source_sha256": "6a6937361359a6762acb2afadea7126764592c14668d0b506874a5f7ed06c370",
+  "prepare_only": true,
+  "passed": false,
+  "guest_binary": "/var/tmp/rgpu-metal-6a6937361359a676/probe",
+  "prepared": true
+}
