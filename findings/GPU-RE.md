@@ -1646,3 +1646,66 @@ for `CP_HQD_QUANTUM`, `CP_HQD_IB_CONTROL` and `CP_HQD_HQ_STATUS0`, but
 with `CP_HQD_ACTIVE` forced to 0 first, which is the state upstream reprograms an HQD in.
 EOP stays 0 while `CP_HQD_EOP_CONTROL` reads 6, so Apple did size an EOP buffer it never
 gave an address to.
+
+## What the KIQ is actually waiting for
+
+`CP_CPC_STALLED_STAT1` and its siblings name the stall exactly, and they change the shape of
+the problem:
+
+    CP_CPC_STALLED_STAT1 = 0x210000   MEC2_DECODING_PACKET | MEC2_WAIT_ON_ROQ_DATA
+    CP_CPC_BUSY_STAT     = 0x8080000  MEC2_MESSAGE_BUSY | MEC2_PIPE1_BUSY
+    CP_CPF_BUSY_STAT     = 0x48460000
+    CP_CPF_STALLED_STAT1 = 0
+    CP_STALLED_STAT1/2/3 = 0          the graphics side is not stalled at all
+    CP_BUSY_STAT         = 0
+
+So the queue *is* dispatched -- on MEC2 pipe 1, the pipe the `GRBM_GFX_CNTL` walk found --
+the microengine has begun decoding a packet, and it is blocked waiting for the ring fetch to
+return. `UTCL2IU_WAITING_ON_FREE`, `UTCL2IU_WAITING_ON_TAGS`, `UTCL1_WAITING_ON_TRANS` and
+`GCRIU_WAITING_ON_FREE` are all clear, so it is not waiting on address translation: the read
+was issued and the data never came back. The CP fetcher (`CPF`) is busy and not
+back-pressured, which is a fetch in flight that never completes.
+
+Two things follow, and the second was a surprise.
+
+**The queue programming is not the problem.** The MQD image in VRAM and the HQD register
+file disagree on four fields, and copying the image into the registers with the MECs halted
+and `CP_HQD_ACTIVE` cleared resolves three of them and changes nothing:
+
+| field | MQD | register | after copy |
+|---|---|---|---|
+| `cp_hqd_eop_base_addr` | `0xf40b7068` | 0 | still 0 -- refuses every write |
+| `cp_hqd_eop_control` | `0x8` | `0x6` | still `0x6` |
+| `cp_hqd_pq_control` | `0xd130860d` | `0xc030860d` | `0xd130060d` |
+| `cp_hqd_persistent_state` | `0xbe05301` | `0xbe05300` | `0xbe05300` |
+
+Of those, two are not discrepancies at all: `CP_HQD_PQ_CONTROL` bit 15 is `PQ_EMPTY`, a
+read-only status bit Apple captured into the image, and `CP_HQD_PERSISTENT_STATE` bit 0 is
+`PRELOAD_REQ`, a self-clearing request. `CP_HQD_EOP_BASE_ADDR` genuinely will not take a
+write, from Apple or from here, active or inactive, MECs running or halted.
+
+**It is not the GPU's path to guest system memory either.** That was the obvious suspect:
+every structure this stack has been proven to read -- the PSP ring, the TMR, the MQD, the
+page tables, the RLC clear-state buffer -- lives in the framebuffer, which the hardware
+reaches through the FB aperture and `GCMC_VM_FB_OFFSET` with no DMA at all, while the KIQ
+ring is the first thing it is asked to fetch from guest RAM through a `SYSTEM|SNOOPED` PTE.
+And the data is genuinely there: reading the guest-physical pages the GART names, from the
+host with QEMU's `xp`, shows the write-pointer word holding `0x20` at
+`0x44b639050` and the ring holding a real `PACKET3_SET_RESOURCES` at its base
+(`0xc006a000 0x0028ffff 0xffffffff 0 ...`, opcode `0xA0`, seven payload dwords).
+
+So the ring was moved into VRAM: an unused framebuffer page was filled with that same
+packet followed by `PACKET2` no-ops, the ring's GART PTE was rewritten to point at it with
+`SYSTEM` and `SNOOPED` and the MTYPE bits cleared, and the GFXHUB TLB was invalidated
+(`GCVM_INVALIDATE_ENG0_REQ = 0x00f80001`, acked immediately) -- all *before* the frame is
+submitted, because once `MEC2_WAIT_ON_ROQ_DATA` is set the fetch is already outstanding and
+no invalidate retries it. The PTE reads back `0xff00071` and the stall is unchanged.
+
+A CP fetch that never returns from VRAM is not a memory-visibility problem. It points at the
+path between the CP and the GL2/UTCL2 complex, which is also the one piece of the GFXHUB
+that has never been verified against upstream field by field: `GCVM_L2_CNTL` reads
+`0xc0603`, `GCVM_L2_CNTL3` reads `0x80120007` where upstream's `gfxhub_v2_1_init_cache_regs`
+asks for `BANK_SELECT = 9` and `L2_CACHE_BIGK_FRAGMENT_SIZE = 6` (this reads 7 and 2), and
+`GCVM_L2_CNTL2`, `CNTL4` and `CNTL5` have not been compared at all. The RLC never
+acknowledging safe mode and the 37 timed-out `_vm_10_1_is_eng_ack` waits are consistent with
+the same region being misconfigured.
