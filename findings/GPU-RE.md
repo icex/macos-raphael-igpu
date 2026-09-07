@@ -1896,3 +1896,72 @@ reset through it.
 That closes the last in-guest route. The command processor is the PSP's for the life of the
 reset, and the only way to get one this guest can drive is to make sure amdgpu never claims
 the device: `tools/enable-early-vfio.sh`.
+
+## Two host hangs, no evidence, and why
+
+The host has hard-hung twice during this work. Both times the signature is identical and
+uninformative:
+
+- the journal stops mid-line, with no shutdown sequence -- a hard hang or reset, not a stop
+- no panic, no oops, no BUG, no machine-check anywhere in the surviving log
+- `/sys/fs/pstore` empty, so no dmesg tail was persisted
+- **`journald`'s `SyncIntervalSec` was the default five minutes**, so up to five minutes of
+  kernel log was sitting in RAM when the machine died, and went with it
+
+What differs between the two is only how long each configuration lasted:
+
+| configuration | survived |
+|---|---|
+| amdgpu binds the iGPU at boot, `gpu-bind.sh` hands it over afterwards | ~33 VM launches over three hours (boot -3, 01:22) |
+| vfio-pci claims it from boot, so it reaches the guest exactly as the firmware left it | **53 seconds into the first launch** (boot -1, 12:39) |
+
+The second one is worth being precise about, because the obvious reading is wrong twice over.
+
+The tempting conclusion was that this plugin's register surgery did it -- moving the
+framebuffer aperture, rewriting the L2 and the GART, halting microengines. It cannot be
+that: `run/serial.log` from the crashed boot ends at `BdsDxe: starting Boot0001` after 304
+bytes, so the guest never reached XNU and none of that code ran.
+
+But nor can the guest be said to have hung *there*. `sercat.py` wrote with `buffering=0` and
+no `fsync`, so the bytes sat in the page cache until btrfs committed, and the last tens of
+seconds of guest output died with the host. "The log stops at X" proves nothing unless the
+writer fsyncs. The only honest statement is that the last *durably recorded* guest output
+was OpenCore starting, and where it went after that is unknown.
+
+Root cause: **undetermined, and not determinable from what was captured.** Two crashes
+produced no diagnostic information at all. Everything below is about not being in that
+position a third time.
+
+### What is in place now
+
+`redeploy.sh` refuses to pass the iGPU through when amdgpu has not initialised it this boot
+-- one grep of the current boot's kernel log for `amdgpu 0000:7b:00.0`, override
+`RGPU_ALLOW_VIRGIN_IGPU=1`. This makes the configuration that died in 53 seconds unreachable
+by accident, and it is verified rather than assumed: with the early binding still active,
+`./redeploy.sh` stops before starting QEMU.
+
+`sercat.py` fsyncs every chunk. At a few hundred kilobytes per boot the cost is nothing, and
+it is the difference between knowing where the guest was and guessing.
+
+`tools/enable-diagnostics.sh` sets `SyncIntervalSec=1s` and `Storage=persistent`. Active
+now, no reboot: the kernel log is durable to within a second of a hang instead of losing up
+to five minutes. This is the change that matters.
+
+It does *not* get pstore working, and the first version of the script that claimed to was
+wrong. This kernel has `CONFIG_EFI_VARS_PSTORE=y` together with
+`CONFIG_EFI_VARS_PSTORE_DEFAULT_DISABLE=y`, so `efi_pstore` is compiled in and inert:
+`/sys/module/pstore/parameters/backend` reads `(null)`, and `modprobe efi_pstore` is a no-op
+because there is no module to load. Turning it on needs `efi_pstore.pstore_disable=0` on the
+kernel command line, which is a boot-config change on a Secure Boot install with hash-pinned
+images. The script now detects the null backend and says so, printing the exact change as a
+decision rather than writing a `modules-load.d` drop-in that looked like it had done
+something. And it would only help for a hang the kernel notices -- a fabric-level lockup
+that stops the CPU dead leaves nothing either way.
+
+`tools/disable-early-vfio.sh` reverts the early binding, restoring the configuration that
+lasted three hours rather than 53 seconds. Nothing is given up by reverting: the host died
+before the guest kernel loaded, so that boot never revealed whether the command processor
+would have been usable.
+
+Still open, and deliberately not changed: the kernel command line carries `nowatchdog`, so a
+hang cannot self-recover and needs the reset button.
