@@ -112,6 +112,26 @@ def main():
     else:
         print("mkrlcfw: KDK or toc firmware absent -- no TOC substitution emitted")
 
+    # This chip's own MEC microcode, for the instruction-cache direct load.
+    #
+    # After amdgpu hands the device over, CP_CPC_IC_BASE still points into the HOST's
+    # carveout (0x8_5f904000, with the host FB base at 0x840000000), so the microengines
+    # fetch their microcode from memory the guest does not own and stop -- MEC2's
+    # instruction pointer parks at 0x310 and never moves. Upstream's direct-load path
+    # programs that register itself, so the plugin needs this chip's MEC ucode to point it
+    # at. gc_10_3_6_mec.bin's payload is 0x41830 bytes; Apple's Navi 23 blob is 0x414b0,
+    # close enough in size to confirm the family and different enough to be worth using
+    # this one.
+    mec = b""
+    mec_path = os.path.join(os.path.dirname(a.fw), "gc_10_3_6_mec.bin.zst")
+    if os.path.exists(mec_path):
+        mb = read_fw(mec_path)
+        m_size, m_off = struct.unpack_from("<I", mb, 0x14)[0], struct.unpack_from("<I", mb, 0x18)[0]
+        mec = mb[m_off:m_off + m_size]
+        print(f"mkrlcfw: MEC ucode {len(mec)} bytes (payload at {m_off:#x})")
+    else:
+        print("mkrlcfw: gc_10_3_6_mec.bin absent -- no MEC ucode emitted")
+
     def carr(name, blob):
         if not blob:
             return ""
@@ -132,6 +152,9 @@ def main():
 
 {carr("kAppleToc", apple_toc)}{carr("kAppleToc2", apple_toc2)}{carr("kRaphaelToc", raph_toc)}#define RGPU_HAVE_TOC_FW {1 if apple_toc else 0}
 static const uint32_t kTocSize = {len(apple_toc)}u;
+
+{carr("kMecFw", mec)}#define RGPU_HAVE_MEC_FW {1 if mec else 0}
+static const uint32_t kMecFwSize = {len(mec)}u;
 
 static const uint32_t kRlcFwSize = {len(d)}u;
 // __attribute__((used)) is required: with only a few bytes read directly the compiler
