@@ -2028,6 +2028,47 @@ MC == phys and CPU-visible BAR0 offsets are `MC - 0x840000000`, which stays cons
 the driver uses the base it reads rather than the BAR address it was given. That is the thing
 to check in `AMDHWVMM` before spending a boot on it.
 
+Implemented as boot-arg `rgpufb` in plugin 1.0.138, deliberately not a mask bit and
+deliberately not behind `rgpucp`: `rgpufb=1` is the identity map and writes no microcode and
+touches no CP register, `rgpufb=2` is the old `0x850000000` relocation, `0` (default) leaves
+Apple's programming alone. `relocateFbAperture` now reads `FB_OFFSET` at runtime rather than
+assuming `0x840000000`, and reports where the locked IC base resolves to so the arithmetic
+is checkable from the log instead of from this document.
+
+Open question before trying it: Apple's driver reads `FB_LOCATION_BASE` back and derives its
+own MC allocations from it, and BAR0 is at `0xf400000000` in the guest. Under an identity map
+MC == phys and CPU-visible BAR0 offsets are `MC - 0x840000000`, which stays consistent *if*
+the driver uses the base it reads rather than the BAR address it was given. Worth checking in
+`AMDHWVMM` first, though the run itself answers it: a driver that used the BAR address would
+fail visibly in TTL init, not silently.
+
+### A hypothesis this raises about the hangs themselves
+
+Not established, and recorded as a hypothesis rather than a finding, but it fits better than
+anything before it.
+
+`FB_LOCATION_BASE != FB_OFFSET` does not only affect the CP. It is the framebuffer aperture
+translation for **every** fabric master behind the GFXHUB -- CP, SDMA, and the DCN display
+hub. Any MC address a master emits inside `[BASE, TOP]` is translated as `MC - BASE + OFFSET`
+and goes straight to DRAM through the host's memory controller, because on an APU the
+framebuffer is a DRAM carveout and this path is not the PCIe path the IOMMU polices. With
+`BASE = 0xf400000000` and `OFFSET = 0x840000000` the mapping is only meaningful for addresses
+the guest's driver generated; anything a master emits that the *firmware* generated -- which
+is exactly what the PSP writes -- lands somewhere else entirely.
+
+That would produce precisely the signature we have: a hard hang at unpredictable timing,
+only ever with the iGPU passed through, with nothing in the kernel log because the kernel's
+own pages are what got written. It also explains why the amdgpu-first configuration survived
+~50x longer without being safe: the difference would be which stale firmware-era addresses
+happen to be sitting in the masters' registers when the guest starts, not whether the hazard
+exists.
+
+If it is right, `rgpufb=1` is not only the route to a working command processor, it is the
+mitigation -- an identity map is the configuration the host itself runs, so every physical
+address any master emits is self-consistent. If it is wrong, the run costs one boot and the
+lockup detectors will finally have something to say about it. Either way it is the next
+thing to do, and it should be done with `tools/enable-lockup-capture.sh` already applied.
+
 ### What is in place now
 
 **Passthrough is opt-in.** `./redeploy.sh` now runs the guest with no passthrough; `--gpu`
