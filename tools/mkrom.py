@@ -33,6 +33,9 @@ ap.add_argument('--mem-type',  type=lambda s:int(s,0), default=0x70, help='ATOM_
 ap.add_argument('--chan-num',  type=int, default=8)
 ap.add_argument('--keep-dead-display-paths', action='store_true',
                 help='do NOT drop display paths whose device_tag is 0 (see fix below)')
+ap.add_argument('--no-display-paths', action='store_true',
+                help='declare ZERO display paths, so Apple creates no AmdRadeonFramebuffer '
+                     'and macOS keeps the EFI framebuffer as the console')
 ap.add_argument('--chan-width',type=int, default=4, help='width = chan_num << chan_width')
 ap.add_argument('--mem-size',  type=int, default=8192, help='per-module memory size')
 ap.add_argument('--modules',   type=int, default=1)
@@ -128,15 +131,43 @@ if not a.keep_dead_display_paths:
         objid, devtag = struct.unpack_from('<H', entry, 0)[0], struct.unpack_from('<H', entry, 12)[0]
         (kept if devtag else dropped).append((i, objid, devtag, entry))
         if devtag: tags |= devtag
-    assert kept, 'every display path has device_tag 0 -- refusing to leave an empty table, ' \
-                 'Apple also asserts ASSERT(0 != connectorCount)'
-    for n, (_, _, _, entry) in enumerate(kept):
+    if a.no_display_paths:
+        # Deliberately zero, to get a usable console rather than a usable GPU display.
+        #
+        # The connector fix works -- four framebuffers are enumerated -- but they all report
+        # "Driver is offline" because Apple's DCN 2.x/3.0 code cannot bring up DCN 3.1.5
+        # pipes (dccg2_get_dccg_ref_freq, hubbub2_get_dchub_ref_freq, and one
+        # generic_reg_wait timeout per framebuffer). Meanwhile the AMD framebuffer has taken
+        # the console away from the EFI framebuffer OpenCore provides, so nothing renders
+        # anywhere: the emulated display freezes in the verbose log at ~0.1 s and a monitor
+        # on the iGPU gets no signal.
+        #
+        # That blocks every route into the guest, and therefore blocks measuring Metal at
+        # all: the command agent is a shell loop that has to be typed into a logged-in
+        # Terminal, guest-login.sh works by screenshotting the display, and the guest's sshd
+        # is not enabled. With no connectors Apple should create no framebuffer, leave the
+        # EFI one alone, and let the login window render -- while the accelerator, which is a
+        # separate kext and already registers, keeps working. Metal on macOS comes from the
+        # accelerator, not the framebuffer, so a headless GPU can still provide it.
+        #
+        # Apple asserts ASSERT(0 != connectorCount) on this, but its asserts log and continue
+        # -- the device_tag one did exactly that.
+        d[do + 6] = 0
+        struct.pack_into('<H', d, do + 4, 0)
+        disp_note = (f"display paths -> {do:#06x}  ZERO paths declared (--no-display-paths): "
+                     f"no AmdRadeonFramebuffer, console stays on the EFI framebuffer")
+        kept = None
+    assert a.no_display_paths or kept, \
+        'every display path has device_tag 0 -- refusing to leave an empty table by accident; ' \
+        'use --no-display-paths if that is what you want'
+    for n, (_, _, _, entry) in enumerate(kept or []):
         d[do + 8 + n*PATH_LEN : do + 8 + (n+1)*PATH_LEN] = entry
-    d[do + 6] = len(kept)                                  # number_of_path
-    struct.pack_into('<H', d, do + 4, tags)                # supporteddevices
-    disp_note = (f"display paths -> {do:#06x}  kept {len(kept)}/{npath} "
-                 f"(dropped {', '.join(f'path[{i}] objid={o:#06x}' for i,o,_,_ in dropped) or 'none'}), "
-                 f"supporteddevices {supported:#06x} -> {tags:#06x}")
+    if kept is not None:
+        d[do + 6] = len(kept)                              # number_of_path
+        struct.pack_into('<H', d, do + 4, tags)            # supporteddevices
+        disp_note = (f"display paths -> {do:#06x}  kept {len(kept)}/{npath} "
+                     f"(dropped {', '.join(f'path[{i}] objid={o:#06x}' for i,o,_,_ in dropped) or 'none'}), "
+                     f"supporteddevices {supported:#06x} -> {tags:#06x}")
 else:
     disp_note = 'display paths -> left alone (--keep-dead-display-paths)'
 

@@ -254,12 +254,41 @@ static bool rlcProbeEnabled2 = false;
 // So: observe first (which of the two is happening), and only then decide.
 static uint32_t vmmProbeMode = 0;
 
+// rgpumem: 1 = report AMDHWMemory's pool state, 2 = also call enableAllocations().
+//
+// The accelerator's PerformanceStatisticsAccum shows the driver allocating happily in GART
+// (gartUsedBytes ~4.8 MB, 19 surfaces, 105 textures, 4 2D contexts) while VRAM is flat zero:
+//
+//     vramFreeBytes = 0        inUseVidMemoryBytes = 0
+//     HWChannel GFX  | Commands Submitted = 0, Completed = 0
+//     HWChannel KIQ  | Commands Submitted = 0, Completed = 0
+//     HWChannel SDMA0| Commands Submitted = 0, Completed = 0
+//
+// Not one command has ever reached any hardware channel, and the VRAM heap has no bytes in
+// it. AMDHWMemory::enableAllocations (x6+0x52a1e) is what populates that heap and it is never
+// called: the XH hook logs "initVRAMInfo" every boot but "enableAllocations entry" never
+// appears, because it sits downstream of the ttlPowerUp failure.
+//
+// enableAllocations takes no arguments -- only `this` -- so it is graftable the same way
+// setMemoryAllocationsEnabled was. But it gates on two POOL POINTERS:
+//
+//     52a2b: mov rdi, qword ptr [rdi + 0x68]   ; pool A, null-tested
+//     52a38: cmp qword ptr [rbx + 0x70], 0x0   ; pool B, compared to 0
+//
+// and those have never been logged -- the XH hook's "pool0/pool1" are the SIZES at +0x40 and
+// +0x48, which is a different thing. If the pool objects at +0x68/+0x70 are null because
+// powerUp never built them, calling enableAllocations achieves nothing and the real fix is
+// upstream. So mode 1 only reports, and mode 2 acts. Do not skip mode 1.
+static uint32_t memProbeMode = 0;
+static void *hwMemObject = nullptr;
+
 static void reportCpState(const char *when);
 static void primeIcacheOnly();
 static void probeRlc();
 static mach_vm_address_t orgVmmInit = 0;
 static mach_vm_address_t orgVmmSetAlloc = 0;
 static mach_vm_address_t orgVmmSetVSReady = 0;
+static mach_vm_address_t orgHwMemSetVSReady = 0;
 // Slide of AMDRadeonX6000, so a captured return address can be reported as a file offset
 // that llvm-nm can name. Static analysis could not identify the caller of
 // setMemoryAllocationsEnabled: it is a virtual call, and vtable slot 0x148 is used by
@@ -361,6 +390,7 @@ static constexpr size_t kOffHwMemEnable = 0x52a1e;    // AMDHWMemory::enableAllo
 static constexpr size_t kOffVmmInit     = 0x56d3a;    // AMDHWVMM::init [x6]
 static constexpr size_t kOffVmmSetAlloc = 0x5791e;    // AMDHWVMM::setMemoryAllocationsEnabled [x6]
 static constexpr size_t kOffVmmSetVSReady = 0x578ce;  // AMDHWVMM::setVirtualSpaceReady [x6]
+static constexpr size_t kOffHwMemSetVSReady = 0x52c3a; // AMDHWMemory::setVirtualSpaceReady [x6]
 static constexpr size_t kOffAccPowerUpHW = 0x4e0c;   // AMDGraphicsAccelerator::powerUpHW [x6]
 static constexpr size_t kOffHwPowerUp    = 0x99618;  // AMDNavi23Hardware::powerUp [x6]
 static constexpr size_t kOffHwEngPowerUp = 0x6fe9a;  // AMDHardware::powerUpHWEngines [x6]
@@ -2095,9 +2125,10 @@ static uint32_t wrapHwMemVram(void *self) {
     if (self == nullptr) return r;
     auto f = reinterpret_cast<uint8_t *>(self);
     auto q = [f](size_t o) -> uint64_t & { return *reinterpret_cast<uint64_t *>(f + o); };
+    hwMemObject = self;
     RLOG("XH: initVRAMInfo -> %u  base=%#llx reserved=%#llx base-reserved=%#llx "
-         "pool0=%#llx pool1=%#llx",
-         r, q(0x50), q(0x58), q(0x60), q(0x40), q(0x48));
+         "size0=%#llx size1=%#llx | poolA(0x68)=%#llx poolB(0x70)=%#llx",
+         r, q(0x50), q(0x58), q(0x60), q(0x40), q(0x48), q(0x68), q(0x70));
     if ((mask & XH) != 0 && q(0x40) != q(0x48) && q(0x40) != 0 && q(0x48) != 0) {
         uint64_t use = q(0x40) < q(0x48) ? q(0x40) : q(0x48);
         RLOG("XH: pool sizes differ (%#llx vs %#llx) -- enableAllocations would build an "
@@ -3378,6 +3409,39 @@ static bool wrapVmmInit(void *self, void *hwIface, uint32_t flags) {
 // mode 3 calls setMemoryAllocationsEnabled(true) right here, which is late enough that the
 // hardware interface is alive and early enough to beat WindowServer's first submission --
 // the deferred diagnostic thread at T+40s is far too late, the guest has already panicked.
+// AMDHWMemory::setVirtualSpaceReady is the memory-side twin of the VMM one that already
+// proved graftable, and it is the natural place to enable allocations: by the time virtual
+// space is ready the pools should exist. Report the pool pointers here, and only act on them
+// under rgpumem=2.
+static uint32_t wrapHwMemSetVSReady(void *self, uint32_t ready) {
+    auto r = FunctionCast(wrapHwMemSetVSReady, orgHwMemSetVSReady)(self, ready);
+    if (self == nullptr) return r;
+    hwMemObject = self;
+    auto f = reinterpret_cast<uint8_t *>(self);
+    auto q = [f](size_t o) -> uint64_t & { return *reinterpret_cast<uint64_t *>(f + o); };
+    RLOG("XM: AMDHWMemory::setVirtualSpaceReady(%u) | size0=%#llx size1=%#llx "
+         "poolA(0x68)=%#llx poolB(0x70)=%#llx  [caller x6+%#llx]",
+         ready, q(0x40), q(0x48), q(0x68), q(0x70),
+         reinterpret_cast<uint64_t>(__builtin_return_address(0)) - x6Base);
+    static bool tried = false;
+    if (ready != 0 && memProbeMode >= 2 && !tried && orgHwMemEnable != 0) {
+        tried = true;
+        if (q(0x68) == 0 || q(0x70) == 0) {
+            RLOG("XM: NOT calling enableAllocations: pool pointers are null (A=%#llx B=%#llx), "
+                 "so it would bail silently -- the pools are built upstream of the ttlPowerUp "
+                 "failure and that is the thing to fix",
+                 q(0x68), q(0x70));
+        } else {
+            RLOG("XM: calling AMDHWMemory::enableAllocations() -- nothing else does, and the "
+                 "VRAM heap is empty without it");
+            reinterpret_cast<uint32_t (*)(void *)>(orgHwMemEnable)(self);
+            RLOG("XM: after enableAllocations: size0=%#llx size1=%#llx poolA=%#llx poolB=%#llx",
+                 q(0x40), q(0x48), q(0x68), q(0x70));
+        }
+    }
+    return r;
+}
+
 static uint32_t wrapVmmSetVSReady(void *self, uint32_t ready) {
     auto r = FunctionCast(wrapVmmSetVSReady, orgVmmSetVSReady)(self, ready);
     if (self == nullptr) return r;
@@ -3919,7 +3983,7 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
             patcher.clearError();
         }
         x6Base = addr;
-        if (vmmProbeMode != 0) {
+        if (vmmProbeMode != 0 || memProbeMode != 0) {
             orgVmmInit = patcher.routeFunction(addr + kOffVmmInit,
                            reinterpret_cast<mach_vm_address_t>(wrapVmmInit), true);
             RLOG("route AMDHWVMM::init -> %s (org=0x%llx)",
@@ -3929,6 +3993,11 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
                                reinterpret_cast<mach_vm_address_t>(wrapVmmSetAlloc), true);
             RLOG("route AMDHWVMM::setMemoryAllocationsEnabled -> %s (org=0x%llx)",
                  orgVmmSetAlloc ? "ok" : "FAILED", orgVmmSetAlloc);
+            patcher.clearError();
+            orgHwMemSetVSReady = patcher.routeFunction(addr + kOffHwMemSetVSReady,
+                                 reinterpret_cast<mach_vm_address_t>(wrapHwMemSetVSReady), true);
+            RLOG("route AMDHWMemory::setVirtualSpaceReady -> %s (org=0x%llx)",
+                 orgHwMemSetVSReady ? "ok" : "FAILED", orgHwMemSetVSReady);
             patcher.clearError();
             orgVmmSetVSReady = patcher.routeFunction(addr + kOffVmmSetVSReady,
                                  reinterpret_cast<mach_vm_address_t>(wrapVmmSetVSReady), true);
@@ -3983,6 +4052,13 @@ static void pluginStart() {
     } else {
         RLOG("rgpucp not set: leaving the command processor alone (correct for a device the "
              "firmware still owns)");
+    }
+    uint32_t mem = 0;
+    if (PE_parse_boot_argn("rgpumem", &mem, sizeof(mem)) && mem <= 2) {
+        memProbeMode = mem;
+        RLOG("rgpumem=%u: %s AMDHWMemory's pool pointers at +0x68/+0x70, which are what "
+             "enableAllocations gates on and which have never been logged", mem,
+             mem >= 2 ? "report and act on" : "report");
     }
     uint32_t vmp = 0;
     if (PE_parse_boot_argn("rgpuvmm", &vmp, sizeof(vmp)) && vmp <= 3) {
