@@ -972,6 +972,17 @@ static void pspRingCtrl(void *psp, uint32_t cmd, const char *what) {
 //
 // So: rgpucp=1 to get the workarounds back on a locked device, nothing by default.
 static bool cpSurgeryEnabled = false;
+
+// Which framebuffer-aperture layout to program, from boot-arg rgpufb.
+//
+//   0  leave it exactly as Apple programmed it (default)
+//   1  identity map: FB_LOCATION_BASE = FB_OFFSET, the host's own configuration
+//   2  the old relocation, BASE = 0x850000000, which brings the locked IC base inside
+//      BAR0 so loadMecMicrocode() can write microcode there (needs rgpucp=1 too)
+//
+// Its own boot-arg rather than a mask bit for the same reason as rgpucp: the mask is out of
+// bits, and this changes where every GPU fabric master sends its reads.
+static uint32_t fbApertureMode = 0;
 static bool pspResetRequested = false;
 static bool pspResetDone = false;
 static constexpr uint32_t kModeReset1 = 0x00070000;   // GFX_CTRL_CMD_ID_MODE1_RST
@@ -3455,7 +3466,7 @@ static void softResetCp() {
 // of these registers, not the GFXHUB ones (that is why xg exists at all), so nothing
 // downstream overwrites this.
 static void relocateFbAperture() {
-    if (asicInfo == nullptr) return;
+    if (asicInfo == nullptr || fbApertureMode == 0) return;
     static bool done = false;
     if (done) return;
     done = true;
@@ -3463,24 +3474,35 @@ static void relocateFbAperture() {
     uint32_t oldBase = fbRead(asicInfo, kGcFbBase) & 0xffffff;
     uint32_t oldTop  = fbRead(asicInfo, kGcFbTop) & 0xffffff;
     uint32_t oldOff  = fbRead(asicInfo, kGcFbOffset) & 0xffffff;
-    if (oldBase == kFbBaseWanted) return;
 
-    fbWrite(asicInfo, kGcFbBase, kFbBaseWanted);
-    fbWrite(asicInfo, kGcFbTop, kFbTopWanted);
+    // Read FB_OFFSET rather than hardcoding the carveout base: it is whatever the platform
+    // firmware chose on this machine, and mode 1 is defined relative to it.
+    uint32_t wantBase = (fbApertureMode == 1) ? oldOff : kFbBaseWanted;
+    uint32_t wantTop  = wantBase + (oldTop - oldBase);
+    if (oldBase == wantBase) return;
+
+    fbWrite(asicInfo, kGcFbBase, wantBase);
+    fbWrite(asicInfo, kGcFbTop, wantTop);
     // The system aperture marks which MC range bypasses the page tables; it is in 256 KB
     // units, so it has to follow the window rather than stay behind on the old one.
-    fbWrite(asicInfo, kGcVmSysApLow, static_cast<uint32_t>(kFbBaseWanted) << 6);
-    fbWrite(asicInfo, kGcVmSysApHigh, (static_cast<uint32_t>(kFbTopWanted) << 6) | 0x3f);
-    RLOG("XP: FB aperture %#x..%#x (offset %#x) -> %#x..%#x; sys aperture %#x..%#x; "
-         "locked IC base %#x lands at fb+%#llx",
-         oldBase, oldTop, oldOff, fbRead(asicInfo, kGcFbBase) & 0xffffff,
+    fbWrite(asicInfo, kGcVmSysApLow, wantBase << 6);
+    fbWrite(asicInfo, kGcVmSysApHigh, (wantTop << 6) | 0x3f);
+
+    uint64_t icBase = (static_cast<uint64_t>(fbRead(asicInfo, kGcCpcIcBaseHi)) << 32) |
+                      fbRead(asicInfo, kGcCpcIcBaseLo);
+    uint64_t phys = icBase - (static_cast<uint64_t>(wantBase) << 24) +
+                    (static_cast<uint64_t>(oldOff) << 24);
+    RLOG("XP: rgpufb=%u: FB aperture %#x..%#x (offset %#x) -> %#x..%#x; sys aperture "
+         "%#x..%#x; locked IC base %#llx now resolves to physical %#llx = carveout+%#llx",
+         fbApertureMode, oldBase, oldTop, oldOff, fbRead(asicInfo, kGcFbBase) & 0xffffff,
          fbRead(asicInfo, kGcFbTop) & 0xffffff, fbRead(asicInfo, kGcVmSysApLow),
-         fbRead(asicInfo, kGcVmSysApHigh), 0x5f904000u, kMecFwFbOffset);
+         fbRead(asicInfo, kGcVmSysApHigh), icBase, phys,
+         phys - (static_cast<uint64_t>(oldOff) << 24));
 }
 
 static uint32_t wrapFbXgmiConfig(void *self) {
     asicInfo = self;
-    if (cpSurgeryEnabled) relocateFbAperture();
+    relocateFbAperture();   // no-op unless rgpufb is set
     if (mask & XK) reportCpState("pre-TTL");
     // NOT calling softResetCp() here. Tried it, and it costs the whole run: the block
     // reset takes GRBM_STATUS from 0x3028 (idle) to 0xa0003028 (CP_BUSY | GUI_ACTIVE)
@@ -3617,6 +3639,17 @@ static void pluginStart() {
     } else {
         RLOG("rgpucp not set: leaving the command processor alone (correct for a device the "
              "firmware still owns)");
+    }
+    uint32_t fbm = 0;
+    if (PE_parse_boot_argn("rgpufb", &fbm, sizeof(fbm)) && fbm <= 2) {
+        fbApertureMode = fbm;
+        if (fbm == 1)
+            RLOG("rgpufb=1: FB_LOCATION_BASE will be set equal to FB_OFFSET, so MC == "
+                 "physical across the carveout -- the configuration the host itself runs, "
+                 "and the one in which the PSP's own autoloaded microcode is reachable");
+        else if (fbm == 2)
+            RLOG("rgpufb=2: FB_LOCATION_BASE -> 0x850000000, bringing the locked IC base "
+                 "inside BAR0 so the plugin can write microcode there (needs rgpucp=1)");
     }
     if (PE_parse_boot_argn("rgpureset", &rst, sizeof(rst)) && rst == 1) {
         pspResetRequested = true;
