@@ -957,6 +957,20 @@ static void pspRingCtrl(void *psp, uint32_t cmd, const char *what) {
 // The honest risk: this is an integrated GPU on the same die as the CPU, reached through
 // vfio, and resetting the graphics block is not guaranteed to leave the host's fabric alone.
 // Recovery if it goes wrong is a host reboot. Hence the separate opt-in.
+// Everything that exists only to compensate for a command processor locked by the PSP is
+// gated on this, and it is OFF by default.
+//
+// Those interventions were written against a device amdgpu had already claimed and released,
+// where the microengines were dead and CP_CPC_IC_BASE pointed into the host's memory. On a
+// device that reaches the guest as the system firmware left it, the PSP's own autoload has
+// already run: the engines are live, the instruction-cache bases mean something, and
+// BOOTLOAD_COMPLETE is genuinely set. Relocating the framebuffer aperture, reloading MEC
+// microcode, rewriting GART entries and halting microengines underneath all of that is not
+// just pointless there, it is a good way to hang the fabric -- and the host has hard-hung
+// twice during this work with no evidence left behind.
+//
+// So: rgpucp=1 to get the workarounds back on a locked device, nothing by default.
+static bool cpSurgeryEnabled = false;
 static bool pspResetRequested = false;
 static bool pspResetDone = false;
 static constexpr uint32_t kModeReset1 = 0x00070000;   // GFX_CTRL_CMD_ID_MODE1_RST
@@ -2057,7 +2071,7 @@ static uint32_t wrapKiqStart(void *self, uint64_t a, uint64_t b, void *spec, uin
     RLOG("XJ:   PM4 startKIQ(%#llx, %#llx) -> %#x (0 is success)", a, b, r);
     kiqEopHint = b;
     if (mask & XK) {
-        enableDoorbellMsg(a, b);
+        if (cpSurgeryEnabled) enableDoorbellMsg(a, b);
         // Before the frame is submitted and the doorbell rung, not after: once MEC2 is
         // stalled in WAIT_ON_ROQ_DATA the fetch is already outstanding and no TLB
         // invalidate brings it back.
@@ -3072,6 +3086,7 @@ static void cpSelfTest() {
     for (unsigned i = sizeof(pkt) / 4; i < 0x400; i++)
         fb[(kRingCopyFbOffset / 4) + i] = 0x80000000u;   // PACKET2 nops
 
+    if (!cpSurgeryEnabled) return;   // never rewrite a live GPU's GART entries
     relocateRingToVram();   // repoints the ring PTE at kRingCopyFbOffset and invalidates
 
     auto dbBase = *reinterpret_cast<volatile uint64_t **>(
@@ -3133,7 +3148,7 @@ static uint32_t wrapKiqSubmit(void *self) {
     // write pointer's unit; if it still sits, the packet is being fetched and ignored.
     if ((mask & XK) != 0 && hwObj != nullptr && asicInfo != nullptr) {
         fbWrite(asicInfo, kGcGrbmGfxCntl, kKiqSelector);
-        cpSelfTest();
+        if (cpSurgeryEnabled) cpSelfTest();
         fbWrite(asicInfo, kGcGrbmGfxCntl, 0);
     }
     auto r = FunctionCast(wrapKiqSubmit, orgKiqSubmit)(self);
@@ -3241,9 +3256,11 @@ static void startRlc() {
     // "active=1 after 2000us": CP_HQD_DEQUEUE_REQUEST is serviced by MEC firmware, so a
     // request that never retires is itself evidence that the microengine is not running.
     // That is what dumpCpUcode is here to settle.
-    programL2LikeUpstream();
-    loadMecMicrocode();
-    startMecEngines();
+    if (cpSurgeryEnabled) {
+        programL2LikeUpstream();
+        loadMecMicrocode();
+        startMecEngines();
+    }
     dumpMecQueues("post-TTL");
     dumpCpUcode("post-TTL");
     dumpGfxHubVm("post-TTL");
@@ -3421,7 +3438,7 @@ static void relocateFbAperture() {
 
 static uint32_t wrapFbXgmiConfig(void *self) {
     asicInfo = self;
-    if (mask & XL) relocateFbAperture();
+    if (cpSurgeryEnabled) relocateFbAperture();
     // NOT calling softResetCp() here. Tried it, and it costs the whole run: the block
     // reset takes GRBM_STATUS from 0x3028 (idle) to 0xa0003028 (CP_BUSY | GUI_ACTIVE)
     // and never settles, TTL's GC hw_init then times out in cosWaitForFunc, and
@@ -3549,6 +3566,15 @@ static void pluginStart() {
     // Its own boot-arg rather than a mask bit: this is the one thing here that can take the
     // host with it, so it should not be reachable by editing a hex mask.
     uint32_t rst = 0;
+    uint32_t cps = 0;
+    if (PE_parse_boot_argn("rgpucp", &cps, sizeof(cps)) && cps == 1) {
+        cpSurgeryEnabled = true;
+        RLOG("rgpucp=1: command-processor workarounds enabled (aperture move, MEC microcode "
+             "reload, GART rewrite, MEC halt) -- only correct on a CP locked by the PSP");
+    } else {
+        RLOG("rgpucp not set: leaving the command processor alone (correct for a device the "
+             "firmware still owns)");
+    }
     if (PE_parse_boot_argn("rgpureset", &rst, sizeof(rst)) && rst == 1) {
         pspResetRequested = true;
         RLOG("rgpureset=1: a PSP MODE1 reset will be issued before the PSP ring is created");
