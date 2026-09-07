@@ -201,11 +201,30 @@ static void diagAppend(const char *fmt, ...) {
 
 static uint32_t diagDumpDelayMs = 75000;
 
+// Ask the CP's instruction cache to prime itself, from boot-arg rgpuic=1, and nothing else.
+// Separate from rgpucp, which bundles the prime with loadMecMicrocode() -- correct only
+// under rgpufb=2, and wrong under the identity map, where the CP fetches from aperture
+// offset 0x1f904000 and 0x0f904000 is an unrelated page.
+static bool icachePrimeEnabled = false;
+
+static void reportCpState(const char *when);
+static void primeIcacheOnly();
+
 static void diagDumpThread(void *, wait_result_t) {
     // Tunable with the rgpudump=<ms> boot-arg: the whole AMD bring-up finishes well
     // before the default, and each iteration costs a boot, so this can be shortened once
     // you know how early the sequence completes on a given configuration.
     IOSleep(diagDumpDelayMs);
+    // The prime runs HERE, not from startRlc.
+    //
+    // startRlc is called from inside TTL::initialize, and halting both MECs plus
+    // invalidating the instruction cache at that point breaks the GC HW_INIT that comes
+    // next: the run fills with "cosWaitForFunc: Timeout while waiting for function" and
+    // never reaches the accelerator. That is the same failure softResetCp() caused from the
+    // same hook. By the time this thread wakes, TTL has finished and the accelerator has
+    // registered, so poking the CP can no longer derail bring-up -- and the engines have
+    // never executed in any run, so there is nothing to interrupt.
+    if (icachePrimeEnabled) { primeIcacheOnly(); reportCpState("after-prime"); }
     SYSLOG("rgpu", "==== deferred diagnostics: %lu bytes ====", diagLen);
     size_t i = 0;
     unsigned n = 0;
@@ -3239,6 +3258,89 @@ static const char *const kEngineNames[] {
 //
 // Do it here, before any engine powers up, which is upstream's order (rlc_resume runs
 // ahead of cp_resume).
+// Prime the CP instruction cache from the address it is locked to, and nothing else.
+//
+// Worth re-running under rgpufb=1 for a reason that did not hold before: the earlier attempt
+// primed while CP_CPC_IC_BASE resolved to 0xff1c9f904000 -- nowhere -- so failing to prime
+// proved only that the address was unreachable. Under the identity map the same register
+// resolves to physical 0x8_5f904000, where the PSP's own autoloaded microcode is.
+//
+// Two controls, because the first version of this test proved nothing. It polled
+// INVALIDATE_CACHE_COMPLETE while that bit was already set on entry (op_cntl = 0x2), so the
+// loop exited at zero microseconds, and a prime that then failed could not be told apart
+// from a register that ignores writes altogether:
+//
+//   writes-land   toggle a harmless CACHE_POLICY bit in BASE_CNTL and read it back
+//   invalidate    clear the completion bit, confirm it reads clear, then command an
+//                 invalidate and watch the bit come back -- proof the block executes
+//                 commands at all
+//
+// Only with both established does "PRIME never completes" mean the fetch itself fails.
+static void primeIcacheOnly() {
+    if (asicInfo == nullptr) return;
+
+    uint32_t mecBefore = fbRead(asicInfo, kGcCpMecCntl);
+    fbWrite(asicInfo, kGcCpMecCntl, (1u << 30) | (1u << 28));   // ME1_HALT | ME2_HALT
+    uint32_t mecHalted = fbRead(asicInfo, kGcCpMecCntl);
+    IODelay(50);
+
+    uint32_t bc0 = fbRead(asicInfo, kGcCpcIcBaseCntl);
+    fbWrite(asicInfo, kGcCpcIcBaseCntl, bc0 ^ (1u << 24));
+    uint32_t bcToggled = fbRead(asicInfo, kGcCpcIcBaseCntl);
+    bool writesLand = (bcToggled != bc0);
+    fbWrite(asicInfo, kGcCpcIcBaseCntl, bc0);
+
+    fbWrite(asicInfo, kGcCpcIcOpCntl, fbRead(asicInfo, kGcCpcIcOpCntl) & ~2u);
+    bool completeCleared = (fbRead(asicInfo, kGcCpcIcOpCntl) & 2u) == 0;
+    fbWrite(asicInfo, kGcCpcIcOpCntl, fbRead(asicInfo, kGcCpcIcOpCntl) | 1u);
+    int inv = 0;
+    for (; inv < 50000; inv++) {
+        if ((fbRead(asicInfo, kGcCpcIcOpCntl) & 2u) != 0) break;
+        IODelay(1);
+    }
+    bool invalidated = inv < 50000;
+
+    uint32_t bc = fbRead(asicInfo, kGcCpcIcBaseCntl);
+    bc &= ~0xfu;            // VMID 0
+    bc &= ~(1u << 23);      // EXE_DISABLE 0
+    bc &= ~(3u << 24);      // CACHE_POLICY 0
+    bc |=  (1u << 4);       // ADDRESS_CLAMP 1
+    fbWrite(asicInfo, kGcCpcIcBaseCntl, bc);
+
+    fbWrite(asicInfo, kGcCpcIcOpCntl, fbRead(asicInfo, kGcCpcIcOpCntl) | (1u << 4));
+    uint32_t opAfterRequest = fbRead(asicInfo, kGcCpcIcOpCntl);
+    bool requestStuck = (opAfterRequest & (1u << 4)) != 0;
+    int prime = 0;
+    for (; prime < 50000; prime++) {
+        if ((fbRead(asicInfo, kGcCpcIcOpCntl) & (1u << 5)) != 0) break;
+        IODelay(1);
+    }
+    bool primed = prime < 50000;
+
+    fbWrite(asicInfo, kGcCpMecCntl, 0);     // unhalt both
+    IODelay(200);
+
+    uint32_t first2 = fbRead(asicInfo, kGcMec2InstrPntr), last2 = first2, ch2 = 0;
+    uint32_t first1 = fbRead(asicInfo, kGcMec1InstrPntr), last1 = first1, ch1 = 0;
+    for (unsigned i = 0; i < 16; i++) {
+        IODelay(20);
+        uint32_t v2 = fbRead(asicInfo, kGcMec2InstrPntr);
+        uint32_t v1 = fbRead(asicInfo, kGcMec1InstrPntr);
+        if (v2 != last2) { ch2++; last2 = v2; }
+        if (v1 != last1) { ch1++; last1 = v1; }
+    }
+    RLOG("XP: controls: writes-land=%u (base_cntl %#x ^bit24 -> %#x) complete-bit-cleared=%u "
+         "| MEC_CNTL %#x -> halted %#x", writesLand, bc0, bcToggled, completeCleared,
+         mecBefore, mecHalted);
+    RLOG("XP: INVALIDATE %s after %dus | PRIME request-stuck=%u (op=%#x) %s after %dus "
+         "(op_cntl=%#x base_cntl=%#x)", invalidated ? "completed" : "NEVER COMPLETED", inv,
+         requestStuck, opAfterRequest, primed ? "completed" : "NEVER COMPLETED", prime,
+         fbRead(asicInfo, kGcCpcIcOpCntl), fbRead(asicInfo, kGcCpcIcBaseCntl));
+    RLOG("XP: MEC2 %#x..%#x (%u changes) MEC1 %#x..%#x (%u changes) -> %s",
+         first2, last2, ch2, first1, last1, ch1,
+         (ch1 || ch2) ? "THE CP EXECUTES" : "still not executing");
+}
+
 static void startRlc() {
     if (asicInfo == nullptr) { RLOG("XK: no register accessor yet"); return; }
     dumpGfxState("before RLC start");
@@ -3639,6 +3741,12 @@ static void pluginStart() {
     } else {
         RLOG("rgpucp not set: leaving the command processor alone (correct for a device the "
              "firmware still owns)");
+    }
+    uint32_t icp = 0;
+    if (PE_parse_boot_argn("rgpuic", &icp, sizeof(icp)) && icp == 1) {
+        icachePrimeEnabled = true;
+        RLOG("rgpuic=1: after TTL the CP instruction cache is asked to prime, with controls "
+             "for whether writes land and whether the invalidate command executes at all");
     }
     uint32_t fbm = 0;
     if (PE_parse_boot_argn("rgpufb", &fbm, sizeof(fbm)) && fbm <= 2) {

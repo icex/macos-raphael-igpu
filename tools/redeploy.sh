@@ -69,7 +69,7 @@ python3 ocprop.py config.plist -o run/config-new.plist \
 # running VM if there is one, otherwise from a throwaway container -- do NOT skip
 # this step, or the ESP keeps the previous config and the run is not a real test.
 qimg() {
-    if docker ps --format '{{.Names}}' | grep -qx macos-sequoia; then
+    if [[ -n "$(docker ps --format '{{.Names}}' | grep -Fx macos-sequoia || true)" ]]; then
         docker exec macos-sequoia qemu-img "$@"
     else
         docker run --rm -v "$PWD/run:/run/vm" --entrypoint qemu-img "$IMAGE" "$@"
@@ -129,8 +129,17 @@ if (( WANT_GPU )); then
     # existed for one experiment, the experiment was run twice, and it cost two hangs and
     # told us nothing new. If you want passthrough, run ./disable-early-vfio.sh and reboot
     # so amdgpu owns the device first.
-    if [[ "$drv" == vfio-pci ]] && ! journalctl -k -b --no-pager 2>/dev/null |
-            grep -q "amdgpu ${DEV}"; then
+    #
+    # grep -c, not grep -q, and the count captured before it is tested. "grep -q" exits the
+    # moment it matches, journalctl is still writing megabytes into the pipe, so it takes
+    # SIGPIPE and dies 141 -- and under "set -o pipefail" that 141 becomes the pipeline's
+    # status even though grep found what it was looking for. The "!" then inverts a success
+    # into a failure, so this guard fired exactly when amdgpu HAD initialised the device and
+    # passed when it had not: broken in the one direction nobody would notice. grep -c reads
+    # its input to the end, so there is no SIGPIPE to misread. This is the same bug that
+    # produced the bogus "the discrete GPU is not present" from enable-early-vfio.sh.
+    amdgpu_lines="$(journalctl -k -b --no-pager 2>/dev/null | grep -c "amdgpu ${DEV}" || true)"
+    if [[ "$drv" == vfio-pci ]] && (( ${amdgpu_lines:-0} == 0 )); then
         cat >&2 <<EOF
 REFUSING to pass through ${DEV}: amdgpu has not initialised it this boot.
 
@@ -202,7 +211,7 @@ fi
 # remember, because the crash that cost three hours was an unattended loop.
 if (( WANT_GPU )) && (( RGPU_MAX_SECONDS > 0 )); then
     ( sleep "$RGPU_MAX_SECONDS"
-      docker ps --format '{{.Names}}' | grep -qx macos-sequoia || exit 0
+      [[ -n "$(docker ps --format '{{.Names}}' | grep -Fx macos-sequoia || true)" ]] || exit 0
       echo "RGPU_MAX_SECONDS=${RGPU_MAX_SECONDS} reached; stopping the VM to release the iGPU" \
           >> run/vm-launch.log
       docker rm -f macos-sequoia >/dev/null 2>&1

@@ -58,8 +58,16 @@ preflight() {
 }
 
 host_oopsed_since() {   # $1 = ISO timestamp
-    journalctl -k --since "$1" --no-pager 2>/dev/null \
-      | grep -qE 'BUG: kernel NULL pointer|general protection fault|vfio_pci_core_runtime_resume'
+    # grep -c and a captured count, never "grep -q" in this pipeline. grep -q exits on the
+    # first match, journalctl is still writing, so it dies of SIGPIPE with 141 -- and this
+    # script runs under "set -o pipefail", which then reports the pipeline as failed. The
+    # effect was that a REAL host oops read as "no oops", so the loop that is supposed to
+    # stop before wedging the machine never stopped. grep -c reads to EOF.
+    local n
+    n="$(journalctl -k --since "$1" --no-pager 2>/dev/null \
+         | grep -cE 'BUG: kernel NULL pointer|general protection fault|vfio_pci_core_runtime_resume' \
+         || true)"
+    (( ${n:-0} > 0 ))
 }
 
 qemu_zombie() {
@@ -82,9 +90,13 @@ LATE='com.apple.xpc.launchd|Loaded kext|login window|WindowServer'
 wait_for_verdict() {
     local t=0
     while (( t < BOOT_TIMEOUT )); do
-        if tr -d '\r' < run/serial.log 2>/dev/null | grep -qE "$MARKERS"; then echo marker; return 0; fi
+        # Same SIGPIPE-under-pipefail hazard as host_oopsed_since: tr is still streaming a
+        # ~200 KB log when grep -q exits, so a found marker read as "not found".
+        if (( $(tr -d '\r' < run/serial.log 2>/dev/null | grep -cE "$MARKERS" || true) > 0 )); then
+            echo marker; return 0
+        fi
         if qemu_zombie; then echo qemu-died; return 0; fi
-        if tr -d '\r' < run/serial.log 2>/dev/null | grep -qE "$LATE"; then
+        if (( $(tr -d '\r' < run/serial.log 2>/dev/null | grep -cE "$LATE" || true) > 0 )); then
             # guest is late in boot; give the AMD stack a moment then take what we have
             sleep 30; echo late; return 0
         fi
