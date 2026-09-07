@@ -2308,6 +2308,76 @@ was taken as "the guest never got far", but neither had `sercat.py`'s fsync, so 
 was a floor rather than a measurement. A genuine 304 now means the guest really did stop in
 OVMF -- and here the cause was a recoverable stale ring, not anything fatal.
 
+### Why nothing reaches a screen: the VBIOS has no display object info table
+
+A real monitor was connected to the iGPU's HDMI port. It stays dark, and the reason is not
+the cable, the port, or hotplug -- the guest was rebooted with the display attached from the
+start and nothing changed.
+
+    ATOM: AmdAtomObjectInfo_V1_4::populateConnectorEntry(atom_display_object_path_v2 *,
+          AtomConnectorEntry &) const: ASSERT(0 != object->device_tag)
+    [0:6:0] [FB:0] AmdRadeonFramebuffer::setCursorImage() !!! Driver is offline.
+    [0:6:0] [FB:1] ... [FB:2] ...
+
+The master data table says why. Dumping all 35 entries of `atom_master_list_of_data_tables`
+at `0x210`:
+
+    [16] displayobjectinfo        0x0000   <-- absent
+    [21] dce_info                 0x0000   <-- absent
+    [27] dispdevicepriority_info  0x05e8
+    [28] vram_info                0x0000   <-- absent, which is why mkrom.py grafts one
+    [30] integratedsysteminfo     0x06bc   (v2.2, 1024 bytes)
+
+There is no display object info table at all, so Apple's parser is reading an absent table,
+every `device_tag` is zero, and no connector survives. All three framebuffers then report
+offline. No amount of cabling fixes that: the driver has no way to know a connector exists.
+
+Note the pattern -- `vram_info` is absent too, and `mkrom.py` already synthesises and grafts
+one. The display fix is the same shape: build a `display_object_info_table_v1_4` with at
+least one valid `atom_display_object_path_v2`, and graft it at index 16. Apple's framebuffer
+kext carries a second assert, `ATOM: %s: ASSERT(0 != connectorCount)`, so an empty table is
+rejected as firmly as an absent one.
+
+What is NOT yet known is the correct content. On an APU the real topology comes from
+`integratedsysteminfo` plus IP discovery, which Apple's Navi 23 driver never consults, and
+this chip's `integratedsysteminfo` is v2.2 and mostly zeroes in its leading fields. Scanning
+the ROM for connector-shaped object ids (`type nibble 3`) returns only noise -- random 16-bit
+patterns match the mask. Object ids must not be guessed: a wrong `atom_display_object_path_v2`
+fails as memory corruption, not as an error.
+
+The reliable source is amdgpu's own view of this silicon, which does enumerate connectors on
+this board. Capture it with the iGPU bound to amdgpu, immediately after a boot and before
+`gpu-bind.sh`:
+
+    ls -l /sys/class/drm/ | grep -i card            # which card is the iGPU
+    for c in /sys/class/drm/card*-*/; do echo "$c $(cat $c/status) $(cat $c/enabled)"; done
+    journalctl -k -b | grep -iE 'amdgpu 0000:7b:00.0.*(connector|display|dcn|link)'
+
+together with `tools/hostregs.py`, which still needs its amdgpu-bound reference dump.
+
+### The display blocks everything else, including verifying Metal
+
+Worth stating plainly, because it reorders the remaining work. There is no way into the guest
+right now:
+
+  - the command agent is a shell loop that has to be typed into a logged-in Terminal by
+    `drive.py` screen automation, so it needs a rendered display and does not survive a boot
+  - `guest-login.sh` drives the emulated display, checking screen brightness to find the
+    login window -- and the emulated framebuffer freezes at kernel time 0.097 s, because
+    `debug=0x108` moves the console to serial and macOS then hands the display to the AMD
+    framebuffer, which is offline
+  - port 50922 accepts connections, but that is only docker-proxy listening; the guest's
+    sshd answers `Connection closed`, so Remote Login is not enabled
+
+So `system_profiler`, a Metal device query, or any functional compute test are all
+unreachable until a display works. Metal itself may well be fine -- the accelerator
+registers, the DMA paging channel now exists, `MTLCompilerService` is running, and nothing
+panics -- but "may well be fine" is not a measurement, and it will not become one from the
+kernel log alone.
+
+Do not read `AMFI: [non-fatal] unable to accelerate context` as evidence either way. That is
+AMFI's own trust-cache message and has nothing to do with GPU acceleration.
+
 ### A hypothesis this raises about the hangs themselves
 
 Not established, and recorded as a hypothesis rather than a finding, but it fits better than
