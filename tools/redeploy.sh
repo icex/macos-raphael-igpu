@@ -61,6 +61,36 @@ cp -f run/OpenCore-rebuilt.qcow2 OpenCore.qcow2
 GPU_ARGS=()
 if (( WANT_GPU )); then
     drv="$(basename "$(readlink -f "/sys/bus/pci/devices/${DEV}/driver")" 2>/dev/null || echo none)"
+    # Refuse to pass through an iGPU that amdgpu has never initialised this boot.
+    #
+    # The host has hard-hung twice, both times with the VM running and the iGPU passed
+    # through, and both times leaving nothing behind: the journal stops mid-line with no
+    # shutdown sequence, no panic, no oops, and /sys/fs/pstore empty. The two differ only in
+    # how long they took. In the configuration where amdgpu binds the iGPU at boot and
+    # gpu-bind.sh hands it over afterwards, it survived roughly 33 VM launches over three
+    # hours before dying. With the iGPU claimed by vfio-pci straight from boot -- so the
+    # device reached the guest exactly as the system firmware left it, never initialised or
+    # quiesced by a driver -- it died 53 seconds into the FIRST launch.
+    #
+    # That is not proof of a mechanism, and it is not claimed as one: the evidence needed to
+    # find the mechanism was never captured. It is enough to say the virgin path is far more
+    # dangerous, and there is no reason to take it, so do not start on it by accident. The
+    # check is simply whether amdgpu ever logged anything about this device this boot.
+    if [[ "$drv" == vfio-pci ]] && ! journalctl -k -b --no-pager 2>/dev/null |
+            grep -q "amdgpu ${DEV}"; then
+        cat >&2 <<EOF
+REFUSING to pass through ${DEV}: amdgpu has not initialised it this boot.
+
+The device is on vfio-pci but was never POSTed and quiesced by amdgpu, which is the
+configuration in which the host hard-hung 53 seconds into the first VM launch. Undo the
+early binding (./disable-early-vfio.sh, then reboot) so amdgpu owns the iGPU at boot and
+gpu-bind.sh hands it over afterwards.
+
+Set RGPU_ALLOW_VIRGIN_IGPU=1 to override, and be at the machine when you do.
+EOF
+        [[ "${RGPU_ALLOW_VIRGIN_IGPU:-0}" == 1 ]] || exit 1
+        echo "RGPU_ALLOW_VIRGIN_IGPU=1 -- proceeding against a virgin iGPU anyway" >&2
+    fi
     if [[ "$drv" == vfio-pci ]]; then
         GPU_ARGS=(--gpu "$DEV" --gpu-id 0x73ff --gpu-rom run/gpu-patched.rom)
         echo "passing through ${DEV} (spoofed 0x73ff)"
