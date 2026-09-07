@@ -2308,7 +2308,74 @@ was taken as "the guest never got far", but neither had `sercat.py`'s fsync, so 
 was a floor rather than a measurement. A genuine 304 now means the guest really did stop in
 OVMF -- and here the cause was a recoverable stale ring, not anything fatal.
 
-### Why nothing reaches a screen: the VBIOS has no display object info table
+### CORRECTED: the VBIOS does have a display object info table, at index 22
+
+> **This section's original conclusion was wrong.** It claimed the VBIOS has no display
+> object info table, because index 16 of the master data table reads `0x0000`. Index 16 is
+> not `displayobjectinfo`. The real `atom_master_list_of_data_tables_v2_1` order puts
+> `displayobjectinfo` at **index 22**, `dce_info` at 27, `vram_info` at 28 -- only the last
+> two of which I had right, and `vram_info` by coincidence. Index 22 reads `0x2284`, and
+> there is a perfectly good `display_object_info_table_v1_4` there. The plan to synthesise
+> one from scratch was unnecessary. What follows is corrected; the mistake is left visible
+> because a wrong table index produced a confident, entirely false structural claim.
+
+    display_object_info_table_v1_4 @0x2284  size=205 rev=1.4
+    supporteddevices=0x0688  number_of_path=6
+
+    path[0] objid=0x340c type=3 enum=4 id=0x0c HDMI_TYPE_A  enc=0x211e device_tag=0x0400 DFP3
+    path[1] objid=0x0000 (empty)                            enc=0x221e device_tag=0x0000
+    path[2] objid=0x3113 type=3 enum=1 id=0x13 DISPLAYPORT  enc=0x2120 device_tag=0x0008 DFP1
+    path[3] objid=0x3213 type=3 enum=2 id=0x13 DISPLAYPORT  enc=0x2220 device_tag=0x0080 DFP6
+    path[4] objid=0x3313 type=3 enum=3 id=0x13 DISPLAYPORT  enc=0x2121 device_tag=0x0200 CV2
+    path[5] objid=0x7103 type=7 id=0x03                     enc=0x0000 device_tag=0x0000
+
+`atom_display_object_path_v2` is **16 bytes** (seven `uint16_t` plus two `uint8_t`), not 24 --
+getting the stride wrong on the first read produced garbage for paths 1, 3, 4 and 5 and made
+the table look corrupt when it is not.
+
+It matches amdgpu's connector list one-for-one: `HDMI_TYPE_A enum 4 / DFP3` is amdgpu's
+`HDMI-A-3` (the port the monitor is on), and the three DisplayPorts are `DP-3`, `DP-4`,
+`DP-5`. `supporteddevices = 0x0688 = 0x008|0x080|0x200|0x400`, exactly the four real device
+tags -- so the firmware itself does not count the two tagless entries as devices.
+
+**The bug is two paths with `device_tag == 0`**: the empty `objid=0x0000` entry and the
+`objid=0x7103` one that amdgpu exposes as `Writeback-2`. amdgpu tolerates them. Apple asserts
+on precisely them, in `populateConnectorEntry`.
+
+`mkrom.py` now drops any path whose `device_tag` is zero, compacts the array in place and
+reduces `number_of_path`, leaving the records that follow the array untouched -- the offsets
+inside each entry point at those records absolutely, so moving whole 16-byte entries keeps
+them valid. `--keep-dead-display-paths` restores the old behaviour.
+
+Result, measured:
+
+    device_tag assert     1 -> 0     gone
+    connectorCount assert 0 -> 0     never fired
+    framebuffers          3 -> 4     FB:0..FB:3, matching the four kept paths
+
+### The next display blocker is the DCN version, not the connector table
+
+The connector fix was necessary and is not sufficient. All four framebuffers still report
+`Driver is offline`, and the driver now gets further before failing -- which is the progress:
+
+    dccg2_get_dccg_ref_freq:89     BREAK_TO_DEBUGGER
+    hubbub2_get_dchub_ref_freq:565 BREAK_TO_DEBUGGER
+    generic_reg_wait:513           BREAK_TO_DEBUGGER   x4, one per framebuffer
+
+The four `generic_reg_wait` timeouts are new: previously the driver gave up before attempting
+to bring the pipes up. Apple's code is DCN 2.x/3.0 (it thinks this is Navi 23) and the silicon
+is DCN 3.1.5, so the register offsets it waits on are not the ones that move. That is the
+display-path work memory has always listed as future, and it is a large job -- reconciling a
+whole display block's register map -- not a one-line graft.
+
+### The original claim that a monitor cannot work is superseded
+
+The earlier text said no cabling could help because the driver had no way to know a connector
+exists. Half right: the connector table was being rejected, not absent. With it accepted, the
+driver enumerates four connectors and tries to light them up. It still cannot, for the DCN
+reason above.
+
+
 
 A real monitor was connected to the iGPU's HDMI port. It stays dark, and the reason is not
 the cable, the port, or hotplug -- the guest was rebooted with the display attached from the

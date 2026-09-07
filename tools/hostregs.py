@@ -30,6 +30,7 @@ Reads only. No writes, ever -- this runs against a live driver, and the point is
 a working configuration, not to perturb it.
 """
 import argparse
+import glob
 import mmap
 import os
 import sys
@@ -78,6 +79,9 @@ def main():
     ap.add_argument("--watch", type=int, default=1,
                     help="samples to take; >1 reports which registers changed")
     ap.add_argument("--device", default=DEV)
+    ap.add_argument("--via-debugfs", action="store_true",
+                    help="read through amdgpu's debugfs register window (required while "
+                         "amdgpu owns the device; needs debugfs mounted and root)")
     a = ap.parse_args()
 
     base = f"/sys/bus/pci/devices/{a.device}"
@@ -85,6 +89,36 @@ def main():
         driver = os.path.basename(os.path.realpath(f"{base}/driver"))
     except OSError:
         driver = "(none)"
+
+    if a.via_debugfs:
+        # amdgpu exposes its own register window: position is the byte offset of the dword
+        # index, i.e. (base + reg) * 4 -- the same SOC15 arithmetic as the raw BAR path.
+        cands = sorted(glob.glob("/sys/kernel/debug/dri/*/amdgpu_regs"))
+        target = None
+        for c in cands:
+            dri = os.path.dirname(c)
+            link = os.path.join(dri, "device")
+            try:
+                if os.path.basename(os.path.realpath(link)) == a.device:
+                    target = c; break
+            except OSError:
+                continue
+        if target is None:
+            sys.exit("no amdgpu_regs under /sys/kernel/debug/dri/* for "
+                     f"{a.device} (debugfs mounted? is amdgpu bound? are you root?)")
+        print(f"device {a.device}, driver in use: {driver}, via {target}")
+        print()
+        with open(target, "rb", buffering=0) as rf:
+            def rdd(bse, reg):
+                try:
+                    rf.seek((bse + reg) * 4)
+                    b = rf.read(4)
+                    return int.from_bytes(b, "little") if len(b) == 4 else None
+                except OSError:
+                    return None
+            samples = [{n: rdd(b, r) for n, b, r in REGS} for _ in range(max(1, a.watch))]
+        report(samples)
+        return
 
     path = f"{base}/resource{BAR}"
     size = os.path.getsize(path)
@@ -100,6 +134,24 @@ def main():
             return None
         return int.from_bytes(mm[off:off + 4], "little")
 
+    # A BAR read of all-ones is a non-responding aperture, not data.
+    #
+    # This tool works while vfio-pci owns the device and returns sane values. Under amdgpu it
+    # returned 0xffffffff for every register, and the first version happily printed those --
+    # even decoding RLC_STAT = 0xffffffff as "every bit busy", which reads like a finding and
+    # is nothing of the kind. Refuse to interpret it. amdgpu claims the MMIO region, so the
+    # correct interface there is its own debugfs window, not a raw resource mmap.
+    probe = [rd(b, r) for _, b, r in REGS[:6]]
+    if probe and all(v == 0xFFFFFFFF for v in probe if v is not None):
+        mm.close(); os.close(fd)
+        sys.exit(
+            f"every register reads 0xffffffff: BAR{BAR} is not responding under driver "
+            f"'{driver}'.\n"
+            "This is not data and must not be recorded as a reference. Under amdgpu use its\n"
+            "debugfs register window instead, which respects the driver's own MMIO claim:\n"
+            "  sudo ./hostregs.py --via-debugfs\n"
+            "Under vfio-pci the raw BAR mmap works and this message should not appear.")
+
     print(f"device {a.device}, driver in use: {driver}, BAR{BAR} = {size} bytes")
     print()
 
@@ -107,6 +159,12 @@ def main():
     for _ in range(max(1, a.watch)):
         samples.append({n: rd(b, r) for n, b, r in REGS})
 
+    report(samples)
+    mm.close()
+    os.close(fd)
+
+
+def report(samples):
     first, last = samples[0], samples[-1]
     for name, b, r in REGS:
         v = first[name]
@@ -132,9 +190,6 @@ def main():
         print(f"  CP_CPC_IC_BASE = {ic:#x}")
         print(f"  FB_LOCATION_BASE = {(fbb & 0xffffff) << 24:#x}   "
               f"FB_OFFSET = {(fbo & 0xffffff) << 24:#x}")
-
-    mm.close()
-    os.close(fd)
 
 
 if __name__ == "__main__":
