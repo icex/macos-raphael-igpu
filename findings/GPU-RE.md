@@ -2214,6 +2214,100 @@ reach it by handing a dirty GPU back with `gpu-restore.sh`, both because amdgpu 
 re-initialising a device whose GMC the guest has rewritten, and because rebinding to
 vfio-pci afterwards is the cycle that wedges the device until a reboot.
 
+### The endVMPTUpdate wall, and getting past it
+
+This is the panic that actually stopped Metal, and it was our bug, not Apple's.
+
+`WindowServer` submits a command buffer, `IOAccelCommandQueue` reaches
+`AMDAccelResource::BatchPrepareMappings`, and `AMDHWVMM::endVMPTUpdate` dereferences NULL.
+The faulting instruction, at symbol + 0x13, matching the panic's `RDI=0` and `CR2=0`:
+
+    589ea: dec dword ptr [rdi + 0x3c]      nesting counter; work only when it reaches 0
+    589ed: je   0x589f0
+    589f9: mov  rdi, qword ptr [rdi + 0x28]    the DMA paging channel   -> NULL
+    589fd: mov  rax, qword ptr [rdi]           FAULT
+    58a00: call qword ptr [rax + 0x140]
+
+`beginVMPTUpdate` is just `inc dword ptr [rdi + 0x3c]; ret`, so the two are a balanced pair
+and the counter is not the problem.
+
+`m_0x28` is written in **exactly one place in the whole kext**:
+`AMDHWVMM::setMemoryAllocationsEnabled(true)` at `0x579a3`, immediately after it creates a
+channel and immediately before it casts the same pointer to
+`AMDRadeonX6000_AMDDMAHWChannel` and stores that at `m_0x30`. The creation sits behind an
+idempotency guard:
+
+    57930: test esi, esi
+    57932: je   0x57a7b        enable == false -> teardown path
+    57938: cmp  qword ptr [rbx + 0x20], 0x0
+    5793d: jne  0x57ba8        m_0x20 already set -> skip creation entirely
+
+Two hypotheses followed, and hooking the function refuted both. `AMDHWVMM::init` also writes
+`m_0x20`, so the guard looked like the suspect -- but measurement says `m_0x20 = 0` after
+init, so the guard is wide open. And the function is only ever called with **enable = 0**:
+
+    XV: AMDHWVMM::init(iface=..., flags=2) -> 1 | m_0x18=0xffffff94e67c5800 m_0x20=0 m_0x28=0
+    XV: setMemoryAllocationsEnabled(0) entry: m_0x20=0 m_0x28=0 m_0x30=0 nest(0x3c)=0
+
+Nobody passes true, so the `je` takes the teardown branch and the channel is never built.
+
+**Static analysis could not name the caller**, and the attempt to do so was a dead end worth
+recording: `setMemoryAllocationsEnabled` is virtual, at vtable index 41 (`[rax + 0x148]`), and
+slot `0x148` is also used by `AMDHWEngine`, `AMDHWChannel`, `AMDBltMgr` and others, so "who
+calls `[rax+0x148]`" is unanswerable from the disassembly. `AMDHardware::startHWEngines` looked
+like the caller and is not -- it null-checks the receiver and tests `al`, which is an engine's
+slot. Capturing `__builtin_return_address(0)` in the hook and reporting it as an `x6+offset`
+settled it immediately:
+
+    AMDGFX10VMM::init +0x1b                          -> AMDHWVMM::init
+    AMDHardware::setMemoryAllocationsEnabled(b) +0x88 -> AMDHWVMM::...(b)     only ever false
+    AMDRTHardware::setVirtualSpaceReady(b) +0x111     -> AMDHWVMM::...(true)  fires correctly
+
+So the outer `AMDHardware::setMemoryAllocationsEnabled(true)` is never reached, because it
+sits on the powerUp path that fails -- while its vtable neighbour `setVirtualSpaceReady`
+(index 40, `[rax + 0x140]`, immediately before `0x148`) *is* called with true.
+
+`rgpuvmm=3` borrows that ordering and drives the missing call from there. It works:
+
+    XV: setVirtualSpaceReady(1) | m_0x20=0 m_0x28=0  [caller x6+0x5e1c3]
+    XV: driving setMemoryAllocationsEnabled(true) from here
+    XV: after forced enable: m_0x20=0xffffffa18897e000 m_0x28=0xffffffa656343400
+        m_0x30=0xffffff9cbceb5000 -> DMA PAGING CHANNEL PRESENT
+
+**No panic.** The guest crossed the wall that ended every previous run and continued into
+userspace with the AMD stack alive:
+
+    AGDCC: ... AMDRadeonX6000_AmdGpuWrangler
+    AGDCC: ... AMDRadeonX6000_AmdAgdcServices / AppleGraphicsDevicePolicy
+    IOSurfaceRootUserClient::set_gpu_policy_dict
+    com.apple.MTLCompilerService running
+
+Read `AMFI: [non-fatal] unable to accelerate context` carefully: that is AMFI's own trust
+cache message, not GPU acceleration, and it is not evidence either way.
+
+**This is a graft, not a repair.** The honest fix is to make `ttlPowerUp` genuinely succeed so
+`AMDHardware::setMemoryAllocationsEnabled(true)` is reached the normal way; milestone `xi`
+only *reports* powerUp success, which is enough for the accelerator to register but not to
+produce the allocation setup that follows. What the graft proves is that the rest of the
+stack is sound once the channel exists, which isolates the remaining problem to the powerUp
+path.
+
+### A stale PSP ring stops the guest in firmware, and 304 bytes is not what it looked like
+
+The run before this one produced a 304-byte serial log ending at `BdsDxe: starting Boot0001`,
+with the host perfectly healthy. `QUIESCE=1` fixed it outright:
+
+    gpu-quiesce: destroy all rings: 0x80010000 -> 0x80030000 after 7 ms
+    gpu-quiesce: destroy GPCOM ring: 0x80030000 -> 0x800c0000 after 1 ms
+
+which is what `redeploy.sh`'s own comment already said it was for -- use it when the guest
+cannot get far enough to run milestone `x7`, and a firmware-stage hang is exactly that.
+
+Worth re-reading the first two host crashes in this light. Both left 304-byte logs and that
+was taken as "the guest never got far", but neither had `sercat.py`'s fsync, so the byte count
+was a floor rather than a measurement. A genuine 304 now means the guest really did stop in
+OVMF -- and here the cause was a recoverable stale ring, not anything fatal.
+
 ### A hypothesis this raises about the hangs themselves
 
 Not established, and recorded as a hypothesis rather than a finding, but it fits better than
