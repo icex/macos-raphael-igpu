@@ -2702,6 +2702,61 @@ question is whether the *contents* of that page table are wrong in the same way 
 sits at MC `0xffbfea0000`, inside CTX0's range `0xffbfa00000..0xffffe00000`, so its PTE has to
 be walked and checked. `walkGart()` already exists in the plugin for exactly this.
 
+### The same address bug again, in the MEC's own pointers -- and the wall behind it
+
+Two more instances of the BAR-relative-instead-of-MC confusion, both in registers the
+microengine uses directly, plus a tooling bug that had been hiding them.
+
+**`walkGart` had never walked anything.** It used the page-table base as a BAR0 *offset*. With
+`ptb` at `0x84fdfc000` and the aperture 256 MB long, its bounds check could never pass, so
+every call printed "outside the 256 MB BAR0 aperture" and no PTE was ever read. Fixed to
+subtract `GCMC_VM_FB_LOCATION_BASE` first. Same class of mistake as the page-table base
+register itself: an MC address and an aperture offset are not interchangeable.
+
+With that fixed, the page table's *contents* check out, which rules out the obvious follow-up
+to the base repair:
+
+    XN: ring va=0xffbfea0000 idx=0x4a0 pte@fb+0xfdfe500 = 0x30002bb9e0077
+        -> pa 0x2bb9e0000  flags VALID SYSTEM SNOOPED READ WRITE
+    XN: rptr report / wptr poll -> pa 0x2bba60000  VALID SYSTEM SNOOPED READ WRITE
+
+**`dumpMqd` had the same defect** and so had never once read the descriptor. Fixed to accept
+all three address forms and report which it got. The MQD then reads:
+
+    XN: mqd va=0xf40b706000 is BAR-relative, offset 0xb706000 -> correct MC 0x84b706000
+    XN: MQD@fb+0xb706000: header=0xc0310800 mqd_base=0xb706000 active=0x1 vmid=0
+    XN: MQD: pq_base=0xffbfea00 rptr=0 doorbell_ctl=0x40000000 pq_control=0xd130860d
+    XN: MQD: eop_base=0xf40b7068 eop_control=0x8 wptr_lo=0 wptr_hi=0
+
+So `CP_MQD_BASE_ADDR` and the MQD's `eop_base` are both BAR-relative, outside the
+`0x840000000..0x85fffffff` aperture. `pq_base` (`0xffbfea00 << 8`) is a GART VA and correct.
+The MEC reloads the HQD from `CP_MQD_BASE_ADDR`; a descriptor it cannot read is a queue that
+never really runs.
+
+`rgpumqd=1` repairs registers **and** the in-VRAM image, since the image is what the engine
+restores from -- repairing only registers is futile and is the documented reason writes to
+`CP_HQD_EOP_BASE_ADDR` "do not stick". Measured:
+
+    XQ: MQD_BASE   0xf40b706000 -> 0x84b706000    register and image both repaired
+    XQ: EOP image  0xf40b706800 -> 0x84b706800    image repaired
+    XQ: EOP register wrote 0x84b7068, reads back 0    DID NOT STICK
+    XQ: rptr still 0 after 100 ms (wptr=0x8)          engine still not consuming
+
+**The wall.** `CP_HQD_EOP_BASE_ADDR` reads 0 and refuses writes even with the MQD base now
+correct, and the engine still does not consume the KIQ MAP_QUEUES packet. So the KIQ stamp
+timeout survives every address repair made so far. What is left to try, in order of cheapness:
+
+  - dequeue the queue first (`CP_HQD_DEQUEUE_REQUEST`) so the HQD is writable, repair, requeue
+  - check whether the HQD must be written through the RLC's indirect path (`RLCG_INDIRECT` /
+    `WREG32_SOC15_RLC*` in upstream) rather than the plugin's `fbWrite`, which would also
+    explain the `CP_CPC_IC_BASE*` "read-only" result
+  - confirm the MEC is actually reloading from the repaired MQD rather than a stale copy
+
+**What is now known to be sound**, and should not be re-investigated: GART page-table base and
+contents, the ring VA and its PTE, the DMA paging channel, the VRAM heap, the connector table,
+Metal enumeration. Each of those was a real bug or a real gap, all are fixed, and none of them
+is what stops the GPU executing.
+
 ### A hypothesis this raises about the hangs themselves
 
 Not established, and recorded as a hypothesis rather than a finding, but it fits better than
