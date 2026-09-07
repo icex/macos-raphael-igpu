@@ -932,7 +932,60 @@ static void pspRingCtrl(void *psp, uint32_t cmd, const char *what) {
          (v & kMboxReadyMask) == kMboxReadyFlag ? " (ready)" : " (TIMEOUT)");
 }
 
+// Ask the PSP to MODE1-reset the GPU, so it re-autoloads the graphics firmware itself.
+//
+// This is the only remaining route to a command processor this guest can drive, and it is
+// deliberately OFF unless the boot-arg rgpureset=1 is given -- kept separate from the rgpu
+// mask because it is the one intervention here that can plausibly take the host down with
+// it rather than merely failing.
+//
+// The reasoning: CP_CPC_IC_BASE, CP_HQD_EOP_BASE_ADDR, CP_PQ_WPTR_POLL_CNTL and
+// CP_CPC_IC_OP_CNTL's PRIME_ICACHE bit are all locked for the life of this reset, while
+// CP_MEC_CNTL and every GMC register are writable. That is the PSP holding the addresses the
+// command processor fetches from. The instruction-cache base still points at the host
+// driver's buffers, and even after moving the framebuffer aperture so that address lands on
+// microcode this plugin wrote and verified by readback, the cache will not prime and the
+// engines will not run. GFX_CMD_ID_AUTOLOAD_RLC -- the command that would hand the CP back
+// -- answers TEE_ERROR_BUSY.
+//
+// A MODE1 reset makes the PSP re-run its own bootloader, which autoloads the GFX firmware
+// and starts the microengines with addresses of its own choosing. amdgpu does exactly this
+// on bare metal through the same mailbox, in psp_v13_0_mode1_reset: wait for the TOS-ready
+// flag in C2PMSG_64, write GFX_CTRL_CMD_ID_MODE1_RST, sleep, then wait for bit 31 of
+// C2PMSG_33. It needs no PCI re-enumeration, which is what makes it usable from a guest.
+//
+// The honest risk: this is an integrated GPU on the same die as the CPU, reached through
+// vfio, and resetting the graphics block is not guaranteed to leave the host's fabric alone.
+// Recovery if it goes wrong is a host reboot. Hence the separate opt-in.
+static bool pspResetRequested = false;
+static bool pspResetDone = false;
+static constexpr uint32_t kModeReset1 = 0x00070000;   // GFX_CTRL_CMD_ID_MODE1_RST
+static constexpr uint32_t kC2PMsg33   = 0x61;         // MP0_SMN_C2PMSG_33
+
+static void pspMode1Reset(void *psp) {
+    if (!pspResetRequested || pspResetDone || hwlibsBase == 0 || psp == nullptr) return;
+    pspResetDone = true;
+    auto wr = reinterpret_cast<void (*)(void *, uint32_t, uint32_t, uint32_t, uint32_t)>(
+                  hwlibsBase + kOffPspRegWrite);
+    auto rd = reinterpret_cast<uint32_t (*)(void *, uint32_t, uint32_t, uint32_t)>(
+                  hwlibsBase + kOffPspRegRead);
+    uint32_t before = rd(psp, kC2PMsg64, 0, kHwIpMp0);
+    RLOG("XQ: MODE1 reset requested; C2PMSG_64=%#x", before);
+    wr(psp, kC2PMsg64, 0, kModeReset1, kHwIpMp0);
+    IOSleep(500);
+    int ms = 0;
+    uint32_t v = 0;
+    for (; ms < 5000; ms++) {
+        v = rd(psp, kC2PMsg33, 0, kHwIpMp0);
+        if ((v & 0x80000000u) != 0) break;
+        IOSleep(1);
+    }
+    RLOG("XQ: MODE1 reset: C2PMSG_33=%#x after %dms%s; C2PMSG_64 now %#x", v, ms,
+         (v & 0x80000000u) ? " (complete)" : " (TIMEOUT)", rd(psp, kC2PMsg64, 0, kHwIpMp0));
+}
+
 static uint32_t wrapPspRingCreate(void *psp, uint32_t ringType) {
+    pspMode1Reset(psp);
     if ((mask & X7) != 0 && ringType == 2 && hwlibsBase != 0 && psp != nullptr) {
         // Destroy UNCONDITIONALLY. A clean mailbox does not mean there is no ring: after a
         // boot that got as far as ENABLE_INT, C2PMSG_64 reads 0x80050000 -- status 0, so
@@ -2937,6 +2990,24 @@ static void loadMecMicrocode() {
     bc |=  (1u << 4);               // ADDRESS_CLAMP 1
     fbWrite(asicInfo, kGcCpcIcBaseCntl, bc);
 
+    // Ask the instruction cache to prime itself from the address it is locked to.
+    //
+    // CP_CPC_IC_OP_CNTL has PRIME_ICACHE (bit 4) and ICACHE_PRIMED (bit 5) beside the
+    // invalidate pair. This is the one direct test of whether the CP can fetch from
+    // 0x85f904000 now that the aperture move has made that address land on microcode we
+    // wrote and read back: priming completes only if the fetch works. If it primes, the
+    // fetch path is fine and whatever stops the engines is elsewhere; if it never primes,
+    // the address is still unreachable to the CP whatever the memory controller says.
+    fbWrite(asicInfo, kGcCpcIcOpCntl, fbRead(asicInfo, kGcCpcIcOpCntl) | (1u << 4));
+    int prime = 0;
+    for (; prime < 50000; prime++) {
+        if ((fbRead(asicInfo, kGcCpcIcOpCntl) & (1u << 5)) != 0) break;
+        IODelay(1);
+    }
+    RLOG("XP: icache prime %s after %dus (op_cntl=%#x)",
+         prime < 50000 ? "COMPLETED" : "never completed", prime,
+         fbRead(asicInfo, kGcCpcIcOpCntl));
+
     auto jt = reinterpret_cast<const uint32_t *>(kMecFw) + kMecJtOffsetDwords;
     fbWrite(asicInfo, kGcMec1UcodeAddr, 0);
     for (uint32_t i = 0; i < kMecJtSizeDwords; i++) fbWrite(asicInfo, kGcMec1UcodeData, jt[i]);
@@ -3475,6 +3546,13 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
 static void pluginStart() {
     if (!PE_parse_boot_argn("rgpu", &mask, sizeof(mask))) mask = 0;
     uint32_t d = 0;
+    // Its own boot-arg rather than a mask bit: this is the one thing here that can take the
+    // host with it, so it should not be reachable by editing a hex mask.
+    uint32_t rst = 0;
+    if (PE_parse_boot_argn("rgpureset", &rst, sizeof(rst)) && rst == 1) {
+        pspResetRequested = true;
+        RLOG("rgpureset=1: a PSP MODE1 reset will be issued before the PSP ring is created");
+    }
     if (PE_parse_boot_argn("rgpudump", &d, sizeof(d)) && d >= 5000 && d <= 300000)
         diagDumpDelayMs = d;
     RLOG("start, patch mask=0x%x (%lu patches known)", mask, arrsize(patches));
