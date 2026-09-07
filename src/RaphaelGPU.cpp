@@ -310,11 +310,33 @@ static uint32_t memProbeMode = 0;
 // must fall OUTSIDE the framebuffer aperture while value+FB_OFFSET falls inside it. If that
 // test fails the register is left alone, because then this diagnosis does not apply.
 static uint32_t ptbFixMode = 0;
+
+// rgpumqd=1: convert the MEC's FB-resident pointers from BAR-relative to MC addresses.
+//
+// Reading the MQD -- which only became possible once dumpMqd stopped confusing an MC address
+// with a BAR0 offset -- shows the same bug as the page-table base, in the two registers the
+// microengine uses most directly:
+//
+//     CP_MQD_BASE_ADDR      = 0xf40b706000   BAR-relative; MC is 0x84b706000
+//     cp_hqd_eop_base_addr  = 0xf40b7068     (<<8 = 0xf40b706800); MC is 0x84b7068
+//     cp_hqd_pq_base        = 0xffbfea00     (<<8 = 0xffbfea0000) -- a GART VA, correct,
+//                                            and its PTE walks VALID SYSTEM SNOOPED RW
+//
+// The framebuffer aperture is 0x840000000..0x85fffffff, so a BAR-relative pointer does not
+// translate. The MEC reloads the HQD from CP_MQD_BASE_ADDR; if it cannot read its own queue
+// descriptor the queue never really runs, which is why the KIQ MAP_QUEUES packet sitting at
+// wptr=8 is never consumed and startKIQ reports "Stamp Timeout for KIQ Submission!".
+//
+// Both the registers AND the in-VRAM MQD image are repaired. Fixing only the registers is
+// futile: the image is what the engine restores from, and that is the documented reason
+// writes to CP_HQD_EOP_BASE_ADDR "do not stick".
+static uint32_t mqdFixMode = 0;
 static void *hwMemObject = nullptr;
 
 static void reportCpState(const char *when);
 static void primeIcacheOnly();
 static void probeRlc();
+static void repairMqdPointers();
 static mach_vm_address_t orgVmmInit = 0;
 static mach_vm_address_t orgVmmSetAlloc = 0;
 static mach_vm_address_t orgVmmSetVSReady = 0;
@@ -2742,9 +2764,25 @@ static void walkGart(const char *what, uint64_t va) {
     ptb &= ~0xfffULL;
     if (va < start) { RLOG("XN: %s va %#llx below GART start %#llx", what, va, start); return; }
     uint64_t idx = (va - start) >> 12;
-    uint64_t off = ptb + idx * 8;
+
+    // ptb is an MC address; BAR0 is a window onto the framebuffer starting at
+    // GCMC_VM_FB_LOCATION_BASE, so the byte offset into the aperture is ptb - fbBase, not ptb.
+    //
+    // This function previously used ptb directly as a BAR0 offset. With ptb at 0x84fdfc000 and
+    // the aperture 256 MB long, the bounds check below could never pass, so every call printed
+    // "outside the 256 MB BAR0 aperture" and no page table entry was ever actually read. Same
+    // class of mistake as the one that put a reserved-relative address in the page-table base
+    // register: an MC address and an aperture offset are not interchangeable.
+    uint64_t fbBase = static_cast<uint64_t>(fbRead(asicInfo, kGcFbBase) & 0xffffff) << 24;
+    if (ptb < fbBase) {
+        RLOG("XN: %s page table base %#llx is below the framebuffer base %#llx -- it is not an "
+             "MC address into VRAM, so it cannot be read through BAR0", what, ptb, fbBase);
+        return;
+    }
+    uint64_t off = (ptb - fbBase) + idx * 8;
     if (off + 8 > 0x10000000ULL) {
-        RLOG("XN: %s PTE at fb offset %#llx is outside the 256 MB BAR0 aperture", what, off);
+        RLOG("XN: %s PTE at BAR0 offset %#llx (ptb %#llx - fbBase %#llx + idx %#llx * 8) is "
+             "outside the 256 MB aperture", what, off, ptb, fbBase, idx);
         return;
     }
     uint32_t lo = fb[off / 4], hi = fb[off / 4 + 1];
@@ -2771,11 +2809,35 @@ static void walkGart(const char *what, uint64_t va) {
 static void dumpMqd(uint64_t mqdVa) {
     auto fb = fbAperture();
     if (fb == nullptr) return;
+    // CP_MQD_BASE_ADDR turns up in three different forms on this part, all naming the same
+    // page, and only one of them is an MC address the GPU can use:
+    //
+    //     reserved + off = 0xebcb706000    what dumpMqd was handed
+    //     base     + off = 0xf40b706000    what the per-queue walk logs (BAR-relative)
+    //     fbHW     + off = 0x84b706000     the MC address, inside the framebuffer aperture
+    //
+    // Exactly the confusion that put a reserved-relative address in the page-table base
+    // register. Accept any of the three, say which it was, and convert to a BAR0 offset so
+    // the descriptor can actually be read -- previously this bailed with "outside BAR0" and
+    // the MQD was never inspected once.
     uint64_t fbBase = static_cast<uint64_t>(fbRead(asicInfo, kGcFbBase) & 0xffffff) << 24;
-    if (mqdVa < fbBase) { RLOG("XN: mqd %#llx below fb base %#llx", mqdVa, fbBase); return; }
-    uint64_t off = mqdVa - fbBase;
+    uint64_t swBase = 0, reserved = 0;
+    if (hwMemObject != nullptr) {
+        auto mf = reinterpret_cast<uint8_t *>(hwMemObject);
+        swBase   = *reinterpret_cast<uint64_t *>(mf + 0x50);
+        reserved = *reinterpret_cast<uint64_t *>(mf + 0x58);
+    }
+    uint64_t off;
+    const char *form;
+    if (swBase != 0 && mqdVa >= swBase)        { off = mqdVa - swBase;   form = "BAR-relative"; }
+    else if (reserved != 0 && mqdVa >= reserved) { off = mqdVa - reserved; form = "reserved-relative"; }
+    else if (mqdVa >= fbBase)                  { off = mqdVa - fbBase;   form = "MC"; }
+    else { RLOG("XN: mqd %#llx below every known base (fb %#llx sw %#llx reserved %#llx)",
+                mqdVa, fbBase, swBase, reserved); return; }
+    RLOG("XN: mqd va=%#llx is %s, offset %#llx -> correct MC would be %#llx", mqdVa, form, off,
+         fbBase + off);
     if (off + 0x800 > 0x10000000ULL) {
-        RLOG("XN: mqd at fb offset %#llx is outside BAR0", off); return;
+        RLOG("XN: mqd offset %#llx is outside the 256 MB BAR0 aperture", off); return;
     }
     auto d = [fb, off](uint32_t f) { return fb[(off + f) / 4]; };
     RLOG("XN: MQD@fb+%#llx: header=%#x mqd_base=%#x active=%#x vmid=%#x persistent=%#x",
@@ -3356,6 +3418,7 @@ static uint32_t wrapKiqSubmit(void *self) {
     auto r = FunctionCast(wrapKiqSubmit, orgKiqSubmit)(self);
     RLOG("XJ:   submitKIQFrame -> %u", r & 0xff);
     if (mask & XK) kickKiq(kiqEopHint);
+    repairMqdPointers();   // report-only unless rgpumqd=1
     return r;
 }
 
@@ -3526,6 +3589,136 @@ static bool repairPageTableBase(const char *when) {
     RLOG("XT: %s: rewrote CTX0 ptb %#llx -> %#llx, reads back %#llx %s", when, ptb, nv, rb,
          rb == nv ? "OK" : "MISMATCH (register refused the write)");
     return rb == nv;
+}
+
+// Convert one FB-resident pointer from BAR-relative to MC, guarded by the arithmetic.
+// enc8 means the register stores the address shifted right by 8, as PQ_BASE and EOP_BASE do.
+static bool fixFbPointer(const char *name, uint32_t regLo, uint32_t regHi, bool enc8,
+                         uint64_t swBase, uint64_t fbHW, uint64_t fbTop, uint32_t *outLo,
+                         uint32_t *outHi) {
+    uint64_t enc = (static_cast<uint64_t>(fbRead(asicInfo, regHi)) << 32) |
+                    fbRead(asicInfo, regLo);
+    uint64_t addr = enc8 ? (enc << 8) : enc;
+    if (addr == 0) { RLOG("XQ:   %-16s is 0, skipping", name); return false; }
+    if (addr >= fbHW && addr <= fbTop) {
+        RLOG("XQ:   %-16s %#llx is already an MC address, leaving it", name, addr);
+        return false;
+    }
+    if (swBase == 0 || addr < swBase) {
+        RLOG("XQ:   %-16s %#llx is neither MC nor BAR-relative (sw base %#llx), leaving it",
+             name, addr, swBase);
+        return false;
+    }
+    uint64_t want = addr - swBase + fbHW;
+    if (want < fbHW || want > fbTop) {
+        RLOG("XQ:   %-16s %#llx -> %#llx would fall outside %#llx..%#llx, leaving it",
+             name, addr, want, fbHW, fbTop);
+        return false;
+    }
+    uint64_t nenc = enc8 ? (want >> 8) : want;
+    *outLo = static_cast<uint32_t>(nenc);
+    *outHi = static_cast<uint32_t>(nenc >> 32);
+    RLOG("XQ:   %-16s %#llx -> %#llx  (reg %#llx -> %#llx)", name, addr, want, enc, nenc);
+    if (mqdFixMode < 1) return false;
+    fbWrite(asicInfo, regLo, *outLo);
+    fbWrite(asicInfo, regHi, *outHi);
+    return true;
+}
+
+// Repair the KIQ HQD's FB-resident pointers, registers and MQD image alike.
+static void repairMqdPointers() {
+    auto fb = fbAperture();
+    if (fb == nullptr || asicInfo == nullptr || hwMemObject == nullptr) {
+        RLOG("XQ: cannot run -- fb=%s asicInfo=%p hwMem=%p", fb ? "ok" : "null",
+             asicInfo, hwMemObject);
+        return;
+    }
+    auto mf = reinterpret_cast<uint8_t *>(hwMemObject);
+    uint64_t swBase = *reinterpret_cast<uint64_t *>(mf + 0x50);
+    uint64_t fbHW   = static_cast<uint64_t>(fbRead(asicInfo, kGcFbBase) & 0xffffff) << 24;
+    uint64_t fbTop  = (static_cast<uint64_t>(fbRead(asicInfo, kGcFbTop) & 0xffffff) << 24)
+                      | 0xffffffULL;
+
+    uint32_t sel = fbRead(asicInfo, kGcGrbmGfxCntl);
+    fbWrite(asicInfo, kGcGrbmGfxCntl, kKiqSelector);
+    IODelay(20);
+
+    RLOG("XQ: repairing KIQ HQD pointers (sw base %#llx, FB %#llx..%#llx)%s", swBase, fbHW,
+         fbTop, mqdFixMode < 1 ? "  [report only, rgpumqd=1 to apply]" : "");
+
+    uint32_t mLo = 0, mHi = 0, eLo = 0, eHi = 0;
+    bool mqdFixed = fixFbPointer("MQD_BASE", kGcMqdBase, kGcMqdBaseHi, false, swBase, fbHW,
+                                 fbTop, &mLo, &mHi);
+    bool eopFixed = fixFbPointer("EOP_BASE", kGcHqdEopBase, kGcHqdEopBaseHi, true, swBase,
+                                 fbHW, fbTop, &eLo, &eHi);
+
+    // The image is what the engine restores from, so the registers alone are not enough.
+    uint64_t mqdEnc = (static_cast<uint64_t>(fbRead(asicInfo, kGcMqdBaseHi)) << 32) |
+                       fbRead(asicInfo, kGcMqdBase);
+    uint64_t imgOff = (mqdEnc >= fbHW && mqdEnc <= fbTop) ? mqdEnc - fbHW
+                    : (swBase != 0 && mqdEnc >= swBase) ? mqdEnc - swBase : ~0ULL;
+    if (imgOff == ~0ULL || imgOff + 0x800 > 0x10000000ULL) {
+        RLOG("XQ: MQD image at %#llx is not reachable through BAR0, image left alone", mqdEnc);
+    } else if (mqdFixMode >= 1) {
+        auto put = [fb, imgOff](uint32_t f, uint32_t v) { fb[(imgOff + f) / 4] = v; };
+        auto get = [fb, imgOff](uint32_t f) { return fb[(imgOff + f) / 4]; };
+        RLOG("XQ: MQD image at fb+%#llx before: mqd_base=%#x_%08x eop_base=%#x_%08x",
+             imgOff, get(0x204), get(0x200), get(0x298), get(0x294));
+        if (mqdFixed) { put(0x200, mLo); put(0x204, mHi); }
+
+        // Repair EOP from the IMAGE, not the register.
+        //
+        // CP_HQD_EOP_BASE_ADDR reads 0 while the image holds 0xf40b7068 (<<8 =
+        // 0xf40b706800, BAR-relative), so the register-driven path above skips it. A zero
+        // register with a non-zero image is the documented "writes to CP_HQD_EOP_BASE_ADDR do
+        // not stick" symptom, and the image is what the engine restores from anyway.
+        uint64_t iEnc = (static_cast<uint64_t>(get(0x298)) << 32) | get(0x294);
+        uint64_t iAddr = iEnc << 8;
+        if (iAddr != 0 && swBase != 0 && iAddr >= swBase) {
+            uint64_t iWant = iAddr - swBase + fbHW;
+            if (iWant >= fbHW && iWant <= fbTop) {
+                uint64_t nEnc = iWant >> 8;
+                put(0x294, static_cast<uint32_t>(nEnc));
+                put(0x298, static_cast<uint32_t>(nEnc >> 32));
+                RLOG("XQ:   EOP image      %#llx -> %#llx", iAddr, iWant);
+                // Try the register too, and say plainly whether it takes the write.
+                fbWrite(asicInfo, kGcHqdEopBase, static_cast<uint32_t>(nEnc));
+                fbWrite(asicInfo, kGcHqdEopBaseHi, static_cast<uint32_t>(nEnc >> 32));
+                uint64_t rb = (static_cast<uint64_t>(fbRead(asicInfo, kGcHqdEopBaseHi)) << 32)
+                              | fbRead(asicInfo, kGcHqdEopBase);
+                RLOG("XQ:   EOP register   wrote %#llx, reads back %#llx %s", nEnc, rb,
+                     rb == nEnc ? "STUCK" : "did not stick");
+            } else {
+                RLOG("XQ:   EOP image      %#llx -> %#llx outside FB, leaving it", iAddr, iWant);
+            }
+        } else if (eopFixed) {
+            put(0x294, eLo); put(0x298, eHi);
+        }
+        RLOG("XQ: MQD image at fb+%#llx after:  mqd_base=%#x_%08x eop_base=%#x_%08x",
+             imgOff, get(0x204), get(0x200), get(0x298), get(0x294));
+    }
+
+    RLOG("XQ: after repair: MQD_BASE=%#x_%08x EOP_BASE=%#x_%08x ACTIVE=%#x rptr=%#x "
+         "wptr=%#x_%08x", fbRead(asicInfo, kGcMqdBaseHi), fbRead(asicInfo, kGcMqdBase),
+         fbRead(asicInfo, kGcHqdEopBaseHi), fbRead(asicInfo, kGcHqdEopBase),
+         fbRead(asicInfo, kGcHqdActive), fbRead(asicInfo, kGcHqdPqRptr),
+         fbRead(asicInfo, kGcHqdPqWptrHi), fbRead(asicInfo, kGcHqdPqWptrLo));
+
+    // Does the engine consume anything now? rptr moving off zero is the whole question.
+    uint32_t r0 = fbRead(asicInfo, kGcHqdPqRptr);
+    for (unsigned i = 0; i < 20; i++) {
+        IOSleep(5);
+        uint32_t r = fbRead(asicInfo, kGcHqdPqRptr);
+        if (r != r0) {
+            RLOG("XQ: rptr MOVED %#x -> %#x after %u ms  <-- THE CP IS CONSUMING THE RING",
+                 r0, r, (i + 1) * 5);
+            break;
+        }
+        if (i == 19)
+            RLOG("XQ: rptr still %#x after 100 ms (wptr=%#x) -- engine still not consuming",
+                 r0, fbRead(asicInfo, kGcHqdPqWptrLo));
+    }
+    fbWrite(asicInfo, kGcGrbmGfxCntl, sel);
 }
 
 static uint32_t wrapVmmFillRegs(void *self) {
@@ -4236,6 +4429,13 @@ static void pluginStart() {
     } else {
         RLOG("rgpucp not set: leaving the command processor alone (correct for a device the "
              "firmware still owns)");
+    }
+    uint32_t mqdm = 0;
+    if (PE_parse_boot_argn("rgpumqd", &mqdm, sizeof(mqdm)) && mqdm <= 1) {
+        mqdFixMode = mqdm;
+        RLOG("rgpumqd=%u: the KIQ HQD's MQD_BASE and EOP_BASE are BAR-relative rather than MC "
+             "addresses; %s", mqdm, mqdm ? "repairing registers and the MQD image"
+                                         : "reporting only");
     }
     uint32_t ptbm = 0;
     if (PE_parse_boot_argn("rgpuptb", &ptbm, sizeof(ptbm)) && ptbm <= 1) {
