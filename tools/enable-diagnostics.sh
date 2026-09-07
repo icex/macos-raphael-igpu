@@ -49,32 +49,51 @@ SyncIntervalSec=1s
 EOF
 echo "wrote /etc/systemd/journald.conf.d/10-crash-durability.conf"
 
-cat > /etc/modules-load.d/pstore.conf <<'EOF'
-# Written by macos-vm/enable-diagnostics.sh
-# Persist a panic's dmesg tail into EFI variables, so it survives the power cycle and shows
-# up under /sys/fs/pstore on the next boot.
-efi_pstore
-EOF
-echo "wrote /etc/modules-load.d/pstore.conf"
-
 systemctl restart systemd-journald
-modprobe efi_pstore 2>/dev/null || echo "note: efi_pstore did not load now; it will at next boot"
 
 echo
-echo "journald sync interval now:"
-systemd-analyze cat-config systemd/journald.conf 2>/dev/null | grep -iE 'SyncIntervalSec|Storage' | tail -4
-echo "pstore backend: $(cat /sys/module/pstore/parameters/backend 2>/dev/null || echo '(none yet)')"
-echo
+echo "journald now:"
+systemd-analyze cat-config systemd/journald.conf 2>/dev/null |
+    grep -E '^(SyncIntervalSec|Storage)=' | tail -4
+
+# pstore: present, and off, and it takes a boot-config change to turn on.
+#
+# This kernel has CONFIG_EFI_VARS_PSTORE=y but also
+# CONFIG_EFI_VARS_PSTORE_DEFAULT_DISABLE=y, so efi_pstore is built in and deliberately
+# inert -- /sys/module/pstore/parameters/backend reads (null) and modprobe is a no-op
+# because there is no module to load. It cannot be enabled from userspace; it needs
+# efi_pstore.pstore_disable=0 on the kernel command line. Say so plainly rather than
+# writing a modules-load.d drop-in that would look like it had done something.
+backend="$(cat /sys/module/pstore/parameters/backend 2>/dev/null || echo '(none)')"
+echo "pstore backend: ${backend}"
+if [[ "$backend" == "(null)" || "$backend" == "(none)" ]]; then
+    cat <<'EOF'
+
+pstore is NOT capturing anything, and this script cannot change that. The kernel is built
+with CONFIG_EFI_VARS_PSTORE_DEFAULT_DISABLE=y, so efi_pstore is compiled in but inert until
+the command line says otherwise. To turn it on, add to KERNEL_CMDLINE[default] in
+/etc/default/limine:
+
+    efi_pstore.pstore_disable=0
+
+then run limine-update and reboot. That is a boot-config change on a Secure Boot install
+with hash-pinned images, so it is left as your decision rather than done here -- and it only
+helps for a hang the kernel actually notices (a panic or oops). A fabric-level lockup that
+stops the CPU dead leaves nothing either way.
+EOF
+fi
+
 cat <<'EOF'
-Active now, no reboot needed. After any future hang, look for:
 
-    ls /sys/fs/pstore/                  # a dmesg-efi-* file if the kernel panicked
-    journalctl -k -b -1 | tail -50      # now durable to within a second of the hang
-    tr -d '\r' < run/serial.log | tail  # guest side, fsynced per chunk since this change
+The journald change is active now, no reboot needed, and it is the one that matters: the
+kernel log is durable to within a second of a hang instead of losing up to five minutes.
 
-One thing this deliberately does NOT change: the kernel command line still carries
-"nowatchdog", so a hang cannot self-recover and needs the reset button. Turning the
-watchdog back on would let the machine reboot itself instead of sitting frozen, but that is
-a boot-config change on a Secure Boot install with hash-pinned images, so it is left as a
-decision rather than done here.
+After any future hang, look in this order:
+
+    journalctl -k -b -1 | tail -50      # now durable to within a second
+    tr -d '\r' < run/serial.log | tail  # guest side, fsynced per chunk
+    ls /sys/fs/pstore/                  # only if the cmdline change above was made
+
+Also unchanged, deliberately: the command line carries "nowatchdog", so a hang cannot
+self-recover and needs the reset button.
 EOF
