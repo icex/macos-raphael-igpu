@@ -2445,6 +2445,135 @@ kernel log alone.
 Do not read `AMFI: [non-fatal] unable to accelerate context` as evidence either way. That is
 AMFI's own trust-cache message and has nothing to do with GPU acceleration.
 
+### Metal enumerates: "Metal Support: Metal 3", measured from inside the guest
+
+A root command channel now survives a boot with no login and no display, which is what made
+this measurable at all. From inside the guest, with the iGPU passed through:
+
+    system_profiler SPDisplaysDataType
+      AMD Radeon Navi23
+        Chipset Model: AMD Radeon Navi23      VRAM (Total): 512 MB
+        Device ID: 0x73ff                     Revision ID: 0x00cb
+        ROM Revision: 102-RAPHAEL-008
+        Metal Support: Metal 3
+
+    MTLCreateSystemDefaultDevice() -> name=AMD Radeon Navi23, lowPower=0, headless=0,
+                                      recommendedMaxWorkingSetSize=268435456
+    IOClass = AMDRadeonX6000_AMDNavi23GraphicsAccelerator
+    IOMatchCategory = IOAccelerator
+
+So the userspace half is in place: macOS advertises the part as a Metal 3 device and hands out
+a real `MTLDevice`. That is enumeration, not execution, and the two must not be conflated.
+
+### The accelerator's own counters name the remaining blocker
+
+`ioreg -rc AMDRadeonX6000_AMDNavi23GraphicsAccelerator` exposes
+`PerformanceStatisticsAccum`, which is the most useful diagnostic found in this project:
+
+    surfaceCount = 19    textureCount = 105    context2DCount = 4
+    gartUsedBytes = 4874240        inUseSysMemoryBytes = 4874240
+    vramFreeBytes = 0              inUseVidMemoryBytes = 0
+    HWChannel GFX   | Commands Submitted = 0, Completed = 0
+    HWChannel KIQ   | Commands Submitted = 0, Completed = 0
+    HWChannel SDMA0 | Commands Submitted = 0, Completed = 0
+    HWChannel SDMA1 | Commands Submitted = 0, Completed = 0
+    Device Utilization % = 0       recoveryCount = 0
+
+The driver allocates freely in GART and creates surfaces, textures and 2D contexts -- but the
+VRAM heap holds **zero bytes** and **not one command has ever reached any hardware channel**,
+not from a Metal command queue and not from WindowServer.
+
+That reframes the parked microengines. `MEC1 = 0x44a`, `MEC2 = 0x44c`, unhalted and static, was
+read for a long time as a hardware problem, and the `CP_CPC_IC_BASE*` registers genuinely are
+read-only to the guest. But idle engines are exactly what one expects when **there is no work
+to fetch because there is no VRAM to build rings in**. The icache lock may be no obstacle at
+all: the PSP configured fetch correctly and has no reason to let anyone change it.
+
+### VRAM: 0 -> 256 MB, by calling AMDHWMemory::enableAllocations
+
+`AMDHWMemory::enableAllocations` (x6+0x52a1e) populates the VRAM heap, takes no arguments
+beyond `this`, and is never called -- the XH hook logs `initVRAMInfo` every boot while
+"enableAllocations entry" never appears, because it sits downstream of the ttlPowerUp failure
+that milestone `xi` only *reports* as success.
+
+It gates on two pool pointers, and this is the part that had never been checked:
+
+    52a2b: mov rdi, qword ptr [rdi + 0x68]   ; pool A, null-tested
+    52a38: cmp qword ptr [rbx + 0x70], 0x0   ; pool B
+
+The XH hook's long-standing "pool0/pool1" log is the *sizes* at +0x40/+0x48, a different
+thing. Boot-arg `rgpumem=1` reports the real pointers before anything acts on them:
+
+    XH: initVRAMInfo -> 1 base=0xf400000000 ... size0=0x20000000 size1=0x10000000
+        | poolA(0x68)=0xffffff98da673500 poolB(0x70)=0xffffff98da673580
+    XM: AMDHWMemory::setVirtualSpaceReady(1) | size0=0x10000000 size1=0x10000000
+        poolA=0xffffff98da673500 poolB=0xffffff98da673580  [caller x6+0x529df]
+
+Both pools are real, so the call would do work rather than bail. `rgpumem=2` then makes it,
+from `AMDHWMemory::setVirtualSpaceReady(true)` -- the memory-side twin of the VMM hook the
+paging-channel graft already uses. Measured result:
+
+    vramFreeBytes  0  ->  268435456      (256 MB)
+    no panic, accelerator still registers, no "There is 0 free memory remaining"
+
+That is the first time this GPU has had a usable VRAM heap under macOS.
+
+**Still zero submissions.** `HWChannel GFX/KIQ/SDMA* Commands Submitted` remain 0,
+`inUseVidMemoryBytes` is still 0, and `ioreg -rc IOAccelerator` reports **no**
+`IOAccelCommandQueue` user clients. So VRAM being available has not by itself caused anything
+to be dispatched. Next question is why no client opens a hardware queue.
+
+### Measuring Metal needs a real toolchain; JXA cannot do it
+
+`clang`, `swift`, `swiftc`, `xcrun` and `python3` all exist in the guest but are bare
+xcode-select stubs -- "No developer tools were found" -- so nothing compiles.
+
+JavaScript for Automation gets partway: `ObjC.import('Metal')` works,
+`MTLCreateSystemDefaultDevice()` returns a device, `d.name`, `d.isHeadless`,
+`d.recommendedMaxWorkingSetSize` all read correctly, and `d.newCommandQueue` yields a live
+queue. It then dead-ends: `q.commandBuffer` reports `typeof function` but calling it throws
+`TypeError: Object is not a function`. JXA cannot dispatch `MTLCommandQueue`'s protocol
+methods, so no command buffer can be created, committed or waited on from AppleScript.
+
+The guest does have working internet (github 200, swscan 404 = reachable), and
+`softwareupdate -l` offers "Command Line Tools for Xcode-16.4" (861 MB), which installs
+headlessly after
+`touch /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress`. That is the route to
+a genuine compute-kernel test rather than device enumeration.
+
+### The guest command channel, made permanent
+
+The deadlock was: the agent had to be typed into a logged-in Terminal, login needed a rendered
+display, and the display needs DCN 3.1.5 work. Broken by booting **without** passthrough --
+where the EFI framebuffer renders the login window normally (screen mean brightness 1171 ->
+46562) -- logging in once, and installing the agent as a LaunchDaemon:
+
+    /usr/local/bin/rgpu-agent.sh          the poll loop, root
+    /Library/LaunchDaemons/as.rgpu.agent.plist   RunAtLoad + KeepAlive
+
+`/Library` is not SIP-protected, so this installs with sudo alone. It starts before any login
+and needs no display, verified under passthrough with a nonce: agent answered as **root** at
+guest uptime 54 s. SSH was the wrong target by comparison --
+`systemsetup -setremotelogin` demands Full Disk Access and `com.openssh.sshd` is not loaded as
+a service.
+
+### Correction: the "304-byte OVMF hangs" were my own watchdog, not the guest
+
+Several runs produced a 304-byte serial log ending at `BdsDxe: starting Boot0001`, which was
+recorded as a stale-PSP-ring firmware hang that `QUIESCE=1` fixed. That is wrong.
+
+`redeploy.sh`'s exposure watchdog originally matched the container by **name**, so a watchdog
+left over from an earlier launch tore down whatever VM was running when it woke. Three were
+found still sleeping (`78161`, `101027`, `122299`) from pre-fix launches; one fired 90 seconds
+into a launch that had been given `RGPU_MAX_SECONDS=900`, and the giveaway was a
+"RGPU_MAX_SECONDS=300 reached" line in a log belonging to the 900 s run. The guest was never
+hanging -- the container was being destroyed while still in firmware. `QUIESCE=1` appearing to
+fix it was coincidence.
+
+The watchdog now captures the container id and exits harmlessly if another run owns the name.
+Note when clearing strays: killing the `sleep` alone makes the parent subshell fall straight
+through to `docker rm -f`, so the parent must be killed first.
+
 ### A hypothesis this raises about the hangs themselves
 
 Not established, and recorded as a hypothesis rather than a finding, but it fits better than
