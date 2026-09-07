@@ -280,6 +280,36 @@ static uint32_t vmmProbeMode = 0;
 // powerUp never built them, calling enableAllocations achieves nothing and the real fix is
 // upstream. So mode 1 only reports, and mode 2 acts. Do not skip mode 1.
 static uint32_t memProbeMode = 0;
+
+// rgpuptb: repair GCVM_CONTEXT0_PAGE_TABLE_BASE_ADDR, which is short by FB_OFFSET.
+//
+// This is the root cause of everything downstream, and it is a textbook discrete-GPU
+// assumption breaking on an APU. Measured:
+//
+//     GART page table lives at MC   0xf40fdfc000   (= FB_LOCATION_BASE + 0x0fdfc000)
+//     GPU faults trying to reach    0xf40fdfc000   (VM_FAULT_STATUS=0xd33)
+//     CTX0 PAGE_TABLE_BASE holds    0xebcfdfc000
+//     fault - ptb                 = 0x840000000   == FB_OFFSET, exactly
+//     AMDHWMemory 'reserved'      = 0xebc0000000, and reserved + 0x0fdfc000 == ptb
+//
+// So the page directory pointer was computed from AMDHWMemory's `reserved` field (+0x58)
+// instead of its `base` (+0x50), and base - reserved is precisely FB_OFFSET. On a discrete
+// GPU FB_OFFSET is 0, reserved == base, and the error is invisible. On this APU FB_OFFSET is
+// 0x840000000, so the GPU's page directory pointer lands outside the framebuffer aperture and
+// EVERY GART translation faults.
+//
+// Which explains the whole stall, and retires the theory that the command processor is
+// hardware-locked. The MEC queues are active and work is queued -- me2 pipe1 q0 ACTIVE,
+// ring=0xffbfea0000, wptr=8, rptr=0, doorbell enabled -- the CP simply cannot fetch the ring,
+// because reaching it requires a page table the GPU cannot address. Hence parked microengines
+// (MEC1=0x44a, MEC2=0x44c) and Commands Completed = 0 on every channel. CP_CPC_IC_BASE* being
+// read-only is real but was never the obstacle.
+//
+// Repaired after AMDGFX10VMM::fillVMRegisters and programAndInvalidateVM, both of which write
+// these registers, and only when the arithmetic says so: the value currently in the register
+// must fall OUTSIDE the framebuffer aperture while value+FB_OFFSET falls inside it. If that
+// test fails the register is left alone, because then this diagnosis does not apply.
+static uint32_t ptbFixMode = 0;
 static void *hwMemObject = nullptr;
 
 static void reportCpState(const char *when);
@@ -289,6 +319,8 @@ static mach_vm_address_t orgVmmInit = 0;
 static mach_vm_address_t orgVmmSetAlloc = 0;
 static mach_vm_address_t orgVmmSetVSReady = 0;
 static mach_vm_address_t orgHwMemSetVSReady = 0;
+static mach_vm_address_t orgVmmFillRegs = 0;
+static mach_vm_address_t orgVmmProgInv = 0;
 // Slide of AMDRadeonX6000, so a captured return address can be reported as a file offset
 // that llvm-nm can name. Static analysis could not identify the caller of
 // setMemoryAllocationsEnabled: it is a virtual call, and vtable slot 0x148 is used by
@@ -391,6 +423,8 @@ static constexpr size_t kOffVmmInit     = 0x56d3a;    // AMDHWVMM::init [x6]
 static constexpr size_t kOffVmmSetAlloc = 0x5791e;    // AMDHWVMM::setMemoryAllocationsEnabled [x6]
 static constexpr size_t kOffVmmSetVSReady = 0x578ce;  // AMDHWVMM::setVirtualSpaceReady [x6]
 static constexpr size_t kOffHwMemSetVSReady = 0x52c3a; // AMDHWMemory::setVirtualSpaceReady [x6]
+static constexpr size_t kOffVmmFillRegs = 0x62400;    // AMDGFX10VMM::fillVMRegisters [x6]
+static constexpr size_t kOffVmmProgInv  = 0x6278a;    // AMDGFX10VMM::programAndInvalidateVM [x6]
 static constexpr size_t kOffAccPowerUpHW = 0x4e0c;   // AMDGraphicsAccelerator::powerUpHW [x6]
 static constexpr size_t kOffHwPowerUp    = 0x99618;  // AMDNavi23Hardware::powerUp [x6]
 static constexpr size_t kOffHwEngPowerUp = 0x6fe9a;  // AMDHardware::powerUpHWEngines [x6]
@@ -3413,6 +3447,95 @@ static bool wrapVmmInit(void *self, void *hwIface, uint32_t flags) {
 // proved graftable, and it is the natural place to enable allocations: by the time virtual
 // space is ready the pools should exist. Report the pool pointers here, and only act on them
 // under rgpumem=2.
+// Add FB_OFFSET back to CTX0's page-table base if, and only if, the arithmetic says it is
+// short by exactly that. Returns true if it rewrote the register.
+static bool repairPageTableBase(const char *when) {
+    if (asicInfo == nullptr) return false;
+    uint64_t fbHW  = static_cast<uint64_t>(fbRead(asicInfo, kGcFbBase) & 0xffffff) << 24;
+    uint64_t fbTop = (static_cast<uint64_t>(fbRead(asicInfo, kGcFbTop) & 0xffffff) << 24)
+                     | 0xffffffULL;
+    uint32_t lo = fbRead(asicInfo, kGcVmCtx0PtbLo);
+    uint32_t hi = fbRead(asicInfo, kGcVmCtx0PtbHi);
+    uint64_t ptb = (static_cast<uint64_t>(hi) << 32) | lo;
+    uint64_t flags = ptb & 0xfffULL;
+    uint64_t addr = ptb & ~0xfffULL;
+
+    // The offset of the page table inside VRAM comes from AMDHWMemory, because the register
+    // alone cannot yield it.
+    //
+    // The driver keeps two numbers: `base` (+0x50) is the guest BAR0 address, 0xf400000000,
+    // and `reserved` (+0x58) is 0xebc0000000 -- which is exactly base minus the GFXHUB
+    // framebuffer base, i.e. the correction that turns a BAR-relative address into an MC
+    // address. Measured on this part:
+    //
+    //     base - reserved   = 0x840000000  == GFXHUB FB_LOCATION_BASE
+    //     ptb - reserved    = 0x0fdfc000   == the page table's offset inside VRAM
+    //     correct MC        = 0x840000000 + 0x0fdfc000 = 0x84fdfc000
+    //
+    // What actually got written was `reserved + offset` = 0xebcfdfc000, and something else
+    // reached for `base + offset` = 0xf40fdfc000 and faulted (VM_FAULT_STATUS=0xd33 at
+    // 0x0f40fdfc). Three addresses for one page, and only one of them is an MC address the
+    // GFXHUB can translate. On a discrete GPU FB_OFFSET is 0, base == reserved == 0, and all
+    // three collapse to the same value, which is why this has never been hit before.
+    if (hwMemObject == nullptr) {
+        RLOG("XT: %s: CTX0 ptb=%#llx but AMDHWMemory has not been seen yet, so the VRAM "
+             "offset cannot be derived -- needs the XH hook (rgpu mask bit xh) active", when,
+             ptb);
+        return false;
+    }
+    auto mf = reinterpret_cast<uint8_t *>(hwMemObject);
+    uint64_t swBase   = *reinterpret_cast<uint64_t *>(mf + 0x50);
+    uint64_t reserved = *reinterpret_cast<uint64_t *>(mf + 0x58);
+
+    if (reserved == 0 || addr < reserved) {
+        RLOG("XT: %s: ptb=%#llx reserved=%#llx -- not reserved-relative, leaving it alone",
+             when, ptb, reserved);
+        return false;
+    }
+    uint64_t off  = addr - reserved;
+    uint64_t want = fbHW + off;
+    bool addrOutside = (addr < fbHW || addr > fbTop);
+    bool wantInside  = (want >= fbHW && want <= fbTop);
+    bool baseMatches = (swBase - reserved) == fbHW;
+
+    RLOG("XT: %s: ptb=%#llx addr=%#llx | sw base=%#llx reserved=%#llx base-reserved=%#llx "
+         "(matches GFXHUB base %#llx: %u)", when, ptb, addr, swBase, reserved,
+         swBase - reserved, fbHW, baseMatches);
+    RLOG("XT: %s: VRAM offset=%#llx -> correct MC=%#llx | FB=%#llx..%#llx "
+         "addr outside=%u want inside=%u", when, off, want, fbHW, fbTop, addrOutside,
+         wantInside);
+
+    if (!baseMatches || !addrOutside || !wantInside) {
+        RLOG("XT: %s: leaving it alone -- the arithmetic does not support the repair", when);
+        return false;
+    }
+    if (ptbFixMode < 1) {
+        RLOG("XT: %s: would rewrite ptb %#llx -> %#llx (rgpuptb=1 to do it)", when, ptb,
+             want | flags);
+        return false;
+    }
+    uint64_t nv = want | flags;
+    fbWrite(asicInfo, kGcVmCtx0PtbLo, static_cast<uint32_t>(nv));
+    fbWrite(asicInfo, kGcVmCtx0PtbHi, static_cast<uint32_t>(nv >> 32));
+    uint64_t rb = (static_cast<uint64_t>(fbRead(asicInfo, kGcVmCtx0PtbHi)) << 32) |
+                   fbRead(asicInfo, kGcVmCtx0PtbLo);
+    RLOG("XT: %s: rewrote CTX0 ptb %#llx -> %#llx, reads back %#llx %s", when, ptb, nv, rb,
+         rb == nv ? "OK" : "MISMATCH (register refused the write)");
+    return rb == nv;
+}
+
+static uint32_t wrapVmmFillRegs(void *self) {
+    auto r = FunctionCast(wrapVmmFillRegs, orgVmmFillRegs)(self);
+    repairPageTableBase("fillVMRegisters");
+    return r;
+}
+
+static uint32_t wrapVmmProgInv(void *self, void *info) {
+    auto r = FunctionCast(wrapVmmProgInv, orgVmmProgInv)(self, info);
+    repairPageTableBase("programAndInvalidateVM");
+    return r;
+}
+
 static uint32_t wrapHwMemSetVSReady(void *self, uint32_t ready) {
     auto r = FunctionCast(wrapHwMemSetVSReady, orgHwMemSetVSReady)(self, ready);
     if (self == nullptr) return r;
@@ -3983,7 +4106,7 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
             patcher.clearError();
         }
         x6Base = addr;
-        if (vmmProbeMode != 0 || memProbeMode != 0) {
+        if (vmmProbeMode != 0 || memProbeMode != 0 || ptbFixMode != 0) {
             orgVmmInit = patcher.routeFunction(addr + kOffVmmInit,
                            reinterpret_cast<mach_vm_address_t>(wrapVmmInit), true);
             RLOG("route AMDHWVMM::init -> %s (org=0x%llx)",
@@ -3993,6 +4116,16 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
                                reinterpret_cast<mach_vm_address_t>(wrapVmmSetAlloc), true);
             RLOG("route AMDHWVMM::setMemoryAllocationsEnabled -> %s (org=0x%llx)",
                  orgVmmSetAlloc ? "ok" : "FAILED", orgVmmSetAlloc);
+            patcher.clearError();
+            orgVmmFillRegs = patcher.routeFunction(addr + kOffVmmFillRegs,
+                             reinterpret_cast<mach_vm_address_t>(wrapVmmFillRegs), true);
+            RLOG("route AMDGFX10VMM::fillVMRegisters -> %s (org=0x%llx)",
+                 orgVmmFillRegs ? "ok" : "FAILED", orgVmmFillRegs);
+            patcher.clearError();
+            orgVmmProgInv = patcher.routeFunction(addr + kOffVmmProgInv,
+                            reinterpret_cast<mach_vm_address_t>(wrapVmmProgInv), true);
+            RLOG("route AMDGFX10VMM::programAndInvalidateVM -> %s (org=0x%llx)",
+                 orgVmmProgInv ? "ok" : "FAILED", orgVmmProgInv);
             patcher.clearError();
             orgHwMemSetVSReady = patcher.routeFunction(addr + kOffHwMemSetVSReady,
                                  reinterpret_cast<mach_vm_address_t>(wrapHwMemSetVSReady), true);
@@ -4052,6 +4185,13 @@ static void pluginStart() {
     } else {
         RLOG("rgpucp not set: leaving the command processor alone (correct for a device the "
              "firmware still owns)");
+    }
+    uint32_t ptbm = 0;
+    if (PE_parse_boot_argn("rgpuptb", &ptbm, sizeof(ptbm)) && ptbm <= 1) {
+        ptbFixMode = ptbm;
+        RLOG("rgpuptb=%u: CTX0 PAGE_TABLE_BASE will be %s -- it is short by FB_OFFSET, which "
+             "makes every GART translation fault and is why the CP never fetches its ring",
+             ptbm, ptbm ? "repaired" : "reported only");
     }
     uint32_t mem = 0;
     if (PE_parse_boot_argn("rgpumem", &mem, sizeof(mem)) && mem <= 2) {
