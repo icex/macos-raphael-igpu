@@ -651,6 +651,7 @@ static void dumpCpUcode(const char *when);
 // HQD, all reporting the identical MQD address.
 static constexpr uint32_t kKiqSelector = 1u | (2u << 2);
 static void dumpGfxHubVm(const char *when);
+static void reportCpState(const char *when);
 static void enableDoorbellMsg(uint64_t mqdAddr, uint64_t eopAddr);
 static void relocateRingToVram();
 static void startMecEngines();
@@ -2109,6 +2110,46 @@ static uint32_t wrapKiqMapQ(void *self, uint32_t ring, uint32_t a, uint64_t b,
 // steps directly, and dump the graphics core's own status registers alongside -- if the
 // command processor is not executing, GRBM_STATUS and CP_STAT say so.
 
+// Read-only report on the command processor. Never writes anything.
+//
+// The interventions are gated behind rgpucp now, and the diagnostics that told us whether
+// the microengines were alive lived inside them -- so with the gate closed a run would say
+// nothing at all about the one question that matters. This is those same reads with none of
+// the writes, safe to call on a device the firmware still owns.
+//
+// What each line answers, on a virgin device:
+//   IC bases      should point somewhere the PSP's own autoload chose, not into host memory
+//   BOOTLOAD      should have bit 31 set for real, so the GC/SDMA gates pass without xl
+//   MEC instr     movement across samples is the difference between a live engine and a
+//                 parked one; two samples 20 us apart cannot tell them apart, sixteen can
+//   FB location   the aperture as the firmware left it, before anything moves it
+static void reportCpState(const char *when) {
+    if (asicInfo == nullptr) return;
+    RLOG("XR: %s: IC bases CPC=%#x_%08x cntl=%#x op=%#x | PFP=%#x_%08x | ME=%#x_%08x", when,
+         fbRead(asicInfo, kGcCpcIcBaseHi), fbRead(asicInfo, kGcCpcIcBaseLo),
+         fbRead(asicInfo, kGcCpcIcBaseCntl), fbRead(asicInfo, kGcCpcIcOpCntl),
+         fbRead(asicInfo, kGcPfpIcBaseHi), fbRead(asicInfo, kGcPfpIcBaseLo),
+         fbRead(asicInfo, kGcMeIcBaseHi), fbRead(asicInfo, kGcMeIcBaseLo));
+    uint32_t bl = fbRead(asicInfo, kGcRlcBootStat);
+    RLOG("XR: %s: BOOTLOAD 0x4e8d=%#x (complete=%u) 0x4e7e=%#x RLC_CNTL=%#x RLC_STAT=%#x "
+         "RLC_SAFE_MODE=%#x", when, bl, (bl >> 31) & 1, fbRead(asicInfo, kGcRlcBootStatSc),
+         fbRead(asicInfo, kGcRlcCntl), fbRead(asicInfo, kGcRlcStat),
+         fbRead(asicInfo, kGcRlcSafeMode));
+    uint32_t a[16];
+    for (unsigned i = 0; i < 16; i++) { a[i] = fbRead(asicInfo, kGcMec2InstrPntr); IODelay(20); }
+    unsigned moves = 0;
+    for (unsigned i = 1; i < 16; i++) if (a[i] != a[i - 1]) moves++;
+    RLOG("XR: %s: MEC2 instr %#x %#x %#x ... %#x (%u changes -> %s) MEC1=%#x CP_MEC_CNTL=%#x",
+         when, a[0], a[1], a[2], a[15], moves,
+         moves ? "EXECUTING" : "not executing", fbRead(asicInfo, kGcMec1InstrPntr),
+         fbRead(asicInfo, kGcCpMecCntl));
+    RLOG("XR: %s: CP_STAT=%#x CPC_STATUS=%#x CPC_STALLED=%#x CPF_BUSY=%#x | FB base=%#x "
+         "top=%#x offset=%#x", when, fbRead(asicInfo, kGcCpStat),
+         fbRead(asicInfo, kGcCpcStatus), fbRead(asicInfo, kGcCpcStalled1),
+         fbRead(asicInfo, kGcCpfBusyStat), fbRead(asicInfo, kGcFbBase) & 0xffffff,
+         fbRead(asicInfo, kGcFbTop) & 0xffffff, fbRead(asicInfo, kGcFbOffset) & 0xffffff);
+}
+
 static void dumpGfxState(const char *when) {
     if (asicInfo == nullptr) { RLOG("XJ: %s: no AsicInfo yet", when); return; }
     RLOG("XJ: %s: GRBM_STATUS=%#x GRBM_STATUS2=%#x CP_STAT=%#x CP_ME_CNTL=%#x "
@@ -3261,6 +3302,7 @@ static void startRlc() {
         loadMecMicrocode();
         startMecEngines();
     }
+    reportCpState("post-TTL");
     dumpMecQueues("post-TTL");
     dumpCpUcode("post-TTL");
     dumpGfxHubVm("post-TTL");
@@ -3439,6 +3481,7 @@ static void relocateFbAperture() {
 static uint32_t wrapFbXgmiConfig(void *self) {
     asicInfo = self;
     if (cpSurgeryEnabled) relocateFbAperture();
+    if (mask & XK) reportCpState("pre-TTL");
     // NOT calling softResetCp() here. Tried it, and it costs the whole run: the block
     // reset takes GRBM_STATUS from 0x3028 (idle) to 0xa0003028 (CP_BUSY | GUI_ACTIVE)
     // and never settles, TTL's GC hw_init then times out in cosWaitForFunc, and
