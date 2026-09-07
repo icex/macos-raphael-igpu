@@ -1,0 +1,9 @@
+{
+  "version": "1.0.157",
+  "sha256": "8f5a4747fa2cd00761417e25d0dc2d1e04dc504ae59dd63ef7a382d9c90750ae",
+  "rgpuptb": 2,
+  "rgpumqd": 2,
+  "explicit_stop": true,
+  "waited_for_native_powerup": 0,
+  "remaining_seconds_at_powerup_result": 83
+}

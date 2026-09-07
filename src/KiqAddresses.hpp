@@ -2,6 +2,7 @@
 #define RAPHAEL_KIQ_ADDRESSES_HPP
 
 #include <stdint.h>
+#include "GartAddresses.hpp"
 
 namespace RaphaelKiq {
 struct Addresses {
@@ -12,14 +13,11 @@ struct Addresses {
 
 // Pure validation for Apple's one-page allocation: 2 KiB MQD followed by 2 KiB EOP.
 // Accept canonical MC addresses as well, so a second preparation cannot relocate twice.
-inline bool planAddresses(uint64_t swBase, uint64_t reserved, uint64_t fbBase,
-                          uint64_t fbTop, uint64_t visibleBytes, uint64_t mqd,
+inline bool planAddresses(const RaphaelGart::Aperture &ap, uint64_t mqd,
                           uint64_t eop, Addresses &out) {
-    constexpr uint64_t maxMc = 0x0000ffffffffffffULL;
-    if (!swBase || !fbBase || swBase < reserved || swBase - reserved != fbBase ||
-        fbTop < fbBase || fbTop > maxMc || swBase > maxMc ||
-        (swBase & 0xfff) || (fbBase & 0xfff) || visibleBytes < 0x1000)
-        return false;
+    if (!RaphaelGart::validAperture(ap) || ap.visibleBytes < 0x1000) return false;
+    const uint64_t swBase = ap.swBase, fbBase = ap.mcBase;
+    const uint64_t fbTop = ap.mcTop, visibleBytes = ap.visibleBytes;
 
     auto offset = [=](uint64_t address, uint64_t &value) {
         if (address >= fbBase && address <= fbTop)
