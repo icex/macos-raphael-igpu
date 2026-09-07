@@ -1870,3 +1870,29 @@ So the CP is owned by the PSP for the life of this reset, and the remaining leve
 the PSP itself start it -- which means getting `AUTOLOAD_RLC` past `TEE_ERROR_BUSY`. The one
 untried input to that is the ASD: `LOAD_ASD` is the other PSP command that still fails, with
 status 0x7, and this chip's own `psp_13_0_5_asd.bin` has never been substituted for Apple's.
+
+## A PSP MODE1 reset from inside the guest is acknowledged and does nothing
+
+`rgpureset=1` issues `GFX_CTRL_CMD_ID_MODE1_RST` to `MP0_C2PMSG_64` before the PSP ring is
+created, following `psp_v13_0_mode1_reset`. The mailbox handshake succeeds:
+
+    XQ: MODE1 reset requested; C2PMSG_64=0x80010000
+    XQ: MODE1 reset: C2PMSG_33=0x80000000 after 0ms (complete); C2PMSG_64 now 0x80070000
+
+Bit 31 of `C2PMSG_33` comes back set, the command is echoed in `C2PMSG_64`, `TTL::initialize()`
+still completes afterwards, and the host is unaffected -- so the risk that motivated putting
+this behind its own boot-arg did not materialise. But it accomplishes nothing:
+
+    XP: IC bases: CPC=0x8_5f904000 cntl=0x10 op=0x2 | PFP=0x8_5f87c000 | ME=0x8_5f8c0000
+    XP: icache prime never completed after 50000us
+    XP: MEC2 instr pntr over 16 samples: 0x310 ... (0 changes) MEC1=0x10000
+
+The instruction-cache bases are byte-identical to before the reset. Had the PSP re-run its
+bootloader and re-autoloaded the graphics firmware it would have chosen its own addresses, so
+the graphics block was not reset at all -- the PSP acknowledged a command it did not carry
+out, which is consistent with a guest that does not own the device asking for an ASIC-wide
+reset through it.
+
+That closes the last in-guest route. The command processor is the PSP's for the life of the
+reset, and the only way to get one this guest can drive is to make sure amdgpu never claims
+the device: `tools/enable-early-vfio.sh`.

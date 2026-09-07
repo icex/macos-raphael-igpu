@@ -31,10 +31,11 @@
 #
 #   /etc/modprobe.d/vfio-igpu.conf   binds 1002:13c0 to vfio-pci and orders it before amdgpu
 #   /etc/mkinitcpio.conf             adds vfio-pci to MODULES, so it is present early enough
-#   initramfs                        regenerated for the main kernel only
+#   initramfs + /boot/limine.conf    regenerated together by limine-mkinitcpio
 #
-# The LTS kernel's initramfs is deliberately left alone, so its Limine entry remains a
-# known-good fallback if anything goes wrong.
+# The initramfs images are hash-pinned in limine.conf, so they can only be regenerated
+# through limine-mkinitcpio -- see the comment at that call. Limine's limine_history entries
+# keep the previous images and their hashes, which is the fallback if the new one misbehaves.
 #
 # SAFETY
 #
@@ -76,8 +77,20 @@ else
 fi
 grep -E '^MODULES' "$MKI"
 
-# Main kernel only: the LTS initramfs stays as it is so its boot entry remains a fallback.
-mkinitcpio -p linux-cachyos
+# limine-mkinitcpio, NOT mkinitcpio -p.
+#
+# /boot/limine.conf pins every initramfs by blake2b hash:
+#
+#     module_path: boot():/<id>/linux-cachyos/initramfs#08ce46cf...
+#
+# so regenerating an image with plain mkinitcpio leaves the pinned hash stale and Limine
+# refuses that entry at the next boot. limine-mkinitcpio -- which is
+# "echo rebuild | /usr/share/libalpm/scripts/limine-mkinitcpio-install", the same script the
+# pacman hook runs on a kernel update -- rebuilds the images and re-pins the hashes together,
+# which is the only way to keep the two in step. It does all kernels rather than one, so the
+# LTS image is rebuilt too; the fallback that matters is Limine's own limine_history entries,
+# which keep the previous images and their hashes.
+limine-mkinitcpio
 
 cat <<'EOF'
 
