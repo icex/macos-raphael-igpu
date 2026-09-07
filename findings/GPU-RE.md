@@ -1709,3 +1709,16 @@ asks for `BANK_SELECT = 9` and `L2_CACHE_BIGK_FRAGMENT_SIZE = 6` (this reads 7 a
 `GCVM_L2_CNTL2`, `CNTL4` and `CNTL5` have not been compared at all. The RLC never
 acknowledging safe mode and the 37 timed-out `_vm_10_1_is_eng_ack` waits are consistent with
 the same region being misconfigured.
+
+Recorded as a negative result: programming the GFXHUB L2 exactly as
+`gfxhub_v2_1_init_cache_regs` does changes nothing. `GCVM_L2_CNTL` goes `0xc0603 -> 0x80e01`
+(fragment processing off, default-page-out-to-system-memory on, PDE fault classification
+off), `GCVM_L2_CNTL3 -> 0x80130009` (`BANK_SELECT` 9, `L2_CACHE_BIGK_FRAGMENT_SIZE` 6),
+`GCVM_L2_CNTL4 -> 0x1` and `GCVM_L2_CNTL5 -> 0x3fe0` from their documented defaults with
+`VMC_TAP_PDE/PTE_REQUEST_PHYSICAL` and `L2_CACHE_SMALLK_FRAGMENT_SIZE` cleared, followed by
+a full invalidate -- every value reads back exactly as intended, and
+`CP_CPC_STALLED_STAT1` stays at `0x210000`.
+
+So the fetch stall survives: a correct queue, a correct ring in either VRAM or system
+memory, a working doorbell, translation not implicated, and an L2 configured byte for byte
+like upstream's.

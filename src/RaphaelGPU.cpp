@@ -613,6 +613,8 @@ static constexpr uint32_t kGcVmL2Cntl      = kGcSeg0 + 0x15bc;
 static constexpr uint32_t kGcVmL2Cntl2     = kGcSeg0 + 0x15bd;
 static constexpr uint32_t kGcVmL2Cntl3     = kGcSeg0 + 0x15be;
 static constexpr uint32_t kGcVmL2Status    = kGcSeg0 + 0x15bf;
+static constexpr uint32_t kGcVmL2Cntl4     = kGcSeg0 + 0x15d4;
+static constexpr uint32_t kGcVmL2Cntl5     = kGcSeg0 + 0x15dc;
 static constexpr uint32_t kGcVmCtxDisable  = kGcSeg0 + 0x160c;
 static constexpr uint32_t kGcVmInvEng0Req  = kGcSeg0 + 0x161f;
 static constexpr uint32_t kGcVmInvEng0Ack  = kGcSeg0 + 0x1631;
@@ -630,6 +632,7 @@ static void dumpGfxHubVm(const char *when);
 static void enableDoorbellMsg(uint64_t mqdAddr, uint64_t eopAddr);
 static void relocateRingToVram();
 static void startMecEngines();
+static void programL2LikeUpstream();
 
 static mach_vm_address_t orgPpPowerUp {};
 static mach_vm_address_t fbBase {};
@@ -1857,9 +1860,9 @@ static uint32_t wrapKiqStart(void *self, uint64_t a, uint64_t b, void *spec, uin
         // Before the frame is submitted and the doorbell rung, not after: once MEC2 is
         // stalled in WAIT_ON_ROQ_DATA the fetch is already outstanding and no TLB
         // invalidate brings it back.
-        fbWrite(asicInfo, kGcGrbmGfxCntl, kKiqSelector);
-        relocateRingToVram();
-        fbWrite(asicInfo, kGcGrbmGfxCntl, 0);
+        // relocateRingToVram() is deliberately not called any more: it answered its
+        // question (the fetch hangs from VRAM too) and leaving it in only corrupts Apple's
+        // ring mapping for every later experiment.
     }
     // startKIQ is where Apple's own KIQ HQD is written, so this is the first moment the
     // walk can distinguish Apple's queue from the ones TTL left behind.
@@ -2014,6 +2017,54 @@ static uint32_t wrapWaitStamp(void *self, uint32_t stamp) {
         dumpGfxHubVm("after stamp timeout");
     }
     return r;
+}
+
+// Program the GFXHUB L2 the way upstream does.
+//
+// The CP's ring fetch is issued and never returns -- MEC2_WAIT_ON_ROQ_DATA with every
+// UTCL wait bit clear -- and it does not return from VRAM either, so this is the path
+// between the CP and the GL2/UTCL2 complex rather than anything about the ring's memory.
+// That complex is the one part of the GFXHUB never checked field by field against
+// gfxhub_v2_1_init_cache_regs, and it does not match:
+//
+//     GCVM_L2_CNTL  = 0xc0603   ENABLE_L2_FRAGMENT_PROCESSING set (upstream clears it),
+//                               ENABLE_DEFAULT_PAGE_OUT_TO_SYSTEM_MEMORY clear (upstream
+//                               sets it), PDE_FAULT_CLASSIFICATION set (upstream clears it)
+//     GCVM_L2_CNTL3 = 0x80120007  BANK_SELECT 7 and L2_CACHE_BIGK_FRAGMENT_SIZE 4;
+//                                 upstream writes 9 and 6 from mmGCVM_L2_CNTL3_DEFAULT
+//
+// Write upstream's values, including CNTL4 and CNTL5 from their defaults with
+// VMC_TAP_PDE/PTE_REQUEST_PHYSICAL and L2_CACHE_SMALLK_FRAGMENT_SIZE cleared, then
+// invalidate so nothing is left cached under the old organisation. Done from
+// powerUpHWEngines, which is before initComputeMQD and startKIQ.
+static void programL2LikeUpstream() {
+    if (asicInfo == nullptr) return;
+    uint32_t cntl = fbRead(asicInfo, kGcVmL2Cntl);
+    uint32_t want = cntl;
+    want |=  (1u << 0);            // ENABLE_L2_CACHE
+    want &= ~(1u << 1);            // ENABLE_L2_FRAGMENT_PROCESSING
+    want |=  (1u << 11);           // ENABLE_DEFAULT_PAGE_OUT_TO_SYSTEM_MEMORY
+    want &= ~(1u << 8);            // L2_PDE0_CACHE_TAG_GENERATION_MODE
+    want &= ~(1u << 18);           // PDE_FAULT_CLASSIFICATION
+    want = (want & ~(3u << 19)) | (1u << 19);      // CONTEXT1_IDENTITY_ACCESS_MODE = 1
+    want &= ~(0x1fu << 21);        // IDENTITY_MODE_FRAGMENT_SIZE = 0
+    fbWrite(asicInfo, kGcVmL2Cntl, want);
+
+    uint32_t c3 = 0x80100007u;                              // mmGCVM_L2_CNTL3_DEFAULT
+    c3 = (c3 & ~0x3fu) | 9u;                                // BANK_SELECT = 9
+    c3 = (c3 & ~(0x1fu << 15)) | (6u << 15);                // BIGK_FRAGMENT_SIZE = 6
+    fbWrite(asicInfo, kGcVmL2Cntl3, c3);
+    uint32_t c4 = 0x000000c1u & ~((1u << 6) | (1u << 7));   // CNTL4 default, TAP_*_PHYSICAL 0
+    fbWrite(asicInfo, kGcVmL2Cntl4, c4);
+    uint32_t c5 = 0x00003fe0u & ~0x1fu;                     // CNTL5 default, SMALLK 0
+    fbWrite(asicInfo, kGcVmL2Cntl5, c5);
+    // One-shot invalidate bits, as gfxhub_v2_1_init_cache_regs sets in CNTL2.
+    fbWrite(asicInfo, kGcVmL2Cntl2, fbRead(asicInfo, kGcVmL2Cntl2) | 3u);
+
+    RLOG("XN: L2 upstream config: CNTL %#x -> %#x (want %#x) CNTL3 -> %#x (want %#x) "
+         "CNTL4 -> %#x CNTL5 -> %#x", cntl, fbRead(asicInfo, kGcVmL2Cntl), want,
+         fbRead(asicInfo, kGcVmL2Cntl3), c3, fbRead(asicInfo, kGcVmL2Cntl4),
+         fbRead(asicInfo, kGcVmL2Cntl5));
 }
 
 // Start the compute microengines with an explicit halt-to-unhalt transition.
@@ -2662,6 +2713,7 @@ static void startRlc() {
     // "active=1 after 2000us": CP_HQD_DEQUEUE_REQUEST is serviced by MEC firmware, so a
     // request that never retires is itself evidence that the microengine is not running.
     // That is what dumpCpUcode is here to settle.
+    programL2LikeUpstream();
     startMecEngines();
     dumpMecQueues("post-TTL");
     dumpCpUcode("post-TTL");
