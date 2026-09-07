@@ -1793,3 +1793,80 @@ nothing.
 
 The instrument to trust from here is the read pointer and the ring contents, not
 `CP_CPC_STALLED_STAT1`.
+
+## Why the command processor never executes: its instruction cache points at the host
+
+`CP_MEC2_INSTR_PNTR` sampled sixteen times over 320 us reads `0x310` with zero changes;
+`CP_MEC1_INSTR_PNTR` reads `0x10000`, the same value the halted PFP, ME and CE report. The
+microengines are not executing. And a `PACKET3_WRITE_DATA` packet of our own -- placed in a
+ring in VRAM, with the doorbell rung with the correct dword count, storing `0xcafebabe` into
+a framebuffer page we then read back -- never lands either. So nothing about Apple's software
+was ever implicated: this queue does not run because the engine does not run.
+
+The reason is in three registers:
+
+    CP_CPC_IC_BASE = 0x8_5f904000    CP_PFP_IC_BASE = 0x8_5f87c000
+    CP_ME_IC_BASE  = 0x8_5f8c0000    CP_CPC_IC_BASE_CNTL = 0x10 (ADDRESS_CLAMP)
+
+On GFX10 a microengine does not run out of internal RAM. It fetches through an instruction
+cache whose base upstream programs in `gfx_v10_0_cp_compute_load_microcode`. These values are
+the *host* driver's: the host's `GCMC_VM_FB_OFFSET` is `0x840000000`, so `0x85f904000` is
+carveout offset `0x1f904000`, and under the host's identity FB mapping that number served as
+both MC and physical address. The guest's FB aperture sits at MC `0xf400000000`, so the
+address the CP is locked to resolves to nothing at all here. `GFX_CMD_ID_AUTOLOAD_RLC`, which
+is what would have reprogrammed it on the PSP path, answers `TEE_ERROR_BUSY`.
+
+And it cannot be rewritten. Five paths were tried and all were ignored: the framebuffer
+accessor plain, with `GRBM_GFX_INDEX` broadcasting all SEs/SHs/instances, inside an
+`RLC_SAFE_MODE` request, with both MECs halted, and through TTL's own
+`_gc_cgs_write_register_ext2` with the GC client id. A bit-toggle probe puts the lock in
+sharp relief:
+
+| register | |
+|---|---|
+| `CP_MEC_CNTL` | writable |
+| `CP_ME_CNTL` | writable |
+| `SCRATCH_REG0` | writable |
+| `GCMC_VM_FB_LOCATION_BASE` / `TOP` | writable |
+| `GCVM_CONTEXT0_PAGE_TABLE_START` / `END` | writable |
+| `GCMC_VM_SYSTEM_APERTURE_LOW` | writable |
+| **`CP_CPC_IC_BASE_LO`** | **locked** |
+| **`CP_HQD_EOP_BASE_ADDR`** | **locked** |
+| **`CP_PQ_WPTR_POLL_CNTL`** | **locked** |
+
+The locked set is exactly the addresses the command processor fetches from -- its microcode,
+its end-of-pipe buffer, its write pointer -- which is what a secure PSP would take ownership
+of once it has autoloaded the engines. It also explains, retrospectively, every write in this
+investigation that silently failed to stick.
+
+### Pointing the microcode at the register instead
+
+Since the register cannot move, the memory can. MC-to-physical through the FB aperture is
+`physical = MC - GCMC_VM_FB_LOCATION_BASE + GCMC_VM_FB_OFFSET`, `FB_OFFSET` is fixed at the
+real carveout base `0x840000000`, and `BASE` is settable in 16 MB steps. Setting
+`BASE = 0x850000000` (with `TOP` at `BASE + 512 MB - 1`, and the system aperture moved to
+match) puts the locked `0x85f904000` at aperture offset `0x0f904000` -- 249 MB in, inside the
+256 MB BAR0 window, so the CPU can write it, and clear of both the GART page table at
+`0x0fdfc000` and everything Apple allocates lower down. Done from `populateXGmiConfig`, before
+`TTL::initialize`, so every address Apple and TTL derive is consistent with the new window;
+Apple programs the MMHUB copies of those registers rather than the GFXHUB ones, so nothing
+downstream overwrites it.
+
+`TTL::initialize()` still completes with the aperture moved, and `GPUCAP` reports
+`0x850000000..0x86fffffff`. This chip's own `gc_10_3_6_mec.bin` payload (0x41830 bytes, now
+embedded by `mkrlcfw.py` alongside the RLC firmware) is copied there and reads back byte for
+byte, and the rest of upstream's loader runs: `CP_CPC_IC_OP_CNTL.INVALIDATE_CACHE` (completes
+immediately), `CP_CPC_IC_BASE_CNTL` with VMID 0 / CACHE_POLICY 0 / EXE_DISABLE 0 /
+ADDRESS_CLAMP 1, and the jump table -- 0xe0 dwords from payload dword 0x1052c, i.e. byte
+0x414b0, which is *exactly* the size of Apple's Navi 23 MEC blob, confirming Apple ships the
+microcode without a jump table and this file carries both -- written into MEC1's internal RAM
+through `CP_MEC_ME1_UCODE_ADDR/DATA`, then the halt-to-unhalt edge.
+
+The engines still do not start. Also checked and not the cause: graphics power gating
+(`RLC_PG_CNTL` already 0, `RLC_GPM_STAT` reporting `GFX_POWER_STATUS`, `GFX_CLOCK_STATUS` and
+`GFX_PIPELINE_POWER_STATUS` all set) and clock gating (`RLC_CGCG_CGLS_CTRL` 0).
+
+So the CP is owned by the PSP for the life of this reset, and the remaining lever is to make
+the PSP itself start it -- which means getting `AUTOLOAD_RLC` past `TEE_ERROR_BUSY`. The one
+untried input to that is the ASD: `LOAD_ASD` is the other PSP command that still fails, with
+status 0x7, and this chip's own `psp_13_0_5_asd.bin` has never been substituted for Apple's.

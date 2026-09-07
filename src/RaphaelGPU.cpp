@@ -449,6 +449,9 @@ static void *asicInfo {};
 // at +0x528, so [hwObj+0x528] is the base of the doorbell aperture as the guest sees it.
 static void *hwObj {};
 static bool cpcWedged = false;
+// A GC context, captured from any TTL register write, so this plugin can use TTL's own
+// register path (_gc_cgs_write_register_ext2) rather than only the framebuffer accessor.
+static void *gcCtx {};
 static uint64_t kiqEopHint {};
 
 // AmdRegisterAccess vtable: 0x138 writeReg32(index, value), 0x140 hwReadReg32(index).
@@ -501,7 +504,8 @@ static constexpr uint32_t kGcHqdActive   = kGcSeg0 + 0x1fab;
 static constexpr uint32_t kGcRlcCgcg     = kGcSeg1 + 0x4c49;   // RLC_CGCG_CGLS_CTRL
 static constexpr uint32_t kGcRlcPgCntl   = kGcSeg1 + 0x4c43;   // RLC_PG_CNTL
 static constexpr uint32_t kGcScratch0    = kGcSeg1 + 0x2040;   // SCRATCH_REG0
-static constexpr uint32_t kGcGrbmGfxCntl = kGcSeg0 + 0x0dc2;   // GRBM_GFX_CNTL
+static constexpr uint32_t kGcGrbmGfxCntl = kGcSeg0 + 0x0dc2;
+static constexpr uint32_t kGcGrbmGfxIndex = kGcSeg1 + 0x2200;   // GRBM_GFX_INDEX   // GRBM_GFX_CNTL
 static constexpr uint32_t kGcVmFaultCntl = kGcSeg0 + 0x15c4;   // GCVM_L2_PROTECTION_FAULT_CNTL, bit 0 clears the latched status
 // The KIQ lives on a compute pipe, and CP_HQD_* are per-queue: GRBM_GFX_CNTL selects
 // which one is visible (PIPEID bits 0-1, MEID bits 2-3, VMID 4-7, QUEUEID 8-10), the
@@ -564,6 +568,17 @@ static constexpr uint32_t kGcHqdQuantum    = kGcSeg0 + 0x1fb0;
 static constexpr uint32_t kGcHqdIqTimer    = kGcSeg0 + 0x1fbf;
 static constexpr uint32_t kGcMec1InstrPntr = kGcSeg0 + 0x0f48;
 static constexpr uint32_t kGcMec2InstrPntr = kGcSeg0 + 0x0f49;
+// The CP's instruction caches. On GFX10 a microengine does not run purely out of internal
+// RAM: it fetches through an instruction cache backed by a GPU address held in these
+// registers, which upstream's direct-load path programs alongside the microcode.
+static constexpr uint32_t kGcCpcIcBaseLo   = kGcSeg1 + 0x584c;
+static constexpr uint32_t kGcCpcIcBaseHi   = kGcSeg1 + 0x584d;
+static constexpr uint32_t kGcCpcIcBaseCntl = kGcSeg1 + 0x584e;
+static constexpr uint32_t kGcCpcIcOpCntl   = kGcSeg1 + 0x584f;
+static constexpr uint32_t kGcPfpIcBaseLo   = kGcSeg1 + 0x5840;
+static constexpr uint32_t kGcPfpIcBaseHi   = kGcSeg1 + 0x5841;
+static constexpr uint32_t kGcMeIcBaseLo    = kGcSeg1 + 0x5844;
+static constexpr uint32_t kGcMeIcBaseHi    = kGcSeg1 + 0x5845;
 static constexpr uint32_t kGcPfpInstrPntr  = kGcSeg0 + 0x0f45;
 static constexpr uint32_t kGcMeInstrPntr   = kGcSeg0 + 0x0f46;
 // What is the command processor stalled ON. CP_STAT only says which blocks are busy;
@@ -1206,6 +1221,7 @@ static uint32_t wrapGcCgsWriteExt(void *ctx, uint32_t reg, uint32_t val, uint32_
 // the microengine is never asked to do the thing it cannot finish.
 static uint32_t wrapGcCgsWrite2(void *ctx, uint32_t reg, uint32_t val, uint32_t client,
                                 uint32_t flag) {
+    if (gcCtx == nullptr) gcCtx = ctx;
     // Never let the compute microengines be halted.
     //
     // This is the finding the whole KIQ investigation was circling. The wedge detector
@@ -2604,7 +2620,18 @@ static void loadHqdFromMqd(uint64_t mqdVa) {
 // bits), invalidate the TLB the way upstream does, and ring the doorbell. If the engine then
 // consumes the packet, the fault is the GPU's path to guest system memory and not anything
 // about how the queue is programmed.
-static constexpr uint64_t kRingCopyFbOffset = 0x0ff00000;   // 255 MB in, above the page tables
+// Scratch framebuffer offsets. These MUST stay clear of the GART page table, which sits at
+// GCVM_CONTEXT0_PAGE_TABLE_BASE (fb+0x0fdfc000) and, for context 0's 1 GB window, runs about
+// 2 MB from there -- the earlier 0x0ff00000 choice was inside it.
+// Where the MEC microcode has to live: the framebuffer offset that the locked
+// CP_CPC_IC_BASE resolves to once the aperture has been moved. See relocateFbAperture.
+static constexpr uint64_t kMecFwFbOffset    = 0x0f904000;
+// gc_10_3_6_mec.bin's own header fields, for the jump-table half of the direct load.
+static constexpr uint32_t kMecJtOffsetDwords = 0x1052c;
+static constexpr uint32_t kMecJtSizeDwords   = 0xe0;
+static constexpr uint32_t kMecFwVersion      = 0x1c;
+static constexpr uint64_t kRingCopyFbOffset = 0x0f100000;
+static constexpr uint64_t kProbeFbOffsetOld = 0;
 
 static void relocateRingToVram() {
     auto fb = fbAperture();
@@ -2789,6 +2816,227 @@ static void kickKiq(uint64_t eopHint) {
     fbWrite(asicInfo, kGcGrbmGfxCntl, 0);
 }
 
+#if RGPU_HAVE_MEC_FW
+// Load the MEC microcode and point the instruction cache at it, as upstream's direct path does.
+//
+// This is the root cause of the dead command processor. After amdgpu hands the device over,
+// the CP's instruction-cache base registers still hold the HOST driver's addresses:
+//
+//     CP_CPC_IC_BASE = 0x8_5f904000    CP_PFP_IC_BASE = 0x8_5f87c000
+//     CP_ME_IC_BASE  = 0x8_5f8c0000    CP_CPC_IC_BASE_CNTL = 0x10 (ADDRESS_CLAMP)
+//
+// The host's framebuffer offset is 0x840000000, so those are addresses inside the host's own
+// carveout -- memory this guest has since reused. On GFX10 a microengine does not run out of
+// internal RAM; it fetches through that cache, so pointing it at foreign memory is why MEC2's
+// instruction pointer parks at 0x310 and never moves across sixteen samples, why MEC1 reads
+// the same 0x10000 the halted graphics engines report, and why nothing -- not Apple's
+// SET_RESOURCES, not a WRITE_DATA packet of our own with a correct doorbell -- ever executes.
+// GFX_CMD_ID_AUTOLOAD_RLC, which is what would have reprogrammed this on the PSP path,
+// answers TEE_ERROR_BUSY.
+//
+// Upstream programs it directly, in gfx_v10_0_cp_compute_load_microcode:
+//
+//     WREG32(mmCP_CPC_IC_BASE_LO, lower_32_bits(mec_fw_gpu_addr) & 0xFFFFF000);
+//     WREG32(mmCP_CPC_IC_BASE_HI, upper_32_bits(mec_fw_gpu_addr));
+//     ... CP_CPC_IC_BASE_CNTL: VMID 0, CACHE_POLICY 0, EXE_DISABLE 0, ADDRESS_CLAMP 1
+//     ... CP_CPC_IC_OP_CNTL.INVALIDATE_CACHE = 1
+//
+// so copy this chip's own gc_10_3_6 MEC payload into the framebuffer through BAR0, take the
+// framebuffer's own MC address for it, and do the same. VRAM needs no page tables -- it is
+// reached through the FB aperture -- so the address is simply fb base plus the offset.
+static void loadMecMicrocode() {
+    auto fb = fbAperture();
+    if (fb == nullptr || asicInfo == nullptr) return;
+    static bool done = false;
+    if (done) return;
+    done = true;
+
+    uint64_t fbBase = static_cast<uint64_t>(fbRead(asicInfo, kGcFbBase) & 0xffffff) << 24;
+    uint64_t mcAddr = fbBase + kMecFwFbOffset;
+    if (kMecFwFbOffset + kMecFwSize > 0x10000000ULL) {
+        RLOG("XP: MEC ucode does not fit under the 256 MB BAR0 aperture"); return;
+    }
+    auto src = reinterpret_cast<const uint32_t *>(kMecFw);
+    for (uint32_t i = 0; i < kMecFwSize / 4; i++) fb[(kMecFwFbOffset / 4) + i] = src[i];
+
+    // Confirm the microcode is really where the CP will look, and that the power state lets
+    // the engines run at all. RLC_PG_CNTL bit 0 is GFX_POWER_GATING_ENABLE and bit 15 is
+    // CP_PG_DISABLE; upstream turns graphics power gating off through the SMU, and this
+    // guest's SMU is Apple's dummy back end, so nothing has. RLC_GPM_STAT bits 1, 2 and 4
+    // are GFX_POWER_STATUS, GFX_CLOCK_STATUS and GFX_PIPELINE_POWER_STATUS.
+    {
+        auto rd = reinterpret_cast<const uint32_t *>(kMecFw);
+        RLOG("XP: ucode readback at fb+%#llx: %08x %08x %08x %08x (want %08x %08x %08x %08x)",
+             kMecFwFbOffset, fb[kMecFwFbOffset / 4], fb[kMecFwFbOffset / 4 + 1],
+             fb[kMecFwFbOffset / 4 + 2], fb[kMecFwFbOffset / 4 + 3],
+             rd[0], rd[1], rd[2], rd[3]);
+        uint32_t pg = fbRead(asicInfo, kGcRlcPgCntl), gpm = fbRead(asicInfo, kGcRlcGpmStat);
+        RLOG("XP: RLC_PG_CNTL=%#x (gfx_pg_en=%u cp_pg_disable=%u) RLC_GPM_STAT=%#x "
+             "(gfx_power=%u gfx_clock=%u pipeline_power=%u) CGCG=%#x", pg, pg & 1,
+             (pg >> 15) & 1, gpm, (gpm >> 1) & 1, (gpm >> 2) & 1, (gpm >> 4) & 1,
+             fbRead(asicInfo, kGcRlcCgcg));
+        // Turn graphics power gating off the only way available without an SMU: clear the
+        // RLC's own enables and set PG_OVERRIDE with CP_PG_DISABLE.
+        fbWrite(asicInfo, kGcRlcPgCntl, (1u << 14) | (1u << 15));
+        fbWrite(asicInfo, kGcRlcCgcg, 0);
+        IODelay(100);
+        RLOG("XP: after PG override: RLC_PG_CNTL=%#x RLC_GPM_STAT=%#x",
+             fbRead(asicInfo, kGcRlcPgCntl), fbRead(asicInfo, kGcRlcGpmStat));
+    }
+    uint32_t oldLo = fbRead(asicInfo, kGcCpcIcBaseLo), oldHi = fbRead(asicInfo, kGcCpcIcBaseHi);
+
+    // Now do the rest of what gfx_v10_0_cp_compute_load_microcode does, in its order. The
+    // base registers are locked, but everything else in that function is available and the
+    // aperture move has already made the locked value correct:
+    //
+    //   1 halt the MECs (here the edge is wanted -- the cache is about to be repointed)
+    //   2 CP_CPC_IC_OP_CNTL.INVALIDATE_CACHE, then poll INVALIDATE_CACHE_COMPLETE
+    //   3 CP_CPC_IC_BASE_CNTL: VMID 0, CACHE_POLICY 0, EXE_DISABLE 0, ADDRESS_CLAMP 1
+    //   4 the jump table into internal RAM: CP_MEC_ME1_UCODE_ADDR = 0, then jt_size dwords
+    //     from the payload at jt_offset, then ADDR = the firmware's ucode_version
+    //   5 unhalt
+    //
+    // The jump table is the part that was missing. For gc_10_3_6 it is 0xe0 dwords starting
+    // at dword 0x1052c of the payload -- byte 0x414b0, which is exactly the size of Apple's
+    // Navi 23 MEC blob, so Apple ships the microcode without a jump table and this file
+    // carries both. Upstream loads MEC1's only: both engines fetch through the same
+    // instruction cache base.
+    // Which of the CP's control registers can this guest actually write? The instruction
+    // cache base is known locked; if CP_MEC_CNTL is locked too then the engines cannot be
+    // started from here at all and only the PSP can do it, which changes what the fix has to
+    // be. Toggle one bit and put it back.
+    {
+        auto probe = [&](const char *name, uint32_t reg, uint32_t bit) {
+            uint32_t was = fbRead(asicInfo, reg);
+            fbWrite(asicInfo, reg, was ^ bit);
+            uint32_t got = fbRead(asicInfo, reg);
+            fbWrite(asicInfo, reg, was);
+            RLOG("XP: writable? %-24s was %#x, toggled %#x -> %#x : %s", name, was, bit, got,
+                 got != was ? "WRITABLE" : "LOCKED");
+        };
+        probe("CP_MEC_CNTL", kGcCpMecCntl, 1u << 28);
+        probe("CP_ME_CNTL", kGcCpMeCntl, 1u << 28);
+        probe("CP_CPC_IC_BASE_LO", kGcCpcIcBaseLo, 1u << 12);
+        probe("CP_HQD_EOP_BASE_ADDR", kGcHqdEopBase, 1u);
+        probe("CP_PQ_WPTR_POLL_CNTL", kGcCpPqWptrPoll, 1u);
+        probe("SCRATCH_REG0 (control)", kGcScratch0, 1u);
+    }
+    fbWrite(asicInfo, kGcCpMecCntl, (1u << 30) | (1u << 28));
+    IODelay(50);
+
+    fbWrite(asicInfo, kGcCpcIcOpCntl, fbRead(asicInfo, kGcCpcIcOpCntl) | 1u);
+    int inv = 0;
+    for (; inv < 50000; inv++) {
+        if ((fbRead(asicInfo, kGcCpcIcOpCntl) & 2u) != 0) break;
+        IODelay(1);
+    }
+    uint32_t bc = fbRead(asicInfo, kGcCpcIcBaseCntl);
+    bc &= ~0xfu;                    // VMID 0
+    bc &= ~(1u << 23);              // EXE_DISABLE 0
+    bc &= ~(3u << 24);              // CACHE_POLICY 0
+    bc |=  (1u << 4);               // ADDRESS_CLAMP 1
+    fbWrite(asicInfo, kGcCpcIcBaseCntl, bc);
+
+    auto jt = reinterpret_cast<const uint32_t *>(kMecFw) + kMecJtOffsetDwords;
+    fbWrite(asicInfo, kGcMec1UcodeAddr, 0);
+    for (uint32_t i = 0; i < kMecJtSizeDwords; i++) fbWrite(asicInfo, kGcMec1UcodeData, jt[i]);
+    fbWrite(asicInfo, kGcMec1UcodeAddr, kMecFwVersion);
+    RLOG("XP: icache invalidate took %dus (op_cntl=%#x); base_cntl %#x; jump table %u dwords "
+         "from dword %#x written to MEC1 internal RAM", inv,
+         fbRead(asicInfo, kGcCpcIcOpCntl), fbRead(asicInfo, kGcCpcIcBaseCntl),
+         kMecJtSizeDwords, kMecJtOffsetDwords);
+
+    // Unhalt: the engines start from their reset vector, and the cache now points at real
+    // microcode.
+    fbWrite(asicInfo, kGcCpMecCntl, 0);
+    IODelay(500);
+
+    uint32_t a = fbRead(asicInfo, kGcMec2InstrPntr), b = a;
+    for (unsigned k = 0; k < 200 && b == a; k++) { IODelay(50); b = fbRead(asicInfo, kGcMec2InstrPntr); }
+    RLOG("XP: MEC ucode %u bytes -> fb+%#llx (mc %#llx); IC base %#x_%08x -> %#x_%08x "
+         "cntl=%#x; MEC2 instr %#x -> %#x, MEC1=%#x", kMecFwSize, kMecFwFbOffset, mcAddr,
+         oldHi, oldLo, fbRead(asicInfo, kGcCpcIcBaseHi), fbRead(asicInfo, kGcCpcIcBaseLo),
+         fbRead(asicInfo, kGcCpcIcBaseCntl), a, b, fbRead(asicInfo, kGcMec1InstrPntr));
+}
+#else
+static void loadMecMicrocode() {}
+#endif
+
+// Does the command processor execute anything at all?
+//
+// With CP_CPC_STALLED_STAT1 withdrawn as evidence, the only trustworthy instruments left are
+// the read pointer and the ring's contents -- and both are Apple's. So stop inferring and
+// run a packet of our own choosing through the queue.
+//
+// PACKET3_WRITE_DATA with DST_SEL = memory and WR_CONFIRM stores one dword at an address of
+// our choosing. Point it at a spare framebuffer page, zero that page first, put the packet
+// at the head of a ring in VRAM, repoint the queue's GART PTE at it, ring the doorbell with
+// the packet's dword count, and watch the page. If 0xcafebabe appears, the CP executes and
+// the problem is somewhere in Apple's frame or its fence; if it never does, this queue does
+// not run and nothing about Apple's software is implicated.
+static constexpr uint64_t kProbeFbOffset = 0x0f110000;   // spare page, next to the ring copy
+// The aperture window this plugin moves the framebuffer to, in the register's own 16 MB
+// units, chosen so the locked CP_CPC_IC_BASE lands at kMecFwFbOffset.
+static constexpr uint32_t kFbBaseWanted = 0x850;
+static constexpr uint32_t kFbTopWanted  = 0x86f;
+
+static void cpSelfTest() {
+    auto fb = fbAperture();
+    if (fb == nullptr || asicInfo == nullptr || hwObj == nullptr) return;
+    uint64_t fbBase = static_cast<uint64_t>(fbRead(asicInfo, kGcFbBase) & 0xffffff) << 24;
+    uint64_t probeVa = fbBase + kProbeFbOffset;
+    fb[kProbeFbOffset / 4] = 0;
+
+    // PACKET3(PACKET3_WRITE_DATA, 3), then control, addr_lo, addr_hi, data.
+    //   header  = 0xC0000000 | (3 << 16) | (0x37 << 8)
+    //   control = WRITE_DATA_DST_SEL(5) | WR_CONFIRM, engine ME
+    const uint32_t pkt[] {
+        0xc0033700u,
+        (5u << 8) | (1u << 20),
+        static_cast<uint32_t>(probeVa),
+        static_cast<uint32_t>(probeVa >> 32),
+        0xcafebabeu,
+    };
+    for (unsigned i = 0; i < sizeof(pkt) / 4; i++) fb[(kRingCopyFbOffset / 4) + i] = pkt[i];
+    for (unsigned i = sizeof(pkt) / 4; i < 0x400; i++)
+        fb[(kRingCopyFbOffset / 4) + i] = 0x80000000u;   // PACKET2 nops
+
+    relocateRingToVram();   // repoints the ring PTE at kRingCopyFbOffset and invalidates
+
+    auto dbBase = *reinterpret_cast<volatile uint64_t **>(
+                      reinterpret_cast<uint8_t *>(hwObj) + 0x528);
+    if (dbBase == nullptr) { RLOG("XP: no doorbell mapping"); return; }
+    dbBase[0] = sizeof(pkt) / 4;
+    RLOG("XP: self-test: wrote WRITE_DATA(%#llx <- 0xcafebabe) at fb+%#llx, rang %zu dwords",
+         probeVa, kRingCopyFbOffset, sizeof(pkt) / 4);
+    // Is the microengine executing at all? Sixteen samples of its instruction pointer over
+    // a few hundred microseconds: a running engine moves, a stopped one does not. Two
+    // samples 20 us apart, which is all the earlier probe took, cannot tell the difference.
+    {
+        uint32_t seen[16];
+        for (unsigned i = 0; i < 16; i++) { seen[i] = fbRead(asicInfo, kGcMec2InstrPntr); IODelay(20); }
+        unsigned distinct = 1;
+        for (unsigned i = 1; i < 16; i++) if (seen[i] != seen[i - 1]) distinct++;
+        RLOG("XP: IC bases: CPC=%#x_%08x cntl=%#x op=%#x | PFP=%#x_%08x | ME=%#x_%08x",
+             fbRead(asicInfo, kGcCpcIcBaseHi), fbRead(asicInfo, kGcCpcIcBaseLo),
+             fbRead(asicInfo, kGcCpcIcBaseCntl), fbRead(asicInfo, kGcCpcIcOpCntl),
+             fbRead(asicInfo, kGcPfpIcBaseHi), fbRead(asicInfo, kGcPfpIcBaseLo),
+             fbRead(asicInfo, kGcMeIcBaseHi), fbRead(asicInfo, kGcMeIcBaseLo));
+        RLOG("XP: MEC2 instr pntr over 16 samples: %#x %#x %#x %#x ... %#x  (%u changes) "
+             "MEC1=%#x CP_MEC_CNTL=%#x", seen[0], seen[1], seen[2], seen[3], seen[15],
+             distinct - 1, fbRead(asicInfo, kGcMec1InstrPntr), fbRead(asicInfo, kGcCpMecCntl));
+    }
+    for (unsigned i = 0; i < 6; i++) {
+        IODelay(1000);
+        uint32_t got = fb[kProbeFbOffset / 4];
+        RLOG("XP: +%ums: probe=%#x rptr=%#x wptr=%#x active=%u %s", i + 1, got,
+             fbRead(asicInfo, kGcHqdPqRptr), fbRead(asicInfo, kGcHqdPqWptrLo),
+             fbRead(asicInfo, kGcHqdActive) & 1,
+             got == 0xcafebabeu ? "<-- THE CP EXECUTES" : "");
+        if (got == 0xcafebabeu) break;
+    }
+}
+
 static uint32_t wrapKiqSubmit(void *self) {
     // The VM fault status reads the same before and after the KIQ submit, so it is
     // latched from something earlier. Clear it first (FAULT_CNTL bit 0 is
@@ -2814,13 +3062,7 @@ static uint32_t wrapKiqSubmit(void *self) {
     // write pointer's unit; if it still sits, the packet is being fetched and ignored.
     if ((mask & XK) != 0 && hwObj != nullptr && asicInfo != nullptr) {
         fbWrite(asicInfo, kGcGrbmGfxCntl, kKiqSelector);
-        for (unsigned i = 0; i < 4; i++) {
-            IODelay(500);
-            RLOG("XK: hand-run +%u00us: rptr=%#x wptr=%#x stalled=%#x cpf_busy=%#x "
-                 "ME2_HDR=%#x", (i + 1) * 5, fbRead(asicInfo, kGcHqdPqRptr),
-                 fbRead(asicInfo, kGcHqdPqWptrLo), fbRead(asicInfo, kGcCpcStalled1),
-                 fbRead(asicInfo, kGcCpfBusyStat), fbRead(asicInfo, kGcMec2HeaderDump));
-        }
+        cpSelfTest();
         fbWrite(asicInfo, kGcGrbmGfxCntl, 0);
     }
     auto r = FunctionCast(wrapKiqSubmit, orgKiqSubmit)(self);
@@ -2929,6 +3171,7 @@ static void startRlc() {
     // request that never retires is itself evidence that the microengine is not running.
     // That is what dumpCpUcode is here to settle.
     programL2LikeUpstream();
+    loadMecMicrocode();
     startMecEngines();
     dumpMecQueues("post-TTL");
     dumpCpUcode("post-TTL");
@@ -3055,8 +3298,59 @@ static void softResetCp() {
     dumpMecQueues("after CP soft reset");
 }
 
+// Move the framebuffer aperture so the CP's locked instruction-cache address means something.
+//
+// CP_CPC_IC_BASE_LO/HI hold 0x8_5f904000 and cannot be written -- not through the
+// framebuffer accessor, not through TTL's own _gc_cgs_write_register_ext2, not with
+// GRBM_GFX_INDEX broadcasting, not in RLC safe mode, not with both MECs halted. It is
+// locked for the life of the reset, which is exactly what one would expect of the register
+// that decides which code the command processor executes. Meanwhile every GMC register
+// tried IS writable: FB_LOCATION_BASE and TOP, the context-0 page-table bounds, the system
+// aperture.
+//
+// So stop trying to point the register at the microcode and point the microcode at the
+// register. MC-to-physical for the framebuffer aperture is
+//
+//     physical = MC - GCMC_VM_FB_LOCATION_BASE + GCMC_VM_FB_OFFSET
+//
+// with FB_OFFSET fixed at 0x840000000, the real carveout base, and BASE settable in 16 MB
+// steps. Choosing BASE = 0x850000000 puts the locked address at aperture offset
+// 0x85f904000 - 0x850000000 = 0x0f904000, i.e. 249 MB in -- inside the 256 MB BAR0 window,
+// so the CPU can write it, and clear of both the page table at 0x0fdfc000 and everything
+// Apple allocates lower down. TOP goes to BASE + 512 MB - 1.
+//
+// This has to happen before TTL::initialize, so that every address Apple and TTL derive is
+// consistent with the new window -- which is why it runs from populateXGmiConfig, the same
+// hook milestone xg already uses to read the aperture back. Apple programs the MMHUB copies
+// of these registers, not the GFXHUB ones (that is why xg exists at all), so nothing
+// downstream overwrites this.
+static void relocateFbAperture() {
+    if (asicInfo == nullptr) return;
+    static bool done = false;
+    if (done) return;
+    done = true;
+
+    uint32_t oldBase = fbRead(asicInfo, kGcFbBase) & 0xffffff;
+    uint32_t oldTop  = fbRead(asicInfo, kGcFbTop) & 0xffffff;
+    uint32_t oldOff  = fbRead(asicInfo, kGcFbOffset) & 0xffffff;
+    if (oldBase == kFbBaseWanted) return;
+
+    fbWrite(asicInfo, kGcFbBase, kFbBaseWanted);
+    fbWrite(asicInfo, kGcFbTop, kFbTopWanted);
+    // The system aperture marks which MC range bypasses the page tables; it is in 256 KB
+    // units, so it has to follow the window rather than stay behind on the old one.
+    fbWrite(asicInfo, kGcVmSysApLow, static_cast<uint32_t>(kFbBaseWanted) << 6);
+    fbWrite(asicInfo, kGcVmSysApHigh, (static_cast<uint32_t>(kFbTopWanted) << 6) | 0x3f);
+    RLOG("XP: FB aperture %#x..%#x (offset %#x) -> %#x..%#x; sys aperture %#x..%#x; "
+         "locked IC base %#x lands at fb+%#llx",
+         oldBase, oldTop, oldOff, fbRead(asicInfo, kGcFbBase) & 0xffffff,
+         fbRead(asicInfo, kGcFbTop) & 0xffffff, fbRead(asicInfo, kGcVmSysApLow),
+         fbRead(asicInfo, kGcVmSysApHigh), 0x5f904000u, kMecFwFbOffset);
+}
+
 static uint32_t wrapFbXgmiConfig(void *self) {
     asicInfo = self;
+    if (mask & XL) relocateFbAperture();
     // NOT calling softResetCp() here. Tried it, and it costs the whole run: the block
     // reset takes GRBM_STATUS from 0x3028 (idle) to 0xa0003028 (CP_BUSY | GUI_ACTIVE)
     // and never settles, TTL's GC hw_init then times out in cosWaitForFunc, and
