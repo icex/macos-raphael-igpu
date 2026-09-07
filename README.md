@@ -8,7 +8,9 @@ No Mac hardware, no macOS build host: everything here is produced and driven fro
 
 ## Status
 
-TTL's SWIP clients initialise in sequence; the failure has moved through three of them.
+Metal 3 enumerates, but GPU execution is not working yet. The first KIQ submission times out
+and prevents the hardware engines from starting. The historical bring-up notes below include
+superseded hypotheses; use the dated corrections in `findings/GPU-RE.md` for the current record.
 
 | stage | state |
 |---|---|
@@ -28,8 +30,53 @@ TTL's SWIP clients initialise in sequence; the failure has moved through three o
 | `GC`/`SDMA` firmware-autoload gates | **solved** — both wait on a `BOOTLOAD_COMPLETE` latch nothing ever sets on this part |
 | RLC safe-mode handshake | **solved** — the RLC never acks; upstream ignores that, Apple hard-fails on it |
 | `TTL::initialize()` on a cold GPU | **complete and deterministic** — was a race on leftover state, now passes on a freshly reset device |
-| **command processor** | **root cause found** — the microengines never execute. `CP_CPC_IC_BASE` still holds the *host* driver's address (`0x8_5f904000`, under the host's `FB_OFFSET` of `0x840000000`) and is **locked** for the life of the reset, along with `CP_HQD_EOP_BASE_ADDR` and `CP_PQ_WPTR_POLL_CNTL`. The fix is to never let amdgpu touch the iGPU: `tools/enable-early-vfio.sh` |
-| WindowServer | submits command buffers; panics in `AMDHWVMM::endVMPTUpdate` because no engine powered up |
+| VRAM allocation | **256 MB available** with `rgpumem=2` |
+| Metal device enumeration | **Metal 3 advertised; MTLDevice creatable** — execution remains unverified |
+| **command processor** | **blocked** — first KIQ SET_RESOURCES submission times out; queue-local translation errors remain under investigation. The previous hardware-lock diagnosis was retracted. |
+| WindowServer | `AMDHWVMM::endVMPTUpdate` NULL dereference repaired; hardware engines still fail to start |
+
+### Host protection and automatic execution test
+
+The iGPU passthrough has hard-hung the host. Its cause remains unresolved. `redeploy.sh`
+defaults to a GPU-less VM; `--gpu` opts in to an experiment with an exposure timer. The iGPU
+must have been initialized by amdgpu during the current boot. Early VFIO binding is refused,
+and the former virgin-device override has been removed. Never cycle vfio-pci → amdgpu →
+vfio-pci within a boot. Crash capture and a timer reduce exposure and improve diagnostics;
+they cannot guarantee recovery from a fabric or CPU lockup.
+
+Launch, serial capture, and the stop deadline are owned by user systemd services. The
+deadline targets the full container ID and includes startup time. A GPU run requires a
+positive `RGPU_MAX_SECONDS`; zero no longer disables its cap. Launch failure or loss of
+serial capture stops that container. The launcher verifies connected serial capture and
+the active deadline before reporting success. Serial capture also holds an idle/sleep
+inhibitor for the VM's lifetime.
+
+Prepare the native test with an already running GPU-less guest and Command Line Tools:
+
+```sh
+python3 -B tools/metal-test.py --vm-dir /path/to/macos-vm --prepare-only
+```
+
+Then, during an explicitly started, bounded GPU experiment:
+
+```sh
+python3 -B tools/metal-test.py --vm-dir /path/to/macos-vm
+```
+
+The runner uses the existing `gx` guest channel. It does not launch or rebind a GPU. A pass
+requires the Navi23 Metal 3 device to complete three compute submissions, return all 196,608
+expected integers, render and read back all 4,096 expected pixels, and exit successfully.
+Each run has a fresh ID and saves its output and JSON verdict in `findings/metal-tests/`.
+Do not issue other `gx` commands during a test. The GPU completion timeout is five seconds;
+the probe also has a 45-second process deadline. Neither deadline can stop a host lockup.
+Offscreen rendering does not prove that the separate DCN display path works or establish
+long-term driver stability.
+
+The result validator's regression tests run without hardware:
+
+```sh
+python3 -B -m unittest discover -s tests -v
+```
 
 ### GC and SDMA HW_INIT: three gates upstream does not have
 
@@ -160,17 +207,21 @@ Full write-up with every VMA: [`findings/GPU-RE.md`](findings/GPU-RE.md).
 
 ```
 src/         RaphaelGPU.cpp     the Lilu plugin (patch table + boot-arg mask)
+             KiqAddresses.hpp   validated MQD/EOP address conversion
 kext/        prebuilt RaphaelGPU.kext
 tools/       mkrom.py           grafts the PSP directory + vram_info onto an APU ROM
              ocprop.py          edits OpenCore config.plist (device properties, boot-args)
              milestones.py      the patch ladder, re-verifies every pattern before deploying
              autorun.sh         walks the ladder unattended and classifies each verdict
              redeploy.sh        rebuild ROM, push to the ESP, restart, drain serial
+             vm-supervision.py  persistent launch/capture and exact-container deadline
+             metal-test.py      native Metal compute and render validation through gx
              gpu-bind.sh        amdgpu -> vfio-pci, with the runtime-PM workaround
              recover-igpu.sh    recovery after the vfio runtime-PM oops
              build-kext.sh      cross-build a Lilu plugin kext on Linux
 findings/    GPU-RE.md          the reverse-engineering write-up
              ip_discovery.txt   this chip's real IP block versions
+tests/       metal_probe.m      GPU results checked against independent expected values
 ```
 
 ## Two traps that cost real time

@@ -1,0 +1,8 @@
+{
+  "cid": "ffa2fe05b18a07f15537d3b9522c6f8824b635e5e69a08f7151391aed93c6c30",
+  "started_at": "2026-09-07T18:51:30.7958208Z",
+  "max_seconds": 683,
+  "deadline_epoch": 1788807773,
+  "timer_unit": "rgpu-deadline-ffa2fe05b18a07f15537d3b9522c6f8824b635e5e69a08f7151391aed93c6c30.timer",
+  "serial_unit": "rgpu-serial-ffa2fe05b18a07f15537d3b9522c6f8824b635e5e69a08f7151391aed93c6c30.service"
+}

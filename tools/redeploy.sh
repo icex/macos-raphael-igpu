@@ -51,7 +51,8 @@ case "${1:-}" in
     --no-gpu) shift ;;
 esac
 
-# Hard cap on how long QEMU may hold the iGPU, in seconds; 0 disables the cap.
+# Hard cap on how long QEMU may hold the iGPU, in seconds. GPU launches require
+# a finite positive value; GPUless launches only need supervised serial capture.
 #
 # Every hang so far happened while the guest had the device open, at 53 s, at ~74 s, and
 # somewhere inside a three-hour unattended loop. None of the three is tied to anything
@@ -60,6 +61,13 @@ esac
 # milestone to stop at, only elapsed exposure to bound. Five minutes is far longer than any
 # experiment needs and far shorter than an unattended loop.
 RGPU_MAX_SECONDS="${RGPU_MAX_SECONDS:-300}"
+if (( WANT_GPU )); then
+    if [[ ! "$RGPU_MAX_SECONDS" =~ ^[0-9]+$ || ${#RGPU_MAX_SECONDS} -gt 10 ]] ||
+       (( 10#$RGPU_MAX_SECONDS < 1 || 10#$RGPU_MAX_SECONDS > 2147483647 )); then
+        echo "RGPU_MAX_SECONDS must be a finite positive integer (1..2147483647) for --gpu" >&2
+        exit 1
+    fi
+fi
 
 python3 mkrom.py --total 0xB600 -o run/gpu-patched.rom "$@"
 python3 ocprop.py config.plist -o run/config-new.plist \
@@ -189,63 +197,17 @@ fi
 
 mv -f run/serial.log "run/serial-$(date +%H%M%S).log" 2>/dev/null || true
 : > run/serial.log
-nohup systemd-inhibit --what=sleep:idle --who="macOS VM" --why="GPU RE run" \
-    ./macos-vm.sh run "${GPU_ARGS[@]}" > run/vm-launch.log 2>&1 &
-# Bounded, not "until": if QEMU dies on startup -- a bad ROM, an inaccessible /dev/vfio
-# node -- an unbounded wait here hangs the script forever on a socket that will never
-# appear, and the real error sits unread in run/vm-launch.log.
-for _ in $(seq 1 60); do [ -S run/serial.sock ] && break; sleep 1; done
-if [ ! -S run/serial.sock ]; then
-    echo "QEMU did not come up; run/vm-launch.log says:" >&2
-    tail -5 run/vm-launch.log >&2
-    exit 1
+# The manager owns launch, serial capture, and the exact-container deadline. Its
+# launch cap and failure cleanup are installed BEFORE Docker can create QEMU, so
+# caller exit cannot strand a container between creation and deadline arming.
+# The helper publishes success only after real serial readiness and a second
+# verification of the timer/service following guest-agent bootstrap.
+cap=0
+(( ${#GPU_ARGS[@]} == 0 )) || cap="$RGPU_MAX_SECONDS"
+python3 ./vm-supervision.py start --vm-dir "$PWD" --max-seconds "$cap" -- "${GPU_ARGS[@]}" \
+    > run/supervision-result.json
+if (( cap > 0 )); then
+    echo "iGPU exposure capped at ${cap}s from container start; supervision: run/supervision.json"
 fi
-(nohup ./sercat.py >/dev/null 2>&1 &)
-
-# Bound how long the guest may hold the iGPU.
-#
-# There is no milestone to stop at: the third hang came after the guest had reached the
-# same quiescent end state that 116 of the 149 archived runs reach without incident, so the
-# guest log cannot tell us when the danger starts. Elapsed exposure is the only thing left
-# to limit, so limit it -- and do it here rather than trusting whoever is driving to
-# remember, because the crash that cost three hours was an unattended loop.
-if (( WANT_GPU )) && (( RGPU_MAX_SECONDS > 0 )); then
-    # Scope the cap to THIS container instance, by id.
-    #
-    # The first version matched on the name "macos-sequoia", which meant a watchdog left over
-    # from an earlier launch killed whatever VM happened to be running when it woke. That is
-    # not hypothetical: a 300 s watchdog from a run started at 17:09 tore down a different
-    # run started at 17:12 with RGPU_MAX_SECONDS=900, and the evidence was a "300 reached"
-    # line in a log file belonging to the 900 s launch. Capturing the id makes a stale
-    # watchdog exit harmlessly instead of sabotaging the next experiment.
-    cid=""
-    for _ in $(seq 1 30); do
-        cid="$(docker inspect -f '{{.Id}}' macos-sequoia 2>/dev/null || true)"
-        [[ -n "$cid" ]] && break
-        sleep 1
-    done
-    if [[ -n "$cid" ]]; then
-        ( sleep "$RGPU_MAX_SECONDS"
-          now="$(docker inspect -f '{{.Id}}' macos-sequoia 2>/dev/null || true)"
-          [[ "$now" == "$cid" ]] || exit 0     # a different run owns the name now
-          echo "RGPU_MAX_SECONDS=${RGPU_MAX_SECONDS} reached; stopping the VM to release the iGPU" \
-              >> run/vm-launch.log
-          docker rm -f "$cid" >/dev/null 2>&1
-        ) >/dev/null 2>&1 &
-        disown
-        echo "iGPU exposure capped at ${RGPU_MAX_SECONDS}s for ${cid:0:12} (RGPU_MAX_SECONDS=0 to disable)"
-    else
-        echo "WARNING: could not identify the container; exposure is NOT capped" >&2
-    fi
-fi
-# The container is recreated on every boot, so the agent command channel and the file
-# server die with it. Without this, ./gx reports "no response from guest agent" and the
-# guest looks unreachable when it is merely unserved.
-for i in $(seq 1 30); do
-    docker cp agent-server.py macos-sequoia:/tmp/ >/dev/null 2>&1 || { sleep 2; continue; }
-    docker exec -d macos-sequoia python3 /tmp/agent-server.py 2>/dev/null || true
-    docker exec -d macos-sequoia sh -c 'cd /run/vm && exec python3 -m http.server 8889' 2>/dev/null || true
-    break
-done
-echo "VM relaunched; serial draining to run/serial.log"
+echo "VM relaunched; serial draining to run/serial.log under user systemd"
 ./milestones.py list | tail -5

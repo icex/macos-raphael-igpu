@@ -1,0 +1,4 @@
+RGPU_METAL_STAGE enumerate
+RGPU_METAL_RESULT {"passed":false,"run_id":"62b840a401eb4854b7b5982a04958443","render_pixels_checked":0,"completed_command_buffers":0,"error":"AMD Radeon Navi23 Metal device is absent","compute_rounds":0,"compute_values_checked":0}
+
+RGPU_EXIT 62b840a401eb4854b7b5982a04958443 1

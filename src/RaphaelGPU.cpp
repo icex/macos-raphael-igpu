@@ -28,6 +28,7 @@
 #include <Headers/kern_patcher.hpp>
 #include <Headers/kern_util.hpp>
 #include <Headers/plugin_start.hpp>
+#include "KiqAddresses.hpp"
 
 // This machine's own RLC firmware, generated at build time by mkrlcfw.py from
 // /lib/firmware/amdgpu/gc_10_3_6_rlc.bin. Not committed: AMD firmware is redistributable
@@ -311,25 +312,11 @@ static uint32_t memProbeMode = 0;
 // test fails the register is left alone, because then this diagnosis does not apply.
 static uint32_t ptbFixMode = 0;
 
-// rgpumqd=1: convert the MEC's FB-resident pointers from BAR-relative to MC addresses.
-//
-// Reading the MQD -- which only became possible once dumpMqd stopped confusing an MC address
-// with a BAR0 offset -- shows the same bug as the page-table base, in the two registers the
-// microengine uses most directly:
-//
-//     CP_MQD_BASE_ADDR      = 0xf40b706000   BAR-relative; MC is 0x84b706000
-//     cp_hqd_eop_base_addr  = 0xf40b7068     (<<8 = 0xf40b706800); MC is 0x84b7068
-//     cp_hqd_pq_base        = 0xffbfea00     (<<8 = 0xffbfea0000) -- a GART VA, correct,
-//                                            and its PTE walks VALID SYSTEM SNOOPED RW
-//
-// The framebuffer aperture is 0x840000000..0x85fffffff, so a BAR-relative pointer does not
-// translate. The MEC reloads the HQD from CP_MQD_BASE_ADDR; if it cannot read its own queue
-// descriptor the queue never really runs, which is why the KIQ MAP_QUEUES packet sitting at
-// wptr=8 is never consumed and startKIQ reports "Stamp Timeout for KIQ Submission!".
-//
-// Both the registers AND the in-VRAM MQD image are repaired. Fixing only the registers is
-// futile: the image is what the engine restores from, and that is the documented reason
-// writes to CP_HQD_EOP_BASE_ADDR "do not stick".
+// rgpumqd=0 reports; 1 retains the legacy post-timeout pointer repair experiment.
+// Mode 2 validates and converts the MQD/EOP addresses before startKIQ, after a real
+// dequeue. Apple programs the initial KIQ HQD directly; a stale MQD being continuously
+// restored has not been demonstrated. The first submission is a 32-dword SET_RESOURCES
+// frame, including its completion WRITE_DATA at dword 16.
 static uint32_t mqdFixMode = 0;
 static void *hwMemObject = nullptr;
 
@@ -337,6 +324,8 @@ static void reportCpState(const char *when);
 static void primeIcacheOnly();
 static void probeRlc();
 static void repairMqdPointers();
+static bool prepareKiq(uint64_t &mqdAddr, uint64_t &eopAddr, const void *spec);
+static void reportKiqPreparation(const char *stage);
 static mach_vm_address_t orgVmmInit = 0;
 static mach_vm_address_t orgVmmSetAlloc = 0;
 static mach_vm_address_t orgVmmSetVSReady = 0;
@@ -623,7 +612,6 @@ static bool cpcWedged = false;
 // A GC context, captured from any TTL register write, so this plugin can use TTL's own
 // register path (_gc_cgs_write_register_ext2) rather than only the framebuffer accessor.
 static void *gcCtx {};
-static uint64_t kiqEopHint {};
 
 // AmdRegisterAccess vtable: 0x138 writeReg32(index, value), 0x140 hwReadReg32(index).
 static void fbWrite(void *self, uint32_t idx, uint32_t val) {
@@ -1499,7 +1487,7 @@ static uint32_t wrapGcCgsWrite2(void *ctx, uint32_t reg, uint32_t val, uint32_t 
         val &= ~((1u << 28) | (1u << 30));
         return FunctionCast(wrapGcCgsWrite2, orgGcCgsWrite2)(ctx, reg, val, client, flag);
     }
-    if ((mask & XL) != 0 && reg == kGcHqdDequeue && val != 0) {
+    if ((mask & XL) != 0 && mqdFixMode != 2 && reg == kGcHqdDequeue && val != 0) {
         static unsigned n = 0;
         if (n < 4) { n++;
             RLOG("XK: dropped CP_HQD_DEQUEUE_REQUEST=%#x (client %#x) -- an outstanding "
@@ -1601,6 +1589,7 @@ static uint8_t wrapGcCheckRegEq(void *arg) {
     bool isSafeMode = reg == kGcRlcSafeMode;
     bool isHqd      = reg == kGcHqdActive;
     if (!isSafeMode && !isHqd) return r;
+    if (isHqd && mqdFixMode == 2) return r; // require genuine dequeue completion
 
     // Poll for a while first: both predicates are the normal success path for hardware
     // that does answer, and conceding early would cut short a wait about to succeed.
@@ -1694,7 +1683,7 @@ static uint8_t wrapGcAutoloadDone(void *ctx) {
         RLOG("XL: autoload check: RLC_STAT=%#x (Apple wants 0x25) BOOTLOAD_STATUS "
              "0x4e8d=%#x 0x4e7e=%#x CP_STAT=%#x -> %s", rlcStat, bootStat, bootStatSc,
              cpStat, complete ? "complete (RLC threads live)" : "not complete");
-        dumpCpUcode("gc hw_init");
+        if (mqdFixMode != 2) dumpCpUcode("gc hw_init");
     }
     return complete ? 1 : r;
 }
@@ -2251,18 +2240,19 @@ static uint32_t wrapPm4Mqd(void *self, uint32_t ring) {
 }
 
 static uint32_t wrapKiqStart(void *self, uint64_t a, uint64_t b, void *spec, uint32_t *out) {
+    if (mqdFixMode == 2 && !prepareKiq(a, b, spec)) {
+        RLOG("XQ2: startKIQ refused: preflight or genuine dequeue failed");
+        return 0xe00002bc; // same failure used by Apple's startKIQ queue-spec check
+    }
     auto r = FunctionCast(wrapKiqStart, orgKiqStart)(self, a, b, spec, out);
     RLOG("XJ:   PM4 startKIQ(%#llx, %#llx) -> %#x (0 is success)", a, b, r);
-    kiqEopHint = b;
-    if (mask & XK) {
-        if (cpSurgeryEnabled) enableDoorbellMsg(a, b);
-        // Before the frame is submitted and the doorbell rung, not after: once MEC2 is
-        // stalled in WAIT_ON_ROQ_DATA the fetch is already outstanding and no TLB
-        // invalidate brings it back.
-        // relocateRingToVram() is deliberately not called any more: it answered its
-        // question (the fetch hangs from VRAM too) and leaving it in only corrupts Apple's
-        // ring mapping for every later experiment.
+    if (mqdFixMode == 2) {
+        fbWrite(asicInfo, kGcGrbmGfxCntl, kKiqSelector);
+        reportKiqPreparation("after native startKIQ");
+        fbWrite(asicInfo, kGcGrbmGfxCntl, 0);
     }
+    // The old HQD experiment remains opt-in outside mode 2.
+    if ((mask & XK) && cpSurgeryEnabled && mqdFixMode != 2) enableDoorbellMsg(a, b);
     // startKIQ is where Apple's own KIQ HQD is written, so this is the first moment the
     // walk can distinguish Apple's queue from the ones TTL left behind.
     if (mask & XJ) dumpMecQueues("after startKIQ");
@@ -2452,7 +2442,7 @@ static uint32_t wrapWaitStamp(void *self, uint32_t stamp) {
     if (!(r & 0xff)) {
         dumpGfxState("after stamp timeout");
         dumpMecQueues("after stamp timeout");
-        dumpCpUcode("after stamp timeout");
+        if (mqdFixMode != 2) dumpCpUcode("after stamp timeout");
         dumpGfxHubVm("after stamp timeout");
     }
     return r;
@@ -2848,89 +2838,6 @@ static void dumpMqd(uint64_t mqdVa) {
          d(0x294), d(0x29c), d(0x2d8), d(0x2dc));
 }
 
-// Program the HQD from the MQD image, the way upstream's kiq_init_register does.
-//
-// The MQD image and the register file disagree, and the MQD is right:
-//
-//     field                   MQD image      HQD register
-//     cp_hqd_eop_base_addr    0xf40b7068     0
-//     cp_hqd_eop_control      0x8            0x6
-//     cp_hqd_pq_control       0xd130860d     0xc030860d   (bits 20, 24, 28 missing)
-//     cp_hqd_persistent_state 0xbe05301      0xbe05300    (PRELOAD_REQ missing)
-//     cp_hqd_active           1              1
-//     cp_hqd_pq_base          0xffbfea00     0xffbfea00
-//     cp_hqd_pq_doorbell_ctl  0x40000000     0x40000000 (+ HIT, set by hardware)
-//
-// So startKIQ built a correct MQD and then did not get all of it into the register file --
-// and the missing fields are exactly the ones this plugin also could not write, including
-// with CP_HQD_ACTIVE forced to 0. Nothing loads the MQD on this path either: on GFX10 the
-// driver writes the HQD itself and the MEC never fetches the image, which is why the
-// register file is what the engine acts on and why a queue with no EOP address and no
-// PRELOAD_REQ sits idle.
-//
-// Copy the image into the registers in upstream's order, with the MECs halted so the
-// writes are not racing the engine, then unhalt and let the caller ring the doorbell.
-// Report every field that still refuses to take, because that list is the finding either
-// way.
-static void loadHqdFromMqd(uint64_t mqdVa) {
-    auto fb = fbAperture();
-    if (fb == nullptr || asicInfo == nullptr) return;
-    uint64_t fbBase = static_cast<uint64_t>(fbRead(asicInfo, kGcFbBase) & 0xffffff) << 24;
-    if (mqdVa < fbBase || (mqdVa - fbBase) + 0x800 > 0x10000000ULL) return;
-    uint64_t off = mqdVa - fbBase;
-    auto d = [fb, off](uint32_t f) { return fb[(off + f) / 4]; };
-
-    // Deliberately not halting the MECs here either -- see wrapGcCgsWrite2.
-    uint32_t mecBefore = fbRead(asicInfo, kGcCpMecCntl);
-    fbWrite(asicInfo, kGcGrbmGfxCntl, kKiqSelector);
-
-    struct { uint32_t reg; uint32_t mqd; const char *name; } fields[] {
-        {kGcHqdActive,      0x208, "ACTIVE=0 first"},   // handled specially below
-        {kGcHqdEopBase,     0x294, "EOP_BASE"},
-        {kGcHqdEopBaseHi,   0x298, "EOP_BASE_HI"},
-        {kGcHqdEopControl,  0x29c, "EOP_CONTROL"},
-        {kGcMqdBase,        0x200, "MQD_BASE"},
-        {kGcMqdBaseHi,      0x204, "MQD_BASE_HI"},
-        {kGcMqdControl,     0x288, "MQD_CONTROL"},
-        {kGcHqdPqBase,      0x220, "PQ_BASE"},
-        {kGcHqdPqBaseHi,    0x224, "PQ_BASE_HI"},
-        {kGcHqdPqControl,   0x244, "PQ_CONTROL"},
-        {kGcHqdRptrRpt,     0x22c, "RPTR_REPORT"},
-        {kGcHqdRptrRptHi,   0x230, "RPTR_REPORT_HI"},
-        {kGcHqdPollAddr,    0x234, "WPTR_POLL"},
-        {kGcHqdPollAddrHi,  0x238, "WPTR_POLL_HI"},
-        {kGcHqdPqDbCtl,     0x23c, "DOORBELL_CONTROL"},
-        {kGcHqdIbControl,   0x254, "IB_CONTROL"},
-        {kGcHqdQuantum,     0x21c, "QUANTUM"},
-        {kGcHqdVmid,        0x20c, "VMID"},
-        {kGcHqdPersist,     0x210, "PERSISTENT_STATE"},
-    };
-    fbWrite(asicInfo, kGcHqdActive, 0);
-    IODelay(20);
-    char bad[128];
-    size_t n = 0;
-    for (auto &f : fields) {
-        if (f.reg == kGcHqdActive) continue;
-        uint32_t want = d(f.mqd);
-        fbWrite(asicInfo, f.reg, want);
-        uint32_t got = fbRead(asicInfo, f.reg);
-        if (got != want && n + 24 < sizeof(bad))
-            n += snprintf(bad + n, sizeof(bad) - n, "%s(%#x!=%#x) ", f.name, got, want);
-    }
-    fbWrite(asicInfo, kGcHqdActive, d(0x208));
-    IODelay(20);
-    // Deliberately NOT restoring GRBM_GFX_CNTL here: the caller set the KIQ selector and
-    // goes on reading this queue afterwards. Resetting it to 0 mid-sequence pointed every
-    // later read at me0/pipe0/queue0, an empty HQD, which made a whole run's worth of
-    // measurements read as zeroes.
-    RLOG("XN: HQD loaded from MQD; refused: %s", n ? bad : "(none)");
-    RLOG("XN: after load: active=%u eop=%#x_%08x eop_ctl=%#x pq_control=%#x persistent=%#x "
-         "CP_MEC_CNTL %#x->%#x", fbRead(asicInfo, kGcHqdActive) & 1,
-         fbRead(asicInfo, kGcHqdEopBaseHi), fbRead(asicInfo, kGcHqdEopBase),
-         fbRead(asicInfo, kGcHqdEopControl), fbRead(asicInfo, kGcHqdPqControl),
-         fbRead(asicInfo, kGcHqdPersist), mecBefore, fbRead(asicInfo, kGcCpMecCntl));
-}
-
 // Move the ring into VRAM and see whether the engine then runs it.
 //
 // CP_CPC_STALLED_STAT1 = 0x210000 is MEC2_DECODING_PACKET | MEC2_WAIT_ON_ROQ_DATA, and
@@ -3012,10 +2919,11 @@ static void relocateRingToVram() {
          (static_cast<uint64_t>(fb[pteOff / 4 + 1]) << 32) | fb[pteOff / 4]);
 }
 
-static void kickKiq(uint64_t eopHint) {
+// Observe the native frame without changing HQD contents or ringing a second doorbell.
+static void kickKiq() {
     if (asicInfo == nullptr) return;
     fbWrite(asicInfo, kGcGrbmGfxCntl, kKiqSelector);
-    RLOG("XK: KIQ before kick: active=%u rptr=%#x wptr=%#x_%08x poll_addr=%#x_%08x "
+    RLOG("XK: KIQ observation: active=%u rptr=%#x wptr=%#x_%08x poll_addr=%#x_%08x "
          "rptr_report=%#x_%08x eop=%#x",
          fbRead(asicInfo, kGcHqdActive) & 1, fbRead(asicInfo, kGcHqdPqRptr),
          fbRead(asicInfo, kGcHqdPqWptrHi), fbRead(asicInfo, kGcHqdPqWptrLo),
@@ -3065,75 +2973,6 @@ static void kickKiq(uint64_t eopHint) {
     uint64_t mqdVa = (static_cast<uint64_t>(fbRead(asicInfo, kGcMqdBaseHi)) << 32) |
                      fbRead(asicInfo, kGcMqdBase);
     dumpMqd(mqdVa);
-    loadHqdFromMqd(mqdVa);
-    // Does the doorbell reach the queue, and can the HQD be reprogrammed at all?
-    //
-    // CP_HQD_PQ_DOORBELL_CONTROL carries DOORBELL_HIT in bit 31: hardware sets it when a
-    // doorbell for this queue arrives. Printing the raw register answers whether the store
-    // gets as far as the HQD. And CP_HQD_EOP_BASE_ADDR ignored a write earlier while
-    // CP_HQD_QUANTUM and CP_HQD_IB_CONTROL accepted theirs, which is what an HQD owned by a
-    // live queue looks like -- upstream always deactivates before it reprograms. So try it
-    // upstream's way round: CP_HQD_ACTIVE = 0, write the EOP registers, CP_HQD_ACTIVE = 1.
-    {
-        uint32_t db = fbRead(asicInfo, kGcHqdPqDbCtl);
-        RLOG("XK: DOORBELL_CONTROL=%#x (offset=%#x en=%u hit=%u source=%u schd_hit=%u)",
-             db, (db >> 2) & 0x3ffffff, (db >> 30) & 1, (db >> 31) & 1, (db >> 28) & 1,
-             (db >> 29) & 1);
-        uint64_t eop = eopHint >> 8;
-        fbWrite(asicInfo, kGcHqdActive, 0);
-        IODelay(20);
-        fbWrite(asicInfo, kGcHqdEopBase, static_cast<uint32_t>(eop));
-        fbWrite(asicInfo, kGcHqdEopBaseHi, static_cast<uint32_t>(eop >> 32));
-        fbWrite(asicInfo, kGcHqdEopControl, 8);
-        uint32_t got = fbRead(asicInfo, kGcHqdEopBase);
-        fbWrite(asicInfo, kGcHqdActive, 1);
-        IODelay(20);
-        RLOG("XK: EOP while deactivated: wrote %#llx>>8=%#x, reads %#x, EOP_CONTROL=%#x, "
-             "active back to %u", eopHint, static_cast<uint32_t>(eop), got,
-             fbRead(asicInfo, kGcHqdEopControl), fbRead(asicInfo, kGcHqdActive) & 1);
-    }
-    // Ring the doorbell by hand.
-    //
-    // CP_HQD_PQ_WPTR_LO reading 0x20 does not prove the doorbell landed: upstream's
-    // gfx_v10_0_kiq_init_register writes that register out of the MQD too, so Apple could
-    // have put it there itself. CP_HQD_HQ_STATUS0.QUEUE_IDLE is set, which says the MEC has
-    // looked at the queue and found nothing to run -- and for a doorbell queue the value
-    // the engine acts on comes from the doorbell, not from this register. So write the
-    // doorbell directly, 64-bit, at index 0 (AMDGPU_NAVI10_DOORBELL_KIQ, and the offset the
-    // HQD itself carries), and see whether the read pointer moves. If it does, Apple's own
-    // store is not reaching BAR2; if it does not, the doorbell path is innocent.
-    if (hwObj != nullptr) {
-        auto dbBase = *reinterpret_cast<volatile uint64_t **>(
-                          reinterpret_cast<uint8_t *>(hwObj) + 0x528);
-        uint32_t wptr = fbRead(asicInfo, kGcHqdPqWptrLo);
-        // Ring with EIGHT dwords, not the 0x20 the queue carries.
-        //
-        // Read from the host, the ring holds exactly one packet: 0xc006a000, which is
-        // PACKET3(PACKET3_SET_RESOURCES, 6) to the dword -- upstream's
-        // gfx_v10_0_kiq_set_resources builds the identical header -- followed by its seven
-        // payload dwords. That is 8 dwords. The next dword is 0xffff1000, which is not a
-        // packet: as a type-3 header it claims a count of 0x3fff, so a command processor
-        // that reads it will wait for 16384 dwords that will never arrive. Which is exactly
-        // the state the CP is in: MEC2_DECODING_PACKET | MEC2_WAIT_ON_ROQ_DATA, with
-        // HQD_PQ_FETCHER_BUSY and HQD_ROQ_PQ_BUSY both clear because the ring read it needed
-        // has already happened.
-        //
-        // CP_HQD_PQ_WPTR reads 0x20 = 32. On GFX10 a compute queue's write pointer is in
-        // DWORDS -- amdgpu's gfx_v10_0_ring_set_wptr_compute rings the doorbell with
-        // ring->wptr, which counts dwords -- and 32 bytes is 8 dwords. So if the value that
-        // reached the doorbell is a byte count, the engine has been told there are 24 dwords
-        // of packets past the end of the real one.
-        //
-        // Ringing with 8 tests that directly: if the stall clears and the read pointer
-        // moves, the write pointer is being submitted in the wrong unit.
-        if (dbBase != nullptr) {
-            dbBase[0] = 8;
-            RLOG("XK: rang doorbell 0 at %p with 8 dwords (queue carries wptr %#x)",
-                 dbBase, wptr);
-        } else {
-            RLOG("XK: no doorbell mapping at [hwObj+0x528]");
-        }
-    }
     for (unsigned i = 0; i < 8; i++) {
         IODelay(500);
         RLOG("XK: KIQ +%u00us: rptr=%#x wptr=%#x active=%u ME2_HDR=%#x CP_STAT=%#x "
@@ -3401,24 +3240,18 @@ static uint32_t wrapKiqSubmit(void *self) {
     }
     if (mask & XK) disableCtx0Retry();
     dumpGfxState("before KIQ submit");
-    // Run the ring by hand BEFORE Apple submits, with both halves right.
-    //
-    // Ringing with 8 dwords after Apple has already rung with 0x20 proves nothing: by then
-    // MEC2 has latched WAIT_ON_ROQ_DATA on the bogus dword-8 header and lowering the write
-    // pointer does not retract that. So do it first -- put a ring in VRAM holding exactly
-    // PACKET3(PACKET3_SET_RESOURCES, 6) and its seven payload dwords followed by PACKET2
-    // no-ops, repoint the GART PTE at it, invalidate, and ring with 8. If the read pointer
-    // then moves and CP_CPC_STALLED_STAT1 clears, the queue works and the problem is the
-    // write pointer's unit; if it still sits, the packet is being fetched and ignored.
+    // Keep the legacy standalone CP test separate from mode 2. Apple's native frame
+    // has 32 dwords: SET_RESOURCES, valid single-dword NOPs, and a stamp at dword 16.
+    // Replacing its doorbell value with 8 would exclude the completion packet.
     if ((mask & XK) != 0 && hwObj != nullptr && asicInfo != nullptr) {
         fbWrite(asicInfo, kGcGrbmGfxCntl, kKiqSelector);
-        if (cpSurgeryEnabled) cpSelfTest();
+        if (cpSurgeryEnabled && mqdFixMode != 2) cpSelfTest();
         fbWrite(asicInfo, kGcGrbmGfxCntl, 0);
     }
     auto r = FunctionCast(wrapKiqSubmit, orgKiqSubmit)(self);
     RLOG("XJ:   submitKIQFrame -> %u", r & 0xff);
-    if (mask & XK) kickKiq(kiqEopHint);
-    repairMqdPointers();   // report-only unless rgpumqd=1
+    if (mask & XK) kickKiq();
+    if (mqdFixMode != 2) repairMqdPointers(); // mode 2 prepares before startKIQ
     return r;
 }
 
@@ -3625,8 +3458,133 @@ static bool fixFbPointer(const char *name, uint32_t regLo, uint32_t regHi, bool 
     return true;
 }
 
-// Repair the KIQ HQD's FB-resident pointers, registers and MQD image alike.
+// Record queue-local errors as well as the pointers; clearing the hub's fault latch
+// does not establish that an earlier PQ/TC UTCL1 error has retired.
+static void reportKiqPreparation(const char *stage) {
+    RLOG("XQ2: %s: ACTIVE=%#x RPTR=%#x WPTR=%#x_%08x HQD_ERROR=%#x "
+         "DEQUEUE=%#x MQD=%#x_%08x EOP=%#x_%08x EOP_CONTROL=%#x", stage,
+         fbRead(asicInfo, kGcHqdActive), fbRead(asicInfo, kGcHqdPqRptr),
+         fbRead(asicInfo, kGcHqdPqWptrHi), fbRead(asicInfo, kGcHqdPqWptrLo),
+         fbRead(asicInfo, kGcHqdError), fbRead(asicInfo, kGcHqdDequeue),
+         fbRead(asicInfo, kGcMqdBaseHi), fbRead(asicInfo, kGcMqdBase),
+         fbRead(asicInfo, kGcHqdEopBaseHi), fbRead(asicInfo, kGcHqdEopBase),
+         fbRead(asicInfo, kGcHqdEopControl));
+}
+
+// Two phases: validate the complete one-page image before changing queue state, then
+// require an inactive queue before changing the image and passing corrected arguments.
+// startKIQ compares spec[0..2] with its returned ME/pipe/queue at x6+0x8e711..0x8e728;
+// HWLibs create_kiq_queue_10_3 returns 2/1/0 on this part at +0x15114..0x1511c.
+// Restrict this experiment to that proven selector rather than guessing from a queue walk.
+static bool prepareKiq(uint64_t &mqdAddr, uint64_t &eopAddr, const void *spec) {
+    if (asicInfo == nullptr || hwMemObject == nullptr || spec == nullptr) {
+        RLOG("XQ2: preflight failed: missing ASIC, memory object, or queue spec");
+        return false;
+    }
+    auto queue = static_cast<const uint32_t *>(spec);
+    if (queue[0] != 2 || queue[1] != 1 || queue[2] != 0) {
+        RLOG("XQ2: preflight failed: unsupported spec ME=%u pipe=%u queue=%u",
+             queue[0], queue[1], queue[2]);
+        return false;
+    }
+    auto fb = fbAperture();
+    if (fb == nullptr) {
+        RLOG("XQ2: preflight failed: BAR0 mapping unavailable");
+        return false;
+    }
+    auto memory = reinterpret_cast<const uint8_t *>(hwMemObject);
+    uint64_t swBase = *reinterpret_cast<const uint64_t *>(memory + 0x50);
+    uint64_t reserved = *reinterpret_cast<const uint64_t *>(memory + 0x58);
+    uint64_t fbBase = static_cast<uint64_t>(fbRead(asicInfo, kGcFbBase) & 0xffffff) << 24;
+    uint64_t fbTop = (static_cast<uint64_t>(fbRead(asicInfo, kGcFbTop) & 0xffffff) << 24)
+                     | 0xffffffULL;
+    // fbAperture and the existing MQD walker use this device's 256 MiB BAR0 mapping.
+    constexpr uint64_t visible = 0x10000000ULL;
+    RaphaelKiq::Addresses planned {};
+    if (!RaphaelKiq::planAddresses(swBase, reserved, fbBase, fbTop, visible,
+                                   mqdAddr, eopAddr, planned)) {
+        RLOG("XQ2: preflight failed: MQD=%#llx EOP=%#llx sw=%#llx reserved=%#llx "
+             "FB=%#llx..%#llx", mqdAddr, eopAddr, swBase, reserved, fbBase, fbTop);
+        return false;
+    }
+    auto get = [fb, &planned](uint32_t byteOffset) {
+        return fb[(planned.imageOffset + byteOffset) / 4];
+    };
+    uint64_t imageMqd = (static_cast<uint64_t>(get(0x204)) << 32) | get(0x200);
+    uint64_t imageEop = (static_cast<uint64_t>(get(0x298)) << 32) | get(0x294);
+    RaphaelKiq::Addresses imagePlan {};
+    if (get(0) != 0xc0310800 || get(0x20c) != 0 || imageEop > 0xffffffffffULL ||
+        !RaphaelKiq::planAddresses(swBase, reserved, fbBase, fbTop, visible,
+                                   imageMqd, imageEop << 8, imagePlan) ||
+        imagePlan.mqdMc != planned.mqdMc || imagePlan.eopMc != planned.eopMc) {
+        RLOG("XQ2: preflight failed: MQD image header=%#x VMID=%#x MQD=%#llx "
+             "EOP(encoded)=%#llx disagrees with startKIQ", get(0), get(0x20c),
+             imageMqd, imageEop);
+        return false;
+    }
+    RLOG("XQ2: preflight OK: selector=%#x MQD=%#llx->%#llx EOP=%#llx->%#llx "
+         "image=BAR0+%#llx", kKiqSelector, mqdAddr, planned.mqdMc, eopAddr,
+         planned.eopMc, planned.imageOffset);
+
+    fbWrite(asicInfo, kGcGrbmGfxCntl, kKiqSelector);
+    reportKiqPreparation("before dequeue");
+    uint32_t active = fbRead(asicInfo, kGcHqdActive);
+    uint32_t poll = fbRead(asicInfo, kGcCpPqWptrPoll);
+    uint32_t doorbell = fbRead(asicInfo, kGcHqdPqDbCtl);
+    if (active == 0xffffffff || poll == 0xffffffff || doorbell == 0xffffffff) {
+        RLOG("XQ2: dequeue refused: inaccessible queue registers");
+        reportKiqPreparation("dequeue refused");
+        fbWrite(asicInfo, kGcGrbmGfxCntl, 0);
+        return false;
+    }
+    fbWrite(asicInfo, kGcCpPqWptrPoll, poll & ~(1u << 31));
+    fbWrite(asicInfo, kGcHqdPqDbCtl, doorbell & ~(1u << 30));
+    unsigned elapsedUs = 0;
+    if (active & 1) {
+        // fbWrite bypasses the legacy XL write hook. Mode 2 also disables XL's
+        // fake ACTIVE-predicate success if Apple's subsequent setup needs to dequeue.
+        fbWrite(asicInfo, kGcHqdDequeue, 1);
+        while ((active & 1) && elapsedUs < 50000) {
+            IODelay(50);
+            elapsedUs += 50;
+            active = fbRead(asicInfo, kGcHqdActive);
+        }
+    }
+    reportKiqPreparation("after dequeue");
+    if (active & 1) {
+        RLOG("XQ2: dequeue TIMEOUT after %u us; descriptor unchanged, startKIQ blocked",
+             elapsedUs);
+        fbWrite(asicInfo, kGcGrbmGfxCntl, 0);
+        return false;
+    }
+    fbWrite(asicInfo, kGcHqdDequeue, 0);
+
+    auto put = [fb, &planned](uint32_t byteOffset, uint32_t value) {
+        fb[(planned.imageOffset + byteOffset) / 4] = value;
+    };
+    put(0x200, static_cast<uint32_t>(planned.mqdMc));
+    put(0x204, static_cast<uint32_t>(planned.mqdMc >> 32));
+    put(0x294, static_cast<uint32_t>(planned.eopMc >> 8));
+    put(0x298, static_cast<uint32_t>(planned.eopMc >> 40));
+    bool imageWritten = get(0x200) == static_cast<uint32_t>(planned.mqdMc) &&
+        get(0x204) == static_cast<uint32_t>(planned.mqdMc >> 32) &&
+        get(0x294) == static_cast<uint32_t>(planned.eopMc >> 8) &&
+        get(0x298) == static_cast<uint32_t>(planned.eopMc >> 40);
+    fbWrite(asicInfo, kGcGrbmGfxCntl, 0);
+    if (!imageWritten) {
+        RLOG("XQ2: MQD image readback failed; startKIQ blocked");
+        return false;
+    }
+    mqdAddr = planned.mqdMc;
+    eopAddr = planned.eopMc;
+    RLOG("XQ2: preparation complete after %u us; calling native startKIQ with MC pointers",
+         elapsedUs);
+    return true;
+}
+
+// Legacy mode-1 experiment, retained separately from mode-2 preparation.
 static void repairMqdPointers() {
+    if (mqdFixMode == 2) return;
     auto fb = fbAperture();
     if (fb == nullptr || asicInfo == nullptr || hwMemObject == nullptr) {
         RLOG("XQ: cannot run -- fb=%s asicInfo=%p hwMem=%p", fb ? "ok" : "null",
@@ -3652,7 +3610,8 @@ static void repairMqdPointers() {
     bool eopFixed = fixFbPointer("EOP_BASE", kGcHqdEopBase, kGcHqdEopBaseHi, true, swBase,
                                  fbHW, fbTop, &eLo, &eHi);
 
-    // The image is what the engine restores from, so the registers alone are not enough.
+    // Keep the image consistent with any legacy register repair. This does not prove
+    // that the initial KIQ HQD is automatically restored from its MQD.
     uint64_t mqdEnc = (static_cast<uint64_t>(fbRead(asicInfo, kGcMqdBaseHi)) << 32) |
                        fbRead(asicInfo, kGcMqdBase);
     uint64_t imgOff = (mqdEnc >= fbHW && mqdEnc <= fbTop) ? mqdEnc - fbHW
@@ -3670,8 +3629,8 @@ static void repairMqdPointers() {
         //
         // CP_HQD_EOP_BASE_ADDR reads 0 while the image holds 0xf40b7068 (<<8 =
         // 0xf40b706800, BAR-relative), so the register-driven path above skips it. A zero
-        // register with a non-zero image is the documented "writes to CP_HQD_EOP_BASE_ADDR do
-        // not stick" symptom, and the image is what the engine restores from anyway.
+        // register with a non-zero image is the measured EOP programming discrepancy;
+        // its cause has not been established by this post-timeout experiment.
         uint64_t iEnc = (static_cast<uint64_t>(get(0x298)) << 32) | get(0x294);
         uint64_t iAddr = iEnc << 8;
         if (iAddr != 0 && swBase != 0 && iAddr >= swBase) {
@@ -3958,66 +3917,9 @@ static void startRlc() {
     fbWrite(asicInfo, kGcRlcCntl, cntl | 1u);
     IOSleep(1);
     RLOG("XK: RLC_CNTL %#x -> %#x", cntl, fbRead(asicInfo, kGcRlcCntl));
-    // Control experiment: is the write path working at all? SCRATCH_REG0/1 are plain
-    // read/write registers in the CP block. If these do not stick either, nothing in the
-    // graphics domain is writable and the block is gated off -- which on an APU is the
-    // SMU's doing, not the driver's.
-    uint32_t s0 = fbRead(asicInfo, kGcScratch0);
-    fbWrite(asicInfo, kGcScratch0, 0xa5a5a5a5u);
-    uint32_t s0b = fbRead(asicInfo, kGcScratch0);
-    fbWrite(asicInfo, kGcScratch0, s0);
-    RLOG("XK: SCRATCH_REG0 %#x -> wrote 0xa5a5a5a5 -> %#x (%s)",
-         s0, s0b, s0b == 0xa5a5a5a5u ? "writes work" : "WRITE DROPPED");
-
-    // Clear the compute queues the host driver left running.
-    //
-    // Walking the MEC queues after the KIQ timeout found eight "active" HQD selectors,
-    // every one of them reporting the same ring: pq_base 0xffbfea00, i.e. a ring at
-    // 0xFFBFEA0000 -- outside this iGPU's 0xf400000000..0xf41fffffff carveout, and
-    // exactly the address in the latched GCVM_L2_PROTECTION_FAULT_ADDR. That is amdgpu's
-    // KIQ, in the host's GART, still mapped in the MEC from before the device was handed
-    // to vfio-pci, now pointing at memory that no longer exists. Meanwhile
-    // CP_MEC_ME1_HEADER_DUMP reads 0xdef1def1 -- MEC1 has never fetched a packet, so the
-    // queue Apple's startKIQ set up is not the one running.
-    //
-    // Same shape as the stale PSP ring x7 destroys: this GPU is never reset, so whatever
-    // the previous driver left behind is still live. Upstream clears it with one
-    // register -- gfx_v10_0_cp_compute_enable(false) writes CP_MEC_CNTL (0x0f55 on
-    // 10.3.x) with MEC_ME1_HALT | MEC_ME2_HALT, and (true) writes 0.
-    // Halting the MEC is not enough: it stops the microengine but leaves the HQD
-    // registers loaded, so CP_HQD_ACTIVE stays 1. The queue has to be dequeued, which is
-    // what upstream does before writing a new MQD -- if CP_HQD_ACTIVE is set, write
-    // CP_HQD_DEQUEUE_REQUEST and poll until it clears.
-    //
-    // First check that queue selection works at all. Eight selectors reporting byte-identical
-    // HQD contents is equally consistent with "eight queues, all amdgpu's" and with
-    // "GRBM_GFX_CNTL is not sticking and every read hits whichever queue is selected".
-    // GRBM_GFX_CNTL may simply not read back, so test selection FUNCTIONALLY: park two
-    // different values in a per-queue register under two different selectors and see
-    // whether they stay apart. If they do not, every HQD access -- Apple's included --
-    // is landing on whichever queue happens to be selected, which would explain both the
-    // eight byte-identical "queues" and a KIQ that never runs.
-    fbWrite(asicInfo, kGcGrbmGfxCntl, 0x0105u);
-    uint32_t sel = fbRead(asicInfo, kGcGrbmGfxCntl);
-    fbWrite(asicInfo, kGcGrbmGfxCntl, (0u) | (1u << 2) | (0u << 8));
-    fbWrite(asicInfo, kGcHqdPqBase, 0xaaaaaaaau);
-    fbWrite(asicInfo, kGcGrbmGfxCntl, (0u) | (1u << 2) | (1u << 8));
-    fbWrite(asicInfo, kGcHqdPqBase, 0xbbbbbbbbu);
-    fbWrite(asicInfo, kGcGrbmGfxCntl, (0u) | (1u << 2) | (0u << 8));
-    uint32_t qa = fbRead(asicInfo, kGcHqdPqBase);
-    fbWrite(asicInfo, kGcGrbmGfxCntl, (0u) | (1u << 2) | (1u << 8));
-    uint32_t qb = fbRead(asicInfo, kGcHqdPqBase);
-    fbWrite(asicInfo, kGcGrbmGfxCntl, 0);
-    RLOG("XK: GRBM_GFX_CNTL readback %#x; per-queue test q0=%#x q1=%#x (%s)", sel, qa, qb,
-         (qa == 0xaaaaaaaau && qb == 0xbbbbbbbbu) ? "SELECTION WORKS"
-                                                 : "SELECTION BROKEN -- all queues alias");
-
-    // Diagnostic only from here on. The dequeue loop that used to live here did clear
-    // the eight queues TTL leaves behind, and the KIQ timed out exactly the same way
-    // afterwards -- so they are not what blocks it. Worse, every dequeue reported
-    // "active=1 after 2000us": CP_HQD_DEQUEUE_REQUEST is serviced by MEC firmware, so a
-    // request that never retires is itself evidence that the microengine is not running.
-    // That is what dumpCpUcode is here to settle.
+    // Previous selector diagnostics wrote artificial PQ_BASE values into two queues
+    // without dequeue or restoration. They could corrupt live queue descriptors and
+    // did not prove selection works. Keep bring-up free of that experiment.
     if (cpSurgeryEnabled) {
         programL2LikeUpstream();
         loadMecMicrocode();
@@ -4025,7 +3927,7 @@ static void startRlc() {
     }
     reportCpState("post-TTL");
     dumpMecQueues("post-TTL");
-    dumpCpUcode("post-TTL");
+    if (mqdFixMode != 2) dumpCpUcode("post-TTL");
     dumpGfxHubVm("post-TTL");
     dumpGfxState("after RLC start");
 }
@@ -4431,11 +4333,11 @@ static void pluginStart() {
              "firmware still owns)");
     }
     uint32_t mqdm = 0;
-    if (PE_parse_boot_argn("rgpumqd", &mqdm, sizeof(mqdm)) && mqdm <= 1) {
+    if (PE_parse_boot_argn("rgpumqd", &mqdm, sizeof(mqdm)) && mqdm <= 2) {
         mqdFixMode = mqdm;
-        RLOG("rgpumqd=%u: the KIQ HQD's MQD_BASE and EOP_BASE are BAR-relative rather than MC "
-             "addresses; %s", mqdm, mqdm ? "repairing registers and the MQD image"
-                                         : "reporting only");
+        RLOG("rgpumqd=%u: %s", mqdm, mqdm == 2
+             ? "validate and prepare KIQ before start; genuine dequeue required"
+             : mqdm == 1 ? "legacy post-timeout MQD/EOP repair" : "reporting only");
     }
     uint32_t ptbm = 0;
     if (PE_parse_boot_argn("rgpuptb", &ptbm, sizeof(ptbm)) && ptbm <= 1) {
@@ -4495,6 +4397,18 @@ static void pluginStart() {
     if (PE_parse_boot_argn("rgpureset", &rst, sizeof(rst)) && rst == 1) {
         pspResetRequested = true;
         RLOG("rgpureset=1: a PSP MODE1 reset will be issued before the PSP ring is created");
+    }
+    if (mqdFixMode == 2 && (cpSurgeryEnabled || pspResetRequested || icachePrimeEnabled ||
+                            rlcProbeEnabled || fbApertureMode != 0)) {
+        RLOG("XQ2: disabling conflicting experiments: rgpucp=%u rgpureset=%u rgpuic=%u "
+             "rgpurlc=%u rgpufb=%u; mode 2 performs queue preparation only",
+             cpSurgeryEnabled, pspResetRequested, icachePrimeEnabled, rlp, fbApertureMode);
+        cpSurgeryEnabled = false;
+        pspResetRequested = false;
+        icachePrimeEnabled = false;
+        rlcProbeEnabled = false;
+        rlcProbeEnabled2 = false;
+        fbApertureMode = 0;
     }
     if (PE_parse_boot_argn("rgpudump", &d, sizeof(d)) && d >= 5000 && d <= 300000)
         diagDumpDelayMs = d;
