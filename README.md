@@ -24,8 +24,67 @@ TTL's SWIP clients initialise in sequence; the failure has moved through three o
 | accelerator attach | **complete** — "Accelerator successfully registered with controller" |
 | framebuffer aperture | **solved** — Apple reads MMHUB, which this part leaves unprogrammed; the GFXHUB copy has the real `0xf400000000..0xf41fffffff` |
 | PowerPlay / power-up | **solved** — reports success instead of powering the GPU back down |
-| RLC microcontroller | **running** — `RLC_CNTL=1`, bootload complete |
-| **graphics ring (KIQ)** | **current blocker** — `waitForHwStamp` times out; CP unhalted, no VM fault, compute pipe idle |
+| RLC microcontroller | **running** — `RLC_CNTL=1`, `RLC_STAT=0x25`, all CP microcode loaded |
+| `GC`/`SDMA` firmware-autoload gates | **solved** — both wait on a `BOOTLOAD_COMPLETE` latch nothing ever sets on this part |
+| RLC safe-mode handshake | **solved** — the RLC never acks; upstream ignores that, Apple hard-fails on it |
+| `TTL::initialize()` on a cold GPU | **complete and deterministic** — was a race on leftover state, now passes on a freshly reset device |
+| **graphics ring (KIQ)** | **current blocker** — one active HQD, valid MQD in VRAM, ring inside the GART range, doorbell enabled at index 0, `CP_PQ_STATUS.DOORBELL_ENABLE=1`, no VM fault — and `waitForHwStamp` still times out with `CP_HQD_PQ_WPTR` at 0 |
+| WindowServer | submits command buffers; panics in `AMDHWVMM::endVMPTUpdate` because no engine powered up |
+
+### GC and SDMA HW_INIT: three gates upstream does not have
+
+`TTL::initialize()` used to succeed only sometimes. On a host that had been running guests all
+night it completed; after a host reboot — i.e. on a GPU that amdgpu had just MODE2-reset on
+unbind, and vfio-pci reset again on open — it failed with `ttl_hw_init failed`. Reading the
+timed-out `cosWaitForFunc` callbacks against the HWLibs symbol table named all three:
+
+- `_gc_fw_autoload_is_completed` — requires `RLC_STAT == 0x25` **and** `BOOTLOAD_COMPLETE` in
+  `RLC_RLCS_BOOTLOAD_STATUS`. Upstream's `gfx_v10_0_wait_for_rlc_autoload_complete` asks for
+  `BOOTLOAD_COMPLETE` and `CP_STAT == 0`; the `RLC_STAT` clause is Apple's own, and it is a
+  liveness sample rather than a latch. Measured here: `RLC_STAT` **is** `0x25`, and
+  `BOOTLOAD_COMPLETE` is clear at *both* offsets — 0x4e8d, which Apple reads, and 0x4e7e, the
+  one upstream defines as `mmRLC_RLCS_BOOTLOAD_STATUS_Sienna_Cichlid` and uses for every GC
+  10.3.x including 10.3.6. That latch is set by the RLC's backdoor-autoload bootloader; when the
+  PSP places the firmware itself, nothing sets it. Reading the microengines' instruction RAM back
+  through `CP_{PFP,ME,CE,MEC_ME1,MEC_ME2}_UCODE_ADDR/DATA` shows real instruction words in all
+  five, so the microcode *is* there — `GFX_CMD_ID_AUTOLOAD_RLC` returning `0xffff000d`
+  (`TEE_ERROR_BUSY`) is not the problem it looks like.
+- `_sdma_5_2_fw_autoload_is_completed` — eleven instructions, and all of them read that same
+  latch through the SDMA client. Upstream's `sdma_v5_2_start` has no such wait at all on the PSP
+  load path.
+- `_gc_enter_rlc_safe_mode_10_3` — writes `RLC_SAFE_MODE = CMD|MESSAGE` and waits 500 ms for the
+  RLC to clear `CMD`. It never does. Upstream's `gfx_v10_0_set_safe_mode` returns `void` and
+  simply proceeds after its timeout.
+
+A fourth, in `_gc_create_kiq_queue_10_3`, is a faithful copy of upstream's
+`gfx_v10_0_kiq_init_register` — deactivate a live HQD with `CP_HQD_DEQUEUE_REQUEST` and wait for
+`CP_HQD_ACTIVE` to fall — except that upstream carries an explicit fallback Apple dropped:
+
+```c
+if (j == adev->usec_timeout) {
+        DRM_DEBUG("KIQ dequeue request failed.\n");
+        /* Manual disable if dequeue request times out */
+        WREG32_SOC15(GC, 0, mmCP_HQD_ACTIVE, 0);
+}
+```
+
+So milestone `xl` answers each of these the way upstream behaves, and only these: the predicate
+filter is `(CP_HQD_ACTIVE | RLC_SAFE_MODE, mask 1, shift 0, expect 0)`, so the same helper's
+other callers keep timing out honestly, and the autoload answer is conditional on `RLC_STAT`
+still reading `0x25` — a genuinely dead RLC still fails here rather than three blocks later with
+no explanation. With them in place `TTL::initialize()` completes and the accelerator registers on
+a cold GPU, every time; and `RLC_RLCS_BOOTLOAD_STATUS` reads `0xc0000001` **afterwards**, which
+is what made the original failure look like a race: GC HW_INIT is itself what sets the latch its
+own gate was waiting for.
+
+Negative result worth recording: an early `GRBM_SOFT_RESET` pulse of `SOFT_RESET_CP|SOFT_RESET_GFX`
+before `TTL::initialize()` makes things strictly worse. `GRBM_STATUS` goes from `0x3028` (idle) to
+`0xa0003028` and stays there, and GC HW_INIT then times out. Upstream only pulses that register
+from inside RLC safe mode with the CP halted and re-initialised afterwards. The premise was wrong
+too: on a freshly booted host the pre-TTL MEC walk reports *no* active compute queue, so the HQDs
+seen later are not amdgpu's leftovers — they are Apple's own KIQ, and the eight "queues" are one
+physical HQD seen through eight `GRBM_GFX_CNTL` selector aliases (identical MQD address in all
+eight).
 
 **PSP HW_INIT now completes.** Every IP firmware blob loads with status 0 — the whole RLC
 family and all the CP microcode — and the PSP goes on to `EVENT__HW_UNINIT`.
