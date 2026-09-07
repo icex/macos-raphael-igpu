@@ -269,7 +269,7 @@ static constexpr size_t kOffBif50EnableDb  = 0x23ac1b; // _bif50_enable_doorbell
 static constexpr size_t kOffNbio72EnableDb = 0x24137e; // _nbio7_2_enable_doorbell_aperture
 static constexpr size_t kOffNbio23EnableDb = 0x23ddcb; // _nbio2_3_enable_doorbell_aperture
 static constexpr size_t kOffBcsReadMmr     = 0x23579c; // _bcs_read_mmr (called, not routed)
-static constexpr size_t kOffGcCgsWrite2    = 0xb519;   // _gc_cgs_write_register_ext2 (called, not routed)
+static constexpr size_t kOffGcCgsWrite2    = 0xb519;   // _gc_cgs_write_register_ext2
 
 // AMDRadeonX6000Framebuffer, not HWLibs.
 static constexpr size_t kOffFbXgmiConfig = 0x3b3e0;    // AmdAsicInfoNavi2::populateXGmiConfig [fb]
@@ -420,6 +420,7 @@ static mach_vm_address_t orgBif61EnableDb {};
 static mach_vm_address_t orgBif50EnableDb {};
 static mach_vm_address_t orgNbio72EnableDb {};
 static mach_vm_address_t orgNbio23EnableDb {};
+static mach_vm_address_t orgGcCgsWrite2 {};
 static mach_vm_address_t orgFbXgmiConfig {};
 static mach_vm_address_t orgHwMemVram {};
 static mach_vm_address_t orgHwMemEnable {};
@@ -543,6 +544,7 @@ static constexpr uint32_t kGcHqdEopControl = kGcSeg0 + 0x1fd0;
 static constexpr uint32_t kGcHqdIbControl  = kGcSeg0 + 0x1fbe;
 static constexpr uint32_t kGcHqdPqBaseHi2  = kGcSeg0 + 0x1fb2;   // same as kGcHqdPqBaseHi
 static constexpr uint32_t kGcRlcSrmCntl    = kGcSeg1 + 0x4c80;
+static constexpr uint32_t kGcRlcSrmStat    = kGcSeg1 + 0x4c9b;
 static constexpr uint32_t kGcRlcCsibLo     = kGcSeg1 + 0x4ca2;
 static constexpr uint32_t kGcRlcCsibLen    = kGcSeg1 + 0x4ca4;
 // Per-queue error and status, and the microengines' instruction pointers. CP_HQD_ERROR
@@ -1150,6 +1152,42 @@ static uint8_t wrapSdmaAutoloadDone(void *ctx) {
     return 1;
 }
 
+// Never let the first HQD dequeue be requested.
+//
+// The decisive measurement: CP_CPC_STALLED_STAT1 already reads 0x210000 --
+// MEC2_DECODING_PACKET | MEC2_WAIT_ON_ROQ_DATA -- *before* Apple submits its first KIQ
+// frame. Sampled from inside submitKIQFrame ahead of the original call, with a ring in VRAM
+// holding a correct PACKET3_SET_RESOURCES and the doorbell rung with the right dword count,
+// the engine is already wedged. So none of it is about Apple's packet, its write pointer's
+// unit, or where the ring lives.
+//
+// What wedges it is the dequeue in _gc_create_kiq_queue_10_3. That function finds a live
+// HQD, writes CP_HQD_DEQUEUE_REQUEST = 1, and waits 500 ms for CP_HQD_ACTIVE to fall. It
+// never falls, and milestone xl then does what upstream does on that timeout -- clear
+// CP_HQD_ACTIVE by hand and carry on. Upstream gets away with it because on real silicon
+// the dequeue retires; here the request is left outstanding, and CP_CPF_BUSY_STAT's
+// HQD_EOP_FETCHER_BUSY and HQD_ROQ_EOP_BUSY are exactly what an unfinished dequeue draining
+// to the end-of-pipe queue looks like. Forcing ACTIVE to 0 underneath a dequeue in flight
+// leaves MEC2 in it forever, and every queue programmed afterwards -- Apple's KIQ included
+// -- waits behind an engine that will never come back.
+//
+// So do not paper over the dequeue: prevent it. Drop the one write that starts it. The wait
+// afterwards still fails, xl still clears CP_HQD_ACTIVE, the queue is still torn down -- but
+// the microengine is never asked to do the thing it cannot finish.
+static uint32_t wrapGcCgsWrite2(void *ctx, uint32_t reg, uint32_t val, uint32_t client,
+                                uint32_t flag) {
+    if ((mask & XL) != 0 && reg == kGcHqdDequeue && val != 0) {
+        static unsigned n = 0;
+        if (n < 4) { n++;
+            RLOG("XK: dropped CP_HQD_DEQUEUE_REQUEST=%#x (client %#x) -- an outstanding "
+                 "dequeue is what leaves MEC2 in WAIT_ON_ROQ_DATA for the rest of the boot",
+                 val, client);
+        }
+        return 0;
+    }
+    return FunctionCast(wrapGcCgsWrite2, orgGcCgsWrite2)(ctx, reg, val, client, flag);
+}
+
 // Give up on a compute queue whose dequeue request never retires, the way upstream does.
 //
 // With the autoload gate satisfied, GC HW_INIT gets one block further and dies in
@@ -1559,6 +1597,8 @@ static void installDiagnostics(KernelPatcher &patcher, mach_vm_address_t base) {
          "nbio7_2_enable_doorbell_aperture"},
         {kOffNbio23EnableDb, &orgNbio23EnableDb, reinterpret_cast<void *>(wrapNbio23EnableDb),
          "nbio2_3_enable_doorbell_aperture"},
+        {kOffGcCgsWrite2, &orgGcCgsWrite2, reinterpret_cast<void *>(wrapGcCgsWrite2),
+         "gc_cgs_write_register_ext2"},
     };
     for (auto &e : dbRoutes) {
         *e.org = patcher.routeFunction(base + e.off,
@@ -2161,10 +2201,39 @@ static void enableDoorbellMsg(uint64_t mqdAddr, uint64_t eopAddr) {
     // which is the size of struct v10_compute_mqd and also GFX10_MEC_HPD_SIZE -- an EOP
     // buffer allocated immediately after the MQD. Program it as upstream would, so the
     // queue has somewhere to retire to.
+    // Why the EOP registers matter, and why they refuse writes.
+    //
+    // CP_CPF_BUSY_STAT = 0x48460000 decodes to HQD_SIGNAL_SEMAPHORE_BUSY,
+    // HQD_MESSAGE_BUSY, HQD_EOP_FETCHER_BUSY, HQD_CONSUMED_RPTR_BUSY, HQD_ROQ_EOP_BUSY and
+    // HQD_PQ_BUSY -- and, crucially, NOT HQD_PQ_FETCHER_BUSY and NOT HQD_ROQ_PQ_BUSY. The
+    // fetcher that is busy is the EOP one, and the ROQ that is busy is the EOP ROQ. So
+    // MEC2_WAIT_ON_ROQ_DATA is not waiting on the ring at all: it is waiting on the
+    // end-of-pipe queue, whose base address reads 0 while CP_HQD_EOP_CONTROL reads a size
+    // of 6. A sized EOP buffer at address 0 is a fetch that can never complete, and it
+    // blocks the packet decode behind it.
+    //
+    // And the reason the address will not take a write is the RLC. RLC_SRM_CNTL reads 0x3
+    // -- SRM_ENABLE and AUTO_INCR_ADDR -- so the save/restore machine is live, and it
+    // continuously restores its register list from the SRM image. This chip's own
+    // gc_10_3_6 SRM list was substituted for Apple's Navi 23 one (milestone x9, and it is
+    // the one blob whose length differs: 0x4480 against Apple's 0x5ec0), so a list that
+    // covers CP_HQD_EOP_BASE_ADDR with a zero value would clobber every write within
+    // microseconds -- from Apple's driver exactly as from here.
+    //
+    // Stop the SRM, program the EOP registers, confirm, and leave the SRM off: it exists
+    // for GFXOFF and clock-gating save/restore, which this configuration does not use
+    // anyway (PowerPlay is reported unsupported by milestone xi).
+    uint32_t srm = fbRead(asicInfo, kGcRlcSrmCntl);
+    fbWrite(asicInfo, kGcRlcSrmCntl, srm & ~1u);
+    IODelay(50);
     uint64_t eop = eopAddr >> 8;
     fbWrite(asicInfo, kGcHqdEopBase, static_cast<uint32_t>(eop));
     fbWrite(asicInfo, kGcHqdEopBaseHi, static_cast<uint32_t>(eop >> 32));
     fbWrite(asicInfo, kGcHqdEopControl, 8);          // 2^(8+1) dwords = 2048 bytes
+    RLOG("XK: SRM %#x -> %#x (SRM_STAT=%#x); EOP now %#x_%08x ctl=%#x", srm,
+         fbRead(asicInfo, kGcRlcSrmCntl), fbRead(asicInfo, kGcRlcSrmStat),
+         fbRead(asicInfo, kGcHqdEopBaseHi), fbRead(asicInfo, kGcHqdEopBase),
+         fbRead(asicInfo, kGcHqdEopControl));
     fbWrite(asicInfo, kGcHqdQuantum, 1u | (1u << 4) | (1u << 8));
     uint32_t ib = fbRead(asicInfo, kGcHqdIbControl);
     fbWrite(asicInfo, kGcHqdIbControl, (ib & ~(0xfu << 20)) | (3u << 20));
@@ -2574,9 +2643,30 @@ static void kickKiq(uint64_t eopHint) {
         auto dbBase = *reinterpret_cast<volatile uint64_t **>(
                           reinterpret_cast<uint8_t *>(hwObj) + 0x528);
         uint32_t wptr = fbRead(asicInfo, kGcHqdPqWptrLo);
+        // Ring with EIGHT dwords, not the 0x20 the queue carries.
+        //
+        // Read from the host, the ring holds exactly one packet: 0xc006a000, which is
+        // PACKET3(PACKET3_SET_RESOURCES, 6) to the dword -- upstream's
+        // gfx_v10_0_kiq_set_resources builds the identical header -- followed by its seven
+        // payload dwords. That is 8 dwords. The next dword is 0xffff1000, which is not a
+        // packet: as a type-3 header it claims a count of 0x3fff, so a command processor
+        // that reads it will wait for 16384 dwords that will never arrive. Which is exactly
+        // the state the CP is in: MEC2_DECODING_PACKET | MEC2_WAIT_ON_ROQ_DATA, with
+        // HQD_PQ_FETCHER_BUSY and HQD_ROQ_PQ_BUSY both clear because the ring read it needed
+        // has already happened.
+        //
+        // CP_HQD_PQ_WPTR reads 0x20 = 32. On GFX10 a compute queue's write pointer is in
+        // DWORDS -- amdgpu's gfx_v10_0_ring_set_wptr_compute rings the doorbell with
+        // ring->wptr, which counts dwords -- and 32 bytes is 8 dwords. So if the value that
+        // reached the doorbell is a byte count, the engine has been told there are 24 dwords
+        // of packets past the end of the real one.
+        //
+        // Ringing with 8 tests that directly: if the stall clears and the read pointer
+        // moves, the write pointer is being submitted in the wrong unit.
         if (dbBase != nullptr) {
-            dbBase[0] = wptr;
-            RLOG("XK: rang doorbell 0 at %p with wptr %#x", dbBase, wptr);
+            dbBase[0] = 8;
+            RLOG("XK: rang doorbell 0 at %p with 8 dwords (queue carries wptr %#x)",
+                 dbBase, wptr);
         } else {
             RLOG("XK: no doorbell mapping at [hwObj+0x528]");
         }
@@ -2608,6 +2698,26 @@ static uint32_t wrapKiqSubmit(void *self) {
     }
     if (mask & XK) disableCtx0Retry();
     dumpGfxState("before KIQ submit");
+    // Run the ring by hand BEFORE Apple submits, with both halves right.
+    //
+    // Ringing with 8 dwords after Apple has already rung with 0x20 proves nothing: by then
+    // MEC2 has latched WAIT_ON_ROQ_DATA on the bogus dword-8 header and lowering the write
+    // pointer does not retract that. So do it first -- put a ring in VRAM holding exactly
+    // PACKET3(PACKET3_SET_RESOURCES, 6) and its seven payload dwords followed by PACKET2
+    // no-ops, repoint the GART PTE at it, invalidate, and ring with 8. If the read pointer
+    // then moves and CP_CPC_STALLED_STAT1 clears, the queue works and the problem is the
+    // write pointer's unit; if it still sits, the packet is being fetched and ignored.
+    if ((mask & XK) != 0 && hwObj != nullptr && asicInfo != nullptr) {
+        fbWrite(asicInfo, kGcGrbmGfxCntl, kKiqSelector);
+        for (unsigned i = 0; i < 4; i++) {
+            IODelay(500);
+            RLOG("XK: hand-run +%u00us: rptr=%#x wptr=%#x stalled=%#x cpf_busy=%#x "
+                 "ME2_HDR=%#x", (i + 1) * 5, fbRead(asicInfo, kGcHqdPqRptr),
+                 fbRead(asicInfo, kGcHqdPqWptrLo), fbRead(asicInfo, kGcCpcStalled1),
+                 fbRead(asicInfo, kGcCpfBusyStat), fbRead(asicInfo, kGcMec2HeaderDump));
+        }
+        fbWrite(asicInfo, kGcGrbmGfxCntl, 0);
+    }
     auto r = FunctionCast(wrapKiqSubmit, orgKiqSubmit)(self);
     RLOG("XJ:   submitKIQFrame -> %u", r & 0xff);
     if (mask & XK) kickKiq(kiqEopHint);

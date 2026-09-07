@@ -1722,3 +1722,34 @@ a full invalidate -- every value reads back exactly as intended, and
 So the fetch stall survives: a correct queue, a correct ring in either VRAM or system
 memory, a working doorbell, translation not implicated, and an L2 configured byte for byte
 like upstream's.
+
+## The stall predates Apple entirely
+
+Sampled from inside `submitKIQFrame`, *before* the original call, with a ring in VRAM holding
+a correct `PACKET3(PACKET3_SET_RESOURCES, 6)` plus `PACKET2` no-ops and the doorbell rung
+with the right dword count:
+
+    XK: hand-run +500us: rptr=0 wptr=0x8 stalled=0x210000 cpf_busy=0x48460000
+
+`CP_CPC_STALLED_STAT1` is already `0x210000` before Apple submits anything. So none of it is
+about Apple's packet, about whether its write pointer is a dword or a byte count, or about
+where the ring lives. MEC2 is wedged before the accelerator gets a turn.
+
+The obvious candidate was the dequeue in `_gc_create_kiq_queue_10_3`, which milestone `xl`
+papers over with upstream's manual `CP_HQD_ACTIVE = 0`: forcing a queue inactive underneath
+an unfinished dequeue would leave the engine in it, and `CP_CPF_BUSY_STAT`'s
+`HQD_EOP_FETCHER_BUSY` and `HQD_ROQ_EOP_BUSY` are what a dequeue draining to the end-of-pipe
+queue looks like. Hooking `_gc_cgs_write_register_ext2` and dropping every
+`CP_HQD_DEQUEUE_REQUEST` write disproves it: on a cold GPU the drop fires exactly once, and
+*after* `TTL::initialize() Completed successfully` -- it is Apple's `startKIQ` doing the
+dequeue, not TTL's, because on a freshly reset device TTL finds no live HQD to dequeue in the
+first place. The stall is there anyway.
+
+Which leaves TTL's own KIQ, created inside GC HW_INIT, as the first queue this MEC is asked
+to run -- and it is the first packet fetch on this engine that never completes. Everything
+Apple does afterwards queues behind it.
+
+One inference to retract: `CP_MEC_ME2_HEADER_DUMP` returning `0xdef0def0`, `0xdef2def2`,
+`0xdef4def4`, `0xdef6def6` in sequence is a *read-triggered counter*, incrementing by two per
+access, not a stale header. "The MEC has never fetched a packet header" was never a sound
+reading of it.
