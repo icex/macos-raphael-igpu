@@ -15,6 +15,25 @@ S=/sys/bus/pci/devices/$DEV
 LOG=findings/autorun-log.md
 BOOT_TIMEOUT=${BOOT_TIMEOUT:-420}
 
+# Passthrough during an unattended loop is how the host was lost for three hours.
+#
+# redeploy.sh's default is now no-passthrough, so this loop is GPU-less unless you ask
+# otherwise -- and a GPU-less rung cannot produce a meaningful verdict about the graphics
+# core, so say which mode we are in rather than letting the log imply the other one.
+#
+# The first host hang came from exactly this script: roughly 33 launches over three hours,
+# each one handing the iGPU to a guest, with nobody at the machine. If you want GPU rungs,
+# AUTORUN_GPU=1 turns them back on -- but run them a few at a time and stay in the room.
+REDEPLOY_GPU_ARG=()
+if [[ "${AUTORUN_GPU:-0}" == 1 ]]; then
+    REDEPLOY_GPU_ARG=(--gpu)
+    say "AUTORUN_GPU=1: rungs run WITH the iGPU passed through, unattended."
+    say "  All three host hangs happened with the device open. Do not leave this running."
+else
+    say "GPU passthrough OFF for this loop (AUTORUN_GPU=1 to enable)."
+    say "  Verdicts below describe the guest without the iGPU, not the graphics core."
+fi
+
 ONLY=0; [[ "${1:-}" == --only ]] && { ONLY=1; shift; }
 SETS=("$@"); [[ ${#SETS[@]} -eq 0 ]] && SETS=(m1 m2 m3 m4 m5 m6 m7)
 
@@ -112,7 +131,7 @@ for i in "${!SETS[@]}"; do
     t0=$(date '+%Y-%m-%d %H:%M:%S')
 
     ./milestones.py only "${enable[@]}" >/dev/null 2>&1 || { say "milestones.py refused (pattern check failed)"; exit 1; }
-    ./redeploy.sh >/dev/null 2>&1 || { say "redeploy failed"; note "- **$label**: redeploy failed"; exit 1; }
+    ./redeploy.sh "${REDEPLOY_GPU_ARG[@]}" >/dev/null 2>&1 || { say "redeploy failed"; note "- **$label**: redeploy failed"; exit 1; }
 
     v=$(wait_for_verdict)
     res=$(classify)
