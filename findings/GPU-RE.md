@@ -1753,3 +1753,43 @@ One inference to retract: `CP_MEC_ME2_HEADER_DUMP` returning `0xdef0def0`, `0xde
 `0xdef4def4`, `0xdef6def6` in sequence is a *read-triggered counter*, incrementing by two per
 access, not a stale header. "The MEC has never fetched a packet header" was never a sound
 reading of it.
+
+## Correction: the CP "stall" bits are the state the GPU arrives in
+
+Instrumenting `_gc_cgs_write_register_ext2` to sample `CP_CPC_STALLED_STAT1` after every GC
+register write, and to keep a short history of the writes preceding the first non-zero read,
+gives this:
+
+    XK: last writes before the wedge: 0xc200=0
+    XK: CP_CPC_STALLED_STAT1 went 0 -> 0x210000 on write reg=0xc200 val=0 client=0xb
+    XK: at wedge: CPC_BUSY=0x8080000 CPF_BUSY=0x48460000 CP_STAT=0x84028000
+                  MEC_CNTL=0 HQD_ACTIVE=0 EOP=0_00000000 eop_ctl=0
+
+The history holds a single entry, so `GRBM_GFX_INDEX = 0` is the *first* GC write the stack
+makes -- a routine broadcast-select -- and the register already reads `0x210000` on the very
+first sample. `CP_MEC_CNTL` is 0 (nothing halted) and `CP_HQD_ACTIVE` is 0 (no queue exists
+yet). There was never a transition to catch.
+
+So `MEC2_DECODING_PACKET | MEC2_WAIT_ON_ROQ_DATA`, together with `CP_CPF_BUSY_STAT`'s
+`HQD_EOP_FETCHER_BUSY` and `HQD_ROQ_EOP_BUSY`, is the state this CP is in *before the guest
+driver touches it* -- inherited from amdgpu's MODE2 reset and vfio-pci's reset, or simply
+this part's idle signature. It is not evidence of a wedge, and three conclusions built on
+reading it as one are hereby withdrawn:
+
+- that the engine was stalled waiting for a ring fetch to return;
+- that the end-of-pipe queue was what it was waiting on, and therefore that
+  `CP_HQD_EOP_BASE_ADDR` reading 0 was the root cause;
+- that halting the MECs is one-way on this part. With all three GC write helpers filtered,
+  no halt write is issued before the bits are already set, so the `0x50000000` seen earlier
+  was pre-existing state and not something TTL wrote.
+
+What survives is narrower and still true: the KIQ's read pointer never advances, no packet is
+consumed, and `waitForHwStamp` times out. The eliminations from the previous sections stand,
+because each was tested against that symptom rather than against the status bits -- the
+doorbell reaches the HQD, translation is configured and faults when told to, the MQD matches
+the register file, the packet and write pointer are verifiably in the pages the GART names,
+the L2 is programmed exactly as upstream does, and relocating the ring into VRAM changes
+nothing.
+
+The instrument to trust from here is the read pointer and the ring contents, not
+`CP_CPC_STALLED_STAT1`.

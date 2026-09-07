@@ -270,6 +270,8 @@ static constexpr size_t kOffNbio72EnableDb = 0x24137e; // _nbio7_2_enable_doorbe
 static constexpr size_t kOffNbio23EnableDb = 0x23ddcb; // _nbio2_3_enable_doorbell_aperture
 static constexpr size_t kOffBcsReadMmr     = 0x23579c; // _bcs_read_mmr (called, not routed)
 static constexpr size_t kOffGcCgsWrite2    = 0xb519;   // _gc_cgs_write_register_ext2
+static constexpr size_t kOffGcCgsWrite     = 0xb4de;   // _gc_cgs_write_register
+static constexpr size_t kOffGcCgsWriteExt  = 0xb4a0;   // _gc_cgs_write_register_ext
 
 // AMDRadeonX6000Framebuffer, not HWLibs.
 static constexpr size_t kOffFbXgmiConfig = 0x3b3e0;    // AmdAsicInfoNavi2::populateXGmiConfig [fb]
@@ -421,6 +423,8 @@ static mach_vm_address_t orgBif50EnableDb {};
 static mach_vm_address_t orgNbio72EnableDb {};
 static mach_vm_address_t orgNbio23EnableDb {};
 static mach_vm_address_t orgGcCgsWrite2 {};
+static mach_vm_address_t orgGcCgsWrite {};
+static mach_vm_address_t orgGcCgsWriteExt {};
 static mach_vm_address_t orgFbXgmiConfig {};
 static mach_vm_address_t orgHwMemVram {};
 static mach_vm_address_t orgHwMemEnable {};
@@ -444,6 +448,7 @@ static void *asicInfo {};
 // mapDoorbellMemory stores the BAR2 mapping at +0x520 and that mapping's virtual address
 // at +0x528, so [hwObj+0x528] is the base of the doorbell aperture as the guest sees it.
 static void *hwObj {};
+static bool cpcWedged = false;
 static uint64_t kiqEopHint {};
 
 // AmdRegisterAccess vtable: 0x138 writeReg32(index, value), 0x140 hwReadReg32(index).
@@ -1152,6 +1157,31 @@ static uint8_t wrapSdmaAutoloadDone(void *ctx) {
     return 1;
 }
 
+// The same halt filter on the other two GC write helpers.
+//
+// _gc_halt_micro_engines_10_3 goes through _gc_cgs_write_register_ext2, and dropping the
+// halt bits there caught exactly one write -- 0x10000000, MEC_ME2_HALT alone -- while
+// CP_MEC_CNTL had already been seen at 0x50000000, both halts. So the other bit arrives
+// through a different helper: HWLibs has three, _gc_cgs_write_register,
+// _gc_cgs_write_register_ext and _gc_cgs_write_register_ext2, all taking (ctx, reg, val,
+// ...) and differing only in which function pointer they forward to. Filter all three.
+static uint32_t wrapGcCgsWrite(void *ctx, uint32_t reg, uint32_t val) {
+    if ((mask & XL) != 0 && reg == kGcCpMecCntl && (val & ((1u << 28) | (1u << 30))) != 0) {
+        static unsigned n = 0;
+        if (n < 4) { n++; RLOG("XK: dropped MEC halt via write_register: %#x", val); }
+        val &= ~((1u << 28) | (1u << 30));
+    }
+    return FunctionCast(wrapGcCgsWrite, orgGcCgsWrite)(ctx, reg, val);
+}
+static uint32_t wrapGcCgsWriteExt(void *ctx, uint32_t reg, uint32_t val, uint32_t client) {
+    if ((mask & XL) != 0 && reg == kGcCpMecCntl && (val & ((1u << 28) | (1u << 30))) != 0) {
+        static unsigned n = 0;
+        if (n < 4) { n++; RLOG("XK: dropped MEC halt via write_register_ext: %#x", val); }
+        val &= ~((1u << 28) | (1u << 30));
+    }
+    return FunctionCast(wrapGcCgsWriteExt, orgGcCgsWriteExt)(ctx, reg, val, client);
+}
+
 // Never let the first HQD dequeue be requested.
 //
 // The decisive measurement: CP_CPC_STALLED_STAT1 already reads 0x210000 --
@@ -1176,6 +1206,33 @@ static uint8_t wrapSdmaAutoloadDone(void *ctx) {
 // the microengine is never asked to do the thing it cannot finish.
 static uint32_t wrapGcCgsWrite2(void *ctx, uint32_t reg, uint32_t val, uint32_t client,
                                 uint32_t flag) {
+    // Never let the compute microengines be halted.
+    //
+    // This is the finding the whole KIQ investigation was circling. The wedge detector
+    // caught CP_CPC_STALLED_STAT1 going 0 -> 0x210000 on a routine GRBM_GFX_INDEX = 0
+    // broadcast write -- but with CP_MEC_CNTL reading 0x50000000 at that instant, i.e. TTL
+    // had just set MEC_ME1_HALT | MEC_ME2_HALT. Sampling the register across a deliberate
+    // halt and unhalt afterwards shows 0x210000 in all three states: it does not track the
+    // halt bits, it was latched by the first one. On this part halting the MECs is not
+    // reversible -- MEC2 reports MEC2_DECODING_PACKET | MEC2_WAIT_ON_ROQ_DATA from then on,
+    // CP_MEC1_INSTR_PNTR sits at the same 0x10000 the halted PFP and ME report, and every
+    // queue programmed afterwards waits behind an engine that never comes back.
+    //
+    // Upstream only calls gfx_v10_0_cp_compute_enable(false) on the way down, or before a
+    // direct microcode load. Neither applies here: the microcode is already in the engines,
+    // placed by the PSP's cold-boot autoload, and read back through
+    // CP_MEC_ME{1,2}_UCODE_ADDR/DATA as real instruction words. So drop the halt and keep
+    // the rest of the register -- pipe resets and MEC_INVALIDATE_ICACHE still get through.
+    if ((mask & XL) != 0 && reg == kGcCpMecCntl &&
+        (val & ((1u << 28) | (1u << 30))) != 0) {
+        static unsigned nh = 0;
+        if (nh < 6) { nh++;
+            RLOG("XK: dropped CP_MEC_CNTL halt bits: %#x -> %#x (halting the MECs on this "
+                 "part is one-way)", val, val & ~((1u << 28) | (1u << 30)));
+        }
+        val &= ~((1u << 28) | (1u << 30));
+        return FunctionCast(wrapGcCgsWrite2, orgGcCgsWrite2)(ctx, reg, val, client, flag);
+    }
     if ((mask & XL) != 0 && reg == kGcHqdDequeue && val != 0) {
         static unsigned n = 0;
         if (n < 4) { n++;
@@ -1185,7 +1242,38 @@ static uint32_t wrapGcCgsWrite2(void *ctx, uint32_t reg, uint32_t val, uint32_t 
         }
         return 0;
     }
-    return FunctionCast(wrapGcCgsWrite2, orgGcCgsWrite2)(ctx, reg, val, client, flag);
+    auto r = FunctionCast(wrapGcCgsWrite2, orgGcCgsWrite2)(ctx, reg, val, client, flag);
+    // Catch the write that wedges the microengine.
+    //
+    // CP_CPC_STALLED_STAT1 is already 0x210000 before Apple submits anything, and dropping
+    // the dequeue request did not prevent it, so the wedge happens somewhere inside TTL's
+    // own GC HW_INIT. Every GC register write in this stack goes through this function, so
+    // sample the stall bit after each one until it first goes non-zero and name the write
+    // that did it. One extra MMIO read per GC write, and only until it trips.
+    if ((mask & XL) != 0 && !cpcWedged && asicInfo != nullptr) {
+        // Keep the last few writes so the transition can be attributed to a sequence
+        // rather than to whichever write happened to be in flight when the bit flipped.
+        static uint32_t histReg[6] {}, histVal[6] {};
+        static unsigned histAt = 0;
+        histReg[histAt % 6] = reg; histVal[histAt % 6] = val; histAt++;
+        uint32_t st = fbRead(asicInfo, kGcCpcStalled1);
+        if (st != 0) {
+            cpcWedged = true;
+            char h[160]; size_t hn = 0;
+            for (unsigned i = histAt >= 6 ? histAt - 6 : 0; i < histAt && hn + 24 < sizeof(h); i++)
+                hn += snprintf(h + hn, sizeof(h) - hn, "%#x=%#x ", histReg[i % 6], histVal[i % 6]);
+            RLOG("XK: last writes before the wedge: %s", h);
+            RLOG("XK: CP_CPC_STALLED_STAT1 went 0 -> %#x on write reg=%#x val=%#x "
+                 "client=%#x flag=%#x", st, reg, val, client, flag);
+            RLOG("XK: at wedge: CPC_BUSY=%#x CPF_BUSY=%#x CP_STAT=%#x MEC_CNTL=%#x "
+                 "HQD_ACTIVE=%#x EOP=%#x_%08x eop_ctl=%#x",
+                 fbRead(asicInfo, kGcCpcBusyStat), fbRead(asicInfo, kGcCpfBusyStat),
+                 fbRead(asicInfo, kGcCpStat), fbRead(asicInfo, kGcCpMecCntl),
+                 fbRead(asicInfo, kGcHqdActive), fbRead(asicInfo, kGcHqdEopBaseHi),
+                 fbRead(asicInfo, kGcHqdEopBase), fbRead(asicInfo, kGcHqdEopControl));
+        }
+    }
+    return r;
 }
 
 // Give up on a compute queue whose dequeue request never retires, the way upstream does.
@@ -1599,6 +1687,10 @@ static void installDiagnostics(KernelPatcher &patcher, mach_vm_address_t base) {
          "nbio2_3_enable_doorbell_aperture"},
         {kOffGcCgsWrite2, &orgGcCgsWrite2, reinterpret_cast<void *>(wrapGcCgsWrite2),
          "gc_cgs_write_register_ext2"},
+        {kOffGcCgsWrite, &orgGcCgsWrite, reinterpret_cast<void *>(wrapGcCgsWrite),
+         "gc_cgs_write_register"},
+        {kOffGcCgsWriteExt, &orgGcCgsWriteExt, reinterpret_cast<void *>(wrapGcCgsWriteExt),
+         "gc_cgs_write_register_ext"},
     };
     for (auto &e : dbRoutes) {
         *e.org = patcher.routeFunction(base + e.off,
@@ -2133,15 +2225,31 @@ static void programL2LikeUpstream() {
 // the queue is programmed onto engines that are already running.
 static void startMecEngines() {
     if (asicInfo == nullptr) return;
+    // Is 0x210000 a wedge or just the halted signature?
+    //
+    // The write that first turned CP_CPC_STALLED_STAT1 non-zero was a routine
+    // GRBM_GFX_INDEX = 0 broadcast-select -- but CP_MEC_CNTL read 0x50000000 at that
+    // moment, i.e. TTL had just halted both MECs. So MEC2_DECODING_PACKET |
+    // MEC2_WAIT_ON_ROQ_DATA may be nothing more than what a halted MEC2 reports, and the
+    // whole "the engine is stuck waiting on a fetch" reading would be wrong. Sample the
+    // register across a deliberate halt and unhalt to find out: if it tracks the halt bits
+    // it is a status artefact, and if it sticks after the unhalt the engine really is stuck.
+    // No halt/unhalt edge here any more. It was modelled on upstream's
+    // gfx_v10_0_cp_compute_enable, but halting the MECs on this part is one-way: the first
+    // halt latches CP_CPC_STALLED_STAT1 at 0x210000 and MEC2 never executes again. Only the
+    // instruction-cache invalidate is kept, which does not touch the halt bits.
     uint32_t before = fbRead(asicInfo, kGcCpMecCntl);
-    fbWrite(asicInfo, kGcCpMecCntl, (1u << 30) | (1u << 28));   // ME1_HALT | ME2_HALT
+    uint32_t st0 = fbRead(asicInfo, kGcCpcStalled1);
+    uint32_t stHalted = st0;
+    fbWrite(asicInfo, kGcCpMecCntl, before | (1u << 27));       // MEC_INVALIDATE_ICACHE
     IODelay(50);
-    fbWrite(asicInfo, kGcCpMecCntl, (1u << 30) | (1u << 28) | (1u << 27));  // + INVALIDATE_ICACHE
-    IODelay(50);
-    fbWrite(asicInfo, kGcCpMecCntl, 0);
+    fbWrite(asicInfo, kGcCpMecCntl, before);
     IODelay(50);
     uint32_t p1 = fbRead(asicInfo, kGcMec1InstrPntr), p2 = fbRead(asicInfo, kGcMec2InstrPntr);
     IODelay(50);
+    RLOG("XK: stall across halt: CP_MEC_CNTL %#x (stalled %#x) -> halted (stalled %#x) "
+         "-> unhalted (stalled %#x)", before, st0, stHalted,
+         fbRead(asicInfo, kGcCpcStalled1));
     RLOG("XK: MEC halt/unhalt: CP_MEC_CNTL %#x -> %#x  CPC_STATUS=%#x  "
          "MEC1 instr %#x->%#x  MEC2 instr %#x->%#x", before,
          fbRead(asicInfo, kGcCpMecCntl), fbRead(asicInfo, kGcCpcStatus),
@@ -2425,9 +2533,8 @@ static void loadHqdFromMqd(uint64_t mqdVa) {
     uint64_t off = mqdVa - fbBase;
     auto d = [fb, off](uint32_t f) { return fb[(off + f) / 4]; };
 
+    // Deliberately not halting the MECs here either -- see wrapGcCgsWrite2.
     uint32_t mecBefore = fbRead(asicInfo, kGcCpMecCntl);
-    fbWrite(asicInfo, kGcCpMecCntl, (1u << 30) | (1u << 28));
-    IODelay(50);
     fbWrite(asicInfo, kGcGrbmGfxCntl, kKiqSelector);
 
     struct { uint32_t reg; uint32_t mqd; const char *name; } fields[] {
@@ -2469,8 +2576,6 @@ static void loadHqdFromMqd(uint64_t mqdVa) {
     // goes on reading this queue afterwards. Resetting it to 0 mid-sequence pointed every
     // later read at me0/pipe0/queue0, an empty HQD, which made a whole run's worth of
     // measurements read as zeroes.
-    fbWrite(asicInfo, kGcCpMecCntl, 0);
-    IODelay(50);
     RLOG("XN: HQD loaded from MQD; refused: %s", n ? bad : "(none)");
     RLOG("XN: after load: active=%u eop=%#x_%08x eop_ctl=%#x pq_control=%#x persistent=%#x "
          "CP_MEC_CNTL %#x->%#x", fbRead(asicInfo, kGcHqdActive) & 1,
