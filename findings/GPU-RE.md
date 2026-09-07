@@ -2574,6 +2574,86 @@ The watchdog now captures the container id and exits harmlessly if another run o
 Note when clearing strays: killing the `sleep` alone makes the parent subshell fall straight
 through to `docker rm -f`, so the parent must be killed first.
 
+### The page-table base was not an MC address, and the CP was never hardware-locked
+
+The single most useful measurement in this project, and it retires a theory several sections
+above rest on.
+
+`XJ: before RLC start` had been printing `VM_FAULT_STATUS=0xd33 addr=0_0f40fdfc` all along.
+Decoded, that is a GPU page fault at `0xf40fdfc000` -- and `0x0fdfc000` is where the GART page
+table lives. The GPU was faulting trying to read its own page directory.
+
+Three addresses exist for that one page, and the driver uses the wrong two:
+
+    AMDHWMemory base     (+0x50) = 0xf400000000    the guest BAR0 address
+    AMDHWMemory reserved (+0x58) = 0xebc0000000
+    base - reserved              = 0x840000000     == GFXHUB FB_LOCATION_BASE, exactly
+
+    base + off      = 0xf40fdfc000   BAR-relative     <- what faulted
+    reserved + off  = 0xebcfdfc000   what was in CTX0 PAGE_TABLE_BASE
+    (base-reserved) + off = 0x84fdfc000   the real MC address, inside the aperture
+
+`reserved` is the correction term that turns a BAR-relative address into an MC address. On a
+discrete GPU `FB_OFFSET` is 0, `base == reserved == 0`, and all three collapse to the same
+number -- which is exactly why nothing upstream has ever tripped over this. On this APU they
+diverge by `0xebc0000000`.
+
+Both hubs, measured, because they disagree:
+
+    GFXHUB  base=0x840 top=0x85f offset=0x840     the hub the CP and GART actually use
+    MMHUB   base=0x100 top=0     offset=0         unconfigured
+    GPUCAP  FB Base 0x840000000                   Apple's own view agrees with GFXHUB
+
+**The first version of this fix was wrong and the guard caught it.** The initial theory was
+"the register is short by FB_OFFSET, add it back". Report-only mode printed the arithmetic and
+refused: `addr + FB_OFFSET` lands *outside* the aperture. The correct derivation needs
+`reserved` from AMDHWMemory, and the repair now cross-checks that `base - reserved` equals the
+GFXHUB framebuffer base before it writes anything. Boot-arg `rgpuptb=1`; `rgpuptb=0` reports
+only.
+
+Applied, measured, and it holds:
+
+    XT: fillVMRegisters: base-reserved=0x840000000 (matches GFXHUB base: 1)
+    XT: fillVMRegisters: VRAM offset=0xfdfc000 -> correct MC=0x84fdfc000
+                         addr outside=1 want inside=1
+    XT: fillVMRegisters: rewrote CTX0 ptb 0xebcfdfc001 -> 0x84fdfc001, reads back OK
+    XT: programAndInvalidateVM: not reserved-relative, leaving it alone   (x5, guard holding)
+    XM: post-TTL: CTX0 ptb=0x8_4fdfc001                                  (repair persists)
+
+**What this retires.** "Why the command processor never executes" and everything built on the
+`CP_CPC_IC_BASE*` lock can now be read differently. Those registers are genuinely read-only to
+the guest -- that measurement stands, with positive controls -- but they were never the
+obstacle. The PSP had configured microcode fetch correctly all along. The engines parked at
+`MEC1=0x44a` / `MEC2=0x44c` because a page table the GPU could not address meant nothing
+reachable existed to fetch.
+
+### But the driver never submits, so the CP is not the current blocker either
+
+With the page table repaired and the fault cleared, the accelerator's counters are unchanged:
+
+    HWChannel GFX | Commands Submitted = 0, Completed = 0     (KIQ, SDMA0, SDMA1 likewise)
+    vramFreeBytes = 268435456   inUseVidMemoryBytes = 0
+    Device Utilization % = 0    recoveryCount = 0
+
+`Commands Submitted` is a *software* counter incremented by the driver on submission. Zero
+means the driver never dispatches anything, which is upstream of the hardware entirely. So
+`wptr=8, rptr=0` on the me2 queues is leftover queue-setup state from KIQ initialisation, not
+client work waiting to be consumed -- an important re-reading of a number that looked like
+evidence of a stalled fetch.
+
+That returns the blocker to the powerUp chain. `AMDHardware::startHWEngines` is routed and
+never logs an entry, so the hardware channels are never started and `submitCommandBuffer` is
+never reached. The chain remains:
+
+    ttlPowerUp fails (0xe00002c7, milestone xi only *reports* success)
+      -> accelPowerUpHW / hardwarePowerUp / powerUpHWEngines / startHWEngines never run
+      -> channels never started
+      -> no submissions, on any channel, ever
+
+`rgpuvmm=3` and `rgpumem=2` grafted around two of the consequences (the DMA paging channel and
+the empty VRAM heap) and both worked, which is what made the page-table bug visible at all.
+Neither addresses the cause.
+
 ### A hypothesis this raises about the hangs themselves
 
 Not established, and recorded as a hypothesis rather than a finding, but it fits better than
