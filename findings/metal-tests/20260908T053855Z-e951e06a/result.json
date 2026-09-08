@@ -1,0 +1,8 @@
+{
+  "run_id": "e951e06ae2b7496e960564671b691490",
+  "source_sha256": "f0fc0ced81fe70732c3491cff1557a83d85c9ccb8c18a6303f9070ae1f969d77",
+  "prepare_only": false,
+  "passed": false,
+  "guest_binary": "/var/tmp/rgpu-metal-f0fc0ced81fe7073/probe",
+  "error": "probe did not exit successfully (gx exit status is insufficient)"
+}

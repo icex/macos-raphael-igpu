@@ -932,6 +932,8 @@ static uint32_t bufPrepCount = 0;
 static const uint32_t *prevCmdBuf = nullptr;
 static uint32_t prevWireCmd = 0;
 static uint32_t prevWireType = 0;
+static uint64_t prevRequestAddr = 0;
+static uint32_t prevRequestSize = 0;
 
 // Transcribe every PSP GPCOM command. psp_cmd_km_buf_prep is the single point where Apple
 // marshals its internal command descriptor into a psp_gfx_cmd_resp:
@@ -955,10 +957,19 @@ static uint32_t wrapPspBufPrep(void *psp, void *desc, uint32_t *slot) {
         const uint32_t *b = (buf != nullptr) ? *reinterpret_cast<const uint32_t *const *>(buf) : nullptr;
         if (b != nullptr) {
             if (prevCmdBuf != nullptr) {
-                uint32_t st = prevCmdBuf[216];           // psp_gfx_resp.status at +864
-                RLOG("   resp cmd_id=%-3u wireType=%-3u status=0x%08x tmr_size=0x%x%s",
-                     prevWireCmd, prevWireType, st, prevCmdBuf[220],
-                     st == 0 ? "" : "   <-- FAILED");
+                // psp_gfx_resp is at +864: status, session, fw_addr_lo, fw_addr_hi, tmr_size.
+                // Linux retains fw_addr for each successful LOAD_IP_FW as the firmware's
+                // address inside TMR. Record it with the submitted source address/size; this
+                // is placement evidence only and never dereferences protected TMR memory.
+                const uint32_t st = prevCmdBuf[216];
+                const uint64_t fwAddr = (static_cast<uint64_t>(prevCmdBuf[219]) << 32) |
+                                        prevCmdBuf[218];
+                RLOG("   resp cmd_id=%-3u wireType=%-3u status=0x%08x fw=0x%08x%08x "
+                     "tmr_size=0x%x%s", prevWireCmd, prevWireType, st, prevCmdBuf[219],
+                     prevCmdBuf[218], prevCmdBuf[220], st == 0 ? "" : "   <-- FAILED");
+                if (prevWireCmd == 6)
+                    RLOG("   LOAD_IP_FW type=%-3u source=0x%llx/0x%x -> tmr=0x%llx",
+                         prevWireType, prevRequestAddr, prevRequestSize, fwAddr);
             }
             // Log addr/size for EVERY command, not just LOAD_IP_FW: LOAD_TOC (32) and
             // SETUP_TMR (5) carry them in the same places (+0x1c/+0x20 addr, +0x24 size),
@@ -968,6 +979,8 @@ static uint32_t wrapPspBufPrep(void *psp, void *desc, uint32_t *slot) {
                  bufPrepCount, wireCmd, dw[0], wireCmd == 6 ? b[10] : 0,
                  b[8], b[7], b[9]);
             prevWireType = (wireCmd == 6) ? b[10] : 0;
+            prevRequestAddr = (static_cast<uint64_t>(b[8]) << 32) | b[7];
+            prevRequestSize = b[9];
             prevCmdBuf = b;
             prevWireCmd = wireCmd;
             bufPrepCount++;

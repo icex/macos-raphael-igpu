@@ -3046,3 +3046,36 @@ If the failure stops the CPUs or wedges the fabric outright this changes nothing
 real possibility given the signature. But the hard-lockup detector fires from a performance
 counter NMI, which reaches a CPU spinning with interrupts disabled -- the case that is
 invisible today and the most useful thing left to learn.
+
+### 2026-09-08: PSP placement is verified and KIQ executes
+
+The PSP response structure settles the firmware-address question.  `psp_gfx_resp.fw_addr`
+is populated for every successful `LOAD_IP_FW`; Linux retains that value as the firmware's
+TMR address.  The added trace records the submitted source and returned destination without
+reading protected TMR memory.  In the first clean run:
+
+```
+LOAD_IP_FW type=4 source=0xf40fc00000/0x414b0 -> tmr=0xf41f904000
+IC bases CPC=0x8_5f904000  PFP=0x8_5f87c000  ME=0x8_5f8c0000
+```
+
+Those instruction-cache values are the same TMR placement expressed through the active
+GFXHUB mapping.  They are not retained host-amdgpu addresses.  All firmware loads reported
+status zero and nonzero destinations where applicable.  Replacing MEC firmware is therefore
+not justified by the evidence.
+
+The same run finally proves that the command processor and KIQ execute.  Each native setup
+frame advances the selected KIQ read pointer to its write pointer (`0x20`, `0x40`, `0x60`),
+with no GFXHUB VM fault; `waitForHwStamp` succeeds.  The previous claim that MEC never
+executed is withdrawn.  Metal still fails on its first command buffer (`MTLCommandBuffer`
+status 5, internal error `e00002bd`), so Metal enumeration remains insufficient evidence of
+acceleration.
+
+There is a reproducibility constraint for subsequent runs.  QEMU termination leaves the KIQ
+HQD live.  A later guest may see an active, non-idle queue such as `RPTR=0x86, WPTR=0xa0`; its
+native dequeue remains asserted after the upstream 50-ms timeout.  The plugin deliberately
+refuses to overwrite that descriptor.  Linux tears queues down by submitting a
+`PACKET3_UNMAP_QUEUES` packet through a working KIQ, rather than by forcibly clearing an HQD.
+The next implementation step is a guest-side graceful driver teardown that performs this
+native queue unmap before QEMU exits.  Do not substitute a host reset or direct HQD clear:
+both would discard the only working recovery protocol and reintroduce host-hang risk.
