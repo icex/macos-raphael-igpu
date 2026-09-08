@@ -17,6 +17,7 @@ import time
 import shlex
 import signal
 import gzip
+import threading
 
 ROOT = Path(__file__).resolve().parents[1]
 BOOT_GUID = '7C436110-AB2A-4BBB-A880-FE41995C9F82'
@@ -84,7 +85,9 @@ IDENTITY_FIELDS = ('source_commit', 'source_sha256', 'build_id', 'binary_sha256'
 
 
 def required_identity(data):
-    return [key for key in IDENTITY_FIELDS if not data.get(key)]
+    missing = [key for key in IDENTITY_FIELDS if not data.get(key)]
+    if type(data.get('gpu')) is not bool: missing.append('gpu')
+    return missing
 
 
 def current_identity(vm, candidate):
@@ -329,6 +332,37 @@ def kernel_updates(cursor=None):
     return marker[1], messages, faults
 
 
+class HostMonitor:
+    """Keep journal capture live across blocking startup, probe, and shutdown."""
+    def __init__(self, cursor, interrupt, interval=1):
+        self.cursor = cursor; self.interrupt = interrupt; self.interval = interval
+        self.messages = []; self.error = None
+        self.done = threading.Event()
+        self.thread = threading.Thread(target=self.watch, name='rgpu-host-monitor')
+
+    def poll(self):
+        try:
+            self.cursor, messages, faults = kernel_updates(self.cursor)
+            self.messages.extend(messages)
+            if faults: self.error = 'new host kernel fault during exposure'
+        except Exception as error:
+            self.error = 'host kernel capture failed: '+str(error)
+
+    def watch(self):
+        while not self.done.wait(self.interval):
+            self.poll()
+            if self.error:
+                self.interrupt()
+                return
+
+    def start(self): self.thread.start()
+
+    def stop(self):
+        self.done.set()
+        self.thread.join()  # kernel_updates itself is bounded to two seconds.
+        self.poll()  # Include faults emitted during cleanup before any verdict.
+
+
 def run_probe(vm, manifest):
     metal = helper('metal-test')
     nonce = manifest['run_id']
@@ -354,10 +388,13 @@ def run_one(vm, manifest_path, output):
         raise ValueError('actual bootdisk content has not been verified')
     supervisor = helper('vm-supervision'); classifier = helper('classify-run')
     state = None; probe = None; failure = None; shutdown_result = None; host_messages = []
+    monitor = None
     output.mkdir(parents=True, exist_ok=False)
     write_once(output/'manifest.json', manifest)
     def cancelled(signum, frame): raise RuntimeError('experiment cancelled')
+    def host_fault(signum, frame): raise RuntimeError(monitor.error or 'host monitor aborted exposure')
     previous = signal.signal(signal.SIGTERM, cancelled)
+    previous_fault = signal.signal(signal.SIGUSR1, host_fault)
     try:
         with (vm/'run/experiment.lock').open('a') as owner:
             fcntl.flock(owner, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -378,6 +415,8 @@ def run_one(vm, manifest_path, output):
                 if manifest.get('gpu') is not False:
                     reserve_boot(used, host['boot_id'], manifest['run_id'])
                 cursor, _, _ = kernel_updates()
+                monitor = HostMonitor(cursor, lambda:os.kill(os.getpid(), signal.SIGUSR1))
+                monitor.start()
                 (vm/'run/serial.log').write_text('')
                 launch_requested = time.time()
                 # Lock already held. start_locked creates its durable reservation
@@ -400,14 +439,9 @@ def run_one(vm, manifest_path, output):
             if errors: raise ValueError('running identity mismatch: '+','.join(errors))
             end = min(state['launch_deadline_epoch'], state['deadline_epoch'])-25
             decisive_since = None
-            next_host_check = 0
             while time.time() < end:
                 supervisor.verify(state)
-                if time.time() >= next_host_check:
-                    cursor, messages, faults = kernel_updates(cursor)
-                    host_messages.extend(messages)
-                    if faults: raise RuntimeError('new host kernel fault during exposure')
-                    next_host_check = time.time()+3
+                if monitor.error: raise RuntimeError(monitor.error)
                 serial = (vm/'run/serial.log').read_text(errors='replace')
                 events = classifier.parse_serial(serial)
                 if any(e['kind'] == 'capture_loss' and e.get('reason') in
@@ -429,6 +463,7 @@ def run_one(vm, manifest_path, output):
                 time.sleep(0.5)
             shutdown_result = supervisor.shutdown(state, grace=20)
     except BaseException as error:
+        signal.signal(signal.SIGUSR1, lambda signum, frame:None)
         failure = type(error).__name__+': '+str(error)
         if isinstance(error, getattr(supervisor, 'ManagedStopUnconfirmed', type(None))):
             shutdown_result = dict(outcome='STOP_UNCONFIRMED', error=str(error))
@@ -439,6 +474,13 @@ def run_one(vm, manifest_path, output):
             except Exception as stop_error:
                 shutdown_result = dict(cid=state['cid'], outcome='STOP_UNCONFIRMED', error=str(stop_error))
     finally:
+        # Once cleanup is underway, retain faults without interrupting cleanup.
+        signal.signal(signal.SIGUSR1, lambda signum, frame:None)
+        if monitor:
+            monitor.stop()
+            host_messages = monitor.messages
+            if monitor.error: failure = monitor.error
+        signal.signal(signal.SIGUSR1, previous_fault)
         signal.signal(signal.SIGTERM, previous)
     serial = (vm/'run/serial.log').read_text(errors='replace') if state else ''
     (output/'serial.txt').write_text(serial)
@@ -469,6 +511,8 @@ if __name__ == '__main__':
     parser.add_argument('--output', type=Path)
     parser.add_argument('--gpu-less', action='store_true', help='prepare a no-passthrough coordinator validation')
     args = parser.parse_args()
+    if args.gpu_less and args.action != 'prepare':
+        parser.error('--gpu-less is only valid with prepare; run uses the explicit prepared mode')
     if args.action == 'host': result = host_snapshot()
     elif args.action == 'prepare':
         if not args.spec or not args.output: parser.error('prepare requires --spec and --output')

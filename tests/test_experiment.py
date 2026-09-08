@@ -6,6 +6,7 @@ import unittest
 import subprocess
 import plistlib
 import hashlib
+import threading
 from unittest.mock import patch
 from types import SimpleNamespace
 
@@ -38,6 +39,32 @@ class ExperimentTests(unittest.TestCase):
         for key in ('source_commit', 'kdk_sha256', 'binary_sha256', 'info_sha256',
                     'config_sha256', 'boot_args', 'image_id', 'probe_binary_sha256'):
             self.assertIn(key, missing)
+
+    def test_manifest_mode_must_be_explicit_boolean(self):
+        check = self.module().required_identity
+        for value in (None, 'false', 0, 1):
+            self.assertIn('gpu', check({'gpu': value}))
+        for value in (False, True):
+            self.assertNotIn('gpu', check({'gpu': value}))
+
+    def test_run_rejects_prepare_only_gpu_less_flag(self):
+        result = subprocess.run(['python3', str(ROOT/'tools/experiment.py'), 'run',
+                                 '--vm-dir', '/nonexistent', '--gpu-less'],
+                                text=True, capture_output=True)
+        self.assertIn('--gpu-less is only valid with prepare', result.stderr)
+
+    def test_host_monitor_detects_fault_while_main_thread_is_blocked(self):
+        tool = self.module()
+        monitor_type = getattr(tool, 'HostMonitor', None)
+        self.assertIsNotNone(monitor_type, 'continuous exposure monitor missing')
+        interrupted = threading.Event()
+        with patch.object(tool, 'kernel_updates', return_value=('next', ['Hardware Error'], ['Hardware Error'])):
+            monitor = monitor_type('cursor', interrupted.set, interval=0.01)
+            monitor.start()
+            try: self.assertTrue(interrupted.wait(2), 'blocking operation suppressed host fault detection')
+            finally: monitor.stop()
+            self.assertTrue(monitor.error)
+            self.assertIn('Hardware Error', monitor.messages)
 
     def test_failed_amdgpu_probe_is_not_completed_initialization(self):
         check = getattr(self.module(), 'amdgpu_initialized', None)
@@ -142,6 +169,9 @@ class ExperimentTests(unittest.TestCase):
     def test_gpueless_coordinator_does_not_open_vfio_or_consume_gpu_boot(self):
         self.exercise_run('gpu-less')
 
+    def test_kernel_fault_during_shutdown_invalidates_result(self):
+        self.exercise_run('shutdown-fault')
+
     def exercise_run(self, mode):
         tool = self.module()
         self.assertTrue(hasattr(tool, 'run_one'))
@@ -149,7 +179,7 @@ class ExperimentTests(unittest.TestCase):
             vm = Path(temp); (vm/'run').mkdir()
             manifest = {key:'fixture' for key in tool.IDENTITY_FIELDS}
             manifest.update(build_id='abc', run_id='a'*32, max_seconds=180, boot_id='boot-A',
-                            bootdisk_verified=True,
+                            bootdisk_verified=True, gpu=True,
                             spec={'run_probe_only_after_native_start': True},
                             launch_options={'BOOTDISK_MODE':'custom', 'NVRAM':'stock'},
                             source_clean=True, vfio_device='0000:7b:00.0',
@@ -176,7 +206,11 @@ class ExperimentTests(unittest.TestCase):
             def verify(state):
                 if mode == 'cancel': raise KeyboardInterrupt()
             def shutdown(state, grace):
+                if mode == 'shutdown-fault': calls.append('host-fault')
                 calls.append(('shutdown',state['cid'])); return dict(cid=state['cid'],outcome='forced')
+            def kernel(cursor=None):
+                faults = ['Hardware Error'] if 'host-fault' in calls else []
+                return 'cursor', faults, faults
             supervisor = SimpleNamespace(start_locked=start, verify=verify, shutdown=shutdown,
                 ManagedStopUnconfirmed=StopUnconfirmed,
                 stop_exact=lambda cid:calls.append(('stop',cid)))
@@ -190,7 +224,7 @@ class ExperimentTests(unittest.TestCase):
                  patch.object(tool, 'host_snapshot', return_value=host), \
                  patch.object(tool, 'helper', side_effect=helpers), \
                  patch.object(tool, 'running_identity', return_value=actual), \
-                 patch.object(tool, 'kernel_updates', return_value=('cursor', [], [])), \
+                 patch.object(tool, 'kernel_updates', side_effect=kernel), \
                  patch.object(tool.time, 'time', side_effect=lambda:now[0]), \
                  patch.object(tool.time, 'sleep', side_effect=lambda n:now.__setitem__(0,now[0]+n)):
                 out = vm/'evidence'
@@ -205,6 +239,9 @@ class ExperimentTests(unittest.TestCase):
                     return
                 elif mode == 'unconfirmed':
                     self.assertEqual(result['verdict'], 'STOP_UNCONFIRMED')
+                elif mode == 'shutdown-fault':
+                    self.assertEqual(result['verdict'], 'INVALID')
+                    self.assertIn('host kernel fault', result['error'])
                 else:
                     self.assertEqual(result['verdict'], 'INVALID')
                     self.assertIn(('stop','c'*64), calls)
