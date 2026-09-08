@@ -38,7 +38,13 @@ if command == "docker":
             state["created_reads"] -= 1
             (root / "fixture.json").write_text(json.dumps(state))
         print(json.dumps(obj))
-    elif args[0] in ("rename", "cp", "exec"):
+    elif args[0] == "exec":
+        if state.get("shutdown_error"):
+            sys.exit(1)
+        if state.get("shutdown_stops"):
+            state["running"] = False
+            (root / "fixture.json").write_text(json.dumps(state))
+    elif args[0] in ("rename", "cp"):
         pass
     elif args[0] in ("stop", "kill"):
         if failure == "stop" or (failure == "absent" and not state.get("running", True)):
@@ -149,6 +155,53 @@ class SupervisionTests(unittest.TestCase):
                             for cmd, args in self.calls()))
         self.assertTrue(any(cmd == "systemctl" and state["serial_unit"] in args
                             for cmd, args in self.calls()))
+
+    def shutdown(self, grace="1"):
+        armed = self.arm()
+        self.assertEqual(armed.returncode, 0, armed.stderr)
+        state_file = self.vm / "run/supervision.json"
+        state_file.write_text(armed.stdout)
+        return self.run_tool("shutdown", "--state", str(state_file), "--grace-seconds", grace)
+
+    def test_shutdown_observes_guest_exit_without_changing_deadline(self):
+        self.fixture["shutdown_stops"] = True
+        self.save()
+        result = self.shutdown()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["outcome"], "exited-after-request")
+        self.assertFalse(self.stopped())
+        requests = [args for cmd, args in self.calls() if cmd == "docker" and args[0] == "exec"]
+        self.assertEqual(requests[0][1], CID)
+        self.assertFalse(any(cmd == "systemctl" and "stop" in args for cmd, args in self.calls()))
+        timers = [args for cmd, args in self.calls() if cmd == "systemd-run"
+                  and any(a.startswith("--on-calendar=") for a in args)]
+        self.assertEqual(len(timers), 1)
+
+    def test_shutdown_forces_exact_target_if_guest_ignores_request(self):
+        result = self.shutdown()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["outcome"], "forced")
+        self.assertEqual(self.stopped(), [CID])
+
+    def test_shutdown_transport_failure_forces_exact_target(self):
+        self.fixture["shutdown_error"] = True
+        self.save()
+        result = self.shutdown()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["outcome"], "forced")
+        self.assertEqual(self.stopped(), [CID])
+
+    def test_shutdown_refuses_restarted_container_without_request_or_stop(self):
+        armed = self.arm()
+        state_file = self.vm / "run/supervision.json"
+        state_file.write_text(armed.stdout)
+        self.fixture = json.loads((self.vm / "fixture.json").read_text())
+        self.fixture["started"] = (self.started + timedelta(seconds=1)).isoformat()
+        self.save()
+        result = self.run_tool("shutdown", "--state", str(state_file))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(self.stopped())
+        self.assertFalse(any(cmd == "docker" and args[0] == "exec" for cmd, args in self.calls()))
 
     def test_elapsed_cap_stops_without_starting_a_fresh_timer(self):
         self.fixture["started"] = (self.started - timedelta(seconds=300)).isoformat()

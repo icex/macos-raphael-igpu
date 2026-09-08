@@ -3050,7 +3050,7 @@ invisible today and the most useful thing left to learn.
 ### 2026-09-08: PSP placement is verified and KIQ executes
 
 The PSP response structure settles the firmware-address question.  `psp_gfx_resp.fw_addr`
-is populated for every successful `LOAD_IP_FW`; Linux retains that value as the firmware's
+is populated for the recorded CP `LOAD_IP_FW` responses; Linux retains that value as the firmware's
 TMR address.  The added trace records the submitted source and returned destination without
 reading protected TMR memory.  In the first clean run:
 
@@ -3061,8 +3061,9 @@ IC bases CPC=0x8_5f904000  PFP=0x8_5f87c000  ME=0x8_5f8c0000
 
 Those instruction-cache values are the same TMR placement expressed through the active
 GFXHUB mapping.  They are not retained host-amdgpu addresses.  All firmware loads reported
-status zero and nonzero destinations where applicable.  Replacing MEC firmware is therefore
-not justified by the evidence.
+status zero and nonzero destinations where applicable (some firmware types return zero).
+These measurements refute the stale-host-address diagnosis; they do not establish that
+every firmware payload is compatible with later workloads.
 
 The same run finally proves that the command processor and KIQ execute.  Each native setup
 frame advances the selected KIQ read pointer to its write pointer (`0x20`, `0x40`, `0x60`),
@@ -3071,11 +3072,31 @@ executed is withdrawn.  Metal still fails on its first command buffer (`MTLComma
 status 5, internal error `e00002bd`), so Metal enumeration remains insufficient evidence of
 acceleration.
 
-There is a reproducibility constraint for subsequent runs.  QEMU termination leaves the KIQ
-HQD live.  A later guest may see an active, non-idle queue such as `RPTR=0x86, WPTR=0xa0`; its
-native dequeue remains asserted after the upstream 50-ms timeout.  The plugin deliberately
-refuses to overwrite that descriptor.  Linux tears queues down by submitting a
-`PACKET3_UNMAP_QUEUES` packet through a working KIQ, rather than by forcibly clearing an HQD.
-The next implementation step is a guest-side graceful driver teardown that performs this
-native queue unmap before QEMU exits.  Do not substitute a host reset or direct HQD clear:
-both would discard the only working recovery protocol and reintroduce host-hang risk.
+Subsequent runs encountered an active KIQ (`RPTR=0x86, WPTR=0xa0`) whose dequeue did
+not complete within 50 ms. The guard refused to overwrite the live descriptor. Graceful
+guest shutdown is a recovery hypothesis, not a demonstrated repair. Linux's use of KIQ
+UNMAP_QUEUES for other queues does not by itself establish a KIQ self-teardown protocol.
+
+### 2026-09-08: diagnostic corrections and bounded shutdown
+
+The clean 1.0.159 run reaches `TtlCreateHybridEngine` failure status 4 after successful
+KIQ setup. `AMDHardware::startHWEngines -> 0` and `powerUpHW -> 0` mean failure.
+`_TtlCreateHybridEngine` at 0x9876b returns 4 both when `_ttlIsHwAvailable` is false
+and when the selected GC/SDMA hybrid-queue creation routine fails. Status 4 alone
+cannot distinguish those paths. `_ttlIsHwAvailable` at 0xafa40 rejects any set bit
+in `dev+0xb0 & 7`; bit 2 is a blocking flag, not a required READY flag.
+
+Experimental builds 1.0.160/161 placed HWLibs offsets for hybrid-engine diagnostics
+in the X6000 route table, adding the wrong binary base. A successful route operation
+did not prove the intended function was hooked. Missing diagnostics from those runs
+cannot establish callback caching or log loss. Those hooks were removed in the retained
+1.0.159 source. Raw runs remain archived but are excluded from causal conclusions.
+The existing offset/prologue preflight does not check route-table binary ownership.
+
+The supervisor now requests ACPI `system_powerdown` through the exact container's QEMU
+monitor, checks the peer process inside that container's PID namespace, and observes
+exit for a bounded grace interval. The original hard deadline remains armed, and a
+nonresponsive guest is force-stopped at the end of the interval. A saved container
+identity with a different StartedAt is refused. Automatic bounded runs attempt shutdown
+30 seconds before the original container deadline. Container exit after an ACPI request
+is recorded as such; it is not proof of native queue unmapping or host safety.

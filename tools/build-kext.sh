@@ -12,7 +12,7 @@ BUILD="${BUILD:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 SRC="$1"; NAME="$2"; BUNDLE="$3"; VER="${4:-1.0.0}"
 SDK="$BUILD/MacKernelSDK-master"
 LRES="$BUILD/liludbg/Lilu.kext/Contents/Resources"
-LD="$BUILD/cctools-inst/bin/x86_64-apple-darwin-ld"
+LD="${KEXT_LD:-$BUILD/cctools-inst/bin/x86_64-apple-darwin-ld}"
 OUT="$BUILD/out/$NAME"
 rm -rf "$OUT"; mkdir -p "$OUT/obj" "$OUT/$NAME.kext/Contents/MacOS"
 
@@ -52,7 +52,7 @@ for f in "$SRC"/*.cpp; do
 done
 
 "$LD" -arch x86_64 -kext -static -o "$OUT/$NAME.kext/Contents/MacOS/$NAME" \
-      "${OBJS[@]}" -L "$SDK/Library/x86_64" -lkmod 2>&1 | grep -v 'Frameworks' || true
+      "${OBJS[@]}" -L "$SDK/Library/x86_64" -lkmod
 
 file "$OUT/$NAME.kext/Contents/MacOS/$NAME" | grep -q 'kext bundle' \
   || { echo "FATAL: not an MH_KEXT_BUNDLE" >&2; exit 1; }
