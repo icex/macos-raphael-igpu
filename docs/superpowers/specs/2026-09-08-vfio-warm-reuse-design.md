@@ -27,7 +27,6 @@ must be proven before the next launch is admitted.
 3. PCI command bus-master enable is clear;
 4. the prior run belongs to the current host boot and is the most recent launch in the boot
    ledger;
-5. the initial three-launch-per-boot ceiling has not been reached.
 
 The utility opens the legacy VFIO container and group as the current user, attaches the group,
 gets the device file descriptor, and maps only BAR5. It unconditionally submits
@@ -46,6 +45,9 @@ A successful transaction writes an immutable JSON receipt under
 run ID, recovery ID, device/group/driver identity, PCI command values, both PSP command
 transitions, VFIO region metadata, and the kernel-capture interval. A failed transaction writes
 evidence to the requested output but never creates a reusable receipt.
+
+Cleanup still runs after the third launch so the device is left quiescent. The launch ceiling is
+an admission rule; a receipt created at the ceiling cannot authorize a fourth launch.
 
 The boot ledger at `run/used-gpu-boots/<boot-id>.json` records ordered launches. The first
 launch is admitted from the clean-boot host gates. Every later launch must atomically consume
@@ -75,4 +77,3 @@ The old `gpu-quiesce.sh` opened the root-only sysfs `resource5`, so that impleme
 sudo. VFIO already grants the experiment user controlled access to this device and its BARs.
 Using the existing VFIO ownership removes the root requirement while preserving kernel IOMMU
 ownership and isolation.
-

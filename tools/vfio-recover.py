@@ -304,8 +304,6 @@ def recover(vm, prior_run_id):
         launches = ledger.get('launches', [])
         if not launches or launches[-1].get('run_id') != prior_run_id:
             raise RecoveryError('prior run is not the latest launch on this boot')
-        if len(launches) >= MAX_LAUNCHES_PER_BOOT:
-            raise RecoveryError('three-launch safety ceiling reached for this boot')
         path = vm/'run/vfio-recovery'/boot_id/(prior_run_id+'.json')
         if path.exists():
             raise RecoveryError('an immutable recovery receipt already exists for this run')
