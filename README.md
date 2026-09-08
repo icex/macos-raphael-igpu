@@ -153,6 +153,7 @@ tools/       mkrom.py           grafts the PSP directory + vram_info onto an APU
              autorun.sh         walks the ladder unattended and classifies each verdict
              redeploy.sh        rebuild ROM, push to the ESP, restart, drain serial
              vm-supervision.py  persistent launch/capture and exact-container deadline
+             vfio-recover.py    rootless PSP-ring teardown and same-boot reuse receipt
              metal-test.py      native Metal compute and render validation through gx
              gpu-bind.sh        amdgpu -> vfio-pci, with the runtime-PM workaround
              recover-igpu.sh    recovery after the vfio runtime-PM oops

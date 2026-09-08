@@ -155,7 +155,76 @@ class ExperimentTests(unittest.TestCase):
             root = Path(temp)
             reserve(root, 'boot-A', 'first')
             with self.assertRaises(FileExistsError): reserve(root, 'boot-A', 'second')
-            self.assertEqual(json.loads((root / 'boot-A.json').read_text())['experiment'], 'first')
+            self.assertEqual(json.loads((root / 'boot-A.json').read_text())['launches'][0]['run_id'],
+                             'first')
+
+    def test_legacy_boot_reservation_accepts_one_matching_recovery_receipt(self):
+        tool = self.module()
+        with tempfile.TemporaryDirectory() as temp:
+            vm = Path(temp); used = vm/'run/used-gpu-boots'; used.mkdir(parents=True)
+            prior, current = 'a'*32, 'b'*32
+            (used/'boot-A.json').write_text(json.dumps(
+                {'boot_id':'boot-A', 'experiment':prior}))
+            receipts = vm/'run/vfio-recovery/boot-A'; receipts.mkdir(parents=True)
+            receipt = {'schema':1, 'status':'recovered', 'boot_id':'boot-A',
+                       'prior_run_id':prior, 'recovery_id':'c'*32,
+                       'device':'0000:7b:00.0', 'iommu_group':'31', 'driver':'vfio-pci',
+                       'pci_command_before':3, 'pci_command_after':3,
+                       'commands':[{'command':0x00030000, 'response':0x80030000,
+                                    'confirmed':True},
+                                   {'command':0x000c0000, 'response':0x800c0000,
+                                    'confirmed':True}]}
+            (receipts/(prior+'.json')).write_text(json.dumps(receipt))
+            authorization, errors = tool.reuse_authorization(vm, 'boot-A', current)
+            self.assertEqual(errors, [])
+            self.assertEqual(authorization['recovery_id'], 'c'*32)
+            tool.reserve_boot(used, 'boot-A', current, authorization)
+            ledger = json.loads((used/'boot-A.json').read_text())
+            self.assertEqual([row['run_id'] for row in ledger['launches']], [prior, current])
+            self.assertEqual(ledger['launches'][1]['recovery_id'], 'c'*32)
+            replay, replay_errors = tool.reuse_authorization(vm, 'boot-A', 'd'*32)
+            self.assertIsNone(replay)
+            self.assertIn('recovery_receipt', replay_errors)
+
+    def test_reuse_requires_latest_predecessor_and_stops_at_three_launches(self):
+        tool = self.module()
+        with tempfile.TemporaryDirectory() as temp:
+            vm = Path(temp); used = vm/'run/used-gpu-boots'; used.mkdir(parents=True)
+            runs = ['a'*32, 'b'*32, 'c'*32]
+            ledger = {'schema':2, 'boot_id':'boot-A', 'max_launches':3,
+                      'launches':[{'run_id':runs[0]},
+                                  {'run_id':runs[1], 'recovery_id':'1'*32},
+                                  {'run_id':runs[2], 'recovery_id':'2'*32}]}
+            (used/'boot-A.json').write_text(json.dumps(ledger))
+            receipt_dir = vm/'run/vfio-recovery/boot-A'; receipt_dir.mkdir(parents=True)
+            wrong = {'schema':1, 'status':'recovered', 'boot_id':'boot-A',
+                     'prior_run_id':runs[0], 'recovery_id':'3'*32,
+                     'device':'0000:7b:00.0', 'iommu_group':'31', 'driver':'vfio-pci',
+                     'pci_command_before':3, 'pci_command_after':3,
+                     'commands':[{'command':0x00030000, 'response':0x80030000,
+                                  'confirmed':True},
+                                 {'command':0x000c0000, 'response':0x800c0000,
+                                  'confirmed':True}]}
+            (receipt_dir/(runs[2]+'.json')).write_text(json.dumps(wrong))
+            authorization, errors = tool.reuse_authorization(vm, 'boot-A', 'd'*32)
+            self.assertIsNone(authorization)
+            self.assertIn('launch_ceiling', errors)
+
+    def test_recovery_receipt_validation_fails_closed(self):
+        tool = self.module()
+        good = {'schema':1, 'status':'recovered', 'boot_id':'boot-A',
+                'prior_run_id':'a'*32, 'recovery_id':'b'*32,
+                'device':'0000:7b:00.0', 'iommu_group':'31', 'driver':'vfio-pci',
+                'pci_command_before':3, 'pci_command_after':3,
+                'commands':[{'command':0x00030000, 'response':0x80030000,
+                             'confirmed':True},
+                            {'command':0x000c0000, 'response':0x800c0000,
+                             'confirmed':True}]}
+        self.assertEqual(tool.validate_recovery_receipt(good, 'boot-A', 'a'*32), [])
+        for key, value in [('status','failed'), ('prior_run_id','c'*32),
+                           ('pci_command_after',7), ('commands',[{'confirmed':True}])]:
+            self.assertIn('recovery_receipt', tool.validate_recovery_receipt(
+                dict(good, **{key:value}), 'boot-A', 'a'*32))
 
     def test_remaining_budget_uses_earlier_launch_cap(self):
         eligible = self.module().probe_fits
@@ -272,10 +341,25 @@ class ExperimentTests(unittest.TestCase):
                 ManagedStopUnconfirmed=StopUnconfirmed,
                 stop_exact=lambda cid:calls.append(('stop',cid)))
             guest_shutdown = SimpleNamespace(shutdown=shutdown)
+            def recover(vm_path, prior):
+                calls.append(('recover', prior))
+                receipt = {'schema':1, 'status':'recovered', 'boot_id':'boot-A',
+                           'prior_run_id':prior, 'recovery_id':'f'*32,
+                           'device':'0000:7b:00.0', 'iommu_group':'31', 'driver':'vfio-pci',
+                           'pci_command_before':3, 'pci_command_after':3,
+                           'commands':[{'command':0x00030000, 'response':0x80030000,
+                                        'confirmed':True},
+                                       {'command':0x000c0000, 'response':0x800c0000,
+                                        'confirmed':True}]}
+                target = vm_path/'run/vfio-recovery/boot-A'; target.mkdir(parents=True, exist_ok=True)
+                (target/(prior+'.json')).write_text(json.dumps(receipt))
+                return receipt
+            recovery = SimpleNamespace(recover=recover)
             original_helper = tool.helper
             def helpers(name):
                 if name == 'vm-supervision': return supervisor
                 if name == 'guest-shutdown': return guest_shutdown
+                if name == 'vfio-recover': return recovery
                 return original_helper(name)
             actual = dict(image_id='wrong' if mode == 'wrong-image' else 'sha256:expected',
                           vfio_args=['vfio-pci,host=0000:7b:00.0'])
@@ -302,9 +386,14 @@ class ExperimentTests(unittest.TestCase):
                 elif mode == 'shutdown-fault':
                     self.assertEqual(result['verdict'], 'INVALID')
                     self.assertIn('host kernel fault', result['error'])
+                    self.assertNotIn(('recover', 'a'*32), calls)
                 else:
                     self.assertEqual(result['verdict'], 'INVALID')
                     self.assertIn(('stop','c'*64), calls)
+                if mode == 'unconfirmed':
+                    self.assertNotIn(('recover', 'a'*32), calls)
+                elif mode != 'shutdown-fault':
+                    self.assertIn(('recover', 'a'*32), calls)
                 if mode == 'capture-loss': self.assertLess(now[0], 110)
                 self.assertTrue((out/'verdict.json').exists())
                 self.assertTrue((vm/'run/used-gpu-boots/boot-A.json').exists())
