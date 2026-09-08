@@ -134,6 +134,83 @@ def verify(state, require_ready=True):
         raise RuntimeError("exposure deadline elapsed during verification")
 
 
+# Execute inside the identified container's PID namespace. The socket lives in a
+# shared bind mount, so verify its peer is a QEMU process visible in THIS namespace
+# before writing. A socket replaced by another container has no visible peer PID.
+POWERDOWN = r"""
+import os, socket, struct, time
+with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+    sock.settimeout(2)
+    sock.connect('/run/vm/monitor.sock')
+    pid, uid, gid = struct.unpack('3i', sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
+    if pid <= 0 or not os.path.basename(os.readlink('/proc/%d/exe' % pid)).startswith('qemu-system-'):
+        raise RuntimeError('monitor peer is not QEMU in this container')
+    data = b''
+    until = time.monotonic() + 2
+    while b'(qemu)' not in data:
+        if time.monotonic() >= until or len(data) > 65536:
+            raise RuntimeError('monitor prompt unavailable')
+        chunk = sock.recv(4096)
+        if not chunk:
+            raise RuntimeError('monitor disconnected')
+        data += chunk
+    sock.sendall(b'system_powerdown\n')
+"""
+
+
+def same_start_running(state):
+    cid = full_cid(state["cid"])
+    selected = '{"Id":{{json .Id}},"StartedAt":{{json .State.StartedAt}},"Running":{{json .State.Running}}}'
+    try:
+        info = json.loads(run([binary("docker"), "inspect", "--format", selected, cid], timeout=2))
+    except RuntimeError:
+        active = run([binary("docker"), "ps", "--no-trunc", "--filter", f"id={cid}",
+                      "--format", "{{.ID}}"], timeout=2).strip()
+        if not active:
+            return False
+        raise
+    if info["Id"] != cid or info["StartedAt"] != state["started_at"]:
+        raise RuntimeError("shutdown target identity/start changed; refusing to affect the new session")
+    return info["Running"] is True
+
+
+def shutdown(state, grace=20):
+    """Request ACPI powerdown; observe exit or force-stop within the existing cap.
+
+    Exiting after the request does NOT prove that GPU queues were quiesced.
+    Never cancel/rearm the deadline or serial service while waiting. The launcher
+    owns the entire container lifetime; restarting that CID does not escape its cap.
+    The initial StartedAt check rejects stale standalone requests, but Docker has no
+    conditional stop API: do not restart a supervised container concurrently.
+    """
+    cid = full_cid(state["cid"])
+    grace = seconds(grace)
+    if not 1 <= grace <= 30:
+        raise ValueError("shutdown grace must be 1..30 seconds")
+    if not same_start_running(state):
+        return {"cid": cid, "outcome": "already-stopped"}
+    verify(state)
+    budget = min(grace, max(0, state["deadline_epoch"] - time.time() - 2)) if state["deadline_epoch"] else grace
+    until = time.monotonic() + budget
+    requested = False
+    error = None
+    if budget >= 1:
+        try:
+            run([binary("docker"), "exec", cid, "python3", "-c", POWERDOWN], timeout=min(4, budget))
+            requested = True
+        except Exception as failure:
+            error = str(failure)
+    if requested:
+        while time.monotonic() < until:
+            if not same_start_running(state):
+                return {"cid": cid, "outcome": "exited-after-request"}
+            time.sleep(min(0.2, max(0, until - time.monotonic())))
+    if same_start_running(state):
+        stop_exact(cid)
+        return {"cid": cid, "outcome": "forced", "request_sent": requested, "request_error": error}
+    return {"cid": cid, "outcome": "exited-after-request" if requested else "already-stopped"}
+
+
 def arm(vm, cid, maximum):
     started_at, started_epoch = inspect(cid)
     deadline = math.floor(started_epoch + maximum) if maximum else None
@@ -275,6 +352,15 @@ def launch(vm, name, maximum, gpu_args):
         temporary = ready.with_suffix(".tmp")
         temporary.write_text(json.dumps(state))
         temporary.replace(ready)
+        if maximum:
+            # Leave the original service cap and exact-CID deadline armed. Start
+            # ACPI shutdown early enough to allow a bounded grace interval.
+            while child.poll() is None:
+                if time.time() >= state["deadline_epoch"] - 30:
+                    result = shutdown(state)
+                    (vm / "run" / f"shutdown-{cid}.json").write_text(json.dumps(result))
+                    break
+                time.sleep(0.2)
         child.wait()
     finally:
         # Prevent an in-flight docker run from creating an uncapped container after
@@ -344,6 +430,9 @@ def main():
     create.add_argument("--vm-dir", type=Path, required=True)
     create.add_argument("--cid", required=True)
     create.add_argument("--max-seconds", required=True)
+    halt = commands.add_parser("shutdown")
+    halt.add_argument("--state", type=Path, required=True)
+    halt.add_argument("--grace-seconds", default="20")
     check = commands.add_parser("verify")
     check.add_argument("--state", type=Path, required=True)
     for verb in ("start", "launch", "cleanup"):
@@ -357,6 +446,12 @@ def main():
     args = parser.parse_args()
     cid = None
     try:
+        if args.command == "shutdown":
+            # shutdown checks the saved StartedAt before any request or force-stop.
+            # Do not use generic failure cleanup, which may target a restarted CID.
+            result = shutdown(json.loads(args.state.read_text()), args.grace_seconds)
+            print(json.dumps(result))
+            return 0
         if args.command in ("start", "launch", "cleanup"):
             if args.command == "cleanup":
                 cleanup(args.vm_dir, args.name)
