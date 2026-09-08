@@ -14,9 +14,11 @@ must be proven before the next launch is admitted.
   VFIO container node is world accessible. Mapping BAR5 through VFIO therefore needs no root.
 - QEMU/VFIO teardown disables PCI bus mastering, interrupts and DMA mappings. It cannot reset
   this function because the shared-bus reset is ineligible.
-- The persistent state known to break the next Apple PSP initialization consists of the UM/RBI
-  and GPCOM rings. Both can be destroyed through MP0 `C2PMSG_64` in BAR5. The command response
-  identifies the command and completion; mailbox value zero alone is not proof of cleanliness.
+- PSP state that breaks the next Apple initialization includes the UM/RBI and GPCOM rings. Both
+  can be destroyed through MP0 `C2PMSG_64` in BAR5. A fully started guest also leaves active
+  GC/KIQ HQDs, CP engines and SDMA state; the third same-boot launch measured those queues and
+  failed a KIQ stamp. The command response identifies PSP completion, but does not prove the GC
+  is clean.
 
 ## Recovery transaction
 
@@ -29,14 +31,18 @@ must be proven before the next launch is admitted.
    ledger;
 
 The utility opens the legacy VFIO container and group as the current user, attaches the group,
-gets the device file descriptor, and maps only BAR5. It unconditionally submits
-`DESTROY_RINGS` (`0x00030000`) followed by `DESTROY_GPCOM_RING` (`0x000c0000`). Each command
-must return the matching ready response within two seconds. It then unmaps and closes every
-VFIO object, verifies bus mastering is still disabled, and checks the kernel journal for new
-IOMMU, lockup, machine-check or PCI faults.
+gets the device file descriptor, and maps only BAR5. It follows Linux GFX10 teardown: disable
+`CP_PQ_WPTR_POLL_CNTL`, walk ME1/ME2 HQD selectors and request dequeue while the MECs still run,
+then halt graphics CP, both MECs and physical SDMA0. If a queue cannot drain after QEMU removed
+its guest DMA mappings, recovery disables its doorbell and clears `CP_HQD_ACTIVE` only after the
+MEC halt readback. It clears stale pointers and proves every selector inactive. It then submits
+`DESTROY_RINGS` (`0x00030000`) followed by `DESTROY_GPCOM_RING` (`0x000c0000`). Every register
+transition and PSP response must read back correctly before a receipt is created.
 
-No CP, SDMA, GMC, SMU or bridge register is written. The transaction never binds amdgpu,
-unbinds vfio-pci, invokes `/sys/.../reset`, removes a PCI function, or changes runtime power.
+The transaction never pulses `GRBM_SOFT_RESET`, writes GMC or SMU, binds amdgpu, unbinds
+vfio-pci, invokes `/sys/.../reset`, removes a PCI function, changes runtime power, or resets the
+shared PCI bus. It then unmaps and closes every VFIO object, verifies bus mastering is still
+disabled, and checks the kernel journal for new IOMMU, lockup, machine-check or PCI faults.
 
 ## Durable admission record
 

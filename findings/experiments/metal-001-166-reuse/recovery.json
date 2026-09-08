@@ -1,0 +1,45 @@
+{
+  "schema": 1,
+  "status": "recovered",
+  "boot_id": "851d35df-7e63-4154-b70b-5cfa044913d6",
+  "prior_run_id": "5b0cf5a6c14b427ab05449f290b3c960",
+  "device": "0000:7b:00.0",
+  "iommu_group": "31",
+  "driver": "vfio-pci",
+  "pci_command_before": 3,
+  "pci_command_after": 3,
+  "bar5": {
+    "index": 5,
+    "size": 524288,
+    "offset": 5497558138880,
+    "read": true,
+    "write": true,
+    "mmap": true
+  },
+  "commands": [
+    {
+      "label": "destroy all rings",
+      "command": 196608,
+      "before": 2147549184,
+      "response": 2147680256,
+      "polls": 7,
+      "confirmed": true
+    },
+    {
+      "label": "destroy GPCOM ring",
+      "command": 786432,
+      "before": 2147680256,
+      "response": 2148270080,
+      "polls": 1,
+      "confirmed": true
+    }
+  ],
+  "kernel_cursor_before": "s=98f6cb2295dc45898ee97031451ba7c8;i=36355;b=851d35df7e634154b70b5cfa044913d6;m=12b331401;t=65af929868e5a;x=44de1d7d28a89cce",
+  "kernel_cursor_after": "s=98f6cb2295dc45898ee97031451ba7c8;i=36357;b=851d35df7e634154b70b5cfa044913d6;m=12b332fd2;t=65af92986aa2b;x=96a73f6aae37fb4b",
+  "kernel_messages": [
+    "vfio-pci 0000:7b:00.0: resetting",
+    "vfio-pci 0000:7b:00.0: reset done"
+  ],
+  "recovery_id": "983810db8c9e4b23b854205cfc4859bb",
+  "created_epoch": 1788876050.3244996
+}

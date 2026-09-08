@@ -318,6 +318,15 @@ def validate_recovery_receipt(receipt, boot_id, prior_run_id):
     for key in ('pci_command_before', 'pci_command_after'):
         value = receipt.get(key)
         if type(value) is not int or value & 4: errors.append('recovery_receipt')
+    gc = receipt.get('gc_quiesce')
+    if (not isinstance(gc, dict) or gc.get('status') != 'quiesced' or
+            gc.get('active_after') != 0 or
+            type(gc.get('cp_me_after')) is not int or
+            gc['cp_me_after'] & 0x15000000 != 0x15000000 or
+            type(gc.get('cp_mec_after')) is not int or
+            gc['cp_mec_after'] & 0x50000000 != 0x50000000 or
+            type(gc.get('sdma0_after')) is not int or gc['sdma0_after'] & 1 != 1):
+        errors.append('recovery_receipt')
     commands = receipt.get('commands')
     if (not isinstance(commands, list) or len(commands) != 2 or
             [row.get('command') for row in commands] != [0x00030000, 0x000c0000] or
@@ -535,6 +544,7 @@ def run_one(vm, manifest_path, output):
                 monitor = HostMonitor(cursor, lambda:os.kill(os.getpid(), signal.SIGUSR1))
                 monitor.start()
                 (vm/'run/serial.log').write_text('')
+                (vm/'run/agent-server-events.jsonl').unlink(missing_ok=True)
                 launch_requested = time.time()
                 # Lock already held. start_locked creates its durable reservation
                 # before invoking systemd, and owns all cleanup on partial launch.
@@ -610,6 +620,9 @@ def run_one(vm, manifest_path, output):
                                'error':type(error).__name__+': '+str(error)}
     serial = (vm/'run/serial.log').read_text(errors='replace') if state else ''
     (output/'serial.txt').write_text(serial)
+    agent_events = vm/'run/agent-server-events.jsonl'
+    if agent_events.is_file():
+        (output/'agent-server-events.jsonl').write_bytes(agent_events.read_bytes())
     events = classifier.parse_serial(serial)
     (output/'events.jsonl').write_text(''.join(json.dumps(e)+'\n' for e in events))
     if probe is not None: write_once(output/'probe.json', probe)

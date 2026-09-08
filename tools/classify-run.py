@@ -107,9 +107,20 @@ def parse_serial(serial):
             losses.append(dict(kind='capture_loss', build=build, reason='summary precedes newer records'))
     # A complete structured snapshot is an immutable, sequenced prefix. Later direct
     # log lines have no record sequence and may race the next snapshot; do not splice
-    # their serial line numbers into that prefix. Raw records remain the early-panic
-    # fallback when no structured snapshot exists, and panics are retained separately.
-    decoded_raw = [row for row in decoded_raw if row.get('build') not in counts]
+    # their serial line numbers into that prefix. Preserve only a terminal KIQ failure
+    # which precedes a panic: it is causal ordering evidence that cannot be replayed in
+    # the next snapshot once the kernel has trapped. It remains outside the structured
+    # sequence and therefore cannot create synthetic capture gaps.
+    terminal_live = []
+    for row in decoded_raw:
+        if row.get('build') not in counts:
+            row['source'] = 'raw-fallback'
+            terminal_live.append(row)
+        elif (row['kind'] == 'kiq' and row.get('result') == 0 and
+              any(panic['seq'] > row['seq'] for panic in panics)):
+            row['source'] = 'live-terminal'
+            terminal_live.append(row)
+    decoded_raw = terminal_live
     if decoded_raw and raw_build not in counts:
         losses.append(dict(kind='capture_loss', build=raw_build, reason='live records only'))
     rows = sorted(list(records.values()) + decoded_raw + panics, key=lambda r: r['seq'])
@@ -130,6 +141,11 @@ def classify(manifest, events, probe):
     if not kinds['build'] or not kinds['route']:
         return verdict('INCONCLUSIVE', stage='identity_or_route_missing')
     panics = [r for r in events if r['kind'] == 'guest_panic']
+    terminal_kiq = [r for r in kinds['kiq'] if r.get('result') == 0 and
+                    (not panics or r['seq'] < panics[0]['seq'])]
+    if terminal_kiq:
+        return verdict('BASELINE_BLOCKED', True, 'kiq',
+                       'repair stale KIQ/HQD state and remove lock-held diagnostics before another launch')
     if panics:
         panic = panics[0]
         if 'sdma_topology' in manifest.get('spec', {}).get('required_observations', []):

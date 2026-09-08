@@ -155,6 +155,26 @@ Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0
         self.assertEqual(c.classify({'build_id':'abc'}, events, None)['verdict'],
                          'PROBE_NOT_RUN')
 
+    def test_terminal_live_kiq_failure_precedes_following_panic(self):
+        c = self.classifier()
+        serial = ''.join([
+            'RGPU_RECORDS build=abc count=6 dropped=0 truncated=0\n',
+            'RGPU_EVENT build=abc seq=0 BUILD: identity=abc\n',
+            'RGPU_EVENT build=abc seq=1 HY: HWLibs hybrid trace route=ok entries-match=1\n',
+            'RGPU_EVENT build=abc seq=2 XJ: waitForHwStamp(1) -> 1\n',
+            'RGPU_EVENT build=abc seq=3 HY: createHybridEngine enter: engine=10 available=1\n',
+            'RGPU_EVENT build=abc seq=4 HY: createHybridEngine exit: engine=10 valid=1 available-before=1 status=0\n',
+            'RGPU_EVENT build=abc seq=5 XJ: AMDHardware::startHWEngines -> 1\n',
+            'RaphaelGPU      rgpu: @ XJ:   waitForHwStamp(1) -> 0\n',
+            'Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff8004fee210, CR2: 0xffffff8004fee210\n'])
+        events = c.parse_serial(serial)
+        failure = next(row for row in events if row['kind'] == 'kiq' and row['result'] == 0)
+        self.assertEqual(failure['source'], 'live-terminal')
+        verdict = c.classify({'build_id':'abc'}, events, None)
+        self.assertTrue(verdict['valid'])
+        self.assertEqual(verdict['verdict'], 'BASELINE_BLOCKED')
+        self.assertEqual(verdict['earliest_failure'], 'kiq')
+
     def test_required_sdma_observation_cannot_silently_fall_back(self):
         c = self.classifier().classify
         manifest = {'build_id':'abc', 'spec':{'required_observations':['sdma_selection'],

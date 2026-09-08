@@ -1,0 +1,23 @@
+[
+  "docker0: port 1(vethaae03ce) entered blocking state",
+  "docker0: port 1(vethaae03ce) entered disabled state",
+  "vethaae03ce: entered allmulticast mode",
+  "vethaae03ce: entered promiscuous mode",
+  "eth0: renamed from veth77e8574",
+  "docker0: port 1(vethaae03ce) entered blocking state",
+  "docker0: port 1(vethaae03ce) entered forwarding state",
+  "[UFW BLOCK] IN=docker0 OUT= MAC= SRC=172.17.0.1 DST=224.0.0.252 LEN=59 TOS=0x00 PREC=0x00 TTL=255 ID=20912 PROTO=UDP SPT=5355 DPT=5355 LEN=39 ",
+  "[UFW BLOCK] IN=docker0 OUT= MAC= SRC=fe80:0000:0000:0000:204f:9cff:fee9:efda DST=ff02:0000:0000:0000:0000:0000:0001:0003 LEN=79 TC=0 HOPLIMIT=255 FLOWLBL=147565 PROTO=UDP SPT=5355 DPT=5355 LEN=39 ",
+  "[UFW BLOCK] IN=docker0 OUT= MAC= SRC=172.17.0.1 DST=224.0.0.252 LEN=59 TOS=0x00 PREC=0x00 TTL=255 ID=21051 PROTO=UDP SPT=5355 DPT=5355 LEN=39 ",
+  "[UFW BLOCK] IN=docker0 OUT= MAC= SRC=172.17.0.1 DST=224.0.0.252 LEN=59 TOS=0x00 PREC=0x00 TTL=255 ID=21152 PROTO=UDP SPT=5355 DPT=5355 LEN=39 ",
+  "vfio-pci 0000:7b:00.0: resetting",
+  "vfio-pci 0000:7b:00.0: reset done",
+  "[UFW BLOCK] IN=enp9s0 OUT= MAC= SRC=192.168.0.43 DST=224.0.0.252 LEN=58 TOS=0x00 PREC=0x00 TTL=255 ID=57898 PROTO=UDP SPT=5355 DPT=5355 LEN=38 ",
+  "[UFW BLOCK] IN=enp9s0 OUT= MAC= SRC=fe80:0000:0000:0000:9b1f:382e:a038:aea2 DST=ff02:0000:0000:0000:0000:0000:0000:0001 LEN=274 TC=0 HOPLIMIT=1 FLOWLBL=89971 PROTO=UDP SPT=27036 DPT=27036 LEN=234 ",
+  "docker0: port 1(vethaae03ce) entered disabled state",
+  "veth77e8574: renamed from eth0",
+  "docker0: port 1(vethaae03ce) entered disabled state",
+  "vethaae03ce (unregistering): left allmulticast mode",
+  "vethaae03ce (unregistering): left promiscuous mode",
+  "docker0: port 1(vethaae03ce) entered disabled state"
+]

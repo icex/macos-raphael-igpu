@@ -45,6 +45,25 @@ READY_MASK = 0x8000FFFF
 READY_FLAG = 0x80000000
 PCI_COMMAND_MASTER = 0x4
 
+# GC 10.3 register indices are dword addressed. These are the same offsets used
+# by Linux gfx_v10_0_hw_fini/gfx_v10_0_kiq_init_register and the measured Apple
+# queue diagnostics. No PCI, PSP, or GRBM soft reset is part of this sequence.
+GC_SEG0 = 0x1260
+GRBM_GFX_CNTL_OFFSET = (GC_SEG0 + 0x0DC2) * 4
+CP_PQ_WPTR_POLL_CNTL_OFFSET = (GC_SEG0 + 0x1E23) * 4
+CP_ME_CNTL_OFFSET = (GC_SEG0 + 0x0F56) * 4
+CP_MEC_CNTL_OFFSET = (GC_SEG0 + 0x0F55) * 4
+CP_HQD_ACTIVE_OFFSET = (GC_SEG0 + 0x1FAB) * 4
+CP_HQD_PQ_RPTR_OFFSET = (GC_SEG0 + 0x1FB3) * 4
+CP_HQD_PQ_DOORBELL_OFFSET = (GC_SEG0 + 0x1FB8) * 4
+CP_HQD_DEQUEUE_OFFSET = (GC_SEG0 + 0x1FC1) * 4
+CP_HQD_PQ_WPTR_LO_OFFSET = (GC_SEG0 + 0x1FDF) * 4
+CP_HQD_PQ_WPTR_HI_OFFSET = (GC_SEG0 + 0x1FE0) * 4
+SDMA0_F32_CNTL_OFFSET = (0x4980 + 0x002A) * 4
+CP_ME_HALT_MASK = 0x15000000  # CE_HALT | PFP_HALT | ME_HALT
+CP_MEC_HALT_MASK = 0x50000000 # MEC_ME1_HALT | MEC_ME2_HALT
+SDMA_HALT_MASK = 0x1
+
 
 class RecoveryError(RuntimeError):
     pass
@@ -249,6 +268,107 @@ def run_command(mmio, command, label, sleep=time.sleep, polls=2000):
     raise RecoveryError(f'{label} did not complete: 0x{before:08x} -> 0x{value:08x}')
 
 
+def queue_selector(me, pipe, queue):
+    if me not in (1, 2) or not 0 <= pipe < 4 or not 0 <= queue < 8:
+        raise ValueError('invalid MEC queue selector')
+    return pipe | (me << 2) | (queue << 8)
+
+
+def quiesce_gc(mmio, sleep=time.sleep, polls=50):
+    """Drain GC queues, halt command processors/SDMA, and prove no HQD is active.
+
+    Firmware dequeue gets the first chance while the MECs still run. Once QEMU has
+    removed guest DMA mappings that request may never finish, so the bounded fallback
+    follows AMD's own inactive-queue paths: halt both MECs, disable the doorbell, then
+    clear ACTIVE and stale pointers. Every transition is read back before a receipt can
+    authorize another launch.
+    """
+    if not 1 <= polls <= 1000:
+        raise ValueError('GC dequeue polls must be 1..1000')
+    active = []
+    dequeued = []
+    stuck = []
+    try:
+        poll_control = mmio.read32(CP_PQ_WPTR_POLL_CNTL_OFFSET)
+        mmio.write32(CP_PQ_WPTR_POLL_CNTL_OFFSET, poll_control & ~1)
+        if mmio.read32(CP_PQ_WPTR_POLL_CNTL_OFFSET) & 1:
+            raise RecoveryError('CP write-pointer polling would not disable')
+        for me in (1, 2):
+            for pipe in range(4):
+                for queue in range(8):
+                    selector = queue_selector(me, pipe, queue)
+                    mmio.write32(GRBM_GFX_CNTL_OFFSET, selector)
+                    if not (mmio.read32(CP_HQD_ACTIVE_OFFSET) & 1):
+                        continue
+                    row = {'me': me, 'pipe': pipe, 'queue': queue,
+                           'selector': selector}
+                    active.append(row)
+                    mmio.write32(CP_HQD_DEQUEUE_OFFSET, 1)
+                    for attempt in range(polls):
+                        if not (mmio.read32(CP_HQD_ACTIVE_OFFSET) & 1):
+                            row['polls'] = attempt
+                            dequeued.append(row)
+                            break
+                        sleep(0.001)
+                    else:
+                        row['polls'] = polls
+                        stuck.append(row)
+                    if row in dequeued:
+                        mmio.write32(CP_HQD_PQ_DOORBELL_OFFSET, 0)
+                        mmio.write32(CP_HQD_DEQUEUE_OFFSET, 0)
+
+        me_before = mmio.read32(CP_ME_CNTL_OFFSET)
+        mmio.write32(CP_ME_CNTL_OFFSET, me_before | CP_ME_HALT_MASK)
+        mec_before = mmio.read32(CP_MEC_CNTL_OFFSET)
+        mmio.write32(CP_MEC_CNTL_OFFSET, mec_before | CP_MEC_HALT_MASK)
+        sdma_before = mmio.read32(SDMA0_F32_CNTL_OFFSET)
+        mmio.write32(SDMA0_F32_CNTL_OFFSET, sdma_before | SDMA_HALT_MASK)
+        me_after = mmio.read32(CP_ME_CNTL_OFFSET)
+        mec_after = mmio.read32(CP_MEC_CNTL_OFFSET)
+        sdma_after = mmio.read32(SDMA0_F32_CNTL_OFFSET)
+        if me_after & CP_ME_HALT_MASK != CP_ME_HALT_MASK:
+            raise RecoveryError('graphics command processor would not halt')
+        if mec_after & CP_MEC_HALT_MASK != CP_MEC_HALT_MASK:
+            raise RecoveryError('compute command processors would not halt')
+        if sdma_after & SDMA_HALT_MASK != SDMA_HALT_MASK:
+            raise RecoveryError('SDMA0 would not halt')
+
+        for row in stuck:
+            mmio.write32(GRBM_GFX_CNTL_OFFSET, row['selector'])
+            mmio.write32(CP_HQD_PQ_DOORBELL_OFFSET, 0)
+            mmio.write32(CP_HQD_ACTIVE_OFFSET, 0)
+            mmio.write32(CP_HQD_DEQUEUE_OFFSET, 0)
+            mmio.write32(CP_HQD_PQ_RPTR_OFFSET, 0)
+            mmio.write32(CP_HQD_PQ_WPTR_LO_OFFSET, 0)
+            mmio.write32(CP_HQD_PQ_WPTR_HI_OFFSET, 0)
+            if mmio.read32(CP_HQD_ACTIVE_OFFSET) & 1:
+                raise RecoveryError('halted HQD would not become inactive at selector '
+                                    f'{row["selector"]:#x}')
+
+        remaining = []
+        for me in (1, 2):
+            for pipe in range(4):
+                for queue in range(8):
+                    selector = queue_selector(me, pipe, queue)
+                    mmio.write32(GRBM_GFX_CNTL_OFFSET, selector)
+                    if mmio.read32(CP_HQD_ACTIVE_OFFSET) & 1:
+                        remaining.append(selector)
+        if remaining:
+            raise RecoveryError('active HQDs remain after halt: '+
+                                ','.join(f'{selector:#x}' for selector in remaining))
+        return {
+            'status': 'quiesced', 'active_before': len(active),
+            'dequeued': len(dequeued), 'dequeue_timeouts': len(stuck),
+            'forced_inactive': len(stuck), 'queues': active,
+            'cp_me_before': me_before, 'cp_me_after': me_after,
+            'cp_mec_before': mec_before, 'cp_mec_after': mec_after,
+            'sdma0_before': sdma_before, 'sdma0_after': sdma_after,
+            'active_after': 0,
+        }
+    finally:
+        mmio.write32(GRBM_GFX_CNTL_OFFSET, 0)
+
+
 def perform_recovery(expected_boot, prior_run_id, state_reader, transport_factory,
                      journal_reader, sleep=time.sleep, polls=2000):
     cursor, _, initial_faults = journal_reader()
@@ -261,6 +381,7 @@ def perform_recovery(expected_boot, prior_run_id, state_reader, transport_factor
     commands = []
     with transport_factory() as transport:
         region = transport.metadata()
+        gc_quiesce = quiesce_gc(transport, sleep, min(polls, 50))
         commands.append(run_command(transport, DESTROY_RINGS, 'destroy all rings', sleep, polls))
         commands.append(run_command(transport, DESTROY_GPCOM_RING, 'destroy GPCOM ring', sleep, polls))
     after = state_reader()
@@ -275,6 +396,7 @@ def perform_recovery(expected_boot, prior_run_id, state_reader, transport_factor
         'prior_run_id': prior_run_id, 'device': DEVICE, 'iommu_group': GROUP,
         'driver': 'vfio-pci', 'pci_command_before': before['pci_command'],
         'pci_command_after': after['pci_command'], 'bar5': region,
+        'gc_quiesce': gc_quiesce,
         'commands': commands, 'kernel_cursor_before': cursor,
         'kernel_cursor_after': final_cursor, 'kernel_messages': messages,
     }

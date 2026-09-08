@@ -17,17 +17,19 @@ evidence required before adding another compatibility patch.
 
 ## Status
 
-**Experimental; full Metal acceleration is not working.** Hardware-tested **1.0.164**
-executes native KIQ setup and proves the next failure is X6000's false second SDMA
-object requesting global instance 1 when Raphael discovery exposes only instance 0.
-`AMDHardware::startHWEngines` consequently returns 0 and the native Metal probe is
-not eligible to submit work.
+**Experimental; full Metal acceleration is not working.** Hardware-tested **1.0.166**
+repairs Raphael's one-instance SDMA topology and X6000's residual engine-2 channel lookup.
+On a recovered second launch, native hybrid creation, engine start and power-up all succeeded,
+and KIQ stamps advanced through at least 21. The Metal probe was not run because of a corrected
+capture-classification defect.
 
 [Clean-run serial evidence](findings/metal-tests/20260908T052603Z-8dad7535/serial.txt)
 and [automated verdict](findings/metal-tests/20260908T052603Z-8dad7535/result.json)
 are retained. Later experimental builds 1.0.160/161 had incorrectly placed diagnostic
 hooks and are excluded from conclusions about the hybrid-engine failure. A later
-session also encountered an active KIQ that would not dequeue; recovery is unresolved.
+third same-boot launch then inherited active ME2 HQDs from the fully started guest and failed a
+KIQ stamp before the Metal probe. Candidate 1.0.167 adds Linux-ordered GC/HQD/SDMA quiesce and
+safer timeout diagnostics; it awaits bounded hardware validation.
 
 | Stage | Verified state |
 |---|---|
@@ -37,7 +39,7 @@ session also encountered an active KIQ that would not dequeue; recovery is unres
 | GC/TTL initialization and accelerator attach | Reached in the clean run |
 | VRAM and initial GART | 256 MB allocator; native physical root `0x84fdfc001` verified |
 | Command processor / KIQ | Three native setup stamps completed; RPTR caught WPTR |
-| Hybrid engines | Instance-0 queues succeed; false instance-1 request returns status 4 |
+| Hybrid engines | One-instance repair succeeds; native start/power-up return 1 on candidate 166 |
 | Metal | Metal 3 device enumerates; **zero completed compute/render submissions** |
 | Physical display | DCN 3.1.5 path remains incomplete |
 | Games | **Zero verified playable games**; [compatibility list](docs/supported-games.md) |
@@ -46,13 +48,13 @@ session also encountered an active KIQ that would not dequeue; recovery is unres
 A percentage would obscure the remaining unknowns. Driver enumeration and queue setup
 are milestones, not a measure of end-to-end rendering completeness.
 
-The [1.0.164 experiment](findings/experiments/hybrid-002-164/notes.md) includes all
-critical records, exact build identity and an orderly guest shutdown. Current
-Hardware-tested **1.0.165** completed the one-instance SDMA repair and TTL initialization,
-then exposed a null SDMA1 channel lookup in X6000's `createAccelChannels`.
-**1.0.166** adds the exact guarded SDMA1-to-SDMA0 channel mapping used for one-engine
-APUs; it is validated offline and awaits one fresh-boot experiment. Full Metal remains
-unavailable. Published 1.0.159 remains the earlier research snapshot.
+The [candidate-166 warm launch](findings/experiments/hybrid-004-166-reuse/notes.md) includes
+the first complete native engine startup. The [third launch](findings/experiments/metal-001-166-reuse/notes.md)
+proves PSP ring destruction alone does not clear GC queues after a fully started guest is
+force-stopped. Candidate 1.0.167 keeps the guarded SDMA repair, removes lock-held timeout dumps,
+adds bounded ACPI shutdown fallback, and extends rootless recovery to halt and clear GC/HQD/SDMA
+state with readback checks. Full Metal remains unavailable. Published 1.0.159 remains the earlier
+research snapshot.
 
 The repair is scoped by a byte-exact `rgpu,raphael-target` device property coupled to the
 grafted VBIOS. The tooling verifies that identity before a physical experiment, so the
@@ -77,10 +79,10 @@ serial capture stops that container. The launcher verifies connected serial capt
 the active deadline before reporting success. Serial capture also holds an idle/sleep
 inhibitor for the VM's lifetime.
 
-Bounded launches request ACPI powerdown 30 seconds before the container deadline.
-The request gets at most 20 seconds; timeout forces a stop while the original timer
-stays armed. In the GPU-less live test, ACPI did not shut macOS down and the fallback
-was required. This does not yet provide verified driver teardown.
+Bounded launches prefer the build- and boot-bound root agent. If that transport is absent, the
+coordinator now uses the exact-container, QEMU-peer-verified ACPI request before force-stop. The
+combined request gets at most 20 seconds while the original timer stays armed. Hardware
+validation of native GPU teardown is still pending.
 
 To request an earlier bounded shutdown:
 
@@ -153,7 +155,8 @@ tools/       mkrom.py           grafts the PSP directory + vram_info onto an APU
              autorun.sh         walks the ladder unattended and classifies each verdict
              redeploy.sh        rebuild ROM, push to the ESP, restart, drain serial
              vm-supervision.py  persistent launch/capture and exact-container deadline
-             vfio-recover.py    rootless PSP-ring teardown and same-boot reuse receipt
+             vfio-recover.py    rootless GC/SDMA/PSP teardown and same-boot reuse receipt
+             agent-server.py    guest command relay with reachability telemetry
              metal-test.py      native Metal compute and render validation through gx
              gpu-bind.sh        amdgpu -> vfio-pci, with the runtime-PM workaround
              recover-igpu.sh    recovery after the vfio runtime-PM oops

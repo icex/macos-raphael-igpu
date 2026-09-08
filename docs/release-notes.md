@@ -1,4 +1,4 @@
-Experimental RaphaelGPU 1.0.166 candidate for Sequoia 15.7.9 (24G830).
+Experimental RaphaelGPU 1.0.167 candidate for Sequoia 15.7.9 (24G830).
 
 - Hardware-tested163 reproduced real KIQ completion and located the next failure:
   SDMA hybrid types10/11 succeed, then type10 fails with native status4.
@@ -30,9 +30,13 @@ Experimental RaphaelGPU 1.0.166 candidate for Sequoia 15.7.9 (24G830).
   Full GPU teardown and warm reuse are not yet established.
 - Adds immutable build/ESP/QEMU identities, concurrent critical diagnostic records,
   explicit missing-data classification and one bounded experiment per host boot.
-- Candidate166 is hardware-untested. Full Metal remains unavailable. No compute/render
-  command completion and no playable game have been verified. Native shutdown/reuse
-  remains unqualified.
+- Candidate166 is hardware-tested: the repaired single-SDMA topology completes native hybrid
+  creation, engine start and power-up, with KIQ stamps through at least 21. A third same-boot
+  launch retained active HQDs and failed before the Metal probe.
+- Candidate167 removes lock-held timeout dumps, adds a verified ACPI shutdown fallback, and
+  extends rootless recovery from PSP rings to Linux-ordered GC/HQD/SDMA quiesce. These lifecycle
+  changes are offline-tested and await hardware validation. Full Metal remains unavailable; no
+  compute/render command completion and no playable game have been verified.
 - Tests and hosted source builds do not establish physical GPU or host stability.
 
 Three historical host hard hangs remain unexplained. This is a research prerelease,

@@ -342,17 +342,22 @@ def launch(vm, name, maximum, gpu_args):
         state = arm(vm, cid, maximum)
         # Existing guest tools address this familiar name; all supervision uses CID.
         run([binary("docker"), "rename", cid, "macos-sequoia"])
-        for _ in range(30):
+        agent_source = Path(__file__).with_name('agent-server.py')
+        if not agent_source.is_file():
+            raise RuntimeError('versioned agent server is missing')
+        for attempt in range(30):
             try:
-                run([binary("docker"), "cp", str(vm / "agent-server.py"), f"{cid}:/tmp/"])
+                run([binary("docker"), "cp", str(agent_source), f"{cid}:/tmp/"])
                 for command in (["python3", "/tmp/agent-server.py"],
                                 ["sh", "-c", "cd /run/vm && exec python3 -m http.server 8889"]):
-                    try:
-                        run([binary("docker"), "exec", "-d", cid, *command])
-                    except Exception:
-                        pass
+                    run([binary("docker"), "exec", "-d", cid, *command])
+                run([binary("docker"), "exec", cid, "sh", "-c",
+                     "curl -fsS --max-time 2 http://127.0.0.1:8888/health >/dev/null && "
+                     "curl -fsS --max-time 2 http://127.0.0.1:8889/ >/dev/null"])
                 break
             except Exception:
+                if attempt == 29:
+                    raise RuntimeError('container command and permit servers did not become ready')
                 time.sleep(2)
         verify(state)
         state["launch_unit"] = name + ".service"
