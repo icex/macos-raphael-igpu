@@ -29,8 +29,8 @@ QEMU/VFIO, user systemd, macOS 15.7.9 KDK 24G830, existing Linux cross-toolchain
 - Existing 1.0.159 is historical evidence. 1.0.162 is a built, hardware-untested diagnostic.
 - No task may claim Metal success from device enumeration, queue setup, a callback alone,
   `powerUpHW -> 0`, or a source/CI build.
-- This is a planning change. Commands for proposed tools below describe interfaces to
-  implement; they are not available until their task passes.
+- T1–T4 are implemented and validated offline and GPU-less. See
+  `findings/gpueless-tests/163/coordinator/notes.md`; physical gates remain open.
 
 ## Task map and responsibilities
 
@@ -60,23 +60,23 @@ orchestration platform.
 read `src/RaphaelGPU.cpp`, `tools/milestones.py`, `findings/GPU-RE.md` and the clean-run
 record; update `docs/ROADMAP.md` only when evidence changes.
 
-- [ ] Record exact source commit, bundle version/hash, KDK binary UUID/hash, firmware/input
+- [x] Record exact source commit, bundle version/hash, KDK binary UUID/hash, firmware/input
   hashes and enabled boot arguments for both the historical reference and current candidate.
-- [ ] Make one row for every enabled patch/boot arg: intended effect, owning binary/function,
+- [x] Make one row for every enabled patch/boot arg: intended effect, owning binary/function,
   actual memory/register writes, return changes, known reason, and cleanup impact.
-- [ ] Review `wrapHwEngPowerUp` against the native 24G830 loop: it replaces the loop and
+- [x] Review `wrapHwEngPowerUp` against the native 24G830 loop: it replaces the loop and
   omits a progress-field write. Establish field consumers before calling it diagnostic-only.
-- [ ] Review `startRlc`, `wrapKiqSubmit`, `wrapGcCheckRegEq`, memory/allocation workarounds
+- [x] Review `startRlc`, `wrapKiqSubmit`, `wrapGcCheckRegEq`, memory/allocation workarounds
   and timeout guards. Label reads with side effects; a logger can be an intervention.
-- [ ] Preserve proven address fixes. Disable/remove an obsolete behavior only in its own
+- [x] Preserve proven address fixes. Disable/remove an obsolete behavior only in its own
   experiment after a source-backed reason; do not shrink the mask wholesale before T5.
-- [ ] Write the first experiment card with the following concrete content:
+- [x] Write the first experiment card with the following concrete content:
 
 ```json
 {
   "id": "hybrid-001",
   "question": "Where does native hybrid creation first fail after KIQ setup?",
-  "candidate_version": "1.0.162",
+  "candidate_version": "1.0.163",
   "requested_diagnostic": "rgpuhybrid=1",
   "behavior_change": "none intended; capped availability observation only",
   "required_observations": ["loaded_build", "route_guards", "kiq_stamps", "hybrid_enter", "hybrid_exit", "engine_start"],
@@ -117,9 +117,9 @@ config hashes; boot args; QEMU image digest/version and relevant argv; guest OS 
 probe source/executable hash; host boot ID/kernel; device IDs/group/owner/PM; exposure cap.
 Capture only selected metadata, never full Docker environments or credentials.
 
-- [ ] Write failing tests for wrong ESP executable, stale Info.plist, changed boot args,
+- [x] Write failing tests for wrong ESP executable, stale Info.plist, changed boot args,
   missing KDK identity, dirty source and intended GPU run that actually omits VFIO.
-- [ ] Write admission tests for missing watchdog evidence, virgin VFIO, a previous use of
+- [x] Write admission tests for missing watchdog evidence, virgin VFIO, a previous use of
   the same boot ID, an active VM and inaccessible host checks. Example contract:
 
 ```python
@@ -132,21 +132,21 @@ self.assertIn("boot_already_used", admit(
      "device_pinned_awake": True, "active_vm": False}, {"boot-A"}))
 ```
 
-- [ ] Implement identity checks using allowlisted fields. Require all production fields;
+- [x] Implement identity checks using allowlisted fields. Require all production fields;
   reduced dictionaries above exercise mismatch handling, not complete admission fixtures.
-- [ ] Treat protected-read denial as `unknown`; never report an empty pstore from permission
+- [x] Treat protected-read denial as `unknown`; never report an empty pstore from permission
   denial. Existing logs and sysfs metadata suffice for most checks; justify any protected read.
-- [ ] Make staging transactional while no VM is running: back up ESP, insert bundle/config,
+- [x] Make staging transactional while no VM is running: back up ESP, insert bundle/config,
   read back and hash both; publish prepared manifest only after they match.
-- [ ] Embed/log a build identity that maps uniquely to the exact candidate. A version
+- [x] Embed/log a build identity that maps uniquely to the exact candidate. A version
   string alone cannot distinguish different binaries carrying that version. Bind the guest
   build marker to the staged image and reject unexpected loaded versions or fallback kexts.
-- [ ] Preserve original supervisor start/deadline identity in the run evidence. Acquire a
+- [x] Preserve original supervisor start/deadline identity in the run evidence. Acquire a
   per-VM experiment lock before preparation/launch/guest commands; no shared-file races.
-- [ ] Reserve the boot ID before opening VFIO. Once a launch could have touched hardware,
+- [x] Reserve the boot ID before opening VFIO. Once a launch could have touched hardware,
   failure/cancellation cannot erase that reservation; release it only if no access occurred
   is positively established. Never restart a supervised container in place.
-- [ ] Run the failing fixtures to green, exercise staging against disposable image fixtures,
+- [x] Run the failing fixtures to green, exercise staging against disposable image fixtures,
   and commit. No live GPU run is required.
 
 **Acceptance:** a mixed source/binary/ESP/guest experiment cannot produce a valid verdict
@@ -171,16 +171,16 @@ Formatting/flushing must not hold a lock while performing MMIO or a slow serial 
 Audit permitted execution/interrupt contexts before selecting the kernel synchronization
 primitive. The existing unprotected `diagLen` and destructive dump are not a safe model.
 
-- [ ] Add a host-testable record buffer that proves no out-of-bounds write, torn record,
+- [x] Add a host-testable record buffer that proves no out-of-bounds write, torn record,
   duplicate sequence or unreported overflow under concurrent producers. Test a slow reader,
   full buffer and snapshot during append with real threads; use sanitizers when available.
-- [ ] Keep hot-path critical observations small: build identity, route guard, KIQ stamp,
+- [x] Keep hot-path critical observations small: build identity, route guard, KIQ stamp,
   hybrid entry/exit, engine startup and first submission/completion. Retain detailed dumps
   only as opt-in bounded follow-ups with a documented discriminating purpose.
-- [ ] Extend hybrid tracing only if the current snapshot is insufficient: record the selected
+- [x] Extend hybrid tracing only if the current snapshot is insufficient: record the selected
   native child result at a verified safe caller boundary; do not route through an unsafe
   displaced branch/call or substitute a success value.
-- [ ] Write classifier fixtures for these exact cases:
+- [x] Write classifier fixtures for these exact cases:
 
 | Fixture | Required verdict |
 |---|---|
@@ -208,9 +208,9 @@ Define complete fixture dictionaries in the test file; these names are local tes
 not production APIs. Retain raw logs alongside parsed records. Archive legacy runs as
 `legacy-evidence`: do not fabricate missing manifests to make them satisfy the new gates.
 
-- [ ] Check source/binary ownership, ABI, complete displaced instructions and entry guards
+- [x] Check source/binary ownership, ABI, complete displaced instructions and entry guards
   before a new route. Test deliberately wrong offsets and missing stage records offline.
-- [ ] Run record-buffer/classifier tests and KDK preflight; verify a GPU-less boot produces
+- [x] Run record-buffer/classifier tests and KDK preflight; verify a GPU-less boot produces
   reliable build/agent records. Commit before spending a GPU run.
 
 **Acceptance:** unknown/invalid data cannot become success or a root-cause diagnosis.
@@ -233,9 +233,9 @@ python3 -B tools/classify-run.py "$RUN_DIRECTORY"
 `VM_DIR`, `MANIFEST` and `RUN_DIRECTORY` are explicit operator inputs supplied by the
 prepare command's outputs; scripts must not embed a personal home path.
 
-- [ ] Write failing tests showing normal redeploy cannot `docker rm -f` a currently active
+- [x] Write failing tests showing normal redeploy cannot `docker rm -f` a currently active
   named VM. Require its owned shutdown path or refusal before modifying disk/config.
-- [ ] Implement the coordinator state machine:
+- [x] Implement the coordinator state machine:
 
 ```text
 PREPARED -> ADMITTED -> STARTED -> IDENTITY_VERIFIED -> TARGET_OBSERVED
@@ -243,23 +243,23 @@ PREPARED -> ADMITTED -> STARTED -> IDENTITY_VERIFIED -> TARGET_OBSERVED
 any identity/capture/host error -> ABORT -> exact-CID stop -> CONTAMINATED
 ```
 
-- [ ] Reuse the supervisor's real deadlines. Work backward from the earlier launch-service
+- [x] Reuse the supervisor's real deadlines. Work backward from the earlier launch-service
   cap as well as Docker StartedAt: start the probe only if its full deadline and cleanup
   reserve fit. Do not assume 45 seconds remain just because the serial marker arrived.
-- [ ] Use completion/readiness events rather than sleeps for guest readiness; a timeout
+- [x] Use completion/readiness events rather than sleeps for guest readiness; a timeout
   reports which required event was missing. Precompile the probe in a GPU-less guest.
-- [ ] Run the Metal probe only if the experiment calls for it and native startup succeeded.
+- [x] Run the Metal probe only if the experiment calls for it and native startup succeeded.
   Do not perform shader submissions solely to confirm a known startup failure again.
-- [ ] On a decisive failure, preserve a short predefined diagnostic tail, stop immediately,
+- [x] On a decisive failure, preserve a short predefined diagnostic tail, stop immediately,
   and mark the boot contaminated. Do not use the remaining cap for exploratory writes.
-- [ ] Test cancellation, stale command delivery, caller death, serial death, Docker failure,
+- [x] Test cancellation, stale command delivery, caller death, serial death, Docker failure,
   too-little-remaining-time and wrong CID. Ensure each path either confirms stop or emits
   an explicit unresolved-stop error; never silently fall through to another launch.
-- [ ] Test the entire state machine with fake Docker/systemd and a GPU-less guest before T5.
+- [x] Test the entire state machine with fake Docker/systemd and a GPU-less guest before T5.
   Preserve ACPI's measured `forced` result; do not relabel it graceful.
-- [ ] Save `manifest.json`, `host-before.json`, `supervision.json`, `events.jsonl`, raw serial,
+- [x] Save `manifest.json`, `host-before.json`, `supervision.json`, `events.jsonl`, raw serial,
   probe output, `shutdown.json`, `host-after.json`, `verdict.json` and a brief decision note.
-- [ ] Run regression suite and commit the completed runner. Do not add an autorun loop.
+- [x] Run regression suite and commit the completed runner. Do not add an autorun loop.
 
 **Acceptance:** one command executes at most one eligible experiment, reports the earliest
 failure accurately, keeps deadlines intact and cannot silently launch another VM.

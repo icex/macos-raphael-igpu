@@ -1,0 +1,9 @@
+{
+  "valid": false,
+  "verdict": "GPULESS_CAPTURE_CHECK",
+  "earliest_failure": "identity_or_route_missing",
+  "evidence": [
+    "BUILD: identity=90fc73c8b2e74ad79ecc2db3eb85ad4c"
+  ],
+  "next_action": "no GPU execution tested; inspect captured build and cleanup"
+}
