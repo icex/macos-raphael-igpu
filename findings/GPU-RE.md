@@ -3387,3 +3387,50 @@ The candidate-170 shutdown was forced after the classifier detected overflow. Re
 found nine active HQD selections; eight dequeue attempts timed out and required post-halt ACTIVE
 clears. `CP_STAT` and `CP_CPC_BUSY_STAT` remained nonzero, so the receipt is explicitly incomplete
 and cannot authorize a second launch on this boot. No host kernel fault was recorded.
+
+### 2026-09-08: candidate 171 moves the first failure back to SDMA paging
+
+Candidate 171 (`d41b565`, build `dd7aa16feabf45d5afec671d2e778ba8`) completed the native
+one-instance startup path: KIQ stamps 1 through 6 completed, the surviving SDMA0 engine started,
+`AMDHardware::startHWEngines` returned 1, and `AMDGraphicsAccelerator::powerUpHW` returned 1.
+The first terminal hardware event was instead serial line 3189:
+
+```
+[0:6:0]: HW Channel 12 SDMA0_PAGE is occupied by channel 34 stamp 1
+```
+
+The KIQ stamp 28 timeout did not occur until line 10713, after channel restart attempts. The old
+classifier compared the later structured KIQ record with an unsequenced raw SDMA line and called
+KIQ the earliest failure. It now records raw terminal KIQ positions separately and lets the first
+raw terminal event select the subsystem. Reclassification is intentionally inconclusive at
+`sdma_vm_context_missing`: the requested observation did not occur.
+
+That missing record identifies the wrong observation boundary. `AMDHWVMM::assignVMID` builds an
+`AMD_VM_INVALIDATE_INFO`, but the paging channel calls
+`AMDGFX10SDMAChannel::writeVMProgramPacket`. That method invokes the VMM vtable slot for
+`AMDGFX10VMM::prepareVMInvalidateRequest`, copies a 0xc8-byte channel template, and patches the
+prepared register/value fields into the SDMA command stream. The CPU-side
+`programAndInvalidateVM` method is not part of this path and therefore never reached the old hook.
+Its absence says nothing about whether the SDMA packet programmed VMID 2 correctly.
+
+Candidate 172 routes `prepareVMInvalidateRequest` at exact 24G830 offset `0x6249c`. Its first 16
+bytes contain only the normal push/move prologue, with no RIP-relative operand or branch. The
+wrapper calls the native encoder first, then copies the 0x28-byte source request and all 21 output
+dwords into an eight-slot append-only buffer. It does no MMIO, formatting, allocation, lock or
+wait in the callback. The existing dedicated thread emits the copy later. This is a read-only
+experiment; Apple remains the sole owner of packet construction and submission.
+
+The Linux comparison narrows what the capture can show. `gmc_v10_0_set_gfxhub_funcs` selects
+`gfxhub_v2_1_funcs` for both GC 10.3.4 (Navi23 / Dimgrey Cavefish) and GC 10.3.6 (Raphael).
+Upstream has no separate 10.3.4 or 10.3.6 GC register header; the whole family uses
+`gc_10_3_0_offset.h`. Both Dimgrey Cavefish and Yellow Carp/Raphael-family discovery tables place
+GC segment 0 at `0x1260` and segment 1 at `0xa000`. A broad GFXHUB-layout rewrite is therefore not
+supported by the reference. The next run must compare Apple's actual register indices and values
+with the shared Linux layout and change only a measured mismatch.
+
+Candidate 171 also supplied the first fully authorizing reset-free cleanup after complete native
+startup. Rootless recovery found two active HQDs and dequeued both on their first poll, force-cleared
+none, read `CP_STAT=0` and `CP_CPC_BUSY_STAT=0`, halted SDMA, and confirmed both PSP teardown
+commands. PCI reset methods stayed empty and the host journal cursor did not advance. This permits
+one targeted same-boot candidate-172 launch without an amdgpu rebind or host reboot; the next
+launch still depends on another equally strict recovery receipt.

@@ -1,6 +1,6 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-09-08. Baseline repository: `40a2ffb`; next candidate: 1.0.171; published
+Updated 2026-09-08. Hardware baseline: candidate 1.0.171; next candidate: 1.0.172; published
 research snapshot: `v1.0.159-preview.1`. This document is the authoritative current
 roadmap. Historical hypotheses in `findings/GPU-RE.md` remain evidence, not instructions.
 
@@ -58,10 +58,13 @@ template at `0xffbfde011c`, proving it patched the wrong value. Exact 24G830 dis
 the SDMA packet address to `AMD_SUBMIT_COMMAND_BUFFER_INFO + 0x58 + 0x28*i`. Linux SDMA 5.2 emits
 the full address together with the IB's VMID. Candidate 170 identifies the stalled WindowServer
 submission as VMID 2, so `0x400100020` must be evaluated through VMID 2's page tables rather than
-rewritten as an MC physical address. Candidate 171 is read-only at this boundary and captures the
-requested VMID 2 root/range plus an asynchronous hardware context snapshot. Its classifier
-requires the same root and an address range containing the submitted IB. The failed recovery is non-authorizing, so this boot
-cannot safely test the new candidate.
+rewritten as an MC physical address. Candidate 171 confirmed the VMID and address, but its
+`programAndInvalidateVM` hook never ran: Apple builds the relevant VM program inside the SDMA
+command stream. The first SDMA0 paging timeout preceded a later KIQ stamp 28 failure; the
+classifier now preserves raw terminal ordering. Reset-free recovery dequeued both active HQDs on
+the first poll, left both CP status registers idle, halted SDMA and confirmed both PSP teardown
+commands without a host fault. Candidate 172 captures all 21 dwords returned by
+`prepareVMInvalidateRequest` so the exact SDMA VM program can be compared with Linux GFXHUB 2.1.
 
 ## 1. What is actually complete
 
@@ -78,7 +81,7 @@ single clean run is not repeatability evidence. There is no defensible overall p
 | [x] | Firmware load / TTL bring-up observed | Clean 1.0.159 serial record, including PSP responses; not all later workloads validated |
 | [x] | Dummy SMU backend | Avoids retargeting Apple's messages to the host CPU's SMU |
 | [x] | 256 MB VRAM allocator and initial GART root | Clean-run native physical root `0x84fdfc001`; per-client VMs remain unverified |
-| [x] | KIQ setup really executes | Candidate 170 advances through at least stamp 34; not a shader test |
+| [x] | KIQ setup really executes | Candidate 171 completes stamps 1 through 6 before the paging failure; not a shader test |
 | [x] | Metal device enumeration | `AMD Radeon Navi23`, Metal 3 advertised; no completed Metal command buffer |
 | [x] | Automated compute/render probe implemented | Fresh nonce, independent CPU/pixel expectations, timeouts; currently FAILS |
 | [x] | Exposure supervision and capture implemented | Full-CID timers, serial durability, sleep inhibitor; not a host-hang fix |
@@ -86,13 +89,13 @@ single clean run is not repeatability evidence. There is no defensible overall p
 | [x] | Wrong-kext route regression prevented for current scopes | `route-domains.py` and regression tests; not a complete C++ verifier |
 | [x] | Optional hybrid diagnostic built | 1.0.162, exact entry guards, `rgpuhybrid=1`, native result preserved |
 | [x] | Hybrid diagnostic validated on hardware | 1.0.163: complete records; type10 fails after type10/type11 success |
-| [ ] | Repeatable clean initial state | Reset-free cleanup works mechanically, but a forced mid-power-up stop left CP busy state that the old receipt incorrectly accepted; new admission fails closed |
-| [x] | Native hybrid queues / complete engine startup | Candidate166 maps residual engine-2 channels to real SDMA0; hybrid status 0, native start/power-up 1 and KIQ stamps through 21 on hardware |
+| [ ] | Repeatable clean initial state | Candidate 171 recovery is the first fully authorizing reset-free cleanup after native startup; one successful warm reinitialization is still required |
+| [x] | Native hybrid queues / complete engine startup | Candidate 171 maps residual engine-2 channels to real SDMA0; hybrid status 0 and native start/power-up 1 on hardware |
 | [ ] | Correct Metal compute and offscreen rendering | First command buffer fails; zero results checked |
 | [ ] | Per-process memory, synchronization and resource lifecycle | Must be exercised after first real completion |
 | [ ] | Accelerated desktop and presentation | WindowServer panic repair is not proof of accelerated composition |
 | [ ] | Physical iGPU display output | DCN 3.1.5 path remains a separate open milestone |
-| [ ] | Reliable shutdown/restart and host stability | Three historical host hangs; mechanism still undetermined; no fault occurred in the three bounded launches on the current boot |
+| [ ] | Reliable shutdown/restart and host stability | Three historical host hangs; mechanism unresolved; candidate 171 recovery authorizes one guarded same-boot launch |
 | [ ] | Desktop performance and release qualification | Deferred until compute, render, presentation and lifecycle pass |
 
 Authoritative recordings:
@@ -418,16 +421,18 @@ date for the unknown hardware defects until M2 has localized them.
   [VFIO](https://docs.kernel.org/driver-api/vfio.html),
   [AMDGPU hardware structure](https://docs.kernel.org/gpu/amdgpu/driver-core.html).
 
-## 8. Next clean-boot experiment
+## 8. Next same-boot experiment
 
-1. Verify the host boot ID changed and no VM is running; renew/verify sleep inhibition.
-2. Inspect iGPU ownership and collect approved reference state **before** any handoff.
-3. Run the completed offline gates once and verify the combined candidate actually in the ESP.
-4. Prepare one `metal-005` experiment whose sole hardware question is whether Apple's VMID 2
-   request and the programmed GFXHUB context can translate the stalled SDMA IB address.
-5. Make the one-way handoff if required, start one bounded run, classify it, archive it,
-   stop and honor the outcome's next action. A stuck queue or non-idle recovery receipt closes
-   that boot's GPU testing. If the full probe passes and recovery is authorizing, run one warm
-   repeat; only then open the interactive QEMU display for desktop testing.
+1. Keep the current VFIO ownership and sleep inhibitor; do not rebind or reset the PCI bus.
+2. Build and stage candidate 1.0.172 from one clean commit, then verify source, kext, ESP,
+   boot arguments, KDK offsets and the predecessor recovery receipt as one identity chain.
+3. Run `metal-006` once. Capture Apple's complete VMID 2 prepared request before the first
+   SDMA paging timeout and preserve raw terminal ordering.
+4. Decode the 21 dwords against `writeVMProgramPacket` and Linux GFXHUB 2.1. Both Navi23
+   GC 10.3.4 and Raphael GC 10.3.6 use that same backend, register header and segment-0/1
+   bases, so any proposed patch must name a measured value that differs.
+5. Recover rootlessly. Continue on this boot only if the receipt again records no dequeue
+   timeout, no forced clear, idle CP status, halted SDMA and confirmed PSP teardown.
 
-No VM launch, handoff, reboot or hardware reset was performed while writing this plan.
+An interactive QEMU display remains gated on the checked compute/render probe, so desktop
+testing cannot mistake Metal enumeration for execution.

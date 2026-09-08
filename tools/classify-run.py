@@ -15,6 +15,8 @@ def _decode_payload(build, seq, payload):
         row.update(kind='route', ok='route=ok entries-match=1' in payload)
     elif 'HY: SDMA selector trace' in payload:
         row.update(kind='sdma_route', ok='route=ok entries-match=1' in payload)
+    elif payload.startswith('VM: route AMDGFX10VMM::prepareVMInvalidateRequest ->'):
+        row.update(kind='vm_program_route', ok='-> ok ' in payload)
     elif payload.startswith('SD: topology routes='):
         m = re.fullmatch(r'SD: topology routes=(ok|FAILED) count=(\d+) entries-match=([01])',
                          payload)
@@ -56,6 +58,13 @@ def _decode_payload(build, seq, payload):
         row.update(kind='vm_invalidate', hub=int(m[1]), vmid=int(m[2]),
                    start=int(m[3], 16), end=int(m[4], 16), root=int(m[5], 16),
                    flags=int(m[6], 16), reprogram=bool(int(m[7])))
+    elif m := re.fullmatch(r'VM: prepared hub=(\d+) vmid=(\d+) start=(0x[0-9a-fA-F]+|0) end=(0x[0-9a-fA-F]+|0) root=(0x[0-9a-fA-F]+|0) flags=(0x[0-9a-fA-F]+|0) reprogram=([01]) alternate=([01]) info=((?:[0-9a-fA-F]{8},){9}[0-9a-fA-F]{8}) words=((?:[0-9a-fA-F]{8},){20}[0-9a-fA-F]{8})', payload):
+        row.update(kind='vm_program', hub=int(m[1]), vmid=int(m[2]),
+                   start=int(m[3], 16), end=int(m[4], 16), root=int(m[5], 16),
+                   flags=int(m[6], 16), reprogram=bool(int(m[7])),
+                   alternate=bool(int(m[8])),
+                   info_words=[int(value, 16) for value in m[9].split(',')],
+                   words=[int(value, 16) for value in m[10].split(',')])
     elif m := re.fullmatch(r'VM: context-snapshot vmid=(\d+) root=(0x[0-9a-fA-F]+|0) ctl=(0x[0-9a-fA-F]+|0) start=(0x[0-9a-fA-F]+|0) end=(0x[0-9a-fA-F]+|0)', payload):
         row.update(kind='vm_context', vmid=int(m[1]), root=int(m[2], 16),
                    control=int(m[3], 16), start=int(m[4], 16), end=int(m[5], 16))
@@ -98,6 +107,13 @@ def parse_serial(serial):
             if m := re.fullmatch(r'BUILD: identity=(\S+)', payload):
                 raw_builds.add(m[1])
             raw_records.append((line_number, payload))
+            terminal = _decode_payload(None, line_number, payload)
+            if (terminal['kind'] in ('kiq', 'kiq_submit') and
+                    terminal.get('result') == 0):
+                terminal['kind'] = 'kiq'
+                terminal['source'] = 'raw-terminal'
+                terminal['raw'] = line.strip()
+                hardware_timeouts.append(terminal)
         if m := re.search(r'Unexpected kernel trap number:\s*(\S+), RIP:\s*(0x[0-9a-fA-F]+), CR2:\s*(0x[0-9a-fA-F]+)', line):
             panics.append(dict(kind='guest_panic', build=None, seq=line_number, raw=line.strip(),
                                trap=m[1], rip=int(m[2], 16), cr2=int(m[3], 16)))
@@ -149,7 +165,7 @@ def parse_serial(serial):
         if row.get('build') not in counts:
             row['source'] = 'raw-fallback'
             terminal_live.append(row)
-        elif row['kind'] in ('vm_invalidate', 'vm_context', 'sdma_submit'):
+        elif row['kind'] in ('vm_invalidate', 'vm_context', 'vm_program', 'sdma_submit'):
             # These records are formatted by the dedicated observation thread,
             # outside the driver callbacks. Preserve the exact live line until
             # the next immutable structured snapshot includes it.
@@ -181,7 +197,35 @@ def classify(manifest, events, probe):
         return verdict('INVALID', stage='route_guards')
     if not kinds['build'] or not kinds['route']:
         return verdict('INCONCLUSIVE', stage='identity_or_route_missing')
+    required = manifest.get('spec', {}).get('required_observations', [])
+    if 'sdma_vm_program' in required:
+        program_routes = [r for r in events if r['kind'] == 'vm_program_route']
+        if len(program_routes) != 1 or not program_routes[0].get('ok'):
+            return verdict('INVALID', stage='sdma_vm_program_route_guard')
+        submits = [r for r in events if r['kind'] == 'sdma_submit' and
+                   r.get('valid') and r.get('vmid') == 2]
+        programs = [r for r in events if r['kind'] == 'vm_program' and
+                    r.get('hub') == 0 and r.get('vmid') == 2 and
+                    len(r.get('info_words', [])) == 10 and
+                    len(r.get('words', [])) == 21]
+        if not submits or not programs:
+            return verdict('INCONCLUSIVE', stage='sdma_vm_program_missing')
+        coherent = any(
+            program.get('reprogram') and program.get('root') and
+            program.get('start') <= address <= program.get('end')
+            for submit in submits
+            for address in (submit.get('ib0', 0), submit.get('ib1', 0)) if address
+            for program in programs)
+        if not coherent:
+            return verdict('INCONCLUSIVE', stage='sdma_vm_program_mismatch')
     panics = [r for r in events if r['kind'] == 'guest_panic']
+    raw_sdma = [r for r in events if r['kind'] == 'sdma_page_timeout' and
+                r.get('source') == 'raw-terminal']
+    raw_kiq = [r for r in events if r['kind'] == 'kiq' and
+               r.get('source') == 'raw-terminal']
+    sdma_precedes_terminal_kiq = bool(
+        raw_sdma and raw_kiq and
+        min(r['seq'] for r in raw_sdma) < min(r['seq'] for r in raw_kiq))
     explicit_submit = [r for r in kinds['kiq_submit']
                        if not panics or r['seq'] < panics[0]['seq']]
     live_terminal_kiq = [r for r in kinds['kiq']
@@ -193,7 +237,8 @@ def classify(manifest, events, probe):
             r for r in kinds['kiq'] if not panics or r['seq'] < panics[0]['seq']]
     terminal_kiq = (max(kiq_before_terminal, key=lambda r:r['seq'])
                     if kiq_before_terminal else None)
-    if terminal_kiq and terminal_kiq.get('result') == 0:
+    if (terminal_kiq and terminal_kiq.get('result') == 0 and
+            not sdma_precedes_terminal_kiq):
         return verdict('BASELINE_BLOCKED', True, 'kiq',
                        'repair stale KIQ/HQD state and remove lock-held diagnostics before another launch')
     if panics:
@@ -274,7 +319,8 @@ def classify(manifest, events, probe):
         if 'sdma_channel_remap' in manifest.get('spec', {}).get('required_observations', []):
             expected_route_count = (7 if any(name in
                                     manifest.get('spec', {}).get('required_observations', [])
-                                    for name in ('sdma_ib_address_repair', 'sdma_vm_context')) else 6)
+                                    for name in ('sdma_ib_address_repair', 'sdma_vm_context',
+                                                 'sdma_vm_program')) else 6)
             if routes[0].get('count') != expected_route_count:
                 return verdict('INVALID', stage='sdma_channel_route_guard')
             remaps = [r for r in events if r['kind'] == 'sdma_engine_remap']

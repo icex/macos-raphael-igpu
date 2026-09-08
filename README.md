@@ -17,10 +17,10 @@ evidence required before adding another compatibility patch.
 
 ## Status
 
-**Experimental; full Metal acceleration is not working.** Hardware-tested **1.0.170**
+**Experimental; full Metal acceleration is not working.** Hardware-tested **1.0.171**
 repairs Raphael's one-instance SDMA topology and X6000's residual engine-2 channel lookup.
-On a clean launch, native hybrid creation, engine start and power-up all succeeded, and KIQ
-stamps advanced through at least 34. The first paging submission then timed out on SDMA0.
+On the latest clean launch, native hybrid creation, engine start and power-up all succeeded,
+and KIQ stamps 1 through 6 completed. The first paging submission then timed out on SDMA0.
 
 [Clean-run serial evidence](findings/metal-tests/20260908T052603Z-8dad7535/serial.txt)
 and [automated verdict](findings/metal-tests/20260908T052603Z-8dad7535/result.json)
@@ -30,11 +30,13 @@ third same-boot launch then inherited active ME2 HQDs from the fully started gue
 KIQ stamp before the Metal probe. Candidate 1.0.170 fixed the coordinator and cleanup checks, but
 its SDMA repair targeted the fixed channel template. Exact 24G830 disassembly shows the hardware
 packet address instead comes from `AMD_SUBMIT_COMMAND_BUFFER_INFO + 0x58 + 0x28*i`. Candidate
-1.0.171 observes those entries and the selected VM context without modifying either. Linux's
+1.0.171 observed those entries without modifying them. Linux's
 SDMA 5.2 implementation confirms that an indirect packet carries a full GPU virtual address plus
 its VMID, so converting the measured VMID 2 address to an MC physical address would be invalid.
-Routine success records are capped so a later timeout remains observable. Metal execution remains
-unverified.
+Its original VM-context hook did not run because Apple builds this context program inside the
+SDMA command stream. Candidate 1.0.172 instead captures the complete native
+`prepareVMInvalidateRequest` output from a safe prologue. Routine success records are capped so a
+later timeout remains observable. Metal execution remains unverified.
 
 | Stage | Verified state |
 |---|---|
@@ -43,8 +45,8 @@ unverified.
 | SMU | Apple's dummy backend avoids the host CPU's SMU mailbox |
 | GC/TTL initialization and accelerator attach | Reached in the clean run |
 | VRAM and initial GART | 256 MB allocator; native physical root `0x84fdfc001` verified |
-| Command processor / KIQ | Three native setup stamps completed; RPTR caught WPTR |
-| Hybrid engines | One-instance repair succeeds; native start/power-up return 1 on candidate 166 |
+| Command processor / KIQ | Initial native submissions execute; stamps 1 through 6 completed in 1.0.171 |
+| Hybrid engines | One-instance repair succeeds; native start/power-up return 1 in 1.0.171 |
 | Metal | Metal 3 device enumerates; **zero completed compute/render submissions** |
 | Physical display | DCN 3.1.5 path remains incomplete |
 | Games | **Zero verified playable games**; [compatibility list](docs/supported-games.md) |
@@ -56,11 +58,12 @@ are milestones, not a measure of end-to-end rendering completeness.
 The [candidate-166 warm launch](findings/experiments/hybrid-004-166-reuse/notes.md) includes
 the first complete native engine startup. The [third launch](findings/experiments/metal-001-166-reuse/notes.md)
 proves PSP ring destruction alone does not clear GC queues after a fully started guest is
-force-stopped. Candidate 1.0.171 keeps the fail-closed lifecycle rules, parses only complete serial
-lines, uses explicit KIQ submission results, and records the actual per-submission SDMA VMID/IB
-fields plus a deferred hardware snapshot for that VMID. The classifier requires a shared root and
-a range containing the IB. It allows warm reuse only after real queue dequeue
-with idle CP status. The one-way amdgpu-to-vfio
+force-stopped. Candidate 1.0.171 also produced the first fully authorizing reset-free recovery
+after native startup: two active HQDs dequeued immediately, no queue was force-cleared, CP status
+was idle, SDMA halted, and both PSP teardown commands completed. Candidate 1.0.172 keeps those
+fail-closed lifecycle rules and records the actual per-submission SDMA VMID/IB fields plus the 21
+dwords Apple uses to form the matching VM program packet. It allows warm reuse only after real
+queue dequeue with idle CP status. The one-way amdgpu-to-vfio
 handoff disables the unsafe PCI reset method before granting user access; later cleanup remains
 rootless. Full Metal remains unavailable. Published 1.0.159 remains the earlier research snapshot.
 

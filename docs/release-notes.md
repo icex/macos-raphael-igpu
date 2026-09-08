@@ -1,69 +1,26 @@
-Experimental RaphaelGPU 1.0.171 candidate for Sequoia 15.7.9 (24G830).
+Experimental RaphaelGPU 1.0.172 candidate for Sequoia 15.7.9 (24G830).
 
-- Hardware-tested163 reproduced real KIQ completion and located the next failure:
-  SDMA hybrid types10/11 succeed, then type10 fails with native status4.
-- Hardware-tested164 proves the failed request is SDMA type0/global-index1: TTL reports
-  one discovered instance, so the native lookup returns null before its callback. X6000
-  unconditionally constructs two Navi23 SDMA objects.
-- Candidate165 added the gated `rgpusdma=1` compatibility boundary: it releases the false
-  second object before initialization, starts the surviving native SDMA0 object, preserves
-  its Boolean result and native progress bit. Hardware objects outside the Raphael target
-  remain on Apple's native path.
-- The repair requires the exact `rgpu,raphael-target = RGPU-RAPHAEL\x01` OSData marker on
-  the same OpenCore device path as the grafted `ATY,bin_image`. `ocprop.py` adds and removes
-  both together, and experiment admission verifies the marker. A real Navi23 using its
-  native configuration therefore stays on Apple's unmodified two-instance path.
-- Hardware-tested165 completed TTL initialization and the owner repair, then panicked in
-  `createAccelChannels+0x278`: X6000 requested the removed SDMA1 engine, native
-  `getHWChannel` returned null, and the caller dereferenced it.
-- Candidate166 maps only residual engine-2 channel requests to the surviving SDMA0 object,
-  only while the exact repaired Raphael owner is active. This preserves native ring lookup,
-  channel construction and return values and matches NootedRed's established one-SDMA APU
-  adaptation.
-- All six X6000 entries and routes must validate before the repair can apply. The
-  host-tested topology helper rejects invalid counts and preserves valid two-instance input;
-  first-engine failures remain failures. No TTL status or GPU completion is forged.
-- Preparation and launch-time identity checks require the experiment card's exact
-  `rgpusdma=1` argument and the per-device marker. The classifier also requires the exact
-  correlated SDMA0/queue-0 then SDMA0/queue-1 event sequence before a probe can run.
-- Candidate164 completed an orderly root-agent shutdown with APFS unmount and CPU halt.
-  Full GPU teardown and warm reuse are not yet established.
-- Adds immutable build/ESP/QEMU identities, concurrent critical diagnostic records,
-  explicit missing-data classification and one bounded experiment per host boot.
-- Candidate166 is hardware-tested: the repaired single-SDMA topology completes native hybrid
-  creation, engine start and power-up, with KIQ stamps through at least 21. A third same-boot
-  launch retained active HQDs and failed before the Metal probe.
-- Candidate168 removes lock-held timeout dumps, adds a verified ACPI shutdown fallback, and
-  extends rootless recovery from PSP rings to Linux-ordered GC/HQD/SDMA quiesce. The first live
-  attempt failed closed because it used a static Navi register-header base for SDMA. Apple
-  `sdma_5_2_stop_engine`, Linux IP discovery, and the live device establish segment-zero base
-  `0x1260`; corrected writes and readbacks were observed. That record cannot prove cleanup,
-  because acquiring the legacy VFIO device first invoked its `bus` reset method. Candidate168
-  disables PCI reset methods during the privileged one-way handoff, refuses every launch or
-  cleanup if they are enabled, rejects reset messages from recovery receipts, and leaves later
-  teardown rootless. Warm cleanup and reinitialization remain unverified. Full Metal remains
-  unavailable; no compute/render command completion and no playable game have been verified.
-- Candidate169 repairs the exact observed SDMA indirect-buffer address projection from
-  `0x400100000` to the validated MC address `0x840100000`. Its first run was stopped before
-  that path executed because a concurrent read parsed an unterminated serial replay as a conflict.
-- Candidate170 parses only newline-complete records and makes `submitKIQFrame` a critical,
-  authoritative event. Runtime observation errors now attempt identified guest/ACPI shutdown
-  before force-stop. Recovery authorizes warm reuse only after zero dequeue timeouts, zero forced
-  HQD clears and idle CP status. Partial engine power-up invokes Apple's native power-off while
-  its DMA mappings remain present.
-- Hardware-tested170 completed native engine power-up and at least 34 KIQ submissions, then
-  timed out on SDMA0 paging with its indirect-buffer address still in the low-36-bit software
-  projection (`0x400100020`). Its earlier repair changed an unrelated fixed channel template.
-- Candidate171 observes the actual `AMD_SUBMIT_COMMAND_BUFFER_INFO` VMID and addresses at
-  `+4` and `+0x58 + 0x28*i` without modifying them. Exact 24G830 X6000 disassembly establishes
-  the layout; Linux SDMA 5.2 establishes that the packet address is virtual under its VMID.
-- The same candidate records each selected user VM's requested root/range and an asynchronous
-  GFXHUB context snapshot after Apple's native programming. Driver callbacks only append bounded
-  copies; a dedicated kernel thread performs MMIO and serial formatting. The classifier requires
-  a shared VMID/root and a range containing the submitted IB before accepting this evidence.
-- Routine successful KIQ and stamp records are capped while native failures are always retained,
-  preventing high submission volume from exhausting the critical record buffer.
-- Tests and hosted source builds do not establish physical GPU or host stability.
+- Hardware-tested candidate 1.0.171 completed native one-instance SDMA startup, KIQ stamps 1
+  through 6, `AMDHardware::startHWEngines`, and accelerator power-up. The first terminal event
+  was an SDMA0 paging timeout; a later KIQ stamp 28 timeout followed channel restart attempts.
+- The classifier now preserves raw terminal ordering, so replayed structured KIQ records cannot
+  outrank an earlier raw SDMA failure.
+- Candidate 1.0.172 replaces an unused `programAndInvalidateVM` observation with a read-only hook
+  on `prepareVMInvalidateRequest`. It copies the complete VMID 2 source request and all 21 native
+  register/value dwords after Apple encodes them. The callback performs no MMIO, logging,
+  allocation or waits; a dedicated kernel thread emits the bounded observation later.
+- Exact KDK preflight verifies the new route at X6000 offset `0x6249c` and its safe prologue.
+  Linux v6.12 uses the same GFXHUB 2.1 implementation, GC register header and GC segment 0/1 bases
+  for Navi23 GC 10.3.4 and Raphael GC 10.3.6, so the next patch will require a measured packet
+  mismatch rather than a family-wide register assumption.
+- Candidate 1.0.171 produced the first authorizing reset-free recovery after native startup: both
+  active HQDs dequeued immediately, no forced clear was used, CP status was idle, SDMA halted,
+  both PSP teardown commands completed, and no host fault was recorded. This permits one guarded
+  same-boot candidate-172 experiment.
+- The source-built test suite includes terminal-ordering, prepared-request parsing, route guards,
+  bounded-copy fixtures, and the existing VM/VFIO lifecycle checks.
 
-Three historical host hard hangs remain unexplained. This is a research prerelease,
-not a stable or game-ready driver. See docs/ROADMAP.md and the archived experiments.
+Metal 3 still only enumerates. No compute or render command buffer has completed, accelerated
+desktop composition is not yet verified, and zero games are supported. This remains a research
+prerelease with three historical host hangs; all bounded launch and recovery guards remain in
+force.

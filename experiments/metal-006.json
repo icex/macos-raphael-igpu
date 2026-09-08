@@ -1,0 +1,38 @@
+{
+  "id": "metal-006",
+  "question": "Which exact GFXHUB register indices and values does Apple encode into the SDMA VMID 2 program packet before the first paging timeout?",
+  "candidate_version": "1.0.172",
+  "requested_diagnostic": "rgpusdma=1",
+  "behavior_change": "replace the unused programAndInvalidateVM observation with a read-only bounded copy of prepareVMInvalidateRequest input and all 21 native output dwords",
+  "required_observations": [
+    "loaded_build",
+    "route_guards",
+    "kiq_stamps",
+    "hybrid_enter",
+    "hybrid_exit",
+    "engine_start",
+    "sdma_topology",
+    "sdma_channel_remap",
+    "sdma_vm_program"
+  ],
+  "max_seconds": 180,
+  "prerequisites": [
+    "same_boot_authorizing_recovery_receipt",
+    "amdgpu_initialized_this_boot",
+    "reset_methods_disabled",
+    "sleep_inhibitor_active",
+    "watchdog_and_pstore_verified"
+  ],
+  "repeat_policy": "do not repeat unchanged; decode the captured request against Linux GFXHUB 2.1 before choosing the next change",
+  "abort_on": [
+    "identity_mismatch",
+    "capture_loss",
+    "guest_panic",
+    "terminal_kiq_submit_failure",
+    "sdma_page_timeout",
+    "host_fault",
+    "incomplete_gc_quiesce"
+  ],
+  "outcome_table": "docs/ROADMAP.md M4-M7",
+  "run_probe_only_after_native_start": true
+}

@@ -196,7 +196,7 @@ static rgpu::DiagnosticRecords<256, 512> diagnostics {};
 static rgpu::DiagnosticRecords<128, 512> criticalRecords {};
 static rgpu::SuccessRecordBudget waitStampRecordBudget {};
 static rgpu::SuccessRecordBudget kiqSubmitRecordBudget {};
-static rgpu::ObservationBuffer<RaphaelVm::InvalidateRequest, 8> vmid2Requests {};
+static rgpu::ObservationBuffer<RaphaelVm::PreparedRequest, 8> vmid2Programs {};
 static rgpu::ObservationBuffer<RaphaelSdma::SubmitInfoObservation, 8> vmid2Submits {};
 
 static void diagAppend(bool critical, const char *fmt, ...) {
@@ -328,6 +328,7 @@ static mach_vm_address_t orgVmmSetAlloc = 0;
 static mach_vm_address_t orgVmmSetVSReady = 0;
 static mach_vm_address_t orgHwMemSetVSReady = 0;
 static mach_vm_address_t orgVmmFillRegs = 0;
+static mach_vm_address_t orgVmmPrepare = 0;
 static mach_vm_address_t orgVmmProgInv = 0;
 // Slide of AMDRadeonX6000, so a captured return address can be reported as a file offset
 // that llvm-nm can name. Static analysis could not identify the caller of
@@ -458,6 +459,7 @@ static constexpr size_t kOffVmmSetAlloc = 0x5791e;    // AMDHWVMM::setMemoryAllo
 static constexpr size_t kOffVmmSetVSReady = 0x578ce;  // AMDHWVMM::setVirtualSpaceReady [x6]
 static constexpr size_t kOffHwMemSetVSReady = 0x52c3a; // AMDHWMemory::setVirtualSpaceReady [x6]
 static constexpr size_t kOffVmmFillRegs = 0x62400;    // AMDGFX10VMM::fillVMRegisters [x6]
+static constexpr size_t kOffVmmPrepare  = 0x6249c;    // __ZN26AMDRadeonX6000_AMDGFX10VMM26prepareVMInvalidateRequestEP25AMD_VM_INVALIDATE_REQUESTPK22AMD_VM_INVALIDATE_INFOb [x6]
 static constexpr size_t kOffVmmProgInv  = 0x6278a;    // AMDGFX10VMM::programAndInvalidateVM [x6]
 static constexpr size_t kOffAccPowerUpHW = 0x4e0c;   // AMDGraphicsAccelerator::powerUpHW [x6]
 static constexpr size_t kOffHwPowerUp    = 0x99618;  // AMDNavi23Hardware::powerUp [x6]
@@ -3857,13 +3859,20 @@ static uint32_t wrapVmmFillRegs(void *self) {
 }
 
 static uint32_t wrapVmmProgInv(void *self, void *info) {
-    const auto request = RaphaelVm::observeInvalidateRequest(
-        reinterpret_cast<const uint8_t *>(info), info != nullptr ? 0x28 : 0);
     auto r = FunctionCast(wrapVmmProgInv, orgVmmProgInv)(self, info);
     if (ptbFixMode != 2) repairPageTableBase("programAndInvalidateVM (legacy)");
-    if (ptbFixMode == 2 && request.valid && request.hub == 0 && request.vmid == 2)
-        vmid2Requests.append(request);
     return r;
+}
+
+static void wrapVmmPrepare(void *self, void *prepared, const void *info, bool alternate) {
+    FunctionCast(wrapVmmPrepare, orgVmmPrepare)(self, prepared, info, alternate);
+    const auto observation = RaphaelVm::observePreparedRequest(
+        reinterpret_cast<const uint8_t *>(info), info != nullptr ? 0x28 : 0,
+        reinterpret_cast<const uint8_t *>(prepared), prepared != nullptr ? 0x54 : 0,
+        alternate);
+    if (ptbFixMode == 2 && observation.valid && observation.request.hub == 0 &&
+            observation.request.vmid == 2)
+        vmid2Programs.append(observation);
 }
 
 static uint32_t wrapHwMemSetVSReady(void *self, uint32_t ready) {
@@ -4199,29 +4208,25 @@ static uint32_t wrapSdmaCommitIb(void *self, void *submitInfo) {
 }
 
 static void publishPendingVmObservations() {
-    static size_t requestCursor = 0;
+    static size_t programCursor = 0;
     static size_t submitCursor = 0;
-    RaphaelVm::InvalidateRequest request {};
-    while (requestCursor < vmid2Requests.size() && vmid2Requests.read(requestCursor, request)) {
-        ++requestCursor;
-        CRLOG("VM: invalidate hub=%u vmid=%u start=%#llx end=%#llx root=%#llx "
-              "flags=%#x reprogram=%u", request.hub, request.vmid, request.start,
-              request.end, request.root, request.flags, request.reprogram);
-        const auto regs = RaphaelVm::contextRegisters(request.vmid);
-        if (regs.valid && asicInfo != nullptr) {
-            const uint64_t root = RaphaelVm::join(
-                fbRead(asicInfo, kGcSeg0 + regs.ptbLo),
-                fbRead(asicInfo, kGcSeg0 + regs.ptbHi));
-            const uint64_t firstPage = RaphaelVm::join(
-                fbRead(asicInfo, kGcSeg0 + regs.startLo),
-                fbRead(asicInfo, kGcSeg0 + regs.startHi));
-            const uint64_t lastPage = RaphaelVm::join(
-                fbRead(asicInfo, kGcSeg0 + regs.endLo),
-                fbRead(asicInfo, kGcSeg0 + regs.endHi));
-            CRLOG("VM: context-snapshot vmid=%u root=%#llx ctl=%#x start=%#llx end=%#llx",
-                  request.vmid, root, fbRead(asicInfo, kGcSeg0 + regs.control),
-                  firstPage << 12, (lastPage << 12) | 0xfffULL);
-        }
+    RaphaelVm::PreparedRequest program {};
+    while (programCursor < vmid2Programs.size() && vmid2Programs.read(programCursor, program)) {
+        ++programCursor;
+        const auto &request = program.request;
+        const auto *i = program.infoWords;
+        const auto *w = program.words;
+        CRLOG("VM: prepared hub=%u vmid=%u start=%#llx end=%#llx root=%#llx flags=%#x "
+              "reprogram=%u alternate=%u info="
+              "%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x words="
+              "%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,"
+              "%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x",
+              request.hub, request.vmid, request.start, request.end, request.root,
+              request.flags, request.reprogram, program.alternate,
+              i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7], i[8], i[9],
+              w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7], w[8], w[9],
+              w[10], w[11], w[12], w[13], w[14], w[15], w[16], w[17], w[18],
+              w[19], w[20]);
     }
     RaphaelSdma::SubmitInfoObservation submit {};
     while (submitCursor < vmid2Submits.size() && vmid2Submits.read(submitCursor, submit)) {
@@ -4700,11 +4705,18 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
             RLOG("route AMDGFX10VMM::fillVMRegisters -> %s (org=0x%llx)",
                  orgVmmFillRegs ? "ok" : "FAILED", orgVmmFillRegs);
             patcher.clearError();
-            orgVmmProgInv = patcher.routeFunction(addr + kOffVmmProgInv,
-                            reinterpret_cast<mach_vm_address_t>(wrapVmmProgInv), true);
-            RLOG("route AMDGFX10VMM::programAndInvalidateVM -> %s (org=0x%llx)",
-                 orgVmmProgInv ? "ok" : "FAILED", orgVmmProgInv);
+            orgVmmPrepare = patcher.routeFunction(addr + kOffVmmPrepare,
+                            reinterpret_cast<mach_vm_address_t>(wrapVmmPrepare), true);
+            CRLOG("VM: route AMDGFX10VMM::prepareVMInvalidateRequest -> %s (org=0x%llx)",
+                  orgVmmPrepare ? "ok" : "FAILED", orgVmmPrepare);
             patcher.clearError();
+            if (ptbFixMode != 2) {
+                orgVmmProgInv = patcher.routeFunction(addr + kOffVmmProgInv,
+                                reinterpret_cast<mach_vm_address_t>(wrapVmmProgInv), true);
+                RLOG("route AMDGFX10VMM::programAndInvalidateVM -> %s (org=0x%llx)",
+                     orgVmmProgInv ? "ok" : "FAILED", orgVmmProgInv);
+                patcher.clearError();
+            }
             orgHwMemSetVSReady = patcher.routeFunction(addr + kOffHwMemSetVSReady,
                                  reinterpret_cast<mach_vm_address_t>(wrapHwMemSetVSReady), true);
             RLOG("route AMDHWMemory::setVirtualSpaceReady -> %s (org=0x%llx)",

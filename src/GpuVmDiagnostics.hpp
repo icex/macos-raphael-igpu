@@ -16,6 +16,17 @@ struct InvalidateRequest {
     bool reprogram;
 };
 
+static constexpr size_t kPreparedRequestDwords = 0x54 / sizeof(uint32_t);
+static constexpr size_t kInvalidateInfoDwords = 0x28 / sizeof(uint32_t);
+
+struct PreparedRequest {
+    bool valid;
+    InvalidateRequest request;
+    bool alternate;
+    uint32_t infoWords[kInvalidateInfoDwords];
+    uint32_t words[kPreparedRequestDwords];
+};
+
 struct ContextRegisters {
     bool valid;
     uint32_t control;
@@ -55,6 +66,25 @@ inline InvalidateRequest observeInvalidateRequest(const uint8_t *bytes, size_t s
     result.root = readU64(bytes + 0x18);
     result.flags = readU32(bytes + 0x20);
     result.reprogram = bytes[0x24] != 0;
+    return result;
+}
+
+// AMDGFX10VMM::prepareVMInvalidateRequest fills this 0x54-byte request before
+// the SDMA channel patches its VM-program packet. Copy both the immutable input
+// and the native output so the observation remains useful after the callback.
+inline PreparedRequest observePreparedRequest(const uint8_t *info, size_t infoSize,
+                                              const uint8_t *prepared,
+                                              size_t preparedSize, bool alternate) {
+    PreparedRequest result {};
+    result.request = observeInvalidateRequest(info, infoSize);
+    result.alternate = alternate;
+    if (!result.request.valid || prepared == nullptr || preparedSize < 0x54)
+        return result;
+    for (size_t i = 0; i < kInvalidateInfoDwords; ++i)
+        result.infoWords[i] = readU32(info + i * sizeof(uint32_t));
+    for (size_t i = 0; i < kPreparedRequestDwords; ++i)
+        result.words[i] = readU32(prepared + i * sizeof(uint32_t));
+    result.valid = true;
     return result;
 }
 
