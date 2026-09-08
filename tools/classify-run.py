@@ -33,10 +33,14 @@ def _decode_payload(build, seq, payload):
     elif m := re.search(r'HY: SDMA select index=(\d+) queue-type=(\d+) found=([01]) counts=(\d+),(\d+),(\d+),(\d+)', payload):
         row.update(kind='sdma_select', index=int(m[1]), queue_type=int(m[2]),
                    found=bool(int(m[3])), counts=[int(m[i]) for i in range(4,8)])
-    elif m := re.search(r'submitKIQFrame -> (\d+)', payload):
+    elif m := re.search(r'submitKIQFrame -> (\d+)(?: caller=x6\+(0x[0-9a-fA-F]+))?',
+                        payload):
         row.update(kind='kiq_submit', result=int(m[1]))
-    elif m := re.search(r'waitForHwStamp\((\d+)\) -> (\d+)', payload):
+        if m[2] is not None: row['caller'] = int(m[2], 16)
+    elif m := re.search(r'waitForHwStamp\((\d+)\) -> (\d+)'
+                        r'(?: caller=x6\+(0x[0-9a-fA-F]+))?', payload):
         row.update(kind='kiq', stamp=int(m[1]), result=int(m[2]))
+        if m[3] is not None: row['caller'] = int(m[3], 16)
     elif m := re.search(r'HY: createHybridEngine enter: engine=(\d+) available=(\d+)', payload):
         row.update(kind='hybrid_enter', engine=int(m[1]), available=int(m[2]))
     elif m := re.search(r'HY: createHybridEngine exit: engine=(\d+) valid=(\d+) available-before=(\d+) status=(\d+)', payload):
@@ -50,10 +54,11 @@ def _decode_payload(build, seq, payload):
         row.update(kind='sdma_ib_repair', index=int(m[1]), before=int(m[2], 16),
                    after=int(m[3], 16), valid=bool(int(m[4])), entries=int(m[5]),
                    changed_total=int(m[6]), changed=int(m[6]) > 0)
-    elif m := re.fullmatch(r'SD: submit vmid=(\d+) flags=(0x[0-9a-fA-F]+) entries=(\d+) valid=([01]) IB0=(0x[0-9a-fA-F]+|0) IB1=(0x[0-9a-fA-F]+|0)', payload):
+    elif m := re.fullmatch(r'SD: submit vmid=(\d+) flags=(0x[0-9a-fA-F]+|0) entries=(\d+) valid=([01]) IB0=(0x[0-9a-fA-F]+|0) IB1=(0x[0-9a-fA-F]+|0)(?: seq=(\d+))?', payload):
         row.update(kind='sdma_submit', vmid=int(m[1]), flags=int(m[2], 16),
                    entries=int(m[3]), valid=bool(int(m[4])), ib0=int(m[5], 16),
                    ib1=int(m[6], 16))
+        if m[7] is not None: row['vm_sequence'] = int(m[7])
     elif m := re.fullmatch(r'VM: invalidate hub=(\d+) vmid=(\d+) start=(0x[0-9a-fA-F]+|0) end=(0x[0-9a-fA-F]+|0) root=(0x[0-9a-fA-F]+|0) flags=(0x[0-9a-fA-F]+|0) reprogram=([01])', payload):
         row.update(kind='vm_invalidate', hub=int(m[1]), vmid=int(m[2]),
                    start=int(m[3], 16), end=int(m[4], 16), root=int(m[5], 16),
@@ -65,6 +70,96 @@ def _decode_payload(build, seq, payload):
                    alternate=bool(int(m[8])),
                    info_words=[int(value, 16) for value in m[9].split(',')],
                    words=[int(value, 16) for value in m[10].split(',')])
+    elif m := re.fullmatch(r'VM: root-repair seq=(\d+) vmid=(\d+) original=(0x[0-9a-fA-F]+|0) native=(0x[0-9a-fA-F]+|0) repaired=([01]) reason=([a-z-]+) prepared-match=([01])', payload):
+        row.update(kind='vm_root_repair', vm_sequence=int(m[1]), vmid=int(m[2]),
+                   original_root=int(m[3], 16), native_root=int(m[4], 16),
+                   repaired=bool(int(m[5])), reason=m[6],
+                   prepared_match=bool(int(m[7])))
+    elif m := re.fullmatch(r'VM: state seq=(\d+) phase=([^ ]+) vmid=(\d+) ctl=(0x[0-9a-fA-F]+|0) root=(0x[0-9a-fA-F]+|0) start=(0x[0-9a-fA-F]+|0) end=(0x[0-9a-fA-F]+|0) requested=(0x[0-9a-fA-F]+|0) native=(0x[0-9a-fA-F]+|0) prepared=(0x[0-9a-fA-F]+|0) repaired=([01]) reason=([a-z-]+) prepared-match=([01]) live-match=([01])', payload):
+        row.update(kind='vm_state', vm_sequence=int(m[1]), phase=m[2], vmid=int(m[3]),
+                   control=int(m[4], 16), root=int(m[5], 16), start=int(m[6], 16),
+                   end=int(m[7], 16), requested_root=int(m[8], 16),
+                   native_root=int(m[9], 16), prepared_root=int(m[10], 16),
+                   repaired=bool(int(m[11])), reason=m[12],
+                   prepared_match=bool(int(m[13])), live_match=bool(int(m[14])))
+    elif m := re.fullmatch(r'VM: walk seq=(\d+) va=(0x[0-9a-fA-F]+|0) root=(0x[0-9a-fA-F]+|0) valid=([01]) complete=([01]) count=(\d+)', payload):
+        row.update(kind='vm_walk', vm_sequence=int(m[1]), va=int(m[2], 16),
+                   root=int(m[3], 16), valid=bool(int(m[4])),
+                   complete=bool(int(m[5])), count=int(m[6]))
+    elif m := re.fullmatch(
+            r'VM: walk-entry seq=(\d+) va=(0x[0-9a-fA-F]+|0) n=(\d+) '
+            r'level=(\d+) index=(\d+) table=(0x[0-9a-fA-F]+|0) '
+            r'raw=(0x[0-9a-fA-F]+|0) addr=(0x[0-9a-fA-F]+|0) '
+            r'V=([01]) S=([01]) C=([01]) X=([01]) R=([01]) W=([01]) '
+            r'P=([01]) TF=([01]) child-mc2pa=([01])', payload):
+        row.update(kind='vm_walk_entry', vm_sequence=int(m[1]), va=int(m[2], 16),
+                   ordinal=int(m[3]), level=int(m[4]), index=int(m[5]),
+                   table=int(m[6], 16), raw_entry=int(m[7], 16),
+                   address=int(m[8], 16), valid=bool(int(m[9])),
+                   system=bool(int(m[10])), snooped=bool(int(m[11])),
+                   executable=bool(int(m[12])), readable=bool(int(m[13])),
+                   writeable=bool(int(m[14])), pde_as_pte=bool(int(m[15])),
+                   translate_further=bool(int(m[16])),
+                   child_converted=bool(int(m[17])))
+    elif m := re.fullmatch(
+            r'VM: invalidate-live seq=(\d+) phase=([^ ]+) reg=(0x[0-9a-fA-F]+|0) '
+            r'kind=(sem|req|ack) engine=(\d+) value=(0x[0-9a-fA-F]+|0) bit2=([01])',
+            payload):
+        row.update(kind='vm_invalidate_live', vm_sequence=int(m[1]), phase=m[2],
+                   register=int(m[3], 16), register_kind=m[4], engine=int(m[5]),
+                   value=int(m[6], 16), vmid2_bit=bool(int(m[7])))
+    elif m := re.fullmatch(
+            r'VM: pre-clear-fault seq=(\d+) cntl=(0x[0-9a-fA-F]+|0) '
+            r'status=(0x[0-9a-fA-F]+|0) addr=(0x[0-9a-fA-F]+|0)', payload):
+        row.update(kind='vm_pre_clear_fault', vm_sequence=int(m[1]),
+                   fault_control=int(m[2], 16), fault_status=int(m[3], 16),
+                   fault_address=int(m[4], 16))
+    elif m := re.fullmatch(
+            r'VM: fault seq=(\d+) phase=([^ ]+) cntl=(0x[0-9a-fA-F]+|0) '
+            r'status=(0x[0-9a-fA-F]+|0) addr=(0x[0-9a-fA-F]+|0) \| '
+            r'invalidate-order=(0x[0-9a-fA-F]+|0) eng0-sem=(0x[0-9a-fA-F]+|0) '
+            r'req=(0x[0-9a-fA-F]+|0) ack=(0x[0-9a-fA-F]+|0) bit2=([01])/([01]) '
+            r'prepared-mask=(0x[0-9a-fA-F]+|0)/(0x[0-9a-fA-F]+|0)', payload):
+        row.update(kind='vm_fault', vm_sequence=int(m[1]), phase=m[2],
+                   fault_control=int(m[3], 16), fault_status=int(m[4], 16),
+                   fault_address=int(m[5], 16), invalidate_order=int(m[6], 16),
+                   semaphore0=int(m[7], 16), request0=int(m[8], 16),
+                   acknowledge0=int(m[9], 16), request_vmid2_bit=int(m[10]),
+                   acknowledge_vmid2_bit=int(m[11]),
+                   prepared_request_mask=int(m[12], 16),
+                   prepared_ack_mask=int(m[13], 16))
+    elif m := re.fullmatch(
+            r'SD: runtime seq=(\d+) phase=([^ ]+) cntl=(0x[0-9a-fA-F]+|0) '
+            r'ucode=(0x[0-9a-fA-F]+|0) f32=(0x[0-9a-fA-F]+|0) '
+            r'status=(0x[0-9a-fA-F]+|0)/(0x[0-9a-fA-F]+|0)/'
+            r'(0x[0-9a-fA-F]+|0)/(0x[0-9a-fA-F]+|0) '
+            r'utcl-cntl=(0x[0-9a-fA-F]+|0) page=(0x[0-9a-fA-F]+|0) '
+            r'rd=(0x[0-9a-fA-F]+|0) wr=(0x[0-9a-fA-F]+|0)', payload):
+        row.update(kind='sdma_runtime', vm_sequence=int(m[1]), phase=m[2],
+                   control=int(m[3], 16), ucode_checksum=int(m[4], 16),
+                   f32_control=int(m[5], 16),
+                   status=[int(m[n], 16) for n in range(6, 10)],
+                   utcl_control=int(m[10], 16), utcl_page=int(m[11], 16),
+                   read_status=int(m[12], 16), write_status=int(m[13], 16))
+    elif m := re.fullmatch(
+            r'SD: xnack seq=(\d+) phase=([^ ]+) rd=(0x[0-9a-fA-F]+|0)/'
+            r'(0x[0-9a-fA-F]+|0) wr=(0x[0-9a-fA-F]+|0)/'
+            r'(0x[0-9a-fA-F]+|0)', payload):
+        row.update(kind='sdma_xnack', vm_sequence=int(m[1]), phase=m[2],
+                   read_xnack0=int(m[3], 16), read_xnack1=int(m[4], 16),
+                   write_xnack0=int(m[5], 16), write_xnack1=int(m[6], 16))
+    elif m := re.fullmatch(
+            r'SD: page seq=(\d+) phase=([^ ]+) status=(0x[0-9a-fA-F]+|0) '
+            r'context=(0x[0-9a-fA-F]+|0) ib-cntl=(0x[0-9a-fA-F]+|0) '
+            r'rptr=(0x[0-9a-fA-F]+|0) offset=(0x[0-9a-fA-F]+|0) '
+            r'base=(0x[0-9a-fA-F]+|0)_([0-9a-fA-F]{8}) size=(0x[0-9a-fA-F]+|0)',
+            payload):
+        row.update(kind='sdma_page_state', vm_sequence=int(m[1]), phase=m[2],
+                   status=int(m[3], 16), context=int(m[4], 16),
+                   ib_control=int(m[5], 16), rptr=int(m[6], 16),
+                   offset=int(m[7], 16),
+                   ib_base=(int(m[8], 16) << 32) | int(m[9], 16),
+                   size=int(m[10], 16))
     elif m := re.fullmatch(r'VM: context-snapshot vmid=(\d+) root=(0x[0-9a-fA-F]+|0) ctl=(0x[0-9a-fA-F]+|0) start=(0x[0-9a-fA-F]+|0) end=(0x[0-9a-fA-F]+|0)', payload):
         row.update(kind='vm_context', vmid=int(m[1]), root=int(m[2], 16),
                    control=int(m[3], 16), start=int(m[4], 16), end=int(m[5], 16))
@@ -165,7 +260,10 @@ def parse_serial(serial):
         if row.get('build') not in counts:
             row['source'] = 'raw-fallback'
             terminal_live.append(row)
-        elif row['kind'] in ('vm_invalidate', 'vm_context', 'vm_program', 'sdma_submit'):
+        elif row['kind'] in ('vm_invalidate', 'vm_context', 'vm_program', 'vm_root_repair',
+                            'vm_state', 'vm_walk', 'vm_walk_entry',
+                            'vm_invalidate_live', 'vm_pre_clear_fault', 'vm_fault',
+                            'sdma_runtime', 'sdma_xnack', 'sdma_page_state', 'sdma_submit'):
             # These records are formatted by the dedicated observation thread,
             # outside the driver callbacks. Preserve the exact live line until
             # the next immutable structured snapshot includes it.
@@ -218,6 +316,37 @@ def classify(manifest, events, probe):
             for program in programs)
         if not coherent:
             return verdict('INCONCLUSIVE', stage='sdma_vm_program_mismatch')
+    if 'vmid2_root_repair' in required:
+        repairs = [r for r in events if r['kind'] == 'vm_root_repair' and
+                   r.get('vmid') == 2]
+        if not repairs:
+            return verdict('INCONCLUSIVE', stage='vmid2_root_repair_missing')
+        repaired = [r for r in repairs if r.get('repaired') and
+                    r.get('reason') == 'repaired']
+        if not repaired:
+            reason = repairs[-1].get('reason', 'unknown')
+            return verdict('INCONCLUSIVE', stage=f'vmid2_root_repair_refused:{reason}',
+                           next_action='inspect the refusal reason; do not retry unchanged')
+        if any(not r.get('prepared_match') for r in repaired):
+            return verdict('INVALID', stage='vmid2_root_prepared_mismatch')
+        sequence_ids = {r.get('vm_sequence') for r in repaired}
+        submits = [r for r in events if r['kind'] == 'sdma_submit' and
+                   r.get('valid') and r.get('vmid') == 2 and
+                   r.get('vm_sequence') in sequence_ids]
+        if not submits:
+            return verdict('INCONCLUSIVE', stage='vmid2_root_submit_mismatch')
+        correlated = {r.get('vm_sequence') for r in submits}
+        states = [r for r in events if r['kind'] == 'vm_state' and
+                  r.get('vmid') == 2 and r.get('phase') == 'dispatch+0ms' and
+                  r.get('vm_sequence') in correlated]
+        if not states:
+            return verdict('INCONCLUSIVE', stage='vmid2_root_state_missing')
+        targets = {0x400100000, 0x4000c0000, 0x400200000}
+        if not any(targets <= {r.get('va') for r in events
+                              if r['kind'] == 'vm_walk' and
+                              r.get('vm_sequence') == sequence}
+                   for sequence in correlated):
+            return verdict('INCONCLUSIVE', stage='vmid2_root_walk_missing')
     panics = [r for r in events if r['kind'] == 'guest_panic']
     raw_sdma = [r for r in events if r['kind'] == 'sdma_page_timeout' and
                 r.get('source') == 'raw-terminal']

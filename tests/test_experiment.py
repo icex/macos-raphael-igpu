@@ -22,6 +22,85 @@ class ExperimentTests(unittest.TestCase):
         spec.loader.exec_module(module)
         return module
 
+    def recovery_receipt(self, tool, prior='a'*32, recovery='b'*32):
+        reservation = {
+            'version':1, 'state':tool.RECOVERY_RESERVATION_ACTIVE,
+            'heap_limit':tool.RECOVERY_HEAP_LIMIT,
+            'reservation_start':tool.RECOVERY_RESERVATION_START,
+            'scratch_start':tool.RECOVERY_SCRATCH_START,
+            'reservation_end':tool.RECOVERY_RESERVATION_END,
+            'run_id':prior, 'checksum':tool._recovery_checksum(prior),
+            'consumed':True,
+            'consume_hdp_flush':{'remap':0x7f000, 'posted_read':0x200},
+        }
+        regions = json.loads(json.dumps(tool.RECOVERY_BAR_REGIONS))
+        return {
+            'schema':3, 'status':'recovered', 'authorizes_launch':True,
+            'boot_id':'boot-A', 'prior_run_id':prior, 'recovery_id':recovery,
+            'device':'0000:7b:00.0', 'iommu_group':'31', 'driver':'vfio-pci',
+            'pci_command_before':3, 'pci_command_after':3,
+            'reset_methods_before':[], 'reset_methods_after':[],
+            'bar5':dict(regions['5'], regions=regions), 'kernel_messages':[],
+            'gc_quiesce':{
+                'status':'quiesced', 'active_after':0,
+                'dequeue_timeouts':0, 'forced_inactive':0,
+                'cp_stat_after':0, 'cp_cpc_busy_after':0,
+                'cp_me_after':0x15000000, 'cp_mec_after':0x50000000,
+                'pq_wptr_poll_after':0, 'pq_status_after':0,
+                'doorbell_range_lower_after':0, 'doorbell_range_upper_after':0,
+                'sdma0_after':1, 'sdma0_cntl_after':0,
+                'sdma0_rb_after':0, 'sdma0_ib_after':0,
+                'gfx_ring_clean':True, 'gfx_retirement_confirmed':True,
+                'gfx_needs_unmap':False, 'gfx_was_stale':False,
+                'host_kiq':{'status':'not-needed'}, 'reservation':reservation,
+                'gfx_rb_active_after':0, 'gfx_rb_doorbell_after':0,
+                'gfx_rb_wptr_after':0, 'gfx_rb_wptr_hi_after':0,
+                'gfx_rb_base_after':0, 'gfx_rb_base_hi_after':0,
+                'gfx_rb_cntl_after':0,
+            },
+            'commands':[
+                {'command':0x00030000, 'response':0x80030000, 'confirmed':True},
+                {'command':0x000c0000, 'response':0x800c0000, 'confirmed':True},
+            ],
+        }
+
+    def host_kiq_receipt(self, tool, prior='a'*32):
+        receipt = self.recovery_receipt(tool, prior)
+        gc = receipt['gc_quiesce']
+        fb = 0xf400000000
+        physical_fb = 0x840000000
+        gart_offset = 0x0e000000
+        gc.update(gfx_needs_unmap=True, gfx_was_stale=True)
+        gc['host_kiq'] = {
+            'status':'retired', 'selector':9, 'cleanup_confirmed':True,
+            'gfx_active_after_unmap':0, 'gfx_active_before_scrub':0,
+            'packet_dwords':0x100, 'rptr_after':0x100,
+            'fence_sequence':0x12345678, 'fence_after':0x12345678,
+            'gfx_doorbell_offset':0x400,
+            'hdp_flush':{'remap':0x7f000, 'posted_read':0x200},
+            'reservation':gc['reservation'],
+            'addresses':{
+                'ring':fb+0x0f100000, 'mqd':fb+0x0f110000,
+                'rptr':fb+0x0f111000, 'wptr':fb+0x0f111008,
+                'eop':fb+0x0f112000, 'fence':fb+0x0f113000},
+            'gart':{'control':1, 'root':physical_fb+gart_offset+1,
+                    'start_page':0, 'end_page':0xff,
+                    'physical_fb':physical_fb, 'bar_offset':gart_offset,
+                    'size':0x800, 'active':True},
+            'cleanup':{'mec_cntl':0x50000000, 'hqd_active':0,
+                       'hqd_doorbell':0, 'hqd_rptr':0,
+                       'hqd_wptr_lo':0, 'hqd_wptr_hi':0,
+                       'pq_status':0, 'doorbell_range_lower':0,
+                       'doorbell_range_upper':0, 'wptr_poll_cntl':0},
+            'final_gate':{
+                'active_after':0, 'cp_stat_after':0,
+                'cp_cpc_busy_after':0, 'pq_wptr_poll_after':0,
+                'pq_status_after':0, 'doorbell_range_lower_after':0,
+                'doorbell_range_upper_after':0,
+                'gfx_ring_clean':True, 'gfx_retirement_confirmed':True},
+        }
+        return receipt
+
     def test_identity_mismatches_and_missing_values_fail_closed(self):
         validate = self.module().validate_identity
         expected = dict(binary_sha256='a'*64, info_sha256='b'*64, boot_args='rgpu=1',
@@ -184,23 +263,7 @@ class ExperimentTests(unittest.TestCase):
             (used/'boot-A.json').write_text(json.dumps(
                 {'boot_id':'boot-A', 'experiment':prior}))
             receipts = vm/'run/vfio-recovery/boot-A'; receipts.mkdir(parents=True)
-            receipt = {'schema':2, 'status':'recovered', 'authorizes_launch':True,
-                       'boot_id':'boot-A',
-                       'prior_run_id':prior, 'recovery_id':'c'*32,
-                       'device':'0000:7b:00.0', 'iommu_group':'31', 'driver':'vfio-pci',
-                       'pci_command_before':3, 'pci_command_after':3,
-                       'reset_methods_before':[], 'reset_methods_after':[],
-                       'kernel_messages':[],
-                       'gc_quiesce':{'status':'quiesced', 'active_after':0,
-                                     'dequeue_timeouts':0, 'forced_inactive':0,
-                                     'cp_stat_after':0, 'cp_cpc_busy_after':0,
-                                     'cp_me_after':0x15000000,
-                                     'cp_mec_after':0x50000000,
-                                     'sdma0_after':1},
-                       'commands':[{'command':0x00030000, 'response':0x80030000,
-                                    'confirmed':True},
-                                   {'command':0x000c0000, 'response':0x800c0000,
-                                    'confirmed':True}]}
+            receipt = self.recovery_receipt(tool, prior, 'c'*32)
             (receipts/(prior+'.json')).write_text(json.dumps(receipt))
             authorization, errors = tool.reuse_authorization(vm, 'boot-A', current)
             self.assertEqual(errors, [])
@@ -236,7 +299,26 @@ class ExperimentTests(unittest.TestCase):
                                    'cp_stat_after':0, 'cp_cpc_busy_after':0,
                                    'cp_me_after':0x15000000,
                                    'cp_mec_after':0x50000000,
-                                   'sdma0_after':1},
+                                   'pq_wptr_poll_after':0,
+                                   'pq_status_after':0,
+                                   'doorbell_range_lower_after':0,
+                                   'doorbell_range_upper_after':0,
+                                   'sdma0_after':1,
+                                   'sdma0_cntl_after':0,
+                                   'sdma0_rb_after':0,
+                                   'sdma0_ib_after':0,
+                                   'gfx_ring_clean':True,
+                                   'gfx_retirement_confirmed':True,
+                                   'gfx_needs_unmap':False,
+                                   'gfx_was_stale':False,
+                                   'host_kiq':{'status':'not-needed'},
+                                   'gfx_rb_active_after':0,
+                                   'gfx_rb_doorbell_after':0,
+                                   'gfx_rb_wptr_after':0,
+                                   'gfx_rb_wptr_hi_after':0,
+                                   'gfx_rb_base_after':0,
+                                   'gfx_rb_base_hi_after':0,
+                                   'gfx_rb_cntl_after':0},
                      'commands':[{'command':0x00030000, 'response':0x80030000,
                                   'confirmed':True},
                                  {'command':0x000c0000, 'response':0x800c0000,
@@ -248,27 +330,163 @@ class ExperimentTests(unittest.TestCase):
 
     def test_recovery_receipt_validation_fails_closed(self):
         tool = self.module()
-        good = {'schema':2, 'status':'recovered', 'authorizes_launch':True,
-                'boot_id':'boot-A',
-                'prior_run_id':'a'*32, 'recovery_id':'b'*32,
-                'device':'0000:7b:00.0', 'iommu_group':'31', 'driver':'vfio-pci',
-                'pci_command_before':3, 'pci_command_after':3,
-                'reset_methods_before':[], 'reset_methods_after':[],
-                'kernel_messages':[],
-                'gc_quiesce':{'status':'quiesced', 'active_after':0,
-                              'dequeue_timeouts':0, 'forced_inactive':0,
-                              'cp_stat_after':0, 'cp_cpc_busy_after':0,
-                              'cp_me_after':0x15000000,
-                              'cp_mec_after':0x50000000,
-                              'sdma0_after':1},
-                'commands':[{'command':0x00030000, 'response':0x80030000,
-                             'confirmed':True},
-                            {'command':0x000c0000, 'response':0x800c0000,
-                             'confirmed':True}]}
+        good = self.recovery_receipt(tool)
         self.assertEqual(tool.validate_recovery_receipt(good, 'boot-A', 'a'*32), [])
         self.assertIn('recovery_receipt', tool.validate_recovery_receipt(
             {key:value for key,value in good.items() if key != 'gc_quiesce'},
             'boot-A', 'a'*32))
+        stale_gfx = json.loads(json.dumps(good))
+        stale_gfx['gc_quiesce']['gfx_rb_active_after'] = 1
+        self.assertIn('recovery_receipt', tool.validate_recovery_receipt(
+            stale_gfx, 'boot-A', 'a'*32))
+        recovered_stale_gfx = json.loads(json.dumps(good))
+        reservation = recovered_stale_gfx['gc_quiesce']['reservation']
+        fb = 0xf400000000
+        recovered_stale_gfx['gc_quiesce'].update({
+            'gfx_needs_unmap':True,
+            'gfx_was_stale':True,
+            'host_kiq':{'status':'retired', 'selector':9,
+                        'cleanup_confirmed':True,
+                        'gfx_active_after_unmap':0,
+                        'gfx_active_before_scrub':0,
+                        'packet_dwords':0x100,
+                        'rptr_after':0x100,
+                        'fence_sequence':0x12345678,
+                        'fence_after':0x12345678,
+                        'gfx_doorbell_offset':0x400,
+                        'hdp_flush':{'remap':0x7f000, 'posted_read':0x200},
+                        'reservation':reservation,
+                        'addresses':{
+                            'ring':fb+0x0f100000, 'mqd':fb+0x0f110000,
+                            'rptr':fb+0x0f111000, 'wptr':fb+0x0f111008,
+                            'eop':fb+0x0f112000, 'fence':fb+0x0f113000},
+                        'gart':{'control':0, 'root':0, 'start_page':0,
+                                'end_page':0, 'physical_fb':0x840000000,
+                                'bar_offset':None, 'size':0, 'active':False},
+                        'cleanup':{'mec_cntl':0x50000000, 'hqd_active':0,
+                                   'hqd_doorbell':0, 'hqd_rptr':0,
+                                   'hqd_wptr_lo':0, 'hqd_wptr_hi':0,
+                                   'pq_status':0, 'doorbell_range_lower':0,
+                                   'doorbell_range_upper':0, 'wptr_poll_cntl':0},
+                        'final_gate':{
+                            'active_after':0, 'cp_stat_after':0,
+                            'cp_cpc_busy_after':0, 'pq_wptr_poll_after':0,
+                            'pq_status_after':0, 'doorbell_range_lower_after':0,
+                            'doorbell_range_upper_after':0,
+                            'gfx_ring_clean':True,
+                            'gfx_retirement_confirmed':True}},
+        })
+        self.assertEqual(tool.validate_recovery_receipt(
+            recovered_stale_gfx, 'boot-A', 'a'*32), [])
+        recovered_stale_gfx['gc_quiesce']['host_kiq']['cleanup_confirmed'] = False
+        self.assertIn('recovery_receipt', tool.validate_recovery_receipt(
+            recovered_stale_gfx, 'boot-A', 'a'*32))
+        for key, value in [('fence_after',0), ('gfx_doorbell_offset',0x800),
+                           ('packet_dwords',6), ('reservation',{'consumed':True}),
+                           ('hdp_flush',{'remap':0})]:
+            broken = json.loads(json.dumps(recovered_stale_gfx))
+            broken['gc_quiesce']['host_kiq']['cleanup_confirmed'] = True
+            broken['gc_quiesce']['host_kiq'][key] = value
+            self.assertIn('recovery_receipt', tool.validate_recovery_receipt(
+                broken, 'boot-A', 'a'*32))
+
+    def test_recovery_receipt_admission_mutation_checks_every_hardware_proof(self):
+        tool = self.module()
+        good = self.host_kiq_receipt(tool)
+        self.assertEqual(tool.validate_recovery_receipt(good, 'boot-A', 'a'*32), [])
+
+        def changed(path, value, *, mirror_reservation=False):
+            receipt = json.loads(json.dumps(good))
+            target = receipt
+            for key in path[:-1]:
+                target = target[key]
+            target[path[-1]] = value
+            if mirror_reservation:
+                receipt['gc_quiesce']['host_kiq']['reservation'] = json.loads(
+                    json.dumps(receipt['gc_quiesce']['reservation']))
+            return receipt
+
+        # Receipt schemas are deliberately not backward-compatible: adding a
+        # proof changes the version and older receipts fail closed.
+        self.assertIn('recovery_receipt', tool.validate_recovery_receipt(
+            changed(('schema',), 2), 'boot-A', 'a'*32))
+
+        for index, expected in tool.RECOVERY_BAR_REGIONS.items():
+            for field, value in expected.items():
+                bad = (not value if type(value) is bool else value + 1)
+                with self.subTest(area='region', index=index, field=field):
+                    self.assertIn('recovery_receipt', tool.validate_recovery_receipt(
+                        changed(('bar5','regions',index,field), bad),
+                        'boot-A', 'a'*32))
+        for field, value in tool.RECOVERY_BAR_REGIONS['5'].items():
+            bad = (not value if type(value) is bool else value + 1)
+            with self.subTest(area='bar5', field=field):
+                self.assertIn('recovery_receipt', tool.validate_recovery_receipt(
+                    changed(('bar5',field), bad), 'boot-A', 'a'*32))
+
+        reservation_bad = {
+            'version':2, 'state':0, 'heap_limit':0, 'reservation_start':0,
+            'scratch_start':0, 'reservation_end':0, 'run_id':'c'*32,
+            'checksum':0, 'consumed':False,
+        }
+        for field, bad in reservation_bad.items():
+            with self.subTest(area='reservation', field=field):
+                self.assertIn('recovery_receipt', tool.validate_recovery_receipt(
+                    changed(('gc_quiesce','reservation',field), bad,
+                            mirror_reservation=True), 'boot-A', 'a'*32))
+        for field, bad in [('remap',0), ('posted_read',0xffffffff)]:
+            with self.subTest(area='reservation-flush', field=field):
+                self.assertIn('recovery_receipt', tool.validate_recovery_receipt(
+                    changed(('gc_quiesce','reservation','consume_hdp_flush',field), bad,
+                            mirror_reservation=True), 'boot-A', 'a'*32))
+
+        host_bad = {
+            'status':'failed', 'selector':8, 'cleanup_confirmed':False,
+            'gfx_active_after_unmap':1, 'gfx_active_before_scrub':1,
+            'packet_dwords':6, 'rptr_after':0, 'fence_sequence':0,
+            'fence_after':0, 'gfx_doorbell_offset':0x800,
+        }
+        for field, bad in host_bad.items():
+            with self.subTest(area='host-kiq', field=field):
+                self.assertIn('recovery_receipt', tool.validate_recovery_receipt(
+                    changed(('gc_quiesce','host_kiq',field), bad),
+                    'boot-A', 'a'*32))
+        for field, bad in [('remap',0), ('posted_read',0xffffffff)]:
+            self.assertIn('recovery_receipt', tool.validate_recovery_receipt(
+                changed(('gc_quiesce','host_kiq','hdp_flush',field), bad),
+                'boot-A', 'a'*32))
+
+        for field in ('ring','mqd','rptr','wptr','eop','fence'):
+            value = good['gc_quiesce']['host_kiq']['addresses'][field]
+            with self.subTest(area='addresses', field=field):
+                self.assertIn('recovery_receipt', tool.validate_recovery_receipt(
+                    changed(('gc_quiesce','host_kiq','addresses',field), value+4),
+                    'boot-A', 'a'*32))
+        gart_bad = {'control':0, 'root':0, 'start_page':2, 'end_page':0xfe,
+                    'physical_fb':0x850000000, 'bar_offset':0x0e000004,
+                    'size':0x808, 'active':False}
+        for field, bad in gart_bad.items():
+            with self.subTest(area='gart', field=field):
+                self.assertIn('recovery_receipt', tool.validate_recovery_receipt(
+                    changed(('gc_quiesce','host_kiq','gart',field), bad),
+                    'boot-A', 'a'*32))
+        cleanup_bad = {
+            'mec_cntl':0, 'hqd_active':1, 'hqd_doorbell':1,
+            'hqd_rptr':1, 'hqd_wptr_lo':1, 'hqd_wptr_hi':1,
+            'pq_status':2, 'doorbell_range_lower':1,
+            'doorbell_range_upper':1, 'wptr_poll_cntl':0x80000000,
+        }
+        for field, bad in cleanup_bad.items():
+            with self.subTest(area='cleanup', field=field):
+                self.assertIn('recovery_receipt', tool.validate_recovery_receipt(
+                    changed(('gc_quiesce','host_kiq','cleanup',field), bad),
+                    'boot-A', 'a'*32))
+        for field, value in good['gc_quiesce']['host_kiq']['final_gate'].items():
+            bad = (not value if type(value) is bool else value + 1)
+            with self.subTest(area='final-gate', field=field):
+                self.assertIn('recovery_receipt', tool.validate_recovery_receipt(
+                    changed(('gc_quiesce','host_kiq','final_gate',field), bad),
+                    'boot-A', 'a'*32))
         for key, value in [('status','failed'), ('prior_run_id','c'*32),
                            ('pci_command_after',7), ('reset_methods_after',['bus']),
                            ('kernel_messages',['vfio-pci 0000:7b:00.0: resetting']),
@@ -362,6 +580,126 @@ class ExperimentTests(unittest.TestCase):
     def test_kernel_fault_during_shutdown_invalidates_result(self):
         self.exercise_run('shutdown-fault')
 
+    def test_confirmed_forced_stop_receipt_admits_next_same_boot_launch(self):
+        tool = self.module()
+        with tempfile.TemporaryDirectory() as temp:
+            vm = Path(temp); (vm/'run').mkdir()
+            manifests = []
+            for run_id in ('a'*32, 'b'*32):
+                manifest = {key:'fixture' for key in tool.IDENTITY_FIELDS}
+                manifest.update(
+                    build_id='abc', run_id=run_id, max_seconds=180,
+                    boot_id='boot-A', bootdisk_verified=True, gpu=True,
+                    spec={'run_probe_only_after_native_start':True,
+                          'requested_diagnostic':'rgpusdma=1'},
+                    launch_options={'BOOTDISK_MODE':'custom', 'NVRAM':'stock'},
+                    source_clean=True, vfio_device='0000:7b:00.0',
+                    candidate_directory='run/candidate-173',
+                    image_id='sha256:expected')
+                path = vm/f'prepared-{run_id[0]}.json'
+                path.write_text(json.dumps(manifest))
+                manifests.append((manifest, path))
+
+            host = dict(self.host(), sleep_inhibited=True)
+            now = [100.0]
+            calls = []
+            lines = [
+                'BUILD: identity=abc',
+                'HY: HWLibs hybrid trace route=ok entries-match=1',
+                'XJ:   waitForHwStamp(1) -> 1',
+                'HY: createHybridEngine enter: engine=1 available=1',
+                'HY: createHybridEngine exit: engine=1 valid=1 available-before=1 status=4',
+                'XJ: AMDHardware::startHWEngines -> 0',
+            ]
+            serial = 'RGPU_RECORDS build=abc count=6 dropped=0 truncated=0\n'+''.join(
+                f'RGPU_EVENT build=abc seq={i} {line}\n'
+                for i,line in enumerate(lines))
+
+            class StopUnconfirmed(RuntimeError):
+                pass
+
+            def start(*args):
+                calls.append(('start', args[2]))
+                (vm/'run/serial.log').write_text(serial)
+                return {'cid':'c'*64, 'deadline_epoch':now[0]+180,
+                        'max_seconds':180}
+
+            supervisor = SimpleNamespace(
+                start_locked=start, verify=lambda state:None,
+                ManagedStopUnconfirmed=StopUnconfirmed,
+                stop_exact=lambda cid:calls.append(('unexpected-stop', cid)))
+
+            def shutdown(vm_path, state, expected_build, grace):
+                calls.append(('forced-stop-confirmed', state['cid']))
+                return {'cid':state['cid'], 'outcome':'forced',
+                        'request_sent':True, 'guest_boot_uuid':'1'*36,
+                        'request_id':'2'*32, 'request_error':None,
+                        'acpi_request_sent':True,
+                        'acpi_request_error':'bounded grace expired'}
+
+            def recover(vm_path, prior):
+                calls.append(('recover', prior))
+                recovery_id = ('f' if prior == 'a'*32 else 'e')*32
+                receipt = self.recovery_receipt(tool, prior, recovery_id)
+                target = vm_path/'run/vfio-recovery/boot-A'
+                target.mkdir(parents=True, exist_ok=True)
+                (target/(prior+'.json')).write_text(json.dumps(receipt))
+                return receipt
+
+            def prepare_launch(expected_boot, run_id):
+                calls.append(('prepare-recovery-reservation', expected_boot, run_id))
+                return {'boot_id':expected_boot, 'run_id':run_id, 'state':'pending'}
+
+            recovery = SimpleNamespace(recover=recover, prepare_launch=prepare_launch)
+            guest_shutdown = SimpleNamespace(shutdown=shutdown)
+            original_helper = tool.helper
+
+            def helpers(name):
+                if name == 'vm-supervision': return supervisor
+                if name == 'guest-shutdown': return guest_shutdown
+                if name == 'vfio-recover': return recovery
+                return original_helper(name)
+
+            class NoopMonitor:
+                def __init__(self, cursor, interrupt, interval=1):
+                    self.messages = []; self.error = None; self.error_kind = None
+                def start(self): pass
+                def stop(self): pass
+
+            observed = iter([manifests[0][0], manifests[1][0]])
+            with patch.object(tool, 'current_identity', side_effect=lambda *args:next(observed)), \
+                 patch.object(tool, 'host_snapshot', return_value=host), \
+                 patch.object(tool, 'helper', side_effect=helpers), \
+                 patch.object(tool, 'running_identity', return_value={
+                     'image_id':'sha256:expected',
+                     'vfio_args':['vfio-pci,host=0000:7b:00.0']}), \
+                 patch.object(tool, 'kernel_updates', return_value=('cursor', [], [])), \
+                 patch.object(tool, 'HostMonitor', NoopMonitor), \
+                 patch.object(tool.time, 'time', side_effect=lambda:now[0]), \
+                 patch.object(tool.time, 'sleep', side_effect=lambda n:now.__setitem__(0, now[0]+n)):
+                first = tool.run_one(vm, manifests[0][1], vm/'evidence-a')
+                second = tool.run_one(vm, manifests[1][1], vm/'evidence-b')
+
+            self.assertEqual(first['warm_reuse'], 'recovered')
+            self.assertEqual(second['warm_reuse'], 'recovered')
+            self.assertEqual([call for call in calls if call[0] == 'start'], [
+                ('start', ['--gpu','0000:7b:00.0','--gpu-id','0x73ff',
+                           '--gpu-rom','run/gpu-patched.rom']),
+                ('start', ['--gpu','0000:7b:00.0','--gpu-id','0x73ff',
+                           '--gpu-rom','run/gpu-patched.rom'])])
+            self.assertEqual(len([call for call in calls
+                                  if call[0] == 'forced-stop-confirmed']), 2)
+            self.assertNotIn(('unexpected-stop', 'c'*64), calls)
+            ledger = json.loads((vm/'run/used-gpu-boots/boot-A.json').read_text())
+            self.assertEqual([row['run_id'] for row in ledger['launches']],
+                             ['a'*32, 'b'*32])
+            self.assertEqual(ledger['launches'][1]['prior_run_id'], 'a'*32)
+            self.assertEqual(ledger['launches'][1]['recovery_id'], 'f'*32)
+            admitted = json.loads(
+                (vm/'run/vfio-recovery/boot-A'/('a'*32+'.json')).read_text())
+            self.assertEqual(tool.validate_recovery_receipt(
+                admitted, 'boot-A', 'a'*32), [])
+
     def exercise_run(self, mode):
         tool = self.module()
         self.assertTrue(hasattr(tool, 'run_one'))
@@ -431,7 +769,26 @@ class ExperimentTests(unittest.TestCase):
                                          'cp_stat_after':0, 'cp_cpc_busy_after':0,
                                          'cp_me_after':0x15000000,
                                          'cp_mec_after':0x50000000,
-                                         'sdma0_after':1},
+                                         'pq_wptr_poll_after':0,
+                                         'pq_status_after':0,
+                                         'doorbell_range_lower_after':0,
+                                         'doorbell_range_upper_after':0,
+                                         'sdma0_after':1,
+                                         'sdma0_cntl_after':0,
+                                         'sdma0_rb_after':0,
+                                         'sdma0_ib_after':0,
+                                         'gfx_ring_clean':True,
+                                         'gfx_retirement_confirmed':True,
+                                         'gfx_needs_unmap':False,
+                                         'gfx_was_stale':False,
+                                         'host_kiq':{'status':'not-needed'},
+                                         'gfx_rb_active_after':0,
+                                         'gfx_rb_doorbell_after':0,
+                                         'gfx_rb_wptr_after':0,
+                                         'gfx_rb_wptr_hi_after':0,
+                                         'gfx_rb_base_after':0,
+                                         'gfx_rb_base_hi_after':0,
+                                         'gfx_rb_cntl_after':0},
                            'commands':[{'command':0x00030000, 'response':0x80030000,
                                         'confirmed':True},
                                        {'command':0x000c0000, 'response':0x800c0000,
@@ -439,7 +796,10 @@ class ExperimentTests(unittest.TestCase):
                 target = vm_path/'run/vfio-recovery/boot-A'; target.mkdir(parents=True, exist_ok=True)
                 (target/(prior+'.json')).write_text(json.dumps(receipt))
                 return receipt
-            recovery = SimpleNamespace(recover=recover)
+            def prepare_launch(expected_boot, run_id):
+                calls.append(('prepare-recovery-reservation', expected_boot, run_id))
+                return {'boot_id':expected_boot, 'run_id':run_id, 'state':'pending'}
+            recovery = SimpleNamespace(recover=recover, prepare_launch=prepare_launch)
             original_helper = tool.helper
             def helpers(name):
                 if name == 'vm-supervision': return supervisor
@@ -462,6 +822,11 @@ class ExperimentTests(unittest.TestCase):
                 out = vm/'evidence'
                 result = tool.run_one(vm, path, out)
                 self.assertEqual(calls.count('start'), 1)
+                if mode != 'gpu-less':
+                    self.assertLess(calls.index(('prepare-recovery-reservation',
+                                                 'boot-A', 'a'*32)),
+                                    calls.index('start'))
+                    self.assertTrue((out/'recovery-reservation.json').exists())
                 if mode == 'hybrid':
                     self.assertEqual(result['verdict'], 'HYBRID_QUEUE_SUSPECTED')
                     self.assertIn(('guest-shutdown','c'*64, 'fixture'), calls)

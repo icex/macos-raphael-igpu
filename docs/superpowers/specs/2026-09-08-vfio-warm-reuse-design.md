@@ -11,7 +11,8 @@ transition. A successful cleanup must be proven before the next launch is admitt
 - `0000:7b:00.0` exposes only the PCI `bus` reset method. Its upstream bus also contains
   the host CCP/PSP, two xHCI controllers and audio functions, so resetting that bus is unsafe.
 - The iGPU remains bound to `vfio-pci`; `/dev/vfio/31` is owned by the desktop user and the
-  VFIO container node is world accessible. Mapping BAR5 through VFIO therefore needs no root.
+  VFIO container node is world accessible. Mapping BAR0, BAR2 and BAR5 through VFIO therefore
+  needs no root after the one-way handoff.
 - Legacy VFIO calls `pci_try_reset_function()` when the device is opened and may reset it again
   on close. On this host that selected the advertised `bus` method despite the shared APU bus.
   The handoff must therefore disable all reset methods before any VFIO consumer opens the device.
@@ -32,14 +33,39 @@ transition. A successful cleanup must be proven before the next launch is admitt
 5. the prior run belongs to the current host boot and is the most recent launch in the boot
    ledger;
 
-The utility opens the legacy VFIO container and group as the current user, attaches the group,
-gets the device file descriptor, and maps only BAR5. It follows Linux GFX10 teardown: disable
-`CP_PQ_WPTR_POLL_CNTL`, walk ME1/ME2 HQD selectors and request dequeue while the MECs still run,
-then halt graphics CP, both MECs and physical SDMA0. If a queue cannot drain after QEMU removed
-its guest DMA mappings, recovery disables its doorbell and clears `CP_HQD_ACTIVE` only after the
-MEC halt readback. It clears stale pointers and proves every selector inactive. It then submits
-`DESTROY_RINGS` (`0x00030000`) followed by `DESTROY_GPCOM_RING` (`0x000c0000`). Every register
-transition and PSP response must read back correctly before a receipt is created.
+Before QEMU starts, the coordinator opens VFIO and writes a `PENDING` descriptor containing the
+128-bit run ID into BAR0. `RaphaelGPU` recognizes that exact challenge immediately before
+`AMDHWMemory::enableAllocations`, caps both Apple BAR0 allocator pools at `0x0f000000`, and changes
+the descriptor to `ACTIVE`. The final 16 MiB is then outside both allocator pools. Recovery
+requires `ACTIVE` plus the exact prior run ID and consumes the descriptor before using the
+reserved region. An old launch nonce, a still-pending descriptor, a corrupt descriptor, or a
+second recovery attempt fails closed.
+
+The utility maps BAR0 VRAM, BAR2 doorbells and BAR5 MMIO. It disables write-pointer polling with
+bit 31, walks all ME1/ME2 HQDs, and requests dequeue while the MECs still run. A stuck or newly
+active HQD blocks the temporary KIQ and makes the transaction non-authorizing. If the legacy
+graphics ring is active or has an enabled/hit doorbell, recovery validates doorbell offset
+`0x400`, masks the 24-bit framebuffer fields, and translates the enabled flat context-0 page
+table exactly as `GartAddresses.hpp`: physical root minus `FB_OFFSET << 24`, with the complete
+table inside the 256 MiB BAR0 window. Unknown depth, flags, address form, bounds, or scratch
+overlap aborts before scratch is written.
+
+With both MECs halted, recovery builds a temporary MEC2/pipe1/queue0 KIQ in the reserved BAR0
+range. Its 0x100-dword ring contains the exact graphics `UNMAP_QUEUES`, a confirmed
+`WRITE_DATA` fence to reserved VRAM, and KIQ NOP padding; `CP_HQD_PQ_CONTROL` is `0xd130060d`.
+CPU BAR0 writes are ordered with the validated NBIO 7.2 `HDP_MEM_FLUSH_CNTL` remap and the NBIO
+CONFIG_MEMSIZE posted-read barrier before MEC2 starts. The BAR2 doorbell is one aligned native
+64-bit store. Success requires the ring read pointer, the unique GPU-written fence, and the
+target graphics `CP_RB_ACTIVE=0` before any legacy register scrub. Cleanup always re-halts MECs,
+retires the temporary HQD, restores selector zero, and leaves the PQ doorbell gate, doorbell
+ranges, and bit-31 pointer poller disabled.
+
+Recovery then disables SDMA context switching, ring and IB before halting physical SDMA0; halts
+the graphics CP; clears legacy programming only after the ordered retirement proof; and proves
+all selectors inactive. It finally submits `DESTROY_RINGS` (`0x00030000`) followed by
+`DESTROY_GPCOM_RING` (`0x000c0000`). A forced HQD clear remains diagnostic only and can never
+authorize another launch. Every timeout, readback mismatch, fence mismatch, PSP response error,
+or non-idle CP status prevents a receipt.
 
 The transaction never pulses `GRBM_SOFT_RESET`, writes GMC or SMU, binds amdgpu, unbinds
 vfio-pci, invokes `/sys/.../reset`, removes a PCI function, or changes runtime power. It then
@@ -51,8 +77,9 @@ remain empty, and rejects any VFIO reset message or new IOMMU, lockup, machine-c
 A successful transaction writes an immutable JSON receipt under
 `run/vfio-recovery/<boot-id>/<prior-run-id>.json`. It contains the current boot ID, previous
 run ID, recovery ID, device/group/driver identity, PCI command values, both PSP command
-transitions, VFIO region metadata, and the kernel-capture interval. A failed transaction writes
-evidence to the requested output but never creates a reusable receipt.
+transitions, all three VFIO region records, launch-bound reservation evidence, HDP flush,
+temporary-KIQ fence and final engine/gate readbacks, plus the kernel-capture interval. A failed
+transaction writes evidence to the requested output but never creates a reusable receipt.
 
 Cleanup still runs after the third launch so the device is left quiescent. The launch ceiling is
 an admission rule; a receipt created at the ceiling cannot authorize a fourth launch.
@@ -74,10 +101,13 @@ For the initial validation, at most three GPU launches may occur in one host boo
 unconfirmed VM stop, active VM, bus-master enable, mailbox timeout, VFIO setup failure, or new
 kernel fault revokes warm reuse.
 
-The first hardware proof is candidate 166 on the current boot after recovering from candidate
-165. Success requires exact PSP responses, an admitted second ledger entry, normal guest PSP
-initialization, and no host fault. A later three-cycle qualification must also prove native
-guest shutdown or explicitly preserve forced-stop outcomes; cleanup does not relabel shutdown.
+Earlier candidate-166 reuse proved PSP cleanup could permit one reinitialization, then the third
+launch exposed inherited HQDs; it does not prove this expanded recovery. The BAR0/BAR2/BAR5
+host-KIQ implementation and its failure paths are covered offline, but no physical launch has
+yet activated the reservation descriptor or demonstrated its fence. Hardware qualification must
+first inspect those records, then prove a subsequent initialization on the same host boot. A
+later three-cycle qualification must also prove native guest shutdown or explicitly preserve
+forced-stop outcomes; cleanup does not relabel shutdown.
 
 ## Privilege boundary
 
@@ -85,4 +115,5 @@ The old `gpu-quiesce.sh` opened the root-only sysfs `resource5`, so that impleme
 sudo for every cleanup. The replacement needs root once per boot for the existing amdgpu to
 vfio-pci handoff and to write an empty value to the root-owned `reset_method` sysfs attribute.
 Only after that verified write does `gpu-bind.sh` grant the experiment user access to the VFIO
-group. Builds, launches, BAR5 cleanup, receipts, and repeated warm tests then run as the user.
+group. Builds, launches, BAR0/BAR2/BAR5 cleanup, receipts, and repeated warm tests then run as
+the user.

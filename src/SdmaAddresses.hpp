@@ -7,6 +7,9 @@ namespace RaphaelSdma {
 
 struct SubmitInfoObservation {
     bool layoutValid;
+    uint32_t vmProgramSequence;
+    uint32_t eventOrder;
+    uintptr_t threadToken;
     uint32_t flags;
     uint32_t vmid;
     uint32_t entries;
@@ -39,7 +42,7 @@ inline SubmitInfoObservation observeSubmitInfo(
     constexpr size_t firstAddress = 0x58;
     constexpr size_t entryStride = 0x28;
     constexpr uint32_t maxEntries = 4;
-    SubmitInfoObservation result {false, 0, 0, 0, {0, 0, 0, 0}};
+    SubmitInfoObservation result {false, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0}};
     if (submitInfo == nullptr || submitInfoBytes < countOffset + sizeof(uint32_t))
         return result;
 

@@ -1,6 +1,6 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-09-08. Hardware baseline: candidate 1.0.171; next candidate: 1.0.172; published
+Updated 2026-09-09. Hardware baseline: candidate 1.0.171; next candidate: 1.0.173; published
 research snapshot: `v1.0.159-preview.1`. This document is the authoritative current
 roadmap. Historical hypotheses in `findings/GPU-RE.md` remain evidence, not instructions.
 
@@ -61,10 +61,16 @@ submission as VMID 2, so `0x400100020` must be evaluated through VMID 2's page t
 rewritten as an MC physical address. Candidate 171 confirmed the VMID and address, but its
 `programAndInvalidateVM` hook never ran: Apple builds the relevant VM program inside the SDMA
 command stream. The first SDMA0 paging timeout preceded a later KIQ stamp 28 failure; the
-classifier now preserves raw terminal ordering. Reset-free recovery dequeued both active HQDs on
-the first poll, left both CP status registers idle, halted SDMA and confirmed both PSP teardown
-commands without a host fault. Candidate 172 captures all 21 dwords returned by
-`prepareVMInvalidateRequest` so the exact SDMA VM program can be compared with Linux GFXHUB 2.1.
+classifier now preserves raw terminal ordering. The BAR5-era reset-free recovery dequeued both
+active HQDs on the first poll, left both CP status registers idle, halted SDMA and confirmed both
+PSP teardown commands without a host fault. That evidence did not execute a graphics UNMAP
+packet and is no longer sufficient to authorize reuse after a fully started guest. Candidate 172
+captures all 21 dwords returned by `prepareVMInvalidateRequest`. Static comparison selected the
+high-confidence defect for candidate 173: Apple's VMID-2 root remains in the logical framebuffer
+domain while GFXHUB consumes the physical domain. Candidate 173 converts only that root in a
+private request copy behind `rgpuvmroot=1`, verifies Apple's output, and records correlated live
+registers plus three page-table walks. This remains diagnostic until hardware shows whether each
+non-SYSTEM child PDE is already physical; the walker never repairs what the GPU consumes.
 
 ## 1. What is actually complete
 
@@ -89,13 +95,13 @@ single clean run is not repeatability evidence. There is no defensible overall p
 | [x] | Wrong-kext route regression prevented for current scopes | `route-domains.py` and regression tests; not a complete C++ verifier |
 | [x] | Optional hybrid diagnostic built | 1.0.162, exact entry guards, `rgpuhybrid=1`, native result preserved |
 | [x] | Hybrid diagnostic validated on hardware | 1.0.163: complete records; type10 fails after type10/type11 success |
-| [ ] | Repeatable clean initial state | Candidate 171 recovery is the first fully authorizing reset-free cleanup after native startup; one successful warm reinitialization is still required |
+| [ ] | Repeatable clean initial state | Launch-bound BAR0/BAR2/BAR5 host-KIQ recovery passes offline tests; descriptor activation, GPU fence and warm reinitialization are not yet hardware-proven |
 | [x] | Native hybrid queues / complete engine startup | Candidate 171 maps residual engine-2 channels to real SDMA0; hybrid status 0 and native start/power-up 1 on hardware |
 | [ ] | Correct Metal compute and offscreen rendering | First command buffer fails; zero results checked |
 | [ ] | Per-process memory, synchronization and resource lifecycle | Must be exercised after first real completion |
 | [ ] | Accelerated desktop and presentation | WindowServer panic repair is not proof of accelerated composition |
 | [ ] | Physical iGPU display output | DCN 3.1.5 path remains a separate open milestone |
-| [ ] | Reliable shutdown/restart and host stability | Three historical host hangs; mechanism unresolved; candidate 171 recovery authorizes one guarded same-boot launch |
+| [ ] | Reliable shutdown/restart and host stability | Three historical host hangs; mechanism unresolved; expanded recovery remains hardware-unproven and authorizes no new claim yet |
 | [ ] | Desktop performance and release qualification | Deferred until compute, render, presentation and lifecycle pass |
 
 Authoritative recordings:
@@ -331,7 +337,19 @@ Physical display work must not be mistaken for a prerequisite to an offscreen co
 - [x] Validate the Linux-ordered rootless GC quiesce after proving `reset_method` is empty: disable pointer polling, request HQD
   dequeue while MEC runs, halt graphics/MEC/SDMA, force only stuck halted HQDs inactive, prove
   zero active queues, then destroy PSP rings. The writes and readbacks are validated with no
-  PCI bus reset or amdgpu rebind. Force-cleared queues are now explicitly non-authorizing.
+  PCI bus reset or amdgpu rebind. This BAR5-era hardware result did not execute graphics
+  `UNMAP_QUEUES`; force-cleared queues are explicitly non-authorizing.
+- [x] Implement the expanded BAR0/BAR2/BAR5 recovery offline: a current-run `PENDING` descriptor
+  is promoted by the guest at the allocation boundary after both VRAM pools are capped, strict
+  GART translation protects the reserved final 16 MiB, and a temporary host KIQ submits graphics
+  `UNMAP_QUEUES` plus a unique completion fence. CPU writes use the validated HDP flush and the
+  KIQ uses one aligned 64-bit BAR2 doorbell store.
+- [x] Fail closed unless the exact current-run reservation is consumed, all inherited HQDs are
+  retired without force clear, the KIQ rptr and unique fence advance, the graphics ring is
+  inactive before scrub, and final PQ polling, gate, ranges, selectors and engines read clean.
+- [ ] Hardware-qualify the reservation activation, HDP flush, temporary-KIQ fence and complete
+  cleanup evidence. Then consume that receipt in one successful same-boot reinitialization.
+  Offline tests alone do not prove this transaction on Raphael hardware.
 - [x] Reject incomplete recovery: any dequeue timeout, forced ACTIVE clear, nonzero `CP_STAT`
   or nonzero `CP_CPC_BUSY_STAT` prevents warm reuse even when halt bits and ACTIVE read back.
 - [x] On a runtime observation/capture failure after exact QEMU identity validation, request
@@ -424,13 +442,13 @@ date for the unknown hardware defects until M2 has localized them.
 ## 8. Next same-boot experiment
 
 1. Keep the current VFIO ownership and sleep inhibitor; do not rebind or reset the PCI bus.
-2. Build and stage candidate 1.0.172 from one clean commit, then verify source, kext, ESP,
+2. Build and stage candidate 1.0.173 from one reviewed commit, then verify source, kext, ESP,
    boot arguments, KDK offsets and the predecessor recovery receipt as one identity chain.
-3. Run `metal-006` once. Capture Apple's complete VMID 2 prepared request before the first
-   SDMA paging timeout and preserve raw terminal ordering.
-4. Decode the 21 dwords against `writeVMProgramPacket` and Linux GFXHUB 2.1. Both Navi23
-   GC 10.3.4 and Raphael GC 10.3.6 use that same backend, register header and segment-0/1
-   bases, so any proposed patch must name a measured value that differs.
+3. Run `metal-007` once with `rgpuvmroot=1`. Require a repaired root, an exact match in Apple's
+   prepared packet, the same sequence on the VMID-2 SDMA submission, and all three walks.
+4. If any non-SYSTEM non-leaf walk entry reports `child-mc2pa=1`, repair that child-PDE producer
+   before another run. If all child pointers are physical, use the captured SDMA UTCL/XNACK/page
+   state and actual invalidate-engine bit 2 to choose between invalidation and firmware.
 5. Recover rootlessly. Continue on this boot only if the receipt again records no dequeue
    timeout, no forced clear, idle CP status, halted SDMA and confirmed PSP teardown.
 

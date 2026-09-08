@@ -1,0 +1,41 @@
+{
+  "id": "metal-007",
+  "question": "Does repairing only the VMID 2 GFXHUB root from Apple's logical framebuffer domain to the hardware physical domain let SDMA fetch, and are child PDE pointers logical or physical?",
+  "candidate_version": "1.0.173",
+  "requested_diagnostic": "rgpuvmroot=1",
+  "behavior_change": "for the exact marked Raphael hub-0 VMID-2 reprogram request, pass Apple a private 0x28-byte copy whose non-SYSTEM root address is converted from MC to physical framebuffer space; leave caller memory, VM virtual addresses, leaves, response mode and firmware untouched",
+  "required_observations": [
+    "loaded_build",
+    "route_guards",
+    "kiq_stamps",
+    "hybrid_enter",
+    "hybrid_exit",
+    "engine_start",
+    "sdma_topology",
+    "sdma_channel_remap",
+    "sdma_vm_program",
+    "vmid2_root_repair"
+  ],
+  "max_seconds": 180,
+  "prerequisites": [
+    "same_boot_authorizing_recovery_receipt",
+    "amdgpu_initialized_this_boot",
+    "reset_methods_disabled",
+    "sleep_inhibitor_active",
+    "watchdog_and_pstore_verified"
+  ],
+  "repeat_policy": "one cold run only; use the three page-table walks to decide whether child PDE production, SDMA UTCL state or firmware is next",
+  "abort_on": [
+    "identity_mismatch",
+    "capture_loss",
+    "root_repair_refused",
+    "prepared_root_mismatch",
+    "guest_panic",
+    "terminal_kiq_submit_failure",
+    "sdma_page_timeout",
+    "host_fault",
+    "incomplete_gc_quiesce"
+  ],
+  "outcome_table": "docs/ROADMAP.md M4-M7",
+  "run_probe_only_after_native_start": true
+}

@@ -1,6 +1,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <initializer_list>
 #include "../src/GpuVmDiagnostics.hpp"
 #include "../src/ObservationBuffer.hpp"
 
@@ -37,19 +38,127 @@ int main() {
     require(!RaphaelVm::observeInvalidateRequest(bytes, 0x27).valid,
             "a truncated invalidate request is rejected");
 
+    unsigned char callerBefore[sizeof(bytes)];
+    std::memcpy(callerBefore, bytes, sizeof(bytes));
+    put64(0x18, 0xf401234001ULL);
+    auto local = RaphaelVm::prepareInvalidateInfo(
+        bytes, sizeof(bytes), true, true, 0xf400, 0xf41f, 0x840);
+    require((reinterpret_cast<uintptr_t>(local.bytes) & (alignof(uint64_t) - 1)) == 0,
+            "the private native invalidate request satisfies its uint64 ABI alignment");
+    require(local.valid && local.eligible && local.repaired &&
+                local.originalRoot == 0xf401234001ULL &&
+                local.nativeRoot == 0x841234001ULL,
+            "Raphael VMID2 logical root is converted from MC to physical FB space");
+    require(RaphaelVm::readU64(local.bytes + 0x18) == 0x841234001ULL,
+            "only the local invalidate copy carries the physical root");
+    require(std::memcmp(callerBefore, bytes, 0x18) == 0 &&
+                std::memcmp(callerBefore + 0x20, bytes + 0x20, 8) == 0 &&
+                RaphaelVm::readU64(bytes + 0x18) == 0xf401234001ULL,
+            "the caller-owned invalidate request remains untouched");
+
+    put64(0x18, 0xf401234005ULL);
+    auto cached = RaphaelVm::prepareInvalidateInfo(
+        bytes, sizeof(bytes), true, true, 0xf400, 0xf41f, 0x840);
+    require(cached.repaired && cached.nativeRoot == 0x841234005ULL,
+            "the observed CACHE bit is retained across root conversion");
+    put64(0x18, 0xf401234041ULL);
+    auto sixtyFourByte = RaphaelVm::prepareInvalidateInfo(
+        bytes, sizeof(bytes), true, true, 0xf400, 0xf41f, 0x840);
+    require(sixtyFourByte.repaired && sixtyFourByte.nativeRoot == 0x841234041ULL,
+            "PDE address bits 11:6 survive the 64-byte-aligned conversion");
+    for (uint64_t rejected : {0xf401234003ULL, 0xf401234009ULL,
+                              0x8401234001ULL, 0x841234001ULL}) {
+        put64(0x18, rejected);
+        auto result = RaphaelVm::prepareInvalidateInfo(
+            bytes, sizeof(bytes), true, true, 0xf400, 0xf41f, 0x840);
+        require(result.valid && !result.repaired,
+                "SYSTEM, unknown, outside-MC, and already-physical roots fail closed");
+    }
+    put64(0x18, 0xf401234001ULL);
+    for (unsigned variant = 0; variant < 5; ++variant) {
+        put32(0, variant == 0 ? 1 : 0);
+        put32(4, variant == 1 ? 0 : (variant == 2 ? 16 : 2));
+        bytes[0x24] = variant == 3 ? 0 : 1;
+        auto result = RaphaelVm::prepareInvalidateInfo(
+            bytes, sizeof(bytes), variant == 4 ? false : true, true,
+            0xf400, 0xf41f, 0x840);
+        require(!result.repaired,
+                "only enabled hub0 VMID2 reprogram requests are eligible");
+    }
+    put32(0, 0); put32(4, 2); bytes[0x24] = 1;
+    require(!RaphaelVm::prepareInvalidateInfo(
+                bytes, 0x27, true, true, 0xf400, 0xf41f, 0x840).valid,
+            "a truncated invalidate request cannot be copied or repaired");
+    require(RaphaelVm::prepareInvalidateInfo(
+                bytes, 0x27, true, true, 0xf400, 0xf41f, 0x840).reason ==
+                RaphaelVm::RootRepairReason::InvalidInput &&
+            RaphaelVm::prepareInvalidateInfo(
+                bytes, sizeof(bytes), false, true, 0xf400, 0xf41f, 0x840).reason ==
+                RaphaelVm::RootRepairReason::Disabled,
+            "invalid input and a disabled candidate have distinct refusal reasons");
+    auto unmarked = RaphaelVm::prepareInvalidateInfo(
+        bytes, sizeof(bytes), true, false, 0xf400, 0xf41f, 0x840);
+    require(unmarked.reason == RaphaelVm::RootRepairReason::TargetUnmarked,
+            "an unmarked device records a distinct refusal reason");
+    auto reasonFor = [&](uint32_t hub, uint32_t vmid, bool reprogram, uint64_t root,
+                         uint32_t base, uint32_t top, uint32_t offset) {
+        put32(0, hub); put32(4, vmid); bytes[0x24] = reprogram;
+        put64(0x18, root);
+        return RaphaelVm::prepareInvalidateInfo(
+            bytes, sizeof(bytes), true, true, base, top, offset).reason;
+    };
+    require(reasonFor(1, 2, true, 0xf401234001ULL, 0xf400, 0xf41f, 0x840) ==
+                RaphaelVm::RootRepairReason::WrongHub &&
+            reasonFor(0, 3, true, 0xf401234001ULL, 0xf400, 0xf41f, 0x840) ==
+                RaphaelVm::RootRepairReason::WrongVmid &&
+            reasonFor(0, 2, false, 0xf401234001ULL, 0xf400, 0xf41f, 0x840) ==
+                RaphaelVm::RootRepairReason::NotReprogrammed &&
+            reasonFor(0, 2, true, 0xf401234001ULL, 0xf400, 0xf3ff, 0x840) ==
+                RaphaelVm::RootRepairReason::InvalidAperture &&
+            reasonFor(0, 2, true, 0xf401234003ULL, 0xf400, 0xf41f, 0x840) ==
+                RaphaelVm::RootRepairReason::SystemRoot &&
+            reasonFor(0, 2, true, 0xf401234009ULL, 0xf400, 0xf41f, 0x840) ==
+                RaphaelVm::RootRepairReason::UnsupportedFlags &&
+            reasonFor(0, 2, true, 0x841234001ULL, 0xf400, 0xf41f, 0x840) ==
+                RaphaelVm::RootRepairReason::AlreadyPhysical &&
+            reasonFor(0, 2, true, 0x4001234001ULL, 0xf400, 0xf41f, 0x840) ==
+                RaphaelVm::RootRepairReason::OutsideFramebuffer,
+            "every root-repair refusal has a distinct stable reason");
+    require(reasonFor(0, 2, true, 0xf00000000001ULL, 0x0001, 0xffffff, 0xffffff) ==
+                RaphaelVm::RootRepairReason::Overflow,
+            "a root whose MC-to-physical result exceeds bit 47 is rejected as overflow");
+    put32(0, 0); put32(4, 2); bytes[0x24] = 1; put64(0x18, 0xf401234001ULL);
+
     alignas(uint32_t) unsigned char prepared[0x54] {};
     for (size_t i = 0; i < 0x54 / sizeof(uint32_t); ++i) {
         const uint32_t value = 0x1000u + static_cast<uint32_t>(i);
         std::memcpy(prepared + i * sizeof(uint32_t), &value, sizeof(value));
     }
+    local = RaphaelVm::prepareInvalidateInfo(
+        bytes, sizeof(bytes), true, true, 0xf400, 0xf41f, 0x840);
+    uint32_t nativeRootLo = static_cast<uint32_t>(local.nativeRoot);
+    uint32_t nativeRootHi = static_cast<uint32_t>(local.nativeRoot >> 32);
+    std::memcpy(prepared + 4, &nativeRootLo, sizeof(nativeRootLo));
+    std::memcpy(prepared + 12, &nativeRootHi, sizeof(nativeRootHi));
     auto program = RaphaelVm::observePreparedRequest(
-        bytes, sizeof(bytes), prepared, sizeof(prepared), true);
+        bytes, sizeof(bytes), local.bytes, sizeof(local.bytes),
+        prepared, sizeof(prepared), true, local.repaired, local.reason);
     require(program.valid && program.request.valid && program.request.vmid == 2 &&
                 program.alternate,
             "the prepared request remains tied to its source VMID and packet variant");
     require(program.words[0] == 0x1000 && program.words[10] == 0x100a &&
                 program.words[20] == 0x1014,
             "all 21 prepared register/value dwords are copied after native encoding");
+    require(program.rootRepaired && program.preparedRootMatches &&
+                program.nativeRoot == 0x841234001ULL,
+            "the observation ties native output to the repaired local root");
+    prepared[4] ^= 1;
+    auto mismatchedProgram = RaphaelVm::observePreparedRequest(
+        bytes, sizeof(bytes), local.bytes, sizeof(local.bytes),
+        prepared, sizeof(prepared), true, local.repaired, local.reason);
+    require(mismatchedProgram.valid && !mismatchedProgram.preparedRootMatches,
+            "native output that does not contain the repaired root is diagnosed");
+    prepared[4] ^= 1;
     require(program.infoWords[0] == 0 && program.infoWords[1] == 2 &&
                 program.infoWords[9] == 1,
             "all 10 source request dwords are retained without normalization");
@@ -57,12 +166,103 @@ int main() {
     bytes[0x26] = 0x5a;
     bytes[0x27] = 0xc3;
     program = RaphaelVm::observePreparedRequest(
-        bytes, sizeof(bytes), prepared, sizeof(prepared), false);
+        bytes, sizeof(bytes), local.bytes, sizeof(local.bytes),
+        prepared, sizeof(prepared), false, local.repaired, local.reason);
     require(program.infoWords[9] == 0xc35aa501,
             "reserved source bytes survive the bounded copy");
     require(!RaphaelVm::observePreparedRequest(
-                bytes, sizeof(bytes), prepared, 0x50, true).valid,
+                bytes, sizeof(bytes), local.bytes, sizeof(local.bytes),
+                prepared, 0x50, true, local.repaired, local.reason).valid,
             "a truncated prepared request is rejected");
+
+    RaphaelVm::FramebufferAperture aperture {
+        0xf400000000ULL, 0xf41fffffffULL, 0x840000000ULL, 0x10000000ULL};
+    require(RaphaelVm::physicalTableAddress(0xf401100000ULL, aperture) ==
+                0x841100000ULL,
+            "non-SYSTEM child page directories convert MC to physical space");
+    require(RaphaelVm::physicalTableAddress(0xf401100040ULL, aperture) ==
+                0x841100040ULL,
+            "64-byte-aligned child page directories retain address bits 11:6");
+    require(RaphaelVm::physicalTableAddress(0x841100000ULL, aperture) ==
+                0x841100000ULL,
+            "already-physical page-directory addresses remain physical");
+    require(RaphaelVm::physicalTableAddress(0x400100000ULL, aperture) == 0,
+            "VM virtual addresses are never treated as page-directory storage");
+
+    // Depth 2, block size 9: root[16] -> child[0] -> leaf[256/192].
+    // Child table pointers are deliberately in logical MC space, as Apple's
+    // getPDEValue emits them; the walker must convert only those non-leaf pointers.
+    alignas(uint64_t) uint64_t pageTables[0x10000 / 8] {};
+    auto store = [&](uint64_t physicalAddress, uint64_t value) {
+        pageTables[(physicalAddress - aperture.physicalBase) / 8] = value;
+    };
+    store(0x840000000ULL + 16 * 8, 0xf400001001ULL);
+    store(0x840001000ULL + 0 * 8, 0xf400002001ULL);
+    store(0x840002000ULL + 256 * 8, 0xf401000071ULL);
+    store(0x840002000ULL + 192 * 8, 0x123450000077ULL);
+    auto reader = [&](uint64_t physicalAddress, uint64_t &value) {
+        if (physicalAddress < aperture.physicalBase ||
+            physicalAddress + 8 > aperture.physicalBase + sizeof(pageTables)) return false;
+        value = pageTables[(physicalAddress - aperture.physicalBase) / 8];
+        return true;
+    };
+    auto walkA = RaphaelVm::walkPageTables(
+        0x840000001ULL, 1u | (2u << 1) | (9u << 3), 0x400100000ULL,
+        aperture, reader);
+    require(walkA.valid && walkA.complete && walkA.count == 3 &&
+                walkA.entries[0].childConverted && walkA.entries[1].childConverted &&
+                !walkA.entries[2].childConverted &&
+                walkA.entries[2].valid && walkA.entries[2].readable &&
+                walkA.entries[2].writeable && walkA.entries[2].executable,
+            "multi-level walk converts child PDEs and decodes the final leaf");
+    auto walkB = RaphaelVm::walkPageTables(
+        0x840000001ULL, 1u | (2u << 1) | (9u << 3), 0x4000c0000ULL,
+        aperture, reader);
+    require(walkB.valid && walkB.complete && walkB.entries[2].raw == 0x123450000077ULL,
+            "a second VMID2 VA selects its own decoded leaf");
+    store(0x840000000ULL + 16 * 8, 0xf400001003ULL);
+    auto systemPde = RaphaelVm::walkPageTables(
+        0x840000001ULL, 1u | (2u << 1) | (9u << 3), 0x400100000ULL,
+        aperture, reader);
+    require(systemPde.valid && !systemPde.complete && systemPde.count == 1 &&
+                systemPde.entries[0].system,
+            "a SYSTEM child PDE is decoded but never followed through BAR0");
+    store(0x840000000ULL + 16 * 8,
+          0xf401000071ULL | (1ULL << 54));
+    auto hugeLeaf = RaphaelVm::walkPageTables(
+        0x840000001ULL, 1u | (2u << 1) | (9u << 3), 0x400100000ULL,
+        aperture, reader);
+    require(hugeLeaf.valid && hugeLeaf.complete && hugeLeaf.count == 1 &&
+                hugeLeaf.entries[0].pdeAsPte && !hugeLeaf.entries[0].childConverted,
+            "PDE_PTE terminates the walk and its data address is never converted");
+    auto invalidWalk = RaphaelVm::walkPageTables(
+        0x840000001ULL, 1u | (2u << 1), 0x400100000ULL, aperture, reader);
+    require(!invalidWalk.valid, "a multilevel context with zero block size is rejected");
+    auto wideFlatIndex = RaphaelVm::walkPageTables(
+        0x840000001ULL, 1u, 1ULL << 44, aperture, reader);
+    require(!wideFlatIndex.valid,
+            "a flat 36-bit PTE index is bounds-checked without uint32 truncation");
+
+    RaphaelVm::FramebufferAperture edge {
+        0xf400000000ULL, 0xf40000007fULL, 0x840000000ULL, 0x80ULL};
+    require(RaphaelVm::physicalTableAddress(0xf400000040ULL, edge) == 0x840000040ULL &&
+                RaphaelVm::physicalTableAddress(0xf400000080ULL, edge) == 0,
+            "table translation admits only exact qwords inside the visible BAR boundary");
+
+    RaphaelVm::FramebufferAperture reservedBar {
+        0xf400000000ULL, 0xf41fffffffULL, 0x840000000ULL, 0x10000000ULL};
+    auto reservedReader = [&](uint64_t physicalAddress, uint64_t &value) {
+        if (physicalAddress != 0x84fdfc000ULL) return false;
+        value = 0x841000071ULL;
+        return true;
+    };
+    auto reservedRoot = RaphaelVm::walkPageTables(
+        0x84fdfc001ULL, 1u, 0, reservedBar, reservedReader);
+    require(reservedRoot.valid && reservedRoot.complete && reservedRoot.count == 1 &&
+                reservedRoot.entries[0].tablePhysical == 0x84fdfc000ULL,
+            "the GART root in the reserved final 16 MiB remains walkable");
+    require(RaphaelVm::physicalTableAddress(0x850000000ULL, reservedBar) == 0,
+            "the first address beyond the 256 MiB BAR remains inaccessible");
 
     constexpr auto vmid0 = RaphaelVm::contextRegisters(0);
     constexpr auto vmid2 = RaphaelVm::contextRegisters(2);
@@ -76,6 +276,25 @@ int main() {
                 vmid2.endHi == 0x16ac,
             "VMID 2 applies the documented one/two-register strides");
     require(!invalid.valid, "VMIDs outside the 16 hardware contexts are rejected");
+    constexpr uint32_t gc = 0x1260;
+    constexpr auto sem2 = RaphaelVm::decodeInvalidateRegister(
+        gc + 0x160f, gc + 0x160d, gc + 0x161f, gc + 0x1631);
+    constexpr auto req7 = RaphaelVm::decodeInvalidateRegister(
+        gc + 0x1626, gc + 0x160d, gc + 0x161f, gc + 0x1631);
+    constexpr auto ack17 = RaphaelVm::decodeInvalidateRegister(
+        gc + 0x1642, gc + 0x160d, gc + 0x161f, gc + 0x1631);
+    constexpr auto outside = RaphaelVm::decodeInvalidateRegister(
+        gc + 0x1643, gc + 0x160d, gc + 0x161f, gc + 0x1631);
+    require(sem2.valid && sem2.kind == RaphaelVm::InvalidateRegisterKind::Semaphore &&
+                sem2.engine == 2 && req7.valid &&
+                req7.kind == RaphaelVm::InvalidateRegisterKind::Request &&
+                req7.engine == 7 && ack17.valid &&
+                ack17.kind == RaphaelVm::InvalidateRegisterKind::Acknowledge &&
+                ack17.engine == 17 && !outside.valid,
+            "prepared register numbers identify the actual invalidate engine and role");
+    require(RaphaelVm::decodeFaultAddress(0x12345, 0xfffffff4) ==
+                0x400012345000ULL,
+            "the 36-bit fault page number is masked and converted to a byte VA");
 
     rgpu::ObservationBuffer<RaphaelVm::InvalidateRequest, 2> observations;
     observations.append(request);
