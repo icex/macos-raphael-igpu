@@ -1,0 +1,76 @@
+{
+  "binary_sha256": "1837dc0a348fabbd3e2cbf01fc7c2dae4678c2e5ee0138393492cae35879c2d5",
+  "info_sha256": "8bebf2ad058cf345dc8a8382a79484252a8ca3840d5f51969c67b35cf8fe317b",
+  "config_sha256": "76571716a86cdedea5bd9856788a3bc876d58f9656dded9f815a50a7e534cf12",
+  "build_id": "90fc73c8b2e74ad79ecc2db3eb85ad4c",
+  "source_sha256": "3ceef0552b6dba71ed5f003d915ee19896efac963b87a27bb446d50bb2d676a5",
+  "source_commit": "b34014093b9f9e919a5e8160f066e75f8a9e0b10",
+  "source_clean": true,
+  "built_from_commit": "6cfaedaac85855bc51a08e1203cc1c6c7acfbf35",
+  "kdk_sha256": {
+    "HWLibs": "9a10fe21b61437fba11bad2c2221307317ddd02893a82a7d753317879682786d",
+    "Framebuffer": "0f4b79b62fa66bbf5a907274d1f5442aeda4ba4ee4b67c216c01757dee7e4505",
+    "X6000": "2e364270c3243c532a9428c670313d5afd20406e42d64edb4fa8f3572504104e"
+  },
+  "build_inputs_sha256": "22e368df68a6daf7962904669f99cf3d296564999c26be2457ca40922b1e311f",
+  "boot_args": "-v keepsyms=1 tlbto_us=0 vti=9 serial=3 debug=0x108 -lilubetaall rgpudump=40000 rgpu=0xfffa5981 rgpuvmm=3 rgpumem=2 rgpuptb=2 rgpumqd=2 rgpuhybrid=1",
+  "harness_sha256": {
+    "macos-vm.sh": "2a6fbd85db7a4044d1e59ce49859922f1d3356c5d446cbe3b9924d836e5f6315",
+    "vm-supervision.py": "99b8203ce346a286c4076e2a469488986b90992fef5f9d72ad346b9d2da411a9",
+    "sercat.py": "c39f0d230fae056a841ffea928c1e9903325fa4fdaaf338adc3ee3feb9d13ec3",
+    "agent-server.py": "f0d1077629e5dc21a6ba4e6bc98c005ebbba301355e4bc3323ce8f48e4dad787",
+    "gx": "73f8912b4699ae286593bb4abb7194f778264322a4a6674a14d64d426eb3dcf6",
+    "gpu-bind.sh": "76a8a73fafb048a505130a9ba3b2327732bdcce6e45904a2ec705c222133387a"
+  },
+  "rom_sha256": "3c6977ee2769b0b5fe96c2f99581806afe53f93e108fcff2f0c177a276c1e901",
+  "launch_options": {
+    "BOOTDISK_MODE": "custom",
+    "NVRAM": "stock"
+  },
+  "image_id": "sha256:3a3c82c79bc4e73531f819ccdfa4053b3084efd7c1f645678dbf8b4b3a24369c",
+  "guest_build": "24G830",
+  "probe_source_sha256": "f0fc0ced81fe70732c3491cff1557a83d85c9ccb8c18a6303f9070ae1f969d77",
+  "probe_binary_sha256": "1637e4b31bca0a1bdc400f96e34b344a823de1b408a8d1677d6bcca475c8c787",
+  "boot_id": "23aedc74-6a57-4321-94f0-ae91d0e79354",
+  "kernel": "7.2.3-1-cachyos-bore",
+  "bootdisk_sha256": "707387e35de83cdde77d62a5eb387ebc440dac8b92d92ac5cb1f4296f45e825f",
+  "run_id": "f9307ad921984874b4f35aa9fb453755",
+  "max_seconds": 180,
+  "gpu": true,
+  "vfio_device": "0000:7b:00.0",
+  "experiment": "hybrid-001",
+  "spec": {
+    "id": "hybrid-001",
+    "question": "Where does native hybrid creation first fail after KIQ setup?",
+    "candidate_version": "1.0.163",
+    "requested_diagnostic": "rgpuhybrid=1",
+    "behavior_change": "no intended GPU behavior change; availability snapshot and concurrent diagnostic storage",
+    "required_observations": [
+      "loaded_build",
+      "route_guards",
+      "kiq_stamps",
+      "hybrid_enter",
+      "hybrid_exit",
+      "engine_start"
+    ],
+    "max_seconds": 180,
+    "prerequisites": [
+      "T2",
+      "T3",
+      "T4",
+      "fresh_amdgpu_first_boot"
+    ],
+    "repeat_policy": "no unchanged retry",
+    "abort_on": [
+      "identity_mismatch",
+      "capture_loss",
+      "kiq_dequeue_timeout",
+      "host_fault"
+    ],
+    "outcome_table": "docs/ROADMAP.md M2",
+    "run_probe_only_after_native_start": true
+  },
+  "candidate_directory": "run/candidate-163",
+  "qemu_version": "QEMU emulator version 10.1.2",
+  "bootdisk_verified": true
+}

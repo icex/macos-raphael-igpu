@@ -42,10 +42,13 @@ session also encountered an active KIQ that would not dequeue; recovery is unres
 A percentage would obscure the remaining unknowns. Driver enumeration and queue setup
 are milestones, not a measure of end-to-end rendering completeness.
 
-Current source/bundle **1.0.162** adds the optional `rgpuhybrid=1` diagnostic. It verifies
-the HWLibs entry bytes, samples availability, logs at most eight calls, and preserves
-the native creation result. It is compiled and statically checked, **not hardware-tested**.
-The published 1.0.159 prerelease retains the recorded clean-run implementation.
+Hardware-tested **1.0.163** now narrows startup failure to the third SDMA hybrid
+request: two SDMA requests succeed, then type10 returns status4 with availability1.
+The [recorded experiment](findings/experiments/hybrid-001-163/notes.md) includes all
+critical records, exact build identity and stop outcome. Full Metal remains unavailable.
+Current **1.0.164** adds a bounded native SDMA-instance lookup trace; it is an
+experimental diagnostic, not a verified acceleration repair. The next experiment
+requires a fresh host boot. Published 1.0.159 remains the earlier research snapshot.
 
 See [release builds](docs/releases.md), [current research corrections](findings/GPU-RE.md),
 and [historical bring-up notes](docs/bring-up-history.md).

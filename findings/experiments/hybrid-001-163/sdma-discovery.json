@@ -1,0 +1,12 @@
+{
+  "boot_id": "23aedc74-6a57-4321-94f0-ae91d0e79354",
+  "source": "cached sysfs IP discovery metadata; captured after handoff, no MMIO",
+  "sdma": [
+    {
+      "die": "0",
+      "hwid": "42",
+      "instance": "0",
+      "version": "5.2.6"
+    }
+  ]
+}

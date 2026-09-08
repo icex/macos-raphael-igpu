@@ -1,0 +1,29 @@
+{
+  "valid": true,
+  "verdict": "HYBRID_QUEUE_SUSPECTED",
+  "earliest_failure": "hybrid",
+  "evidence": [
+    "BUILD: identity=90fc73c8b2e74ad79ecc2db3eb85ad4c",
+    "HY: HWLibs hybrid trace route=ok entries-match=1 (max 8 calls)",
+    "XJ: AMDGraphicsAccelerator::powerUpHW entry",
+    "HY: createHybridEngine enter: engine=12 available=1",
+    "HY: createHybridEngine exit: engine=12 valid=1 available-before=1 status=0",
+    "XJ:   waitForHwStamp(1) -> 1",
+    "HY: createHybridEngine enter: engine=13 available=1",
+    "HY: createHybridEngine exit: engine=13 valid=1 available-before=1 status=0",
+    "XJ:   waitForHwStamp(2) -> 1",
+    "XJ:   waitForHwStamp(3) -> 1",
+    "XJ:   waitForHwStamp(1) -> 1",
+    "XJ: AMDHardware::powerUpHWEngines -> 1",
+    "HY: createHybridEngine enter: engine=10 available=1",
+    "HY: createHybridEngine exit: engine=10 valid=1 available-before=1 status=0",
+    "HY: createHybridEngine enter: engine=11 available=1",
+    "HY: createHybridEngine exit: engine=11 valid=1 available-before=1 status=0",
+    "HY: createHybridEngine enter: engine=10 available=1",
+    "HY: createHybridEngine exit: engine=10 valid=1 available-before=1 status=4",
+    "XJ: AMDHardware::startHWEngines -> 0",
+    "XJ: AMDGraphicsAccelerator::powerUpHW -> 0",
+    "XJ:   waitForHwStamp(1) -> 1"
+  ],
+  "next_action": "locate native rejecting branch; snapshot is not causal proof"
+}

@@ -393,6 +393,7 @@ static constexpr size_t kOffCheckPcie    = 0x246a4e;   // _check_pcie_link_statu
 static constexpr size_t kOffGetDevInf    = 0x234dec;   // _bcs_get_device_inf
 static constexpr size_t kOffTtlHybrid = 0x9876b;       // _TtlCreateHybridEngine
 static constexpr size_t kOffTtlAvailable = 0xafa40;    // _ttlIsHwAvailable (called, not routed)
+static constexpr size_t kOffSdmaFindInstance = 0xa7312; // _IpiSdmaFindInstanceByEngineIndexAndType
 static constexpr size_t kOffTtlSetDevCap = 0xaf02d;    // _ttlSetDeviceCapabilityEntry
 static constexpr size_t kOffVmPhysicalFb = 0x33370;   // _vm_10_1_get_uma_physical_fb_offset
 static constexpr size_t kOffGvmGetIpFn   = 0x19258;    // _gvm_get_ip_function
@@ -1161,6 +1162,39 @@ static bool cpSurgeryEnabled = false;
 static bool hybridProbeEnabled = false;
 static mach_vm_address_t orgTtlHybrid {};
 static mach_vm_address_t addrTtlAvailable {};
+static mach_vm_address_t orgSdmaFindInstance {};
+static mach_vm_address_t sdmaTraceBase {};
+static size_t sdmaTraceSize {};
+
+// Observe the native selector's actual return, only at the verified hybrid
+// caller (HWLibs+0xa7a79). Its next instruction branches on a null instance.
+// No extra selector calls, MMIO, queue changes, or fabricated success.
+static void *wrapSdmaFindInstance(void *context, uint32_t index, uint32_t type) {
+    auto caller = reinterpret_cast<mach_vm_address_t>(__builtin_return_address(0));
+    void *instance = FunctionCast(wrapSdmaFindInstance, orgSdmaFindInstance)(context, index, type);
+    static unsigned calls = 0;
+    if (caller == sdmaTraceBase + 0xa7a79 && context &&
+        __sync_fetch_and_add(&calls, 1u) < 8) {
+        auto ctx = reinterpret_cast<const uint8_t *>(context);
+        auto counts = reinterpret_cast<const uint32_t *>(ctx + 0x2c);
+        uint32_t q0 = 0, q1 = 0, q2 = 0, occupied = 0;
+        uint64_t callback = ~0ULL;
+        if (instance) {
+            auto selected = reinterpret_cast<const uint8_t *>(instance);
+            auto queues = reinterpret_cast<const uint32_t *>(selected + 0x58);
+            q0 = queues[0]; q1 = queues[1]; q2 = queues[2];
+            occupied = (*reinterpret_cast<void *const *>(selected + 0x30) ? 1u : 0u) |
+                       (*reinterpret_cast<void *const *>(selected + 0x48) ? 2u : 0u);
+            auto function = *reinterpret_cast<const mach_vm_address_t *>(selected + 0x70);
+            if (function >= sdmaTraceBase && function - sdmaTraceBase < sdmaTraceSize)
+                callback = function - sdmaTraceBase;
+        }
+        CRLOG("HY: SDMA select index=%u queue-type=%u found=%u counts=%u,%u,%u,%u queues=%u,%u,%u occupied=%u callback=%#llx",
+              index, type, instance != nullptr, counts[0], counts[1], counts[2], counts[3],
+              q0, q1, q2, occupied, callback);
+    }
+    return instance;
+}
 
 // The availability helper is read-only in 24G830. Status 4 from the original
 // create routine covers BOTH unavailable hardware and a failed GC/SDMA queue.
@@ -4338,6 +4372,22 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
             }
             CRLOG("HY: HWLibs hybrid trace route=%s entries-match=%u (max 8 calls)",
                  orgTtlHybrid ? "ok" : "OFF", matches);
+            patcher.clearError();
+            // Exactly 16 complete, position-independent bytes. The first
+            // conditional branch starts at +16 and is not displaced.
+            static const uint8_t selectEntry[] = {0x55, 0x48, 0x89, 0xe5,
+                0x44, 0x8b, 0x47, 0x2c, 0x45, 0x31, 0xc9, 0x89, 0xd1, 0x4d, 0x85, 0xc0};
+            bool selectMatches = kOffSdmaFindInstance + sizeof(selectEntry) <= sz;
+            auto select = reinterpret_cast<const uint8_t *>(addr + kOffSdmaFindInstance);
+            for (size_t i = 0; selectMatches && i < sizeof(selectEntry); ++i)
+                selectMatches = select[i] == selectEntry[i];
+            if (orgTtlHybrid && selectMatches) {
+                sdmaTraceBase = addr; sdmaTraceSize = sz;
+                orgSdmaFindInstance = patcher.routeFunction(addr + kOffSdmaFindInstance,
+                    reinterpret_cast<mach_vm_address_t>(wrapSdmaFindInstance), true);
+            }
+            CRLOG("HY: SDMA selector trace route=%s entries-match=%u (max 8 hybrid calls)",
+                  orgSdmaFindInstance ? "ok" : "OFF", selectMatches);
             patcher.clearError();
         }
         applyFor(patcher, true);

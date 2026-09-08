@@ -105,6 +105,36 @@ class ClassifyTests(unittest.TestCase):
             'RGPU_EVENT build=abc seq=1 HY: HWLibs hybrid trace route=ok entries-match=1\n')
         self.assertTrue(any(r['kind'] == 'capture_loss' for r in rows))
 
+    def test_required_sdma_observation_cannot_silently_fall_back(self):
+        c = self.classifier().classify
+        manifest = {'build_id':'abc', 'spec':{'required_observations':['sdma_selection'],
+                    'sdma_selection_target':{'index':1, 'queue_type':0}}}
+        events = self.events()
+        self.assertEqual(c(manifest, events, None)['verdict'], 'INCONCLUSIVE')
+        events.append(dict(kind='sdma_route', build='abc', seq=6, ok=False))
+        self.assertEqual(c(manifest, events, None)['verdict'], 'INVALID')
+        events[-1]['ok'] = True
+        self.assertEqual(c(manifest, events, None)['verdict'], 'INCONCLUSIVE')
+        events.append(dict(kind='sdma_select', build='abc', seq=7, index=1, queue_type=0,
+                           found=False, counts=[1,0,0,0]))
+        self.assertEqual(c(manifest, events, None)['verdict'], 'HYBRID_QUEUE_SUSPECTED')
+        events[-1]['index'] = 0
+        events[-1]['found'] = True
+        self.assertEqual(c(manifest, events, None)['verdict'], 'INCONCLUSIVE')
+
+    def test_sdma_lookup_preserves_index_type_and_missing_instance(self):
+        rows = self.classifier().parse_serial(
+            'RGPU_RECORDS build=abc count=2 dropped=0 truncated=0\n'
+            'RGPU_EVENT build=abc seq=0 HY: SDMA selector trace route=ok entries-match=1\n'
+            'RGPU_EVENT build=abc seq=1 HY: SDMA select index=1 queue-type=0 found=0 counts=1,0,0,0 queues=0,0,0 occupied=0 callback=0xffffffffffffffff\n')
+        self.assertEqual(rows[0]['kind'], 'sdma_route')
+        self.assertTrue(rows[0]['ok'])
+        self.assertEqual(rows[1]['kind'], 'sdma_select')
+        self.assertEqual(rows[1]['index'], 1)
+        self.assertEqual(rows[1]['queue_type'], 0)
+        self.assertFalse(rows[1]['found'])
+        self.assertEqual(rows[1]['counts'], [1,0,0,0])
+
 
 if __name__ == '__main__':
     unittest.main()
