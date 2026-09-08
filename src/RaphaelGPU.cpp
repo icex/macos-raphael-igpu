@@ -31,6 +31,7 @@
 #include "KiqAddresses.hpp"
 #include "GartAddresses.hpp"
 #include "DiagnosticRecords.hpp"
+#include "SdmaTopology.hpp"
 #if __has_include("BuildIdentity.hpp")
 #include "BuildIdentity.hpp"
 #else
@@ -442,8 +443,12 @@ static constexpr size_t kOffAccPowerUpHW = 0x4e0c;   // AMDGraphicsAccelerator::
 static constexpr size_t kOffHwPowerUp    = 0x99618;  // AMDNavi23Hardware::powerUp [x6]
 static constexpr size_t kOffGfx10PowerUp = 0x73e68;  // AMDGFX10Hardware::powerUp [x6]
 static constexpr size_t kOffGfx10SetVMRegs = 0x74320; // AMDGFX10Hardware::setVMRegisters [x6]
+static constexpr size_t kOffHwEngInit    = 0x6fd4e;  // AMDHardware::initializeHWEngines [x6]
 static constexpr size_t kOffHwEngPowerUp = 0x6fe9a;  // AMDHardware::powerUpHWEngines [x6]
+static constexpr size_t kOffHwEngPowerOff = 0x6ff58; // AMDHardware::powerOffHWEngines [x6]
 static constexpr size_t kOffHwEngStart   = 0x6ffd2;  // AMDHardware::startHWEngines [x6]
+static constexpr size_t kOffHwEngStop    = 0x70086;  // AMDHardware::stopHWEngines [x6]
+static constexpr size_t kOffHwPowerOff   = 0x70360;  // __ZN26AMDRadeonX6000_AMDHardware8powerOffEv [x6]
 static constexpr size_t kOffPm4Mqd       = 0x69362;  // AMDGFX10PM4Engine::initComputeMQD [x6]
 static constexpr size_t kOffKiqStart     = 0x8e670;  // AMDGFX10KIQHWChannel::startKIQ [x6]
 static constexpr size_t kOffPm4GfxMqd    = 0x6952a;  // AMDGFX10PM4Engine::initGraphicsMQD [x6]
@@ -594,8 +599,12 @@ static mach_vm_address_t orgAccPowerUpHW {};
 static mach_vm_address_t orgHwPowerUp {};
 static mach_vm_address_t orgGfx10PowerUp {};
 static mach_vm_address_t orgGfx10SetVMRegs {};
+static mach_vm_address_t orgHwEngInit {};
 static mach_vm_address_t orgHwEngPowerUp {};
+static mach_vm_address_t orgHwEngPowerOff {};
 static mach_vm_address_t orgHwEngStart {};
+static mach_vm_address_t orgHwEngStop {};
+static mach_vm_address_t orgHwPowerOff {};
 static mach_vm_address_t orgPm4Mqd {};
 static mach_vm_address_t orgKiqStart {};
 static mach_vm_address_t orgPm4GfxMqd {};
@@ -613,6 +622,9 @@ static void *asicInfo {};
 // at +0x528, so [hwObj+0x528] is the base of the doorbell aperture as the guest sees it.
 static void *hwObj {};
 static bool cpcWedged = false;
+static bool sdmaTopologyEnabled = false;
+static bool sdmaTopologyRoutesReady = false;
+static void *sdmaTopologyOwner {};
 // A GC context, captured from any TTL register write, so this plugin can use TTL's own
 // register path (_gc_cgs_write_register_ext2) rather than only the framebuffer accessor.
 static void *gcCtx {};
@@ -1891,8 +1903,8 @@ static bool wrapTtlSetDevCap(void *ttl, uint32_t devId, uint32_t intRev, uint32_
 }
 
 
-// Rewrite the versions in the ipconfig table ITSELF, every entry, the first time we see
-// it -- not lazily inside the accessor. mc_sw_init does not use the accessor at all:
+// Rewrite the versions in each ipconfig table ITSELF, every entry, before returning
+// from the accessor. mc_sw_init does not use the accessor at all:
 //     1aaec: cmp dword ptr [r15 + rax - 0x10], 0x46   ; scan entries, stride 0x260
 // it walks a copy of these entries directly, so a version rewritten only when
 // ipconfig_get_ip_discovery_info happens to be called for that id never reaches it, and
@@ -1920,11 +1932,10 @@ static void applyRemapsToTable(void *ipconfig) {
 }
 
 static void *wrapIpcfgGet(void *ipconfig, uint32_t id) {
-    if (!dumpedTable && ipconfig != nullptr) {
-        dumpedTable = true;
+    if (ipconfig != nullptr) {
         auto base = static_cast<const uint8_t *>(ipconfig);
         uint32_t n = *reinterpret_cast<const uint32_t *>(base + 0x1c);
-        RLOG("ipconfig table: %u entries", n);
+        if (!dumpedTable) RLOG("ipconfig table: %u entries", n);
         if (n <= 64) {
             for (uint32_t i = 0; i < n; i++) {
                 auto e = base + 0x20 + static_cast<size_t>(i) * 0x260;
@@ -1933,13 +1944,15 @@ static void *wrapIpcfgGet(void *ipconfig, uint32_t id) {
                     *reinterpret_cast<const uint16_t *>(e + 0x0c) == 3 &&
                     *reinterpret_cast<const uint16_t *>(e + 0x10) == 6)
                     raphaelGcSeen = true;
-                RLOG("  ip[%u] id=0x%x ver=%u.%u.%u", i,
-                     *reinterpret_cast<const uint32_t *>(e + 0x00),
-                     *reinterpret_cast<const uint16_t *>(e + 0x08),
-                     *reinterpret_cast<const uint16_t *>(e + 0x0c),
-                     *reinterpret_cast<const uint16_t *>(e + 0x10));
+                if (!dumpedTable)
+                    RLOG("  ip[%u] id=0x%x ver=%u.%u.%u", i,
+                         *reinterpret_cast<const uint32_t *>(e + 0x00),
+                         *reinterpret_cast<const uint16_t *>(e + 0x08),
+                         *reinterpret_cast<const uint16_t *>(e + 0x0c),
+                         *reinterpret_cast<const uint16_t *>(e + 0x10));
             }
         }
+        dumpedTable = true;
         if (mask & R1) applyRemapsToTable(ipconfig);
     }
     void *r = FunctionCast(wrapIpcfgGet, orgIpcfgGet)(ipconfig, id);
@@ -4076,6 +4089,83 @@ static void startRlc() {
     dumpGfxState("after RLC start");
 }
 
+// Navi23's allocator always constructs two SDMA objects. Raphael's IP discovery
+// contains only SDMA0, and hybrid-002 proved that the second object reaches the
+// native selector as global instance index 1 and is rejected before its callback.
+// Remove that false object before AMDHardware::initializeHWEngines assigns indices,
+// allocates channels or powers engines. The generic initialize/power/free loops all
+// tolerate null slots. startHWEngines does not, so its one-instance equivalent lives
+// below and preserves the first engine's real Boolean result.
+static bool isRaphaelHardware(void *self) {
+    if (!raphaelGcSeen || self == nullptr) return false;
+    auto rawPci = *reinterpret_cast<void **>(reinterpret_cast<uint8_t *>(self) + 0x10);
+    auto pci = OSDynamicCast(IOService, reinterpret_cast<OSObject *>(rawPci));
+    if (pci == nullptr) return false;
+    auto vendor = OSDynamicCast(OSData, pci->getProperty("vendor-id"));
+    auto device = OSDynamicCast(OSData, pci->getProperty("device-id"));
+    auto atom = OSDynamicCast(OSData, pci->getProperty("ATY,bin_image"));
+    auto marker = OSDynamicCast(OSData, pci->getProperty("rgpu,raphael-target"));
+    static constexpr uint8_t expectedMarker[] = {
+        'R', 'G', 'P', 'U', '-', 'R', 'A', 'P', 'H', 'A', 'E', 'L', 1
+    };
+    if (vendor == nullptr || vendor->getLength() < sizeof(uint16_t) ||
+        device == nullptr || device->getLength() < sizeof(uint16_t) ||
+        atom == nullptr || atom->getLength() < 512 || marker == nullptr ||
+        marker->getLength() != sizeof(expectedMarker))
+        return false;
+    auto markerBytes = static_cast<const uint8_t *>(marker->getBytesNoCopy());
+    bool markerMatches = true;
+    for (size_t i = 0; i < sizeof(expectedMarker); i++)
+        markerMatches &= markerBytes[i] == expectedMarker[i];
+    return markerMatches &&
+           *static_cast<const uint16_t *>(vendor->getBytesNoCopy()) == 0x1002 &&
+           *static_cast<const uint16_t *>(device->getBytesNoCopy()) == 0x73ff;
+}
+
+static uint32_t wrapHwEngInit(void *self) {
+    if (sdmaTopologyEnabled && sdmaTopologyRoutesReady && isRaphaelHardware(self)) {
+        auto slots = reinterpret_cast<void **>(reinterpret_cast<uint8_t *>(self) + 0x3b8);
+        auto topology = RaphaelSdma::plan(1);
+        void *detached = RaphaelSdma::detachExtra(slots, 2, topology);
+        if (detached != nullptr) {
+            auto vt = *reinterpret_cast<uint64_t **>(detached);
+            auto release = reinterpret_cast<void (*)(void *)>(vt[0x28 / 8]);
+            release(detached);
+            sdmaTopologyOwner = self;
+            CRLOG("SD: topology applied: discovered=1 kept=SDMA0 removed=SDMA1 before initialize");
+        } else if (sdmaTopologyOwner == self && slots[0] != nullptr && slots[1] == nullptr) {
+            CRLOG("SD: topology already applied to this hardware object");
+        } else {
+            if (sdmaTopologyOwner == self) sdmaTopologyOwner = nullptr;
+            CRLOG("SD: topology NOT applied: second Navi23 SDMA object was absent");
+        }
+    } else if (sdmaTopologyEnabled && sdmaTopologyRoutesReady) {
+        CRLOG("SD: topology NOT applied: hardware object is not the Raphael target");
+    }
+    auto result = FunctionCast(wrapHwEngInit, orgHwEngInit)(self);
+    CRLOG("SD: AMDHardware::initializeHWEngines -> %u (topology-applied=%u)",
+          result & 0xff, sdmaTopologyOwner == self);
+    return result;
+}
+
+static bool startOneSdmaEngine(void *engine) {
+    auto vt = *reinterpret_cast<uint64_t **>(engine);
+    auto start = reinterpret_cast<uint32_t (*)(void *)>(vt[0x148 / 8]);
+    return (start(engine) & 0xff) != 0;
+}
+
+static void updateHwEngineStartTrace(void *self, bool success) {
+    if (self == nullptr) return;
+    auto handler = *reinterpret_cast<void **>(reinterpret_cast<uint8_t *>(self) + 0x18);
+    if (handler == nullptr) return;
+    auto vt = *reinterpret_cast<uint64_t **>(handler);
+    auto getTrace = reinterpret_cast<uint8_t *(*)(void *)>(vt[0x178 / 8]);
+    auto trace = getTrace(handler);
+    if (trace == nullptr) return;
+    auto field = reinterpret_cast<uint16_t *>(trace + 8);
+    *field = static_cast<uint16_t>((*field & ~0x200u) | (success ? 0x200u : 0));
+}
+
 static uint32_t wrapHwEngPowerUp(void *self) {
     hwObj = self;
     if (mask & XK) startRlc();
@@ -4098,9 +4188,42 @@ static uint32_t wrapHwEngPowerUp(void *self) {
 }
 
 static uint32_t wrapHwEngStart(void *self) {
-    auto r = FunctionCast(wrapHwEngStart, orgHwEngStart)(self);
+    uint32_t r = 0;
+    auto slots = self != nullptr
+        ? reinterpret_cast<void **>(reinterpret_cast<uint8_t *>(self) + 0x3b8)
+        : nullptr;
+    auto topology = RaphaelSdma::plan(1);
+    if (sdmaTopologyEnabled && sdmaTopologyRoutesReady &&
+        RaphaelSdma::ownsRepairedSlots(sdmaTopologyOwner, self, slots, 2, topology)) {
+        bool success = RaphaelSdma::start(slots, 2, topology, startOneSdmaEngine);
+        updateHwEngineStartTrace(self, success);
+        r = success ? 1u : 0u;
+        CRLOG("SD: one-instance start -> %u (SDMA0=%p SDMA1=%p)", r,
+              slots[0], slots[1]);
+    } else {
+        r = FunctionCast(wrapHwEngStart, orgHwEngStart)(self);
+    }
     CRLOG("XJ: AMDHardware::startHWEngines -> %u", r & 0xff);
     return r;
+}
+
+static uint32_t wrapHwEngStop(void *self) {
+    auto result = FunctionCast(wrapHwEngStop, orgHwEngStop)(self);
+    CRLOG("LC: AMDHardware::stopHWEngines -> %u", result & 0xff);
+    return result;
+}
+
+static uint32_t wrapHwEngPowerOff(void *self) {
+    auto result = FunctionCast(wrapHwEngPowerOff, orgHwEngPowerOff)(self);
+    CRLOG("LC: AMDHardware::powerOffHWEngines -> %u", result & 0xff);
+    return result;
+}
+
+static uint32_t wrapHwPowerOff(void *self) {
+    CRLOG("LC: AMDHardware::powerOff enter");
+    auto result = FunctionCast(wrapHwPowerOff, orgHwPowerOff)(self);
+    CRLOG("LC: AMDHardware::powerOff -> %u", result & 0xff);
+    return result;
 }
 
 // AMDNavi23Hardware::powerUp returns false on exactly two conditions, decoded at 0x99618:
@@ -4344,6 +4467,16 @@ static uint32_t wrapFbXgmiConfig(void *self) {
     return r;
 }
 
+static bool entryMatches(mach_vm_address_t base, size_t imageSize, size_t offset,
+                         const uint8_t *expected, size_t expectedSize) {
+    if (expected == nullptr || offset > imageSize || expectedSize > imageSize - offset)
+        return false;
+    auto entry = reinterpret_cast<const uint8_t *>(base + offset);
+    for (size_t i = 0; i < expectedSize; ++i)
+        if (entry[i] != expected[i]) return false;
+    return true;
+}
+
 static void processKext(void *, KernelPatcher &patcher, size_t index,
                         mach_vm_address_t addr, size_t sz) {
     RLOG("kext callback: index=%lu hwlibs=%lu fb=%lu addr=%llx size=%lu",
@@ -4501,8 +4634,6 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
                  reinterpret_cast<void *>(wrapGfx10SetVMRegs), "AMDGFX10Hardware::setVMRegisters"},
                 {kOffHwEngPowerUp, &orgHwEngPowerUp,
                  reinterpret_cast<void *>(wrapHwEngPowerUp), "AMDHardware::powerUpHWEngines"},
-                {kOffHwEngStart, &orgHwEngStart,
-                 reinterpret_cast<void *>(wrapHwEngStart), "AMDHardware::startHWEngines"},
                 {kOffPm4Mqd, &orgPm4Mqd,
                  reinterpret_cast<void *>(wrapPm4Mqd), "AMDGFX10PM4Engine::initComputeMQD"},
                 {kOffKiqStart, &orgKiqStart,
@@ -4523,6 +4654,65 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
                 patcher.clearError();
             }
         }
+        // Exact complete instructions displaced by the five new X6000 routes.
+        // The start/powerOff patterns extend to 21 bytes because byte 16 is in
+        // the middle of their first memory-operand instruction.
+        static const uint8_t engInitEntry[] = {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57,
+            0x41, 0x56, 0x53, 0x50, 0x49, 0x89, 0xfe, 0x45, 0x31, 0xff};
+        static const uint8_t engPowerOffEntry[] = {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57,
+            0x41, 0x56, 0x53, 0x50, 0x49, 0x89, 0xfe, 0x45, 0x31, 0xff};
+        static const uint8_t engStartEntry[] = {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57,
+            0x41, 0x56, 0x41, 0x54, 0x53, 0x48, 0x89, 0xfb, 0x0f, 0xb6,
+            0x87, 0xc2, 0x00, 0x00, 0x00};
+        static const uint8_t engStopEntry[] = {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57,
+            0x41, 0x56, 0x53, 0x50, 0x49, 0x89, 0xfe, 0x45, 0x31, 0xff};
+        static const uint8_t hwPowerOffEntry[] = {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57,
+            0x41, 0x56, 0x41, 0x54, 0x53, 0x48, 0x89, 0xfb, 0x80, 0xbf,
+            0x31, 0x05, 0x00, 0x00, 0x01};
+        bool engInitMatches = entryMatches(addr, sz, kOffHwEngInit,
+                                           engInitEntry, sizeof(engInitEntry));
+        bool engPowerOffMatches = entryMatches(addr, sz, kOffHwEngPowerOff,
+                                               engPowerOffEntry, sizeof(engPowerOffEntry));
+        bool engStartMatches = entryMatches(addr, sz, kOffHwEngStart,
+                                            engStartEntry, sizeof(engStartEntry));
+        bool engStopMatches = entryMatches(addr, sz, kOffHwEngStop,
+                                           engStopEntry, sizeof(engStopEntry));
+        bool hwPowerOffMatches = entryMatches(addr, sz, kOffHwPowerOff,
+                                              hwPowerOffEntry, sizeof(hwPowerOffEntry));
+        bool sdmaEntriesMatch = engInitMatches && engPowerOffMatches && engStartMatches &&
+                                engStopMatches && hwPowerOffMatches;
+        if (((mask & XJ) || sdmaTopologyEnabled) && engStartMatches &&
+            (!sdmaTopologyEnabled || sdmaEntriesMatch)) {
+            orgHwEngStart = patcher.routeFunction(addr + kOffHwEngStart,
+                              reinterpret_cast<mach_vm_address_t>(wrapHwEngStart), true);
+            RLOG("route AMDHardware::startHWEngines -> %s entries-match=%u (org=0x%llx)",
+                 orgHwEngStart ? "ok" : "FAILED", engStartMatches, orgHwEngStart);
+            patcher.clearError();
+        }
+        if (sdmaTopologyEnabled) {
+            struct { size_t off; mach_vm_address_t *org; void *fn; const char *name; } t[] {
+                {kOffHwEngInit, &orgHwEngInit,
+                 reinterpret_cast<void *>(wrapHwEngInit), "AMDHardware::initializeHWEngines"},
+                {kOffHwEngStop, &orgHwEngStop,
+                 reinterpret_cast<void *>(wrapHwEngStop), "AMDHardware::stopHWEngines"},
+                {kOffHwEngPowerOff, &orgHwEngPowerOff,
+                 reinterpret_cast<void *>(wrapHwEngPowerOff), "AMDHardware::powerOffHWEngines"},
+                {kOffHwPowerOff, &orgHwPowerOff,
+                 reinterpret_cast<void *>(wrapHwPowerOff), "AMDHardware::powerOff"},
+            };
+            for (auto &e : t) {
+                if (sdmaEntriesMatch)
+                    *e.org = patcher.routeFunction(addr + e.off,
+                                 reinterpret_cast<mach_vm_address_t>(e.fn), true);
+                CRLOG("SD: route %s -> %s (org=0x%llx)", e.name,
+                      *e.org ? "ok" : "FAILED", *e.org);
+                patcher.clearError();
+            }
+            sdmaTopologyRoutesReady = sdmaEntriesMatch && orgHwEngStart && orgHwEngInit &&
+                                      orgHwEngStop && orgHwEngPowerOff && orgHwPowerOff;
+            CRLOG("SD: topology routes=%s count=5 entries-match=%u",
+                  sdmaTopologyRoutesReady ? "ok" : "FAILED", sdmaEntriesMatch);
+        }
     }
 }
 
@@ -4538,6 +4728,11 @@ static void pluginStart() {
                          hybridProbe == 1;
     RLOG("rgpuhybrid=%u: guarded hybrid-engine diagnostics %s", hybridProbeEnabled,
          hybridProbeEnabled ? "enabled" : "disabled");
+    uint32_t sdmaTopology = 0;
+    sdmaTopologyEnabled = PE_parse_boot_argn("rgpusdma", &sdmaTopology,
+                                             sizeof(sdmaTopology)) && sdmaTopology == 1;
+    RLOG("rgpusdma=%u: Raphael one-instance SDMA topology correction %s",
+         sdmaTopologyEnabled, sdmaTopologyEnabled ? "enabled" : "disabled");
     uint32_t cps = 0;
     if (PE_parse_boot_argn("rgpucp", &cps, sizeof(cps)) && cps == 1) {
         cpSurgeryEnabled = true;

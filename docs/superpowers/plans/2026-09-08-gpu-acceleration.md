@@ -307,14 +307,17 @@ startup complete but no Metal progress -> follow first submission -> classify pa
 translation, fence-memory or interrupt/completion failure -> repair that boundary only
 ```
 
-- [ ] Write down native function ABI, return semantics, argument fields and producer for
+- [x] Write down native function ABI, return semantics, argument fields and producer for
   the value being repaired; prove them from the 24G830 binary and pinned reference code.
-- [ ] For pure transformations/dispatch, encode the failing captured case as a regression
+- [x] For pure transformations/dispatch, encode the failing captured case as a regression
   before implementing. Include unchanged valid inputs, overflow/range errors and failure
   cleanup; use real captured domains, not assertions that repeat the implementation.
+- [x] Compare Raphael and Navi23 block-by-block against pinned Linux v6.12. Record shared
+  backends and the distinct SDMA queues, UMA/GART/MALL, GC power/golden, PSP/SMU, UMC and
+  DCN315 behavior in `findings/raphael-vs-navi-linux.md`; add code only for an observed boundary.
 - [ ] For ordering/lifecycle repairs, use an event-sequence fixture plus native before/after
   hardware evidence; a mocked “success return” is not acceptance.
-- [ ] Implement one gated minimal repair; verify compile, route ownership, entry guards and
+- [x] Implement one gated minimal repair; verify compile, route ownership, entry guards and
   required firmware before staging. Review changes to cleanup as carefully as initialization.
 - [ ] Run the next distinct experiment only from an admitted state. Require native startup
   success plus actual user work; preserve all previous checked address/queue invariants.

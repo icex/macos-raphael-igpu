@@ -135,6 +135,109 @@ class ClassifyTests(unittest.TestCase):
         self.assertFalse(rows[1]['found'])
         self.assertEqual(rows[1]['counts'], [1,0,0,0])
 
+    def test_required_topology_repair_must_route_and_apply_before_start(self):
+        c = self.classifier()
+        manifest = {'build_id':'abc', 'spec':{'required_observations':['sdma_topology']}}
+        baseline = self.events(1, 0, 1)
+        self.assertEqual(c.classify(manifest, baseline, None)['verdict'], 'INCONCLUSIVE')
+
+        serial = ''.join([
+            'RGPU_EVENT build=abc seq=0 BUILD: identity=abc\n',
+            'RGPU_EVENT build=abc seq=1 HY: HWLibs hybrid trace route=ok entries-match=1 (max 8 calls)\n',
+            'RGPU_EVENT build=abc seq=2 SD: topology routes=ok count=5 entries-match=1\n',
+            'RGPU_EVENT build=abc seq=3 SD: topology applied: discovered=1 kept=SDMA0 removed=SDMA1 before initialize\n',
+            'RGPU_EVENT build=abc seq=4 SD: AMDHardware::initializeHWEngines -> 1 (topology-applied=1)\n',
+            'RGPU_EVENT build=abc seq=5 XJ: waitForHwStamp(1) -> 1\n',
+            'RGPU_EVENT build=abc seq=6 HY: createHybridEngine enter: engine=10 available=1\n',
+            'RGPU_EVENT build=abc seq=7 HY: SDMA select index=0 queue-type=0 found=1 counts=1,0,0,0 queues=2,0,0 occupied=0 callback=0xffffff8000000000\n',
+            'RGPU_EVENT build=abc seq=8 HY: createHybridEngine exit: engine=10 valid=1 available-before=1 status=0\n',
+            'RGPU_EVENT build=abc seq=9 HY: createHybridEngine enter: engine=11 available=1\n',
+            'RGPU_EVENT build=abc seq=10 HY: SDMA select index=0 queue-type=1 found=1 counts=1,0,0,0 queues=2,0,0 occupied=0 callback=0xffffff8000000000\n',
+            'RGPU_EVENT build=abc seq=11 HY: createHybridEngine exit: engine=11 valid=1 available-before=1 status=0\n',
+            'RGPU_EVENT build=abc seq=12 SD: one-instance start -> 1 (SDMA0=0xffffff8000001000 SDMA1=0)\n',
+            'RGPU_EVENT build=abc seq=13 XJ: AMDHardware::startHWEngines -> 1\n',
+            'RGPU_RECORDS build=abc count=14 dropped=0 truncated=0\n'])
+        events = c.parse_serial(serial)
+        self.assertEqual(c.classify(manifest, events, None)['verdict'], 'PROBE_NOT_RUN')
+
+        missing_apply = [dict(row) for row in events if row['kind'] != 'sdma_topology']
+        for seq, row in enumerate(missing_apply): row['seq'] = seq
+        self.assertEqual(c.classify(manifest, missing_apply, None)['verdict'], 'INCONCLUSIVE')
+        bad_route = [dict(row) for row in events]
+        next(row for row in bad_route if row['kind'] == 'sdma_topology_route')['ok'] = False
+        self.assertEqual(c.classify(manifest, bad_route, None)['verdict'], 'INVALID')
+
+        late = [dict(row) for row in events]
+        apply = next(row for row in late if row['kind'] == 'sdma_topology')
+        start = next(row for row in late if row['kind'] == 'engine_start')
+        apply['seq'], start['seq'] = start['seq'], apply['seq']
+        late.sort(key=lambda row: row['seq'])
+        self.assertEqual(c.classify(manifest, late, None)['verdict'], 'INCONCLUSIVE')
+
+        arbitrary = serial.replace(
+            'SD: topology applied: discovered=1 kept=SDMA0 removed=SDMA1 before initialize',
+            'SD: topology applied: arbitrary text')
+        self.assertEqual(c.classify(manifest, c.parse_serial(arbitrary), None)['verdict'],
+                         'INCONCLUSIVE')
+        no_replacement_start = serial.replace(
+            'SD: one-instance start -> 1 (SDMA0=0xffffff8000001000 SDMA1=0)',
+            'SD: replacement start record absent')
+        self.assertEqual(c.classify(manifest, c.parse_serial(no_replacement_start), None)['verdict'],
+                         'INCONCLUSIVE')
+        init_failed = serial.replace(
+            'SD: AMDHardware::initializeHWEngines -> 1 (topology-applied=1)',
+            'SD: AMDHardware::initializeHWEngines -> 0 (topology-applied=1)')
+        self.assertEqual(c.classify(manifest, c.parse_serial(init_failed), None)['verdict'],
+                         'STARTUP_FAILED_LATER')
+        missing_queue_one = serial.replace(
+            'HY: SDMA select index=0 queue-type=1 found=1 counts=1,0,0,0 queues=2,0,0 occupied=0 callback=0xffffff8000000000',
+            'HY: SDMA queue-one record absent')
+        self.assertEqual(c.classify(manifest, c.parse_serial(missing_queue_one), None)['verdict'],
+                         'INCONCLUSIVE')
+        false_second = serial.replace(
+            'HY: SDMA select index=0 queue-type=1 found=1 counts=1,0,0,0 queues=2,0,0 occupied=0 callback=0xffffff8000000000',
+            'HY: SDMA select index=1 queue-type=0 found=0 counts=1,0,0,0 queues=0,0,0 occupied=0 callback=0xffffffffffffffff')
+        self.assertEqual(c.classify(manifest, c.parse_serial(false_second), None)['verdict'],
+                         'STARTUP_FAILED_LATER')
+
+        queue_after_replacement = [dict(row) for row in events]
+        queue_one = next(row for row in queue_after_replacement
+                         if row['kind'] == 'sdma_select' and row['queue_type'] == 1)
+        replacement = next(row for row in queue_after_replacement
+                           if row['kind'] == 'sdma_one_start')
+        queue_one['seq'], replacement['seq'] = replacement['seq'], queue_one['seq']
+        queue_after_replacement.sort(key=lambda row: row['seq'])
+        self.assertEqual(c.classify(manifest, queue_after_replacement, None)['verdict'],
+                         'INCONCLUSIVE')
+
+        reversed_exits = [dict(row) for row in events]
+        exit_zero = next(row for row in reversed_exits
+                         if row['kind'] == 'hybrid_exit' and row['engine'] == 10)
+        exit_one = next(row for row in reversed_exits
+                        if row['kind'] == 'hybrid_exit' and row['engine'] == 11)
+        exit_zero['seq'], exit_one['seq'] = exit_one['seq'], exit_zero['seq']
+        reversed_exits.sort(key=lambda row: row['seq'])
+        self.assertEqual(c.classify(manifest, reversed_exits, None)['verdict'],
+                         'INCONCLUSIVE')
+
+        missing_correlated_enter = [dict(row) for row in events
+                                    if not (row['kind'] == 'hybrid_enter' and
+                                            row['engine'] == 10)]
+        for seq, row in enumerate(missing_correlated_enter): row['seq'] = seq
+        self.assertEqual(c.classify(manifest, missing_correlated_enter, None)['verdict'],
+                         'INCONCLUSIVE')
+
+        duplicate_selection = [dict(row) for row in events]
+        duplicate = dict(next(row for row in duplicate_selection
+                              if row['kind'] == 'sdma_select' and row['queue_type'] == 0))
+        for row in duplicate_selection:
+            if row['seq'] >= 8: row['seq'] += 1
+        duplicate['seq'] = 8
+        duplicate_selection.append(duplicate)
+        duplicate_selection.sort(key=lambda row: row['seq'])
+        self.assertEqual(c.classify(manifest, duplicate_selection, None)['verdict'],
+                         'INCONCLUSIVE')
+
 
 if __name__ == '__main__':
     unittest.main()

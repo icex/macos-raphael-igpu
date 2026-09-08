@@ -31,6 +31,17 @@ def parse_serial(serial):
             row.update(kind='route', ok='route=ok entries-match=1' in payload)
         elif 'HY: SDMA selector trace' in payload:
             row.update(kind='sdma_route', ok='route=ok entries-match=1' in payload)
+        elif payload.startswith('SD: topology routes='):
+            row.update(kind='sdma_topology_route',
+                       ok='routes=ok count=5 entries-match=1' in payload)
+        elif payload == 'SD: topology applied: discovered=1 kept=SDMA0 removed=SDMA1 before initialize':
+            row.update(kind='sdma_topology', applied=True)
+        elif payload.startswith('SD: topology NOT applied:'):
+            row.update(kind='sdma_topology', applied=False)
+        elif m := re.fullmatch(r'SD: AMDHardware::initializeHWEngines -> (\d+) \(topology-applied=([01])\)', payload):
+            row.update(kind='sdma_initialize', result=int(m[1]), applied=bool(int(m[2])))
+        elif m := re.match(r'SD: one-instance start -> (\d+) \(SDMA0=\S+ SDMA1=\S+\)$', payload):
+            row.update(kind='sdma_one_start', result=int(m[1]))
         elif m := re.search(r'HY: SDMA select index=(\d+) queue-type=(\d+) found=([01]) counts=(\d+),(\d+),(\d+),(\d+)', payload):
             row.update(kind='sdma_select', index=int(m[1]), queue_type=int(m[2]),
                        found=bool(int(m[3])), counts=[int(m[i]) for i in range(4,8)])
@@ -79,6 +90,57 @@ def classify(manifest, events, probe):
         return verdict('INCONCLUSIVE', stage='capture_loss')
     if any(r.get('result') == 0 for r in kinds['kiq']):
         return verdict('BASELINE_BLOCKED', True, 'kiq', 'analyze the earlier KIQ failure offline; no retry')
+    if 'sdma_topology' in manifest.get('spec', {}).get('required_observations', []):
+        routes = [r for r in events if r['kind'] == 'sdma_topology_route']
+        applied = [r for r in events if r['kind'] == 'sdma_topology']
+        initialized = [r for r in events if r['kind'] == 'sdma_initialize']
+        one_starts = [r for r in events if r['kind'] == 'sdma_one_start']
+        selections = [r for r in events if r['kind'] == 'sdma_select']
+        if any(not r.get('ok') for r in routes):
+            return verdict('INVALID', stage='sdma_topology_route_guard')
+        if (len(routes) != 1 or len(applied) != 1 or len(initialized) != 1 or
+                len(one_starts) != 1 or
+                any(not r.get('applied') for r in applied + initialized)):
+            return verdict('INCONCLUSIVE', stage='sdma_topology_missing')
+        if any(r.get('result') == 0 for r in initialized + one_starts):
+            return verdict('STARTUP_FAILED_LATER', True, 'sdma_engine_start',
+                           'inspect the preserved native SDMA initialization/start failure')
+        if any(r.get('index') != 0 for r in selections):
+            return verdict('STARTUP_FAILED_LATER', True, 'sdma_topology_effect',
+                           'the removed SDMA instance is still reaching native selection')
+        sdma_events = sorted(
+            (r for r in events if r['kind'] == 'sdma_select' or
+             (r['kind'] in ('hybrid_enter', 'hybrid_exit') and
+              r.get('engine') in (10, 11))),
+            key=lambda r: r['seq'])
+        expected = (
+            ('hybrid_enter', 10, None),
+            ('sdma_select', None, 0),
+            ('hybrid_exit', 10, None),
+            ('hybrid_enter', 11, None),
+            ('sdma_select', None, 1),
+            ('hybrid_exit', 11, None),
+        )
+        if len(sdma_events) != len(expected):
+            return verdict('INCONCLUSIVE', stage='sdma_topology_effect_missing')
+        for row, (kind, engine, queue_type) in zip(sdma_events, expected):
+            if row['kind'] != kind:
+                return verdict('INCONCLUSIVE', stage='sdma_topology_order')
+            if engine is not None and row.get('engine') != engine:
+                return verdict('INCONCLUSIVE', stage='sdma_topology_effect_missing')
+            if kind == 'hybrid_enter' and row.get('available') != 1:
+                return verdict('INCONCLUSIVE', stage='sdma_topology_effect_missing')
+            if kind == 'hybrid_exit' and row.get('result') != 0:
+                return verdict('INCONCLUSIVE', stage='sdma_topology_effect_missing')
+            if kind == 'sdma_select' and not (
+                    row.get('index') == 0 and row.get('queue_type') == queue_type and
+                    row.get('found') and row.get('counts') == [1, 0, 0, 0]):
+                return verdict('INCONCLUSIVE', stage='sdma_topology_effect_missing')
+        starts = [r for r in events if r['kind'] == 'engine_start']
+        if (len(starts) != 1 or not routes[0]['seq'] < applied[0]['seq'] <
+                initialized[0]['seq'] < sdma_events[0]['seq'] <
+                sdma_events[-1]['seq'] < one_starts[0]['seq'] < starts[0]['seq']):
+            return verdict('INCONCLUSIVE', stage='sdma_topology_order')
     if 'sdma_selection' in manifest.get('spec', {}).get('required_observations', []):
         routes = [r for r in events if r['kind'] == 'sdma_route']
         if any(not r.get('ok') for r in routes):

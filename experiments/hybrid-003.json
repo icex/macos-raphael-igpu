@@ -1,0 +1,30 @@
+{
+  "id": "hybrid-003",
+  "question": "Does correcting X6000's false second SDMA object allow native startup and real Metal work?",
+  "candidate_version": "1.0.165",
+  "requested_diagnostic": "rgpusdma=1",
+  "behavior_change": "release the nonexistent second Navi23 SDMA object before initialization and start the surviving native object with its real result and trace state",
+  "required_observations": [
+    "loaded_build",
+    "route_guards",
+    "kiq_stamps",
+    "hybrid_enter",
+    "hybrid_exit",
+    "engine_start",
+    "sdma_topology"
+  ],
+  "max_seconds": 180,
+  "prerequisites": [
+    "T6_offline_validation",
+    "fresh_amdgpu_first_boot"
+  ],
+  "repeat_policy": "no unchanged retry",
+  "abort_on": [
+    "identity_mismatch",
+    "capture_loss",
+    "kiq_dequeue_timeout",
+    "host_fault"
+  ],
+  "outcome_table": "docs/ROADMAP.md M3-M4",
+  "run_probe_only_after_native_start": true
+}
