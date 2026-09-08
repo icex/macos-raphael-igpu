@@ -1,0 +1,7 @@
+{
+  "guest_build": "24G830",
+  "guest_boot_uuid": "4FC361A8-FE81-49C0-8317-3F85F2666225",
+  "guest_uid": 0,
+  "probe_source_sha256": "f0fc0ced81fe70732c3491cff1557a83d85c9ccb8c18a6303f9070ae1f969d77",
+  "probe_binary_sha256": "1637e4b31bca0a1bdc400f96e34b344a823de1b408a8d1677d6bcca475c8c787"
+}

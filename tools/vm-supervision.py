@@ -26,6 +26,10 @@ DOCKER_ENV = ("DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_CONFIG", "DOCKER_TLS_VERI
               "DOCKER_CERT_PATH")
 
 
+class ManagedStopUnconfirmed(RuntimeError):
+    pass
+
+
 def full_cid(value):
     if not CID_PATTERN.fullmatch(value):
         raise ValueError("container identity must be a full 64-digit hexadecimal ID")
@@ -444,14 +448,14 @@ def start_locked(vm, maximum, gpu_args):
         (vm / "run/supervision.json").write_text(json.dumps(state))
         reservation.unlink()
         return state
-    except Exception:
+    except BaseException:
         try:
             run([binary("systemctl"), "--user", "stop", name + ".service"], timeout=40)
         except Exception:
             # Absence of a container does not cancel an accepted but delayed
             # service launch. Its own cap/cleanup remain responsible; keep the
             # reservation until that lifetime is known to have ended.
-            raise RuntimeError('managed service stop unconfirmed; launch reservation retained') from None
+            raise ManagedStopUnconfirmed('managed service stop unconfirmed; launch reservation retained') from None
         cleanup(vm, name)
         raise
 
