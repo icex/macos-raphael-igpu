@@ -43,6 +43,8 @@ def verify_toolchain(toolchain, inputs):
 
 
 def build(toolchain, output):
+    subprocess.run([os.sys.executable, str(ROOT / 'tools/route-domains.py'),
+                    str(ROOT / 'src/RaphaelGPU.cpp')], check=True)
     inputs = json.loads((ROOT / 'build-support/inputs.json').read_text())
     verify_toolchain(toolchain, inputs)
     firmware = gzip.decompress((ROOT / 'build-support/rlc_fw.h.gz').read_bytes())
