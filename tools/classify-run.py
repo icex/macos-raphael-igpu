@@ -31,6 +31,8 @@ def _decode_payload(build, seq, payload):
     elif m := re.search(r'HY: SDMA select index=(\d+) queue-type=(\d+) found=([01]) counts=(\d+),(\d+),(\d+),(\d+)', payload):
         row.update(kind='sdma_select', index=int(m[1]), queue_type=int(m[2]),
                    found=bool(int(m[3])), counts=[int(m[i]) for i in range(4,8)])
+    elif m := re.search(r'submitKIQFrame -> (\d+)', payload):
+        row.update(kind='kiq_submit', result=int(m[1]))
     elif m := re.search(r'waitForHwStamp\((\d+)\) -> (\d+)', payload):
         row.update(kind='kiq', stamp=int(m[1]), result=int(m[2]))
     elif m := re.search(r'HY: createHybridEngine enter: engine=(\d+) available=(\d+)', payload):
@@ -53,7 +55,13 @@ def _decode_payload(build, seq, payload):
 def parse_serial(serial):
     records, losses, counts, raw_records, panics, hardware_timeouts = {}, [], {}, [], [], []
     raw_builds = set()
-    for line_number, line in enumerate(serial.replace('\r', '').splitlines()):
+    serial = serial.replace('\r', '')
+    # sercat fsyncs every append, so a concurrent reader can legitimately observe
+    # the bytes in the middle of one line.  A line has no evidentiary value until
+    # its newline is durable; parsing that tail can turn a replay into a conflict.
+    if serial and not serial.endswith('\n'):
+        serial = serial.rsplit('\n', 1)[0] + ('\n' if '\n' in serial else '')
+    for line_number, line in enumerate(serial.splitlines()):
         summary = re.search(r'RGPU_RECORDS build=(\S+) count=(\d+) dropped=(\d+) truncated=(\d+)', line)
         if summary:
             counts[summary[1]] = max(counts.get(summary[1], 0), int(summary[2]))
@@ -146,15 +154,25 @@ def classify(manifest, events, probe):
     if not expected or any(r.get('build') not in (None, expected) for r in events):
         return verdict('INVALID', stage='loaded_build')
     kinds = {kind: [r for r in events if r['kind'] == kind]
-             for kind in ('build', 'route', 'kiq', 'hybrid_enter', 'hybrid_exit', 'engine_start')}
+             for kind in ('build', 'route', 'kiq', 'kiq_submit', 'hybrid_enter',
+                          'hybrid_exit', 'engine_start')}
     if any(not r.get('ok') for r in kinds['route']):
         return verdict('INVALID', stage='route_guards')
     if not kinds['build'] or not kinds['route']:
         return verdict('INCONCLUSIVE', stage='identity_or_route_missing')
     panics = [r for r in events if r['kind'] == 'guest_panic']
-    terminal_kiq = [r for r in kinds['kiq'] if r.get('result') == 0 and
-                    (not panics or r['seq'] < panics[0]['seq'])]
-    if terminal_kiq:
+    explicit_submit = [r for r in kinds['kiq_submit']
+                       if not panics or r['seq'] < panics[0]['seq']]
+    live_terminal_kiq = [r for r in kinds['kiq']
+                         if r.get('source') == 'live-terminal' and
+                         (not panics or r['seq'] < panics[0]['seq'])]
+    kiq_before_terminal = explicit_submit + live_terminal_kiq
+    if not kiq_before_terminal:
+        kiq_before_terminal = [
+            r for r in kinds['kiq'] if not panics or r['seq'] < panics[0]['seq']]
+    terminal_kiq = (max(kiq_before_terminal, key=lambda r:r['seq'])
+                    if kiq_before_terminal else None)
+    if terminal_kiq and terminal_kiq.get('result') == 0:
         return verdict('BASELINE_BLOCKED', True, 'kiq',
                        'repair stale KIQ/HQD state and remove lock-held diagnostics before another launch')
     if panics:
@@ -180,8 +198,6 @@ def classify(manifest, events, probe):
     if (any(r['kind'] == 'capture_loss' for r in events) or
             seqs != list(range(len(seqs)))):
         return verdict('INCONCLUSIVE', stage='capture_loss')
-    if any(r.get('result') == 0 for r in kinds['kiq']):
-        return verdict('BASELINE_BLOCKED', True, 'kiq', 'analyze the earlier KIQ failure offline; no retry')
     if 'sdma_topology' in manifest.get('spec', {}).get('required_observations', []):
         routes = [r for r in events if r['kind'] == 'sdma_topology_route']
         applied = [r for r in events if r['kind'] == 'sdma_topology']

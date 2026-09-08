@@ -1,0 +1,38 @@
+{
+  "id": "metal-004",
+  "question": "Does candidate 170 reach the repaired SDMA paging-IB submission and complete the checked Metal compute/render probe from a clean CP state?",
+  "candidate_version": "1.0.170",
+  "requested_diagnostic": "rgpusdma=1",
+  "behavior_change": "preserve candidate 169's exact SDMA address repair while making explicit KIQ submission results authoritative and running Apple's native engine power-off immediately after partial power-up failure",
+  "required_observations": [
+    "loaded_build",
+    "route_guards",
+    "kiq_stamps",
+    "hybrid_enter",
+    "hybrid_exit",
+    "engine_start",
+    "sdma_topology",
+    "sdma_channel_remap",
+    "sdma_ib_address_repair"
+  ],
+  "max_seconds": 180,
+  "prerequisites": [
+    "fresh_host_boot",
+    "amdgpu_initialized_this_boot",
+    "reset_methods_disabled",
+    "sleep_inhibitor_active",
+    "watchdog_and_pstore_verified"
+  ],
+  "repeat_policy": "one warm qualification run is allowed only after the full checked probe passes and recovery records no dequeue timeout, forced clear, or CP busy state",
+  "abort_on": [
+    "identity_mismatch",
+    "capture_loss",
+    "guest_panic",
+    "terminal_kiq_submit_failure",
+    "sdma_page_timeout",
+    "host_fault",
+    "incomplete_gc_quiesce"
+  ],
+  "outcome_table": "docs/ROADMAP.md M4-M7",
+  "run_probe_only_after_native_start": true
+}

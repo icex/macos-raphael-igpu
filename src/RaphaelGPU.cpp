@@ -33,6 +33,7 @@
 #include "DiagnosticRecords.hpp"
 #include "SdmaTopology.hpp"
 #include "SdmaAddresses.hpp"
+#include "EngineLifecycle.hpp"
 #if __has_include("BuildIdentity.hpp")
 #include "BuildIdentity.hpp"
 #else
@@ -3411,7 +3412,7 @@ static uint32_t wrapKiqSubmit(void *self) {
         fbWrite(asicInfo, kGcGrbmGfxCntl, 0);
     }
     auto r = FunctionCast(wrapKiqSubmit, orgKiqSubmit)(self);
-    RLOG("XJ:   submitKIQFrame -> %u", r & 0xff);
+    CRLOG("XJ:   submitKIQFrame -> %u", r & 0xff);
     if (mask & XK) kickKiq();
     if (mqdFixMode != 2) repairMqdPointers(); // mode 2 prepares before startKIQ
     return r;
@@ -4219,22 +4220,32 @@ static void updateHwEngineStartTrace(void *self, bool success) {
 static uint32_t wrapHwEngPowerUp(void *self) {
     hwObj = self;
     if (mask & XK) startRlc();
-    if ((mask & XJ) == 0 || self == nullptr)
+    if (!RaphaelLifecycle::customPowerUpReady(
+            (mask & XJ) != 0, self, orgHwEngPowerOff != 0))
         return FunctionCast(wrapHwEngPowerUp, orgHwEngPowerUp)(self);
-    auto f = reinterpret_cast<uint8_t *>(self);
-    uint32_t ok = 1;
-    for (unsigned i = 0; i < 11; i++) {
-        auto eng = *reinterpret_cast<void **>(f + 0x3b0 + 8 * i);
-        if (eng == nullptr) continue;
-        auto vt = *reinterpret_cast<uint64_t **>(eng);
-        auto up = reinterpret_cast<uint32_t (*)(void *)>(vt[0x138 / 8]);
-        uint32_t r = up(eng) & 0xff;
-        RLOG("XJ:   engine %u %-5s at %p vtable=%p powerUp -> %u",
-             i, kEngineNames[i], eng, reinterpret_cast<void *>(vt), r);
-        if (!r) { ok = 0; break; }
-    }
+    auto engines = reinterpret_cast<void **>(reinterpret_cast<uint8_t *>(self) + 0x3b0);
+    size_t failed = 11;
+    bool ok = RaphaelLifecycle::powerUpAll(
+        engines, 11,
+        [&](void *eng, size_t i) {
+            auto vt = *reinterpret_cast<uint64_t **>(eng);
+            auto up = reinterpret_cast<uint32_t (*)(void *)>(vt[0x138 / 8]);
+            uint32_t result = up(eng) & 0xff;
+            RLOG("XJ:   engine %u %-5s at %p vtable=%p powerUp -> %u",
+                 static_cast<unsigned>(i), kEngineNames[i], eng,
+                 reinterpret_cast<void *>(vt), result);
+            return result != 0;
+        },
+        [&] {
+            auto powerOff = reinterpret_cast<uint32_t (*)(void *)>(orgHwEngPowerOff);
+            uint32_t result = powerOff(self) & 0xff;
+            CRLOG("LC: partial engine power-up cleaned before DMA teardown -> %u", result);
+        }, failed);
+    if (!ok)
+        CRLOG("LC: engine %u power-up failed; cleanup ran with guest mappings live",
+              static_cast<unsigned>(failed));
     CRLOG("XJ: AMDHardware::powerUpHWEngines -> %u", ok);
-    return ok;
+    return ok ? 1u : 0u;
 }
 
 static uint32_t wrapHwEngStart(void *self) {

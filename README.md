@@ -28,11 +28,13 @@ and [automated verdict](findings/metal-tests/20260908T052603Z-8dad7535/result.js
 are retained. Later experimental builds 1.0.160/161 had incorrectly placed diagnostic
 hooks and are excluded from conclusions about the hybrid-engine failure. A later
 third same-boot launch then inherited active ME2 HQDs from the fully started guest and failed a
-KIQ stamp before the Metal probe. Candidate 1.0.168 adds Linux-ordered GC/HQD/SDMA quiesce,
-safer timeout diagnostics, and an admission gate that requires PCI reset methods to be disabled
-before VFIO is opened. The SDMA writes have live readback evidence, but the first full cleanup
-record was confounded by VFIO's implicit shared-bus reset. Warm reinitialization and Metal
-execution remain unverified.
+KIQ stamp before the Metal probe. Candidate 1.0.169 adds reset-free Linux-ordered cleanup and
+repairs the measured truncated SDMA paging-IB address. Its first run was force-stopped by a torn
+serial-read classifier bug before that repair executed, contaminating the next warm launch.
+Read-only VFIO proved the old recovery receipt was unsafe: halt bits were set while `CP_STAT` and
+`CP_CPC_BUSY_STAT` remained nonzero. The next 1.0.170 candidate fixes that coordinator path,
+rejects incomplete cleanup, and invokes Apple's native engine power-off after partial startup
+failure. Metal execution remains unverified pending one clean-boot run.
 
 | Stage | Verified state |
 |---|---|
@@ -54,11 +56,11 @@ are milestones, not a measure of end-to-end rendering completeness.
 The [candidate-166 warm launch](findings/experiments/hybrid-004-166-reuse/notes.md) includes
 the first complete native engine startup. The [third launch](findings/experiments/metal-001-166-reuse/notes.md)
 proves PSP ring destruction alone does not clear GC queues after a fully started guest is
-force-stopped. Candidate 1.0.168 keeps the guarded SDMA repair, removes lock-held timeout dumps,
-adds bounded ACPI shutdown fallback, and extends rootless recovery to halt and clear GC/HQD/SDMA
-state with readback checks. The one-way amdgpu-to-vfio handoff now disables the unsafe PCI reset
-method before granting user access; later cleanup remains rootless. Full Metal remains
-unavailable. Published 1.0.159 remains the earlier research snapshot.
+force-stopped. Candidate 1.0.170 keeps the guarded SDMA repair, parses only complete serial lines,
+uses explicit KIQ submission results, tries native guest/ACPI shutdown before force-stop, and
+allows warm reuse only after real queue dequeue with idle CP status. The one-way amdgpu-to-vfio
+handoff disables the unsafe PCI reset method before granting user access; later cleanup remains
+rootless. Full Metal remains unavailable. Published 1.0.159 remains the earlier research snapshot.
 
 The repair is scoped by a byte-exact `rgpu,raphael-target` device property coupled to the
 grafted VBIOS. The tooling verifies that identity before a physical experiment, so the
@@ -85,8 +87,9 @@ inhibitor for the VM's lifetime.
 
 Bounded launches prefer the build- and boot-bound root agent. If that transport is absent, the
 coordinator now uses the exact-container, QEMU-peer-verified ACPI request before force-stop. The
-combined request gets at most 20 seconds while the original timer stays armed. Validation of the
-reset-disabled cleanup, the guest's native GPU teardown, and a subsequent warm launch is pending.
+combined request gets at most 20 seconds while the original timer stays armed. A runtime capture
+failure follows this graceful path after exact identity validation. Wrong-image and host-fault
+paths still stop directly. Validation of native GPU teardown and a subsequent warm launch is pending.
 
 To request an earlier bounded shutdown:
 

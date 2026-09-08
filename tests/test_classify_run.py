@@ -82,6 +82,17 @@ class ClassifyTests(unittest.TestCase):
         rows = parse(summary+line+line.replace('identity=abc', 'identity=def'))
         self.assertTrue(any(r['kind'] == 'capture_loss' for r in rows))
 
+    def test_unterminated_replay_tail_is_ignored_until_complete(self):
+        parse = self.classifier().parse_serial
+        serial = ''.join([
+            'RGPU_RECORDS build=abc count=2 dropped=0 truncated=0\n',
+            'RGPU_EVENT build=abc seq=0 BUILD: identity=abc\n',
+            'RGPU_EVENT build=abc seq=1 HY: HWLibs hybrid trace route=ok entries-match=1\n',
+            'RGPU_EVENT build=abc seq=1 HY: HWLibs hybrid trace route='])
+        rows = parse(serial)
+        self.assertFalse(any(row['kind'] == 'capture_loss' for row in rows))
+        self.assertEqual([row['kind'] for row in rows], ['build', 'route'])
+
     def test_snapshot_missing_last_record_is_not_complete_capture(self):
         parse = self.classifier().parse_serial
         rows = parse('RGPU_RECORDS build=abc count=2 dropped=0 truncated=0\n'
@@ -174,6 +185,57 @@ Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0
         self.assertTrue(verdict['valid'])
         self.assertEqual(verdict['verdict'], 'BASELINE_BLOCKED')
         self.assertEqual(verdict['earliest_failure'], 'kiq')
+
+    def test_later_success_recovers_an_earlier_kiq_timeout(self):
+        c = self.classifier().classify
+        events = self.events()
+        events[2]['result'] = 0
+        for row in events[3:]:
+            row['seq'] += 1
+        events.insert(3, dict(kind='kiq', build='abc', seq=3, stamp=4, result=1))
+        self.assertEqual(c({'build_id':'abc'}, events, None)['verdict'],
+                         'HYBRID_QUEUE_SUSPECTED')
+
+    def test_last_kiq_failure_remains_decisive(self):
+        c = self.classifier().classify
+        events = self.events()
+        for row in events[3:]:
+            row['seq'] += 1
+        events.insert(3, dict(kind='kiq', build='abc', seq=3, stamp=4, result=0))
+        self.assertEqual(c({'build_id':'abc'}, events, None)['verdict'],
+                         'BASELINE_BLOCKED')
+
+    def test_explicit_kiq_submit_result_outranks_generic_stamp_wait(self):
+        c = self.classifier()
+        events = self.events()
+        events[2]['result'] = 0
+        for row in events[3:]:
+            row['seq'] += 1
+        events.insert(3, dict(kind='kiq_submit', build='abc', seq=3, result=1))
+        self.assertEqual(c.classify({'build_id':'abc'}, events, None)['verdict'],
+                         'HYBRID_QUEUE_SUSPECTED')
+        events[3]['result'] = 0
+        self.assertEqual(c.classify({'build_id':'abc'}, events, None)['verdict'],
+                         'BASELINE_BLOCKED')
+
+    def test_submit_kiq_frame_is_a_structured_classifier_event(self):
+        rows = self.classifier().parse_serial(
+            'RGPU_RECORDS build=abc count=1 dropped=0 truncated=0\n'
+            'RGPU_EVENT build=abc seq=0 XJ:   submitKIQFrame -> 1\n')
+        self.assertEqual(rows[0]['kind'], 'kiq_submit')
+        self.assertEqual(rows[0]['result'], 1)
+
+    def test_live_terminal_kiq_failure_after_submit_still_precedes_panic(self):
+        c = self.classifier()
+        events = self.events()
+        for row in events[3:]:
+            row['seq'] += 1
+        events.insert(3, dict(kind='kiq_submit', build='abc', seq=3, result=1))
+        events.extend([
+            dict(kind='kiq', build='abc', seq=20, result=0, source='live-terminal'),
+            dict(kind='guest_panic', build='abc', seq=21, raw='panic')])
+        self.assertEqual(c.classify({'build_id':'abc'}, events, None)['verdict'],
+                         'BASELINE_BLOCKED')
 
     def test_required_sdma_observation_cannot_silently_fall_back(self):
         c = self.classifier().classify
