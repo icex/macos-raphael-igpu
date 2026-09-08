@@ -2576,12 +2576,11 @@ static void dumpGfxHubVm(const char *when) {
 static uint32_t wrapWaitStamp(void *self, uint32_t stamp) {
     auto r = FunctionCast(wrapWaitStamp, orgWaitStamp)(self, stamp);
     CRLOG("XJ:   waitForHwStamp(%u) -> %u", stamp, r & 0xff);
-    if (!(r & 0xff)) {
-        dumpGfxState("after stamp timeout");
-        dumpMecQueues("after stamp timeout");
-        if (mqdFixMode != 2) dumpCpUcode("after stamp timeout");
-        dumpGfxHubVm("after stamp timeout");
-    }
+    // This native call can run while X6000 holds a spin lock. Large MMIO walks and
+    // serial output here delayed the failure path until lck_spinlock_timeout fired,
+    // obscuring the original KIQ timeout with a recursive trap. The critical record
+    // is safe and sufficient in this context; collect wider state only from a later,
+    // lock-free lifecycle hook or from the host after QEMU has stopped.
     return r;
 }
 

@@ -123,5 +123,26 @@ class GuestShutdownTests(unittest.TestCase):
             self.assertIn(boot, observed_commands[0])
             self.assertEqual(list((vm/'run').glob('shutdown-permit-*')), [])
 
+    def test_shutdown_uses_verified_acpi_when_agent_transport_is_unavailable(self):
+        module = self.module()
+        with tempfile.TemporaryDirectory() as temp:
+            vm = Path(temp); (vm/'run').mkdir()
+            state = {'cid':'c'*64, 'deadline_epoch':None}
+            acpi_calls = []
+            supervisor = SimpleNamespace(
+                same_start_running=lambda state:True,
+                verify=lambda state:None,
+                shutdown=lambda state, grace:(acpi_calls.append((state, grace)) or
+                    {'cid':state['cid'], 'outcome':'exited-after-request'}),
+                stop_exact=lambda cid:self.fail('successful ACPI exit must not force stop'))
+            with patch.object(module, 'load_supervisor', return_value=supervisor), \
+                 patch.object(module, 'identify', side_effect=ValueError('guest identity transport failed')):
+                result = module.shutdown(vm, state, expected_build='24G830', grace=2)
+            self.assertEqual(result['outcome'], 'exited-after-acpi-request')
+            self.assertFalse(result['request_sent'])
+            self.assertTrue(result['acpi_request_sent'])
+            self.assertEqual(result['request_error'], 'guest identity transport failed')
+            self.assertEqual(len(acpi_calls), 1)
+
 
 if __name__ == '__main__': unittest.main()

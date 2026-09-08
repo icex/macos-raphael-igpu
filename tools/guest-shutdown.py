@@ -118,10 +118,32 @@ def shutdown(vm, state, expected_build, grace=20):
                 try:
                     if pending.read_text() == command: pending.unlink(missing_ok=True)
                 except FileNotFoundError: pass
+        # The root agent is preferred because it proves the guest build and boot UUID,
+        # but loss of that HTTP poller must not jump straight to killing QEMU. The
+        # supervisor's ACPI path re-verifies the exact container and the QEMU peer of
+        # its monitor socket before sending system_powerdown. That gives macOS a final,
+        # bounded chance to execute the driver's native stop/power-off methods.
+        remaining = max(0.0, until-time.monotonic())
+        if supervisor.same_start_running(state) and remaining >= 1:
+            try:
+                acpi = supervisor.shutdown(state, grace=max(1, min(20, int(remaining))))
+                outcome = acpi.get('outcome')
+                if outcome == 'exited-after-request':
+                    outcome = 'exited-after-acpi-request'
+                return dict(cid=state['cid'], outcome=outcome,
+                            request_sent=requested, guest_boot_uuid=guest_boot,
+                            request_id=nonce if requested else None, request_error=error,
+                            acpi_request_sent=bool(acpi.get('request_sent', True)),
+                            acpi_request_error=acpi.get('request_error'))
+            except Exception as failure:
+                acpi_error = str(failure)
+        else:
+            acpi_error = 'no bounded grace remains for ACPI powerdown'
         supervisor.stop_exact(state['cid'])
         return dict(cid=state['cid'], outcome='forced', request_sent=requested,
-                    guest_boot_uuid=guest_boot,
-                    request_id=nonce if requested else None, request_error=error)
+                    guest_boot_uuid=guest_boot, request_id=nonce if requested else None,
+                    request_error=error, acpi_request_sent=False,
+                    acpi_request_error=acpi_error)
 
 
 if __name__ == '__main__':

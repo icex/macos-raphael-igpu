@@ -30,7 +30,11 @@ guest required a targeted force-stop. A rootless VFIO transaction has since dest
 rings with exact acknowledgements while PCI bus mastering remained disabled. Candidate 166 then
 reinitialized on that recovered state, completed native engine startup and advanced KIQ stamps
 through 21. A second post-stop recovery also succeeded. The Metal probe was withheld by a now-fixed
-snapshot-classification bug, so no Metal command completion is verified yet.
+snapshot-classification bug. The third launch then completed three early KIQ stamps but found
+sixteen active ME2 HQD selections inherited from the fully started previous guest and timed out
+before the probe. PSP teardown is therefore only one part of reuse; candidate 167 adds a
+source-backed GC/HQD and SDMA quiesce transaction plus bounded ACPI shutdown fallback. Neither
+change has hardware validation yet, and no Metal command completion is verified.
 
 ## 1. What is actually complete
 
@@ -55,7 +59,7 @@ single clean run is not repeatability evidence. There is no defensible overall p
 | [x] | Wrong-kext route regression prevented for current scopes | `route-domains.py` and regression tests; not a complete C++ verifier |
 | [x] | Optional hybrid diagnostic built | 1.0.162, exact entry guards, `rgpuhybrid=1`, native result preserved |
 | [x] | Hybrid diagnostic validated on hardware | 1.0.163: complete records; type10 fails after type10/type11 success |
-| [ ] | Repeatable clean initial state | Rootless cleanup plus one same-boot reinitialization are measured; the third-cycle qualification remains open |
+| [ ] | Repeatable clean initial state | PSP cleanup enabled one warm start; the third launch retained active HQDs and failed KIQ. GC/HQD/SDMA quiesce is implemented offline and awaits bounded hardware validation |
 | [x] | Native hybrid queues / complete engine startup | Candidate166 maps residual engine-2 channels to real SDMA0; hybrid status 0, native start/power-up 1 and KIQ stamps through 21 on hardware |
 | [ ] | Correct Metal compute and offscreen rendering | First command buffer fails; zero results checked |
 | [ ] | Per-process memory, synchronization and resource lifecycle | Must be exercised after first real completion |
@@ -289,8 +293,15 @@ Physical display work must not be mistaken for a prerequisite to an offscreen co
 - [x] Implement rootless VFIO BAR5 access that refuses an active VM or enabled bus master,
   destroys both PSP rings, verifies exact responses and creates a single-use receipt. The first
   post-candidate-165 transaction completed in 7 ms and 1 ms with no host fault.
-- [x] After teardown evidence, run a single controlled warm reuse experiment; a failure
-  returns to one launch per clean host boot. Only then graduate to three bounded cycles.
+- [x] Run the first controlled warm reuse experiment. It reinitialized successfully after a
+  guest panic, proving PSP cleanup is useful but not sufficient after full engine startup.
+- [x] Run the third same-boot qualification under the fixed ceiling. It found inherited active
+  ME2 HQDs and failed a KIQ stamp before Metal; no fourth launch was attempted.
+- [ ] Validate the Linux-ordered rootless GC quiesce: disable pointer polling, request HQD
+  dequeue while MEC runs, halt graphics/MEC/SDMA, force only stuck halted HQDs inactive, prove
+  zero active queues, then destroy PSP rings. No PCI bus reset or amdgpu rebind is allowed.
+- [ ] Prove the exact-container ACPI fallback reaches native driver stop/power-off when the
+  root command channel is unavailable; preserve the independent exposure deadline.
 
 **Pass:** successful native cleanup and repeatable reinitialization without force clear,
 reset escalation, host lockup, IOMMU errors or persistent D-state tasks. Host stability

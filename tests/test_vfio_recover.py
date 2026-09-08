@@ -22,6 +22,7 @@ class FakeTransport:
         self.fail_command = fail_command
         self.events = []
         self.value = 0x80050000
+        self.registers = {}
         self.region = {'index': 5, 'size': 0x80000, 'offset': 0x120000,
                        'read': True, 'write': True, 'mmap': True}
 
@@ -34,11 +35,13 @@ class FakeTransport:
 
     def read32(self, offset):
         self.events.append(('read', offset))
-        return self.value
+        return self.value if offset == self.tool.C2PMSG_64_OFFSET else self.registers.get(offset, 0)
 
     def write32(self, offset, value):
         self.events.append(('write', offset, value))
-        if value != self.fail_command:
+        if offset != self.tool.C2PMSG_64_OFFSET:
+            self.registers[offset] = value
+        elif value != self.fail_command:
             self.value = self.tool.READY_FLAG | value
 
     def metadata(self):
@@ -80,7 +83,8 @@ class VfioRecoveryTests(unittest.TestCase):
         evidence = self.tool.perform_recovery(
             'boot-A', 'a'*32, lambda:next(states), lambda:fake,
             lambda cursor=None: ('cursor-2', [], []), sleep=lambda _:None)
-        writes = [event for event in fake.events if event[0] == 'write']
+        writes = [event for event in fake.events if event[0] == 'write' and
+                  event[1] == self.tool.C2PMSG_64_OFFSET]
         self.assertEqual(writes, [
             ('write', self.tool.C2PMSG_64_OFFSET, self.tool.DESTROY_RINGS),
             ('write', self.tool.C2PMSG_64_OFFSET, self.tool.DESTROY_GPCOM_RING)])
@@ -88,6 +92,72 @@ class VfioRecoveryTests(unittest.TestCase):
         self.assertEqual([row['command'] for row in evidence['commands']],
                          [self.tool.DESTROY_RINGS, self.tool.DESTROY_GPCOM_RING])
         self.assertTrue(all(row['confirmed'] for row in evidence['commands']))
+        self.assertEqual(evidence['gc_quiesce']['status'], 'quiesced')
+
+    def test_gc_quiesce_dequeues_before_halting_engines(self):
+        tool = self.tool
+
+        class QueueTransport(FakeTransport):
+            def __init__(self):
+                super().__init__(tool)
+                self.selector = 0
+                self.active = {tool.queue_selector(2, 1, 0): 1}
+
+            def read32(self, offset):
+                if offset == tool.CP_HQD_ACTIVE_OFFSET:
+                    self.events.append(('read-active', self.selector))
+                    return self.active.get(self.selector, 0)
+                return super().read32(offset)
+
+            def write32(self, offset, value):
+                if offset == tool.GRBM_GFX_CNTL_OFFSET:
+                    self.selector = value
+                if offset == tool.CP_HQD_DEQUEUE_OFFSET and value == 1:
+                    self.active[self.selector] = 0
+                super().write32(offset, value)
+
+        fake = QueueTransport()
+        result = tool.quiesce_gc(fake, sleep=lambda _:None, polls=3)
+        self.assertEqual(result['active_before'], 1)
+        self.assertEqual(result['dequeued'], 1)
+        self.assertEqual(result['forced_inactive'], 0)
+        dequeue = fake.events.index(('write', tool.CP_HQD_DEQUEUE_OFFSET, 1))
+        halt = fake.events.index(('write', tool.CP_MEC_CNTL_OFFSET, tool.CP_MEC_HALT_MASK))
+        self.assertLess(dequeue, halt)
+        self.assertEqual(fake.registers[tool.CP_ME_CNTL_OFFSET] & tool.CP_ME_HALT_MASK,
+                         tool.CP_ME_HALT_MASK)
+        self.assertEqual(fake.registers[tool.SDMA0_F32_CNTL_OFFSET] & tool.SDMA_HALT_MASK, 1)
+
+    def test_gc_quiesce_force_clears_stuck_hqd_only_after_mec_halt(self):
+        tool = self.tool
+
+        class StuckTransport(FakeTransport):
+            def __init__(self):
+                super().__init__(tool)
+                self.selector = 0
+                self.target = tool.queue_selector(2, 3, 6)
+                self.active = 1
+
+            def read32(self, offset):
+                if offset == tool.CP_HQD_ACTIVE_OFFSET and self.selector == self.target:
+                    return self.active
+                return super().read32(offset)
+
+            def write32(self, offset, value):
+                if offset == tool.GRBM_GFX_CNTL_OFFSET:
+                    self.selector = value
+                if (offset == tool.CP_HQD_ACTIVE_OFFSET and value == 0 and
+                        self.selector == self.target):
+                    self.active = 0
+                super().write32(offset, value)
+
+        fake = StuckTransport()
+        result = tool.quiesce_gc(fake, sleep=lambda _:None, polls=2)
+        self.assertEqual(result['dequeue_timeouts'], 1)
+        self.assertEqual(result['forced_inactive'], 1)
+        halt = fake.events.index(('write', tool.CP_MEC_CNTL_OFFSET, tool.CP_MEC_HALT_MASK))
+        clear = fake.events.index(('write', tool.CP_HQD_ACTIVE_OFFSET, 0))
+        self.assertLess(halt, clear)
 
     def test_mailbox_timeout_closes_transport_and_never_reports_success(self):
         fake = FakeTransport(self.tool, fail_command=self.tool.DESTROY_RINGS)

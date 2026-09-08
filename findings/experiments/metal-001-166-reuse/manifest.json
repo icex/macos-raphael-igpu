@@ -1,0 +1,78 @@
+{
+  "binary_sha256": "0505b933c700c96f5bdfe7b933a706ea08ed22245a75c392c4d21317fc415b24",
+  "info_sha256": "2d14b7839e6a50c1e21c8c0274779adda50111647acd99617db5e9ab712e3fd3",
+  "config_sha256": "41759554557068dbd7764931010e428c948d6ed2c0e8009fb158ce100d728a05",
+  "build_id": "a4de027a907844b89511619471892e9e",
+  "source_sha256": "fdcaffc8f007c12308e314cb1254b38a011437cd4d47279ee90f8e43fcc866ce",
+  "source_commit": "973d2120ad630cf5255dc1fd390d9fd2c1614b3a",
+  "source_clean": true,
+  "built_from_commit": "00013c7bb6e0f083f3197d5b99fe57e6b8e69714",
+  "kdk_sha256": {
+    "HWLibs": "9a10fe21b61437fba11bad2c2221307317ddd02893a82a7d753317879682786d",
+    "Framebuffer": "0f4b79b62fa66bbf5a907274d1f5442aeda4ba4ee4b67c216c01757dee7e4505",
+    "X6000": "2e364270c3243c532a9428c670313d5afd20406e42d64edb4fa8f3572504104e"
+  },
+  "build_inputs_sha256": "22e368df68a6daf7962904669f99cf3d296564999c26be2457ca40922b1e311f",
+  "boot_args": "-v keepsyms=1 tlbto_us=0 vti=9 serial=3 debug=0x108 -lilubetaall rgpudump=40000 rgpu=0xfffa5981 rgpuvmm=3 rgpumem=2 rgpuptb=2 rgpumqd=2 rgpuhybrid=1 rgpusdma=1",
+  "harness_sha256": {
+    "macos-vm.sh": "2a6fbd85db7a4044d1e59ce49859922f1d3356c5d446cbe3b9924d836e5f6315",
+    "vm-supervision.py": "99b8203ce346a286c4076e2a469488986b90992fef5f9d72ad346b9d2da411a9",
+    "sercat.py": "c39f0d230fae056a841ffea928c1e9903325fa4fdaaf338adc3ee3feb9d13ec3",
+    "agent-server.py": "f0d1077629e5dc21a6ba4e6bc98c005ebbba301355e4bc3323ce8f48e4dad787",
+    "gx": "73f8912b4699ae286593bb4abb7194f778264322a4a6674a14d64d426eb3dcf6",
+    "gpu-bind.sh": "76a8a73fafb048a505130a9ba3b2327732bdcce6e45904a2ec705c222133387a"
+  },
+  "rom_sha256": "3c6977ee2769b0b5fe96c2f99581806afe53f93e108fcff2f0c177a276c1e901",
+  "launch_options": {
+    "BOOTDISK_MODE": "custom",
+    "NVRAM": "stock"
+  },
+  "image_id": "sha256:3a3c82c79bc4e73531f819ccdfa4053b3084efd7c1f645678dbf8b4b3a24369c",
+  "guest_build": "24G830",
+  "probe_source_sha256": "f0fc0ced81fe70732c3491cff1557a83d85c9ccb8c18a6303f9070ae1f969d77",
+  "probe_binary_sha256": "1637e4b31bca0a1bdc400f96e34b344a823de1b408a8d1677d6bcca475c8c787",
+  "boot_id": "851d35df-7e63-4154-b70b-5cfa044913d6",
+  "kernel": "7.2.3-1-cachyos-bore",
+  "bootdisk_sha256": "fe8d6bab981cb6e1fd7caea92ccc4a5ba574b029ffa55d0df1bb1ab0d3dcbcb6",
+  "run_id": "5b0cf5a6c14b427ab05449f290b3c960",
+  "max_seconds": 180,
+  "gpu": true,
+  "vfio_device": "0000:7b:00.0",
+  "experiment": "metal-001",
+  "spec": {
+    "id": "metal-001",
+    "question": "After proven candidate-166 native startup on a second same-boot initialization, does the checked Metal compute and render probe complete correctly?",
+    "candidate_version": "1.0.166",
+    "requested_diagnostic": "rgpusdma=1",
+    "behavior_change": "none in the kext; keep a complete structured snapshot separate from later unsequenced direct serial records so native success can admit the prepared probe",
+    "required_observations": [
+      "loaded_build",
+      "route_guards",
+      "kiq_stamps",
+      "hybrid_enter",
+      "hybrid_exit",
+      "engine_start",
+      "sdma_topology",
+      "sdma_channel_remap"
+    ],
+    "max_seconds": 180,
+    "prerequisites": [
+      "hybrid_004_native_start_pass",
+      "rootless_recovery_receipt",
+      "classifier_snapshot_boundary_regression"
+    ],
+    "repeat_policy": "one final launch under the three-launch same-boot ceiling",
+    "abort_on": [
+      "identity_mismatch",
+      "capture_loss",
+      "guest_panic",
+      "kiq_dequeue_timeout",
+      "host_fault"
+    ],
+    "outcome_table": "docs/ROADMAP.md M4-M5",
+    "run_probe_only_after_native_start": true
+  },
+  "candidate_directory": "run/candidate-166",
+  "qemu_version": "QEMU emulator version 10.1.2",
+  "bootdisk_verified": true
+}

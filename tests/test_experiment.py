@@ -170,6 +170,10 @@ class ExperimentTests(unittest.TestCase):
                        'prior_run_id':prior, 'recovery_id':'c'*32,
                        'device':'0000:7b:00.0', 'iommu_group':'31', 'driver':'vfio-pci',
                        'pci_command_before':3, 'pci_command_after':3,
+                       'gc_quiesce':{'status':'quiesced', 'active_after':0,
+                                     'cp_me_after':0x15000000,
+                                     'cp_mec_after':0x50000000,
+                                     'sdma0_after':1},
                        'commands':[{'command':0x00030000, 'response':0x80030000,
                                     'confirmed':True},
                                    {'command':0x000c0000, 'response':0x800c0000,
@@ -201,6 +205,10 @@ class ExperimentTests(unittest.TestCase):
                      'prior_run_id':runs[0], 'recovery_id':'3'*32,
                      'device':'0000:7b:00.0', 'iommu_group':'31', 'driver':'vfio-pci',
                      'pci_command_before':3, 'pci_command_after':3,
+                     'gc_quiesce':{'status':'quiesced', 'active_after':0,
+                                   'cp_me_after':0x15000000,
+                                   'cp_mec_after':0x50000000,
+                                   'sdma0_after':1},
                      'commands':[{'command':0x00030000, 'response':0x80030000,
                                   'confirmed':True},
                                  {'command':0x000c0000, 'response':0x800c0000,
@@ -216,11 +224,18 @@ class ExperimentTests(unittest.TestCase):
                 'prior_run_id':'a'*32, 'recovery_id':'b'*32,
                 'device':'0000:7b:00.0', 'iommu_group':'31', 'driver':'vfio-pci',
                 'pci_command_before':3, 'pci_command_after':3,
+                'gc_quiesce':{'status':'quiesced', 'active_after':0,
+                              'cp_me_after':0x15000000,
+                              'cp_mec_after':0x50000000,
+                              'sdma0_after':1},
                 'commands':[{'command':0x00030000, 'response':0x80030000,
                              'confirmed':True},
                             {'command':0x000c0000, 'response':0x800c0000,
                              'confirmed':True}]}
         self.assertEqual(tool.validate_recovery_receipt(good, 'boot-A', 'a'*32), [])
+        self.assertIn('recovery_receipt', tool.validate_recovery_receipt(
+            {key:value for key,value in good.items() if key != 'gc_quiesce'},
+            'boot-A', 'a'*32))
         for key, value in [('status','failed'), ('prior_run_id','c'*32),
                            ('pci_command_after',7), ('commands',[{'confirmed':True}])]:
             self.assertIn('recovery_receipt', tool.validate_recovery_receipt(
@@ -347,6 +362,10 @@ class ExperimentTests(unittest.TestCase):
                            'prior_run_id':prior, 'recovery_id':'f'*32,
                            'device':'0000:7b:00.0', 'iommu_group':'31', 'driver':'vfio-pci',
                            'pci_command_before':3, 'pci_command_after':3,
+                           'gc_quiesce':{'status':'quiesced', 'active_after':0,
+                                         'cp_me_after':0x15000000,
+                                         'cp_mec_after':0x50000000,
+                                         'sdma0_after':1},
                            'commands':[{'command':0x00030000, 'response':0x80030000,
                                         'confirmed':True},
                                        {'command':0x000c0000, 'response':0x800c0000,

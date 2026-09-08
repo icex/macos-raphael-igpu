@@ -3223,3 +3223,27 @@ capture loss. The structured snapshot itself covers sequences 0 through 62 with 
 truncated records and reclassifies as `PROBE_NOT_RUN`. The parser now treats that complete prefix
 as authoritative while preserving raw records only as the pre-snapshot panic fallback. The third
 and final launch under the initial same-boot ceiling tests actual Metal execution.
+
+### 2026-09-08: PSP cleanup is insufficient after full engine startup
+
+The third launch consumed the second PSP-only receipt. Candidate 166 again initialized the
+repaired topology, completed hybrid creation for engines 12 and 13, and advanced the first three
+KIQ stamps. The next `waitForHwStamp(1)` returned zero before the Metal probe ran. Its timeout
+snapshot found sixteen active ME2 HQD selections across all four pipes. Half retained the prior
+KIQ ring/MQD with RPTR equal to WPTR `0x60`; the others referenced the second queue image. The
+previous fully started guest had been force-stopped, and its driver lifecycle hooks never ran.
+Destroying PSP rings therefore cannot establish a reusable GC state.
+
+The subsequent panic is not the earliest failure. `wrapWaitStamp` walked every HQD and emitted a
+large serial dump from a native path that can hold a spin lock; the backtrace reaches
+`lck_spinlock_timeout_set_orig_ctid` before recursive trap handling. That instrumentation is
+removed. The classifier now retains a terminal live KIQ failure before a panic without splicing
+unsequenced serial line numbers into the complete structured prefix.
+
+The recovery transaction now follows the bounded GFX10 shutdown order from Linux: disable KIQ
+pointer polling, request HQD dequeue while MEC still runs, halt graphics CP and both MECs, halt
+physical SDMA0, then disable doorbells and clear only stuck HQDs after the halt readback. It
+proves all selectors inactive before destroying the PSP rings. The exact-container shutdown path
+also falls back to its already peer-verified ACPI powerdown instead of immediately killing QEMU
+when the root agent transport is absent. Both changes are offline-tested and still require one
+fresh-boot hardware validation; the three-launch ceiling correctly prevented a fourth attempt.
