@@ -1,0 +1,8 @@
+{"build": "69ba1ae965234124a3506f8820923da2", "seq": 242, "kind": "build", "raw": "BUILD: identity=69ba1ae965234124a3506f8820923da2"}
+{"build": "69ba1ae965234124a3506f8820923da2", "seq": 1717, "kind": "sdma_topology_route", "raw": "SD: topology routes=ok count=5 entries-match=1", "count": 5, "ok": true}
+{"build": "69ba1ae965234124a3506f8820923da2", "seq": 1730, "kind": "route", "raw": "HY: HWLibs hybrid trace route=ok entries-match=1 (max 8 calls)", "ok": true}
+{"build": "69ba1ae965234124a3506f8820923da2", "seq": 1731, "kind": "sdma_route", "raw": "HY: SDMA selector trace route=ok entries-match=1 (max 8 hybrid calls)", "ok": true}
+{"build": "69ba1ae965234124a3506f8820923da2", "seq": 2388, "kind": "sdma_topology", "raw": "SD: topology applied: discovered=1 kept=SDMA0 removed=SDMA1 before initialize", "applied": true}
+{"build": "69ba1ae965234124a3506f8820923da2", "seq": 2391, "kind": "sdma_initialize", "raw": "SD: AMDHardware::initializeHWEngines -> 1 (topology-applied=1)", "result": 1, "applied": true}
+{"kind": "guest_panic", "build": "69ba1ae965234124a3506f8820923da2", "seq": 2392, "raw": "Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0", "trap": "0xe", "rip": 18446743522153481968, "cr2": 0, "symbol": "__ZN37AMDRadeonX6000_AMDGraphicsAccelerator19createAccelChannelsEb", "offset": 632}
+{"kind": "capture_loss", "build": "69ba1ae965234124a3506f8820923da2", "reason": "live records only"}

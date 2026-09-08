@@ -58,7 +58,7 @@ establish memory, engine-count, power or display compatibility.
 | Block | Physical Raphael | Apple-facing Navi23 | Linux relationship | Project decision and next trigger |
 |---|---|---|---|---|
 | GC / shaders | GC 10.3.6, 1 WGP / 2 CUs | GC 10.3.4, many more CUs | Both select `gfx_v10_0`, but 10.3.6 has its own golden-register table, TSC registers and APU power-gating cases | Keep Navi23 dispatch plus Raphael firmware substitutions because KIQ executes. If M4 reaches a graphics/compute hang after valid submission, compare the exact failed register path with the 10.3.6 golden table before adding any write. |
-| SDMA | SDMA 5.2.6, discovery count 1 | SDMA 5.2.4; Apple's class constructs two physical-engine objects | Both select `sdma_v5_2`. Linux loops over `adev->sdma.num_instances`. KFD exposes 2 queues per 5.2.6 engine and 8 per 5.2.4 engine. | Candidate 1.0.165 removes the false second Apple object before initialization and preserves SDMA0's native result. This is the only new adaptation justified by hybrid-002. Record the 2-versus-8 queue distinction; change channel capacity only if a later trace requests an unsupported queue on SDMA0. |
+| SDMA | SDMA 5.2.6, discovery count 1 | SDMA 5.2.4; Apple's class constructs two physical-engine objects | Both select `sdma_v5_2`. Linux loops over `adev->sdma.num_instances`. KFD exposes 2 queues per 5.2.6 engine and 8 per 5.2.4 engine. | Candidate165 removes the false second Apple object. Hybrid-003 then proved X6000 still requests that engine while building accelerator channels; candidate166 maps that request to the surviving SDMA0 object, matching the one-engine/two-queue distinction. |
 | GFXHUB / MMHUB | GC 10.3.6 + MMHUB 2.4.1, UMA | GC 10.3.4 + MMHUB 2.3.0, discrete VRAM | `gmc_v10_0` uses `gfxhub_v2_1` for both GC revisions and `mmhub_v2_3` for MMHUB 2.3.0/2.4.0/2.4.1. Native APU setup has a distinct aperture path, but Linux suppresses that override under passthrough. | Keep the established BAR-relative-to-MC corrections because register/fault/readback evidence proves them; Linux alone does not prove that guest repair. Linux uses a 1 GiB GART for 10.3.6 but 512 MiB by default for Navi23; test address range and page-table depth before changing Apple's size. |
 | Last-level cache | Linux assigns zero MALL capacity for GC 10.3.6 | 32 MiB MALL/Infinity Cache for GC 10.3.4 | `gmc_v10_0` sets 32 MiB only for 10.3.4 and falls through to zero for 10.3.6; this is a driver capability value, not proof that no cache exists in silicon. | Do not advertise or reserve Navi23's 32 MiB cache solely from the spoofed identity. If Apple derives allocation or coherency behavior from it, patch the specific capability only after observing a failure. |
 | PSP / MP0 | 13.0.5 | 11.0.12 | Different PSP generations and firmware containers | Continue using the physical chip's TOC/RLC payloads while satisfying Apple's dispatch. Do not issue Navi23 reset/power assumptions to the SoC PSP without a bounded, source-backed proof. |
@@ -89,12 +89,12 @@ of physical engines from IP discovery, and its SDMA setup and lifecycle loops us
 maximum bounds still exist. The source also shows that aliasing Apple's SDMA1 object onto
 SDMA0 would be wrong because engine count and queues per engine are separate dimensions.
 
-No other compatibility write is added to candidate 1.0.165. The current KIQ, GART root and
-native instance-0 hybrid queues already work, so broad golden-register, GART-size, cache,
-power or DCN changes would mix independent hypotheses into the only hardware run. Hybrid-003
-first tests whether the proven owner-topology defect was the remaining native-startup wall.
+No unrelated compatibility write is added to candidate 1.0.166. The current KIQ, GART root
+and native instance-0 hybrid queues already work, so broad golden-register, GART-size, cache,
+power or DCN changes would mix independent hypotheses into the next hardware run. Hybrid-004
+tests only the residual SDMA1 channel request exposed by the owner repair.
 
-If hybrid-003 reaches the Metal probe, the next observation order is fixed:
+If hybrid-004 reaches the Metal probe, the next observation order is fixed:
 
 1. Preserve the native command-buffer status, engine and fault domain.
 2. If submission never advances, identify PM4, SDMA or VM before reading registers.

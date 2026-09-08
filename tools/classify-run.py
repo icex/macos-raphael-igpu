@@ -7,56 +7,92 @@ from pathlib import Path
 import re
 
 
+def _decode_payload(build, seq, payload):
+    row = dict(build=build, seq=seq, kind='other', raw=payload)
+    if payload == 'BUILD: identity='+str(build):
+        row['kind'] = 'build'
+    elif 'HY: HWLibs hybrid trace' in payload:
+        row.update(kind='route', ok='route=ok entries-match=1' in payload)
+    elif 'HY: SDMA selector trace' in payload:
+        row.update(kind='sdma_route', ok='route=ok entries-match=1' in payload)
+    elif payload.startswith('SD: topology routes='):
+        m = re.fullmatch(r'SD: topology routes=(ok|FAILED) count=(\d+) entries-match=([01])',
+                         payload)
+        row.update(kind='sdma_topology_route', count=int(m[2]) if m else 0,
+                   ok=bool(m and m[1] == 'ok' and m[3] == '1'))
+    elif payload == 'SD: topology applied: discovered=1 kept=SDMA0 removed=SDMA1 before initialize':
+        row.update(kind='sdma_topology', applied=True)
+    elif payload.startswith('SD: topology NOT applied:'):
+        row.update(kind='sdma_topology', applied=False)
+    elif m := re.fullmatch(r'SD: AMDHardware::initializeHWEngines -> (\d+) \(topology-applied=([01])\)', payload):
+        row.update(kind='sdma_initialize', result=int(m[1]), applied=bool(int(m[2])))
+    elif m := re.match(r'SD: one-instance start -> (\d+) \(SDMA0=\S+ SDMA1=\S+\)$', payload):
+        row.update(kind='sdma_one_start', result=int(m[1]))
+    elif m := re.search(r'HY: SDMA select index=(\d+) queue-type=(\d+) found=([01]) counts=(\d+),(\d+),(\d+),(\d+)', payload):
+        row.update(kind='sdma_select', index=int(m[1]), queue_type=int(m[2]),
+                   found=bool(int(m[3])), counts=[int(m[i]) for i in range(4,8)])
+    elif m := re.search(r'waitForHwStamp\((\d+)\) -> (\d+)', payload):
+        row.update(kind='kiq', stamp=int(m[1]), result=int(m[2]))
+    elif m := re.search(r'HY: createHybridEngine enter: engine=(\d+) available=(\d+)', payload):
+        row.update(kind='hybrid_enter', engine=int(m[1]), available=int(m[2]))
+    elif m := re.search(r'HY: createHybridEngine exit: engine=(\d+) valid=(\d+) available-before=(\d+) status=(\d+)', payload):
+        row.update(kind='hybrid_exit', engine=int(m[1]), arguments_valid=int(m[2]),
+                   available=int(m[3]), result=int(m[4]))
+    elif m := re.search(r'AMDHardware::startHWEngines -> (\d+)', payload):
+        row.update(kind='engine_start', result=int(m[1]))
+    elif m := re.search(r'SD: channel engine remap (\d+) -> (\d+)', payload):
+        row.update(kind='sdma_engine_remap', requested=int(m[1]), selected=int(m[2]))
+    elif payload.startswith('XQ2: dequeue') and ('refused' in payload or 'timeout' in payload.lower()):
+        row.update(kind='kiq', result=0)
+    return row
+
+
 def parse_serial(serial):
-    records, losses, counts = {}, [], {}
-    for line in serial.replace('\r', '').splitlines():
+    records, losses, counts, raw_records, panics = {}, [], {}, [], []
+    raw_builds = set()
+    for line_number, line in enumerate(serial.replace('\r', '').splitlines()):
         summary = re.search(r'RGPU_RECORDS build=(\S+) count=(\d+) dropped=(\d+) truncated=(\d+)', line)
         if summary:
             counts[summary[1]] = max(counts.get(summary[1], 0), int(summary[2]))
         if summary and any(int(summary[i]) for i in (3, 4)):
             losses.append(dict(kind='capture_loss', build=summary[1], reason='overflow'))
         match = re.search(r'RGPU_EVENT build=(\S+) seq=(\d+) (.+)$', line)
-        if not match:
+        if match:
+            build, seq, payload = match[1], int(match[2]), match[3]
+            key = (build, seq)
+            if key in records:
+                if records[key]['raw'] != payload:
+                    losses.append(dict(kind='capture_loss', build=build, reason='conflicting replay'))
+                continue
+            records[key] = _decode_payload(build, seq, payload)
             continue
-        build, seq, payload = match[1], int(match[2]), match[3]
-        key = (build, seq)
-        if key in records:
-            if records[key]['raw'] != payload:
-                losses.append(dict(kind='capture_loss', build=build, reason='conflicting replay'))
+        raw = re.search(r'RaphaelGPU\s+rgpu:\s*@\s+(.*)$', line)
+        if raw:
+            payload = raw[1]
+            if m := re.fullmatch(r'BUILD: identity=(\S+)', payload):
+                raw_builds.add(m[1])
+            raw_records.append((line_number, payload))
+        if m := re.search(r'Unexpected kernel trap number:\s*(\S+), RIP:\s*(0x[0-9a-fA-F]+), CR2:\s*(0x[0-9a-fA-F]+)', line):
+            panics.append(dict(kind='guest_panic', build=None, seq=line_number, raw=line.strip(),
+                               trap=m[1], rip=int(m[2], 16), cr2=int(m[3], 16)))
+        if (panics and 'symbol' not in panics[-1] and
+                (m := re.search(r'com\.apple\.kext\.AMDRadeonX6000\s*:\s*(\S+)\s*\+\s*(0x[0-9a-fA-F]+)', line))):
+            panics[-1].update(symbol=m[1], offset=int(m[2], 16))
+    raw_build = next(iter(raw_builds)) if len(raw_builds) == 1 else None
+    structured_payloads = {(r['build'], r['raw']) for r in records.values()}
+    seen_raw = set()
+    decoded_raw = []
+    for line_number, payload in raw_records:
+        build_match = re.fullmatch(r'BUILD: identity=(\S+)', payload)
+        build = build_match[1] if build_match else raw_build
+        row = _decode_payload(build, line_number, payload)
+        key = (build, payload)
+        if row['kind'] == 'other' or key in seen_raw or key in structured_payloads:
             continue
-        row = dict(build=build, seq=seq, kind='other', raw=payload)
-        if payload == 'BUILD: identity='+build:
-            row['kind'] = 'build'
-        elif 'HY: HWLibs hybrid trace' in payload:
-            row.update(kind='route', ok='route=ok entries-match=1' in payload)
-        elif 'HY: SDMA selector trace' in payload:
-            row.update(kind='sdma_route', ok='route=ok entries-match=1' in payload)
-        elif payload.startswith('SD: topology routes='):
-            row.update(kind='sdma_topology_route',
-                       ok='routes=ok count=5 entries-match=1' in payload)
-        elif payload == 'SD: topology applied: discovered=1 kept=SDMA0 removed=SDMA1 before initialize':
-            row.update(kind='sdma_topology', applied=True)
-        elif payload.startswith('SD: topology NOT applied:'):
-            row.update(kind='sdma_topology', applied=False)
-        elif m := re.fullmatch(r'SD: AMDHardware::initializeHWEngines -> (\d+) \(topology-applied=([01])\)', payload):
-            row.update(kind='sdma_initialize', result=int(m[1]), applied=bool(int(m[2])))
-        elif m := re.match(r'SD: one-instance start -> (\d+) \(SDMA0=\S+ SDMA1=\S+\)$', payload):
-            row.update(kind='sdma_one_start', result=int(m[1]))
-        elif m := re.search(r'HY: SDMA select index=(\d+) queue-type=(\d+) found=([01]) counts=(\d+),(\d+),(\d+),(\d+)', payload):
-            row.update(kind='sdma_select', index=int(m[1]), queue_type=int(m[2]),
-                       found=bool(int(m[3])), counts=[int(m[i]) for i in range(4,8)])
-        elif m := re.search(r'waitForHwStamp\((\d+)\) -> (\d+)', payload):
-            row.update(kind='kiq', stamp=int(m[1]), result=int(m[2]))
-        elif m := re.search(r'HY: createHybridEngine enter: engine=(\d+) available=(\d+)', payload):
-            row.update(kind='hybrid_enter', engine=int(m[1]), available=int(m[2]))
-        elif m := re.search(r'HY: createHybridEngine exit: engine=(\d+) valid=(\d+) available-before=(\d+) status=(\d+)', payload):
-            row.update(kind='hybrid_exit', engine=int(m[1]), arguments_valid=int(m[2]),
-                       available=int(m[3]), result=int(m[4]))
-        elif m := re.search(r'AMDHardware::startHWEngines -> (\d+)', payload):
-            row.update(kind='engine_start', result=int(m[1]))
-        elif payload.startswith('XQ2: dequeue') and ('refused' in payload or 'timeout' in payload.lower()):
-            row.update(kind='kiq', result=0)
-        records[key] = row
+        seen_raw.add(key)
+        decoded_raw.append(row)
+    for panic in panics:
+        panic['build'] = raw_build
     for build, count in counts.items():
         if any((build, seq) not in records for seq in range(min(count, 129))):
             losses.append(dict(kind='capture_loss', build=build, reason='snapshot incomplete'))
@@ -67,7 +103,9 @@ def parse_serial(serial):
     for build, seq in records:
         if seq >= counts[build]:
             losses.append(dict(kind='capture_loss', build=build, reason='summary precedes newer records'))
-    rows = sorted(records.values(), key=lambda r: r['seq'])
+    if decoded_raw and raw_build not in counts:
+        losses.append(dict(kind='capture_loss', build=raw_build, reason='live records only'))
+    rows = sorted(list(records.values()) + decoded_raw + panics, key=lambda r: r['seq'])
     return rows + losses
 
 
@@ -76,7 +114,7 @@ def classify(manifest, events, probe):
         return dict(valid=valid, verdict=name, earliest_failure=stage,
                     evidence=[r.get('raw', r['kind']) for r in events], next_action=next_action)
     expected = manifest.get('build_id')
-    if not expected or any(r.get('build') != expected for r in events):
+    if not expected or any(r.get('build') not in (None, expected) for r in events):
         return verdict('INVALID', stage='loaded_build')
     kinds = {kind: [r for r in events if r['kind'] == kind]
              for kind in ('build', 'route', 'kiq', 'hybrid_enter', 'hybrid_exit', 'engine_start')}
@@ -84,6 +122,26 @@ def classify(manifest, events, probe):
         return verdict('INVALID', stage='route_guards')
     if not kinds['build'] or not kinds['route']:
         return verdict('INCONCLUSIVE', stage='identity_or_route_missing')
+    panics = [r for r in events if r['kind'] == 'guest_panic']
+    if panics:
+        panic = panics[0]
+        if 'sdma_topology' in manifest.get('spec', {}).get('required_observations', []):
+            routes = [r for r in events if r['kind'] == 'sdma_topology_route']
+            applied = [r for r in events if r['kind'] == 'sdma_topology']
+            initialized = [r for r in events if r['kind'] == 'sdma_initialize']
+            if any(not r.get('ok') for r in routes):
+                return verdict('INVALID', stage='sdma_topology_route_guard')
+            if not (len(routes) == len(applied) == len(initialized) == 1 and
+                    applied[0].get('applied') and initialized[0].get('applied') and
+                    initialized[0].get('result') == 1 and routes[0]['seq'] < applied[0]['seq'] <
+                    initialized[0]['seq'] < panic['seq']):
+                return verdict('INCONCLUSIVE', stage='guest_panic_context_missing')
+        symbol = panic.get('symbol', 'unknown')
+        short = 'createAccelChannels' if 'createAccelChannels' in symbol else symbol
+        offset = panic.get('offset')
+        stage = f'guest_panic:{short}' + (f'+{offset:#x}' if offset is not None else '')
+        return verdict('GUEST_PANIC', True, stage,
+                       'decode the symbolicated fault and repair it offline; no retry')
     seqs = sorted(r['seq'] for r in events if 'seq' in r)
     if (any(r['kind'] == 'capture_loss' for r in events) or
             seqs != list(range(len(seqs)))):
@@ -141,6 +199,17 @@ def classify(manifest, events, probe):
                 initialized[0]['seq'] < sdma_events[0]['seq'] <
                 sdma_events[-1]['seq'] < one_starts[0]['seq'] < starts[0]['seq']):
             return verdict('INCONCLUSIVE', stage='sdma_topology_order')
+        if 'sdma_channel_remap' in manifest.get('spec', {}).get('required_observations', []):
+            if routes[0].get('count') != 6:
+                return verdict('INVALID', stage='sdma_channel_route_guard')
+            remaps = [r for r in events if r['kind'] == 'sdma_engine_remap']
+            if not remaps:
+                return verdict('INCONCLUSIVE', stage='sdma_channel_remap_missing')
+            if any(r.get('requested') != 2 or r.get('selected') != 1 for r in remaps):
+                return verdict('STARTUP_FAILED_LATER', True, 'sdma_channel_remap',
+                               'inspect the unexpected SDMA channel mapping')
+            if not initialized[0]['seq'] < remaps[0]['seq'] < one_starts[0]['seq']:
+                return verdict('INCONCLUSIVE', stage='sdma_channel_remap_order')
     if 'sdma_selection' in manifest.get('spec', {}).get('required_observations', []):
         routes = [r for r in events if r['kind'] == 'sdma_route']
         if any(not r.get('ok') for r in routes):

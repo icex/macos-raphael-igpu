@@ -1,0 +1,7 @@
+{
+  "valid": false,
+  "verdict": "INCONCLUSIVE",
+  "earliest_failure": "identity_or_route_missing",
+  "evidence": [],
+  "next_action": "repair observation before another experiment"
+}
