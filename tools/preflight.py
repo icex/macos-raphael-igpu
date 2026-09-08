@@ -85,6 +85,9 @@ def rip_relative_in_prologue(data, va, n=16):
 def main():
     if not KDK.exists():
         sys.exit(f"preflight: KDK binary missing: {KDK}")
+    ownership = subprocess.run([sys.executable, str(VM / "route-domains.py"), str(SRC)])
+    if ownership.returncode:
+        return 1
     data, syms = KDK.read_bytes(), load_symbols()
     fbdata, fbsyms = FBK.read_bytes(), load_symbols(FBNM)
     x6data, x6syms = X6K.read_bytes(), load_symbols(X6NM)
@@ -154,7 +157,7 @@ def main():
     if bad:
         print(f"\npreflight: {bad} problem(s) -- NOT safe to deploy")
         return 1
-    print("\npreflight: all constants resolve, all routes safe, all patterns unique")
+    print("\npreflight: route scopes checked, constants checked, prologues checked, patterns unique")
     return 0
 
 sys.exit(main())
