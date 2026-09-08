@@ -32,6 +32,7 @@
 #include "GartAddresses.hpp"
 #include "DiagnosticRecords.hpp"
 #include "SdmaTopology.hpp"
+#include "SdmaAddresses.hpp"
 #if __has_include("BuildIdentity.hpp")
 #include "BuildIdentity.hpp"
 #else
@@ -450,6 +451,7 @@ static constexpr size_t kOffHwEngStart   = 0x6ffd2;  // AMDHardware::startHWEngi
 static constexpr size_t kOffHwEngStop    = 0x70086;  // AMDHardware::stopHWEngines [x6]
 static constexpr size_t kOffHwPowerOff   = 0x70360;  // __ZN26AMDRadeonX6000_AMDHardware8powerOffEv [x6]
 static constexpr size_t kOffHwGetChannel = 0x7097c;  // __ZN26AMDRadeonX6000_AMDHardware12getHWChannelE20_eAMD_HW_ENGINE_TYPE18_eAMD_HW_RING_TYPE [x6]
+static constexpr size_t kOffSdmaCommitIb = 0x66e06; // __ZN34AMDRadeonX6000_AMDGFX10SDMAChannel27commitIndirectCommandBufferEP30AMD_SUBMIT_COMMAND_BUFFER_INFO [x6]
 static constexpr size_t kOffPm4Mqd       = 0x69362;  // AMDGFX10PM4Engine::initComputeMQD [x6]
 static constexpr size_t kOffKiqStart     = 0x8e670;  // AMDGFX10KIQHWChannel::startKIQ [x6]
 static constexpr size_t kOffPm4GfxMqd    = 0x6952a;  // AMDGFX10PM4Engine::initGraphicsMQD [x6]
@@ -607,6 +609,7 @@ static mach_vm_address_t orgHwEngStart {};
 static mach_vm_address_t orgHwEngStop {};
 static mach_vm_address_t orgHwPowerOff {};
 static mach_vm_address_t orgHwGetChannel {};
+static mach_vm_address_t orgSdmaCommitIb {};
 static mach_vm_address_t orgPm4Mqd {};
 static mach_vm_address_t orgKiqStart {};
 static mach_vm_address_t orgPm4GfxMqd {};
@@ -4166,6 +4169,35 @@ static void *wrapHwGetChannel(void *self, uint32_t engineType, uint32_t ringType
     return FunctionCast(wrapHwGetChannel, orgHwGetChannel)(self, selected, ringType);
 }
 
+static uint32_t wrapSdmaCommitIb(void *self, void *submitInfo) {
+    // commitIndirectCommandBuffer copies this 0x200-byte template before it
+    // submits the ring frame. Its first six dwords are SDMA_OP_INDIRECT. The
+    // measured failing template named 0x400100000 although the allocation was
+    // at software FB +0x100000 (0xf400100000); translate that exact truncated
+    // framebuffer window to the physical MC aperture (0x840100000).
+    if (sdmaTopologyEnabled && sdmaTopologyRoutesReady && self != nullptr) {
+        auto frame = *reinterpret_cast<uint32_t **>(reinterpret_cast<uint8_t *>(self) + 0x138);
+        if (frame != nullptr && frame[0] == 0x09u) {
+            RaphaelGart::Aperture aperture {};
+            const uint64_t before = (static_cast<uint64_t>(frame[2]) << 32) | frame[1];
+            auto repair = gartApertureInfo(aperture) && RaphaelGart::validAperture(aperture)
+                ? RaphaelSdma::repairTruncatedFramebufferAddress(
+                    before, aperture.swBase, aperture.physicalBase, aperture.visibleBytes)
+                : RaphaelSdma::AddressRepair {false, false, before};
+            static unsigned reports = 0;
+            const bool report = __sync_fetch_and_add(&reports, 1u) < 16;
+            if (repair.changed) {
+                frame[1] = static_cast<uint32_t>(repair.address);
+                frame[2] = static_cast<uint32_t>(repair.address >> 32);
+            }
+            if (report)
+                CRLOG("SD: IB template %#llx -> %#llx valid=%u changed=%u", before,
+                      repair.address, repair.valid, repair.changed);
+        }
+    }
+    return FunctionCast(wrapSdmaCommitIb, orgSdmaCommitIb)(self, submitInfo);
+}
+
 static bool startOneSdmaEngine(void *engine) {
     auto vt = *reinterpret_cast<uint64_t **>(engine);
     auto start = reinterpret_cast<uint32_t (*)(void *)>(vt[0x148 / 8]);
@@ -4689,6 +4721,8 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
             0x31, 0x05, 0x00, 0x00, 0x01};
         static const uint8_t hwGetChannelEntry[] = {0x55, 0x48, 0x89, 0xe5, 0x89, 0xf0,
             0x48, 0x8b, 0xbc, 0xc7, 0xb0, 0x03, 0x00, 0x00, 0x48, 0x85, 0xff};
+        static const uint8_t sdmaCommitIbEntry[] = {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57,
+            0x41, 0x56, 0x53, 0x48, 0x81, 0xec, 0x08, 0x02, 0x00, 0x00};
         bool engInitMatches = entryMatches(addr, sz, kOffHwEngInit,
                                            engInitEntry, sizeof(engInitEntry));
         bool engPowerOffMatches = entryMatches(addr, sz, kOffHwEngPowerOff,
@@ -4702,8 +4736,12 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
         bool hwGetChannelMatches = entryMatches(addr, sz, kOffHwGetChannel,
                                                 hwGetChannelEntry,
                                                 sizeof(hwGetChannelEntry));
+        bool sdmaCommitIbMatches = entryMatches(addr, sz, kOffSdmaCommitIb,
+                                                sdmaCommitIbEntry,
+                                                sizeof(sdmaCommitIbEntry));
         bool sdmaEntriesMatch = engInitMatches && engPowerOffMatches && engStartMatches &&
-                                engStopMatches && hwPowerOffMatches && hwGetChannelMatches;
+                                engStopMatches && hwPowerOffMatches && hwGetChannelMatches &&
+                                sdmaCommitIbMatches;
         if (((mask & XJ) || sdmaTopologyEnabled) && engStartMatches &&
             (!sdmaTopologyEnabled || sdmaEntriesMatch)) {
             orgHwEngStart = patcher.routeFunction(addr + kOffHwEngStart,
@@ -4724,6 +4762,9 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
                  reinterpret_cast<void *>(wrapHwPowerOff), "AMDHardware::powerOff"},
                 {kOffHwGetChannel, &orgHwGetChannel,
                  reinterpret_cast<void *>(wrapHwGetChannel), "AMDHardware::getHWChannel"},
+                {kOffSdmaCommitIb, &orgSdmaCommitIb,
+                 reinterpret_cast<void *>(wrapSdmaCommitIb),
+                 "AMDGFX10SDMAChannel::commitIndirectCommandBuffer"},
             };
             for (auto &e : t) {
                 if (sdmaEntriesMatch)
@@ -4735,8 +4776,8 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
             }
             sdmaTopologyRoutesReady = sdmaEntriesMatch && orgHwEngStart && orgHwEngInit &&
                                       orgHwEngStop && orgHwEngPowerOff && orgHwPowerOff &&
-                                      orgHwGetChannel;
-            CRLOG("SD: topology routes=%s count=6 entries-match=%u",
+                                      orgHwGetChannel && orgSdmaCommitIb;
+            CRLOG("SD: topology routes=%s count=7 entries-match=%u",
                   sdmaTopologyRoutesReady ? "ok" : "FAILED", sdmaEntriesMatch);
         }
     }

@@ -42,13 +42,16 @@ def _decode_payload(build, seq, payload):
         row.update(kind='engine_start', result=int(m[1]))
     elif m := re.search(r'SD: channel engine remap (\d+) -> (\d+)', payload):
         row.update(kind='sdma_engine_remap', requested=int(m[1]), selected=int(m[2]))
+    elif m := re.fullmatch(r'SD: IB template (0x[0-9a-fA-F]+) -> (0x[0-9a-fA-F]+) valid=([01]) changed=([01])', payload):
+        row.update(kind='sdma_ib_repair', before=int(m[1], 16), after=int(m[2], 16),
+                   valid=bool(int(m[3])), changed=bool(int(m[4])))
     elif payload.startswith('XQ2: dequeue') and ('refused' in payload or 'timeout' in payload.lower()):
         row.update(kind='kiq', result=0)
     return row
 
 
 def parse_serial(serial):
-    records, losses, counts, raw_records, panics = {}, [], {}, [], []
+    records, losses, counts, raw_records, panics, hardware_timeouts = {}, [], {}, [], [], []
     raw_builds = set()
     for line_number, line in enumerate(serial.replace('\r', '').splitlines()):
         summary = re.search(r'RGPU_RECORDS build=(\S+) count=(\d+) dropped=(\d+) truncated=(\d+)', line)
@@ -78,6 +81,11 @@ def parse_serial(serial):
         if (panics and 'symbol' not in panics[-1] and
                 (m := re.search(r'com\.apple\.kext\.AMDRadeonX6000\s*:\s*(\S+)\s*\+\s*(0x[0-9a-fA-F]+)', line))):
             panics[-1].update(symbol=m[1], offset=int(m[2], 16))
+        if (re.search(r'HW Channel \d+ SDMA0_PAGE is occupied by channel \d+ stamp \d+', line) or
+                re.search(r'Restart Channel:\s*\d+\s+SDMA0_PAGE', line)):
+            hardware_timeouts.append(dict(kind='sdma_page_timeout', build=None,
+                                          seq=line_number, source='raw-terminal',
+                                          raw=line.strip()))
     raw_build = next(iter(raw_builds)) if len(raw_builds) == 1 else None
     if raw_build is None and len(counts) == 1:
         raw_build = next(iter(counts))
@@ -95,6 +103,8 @@ def parse_serial(serial):
         decoded_raw.append(row)
     for panic in panics:
         panic['build'] = raw_build
+    for timeout in hardware_timeouts:
+        timeout['build'] = raw_build
     for build, count in counts.items():
         if any((build, seq) not in records for seq in range(min(count, 129))):
             losses.append(dict(kind='capture_loss', build=build, reason='snapshot incomplete'))
@@ -123,7 +133,8 @@ def parse_serial(serial):
     decoded_raw = terminal_live
     if decoded_raw and raw_build not in counts:
         losses.append(dict(kind='capture_loss', build=raw_build, reason='live records only'))
-    rows = sorted(list(records.values()) + decoded_raw + panics, key=lambda r: r['seq'])
+    rows = sorted(list(records.values()) + decoded_raw + panics + hardware_timeouts,
+                  key=lambda r: r['seq'])
     return rows + losses
 
 
@@ -165,7 +176,7 @@ def classify(manifest, events, probe):
         stage = f'guest_panic:{short}' + (f'+{offset:#x}' if offset is not None else '')
         return verdict('GUEST_PANIC', True, stage,
                        'decode the symbolicated fault and repair it offline; no retry')
-    seqs = sorted(r['seq'] for r in events if 'seq' in r)
+    seqs = sorted(r['seq'] for r in events if 'seq' in r and r.get('source') != 'raw-terminal')
     if (any(r['kind'] == 'capture_loss' for r in events) or
             seqs != list(range(len(seqs)))):
         return verdict('INCONCLUSIVE', stage='capture_loss')
@@ -223,7 +234,9 @@ def classify(manifest, events, probe):
                 sdma_events[-1]['seq'] < one_starts[0]['seq'] < starts[0]['seq']):
             return verdict('INCONCLUSIVE', stage='sdma_topology_order')
         if 'sdma_channel_remap' in manifest.get('spec', {}).get('required_observations', []):
-            if routes[0].get('count') != 6:
+            expected_route_count = (7 if 'sdma_ib_address_repair' in
+                                    manifest.get('spec', {}).get('required_observations', []) else 6)
+            if routes[0].get('count') != expected_route_count:
                 return verdict('INVALID', stage='sdma_channel_route_guard')
             remaps = [r for r in events if r['kind'] == 'sdma_engine_remap']
             if not remaps:
@@ -233,6 +246,13 @@ def classify(manifest, events, probe):
                                'inspect the unexpected SDMA channel mapping')
             if not initialized[0]['seq'] < remaps[0]['seq'] < one_starts[0]['seq']:
                 return verdict('INCONCLUSIVE', stage='sdma_channel_remap_order')
+        if 'sdma_ib_address_repair' in manifest.get('spec', {}).get('required_observations', []):
+            repairs = [r for r in events if r['kind'] == 'sdma_ib_repair' and
+                       r.get('valid') and r.get('changed')]
+            if not repairs:
+                return verdict('INCONCLUSIVE', stage='sdma_ib_address_repair_missing')
+            if any(r['seq'] <= starts[0]['seq'] for r in repairs):
+                return verdict('INCONCLUSIVE', stage='sdma_ib_address_repair_order')
     if 'sdma_selection' in manifest.get('spec', {}).get('required_observations', []):
         routes = [r for r in events if r['kind'] == 'sdma_route']
         if any(not r.get('ok') for r in routes):
@@ -255,6 +275,9 @@ def classify(manifest, events, probe):
         return verdict('INCONCLUSIVE', stage='engine_start_missing')
     if any(r['result'] == 0 for r in kinds['engine_start']):
         return verdict('STARTUP_FAILED_LATER', True, 'engine_start', 'trace the next native startup failure')
+    if any(r['kind'] == 'sdma_page_timeout' for r in events):
+        return verdict('SDMA_PAGE_TIMEOUT', True, 'sdma0_page',
+                       'inspect the repaired indirect packet and SDMA VM state; do not retry unchanged')
     if probe is None:
         return verdict('PROBE_NOT_RUN', True, next_action='run the prepared probe only if remaining budget permits')
     if not isinstance(probe, dict) or 'run_id' not in probe or 'output' not in probe:
