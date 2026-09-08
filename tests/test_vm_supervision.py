@@ -12,6 +12,7 @@ import shutil
 import time
 import unittest
 import fcntl
+from unittest.mock import patch
 
 TOOL = Path(__file__).resolve().parents[1] / "tools/vm-supervision.py"
 CID = "a" * 64
@@ -149,6 +150,18 @@ class SupervisionTests(unittest.TestCase):
         result = self.run_tool('start', '--vm-dir', str(self.vm), '--max-seconds', '180')
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(any(command == 'systemd-run' for command, _ in self.calls()))
+
+    def test_unconfirmed_service_stop_does_not_release_pending_launch(self):
+        spec = importlib.util.spec_from_file_location('supervisor', TOOL)
+        module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+        pending = self.vm / 'run/launch-pending'; pending.mkdir()
+        def unavailable(args, **kwargs):
+            if args[:2] == ['docker', 'ps']: return ''
+            raise RuntimeError('service may have accepted launch; transport unavailable')
+        with patch.object(module, 'binary', side_effect=lambda name: name), \
+             patch.object(module, 'run', side_effect=unavailable):
+            with self.assertRaises(RuntimeError): module.start_locked(self.vm, 180, [])
+        self.assertEqual(len(list(pending.iterdir())), 1)
 
     def test_caller_death_before_container_identity_keeps_launch_reserved(self):
         self.fixture['no_identity'] = True
