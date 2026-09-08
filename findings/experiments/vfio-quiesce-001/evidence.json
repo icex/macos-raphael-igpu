@@ -1,0 +1,66 @@
+{
+  "authorizes_launch": false,
+  "bar5": {
+    "index": 5,
+    "mmap": true,
+    "offset": 5497558138880,
+    "read": true,
+    "size": 524288,
+    "write": true
+  },
+  "boot_id": "851d35df-7e63-4154-b70b-5cfa044913d6",
+  "commands": [
+    {
+      "before": 2148270080,
+      "command": 196608,
+      "confirmed": true,
+      "label": "destroy all rings",
+      "polls": 1,
+      "response": 2147680256
+    },
+    {
+      "before": 2147680256,
+      "command": 786432,
+      "confirmed": true,
+      "label": "destroy GPCOM ring",
+      "polls": 1,
+      "response": 2148270080
+    }
+  ],
+  "device": "0000:7b:00.0",
+  "driver": "vfio-pci",
+  "gc_quiesce": {
+    "active_after": 0,
+    "active_before": 0,
+    "cp_me_after": 352321536,
+    "cp_me_before": 352321536,
+    "cp_mec_after": 1342177280,
+    "cp_mec_before": 1342177280,
+    "dequeue_timeouts": 0,
+    "dequeued": 0,
+    "forced_inactive": 0,
+    "queues": [],
+    "sdma0_after": 1,
+    "sdma0_before": 0,
+    "sdma0_cntl_after": 195,
+    "sdma0_cntl_before": 262339,
+    "sdma0_ib_after": 256,
+    "sdma0_ib_before": 257,
+    "sdma0_rb_after": 2156331040,
+    "sdma0_rb_before": 2156331041,
+    "status": "quiesced"
+  },
+  "iommu_group": "31",
+  "kernel_cursor_after": "s=98f6cb2295dc45898ee97031451ba7c8;i=36590;b=851d35df7e634154b70b5cfa044913d6;m=1bbcacd22;t=65af9ba1e477b;x=c820bd2a57fa99d7",
+  "kernel_cursor_before": "s=98f6cb2295dc45898ee97031451ba7c8;i=3658e;b=851d35df7e634154b70b5cfa044913d6;m=1ba6174b3;t=65af9b8b4ef0c;x=90660a5a369424ea",
+  "kernel_messages": [
+    "vfio-pci 0000:7b:00.0: resetting",
+    "vfio-pci 0000:7b:00.0: reset done"
+  ],
+  "pci_command_after": 3,
+  "pci_command_before": 3,
+  "prior_run_id": "5b0cf5a6c14b427ab05449f290b3c960",
+  "schema": 1,
+  "status": "recovered",
+  "validation_only": true
+}

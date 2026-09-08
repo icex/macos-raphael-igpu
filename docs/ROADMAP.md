@@ -1,6 +1,6 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-09-08. Baseline repository: `5727e7d`; candidate: 1.0.166; published
+Updated 2026-09-08. Baseline repository: `5727e7d`; candidate: 1.0.168; published
 research snapshot: `v1.0.159-preview.1`. This document is the authoritative current
 roadmap. Historical hypotheses in `findings/GPU-RE.md` remain evidence, not instructions.
 
@@ -16,7 +16,7 @@ block-by-block compatibility audit and defines the triggers for any further adap
 Execution update: the fresh amdgpu boot is captured, the sleep inhibitor is active,
 and [the fixed baseline audit](../findings/baseline-audit.md) records enabled
 interventions. Candidate 1.0.163 adds concurrent critical records and build markers.
-All 86 Python tests and the C++ fixtures pass locally; GitHub CI runs the same suite.
+All 112 Python tests and the C++ fixtures pass locally; GitHub CI runs the same suite.
 [GPU-less end-to-end validation](../findings/gpueless-tests/163/coordinator/notes.md)
 confirmed exact delivery and cleanup. T1–T4 are complete.
 [Physical experiment164](../findings/experiments/hybrid-002-164/notes.md) proved the
@@ -32,9 +32,13 @@ reinitialized on that recovered state, completed native engine startup and advan
 through 21. A second post-stop recovery also succeeded. The Metal probe was withheld by a now-fixed
 snapshot-classification bug. The third launch then completed three early KIQ stamps but found
 sixteen active ME2 HQD selections inherited from the fully started previous guest and timed out
-before the probe. PSP teardown is therefore only one part of reuse; candidate 167 adds a
-source-backed GC/HQD and SDMA quiesce transaction plus bounded ACPI shutdown fallback. Neither
-change has hardware validation yet, and no Metal command completion is verified.
+before the probe. PSP teardown is therefore only one part of reuse; candidate 168 adds a
+source-backed GC/HQD and SDMA quiesce transaction plus bounded ACPI shutdown fallback. Live
+readback validated the corrected SDMA register path and PSP commands, but opening legacy VFIO
+silently invoked the device's only `bus` reset method first. That reset is unsafe because the bus
+also contains host APU functions and it confounds the queue-state evidence. Candidate 168 now
+requires reset methods to be disabled during the privileged one-way handoff before any VFIO open.
+Warm cleanup, reinitialization, and Metal completion remain unverified.
 
 ## 1. What is actually complete
 
@@ -59,7 +63,7 @@ single clean run is not repeatability evidence. There is no defensible overall p
 | [x] | Wrong-kext route regression prevented for current scopes | `route-domains.py` and regression tests; not a complete C++ verifier |
 | [x] | Optional hybrid diagnostic built | 1.0.162, exact entry guards, `rgpuhybrid=1`, native result preserved |
 | [x] | Hybrid diagnostic validated on hardware | 1.0.163: complete records; type10 fails after type10/type11 success |
-| [ ] | Repeatable clean initial state | PSP cleanup enabled one warm start; the third launch retained active HQDs and failed KIQ. GC/HQD/SDMA quiesce is implemented offline and awaits bounded hardware validation |
+| [ ] | Repeatable clean initial state | PSP cleanup plus an implicit VFIO bus reset preceded one warm start; full reset-disabled GC/SDMA cleanup still needs hardware proof |
 | [x] | Native hybrid queues / complete engine startup | Candidate166 maps residual engine-2 channels to real SDMA0; hybrid status 0, native start/power-up 1 and KIQ stamps through 21 on hardware |
 | [ ] | Correct Metal compute and offscreen rendering | First command buffer fails; zero results checked |
 | [ ] | Per-process memory, synchronization and resource lifecycle | Must be exercised after first real completion |
@@ -297,7 +301,7 @@ Physical display work must not be mistaken for a prerequisite to an offscreen co
   guest panic, proving PSP cleanup is useful but not sufficient after full engine startup.
 - [x] Run the third same-boot qualification under the fixed ceiling. It found inherited active
   ME2 HQDs and failed a KIQ stamp before Metal; no fourth launch was attempted.
-- [ ] Validate the Linux-ordered rootless GC quiesce: disable pointer polling, request HQD
+- [ ] Validate the Linux-ordered rootless GC quiesce after proving `reset_method` is empty: disable pointer polling, request HQD
   dequeue while MEC runs, halt graphics/MEC/SDMA, force only stuck halted HQDs inactive, prove
   zero active queues, then destroy PSP rings. No PCI bus reset or amdgpu rebind is allowed.
 - [ ] Prove the exact-container ACPI fallback reaches native driver stop/power-off when the

@@ -1,4 +1,4 @@
-Experimental RaphaelGPU 1.0.167 candidate for Sequoia 15.7.9 (24G830).
+Experimental RaphaelGPU 1.0.168 candidate for Sequoia 15.7.9 (24G830).
 
 - Hardware-tested163 reproduced real KIQ completion and located the next failure:
   SDMA hybrid types10/11 succeed, then type10 fails with native status4.
@@ -33,10 +33,16 @@ Experimental RaphaelGPU 1.0.167 candidate for Sequoia 15.7.9 (24G830).
 - Candidate166 is hardware-tested: the repaired single-SDMA topology completes native hybrid
   creation, engine start and power-up, with KIQ stamps through at least 21. A third same-boot
   launch retained active HQDs and failed before the Metal probe.
-- Candidate167 removes lock-held timeout dumps, adds a verified ACPI shutdown fallback, and
-  extends rootless recovery from PSP rings to Linux-ordered GC/HQD/SDMA quiesce. These lifecycle
-  changes are offline-tested and await hardware validation. Full Metal remains unavailable; no
-  compute/render command completion and no playable game have been verified.
+- Candidate168 removes lock-held timeout dumps, adds a verified ACPI shutdown fallback, and
+  extends rootless recovery from PSP rings to Linux-ordered GC/HQD/SDMA quiesce. The first live
+  attempt failed closed because it used a static Navi register-header base for SDMA. Apple
+  `sdma_5_2_stop_engine`, Linux IP discovery, and the live device establish segment-zero base
+  `0x1260`; corrected writes and readbacks were observed. That record cannot prove cleanup,
+  because acquiring the legacy VFIO device first invoked its `bus` reset method. Candidate168
+  disables PCI reset methods during the privileged one-way handoff, refuses every launch or
+  cleanup if they are enabled, rejects reset messages from recovery receipts, and leaves later
+  teardown rootless. Warm cleanup and reinitialization remain unverified. Full Metal remains
+  unavailable; no compute/render command completion and no playable game have been verified.
 - Tests and hosted source builds do not establish physical GPU or host stability.
 
 Three historical host hard hangs remain unexplained. This is a research prerelease,

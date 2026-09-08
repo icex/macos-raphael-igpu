@@ -52,11 +52,19 @@ coordinator and QEMU supervisor.
 
 **Files:** update `findings/GPU-RE.md`, `docs/ROADMAP.md`, experiment evidence.
 
-- [x] Recover the current post-candidate-165 device without sudo and record exact evidence.
+- [x] Record the current post-candidate-165 transaction; later analysis found it was confounded
+  by legacy VFIO's implicit `bus` reset and it cannot prove cleanup.
 - [ ] Rebuild/reprepare candidate 166 against the resulting source commit.
 - [x] Launch candidate 166 on the same host boot with the 180-second supervisor and continuous
   host monitor.
 - [x] Verify receipt consumption, normal PSP initialization and absence of host kernel faults.
 - [ ] If it succeeds, run up to one more cleanup/launch cycle; otherwise close reuse for this
   boot and diagnose the first failed invariant.
-- [ ] Commit the implementation and evidence to `dev`; do not merge or push to `main`.
+- [x] Commit the implementation and evidence to `dev`; do not merge or push to `main`.
+
+## Task 5: Remove implicit PCI resets and repeat the proof
+
+- [x] Disable reset methods before granting user access during the one-way handoff.
+- [x] Refuse launch and recovery before VFIO open unless `reset_method` reads empty.
+- [x] Require schema-2 receipts with empty before/after reset methods and no reset messages.
+- [ ] Validate GC/SDMA/PSP cleanup and one warm launch without a VFIO reset message.
