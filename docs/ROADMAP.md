@@ -26,7 +26,10 @@ SDMA instance. X6000 unconditionally constructed two Navi23 SDMA objects. Candid
 then exposed X6000's residual SDMA1 channel lookup: `getHWChannel` returned null and
 `createAccelChannels+0x278` dereferenced it. Candidate 1.0.166 adds the guarded channel
 mapping to the surviving physical SDMA0 engine. The host remained healthy, but the panicked
-guest required a targeted force-stop. No Metal command completion or safe warm reuse is verified.
+guest required a targeted force-stop. A rootless VFIO transaction has since destroyed both PSP
+rings with exact acknowledgements while PCI bus mastering remained disabled. Reinitialization
+on that recovered state is the next experiment; no Metal command completion or repeated warm
+reuse is verified yet.
 
 ## 1. What is actually complete
 
@@ -51,7 +54,7 @@ single clean run is not repeatability evidence. There is no defensible overall p
 | [x] | Wrong-kext route regression prevented for current scopes | `route-domains.py` and regression tests; not a complete C++ verifier |
 | [x] | Optional hybrid diagnostic built | 1.0.162, exact entry guards, `rgpuhybrid=1`, native result preserved |
 | [x] | Hybrid diagnostic validated on hardware | 1.0.163: complete records; type10 fails after type10/type11 success |
-| [ ] | Repeatable clean initial state | Last GPU runs reached a stuck KIQ; safe warm reuse unproved |
+| [ ] | Repeatable clean initial state | Rootless post-run PSP cleanup is measured; the next same-boot initialization and three-cycle qualification remain open |
 | [ ] | Native hybrid queues / complete engine startup | Candidate165 removed the false object; candidate166 repairs the measured residual SDMA1 channel lookup and awaits hardware validation |
 | [ ] | Correct Metal compute and offscreen rendering | First command buffer fails; zero results checked |
 | [ ] | Per-process memory, synchronization and resource lifecycle | Must be exercised after first real completion |
@@ -119,7 +122,7 @@ Navi23 assumptions are adapted only after an observed failure selects one of tho
 |---|---|
 | Diagnostic routes targeted the wrong binary | KDK identity + offset/ABI/entry checks + route-domain test before deploy |
 | A status 4 / return 0 was interpreted without tracing its callers | Per-function return semantics and a stage classifier; ambiguous stays ambiguous |
-| Repeated boots inherited queue/firmware state | Record host boot ID and handoff history; one GPU launch per clean boot until reuse is proved |
+| Repeated boots inherited queue/firmware state | Rootless VFIO PSP teardown, immutable recovery receipt, ordered launch ledger and a three-launch validation ceiling |
 | Logs were interleaved, truncated or absent | Sequenced bounded records, explicit overflow counter, retained raw serial and guest results |
 | Source, bundle, ESP and guest could differ | Immutable experiment manifest with hashes at each boundary and loaded build identity |
 | Many workaround bits obscured causality | Audit every enabled intervention; frozen baseline plus one behavioral delta |
@@ -270,9 +273,9 @@ Physical display work must not be mistaken for a prerequisite to an offscreen co
 
 ### M7 — Lifecycle and host protection (parallel investigation; gates repeated use)
 
-- [ ] Replace ACPI-only shutdown assumptions with a bounded request through the already
+- [x] Replace ACPI-only shutdown assumptions with a bounded request through the already
   installed root guest agent, bound to the current guest/container identity and revocable.
-- [ ] Prove guest shutdown GPU-less before testing it with passthrough. Do not delay or
+- [x] Prove guest shutdown GPU-less before testing it with passthrough. Do not delay or
   disable the existing independent exposure timers.
 - [ ] Trace native driver uninitialization: stop new clients, drain required work, stop
   queues/engines, release interrupts, destroy PSP rings, release referenced memory in
@@ -282,6 +285,9 @@ Physical display work must not be mistaken for a prerequisite to an offscreen co
 - [ ] Investigate the host hangs as their own defect: preserve boot-keyed host journal,
   pstore accessibility/result and host device/PM history; correlate code paths rather
   than the last serial line. Do not intentionally reproduce a host hang for evidence.
+- [x] Implement rootless VFIO BAR5 access that refuses an active VM or enabled bus master,
+  destroys both PSP rings, verifies exact responses and creates a single-use receipt. The first
+  post-candidate-165 transaction completed in 7 ms and 1 ms with no host fault.
 - [ ] After teardown evidence, run a single controlled warm reuse experiment; a failure
   returns to one launch per clean host boot. Only then graduate to three bounded cycles.
 

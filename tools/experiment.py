@@ -265,7 +265,7 @@ def validate_identity(expected, observed):
             if value is None or observed.get(key) != value]
 
 
-def admit(manifest, host, used_boots):
+def admit(manifest, host, used_boots, reuse_allowed=False):
     errors = []
     for key in ('amdgpu_initialized', 'capture_ready', 'watchdogs_verified',
                 'device_pinned_awake', 'device_accessible'):
@@ -274,7 +274,8 @@ def admit(manifest, host, used_boots):
     if host.get('active_vm') is not False: errors.append('active_vm')
     if not host.get('boot_id') or host['boot_id'] != manifest.get('boot_id'):
         errors.append('boot_id')
-    if host.get('boot_id') in used_boots: errors.append('boot_already_used')
+    if host.get('boot_id') in used_boots and not reuse_allowed:
+        errors.append('boot_already_used')
     if host.get('driver') != 'vfio-pci': errors.append('driver')
     if host.get('device') != '1002:13c0': errors.append('device')
     if host.get('iommu_group') != '31': errors.append('iommu_group')
@@ -297,11 +298,95 @@ def write_once(path, value):
     finally: os.close(fd)
 
 
-def reserve_boot(directory, boot_id, experiment):
+def read_boot_ledger(path):
+    value = json.loads(Path(path).read_text())
+    if 'launches' not in value and 'experiment' in value:
+        return {'schema':2, 'boot_id':value['boot_id'], 'max_launches':3,
+                'launches':[{'run_id':value['experiment'], 'legacy':True}]}
+    return value
+
+
+def validate_recovery_receipt(receipt, boot_id, prior_run_id):
+    errors = []
+    exact = {'schema':1, 'status':'recovered', 'boot_id':boot_id,
+             'prior_run_id':prior_run_id, 'device':'0000:7b:00.0',
+             'iommu_group':'31', 'driver':'vfio-pci'}
+    if any(receipt.get(key) != value for key,value in exact.items()):
+        errors.append('recovery_receipt')
+    if not re.fullmatch(r'[0-9a-f]{32}', str(receipt.get('recovery_id', ''))):
+        errors.append('recovery_receipt')
+    for key in ('pci_command_before', 'pci_command_after'):
+        value = receipt.get(key)
+        if type(value) is not int or value & 4: errors.append('recovery_receipt')
+    commands = receipt.get('commands')
+    if (not isinstance(commands, list) or len(commands) != 2 or
+            [row.get('command') for row in commands] != [0x00030000, 0x000c0000] or
+            any(row.get('confirmed') is not True for row in commands) or
+            any(type(row.get('response')) is not int or
+                (row['response'] & 0x8000ffff) != 0x80000000 or
+                ((row['response'] >> 16) & 0x7fff) != (row['command'] >> 16)
+                for row in commands)):
+        errors.append('recovery_receipt')
+    return sorted(set(errors))
+
+
+def reuse_authorization(vm, boot_id, run_id):
+    path = vm/'run/used-gpu-boots'/(boot_id+'.json')
+    if not path.exists(): return None, []
+    try: ledger = read_boot_ledger(path)
+    except (OSError, ValueError, KeyError): return None, ['boot_ledger']
+    launches = ledger.get('launches')
+    if not isinstance(launches, list) or not launches: return None, ['boot_ledger']
+    if any(row.get('run_id') == run_id for row in launches): return None, ['run_id_reused']
+    if len(launches) >= 3: return None, ['launch_ceiling']
+    prior = launches[-1].get('run_id')
+    receipt_path = vm/'run/vfio-recovery'/boot_id/(str(prior)+'.json')
+    try: receipt = json.loads(receipt_path.read_text())
+    except (OSError, ValueError): return None, ['recovery_receipt']
+    errors = validate_recovery_receipt(receipt, boot_id, prior)
+    if receipt.get('recovery_id') in {row.get('recovery_id') for row in launches}:
+        errors.append('recovery_receipt')
+    return (receipt if not errors else None), sorted(set(errors))
+
+
+def replace_json(path, value):
+    path = Path(path)
+    temp = path.with_name(path.name+'.new-'+uuid.uuid4().hex)
+    try:
+        with temp.open('x') as stream:
+            json.dump(value, stream, indent=2)
+            stream.write('\n'); stream.flush(); os.fsync(stream.fileno())
+        temp.replace(path)
+        directory = os.open(path.parent, os.O_DIRECTORY)
+        try: os.fsync(directory)
+        finally: os.close(directory)
+    finally:
+        temp.unlink(missing_ok=True)
+
+
+def reserve_boot(directory, boot_id, experiment, recovery=None):
     if not re.fullmatch(r'[A-Za-z0-9-]+', boot_id):
         raise ValueError('invalid host boot ID')
     directory.mkdir(parents=True, exist_ok=True)
-    write_once(directory / (boot_id+'.json'), {'boot_id': boot_id, 'experiment': experiment})
+    path = directory / (boot_id+'.json')
+    if not path.exists():
+        write_once(path, {'schema':2, 'boot_id':boot_id, 'max_launches':3,
+                          'launches':[{'run_id':experiment, 'reserved_epoch':time.time()}]})
+        return
+    if recovery is None: raise FileExistsError(path)
+    ledger = read_boot_ledger(path); launches = ledger.get('launches', [])
+    prior = launches[-1].get('run_id') if launches else None
+    errors = validate_recovery_receipt(recovery, boot_id, prior)
+    if len(launches) >= 3: errors.append('launch_ceiling')
+    if any(row.get('run_id') == experiment for row in launches): errors.append('run_id_reused')
+    if recovery.get('recovery_id') in {row.get('recovery_id') for row in launches}:
+        errors.append('recovery_receipt')
+    if errors: raise ValueError('reuse reservation refused: '+','.join(sorted(set(errors))))
+    launches.append({'run_id':experiment, 'reserved_epoch':time.time(),
+                     'recovery_id':recovery['recovery_id'], 'prior_run_id':prior})
+    ledger.update(schema=2, boot_id=boot_id, max_launches=3, launches=launches)
+    ledger.pop('experiment', None)
+    replace_json(path, ledger)
 
 
 def probe_fits(now, launch_deadline, container_deadline, probe_seconds=45, cleanup_seconds=25):
@@ -404,7 +489,7 @@ def run_probe(vm, manifest):
 
 
 def run_one(vm, manifest_path, output):
-    """One launch, no handoff/reset/retry. Failure permanently consumes this boot."""
+    """One bounded launch; a verified prior recovery may authorize same-boot reuse."""
     manifest = json.loads(manifest_path.read_text())
     missing = required_identity(manifest)
     if missing: raise ValueError('incomplete prepared identity: '+','.join(missing))
@@ -413,6 +498,7 @@ def run_one(vm, manifest_path, output):
     supervisor = helper('vm-supervision'); classifier = helper('classify-run')
     guest_shutdown = helper('guest-shutdown')
     state = None; probe = None; failure = None; shutdown_result = None; host_messages = []
+    recovery_result = None
     monitor = None
     output.mkdir(parents=True, exist_ok=False)
     write_once(output/'manifest.json', manifest)
@@ -432,14 +518,19 @@ def run_one(vm, manifest_path, output):
                 errors = validate_identity({key:manifest[key] for key in observed if key in manifest}, observed)
                 host = host_snapshot(); write_once(output/'host-before.json', host)
                 used = vm/'run/used-gpu-boots'; used.mkdir(exist_ok=True)
+                recovery = None; reuse_errors = []
                 if manifest.get('gpu') is False:
                     if host['active_vm']: errors.append('active_vm')
                 else:
-                    errors += admit(manifest, host, {p.stem for p in used.glob('*.json')})
+                    recovery, reuse_errors = reuse_authorization(vm, host['boot_id'],
+                                                                  manifest['run_id'])
+                    errors += reuse_errors
+                    errors += admit(manifest, host, {p.stem for p in used.glob('*.json')},
+                                    reuse_allowed=recovery is not None)
                 if not host['sleep_inhibited']: errors.append('sleep_inhibited')
                 if errors: raise ValueError('admission refused: '+','.join(errors))
                 if manifest.get('gpu') is not False:
-                    reserve_boot(used, host['boot_id'], manifest['run_id'])
+                    reserve_boot(used, host['boot_id'], manifest['run_id'], recovery)
                 cursor, _, _ = kernel_updates()
                 monitor = HostMonitor(cursor, lambda:os.kill(os.getpid(), signal.SIGUSR1))
                 monitor.start()
@@ -509,6 +600,14 @@ def run_one(vm, manifest_path, output):
             if monitor.error: failure = monitor.error
         signal.signal(signal.SIGUSR1, previous_fault)
         signal.signal(signal.SIGTERM, previous)
+    if (manifest.get('gpu') is not False and state and shutdown_result and
+            shutdown_result.get('outcome') != 'STOP_UNCONFIRMED' and
+            not (monitor and monitor.error)):
+        try:
+            recovery_result = helper('vfio-recover').recover(vm, manifest['run_id'])
+        except BaseException as error:
+            recovery_result = {'status':'failed',
+                               'error':type(error).__name__+': '+str(error)}
     serial = (vm/'run/serial.log').read_text(errors='replace') if state else ''
     (output/'serial.txt').write_text(serial)
     events = classifier.parse_serial(serial)
@@ -517,7 +616,9 @@ def run_one(vm, manifest_path, output):
     write_once(output/'shutdown.json', shutdown_result)
     write_once(output/'host-after.json', host_snapshot())
     write_once(output/'host-kernel-messages.json', host_messages)
+    if recovery_result is not None: write_once(output/'recovery.json', recovery_result)
     result = classifier.classify(manifest, events, probe)
+    result['warm_reuse'] = (recovery_result or {'status':'not-attempted'})['status']
     if manifest.get('gpu') is False and not failure:
         result.update(valid=False, verdict='GPULESS_CAPTURE_CHECK',
                       next_action='no GPU execution tested; inspect captured build and cleanup')

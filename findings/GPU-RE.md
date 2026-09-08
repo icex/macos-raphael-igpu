@@ -3183,3 +3183,33 @@ Metal enumeration remains the strongest userspace state; no compute or render co
 completed correctly. Hybrid-004 must observe the `2 -> 1` channel mapping, preserve KIQ and
 native engine results, and pass the checked compute/render probe before core acceleration
 can be claimed.
+
+### 2026-09-08: rootless PSP cleanup replaces the reboot development loop
+
+The iGPU advertises only the PCI `bus` reset method. Bus 7b also contains the host CCP/PSP,
+two xHCI controllers and audio functions, so a bridge or bus reset is not a safe per-GPU reset.
+The vfio-pci close path disables bus mastering and DMA mappings, but cannot perform that shared
+reset. Its generic `resetting` / `reset done` kernel messages do not establish that a function
+reset occurred.
+
+Root is unnecessary for the cleanup itself. `/dev/vfio/31` is owned by the experiment user,
+so `tools/vfio-recover.py` opens the legacy VFIO container/group, obtains the device fd and maps
+only BAR5. It refuses an active QEMU, a wrong device/group/driver, enabled PCI bus mastering, a
+host fault or a nonlatest prior run. It unconditionally sends `DESTROY_RINGS` and
+`DESTROY_GPCOM_RING`, closes VFIO, rechecks bus mastering and stores an immutable receipt.
+The ordered boot ledger consumes that receipt once before a later launch and initially permits
+at most three launches in one host boot.
+
+The first transaction ran after candidate 1.0.165 panicked and was force-stopped. Without sudo,
+rebind or reboot it recorded:
+
+```
+PCI_COMMAND             0x0003 -> 0x0003  (bus master clear)
+DESTROY_RINGS           0x80010000 -> 0x80030000  after 7 polls
+DESTROY_GPCOM_RING      0x80030000 -> 0x800c0000  after 1 poll
+host kernel faults      none
+```
+
+This proves the known persistent PSP-ring state is recoverable through the already-authorized
+VFIO device. It does not yet prove that every GC/SDMA/interrupt state is clean or that the next
+Apple initialization succeeds. Hybrid-004 is the first same-host-boot reinitialization test.
