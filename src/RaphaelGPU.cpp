@@ -33,6 +33,8 @@
 #include "DiagnosticRecords.hpp"
 #include "SdmaTopology.hpp"
 #include "SdmaAddresses.hpp"
+#include "GpuVmDiagnostics.hpp"
+#include "ObservationBuffer.hpp"
 #include "EngineLifecycle.hpp"
 #if __has_include("BuildIdentity.hpp")
 #include "BuildIdentity.hpp"
@@ -192,6 +194,10 @@ static const RPatch patches[] {
 // `log show`; the live serial copy stays as a crash-time fallback.
 static rgpu::DiagnosticRecords<256, 512> diagnostics {};
 static rgpu::DiagnosticRecords<128, 512> criticalRecords {};
+static rgpu::SuccessRecordBudget waitStampRecordBudget {};
+static rgpu::SuccessRecordBudget kiqSubmitRecordBudget {};
+static rgpu::ObservationBuffer<RaphaelVm::InvalidateRequest, 8> vmid2Requests {};
+static rgpu::ObservationBuffer<RaphaelSdma::SubmitInfoObservation, 8> vmid2Submits {};
 
 static void diagAppend(bool critical, const char *fmt, ...) {
     char text[512];
@@ -330,6 +336,18 @@ static mach_vm_address_t orgVmmProgInv = 0;
 // from the disassembly. The return address is unambiguous.
 static mach_vm_address_t x6Base = 0;
 static void *vmmObject = nullptr;
+static void publishPendingVmObservations();
+
+static void vmObservationThread(void *, wait_result_t) {
+    // Driver hooks only copy small immutable structures into bounded buffers.
+    // All formatting, serial output and MMIO happens here, outside unknown
+    // caller lock contexts. The bounded experiment never exceeds 180 seconds.
+    for (unsigned poll = 0; poll < 1800; ++poll) {
+        publishPendingVmObservations();
+        IOSleep(100);
+    }
+    thread_terminate(current_thread());
+}
 
 static void diagDumpThread(void *, wait_result_t) {
     // Tunable with the rgpudump=<ms> boot-arg: the whole AMD bring-up finishes well
@@ -2579,7 +2597,8 @@ static void dumpGfxHubVm(const char *when) {
 
 static uint32_t wrapWaitStamp(void *self, uint32_t stamp) {
     auto r = FunctionCast(wrapWaitStamp, orgWaitStamp)(self, stamp);
-    CRLOG("XJ:   waitForHwStamp(%u) -> %u", stamp, r & 0xff);
+    if (waitStampRecordBudget.take((r & 0xff) != 0, 8))
+        CRLOG("XJ:   waitForHwStamp(%u) -> %u", stamp, r & 0xff);
     // This native call can run while X6000 holds a spin lock. Large MMIO walks and
     // serial output here delayed the failure path until lck_spinlock_timeout fired,
     // obscuring the original KIQ timeout with a recursive trap. The critical record
@@ -3412,7 +3431,8 @@ static uint32_t wrapKiqSubmit(void *self) {
         fbWrite(asicInfo, kGcGrbmGfxCntl, 0);
     }
     auto r = FunctionCast(wrapKiqSubmit, orgKiqSubmit)(self);
-    CRLOG("XJ:   submitKIQFrame -> %u", r & 0xff);
+    if (kiqSubmitRecordBudget.take((r & 0xff) != 0, 8))
+        CRLOG("XJ:   submitKIQFrame -> %u", r & 0xff);
     if (mask & XK) kickKiq();
     if (mqdFixMode != 2) repairMqdPointers(); // mode 2 prepares before startKIQ
     return r;
@@ -3837,20 +3857,12 @@ static uint32_t wrapVmmFillRegs(void *self) {
 }
 
 static uint32_t wrapVmmProgInv(void *self, void *info) {
-    static unsigned reports = 0;
-    const bool report = ptbFixMode == 2 && reports++ < 16;
-    if (report && info != nullptr) {
-        // prepareVMInvalidateRequest reads these members; its caller allocates
-        // 0x28 bytes. The +0x24 byte requests root/start/end reprogramming.
-        auto request = reinterpret_cast<const uint8_t *>(info);
-        RLOG("XT2: native invalidate hub=%u vmid=%u root=%#llx reprogram=%u",
-             *reinterpret_cast<const uint32_t *>(request),
-             *reinterpret_cast<const uint32_t *>(request + 4),
-             *reinterpret_cast<const uint64_t *>(request + 0x18), request[0x24]);
-    }
+    const auto request = RaphaelVm::observeInvalidateRequest(
+        reinterpret_cast<const uint8_t *>(info), info != nullptr ? 0x28 : 0);
     auto r = FunctionCast(wrapVmmProgInv, orgVmmProgInv)(self, info);
     if (ptbFixMode != 2) repairPageTableBase("programAndInvalidateVM (legacy)");
-    if (report) reportGartRoot("after native invalidate (read only)");
+    if (ptbFixMode == 2 && request.valid && request.hub == 0 && request.vmid == 2)
+        vmid2Requests.append(request);
     return r;
 }
 
@@ -4171,32 +4183,53 @@ static void *wrapHwGetChannel(void *self, uint32_t engineType, uint32_t ringType
 }
 
 static uint32_t wrapSdmaCommitIb(void *self, void *submitInfo) {
-    // commitIndirectCommandBuffer copies this 0x200-byte template before it
-    // submits the ring frame. Its first six dwords are SDMA_OP_INDIRECT. The
-    // measured failing template named 0x400100000 although the allocation was
-    // at software FB +0x100000 (0xf400100000); translate that exact truncated
-    // framebuffer window to the physical MC aperture (0x840100000).
-    if (sdmaTopologyEnabled && sdmaTopologyRoutesReady && self != nullptr) {
-        auto frame = *reinterpret_cast<uint32_t **>(reinterpret_cast<uint8_t *>(self) + 0x138);
-        if (frame != nullptr && frame[0] == 0x09u) {
-            RaphaelGart::Aperture aperture {};
-            const uint64_t before = (static_cast<uint64_t>(frame[2]) << 32) | frame[1];
-            auto repair = gartApertureInfo(aperture) && RaphaelGart::validAperture(aperture)
-                ? RaphaelSdma::repairTruncatedFramebufferAddress(
-                    before, aperture.swBase, aperture.physicalBase, aperture.visibleBytes)
-                : RaphaelSdma::AddressRepair {false, false, before};
-            static unsigned reports = 0;
-            const bool report = __sync_fetch_and_add(&reports, 1u) < 16;
-            if (repair.changed) {
-                frame[1] = static_cast<uint32_t>(repair.address);
-                frame[2] = static_cast<uint32_t>(repair.address >> 32);
-            }
-            if (report)
-                CRLOG("SD: IB template %#llx -> %#llx valid=%u changed=%u", before,
-                      repair.address, repair.valid, repair.changed);
-        }
+    // X6000 copies its fixed channel template from self+0x138, then emits one
+    // SDMA INDIRECT packet per AMD_SUBMIT_COMMAND_BUFFER_INFO entry. Static
+    // disassembly shows the packet address comes from submitInfo+0x58+0x28*i;
+    // the old wrapper changed template[1:2], an unrelated driver-owned address.
+    // The packet carries a VMID, so these are GPU virtual addresses. Observe
+    // the actual submit entries before the native encoder reads them, but do
+    // not translate them into physical framebuffer addresses.
+    if (sdmaTopologyEnabled && sdmaTopologyRoutesReady && submitInfo != nullptr) {
+        const auto observation = RaphaelSdma::observeSubmitInfo(
+            reinterpret_cast<const uint8_t *>(submitInfo), 0xe8);
+        if (observation.vmid == 2) vmid2Submits.append(observation);
     }
     return FunctionCast(wrapSdmaCommitIb, orgSdmaCommitIb)(self, submitInfo);
+}
+
+static void publishPendingVmObservations() {
+    static size_t requestCursor = 0;
+    static size_t submitCursor = 0;
+    RaphaelVm::InvalidateRequest request {};
+    while (requestCursor < vmid2Requests.size() && vmid2Requests.read(requestCursor, request)) {
+        ++requestCursor;
+        CRLOG("VM: invalidate hub=%u vmid=%u start=%#llx end=%#llx root=%#llx "
+              "flags=%#x reprogram=%u", request.hub, request.vmid, request.start,
+              request.end, request.root, request.flags, request.reprogram);
+        const auto regs = RaphaelVm::contextRegisters(request.vmid);
+        if (regs.valid && asicInfo != nullptr) {
+            const uint64_t root = RaphaelVm::join(
+                fbRead(asicInfo, kGcSeg0 + regs.ptbLo),
+                fbRead(asicInfo, kGcSeg0 + regs.ptbHi));
+            const uint64_t firstPage = RaphaelVm::join(
+                fbRead(asicInfo, kGcSeg0 + regs.startLo),
+                fbRead(asicInfo, kGcSeg0 + regs.startHi));
+            const uint64_t lastPage = RaphaelVm::join(
+                fbRead(asicInfo, kGcSeg0 + regs.endLo),
+                fbRead(asicInfo, kGcSeg0 + regs.endHi));
+            CRLOG("VM: context-snapshot vmid=%u root=%#llx ctl=%#x start=%#llx end=%#llx",
+                  request.vmid, root, fbRead(asicInfo, kGcSeg0 + regs.control),
+                  firstPage << 12, (lastPage << 12) | 0xfffULL);
+        }
+    }
+    RaphaelSdma::SubmitInfoObservation submit {};
+    while (submitCursor < vmid2Submits.size() && vmid2Submits.read(submitCursor, submit)) {
+        ++submitCursor;
+        CRLOG("SD: submit vmid=%u flags=%#x entries=%u valid=%u IB0=%#llx IB1=%#llx",
+              submit.vmid, submit.flags, submit.entries, submit.layoutValid,
+              submit.addresses[0], submit.addresses[1]);
+    }
 }
 
 static bool startOneSdmaEngine(void *engine) {
@@ -4916,6 +4949,10 @@ static void pluginStart() {
         thread_deallocate(th);
     else
         RLOG("could not start the deferred diagnostics thread");
+    if (kernel_thread_start(vmObservationThread, nullptr, &th) == KERN_SUCCESS)
+        thread_deallocate(th);
+    else
+        RLOG("could not start the VM observation thread");
     lilu.onPatcherLoadForce(onPatcher);
     lilu.onKextLoadForce(kexts, arrsize(kexts), processKext, nullptr);
     RLOG("registered %lu kexts (Loaded flag set)", arrsize(kexts));

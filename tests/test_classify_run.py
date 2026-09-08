@@ -399,10 +399,10 @@ Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0
         self.assertEqual(c.classify(manifest, missing, None)['earliest_failure'],
                          'sdma_channel_remap_missing')
 
-    def test_sdma_ib_repair_is_required_and_page_timeout_is_decisive(self):
+    def test_sdma_vm_observation_and_page_timeout_are_decisive(self):
         c = self.classifier()
         manifest = {'build_id': 'abc', 'spec': {'required_observations': [
-                    'sdma_topology', 'sdma_channel_remap', 'sdma_ib_address_repair']}}
+                    'sdma_topology', 'sdma_channel_remap', 'sdma_vm_context']}}
         serial = ''.join([
             'RGPU_EVENT build=abc seq=0 BUILD: identity=abc\n',
             'RGPU_EVENT build=abc seq=1 HY: HWLibs hybrid trace route=ok entries-match=1\n',
@@ -419,8 +419,10 @@ Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0
             'RGPU_EVENT build=abc seq=12 HY: createHybridEngine exit: engine=11 valid=1 available-before=1 status=0\n',
             'RGPU_EVENT build=abc seq=13 SD: one-instance start -> 1 (SDMA0=0xffffff8000001000 SDMA1=0)\n',
             'RGPU_EVENT build=abc seq=14 XJ: AMDHardware::startHWEngines -> 1\n',
-            'RGPU_EVENT build=abc seq=15 SD: IB template 0x400100000 -> 0x840100000 valid=1 changed=1\n',
-            'RGPU_RECORDS build=abc count=16 dropped=0 truncated=0\n',
+            'RGPU_EVENT build=abc seq=15 VM: invalidate hub=0 vmid=2 start=0x400000000 end=0x400ffffff root=0x840abc000 flags=0x3 reprogram=1\n',
+            'RGPU_EVENT build=abc seq=16 VM: context-snapshot vmid=2 root=0x840abc000 ctl=0x80101 start=0x400000000 end=0x400ffffff\n',
+            'RGPU_EVENT build=abc seq=17 SD: submit vmid=2 flags=0x123 entries=1 valid=1 IB0=0x400100020 IB1=0\n',
+            'RGPU_RECORDS build=abc count=18 dropped=0 truncated=0\n',
             '[0:6:0]: HW Channel 12 SDMA0_PAGE is occupied by channel 34 stamp 1\n'])
         events = c.parse_serial(serial)
         result = c.classify(manifest, events, None)
@@ -429,16 +431,50 @@ Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0
         self.assertEqual(result['earliest_failure'], 'sdma0_page')
 
         missing = serial.replace(
-            'RGPU_EVENT build=abc seq=15 SD: IB template 0x400100000 -> 0x840100000 valid=1 changed=1\n', '')
-        missing = missing.replace('count=16', 'count=15')
+            'RGPU_EVENT build=abc seq=17 SD: submit vmid=2 flags=0x123 entries=1 valid=1 IB0=0x400100020 IB1=0\n', '')
+        missing = missing.replace('count=18', 'count=17')
         result = c.classify(manifest, c.parse_serial(missing), None)
         self.assertEqual(result['verdict'], 'INCONCLUSIVE')
-        self.assertEqual(result['earliest_failure'], 'sdma_ib_address_repair_missing')
+        self.assertEqual(result['earliest_failure'], 'sdma_vm_context_missing')
 
-        unchanged = serial.replace('valid=1 changed=1', 'valid=1 changed=0')
-        result = c.classify(manifest, c.parse_serial(unchanged), None)
+        mismatched = serial.replace('root=0x840abc000 ctl=0x80101',
+                                    'root=0x840def000 ctl=0x80101')
+        result = c.classify(manifest, c.parse_serial(mismatched), None)
         self.assertEqual(result['verdict'], 'INCONCLUSIVE')
-        self.assertEqual(result['earliest_failure'], 'sdma_ib_address_repair_missing')
+        self.assertEqual(result['earliest_failure'], 'sdma_vm_context_mismatch')
+
+        outside = serial.replace('IB0=0x400100020', 'IB0=0x500100020')
+        result = c.classify(manifest, c.parse_serial(outside), None)
+        self.assertEqual(result['verdict'], 'INCONCLUSIVE')
+        self.assertEqual(result['earliest_failure'], 'sdma_vm_context_mismatch')
+
+    def test_submit_and_vm_context_records_parse(self):
+        rows = self.classifier().parse_serial(
+            'RGPU_RECORDS build=abc count=3 dropped=0 truncated=0\n'
+            'RGPU_EVENT build=abc seq=0 VM: invalidate hub=0 vmid=2 start=0x400000000 end=0x400ffffff root=0x840abc000 flags=0x3 reprogram=1\n'
+            'RGPU_EVENT build=abc seq=1 VM: context-snapshot vmid=2 root=0x840abc000 ctl=0x80101 start=0x400000000 end=0x400ffffff\n'
+            'RGPU_EVENT build=abc seq=2 SD: submit vmid=2 flags=0x123 entries=3 valid=1 IB0=0x400900000 IB1=0x401180000\n')
+        self.assertEqual(rows[0]['kind'], 'vm_invalidate')
+        self.assertEqual(rows[0]['vmid'], 2)
+        self.assertEqual(rows[0]['root'], 0x840abc000)
+        self.assertEqual(rows[1]['kind'], 'vm_context')
+        self.assertEqual(rows[1]['control'], 0x80101)
+        self.assertEqual(rows[2]['kind'], 'sdma_submit')
+        self.assertEqual(rows[2]['vmid'], 2)
+        self.assertEqual(rows[2]['ib0'], 0x400900000)
+        self.assertEqual(rows[2]['ib1'], 0x401180000)
+
+    def test_live_vm_observations_survive_until_the_next_structured_snapshot(self):
+        rows = self.classifier().parse_serial(
+            'RGPU_EVENT build=abc seq=0 BUILD: identity=abc\n'
+            'RGPU_RECORDS build=abc count=1 dropped=0 truncated=0\n'
+            'RaphaelGPU rgpu: @ VM: invalidate hub=0 vmid=2 start=0x400000000 end=0x400ffffff root=0x840abc000 flags=0x3 reprogram=1\n'
+            'RaphaelGPU rgpu: @ VM: context-snapshot vmid=2 root=0x840abc000 ctl=0x80101 start=0x400000000 end=0x400ffffff\n'
+            'RaphaelGPU rgpu: @ SD: submit vmid=2 flags=0x123 entries=1 valid=1 IB0=0x400100020 IB1=0\n')
+        live = [row for row in rows if row.get('source') == 'live-observation']
+        self.assertEqual([row['kind'] for row in live],
+                         ['vm_invalidate', 'vm_context', 'sdma_submit'])
+        self.assertFalse(any(row['kind'] == 'capture_loss' for row in rows))
 
 
 if __name__ == '__main__':

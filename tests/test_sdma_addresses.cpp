@@ -1,6 +1,6 @@
 #include <cstdio>
 #include <cstdlib>
-#include <initializer_list>
+#include <cstring>
 #include "../src/SdmaAddresses.hpp"
 
 static void require(bool condition, const char *message) {
@@ -11,46 +11,46 @@ static void require(bool condition, const char *message) {
 }
 
 int main() {
-    using RaphaelSdma::AddressRepair;
-    using RaphaelSdma::repairTruncatedFramebufferAddress;
+    // Exact 24G830 disassembly: flags at +0, VMID at +4, entry count at
+    // +0x14, then one qword GPU virtual address at +0x58 + 0x28*i.
+    alignas(uint64_t) unsigned char submit[0xe8] {};
+    auto put32 = [&](size_t offset, uint32_t value) {
+        std::memcpy(submit + offset, &value, sizeof(value));
+    };
+    auto put64 = [&](size_t offset, uint64_t value) {
+        std::memcpy(submit + offset, &value, sizeof(value));
+    };
+    put32(0, 0x12345678);
+    put32(4, 2);
+    put32(0x14, 3);
+    put64(0x58, 0x400100020ULL);
+    put64(0x80, 0xffbff40000ULL);
+    put64(0xa8, 0x401180000ULL);
 
-    constexpr uint64_t swBase = 0xf400000000ULL;
-    constexpr uint64_t physicalBase = 0x840000000ULL;
-    constexpr uint64_t bytes = 0x10000000ULL;
+    unsigned char before[sizeof(submit)];
+    std::memcpy(before, submit, sizeof(submit));
+    auto observation = RaphaelSdma::observeSubmitInfo(submit, sizeof(submit));
+    require(observation.layoutValid && observation.entries == 3,
+            "the measured three-entry submit layout is accepted");
+    require(observation.flags == 0x12345678 && observation.vmid == 2,
+            "the SDMA packet flags and VMID are captured");
+    require(observation.addresses[0] == 0x400100020ULL &&
+                observation.addresses[1] == 0xffbff40000ULL &&
+                observation.addresses[2] == 0x401180000ULL,
+            "every measured GPU virtual address is captured");
+    require(std::memcmp(before, submit, sizeof(submit)) == 0,
+            "observing a VMID-relative submit never rewrites its addresses");
 
-    auto first = repairTruncatedFramebufferAddress(
-        0x400100000ULL, swBase, physicalBase, bytes);
-    require(first.valid && first.changed && first.address == 0x840100000ULL,
-            "the measured SDMA paging IB is translated into the physical FB aperture");
+    put32(0x14, 5);
+    auto tooMany = RaphaelSdma::observeSubmitInfo(submit, sizeof(submit));
+    require(!tooMany.layoutValid && tooMany.entries == 5,
+            "an entry count beyond the measured structure fails closed");
+    auto tooShort = RaphaelSdma::observeSubmitInfo(submit, 0x5f);
+    require(!tooShort.layoutValid,
+            "a truncated submit structure cannot expose a partial address");
+    auto missing = RaphaelSdma::observeSubmitInfo(nullptr, sizeof(submit));
+    require(!missing.layoutValid,
+            "a missing submit structure is rejected");
 
-    auto last = repairTruncatedFramebufferAddress(
-        0x40fffffffULL, swBase, physicalBase, bytes);
-    require(last.valid && last.changed && last.address == 0x84fffffffULL,
-            "the final byte of the framebuffer range is translated");
-
-    auto physical = repairTruncatedFramebufferAddress(
-        0x840100000ULL, swBase, physicalBase, bytes);
-    require(physical.valid && !physical.changed && physical.address == 0x840100000ULL,
-            "an already physical address remains unchanged");
-
-    for (uint64_t outside : {0x3ffffffffULL, 0x410000000ULL, 0xffbff40000ULL}) {
-        AddressRepair repair = repairTruncatedFramebufferAddress(
-            outside, swBase, physicalBase, bytes);
-        require(!repair.valid && !repair.changed && repair.address == outside,
-                "an address outside the exact truncated framebuffer window is rejected");
-    }
-
-    auto noTruncation = repairTruncatedFramebufferAddress(
-        0x400100000ULL, 0x400000000ULL, physicalBase, bytes);
-    require(!noTruncation.valid && !noTruncation.changed,
-            "a software aperture already representable in 36 bits is not reinterpreted");
-
-    for (uint64_t invalidBytes : {0ULL, 0x1000000001ULL}) {
-        auto invalid = repairTruncatedFramebufferAddress(
-            0x400100000ULL, swBase, physicalBase, invalidBytes);
-        require(!invalid.valid && !invalid.changed,
-                "unsupported framebuffer extents cannot enable repair");
-    }
-
-    std::puts("SDMA address fixtures passed");
+    std::puts("SDMA submit observation fixtures passed");
 }

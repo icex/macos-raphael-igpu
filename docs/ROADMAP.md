@@ -1,6 +1,6 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-09-08. Baseline repository: `d1058f1`; next candidate: 1.0.170; published
+Updated 2026-09-08. Baseline repository: `40a2ffb`; next candidate: 1.0.171; published
 research snapshot: `v1.0.159-preview.1`. This document is the authoritative current
 roadmap. Historical hypotheses in `findings/GPU-RE.md` remain evidence, not instructions.
 
@@ -16,7 +16,7 @@ block-by-block compatibility audit and defines the triggers for any further adap
 Execution update: the fresh amdgpu boot is captured, the sleep inhibitor is active,
 and [the fixed baseline audit](../findings/baseline-audit.md) records enabled
 interventions. Candidate 1.0.163 adds concurrent critical records and build markers.
-All 112 Python tests and the C++ fixtures pass locally; GitHub CI runs the same suite.
+The Python suite and seven C++ fixtures run locally and in GitHub CI.
 [GPU-less end-to-end validation](../findings/gpueless-tests/163/coordinator/notes.md)
 confirmed exact delivery and cleanup. T1–T4 are complete.
 [Physical experiment164](../findings/experiments/hybrid-002-164/notes.md) proved the
@@ -52,8 +52,16 @@ result when present, and requests bounded guest/ACPI shutdown after runtime obse
 errors. Recovery authorizes another launch only when dequeue had no timeout or force-clear and
 both CP status registers are idle. The driver also calls Apple's native
 `powerOffHWEngines` immediately after partial engine power-up failure, while the guest mappings
-still exist. A fresh boot is required to test this combined lifecycle and SDMA batch; the current
-three-launch ledger is exhausted and the CP is measurably non-idle.
+still exist. Candidate 170 then completed native startup and KIQ stamp 34 on a fresh boot before
+SDMA0 paging stalled on IB `0x400100020`. The old wrapper logged the unchanged fixed channel
+template at `0xffbfde011c`, proving it patched the wrong value. Exact 24G830 disassembly now traces
+the SDMA packet address to `AMD_SUBMIT_COMMAND_BUFFER_INFO + 0x58 + 0x28*i`. Linux SDMA 5.2 emits
+the full address together with the IB's VMID. Candidate 170 identifies the stalled WindowServer
+submission as VMID 2, so `0x400100020` must be evaluated through VMID 2's page tables rather than
+rewritten as an MC physical address. Candidate 171 is read-only at this boundary and captures the
+requested VMID 2 root/range plus an asynchronous hardware context snapshot. Its classifier
+requires the same root and an address range containing the submitted IB. The failed recovery is non-authorizing, so this boot
+cannot safely test the new candidate.
 
 ## 1. What is actually complete
 
@@ -70,7 +78,7 @@ single clean run is not repeatability evidence. There is no defensible overall p
 | [x] | Firmware load / TTL bring-up observed | Clean 1.0.159 serial record, including PSP responses; not all later workloads validated |
 | [x] | Dummy SMU backend | Avoids retargeting Apple's messages to the host CPU's SMU |
 | [x] | 256 MB VRAM allocator and initial GART root | Clean-run native physical root `0x84fdfc001`; per-client VMs remain unverified |
-| [x] | KIQ setup really executes | Three stamps succeed; RPTR reaches WPTR `0x20`, `0x40`, `0x60`; not a shader test |
+| [x] | KIQ setup really executes | Candidate 170 advances through at least stamp 34; not a shader test |
 | [x] | Metal device enumeration | `AMD Radeon Navi23`, Metal 3 advertised; no completed Metal command buffer |
 | [x] | Automated compute/render probe implemented | Fresh nonce, independent CPU/pixel expectations, timeouts; currently FAILS |
 | [x] | Exposure supervision and capture implemented | Full-CID timers, serial durability, sleep inhibitor; not a host-hang fix |
@@ -415,8 +423,8 @@ date for the unknown hardware defects until M2 has localized them.
 1. Verify the host boot ID changed and no VM is running; renew/verify sleep inhibition.
 2. Inspect iGPU ownership and collect approved reference state **before** any handoff.
 3. Run the completed offline gates once and verify the combined candidate actually in the ESP.
-4. Prepare one `metal-004` experiment whose sole hardware question is whether the repaired
-   SDMA paging IB completes the checked Metal probe.
+4. Prepare one `metal-005` experiment whose sole hardware question is whether Apple's VMID 2
+   request and the programmed GFXHUB context can translate the stalled SDMA IB address.
 5. Make the one-way handoff if required, start one bounded run, classify it, archive it,
    stop and honor the outcome's next action. A stuck queue or non-idle recovery receipt closes
    that boot's GPU testing. If the full probe passes and recovery is authorizing, run one warm

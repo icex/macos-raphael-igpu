@@ -17,24 +17,24 @@ evidence required before adding another compatibility patch.
 
 ## Status
 
-**Experimental; full Metal acceleration is not working.** Hardware-tested **1.0.166**
+**Experimental; full Metal acceleration is not working.** Hardware-tested **1.0.170**
 repairs Raphael's one-instance SDMA topology and X6000's residual engine-2 channel lookup.
-On a recovered second launch, native hybrid creation, engine start and power-up all succeeded,
-and KIQ stamps advanced through at least 21. The Metal probe was not run because of a corrected
-capture-classification defect.
+On a clean launch, native hybrid creation, engine start and power-up all succeeded, and KIQ
+stamps advanced through at least 34. The first paging submission then timed out on SDMA0.
 
 [Clean-run serial evidence](findings/metal-tests/20260908T052603Z-8dad7535/serial.txt)
 and [automated verdict](findings/metal-tests/20260908T052603Z-8dad7535/result.json)
 are retained. Later experimental builds 1.0.160/161 had incorrectly placed diagnostic
 hooks and are excluded from conclusions about the hybrid-engine failure. A later
 third same-boot launch then inherited active ME2 HQDs from the fully started guest and failed a
-KIQ stamp before the Metal probe. Candidate 1.0.169 adds reset-free Linux-ordered cleanup and
-repairs the measured truncated SDMA paging-IB address. Its first run was force-stopped by a torn
-serial-read classifier bug before that repair executed, contaminating the next warm launch.
-Read-only VFIO proved the old recovery receipt was unsafe: halt bits were set while `CP_STAT` and
-`CP_CPC_BUSY_STAT` remained nonzero. The next 1.0.170 candidate fixes that coordinator path,
-rejects incomplete cleanup, and invokes Apple's native engine power-off after partial startup
-failure. Metal execution remains unverified pending one clean-boot run.
+KIQ stamp before the Metal probe. Candidate 1.0.170 fixed the coordinator and cleanup checks, but
+its SDMA repair targeted the fixed channel template. Exact 24G830 disassembly shows the hardware
+packet address instead comes from `AMD_SUBMIT_COMMAND_BUFFER_INFO + 0x58 + 0x28*i`. Candidate
+1.0.171 observes those entries and the selected VM context without modifying either. Linux's
+SDMA 5.2 implementation confirms that an indirect packet carries a full GPU virtual address plus
+its VMID, so converting the measured VMID 2 address to an MC physical address would be invalid.
+Routine success records are capped so a later timeout remains observable. Metal execution remains
+unverified.
 
 | Stage | Verified state |
 |---|---|
@@ -56,9 +56,11 @@ are milestones, not a measure of end-to-end rendering completeness.
 The [candidate-166 warm launch](findings/experiments/hybrid-004-166-reuse/notes.md) includes
 the first complete native engine startup. The [third launch](findings/experiments/metal-001-166-reuse/notes.md)
 proves PSP ring destruction alone does not clear GC queues after a fully started guest is
-force-stopped. Candidate 1.0.170 keeps the guarded SDMA repair, parses only complete serial lines,
-uses explicit KIQ submission results, tries native guest/ACPI shutdown before force-stop, and
-allows warm reuse only after real queue dequeue with idle CP status. The one-way amdgpu-to-vfio
+force-stopped. Candidate 1.0.171 keeps the fail-closed lifecycle rules, parses only complete serial
+lines, uses explicit KIQ submission results, and records the actual per-submission SDMA VMID/IB
+fields plus a deferred hardware snapshot for that VMID. The classifier requires a shared root and
+a range containing the IB. It allows warm reuse only after real queue dequeue
+with idle CP status. The one-way amdgpu-to-vfio
 handoff disables the unsafe PCI reset method before granting user access; later cleanup remains
 rootless. Full Metal remains unavailable. Published 1.0.159 remains the earlier research snapshot.
 

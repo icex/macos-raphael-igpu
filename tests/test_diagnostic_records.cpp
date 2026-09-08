@@ -8,6 +8,14 @@
 #include <vector>
 
 int main() {
+    rgpu::SuccessRecordBudget budget {};
+    unsigned successfulRecords = 0;
+    for (unsigned i = 0; i < 100; ++i)
+        successfulRecords += budget.take(true, 4) ? 1 : 0;
+    assert(successfulRecords == 4);
+    for (unsigned i = 0; i < 100; ++i)
+        assert(budget.take(false, 4));
+
     rgpu::DiagnosticRecords<2, 8> small {};
     char out[8];
     assert(!small.read(0, out));
