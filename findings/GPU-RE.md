@@ -3091,7 +3091,11 @@ in the X6000 route table, adding the wrong binary base. A successful route opera
 did not prove the intended function was hooked. Missing diagnostics from those runs
 cannot establish callback caching or log loss. Those hooks were removed in the retained
 1.0.159 source. Raw runs remain archived but are excluded from causal conclusions.
-The existing offset/prologue preflight does not check route-table binary ownership.
+The old offset/prologue preflight did not check route-table binary ownership. The new
+`route-domains.py` checks the current installDiagnostics and processKext scopes against
+the offsets' binary annotations; preflight and release builds now call it. Regression
+tests reproduce the wrong-HWLibs-offset-in-X6000-table error. This is a targeted static
+check, not a general C++ data-flow analysis.
 
 The supervisor now requests ACPI `system_powerdown` through the exact container's QEMU
 monitor, checks the peer process inside that container's PID namespace, and observes
