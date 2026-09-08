@@ -6,6 +6,12 @@ with VFIO to a macOS Sequoia guest under QEMU/KVM.
 
 Development and VM control run on Linux. Release CI compiles the x86_64 kext on a GitHub-hosted macOS runner.
 
+## Roadmap
+
+[GPU acceleration roadmap](docs/ROADMAP.md) tracks verified milestones, remaining gates,
+host constraints and the next experiment. The linked execution plan replaces ad-hoc
+iterations with immutable identities, explicit hypotheses and automatic result classification.
+
 ## Status
 
 **Experimental; full Metal acceleration is not working.** Version **1.0.159** executes
