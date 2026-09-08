@@ -205,18 +205,22 @@ class ExperimentTests(unittest.TestCase):
             class StopUnconfirmed(RuntimeError): pass
             def verify(state):
                 if mode == 'cancel': raise KeyboardInterrupt()
-            def shutdown(state, grace):
+            def shutdown(vm_path, state, expected_build, grace):
                 if mode == 'shutdown-fault': calls.append('host-fault')
-                calls.append(('shutdown',state['cid'])); return dict(cid=state['cid'],outcome='forced')
+                calls.append(('guest-shutdown', state['cid'], expected_build))
+                return dict(cid=state['cid'], outcome='forced')
             def kernel(cursor=None):
                 faults = ['Hardware Error'] if 'host-fault' in calls else []
                 return 'cursor', faults, faults
-            supervisor = SimpleNamespace(start_locked=start, verify=verify, shutdown=shutdown,
+            supervisor = SimpleNamespace(start_locked=start, verify=verify,
                 ManagedStopUnconfirmed=StopUnconfirmed,
                 stop_exact=lambda cid:calls.append(('stop',cid)))
+            guest_shutdown = SimpleNamespace(shutdown=shutdown)
             original_helper = tool.helper
             def helpers(name):
-                return supervisor if name == 'vm-supervision' else original_helper(name)
+                if name == 'vm-supervision': return supervisor
+                if name == 'guest-shutdown': return guest_shutdown
+                return original_helper(name)
             actual = dict(image_id='wrong' if mode == 'wrong-image' else 'sha256:expected',
                           vfio_args=['vfio-pci,host=0000:7b:00.0'])
             if mode == 'gpu-less': actual['vfio_args'] = []
@@ -232,7 +236,7 @@ class ExperimentTests(unittest.TestCase):
                 self.assertEqual(calls.count('start'), 1)
                 if mode == 'hybrid':
                     self.assertEqual(result['verdict'], 'HYBRID_QUEUE_SUSPECTED')
-                    self.assertIn(('shutdown','c'*64), calls)
+                    self.assertIn(('guest-shutdown','c'*64, 'fixture'), calls)
                 elif mode == 'gpu-less':
                     self.assertEqual(result['verdict'], 'GPULESS_CAPTURE_CHECK')
                     self.assertFalse((vm/'run/used-gpu-boots/boot-A.json').exists())

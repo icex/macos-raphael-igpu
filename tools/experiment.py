@@ -387,6 +387,7 @@ def run_one(vm, manifest_path, output):
     if manifest.get('bootdisk_verified') is not True:
         raise ValueError('actual bootdisk content has not been verified')
     supervisor = helper('vm-supervision'); classifier = helper('classify-run')
+    guest_shutdown = helper('guest-shutdown')
     state = None; probe = None; failure = None; shutdown_result = None; host_messages = []
     monitor = None
     output.mkdir(parents=True, exist_ok=False)
@@ -461,7 +462,8 @@ def run_one(vm, manifest_path, output):
                     if decisive_since is None: decisive_since = time.time()
                     if time.time()-decisive_since >= 2: break
                 time.sleep(0.5)
-            shutdown_result = supervisor.shutdown(state, grace=20)
+            shutdown_result = guest_shutdown.shutdown(
+                vm, state, expected_build=manifest['guest_build'], grace=20)
     except BaseException as error:
         signal.signal(signal.SIGUSR1, lambda signum, frame:None)
         failure = type(error).__name__+': '+str(error)

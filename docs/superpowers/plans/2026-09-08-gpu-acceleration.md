@@ -352,10 +352,10 @@ the fix preserves native errors on genuinely invalid input and does not fake com
 add a minimal revocable request to the existing guest-agent transport; add narrowly
 scoped native uninitialization observations to `src/RaphaelGPU.cpp` if needed.
 
-- [ ] First write GPU-less tests for guest-agent poweroff: exact guest/container identity,
+- [x] First write GPU-less tests for guest-agent poweroff: exact guest/container identity,
   one command-channel lock, per-run permit, finite timeout, removal of pending commands,
   and refusal of a delayed command in a later VM. Never issue host `shutdown`/`reboot`.
-- [ ] Request `/sbin/shutdown -h now` through the installed root guest agent; avoid host
+- [x] Request `/sbin/shutdown -h now` through the installed root guest agent; avoid host
   sudo and interactive guest login. A request acknowledgment is not an exit verdict.
 - [ ] Verify guest exit without forced container stop in a GPU-less run. Keep the existing
   independent cap/fallback even if the request transport blocks or returns success.
