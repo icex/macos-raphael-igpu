@@ -1,4 +1,17 @@
-# How to actually get a patch into Apple's AMD kexts
+# Patch delivery
+
+## Current verified path
+
+Enable **both** Lilu.kext and RaphaelGPU.kext in OpenCore `Kernel > Add`, and use
+`-lilubetaall` on the tested Sequoia setup. Lilu then patches the AMD kexts as they
+load. The original `Invalid Parameter` injection failure was a missing enabled Lilu
+dependency. AuxKC delivery loads too late for this controller's initial `start()`.
+Use the matching KDK preflight and `esp-kext.sh`; do not disable Lilu injection.
+
+## Historical attempts (superseded)
+
+The record below preserves the earlier experiments, including the incorrect conclusion
+that AuxKC was the winning path. Its final deployment recommendation is obsolete.
 
 Four mechanisms were tried, in order. Three fail, and each fails *silently* — which is the real
 hazard, because a no-op looks exactly like "the patch didn't help".
