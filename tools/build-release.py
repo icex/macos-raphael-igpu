@@ -12,6 +12,7 @@ import struct
 import subprocess
 import tempfile
 import zipfile
+import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -56,6 +57,11 @@ def build(toolchain, output):
         stage = Path(temporary)
         source = stage / 'src'
         shutil.copytree(ROOT / 'src', source)
+        source_sha256 = tree_digest(source)
+        # One build invocation gets one marker, bound to the final executable hash
+        # in its manifest. Rebuilding the same version cannot impersonate it.
+        build_id = uuid.uuid4().hex
+        (source / 'BuildIdentity.hpp').write_text('#define RGPU_BUILD_ID "'+build_id+'"\n')
         (source / 'rlc_fw.h').write_bytes(firmware)
         # Isolate all outputs from developer builds and the checked-in executable.
         for name in ('MacKernelSDK-master', 'liludbg', 'cctools-inst'):
@@ -70,6 +76,10 @@ def build(toolchain, output):
         (bundle / 'Contents/Info.plist').write_bytes(plistlib.dumps(info))
         commit = subprocess.check_output(['git','rev-parse','HEAD'], cwd=ROOT, text=True).strip()
         manifest = dict(inputs, version=version, source_commit=commit,
+                        source_clean=not bool(subprocess.check_output(
+                            ['git', 'status', '--porcelain'], cwd=ROOT, text=True).strip()),
+                        build_id=build_id, source_sha256=source_sha256,
+                        info_sha256=hashlib.sha256((bundle / 'Contents/Info.plist').read_bytes()).hexdigest(),
                         executable_sha256=hashlib.sha256(executable.read_bytes()).hexdigest(),
                         metal_execution_verified=False, verified_playable_games=0)
         output.mkdir(parents=True, exist_ok=True)

@@ -30,6 +30,12 @@
 #include <Headers/plugin_start.hpp>
 #include "KiqAddresses.hpp"
 #include "GartAddresses.hpp"
+#include "DiagnosticRecords.hpp"
+#if __has_include("BuildIdentity.hpp")
+#include "BuildIdentity.hpp"
+#else
+#define RGPU_BUILD_ID "unidentified"
+#endif
 
 // This machine's own RLC firmware, generated at build time by mkrlcfw.py from
 // /lib/firmware/amdgpu/gc_10_3_6_rlc.bin. Not committed: AMD firmware is redistributable
@@ -181,24 +187,28 @@ static const RPatch patches[] {
 // So buffer every diagnostic line here and re-emit the whole buffer from a thread once
 // userspace is up. The deferred copy is clean, ordered, and greppable with
 // `log show`; the live serial copy stays as a crash-time fallback.
-static char   diagBuf[32768];
-static size_t diagLen;
+static rgpu::DiagnosticRecords<256, 512> diagnostics {};
+static rgpu::DiagnosticRecords<128, 512> criticalRecords {};
 
-static void diagAppend(const char *fmt, ...) {
-    if (diagLen + 512 >= sizeof(diagBuf)) return;
+static void diagAppend(bool critical, const char *fmt, ...) {
+    char text[512];
     va_list ap;
     va_start(ap, fmt);
-    int n = vsnprintf(diagBuf + diagLen, sizeof(diagBuf) - diagLen - 2, fmt, ap);
+    int n = vsnprintf(text, sizeof(text), fmt, ap);
     va_end(ap);
-    if (n <= 0) return;
-    diagLen += static_cast<size_t>(n);
-    diagBuf[diagLen++] = '\n';
-    diagBuf[diagLen] = '\0';
+    if (n < 0) { text[0] = '\0'; }
+    bool truncated = n < 0 || static_cast<size_t>(n) >= sizeof(text);
+    diagnostics.append(text, truncated);
+    if (critical) criticalRecords.append(text, truncated);
 }
 
 #define RLOG(fmt, ...) do { \
-    SYSLOG("rgpu", fmt, ## __VA_ARGS__);  \
-    diagAppend(fmt, ## __VA_ARGS__);      \
+    diagAppend(false, fmt, ## __VA_ARGS__); \
+    SYSLOG("rgpu", fmt, ## __VA_ARGS__); \
+} while (0)
+#define CRLOG(fmt, ...) do { \
+    diagAppend(true, fmt, ## __VA_ARGS__); \
+    SYSLOG("rgpu", fmt, ## __VA_ARGS__); \
 } while (0)
 
 static uint32_t diagDumpDelayMs = 75000;
@@ -334,17 +344,26 @@ static void diagDumpThread(void *, wait_result_t) {
     // never executed in any run, so there is nothing to interrupt.
     if (icachePrimeEnabled) { primeIcacheOnly(); reportCpState("after-prime"); }
     if (rlcProbeEnabled) { probeRlc(); reportCpState("after-rlc"); }
-    SYSLOG("rgpu", "==== deferred diagnostics: %lu bytes ====", diagLen);
-    size_t i = 0;
-    unsigned n = 0;
-    while (i < diagLen) {
-        size_t e = i;
-        while (e < diagLen && diagBuf[e] != '\n') e++;
-        diagBuf[e] = '\0';
-        SYSLOG("rgpu", "d%03u| %s", n++, diagBuf + i);
-        i = e + 1;
+    SYSLOG("rgpu", "==== deferred diagnostics: %lu records ====", diagnostics.size());
+    char text[512];
+    for (size_t i = 0; i < diagnostics.size(); ++i) {
+        if (diagnostics.read(i, text)) SYSLOG("rgpu", "d%03lu| %s", i, text);
     }
-    SYSLOG("rgpu", "==== deferred diagnostics end (%u lines) ====", n);
+    SYSLOG("rgpu", "==== deferred diagnostics end (dropped=%llu truncated=%llu) ====",
+           diagnostics.dropped(), diagnostics.truncated());
+    // Replay only critical records. Native startup can finish after the first dump.
+    // Immutable slots allow snapshots while callbacks append, without serial under
+    // a lock. A pending reservation is retried at the next snapshot, never read.
+    for (unsigned replay = 0; replay < 18; ++replay) {
+        size_t count = criticalRecords.size();
+        SYSLOG("rgpu", "RGPU_RECORDS build=%s count=%lu dropped=%llu truncated=%llu",
+               RGPU_BUILD_ID, count, criticalRecords.dropped(), criticalRecords.truncated());
+        for (size_t i = 0; i < count; ++i) {
+            if (criticalRecords.read(i, text))
+                SYSLOG("rgpu", "RGPU_EVENT build=%s seq=%lu %s", RGPU_BUILD_ID, i, text);
+        }
+        IOSleep(10000);
+    }
     thread_terminate(current_thread());
 }
 
@@ -1156,10 +1175,10 @@ static uint32_t wrapTtlHybrid(void *ttl, void *request, void *output) {
     if (report && valid) {
         available = reinterpret_cast<bool (*)(void *)>(addrTtlAvailable)(ttl);
         if (available) engineType = *reinterpret_cast<const uint32_t *>(request);
-        RLOG("HY: createHybridEngine enter: engine=%u available=%u", engineType, available);
+        CRLOG("HY: createHybridEngine enter: engine=%u available=%u", engineType, available);
     }
     uint32_t result = FunctionCast(wrapTtlHybrid, orgTtlHybrid)(ttl, request, output);
-    if (report) RLOG("HY: createHybridEngine exit: engine=%u valid=%u available-before=%u status=%u",
+    if (report) CRLOG("HY: createHybridEngine exit: engine=%u valid=%u available-before=%u status=%u",
                      engineType, valid, available, result);
     return result;
 }
@@ -2507,7 +2526,7 @@ static void dumpGfxHubVm(const char *when) {
 
 static uint32_t wrapWaitStamp(void *self, uint32_t stamp) {
     auto r = FunctionCast(wrapWaitStamp, orgWaitStamp)(self, stamp);
-    RLOG("XJ:   waitForHwStamp(%u) -> %u", stamp, r & 0xff);
+    CRLOG("XJ:   waitForHwStamp(%u) -> %u", stamp, r & 0xff);
     if (!(r & 0xff)) {
         dumpGfxState("after stamp timeout");
         dumpMecQueues("after stamp timeout");
@@ -3610,7 +3629,7 @@ static bool prepareKiq(uint64_t &mqdAddr, uint64_t &eopAddr, const void *spec) {
     uint32_t poll = fbRead(asicInfo, kGcCpPqWptrPoll);
     uint32_t doorbell = fbRead(asicInfo, kGcHqdPqDbCtl);
     if (active == 0xffffffff || poll == 0xffffffff || doorbell == 0xffffffff) {
-        RLOG("XQ2: dequeue refused: inaccessible queue registers");
+        CRLOG("XQ2: dequeue refused: inaccessible queue registers");
         reportKiqPreparation("dequeue refused");
         fbWrite(asicInfo, kGcGrbmGfxCntl, 0);
         return false;
@@ -3630,7 +3649,7 @@ static bool prepareKiq(uint64_t &mqdAddr, uint64_t &eopAddr, const void *spec) {
     }
     reportKiqPreparation("after dequeue");
     if (active & 1) {
-        RLOG("XQ2: dequeue TIMEOUT after %u us; descriptor unchanged, startKIQ blocked",
+        CRLOG("XQ2: dequeue TIMEOUT after %u us; descriptor unchanged, startKIQ blocked",
              elapsedUs);
         fbWrite(asicInfo, kGcGrbmGfxCntl, 0);
         return false;
@@ -4040,13 +4059,13 @@ static uint32_t wrapHwEngPowerUp(void *self) {
              i, kEngineNames[i], eng, reinterpret_cast<void *>(vt), r);
         if (!r) { ok = 0; break; }
     }
-    RLOG("XJ: AMDHardware::powerUpHWEngines -> %u", ok);
+    CRLOG("XJ: AMDHardware::powerUpHWEngines -> %u", ok);
     return ok;
 }
 
 static uint32_t wrapHwEngStart(void *self) {
     auto r = FunctionCast(wrapHwEngStart, orgHwEngStart)(self);
-    RLOG("XJ: AMDHardware::startHWEngines -> %u", r & 0xff);
+    CRLOG("XJ: AMDHardware::startHWEngines -> %u", r & 0xff);
     return r;
 }
 
@@ -4102,9 +4121,9 @@ static uint32_t wrapGfx10PowerUp(void *self) {
 }
 
 static uint32_t wrapAccPowerUpHW(void *self) {
-    RLOG("XJ: AMDGraphicsAccelerator::powerUpHW entry");
+    CRLOG("XJ: AMDGraphicsAccelerator::powerUpHW entry");
     auto r = FunctionCast(wrapAccPowerUpHW, orgAccPowerUpHW)(self);
-    RLOG("XJ: AMDGraphicsAccelerator::powerUpHW -> %u", r & 0xff);
+    CRLOG("XJ: AMDGraphicsAccelerator::powerUpHW -> %u", r & 0xff);
     return r;
 }
 
@@ -4317,7 +4336,7 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
                 orgTtlHybrid = patcher.routeFunction(addr + kOffTtlHybrid,
                     reinterpret_cast<mach_vm_address_t>(wrapTtlHybrid), true);
             }
-            RLOG("HY: HWLibs hybrid trace route=%s entries-match=%u (max 8 calls)",
+            CRLOG("HY: HWLibs hybrid trace route=%s entries-match=%u (max 8 calls)",
                  orgTtlHybrid ? "ok" : "OFF", matches);
             patcher.clearError();
         }
@@ -4458,6 +4477,7 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
 }
 
 static void pluginStart() {
+    CRLOG("BUILD: identity=%s", RGPU_BUILD_ID);
     if (!PE_parse_boot_argn("rgpu", &mask, sizeof(mask))) mask = 0;
     uint32_t d = 0;
     // Its own boot-arg rather than a mask bit: this is the one thing here that can take the

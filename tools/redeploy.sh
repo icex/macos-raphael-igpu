@@ -22,6 +22,20 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 export MTOOLS_SKIP_CHECK=1
 
+# Refuse active guests before touching their boot media. The supervisor owns the
+# existing guest's exact-CID shutdown; redeploy must never kill it by name.
+exec 9>run/redeploy.lock
+flock -n 9 || { echo 'another redeploy owns the VM' >&2; exit 1; }
+if compgen -G 'run/launch-pending/*' >/dev/null; then
+    echo 'REFUSING redeploy: a supervised launch is pending' >&2
+    exit 1
+fi
+active_names="$(docker ps -a --filter status=running --filter status=created --filter status=restarting --filter status=paused --format '{{.Names}}')"
+if [[ "$active_names" == *macos-sequoia* || "$active_names" == *rgpu-launch-* ]]; then
+    echo 'REFUSING redeploy: active VM; use its owned supervisor shutdown first' >&2
+    exit 1
+fi
+
 # sudo has no TTY under this script, so it needs an askpass helper. /tmp is tmpfs here, so
 # a helper written by an earlier session is gone after every reboot -- write it if absent
 # rather than failing on a stale path. kdialog is the Plasma prompt; fall back to
@@ -84,8 +98,10 @@ qimg() {
     fi
 }
 
-docker rm -f macos-sequoia >/dev/null 2>&1 || true
-sleep 1
+# A stopped name may be removed; never use force and never ignore failure.
+docker rm macos-sequoia >/dev/null 2>&1 || {
+    [[ -z "$(docker ps -a --filter name='^/macos-sequoia$' --format '{{.ID}}')" ]] || exit 1
+}
 
 # The guest never tears down its PSP GPCOM ring (QEMU is just killed), and Apple's
 # psp_ring_create only calls ring_stop on its TEE path -- so without this every boot
@@ -190,8 +206,8 @@ EOF
         GPU_ARGS=(--gpu "$DEV" --gpu-id 0x73ff --gpu-rom run/gpu-patched.rom)
         echo "passing through ${DEV} (spoofed 0x73ff)"
     else
-        echo "NOTE: ${DEV} is bound to '${drv}', not vfio-pci -- starting without passthrough."
-        echo "      run 'SUDO_ASKPASS=\"\$SUDO_ASKPASS\" sudo -A ./gpu-bind.sh' first."
+        echo "REFUSING GPU launch: ${DEV} is bound to '${drv}', not vfio-pci" >&2
+        exit 1
     fi
 fi
 
@@ -204,6 +220,9 @@ mv -f run/serial.log "run/serial-$(date +%H%M%S).log" 2>/dev/null || true
 # verification of the timer/service following guest-agent bootstrap.
 cap=0
 (( ${#GPU_ARGS[@]} == 0 )) || cap="$RGPU_MAX_SECONDS"
+# start() acquires this same lock, rechecks pending/running guests, and holds it
+# until the launched container is identifiable. No media writes follow this point.
+flock -u 9
 python3 ./vm-supervision.py start --vm-dir "$PWD" --max-seconds "$cap" -- "${GPU_ARGS[@]}" \
     > run/supervision-result.json
 if (( cap > 0 )); then

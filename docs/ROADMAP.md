@@ -1,6 +1,6 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-09-08. Baseline repository: `d6e320a`; candidate: 1.0.162; published
+Updated 2026-09-08. Baseline repository: `d6e320a`; candidate: 1.0.163; published
 research snapshot: `v1.0.159-preview.1`. This document is the authoritative current
 roadmap. Historical hypotheses in `findings/GPU-RE.md` remain evidence, not instructions.
 
@@ -10,6 +10,12 @@ compatibility, while protecting the host. Enumeration, compilation and a working
 are intermediate milestones. No finite test can guarantee that the host will never hang.
 
 [Task-by-task execution plan](superpowers/plans/2026-09-08-gpu-acceleration.md).
+
+Execution update: the fresh amdgpu boot is captured, the sleep inhibitor is active,
+and [the fixed baseline audit](../findings/baseline-audit.md) records enabled
+interventions. Candidate 1.0.163 adds concurrent critical records and build markers.
+Offline classifier/admission/staging tests pass; GPU-less delivery and the complete
+one-run coordinator are still being validated. No new GPU execution claim is made.
 
 ## 1. What is actually complete
 

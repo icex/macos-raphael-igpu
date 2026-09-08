@@ -67,6 +67,36 @@ class RedeployTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertNotIn("VM relaunched", result.stdout)
 
+    def test_active_vm_is_refused_before_any_disk_mutation(self):
+        (self.vm / 'bin/docker').write_text(
+            '#!/bin/sh\nif [ "$1" = ps ]; then echo macos-sequoia; exit 0; fi\n'
+            'echo "$@" >> run/unexpected-docker\nexit 0\n')
+        result = self.run_script('--no-gpu')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.vm / 'run/config-new.plist').exists())
+        self.assertFalse((self.vm / 'run/unexpected-docker').exists())
+        self.assertFalse((self.vm / 'run/supervisor-call.json').exists())
+
+    def test_gpu_request_cannot_silently_start_gpueless(self):
+        (self.vm / 'bin/readlink').write_text('#!/bin/sh\necho /fixture/amdgpu\n')
+        result = self.run_script('--gpu')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.vm / 'run/supervisor-call.json').exists())
+
+    def test_created_launch_refuses_staging_before_it_starts_running(self):
+        (self.vm / 'bin/docker').write_text(
+            '#!/bin/sh\nif [ "$1" = ps ] && [ "$2" = -a ]; then echo rgpu-launch-pending; fi\nexit 0\n')
+        result = self.run_script('--no-gpu')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.vm / 'run/config-new.plist').exists())
+
+    def test_reserved_launch_without_container_still_blocks_staging(self):
+        (self.vm / 'run/launch-pending').mkdir()
+        (self.vm / 'run/launch-pending/rgpu-launch-owned').write_text('reserved')
+        result = self.run_script('--no-gpu')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.vm / 'run/config-new.plist').exists())
+
     def test_gpu_cap_zero_and_nonfinite_are_rejected_before_launch(self):
         for cap in ("0", "nan", "-1", "inf", "1.5", "999999999999999999999999"):
             self.env["RGPU_MAX_SECONDS"] = cap

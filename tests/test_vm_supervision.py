@@ -11,6 +11,7 @@ import signal
 import shutil
 import time
 import unittest
+import fcntl
 
 TOOL = Path(__file__).resolve().parents[1] / "tools/vm-supervision.py"
 CID = "a" * 64
@@ -25,8 +26,13 @@ state = json.loads((root / "fixture.json").read_text())
 failure = state.get("failure", "")
 if command == "docker":
     if args[0] == "ps":
-        print(state["cid"] if state.get("running", True) else "")
+        if '{{.Names}}' in args:
+            print(state.get('active_name', ''))
+        else:
+            print(state["cid"] if state.get("running", True) else "")
     elif args[0] == "inspect":
+        if state.get('no_identity'):
+            sys.exit(1)
         if args[args.index("--format") + 1] == "{{.Id}}":
             print(state["cid"])
             sys.exit(0)
@@ -129,6 +135,47 @@ class SupervisionTests(unittest.TestCase):
 
     def stopped(self):
         return [args[-1] for cmd, args in self.calls() if cmd == "docker" and args[0] == "stop"]
+
+    def test_staging_lock_refuses_direct_supervisor_start(self):
+        with (self.vm / 'run/redeploy.lock').open('a') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            result = self.run_tool('start', '--vm-dir', str(self.vm), '--max-seconds', '180')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(any(command == 'systemd-run' for command, _ in self.calls()))
+
+    def test_pending_container_refuses_second_direct_start(self):
+        self.fixture['active_name'] = 'rgpu-launch-pending'
+        self.save()
+        result = self.run_tool('start', '--vm-dir', str(self.vm), '--max-seconds', '180')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(any(command == 'systemd-run' for command, _ in self.calls()))
+
+    def test_caller_death_before_container_identity_keeps_launch_reserved(self):
+        self.fixture['no_identity'] = True
+        self.save()
+        script = self.vm / 'macos-vm.sh'
+        script.write_text('#!/bin/sh\nexec sleep 30\n'); script.chmod(0o700)
+        parent = subprocess.Popen([sys.executable, '-B', str(TOOL), 'start',
+                                   '--vm-dir', str(self.vm), '--max-seconds', '180'],
+                                  env=self.env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        def cleanup_parent():
+            if parent.poll() is None: parent.kill()
+            parent.wait()
+            pid_path = self.vm / 'managed.pid'
+            if pid_path.exists():
+                try: os.kill(int(pid_path.read_text()), signal.SIGTERM)
+                except ProcessLookupError: pass
+        self.addCleanup(cleanup_parent)
+        until = time.monotonic()+3
+        while not (self.vm / 'managed.pid').exists() and time.monotonic() < until:
+            time.sleep(0.02)
+        self.assertTrue((self.vm / 'managed.pid').exists())
+        parent.kill(); parent.wait()
+        before = len([c for c in self.calls() if c[0] == 'systemd-run'])
+        second = self.run_tool('start', '--vm-dir', str(self.vm), '--max-seconds', '180')
+        self.assertNotEqual(second.returncode, 0)
+        self.assertIn('pending', second.stderr)
+        self.assertEqual(len([c for c in self.calls() if c[0] == 'systemd-run']), before)
 
     def test_arms_absolute_deadline_and_preserves_exact_container_target(self):
         result = self.arm()
