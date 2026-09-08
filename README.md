@@ -36,6 +36,11 @@ session also encountered an active KIQ that would not dequeue; recovery is unres
 A percentage would obscure the remaining unknowns. Driver enumeration and queue setup
 are milestones, not a measure of end-to-end rendering completeness.
 
+Current source/bundle **1.0.162** adds the optional `rgpuhybrid=1` diagnostic. It verifies
+the HWLibs entry bytes, samples availability, logs at most eight calls, and preserves
+the native creation result. It is compiled and statically checked, **not hardware-tested**.
+The published 1.0.159 prerelease retains the recorded clean-run implementation.
+
 See [release builds](docs/releases.md), [current research corrections](findings/GPU-RE.md),
 and [historical bring-up notes](docs/bring-up-history.md).
 

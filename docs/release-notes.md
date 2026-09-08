@@ -1,5 +1,8 @@
-Experimental RaphaelGPU 1.0.159 research snapshot for Sequoia 15.7.9 (24G830).
+Experimental RaphaelGPU 1.0.162 diagnostic snapshot for Sequoia 15.7.9 (24G830).
 
+- Adds opt-in `rgpuhybrid=1` observations around hybrid-engine creation, with exact
+  HWLibs entry checks and unchanged native return values. This diagnostic has passed
+  compilation/static checks but has not been tested on the physical GPU.
 - Clean-run evidence now proves three native KIQ setup stamps execute. PSP firmware
   destinations match the active instruction-cache mapping.
 - Full Metal acceleration remains unavailable: hybrid-engine creation returns status 4

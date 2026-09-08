@@ -372,6 +372,8 @@ static constexpr size_t kOffIpcfgGet     = 0x245040;   // _ipconfig_get_ip_disco
 static constexpr size_t kOffBifIpCreate  = 0x239931;   // _bif_ip_create
 static constexpr size_t kOffCheckPcie    = 0x246a4e;   // _check_pcie_link_status
 static constexpr size_t kOffGetDevInf    = 0x234dec;   // _bcs_get_device_inf
+static constexpr size_t kOffTtlHybrid = 0x9876b;       // _TtlCreateHybridEngine
+static constexpr size_t kOffTtlAvailable = 0xafa40;    // _ttlIsHwAvailable (called, not routed)
 static constexpr size_t kOffTtlSetDevCap = 0xaf02d;    // _ttlSetDeviceCapabilityEntry
 static constexpr size_t kOffVmPhysicalFb = 0x33370;   // _vm_10_1_get_uma_physical_fb_offset
 static constexpr size_t kOffGvmGetIpFn   = 0x19258;    // _gvm_get_ip_function
@@ -1137,6 +1139,30 @@ static void pspRingCtrl(void *psp, uint32_t cmd, const char *what) {
 //
 // So: rgpucp=1 to get the workarounds back on a locked device, nothing by default.
 static bool cpSurgeryEnabled = false;
+static bool hybridProbeEnabled = false;
+static mach_vm_address_t orgTtlHybrid {};
+static mach_vm_address_t addrTtlAvailable {};
+
+// The availability helper is read-only in 24G830. Status 4 from the original
+// create routine covers BOTH unavailable hardware and a failed GC/SDMA queue.
+// Sample availability immediately before the native call; concurrent state can
+// change before the original checks it. Never override it or write request/output.
+static uint32_t wrapTtlHybrid(void *ttl, void *request, void *output) {
+    static unsigned calls = 0;
+    bool report = __sync_fetch_and_add(&calls, 1u) < 8;
+    bool valid = ttl != nullptr && request != nullptr && output != nullptr;
+    bool available = false;
+    uint32_t engineType = 0xffffffffu;
+    if (report && valid) {
+        available = reinterpret_cast<bool (*)(void *)>(addrTtlAvailable)(ttl);
+        if (available) engineType = *reinterpret_cast<const uint32_t *>(request);
+        RLOG("HY: createHybridEngine enter: engine=%u available=%u", engineType, available);
+    }
+    uint32_t result = FunctionCast(wrapTtlHybrid, orgTtlHybrid)(ttl, request, output);
+    if (report) RLOG("HY: createHybridEngine exit: engine=%u valid=%u available-before=%u status=%u",
+                     engineType, valid, available, result);
+    return result;
+}
 
 // Which framebuffer-aperture layout to program, from boot-arg rgpufb.
 //
@@ -4271,6 +4297,30 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
            index, kexts[KextHWLibs].loadIndex, kexts[KextFB].loadIndex, addr, sz);
     if (kexts[KextHWLibs].loadIndex == index) {
         RLOG("HWLibs loaded, mask=0x%x", mask);
+        if (hybridProbeEnabled) {
+            // Bind both offsets to HWLibs and verify complete displaced instructions.
+            // Builds 160/161 used an X6000 base here and were invalid experiments.
+            static const uint8_t hybridEntry[] = {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57,
+                0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53, 0x50, 0xbb, 0x02, 0, 0, 0};
+            static const uint8_t availableEntry[] = {0x55, 0x48, 0x89, 0xe5, 0x53, 0x50,
+                0x48, 0x89, 0xfb, 0xe8, 0x66, 0x81, 0xfe, 0xff};
+            bool matches = kOffTtlHybrid + sizeof(hybridEntry) <= sz &&
+                           kOffTtlAvailable + sizeof(availableEntry) <= sz;
+            auto hybrid = reinterpret_cast<const uint8_t *>(addr + kOffTtlHybrid);
+            auto available = reinterpret_cast<const uint8_t *>(addr + kOffTtlAvailable);
+            for (size_t i = 0; matches && i < sizeof(hybridEntry); i++)
+                matches = hybrid[i] == hybridEntry[i];
+            for (size_t i = 0; matches && i < sizeof(availableEntry); i++)
+                matches = available[i] == availableEntry[i];
+            if (matches) {
+                addrTtlAvailable = addr + kOffTtlAvailable;
+                orgTtlHybrid = patcher.routeFunction(addr + kOffTtlHybrid,
+                    reinterpret_cast<mach_vm_address_t>(wrapTtlHybrid), true);
+            }
+            RLOG("HY: HWLibs hybrid trace route=%s entries-match=%u (max 8 calls)",
+                 orgTtlHybrid ? "ok" : "OFF", matches);
+            patcher.clearError();
+        }
         applyFor(patcher, true);
         RLOG("post-patch: mask=0x%x D1=%d R1=%d base=0x%llx",
                mask, (mask & D1) != 0, (mask & R1) != 0, addr);
@@ -4413,6 +4463,11 @@ static void pluginStart() {
     // Its own boot-arg rather than a mask bit: this is the one thing here that can take the
     // host with it, so it should not be reachable by editing a hex mask.
     uint32_t rst = 0;
+    uint32_t hybridProbe = 0;
+    hybridProbeEnabled = PE_parse_boot_argn("rgpuhybrid", &hybridProbe, sizeof(hybridProbe)) &&
+                         hybridProbe == 1;
+    RLOG("rgpuhybrid=%u: guarded hybrid-engine diagnostics %s", hybridProbeEnabled,
+         hybridProbeEnabled ? "enabled" : "disabled");
     uint32_t cps = 0;
     if (PE_parse_boot_argn("rgpucp", &cps, sizeof(cps)) && cps == 1) {
         cpSurgeryEnabled = true;

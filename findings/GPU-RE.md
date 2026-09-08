@@ -3104,3 +3104,20 @@ nonresponsive guest is force-stopped at the end of the interval. A saved contain
 identity with a different StartedAt is refused. Automatic bounded runs attempt shutdown
 30 seconds before the original container deadline. Container exit after an ACPI request
 is recorded as such; it is not proof of native queue unmapping or host safety.
+
+### 2026-09-08: guarded hybrid diagnostic staged as 1.0.162
+
+`rgpuhybrid=1` (off by default) routes `_TtlCreateHybridEngine` only from the HWLibs
+load callback, after checking its first 19 bytes and the first 14 bytes of the read-only
+`_ttlIsHwAvailable` helper. The wrapper samples availability before the native call,
+logs request engine type when available, and preserves the native return. Logging is
+capped at eight calls. It makes no MMIO writes. Availability is a snapshot; concurrent
+state changes remain possible before the original routine checks it again.
+
+Local compilation, route-domain regression tests and 24G830 KDK preflight pass.
+**No passthrough run has tested this candidate.** The VM harness build directory holds
+1.0.162; its ESP still holds verified 1.0.159. The last GPU session's KIQ did not dequeue,
+and the GPU-less ACPI experiment required force-stop. A clean host boot and a fresh
+amdgpu-first handoff are needed for the planned next validation; do not cycle drivers
+or force-clear the existing HQD to obtain it. The optional diagnostic must be explicitly
+enabled and the candidate injected before that bounded test.
