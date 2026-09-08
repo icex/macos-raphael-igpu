@@ -27,9 +27,10 @@ then exposed X6000's residual SDMA1 channel lookup: `getHWChannel` returned null
 `createAccelChannels+0x278` dereferenced it. Candidate 1.0.166 adds the guarded channel
 mapping to the surviving physical SDMA0 engine. The host remained healthy, but the panicked
 guest required a targeted force-stop. A rootless VFIO transaction has since destroyed both PSP
-rings with exact acknowledgements while PCI bus mastering remained disabled. Reinitialization
-on that recovered state is the next experiment; no Metal command completion or repeated warm
-reuse is verified yet.
+rings with exact acknowledgements while PCI bus mastering remained disabled. Candidate 166 then
+reinitialized on that recovered state, completed native engine startup and advanced KIQ stamps
+through 21. A second post-stop recovery also succeeded. The Metal probe was withheld by a now-fixed
+snapshot-classification bug, so no Metal command completion is verified yet.
 
 ## 1. What is actually complete
 
@@ -54,8 +55,8 @@ single clean run is not repeatability evidence. There is no defensible overall p
 | [x] | Wrong-kext route regression prevented for current scopes | `route-domains.py` and regression tests; not a complete C++ verifier |
 | [x] | Optional hybrid diagnostic built | 1.0.162, exact entry guards, `rgpuhybrid=1`, native result preserved |
 | [x] | Hybrid diagnostic validated on hardware | 1.0.163: complete records; type10 fails after type10/type11 success |
-| [ ] | Repeatable clean initial state | Rootless post-run PSP cleanup is measured; the next same-boot initialization and three-cycle qualification remain open |
-| [ ] | Native hybrid queues / complete engine startup | Candidate165 removed the false object; candidate166 repairs the measured residual SDMA1 channel lookup and awaits hardware validation |
+| [ ] | Repeatable clean initial state | Rootless cleanup plus one same-boot reinitialization are measured; the third-cycle qualification remains open |
+| [x] | Native hybrid queues / complete engine startup | Candidate166 maps residual engine-2 channels to real SDMA0; hybrid status 0, native start/power-up 1 and KIQ stamps through 21 on hardware |
 | [ ] | Correct Metal compute and offscreen rendering | First command buffer fails; zero results checked |
 | [ ] | Per-process memory, synchronization and resource lifecycle | Must be exercised after first real completion |
 | [ ] | Accelerated desktop and presentation | WindowServer panic repair is not proof of accelerated composition |
@@ -219,7 +220,7 @@ does not override any return or clear any status.
 - [x] Decode the next boundary and implement candidate166: while the exact repaired owner
   is active, route engine enum 2 channel requests through the surviving SDMA0 object.
   Other engine IDs, native ring selection and return values remain unchanged.
-- [ ] Confirm native hybrid creation returns 0, its returned handles are valid, required
+- [x] Confirm native hybrid creation returns 0, its returned handles are valid, required
   start/powerUp calls return their actual success values, and initial stamps still advance.
 
 **Pass:** complete native startup plus subsequent M4 execution. A patch that merely
@@ -288,7 +289,7 @@ Physical display work must not be mistaken for a prerequisite to an offscreen co
 - [x] Implement rootless VFIO BAR5 access that refuses an active VM or enabled bus master,
   destroys both PSP rings, verifies exact responses and creates a single-use receipt. The first
   post-candidate-165 transaction completed in 7 ms and 1 ms with no host fault.
-- [ ] After teardown evidence, run a single controlled warm reuse experiment; a failure
+- [x] After teardown evidence, run a single controlled warm reuse experiment; a failure
   returns to one launch per clean host boot. Only then graduate to three bounded cycles.
 
 **Pass:** successful native cleanup and repeatable reinitialization without force clear,

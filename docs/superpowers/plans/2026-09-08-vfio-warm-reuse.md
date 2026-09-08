@@ -54,9 +54,9 @@ coordinator and QEMU supervisor.
 
 - [x] Recover the current post-candidate-165 device without sudo and record exact evidence.
 - [ ] Rebuild/reprepare candidate 166 against the resulting source commit.
-- [ ] Launch candidate 166 on the same host boot with the 180-second supervisor and continuous
+- [x] Launch candidate 166 on the same host boot with the 180-second supervisor and continuous
   host monitor.
-- [ ] Verify receipt consumption, normal PSP initialization and absence of host kernel faults.
+- [x] Verify receipt consumption, normal PSP initialization and absence of host kernel faults.
 - [ ] If it succeeds, run up to one more cleanup/launch cycle; otherwise close reuse for this
   boot and diagnose the first failed invariant.
 - [ ] Commit the implementation and evidence to `dev`; do not merge or push to `main`.

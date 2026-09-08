@@ -3211,5 +3211,15 @@ host kernel faults      none
 ```
 
 This proves the known persistent PSP-ring state is recoverable through the already-authorized
-VFIO device. It does not yet prove that every GC/SDMA/interrupt state is clean or that the next
-Apple initialization succeeds. Hybrid-004 is the first same-host-boot reinitialization test.
+VFIO device. Hybrid-004 then consumed that receipt on the same host boot. Apple reinitialized the
+PSP, candidate 166 completed the SDMA channel remap, all hybrid creations returned status zero,
+native engine start and power-up returned 1, and KIQ stamps advanced through at least 21. No host
+fault occurred. A second post-stop recovery returned the same exact PSP acknowledgements and kept
+bus mastering disabled.
+
+The live coordinator did not run the Metal probe because it mixed later unsequenced direct log
+lines into an already complete structured snapshot and called the resulting line-number gaps
+capture loss. The structured snapshot itself covers sequences 0 through 62 with zero dropped or
+truncated records and reclassifies as `PROBE_NOT_RUN`. The parser now treats that complete prefix
+as authoritative while preserving raw records only as the pre-snapshot panic fallback. The third
+and final launch under the initial same-boot ceiling tests actual Metal execution.
