@@ -3,6 +3,16 @@
 #include <stdint.h>
 
 namespace rgpu {
+class SuccessRecordBudget {
+    uint64_t successes_ {};
+public:
+    bool take(bool success, uint64_t maximumSuccessRecords) {
+        if (!success) return true;
+        return __atomic_fetch_add(&successes_, 1, __ATOMIC_RELAXED) <
+            maximumSuccessRecords;
+    }
+};
+
 // Append-only for one kext lifetime. No allocation, waiting on a producer, locks,
 // MMIO, or formatting inside this class. Each reservation owns a distinct slot.
 // Release publication follows the terminating NUL; acquire readers never inspect

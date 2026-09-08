@@ -44,6 +44,21 @@ def _decode_payload(build, seq, payload):
         row.update(kind='engine_start', result=int(m[1]))
     elif m := re.search(r'SD: channel engine remap (\d+) -> (\d+)', payload):
         row.update(kind='sdma_engine_remap', requested=int(m[1]), selected=int(m[2]))
+    elif m := re.fullmatch(r'SD: submit IB\[(\d+)\] (0x[0-9a-fA-F]+) -> (0x[0-9a-fA-F]+) recognized=([01]) entries=(\d+) changed-total=(\d+)', payload):
+        row.update(kind='sdma_ib_repair', index=int(m[1]), before=int(m[2], 16),
+                   after=int(m[3], 16), valid=bool(int(m[4])), entries=int(m[5]),
+                   changed_total=int(m[6]), changed=int(m[6]) > 0)
+    elif m := re.fullmatch(r'SD: submit vmid=(\d+) flags=(0x[0-9a-fA-F]+) entries=(\d+) valid=([01]) IB0=(0x[0-9a-fA-F]+|0) IB1=(0x[0-9a-fA-F]+|0)', payload):
+        row.update(kind='sdma_submit', vmid=int(m[1]), flags=int(m[2], 16),
+                   entries=int(m[3]), valid=bool(int(m[4])), ib0=int(m[5], 16),
+                   ib1=int(m[6], 16))
+    elif m := re.fullmatch(r'VM: invalidate hub=(\d+) vmid=(\d+) start=(0x[0-9a-fA-F]+|0) end=(0x[0-9a-fA-F]+|0) root=(0x[0-9a-fA-F]+|0) flags=(0x[0-9a-fA-F]+|0) reprogram=([01])', payload):
+        row.update(kind='vm_invalidate', hub=int(m[1]), vmid=int(m[2]),
+                   start=int(m[3], 16), end=int(m[4], 16), root=int(m[5], 16),
+                   flags=int(m[6], 16), reprogram=bool(int(m[7])))
+    elif m := re.fullmatch(r'VM: context-snapshot vmid=(\d+) root=(0x[0-9a-fA-F]+|0) ctl=(0x[0-9a-fA-F]+|0) start=(0x[0-9a-fA-F]+|0) end=(0x[0-9a-fA-F]+|0)', payload):
+        row.update(kind='vm_context', vmid=int(m[1]), root=int(m[2], 16),
+                   control=int(m[3], 16), start=int(m[4], 16), end=int(m[5], 16))
     elif m := re.fullmatch(r'SD: IB template (0x[0-9a-fA-F]+) -> (0x[0-9a-fA-F]+) valid=([01]) changed=([01])', payload):
         row.update(kind='sdma_ib_repair', before=int(m[1], 16), after=int(m[2], 16),
                    valid=bool(int(m[3])), changed=bool(int(m[4])))
@@ -134,6 +149,12 @@ def parse_serial(serial):
         if row.get('build') not in counts:
             row['source'] = 'raw-fallback'
             terminal_live.append(row)
+        elif row['kind'] in ('vm_invalidate', 'vm_context', 'sdma_submit'):
+            # These records are formatted by the dedicated observation thread,
+            # outside the driver callbacks. Preserve the exact live line until
+            # the next immutable structured snapshot includes it.
+            row['source'] = 'live-observation'
+            terminal_live.append(row)
         elif (row['kind'] == 'kiq' and row.get('result') == 0 and
               any(panic['seq'] > row['seq'] for panic in panics)):
             row['source'] = 'live-terminal'
@@ -194,7 +215,8 @@ def classify(manifest, events, probe):
         stage = f'guest_panic:{short}' + (f'+{offset:#x}' if offset is not None else '')
         return verdict('GUEST_PANIC', True, stage,
                        'decode the symbolicated fault and repair it offline; no retry')
-    seqs = sorted(r['seq'] for r in events if 'seq' in r and r.get('source') != 'raw-terminal')
+    seqs = sorted(r['seq'] for r in events if 'seq' in r and
+                  r.get('source') not in ('raw-terminal', 'live-observation'))
     if (any(r['kind'] == 'capture_loss' for r in events) or
             seqs != list(range(len(seqs)))):
         return verdict('INCONCLUSIVE', stage='capture_loss')
@@ -250,8 +272,9 @@ def classify(manifest, events, probe):
                 sdma_events[-1]['seq'] < one_starts[0]['seq'] < starts[0]['seq']):
             return verdict('INCONCLUSIVE', stage='sdma_topology_order')
         if 'sdma_channel_remap' in manifest.get('spec', {}).get('required_observations', []):
-            expected_route_count = (7 if 'sdma_ib_address_repair' in
-                                    manifest.get('spec', {}).get('required_observations', []) else 6)
+            expected_route_count = (7 if any(name in
+                                    manifest.get('spec', {}).get('required_observations', [])
+                                    for name in ('sdma_ib_address_repair', 'sdma_vm_context')) else 6)
             if routes[0].get('count') != expected_route_count:
                 return verdict('INVALID', stage='sdma_channel_route_guard')
             remaps = [r for r in events if r['kind'] == 'sdma_engine_remap']
@@ -262,6 +285,43 @@ def classify(manifest, events, probe):
                                'inspect the unexpected SDMA channel mapping')
             if not initialized[0]['seq'] < remaps[0]['seq'] < one_starts[0]['seq']:
                 return verdict('INCONCLUSIVE', stage='sdma_channel_remap_order')
+        if 'sdma_vm_context' in manifest.get('spec', {}).get('required_observations', []):
+            submits = [r for r in events if r['kind'] == 'sdma_submit' and
+                       r.get('valid') and r.get('vmid') == 2]
+            invalidates = [r for r in events if r['kind'] == 'vm_invalidate' and
+                           r.get('hub') == 0 and r.get('vmid') == 2]
+            contexts = [r for r in events if r['kind'] == 'vm_context' and
+                        r.get('vmid') == 2]
+            if not submits or not invalidates or not contexts:
+                return verdict('INCONCLUSIVE', stage='sdma_vm_context_missing')
+            # The hardware context is read later by a dedicated worker so the
+            # driver callback never performs MMIO or serial formatting while a
+            # caller lock may be held. Treat it as an asynchronous snapshot:
+            # require a coherent request/snapshot chain that actually contains
+            # one of the submitted GPU virtual addresses. Mere coexistence of
+            # three unrelated records cannot validate this observation.
+            coherent = False
+            for submit in submits:
+                addresses = [submit.get('ib0', 0), submit.get('ib1', 0)]
+                for address in (value for value in addresses if value):
+                    for request in invalidates:
+                        if (not request.get('reprogram') or not request.get('root') or
+                                not request.get('start') <= address <= request.get('end')):
+                            continue
+                        if any(context.get('root') == request.get('root') and
+                               context.get('start') <= address <= context.get('end')
+                               for context in contexts):
+                            coherent = True
+                            break
+                    if coherent:
+                        break
+                if coherent:
+                    break
+            if not coherent:
+                return verdict('INCONCLUSIVE', stage='sdma_vm_context_mismatch')
+        if any(r['kind'] == 'sdma_page_timeout' for r in events):
+            return verdict('SDMA_PAGE_TIMEOUT', True, 'sdma0_page',
+                           'inspect the indirect packet and SDMA VM state; do not retry unchanged')
         if 'sdma_ib_address_repair' in manifest.get('spec', {}).get('required_observations', []):
             repairs = [r for r in events if r['kind'] == 'sdma_ib_repair' and
                        r.get('valid') and r.get('changed')]

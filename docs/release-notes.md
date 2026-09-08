@@ -1,4 +1,4 @@
-Experimental RaphaelGPU 1.0.170 candidate for Sequoia 15.7.9 (24G830).
+Experimental RaphaelGPU 1.0.171 candidate for Sequoia 15.7.9 (24G830).
 
 - Hardware-tested163 reproduced real KIQ completion and located the next failure:
   SDMA hybrid types10/11 succeed, then type10 fails with native status4.
@@ -51,6 +51,18 @@ Experimental RaphaelGPU 1.0.170 candidate for Sequoia 15.7.9 (24G830).
   before force-stop. Recovery authorizes warm reuse only after zero dequeue timeouts, zero forced
   HQD clears and idle CP status. Partial engine power-up invokes Apple's native power-off while
   its DMA mappings remain present.
+- Hardware-tested170 completed native engine power-up and at least 34 KIQ submissions, then
+  timed out on SDMA0 paging with its indirect-buffer address still in the low-36-bit software
+  projection (`0x400100020`). Its earlier repair changed an unrelated fixed channel template.
+- Candidate171 observes the actual `AMD_SUBMIT_COMMAND_BUFFER_INFO` VMID and addresses at
+  `+4` and `+0x58 + 0x28*i` without modifying them. Exact 24G830 X6000 disassembly establishes
+  the layout; Linux SDMA 5.2 establishes that the packet address is virtual under its VMID.
+- The same candidate records each selected user VM's requested root/range and an asynchronous
+  GFXHUB context snapshot after Apple's native programming. Driver callbacks only append bounded
+  copies; a dedicated kernel thread performs MMIO and serial formatting. The classifier requires
+  a shared VMID/root and a range containing the submitted IB before accepting this evidence.
+- Routine successful KIQ and stamp records are capped while native failures are always retained,
+  preventing high submission volume from exhausting the critical record buffer.
 - Tests and hosted source builds do not establish physical GPU or host stability.
 
 Three historical host hard hangs remain unexplained. This is a research prerelease,

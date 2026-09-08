@@ -18,7 +18,7 @@ jobs:
       - run: python3 -B -m unittest discover -s tests -v
       - name: Validate address arithmetic
         run: |
-          for source in tests/test_gart_addresses.cpp tests/test_kiq_addresses.cpp tests/test_sdma_topology.cpp tests/test_sdma_addresses.cpp tests/test_engine_lifecycle.cpp; do
+          for source in tests/test_gart_addresses.cpp tests/test_kiq_addresses.cpp tests/test_sdma_topology.cpp tests/test_sdma_addresses.cpp tests/test_gpu_vm_diagnostics.cpp tests/test_engine_lifecycle.cpp; do
             g++ -std=c++14 -Wall -Wextra -Werror -fsanitize=undefined "$source" -o /tmp/address-test
             /tmp/address-test
           done

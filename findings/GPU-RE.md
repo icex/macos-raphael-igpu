@@ -3330,3 +3330,60 @@ native cleanup point that still owns the KIQ ring, MQD and writeback mappings.
 No host reset, driver rebind or privileged command was used for this analysis. The current boot's
 three-launch ceiling is exhausted and its CP is measurably non-idle, so candidate 169's SDMA
 address repair still requires one clean-boot hardware experiment.
+
+### 2026-09-08: candidate 170 isolates the SDMA paging packet address
+
+Candidate 170 (`40a2ffb`, build `c8328a6c1f75442399b62276ed7d65aa`) ran once after a fresh
+amdgpu-to-vfio handoff with PCI reset methods disabled. Native hybrid creation, engine start and
+accelerator power-up returned success. KIQ submissions continued through at least stamp 34 and
+`VM_FAULT_STATUS` remained zero. The first decisive failure was instead the shared SDMA0 paging
+channel timing out with hardware queue 1 stopped at:
+
+```
+IB: ENABLED, GPUAddress = 0x0000000400100020,
+    ConsumedSize = 0, RemainSize = 0x70
+```
+
+The candidate-169/170 repair never touched that value. Every invocation observed the fixed
+channel template address `0xffbfde011c`, which is outside either framebuffer aperture and was
+correctly left unchanged. The assumption that `channel+0x138` contained the paging IB was wrong.
+
+Exact disassembly of Sequoia 24G830 `AMDRadeonX6000` establishes the complete producer/consumer
+chain. `AMDAccelChannel::submitBuffer` at `0xb83e` zeros a 0xe8-byte
+`AMD_SUBMIT_COMMAND_BUFFER_INFO`, copies the primary command descriptor GPU address into offset
+`+0x58` at `0xbacc`/`0xbad0`, and appends further entries at stride 0x28. The count at `+0x14` is
+the descriptor count plus one. `AMDGFX10SDMAChannel::commitIndirectCommandBuffer` at `0x66e06`
+copies its fixed 0x200-byte template, then reads the count at `+0x14`; after adding 0x4c to the
+submit pointer it reads `[pointer+0xc]`, exactly the original `+0x58`, and advances by 0x28 per
+entry. It stores each qword into the emitted SDMA INDIRECT frame before submitting it natively.
+
+The first candidate-171 implementation would have repaired `submitInfo + 0x58 + 0x28*i` before
+calling the original encoder. It was withheld before hardware use after checking the reference
+packet semantics. Linux's `sdma_v5_2_ring_emit_ib` places the IB's VMID in the SDMA INDIRECT
+header, then emits the full low and high halves of `ib->gpu_addr`. Candidate 170 identifies the
+stalled submission as WindowServer VMID 2. The measured `0x400100020` is therefore a GPU virtual
+address under VMID 2; changing it to MC physical `0x840100020` while retaining VMID 2 would mix
+address spaces. [Linux v6.12 SDMA 5.2 source](https://github.com/torvalds/linux/blob/v6.12/drivers/gpu/drm/amd/amdgpu/sdma_v5_2.c#L251-L284).
+
+The corrected candidate 171 is read-only at both boundaries. It records flags, VMID, count and
+the first two addresses from the exact submit-info layout. It also records nonzero-VMID requests
+to `programAndInvalidateVM`. Driver callbacks only append bounded raw copies; a dedicated kernel
+thread later reads the selected GC 10.3 context control, root, start and end registers and formats
+the serial records. This is an asynchronous hardware snapshot, not proof that the register state
+was identical at callback time. The classifier accepts it only when the request and snapshot have
+the same nonzero root and both ranges contain a submitted IB address. VMID 2 has its own bounded record budget; the
+old first-16-call diagnostic captured only context-0 initialization and never observed the
+WindowServer mapping. Context control has stride one, while root/start/end low/high pairs have
+stride two, as confirmed against `gc_10_3_0_offset.h`.
+
+Candidate 170 also exposed a diagnostic correctness defect: a success record for every KIQ
+submission filled all 128 critical slots, dropping the later failure evidence. Candidate 171
+retains every native failure but caps routine successful KIQ submit and stamp records at eight
+each. SDMA and VM observations are similarly bounded. Hosted fixtures cover the immutable submit
+layout, VM request parsing, per-context register strides, invalid counts, success-budget
+exhaustion and classifier handling of the raw SDMA paging timeout.
+
+The candidate-170 shutdown was forced after the classifier detected overflow. Reset-free recovery
+found nine active HQD selections; eight dequeue attempts timed out and required post-halt ACTIVE
+clears. `CP_STAT` and `CP_CPC_BUSY_STAT` remained nonzero, so the receipt is explicitly incomplete
+and cannot authorize a second launch on this boot. No host kernel fault was recorded.

@@ -1,0 +1,146 @@
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 0, "kind": "build", "raw": "BUILD: identity=c8328a6c1f75442399b62276ed7d65aa"}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 1, "kind": "other", "raw": "SD: route AMDHardware::initializeHWEngines -> ok (org=0xffffff800ca1d344)"}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 2, "kind": "other", "raw": "SD: route AMDHardware::stopHWEngines -> ok (org=0xffffff800ca1d358)"}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 3, "kind": "other", "raw": "SD: route AMDHardware::powerOffHWEngines -> ok (org=0xffffff800ca1d36c)"}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 4, "kind": "other", "raw": "SD: route AMDHardware::powerOff -> ok (org=0xffffff800ca1d380)"}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 5, "kind": "other", "raw": "SD: route AMDHardware::getHWChannel -> ok (org=0xffffff800ca1d394)"}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 6, "kind": "other", "raw": "SD: route AMDGFX10SDMAChannel::commitIndirectCommandBuffer -> ok (org=0xffffff800ca1d3a8)"}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 7, "kind": "sdma_topology_route", "raw": "SD: topology routes=ok count=7 entries-match=1", "count": 7, "ok": true}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 8, "kind": "route", "raw": "HY: HWLibs hybrid trace route=ok entries-match=1 (max 8 calls)", "ok": true}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 9, "kind": "sdma_route", "raw": "HY: SDMA selector trace route=ok entries-match=1 (max 8 hybrid calls)", "ok": true}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 10, "kind": "sdma_topology", "raw": "SD: topology applied: discovered=1 kept=SDMA0 removed=SDMA1 before initialize", "applied": true}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 11, "kind": "sdma_initialize", "raw": "SD: AMDHardware::initializeHWEngines -> 1 (topology-applied=1)", "result": 1, "applied": true}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 12, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 13, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 14, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 15, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 16, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 17, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 18, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=1", "requested": 2, "selected": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 19, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 20, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=1", "requested": 2, "selected": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 21, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 22, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 23, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 24, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 25, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 26, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 27, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=1", "requested": 2, "selected": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 28, "kind": "other", "raw": "XJ: AMDGraphicsAccelerator::powerUpHW entry"}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 29, "kind": "hybrid_enter", "raw": "HY: createHybridEngine enter: engine=12 available=1", "engine": 12, "available": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 30, "kind": "hybrid_exit", "raw": "HY: createHybridEngine exit: engine=12 valid=1 available-before=1 status=0", "engine": 12, "arguments_valid": 1, "available": 1, "result": 0}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 31, "kind": "kiq", "raw": "XJ:   waitForHwStamp(1) -> 1", "stamp": 1, "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 32, "kind": "kiq_submit", "raw": "XJ:   submitKIQFrame -> 1", "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 33, "kind": "hybrid_enter", "raw": "HY: createHybridEngine enter: engine=13 available=1", "engine": 13, "available": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 34, "kind": "hybrid_exit", "raw": "HY: createHybridEngine exit: engine=13 valid=1 available-before=1 status=0", "engine": 13, "arguments_valid": 1, "available": 1, "result": 0}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 35, "kind": "kiq", "raw": "XJ:   waitForHwStamp(2) -> 1", "stamp": 2, "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 36, "kind": "kiq_submit", "raw": "XJ:   submitKIQFrame -> 1", "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 37, "kind": "kiq", "raw": "XJ:   waitForHwStamp(3) -> 1", "stamp": 3, "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 38, "kind": "kiq_submit", "raw": "XJ:   submitKIQFrame -> 1", "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 39, "kind": "kiq", "raw": "XJ:   waitForHwStamp(1) -> 1", "stamp": 1, "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 40, "kind": "other", "raw": "XJ: AMDHardware::powerUpHWEngines -> 1"}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 41, "kind": "hybrid_enter", "raw": "HY: createHybridEngine enter: engine=10 available=1", "engine": 10, "available": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 42, "kind": "sdma_select", "raw": "HY: SDMA select index=0 queue-type=0 found=1 counts=1,0,0,0 queues=1,1,2510495400 occupied=0 callback=0x62c9f", "index": 0, "queue_type": 0, "found": true, "counts": [1, 0, 0, 0]}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 43, "kind": "hybrid_exit", "raw": "HY: createHybridEngine exit: engine=10 valid=1 available-before=1 status=0", "engine": 10, "arguments_valid": 1, "available": 1, "result": 0}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 44, "kind": "hybrid_enter", "raw": "HY: createHybridEngine enter: engine=11 available=1", "engine": 11, "available": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 45, "kind": "sdma_select", "raw": "HY: SDMA select index=0 queue-type=1 found=1 counts=1,0,0,0 queues=1,1,2510495400 occupied=1 callback=0x62c9f", "index": 0, "queue_type": 1, "found": true, "counts": [1, 0, 0, 0]}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 46, "kind": "hybrid_exit", "raw": "HY: createHybridEngine exit: engine=11 valid=1 available-before=1 status=0", "engine": 11, "arguments_valid": 1, "available": 1, "result": 0}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 47, "kind": "sdma_one_start", "raw": "SD: one-instance start -> 1 (SDMA0=0xffffff9f6c1c0c00 SDMA1=0)", "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 48, "kind": "engine_start", "raw": "XJ: AMDHardware::startHWEngines -> 1", "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 49, "kind": "sdma_ib_repair", "raw": "SD: IB template 0xffbfde011c -> 0xffbfde011c valid=0 changed=0", "before": 1098435658012, "after": 1098435658012, "valid": false, "changed": false}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 50, "kind": "other", "raw": "XJ: AMDGraphicsAccelerator::powerUpHW -> 1"}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 51, "kind": "kiq", "raw": "XJ:   waitForHwStamp(1) -> 1", "stamp": 1, "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 52, "kind": "sdma_ib_repair", "raw": "SD: IB template 0xffbfde011c -> 0xffbfde011c valid=0 changed=0", "before": 1098435658012, "after": 1098435658012, "valid": false, "changed": false}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 53, "kind": "sdma_ib_repair", "raw": "SD: IB template 0xffbfde011c -> 0xffbfde011c valid=0 changed=0", "before": 1098435658012, "after": 1098435658012, "valid": false, "changed": false}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 54, "kind": "sdma_ib_repair", "raw": "SD: IB template 0xffbfde011c -> 0xffbfde011c valid=0 changed=0", "before": 1098435658012, "after": 1098435658012, "valid": false, "changed": false}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 55, "kind": "sdma_ib_repair", "raw": "SD: IB template 0xffbfde011c -> 0xffbfde011c valid=0 changed=0", "before": 1098435658012, "after": 1098435658012, "valid": false, "changed": false}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 56, "kind": "sdma_ib_repair", "raw": "SD: IB template 0xffbfde011c -> 0xffbfde011c valid=0 changed=0", "before": 1098435658012, "after": 1098435658012, "valid": false, "changed": false}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 57, "kind": "sdma_ib_repair", "raw": "SD: IB template 0xffbfde011c -> 0xffbfde011c valid=0 changed=0", "before": 1098435658012, "after": 1098435658012, "valid": false, "changed": false}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 58, "kind": "sdma_ib_repair", "raw": "SD: IB template 0xffbfde011c -> 0xffbfde011c valid=0 changed=0", "before": 1098435658012, "after": 1098435658012, "valid": false, "changed": false}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 59, "kind": "sdma_ib_repair", "raw": "SD: IB template 0xffbfde011c -> 0xffbfde011c valid=0 changed=0", "before": 1098435658012, "after": 1098435658012, "valid": false, "changed": false}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 60, "kind": "sdma_ib_repair", "raw": "SD: IB template 0xffbfde011c -> 0xffbfde011c valid=0 changed=0", "before": 1098435658012, "after": 1098435658012, "valid": false, "changed": false}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 61, "kind": "sdma_ib_repair", "raw": "SD: IB template 0xffbfde011c -> 0xffbfde011c valid=0 changed=0", "before": 1098435658012, "after": 1098435658012, "valid": false, "changed": false}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 62, "kind": "sdma_ib_repair", "raw": "SD: IB template 0xffbfde011c -> 0xffbfde011c valid=0 changed=0", "before": 1098435658012, "after": 1098435658012, "valid": false, "changed": false}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 63, "kind": "sdma_ib_repair", "raw": "SD: IB template 0xffbfde011c -> 0xffbfde011c valid=0 changed=0", "before": 1098435658012, "after": 1098435658012, "valid": false, "changed": false}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 64, "kind": "sdma_ib_repair", "raw": "SD: IB template 0xffbfde011c -> 0xffbfde011c valid=0 changed=0", "before": 1098435658012, "after": 1098435658012, "valid": false, "changed": false}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 65, "kind": "sdma_ib_repair", "raw": "SD: IB template 0xffbfde011c -> 0xffbfde011c valid=0 changed=0", "before": 1098435658012, "after": 1098435658012, "valid": false, "changed": false}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 66, "kind": "sdma_ib_repair", "raw": "SD: IB template 0xffbfde011c -> 0xffbfde011c valid=0 changed=0", "before": 1098435658012, "after": 1098435658012, "valid": false, "changed": false}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 67, "kind": "kiq", "raw": "XJ:   waitForHwStamp(4) -> 1", "stamp": 4, "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 68, "kind": "kiq_submit", "raw": "XJ:   submitKIQFrame -> 1", "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 69, "kind": "kiq", "raw": "XJ:   waitForHwStamp(5) -> 1", "stamp": 5, "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 70, "kind": "kiq_submit", "raw": "XJ:   submitKIQFrame -> 1", "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 71, "kind": "kiq", "raw": "XJ:   waitForHwStamp(6) -> 1", "stamp": 6, "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 72, "kind": "kiq_submit", "raw": "XJ:   submitKIQFrame -> 1", "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 73, "kind": "kiq", "raw": "XJ:   waitForHwStamp(7) -> 1", "stamp": 7, "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 74, "kind": "kiq_submit", "raw": "XJ:   submitKIQFrame -> 1", "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 75, "kind": "kiq", "raw": "XJ:   waitForHwStamp(8) -> 1", "stamp": 8, "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 76, "kind": "kiq_submit", "raw": "XJ:   submitKIQFrame -> 1", "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 77, "kind": "kiq", "raw": "XJ:   waitForHwStamp(9) -> 1", "stamp": 9, "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 78, "kind": "kiq_submit", "raw": "XJ:   submitKIQFrame -> 1", "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 79, "kind": "kiq", "raw": "XJ:   waitForHwStamp(10) -> 1", "stamp": 10, "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 80, "kind": "kiq_submit", "raw": "XJ:   submitKIQFrame -> 1", "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 81, "kind": "kiq", "raw": "XJ:   waitForHwStamp(11) -> 1", "stamp": 11, "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 82, "kind": "kiq_submit", "raw": "XJ:   submitKIQFrame -> 1", "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 83, "kind": "kiq", "raw": "XJ:   waitForHwStamp(12) -> 1", "stamp": 12, "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 84, "kind": "kiq_submit", "raw": "XJ:   submitKIQFrame -> 1", "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 85, "kind": "kiq", "raw": "XJ:   waitForHwStamp(13) -> 1", "stamp": 13, "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 86, "kind": "kiq_submit", "raw": "XJ:   submitKIQFrame -> 1", "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 87, "kind": "kiq", "raw": "XJ:   waitForHwStamp(14) -> 1", "stamp": 14, "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 88, "kind": "kiq_submit", "raw": "XJ:   submitKIQFrame -> 1", "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 89, "kind": "kiq", "raw": "XJ:   waitForHwStamp(15) -> 1", "stamp": 15, "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 90, "kind": "kiq_submit", "raw": "XJ:   submitKIQFrame -> 1", "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 91, "kind": "kiq", "raw": "XJ:   waitForHwStamp(16) -> 1", "stamp": 16, "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 92, "kind": "kiq_submit", "raw": "XJ:   submitKIQFrame -> 1", "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 93, "kind": "kiq", "raw": "XJ:   waitForHwStamp(17) -> 1", "stamp": 17, "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 94, "kind": "kiq_submit", "raw": "XJ:   submitKIQFrame -> 1", "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 95, "kind": "kiq", "raw": "XJ:   waitForHwStamp(18) -> 1", "stamp": 18, "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 96, "kind": "kiq_submit", "raw": "XJ:   submitKIQFrame -> 1", "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 97, "kind": "kiq", "raw": "XJ:   waitForHwStamp(19) -> 1", "stamp": 19, "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 98, "kind": "kiq_submit", "raw": "XJ:   submitKIQFrame -> 1", "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 99, "kind": "kiq", "raw": "XJ:   waitForHwStamp(20) -> 1", "stamp": 20, "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 100, "kind": "kiq_submit", "raw": "XJ:   submitKIQFrame -> 1", "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 101, "kind": "kiq", "raw": "XJ:   waitForHwStamp(21) -> 1", "stamp": 21, "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 102, "kind": "kiq_submit", "raw": "XJ:   submitKIQFrame -> 1", "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 103, "kind": "kiq", "raw": "XJ:   waitForHwStamp(22) -> 1", "stamp": 22, "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 104, "kind": "kiq_submit", "raw": "XJ:   submitKIQFrame -> 1", "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 105, "kind": "kiq", "raw": "XJ:   waitForHwStamp(23) -> 1", "stamp": 23, "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 106, "kind": "kiq_submit", "raw": "XJ:   submitKIQFrame -> 1", "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 107, "kind": "kiq", "raw": "XJ:   waitForHwStamp(24) -> 1", "stamp": 24, "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 108, "kind": "kiq_submit", "raw": "XJ:   submitKIQFrame -> 1", "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 109, "kind": "kiq", "raw": "XJ:   waitForHwStamp(25) -> 1", "stamp": 25, "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 110, "kind": "kiq_submit", "raw": "XJ:   submitKIQFrame -> 1", "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 111, "kind": "kiq", "raw": "XJ:   waitForHwStamp(26) -> 1", "stamp": 26, "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 112, "kind": "kiq_submit", "raw": "XJ:   submitKIQFrame -> 1", "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 113, "kind": "kiq", "raw": "XJ:   waitForHwStamp(27) -> 1", "stamp": 27, "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 114, "kind": "kiq_submit", "raw": "XJ:   submitKIQFrame -> 1", "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 115, "kind": "kiq", "raw": "XJ:   waitForHwStamp(28) -> 1", "stamp": 28, "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 116, "kind": "kiq_submit", "raw": "XJ:   submitKIQFrame -> 1", "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 117, "kind": "kiq", "raw": "XJ:   waitForHwStamp(29) -> 1", "stamp": 29, "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 118, "kind": "kiq_submit", "raw": "XJ:   submitKIQFrame -> 1", "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 119, "kind": "kiq", "raw": "XJ:   waitForHwStamp(30) -> 1", "stamp": 30, "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 120, "kind": "kiq_submit", "raw": "XJ:   submitKIQFrame -> 1", "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 121, "kind": "kiq", "raw": "XJ:   waitForHwStamp(31) -> 1", "stamp": 31, "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 122, "kind": "kiq_submit", "raw": "XJ:   submitKIQFrame -> 1", "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 123, "kind": "kiq", "raw": "XJ:   waitForHwStamp(32) -> 1", "stamp": 32, "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 124, "kind": "kiq_submit", "raw": "XJ:   submitKIQFrame -> 1", "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 125, "kind": "kiq", "raw": "XJ:   waitForHwStamp(33) -> 1", "stamp": 33, "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 126, "kind": "kiq_submit", "raw": "XJ:   submitKIQFrame -> 1", "result": 1}
+{"build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 127, "kind": "kiq", "raw": "XJ:   waitForHwStamp(34) -> 1", "stamp": 34, "result": 1}
+{"kind": "sdma_page_timeout", "build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 3271, "source": "raw-terminal", "raw": "[0:6:0]: HW Channel 12 SDMA0_PAGE is occupied by channel 34 stamp 1"}
+{"kind": "sdma_page_timeout", "build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 3341, "source": "raw-terminal", "raw": "Restart Channel: 34 SDMA0_PAGE"}
+{"kind": "sdma_page_timeout", "build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 5349, "source": "raw-terminal", "raw": "Restart Channel: 34 SDMA0_PAGE"}
+{"kind": "sdma_page_timeout", "build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 6975, "source": "raw-terminal", "raw": "[0:6:0]: HW Channel 12 SDMA0_PAGE is occupied by channel 34 stamp 2"}
+{"kind": "sdma_page_timeout", "build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 7045, "source": "raw-terminal", "raw": "Restart Channel: 34 SDMA0_PAGE"}
+{"kind": "sdma_page_timeout", "build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 9051, "source": "raw-terminal", "raw": "Restart Channel: 34 SDMA0_PAGE"}
+{"kind": "sdma_page_timeout", "build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 10388, "source": "raw-terminal", "raw": "[0:6:0]: HW Channel 12 SDMA0_PAGE is occupied by channel 12 stamp 1"}
+{"kind": "sdma_page_timeout", "build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 10570, "source": "raw-terminal", "raw": "Restart Channel: 12 SDMA0_PAGE"}
+{"kind": "sdma_page_timeout", "build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 12574, "source": "raw-terminal", "raw": "Restart Channel: 12 SDMA0_PAGE"}
+{"kind": "sdma_page_timeout", "build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 13981, "source": "raw-terminal", "raw": "[0:6:0]: HW Channel 12 SDMA0_PAGE is occupied by channel 34 stamp 2"}
+{"kind": "sdma_page_timeout", "build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 14051, "source": "raw-terminal", "raw": "Restart Channel: 34 SDMA0_PAGE"}
+{"kind": "sdma_page_timeout", "build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 16066, "source": "raw-terminal", "raw": "Restart Channel: 34 SDMA0_PAGE"}
+{"kind": "sdma_page_timeout", "build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 17710, "source": "raw-terminal", "raw": "[0:6:0]: HW Channel 12 SDMA0_PAGE is occupied by channel 34 stamp 3"}
+{"kind": "sdma_page_timeout", "build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 17787, "source": "raw-terminal", "raw": "Restart Channel: 34 SDMA0_PAGE"}
+{"kind": "sdma_page_timeout", "build": "c8328a6c1f75442399b62276ed7d65aa", "seq": 19797, "source": "raw-terminal", "raw": "Restart Channel: 34 SDMA0_PAGE"}
+{"kind": "capture_loss", "build": "c8328a6c1f75442399b62276ed7d65aa", "reason": "overflow"}
+{"kind": "capture_loss", "build": "c8328a6c1f75442399b62276ed7d65aa", "reason": "overflow"}
+{"kind": "capture_loss", "build": "c8328a6c1f75442399b62276ed7d65aa", "reason": "overflow"}
