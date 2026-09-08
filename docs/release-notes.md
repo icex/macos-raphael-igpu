@@ -1,4 +1,4 @@
-Experimental RaphaelGPU 1.0.168 candidate for Sequoia 15.7.9 (24G830).
+Experimental RaphaelGPU 1.0.170 candidate for Sequoia 15.7.9 (24G830).
 
 - Hardware-tested163 reproduced real KIQ completion and located the next failure:
   SDMA hybrid types10/11 succeed, then type10 fails with native status4.
@@ -43,6 +43,14 @@ Experimental RaphaelGPU 1.0.168 candidate for Sequoia 15.7.9 (24G830).
   cleanup if they are enabled, rejects reset messages from recovery receipts, and leaves later
   teardown rootless. Warm cleanup and reinitialization remain unverified. Full Metal remains
   unavailable; no compute/render command completion and no playable game have been verified.
+- Candidate169 repairs the exact observed SDMA indirect-buffer address projection from
+  `0x400100000` to the validated MC address `0x840100000`. Its first run was stopped before
+  that path executed because a concurrent read parsed an unterminated serial replay as a conflict.
+- Candidate170 parses only newline-complete records and makes `submitKIQFrame` a critical,
+  authoritative event. Runtime observation errors now attempt identified guest/ACPI shutdown
+  before force-stop. Recovery authorizes warm reuse only after zero dequeue timeouts, zero forced
+  HQD clears and idle CP status. Partial engine power-up invokes Apple's native power-off while
+  its DMA mappings remain present.
 - Tests and hosted source builds do not establish physical GPU or host stability.
 
 Three historical host hard hangs remain unexplained. This is a research prerelease,

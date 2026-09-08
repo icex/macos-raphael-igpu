@@ -1,6 +1,6 @@
 # Game compatibility
 
-Updated 2026-09-08, hardware-tested driver 1.0.166, candidate 1.0.168, macOS Sequoia 15.7.9 (24G830), Raphael iGPU
+Updated 2026-09-08, hardware-tested driver 1.0.166, candidate 1.0.170, macOS Sequoia 15.7.9 (24G830), Raphael iGPU
 spoofed as Navi23 under QEMU/VFIO.
 
 **Verified playable games: 0.** No individual game has a recorded compatibility test.
@@ -18,3 +18,6 @@ A supported entry will require a named game and version, graphics backend, guest
 versions, resolution/settings, actual rendered gameplay, observed duration and linked
 logs/results. Record crashes, rendering defects and performance separately. Passing the
 small Metal probe is a prerequisite for game testing, not proof that games work.
+
+Game qualification is currently deferred. The active target is correct Metal compute,
+offscreen rendering, and accelerated desktop composition through the VM display.

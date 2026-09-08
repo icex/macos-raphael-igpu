@@ -118,6 +118,7 @@ class VfioRecoveryTests(unittest.TestCase):
                          [self.tool.DESTROY_RINGS, self.tool.DESTROY_GPCOM_RING])
         self.assertTrue(all(row['confirmed'] for row in evidence['commands']))
         self.assertEqual(evidence['gc_quiesce']['status'], 'quiesced')
+        self.assertTrue(evidence['authorizes_launch'])
         self.assertEqual(evidence['schema'], 2)
         self.assertEqual(evidence['reset_methods_before'], [])
         self.assertEqual(evidence['reset_methods_after'], [])
@@ -149,6 +150,8 @@ class VfioRecoveryTests(unittest.TestCase):
         self.assertEqual(result['active_before'], 1)
         self.assertEqual(result['dequeued'], 1)
         self.assertEqual(result['forced_inactive'], 0)
+        self.assertEqual(result['cp_stat_after'], 0)
+        self.assertEqual(result['cp_cpc_busy_after'], 0)
         dequeue = fake.events.index(('write', tool.CP_HQD_DEQUEUE_OFFSET, 1))
         halt = fake.events.index(('write', tool.CP_MEC_CNTL_OFFSET, tool.CP_MEC_HALT_MASK))
         self.assertLess(dequeue, halt)
@@ -195,6 +198,33 @@ class VfioRecoveryTests(unittest.TestCase):
         clear = fake.events.index(('write', tool.CP_HQD_ACTIVE_OFFSET, 0))
         self.assertLess(halt, clear)
 
+    def test_forced_hqd_clear_cannot_authorize_warm_reuse(self):
+        tool = self.tool
+        receipt = {
+            'schema':2, 'status':'recovered', 'authorizes_launch':False,
+            'boot_id':'boot-A',
+            'prior_run_id':'a'*32, 'recovery_id':'b'*32,
+            'device':'0000:7b:00.0', 'iommu_group':'31', 'driver':'vfio-pci',
+            'pci_command_before':3, 'pci_command_after':3,
+            'reset_methods_before':[], 'reset_methods_after':[], 'kernel_messages':[],
+            'gc_quiesce':{'status':'quiesced', 'active_after':0,
+                          'dequeue_timeouts':1, 'forced_inactive':1,
+                          'cp_stat_after':0, 'cp_cpc_busy_after':0,
+                          'cp_me_after':tool.CP_ME_HALT_MASK,
+                          'cp_mec_after':tool.CP_MEC_HALT_MASK,
+                          'sdma0_after':tool.SDMA_HALT_MASK},
+            'commands':[{'command':tool.DESTROY_RINGS,
+                         'response':tool.READY_FLAG|tool.DESTROY_RINGS,
+                         'confirmed':True},
+                        {'command':tool.DESTROY_GPCOM_RING,
+                         'response':tool.READY_FLAG|tool.DESTROY_GPCOM_RING,
+                         'confirmed':True}]}
+        experiment_path = ROOT/'tools/experiment.py'
+        spec = importlib.util.spec_from_file_location('experiment_for_recovery', experiment_path)
+        experiment = importlib.util.module_from_spec(spec); spec.loader.exec_module(experiment)
+        self.assertIn('recovery_receipt', experiment.validate_recovery_receipt(
+            receipt, 'boot-A', 'a'*32))
+
     def test_mailbox_timeout_closes_transport_and_never_reports_success(self):
         fake = FakeTransport(self.tool, fail_command=self.tool.DESTROY_RINGS)
         states = iter([self.state(), self.state()])
@@ -224,6 +254,19 @@ class VfioRecoveryTests(unittest.TestCase):
                 with self.assertRaises(self.tool.RecoveryError):
                     self.tool.perform_recovery('boot-A', 'c'*32, lambda:next(states),
                                                lambda:fake, kernel, sleep=lambda _:None)
+
+    def test_nonidle_cp_is_preserved_as_non_authorizing_evidence(self):
+        fake = FakeTransport(self.tool)
+        fake.registers[self.tool.CP_STAT_OFFSET] = 0x80008200
+        fake.registers[self.tool.CP_CPC_BUSY_STAT_OFFSET] = 0x08080000
+        states = iter([self.state(), self.state()])
+        evidence = self.tool.perform_recovery(
+            'boot-A', 'c'*32, lambda:next(states), lambda:fake,
+            lambda cursor=None:('cursor-2', [], []), sleep=lambda _:None)
+        self.assertEqual(evidence['status'], 'incomplete')
+        self.assertFalse(evidence['authorizes_launch'])
+        self.assertEqual(evidence['gc_quiesce']['cp_stat_after'], 0x80008200)
+        self.assertEqual(evidence['gc_quiesce']['cp_cpc_busy_after'], 0x08080000)
 
     def test_receipt_is_created_once_only_after_complete_recovery(self):
         with tempfile.TemporaryDirectory() as temp:

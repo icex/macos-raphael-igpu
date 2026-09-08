@@ -119,7 +119,23 @@ class ExperimentTests(unittest.TestCase):
             try: self.assertTrue(interrupted.wait(2), 'blocking operation suppressed host fault detection')
             finally: monitor.stop()
             self.assertTrue(monitor.error)
+            self.assertEqual(monitor.error_kind, 'fault')
             self.assertIn('Hardware Error', monitor.messages)
+
+    def test_host_monitor_distinguishes_capture_failure_from_kernel_fault(self):
+        tool = self.module()
+        published = []
+        class PublicationMonitor(tool.HostMonitor):
+            def __setattr__(self, name, value):
+                if name == 'error' and value is not None:
+                    published.append(getattr(self, 'error_kind', None))
+                super().__setattr__(name, value)
+        with patch.object(tool, 'kernel_updates', side_effect=RuntimeError('journal unavailable')):
+            monitor = PublicationMonitor('cursor', lambda:None)
+            monitor.poll()
+        self.assertEqual(monitor.error_kind, 'capture')
+        self.assertEqual(published, ['capture'])
+        self.assertIn('capture failed', monitor.error)
 
     def test_failed_amdgpu_probe_is_not_completed_initialization(self):
         check = getattr(self.module(), 'amdgpu_initialized', None)
@@ -168,13 +184,16 @@ class ExperimentTests(unittest.TestCase):
             (used/'boot-A.json').write_text(json.dumps(
                 {'boot_id':'boot-A', 'experiment':prior}))
             receipts = vm/'run/vfio-recovery/boot-A'; receipts.mkdir(parents=True)
-            receipt = {'schema':2, 'status':'recovered', 'boot_id':'boot-A',
+            receipt = {'schema':2, 'status':'recovered', 'authorizes_launch':True,
+                       'boot_id':'boot-A',
                        'prior_run_id':prior, 'recovery_id':'c'*32,
                        'device':'0000:7b:00.0', 'iommu_group':'31', 'driver':'vfio-pci',
                        'pci_command_before':3, 'pci_command_after':3,
                        'reset_methods_before':[], 'reset_methods_after':[],
                        'kernel_messages':[],
                        'gc_quiesce':{'status':'quiesced', 'active_after':0,
+                                     'dequeue_timeouts':0, 'forced_inactive':0,
+                                     'cp_stat_after':0, 'cp_cpc_busy_after':0,
                                      'cp_me_after':0x15000000,
                                      'cp_mec_after':0x50000000,
                                      'sdma0_after':1},
@@ -205,13 +224,16 @@ class ExperimentTests(unittest.TestCase):
                                   {'run_id':runs[2], 'recovery_id':'2'*32}]}
             (used/'boot-A.json').write_text(json.dumps(ledger))
             receipt_dir = vm/'run/vfio-recovery/boot-A'; receipt_dir.mkdir(parents=True)
-            wrong = {'schema':2, 'status':'recovered', 'boot_id':'boot-A',
+            wrong = {'schema':2, 'status':'recovered', 'authorizes_launch':True,
+                     'boot_id':'boot-A',
                      'prior_run_id':runs[0], 'recovery_id':'3'*32,
                      'device':'0000:7b:00.0', 'iommu_group':'31', 'driver':'vfio-pci',
                      'pci_command_before':3, 'pci_command_after':3,
                      'reset_methods_before':[], 'reset_methods_after':[],
                      'kernel_messages':[],
                      'gc_quiesce':{'status':'quiesced', 'active_after':0,
+                                   'dequeue_timeouts':0, 'forced_inactive':0,
+                                   'cp_stat_after':0, 'cp_cpc_busy_after':0,
                                    'cp_me_after':0x15000000,
                                    'cp_mec_after':0x50000000,
                                    'sdma0_after':1},
@@ -226,13 +248,16 @@ class ExperimentTests(unittest.TestCase):
 
     def test_recovery_receipt_validation_fails_closed(self):
         tool = self.module()
-        good = {'schema':2, 'status':'recovered', 'boot_id':'boot-A',
+        good = {'schema':2, 'status':'recovered', 'authorizes_launch':True,
+                'boot_id':'boot-A',
                 'prior_run_id':'a'*32, 'recovery_id':'b'*32,
                 'device':'0000:7b:00.0', 'iommu_group':'31', 'driver':'vfio-pci',
                 'pci_command_before':3, 'pci_command_after':3,
                 'reset_methods_before':[], 'reset_methods_after':[],
                 'kernel_messages':[],
                 'gc_quiesce':{'status':'quiesced', 'active_after':0,
+                              'dequeue_timeouts':0, 'forced_inactive':0,
+                              'cp_stat_after':0, 'cp_cpc_busy_after':0,
                               'cp_me_after':0x15000000,
                               'cp_mec_after':0x50000000,
                               'sdma0_after':1},
@@ -250,6 +275,13 @@ class ExperimentTests(unittest.TestCase):
                            ('commands',[{'confirmed':True}])]:
             self.assertIn('recovery_receipt', tool.validate_recovery_receipt(
                 dict(good, **{key:value}), 'boot-A', 'a'*32))
+        for key, value in [('dequeue_timeouts',1), ('forced_inactive',1),
+                           ('cp_stat_after',0x80008200),
+                           ('cp_cpc_busy_after',0x08080000)]:
+            broken = dict(good)
+            broken['gc_quiesce'] = dict(good['gc_quiesce'], **{key:value})
+            self.assertIn('recovery_receipt', tool.validate_recovery_receipt(
+                broken, 'boot-A', 'a'*32))
 
     def test_remaining_budget_uses_earlier_launch_cap(self):
         eligible = self.module().probe_fits
@@ -312,6 +344,15 @@ class ExperimentTests(unittest.TestCase):
     def test_definitive_capture_loss_stops_without_using_remaining_budget(self):
         self.exercise_run('capture-loss')
 
+    def test_runtime_abort_after_validated_launch_attempts_guest_shutdown_first(self):
+        self.exercise_run('runtime-abort')
+
+    def test_host_capture_failure_attempts_guest_shutdown_but_forbids_reuse(self):
+        self.exercise_run('monitor-capture')
+
+    def test_host_kernel_fault_uses_immediate_exact_stop_and_forbids_reuse(self):
+        self.exercise_run('monitor-fault')
+
     def test_unresolved_startup_stop_is_explicit(self):
         self.exercise_run('unconfirmed')
 
@@ -355,6 +396,7 @@ class ExperimentTests(unittest.TestCase):
             class StopUnconfirmed(RuntimeError): pass
             def verify(state):
                 if mode == 'cancel': raise KeyboardInterrupt()
+                if mode == 'runtime-abort': raise RuntimeError('runtime observation failed')
             def shutdown(vm_path, state, expected_build, grace):
                 if mode == 'shutdown-fault': calls.append('host-fault')
                 calls.append(('guest-shutdown', state['cid'], expected_build))
@@ -362,19 +404,31 @@ class ExperimentTests(unittest.TestCase):
             def kernel(cursor=None):
                 faults = ['Hardware Error'] if 'host-fault' in calls else []
                 return 'cursor', faults, faults
+            class ImmediateMonitor:
+                def __init__(self, cursor, interrupt, interval=1):
+                    self.messages = []
+                    self.error_kind = 'fault' if mode == 'monitor-fault' else 'capture'
+                    self.error = ('new host kernel fault during exposure' if
+                                  self.error_kind == 'fault' else
+                                  'host kernel capture failed: journal unavailable')
+                def start(self): pass
+                def stop(self): pass
             supervisor = SimpleNamespace(start_locked=start, verify=verify,
                 ManagedStopUnconfirmed=StopUnconfirmed,
                 stop_exact=lambda cid:calls.append(('stop',cid)))
             guest_shutdown = SimpleNamespace(shutdown=shutdown)
             def recover(vm_path, prior):
                 calls.append(('recover', prior))
-                receipt = {'schema':2, 'status':'recovered', 'boot_id':'boot-A',
+                receipt = {'schema':2, 'status':'recovered', 'authorizes_launch':True,
+                           'boot_id':'boot-A',
                            'prior_run_id':prior, 'recovery_id':'f'*32,
                            'device':'0000:7b:00.0', 'iommu_group':'31', 'driver':'vfio-pci',
                            'pci_command_before':3, 'pci_command_after':3,
                            'reset_methods_before':[], 'reset_methods_after':[],
                            'kernel_messages':[],
                            'gc_quiesce':{'status':'quiesced', 'active_after':0,
+                                         'dequeue_timeouts':0, 'forced_inactive':0,
+                                         'cp_stat_after':0, 'cp_cpc_busy_after':0,
                                          'cp_me_after':0x15000000,
                                          'cp_mec_after':0x50000000,
                                          'sdma0_after':1},
@@ -395,11 +449,14 @@ class ExperimentTests(unittest.TestCase):
             actual = dict(image_id='wrong' if mode == 'wrong-image' else 'sha256:expected',
                           vfio_args=['vfio-pci,host=0000:7b:00.0'])
             if mode == 'gpu-less': actual['vfio_args'] = []
+            monitor_type = ImmediateMonitor if mode in ('monitor-capture', 'monitor-fault') \
+                else tool.HostMonitor
             with patch.object(tool, 'current_identity', return_value=manifest), \
                  patch.object(tool, 'host_snapshot', return_value=host), \
                  patch.object(tool, 'helper', side_effect=helpers), \
                  patch.object(tool, 'running_identity', return_value=actual), \
                  patch.object(tool, 'kernel_updates', side_effect=kernel), \
+                 patch.object(tool, 'HostMonitor', monitor_type), \
                  patch.object(tool.time, 'time', side_effect=lambda:now[0]), \
                  patch.object(tool.time, 'sleep', side_effect=lambda n:now.__setitem__(0,now[0]+n)):
                 out = vm/'evidence'
@@ -418,12 +475,29 @@ class ExperimentTests(unittest.TestCase):
                     self.assertEqual(result['verdict'], 'INVALID')
                     self.assertIn('host kernel fault', result['error'])
                     self.assertNotIn(('recover', 'a'*32), calls)
-                else:
+                elif mode == 'monitor-capture':
+                    self.assertEqual(result['verdict'], 'INVALID')
+                    self.assertIn('capture failed', result['error'])
+                    self.assertIn(('guest-shutdown','c'*64, 'fixture'), calls)
+                    self.assertNotIn(('stop','c'*64), calls)
+                    self.assertNotIn(('recover', 'a'*32), calls)
+                elif mode == 'monitor-fault':
+                    self.assertEqual(result['verdict'], 'INVALID')
+                    self.assertIn('host kernel fault', result['error'])
+                    self.assertIn(('stop','c'*64), calls)
+                    self.assertNotIn(('guest-shutdown','c'*64, 'fixture'), calls)
+                    self.assertNotIn(('recover', 'a'*32), calls)
+                elif mode == 'wrong-image':
                     self.assertEqual(result['verdict'], 'INVALID')
                     self.assertIn(('stop','c'*64), calls)
+                    self.assertNotIn(('guest-shutdown','c'*64, 'fixture'), calls)
+                else:
+                    self.assertEqual(result['verdict'], 'INVALID')
+                    self.assertIn(('guest-shutdown','c'*64, 'fixture'), calls)
+                    self.assertNotIn(('stop','c'*64), calls)
                 if mode == 'unconfirmed':
                     self.assertNotIn(('recover', 'a'*32), calls)
-                elif mode != 'shutdown-fault':
+                elif mode not in ('shutdown-fault', 'monitor-capture', 'monitor-fault'):
                     self.assertIn(('recover', 'a'*32), calls)
                 if mode == 'capture-loss': self.assertLess(now[0], 110)
                 self.assertTrue((out/'verdict.json').exists())

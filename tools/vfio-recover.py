@@ -53,6 +53,8 @@ GRBM_GFX_CNTL_OFFSET = (GC_SEG0 + 0x0DC2) * 4
 CP_PQ_WPTR_POLL_CNTL_OFFSET = (GC_SEG0 + 0x1E23) * 4
 CP_ME_CNTL_OFFSET = (GC_SEG0 + 0x0F56) * 4
 CP_MEC_CNTL_OFFSET = (GC_SEG0 + 0x0F55) * 4
+CP_STAT_OFFSET = (GC_SEG0 + 0x0F40) * 4
+CP_CPC_BUSY_STAT_OFFSET = (GC_SEG0 + 0x0E25) * 4
 CP_HQD_ACTIVE_OFFSET = (GC_SEG0 + 0x1FAB) * 4
 CP_HQD_PQ_RPTR_OFFSET = (GC_SEG0 + 0x1FB3) * 4
 CP_HQD_PQ_DOORBELL_OFFSET = (GC_SEG0 + 0x1FB8) * 4
@@ -392,12 +394,16 @@ def quiesce_gc(mmio, sleep=time.sleep, polls=50):
         if remaining:
             raise RecoveryError('active HQDs remain after halt: '+
                                 ','.join(f'{selector:#x}' for selector in remaining))
+        cp_stat_after = mmio.read32(CP_STAT_OFFSET)
+        cp_cpc_busy_after = mmio.read32(CP_CPC_BUSY_STAT_OFFSET)
         return {
             'status': 'quiesced', 'active_before': len(active),
             'dequeued': len(dequeued), 'dequeue_timeouts': len(stuck),
             'forced_inactive': len(stuck), 'queues': active,
             'cp_me_before': me_before, 'cp_me_after': me_after,
             'cp_mec_before': mec_before, 'cp_mec_after': mec_after,
+            'cp_stat_after': cp_stat_after,
+            'cp_cpc_busy_after': cp_cpc_busy_after,
             'sdma0_cntl_before': sdma_cntl_before,
             'sdma0_cntl_after': sdma_cntl_after,
             'sdma0_rb_before': sdma_rb_before,
@@ -438,8 +444,13 @@ def perform_recovery(expected_boot, prior_run_id, state_reader, transport_factor
     if implicit_resets:
         raise RecoveryError('VFIO performed a forbidden implicit PCI reset: '+
                             '; '.join(implicit_resets))
+    safe_for_reuse = (gc_quiesce['dequeue_timeouts'] == 0 and
+                      gc_quiesce['forced_inactive'] == 0 and
+                      gc_quiesce['cp_stat_after'] == 0 and
+                      gc_quiesce['cp_cpc_busy_after'] == 0)
     return {
-        'schema': 2, 'status': 'recovered', 'boot_id': expected_boot,
+        'schema': 2, 'status': 'recovered' if safe_for_reuse else 'incomplete',
+        'authorizes_launch': safe_for_reuse, 'boot_id': expected_boot,
         'prior_run_id': prior_run_id, 'device': DEVICE, 'iommu_group': GROUP,
         'driver': 'vfio-pci', 'pci_command_before': before['pci_command'],
         'pci_command_after': after['pci_command'],

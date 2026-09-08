@@ -1,12 +1,12 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-09-08. Baseline repository: `5727e7d`; candidate: 1.0.168; published
+Updated 2026-09-08. Baseline repository: `d1058f1`; next candidate: 1.0.170; published
 research snapshot: `v1.0.159-preview.1`. This document is the authoritative current
 roadmap. Historical hypotheses in `findings/GPU-RE.md` remain evidence, not instructions.
 
 **Objective:** real, correct GPU compute and rendering in the Sequoia VM on the existing
-Raphael iGPU, followed by usable desktop/display, repeatable lifecycle and measured game
-compatibility, while protecting the host. Enumeration, compilation and a working KIQ
+Raphael iGPU, followed by usable desktop rendering through the VM display and a repeatable
+lifecycle, while protecting the host. Enumeration, compilation and a working KIQ
 are intermediate milestones. No finite test can guarantee that the host will never hang.
 
 [Task-by-task execution plan](superpowers/plans/2026-09-08-gpu-acceleration.md).
@@ -38,7 +38,22 @@ readback validated the corrected SDMA register path and PSP commands, but openin
 silently invoked the device's only `bus` reset method first. That reset is unsafe because the bus
 also contains host APU functions and it confounds the queue-state evidence. Candidate 168 now
 requires reset methods to be disabled during the privileged one-way handoff before any VFIO open.
-Warm cleanup, reinitialization, and Metal completion remain unverified.
+Candidate 169 repairs the next measured address defect: X6000 emitted an SDMA indirect-buffer
+address in the low-36-bit projection of the software framebuffer aperture. The route converts
+only that exact projection into the validated MC aperture before native submission. Its first
+clean launch reached KIQ stamps 1 through 4, but the coordinator read an unterminated replay
+line and force-stopped QEMU before the SDMA template was submitted. That abort contaminated the
+CP. The next launch failed its first KIQ stamp. Read-only VFIO then measured
+`CP_STAT=0x80008200` and `CP_CPC_BUSY_STAT=0x08080000` after the old cleanup had marked every
+engine halted. Candidate 169's SDMA repair therefore remains hardware-unresolved.
+
+The coordinator now ignores an unterminated serial tail, uses the explicit `submitKIQFrame`
+result when present, and requests bounded guest/ACPI shutdown after runtime observation
+errors. Recovery authorizes another launch only when dequeue had no timeout or force-clear and
+both CP status registers are idle. The driver also calls Apple's native
+`powerOffHWEngines` immediately after partial engine power-up failure, while the guest mappings
+still exist. A fresh boot is required to test this combined lifecycle and SDMA batch; the current
+three-launch ledger is exhausted and the CP is measurably non-idle.
 
 ## 1. What is actually complete
 
@@ -63,14 +78,14 @@ single clean run is not repeatability evidence. There is no defensible overall p
 | [x] | Wrong-kext route regression prevented for current scopes | `route-domains.py` and regression tests; not a complete C++ verifier |
 | [x] | Optional hybrid diagnostic built | 1.0.162, exact entry guards, `rgpuhybrid=1`, native result preserved |
 | [x] | Hybrid diagnostic validated on hardware | 1.0.163: complete records; type10 fails after type10/type11 success |
-| [ ] | Repeatable clean initial state | PSP cleanup plus an implicit VFIO bus reset preceded one warm start; full reset-disabled GC/SDMA cleanup still needs hardware proof |
+| [ ] | Repeatable clean initial state | Reset-free cleanup works mechanically, but a forced mid-power-up stop left CP busy state that the old receipt incorrectly accepted; new admission fails closed |
 | [x] | Native hybrid queues / complete engine startup | Candidate166 maps residual engine-2 channels to real SDMA0; hybrid status 0, native start/power-up 1 and KIQ stamps through 21 on hardware |
 | [ ] | Correct Metal compute and offscreen rendering | First command buffer fails; zero results checked |
 | [ ] | Per-process memory, synchronization and resource lifecycle | Must be exercised after first real completion |
 | [ ] | Accelerated desktop and presentation | WindowServer panic repair is not proof of accelerated composition |
 | [ ] | Physical iGPU display output | DCN 3.1.5 path remains a separate open milestone |
-| [ ] | Reliable shutdown/restart and host stability | Three historical host hangs; mechanism still undetermined |
-| [ ] | Supported games and performance | Zero games tested/verified; see `supported-games.md` |
+| [ ] | Reliable shutdown/restart and host stability | Three historical host hangs; mechanism still undetermined; no fault occurred in the three bounded launches on the current boot |
+| [ ] | Desktop performance and release qualification | Deferred until compute, render, presentation and lifecycle pass |
 
 Authoritative recordings:
 
@@ -104,7 +119,7 @@ flowchart TD
     E --> F[Correct offscreen rendering]
     F --> G[Memory and synchronization matrix]
     G --> H[Accelerated desktop / presentation]
-    H --> I[Games and performance]
+    H --> I[Desktop performance and release]
     A --> L[Shutdown and host-hang investigation]
     B --> L
     L --> R[Validated lifecycle and reuse]
@@ -286,9 +301,10 @@ Physical display work must not be mistaken for a prerequisite to an offscreen co
   installed root guest agent, bound to the current guest/container identity and revocable.
 - [x] Prove guest shutdown GPU-less before testing it with passthrough. Do not delay or
   disable the existing independent exposure timers.
-- [ ] Trace native driver uninitialization: stop new clients, drain required work, stop
+- [x] Trace native driver uninitialization: stop new clients, drain required work, stop
   queues/engines, release interrupts, destroy PSP rings, release referenced memory in
-  the implementation's required order. Verify order from Apple and matching Linux paths.
+  the implementation's required order. Apple exposes engine powerOff at vtable `0x140`
+  and stop at `0x150`; Linux disables compute queues before halting CP.
 - [ ] Distinguish four results: shutdown requested; guest exited; driver teardown observed;
   next initialization succeeds. None implies the next automatically.
 - [ ] Investigate the host hangs as their own defect: preserve boot-keyed host journal,
@@ -301,9 +317,16 @@ Physical display work must not be mistaken for a prerequisite to an offscreen co
   guest panic, proving PSP cleanup is useful but not sufficient after full engine startup.
 - [x] Run the third same-boot qualification under the fixed ceiling. It found inherited active
   ME2 HQDs and failed a KIQ stamp before Metal; no fourth launch was attempted.
-- [ ] Validate the Linux-ordered rootless GC quiesce after proving `reset_method` is empty: disable pointer polling, request HQD
+- [x] Validate the Linux-ordered rootless GC quiesce after proving `reset_method` is empty: disable pointer polling, request HQD
   dequeue while MEC runs, halt graphics/MEC/SDMA, force only stuck halted HQDs inactive, prove
-  zero active queues, then destroy PSP rings. No PCI bus reset or amdgpu rebind is allowed.
+  zero active queues, then destroy PSP rings. The writes and readbacks are validated with no
+  PCI bus reset or amdgpu rebind. Force-cleared queues are now explicitly non-authorizing.
+- [x] Reject incomplete recovery: any dequeue timeout, forced ACTIVE clear, nonzero `CP_STAT`
+  or nonzero `CP_CPC_BUSY_STAT` prevents warm reuse even when halt bits and ACTIVE read back.
+- [x] On a runtime observation/capture failure after exact QEMU identity validation, request
+  guest shutdown and peer-verified ACPI powerdown before exact-CID force-stop fallback.
+- [x] On partial engine power-up failure, invoke Apple's native `powerOffHWEngines` immediately
+  while its queue/MQD mappings still exist; preserve and report the native cleanup result.
 - [ ] Prove the exact-container ACPI fallback reaches native driver stop/power-off when the
   root command channel is unavailable; preserve the independent exposure deadline.
 
@@ -314,12 +337,12 @@ an evidence-backed containment strategy is established. A timeout is not contain
 a fabric lockup. Suspend/resume of the host stays disabled during development; support
 for it is a later separate qualification task.
 
-### M8 — Performance, games and release qualification
+### M8 — Desktop performance and release qualification
 
 - [ ] Establish GPU-time and wall-time baselines after correctness; separate boot, shader
   compile, CPU transfer and GPU execution. Set optimization targets from those measurements.
-- [ ] Use a small native test app, then a named installed Metal game; record game/build,
-  OS/kext/firmware, backend, resolution/settings, duration, frame times and visual defects.
+- [ ] Measure WindowServer and a small native Metal presentation app at fixed resolutions;
+  record OS/kext/firmware, backend, duration, frame times and visual defects.
 - [ ] Require three independently initialized host-boot sessions with the core suite passing.
 - [ ] After M7, require three successful bounded VM lifecycle cycles; do not turn this into
   an unattended autorun loop or extend the current cap to manufacture a stability result.
@@ -327,6 +350,9 @@ for it is a later separate qualification task.
   lifetime. Long gameplay/soak testing needs a separate reviewed safety plan after M7.
 - [ ] Promote a release only with build hashes, passing hardware evidence and a feature/
   limitation list. Keep unsupported or untested games labeled accordingly.
+
+Game testing is deferred because it is outside the current desktop-rendering objective.
+`supported-games.md` remains an explicitly untested list until that scope changes.
 
 **Core acceleration achieved:** M3–M5 pass on the real iGPU. **Usable accelerated VM:**
 M6 desktop path and M7 lifecycle also pass. **Full roadmap complete:** physical display
@@ -384,13 +410,16 @@ date for the unknown hardware defects until M2 has localized them.
   [VFIO](https://docs.kernel.org/driver-api/vfio.html),
   [AMDGPU hardware structure](https://docs.kernel.org/gpu/amdgpu/driver-core.html).
 
-## 8. Resume after the planned reboot
+## 8. Next clean-boot experiment
 
 1. Verify the host boot ID changed and no VM is running; renew/verify sleep inhibition.
 2. Inspect iGPU ownership and collect approved reference state **before** any handoff.
-3. Complete the M0 offline/GPU-less gates. A reboot does not authorize skipping them.
-4. Prepare one M2 experiment; verify the candidate actually in the ESP and the probe ready.
+3. Run the completed offline gates once and verify the combined candidate actually in the ESP.
+4. Prepare one `metal-004` experiment whose sole hardware question is whether the repaired
+   SDMA paging IB completes the checked Metal probe.
 5. Make the one-way handoff if required, start one bounded run, classify it, archive it,
-   stop and honor the outcome's next action. A stuck queue closes that boot's GPU testing.
+   stop and honor the outcome's next action. A stuck queue or non-idle recovery receipt closes
+   that boot's GPU testing. If the full probe passes and recovery is authorizing, run one warm
+   repeat; only then open the interactive QEMU display for desktop testing.
 
 No VM launch, handoff, reboot or hardware reset was performed while writing this plan.

@@ -3273,3 +3273,60 @@ admission and rootless recovery refuse any nonempty or unreadable reset method. 
 use schema 2, record the empty state before and after, and reject any target-device reset message.
 The three-launch ceiling still prevented using the confounded validation as permission for a
 fourth launch; a fresh boot must prove reset-free cleanup and warm reinitialization.
+
+### 2026-09-08: a torn serial read, not the SDMA patch, contaminated the CP
+
+Candidate 169 (`d1058f1`, build `c9d63d2aabf742cf92616cb91ba8aa27`) repairs only the
+measured SDMA paging-IB address projection. X6000 builds opcode `SDMA_OP_INDIRECT` with an
+address such as `0x400100000`, the low 36 bits of a buffer in the `0xf400000000` software
+framebuffer aperture. The wrapper recognizes only that exact projection and restores the
+validated MC aperture, yielding `0x840100000`, before the native 0x200-byte template copy.
+
+The first candidate-169 run (`b3d6720b7c58406ea3089c6ef16e60f6`) did not test that repair.
+It initialized the one-instance SDMA topology and advanced KIQ stamps 1, 2 and 3. A direct
+`waitForHwStamp(1) -> 0` was followed by `waitForHwStamp(4) -> 1` and a successful
+`submitKIQFrame`; the later success proves the earlier generic wait result was not a terminal
+KIQ failure. While the next structured snapshot was being printed, the coordinator read the
+file between writes. Python's `splitlines()` treated the unterminated tail as a complete replay;
+its partial payload differed from the earlier sequence and was classified as a conflicting
+replay. The coordinator then force-stopped QEMU while the driver was still inside its KIQ path,
+before any `AMDHardware::stopHWEngines` or `powerOffHWEngines` event. No `SD: IB template`
+record had occurred.
+
+The following warm launch (`557c33d2a4164c0a919b5cde3d1cbd84`) therefore began with
+`CP_STAT=0x80008200`, `CP_CPC_STATUS=0xa0000082` and `CP_CPF_BUSY_STAT=0x48460002`. Its first
+KIQ ring stopped at RPTR 0 / WPTR 0x20 and `powerUpHWEngines` returned zero. The rootless
+post-stop transaction found the same active HQD through eight aliased selectors, could not
+dequeue it, halted the engines and force-cleared ACTIVE. It nevertheless wrote a schema-2
+`recovered` receipt because the old validator checked only halt bits and ACTIVE.
+
+Read-only legacy-VFIO access after that transaction, with `reset_method` empty and no QEMU
+running, measured the actual retained state:
+
+```
+CP_STAT              0x80008200
+CP_CPC_BUSY_STAT     0x08080000
+CP_ME_CNTL           0x15000000
+CP_MEC_CNTL          0x50000000
+SDMA0_F32_CNTL       0x00000001
+```
+
+The halt bits are real, but they do not clear the command processor's outstanding internal
+work. A recovery receipt now authorizes reuse only with zero dequeue timeouts, zero forced
+ACTIVE clears, `CP_STAT == 0` and `CP_CPC_BUSY_STAT == 0`. An incomplete transaction is retained
+as evidence with `status=incomplete` and `authorizes_launch=false`. Existing receipts lacking
+these observations fail closed.
+
+Two changes prevent the harness from creating the same state again. The classifier ignores the
+final serial fragment until its newline is present and prefers the explicit `submitKIQFrame`
+result over generic `waitForHwStamp` calls. The coordinator requests the identified guest's shutdown, then peer-verified ACPI
+powerdown, before exact-CID force-stop on runtime capture or observation errors. Identity mismatch
+and host-kernel faults retain the immediate stop path. In the driver, a partial
+`AMDHardware::powerUpHWEngines` failure now invokes Apple's own `powerOffHWEngines` while QEMU's
+DMA mappings still exist. The exact 24G830 implementation dispatches engine power-off through
+vtable slot 0x140; PM4 power-off tail-calls its stop method at slot 0x150. This is the earliest
+native cleanup point that still owns the KIQ ring, MQD and writeback mappings.
+
+No host reset, driver rebind or privileged command was used for this analysis. The current boot's
+three-launch ceiling is exhausted and its CP is measurably non-idle, so candidate 169's SDMA
+address repair still requires one clean-boot hardware experiment.

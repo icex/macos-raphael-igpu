@@ -312,7 +312,8 @@ def read_boot_ledger(path):
 
 def validate_recovery_receipt(receipt, boot_id, prior_run_id):
     errors = []
-    exact = {'schema':2, 'status':'recovered', 'boot_id':boot_id,
+    exact = {'schema':2, 'status':'recovered', 'authorizes_launch':True,
+             'boot_id':boot_id,
              'prior_run_id':prior_run_id, 'device':'0000:7b:00.0',
              'iommu_group':'31', 'driver':'vfio-pci'}
     if any(receipt.get(key) != value for key,value in exact.items()):
@@ -334,6 +335,10 @@ def validate_recovery_receipt(receipt, boot_id, prior_run_id):
     gc = receipt.get('gc_quiesce')
     if (not isinstance(gc, dict) or gc.get('status') != 'quiesced' or
             gc.get('active_after') != 0 or
+            gc.get('dequeue_timeouts') != 0 or
+            gc.get('forced_inactive') != 0 or
+            gc.get('cp_stat_after') != 0 or
+            gc.get('cp_cpc_busy_after') != 0 or
             type(gc.get('cp_me_after')) is not int or
             gc['cp_me_after'] & 0x15000000 != 0x15000000 or
             type(gc.get('cp_mec_after')) is not int or
@@ -467,7 +472,7 @@ class HostMonitor:
     """Keep journal capture live across blocking startup, probe, and shutdown."""
     def __init__(self, cursor, interrupt, interval=1):
         self.cursor = cursor; self.interrupt = interrupt; self.interval = interval
-        self.messages = []; self.error = None
+        self.messages = []; self.error = None; self.error_kind = None
         self.done = threading.Event()
         self.thread = threading.Thread(target=self.watch, name='rgpu-host-monitor')
 
@@ -475,9 +480,17 @@ class HostMonitor:
         try:
             self.cursor, messages, faults = kernel_updates(self.cursor)
             self.messages.extend(messages)
-            if faults: self.error = 'new host kernel fault during exposure'
+            if faults:
+                self.error_kind = 'fault'
+                # error is the publication flag read by the main thread; its
+                # kind must already be visible when that flag becomes non-null.
+                self.error = 'new host kernel fault during exposure'
         except Exception as error:
-            self.error = 'host kernel capture failed: '+str(error)
+            # Never demote a detected hardware/kernel fault if the capture
+            # channel itself also fails during cleanup.
+            if self.error_kind != 'fault':
+                self.error_kind = 'capture'
+                self.error = 'host kernel capture failed: '+str(error)
 
     def watch(self):
         while not self.done.wait(self.interval):
@@ -521,6 +534,7 @@ def run_one(vm, manifest_path, output):
     guest_shutdown = helper('guest-shutdown')
     state = None; probe = None; failure = None; shutdown_result = None; host_messages = []
     recovery_result = None
+    running_validated = False
     monitor = None
     output.mkdir(parents=True, exist_ok=False)
     write_once(output/'manifest.json', manifest)
@@ -577,6 +591,7 @@ def run_one(vm, manifest_path, output):
             running = running_identity(state['cid']); write_once(output/'running-identity.json', running)
             errors = validate_running(manifest, running)
             if errors: raise ValueError('running identity mismatch: '+','.join(errors))
+            running_validated = True
             end = min(state['launch_deadline_epoch'], state['deadline_epoch'])-25
             decisive_since = None
             while time.time() < end:
@@ -606,14 +621,30 @@ def run_one(vm, manifest_path, output):
     except BaseException as error:
         signal.signal(signal.SIGUSR1, lambda signum, frame:None)
         failure = type(error).__name__+': '+str(error)
-        if isinstance(error, getattr(supervisor, 'ManagedStopUnconfirmed', type(None))):
+        managed_unconfirmed = isinstance(
+            error, getattr(supervisor, 'ManagedStopUnconfirmed', type(None)))
+        if managed_unconfirmed:
             shutdown_result = dict(outcome='STOP_UNCONFIRMED', error=str(error))
-        if state:
+        if state and not managed_unconfirmed:
             try:
-                supervisor.stop_exact(state['cid'])
-                shutdown_result = dict(cid=state['cid'], outcome='forced-after-abort')
+                # A validated guest still owns live DMA mappings. Loss of the
+                # journal capture channel must try guest/ACPI shutdown first;
+                # an actual host kernel fault takes the shortest exact-stop path.
+                if running_validated and not (
+                        monitor and getattr(monitor, 'error_kind', None) == 'fault'):
+                    shutdown_result = guest_shutdown.shutdown(
+                        vm, state, expected_build=manifest['guest_build'], grace=20)
+                else:
+                    supervisor.stop_exact(state['cid'])
+                    shutdown_result = dict(cid=state['cid'], outcome='forced-after-abort')
             except Exception as stop_error:
-                shutdown_result = dict(cid=state['cid'], outcome='STOP_UNCONFIRMED', error=str(stop_error))
+                try:
+                    supervisor.stop_exact(state['cid'])
+                    shutdown_result = dict(cid=state['cid'], outcome='forced-after-shutdown-error',
+                                           error=str(stop_error))
+                except Exception as force_error:
+                    shutdown_result = dict(cid=state['cid'], outcome='STOP_UNCONFIRMED',
+                                           error=str(force_error))
     finally:
         # Once cleanup is underway, retain faults without interrupting cleanup.
         signal.signal(signal.SIGUSR1, lambda signum, frame:None)

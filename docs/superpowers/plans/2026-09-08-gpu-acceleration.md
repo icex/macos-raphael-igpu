@@ -240,7 +240,8 @@ prepare command's outputs; scripts must not embed a personal home path.
 ```text
 PREPARED -> ADMITTED -> STARTED -> IDENTITY_VERIFIED -> TARGET_OBSERVED
          -> PROBE_IF_ELIGIBLE -> SHUTDOWN_REQUESTED -> STOP_CONFIRMED -> CLASSIFIED
-any identity/capture/host error -> ABORT -> exact-CID stop -> CONTAMINATED
+identity mismatch/host fault -> ABORT -> exact-CID stop -> CONTAMINATED
+runtime capture/observation error -> guest/ACPI shutdown -> exact-CID fallback -> CLASSIFIED
 ```
 
 - [x] Reuse the supervisor's real deadlines. Work backward from the earlier launch-service
@@ -250,8 +251,9 @@ any identity/capture/host error -> ABORT -> exact-CID stop -> CONTAMINATED
   reports which required event was missing. Precompile the probe in a GPU-less guest.
 - [x] Run the Metal probe only if the experiment calls for it and native startup succeeded.
   Do not perform shader submissions solely to confirm a known startup failure again.
-- [x] On a decisive failure, preserve a short predefined diagnostic tail, stop immediately,
-  and mark the boot contaminated. Do not use the remaining cap for exploratory writes.
+- [x] On a decisive failure, preserve a short predefined diagnostic tail and begin bounded
+  shutdown immediately. After running identity is verified, give native guest/ACPI teardown
+  the first chance; exact-CID stop is the fallback. Do not use the remaining cap for exploratory writes.
 - [x] Test cancellation, stale command delivery, caller death, serial death, Docker failure,
   too-little-remaining-time and wrong CID. Ensure each path either confirms stop or emits
   an explicit unresolved-stop error; never silently fall through to another launch.
@@ -367,6 +369,14 @@ scoped native uninitialization observations to `src/RaphaelGPU.cpp` if needed.
   TMR/ring release after masters no longer reference those allocations.
 - [ ] Observe clean native shutdown after a bounded GPU workload, without forcing register
   state. If teardown cannot run after partial startup, isolate that failure separately.
+- [x] Ignore unterminated serial tails and prefer the explicit `submitKIQFrame` result over a
+  generic stamp wait; for old evidence, a later successful stamp is recovered execution.
+- [x] After exact running identity is validated, attempt guest/ACPI shutdown on coordinator
+  exceptions before exact-CID force-stop. Identity mismatch and host fault still stop directly.
+- [x] Make recovery receipts fail closed on dequeue timeout, forced ACTIVE clear, nonzero
+  `CP_STAT` or nonzero `CP_CPC_BUSY_STAT`.
+- [x] Arrange partial engine power-up cleanup through Apple's native
+  `powerOffHWEngines` while guest DMA mappings remain live.
 - [ ] Investigate host fault evidence per boot, including inaccessible/missing capture.
   Revalidate runtime-PM pinning and actual touched SoC resources; last-line correlation
   and amdgpu-first vs virgin survival times are not mechanisms or probabilities.
@@ -378,7 +388,7 @@ scoped native uninitialization observations to `src/RaphaelGPU.cpp` if needed.
 **Acceptance:** shutdown/reinitialize is a measured lifecycle, not repeated forced kills;
 M7's host-safety risk remains explicit until resolved or defensibly contained.
 
-## T9 — Presentation, DCN, games and release
+## T9 — Presentation, DCN and release
 
 **Files:** extend `tests/metal_probe.m` or add a small Metal presentation test app;
 update `findings/feature-matrix.md`, `docs/supported-games.md`, `docs/release-notes.md`;
@@ -392,9 +402,8 @@ add a dedicated DCN compatibility unit only when source mapping demonstrates its
   statuses separate. Video acceleration is an additional feature, not a compute gate.
 - [ ] Run the M8 independent-boot/core/lifecycle qualification without extending existing
   caps. Long-duration gaming/stress is a separate gated plan after host stability improves.
-- [ ] Test named installed games only after core correctness. Report measured frame times,
-  settings, actual gameplay, defects and duration; no unsupported compatibility predictions.
-- [ ] Update the test-derived supported list and feature matrix; preserve failure evidence.
+- [ ] Keep game testing deferred while desktop rendering is the requested target. Preserve the
+  existing supported-games document as untested rather than inferring compatibility.
 - [ ] Review/remove proven obsolete experimental hooks one at a time with regression runs.
   Consolidate hardware access into typed, documented units only as affected code is touched.
 - [ ] Merge reviewed `dev` milestones into `main`; tag a source-built release only with
