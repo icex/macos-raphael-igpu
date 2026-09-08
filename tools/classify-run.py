@@ -79,6 +79,8 @@ def parse_serial(serial):
                 (m := re.search(r'com\.apple\.kext\.AMDRadeonX6000\s*:\s*(\S+)\s*\+\s*(0x[0-9a-fA-F]+)', line))):
             panics[-1].update(symbol=m[1], offset=int(m[2], 16))
     raw_build = next(iter(raw_builds)) if len(raw_builds) == 1 else None
+    if raw_build is None and len(counts) == 1:
+        raw_build = next(iter(counts))
     structured_payloads = {(r['build'], r['raw']) for r in records.values()}
     seen_raw = set()
     decoded_raw = []
@@ -103,6 +105,11 @@ def parse_serial(serial):
     for build, seq in records:
         if seq >= counts[build]:
             losses.append(dict(kind='capture_loss', build=build, reason='summary precedes newer records'))
+    # A complete structured snapshot is an immutable, sequenced prefix. Later direct
+    # log lines have no record sequence and may race the next snapshot; do not splice
+    # their serial line numbers into that prefix. Raw records remain the early-panic
+    # fallback when no structured snapshot exists, and panics are retained separately.
+    decoded_raw = [row for row in decoded_raw if row.get('build') not in counts]
     if decoded_raw and raw_build not in counts:
         losses.append(dict(kind='capture_loss', build=raw_build, reason='live records only'))
     rows = sorted(list(records.values()) + decoded_raw + panics, key=lambda r: r['seq'])

@@ -1,0 +1,33 @@
+{
+  "id": "metal-001",
+  "question": "After proven candidate-166 native startup on a second same-boot initialization, does the checked Metal compute and render probe complete correctly?",
+  "candidate_version": "1.0.166",
+  "requested_diagnostic": "rgpusdma=1",
+  "behavior_change": "none in the kext; keep a complete structured snapshot separate from later unsequenced direct serial records so native success can admit the prepared probe",
+  "required_observations": [
+    "loaded_build",
+    "route_guards",
+    "kiq_stamps",
+    "hybrid_enter",
+    "hybrid_exit",
+    "engine_start",
+    "sdma_topology",
+    "sdma_channel_remap"
+  ],
+  "max_seconds": 180,
+  "prerequisites": [
+    "hybrid_004_native_start_pass",
+    "rootless_recovery_receipt",
+    "classifier_snapshot_boundary_regression"
+  ],
+  "repeat_policy": "one final launch under the three-launch same-boot ceiling",
+  "abort_on": [
+    "identity_mismatch",
+    "capture_loss",
+    "guest_panic",
+    "kiq_dequeue_timeout",
+    "host_fault"
+  ],
+  "outcome_table": "docs/ROADMAP.md M4-M5",
+  "run_probe_only_after_native_start": true
+}
