@@ -447,8 +447,12 @@ def start_locked(vm, maximum, gpu_args):
     except Exception:
         try:
             run([binary("systemctl"), "--user", "stop", name + ".service"], timeout=40)
-        finally:
-            cleanup(vm, name)
+        except Exception:
+            # Absence of a container does not cancel an accepted but delayed
+            # service launch. Its own cap/cleanup remain responsible; keep the
+            # reservation until that lifetime is known to have ended.
+            raise RuntimeError('managed service stop unconfirmed; launch reservation retained') from None
+        cleanup(vm, name)
         raise
 
 def main():
