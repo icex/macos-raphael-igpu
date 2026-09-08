@@ -1,6 +1,6 @@
 # Native hybrid branch follow-up map (offline, 24G830)
 
-This is a preparation map, not a result of hybrid-001.
+This map now includes the hardware-confirmed hybrid-002 branch result.
 
 TtlCreateHybridEngine 0x9876b validates all three pointers, calls
 `ttlIsHwAvailable` at 0x987a2, and rejects false at 0x987ae with status 4.
@@ -63,3 +63,20 @@ counts SDMA instances across HWIDs42/43/68/69. Its
 [SDMA backend](https://github.com/torvalds/linux/blob/v6.12/drivers/gpu/drm/amd/amdgpu/sdma_v5_2.c)
 uses the discovered instance count for ring setup. This pinned reference is not
 the running CachyOS7.2.3 kernel; live discovery is recorded separately.
+
+## Hardware-confirmed cause (candidate 164)
+
+Hybrid-002 recorded SDMA type0/index0 and type1/index0 resolving against counts
+`1,0,0,0`, then type0/index1 returning null before the instance callback. X6000's
+Navi23 `allocateHWEngines` at 0x9977c unconditionally constructs two SDMA objects at
+hardware+0x3b8 and +0x3c0. Generic `initializeHWEngines` passes array indices 1 and 2;
+`AMDGFX10SDMAEngine::init` at 0x6b7b2 subtracts one and stores instance indices 0 and 1
+for both ring requests. The second object is therefore the producer of the rejected
+index1 request.
+
+The native `startHWEngines` count is `2 * byte[hardware+0xc2] + 2`, so its minimum is
+two and no capability-field value represents Raphael's single SDMA instance. A correct
+compatibility path must remove the second object before generic initialization and use
+one-engine start semantics while preserving the real first-engine result and trace bit.
+Aliasing index1 onto instance0 would collide with the two handles already owned by the
+first object and leave a false engine exposed to clients.
