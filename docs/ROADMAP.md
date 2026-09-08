@@ -14,8 +14,9 @@ are intermediate milestones. No finite test can guarantee that the host will nev
 Execution update: the fresh amdgpu boot is captured, the sleep inhibitor is active,
 and [the fixed baseline audit](../findings/baseline-audit.md) records enabled
 interventions. Candidate 1.0.163 adds concurrent critical records and build markers.
-Offline classifier/admission/staging tests pass; GPU-less delivery and the complete
-one-run coordinator are still being validated. No new GPU execution claim is made.
+All 75 offline tests pass. [GPU-less end-to-end validation](../findings/gpueless-tests/163/coordinator/notes.md)
+confirmed the exact loaded build, complete critical records, no VFIO arguments and
+bounded exact-CID cleanup. T1–T4 are complete; T5 is next. No new GPU execution claim is made.
 
 ## 1. What is actually complete
 
@@ -39,7 +40,7 @@ single clean run is not repeatability evidence. There is no defensible overall p
 | [x] | Bounded ACPI shutdown/fallback tested without GPU | Request sent; guest did not exit; exact container force-stopped |
 | [x] | Wrong-kext route regression prevented for current scopes | `route-domains.py` and regression tests; not a complete C++ verifier |
 | [x] | Optional hybrid diagnostic built | 1.0.162, exact entry guards, `rgpuhybrid=1`, native result preserved |
-| [ ] | Hybrid diagnostic validated on hardware | Not deployed/tested; ESP still contains 1.0.159 |
+| [ ] | Hybrid diagnostic validated on hardware | 1.0.163 is deployed and validated GPU-less; physical routes remain untested |
 | [ ] | Repeatable clean initial state | Last GPU runs reached a stuck KIQ; safe warm reuse unproved |
 | [ ] | Native hybrid queues / complete engine startup | Clean run fails `TtlCreateHybridEngine` status 4 |
 | [ ] | Correct Metal compute and offscreen rendering | First command buffer fails; zero results checked |
@@ -117,14 +118,14 @@ firmware state or host IOMMU state. Do not use snapshot rollback as a clean-GPU 
 
 ### M0 — Make experiments identifiable and falsifiable (next; no GPU required)
 
-- [ ] Freeze 1.0.159 as a reference observation, not as a known-good accelerated driver.
-- [ ] Inventory enabled patches as compatibility fixes, observations, behavior-changing
+- [x] Freeze 1.0.159 as a reference observation, not as a known-good accelerated driver.
+- [x] Inventory enabled patches as compatibility fixes, observations, behavior-changing
   experiments or obsolete hypotheses. In particular, `XJ` replaces a native power-up
   loop, `XK` performs hardware writes, and some legacy logs still describe retracted ideas.
-- [ ] Add an immutable experiment record and cross-check source/binary/ESP/loaded identity.
-- [ ] Add deterministic result classification and diagnostic integrity checks.
-- [ ] Make the small critical diagnostic records survive concurrent logging and buffer pressure.
-- [ ] Remove active-container force-replacement from the normal experiment path.
+- [x] Add an immutable experiment record and cross-check source/binary/ESP/loaded identity.
+- [x] Add deterministic result classification and diagnostic integrity checks.
+- [x] Make the small critical diagnostic records survive concurrent logging and buffer pressure.
+- [x] Remove active-container force-replacement from the normal experiment path.
 
 Keep M0 small: extend the existing scripts and tests. No dashboard, replacement VM
 framework, broad driver refactor or repeated CI builds belong on the first-run critical
