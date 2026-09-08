@@ -448,6 +448,37 @@ Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0
         self.assertEqual(result['verdict'], 'INCONCLUSIVE')
         self.assertEqual(result['earliest_failure'], 'sdma_vm_context_mismatch')
 
+    def test_raw_terminal_order_outranks_later_structured_kiq_failure(self):
+        c = self.classifier()
+        manifest = {'build_id': 'abc', 'spec': {'required_observations': [
+                    'sdma_topology', 'sdma_channel_remap', 'sdma_vm_context']}}
+        serial = ''.join([
+            'RGPU_EVENT build=abc seq=0 BUILD: identity=abc\n',
+            'RGPU_EVENT build=abc seq=1 HY: HWLibs hybrid trace route=ok entries-match=1\n',
+            'RGPU_EVENT build=abc seq=2 SD: topology routes=ok count=7 entries-match=1\n',
+            'RGPU_EVENT build=abc seq=3 SD: topology applied: discovered=1 kept=SDMA0 removed=SDMA1 before initialize\n',
+            'RGPU_EVENT build=abc seq=4 SD: AMDHardware::initializeHWEngines -> 1 (topology-applied=1)\n',
+            'RGPU_EVENT build=abc seq=5 SD: channel engine remap 2 -> 1 ring=3\n',
+            'RGPU_EVENT build=abc seq=6 XJ: waitForHwStamp(1) -> 1\n',
+            'RGPU_EVENT build=abc seq=7 HY: createHybridEngine enter: engine=10 available=1\n',
+            'RGPU_EVENT build=abc seq=8 HY: SDMA select index=0 queue-type=0 found=1 counts=1,0,0,0 queues=2,0,0 occupied=0 callback=0xffffff8000000000\n',
+            'RGPU_EVENT build=abc seq=9 HY: createHybridEngine exit: engine=10 valid=1 available-before=1 status=0\n',
+            'RGPU_EVENT build=abc seq=10 HY: createHybridEngine enter: engine=11 available=1\n',
+            'RGPU_EVENT build=abc seq=11 HY: SDMA select index=0 queue-type=1 found=1 counts=1,0,0,0 queues=2,0,0 occupied=0 callback=0xffffff8000000000\n',
+            'RGPU_EVENT build=abc seq=12 HY: createHybridEngine exit: engine=11 valid=1 available-before=1 status=0\n',
+            'RGPU_EVENT build=abc seq=13 SD: one-instance start -> 1 (SDMA0=0xffffff8000001000 SDMA1=0)\n',
+            'RGPU_EVENT build=abc seq=14 XJ: AMDHardware::startHWEngines -> 1\n',
+            'RGPU_EVENT build=abc seq=15 SD: submit vmid=2 flags=0 entries=1 valid=1 IB0=0x400100000 IB1=0\n',
+            'RGPU_EVENT build=abc seq=16 XJ: waitForHwStamp(28) -> 0\n',
+            'RGPU_EVENT build=abc seq=17 XJ: submitKIQFrame -> 0\n',
+            'RGPU_RECORDS build=abc count=18 dropped=0 truncated=0\n',
+            '[0:6:0]: HW Channel 12 SDMA0_PAGE is occupied by channel 34 stamp 1\n',
+            'RaphaelGPU rgpu: @ XJ:   waitForHwStamp(28) -> 0\n'])
+        events = c.parse_serial(serial)
+        result = c.classify(manifest, events, None)
+        self.assertEqual(result['verdict'], 'INCONCLUSIVE')
+        self.assertEqual(result['earliest_failure'], 'sdma_vm_context_missing')
+
     def test_submit_and_vm_context_records_parse(self):
         rows = self.classifier().parse_serial(
             'RGPU_RECORDS build=abc count=3 dropped=0 truncated=0\n'
@@ -463,6 +494,99 @@ Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0
         self.assertEqual(rows[2]['vmid'], 2)
         self.assertEqual(rows[2]['ib0'], 0x400900000)
         self.assertEqual(rows[2]['ib1'], 0x401180000)
+
+    def test_prepared_vm_program_record_parses_all_native_words(self):
+        words = ','.join(f'{0x1000 + i:08x}' for i in range(21))
+        info = ','.join(f'{0x2000 + i:08x}' for i in range(10))
+        rows = self.classifier().parse_serial(
+            'RGPU_RECORDS build=abc count=1 dropped=0 truncated=0\n'
+            'RGPU_EVENT build=abc seq=0 VM: prepared hub=0 vmid=2 '
+            'start=0x400000000 end=0x400ffffff root=0x840abc000 flags=0x3 '
+            f'reprogram=1 alternate=1 info={info} words={words}\n')
+        self.assertEqual(rows[0]['kind'], 'vm_program')
+        self.assertEqual(rows[0]['vmid'], 2)
+        self.assertEqual(rows[0]['root'], 0x840abc000)
+        self.assertEqual(rows[0]['info_words'], list(range(0x2000, 0x200a)))
+        self.assertEqual(rows[0]['words'], list(range(0x1000, 0x1015)))
+
+        route = self.classifier().parse_serial(
+            'RGPU_RECORDS build=abc count=1 dropped=0 truncated=0\n'
+            'RGPU_EVENT build=abc seq=0 VM: route '
+            'AMDGFX10VMM::prepareVMInvalidateRequest -> ok (org=0xffffff800006249c)\n')
+        self.assertEqual(route[0]['kind'], 'vm_program_route')
+        self.assertTrue(route[0]['ok'])
+
+    def test_late_prepared_vm_program_survives_after_structured_snapshot(self):
+        words = ','.join(f'{0x1000 + i:08x}' for i in range(21))
+        info = ','.join(f'{0x2000 + i:08x}' for i in range(10))
+        rows = self.classifier().parse_serial(
+            'RGPU_RECORDS build=abc count=1 dropped=0 truncated=0\n'
+            'RGPU_EVENT build=abc seq=0 BUILD: identity=abc\n'
+            'RaphaelGPU rgpu: @ VM: prepared hub=0 vmid=2 '
+            'start=0x400000000 end=0x400ffffff root=0x840abc000 flags=0x3 '
+            f'reprogram=1 alternate=1 info={info} words={words}\n')
+        programs = [row for row in rows if row['kind'] == 'vm_program']
+        self.assertEqual(len(programs), 1)
+        self.assertEqual(programs[0]['source'], 'live-observation')
+        self.assertEqual(programs[0]['words'][20], 0x1014)
+
+    def test_required_vm_program_correlates_with_the_stalled_sdma_submit(self):
+        c = self.classifier().classify
+        manifest = {'build_id': 'abc', 'spec': {'required_observations': [
+                    'sdma_topology', 'sdma_channel_remap', 'sdma_vm_program']}}
+        rows = [
+            dict(kind='build'), dict(kind='route', ok=True),
+            dict(kind='vm_program_route', ok=True),
+            dict(kind='sdma_topology_route', ok=True, count=7),
+            dict(kind='sdma_topology', applied=True),
+            dict(kind='sdma_initialize', applied=True, result=1),
+            dict(kind='sdma_engine_remap', requested=2, selected=1),
+            dict(kind='kiq', stamp=1, result=1),
+            dict(kind='hybrid_enter', engine=10, available=1),
+            dict(kind='sdma_select', index=0, queue_type=0, found=True,
+                 counts=[1, 0, 0, 0]),
+            dict(kind='hybrid_exit', engine=10, available=1, result=0),
+            dict(kind='hybrid_enter', engine=11, available=1),
+            dict(kind='sdma_select', index=0, queue_type=1, found=True,
+                 counts=[1, 0, 0, 0]),
+            dict(kind='hybrid_exit', engine=11, available=1, result=0),
+            dict(kind='sdma_one_start', result=1),
+            dict(kind='engine_start', result=1),
+            dict(kind='vm_program', hub=0, vmid=2, start=0x400000000,
+                 end=0x400ffffff, root=0x840abc000, reprogram=True,
+                 info_words=list(range(10)), words=list(range(21))),
+            dict(kind='sdma_submit', vmid=2, valid=True, ib0=0x400100020, ib1=0),
+        ]
+        events = [dict(row, build='abc', seq=i) for i, row in enumerate(rows)]
+        events.append(dict(kind='sdma_page_timeout', build='abc', seq=100,
+                           source='raw-terminal'))
+        result = c(manifest, events, None)
+        self.assertEqual(result['verdict'], 'SDMA_PAGE_TIMEOUT')
+        self.assertEqual(result['earliest_failure'], 'sdma0_page')
+
+        no_program = [row for row in events if row['kind'] != 'vm_program']
+        for seq, row in enumerate(row for row in no_program
+                                  if row.get('source') != 'raw-terminal'):
+            row['seq'] = seq
+        result = c(manifest, no_program, None)
+        self.assertEqual(result['earliest_failure'], 'sdma_vm_program_missing')
+
+    def test_required_vm_program_fails_closed_before_terminal_verdicts(self):
+        c = self.classifier().classify
+        manifest = {'build_id': 'abc', 'spec': {'required_observations': [
+                    'sdma_topology', 'sdma_channel_remap', 'sdma_vm_program']}}
+        base = [dict(kind='build', build='abc', seq=0),
+                dict(kind='route', build='abc', seq=1, ok=True)]
+        kiq = base + [dict(kind='kiq', build='abc', seq=2, result=0)]
+        result = c(manifest, kiq, None)
+        self.assertFalse(result['valid'])
+        self.assertEqual(result['earliest_failure'], 'sdma_vm_program_route_guard')
+
+        panic = base + [dict(kind='vm_program_route', build='abc', seq=2, ok=True),
+                        dict(kind='guest_panic', build='abc', seq=3)]
+        result = c(manifest, panic, None)
+        self.assertFalse(result['valid'])
+        self.assertEqual(result['earliest_failure'], 'sdma_vm_program_missing')
 
     def test_live_vm_observations_survive_until_the_next_structured_snapshot(self):
         rows = self.classifier().parse_serial(

@@ -37,6 +37,33 @@ int main() {
     require(!RaphaelVm::observeInvalidateRequest(bytes, 0x27).valid,
             "a truncated invalidate request is rejected");
 
+    alignas(uint32_t) unsigned char prepared[0x54] {};
+    for (size_t i = 0; i < 0x54 / sizeof(uint32_t); ++i) {
+        const uint32_t value = 0x1000u + static_cast<uint32_t>(i);
+        std::memcpy(prepared + i * sizeof(uint32_t), &value, sizeof(value));
+    }
+    auto program = RaphaelVm::observePreparedRequest(
+        bytes, sizeof(bytes), prepared, sizeof(prepared), true);
+    require(program.valid && program.request.valid && program.request.vmid == 2 &&
+                program.alternate,
+            "the prepared request remains tied to its source VMID and packet variant");
+    require(program.words[0] == 0x1000 && program.words[10] == 0x100a &&
+                program.words[20] == 0x1014,
+            "all 21 prepared register/value dwords are copied after native encoding");
+    require(program.infoWords[0] == 0 && program.infoWords[1] == 2 &&
+                program.infoWords[9] == 1,
+            "all 10 source request dwords are retained without normalization");
+    bytes[0x25] = 0xa5;
+    bytes[0x26] = 0x5a;
+    bytes[0x27] = 0xc3;
+    program = RaphaelVm::observePreparedRequest(
+        bytes, sizeof(bytes), prepared, sizeof(prepared), false);
+    require(program.infoWords[9] == 0xc35aa501,
+            "reserved source bytes survive the bounded copy");
+    require(!RaphaelVm::observePreparedRequest(
+                bytes, sizeof(bytes), prepared, 0x50, true).valid,
+            "a truncated prepared request is rejected");
+
     constexpr auto vmid0 = RaphaelVm::contextRegisters(0);
     constexpr auto vmid2 = RaphaelVm::contextRegisters(2);
     constexpr auto invalid = RaphaelVm::contextRegisters(16);

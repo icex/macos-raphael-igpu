@@ -89,12 +89,16 @@ of physical engines from IP discovery, and its SDMA setup and lifecycle loops us
 maximum bounds still exist. The source also shows that aliasing Apple's SDMA1 object onto
 SDMA0 would be wrong because engine count and queues per engine are separate dimensions.
 
-No unrelated compatibility write is added to candidate 1.0.166. The current KIQ, GART root
-and native instance-0 hybrid queues already work, so broad golden-register, GART-size, cache,
-power or DCN changes would mix independent hypotheses into the next hardware run. Hybrid-004
-tests only the residual SDMA1 channel request exposed by the owner repair.
+Candidate 1.0.171 reached native startup and then stalled SDMA0 paging on a VMID 2 IB. It also
+proved that reset-free recovery can dequeue the remaining HQDs and return an idle CP without a
+PCI reset or amdgpu rebind. Candidate 1.0.172 adds no compatibility write. It captures the exact
+VM program request Apple encodes into the SDMA stream.
 
-If hybrid-004 reaches the Metal probe, the next observation order is fixed:
+The shared backend is now checked down to its address basis: Navi23/Dimgrey Cavefish and the
+Raphael-family discovery data both place GC segment 0 at `0x1260` and segment 1 at `0xa000`, and
+Linux uses the single `gc_10_3_0_offset.h` layout for GC 10.3.4 and 10.3.6. Broad register
+translation is therefore excluded unless the captured Apple packet itself demonstrates a wrong
+index or value. The next observation order is fixed:
 
 1. Preserve the native command-buffer status, engine and fault domain.
 2. If submission never advances, identify PM4, SDMA or VM before reading registers.
