@@ -160,8 +160,9 @@ Question: does hybrid creation fail because hardware availability is rejected, b
 GC/SDMA queue cannot be created, or because the intended diagnostic is not actually active?
 
 - [x] Validate the 1.0.163 entry guards and `HY` call records on a controlled run.
-- [x] Retain actual call ordering: KIQ stamps → engine power-up → hybrid create →
-  startHWEngines → Metal submission. Do not infer ordering from unrelated log timestamps.
+- [x] Retain the actual critical sequence: interleaved GC hybrid creation and KIQ
+  stamps, power-up success, SDMA hybrid requests, then startup failure. The Metal
+  probe was skipped because native startup failed.
 - [ ] If needed, trace only the selected child call/flag writer at an ABI-verified boundary.
 
 | Result | Interpretation | Next action |

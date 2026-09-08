@@ -1,0 +1,10 @@
+{
+  "binary_sha256": "7245f94ebc83a134c3715d89f494233cc90382fbc9cbd909afeb4d7667c55bef",
+  "info_sha256": "f2053c040da922386d1f6d1ae3a5271341125044d3d35af81b61612589b615a5",
+  "config_sha256": "76571716a86cdedea5bd9856788a3bc876d58f9656dded9f815a50a7e534cf12",
+  "backup": "/home/bogdan/macos-vm/run/oc-raw.img.backup-8dd1dafe95ca4f8cacb23b4a463b640f",
+  "bootdisk_sha256": "ddacbd2b5a085b05962097b5073675da191790726de982540ae75a17a71c1e21",
+  "candidate_version": "1.0.164",
+  "build_id": "79e17c018d744550bc435f2789174dde",
+  "physical_tested": false
+}
