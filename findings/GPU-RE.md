@@ -3188,11 +3188,12 @@ can be claimed.
 
 The iGPU advertises only the PCI `bus` reset method. Bus 7b also contains the host CCP/PSP,
 two xHCI controllers and audio functions, so a bridge or bus reset is not a safe per-GPU reset.
-The vfio-pci close path disables bus mastering and DMA mappings, but cannot perform that shared
-reset. Its generic `resetting` / `reset done` kernel messages do not establish that a function
-reset occurred.
+The original interpretation of vfio-pci's `resetting` / `reset done` messages was wrong. Legacy
+VFIO calls the PCI reset path on device acquisition and may call it again on close. The active
+method was `bus`, so these transactions invoked an unsafe shared-bus reset.
 
-Root is unnecessary for the cleanup itself. `/dev/vfio/31` is owned by the experiment user,
+After a one-time privileged handoff disables every PCI reset method, root is unnecessary for the
+cleanup itself. `/dev/vfio/31` is owned by the experiment user,
 so `tools/vfio-recover.py` opens the legacy VFIO container/group, obtains the device fd and maps
 only BAR5. It refuses an active QEMU, a wrong device/group/driver, enabled PCI bus mastering, a
 host fault or a nonlatest prior run. It unconditionally sends `DESTROY_RINGS` and
@@ -3201,7 +3202,7 @@ The ordered boot ledger consumes that receipt once before a later launch and ini
 at most three launches in one host boot.
 
 The first transaction ran after candidate 1.0.165 panicked and was force-stopped. Without sudo,
-rebind or reboot it recorded:
+rebind or reboot it recorded the following, but the implicit reset makes attribution impossible:
 
 ```
 PCI_COMMAND             0x0003 -> 0x0003  (bus master clear)
@@ -3210,12 +3211,13 @@ DESTROY_GPCOM_RING      0x80030000 -> 0x800c0000  after 1 poll
 host kernel faults      none
 ```
 
-This proves the known persistent PSP-ring state is recoverable through the already-authorized
-VFIO device. Hybrid-004 then consumed that receipt on the same host boot. Apple reinitialized the
+This proves only that the PSP commands were acknowledged after VFIO's implicit reset. Hybrid-004
+then consumed that now-obsolete schema-1 receipt on the same host boot. Apple reinitialized the
 PSP, candidate 166 completed the SDMA channel remap, all hybrid creations returned status zero,
 native engine start and power-up returned 1, and KIQ stamps advanced through at least 21. No host
 fault occurred. A second post-stop recovery returned the same exact PSP acknowledgements and kept
-bus mastering disabled.
+bus mastering disabled, but it also used the implicit reset path. Schema-2 admission rejects both
+historical receipts.
 
 The live coordinator did not run the Metal probe because it mixed later unsequenced direct log
 lines into an already complete structured snapshot and called the resulting line-number gaps
@@ -3241,9 +3243,33 @@ removed. The classifier now retains a terminal live KIQ failure before a panic w
 unsequenced serial line numbers into the complete structured prefix.
 
 The recovery transaction now follows the bounded GFX10 shutdown order from Linux: disable KIQ
-pointer polling, request HQD dequeue while MEC still runs, halt graphics CP and both MECs, halt
-physical SDMA0, then disable doorbells and clear only stuck HQDs after the halt readback. It
-proves all selectors inactive before destroying the PSP rings. The exact-container shutdown path
-also falls back to its already peer-verified ACPI powerdown instead of immediately killing QEMU
-when the root agent transport is absent. Both changes are offline-tested and still require one
-fresh-boot hardware validation; the three-launch ceiling correctly prevented a fourth attempt.
+pointer polling, request HQD dequeue while MEC still runs, stop SDMA context switching/ring/IB,
+halt physical SDMA0, halt graphics CP and both MECs, then disable doorbells and clear only stuck
+HQDs after the halt readback. It proves all selectors inactive before destroying the PSP rings.
+The exact-container shutdown path also falls back to its already peer-verified ACPI powerdown
+instead of immediately killing QEMU when the root agent transport is absent.
+
+The first live implementation failed closed at the SDMA halt readback. It had incorrectly treated
+the generated register header's `base address: 0x4980` comment as the live base. Both Apple's
+`sdma_5_2_stop_engine` and Linux's discovery-based access use base index zero plus register
+`0x2a`; the live segment-zero base is `0x1260`, so BAR5 byte offset `0x4a28` is correct. With that
+correction, validation against the stopped third-run state cleared `AUTO_CTXSW_ENABLE`,
+`RB_ENABLE`, and `IB_ENABLE`, set `F32_CNTL.HALT`, read back the CP/MEC halt masks, proved zero
+active HQDs, and received `0x80030000`/`0x800c0000` for PSP teardown. PCI command stayed `0x0003`,
+the device stayed on vfio-pci, no sudo or driver rebind was used, and the kernel recorded no
+fault.
+
+That conclusion needed one more correction. The kernel interval contained `vfio-pci ...
+resetting` and `reset done` because `vfio_pci_core_enable()` calls `pci_try_reset_function()`
+when a legacy VFIO device fd is acquired; the close path may reset again. The only enabled method
+was `bus`. This means the shared APU bus was reset before BAR5 inspection, and `active_before = 0`
+cannot prove the transaction cleared the prior HQDs. The live record still validates the corrected
+SDMA offsets, writes/readbacks and PSP acknowledgements after that reset.
+
+Candidate 168 fixes the lifecycle boundary instead of treating those messages as harmless. During
+the one privileged amdgpu-to-vfio handoff, `gpu-bind.sh` writes an empty value to the root-owned
+`reset_method` attribute and verifies it before granting user access to the VFIO group. Both launch
+admission and rootless recovery refuse any nonempty or unreadable reset method. Recovery receipts
+use schema 2, record the empty state before and after, and reject any target-device reset message.
+The three-launch ceiling still prevented using the confounded validation as permission for a
+fourth launch; a fresh boot must prove reset-free cleanup and warm reinitialization.

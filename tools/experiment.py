@@ -65,6 +65,7 @@ def host_snapshot():
     config = read('/etc/systemd/journald.conf.d/10-crash-durability.conf') or ''
     watchdogs = {name: read('/proc/sys/kernel/'+name)
                  for name in ('watchdog', 'nmi_watchdog', 'hardlockup_panic')}
+    reset_method_text = read(device/'reset_method')
     return dict(boot_id=read('/proc/sys/kernel/random/boot_id'), kernel=os.uname().release,
                 driver=driver, device=(read(device/'vendor') or '').removeprefix('0x')+':'+
                     (read(device/'device') or '').removeprefix('0x'), iommu_group=group,
@@ -75,6 +76,8 @@ def host_snapshot():
                 pstore_files=pstore,
                 device_pinned_awake=read(device/'power/control') == 'on' and read(device/'power/runtime_status') == 'active',
                 device_accessible=os.access('/dev/vfio/'+group, os.R_OK | os.W_OK),
+                reset_methods=(None if reset_method_text is None else
+                               reset_method_text.split()),
                 active_vm=any(n == 'macos-sequoia' or n.startswith('rgpu-launch-') for n in active.splitlines()),
                 sleep_inhibited=subprocess.run(['systemctl', '--user', 'is-active', '--quiet',
                                                 'rgpu-work-inhibit.service']).returncode == 0)
@@ -272,6 +275,7 @@ def admit(manifest, host, used_boots, reuse_allowed=False):
         if host.get(key) is not True:
             errors.append(key)
     if host.get('active_vm') is not False: errors.append('active_vm')
+    if host.get('reset_methods') != []: errors.append('reset_method')
     if not host.get('boot_id') or host['boot_id'] != manifest.get('boot_id'):
         errors.append('boot_id')
     if host.get('boot_id') in used_boots and not reuse_allowed:
@@ -308,7 +312,7 @@ def read_boot_ledger(path):
 
 def validate_recovery_receipt(receipt, boot_id, prior_run_id):
     errors = []
-    exact = {'schema':1, 'status':'recovered', 'boot_id':boot_id,
+    exact = {'schema':2, 'status':'recovered', 'boot_id':boot_id,
              'prior_run_id':prior_run_id, 'device':'0000:7b:00.0',
              'iommu_group':'31', 'driver':'vfio-pci'}
     if any(receipt.get(key) != value for key,value in exact.items()):
@@ -318,6 +322,15 @@ def validate_recovery_receipt(receipt, boot_id, prior_run_id):
     for key in ('pci_command_before', 'pci_command_after'):
         value = receipt.get(key)
         if type(value) is not int or value & 4: errors.append('recovery_receipt')
+    if (receipt.get('reset_methods_before') != [] or
+            receipt.get('reset_methods_after') != []):
+        errors.append('recovery_receipt')
+    messages = receipt.get('kernel_messages')
+    if (not isinstance(messages, list) or
+            any(not isinstance(message, str) for message in messages) or
+            any(re.search(r'vfio-pci 0000:7b:00\.0: (?:resetting|reset done)\b',
+                          message, re.I) for message in messages)):
+        errors.append('recovery_receipt')
     gc = receipt.get('gc_quiesce')
     if (not isinstance(gc, dict) or gc.get('status') != 'quiesced' or
             gc.get('active_after') != 0 or

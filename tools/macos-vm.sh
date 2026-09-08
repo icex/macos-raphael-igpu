@@ -178,6 +178,10 @@ if [[ -n "${GPU}" ]]; then
     [[ -e "/sys/bus/pci/devices/${GPU}" ]] || die "no such PCI device: ${GPU}"
     drv="$(basename "$(readlink -f "/sys/bus/pci/devices/${GPU}/driver")" 2>/dev/null || echo none)"
     [[ "${drv}" == vfio-pci ]] || die "${GPU} is bound to '${drv}', not vfio-pci -- run ./gpu-bind.sh first"
+    reset_path="/sys/bus/pci/devices/${GPU}/reset_method"
+    [[ -r "${reset_path}" ]] || die "${GPU} reset_method is unreadable -- refusing VFIO open"
+    reset_methods="$(tr -d '[:space:]' < "${reset_path}")"
+    [[ -z "${reset_methods}" ]] || die "PCI reset methods are still enabled for ${GPU}: ${reset_methods} -- run ./gpu-bind.sh before QEMU"
     grp="$(basename "$(readlink -f "/sys/bus/pci/devices/${GPU}/iommu_group")")"
     [[ -r "/dev/vfio/${grp}" && -w "/dev/vfio/${grp}" ]] || die "/dev/vfio/${grp} is not accessible to you"
     GPU_ARGS=(--device /dev/vfio/vfio --device "/dev/vfio/${grp}" --ulimit memlock=-1)

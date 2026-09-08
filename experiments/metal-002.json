@@ -1,7 +1,7 @@
 {
   "id": "metal-002",
-  "question": "Does candidate 167 complete the checked Metal compute/render probe, shut down natively when possible, and leave a GC/SDMA/PSP receipt that permits one clean warm restart?",
-  "candidate_version": "1.0.167",
+  "question": "Does candidate 168 complete the checked Metal compute/render probe, shut down natively when possible, and leave a GC/SDMA/PSP receipt that permits one clean warm restart?",
+  "candidate_version": "1.0.168",
   "requested_diagnostic": "rgpusdma=1",
   "behavior_change": "remove lock-held timeout MMIO dumps; add exact-container ACPI fallback and Linux-ordered rootless GC/HQD/SDMA quiesce before PSP ring destruction",
   "required_observations": [
@@ -17,7 +17,7 @@
   "max_seconds": 180,
   "prerequisites": [
     "candidate_166_native_start_pass",
-    "candidate_167_offline_validation",
+    "candidate_168_reset_methods_disabled",
     "fresh_amdgpu_first_boot"
   ],
   "repeat_policy": "one warm restart only after a receipt proves zero active HQDs and halted CP/MEC/SDMA plus exact PSP responses",

@@ -59,10 +59,21 @@ CP_HQD_PQ_DOORBELL_OFFSET = (GC_SEG0 + 0x1FB8) * 4
 CP_HQD_DEQUEUE_OFFSET = (GC_SEG0 + 0x1FC1) * 4
 CP_HQD_PQ_WPTR_LO_OFFSET = (GC_SEG0 + 0x1FDF) * 4
 CP_HQD_PQ_WPTR_HI_OFFSET = (GC_SEG0 + 0x1FE0) * 4
-SDMA0_F32_CNTL_OFFSET = (0x4980 + 0x002A) * 4
+# Raphael IP discovery gives SDMA0 the same segment-zero base as GC.  The
+# generated gc_10_3_0 register header's "base address: 0x4980" describes a
+# static ASIC layout and must not replace the live discovery base.  Apple
+# confirms the addressing in sdma_5_2_stop_engine: SDMA0 uses block 0x23,
+# base index 0, then the register offsets below.
+SDMA0_CNTL_OFFSET = (GC_SEG0 + 0x001C) * 4
+SDMA0_F32_CNTL_OFFSET = (GC_SEG0 + 0x002A) * 4
+SDMA0_GFX_RB_CNTL_OFFSET = (GC_SEG0 + 0x0080) * 4
+SDMA0_GFX_IB_CNTL_OFFSET = (GC_SEG0 + 0x008A) * 4
 CP_ME_HALT_MASK = 0x15000000  # CE_HALT | PFP_HALT | ME_HALT
 CP_MEC_HALT_MASK = 0x50000000 # MEC_ME1_HALT | MEC_ME2_HALT
 SDMA_HALT_MASK = 0x1
+SDMA_AUTO_CTXSW_ENABLE_MASK = 0x00040000
+SDMA_RB_ENABLE_MASK = 0x1
+SDMA_IB_ENABLE_MASK = 0x1
 
 
 class RecoveryError(RuntimeError):
@@ -129,6 +140,7 @@ def host_state():
         with (root/'config').open('rb') as stream:
             stream.seek(4)
             pci_command = struct.unpack('<H', stream.read(2))[0]
+        reset_methods = (root/'reset_method').read_text().split()
     except (OSError, ValueError, struct.error) as error:
         raise RecoveryError('cannot establish PCI identity: '+str(error)) from error
     return {
@@ -138,6 +150,7 @@ def host_state():
         'device': f'{vendor:04x}:{device:04x}',
         'iommu_group': group,
         'pci_command': pci_command,
+        'reset_methods': reset_methods,
     }
 
 
@@ -150,6 +163,7 @@ def validate_host_state(state, expected_boot):
     if state.get('iommu_group') != GROUP: errors.append('iommu_group')
     command = state.get('pci_command')
     if type(command) is not int or command & PCI_COMMAND_MASTER: errors.append('bus_master')
+    if state.get('reset_methods') != []: errors.append('reset_method')
     return errors
 
 
@@ -317,21 +331,43 @@ def quiesce_gc(mmio, sleep=time.sleep, polls=50):
                         mmio.write32(CP_HQD_PQ_DOORBELL_OFFSET, 0)
                         mmio.write32(CP_HQD_DEQUEUE_OFFSET, 0)
 
+        # Linux sdma_v5_2_hw_fini disables context switching and the GFX
+        # ring/IB before halting the engine.  Preserve that order so no SDMA
+        # fetch can race teardown of QEMU's DMA mappings.
+        sdma_cntl_before = mmio.read32(SDMA0_CNTL_OFFSET)
+        mmio.write32(SDMA0_CNTL_OFFSET,
+                     sdma_cntl_before & ~SDMA_AUTO_CTXSW_ENABLE_MASK)
+        sdma_rb_before = mmio.read32(SDMA0_GFX_RB_CNTL_OFFSET)
+        mmio.write32(SDMA0_GFX_RB_CNTL_OFFSET,
+                     sdma_rb_before & ~SDMA_RB_ENABLE_MASK)
+        sdma_ib_before = mmio.read32(SDMA0_GFX_IB_CNTL_OFFSET)
+        mmio.write32(SDMA0_GFX_IB_CNTL_OFFSET,
+                     sdma_ib_before & ~SDMA_IB_ENABLE_MASK)
+        sdma_before = mmio.read32(SDMA0_F32_CNTL_OFFSET)
+        mmio.write32(SDMA0_F32_CNTL_OFFSET, sdma_before | SDMA_HALT_MASK)
+        sdma_cntl_after = mmio.read32(SDMA0_CNTL_OFFSET)
+        sdma_rb_after = mmio.read32(SDMA0_GFX_RB_CNTL_OFFSET)
+        sdma_ib_after = mmio.read32(SDMA0_GFX_IB_CNTL_OFFSET)
+        sdma_after = mmio.read32(SDMA0_F32_CNTL_OFFSET)
+        if sdma_cntl_after & SDMA_AUTO_CTXSW_ENABLE_MASK:
+            raise RecoveryError('SDMA0 context switching would not stop')
+        if sdma_rb_after & SDMA_RB_ENABLE_MASK:
+            raise RecoveryError('SDMA0 ring buffer would not stop')
+        if sdma_ib_after & SDMA_IB_ENABLE_MASK:
+            raise RecoveryError('SDMA0 indirect buffer would not stop')
+        if sdma_after & SDMA_HALT_MASK != SDMA_HALT_MASK:
+            raise RecoveryError('SDMA0 would not halt')
+
         me_before = mmio.read32(CP_ME_CNTL_OFFSET)
         mmio.write32(CP_ME_CNTL_OFFSET, me_before | CP_ME_HALT_MASK)
         mec_before = mmio.read32(CP_MEC_CNTL_OFFSET)
         mmio.write32(CP_MEC_CNTL_OFFSET, mec_before | CP_MEC_HALT_MASK)
-        sdma_before = mmio.read32(SDMA0_F32_CNTL_OFFSET)
-        mmio.write32(SDMA0_F32_CNTL_OFFSET, sdma_before | SDMA_HALT_MASK)
         me_after = mmio.read32(CP_ME_CNTL_OFFSET)
         mec_after = mmio.read32(CP_MEC_CNTL_OFFSET)
-        sdma_after = mmio.read32(SDMA0_F32_CNTL_OFFSET)
         if me_after & CP_ME_HALT_MASK != CP_ME_HALT_MASK:
             raise RecoveryError('graphics command processor would not halt')
         if mec_after & CP_MEC_HALT_MASK != CP_MEC_HALT_MASK:
             raise RecoveryError('compute command processors would not halt')
-        if sdma_after & SDMA_HALT_MASK != SDMA_HALT_MASK:
-            raise RecoveryError('SDMA0 would not halt')
 
         for row in stuck:
             mmio.write32(GRBM_GFX_CNTL_OFFSET, row['selector'])
@@ -362,6 +398,12 @@ def quiesce_gc(mmio, sleep=time.sleep, polls=50):
             'forced_inactive': len(stuck), 'queues': active,
             'cp_me_before': me_before, 'cp_me_after': me_after,
             'cp_mec_before': mec_before, 'cp_mec_after': mec_after,
+            'sdma0_cntl_before': sdma_cntl_before,
+            'sdma0_cntl_after': sdma_cntl_after,
+            'sdma0_rb_before': sdma_rb_before,
+            'sdma0_rb_after': sdma_rb_after,
+            'sdma0_ib_before': sdma_ib_before,
+            'sdma0_ib_after': sdma_ib_after,
             'sdma0_before': sdma_before, 'sdma0_after': sdma_after,
             'active_after': 0,
         }
@@ -391,11 +433,18 @@ def perform_recovery(expected_boot, prior_run_id, state_reader, transport_factor
     final_cursor, messages, faults = journal_reader(cursor)
     if faults:
         raise RecoveryError('new host kernel fault during recovery: '+'; '.join(faults))
+    implicit_resets = [message for message in messages if re.search(
+        rf'vfio-pci {re.escape(DEVICE)}: (?:resetting|reset done)\b', message, re.I)]
+    if implicit_resets:
+        raise RecoveryError('VFIO performed a forbidden implicit PCI reset: '+
+                            '; '.join(implicit_resets))
     return {
-        'schema': 1, 'status': 'recovered', 'boot_id': expected_boot,
+        'schema': 2, 'status': 'recovered', 'boot_id': expected_boot,
         'prior_run_id': prior_run_id, 'device': DEVICE, 'iommu_group': GROUP,
         'driver': 'vfio-pci', 'pci_command_before': before['pci_command'],
-        'pci_command_after': after['pci_command'], 'bar5': region,
+        'pci_command_after': after['pci_command'],
+        'reset_methods_before': before['reset_methods'],
+        'reset_methods_after': after['reset_methods'], 'bar5': region,
         'gc_quiesce': gc_quiesce,
         'commands': commands, 'kernel_cursor_before': cursor,
         'kernel_cursor_after': final_cursor, 'kernel_messages': messages,

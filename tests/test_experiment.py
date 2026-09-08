@@ -132,7 +132,7 @@ class ExperimentTests(unittest.TestCase):
         return dict(boot_id='boot-A', amdgpu_initialized=True, capture_ready=True,
                     watchdogs_verified=True, device_pinned_awake=True, active_vm=False,
                     driver='vfio-pci', device='1002:13c0', iommu_group='31',
-                    device_accessible=True)
+                    device_accessible=True, reset_methods=[])
 
     def test_unknown_or_failed_host_gate_refuses_admission(self):
         admit = self.module().admit
@@ -148,6 +148,8 @@ class ExperimentTests(unittest.TestCase):
             self.assertIn(field, admit(dict(manifest, **{field: value}), self.host(), set()))
         self.assertIn('boot_already_used', admit(manifest, self.host(), {'boot-A'}))
         self.assertIn('active_vm', admit(manifest, dict(self.host(), active_vm=True), set()))
+        self.assertIn('reset_method', admit(
+            manifest, dict(self.host(), reset_methods=['bus']), set()))
 
     def test_boot_reservation_survives_failure_and_cannot_be_replaced(self):
         reserve = self.module().reserve_boot
@@ -166,10 +168,12 @@ class ExperimentTests(unittest.TestCase):
             (used/'boot-A.json').write_text(json.dumps(
                 {'boot_id':'boot-A', 'experiment':prior}))
             receipts = vm/'run/vfio-recovery/boot-A'; receipts.mkdir(parents=True)
-            receipt = {'schema':1, 'status':'recovered', 'boot_id':'boot-A',
+            receipt = {'schema':2, 'status':'recovered', 'boot_id':'boot-A',
                        'prior_run_id':prior, 'recovery_id':'c'*32,
                        'device':'0000:7b:00.0', 'iommu_group':'31', 'driver':'vfio-pci',
                        'pci_command_before':3, 'pci_command_after':3,
+                       'reset_methods_before':[], 'reset_methods_after':[],
+                       'kernel_messages':[],
                        'gc_quiesce':{'status':'quiesced', 'active_after':0,
                                      'cp_me_after':0x15000000,
                                      'cp_mec_after':0x50000000,
@@ -201,10 +205,12 @@ class ExperimentTests(unittest.TestCase):
                                   {'run_id':runs[2], 'recovery_id':'2'*32}]}
             (used/'boot-A.json').write_text(json.dumps(ledger))
             receipt_dir = vm/'run/vfio-recovery/boot-A'; receipt_dir.mkdir(parents=True)
-            wrong = {'schema':1, 'status':'recovered', 'boot_id':'boot-A',
+            wrong = {'schema':2, 'status':'recovered', 'boot_id':'boot-A',
                      'prior_run_id':runs[0], 'recovery_id':'3'*32,
                      'device':'0000:7b:00.0', 'iommu_group':'31', 'driver':'vfio-pci',
                      'pci_command_before':3, 'pci_command_after':3,
+                     'reset_methods_before':[], 'reset_methods_after':[],
+                     'kernel_messages':[],
                      'gc_quiesce':{'status':'quiesced', 'active_after':0,
                                    'cp_me_after':0x15000000,
                                    'cp_mec_after':0x50000000,
@@ -220,10 +226,12 @@ class ExperimentTests(unittest.TestCase):
 
     def test_recovery_receipt_validation_fails_closed(self):
         tool = self.module()
-        good = {'schema':1, 'status':'recovered', 'boot_id':'boot-A',
+        good = {'schema':2, 'status':'recovered', 'boot_id':'boot-A',
                 'prior_run_id':'a'*32, 'recovery_id':'b'*32,
                 'device':'0000:7b:00.0', 'iommu_group':'31', 'driver':'vfio-pci',
                 'pci_command_before':3, 'pci_command_after':3,
+                'reset_methods_before':[], 'reset_methods_after':[],
+                'kernel_messages':[],
                 'gc_quiesce':{'status':'quiesced', 'active_after':0,
                               'cp_me_after':0x15000000,
                               'cp_mec_after':0x50000000,
@@ -237,7 +245,9 @@ class ExperimentTests(unittest.TestCase):
             {key:value for key,value in good.items() if key != 'gc_quiesce'},
             'boot-A', 'a'*32))
         for key, value in [('status','failed'), ('prior_run_id','c'*32),
-                           ('pci_command_after',7), ('commands',[{'confirmed':True}])]:
+                           ('pci_command_after',7), ('reset_methods_after',['bus']),
+                           ('kernel_messages',['vfio-pci 0000:7b:00.0: resetting']),
+                           ('commands',[{'confirmed':True}])]:
             self.assertIn('recovery_receipt', tool.validate_recovery_receipt(
                 dict(good, **{key:value}), 'boot-A', 'a'*32))
 
@@ -358,10 +368,12 @@ class ExperimentTests(unittest.TestCase):
             guest_shutdown = SimpleNamespace(shutdown=shutdown)
             def recover(vm_path, prior):
                 calls.append(('recover', prior))
-                receipt = {'schema':1, 'status':'recovered', 'boot_id':'boot-A',
+                receipt = {'schema':2, 'status':'recovered', 'boot_id':'boot-A',
                            'prior_run_id':prior, 'recovery_id':'f'*32,
                            'device':'0000:7b:00.0', 'iommu_group':'31', 'driver':'vfio-pci',
                            'pci_command_before':3, 'pci_command_after':3,
+                           'reset_methods_before':[], 'reset_methods_after':[],
+                           'kernel_messages':[],
                            'gc_quiesce':{'status':'quiesced', 'active_after':0,
                                          'cp_me_after':0x15000000,
                                          'cp_mec_after':0x50000000,

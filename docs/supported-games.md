@@ -1,6 +1,6 @@
 # Game compatibility
 
-Updated 2026-09-08, hardware-tested driver 1.0.166, candidate 1.0.167, macOS Sequoia 15.7.9 (24G830), Raphael iGPU
+Updated 2026-09-08, hardware-tested driver 1.0.166, candidate 1.0.168, macOS Sequoia 15.7.9 (24G830), Raphael iGPU
 spoofed as Navi23 under QEMU/VFIO.
 
 **Verified playable games: 0.** No individual game has a recorded compatibility test.

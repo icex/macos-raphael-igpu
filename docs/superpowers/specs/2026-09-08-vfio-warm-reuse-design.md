@@ -2,9 +2,9 @@
 
 ## Goal
 
-Allow repeated, bounded macOS GPU experiments on the Raphael iGPU during one host boot,
-without sudo, a PCI bus reset, or a vfio-pci/amdgpu driver transition. A successful cleanup
-must be proven before the next launch is admitted.
+Allow repeated, bounded macOS GPU experiments on the Raphael iGPU during one host boot after one
+privileged handoff, without per-run sudo, a PCI bus reset, or another vfio-pci/amdgpu driver
+transition. A successful cleanup must be proven before the next launch is admitted.
 
 ## Measured constraints
 
@@ -12,8 +12,9 @@ must be proven before the next launch is admitted.
   the host CCP/PSP, two xHCI controllers and audio functions, so resetting that bus is unsafe.
 - The iGPU remains bound to `vfio-pci`; `/dev/vfio/31` is owned by the desktop user and the
   VFIO container node is world accessible. Mapping BAR5 through VFIO therefore needs no root.
-- QEMU/VFIO teardown disables PCI bus mastering, interrupts and DMA mappings. It cannot reset
-  this function because the shared-bus reset is ineligible.
+- Legacy VFIO calls `pci_try_reset_function()` when the device is opened and may reset it again
+  on close. On this host that selected the advertised `bus` method despite the shared APU bus.
+  The handoff must therefore disable all reset methods before any VFIO consumer opens the device.
 - PSP state that breaks the next Apple initialization includes the UM/RBI and GPCOM rings. Both
   can be destroyed through MP0 `C2PMSG_64` in BAR5. A fully started guest also leaves active
   GC/KIQ HQDs, CP engines and SDMA state; the third same-boot launch measured those queues and
@@ -27,7 +28,8 @@ must be proven before the next launch is admitted.
 1. no Docker-OSX/QEMU process is active;
 2. the exact Raphael device is `1002:13c0`, bound to `vfio-pci`, in IOMMU group 31;
 3. PCI command bus-master enable is clear;
-4. the prior run belongs to the current host boot and is the most recent launch in the boot
+4. `/sys/.../reset_method` exists and reads empty;
+5. the prior run belongs to the current host boot and is the most recent launch in the boot
    ledger;
 
 The utility opens the legacy VFIO container and group as the current user, attaches the group,
@@ -40,9 +42,9 @@ MEC halt readback. It clears stale pointers and proves every selector inactive. 
 transition and PSP response must read back correctly before a receipt is created.
 
 The transaction never pulses `GRBM_SOFT_RESET`, writes GMC or SMU, binds amdgpu, unbinds
-vfio-pci, invokes `/sys/.../reset`, removes a PCI function, changes runtime power, or resets the
-shared PCI bus. It then unmaps and closes every VFIO object, verifies bus mastering is still
-disabled, and checks the kernel journal for new IOMMU, lockup, machine-check or PCI faults.
+vfio-pci, invokes `/sys/.../reset`, removes a PCI function, or changes runtime power. It then
+unmaps and closes every VFIO object, verifies bus mastering is still disabled and reset methods
+remain empty, and rejects any VFIO reset message or new IOMMU, lockup, machine-check or PCI fault.
 
 ## Durable admission record
 
@@ -77,9 +79,10 @@ The first hardware proof is candidate 166 on the current boot after recovering f
 initialization, and no host fault. A later three-cycle qualification must also prove native
 guest shutdown or explicitly preserve forced-stop outcomes; cleanup does not relabel shutdown.
 
-## Why sudo is unnecessary
+## Privilege boundary
 
 The old `gpu-quiesce.sh` opened the root-only sysfs `resource5`, so that implementation needed
-sudo. VFIO already grants the experiment user controlled access to this device and its BARs.
-Using the existing VFIO ownership removes the root requirement while preserving kernel IOMMU
-ownership and isolation.
+sudo for every cleanup. The replacement needs root once per boot for the existing amdgpu to
+vfio-pci handoff and to write an empty value to the root-owned `reset_method` sysfs attribute.
+Only after that verified write does `gpu-bind.sh` grant the experiment user access to the VFIO
+group. Builds, launches, BAR5 cleanup, receipts, and repeated warm tests then run as the user.

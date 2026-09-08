@@ -12,7 +12,8 @@
 # the caller down with it.
 set -uo pipefail
 DEV=0000:7b:00.0
-OWNER="${SUDO_UID:-1000}"
+OWNER_UID="${RGPU_OWNER_UID:-${SUDO_UID:-}}"
+OWNER_GID="${RGPU_OWNER_GID:-${SUDO_GID:-}}"
 S=/sys/bus/pci/devices/$DEV
 w() { local t=$1 val=$2 path=$3; timeout "$t" sh -c "echo '$val' > '$path'" 2>&1 \
         && echo "  ok: $val > ${path#/sys/bus/pci/}" || echo "  TIMEOUT/FAIL: $val > ${path#/sys/bus/pci/}"; }
@@ -20,6 +21,14 @@ st() { echo "  driver=$(basename "$(readlink -f $S/driver)" 2>/dev/null || echo 
             "rpm=$(cat $S/power/runtime_status 2>/dev/null || echo ?)" \
             "control=$(cat $S/power/control 2>/dev/null || echo ?)" \
             "pstate=$(cat $S/power_state 2>/dev/null || echo ?)"; }
+
+[[ $EUID -eq 0 ]] || { echo "run me with sudo" >&2; exit 1; }
+if [[ ! "${OWNER_UID}" =~ ^[0-9]+$ || ! "${OWNER_GID}" =~ ^[0-9]+$ ]] ||
+        (( 10#${OWNER_UID} == 0 || 10#${OWNER_GID} == 0 )); then
+    echo "cannot identify the invoking user; use sudo or set RGPU_OWNER_UID and RGPU_OWNER_GID" >&2
+    exit 1
+fi
+OWNER="${OWNER_UID}:${OWNER_GID}"
 
 echo "before:"; st
 
@@ -49,6 +58,16 @@ if [[ "$cur" != vfio-pci ]]; then
     # vfio-pci re-enables runtime PM on probe, so pin it again afterwards.
     w 10 on "$S/power/control"
 fi
+
+# Legacy VFIO otherwise invokes the device's only advertised method (`bus`) on
+# open/close. That bus contains host APU functions, so disable reset support
+# before granting the caller access to the group node.
+[[ -w "$S/reset_method" ]] || { echo "reset_method is not writable -- reboot required" >&2; exit 1; }
+w 10 "" "$S/reset_method"
+[[ -z "$(tr -d '[:space:]' < "$S/reset_method")" ]] || {
+    echo "could not disable PCI reset methods -- reboot required" >&2
+    exit 1
+}
 
 echo "after:"; st
 grp="$(basename "$(readlink -f $S/iommu_group)" 2>/dev/null || echo '?')"

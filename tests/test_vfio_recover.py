@@ -52,9 +52,21 @@ class VfioRecoveryTests(unittest.TestCase):
     def setUp(self):
         self.tool = load_tool()
 
+    def test_sdma_registers_use_ip_discovery_segment_zero(self):
+        tool = self.tool
+        self.assertEqual(tool.SDMA0_F32_CNTL_OFFSET,
+                         (tool.GC_SEG0 + 0x2A) * 4)
+        self.assertEqual(tool.SDMA0_CNTL_OFFSET,
+                         (tool.GC_SEG0 + 0x1C) * 4)
+        self.assertEqual(tool.SDMA0_GFX_RB_CNTL_OFFSET,
+                         (tool.GC_SEG0 + 0x80) * 4)
+        self.assertEqual(tool.SDMA0_GFX_IB_CNTL_OFFSET,
+                         (tool.GC_SEG0 + 0x8A) * 4)
+
     def state(self, **changes):
         state = dict(boot_id='boot-A', active_vm=False, driver='vfio-pci',
-                     device='1002:13c0', iommu_group='31', pci_command=0x0003)
+                     device='1002:13c0', iommu_group='31', pci_command=0x0003,
+                     reset_methods=[])
         state.update(changes)
         return state
 
@@ -71,11 +83,24 @@ class VfioRecoveryTests(unittest.TestCase):
         check = self.tool.validate_host_state
         self.assertEqual(check(self.state(), 'boot-A'), [])
         cases = [('active_vm', True), ('driver', 'amdgpu'), ('device', '1002:ffff'),
-                 ('iommu_group', '30'), ('pci_command', 0x0007), ('boot_id', 'boot-B')]
+                 ('iommu_group', '30'), ('pci_command', 0x0007), ('boot_id', 'boot-B'),
+                 ('reset_methods', ['bus'])]
         for field, value in cases:
             with self.subTest(field=field):
-                self.assertIn(field if field != 'pci_command' else 'bus_master',
+                expected = {'pci_command':'bus_master', 'reset_methods':'reset_method'}.get(
+                    field, field)
+                self.assertIn(expected,
                               check(self.state(**{field:value}), 'boot-A'))
+
+    def test_bus_reset_method_is_rejected_before_vfio_is_opened(self):
+        opened = []
+        with self.assertRaisesRegex(self.tool.RecoveryError, 'reset_method'):
+            self.tool.perform_recovery(
+                'boot-A', 'a'*32,
+                lambda:self.state(reset_methods=['bus']),
+                lambda:opened.append(True),
+                lambda cursor=None:('cursor-2', [], []), sleep=lambda _:None)
+        self.assertEqual(opened, [])
 
     def test_recovery_destroys_both_rings_and_closes_transport(self):
         fake = FakeTransport(self.tool)
@@ -93,6 +118,9 @@ class VfioRecoveryTests(unittest.TestCase):
                          [self.tool.DESTROY_RINGS, self.tool.DESTROY_GPCOM_RING])
         self.assertTrue(all(row['confirmed'] for row in evidence['commands']))
         self.assertEqual(evidence['gc_quiesce']['status'], 'quiesced')
+        self.assertEqual(evidence['schema'], 2)
+        self.assertEqual(evidence['reset_methods_before'], [])
+        self.assertEqual(evidence['reset_methods_after'], [])
 
     def test_gc_quiesce_dequeues_before_halting_engines(self):
         tool = self.tool
@@ -124,6 +152,14 @@ class VfioRecoveryTests(unittest.TestCase):
         dequeue = fake.events.index(('write', tool.CP_HQD_DEQUEUE_OFFSET, 1))
         halt = fake.events.index(('write', tool.CP_MEC_CNTL_OFFSET, tool.CP_MEC_HALT_MASK))
         self.assertLess(dequeue, halt)
+        rb_stop = fake.events.index(('write', tool.SDMA0_GFX_RB_CNTL_OFFSET, 0))
+        ib_stop = fake.events.index(('write', tool.SDMA0_GFX_IB_CNTL_OFFSET, 0))
+        sdma_halt = fake.events.index(('write', tool.SDMA0_F32_CNTL_OFFSET,
+                                      tool.SDMA_HALT_MASK))
+        self.assertLess(dequeue, rb_stop)
+        self.assertLess(rb_stop, ib_stop)
+        self.assertLess(ib_stop, sdma_halt)
+        self.assertLess(sdma_halt, halt)
         self.assertEqual(fake.registers[tool.CP_ME_CNTL_OFFSET] & tool.CP_ME_HALT_MASK,
                          tool.CP_ME_HALT_MASK)
         self.assertEqual(fake.registers[tool.SDMA0_F32_CNTL_OFFSET] & tool.SDMA_HALT_MASK, 1)
@@ -172,14 +208,19 @@ class VfioRecoveryTests(unittest.TestCase):
                           self.tool.DESTROY_GPCOM_RING), fake.events)
 
     def test_post_transaction_bus_master_or_kernel_fault_fails(self):
-        for mode in ('bus-master', 'fault'):
+        for mode in ('bus-master', 'fault', 'implicit-reset'):
             with self.subTest(mode=mode):
                 fake = FakeTransport(self.tool)
                 states = iter([self.state(), self.state(pci_command=7) if mode == 'bus-master'
                                else self.state()])
-                kernel = ((lambda cursor=None: ('cursor-2', ['IO_PAGE_FAULT'], ['IO_PAGE_FAULT']))
-                          if mode == 'fault' else
-                          (lambda cursor=None: ('cursor-2', [], [])))
+                if mode == 'fault':
+                    kernel = lambda cursor=None: ('cursor-2', ['IO_PAGE_FAULT'], ['IO_PAGE_FAULT'])
+                elif mode == 'implicit-reset':
+                    kernel = lambda cursor=None: (
+                        'cursor-2', ['vfio-pci 0000:7b:00.0: resetting',
+                                     'vfio-pci 0000:7b:00.0: reset done'], [])
+                else:
+                    kernel = lambda cursor=None: ('cursor-2', [], [])
                 with self.assertRaises(self.tool.RecoveryError):
                     self.tool.perform_recovery('boot-A', 'c'*32, lambda:next(states),
                                                lambda:fake, kernel, sleep=lambda _:None)
