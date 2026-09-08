@@ -337,6 +337,47 @@ Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0
         self.assertEqual(c.classify(manifest, missing, None)['earliest_failure'],
                          'sdma_channel_remap_missing')
 
+    def test_sdma_ib_repair_is_required_and_page_timeout_is_decisive(self):
+        c = self.classifier()
+        manifest = {'build_id': 'abc', 'spec': {'required_observations': [
+                    'sdma_topology', 'sdma_channel_remap', 'sdma_ib_address_repair']}}
+        serial = ''.join([
+            'RGPU_EVENT build=abc seq=0 BUILD: identity=abc\n',
+            'RGPU_EVENT build=abc seq=1 HY: HWLibs hybrid trace route=ok entries-match=1\n',
+            'RGPU_EVENT build=abc seq=2 SD: topology routes=ok count=7 entries-match=1\n',
+            'RGPU_EVENT build=abc seq=3 SD: topology applied: discovered=1 kept=SDMA0 removed=SDMA1 before initialize\n',
+            'RGPU_EVENT build=abc seq=4 SD: AMDHardware::initializeHWEngines -> 1 (topology-applied=1)\n',
+            'RGPU_EVENT build=abc seq=5 SD: channel engine remap 2 -> 1 ring=3\n',
+            'RGPU_EVENT build=abc seq=6 XJ: waitForHwStamp(1) -> 1\n',
+            'RGPU_EVENT build=abc seq=7 HY: createHybridEngine enter: engine=10 available=1\n',
+            'RGPU_EVENT build=abc seq=8 HY: SDMA select index=0 queue-type=0 found=1 counts=1,0,0,0 queues=2,0,0 occupied=0 callback=0xffffff8000000000\n',
+            'RGPU_EVENT build=abc seq=9 HY: createHybridEngine exit: engine=10 valid=1 available-before=1 status=0\n',
+            'RGPU_EVENT build=abc seq=10 HY: createHybridEngine enter: engine=11 available=1\n',
+            'RGPU_EVENT build=abc seq=11 HY: SDMA select index=0 queue-type=1 found=1 counts=1,0,0,0 queues=2,0,0 occupied=0 callback=0xffffff8000000000\n',
+            'RGPU_EVENT build=abc seq=12 HY: createHybridEngine exit: engine=11 valid=1 available-before=1 status=0\n',
+            'RGPU_EVENT build=abc seq=13 SD: one-instance start -> 1 (SDMA0=0xffffff8000001000 SDMA1=0)\n',
+            'RGPU_EVENT build=abc seq=14 XJ: AMDHardware::startHWEngines -> 1\n',
+            'RGPU_EVENT build=abc seq=15 SD: IB template 0x400100000 -> 0x840100000 valid=1 changed=1\n',
+            'RGPU_RECORDS build=abc count=16 dropped=0 truncated=0\n',
+            '[0:6:0]: HW Channel 12 SDMA0_PAGE is occupied by channel 34 stamp 1\n'])
+        events = c.parse_serial(serial)
+        result = c.classify(manifest, events, None)
+        self.assertTrue(result['valid'])
+        self.assertEqual(result['verdict'], 'SDMA_PAGE_TIMEOUT')
+        self.assertEqual(result['earliest_failure'], 'sdma0_page')
+
+        missing = serial.replace(
+            'RGPU_EVENT build=abc seq=15 SD: IB template 0x400100000 -> 0x840100000 valid=1 changed=1\n', '')
+        missing = missing.replace('count=16', 'count=15')
+        result = c.classify(manifest, c.parse_serial(missing), None)
+        self.assertEqual(result['verdict'], 'INCONCLUSIVE')
+        self.assertEqual(result['earliest_failure'], 'sdma_ib_address_repair_missing')
+
+        unchanged = serial.replace('valid=1 changed=1', 'valid=1 changed=0')
+        result = c.classify(manifest, c.parse_serial(unchanged), None)
+        self.assertEqual(result['verdict'], 'INCONCLUSIVE')
+        self.assertEqual(result['earliest_failure'], 'sdma_ib_address_repair_missing')
+
 
 if __name__ == '__main__':
     unittest.main()
