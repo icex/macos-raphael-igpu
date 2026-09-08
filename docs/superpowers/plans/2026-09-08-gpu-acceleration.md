@@ -191,6 +191,7 @@ primitive. The existing unprotected `diagLen` and destructive dump are not a saf
 | KIQ succeeds; hybrid returns 4 with availability-before 1 | `HYBRID_QUEUE_SUSPECTED`, not proven queue cause |
 | Hybrid returns 0; engine start returns 0 | `STARTUP_FAILED_LATER` |
 | Metal enumerates, no completed command buffer | `EXECUTION_FAILED` |
+| Native startup succeeds, probe was not attempted | `PROBE_NOT_RUN` (execution unknown) |
 | Correct nonce/output/pixels/exit and clean native results | `CORE_PROBE_PASS` |
 
 Example assertions:

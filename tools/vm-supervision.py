@@ -19,6 +19,7 @@ import uuid
 import subprocess
 import sys
 import time
+import fcntl
 
 CID_PATTERN = re.compile(r"[0-9a-f]{64}")
 DOCKER_ENV = ("DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_CONFIG", "DOCKER_TLS_VERIFY",
@@ -283,6 +284,9 @@ def cleanup(vm, name):
         # This random name belongs exclusively to this launch. Even failed ID
         # lookup must not fall back to the reusable macos-sequoia name.
         stop_exact(name, by_name=True)
+    # Exact unique reservation: an old cleanup cannot unlink a newer launch.
+    # Reached only after container stop was confirmed. Unknown stop leaves it.
+    (vm / 'run/launch-pending' / name).unlink(missing_ok=True)
 
 
 def launch(vm, name, maximum, gpu_args):
@@ -376,8 +380,31 @@ def launch(vm, name, maximum, gpu_args):
 
 
 def start(vm, maximum, gpu_args):
+    with (vm / 'run/redeploy.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        pending = vm / 'run/launch-pending'
+        pending.mkdir(exist_ok=True)
+        if any(pending.iterdir()):
+            raise RuntimeError('a supervised launch is still pending')
+        active = run([binary('docker'), 'ps', '-a', '--filter', 'status=running',
+                      '--filter', 'status=created', '--filter', 'status=restarting',
+                      '--filter', 'status=paused', '--format', '{{.Names}}'])
+        if any(name == 'macos-sequoia' or name.startswith('rgpu-launch-')
+               for name in active.splitlines()):
+            raise RuntimeError('active or pending VM already owns the media')
+        return start_locked(vm, maximum, gpu_args)
+
+
+def start_locked(vm, maximum, gpu_args):
     vm = vm.resolve()
     name = "rgpu-launch-" + uuid.uuid4().hex
+    # Durable admission survives the short-lived caller dying before Docker has
+    # created a visible container. Managed cleanup removes only this launch's file.
+    reservation = vm / 'run/launch-pending' / name
+    with reservation.open('x') as stream:
+        stream.write(name+'\n')
+        stream.flush()
+        os.fsync(stream.fileno())
     helper = str(Path(__file__).resolve())
     env_keys = DOCKER_ENV + ("PATH", "DISPLAY", "XAUTHORITY", "XDG_RUNTIME_DIR", "IMAGE",
                            "VCPUS", "RAM_GB", "DISK_BUS", "AUDIO", "NVRAM", "BOOTDISK_MODE",
@@ -415,6 +442,7 @@ def start(vm, maximum, gpu_args):
         if (service.get("ActiveState"), service.get("SubState")) != ("active", "running"):
             raise RuntimeError("supervised launcher stopped during readiness verification")
         (vm / "run/supervision.json").write_text(json.dumps(state))
+        reservation.unlink()
         return state
     except Exception:
         try:

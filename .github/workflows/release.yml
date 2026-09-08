@@ -13,6 +13,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      - name: Install FAT image test utilities
+        run: sudo apt-get update && sudo apt-get install -y mtools
       - run: python3 -B -m unittest discover -s tests -v
       - name: Validate address arithmetic
         run: |
@@ -20,6 +22,10 @@ jobs:
             g++ -std=c++14 -Wall -Wextra -Werror -fsanitize=undefined "$source" -o /tmp/address-test
             /tmp/address-test
           done
+      - name: Validate concurrent diagnostic records
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror -pthread -fsanitize=address,undefined tests/test_diagnostic_records.cpp -o /tmp/record-test
+          /tmp/record-test
   build:
     needs: test
     runs-on: macos-15-intel
