@@ -39,7 +39,7 @@ single clean run is not repeatability evidence. There is no defensible overall p
 | [x] | Metal device enumeration | `AMD Radeon Navi23`, Metal 3 advertised; no completed Metal command buffer |
 | [x] | Automated compute/render probe implemented | Fresh nonce, independent CPU/pixel expectations, timeouts; currently FAILS |
 | [x] | Exposure supervision and capture implemented | Full-CID timers, serial durability, sleep inhibitor; not a host-hang fix |
-| [x] | Bounded ACPI shutdown/fallback tested without GPU | Request sent; guest did not exit; exact container force-stopped |
+| [x] | Revocable root-agent shutdown path implemented | Nonce, live build and boot UUID checks; exact-container fallback; native exit still unproved because the first live GPU-less validation panicked before agent readiness |
 | [x] | Wrong-kext route regression prevented for current scopes | `route-domains.py` and regression tests; not a complete C++ verifier |
 | [x] | Optional hybrid diagnostic built | 1.0.162, exact entry guards, `rgpuhybrid=1`, native result preserved |
 | [x] | Hybrid diagnostic validated on hardware | 1.0.163: complete records; type10 fails after type10/type11 success |
