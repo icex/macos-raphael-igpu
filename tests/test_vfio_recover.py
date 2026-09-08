@@ -142,6 +142,23 @@ class VfioRecoveryTests(unittest.TestCase):
                 with self.assertRaisesRegex(self.tool.RecoveryError, 'latest launch'):
                     self.tool.recover(vm, 'e'*32)
 
+    def test_cleanup_still_runs_at_launch_ceiling(self):
+        with tempfile.TemporaryDirectory() as temp:
+            vm = Path(temp); (vm/'run/used-gpu-boots').mkdir(parents=True)
+            prior = 'c'*32
+            ledger = {'boot_id':'boot-A', 'launches':[
+                {'run_id':'a'*32}, {'run_id':'b'*32}, {'run_id':prior}]}
+            (vm/'run/used-gpu-boots/boot-A.json').write_text(json.dumps(ledger))
+            fake = FakeTransport(self.tool)
+            states = iter([self.state(), self.state(), self.state()])
+            with patch.object(self.tool, 'host_state', side_effect=lambda:next(states)), \
+                 patch.object(self.tool, 'LegacyVfio', return_value=fake), \
+                 patch.object(self.tool, 'kernel_updates', side_effect=[
+                     ('cursor-1', [], []), ('cursor-2', [], [])]):
+                receipt = self.tool.recover(vm, prior)
+            self.assertEqual(receipt['status'], 'recovered')
+            self.assertTrue((vm/'run/vfio-recovery/boot-A'/(prior+'.json')).exists())
+
 
 if __name__ == '__main__':
     unittest.main()
