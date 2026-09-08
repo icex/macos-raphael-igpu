@@ -269,18 +269,18 @@ failure accurately, keeps deadlines intact and cannot silently launch another VM
 **Files:** consume prepared card/manifest; add one immutable directory under
 `findings/experiments/`; update baseline audit and roadmap with the actual verdict.
 
-- [ ] After reboot, verify new boot ID/no VM/sleep inhibitor/host capture and amdgpu ownership.
-- [ ] Capture permitted reference metadata before the handoff. Do not run the old
+- [x] After reboot, verify new boot ID/no VM/sleep inhibitor/host capture and amdgpu ownership.
+- [x] Capture permitted reference metadata before the handoff. Do not run the old
   `capture-amdgpu-reference.sh` unreviewed: it also invokes raw register access.
-- [ ] Validate 1.0.162 or its reviewed successor and `rgpuhybrid=1` in the actual ESP.
+- [x] Validate 1.0.162 or its reviewed successor and `rgpuhybrid=1` in the actual ESP.
   A staged build directory is not a deployed candidate.
-- [ ] Use the reviewed one-way handoff once if needed. Do not request sudo for subsequent
+- [x] Use the reviewed one-way handoff once if needed. Do not request sudo for subsequent
   build/launch/tests when existing device permissions already suffice.
-- [ ] Run the M2 experiment via T4, at most 180 seconds, with the probe precompiled.
+- [x] Run the M2 experiment via T4, at most 180 seconds, with the probe precompiled.
 - [ ] Apply the exact M2 decision table. If availability is suspected, identify the native
   state-bit writer and its event ordering. If queue creation is suspected, identify selected
   engine type, actual hardware instance and its callback return before changing behavior.
-- [ ] Stop, archive, classify and commit regardless of success or failure. Mark M2 complete
+- [x] Stop, archive, classify and commit regardless of success or failure. Mark M2 complete
   only when a concrete native failing branch/callback is located; a snapshot is insufficient.
 
 **Acceptance:** a valid run either narrows the first failure to a specific native operation

@@ -1,6 +1,6 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-09-08. Baseline repository: `d6e320a`; candidate: 1.0.163; published
+Updated 2026-09-08. Baseline repository: `d6e320a`; candidate: 1.0.164; published
 research snapshot: `v1.0.159-preview.1`. This document is the authoritative current
 roadmap. Historical hypotheses in `findings/GPU-RE.md` remain evidence, not instructions.
 
@@ -15,8 +15,10 @@ Execution update: the fresh amdgpu boot is captured, the sleep inhibitor is acti
 and [the fixed baseline audit](../findings/baseline-audit.md) records enabled
 interventions. Candidate 1.0.163 adds concurrent critical records and build markers.
 All 75 offline tests pass. [GPU-less end-to-end validation](../findings/gpueless-tests/163/coordinator/notes.md)
-confirmed the exact loaded build, complete critical records, no VFIO arguments and
-bounded exact-CID cleanup. T1–T4 are complete; T5 is next. No new GPU execution claim is made.
+confirmed exact delivery and cleanup. T1–T4 are complete.
+[Physical experiment163](../findings/experiments/hybrid-001-163/notes.md) reproduced
+KIQ success and narrowed failure to the third SDMA hybrid request. Candidate164
+traces its actual native instance lookup. No Metal command completion is verified.
 
 ## 1. What is actually complete
 
@@ -40,7 +42,7 @@ single clean run is not repeatability evidence. There is no defensible overall p
 | [x] | Bounded ACPI shutdown/fallback tested without GPU | Request sent; guest did not exit; exact container force-stopped |
 | [x] | Wrong-kext route regression prevented for current scopes | `route-domains.py` and regression tests; not a complete C++ verifier |
 | [x] | Optional hybrid diagnostic built | 1.0.162, exact entry guards, `rgpuhybrid=1`, native result preserved |
-| [ ] | Hybrid diagnostic validated on hardware | 1.0.163 is deployed and validated GPU-less; physical routes remain untested |
+| [x] | Hybrid diagnostic validated on hardware | 1.0.163: complete records; type10 fails after type10/type11 success |
 | [ ] | Repeatable clean initial state | Last GPU runs reached a stuck KIQ; safe warm reuse unproved |
 | [ ] | Native hybrid queues / complete engine startup | Clean run fails `TtlCreateHybridEngine` status 4 |
 | [ ] | Correct Metal compute and offscreen rendering | First command buffer fails; zero results checked |
@@ -116,7 +118,7 @@ firmware state or host IOMMU state. Do not use snapshot rollback as a clean-GPU 
 
 ## 5. Ordered milestones and acceptance gates
 
-### M0 — Make experiments identifiable and falsifiable (next; no GPU required)
+### M0 — Make experiments identifiable and falsifiable (complete)
 
 - [x] Freeze 1.0.159 as a reference observation, not as a known-good accelerated driver.
 - [x] Inventory enabled patches as compatibility fixes, observations, behavior-changing
@@ -138,14 +140,14 @@ working fixes during this audit—do not remove several bits and call that a con
 
 ### M1 — Establish a controlled initial state (after the planned reboot)
 
-- [ ] Read new host boot ID, kernel, watchdog state, journal availability, power/control,
+- [x] Read new host boot ID, kernel, watchdog state, journal availability, power/control,
   driver ownership and IOMMU group membership. Missing evidence is `UNKNOWN`, not `PASS`.
-- [ ] While amdgpu owns the iGPU, capture approved software state: IP discovery, firmware
+- [x] While amdgpu owns the iGPU, capture approved software state: IP discovery, firmware
   versions, topology and connector/EDID data, without raw register probes or reset triggers.
-- [ ] Pin reference source versions: the existing Linux reference cache is v6.12; it is
+- [x] Pin reference source versions: the existing Linux reference cache is v6.12; it is
   not automatically a description of the running 7.2.3 host. Record relevant differences.
-- [ ] Prepare the candidate, probe and run card before the one-way amdgpu → vfio-pci handoff.
-- [ ] Permit exactly one bounded GPU launch for that boot until M7 proves warm reuse.
+- [x] Prepare the candidate, probe and run card before the one-way amdgpu → vfio-pci handoff.
+- [x] Permit exactly one bounded GPU launch for that boot until M7 proves warm reuse.
 
 **Pass:** manifest proves the intended baseline and the guest reaches the target stage
 without an earlier guard failure. If KIQ cannot dequeue, the run says `BASELINE_BLOCKED`;
@@ -157,8 +159,8 @@ that failure without a different discriminating plan.
 Question: does hybrid creation fail because hardware availability is rejected, because a
 GC/SDMA queue cannot be created, or because the intended diagnostic is not actually active?
 
-- [ ] Validate the 1.0.162 entry guards and `HY` call records on a controlled run.
-- [ ] Retain actual call ordering: KIQ stamps → engine power-up → hybrid create →
+- [x] Validate the 1.0.163 entry guards and `HY` call records on a controlled run.
+- [x] Retain actual call ordering: KIQ stamps → engine power-up → hybrid create →
   startHWEngines → Metal submission. Do not infer ordering from unrelated log timestamps.
 - [ ] If needed, trace only the selected child call/flag writer at an ABI-verified boundary.
 

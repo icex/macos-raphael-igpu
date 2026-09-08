@@ -29,6 +29,11 @@ def parse_serial(serial):
             row['kind'] = 'build'
         elif 'HY: HWLibs hybrid trace' in payload:
             row.update(kind='route', ok='route=ok entries-match=1' in payload)
+        elif 'HY: SDMA selector trace' in payload:
+            row.update(kind='sdma_route', ok='route=ok entries-match=1' in payload)
+        elif m := re.search(r'HY: SDMA select index=(\d+) queue-type=(\d+) found=([01]) counts=(\d+),(\d+),(\d+),(\d+)', payload):
+            row.update(kind='sdma_select', index=int(m[1]), queue_type=int(m[2]),
+                       found=bool(int(m[3])), counts=[int(m[i]) for i in range(4,8)])
         elif m := re.search(r'waitForHwStamp\((\d+)\) -> (\d+)', payload):
             row.update(kind='kiq', stamp=int(m[1]), result=int(m[2]))
         elif m := re.search(r'HY: createHybridEngine enter: engine=(\d+) available=(\d+)', payload):
@@ -74,6 +79,16 @@ def classify(manifest, events, probe):
         return verdict('INCONCLUSIVE', stage='capture_loss')
     if any(r.get('result') == 0 for r in kinds['kiq']):
         return verdict('BASELINE_BLOCKED', True, 'kiq', 'analyze the earlier KIQ failure offline; no retry')
+    if 'sdma_selection' in manifest.get('spec', {}).get('required_observations', []):
+        routes = [r for r in events if r['kind'] == 'sdma_route']
+        if any(not r.get('ok') for r in routes):
+            return verdict('INVALID', stage='sdma_route_guard')
+        target = manifest['spec'].get('sdma_selection_target', {})
+        selections = [r for r in events if r['kind'] == 'sdma_select' and
+                      r.get('index') == target.get('index') and
+                      r.get('queue_type') == target.get('queue_type')]
+        if not routes or not selections:
+            return verdict('INCONCLUSIVE', stage='sdma_selection_missing')
     if not kinds['kiq'] or not kinds['hybrid_enter'] or not kinds['hybrid_exit']:
         return verdict('INCONCLUSIVE', stage='required_native_record_missing')
     for row in kinds['hybrid_exit']:
