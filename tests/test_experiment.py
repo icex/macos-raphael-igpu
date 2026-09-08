@@ -6,6 +6,8 @@ import unittest
 import subprocess
 import plistlib
 import hashlib
+from unittest.mock import patch
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -28,6 +30,21 @@ class ExperimentTests(unittest.TestCase):
             for value in (None, 'stale'):
                 observed = dict(expected, **{key: value})
                 self.assertIn(key, validate(expected, observed))
+
+    def test_production_manifest_requires_all_identity_fields(self):
+        check = getattr(self.module(), 'required_identity', None)
+        self.assertIsNotNone(check, 'production identity completeness check missing')
+        missing = check({'build_id': 'candidate'})
+        for key in ('source_commit', 'kdk_sha256', 'binary_sha256', 'info_sha256',
+                    'config_sha256', 'boot_args', 'image_id', 'probe_binary_sha256'):
+            self.assertIn(key, missing)
+
+    def test_failed_amdgpu_probe_is_not_completed_initialization(self):
+        check = getattr(self.module(), 'amdgpu_initialized', None)
+        self.assertIsNotNone(check)
+        self.assertFalse(check('amdgpu 0000:7b:00.0: probe failed with error -22'))
+        self.assertTrue(check('[drm] Initialized amdgpu 3.64.0 for 0000:7b:00.0 on minor 0'))
+        self.assertFalse(check('[drm] Initialized amdgpu 3.64.0 for 0000:03:00.0 on minor 1'))
 
     def host(self):
         return dict(boot_id='boot-A', amdgpu_initialized=True, capture_ready=True,
@@ -64,6 +81,16 @@ class ExperimentTests(unittest.TestCase):
         self.assertTrue(eligible(now=100, launch_deadline=180, container_deadline=190))
         self.assertFalse(eligible(now=100, launch_deadline=None, container_deadline=190))
 
+    def test_running_guest_must_have_exact_image_and_vfio_device(self):
+        check = getattr(self.module(), 'validate_running', None)
+        self.assertIsNotNone(check, 'actual QEMU admission check missing')
+        manifest = {'image_id': 'sha256:expected', 'vfio_device': '0000:7b:00.0'}
+        observed = {'image_id': 'sha256:expected', 'vfio_args':
+                    ['vfio-pci,host=0000:7b:00.0,x-pci-device-id=0x73ff']}
+        self.assertEqual(check(manifest, observed), [])
+        self.assertIn('vfio_device', check(manifest, dict(observed, vfio_args=[])))
+        self.assertIn('image_id', check(manifest, dict(observed, image_id='sha256:wrong')))
+
     def test_immutable_json_never_overwrites_prepared_identity(self):
         write = self.module().write_once
         with tempfile.TemporaryDirectory() as temp:
@@ -96,6 +123,97 @@ class ExperimentTests(unittest.TestCase):
             with self.assertRaises((ValueError, FileNotFoundError)):
                 stage(image, bundle, config, offset=0)
             self.assertEqual(image.read_bytes(), good)
+
+    def test_one_run_archives_failure_stops_and_never_reuses_boot(self):
+        self.exercise_run('hybrid')
+
+    def test_wrong_running_image_aborts_and_stops_exact_container(self):
+        self.exercise_run('wrong-image')
+
+    def test_cancelled_observation_stops_exact_container(self):
+        self.exercise_run('cancel')
+
+    def test_definitive_capture_loss_stops_without_using_remaining_budget(self):
+        self.exercise_run('capture-loss')
+
+    def test_unresolved_startup_stop_is_explicit(self):
+        self.exercise_run('unconfirmed')
+
+    def test_gpueless_coordinator_does_not_open_vfio_or_consume_gpu_boot(self):
+        self.exercise_run('gpu-less')
+
+    def exercise_run(self, mode):
+        tool = self.module()
+        self.assertTrue(hasattr(tool, 'run_one'))
+        with tempfile.TemporaryDirectory() as temp:
+            vm = Path(temp); (vm/'run').mkdir()
+            manifest = {key:'fixture' for key in tool.IDENTITY_FIELDS}
+            manifest.update(build_id='abc', run_id='a'*32, max_seconds=180, boot_id='boot-A',
+                            bootdisk_verified=True,
+                            spec={'run_probe_only_after_native_start': True},
+                            launch_options={'BOOTDISK_MODE':'custom', 'NVRAM':'stock'},
+                            source_clean=True, vfio_device='0000:7b:00.0',
+                            candidate_directory='run/candidate-163', image_id='sha256:expected')
+            path = vm/'prepared.json'; path.write_text(json.dumps(manifest))
+            host = dict(self.host(), sleep_inhibited=True)
+            if mode == 'gpu-less':
+                manifest['gpu'] = False; path.write_text(json.dumps(manifest))
+            now = [100.0]; calls = []
+            lines = ['BUILD: identity=abc', 'HY: HWLibs hybrid trace route=ok entries-match=1',
+                     'XJ:   waitForHwStamp(1) -> 1',
+                     'HY: createHybridEngine enter: engine=1 available=1',
+                     'HY: createHybridEngine exit: engine=1 valid=1 available-before=1 status=4',
+                     'XJ: AMDHardware::startHWEngines -> 0']
+            serial = 'RGPU_RECORDS build=abc count=6 dropped=0 truncated=0\n'+''.join(
+                f'RGPU_EVENT build=abc seq={i} {line}\n' for i,line in enumerate(lines))
+            def start(*args):
+                calls.append('start'); (vm/'run/serial.log').write_text(serial)
+                if mode == 'gpu-less': self.assertEqual(args[2], [])
+                if mode == 'unconfirmed': raise StopUnconfirmed('pending service stop unknown')
+                return dict(cid='c'*64, deadline_epoch=280, max_seconds=180)
+            if mode == 'capture-loss': serial = serial.replace('dropped=0','dropped=1')
+            class StopUnconfirmed(RuntimeError): pass
+            def verify(state):
+                if mode == 'cancel': raise KeyboardInterrupt()
+            def shutdown(state, grace):
+                calls.append(('shutdown',state['cid'])); return dict(cid=state['cid'],outcome='forced')
+            supervisor = SimpleNamespace(start_locked=start, verify=verify, shutdown=shutdown,
+                ManagedStopUnconfirmed=StopUnconfirmed,
+                stop_exact=lambda cid:calls.append(('stop',cid)))
+            original_helper = tool.helper
+            def helpers(name):
+                return supervisor if name == 'vm-supervision' else original_helper(name)
+            actual = dict(image_id='wrong' if mode == 'wrong-image' else 'sha256:expected',
+                          vfio_args=['vfio-pci,host=0000:7b:00.0'])
+            if mode == 'gpu-less': actual['vfio_args'] = []
+            with patch.object(tool, 'current_identity', return_value=manifest), \
+                 patch.object(tool, 'host_snapshot', return_value=host), \
+                 patch.object(tool, 'helper', side_effect=helpers), \
+                 patch.object(tool, 'running_identity', return_value=actual), \
+                 patch.object(tool, 'kernel_updates', return_value=('cursor', [], [])), \
+                 patch.object(tool.time, 'time', side_effect=lambda:now[0]), \
+                 patch.object(tool.time, 'sleep', side_effect=lambda n:now.__setitem__(0,now[0]+n)):
+                out = vm/'evidence'
+                result = tool.run_one(vm, path, out)
+                self.assertEqual(calls.count('start'), 1)
+                if mode == 'hybrid':
+                    self.assertEqual(result['verdict'], 'HYBRID_QUEUE_SUSPECTED')
+                    self.assertIn(('shutdown','c'*64), calls)
+                elif mode == 'gpu-less':
+                    self.assertEqual(result['verdict'], 'GPULESS_CAPTURE_CHECK')
+                    self.assertFalse((vm/'run/used-gpu-boots/boot-A.json').exists())
+                    return
+                elif mode == 'unconfirmed':
+                    self.assertEqual(result['verdict'], 'STOP_UNCONFIRMED')
+                else:
+                    self.assertEqual(result['verdict'], 'INVALID')
+                    self.assertIn(('stop','c'*64), calls)
+                if mode == 'capture-loss': self.assertLess(now[0], 110)
+                self.assertTrue((out/'verdict.json').exists())
+                self.assertTrue((vm/'run/used-gpu-boots/boot-A.json').exists())
+                second = tool.run_one(vm,path,vm/'second')
+                self.assertEqual(second['verdict'], 'INVALID')
+                self.assertEqual(calls.count('start'), 1)
 
 
 if __name__ == '__main__': unittest.main()
