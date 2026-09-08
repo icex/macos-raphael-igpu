@@ -277,7 +277,7 @@ failure accurately, keeps deadlines intact and cannot silently launch another VM
 - [x] Use the reviewed one-way handoff once if needed. Do not request sudo for subsequent
   build/launch/tests when existing device permissions already suffice.
 - [x] Run the M2 experiment via T4, at most 180 seconds, with the probe precompiled.
-- [ ] Apply the exact M2 decision table. If availability is suspected, identify the native
+- [x] Apply the exact M2 decision table. If availability is suspected, identify the native
   state-bit writer and its event ordering. If queue creation is suspected, identify selected
   engine type, actual hardware instance and its callback return before changing behavior.
 - [x] Stop, archive, classify and commit regardless of success or failure. Mark M2 complete

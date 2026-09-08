@@ -1,6 +1,6 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-09-08. Baseline repository: `d6e320a`; candidate: 1.0.164; published
+Updated 2026-09-08. Baseline repository: `f2dd1f2`; candidate: 1.0.164; published
 research snapshot: `v1.0.159-preview.1`. This document is the authoritative current
 roadmap. Historical hypotheses in `findings/GPU-RE.md` remain evidence, not instructions.
 
@@ -16,9 +16,11 @@ and [the fixed baseline audit](../findings/baseline-audit.md) records enabled
 interventions. Candidate 1.0.163 adds concurrent critical records and build markers.
 All 75 offline tests pass. [GPU-less end-to-end validation](../findings/gpueless-tests/163/coordinator/notes.md)
 confirmed exact delivery and cleanup. T1–T4 are complete.
-[Physical experiment163](../findings/experiments/hybrid-001-163/notes.md) reproduced
-KIQ success and narrowed failure to the third SDMA hybrid request. Candidate164
-traces its actual native instance lookup. No Metal command completion is verified.
+[Physical experiment164](../findings/experiments/hybrid-002-164/notes.md) proved the
+third request is SDMA type0/global-index1 and fails because TTL discovered exactly one
+SDMA instance. X6000 unconditionally constructed two Navi23 SDMA objects. The guest
+then completed one native root-agent shutdown without fallback. No Metal command
+completion or safe warm reuse is verified.
 
 ## 1. What is actually complete
 
@@ -39,12 +41,12 @@ single clean run is not repeatability evidence. There is no defensible overall p
 | [x] | Metal device enumeration | `AMD Radeon Navi23`, Metal 3 advertised; no completed Metal command buffer |
 | [x] | Automated compute/render probe implemented | Fresh nonce, independent CPU/pixel expectations, timeouts; currently FAILS |
 | [x] | Exposure supervision and capture implemented | Full-CID timers, serial durability, sleep inhibitor; not a host-hang fix |
-| [x] | Revocable root-agent shutdown path implemented | Nonce, live build and boot UUID checks; exact-container fallback; native exit still unproved because the first live GPU-less validation panicked before agent readiness |
+| [x] | Revocable root-agent shutdown path implemented | Nonce, live build and boot UUID checks; candidate164 exited after the guest request with APFS unmount and CPU halt; complete GPU teardown and warm reuse remain unproved |
 | [x] | Wrong-kext route regression prevented for current scopes | `route-domains.py` and regression tests; not a complete C++ verifier |
 | [x] | Optional hybrid diagnostic built | 1.0.162, exact entry guards, `rgpuhybrid=1`, native result preserved |
 | [x] | Hybrid diagnostic validated on hardware | 1.0.163: complete records; type10 fails after type10/type11 success |
 | [ ] | Repeatable clean initial state | Last GPU runs reached a stuck KIQ; safe warm reuse unproved |
-| [ ] | Native hybrid queues / complete engine startup | Clean run fails `TtlCreateHybridEngine` status 4 |
+| [ ] | Native hybrid queues / complete engine startup | One SDMA object starts; X6000's false second object requests absent instance1 and returns status 4 |
 | [ ] | Correct Metal compute and offscreen rendering | First command buffer fails; zero results checked |
 | [ ] | Per-process memory, synchronization and resource lifecycle | Must be exercised after first real completion |
 | [ ] | Accelerated desktop and presentation | WindowServer panic repair is not proof of accelerated composition |
@@ -163,7 +165,8 @@ GC/SDMA queue cannot be created, or because the intended diagnostic is not actua
 - [x] Retain the actual critical sequence: interleaved GC hybrid creation and KIQ
   stamps, power-up success, SDMA hybrid requests, then startup failure. The Metal
   probe was skipped because native startup failed.
-- [ ] If needed, trace only the selected child call/flag writer at an ABI-verified boundary.
+- [x] Trace the selected SDMA lookup: type0/index1 returns null against discovered counts
+  `1,0,0,0`; the callback is not reached.
 
 | Result | Interpretation | Next action |
 |---|---|---|
@@ -181,10 +184,12 @@ does not override any return or clear any status.
 
 ### M3 — Repair the demonstrated startup defect
 
-- [ ] Trace each suspect value to its allocator/configuration owner and first writer.
-- [ ] Compare hardware instance counts and queue types against this chip's discovery;
+- [x] Trace the rejected index to Navi23 `allocateHWEngines`, generic engine-array
+  initialization and `AMDGFX10SDMAEngine::init`.
+- [x] Compare hardware instance counts and queue types against this chip's discovery;
   do not infer engine presence from a successfully constructed Apple object.
-- [ ] Check GC/SDMA creation parameters, memory domain, alignment and instance selection.
+- [x] Check instance selection: index0 types0/1 resolve and create; index1/type0 has no
+  discovered instance and never reaches allocation or the callback.
 - [ ] Fix the smallest owner-level mismatch while preserving native failure cleanup.
 - [ ] Add a regression for the decoded data transformation or dispatch decision.
 - [ ] Confirm native hybrid creation returns 0, its returned handles are valid, required
