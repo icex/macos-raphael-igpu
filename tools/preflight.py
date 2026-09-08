@@ -123,6 +123,56 @@ def main():
         if not ok: bad += 1
         print(f"{name:26s} {off_s:>9s}  {sym:44s} {note}")
 
+    # The recovery reservation is useful only when both allocator limits are
+    # capped before the original enableAllocations implementation can create
+    # either BAR0 pool. Keep this ordering in the deployment preflight rather
+    # than relying only on the hosted header fixture.
+    source = SRC.read_text()
+    wrapper_start = source.find("static uint32_t wrapHwMemEnable(void *self) {")
+    wrapper_end = source.find("static uint32_t wrapPpPowerUp", wrapper_start)
+    wrapper = source[wrapper_start:wrapper_end]
+    ordered = [wrapper.find(token) for token in (
+        "RaphaelRecovery::activate(descriptor, pool0, pool1)",
+        "q(0x40) = pool0", "q(0x48) = pool1",
+        "FunctionCast(wrapHwMemEnable, orgHwMemEnable)(self)")]
+    routed = "orgHwMemEnable = patcher.routeFunction(addr + kOffHwMemEnable" in source
+    full_bar_visible = source.count(
+        "RaphaelRecovery::barVisibleBytes(size0, size1)") >= 2
+    reservation_ok = (wrapper_start >= 0 and wrapper_end > wrapper_start and routed and
+                      all(position >= 0 for position in ordered) and
+                      ordered == sorted(ordered) and full_bar_visible)
+    print(f"recovery reservation {'ok (both pools capped; full BAR remains visible)' if reservation_ok else 'INVALID ORDER, ROUTE, OR BAR BOUND'}")
+    if not reservation_ok:
+        bad += 1
+
+    prepare_start = source.find("static void wrapVmmPrepare(void *self")
+    prepare_end = source.find("static uint32_t wrapHwMemSetVSReady", prepare_start)
+    prepare = source[prepare_start:prepare_end]
+    prepare_order = [prepare.find(token) for token in (
+        "RaphaelVm::prepareInvalidateInfo(",
+        "nativeInfo = local.valid",
+        "FunctionCast(wrapVmmPrepare, orgVmmPrepare)",
+        "RaphaelVm::observePreparedRequest(",
+        "vmid2Programs.append(observation)")]
+    forbidden = ("fbRead(", "fbWrite(", "RLOG(", "CRLOG(", "IOSleep(",
+                 "fbAperture(", "IOLock", "new ", "alloc(")
+    prepare_ok = (prepare_start >= 0 and prepare_end > prepare_start and
+                  all(position >= 0 for position in prepare_order) and
+                  prepare_order == sorted(prepare_order) and
+                  not any(token in prepare for token in forbidden) and
+                  "__atomic_load_n(&raphaelTargetConfirmed, __ATOMIC_ACQUIRE)" in prepare and
+                  "__atomic_load_n(&cachedFbPublished, __ATOMIC_ACQUIRE)" in prepare and
+                  "__atomic_store_n(&latestVmid2ProgramSequence, observation.sequence, __ATOMIC_RELEASE)" in prepare)
+    print(f"VM callback safety   {'ok (copy/repair/native/copy/append; no blocking work)' if prepare_ok else 'INVALID ORDER OR UNSAFE OPERATION'}")
+    if not prepare_ok:
+        bad += 1
+
+    setvm_pointer_abi = ("static uintptr_t wrapGfx10SetVMRegs(void *self)" in source and
+                         "static uint32_t wrapGfx10SetVMRegs(void *self)" not in source)
+    print(f"setVMRegisters ABI   {'ok (pointer-width return)' if setvm_pointer_abi else 'INVALID RETURN TYPE'}")
+    if not setvm_pointer_abi:
+        bad += 1
+
     # If the RLC firmware header was generated, the built kext must actually CONTAIN those
     # bytes. Without __attribute__((used)) the compiler folds the few bytes read directly and
     # drops the rest of the array, yielding a kext that looks fine and carries no firmware.
@@ -157,7 +207,8 @@ def main():
     if bad:
         print(f"\npreflight: {bad} problem(s) -- NOT safe to deploy")
         return 1
-    print("\npreflight: route scopes checked, constants checked, prologues checked, patterns unique")
+    print("\npreflight: route scopes checked, constants checked, prologues checked, "
+          "allocator ordering checked, patterns unique")
     return 0
 
 sys.exit(main())

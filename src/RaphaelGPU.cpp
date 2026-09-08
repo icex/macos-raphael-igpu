@@ -36,6 +36,7 @@
 #include "GpuVmDiagnostics.hpp"
 #include "ObservationBuffer.hpp"
 #include "EngineLifecycle.hpp"
+#include "RecoveryReservation.hpp"
 #if __has_include("BuildIdentity.hpp")
 #include "BuildIdentity.hpp"
 #else
@@ -198,6 +199,16 @@ static rgpu::SuccessRecordBudget waitStampRecordBudget {};
 static rgpu::SuccessRecordBudget kiqSubmitRecordBudget {};
 static rgpu::ObservationBuffer<RaphaelVm::PreparedRequest, 8> vmid2Programs {};
 static rgpu::ObservationBuffer<RaphaelSdma::SubmitInfoObservation, 8> vmid2Submits {};
+static bool vmRootFixEnabled = false;
+static volatile bool raphaelTargetConfirmed = false;
+// Published once by the early framebuffer callback and read later by the VM
+// callback. Keeping this snapshot avoids MMIO under X6000's unknown VM locks.
+static volatile uint32_t cachedFbBase = 0;
+static volatile uint32_t cachedFbTop = 0;
+static volatile uint32_t cachedFbOffset = 0;
+static volatile bool cachedFbPublished = false;
+static volatile uint32_t nextVmObservationSequence = 0;
+static volatile uint32_t latestVmid2ProgramSequence = 0;
 
 static void diagAppend(bool critical, const char *fmt, ...) {
     char text[512];
@@ -316,6 +327,8 @@ static uint32_t ptbFixMode = 0;
 // frame, including its completion WRITE_DATA at dword 16.
 static uint32_t mqdFixMode = 0;
 static void *hwMemObject = nullptr;
+static volatile uint32_t *fbAperture();
+static uint32_t wrapHwMemEnable(void *self);
 
 static void reportCpState(const char *when);
 static void primeIcacheOnly();
@@ -343,9 +356,9 @@ static void vmObservationThread(void *, wait_result_t) {
     // Driver hooks only copy small immutable structures into bounded buffers.
     // All formatting, serial output and MMIO happens here, outside unknown
     // caller lock contexts. The bounded experiment never exceeds 180 seconds.
-    for (unsigned poll = 0; poll < 1800; ++poll) {
+    for (unsigned poll = 0; poll < 18000; ++poll) {
         publishPendingVmObservations();
-        IOSleep(100);
+        IOSleep(10);
     }
     thread_terminate(current_thread());
 }
@@ -717,6 +730,32 @@ static constexpr uint32_t kGcScratch0    = kGcSeg1 + 0x2040;   // SCRATCH_REG0
 static constexpr uint32_t kGcGrbmGfxCntl = kGcSeg0 + 0x0dc2;
 static constexpr uint32_t kGcGrbmGfxIndex = kGcSeg1 + 0x2200;   // GRBM_GFX_INDEX   // GRBM_GFX_CNTL
 static constexpr uint32_t kGcVmFaultCntl = kGcSeg0 + 0x15c4;   // GCVM_L2_PROTECTION_FAULT_CNTL, bit 0 clears the latched status
+static constexpr uint32_t kGcVmInvCntl   = kGcSeg0 + 0x15c3;   // GCVM_INVALIDATE_CNTL
+// SDMA0 shares GC segment zero. The generated header's byte base 0x4980 is
+// kGcSeg0 in dwords, so these are the discovery-correct GC 10.3.6 indices.
+static constexpr uint32_t kSdmaCntl       = kGcSeg0 + 0x001c;
+static constexpr uint32_t kSdmaStatus0    = kGcSeg0 + 0x0025;
+static constexpr uint32_t kSdmaStatus1    = kGcSeg0 + 0x0026;
+static constexpr uint32_t kSdmaUcodeCsum  = kGcSeg0 + 0x0029;
+static constexpr uint32_t kSdmaF32Cntl    = kGcSeg0 + 0x002a;
+static constexpr uint32_t kSdmaStatus2    = kGcSeg0 + 0x0038;
+static constexpr uint32_t kSdmaUtclCntl   = kGcSeg0 + 0x003c;
+static constexpr uint32_t kSdmaUtclRd     = kGcSeg0 + 0x003e;
+static constexpr uint32_t kSdmaUtclWr     = kGcSeg0 + 0x003f;
+static constexpr uint32_t kSdmaRdXnack0   = kGcSeg0 + 0x0043;
+static constexpr uint32_t kSdmaRdXnack1   = kGcSeg0 + 0x0044;
+static constexpr uint32_t kSdmaWrXnack0   = kGcSeg0 + 0x0045;
+static constexpr uint32_t kSdmaWrXnack1   = kGcSeg0 + 0x0046;
+static constexpr uint32_t kSdmaUtclPage   = kGcSeg0 + 0x0048;
+static constexpr uint32_t kSdmaStatus3    = kGcSeg0 + 0x004c;
+static constexpr uint32_t kSdmaPageIbCntl = kGcSeg0 + 0x00e2;
+static constexpr uint32_t kSdmaPageIbRptr = kGcSeg0 + 0x00e3;
+static constexpr uint32_t kSdmaPageIbOff  = kGcSeg0 + 0x00e4;
+static constexpr uint32_t kSdmaPageIbLo   = kGcSeg0 + 0x00e5;
+static constexpr uint32_t kSdmaPageIbHi   = kGcSeg0 + 0x00e6;
+static constexpr uint32_t kSdmaPageIbSize = kGcSeg0 + 0x00e7;
+static constexpr uint32_t kSdmaPageCtx    = kGcSeg0 + 0x00e9;
+static constexpr uint32_t kSdmaPageStatus = kGcSeg0 + 0x0100;
 // The KIQ lives on a compute pipe, and CP_HQD_* are per-queue: GRBM_GFX_CNTL selects
 // which one is visible (PIPEID bits 0-1, MEID bits 2-3, VMID 4-7, QUEUEID 8-10), the
 // same thing upstream's nv_grbm_select does.
@@ -2598,9 +2637,11 @@ static void dumpGfxHubVm(const char *when) {
 }
 
 static uint32_t wrapWaitStamp(void *self, uint32_t stamp) {
+    uint64_t caller = reinterpret_cast<uint64_t>(__builtin_return_address(0)) - x6Base;
     auto r = FunctionCast(wrapWaitStamp, orgWaitStamp)(self, stamp);
     if (waitStampRecordBudget.take((r & 0xff) != 0, 8))
-        CRLOG("XJ:   waitForHwStamp(%u) -> %u", stamp, r & 0xff);
+        CRLOG("XJ:   waitForHwStamp(%u) -> %u caller=x6+%#llx",
+              stamp, r & 0xff, caller);
     // This native call can run while X6000 holds a spin lock. Large MMIO walks and
     // serial output here delayed the failure path until lck_spinlock_timeout fired,
     // obscuring the original KIQ timeout with a recursive trap. The critical record
@@ -2874,7 +2915,7 @@ static bool gartApertureInfo(RaphaelGart::Aperture &ap) {
     const uint64_t size0 = *reinterpret_cast<const uint64_t *>(memory + 0x40);
     const uint64_t size1 = *reinterpret_cast<const uint64_t *>(memory + 0x48);
     if (size0 == 0 || size1 == 0) return false;
-    uint64_t visible = size0 < size1 ? size0 : size1;
+    uint64_t visible = RaphaelRecovery::barVisibleBytes(size0, size1);
     if (visible > 0x10000000ULL) visible = 0x10000000ULL;
     ap = {*reinterpret_cast<const uint64_t *>(memory + 0x50),
           *reinterpret_cast<const uint64_t *>(memory + 0x58),
@@ -3411,12 +3452,24 @@ static void cpSelfTest() {
 }
 
 static uint32_t wrapKiqSubmit(void *self) {
+    uint64_t caller = reinterpret_cast<uint64_t>(__builtin_return_address(0)) - x6Base;
     // The VM fault status reads the same before and after the KIQ submit, so it is
     // latched from something earlier. Clear it first (FAULT_CNTL bit 0 is
     // CLEAR_PROTECTION_FAULT_STATUS_ADDR) so that whatever shows up afterwards is
     // definitely the command processor's.
     if (mask & XK) {
         uint32_t c = fbRead(asicInfo, kGcVmFaultCntl);
+        if (vmRootFixEnabled) {
+            const uint32_t sequence = __atomic_load_n(
+                &latestVmid2ProgramSequence, __ATOMIC_ACQUIRE);
+            if (sequence != 0) {
+                const uint32_t status = fbRead(asicInfo, kGcVmFaultSts);
+                const uint64_t address = RaphaelVm::decodeFaultAddress(
+                    fbRead(asicInfo, kGcVmFaultLo), fbRead(asicInfo, kGcVmFaultHi));
+                CRLOG("VM: pre-clear-fault seq=%u cntl=%#x status=%#x addr=%#llx",
+                      sequence, c, status, address);
+            }
+        }
         fbWrite(asicInfo, kGcVmFaultCntl, c | 1u);
         fbWrite(asicInfo, kGcVmFaultCntl, c);
         RLOG("XK: cleared VM fault latch, status now %#x",
@@ -3434,7 +3487,7 @@ static uint32_t wrapKiqSubmit(void *self) {
     }
     auto r = FunctionCast(wrapKiqSubmit, orgKiqSubmit)(self);
     if (kiqSubmitRecordBudget.take((r & 0xff) != 0, 8))
-        CRLOG("XJ:   submitKIQFrame -> %u", r & 0xff);
+        CRLOG("XJ:   submitKIQFrame -> %u caller=x6+%#llx", r & 0xff, caller);
     if (mask & XK) kickKiq();
     if (mqdFixMode != 2) repairMqdPointers(); // mode 2 prepares before startKIQ
     return r;
@@ -3865,14 +3918,33 @@ static uint32_t wrapVmmProgInv(void *self, void *info) {
 }
 
 static void wrapVmmPrepare(void *self, void *prepared, const void *info, bool alternate) {
-    FunctionCast(wrapVmmPrepare, orgVmmPrepare)(self, prepared, info, alternate);
-    const auto observation = RaphaelVm::observePreparedRequest(
+    // This callback can run under X6000 locks. Its complete operation is:
+    // bounded stack copy -> pure arithmetic -> native call on the copy ->
+    // bounded output copy -> lock-free append. No MMIO, allocation, logging,
+    // lazy mapping, lock, or wait is permitted here.
+    const bool marked = __atomic_load_n(&raphaelTargetConfirmed, __ATOMIC_ACQUIRE);
+    const bool aperturePublished = __atomic_load_n(&cachedFbPublished, __ATOMIC_ACQUIRE);
+    const uint32_t fbBaseSnapshot = __atomic_load_n(&cachedFbBase, __ATOMIC_RELAXED);
+    const uint32_t fbTopSnapshot = __atomic_load_n(&cachedFbTop, __ATOMIC_RELAXED);
+    const uint32_t fbOffsetSnapshot = __atomic_load_n(&cachedFbOffset, __ATOMIC_RELAXED);
+    auto local = RaphaelVm::prepareInvalidateInfo(
         reinterpret_cast<const uint8_t *>(info), info != nullptr ? 0x28 : 0,
+        vmRootFixEnabled, marked && aperturePublished, fbBaseSnapshot, fbTopSnapshot,
+        fbOffsetSnapshot);
+    const void *nativeInfo = local.valid ? static_cast<const void *>(local.bytes) : info;
+    FunctionCast(wrapVmmPrepare, orgVmmPrepare)(self, prepared, nativeInfo, alternate);
+    auto observation = RaphaelVm::observePreparedRequest(
+        reinterpret_cast<const uint8_t *>(info), info != nullptr ? 0x28 : 0,
+        reinterpret_cast<const uint8_t *>(nativeInfo), nativeInfo != nullptr ? 0x28 : 0,
         reinterpret_cast<const uint8_t *>(prepared), prepared != nullptr ? 0x54 : 0,
-        alternate);
-    if (ptbFixMode == 2 && observation.valid && observation.request.hub == 0 &&
-            observation.request.vmid == 2)
+        alternate, local.repaired, local.reason);
+    if (observation.valid && observation.request.hub == 0 &&
+            observation.request.vmid == 2) {
+        observation.sequence = __sync_add_and_fetch(&nextVmObservationSequence, 1u);
+        observation.threadToken = reinterpret_cast<uintptr_t>(current_thread());
         vmid2Programs.append(observation);
+        __atomic_store_n(&latestVmid2ProgramSequence, observation.sequence, __ATOMIC_RELEASE);
+    }
 }
 
 static uint32_t wrapHwMemSetVSReady(void *self, uint32_t ready) {
@@ -3896,7 +3968,7 @@ static uint32_t wrapHwMemSetVSReady(void *self, uint32_t ready) {
         } else {
             RLOG("XM: calling AMDHWMemory::enableAllocations() -- nothing else does, and the "
                  "VRAM heap is empty without it");
-            reinterpret_cast<uint32_t (*)(void *)>(orgHwMemEnable)(self);
+            wrapHwMemEnable(self);
             RLOG("XM: after enableAllocations: size0=%#llx size1=%#llx poolA=%#llx poolB=%#llx",
                  q(0x40), q(0x48), q(0x68), q(0x70));
         }
@@ -4143,9 +4215,15 @@ static bool isRaphaelHardware(void *self) {
     bool markerMatches = true;
     for (size_t i = 0; i < sizeof(expectedMarker); i++)
         markerMatches &= markerBytes[i] == expectedMarker[i];
-    return markerMatches &&
-           *static_cast<const uint16_t *>(vendor->getBytesNoCopy()) == 0x1002 &&
-           *static_cast<const uint16_t *>(device->getBytesNoCopy()) == 0x73ff;
+    const bool matches = markerMatches &&
+        *static_cast<const uint16_t *>(vendor->getBytesNoCopy()) == 0x1002 &&
+        *static_cast<const uint16_t *>(device->getBytesNoCopy()) == 0x73ff;
+    if (matches) {
+        // The framebuffer snapshot is published earlier in startup. Make the
+        // exact marker match the release barrier for later VM callbacks.
+        __atomic_store_n(&raphaelTargetConfirmed, true, __ATOMIC_RELEASE);
+    }
+    return matches;
 }
 
 static uint32_t wrapHwEngInit(void *self) {
@@ -4200,16 +4278,219 @@ static uint32_t wrapSdmaCommitIb(void *self, void *submitInfo) {
     // the actual submit entries before the native encoder reads them, but do
     // not translate them into physical framebuffer addresses.
     if (sdmaTopologyEnabled && sdmaTopologyRoutesReady && submitInfo != nullptr) {
-        const auto observation = RaphaelSdma::observeSubmitInfo(
+        auto observation = RaphaelSdma::observeSubmitInfo(
             reinterpret_cast<const uint8_t *>(submitInfo), 0xe8);
-        if (observation.vmid == 2) vmid2Submits.append(observation);
+        if (observation.vmid == 2) {
+            observation.eventOrder = __sync_add_and_fetch(&nextVmObservationSequence, 1u);
+            observation.threadToken = reinterpret_cast<uintptr_t>(current_thread());
+            observation.vmProgramSequence = __atomic_load_n(
+                &latestVmid2ProgramSequence, __ATOMIC_ACQUIRE);
+            vmid2Submits.append(observation);
+        }
     }
     return FunctionCast(wrapSdmaCommitIb, orgSdmaCommitIb)(self, submitInfo);
+}
+
+static const char *rootRepairReasonName(uint32_t reason) {
+    using R = RaphaelVm::RootRepairReason;
+    switch (static_cast<R>(reason)) {
+        case R::InvalidInput: return "invalid-input";
+        case R::Disabled: return "disabled";
+        case R::TargetUnmarked: return "target-unmarked";
+        case R::WrongHub: return "wrong-hub";
+        case R::WrongVmid: return "wrong-vmid";
+        case R::NotReprogrammed: return "not-reprogrammed";
+        case R::InvalidAperture: return "invalid-aperture";
+        case R::SystemRoot: return "system-root";
+        case R::UnsupportedFlags: return "unsupported-flags";
+        case R::AlreadyPhysical: return "already-physical";
+        case R::OutsideFramebuffer: return "outside-framebuffer";
+        case R::Overflow: return "overflow";
+        case R::Repaired: return "repaired";
+    }
+    return "unknown";
+}
+
+static const char *invalidateRegisterKindName(RaphaelVm::InvalidateRegisterKind kind) {
+    using K = RaphaelVm::InvalidateRegisterKind;
+    switch (kind) {
+        case K::Semaphore: return "sem";
+        case K::Request: return "req";
+        case K::Acknowledge: return "ack";
+        case K::Unknown: return "other";
+    }
+    return "other";
+}
+
+static bool vmid2Aperture(RaphaelVm::FramebufferAperture &aperture) {
+    if (!__atomic_load_n(&cachedFbPublished, __ATOMIC_ACQUIRE)) return false;
+    const uint32_t base = __atomic_load_n(&cachedFbBase, __ATOMIC_RELAXED);
+    const uint32_t top = __atomic_load_n(&cachedFbTop, __ATOMIC_RELAXED);
+    const uint32_t offset = __atomic_load_n(&cachedFbOffset, __ATOMIC_RELAXED);
+    if (base == 0 || offset == 0 || top < base ||
+        ((base | top | offset) & 0xff000000u) || hwMemObject == nullptr)
+        return false;
+    auto memory = reinterpret_cast<const uint8_t *>(hwMemObject);
+    uint64_t size0 = *reinterpret_cast<const uint64_t *>(memory + 0x40);
+    uint64_t size1 = *reinterpret_cast<const uint64_t *>(memory + 0x48);
+    uint64_t visible = RaphaelRecovery::barVisibleBytes(size0, size1);
+    if (visible > 0x10000000ULL) visible = 0x10000000ULL;
+    aperture = {static_cast<uint64_t>(base) << 24,
+                (static_cast<uint64_t>(top) << 24) | 0xffffffULL,
+                static_cast<uint64_t>(offset) << 24, visible};
+    return RaphaelVm::validAperture(aperture);
+}
+
+static bool submitFitsProgram(const RaphaelSdma::SubmitInfoObservation &submit,
+                              const RaphaelVm::PreparedRequest &program) {
+    if (!submit.layoutValid || submit.vmid != 2 || !program.valid ||
+        program.request.hub != 0 || program.request.vmid != 2 ||
+        !program.request.reprogram || submit.entries == 0 || submit.entries > 4)
+        return false;
+    bool sawAddress = false;
+    for (uint32_t n = 0; n < submit.entries; ++n) {
+        const uint64_t address = submit.addresses[n];
+        if (address == 0) continue;
+        sawAddress = true;
+        if (address < program.request.start || address > program.request.end) return false;
+    }
+    return sawAddress;
+}
+
+static void reportVmid2Walk(uint32_t sequence, const RaphaelVm::PreparedRequest &program,
+                            const RaphaelSdma::SubmitInfoObservation &submit) {
+    RaphaelVm::FramebufferAperture aperture {};
+    auto fb = fbAperture();
+    if (fb == nullptr || !vmid2Aperture(aperture)) {
+        CRLOG("VM: walk seq=%u refused: BAR0/aperture unavailable", sequence);
+        return;
+    }
+    auto reader = [&](uint64_t physical, uint64_t &value) {
+        if (physical < aperture.physicalBase ||
+            physical - aperture.physicalBase > aperture.visibleBytes - 8)
+            return false;
+        const uint64_t dword = (physical - aperture.physicalBase) / 4;
+        const uint32_t lo = fb[dword], hi = fb[dword + 1];
+        value = RaphaelVm::join(lo, hi);
+        return true;
+    };
+    uint64_t targets[7] {0x400100000ULL, 0x4000c0000ULL, 0x400200000ULL};
+    size_t targetCount = 3;
+    for (uint32_t n = 0; n < submit.entries && n < 4; ++n) {
+        const uint64_t address = submit.addresses[n];
+        if (address == 0) continue;
+        bool duplicate = false;
+        for (size_t existing = 0; existing < targetCount; ++existing)
+            duplicate |= targets[existing] == address;
+        if (!duplicate && targetCount < sizeof(targets) / sizeof(targets[0]))
+            targets[targetCount++] = address;
+    }
+    for (size_t target = 0; target < targetCount; ++target) {
+        const uint64_t va = targets[target];
+        auto walk = RaphaelVm::walkPageTables(program.nativeRoot,
+            // The prepared request does not carry context control. The live
+            // value is read here, outside the callback and its caller locks.
+            fbRead(asicInfo, kGcSeg0 + RaphaelVm::contextRegisters(2).control),
+            va, aperture, reader);
+        CRLOG("VM: walk seq=%u va=%#llx root=%#llx valid=%u complete=%u count=%u",
+              sequence, va, program.nativeRoot, walk.valid, walk.complete, walk.count);
+        for (uint32_t n = 0; n < walk.count; ++n) {
+            const auto &e = walk.entries[n];
+            CRLOG("VM: walk-entry seq=%u va=%#llx n=%u level=%u index=%llu table=%#llx "
+                  "raw=%#llx addr=%#llx V=%u S=%u C=%u X=%u R=%u W=%u P=%u TF=%u "
+                  "child-mc2pa=%u",
+                  sequence, va, n, e.level, e.index, e.tablePhysical, e.raw, e.address,
+                  e.valid, e.system, e.snooped, e.executable, e.readable, e.writeable,
+                  e.pdeAsPte, e.translateFurther, e.childConverted);
+        }
+    }
+}
+
+static void reportVmid2Runtime(const char *phase, uint32_t sequence,
+                               const RaphaelVm::PreparedRequest &program,
+                               const RaphaelSdma::SubmitInfoObservation *submit, bool walk) {
+    if (asicInfo == nullptr) return;
+    constexpr auto ctx = RaphaelVm::contextRegisters(2);
+    auto rd = [](uint32_t relative) { return fbRead(asicInfo, kGcSeg0 + relative); };
+    const uint32_t control = rd(ctx.control);
+    const uint64_t liveRoot = RaphaelVm::join(rd(ctx.ptbLo), rd(ctx.ptbHi));
+    const uint64_t start = RaphaelVm::join(rd(ctx.startLo), rd(ctx.startHi)) << 12;
+    const uint64_t end = (RaphaelVm::join(rd(ctx.endLo), rd(ctx.endHi)) << 12) | 0xfffULL;
+    const uint64_t preparedRoot = RaphaelVm::join(program.words[1], program.words[3]);
+    CRLOG("VM: state seq=%u phase=%s vmid=2 ctl=%#x root=%#llx start=%#llx end=%#llx "
+          "requested=%#llx native=%#llx prepared=%#llx repaired=%u reason=%s "
+          "prepared-match=%u live-match=%u",
+          sequence, phase, control, liveRoot, start, end, program.request.root,
+          program.nativeRoot, preparedRoot, program.rootRepaired,
+          rootRepairReasonName(program.repairReason), program.preparedRootMatches,
+          liveRoot == program.nativeRoot);
+    CRLOG("VM: context-snapshot vmid=2 root=%#llx ctl=%#x start=%#llx end=%#llx",
+          liveRoot, control, start, end);
+
+    const uint32_t faultControl = fbRead(asicInfo, kGcVmFaultCntl);
+    const uint32_t faultStatus = fbRead(asicInfo, kGcVmFaultSts);
+    const uint64_t faultAddress = RaphaelVm::decodeFaultAddress(
+        fbRead(asicInfo, kGcVmFaultLo), fbRead(asicInfo, kGcVmFaultHi));
+    const uint32_t invControl = fbRead(asicInfo, kGcVmInvCntl);
+    const uint32_t sem0 = fbRead(asicInfo, kGcVmInvEng0Sem);
+    const uint32_t req0 = fbRead(asicInfo, kGcVmInvEng0Req);
+    const uint32_t ack0 = fbRead(asicInfo, kGcVmInvEng0Ack);
+    CRLOG("VM: fault seq=%u phase=%s cntl=%#x status=%#x addr=%#llx | invalidate-order=%#x "
+          "eng0-sem=%#x req=%#x ack=%#x bit2=%u/%u prepared-mask=%#x/%#x",
+          sequence, phase, faultControl, faultStatus, faultAddress, invControl,
+          sem0, req0, ack0, (req0 >> 2) & 1u, (ack0 >> 2) & 1u,
+          program.words[19], program.words[20]);
+    const uint32_t preparedRegs[] {program.words[12], program.words[14],
+                                   program.words[16], program.words[18]};
+    for (uint32_t reg : preparedRegs) {
+        auto decoded = RaphaelVm::decodeInvalidateRegister(
+            reg, kGcVmInvEng0Sem, kGcVmInvEng0Req, kGcVmInvEng0Ack);
+        uint32_t mmioReg = reg;
+        if (!decoded.valid) {
+            decoded = RaphaelVm::decodeInvalidateRegister(
+                reg, kGcVmInvEng0Sem - kGcSeg0, kGcVmInvEng0Req - kGcSeg0,
+                kGcVmInvEng0Ack - kGcSeg0);
+            if (decoded.valid) mmioReg += kGcSeg0;
+        }
+        if (decoded.valid) {
+            const uint32_t value = fbRead(asicInfo, mmioReg);
+            CRLOG("VM: invalidate-live seq=%u phase=%s reg=%#x kind=%s engine=%u "
+                  "value=%#x bit2=%u",
+                  sequence, phase, mmioReg, invalidateRegisterKindName(decoded.kind),
+                  decoded.engine, value, (value >> 2) & 1u);
+        }
+    }
+
+    CRLOG("SD: runtime seq=%u phase=%s cntl=%#x ucode=%#x f32=%#x "
+          "status=%#x/%#x/%#x/%#x "
+          "utcl-cntl=%#x page=%#x rd=%#x wr=%#x",
+          sequence, phase, fbRead(asicInfo, kSdmaCntl),
+          fbRead(asicInfo, kSdmaUcodeCsum), fbRead(asicInfo, kSdmaF32Cntl),
+          fbRead(asicInfo, kSdmaStatus0),
+          fbRead(asicInfo, kSdmaStatus1), fbRead(asicInfo, kSdmaStatus2),
+          fbRead(asicInfo, kSdmaStatus3), fbRead(asicInfo, kSdmaUtclCntl),
+          fbRead(asicInfo, kSdmaUtclPage), fbRead(asicInfo, kSdmaUtclRd),
+          fbRead(asicInfo, kSdmaUtclWr));
+    CRLOG("SD: xnack seq=%u phase=%s rd=%#x/%#x wr=%#x/%#x",
+          sequence, phase, fbRead(asicInfo, kSdmaRdXnack0),
+          fbRead(asicInfo, kSdmaRdXnack1), fbRead(asicInfo, kSdmaWrXnack0),
+          fbRead(asicInfo, kSdmaWrXnack1));
+    CRLOG("SD: page seq=%u phase=%s status=%#x context=%#x ib-cntl=%#x rptr=%#x "
+          "offset=%#x base=%#x_%08x size=%#x",
+          sequence, phase, fbRead(asicInfo, kSdmaPageStatus),
+          fbRead(asicInfo, kSdmaPageCtx), fbRead(asicInfo, kSdmaPageIbCntl),
+          fbRead(asicInfo, kSdmaPageIbRptr), fbRead(asicInfo, kSdmaPageIbOff),
+          fbRead(asicInfo, kSdmaPageIbHi), fbRead(asicInfo, kSdmaPageIbLo),
+          fbRead(asicInfo, kSdmaPageIbSize));
+    if (walk && submit != nullptr) reportVmid2Walk(sequence, program, *submit);
 }
 
 static void publishPendingVmObservations() {
     static size_t programCursor = 0;
     static size_t submitCursor = 0;
+    static RaphaelVm::PreparedRequest programCache[8] {};
+    static size_t programCount = 0;
+    static uint32_t sampledSequence = 0;
     RaphaelVm::PreparedRequest program {};
     while (programCursor < vmid2Programs.size() && vmid2Programs.read(programCursor, program)) {
         ++programCursor;
@@ -4227,13 +4508,64 @@ static void publishPendingVmObservations() {
               w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7], w[8], w[9],
               w[10], w[11], w[12], w[13], w[14], w[15], w[16], w[17], w[18],
               w[19], w[20]);
+        CRLOG("VM: root-repair seq=%u vmid=%u original=%#llx native=%#llx repaired=%u "
+              "reason=%s prepared-match=%u",
+              program.sequence, request.vmid, request.root, program.nativeRoot,
+              program.rootRepaired, rootRepairReasonName(program.repairReason),
+              program.preparedRootMatches);
+        if (programCount < sizeof(programCache) / sizeof(programCache[0]))
+            programCache[programCount++] = program;
+        // This is the earliest worker-side sample, normally before SDMA dispatch
+        // and therefore before a later KIQ diagnostic clears the fault latch.
+        if (programCount == 1)
+            reportVmid2Runtime("prepared", program.sequence, program, nullptr, false);
     }
     RaphaelSdma::SubmitInfoObservation submit {};
     while (submitCursor < vmid2Submits.size() && vmid2Submits.read(submitCursor, submit)) {
         ++submitCursor;
-        CRLOG("SD: submit vmid=%u flags=%#x entries=%u valid=%u IB0=%#llx IB1=%#llx",
+        const RaphaelVm::PreparedRequest *matched = nullptr;
+        for (size_t n = programCount; n > 0; --n) {
+            const auto &candidate = programCache[n - 1];
+            if (candidate.threadToken == submit.threadToken &&
+                candidate.sequence == submit.vmProgramSequence &&
+                candidate.sequence < submit.eventOrder &&
+                submitFitsProgram(submit, candidate)) {
+                matched = &candidate;
+                break;
+            }
+        }
+        // A later prepare on the same thread can publish between the target prepare
+        // and this callback. Recover the exact predecessor from the bounded copies,
+        // but never pair across threads or outside the captured VM range.
+        if (matched == nullptr) {
+            for (size_t n = programCount; n > 0; --n) {
+                const auto &candidate = programCache[n - 1];
+                if (candidate.threadToken == submit.threadToken &&
+                    candidate.sequence < submit.eventOrder &&
+                    submitFitsProgram(submit, candidate)) {
+                    matched = &candidate;
+                    break;
+                }
+            }
+        }
+        submit.vmProgramSequence = matched != nullptr ? matched->sequence : 0;
+        CRLOG("SD: submit vmid=%u flags=%#x entries=%u valid=%u IB0=%#llx IB1=%#llx seq=%u",
               submit.vmid, submit.flags, submit.entries, submit.layoutValid,
-              submit.addresses[0], submit.addresses[1]);
+              submit.addresses[0], submit.addresses[1], submit.vmProgramSequence);
+        if (matched == nullptr) {
+            CRLOG("VM: submit-correlation refused: vmid=%u thread=%#llx no in-range program",
+                  submit.vmid, static_cast<uint64_t>(submit.threadToken));
+        }
+        if (submit.layoutValid && matched != nullptr && sampledSequence == 0) {
+            sampledSequence = matched->sequence;
+            reportVmid2Runtime("dispatch+0ms", sampledSequence, *matched, &submit, true);
+            IOSleep(1);
+            reportVmid2Runtime("dispatch+1ms", sampledSequence, *matched, &submit, false);
+            IOSleep(9);
+            reportVmid2Runtime("dispatch+10ms", sampledSequence, *matched, &submit, false);
+            IOSleep(90);
+            reportVmid2Runtime("dispatch+100ms", sampledSequence, *matched, &submit, false);
+        }
     }
 }
 
@@ -4362,10 +4694,10 @@ static uint32_t wrapHwPowerUp(void *self) {
 // powerUpHWEngines is already routed; setVMRegisters was not, and it is the more interesting
 // of the two here because it programs the very VM registers whose page-table base was found
 // to be wrong.
-static uint32_t wrapGfx10SetVMRegs(void *self) {
+static uintptr_t wrapGfx10SetVMRegs(void *self) {
     auto r = FunctionCast(wrapGfx10SetVMRegs, orgGfx10SetVMRegs)(self);
-    RLOG("XJ: AMDGFX10Hardware::setVMRegisters -> %u  <-- check A of AMDHardware::powerUp; 0 "
-         "here fails powerUp before powerUpHWEngines is even reached", r & 0xff);
+    RLOG("XJ: AMDGFX10Hardware::setVMRegisters -> %p  <-- pointer return; null here fails "
+         "powerUp before powerUpHWEngines is even reached", reinterpret_cast<void *>(r));
     return r;
 }
 
@@ -4386,7 +4718,40 @@ static uint32_t wrapAccPowerUpHW(void *self) {
 static uint32_t wrapHwMemEnable(void *self) {
     if (self != nullptr) {
         auto f = reinterpret_cast<uint8_t *>(self);
-        auto q = [f](size_t o) { return *reinterpret_cast<uint64_t *>(f + o); };
+        auto q = [f](size_t o) -> uint64_t & {
+            return *reinterpret_cast<uint64_t *>(f + o);
+        };
+        // The coordinator writes a launch-bound PENDING challenge before QEMU.
+        // Activate it immediately before Apple's only two BAR0 allocators are
+        // constructed. Capping both pool sizes reserves the final 16 MiB for
+        // the descriptor, temporary host KIQ, and the independently validated
+        // GART table. A missing/stale challenge leaves the normal sizes alone.
+        if ((mask & XH) != 0) {
+            auto fb = fbAperture();
+            if (fb != nullptr) {
+                RaphaelRecovery::Descriptor descriptor {};
+                auto words = reinterpret_cast<uint32_t *>(&descriptor);
+                constexpr size_t count = sizeof(descriptor) / sizeof(uint32_t);
+                for (size_t i = 0; i < count; ++i)
+                    words[i] = fb[RaphaelRecovery::ReservationOffset / 4 + i];
+                uint64_t pool0 = q(0x40), pool1 = q(0x48);
+                if (RaphaelRecovery::activate(descriptor, pool0, pool1)) {
+                    q(0x40) = pool0;
+                    q(0x48) = pool1;
+                    for (size_t i = 0; i < count; ++i)
+                        fb[RaphaelRecovery::ReservationOffset / 4 + i] = words[i];
+                    bool readback = true;
+                    for (size_t i = 0; i < count; ++i)
+                        readback &= fb[RaphaelRecovery::ReservationOffset / 4 + i] == words[i];
+                    RLOG("XH: recovery reservation ACTIVE nonce=%#llx_%016llx heap=%#llx "
+                         "scratch=%#llx readback=%u", descriptor.nonceHi,
+                         descriptor.nonceLo, pool0, descriptor.scratchOffset, readback);
+                } else {
+                    RLOG("XH: no valid pending recovery reservation; allocator sizes remain "
+                         "%#llx/%#llx", q(0x40), q(0x48));
+                }
+            }
+        }
         RLOG("XH: enableAllocations entry: pool0=%p pool1=%p size0=%#llx size1=%#llx "
              "base=%#llx",
              reinterpret_cast<void *>(q(0x68)), reinterpret_cast<void *>(q(0x70)),
@@ -4538,6 +4903,15 @@ static uint32_t wrapFbXgmiConfig(void *self) {
     // pq_base=0xffbfea00 are not amdgpu's leftovers -- amdgpu does a MODE2 reset on
     // unbind and vfio-pci resets again on open. They appear during TTL's own GC hw_init.
     auto r = FunctionCast(wrapFbXgmiConfig, orgFbXgmiConfig)(self);
+    if (self != nullptr) {
+        __atomic_store_n(&cachedFbBase, fbRead(self, kGcFbBase) & 0xffffff,
+                         __ATOMIC_RELAXED);
+        __atomic_store_n(&cachedFbTop, fbRead(self, kGcFbTop) & 0xffffff,
+                         __ATOMIC_RELAXED);
+        __atomic_store_n(&cachedFbOffset, fbRead(self, kGcFbOffset) & 0xffffff,
+                         __ATOMIC_RELAXED);
+        __atomic_store_n(&cachedFbPublished, true, __ATOMIC_RELEASE);
+    }
     if ((mask & XG) != 0 && self != nullptr) {
         auto f = reinterpret_cast<uint8_t *>(self);
         auto fld = [f](size_t o) -> uint32_t & {
@@ -4665,7 +5039,7 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
                  orgPpPowerUp ? "ok" : "FAILED", orgPpPowerUp);
             patcher.clearError();
         }
-        if (mask & XG) {
+        if ((mask & XG) || vmRootFixEnabled) {
             orgFbXgmiConfig = patcher.routeFunction(addr + kOffFbXgmiConfig,
                                 reinterpret_cast<mach_vm_address_t>(wrapFbXgmiConfig), true);
             RLOG("route AmdAsicInfoNavi2::populateXGmiConfig -> %s (org=0x%llx)",
@@ -4689,7 +5063,8 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
             patcher.clearError();
         }
         x6Base = addr;
-        if (vmmProbeMode != 0 || memProbeMode != 0 || ptbFixMode != 0) {
+        if (vmmProbeMode != 0 || memProbeMode != 0 || ptbFixMode != 0 ||
+            vmRootFixEnabled) {
             orgVmmInit = patcher.routeFunction(addr + kOffVmmInit,
                            reinterpret_cast<mach_vm_address_t>(wrapVmmInit), true);
             RLOG("route AMDHWVMM::init -> %s (org=0x%llx)",
@@ -4879,6 +5254,12 @@ static void pluginStart() {
              ? "validated native physical framebuffer getter; no manual PTB writes"
              : ptbm == 1 ? "legacy post-invalidation PTB experiment" : "reporting only");
     }
+    uint32_t vmroot = 0;
+    vmRootFixEnabled = PE_parse_boot_argn("rgpuvmroot", &vmroot, sizeof(vmroot)) &&
+        vmroot == 1;
+    RLOG("rgpuvmroot=%u: VMID2 GFXHUB root MC-to-physical repair %s; child PDEs remain "
+         "diagnostic-only until the bounded BAR0 walk proves their address form",
+         vmRootFixEnabled, vmRootFixEnabled ? "ARMED" : "off");
     uint32_t mem = 0;
     if (PE_parse_boot_argn("rgpumem", &mem, sizeof(mem)) && mem <= 2) {
         memProbeMode = mem;

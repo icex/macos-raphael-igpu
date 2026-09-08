@@ -34,9 +34,12 @@ packet address instead comes from `AMD_SUBMIT_COMMAND_BUFFER_INFO + 0x58 + 0x28*
 SDMA 5.2 implementation confirms that an indirect packet carries a full GPU virtual address plus
 its VMID, so converting the measured VMID 2 address to an MC physical address would be invalid.
 Its original VM-context hook did not run because Apple builds this context program inside the
-SDMA command stream. Candidate 1.0.172 instead captures the complete native
-`prepareVMInvalidateRequest` output from a safe prologue. Routine success records are capped so a
-later timeout remains observable. Metal execution remains unverified.
+SDMA command stream. Candidate 1.0.172 captures the complete native
+`prepareVMInvalidateRequest` output from a safe prologue. Candidate 1.0.173 adds a separately
+gated VMID-2 root-domain correction and correlates its prepared packet, live registers, SDMA
+state and three diagnostic page-table walks. The root-only correction remains an experiment
+until hardware shows whether child page-directory pointers are already physical. Routine success
+records are capped so a later timeout remains observable. Metal execution remains unverified.
 
 | Stage | Verified state |
 |---|---|
@@ -60,9 +63,10 @@ the first complete native engine startup. The [third launch](findings/experiment
 proves PSP ring destruction alone does not clear GC queues after a fully started guest is
 force-stopped. Candidate 1.0.171 also produced the first fully authorizing reset-free recovery
 after native startup: two active HQDs dequeued immediately, no queue was force-cleared, CP status
-was idle, SDMA halted, and both PSP teardown commands completed. Candidate 1.0.172 keeps those
+was idle, SDMA halted, and both PSP teardown commands completed. Candidate 1.0.173 keeps those
 fail-closed lifecycle rules and records the actual per-submission SDMA VMID/IB fields plus the 21
-dwords Apple uses to form the matching VM program packet. It allows warm reuse only after real
+dwords Apple uses to form the matching VM program packet, and can repair only the exact marked
+VMID-2 root when `rgpuvmroot=1` is explicit. It allows warm reuse only after real
 queue dequeue with idle CP status. The one-way amdgpu-to-vfio
 handoff disables the unsafe PCI reset method before granting user access; later cleanup remains
 rootless. Full Metal remains unavailable. Published 1.0.159 remains the earlier research snapshot.

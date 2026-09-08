@@ -17,6 +17,7 @@ import time
 import shlex
 import signal
 import gzip
+import struct
 import threading
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -310,9 +311,187 @@ def read_boot_ledger(path):
     return value
 
 
+RECOVERY_BAR_REGIONS = {
+    '0': {'index':0, 'size':0x10000000, 'offset':0 << 40,
+          'read':True, 'write':True, 'mmap':True},
+    '2': {'index':2, 'size':0x00200000, 'offset':2 << 40,
+          'read':True, 'write':True, 'mmap':True},
+    '5': {'index':5, 'size':0x00080000, 'offset':5 << 40,
+          'read':True, 'write':True, 'mmap':True},
+}
+RECOVERY_RESERVATION_MAGIC = int.from_bytes(b'RGPUKIR1', 'little')
+RECOVERY_RESERVATION_VERSION = 1
+RECOVERY_RESERVATION_ACTIVE = int.from_bytes(b'ACTV', 'little')
+RECOVERY_HEAP_LIMIT = 0x0f000000
+RECOVERY_RESERVATION_START = 0x0f000000
+RECOVERY_SCRATCH_START = 0x0f100000
+RECOVERY_RESERVATION_END = 0x10000000
+
+
+def _recovery_checksum(prior_run_id):
+    try:
+        nonce_lo, nonce_hi = struct.unpack('<QQ', bytes.fromhex(prior_run_id))
+    except (ValueError, TypeError, struct.error):
+        return None
+    values = (RECOVERY_RESERVATION_MAGIC, RECOVERY_RESERVATION_VERSION,
+              RECOVERY_RESERVATION_ACTIVE, RECOVERY_HEAP_LIMIT,
+              RECOVERY_RESERVATION_START, RECOVERY_SCRATCH_START,
+              RECOVERY_RESERVATION_END, nonce_lo, nonce_hi)
+    checksum = 0x9e3779b97f4a7c15
+    for value in values:
+        checksum ^= value
+    return checksum & 0xffffffffffffffff
+
+
+def _valid_hdp_flush(value):
+    return (isinstance(value, dict) and set(value) == {'remap', 'posted_read'} and
+            type(value.get('remap')) is int and value.get('remap') == 0x7f000 and
+            type(value.get('posted_read')) is int and
+            0 <= value['posted_read'] <= 0xffffffff and
+            value['posted_read'] != 0xffffffff)
+
+
+def _valid_reservation(value, prior_run_id):
+    integer_keys = ('version','state','heap_limit','reservation_start',
+                    'scratch_start','reservation_end','checksum')
+    return (isinstance(value, dict) and
+            set(value) == set(integer_keys) | {
+                'run_id','consumed','consume_hdp_flush'} and
+            all(type(value.get(key)) is int for key in integer_keys) and
+            value.get('version') == RECOVERY_RESERVATION_VERSION and
+            value.get('state') == RECOVERY_RESERVATION_ACTIVE and
+            value.get('heap_limit') == RECOVERY_HEAP_LIMIT and
+            value.get('reservation_start') == RECOVERY_RESERVATION_START and
+            value.get('scratch_start') == RECOVERY_SCRATCH_START and
+            value.get('reservation_end') == RECOVERY_RESERVATION_END and
+            value.get('run_id') == prior_run_id and
+            value.get('checksum') == _recovery_checksum(prior_run_id) and
+            value.get('consumed') is True and
+            _valid_hdp_flush(value.get('consume_hdp_flush')))
+
+
+def _valid_recovery_regions(value):
+    if not isinstance(value, dict):
+        return False
+    if set(value) != {'index','size','offset','read','write','mmap','regions'}:
+        return False
+    regions = value.get('regions')
+    if not isinstance(regions, dict) or set(regions) != set(RECOVERY_BAR_REGIONS):
+        return False
+    for index, expected in RECOVERY_BAR_REGIONS.items():
+        observed = regions.get(index)
+        if (not isinstance(observed, dict) or set(observed) != set(expected) or
+                any(type(observed.get(key)) is not type(want)
+                    for key, want in expected.items())):
+            return False
+    top = {key:value.get(key) for key in ('index','size','offset','read','write','mmap')}
+    return (all(type(top.get(key)) is type(want)
+                for key, want in RECOVERY_BAR_REGIONS['5'].items()) and
+            top == RECOVERY_BAR_REGIONS['5'] and regions == RECOVERY_BAR_REGIONS)
+
+
+def _valid_gart(value):
+    keys = {'control','root','start_page','end_page','physical_fb',
+            'bar_offset','size','active'}
+    if not isinstance(value, dict) or set(value) != keys:
+        return False
+    if any(type(value.get(key)) is not int for key in
+           ('control','root','start_page','end_page','physical_fb','size')):
+        return False
+    active = value.get('active')
+    if type(active) is not bool:
+        return False
+    if value['physical_fb'] <= 0 or value['physical_fb'] & 0xffffff:
+        return False
+    if not active:
+        return (value['control'] & 7) == 0 and (value['root'] & 1) == 0 and \
+               value['start_page'] == 0 and value['end_page'] == 0 and \
+               value['bar_offset'] is None and value['size'] == 0
+    offset = value.get('bar_offset')
+    flags = value['root'] & 0xfff
+    expected_size = (value['end_page'] - value['start_page'] + 1) * 8
+    return ((value['control'] & 7) == 1 and flags in (1, 5) and
+            value['end_page'] >= value['start_page'] and
+            type(offset) is int and offset >= 0 and
+            value['size'] == expected_size and 0 < value['size'] <= 0x10000000 and
+            (value['root'] & ~0xfff) - value['physical_fb'] == offset and
+            offset + value['size'] <= 0x10000000 and
+            not (offset < RECOVERY_RESERVATION_END and
+                 RECOVERY_SCRATCH_START < offset + value['size']))
+
+
+def _valid_host_kiq(value, reservation, gc):
+    if not isinstance(value, dict):
+        return False
+    expected_keys = {'status','selector','packet_dwords','rptr_after',
+                     'fence_sequence','fence_after','gfx_active_after_unmap',
+                     'gfx_active_before_scrub','gfx_doorbell_offset','addresses',
+                     'gart','reservation','hdp_flush','cleanup_confirmed','cleanup',
+                     'final_gate'}
+    if set(value) != expected_keys:
+        return False
+    fence = value.get('fence_sequence')
+    addresses = value.get('addresses')
+    cleanup = value.get('cleanup')
+    gate = value.get('final_gate')
+    integer_fields = ('selector','packet_dwords','rptr_after','fence_sequence',
+                      'fence_after','gfx_active_after_unmap',
+                      'gfx_active_before_scrub','gfx_doorbell_offset')
+    if (any(type(value.get(key)) is not int for key in integer_fields) or
+            value.get('status') != 'retired' or value.get('selector') != 9 or
+            value.get('packet_dwords') != 0x100 or
+            value.get('rptr_after') != 0x100 or
+            type(fence) is not int or not 1 <= fence <= 0xffffffff or
+            value.get('fence_after') != fence or
+            value.get('gfx_active_after_unmap') != 0 or
+            value.get('gfx_active_before_scrub') != 0 or
+            value.get('gfx_doorbell_offset') != 0x400 or
+            value.get('reservation') != reservation or
+            not _valid_hdp_flush(value.get('hdp_flush')) or
+            not _valid_gart(value.get('gart')) or
+            value.get('cleanup_confirmed') is not True):
+        return False
+    if not isinstance(addresses, dict) or set(addresses) != {
+            'ring','mqd','rptr','wptr','eop','fence'}:
+        return False
+    if any(type(addresses[key]) is not int for key in addresses):
+        return False
+    fb_base = addresses['ring'] - 0x0f100000
+    if fb_base <= 0 or fb_base & 0xffffff:
+        return False
+    expected_addresses = {name:fb_base+offset for name,offset in {
+        'ring':0x0f100000, 'mqd':0x0f110000, 'rptr':0x0f111000,
+        'wptr':0x0f111008, 'eop':0x0f112000, 'fence':0x0f113000}.items()}
+    if addresses != expected_addresses:
+        return False
+    cleanup_keys = {'mec_cntl','hqd_active','hqd_doorbell','hqd_rptr',
+                    'hqd_wptr_lo','hqd_wptr_hi','pq_status',
+                    'doorbell_range_lower','doorbell_range_upper','wptr_poll_cntl'}
+    if (not isinstance(cleanup, dict) or set(cleanup) != cleanup_keys or
+            any(type(cleanup.get(key)) is not int for key in cleanup_keys)):
+        return False
+    if (cleanup['mec_cntl'] & 0x50000000 != 0x50000000 or
+            cleanup.get('hqd_active') != 0 or cleanup.get('hqd_doorbell') != 0 or
+            cleanup.get('hqd_rptr') != 0 or cleanup.get('hqd_wptr_lo') != 0 or
+            cleanup.get('hqd_wptr_hi') != 0 or
+            type(cleanup.get('pq_status')) is not int or cleanup['pq_status'] & 2 or
+            cleanup.get('doorbell_range_lower') != 0 or
+            cleanup.get('doorbell_range_upper') != 0 or
+            type(cleanup.get('wptr_poll_cntl')) is not int or
+            cleanup['wptr_poll_cntl'] & 0x80000000):
+        return False
+    expected_gate = {key:gc.get(key) for key in (
+        'active_after','cp_stat_after','cp_cpc_busy_after','pq_wptr_poll_after',
+        'pq_status_after','doorbell_range_lower_after','doorbell_range_upper_after',
+        'gfx_ring_clean','gfx_retirement_confirmed')}
+    return (isinstance(gate, dict) and set(gate) == set(expected_gate) and
+            all(type(gate.get(key)) is type(expected) and gate.get(key) == expected
+                for key, expected in expected_gate.items()))
+
+
 def validate_recovery_receipt(receipt, boot_id, prior_run_id):
     errors = []
-    exact = {'schema':2, 'status':'recovered', 'authorizes_launch':True,
+    exact = {'schema':3, 'status':'recovered', 'authorizes_launch':True,
              'boot_id':boot_id,
              'prior_run_id':prior_run_id, 'device':'0000:7b:00.0',
              'iommu_group':'31', 'driver':'vfio-pci'}
@@ -326,6 +505,8 @@ def validate_recovery_receipt(receipt, boot_id, prior_run_id):
     if (receipt.get('reset_methods_before') != [] or
             receipt.get('reset_methods_after') != []):
         errors.append('recovery_receipt')
+    if not _valid_recovery_regions(receipt.get('bar5')):
+        errors.append('recovery_receipt')
     messages = receipt.get('kernel_messages')
     if (not isinstance(messages, list) or
             any(not isinstance(message, str) for message in messages) or
@@ -333,18 +514,43 @@ def validate_recovery_receipt(receipt, boot_id, prior_run_id):
                           message, re.I) for message in messages)):
         errors.append('recovery_receipt')
     gc = receipt.get('gc_quiesce')
-    if (not isinstance(gc, dict) or gc.get('status') != 'quiesced' or
-            gc.get('active_after') != 0 or
-            gc.get('dequeue_timeouts') != 0 or
-            gc.get('forced_inactive') != 0 or
-            gc.get('cp_stat_after') != 0 or
-            gc.get('cp_cpc_busy_after') != 0 or
+    exact_zero_gc = ('active_after','dequeue_timeouts','forced_inactive',
+                     'cp_stat_after','cp_cpc_busy_after',
+                     'doorbell_range_lower_after','doorbell_range_upper_after',
+                     'gfx_rb_active_after','gfx_rb_doorbell_after',
+                     'gfx_rb_wptr_after','gfx_rb_wptr_hi_after',
+                     'gfx_rb_base_after','gfx_rb_base_hi_after','gfx_rb_cntl_after')
+    if (not isinstance(gc, dict) or
+            any(type(gc.get(key)) is not int or gc.get(key) != 0
+                for key in exact_zero_gc) or
+            gc.get('status') != 'quiesced' or
             type(gc.get('cp_me_after')) is not int or
             gc['cp_me_after'] & 0x15000000 != 0x15000000 or
             type(gc.get('cp_mec_after')) is not int or
             gc['cp_mec_after'] & 0x50000000 != 0x50000000 or
-            type(gc.get('sdma0_after')) is not int or gc['sdma0_after'] & 1 != 1):
+            type(gc.get('pq_wptr_poll_after')) is not int or
+            gc['pq_wptr_poll_after'] & 0x80000000 != 0 or
+            type(gc.get('pq_status_after')) is not int or
+            gc['pq_status_after'] & 2 != 0 or
+            type(gc.get('sdma0_after')) is not int or gc['sdma0_after'] & 1 != 1 or
+            type(gc.get('sdma0_cntl_after')) is not int or
+            gc['sdma0_cntl_after'] & 0x00040000 != 0 or
+            type(gc.get('sdma0_rb_after')) is not int or gc['sdma0_rb_after'] & 1 != 0 or
+            type(gc.get('sdma0_ib_after')) is not int or gc['sdma0_ib_after'] & 1 != 0 or
+            gc.get('gfx_ring_clean') is not True or
+            gc.get('gfx_retirement_confirmed') is not True):
         errors.append('recovery_receipt')
+    if isinstance(gc, dict):
+        reservation = gc.get('reservation')
+        if not _valid_reservation(reservation, prior_run_id):
+            errors.append('recovery_receipt')
+        host_kiq = gc.get('host_kiq')
+        if gc.get('gfx_needs_unmap') is True:
+            if not _valid_host_kiq(host_kiq, reservation, gc):
+                errors.append('recovery_receipt')
+        elif (gc.get('gfx_needs_unmap') is not False or
+              host_kiq != {'status':'not-needed'}):
+            errors.append('recovery_receipt')
     commands = receipt.get('commands')
     if (not isinstance(commands, list) or len(commands) != 2 or
             [row.get('command') for row in commands] != [0x00030000, 0x000c0000] or
@@ -570,6 +776,10 @@ def run_one(vm, manifest_path, output):
                 cursor, _, _ = kernel_updates()
                 monitor = HostMonitor(cursor, lambda:os.kill(os.getpid(), signal.SIGUSR1))
                 monitor.start()
+                if manifest.get('gpu') is not False:
+                    reservation = helper('vfio-recover').prepare_launch(
+                        host['boot_id'], manifest['run_id'])
+                    write_once(output/'recovery-reservation.json', reservation)
                 (vm/'run/serial.log').write_text('')
                 (vm/'run/agent-server-events.jsonl').unlink(missing_ok=True)
                 launch_requested = time.time()

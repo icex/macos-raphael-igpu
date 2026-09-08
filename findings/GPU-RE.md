@@ -3434,3 +3434,26 @@ none, read `CP_STAT=0` and `CP_CPC_BUSY_STAT=0`, halted SDMA, and confirmed both
 commands. PCI reset methods stayed empty and the host journal cursor did not advance. This permits
 one targeted same-boot candidate-172 launch without an amdgpu rebind or host reboot; the next
 launch still depends on another equally strict recovery receipt.
+
+### 2026-09-09: candidate 173 isolates the VMID-2 page-directory address domain
+
+24G830 `getPDEValue` retains address bits 47:6 and adds VALID, but performs no framebuffer
+MC-to-physical conversion. Linux `gmc_v10_0_get_vm_pde` performs that conversion for every
+non-SYSTEM, non-leaf PDE. The candidate-172 boundary therefore exposes a high-confidence root
+defect: a logical `0xf4...` page-directory root must be presented to GFXHUB as the matching
+physical `0x84...` address.
+
+Candidate 173 gates the mutation on `rgpuvmroot=1`, the byte-exact Raphael marker, hub 0, VMID 2,
+reprogram enabled, known VALID/CACHE flags, and an address inside the published framebuffer
+aperture. The wrapper copies all 0x28 caller bytes to its stack, repairs only the copy, calls Apple,
+then copies all 21 output dwords into a bounded observation. No MMIO, logging, allocation, sleep or
+lock is added to this callback. `setVMRegisters` also now uses the pointer-width return ABI shown by
+its 24G830 implementation.
+
+The root-only repair is not yet claimed complete. Apple's child PDE producer may emit the same
+logical domain. A worker correlates the prepared request with its VMID-2 SDMA submit and walks
+`0x400100000`, `0x4000c0000` and `0x400200000` via BAR0. It decodes PDE/PTE flags and translates
+only non-SYSTEM non-leaf table pointers for CPU inspection. It never rewrites a child PDE, leaf
+address or submitted GPU virtual address. A `raw=0xf4... child-mc2pa=1` result selects child-PDE
+production as the next fix; physical children instead direct investigation to the recorded actual
+invalidate engine and SDMA UTCL/XNACK/page state. No response-mode or firmware change is included.
