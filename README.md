@@ -11,13 +11,17 @@ Development and VM control run on Linux. Release CI compiles the x86_64 kext on 
 [GPU acceleration roadmap](docs/ROADMAP.md) tracks verified milestones, remaining gates,
 host constraints and the next experiment. The linked execution plan replaces ad-hoc
 iterations with immutable identities, explicit hypotheses and automatic result classification.
+The [Raphael-versus-Navi23 Linux comparison](findings/raphael-vs-navi-linux.md) records which
+IP blocks genuinely share an implementation, which only share an ISA generation, and the
+evidence required before adding another compatibility patch.
 
 ## Status
 
-**Experimental; full Metal acceleration is not working.** Version **1.0.159** executes
-native KIQ setup commands in one recorded clean run. The next failure is
-`TtlCreateHybridEngine` returning status 4, followed by `AMDHardware::startHWEngines`
-returning 0 (failure). The native Metal probe fails on its first command buffer.
+**Experimental; full Metal acceleration is not working.** Hardware-tested **1.0.164**
+executes native KIQ setup and proves the next failure is X6000's false second SDMA
+object requesting global instance 1 when Raphael discovery exposes only instance 0.
+`AMDHardware::startHWEngines` consequently returns 0 and the native Metal probe is
+not eligible to submit work.
 
 [Clean-run serial evidence](findings/metal-tests/20260908T052603Z-8dad7535/serial.txt)
 and [automated verdict](findings/metal-tests/20260908T052603Z-8dad7535/result.json)
@@ -33,7 +37,7 @@ session also encountered an active KIQ that would not dequeue; recovery is unres
 | GC/TTL initialization and accelerator attach | Reached in the clean run |
 | VRAM and initial GART | 256 MB allocator; native physical root `0x84fdfc001` verified |
 | Command processor / KIQ | Three native setup stamps completed; RPTR caught WPTR |
-| Hybrid engines | Creation fails with status 4; hardware startup remains incomplete |
+| Hybrid engines | Instance-0 queues succeed; false instance-1 request returns status 4 |
 | Metal | Metal 3 device enumerates; **zero completed compute/render submissions** |
 | Physical display | DCN 3.1.5 path remains incomplete |
 | Games | **Zero verified playable games**; [compatibility list](docs/supported-games.md) |
@@ -42,13 +46,16 @@ session also encountered an active KIQ that would not dequeue; recovery is unres
 A percentage would obscure the remaining unknowns. Driver enumeration and queue setup
 are milestones, not a measure of end-to-end rendering completeness.
 
-Hardware-tested **1.0.163** now narrows startup failure to the third SDMA hybrid
-request: two SDMA requests succeed, then type10 returns status4 with availability1.
-The [recorded experiment](findings/experiments/hybrid-001-163/notes.md) includes all
-critical records, exact build identity and stop outcome. Full Metal remains unavailable.
-Current **1.0.164** adds a bounded native SDMA-instance lookup trace; it is an
-experimental diagnostic, not a verified acceleration repair. The next experiment
-requires a fresh host boot. Published 1.0.159 remains the earlier research snapshot.
+The [1.0.164 experiment](findings/experiments/hybrid-002-164/notes.md) includes all
+critical records, exact build identity and an orderly guest shutdown. Current
+**1.0.165** implements a gated, hardware-untested one-instance SDMA topology repair;
+its [causal record](findings/hybrid-cause.md) defines the ABI, cleanup and falsifiable
+next result. Full Metal remains unavailable. Published 1.0.159 remains the earlier
+research snapshot.
+
+The repair is scoped by a byte-exact `rgpu,raphael-target` device property coupled to the
+grafted VBIOS. The tooling verifies that identity before a physical experiment, so the
+real Navi23 `0x73ff` PCI identity alone can never select Raphael-specific topology code.
 
 See [release builds](docs/releases.md), [current research corrections](findings/GPU-RE.md),
 and [historical bring-up notes](docs/bring-up-history.md).

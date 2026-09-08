@@ -3121,3 +3121,38 @@ and the GPU-less ACPI experiment required force-stop. A clean host boot and a fr
 amdgpu-first handoff are needed for the planned next validation; do not cycle drivers
 or force-clear the existing HQD to obtain it. The optional diagnostic must be explicitly
 enabled and the candidate injected before that bounded test.
+
+### 2026-09-08: the false second SDMA object is the native startup failure
+
+Candidates 1.0.163 and 1.0.164 replaced the ambiguous status-4 observation with a
+sequenced native call record. All KIQ stamps complete. SDMA type 10/index 0 and type
+11/index 0 resolve and return status 0 against discovered counts `1,0,0,0`. The next
+request, type 10/index 1, has no instance; selection returns null before the instance
+callback and `AMDHardware::startHWEngines` returns false.
+
+X6000 produces the invalid request itself. Navi23 `allocateHWEngines` at `0x9977c`
+always constructs two SDMA objects. Generic initialization passes their array indices;
+`AMDGFX10SDMAEngine::init` at `0x6b7b2` subtracts one and stores global indices 0 and 1.
+The generic start loop at `0x6ffd2` has a minimum bound of two, so the Navi23 capability
+field cannot represent Raphael's single discovered SDMA instance. Aliasing index 1 to
+index 0 would collide with the two valid queue handles already owned by the first object.
+
+Candidate 1.0.165 therefore adds an off-by-default `rgpusdma=1` compatibility boundary.
+After all five X6000 routes resolve and the original GC 10.3.6 discovery is observed, it
+releases the false second object before generic initialization. It starts only the native
+first object, preserves its Boolean result and reproduces the native trace bit. Native
+loops retain cleanup ownership and skip the null slot. The full ABI, evidence, regression
+domain and next acceptance result are in `findings/hybrid-cause.md`.
+
+The spoofed `0x73ff` PCI ID is also a real Navi23 ID, so it is not a sufficient repair
+scope. Candidate 1.0.165 additionally requires the byte-exact `rgpu,raphael-target`
+OSData marker on the same IOPCIDevice as the grafted `ATY,bin_image`. `ocprop.py` adds or
+removes those properties together at the selected OpenCore path, and the experiment
+coordinator checks the marker both while preparing and immediately before launch. The
+discovery wrapper scans every table it sees for the original GC 10.3.6 version before
+remapping, avoiding dependence on which GPU's table is queried first.
+
+Candidate 1.0.165 is not hardware-tested. Metal enumeration remains the strongest observed
+userspace state; no compute or render command has completed correctly. Hybrid-003 must keep
+the KIQ stamps valid, complete native startup and pass the existing checked compute/render
+probe before this repair can be credited with core acceleration.

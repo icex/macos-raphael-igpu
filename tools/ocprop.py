@@ -6,6 +6,9 @@ refuses, so the leading comment block is split off and restored verbatim.
 """
 import plistlib, sys, argparse, re
 
+RAPHAEL_TARGET_KEY = 'rgpu,raphael-target'
+RAPHAEL_TARGET_MARKER = b'RGPU-RAPHAEL\x01'
+
 ap = argparse.ArgumentParser()
 ap.add_argument('plist')
 ap.add_argument('-o', '--output')
@@ -33,12 +36,14 @@ add = d.setdefault('DeviceProperties', {}).setdefault('Add', {})
 if a.drop_vbios:
     for p, props in list(add.items()):
         props.pop('ATY,bin_image', None)
+        props.pop(RAPHAEL_TARGET_KEY, None)
         if not props: del add[p]
 
 if a.vbios:
     rom = open(a.vbios, 'rb').read()
     for p in (a.path or ['PciRoot(0x0)/Pci(0x6,0x0)']):
         add.setdefault(p, {})['ATY,bin_image'] = rom
+        add[p][RAPHAEL_TARGET_KEY] = RAPHAEL_TARGET_MARKER
 
 for spec in a.prop:
     key, val = spec.split('=', 1)

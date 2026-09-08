@@ -1,6 +1,6 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-09-08. Baseline repository: `f2dd1f2`; candidate: 1.0.164; published
+Updated 2026-09-08. Baseline repository: `5985bf4`; candidate: 1.0.165; published
 research snapshot: `v1.0.159-preview.1`. This document is the authoritative current
 roadmap. Historical hypotheses in `findings/GPU-RE.md` remain evidence, not instructions.
 
@@ -10,17 +10,21 @@ compatibility, while protecting the host. Enumeration, compilation and a working
 are intermediate milestones. No finite test can guarantee that the host will never hang.
 
 [Task-by-task execution plan](superpowers/plans/2026-09-08-gpu-acceleration.md).
+[Raphael versus Navi23 in Linux](../findings/raphael-vs-navi-linux.md) is the current
+block-by-block compatibility audit and defines the triggers for any further adaptation.
 
 Execution update: the fresh amdgpu boot is captured, the sleep inhibitor is active,
 and [the fixed baseline audit](../findings/baseline-audit.md) records enabled
 interventions. Candidate 1.0.163 adds concurrent critical records and build markers.
-All 75 offline tests pass. [GPU-less end-to-end validation](../findings/gpueless-tests/163/coordinator/notes.md)
+All 86 Python tests and the C++ fixtures pass locally; GitHub CI runs the same suite.
+[GPU-less end-to-end validation](../findings/gpueless-tests/163/coordinator/notes.md)
 confirmed exact delivery and cleanup. T1–T4 are complete.
 [Physical experiment164](../findings/experiments/hybrid-002-164/notes.md) proved the
 third request is SDMA type0/global-index1 and fails because TTL discovered exactly one
-SDMA instance. X6000 unconditionally constructed two Navi23 SDMA objects. The guest
-then completed one native root-agent shutdown without fallback. No Metal command
-completion or safe warm reuse is verified.
+SDMA instance. X6000 unconditionally constructed two Navi23 SDMA objects. Candidate
+1.0.165 contains an offline-validated, gated one-instance correction; it has not run
+on hardware. The guest then completed one native root-agent shutdown without fallback.
+No Metal command completion or safe warm reuse is verified.
 
 ## 1. What is actually complete
 
@@ -46,7 +50,7 @@ single clean run is not repeatability evidence. There is no defensible overall p
 | [x] | Optional hybrid diagnostic built | 1.0.162, exact entry guards, `rgpuhybrid=1`, native result preserved |
 | [x] | Hybrid diagnostic validated on hardware | 1.0.163: complete records; type10 fails after type10/type11 success |
 | [ ] | Repeatable clean initial state | Last GPU runs reached a stuck KIQ; safe warm reuse unproved |
-| [ ] | Native hybrid queues / complete engine startup | One SDMA object starts; X6000's false second object requests absent instance1 and returns status 4 |
+| [ ] | Native hybrid queues / complete engine startup | Candidate165 removes the proven false second object; hardware validation remains pending |
 | [ ] | Correct Metal compute and offscreen rendering | First command buffer fails; zero results checked |
 | [ ] | Per-process memory, synchronization and resource lifecycle | Must be exercised after first real completion |
 | [ ] | Accelerated desktop and presentation | WindowServer panic repair is not proof of accelerated composition |
@@ -100,6 +104,12 @@ Static research, GPU-less harness tests and build checks may run independently. 
 one worker owns the physical iGPU and VM command channel. Hardware launches are serialized.
 Do not switch to DCN debugging while the immediate compute/queue failure is unresolved;
 read-only DCN source mapping can proceed without consuming hardware runs.
+
+The Linux comparison confirms candidate165's SDMA repair and identifies later watchpoints:
+Raphael has one SDMA 5.2.6 instance with two KFD queues per engine, a 1 GiB Linux GART,
+zero Linux-advertised MALL capacity, GC 10.3.6-specific golden/power behavior, and a
+dedicated DCN315 display path.
+Navi23 assumptions are adapted only after an observed failure selects one of those boundaries.
 
 ## 4. Why progress has looked random, and the replacements
 
@@ -188,10 +198,16 @@ does not override any return or clear any status.
   initialization and `AMDGFX10SDMAEngine::init`.
 - [x] Compare hardware instance counts and queue types against this chip's discovery;
   do not infer engine presence from a successfully constructed Apple object.
+- [x] Compare Raphael and Navi23 block-by-block against pinned Linux v6.12; record the
+  shared backends and the distinct SDMA queues, UMA/GART/MALL, GC power/golden, PSP/SMU,
+  UMC and DCN315 behavior in `findings/raphael-vs-navi-linux.md`.
 - [x] Check instance selection: index0 types0/1 resolve and create; index1/type0 has no
   discovered instance and never reaches allocation or the callback.
-- [ ] Fix the smallest owner-level mismatch while preserving native failure cleanup.
-- [ ] Add a regression for the decoded data transformation or dispatch decision.
+- [x] Fix the smallest owner-level mismatch while preserving native failure cleanup:
+  candidate165 removes/releases the false second object before initialization and preserves
+  the surviving object's real start result and native trace bit.
+- [x] Add a regression for the decoded topology decision, valid two-instance input,
+  invalid counts, missing engines and native child failure.
 - [ ] Confirm native hybrid creation returns 0, its returned handles are valid, required
   start/powerUp calls return their actual success values, and initial stamps still advance.
 

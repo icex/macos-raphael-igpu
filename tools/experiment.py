@@ -21,6 +21,9 @@ import threading
 
 ROOT = Path(__file__).resolve().parents[1]
 BOOT_GUID = '7C436110-AB2A-4BBB-A880-FE41995C9F82'
+RAPHAEL_DEVICE_PATH = 'PciRoot(0x0)/Pci(0x6,0x0)'
+RAPHAEL_TARGET_KEY = 'rgpu,raphael-target'
+RAPHAEL_TARGET_MARKER = b'RGPU-RAPHAEL\x01'
 
 
 def helper(name):
@@ -90,7 +93,28 @@ def required_identity(data):
     return missing
 
 
-def current_identity(vm, candidate):
+def boot_argument_errors(args, requested_diagnostic):
+    switches = {word.split('=', 1)[0]:word.split('=', 1)[1]
+                for word in args.split() if '=' in word}
+    required = dict(rgpu='0xfffa5981', rgpuvmm='3', rgpumem='2', rgpuptb='2',
+                    rgpumqd='2', rgpuhybrid='1')
+    errors = []
+    if any(switches.get(key) != value for key,value in required.items()):
+        errors.append('functional_baseline')
+    if not requested_diagnostic or requested_diagnostic not in args.split():
+        errors.append('requested_diagnostic')
+    if any(key in switches for key in ('rgpucp', 'rgpureset', 'rgpuic', 'rgpurlc', 'rgpufb')):
+        errors.append('retired_experiment')
+    return errors
+
+
+def raphael_target_marked(config):
+    props = config.get('DeviceProperties', {}).get('Add', {}).get(RAPHAEL_DEVICE_PATH, {})
+    return (isinstance(props.get('ATY,bin_image'), bytes) and
+            props.get(RAPHAEL_TARGET_KEY) == RAPHAEL_TARGET_MARKER)
+
+
+def current_identity(vm, candidate, requested_diagnostic):
     build = json.loads((candidate / 'build-manifest.json').read_text())
     bundle = candidate / 'RaphaelGPU.kext/Contents'
     expected = dict(binary_sha256=sha((bundle/'MacOS/RaphaelGPU').read_bytes()),
@@ -114,13 +138,13 @@ def current_identity(vm, candidate):
     if validate_identity(expected, image): raise ValueError('ESP executable or Info.plist differs from candidate')
     config = (vm/'config.plist').read_bytes()
     if sha(config) != image['config_sha256']: raise ValueError('ESP config differs from intended boot config')
-    args = plist(config)['NVRAM']['Add'][BOOT_GUID]['boot-args']
-    switches = {word.split('=', 1)[0]:word.split('=', 1)[1] for word in args.split() if '=' in word}
-    required = dict(rgpu='0xfffa5981', rgpuvmm='3', rgpumem='2', rgpuptb='2', rgpumqd='2', rgpuhybrid='1')
-    if any(switches.get(key) != value for key,value in required.items()):
-        raise ValueError('functional baseline or hybrid diagnostic boot arguments changed')
-    if any(key in switches for key in ('rgpucp', 'rgpureset', 'rgpuic', 'rgpurlc', 'rgpufb')):
-        raise ValueError('retired hardware experiments cannot be admitted')
+    parsed_config = plist(config)
+    if not raphael_target_marked(parsed_config):
+        raise ValueError('OpenCore config lacks the exact per-device Raphael target marker')
+    args = parsed_config['NVRAM']['Add'][BOOT_GUID]['boot-args']
+    boot_errors = boot_argument_errors(args, requested_diagnostic)
+    if boot_errors:
+        raise ValueError('boot arguments changed: '+','.join(boot_errors))
     extension = vm/'kdk/x/System/Library/Extensions'
     kdk = {name: sha(path.read_bytes()) for name, path in {
         'HWLibs': extension/'AMDRadeonX6000HWServices.kext/Contents/PlugIns/AMDRadeonX6000HWLibs.kext/Contents/MacOS/AMDRadeonX6000HWLibs',
@@ -159,7 +183,7 @@ def prepare(vm, spec, output, gpu=True):
         host = host_snapshot()
         if host['active_vm'] or (pending.exists() and any(pending.iterdir())):
             raise ValueError('active or pending VM prevents preparation')
-        identity = current_identity(vm, candidate)
+        identity = current_identity(vm, candidate, card['requested_diagnostic'])
         if not identity['source_clean']: raise ValueError('commit source and tooling before preparation')
         if card['requested_diagnostic'] not in identity['boot_args'].split():
             raise ValueError('required diagnostic boot argument is absent')
@@ -403,7 +427,8 @@ def run_one(vm, manifest_path, output):
                 fcntl.flock(media, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 pending = vm/'run/launch-pending'; pending.mkdir(exist_ok=True)
                 if any(pending.iterdir()): raise ValueError('another supervised launch is pending')
-                observed = current_identity(vm, vm/manifest['candidate_directory'])
+                requested = manifest.get('spec', {}).get('requested_diagnostic')
+                observed = current_identity(vm, vm/manifest['candidate_directory'], requested)
                 errors = validate_identity({key:manifest[key] for key in observed if key in manifest}, observed)
                 host = host_snapshot(); write_once(output/'host-before.json', host)
                 used = vm/'run/used-gpu-boots'; used.mkdir(exist_ok=True)

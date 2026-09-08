@@ -40,6 +40,61 @@ class ExperimentTests(unittest.TestCase):
                     'config_sha256', 'boot_args', 'image_id', 'probe_binary_sha256'):
             self.assertIn(key, missing)
 
+    def test_requested_diagnostic_is_part_of_boot_identity(self):
+        validate = self.module().boot_argument_errors
+        baseline = ('-v rgpu=0xfffa5981 rgpuvmm=3 rgpumem=2 rgpuptb=2 '
+                    'rgpumqd=2 rgpuhybrid=1 rgpusdma=1')
+        self.assertEqual(validate(baseline, 'rgpusdma=1'), [])
+        self.assertIn('requested_diagnostic',
+                      validate(baseline.replace(' rgpusdma=1', ''), 'rgpusdma=1'))
+        self.assertIn('requested_diagnostic',
+                      validate(baseline.replace('rgpusdma=1', 'rgpusdma=0'), 'rgpusdma=1'))
+        self.assertIn('functional_baseline',
+                      validate(baseline.replace('rgpumqd=2', 'rgpumqd=1'), 'rgpusdma=1'))
+        self.assertIn('retired_experiment', validate(baseline+' rgpureset=1', 'rgpusdma=1'))
+
+    def test_raphael_target_marker_is_exact_and_bound_to_the_vbios_device(self):
+        tool = self.module()
+        check = getattr(tool, 'raphael_target_marked', None)
+        self.assertIsNotNone(check, 'per-device Raphael identity check missing')
+        path = 'PciRoot(0x0)/Pci(0x6,0x0)'
+        config = {'DeviceProperties': {'Add': {path: {
+            'ATY,bin_image': b'VBIOS',
+            'rgpu,raphael-target': b'RGPU-RAPHAEL\x01'}}}}
+        self.assertTrue(check(config))
+        for value in (None, b'RGPU-RAPHAEL', b'RGPU-RAPHAEL\x00', 'RGPU-RAPHAEL\x01'):
+            changed = {'DeviceProperties': {'Add': {path: dict(config['DeviceProperties']['Add'][path])}}}
+            if value is None:
+                changed['DeviceProperties']['Add'][path].pop('rgpu,raphael-target')
+            else:
+                changed['DeviceProperties']['Add'][path]['rgpu,raphael-target'] = value
+            self.assertFalse(check(changed))
+        wrong_path = {'DeviceProperties': {'Add': {'PciRoot(0x0)/Pci(0x7,0x0)':
+                      config['DeviceProperties']['Add'][path]}}}
+        self.assertFalse(check(wrong_path))
+        no_vbios = {'DeviceProperties': {'Add': {path: {
+                    'rgpu,raphael-target': b'RGPU-RAPHAEL\x01'}}}}
+        self.assertFalse(check(no_vbios))
+
+    def test_ocprop_couples_target_marker_to_vbios_injection(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source, output, rom = root/'config.plist', root/'out.plist', root/'rom.bin'
+            source.write_bytes(plistlib.dumps({'DeviceProperties': {'Add': {}}}))
+            rom.write_bytes(b'VBIOS')
+            subprocess.run(['python3', str(ROOT/'tools/ocprop.py'), str(source),
+                            '-o', str(output), '--vbios', str(rom)], check=True,
+                           text=True, capture_output=True)
+            config = plistlib.loads(output.read_bytes())
+            props = config['DeviceProperties']['Add']['PciRoot(0x0)/Pci(0x6,0x0)']
+            self.assertEqual(props['ATY,bin_image'], b'VBIOS')
+            self.assertEqual(props['rgpu,raphael-target'], b'RGPU-RAPHAEL\x01')
+            subprocess.run(['python3', str(ROOT/'tools/ocprop.py'), str(output),
+                            '--drop-vbios'], check=True, text=True, capture_output=True)
+            config = plistlib.loads(output.read_bytes())
+            self.assertNotIn('PciRoot(0x0)/Pci(0x6,0x0)',
+                             config['DeviceProperties']['Add'])
+
     def test_manifest_mode_must_be_explicit_boolean(self):
         check = self.module().required_identity
         for value in (None, 'false', 0, 1):
@@ -180,7 +235,8 @@ class ExperimentTests(unittest.TestCase):
             manifest = {key:'fixture' for key in tool.IDENTITY_FIELDS}
             manifest.update(build_id='abc', run_id='a'*32, max_seconds=180, boot_id='boot-A',
                             bootdisk_verified=True, gpu=True,
-                            spec={'run_probe_only_after_native_start': True},
+                            spec={'run_probe_only_after_native_start': True,
+                                  'requested_diagnostic': 'rgpusdma=1'},
                             launch_options={'BOOTDISK_MODE':'custom', 'NVRAM':'stock'},
                             source_clean=True, vfio_device='0000:7b:00.0',
                             candidate_directory='run/candidate-163', image_id='sha256:expected')
