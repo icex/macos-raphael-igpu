@@ -98,6 +98,40 @@ class ClassifyTests(unittest.TestCase):
         rows = self.classifier().parse_serial('RGPU_EVENT build=abc seq=0 BUILD: identity=abc\n')
         self.assertTrue(any(r['kind'] == 'capture_loss' for r in rows))
 
+    def test_early_raw_records_and_symbolicated_guest_panic_are_decisive(self):
+        classifier = self.classifier()
+        serial = '''
+RaphaelGPU      rgpu: @ BUILD: identity=abc
+RaphaelGPU      rgpu: @ HY: HWLibs hybrid trace route=ok entries-match=1 (max 8 calls)
+RaphaelGPU      rgpu: @ SD: topology routes=ok count=5 entries-match=1
+RaphaelGPU      rgpu: @ SD: topology applied: discovered=1 kept=SDMA0 removed=SDMA1 before initialize
+RaphaelGPU      rgpu: @ SD: AMDHardware::initializeHWEngines -> 1 (topology-applied=1)
+Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0
+0xffffffcb349c3a60 : 0xffffff7f94b246f0 com.apple.kext.AMDRadeonX6000 : __ZN37AMDRadeonX6000_AMDGraphicsAccelerator19createAccelChannelsEb + 0x278
+0xffffffcb349c3c20 : 0xffffff7f94b257f8 com.apple.kext.AMDRadeonX6000 : __ZN37AMDRadeonX6000_AMDGraphicsAccelerator19populateAccelConfigEP13IOAccelConfig + 0x2ba
+'''
+        events = classifier.parse_serial(serial)
+        panic = next(row for row in events if row['kind'] == 'guest_panic')
+        self.assertEqual(panic['symbol'],
+                         '__ZN37AMDRadeonX6000_AMDGraphicsAccelerator19createAccelChannelsEb')
+        self.assertEqual(panic['offset'], 0x278)
+        verdict = classifier.classify(
+            {'build_id': 'abc', 'spec': {'required_observations': ['sdma_topology']}},
+            events, None)
+        self.assertTrue(verdict['valid'])
+        self.assertEqual(verdict['verdict'], 'GUEST_PANIC')
+        self.assertEqual(verdict['earliest_failure'],
+                         'guest_panic:createAccelChannels+0x278')
+
+    def test_raw_panic_without_exact_build_and_route_stays_inconclusive(self):
+        classifier = self.classifier()
+        serial = ('Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0\n'
+                  'frame com.apple.kext.AMDRadeonX6000 : createAccelChannels + 0x278\n')
+        verdict = classifier.classify({'build_id': 'abc'},
+                                      classifier.parse_serial(serial), None)
+        self.assertFalse(verdict['valid'])
+        self.assertEqual(verdict['verdict'], 'INCONCLUSIVE')
+
     def test_old_summary_cannot_cover_newer_records(self):
         rows = self.classifier().parse_serial(
             'RGPU_RECORDS build=abc count=1 dropped=0 truncated=0\n'
@@ -237,6 +271,35 @@ class ClassifyTests(unittest.TestCase):
         duplicate_selection.sort(key=lambda row: row['seq'])
         self.assertEqual(c.classify(manifest, duplicate_selection, None)['verdict'],
                          'INCONCLUSIVE')
+
+    def test_candidate_166_requires_the_sdma1_channel_remap(self):
+        c = self.classifier()
+        manifest = {'build_id': 'abc', 'spec': {'required_observations': [
+                    'sdma_topology', 'sdma_channel_remap']}}
+        serial = ''.join([
+            'RGPU_EVENT build=abc seq=0 BUILD: identity=abc\n',
+            'RGPU_EVENT build=abc seq=1 HY: HWLibs hybrid trace route=ok entries-match=1\n',
+            'RGPU_EVENT build=abc seq=2 SD: topology routes=ok count=6 entries-match=1\n',
+            'RGPU_EVENT build=abc seq=3 SD: topology applied: discovered=1 kept=SDMA0 removed=SDMA1 before initialize\n',
+            'RGPU_EVENT build=abc seq=4 SD: AMDHardware::initializeHWEngines -> 1 (topology-applied=1)\n',
+            'RGPU_EVENT build=abc seq=5 SD: channel engine remap 2 -> 1 ring=3\n',
+            'RGPU_EVENT build=abc seq=6 XJ: waitForHwStamp(1) -> 1\n',
+            'RGPU_EVENT build=abc seq=7 HY: createHybridEngine enter: engine=10 available=1\n',
+            'RGPU_EVENT build=abc seq=8 HY: SDMA select index=0 queue-type=0 found=1 counts=1,0,0,0 queues=2,0,0 occupied=0 callback=0xffffff8000000000\n',
+            'RGPU_EVENT build=abc seq=9 HY: createHybridEngine exit: engine=10 valid=1 available-before=1 status=0\n',
+            'RGPU_EVENT build=abc seq=10 HY: createHybridEngine enter: engine=11 available=1\n',
+            'RGPU_EVENT build=abc seq=11 HY: SDMA select index=0 queue-type=1 found=1 counts=1,0,0,0 queues=2,0,0 occupied=0 callback=0xffffff8000000000\n',
+            'RGPU_EVENT build=abc seq=12 HY: createHybridEngine exit: engine=11 valid=1 available-before=1 status=0\n',
+            'RGPU_EVENT build=abc seq=13 SD: one-instance start -> 1 (SDMA0=0xffffff8000001000 SDMA1=0)\n',
+            'RGPU_EVENT build=abc seq=14 XJ: AMDHardware::startHWEngines -> 1\n',
+            'RGPU_RECORDS build=abc count=15 dropped=0 truncated=0\n'])
+        events = c.parse_serial(serial)
+        self.assertEqual(c.classify(manifest, events, None)['verdict'], 'PROBE_NOT_RUN')
+        missing = [row for row in events if row['kind'] != 'sdma_engine_remap']
+        for seq, row in enumerate(missing):
+            if 'seq' in row: row['seq'] = seq
+        self.assertEqual(c.classify(manifest, missing, None)['earliest_failure'],
+                         'sdma_channel_remap_missing')
 
 
 if __name__ == '__main__':

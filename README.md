@@ -48,10 +48,11 @@ are milestones, not a measure of end-to-end rendering completeness.
 
 The [1.0.164 experiment](findings/experiments/hybrid-002-164/notes.md) includes all
 critical records, exact build identity and an orderly guest shutdown. Current
-**1.0.165** implements a gated, hardware-untested one-instance SDMA topology repair;
-its [causal record](findings/hybrid-cause.md) defines the ABI, cleanup and falsifiable
-next result. Full Metal remains unavailable. Published 1.0.159 remains the earlier
-research snapshot.
+Hardware-tested **1.0.165** completed the one-instance SDMA repair and TTL initialization,
+then exposed a null SDMA1 channel lookup in X6000's `createAccelChannels`.
+**1.0.166** adds the exact guarded SDMA1-to-SDMA0 channel mapping used for one-engine
+APUs; it is validated offline and awaits one fresh-boot experiment. Full Metal remains
+unavailable. Published 1.0.159 remains the earlier research snapshot.
 
 The repair is scoped by a byte-exact `rgpu,raphael-target` device property coupled to the
 grafted VBIOS. The tooling verifies that identity before a physical experiment, so the

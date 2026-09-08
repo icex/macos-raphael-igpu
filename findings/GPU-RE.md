@@ -3152,7 +3152,34 @@ coordinator checks the marker both while preparing and immediately before launch
 discovery wrapper scans every table it sees for the original GC 10.3.6 version before
 remapping, avoiding dependence on which GPU's table is queried first.
 
-Candidate 1.0.165 is not hardware-tested. Metal enumeration remains the strongest observed
-userspace state; no compute or render command has completed correctly. Hybrid-003 must keep
-the KIQ stamps valid, complete native startup and pass the existing checked compute/render
-probe before this repair can be credited with core acceleration.
+### 2026-09-08: owner repair exposes X6000's residual SDMA1 channel assumption
+
+Hybrid-003 hardware-tested candidate 1.0.165. `TTL::initialize()` completed, the false
+second SDMA object was released, and `AMDHardware::initializeHWEngines` returned 1. The
+guest then trapped in `createAccelChannels(bool)+0x278` before engine start. At X6000
+relative `0x26e7`, a virtual `getHWChannel` call returned null; `0x26f0` immediately
+dereferenced that result. The panic registers agree: `RAX=0`, `R14=0`, `CR2=0`.
+
+The exact chain is `createAccelChannels` channel type 2 →
+`AMDRTHardware::getHWChannel` → engine enum 2 →
+`AMDHardware::getHWChannel(engine, ring)` at `0x7097c`. The last function indexes
+`hardware + 0x3b0 + 8*engine`, so enum 2 reads the intentionally empty `+0x3c0` slot.
+This is a higher-layer Navi23 topology assumption revealed by the correct physical-owner
+repair, not a new HWLibs discovery failure.
+
+Candidate 1.0.166 adds a sixth exact X6000 route. It maps engine enum 2 to enum 1 only
+after the byte-marked Raphael hardware object owns the verified one-instance repair.
+The native method still selects and returns the real SDMA0 ring; every other engine,
+hardware object and pre-repair call is unchanged. This matches NootedRed's one-SDMA APU
+channel mapping and does not fabricate a second discovery instance or force success.
+
+The original coordinator classified the early panic as missing evidence because critical
+records were not replayed before the crash. The classifier now parses exact live `CRLOG`
+records, retains fail-closed build/route checks, recognizes the first symbolicated panic
+frame and terminates exposure after a decisive result. The corrected immutable evidence
+is in `findings/experiments/hybrid-003-165/`.
+
+Metal enumeration remains the strongest userspace state; no compute or render command has
+completed correctly. Hybrid-004 must observe the `2 -> 1` channel mapping, preserve KIQ and
+native engine results, and pass the checked compute/render probe before core acceleration
+can be claimed.

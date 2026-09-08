@@ -1,6 +1,6 @@
 # Game compatibility
 
-Updated 2026-09-08, hardware-tested driver 1.0.164, macOS Sequoia 15.7.9 (24G830), Raphael iGPU
+Updated 2026-09-08, hardware-tested driver 1.0.165, candidate 1.0.166, macOS Sequoia 15.7.9 (24G830), Raphael iGPU
 spoofed as Navi23 under QEMU/VFIO.
 
 **Verified playable games: 0.** No individual game has a recorded compatibility test.
@@ -9,7 +9,7 @@ Metal 3 enumeration alone does not establish game compatibility.
 
 | Workload | Result | Evidence |
 |---|---|---|
-| Native Metal compute probe | 159 failed first command; 164 did not submit because native startup failed | [164 experiment](../findings/experiments/hybrid-002-164/notes.md) |
+| Native Metal compute probe | 159 failed first command; 165 did not submit because `createAccelChannels` panicked | [165 experiment](../findings/experiments/hybrid-003-165/notes.md) |
 | Native offscreen rendering probe | Not reached | Same experiment |
 | Individual games | Not tested | No game test records exist |
 

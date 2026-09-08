@@ -1,7 +1,9 @@
 # SDMA hybrid-engine failure and compatibility boundary
 
-Status: hardware cause verified with candidate 1.0.164; candidate 1.0.165 repair is
-implemented and validated offline, but has not yet run on the physical iGPU.
+Status: the original cause was verified with candidate 1.0.164. Candidate 1.0.165
+completed the owner repair and TTL initialization on hardware, then exposed a residual
+X6000 channel lookup for the removed SDMA1 object. Candidate 1.0.166 repairs that exact
+boundary and is validated offline.
 
 ## Captured failure
 
@@ -50,7 +52,7 @@ Linux v6.12's pinned `amdgpu_discovery.c` independently counts the SDMA IP insta
 reported by discovery and its SDMA setup loops use that count. It therefore does not
 manufacture a second instance merely because the surrounding GPU family often has two.
 
-## Candidate 1.0.165 repair
+## Candidate 1.0.165 owner repair
 
 The `rgpusdma=1` compatibility gate makes one owner-level topology correction:
 
@@ -75,16 +77,39 @@ marker. The runtime gate independently compares every marker byte and requires t
 AMD vendor and spoofed Navi23 device ID on the same IOPCIDevice.
 Counts outside the supported one-or-two-instance domain fail closed in the host-testable
 topology helper, where a valid two-instance input is also proven unchanged. First-engine
-failure remains failure. The repair does not alias instance 1 to instance 0, change a TTL
+failure remains failure. The repair does not fabricate a TTL instance, change a TTL
 return, create a fake handle, touch MMIO or claim command completion.
+
+## Hardware result and candidate 1.0.166
+
+Hybrid-003 proved the owner repair applies and lets native initialization continue:
+`TTL::initialize()` completed, the false object was released, and
+`AMDHardware::initializeHWEngines` returned 1. The guest then trapped at X6000 relative
+`0x26f0`, symbolicated as `createAccelChannels(bool)+0x278`, with a null return from the
+immediately preceding virtual `getHWChannel` call.
+
+The remaining path is exact. `createAccelChannels` requests channel type 2.
+`AMDRTHardware::getHWChannel` maps one such channel/index combination to engine enum 2.
+`AMDHardware::getHWChannel(engine, ring)` indexes `hardware + 0x3b0 + 8*engine`; enum 2
+therefore reads the detached `+0x3c0` slot and returns null. The caller assumes a Navi23
+two-engine topology and immediately dereferences the result.
+
+Candidate 1.0.166 adds that sixth guarded X6000 route. After the exact Raphael owner has
+been repaired, only engine enum 2 requests are changed to enum 1. The original method then
+selects the ring and returns the native SDMA0 channel. Calls before repair, calls for other
+engines and calls on any other hardware object remain unchanged. This is the same boundary
+used by NootedRed for one-SDMA APUs; it does not manufacture an HWLibs instance or duplicate
+an existing hybrid handle.
 
 ## Falsifiable next result
 
-Hybrid-003 predicts only type-10/index-0 and type-11/index-0 requests, both with native
-status 0, followed by `AMDHardware::startHWEngines -> 1`. KIQ stamps must remain valid.
+Hybrid-004 must first record `SD: channel engine remap 2 -> 1`, then only
+type-10/index-0 and type-11/index-0 hybrid requests with native status 0, followed by
+`AMDHardware::startHWEngines -> 1`. KIQ stamps must remain valid.
 The repair passes only if the existing native probe then completes correct compute output
 and rendered pixels. A different native failure becomes the next measured boundary; device
 enumeration or startup alone is not Metal acceleration.
 
-Primary evidence: `findings/experiments/hybrid-002-164/` and the SHA-pinned local 24G830
+Primary evidence: `findings/experiments/hybrid-002-164/`,
+`findings/experiments/hybrid-003-165/`, and the SHA-pinned local 24G830
 X6000/HWLibs disassembly identified in `findings/baseline-identities.json`.

@@ -1,6 +1,6 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-09-08. Baseline repository: `5985bf4`; candidate: 1.0.165; published
+Updated 2026-09-08. Baseline repository: `5727e7d`; candidate: 1.0.166; published
 research snapshot: `v1.0.159-preview.1`. This document is the authoritative current
 roadmap. Historical hypotheses in `findings/GPU-RE.md` remain evidence, not instructions.
 
@@ -22,9 +22,11 @@ confirmed exact delivery and cleanup. T1–T4 are complete.
 [Physical experiment164](../findings/experiments/hybrid-002-164/notes.md) proved the
 third request is SDMA type0/global-index1 and fails because TTL discovered exactly one
 SDMA instance. X6000 unconditionally constructed two Navi23 SDMA objects. Candidate
-1.0.165 contains an offline-validated, gated one-instance correction; it has not run
-on hardware. The guest then completed one native root-agent shutdown without fallback.
-No Metal command completion or safe warm reuse is verified.
+1.0.165 completed the gated one-instance correction and TTL initialization on hardware,
+then exposed X6000's residual SDMA1 channel lookup: `getHWChannel` returned null and
+`createAccelChannels+0x278` dereferenced it. Candidate 1.0.166 adds the guarded channel
+mapping to the surviving physical SDMA0 engine. The host remained healthy, but the panicked
+guest required a targeted force-stop. No Metal command completion or safe warm reuse is verified.
 
 ## 1. What is actually complete
 
@@ -50,7 +52,7 @@ single clean run is not repeatability evidence. There is no defensible overall p
 | [x] | Optional hybrid diagnostic built | 1.0.162, exact entry guards, `rgpuhybrid=1`, native result preserved |
 | [x] | Hybrid diagnostic validated on hardware | 1.0.163: complete records; type10 fails after type10/type11 success |
 | [ ] | Repeatable clean initial state | Last GPU runs reached a stuck KIQ; safe warm reuse unproved |
-| [ ] | Native hybrid queues / complete engine startup | Candidate165 removes the proven false second object; hardware validation remains pending |
+| [ ] | Native hybrid queues / complete engine startup | Candidate165 removed the false object; candidate166 repairs the measured residual SDMA1 channel lookup and awaits hardware validation |
 | [ ] | Correct Metal compute and offscreen rendering | First command buffer fails; zero results checked |
 | [ ] | Per-process memory, synchronization and resource lifecycle | Must be exercised after first real completion |
 | [ ] | Accelerated desktop and presentation | WindowServer panic repair is not proof of accelerated composition |
@@ -105,7 +107,7 @@ one worker owns the physical iGPU and VM command channel. Hardware launches are 
 Do not switch to DCN debugging while the immediate compute/queue failure is unresolved;
 read-only DCN source mapping can proceed without consuming hardware runs.
 
-The Linux comparison confirms candidate165's SDMA repair and identifies later watchpoints:
+The Linux comparison supports the one-instance SDMA repair and identifies later watchpoints:
 Raphael has one SDMA 5.2.6 instance with two KFD queues per engine, a 1 GiB Linux GART,
 zero Linux-advertised MALL capacity, GC 10.3.6-specific golden/power behavior, and a
 dedicated DCN315 display path.
@@ -208,6 +210,12 @@ does not override any return or clear any status.
   the surviving object's real start result and native trace bit.
 - [x] Add a regression for the decoded topology decision, valid two-instance input,
   invalid counts, missing engines and native child failure.
+- [x] Run candidate165: TTL and native engine initialization succeeded, then
+  `createAccelChannels+0x278` dereferenced the null result of a request for the detached
+  SDMA1 slot. The host remained healthy and the guest panic is fully symbolicated.
+- [x] Decode the next boundary and implement candidate166: while the exact repaired owner
+  is active, route engine enum 2 channel requests through the surviving SDMA0 object.
+  Other engine IDs, native ring selection and return values remain unchanged.
 - [ ] Confirm native hybrid creation returns 0, its returned handles are valid, required
   start/powerUp calls return their actual success values, and initial stamps still advance.
 

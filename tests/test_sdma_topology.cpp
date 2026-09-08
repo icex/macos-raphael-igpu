@@ -24,6 +24,14 @@ static bool startEngine(void *raw) {
 int main() {
     using RaphaelSdma::Topology;
 
+    require(RaphaelSdma::engineForPhysicalTopology(2, true) == 1,
+            "a repaired one-instance topology maps SDMA1 channel requests to SDMA0");
+    require(RaphaelSdma::engineForPhysicalTopology(2, false) == 2,
+            "an unrepaired topology preserves SDMA1 channel requests");
+    require(RaphaelSdma::engineForPhysicalTopology(0, true) == 0 &&
+            RaphaelSdma::engineForPhysicalTopology(1, true) == 1,
+            "the channel mapper does not change PM4 or SDMA0");
+
     // Hybrid-002 captured one discovered instance while X6000 allocated two objects.
     auto one = RaphaelSdma::plan(1);
     require(one.valid && one.startCount == 1, "one discovered instance produces one start");

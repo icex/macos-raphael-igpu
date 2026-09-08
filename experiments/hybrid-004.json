@@ -1,0 +1,33 @@
+{
+  "id": "hybrid-004",
+  "question": "Does mapping X6000's residual SDMA1 channel requests to the surviving physical SDMA0 engine complete native startup and execute real Metal work?",
+  "candidate_version": "1.0.166",
+  "requested_diagnostic": "rgpusdma=1",
+  "behavior_change": "after the guarded one-instance owner repair, map only AMDHardware SDMA1 channel requests to the surviving SDMA0 object while preserving native ring selection and results",
+  "required_observations": [
+    "loaded_build",
+    "route_guards",
+    "kiq_stamps",
+    "hybrid_enter",
+    "hybrid_exit",
+    "engine_start",
+    "sdma_topology",
+    "sdma_channel_remap"
+  ],
+  "max_seconds": 180,
+  "prerequisites": [
+    "hybrid_003_symbolicated",
+    "candidate_166_offline_validation",
+    "fresh_amdgpu_first_boot"
+  ],
+  "repeat_policy": "no unchanged retry",
+  "abort_on": [
+    "identity_mismatch",
+    "capture_loss",
+    "guest_panic",
+    "kiq_dequeue_timeout",
+    "host_fault"
+  ],
+  "outcome_table": "docs/ROADMAP.md M3-M4",
+  "run_probe_only_after_native_start": true
+}

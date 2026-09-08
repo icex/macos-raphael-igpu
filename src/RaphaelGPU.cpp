@@ -449,6 +449,7 @@ static constexpr size_t kOffHwEngPowerOff = 0x6ff58; // AMDHardware::powerOffHWE
 static constexpr size_t kOffHwEngStart   = 0x6ffd2;  // AMDHardware::startHWEngines [x6]
 static constexpr size_t kOffHwEngStop    = 0x70086;  // AMDHardware::stopHWEngines [x6]
 static constexpr size_t kOffHwPowerOff   = 0x70360;  // __ZN26AMDRadeonX6000_AMDHardware8powerOffEv [x6]
+static constexpr size_t kOffHwGetChannel = 0x7097c;  // __ZN26AMDRadeonX6000_AMDHardware12getHWChannelE20_eAMD_HW_ENGINE_TYPE18_eAMD_HW_RING_TYPE [x6]
 static constexpr size_t kOffPm4Mqd       = 0x69362;  // AMDGFX10PM4Engine::initComputeMQD [x6]
 static constexpr size_t kOffKiqStart     = 0x8e670;  // AMDGFX10KIQHWChannel::startKIQ [x6]
 static constexpr size_t kOffPm4GfxMqd    = 0x6952a;  // AMDGFX10PM4Engine::initGraphicsMQD [x6]
@@ -605,6 +606,7 @@ static mach_vm_address_t orgHwEngPowerOff {};
 static mach_vm_address_t orgHwEngStart {};
 static mach_vm_address_t orgHwEngStop {};
 static mach_vm_address_t orgHwPowerOff {};
+static mach_vm_address_t orgHwGetChannel {};
 static mach_vm_address_t orgPm4Mqd {};
 static mach_vm_address_t orgKiqStart {};
 static mach_vm_address_t orgPm4GfxMqd {};
@@ -4148,6 +4150,23 @@ static uint32_t wrapHwEngInit(void *self) {
     return result;
 }
 
+static void *wrapHwGetChannel(void *self, uint32_t engineType, uint32_t ringType) {
+    auto slots = self != nullptr
+        ? reinterpret_cast<void **>(reinterpret_cast<uint8_t *>(self) + 0x3b8)
+        : nullptr;
+    auto topology = RaphaelSdma::plan(1);
+    bool repaired = sdmaTopologyEnabled && sdmaTopologyRoutesReady &&
+        RaphaelSdma::ownsRepairedSlots(sdmaTopologyOwner, self, slots, 2, topology);
+    uint32_t selected = RaphaelSdma::engineForPhysicalTopology(engineType, repaired);
+    if (selected != engineType) {
+        static unsigned reports = 0;
+        if (__sync_fetch_and_add(&reports, 1u) < 16)
+            CRLOG("SD: channel engine remap %u -> %u ring=%u", engineType, selected,
+                  ringType);
+    }
+    return FunctionCast(wrapHwGetChannel, orgHwGetChannel)(self, selected, ringType);
+}
+
 static bool startOneSdmaEngine(void *engine) {
     auto vt = *reinterpret_cast<uint64_t **>(engine);
     auto start = reinterpret_cast<uint32_t (*)(void *)>(vt[0x148 / 8]);
@@ -4669,6 +4688,8 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
         static const uint8_t hwPowerOffEntry[] = {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57,
             0x41, 0x56, 0x41, 0x54, 0x53, 0x48, 0x89, 0xfb, 0x80, 0xbf,
             0x31, 0x05, 0x00, 0x00, 0x01};
+        static const uint8_t hwGetChannelEntry[] = {0x55, 0x48, 0x89, 0xe5, 0x89, 0xf0,
+            0x48, 0x8b, 0xbc, 0xc7, 0xb0, 0x03, 0x00, 0x00, 0x48, 0x85, 0xff};
         bool engInitMatches = entryMatches(addr, sz, kOffHwEngInit,
                                            engInitEntry, sizeof(engInitEntry));
         bool engPowerOffMatches = entryMatches(addr, sz, kOffHwEngPowerOff,
@@ -4679,8 +4700,11 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
                                            engStopEntry, sizeof(engStopEntry));
         bool hwPowerOffMatches = entryMatches(addr, sz, kOffHwPowerOff,
                                               hwPowerOffEntry, sizeof(hwPowerOffEntry));
+        bool hwGetChannelMatches = entryMatches(addr, sz, kOffHwGetChannel,
+                                                hwGetChannelEntry,
+                                                sizeof(hwGetChannelEntry));
         bool sdmaEntriesMatch = engInitMatches && engPowerOffMatches && engStartMatches &&
-                                engStopMatches && hwPowerOffMatches;
+                                engStopMatches && hwPowerOffMatches && hwGetChannelMatches;
         if (((mask & XJ) || sdmaTopologyEnabled) && engStartMatches &&
             (!sdmaTopologyEnabled || sdmaEntriesMatch)) {
             orgHwEngStart = patcher.routeFunction(addr + kOffHwEngStart,
@@ -4699,6 +4723,8 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
                  reinterpret_cast<void *>(wrapHwEngPowerOff), "AMDHardware::powerOffHWEngines"},
                 {kOffHwPowerOff, &orgHwPowerOff,
                  reinterpret_cast<void *>(wrapHwPowerOff), "AMDHardware::powerOff"},
+                {kOffHwGetChannel, &orgHwGetChannel,
+                 reinterpret_cast<void *>(wrapHwGetChannel), "AMDHardware::getHWChannel"},
             };
             for (auto &e : t) {
                 if (sdmaEntriesMatch)
@@ -4709,8 +4735,9 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
                 patcher.clearError();
             }
             sdmaTopologyRoutesReady = sdmaEntriesMatch && orgHwEngStart && orgHwEngInit &&
-                                      orgHwEngStop && orgHwEngPowerOff && orgHwPowerOff;
-            CRLOG("SD: topology routes=%s count=5 entries-match=%u",
+                                      orgHwEngStop && orgHwEngPowerOff && orgHwPowerOff &&
+                                      orgHwGetChannel;
+            CRLOG("SD: topology routes=%s count=6 entries-match=%u",
                   sdmaTopologyRoutesReady ? "ok" : "FAILED", sdmaEntriesMatch);
         }
     }

@@ -1,0 +1,8 @@
+{
+  "cid": "903a3ffb9be57da079c49599c288f207d110897ea1255085b2d802528a32ab25",
+  "outcome": "forced",
+  "request_sent": false,
+  "guest_boot_uuid": null,
+  "request_id": null,
+  "request_error": "guest identity transport failed"
+}

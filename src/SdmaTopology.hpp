@@ -5,6 +5,15 @@
 
 namespace RaphaelSdma {
 
+// X6000 still asks AMDHardware for SDMA1 channels after its false second
+// engine object has been removed. On a repaired one-instance owner those
+// requests belong to the physical SDMA0 engine. Keep all other engine ids and
+// every unrepaired/native topology untouched.
+constexpr uint32_t engineForPhysicalTopology(uint32_t requestedEngine,
+                                              bool oneInstanceRepaired) {
+    return oneInstanceRepaired && requestedEngine == 2 ? 1 : requestedEngine;
+}
+
 // Apple's Navi23 allocator has exactly two SDMA object slots. Raphael discovery
 // reports one physical instance; counts outside this domain are not safe to adapt.
 struct Topology {
