@@ -108,6 +108,13 @@ struct InvalidateRegister {
     uint32_t engine;
 };
 
+struct InvalidateRegisterSample {
+    InvalidateRegister decoded;
+    uint32_t mmioRegister;
+    uint32_t value;
+    bool read;
+};
+
 inline uint32_t readU32(const uint8_t *bytes) {
     uint32_t value = 0;
     for (size_t i = 0; i < sizeof(value); ++i)
@@ -367,6 +374,19 @@ constexpr InvalidateRegister decodeInvalidateRegister(
                 ? InvalidateRegister {true, InvalidateRegisterKind::Acknowledge,
                                       reg - acknowledge0}
                 : InvalidateRegister {false, InvalidateRegisterKind::Unknown, 0};
+}
+
+// Invalidate semaphore reads can acquire ownership; do not sample them
+// diagnostically. Unknown register roles are also refused.
+template <typename Reader>
+inline InvalidateRegisterSample sampleInvalidateRegister(
+    uint32_t mmioRegister, InvalidateRegister decoded, Reader reader) {
+    InvalidateRegisterSample result {decoded, mmioRegister, 0, false};
+    if (!decoded.valid || decoded.kind == InvalidateRegisterKind::Semaphore)
+        return result;
+    result.value = reader(mmioRegister);
+    result.read = true;
+    return result;
 }
 
 constexpr uint64_t join(uint32_t lo, uint32_t hi) {

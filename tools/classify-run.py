@@ -103,6 +103,12 @@ def _decode_payload(build, seq, payload):
                    child_converted=bool(int(m[17])))
     elif m := re.fullmatch(
             r'VM: invalidate-live seq=(\d+) phase=([^ ]+) reg=(0x[0-9a-fA-F]+|0) '
+            r'kind=sem engine=(\d+) value=unread', payload):
+        row.update(kind='vm_invalidate_live', vm_sequence=int(m[1]), phase=m[2],
+                   register=int(m[3], 16), register_kind='sem', engine=int(m[4]),
+                   value=None, vmid2_bit=None)
+    elif m := re.fullmatch(
+            r'VM: invalidate-live seq=(\d+) phase=([^ ]+) reg=(0x[0-9a-fA-F]+|0) '
             r'kind=(sem|req|ack) engine=(\d+) value=(0x[0-9a-fA-F]+|0) bit2=([01])',
             payload):
         row.update(kind='vm_invalidate_live', vm_sequence=int(m[1]), phase=m[2],
@@ -117,13 +123,14 @@ def _decode_payload(build, seq, payload):
     elif m := re.fullmatch(
             r'VM: fault seq=(\d+) phase=([^ ]+) cntl=(0x[0-9a-fA-F]+|0) '
             r'status=(0x[0-9a-fA-F]+|0) addr=(0x[0-9a-fA-F]+|0) \| '
-            r'invalidate-order=(0x[0-9a-fA-F]+|0) eng0-sem=(0x[0-9a-fA-F]+|0) '
+            r'invalidate-order=(0x[0-9a-fA-F]+|0) eng0-sem=(0x[0-9a-fA-F]+|0|unread) '
             r'req=(0x[0-9a-fA-F]+|0) ack=(0x[0-9a-fA-F]+|0) bit2=([01])/([01]) '
             r'prepared-mask=(0x[0-9a-fA-F]+|0)/(0x[0-9a-fA-F]+|0)', payload):
         row.update(kind='vm_fault', vm_sequence=int(m[1]), phase=m[2],
                    fault_control=int(m[3], 16), fault_status=int(m[4], 16),
                    fault_address=int(m[5], 16), invalidate_order=int(m[6], 16),
-                   semaphore0=int(m[7], 16), request0=int(m[8], 16),
+                   semaphore0=None if m[7] == 'unread' else int(m[7], 16),
+                   request0=int(m[8], 16),
                    acknowledge0=int(m[9], 16), request_vmid2_bit=int(m[10]),
                    acknowledge_vmid2_bit=int(m[11]),
                    prepared_request_mask=int(m[12], 16),

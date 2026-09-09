@@ -3461,3 +3461,12 @@ invalidate engine and SDMA UTCL/XNACK/page state. No response-mode or firmware c
 The earlier walker misdecoded `PAGE_TABLE_BLOCK_SIZE` as the width of every level. Linux programs
 that field as the leaf width minus 9; `ctrl=0x3b` therefore means a 16-bit leaf with 9-bit
 intermediate directories, and the three `0x400...` targets use root index 64 ([GFXHUB 2.1 source](https://github.com/torvalds/linux/blob/v6.12/drivers/gpu/drm/amd/amdgpu/gfxhub_v2_1.c)).
+
+Invalidate semaphore registers are not safe diagnostic samples. Linux's CPU flush path documents
+that a semaphore read returning one acquires ownership and releases it by writing zero
+([`gmc_v10_0.c`](https://github.com/torvalds/linux/blob/v6.12/drivers/gpu/drm/amd/amdgpu/gmc_v10_0.c#L276-L306));
+its ring path uses the same acquire-before-invalidate and release-after-invalidate protocol
+([ring implementation](https://github.com/torvalds/linux/blob/v6.12/drivers/gpu/drm/amd/amdgpu/gmc_v10_0.c#L373-L405)).
+Diagnostics therefore leave decoded semaphore values explicitly unread while retaining request
+and acknowledge reads. This removes an acquisition risk; it does not establish that a diagnostic
+read caused any earlier GPU fault.

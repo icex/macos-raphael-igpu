@@ -1,7 +1,7 @@
 {
   "id": "metal-007",
   "question": "Does repairing only the VMID 2 GFXHUB root from Apple's logical framebuffer domain to the hardware physical domain let SDMA fetch, and are child PDE pointers logical or physical?",
-  "candidate_version": "1.0.173",
+  "candidate_version": "1.0.174",
   "requested_diagnostic": "rgpuvmroot=1",
   "behavior_change": "for the exact marked Raphael hub-0 VMID-2 reprogram request, pass Apple a private 0x28-byte copy whose non-SYSTEM root address is converted from MC to physical framebuffer space; leave caller memory, VM virtual addresses, leaves, response mode and firmware untouched",
   "required_observations": [
