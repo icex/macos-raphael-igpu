@@ -3555,3 +3555,94 @@ retirement. Zero final ACTIVE and doorbell samples after cleanup do not substitu
 fence proof. The exact run is archived in
 [metal-008-175-bar0](experiments/metal-008-175-bar0/notes.md). Full Metal execution, the VMID-2
 root repair, and repeatable normal recovery remain unproven.
+
+### 2026-09-09: retained candidate-175 host-KIQ scratch is internally consistent
+
+A later bounded observer mapped BAR0 read-only and captured the retained recovery scratch twice
+without a userspace write. Both passes were stable. The complete 64 KiB ring matched the exact
+source-built image; its sequence and the current fence were decimal `1719349093` (`0x667b2f65`),
+and the RPTR report and stored WPTR were both `0x100`. The MQD differed from its initial image in
+exactly 14 bytes across six dwords: query-time low/high, connect-end-time low/high, and final PQ
+RPTR/WPTR. The reconstructed times differ by 12 and both final pointers are `0x100`; the other 506
+dwords match. This is strongly consistent with CP or hardware lifecycle writeback, while the exact
+trigger remains unresolved.
+
+PCI command remained 3, reset methods remained empty, no VM was active, and the postflight journal
+contained no new message or fault. The result is explicitly nonauthorizing for launch, recovery or
+cleanup. It does not repair the incomplete schema-5 receipt and does not prove Metal execution.
+
+The positive fence read also does not establish the cause of candidate 175's earlier miss. Before
+reading the fence, the observer read the full ring, MQD, pointer block and EOP block; that traffic
+could have displaced or refreshed HDP cache lines. Independently, Linux's PCI-aperture read path
+invalidates HDP and issues a full barrier before copying from the aperture, whereas VFIO's noncached
+PCI mapping supplies no AMD HDP operation. The recovery helper now performs the discovery-derived
+HDP 5.2 invalidate at BAR5 `0x3fc4`, a same-register posting read and an ordinary-memory full fence
+before its BAR0 completion reads. That correctness fix passes 247 offline Python tests. It has not
+been hardware-qualified, and stale HDP has not been proved to be the candidate-175 cause. The exact
+artifacts, primary Linux source links and MQD comparison are archived in
+[retained-kiq-175](recovery-tests/retained-kiq-175/notes.md).
+
+### 2026-09-09: PAGE inputs clear, but a halted direct KIQ WPTR clear is ignored
+
+The retained ring sequence and fence equality establish that the temporary host KIQ reached its
+completion fence at some point; they do not establish why the earlier recovery poll did not see
+that value. A separately reviewed, one-shot stopped-state preparation next cleared SDMA0 PAGE IB
+control from `0x101` to `0x100`, then PAGE RB control from `0x80840021` to `0x80840020`. Each native
+DWORD store used an immediate same-register posting read, and all non-enable bits were preserved.
+
+The following selector-9 `CP_HQD_PQ_WPTR_LO=0` store did not take effect: its posting read remained
+`0x100`, with ACTIVE, DEQUEUE and the doorbell enable bit already zero and MEC/SDMA halted and idle.
+The tool stopped at that boundary. Two stable post-passes found the PAGE enables still clear, all
+64 HQDs inactive, and the host and historical evidence unchanged. The result is nonauthorizing and
+no launch followed. See the byte-preserved
+[retained KIQ preparation archive](recovery-tests/retained-kiq-preparation-175/notes.md).
+
+Exact 24G830 disassembly explains why the stale pointer matters for the next driver start: the
+inactive `_gc_create_kiq_queue_10_3` branch skips the DEQUEUE/RPTR/WPTR reset block, then rewrites
+the queue image and activates it. The candidate-176 source guard now requires the selected queue
+to become inactive with ingress disabled, initializes RPTR/WPTR to zero with effective readback,
+and refuses native activation if that state cannot be established. Its eight C++14 fixtures pass;
+the change has not yet been built or exercised on hardware. Full Metal execution and repeatable
+normal recovery remain unproven.
+
+### 2026-09-09: the stopped native doorbell path clears the retained KIQ pointer
+
+A separately reviewed one-shot transaction started from the exact retained stopped state and
+enabled only selector 9's doorbell-zero control plus the global PQ doorbell gate. One aligned
+64-bit native BAR2 store cleared `CP_HQD_PQ_WPTR_LO/WPTR_HI` from `0x100/0` to `0/0` while ACTIVE
+remained zero and MEC remained halted. The transaction produced no host fault. Its overly strict
+close-preimage check rejected the normal `CP_PQ_STATUS.DOORBELL_UPDATED` status after the written
+`0x2` changed to `0x3`, leaving the global gate physically enabled until the separate closure. The
+result remained nonauthorizing; it still disabled the per-HQD doorbell, whose raw readback was
+HIT-only `0x80000000`.
+
+A distinct transaction pinned that failed result and final scan, cleared only the global doorbell
+enable bit (`0x3` to `0x1`), and read it back. Two stable post-passes retained all 64 HQDs inactive,
+selector 9's pointers at zero, all doorbell enables clear, CP and SDMA halted and idle, PAGE inputs
+disabled, and the prior evidence and launch ledger unchanged. Both records are permanently
+nonauthorizing. This establishes a bounded stopped-state pointer update mechanism for future normal
+recovery; it does not retroactively authorize candidate 175, authorize candidate 176, or prove
+Metal or repeatable lifecycle recovery. Exact artifacts and source identities are in the
+[doorbell-zero and closure archive](recovery-tests/retained-kiq-doorbell-zero-175/notes.md).
+
+The integrated schema-6 normal-recovery path records PAGE IB then PAGE RB disable/readback before
+SDMA halt, requires the PAGE/GFX/RLC inputs off and SDMA idle, and keeps the old failed schema-5
+receipt unchanged. Its host-KIQ validator preserves the raw per-HQD doorbell value and accepts only
+zero or HIT-only `0x80000000`; any enabled or unrelated bit still rejects authorization. Focused
+producer/consumer tests pass offline, but no schema-6 hardware receipt exists yet.
+
+Future schema-6 recovery can enter the stopped-WPTR path only when raw evidence proves a terminal
+host-KIQ fence, pre-scrub UNMAP, genuine dequeue, and no cleanup failure except the retained WPTR.
+It requires a new halted/disabled scan, one native 64-bit zero doorbell, explicit global and per-HQD
+gate closure, and a final stable scan. The raw host-KIQ status remains failed in the receipt; an
+independent proof module validates every transition and constructs a separate effective retired
+cleanup view for the unchanged receipt checks. This path is offline-tested and has not been
+qualified by a hardware schema-6 recovery.
+
+The same offline review identified a transport defect in BAR5 DWORD writes. The local CPython
+`_struct.pack_into('<I', ...)` implementation performs a destination `memset` before its final
+copy, so using it on MMIO can expose a transient zero register value. The recovery transport now
+uses the existing aligned native-width DWORD store for `write32` and HDP flush writes; ordinary
+in-memory packet construction still uses `struct.pack_into`. This mechanism is a correctness defect
+and the replacement is offline-tested, but it is not evidence that the transient clear caused a
+past crash. It also does not alter the earlier native 64-bit doorbell-zero observation.

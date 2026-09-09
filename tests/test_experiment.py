@@ -5,6 +5,7 @@ import tempfile
 import unittest
 import subprocess
 import plistlib
+import copy
 import hashlib
 import threading
 from unittest.mock import patch
@@ -137,6 +138,50 @@ class ExperimentTests(unittest.TestCase):
                 'gfx_ring_clean':True, 'gfx_retirement_confirmed':True,
                 'graphics_pipe_proof_complete':True},
         }
+        return receipt
+
+    def schema6_recovery_receipt(self, tool, prior='a'*32, recovery='b'*32):
+        receipt = self.recovery_receipt(tool, prior, recovery)
+        receipt['schema'] = 6
+        gc = receipt['gc_quiesce']
+        gc.update({
+            'sdma0_before':0x20,
+            'sdma0_cntl_before':0x00040021,
+            'sdma0_rb_before':0x80840021,
+            'sdma0_ib_before':0x101,
+            'sdma0_page_ib_before':0x101,
+            'sdma0_page_ib_after':0x100,
+            'sdma0_page_rb_before':0x80840021,
+            'sdma0_page_rb_after':0x80840020,
+            'sdma0_status_before':1,
+            'sdma0_status_after':1,
+            'sdma0_shutdown_trace':[
+                {'step':'disable-page-ib', 'register':0x4d08,
+                 'before':0x101, 'written':0x100, 'readback':0x100},
+                {'step':'disable-page-rb', 'register':0x4ce0,
+                 'before':0x80840021, 'written':0x80840020,
+                 'readback':0x80840020},
+            ],
+            'sdma0_rlc_inputs':[
+                {'index':0, 'rb_before':0x200, 'rb_after':0x200,
+                 'ib_before':0x100, 'ib_after':0x100},
+                {'index':1, 'rb_before':0x204, 'rb_after':0x204,
+                 'ib_before':0x104, 'ib_after':0x104},
+            ],
+        })
+        return receipt
+
+    def schema6_host_kiq_receipt(self, tool, prior='a'*32):
+        receipt = self.host_kiq_receipt(tool, prior)
+        page_proof = self.schema6_recovery_receipt(tool, prior)['gc_quiesce']
+        receipt['schema'] = 6
+        for key in ('sdma0_before', 'sdma0_cntl_before',
+                    'sdma0_rb_before', 'sdma0_ib_before',
+                    'sdma0_page_ib_before', 'sdma0_page_ib_after',
+                    'sdma0_page_rb_before', 'sdma0_page_rb_after',
+                    'sdma0_status_before', 'sdma0_status_after',
+                    'sdma0_shutdown_trace', 'sdma0_rlc_inputs'):
+            receipt['gc_quiesce'][key] = page_proof[key]
         return receipt
 
     def test_identity_mismatches_and_missing_values_fail_closed(self):
@@ -519,6 +564,90 @@ class ExperimentTests(unittest.TestCase):
             self.assertIsNone(replay)
             self.assertIn('recovery_receipt', replay_errors)
 
+    def test_candidate176_one_use_receipt_is_exact_third_ledger_entry(self):
+        tool = self.module()
+        with tempfile.TemporaryDirectory() as temp:
+            vm = Path(temp); used = vm/'run/used-gpu-boots'; used.mkdir(parents=True)
+            first, prior, current = 'a'*32, 'b'*32, 'c'*32
+            ledger = {'schema':2, 'boot_id':'boot-A', 'max_launches':3,
+                      'launches':[{'run_id':first},
+                                  {'run_id':prior, 'prior_run_id':first,
+                                   'recovery_id':'1'*32, 'attempt_id':'2'*32}]}
+            ledger_path = used/'boot-A.json'
+            ledger_path.write_text(json.dumps(ledger)+'\n')
+            manifest = {'boot_id':'boot-A', 'run_id':current,
+                        'candidate_directory':'run/candidate-176'}
+            manifest_path = vm/'run/metal-009-176-manifest.json'
+            manifest_path.write_text(json.dumps(manifest)+'\n')
+            receipt = {
+                'schema':7, 'kind':'same-boot-retained-kiq-continuation',
+                'status':'authorized', 'authorizes_launch':True,
+                'boot_id':'boot-A', 'prior_run_id':prior,
+                'next_run_id':current, 'recovery_id':'3'*32,
+                'authorization_id':'4'*32,
+                'ledger_sha256':hashlib.sha256(ledger_path.read_bytes()).hexdigest()}
+            target = vm/'run/retained-kiq-continuations/boot-A'
+            target.mkdir(parents=True); (target/(prior+'.json')).write_text(
+                json.dumps(receipt)+'\n')
+            calls = []
+            continuation = SimpleNamespace(validate_receipt=lambda *args:
+                calls.append(args) or [])
+            original = tool.helper
+            with patch.object(tool, 'helper', side_effect=lambda name:
+                    continuation if name == 'retained-kiq-continuation'
+                    else original(name)):
+                authorization, errors = tool.reuse_authorization(
+                    vm, 'boot-A', current, manifest, manifest_path)
+                self.assertEqual(errors, [])
+                self.assertEqual(authorization, receipt)
+                tool.reserve_boot(used, 'boot-A', current, authorization,
+                                  manifest, manifest_path)
+            self.assertGreaterEqual(len(calls), 2)
+            updated = json.loads(ledger_path.read_text())
+            self.assertEqual([row['run_id'] for row in updated['launches']],
+                             [first, prior, current])
+            self.assertEqual(updated['launches'][2]['authorization_id'], '4'*32)
+            self.assertEqual(updated['launches'][2]['recovery_id'], '3'*32)
+            replay, replay_errors = tool.reuse_authorization(
+                vm, 'boot-A', 'd'*32, manifest, manifest_path)
+            self.assertIsNone(replay)
+            self.assertIn('launch_ceiling', replay_errors)
+
+    def test_candidate176_receipt_requires_helper_manifest_and_raw_ledger(self):
+        tool = self.module()
+        with tempfile.TemporaryDirectory() as temp:
+            vm = Path(temp); used = vm/'run/used-gpu-boots'; used.mkdir(parents=True)
+            prior, current = 'b'*32, 'c'*32
+            ledger_path = used/'boot-A.json'
+            ledger_path.write_text(json.dumps({
+                'schema':2, 'boot_id':'boot-A', 'max_launches':3,
+                'launches':[{'run_id':'a'*32}, {'run_id':prior}]})+'\n')
+            receipt = {'schema':7, 'recovery_id':'3'*32,
+                       'authorization_id':'4'*32,
+                       'ledger_sha256':hashlib.sha256(ledger_path.read_bytes()).hexdigest()}
+            target = vm/'run/retained-kiq-continuations/boot-A'
+            target.mkdir(parents=True); (target/(prior+'.json')).write_text(
+                json.dumps(receipt))
+            manifest = {'run_id':current}; manifest_path = vm/'manifest.json'
+            manifest_path.write_text(json.dumps(manifest))
+            continuation = SimpleNamespace(validate_receipt=lambda *args:
+                                             ['retained_kiq_continuation_manifest'])
+            original = tool.helper
+            with patch.object(tool, 'helper', side_effect=lambda name:
+                    continuation if name == 'retained-kiq-continuation'
+                    else original(name)):
+                authorization, errors = tool.reuse_authorization(
+                    vm, 'boot-A', current, manifest, manifest_path)
+                self.assertIsNone(authorization)
+                self.assertIn('retained_kiq_continuation_manifest', errors)
+
+                continuation.validate_receipt = lambda *args:[]
+                ledger_path.write_bytes(ledger_path.read_bytes()+b' ')
+                with self.assertRaisesRegex(
+                        ValueError, 'retained_kiq_continuation_receipt'):
+                    tool.reserve_boot(used, 'boot-A', current, receipt,
+                                      manifest, manifest_path)
+
     def test_reuse_requires_latest_predecessor_and_stops_at_three_launches(self):
         tool = self.module()
         with tempfile.TemporaryDirectory() as temp:
@@ -654,6 +783,180 @@ class ExperimentTests(unittest.TestCase):
             broken['gc_quiesce']['host_kiq'][key] = value
             self.assertIn('recovery_receipt', tool.validate_recovery_receipt(
                 broken, 'boot-A', 'a'*32))
+
+    def test_schema6_dispatch_accepts_new_proof_without_weakening_schema5(self):
+        tool = self.module()
+        schema5 = self.recovery_receipt(tool)
+        schema6 = self.schema6_recovery_receipt(tool)
+
+        self.assertEqual(tool.validate_recovery_receipt(
+            schema5, 'boot-A', 'a'*32), [])
+        self.assertEqual(tool.validate_recovery_receipt_v6(
+            schema6, 'boot-A', 'a'*32), [])
+        self.assertEqual(tool.validate_reuse_receipt(
+            schema6, 'boot-A', 'a'*32), [])
+        self.assertIn('recovery_receipt', tool.validate_recovery_receipt(
+            schema6, 'boot-A', 'a'*32))
+
+    def test_schema6_accepts_only_disabled_host_kiq_doorbell_status(self):
+        tool = self.module()
+        hit_only = self.schema6_host_kiq_receipt(tool)
+        cleanup = hit_only['gc_quiesce']['host_kiq']['cleanup']
+        cleanup['hqd_doorbell'] = 0x80000000
+
+        self.assertEqual(tool.validate_recovery_receipt_v6(
+            hit_only, 'boot-A', 'a'*32), [])
+        self.assertEqual(tool.validate_reuse_receipt(
+            hit_only, 'boot-A', 'a'*32), [])
+        self.assertEqual(cleanup['hqd_doorbell'], 0x80000000)
+
+        legacy = self.host_kiq_receipt(tool)
+        legacy['gc_quiesce']['host_kiq']['cleanup']['hqd_doorbell'] = 0x80000000
+        self.assertIn('recovery_receipt', tool.validate_recovery_receipt(
+            legacy, 'boot-A', 'a'*32))
+
+        for label, value in (
+                ('enabled', 0x40000000),
+                ('hit-and-enabled', 0xc0000000),
+                ('mode', 0x00000001),
+                ('scheduler-hit', 0x20000000),
+                ('negative', -1),
+                ('wider-than-dword', 0x100000000),
+                ('boolean', True),
+                ('not-an-integer', None)):
+            with self.subTest(label=label):
+                broken = self.schema6_host_kiq_receipt(tool)
+                broken['gc_quiesce']['host_kiq']['cleanup'][
+                    'hqd_doorbell'] = value
+                self.assertIn('recovery_receipt',
+                              tool.validate_recovery_receipt_v6(
+                                  broken, 'boot-A', 'a'*32))
+
+        missing = self.schema6_host_kiq_receipt(tool)
+        missing['gc_quiesce']['host_kiq']['cleanup'].pop('hqd_doorbell')
+        self.assertIn('recovery_receipt', tool.validate_recovery_receipt_v6(
+            missing, 'boot-A', 'a'*32))
+
+    def test_schema6_derives_stopped_wptr_proof_without_mutating_raw_receipt(self):
+        tool = self.module()
+        receipt = self.schema6_host_kiq_receipt(tool)
+        fixture = json.loads((ROOT/'tests/fixtures/'
+                              'stopped-wptr-clear-schema6-positive.json').read_text())
+        receipt['gc_quiesce'].update(copy.deepcopy(fixture['gc_quiesce']))
+        # The proof fixture isolates the stopped-pointer contract. Supply the
+        # full producer GART shape required by the existing receipt validator.
+        gart = self.schema6_host_kiq_receipt(tool)[
+            'gc_quiesce']['host_kiq']['gart']
+        evidence = receipt['gc_quiesce']['host_kiq']['evidence']
+        evidence['gart'] = copy.deepcopy(gart)
+        evidence['retired_before_cleanup']['gart'] = copy.deepcopy(gart)
+        raw = copy.deepcopy(receipt)
+
+        self.assertEqual(tool.validate_recovery_receipt_v6(
+            receipt, 'boot-A', 'a'*32), [])
+        self.assertEqual(receipt, raw)
+        self.assertEqual(receipt['gc_quiesce']['host_kiq']['status'], 'failed')
+
+        corrupted = copy.deepcopy(receipt)
+        corrupted['gc_quiesce']['stopped_wptr_doorbell_clear'][
+            'transition']['doorbell']['value'] = 1
+        self.assertIn('recovery_receipt', tool.validate_recovery_receipt_v6(
+            corrupted, 'boot-A', 'a'*32))
+
+        without_proof = copy.deepcopy(receipt)
+        without_proof['gc_quiesce'].pop('stopped_wptr_doorbell_clear')
+        self.assertIn('recovery_receipt', tool.validate_recovery_receipt_v6(
+            without_proof, 'boot-A', 'a'*32))
+
+        legacy = copy.deepcopy(receipt)
+        legacy['schema'] = 5
+        self.assertIn('recovery_receipt', tool.validate_recovery_receipt(
+            legacy, 'boot-A', 'a'*32))
+
+    def test_schema6_rejects_inaccessible_or_unsafe_sdma_scalar_proof(self):
+        tool = self.module()
+        good = self.schema6_recovery_receipt(tool)
+
+        for malformed in (None, [], 'invalid'):
+            with self.subTest(malformed_gc=malformed):
+                broken = dict(good, gc_quiesce=malformed)
+                self.assertEqual(tool.validate_recovery_receipt_v6(
+                    broken, 'boot-A', 'a'*32), ['recovery_receipt'])
+
+        mutations = [
+            ('missing-page-proof', ('sdma0_page_ib_before',), None),
+            ('page-ib-enabled', ('sdma0_page_ib_after',), 0x101),
+            ('page-rb-wrong-transition', ('sdma0_page_rb_after',), 0x80000000),
+            ('status-not-idle', ('sdma0_status_after',), 0),
+            ('status-inaccessible', ('sdma0_status_before',), 0xffffffff),
+            ('status-negative', ('sdma0_status_before',), -1),
+            ('f32-inaccessible', ('sdma0_after',), 0xffffffff),
+            ('f32-wider-than-dword', ('sdma0_before',), 0x100000000),
+            ('gfx-input-inaccessible', ('sdma0_rb_before',), 0xffffffff),
+            ('boolean-is-not-register', ('sdma0_page_rb_before',), True),
+        ]
+        for label, path, value in mutations:
+            with self.subTest(label=label):
+                broken = json.loads(json.dumps(good))
+                if label == 'missing-page-proof':
+                    broken['gc_quiesce'].pop(path[0])
+                else:
+                    broken['gc_quiesce'][path[0]] = value
+                self.assertIn('recovery_receipt',
+                              tool.validate_recovery_receipt_v6(
+                                  broken, 'boot-A', 'a'*32))
+
+    def test_schema6_rejects_wrong_page_trace_or_rlc_observations(self):
+        tool = self.module()
+        good = self.schema6_recovery_receipt(tool)
+
+        mutations = []
+        reversed_trace = list(reversed(good['gc_quiesce']['sdma0_shutdown_trace']))
+        mutations.append(('trace-order', ('sdma0_shutdown_trace',), reversed_trace))
+        wrong_register = json.loads(json.dumps(
+            good['gc_quiesce']['sdma0_shutdown_trace']))
+        wrong_register[0]['register'] += 4
+        mutations.append(('trace-register', ('sdma0_shutdown_trace',), wrong_register))
+        wrong_readback = json.loads(json.dumps(
+            good['gc_quiesce']['sdma0_shutdown_trace']))
+        wrong_readback[1]['readback'] ^= 1
+        mutations.append(('trace-readback', ('sdma0_shutdown_trace',), wrong_readback))
+        extra_trace_key = json.loads(json.dumps(
+            good['gc_quiesce']['sdma0_shutdown_trace']))
+        extra_trace_key[0]['extra'] = 0
+        mutations.append(('trace-exact-keys', ('sdma0_shutdown_trace',), extra_trace_key))
+
+        for label, path, value in mutations:
+            with self.subTest(label=label):
+                broken = json.loads(json.dumps(good))
+                broken['gc_quiesce'][path[0]] = value
+                self.assertIn('recovery_receipt',
+                              tool.validate_recovery_receipt_v6(
+                                  broken, 'boot-A', 'a'*32))
+
+        rlc_mutations = [
+            ('missing-row', lambda rows: rows.pop()),
+            ('wrong-index', lambda rows: rows[1].update(index=0)),
+            ('extra-key', lambda rows: rows[0].update(extra=0)),
+            ('changed-observation', lambda rows: rows[0].update(rb_after=0x204)),
+            ('enabled-rb', lambda rows: rows[0].update(rb_after=0x201,
+                                                       rb_before=0x201)),
+            ('enabled-ib', lambda rows: rows[1].update(ib_after=0x105,
+                                                       ib_before=0x105)),
+            ('inaccessible', lambda rows: rows[0].update(ib_before=0xffffffff,
+                                                         ib_after=0xffffffff)),
+            ('boolean-register', lambda rows: rows[0].update(rb_before=False,
+                                                             rb_after=False)),
+            ('wider-than-dword', lambda rows: rows[0].update(rb_before=0x100000000,
+                                                             rb_after=0x100000000)),
+        ]
+        for label, mutate in rlc_mutations:
+            with self.subTest(label=label):
+                broken = json.loads(json.dumps(good))
+                mutate(broken['gc_quiesce']['sdma0_rlc_inputs'])
+                self.assertIn('recovery_receipt',
+                              tool.validate_recovery_receipt_v6(
+                                  broken, 'boot-A', 'a'*32))
 
     def test_recovery_receipt_admission_mutation_checks_every_hardware_proof(self):
         tool = self.module()

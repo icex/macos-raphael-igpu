@@ -1,0 +1,11 @@
+{
+  "authorizes_cleanup": false,
+  "authorizes_launch": false,
+  "authorizes_recovery": false,
+  "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+  "created_epoch": 1788960002.5284517,
+  "kind": "retained-idle-selector-inspection",
+  "run_id": "1a065e4f5f674cc0a26d4e9dbdf59649",
+  "schema": 1,
+  "status": "device-open-attempted"
+}

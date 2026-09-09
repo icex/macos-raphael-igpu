@@ -1,0 +1,44 @@
+{
+  "id": "metal-009",
+  "question": "After verified same-boot cleanup, does candidate 176 execute the prepared Metal compute/render probe, with VMID-2 root repair and page-table evidence explaining the result?",
+  "candidate_version": "1.0.176",
+  "requested_diagnostic": "rgpuvmroot=1",
+  "behavior_change": "use the corrected coordinator readiness gate to start one prepared probe only after exact identity, route, capture, native KIQ/SDMA/engine and outer accelerator startup checks; before Apple's native KIQ creation, require the selected queue to become inactive with ingress disabled, initialize RPTR and both WPTR halves to zero with effective readback, and refuse activation if that safety state cannot be established; preserve candidate 175's BAR0 early-owner repair, VMID-2 root diagnostic, boot arguments, routes, and all other functional behavior",
+  "required_observations": [
+    "loaded_build",
+    "route_guards",
+    "kiq_stamps",
+    "hybrid_enter",
+    "hybrid_exit",
+    "engine_start",
+    "sdma_topology",
+    "sdma_channel_remap",
+    "sdma_vm_program",
+    "vmid2_root_repair"
+  ],
+  "max_seconds": 180,
+  "prerequisites": [
+    "same_boot_candidate176_one_use_authorization",
+    "inactive_kiq_pointer_guard_offline_validated",
+    "bar0_early_owner_retry_hardware_validated",
+    "amdgpu_initialized_this_boot",
+    "reset_methods_disabled",
+    "sleep_inhibitor_active",
+    "watchdog_and_pstore_verified"
+  ],
+  "repeat_policy": "one authorized run only; require exact candidate and route identity, complete capture, successful native KIQ/SDMA/engine startup and outer accelerator power-up before one prepared probe, then require VMID-2 root repair, SDMA programming and page-table evidence for the final verdict",
+  "abort_on": [
+    "identity_mismatch",
+    "capture_loss",
+    "bar0_mapping_unavailable",
+    "root_repair_refused",
+    "prepared_root_mismatch",
+    "guest_panic",
+    "terminal_kiq_submit_failure",
+    "sdma_page_timeout",
+    "host_fault",
+    "incomplete_gc_quiesce"
+  ],
+  "outcome_table": "docs/ROADMAP.md M4-M7",
+  "run_probe_only_after_native_start": true
+}

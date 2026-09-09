@@ -1,0 +1,13 @@
+{
+  "authorizes_cleanup": false,
+  "authorizes_launch": false,
+  "authorizes_recovery": false,
+  "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+  "created_epoch": 1788958371.3210003,
+  "kind": "retained-host-kiq-observation",
+  "observer_source_sha256": "cf6513926a9c9fbf5f11df3cd1980ca3de90a786d8ef4c5f21d8764d5755b3d9",
+  "recovery_id": "e503b2ca63db4e11a21494d1841dca24",
+  "run_id": "1a065e4f5f674cc0a26d4e9dbdf59649",
+  "schema": 1,
+  "status": "device-open-attempted"
+}

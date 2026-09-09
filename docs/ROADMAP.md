@@ -101,6 +101,61 @@ fields. Recovery is `incomplete` and non-authorizing even though final ACTIVE an
 were zero. Full Metal execution, VMID-2 root repair, and repeatable normal recovery remain
 unproven. See the [candidate-175 evidence](../findings/experiments/metal-008-175-bar0/notes.md).
 
+A later bounded, BAR0-only observation preserved the stopped state and found the complete 64 KiB
+host-KIQ ring byte-exact. The embedded sequence and retained fence both equaled decimal
+`1719349093` (`0x667b2f65`), while the RPTR report and stored WPTR were `0x100`. The MQD differed
+only in six lifecycle-status dwords: its two time pairs and final RPTR/WPTR; the other 506 dwords
+matched. No reset method or new host fault was observed. This result is diagnostic and explicitly
+nonauthorizing, and it does not prove Metal execution. Because the observer read the ring, MQD,
+pointers and EOP block before the fence, its positive fence read does not prove that HDP caching
+could not have hidden the value from the earlier recovery poll. Linux's PCI-aperture path requires
+HDP read-cache invalidation and a full barrier before reads. That missing path is now corrected and
+covered by 247 offline Python tests, but it is not hardware-qualified and is not proven as the
+cause of candidate 175's failed fence observation. See the
+[retained host-KIQ archive](../findings/recovery-tests/retained-kiq-175/notes.md).
+
+The retained sequence/fence equality proves that the temporary host KIQ reached its completion
+fence at some point, while leaving the earlier BAR0 visibility failure's cause unresolved. A
+separately reviewed stopped-state preparation then cleared SDMA0 PAGE IB enable before PAGE RB
+enable, preserving every other control bit and reading both values back. Its following native
+`CP_HQD_PQ_WPTR_LO=0` store was ignored: selector 9 remained inactive with WPTR `0x100`. No launch
+was authorized or attempted. Exact Apple 24G830 analysis found that the inactive KIQ creation path
+skips the pointer-reset block before programming and activating the replacement queue. The bounded
+candidate-176 guard closes that path before native activation and passes all eight C++14 fixtures,
+but it has not yet been built or tested on hardware. The exact stopped-state result is archived in
+[retained KIQ preparation](../findings/recovery-tests/retained-kiq-preparation-175/notes.md).
+
+A following one-shot transaction used the stopped queue's native 64-bit doorbell path while
+selector 9 was inactive, MEC was halted and ingress was otherwise disabled. It cleared the retained
+WPTR from `0x100` to zero without activating the queue or producing a host fault. The doorbell HIT
+status remained set, and the global status changed from `0x2` to `0x3`; a separate pinned closure
+then cleared only `CP_PQ_STATUS.DOORBELL_ENABLE`, reading `0x1` back while preserving the status
+bit. Stable final scans kept all 64 HQDs inactive, selector 9's pointers zero, the engines halted
+and idle, PAGE inputs disabled, and every doorbell enable clear. Both transactions are diagnostic
+and nonauthorizing. They prove the bounded stopped-pointer update mechanism used by the planned
+normal-recovery correction; they do not authorize candidate 176 or prove repeatable recovery. See
+the [doorbell-zero and closure archive](../findings/recovery-tests/retained-kiq-doorbell-zero-175/notes.md).
+
+The schema-6 normal-recovery producer and validator now preserve PAGE IB-then-RB shutdown evidence,
+require the PAGE/GFX/RLC inputs disabled and SDMA idle, and accept selector doorbell cleanup only as
+exact zero or HIT-only with the enable bit clear. The integrated focused suite passes offline. This
+schema has not produced an authorizing hardware receipt, and the old failed schema-5 receipt remains
+unchanged.
+
+For future schema-6 recovery, the automatic stopped-WPTR path is available only after a terminal
+host-KIQ fence, pre-scrub UNMAP proof, genuine dequeue, and a sole pointer-clear cleanup failure. It
+then requires a fresh halted/disabled scan, issues one native 64-bit zero doorbell, closes the global
+and per-HQD gates, and requires another complete stable scan. The receipt preserves the raw failed
+host-KIQ record; a separate validator derives the effective retired/clean view from those raw
+operations for normal receipt validation. This path is offline-tested and not hardware-qualified.
+
+Offline transport review also found that Python's `_struct.pack_into('<I', ...)` clears the
+destination before copying the final DWORD. On a BAR5 MMIO mapping that preliminary clear is a real
+device write and can transiently change a control register. The recovery transport now uses one
+aligned native-width DWORD store for BAR5 `write32` and HDP flush writes. This is a correctness fix
+covered by the offline suite; it does not establish the cause of any earlier host or guest failure,
+and it does not change the separately measured native 64-bit stopped-WPTR result.
+
 ## 1. What is actually complete
 
 Checked means the stated deliverable exists or the stated observation was recorded.
@@ -471,14 +526,15 @@ date for the unknown hardware defects until M2 has localized them.
 ## 8. Next controlled experiment
 
 1. Preserve the stopped VFIO state and the complete candidate-175 evidence. Its consumed startup
-   receipt and incomplete normal-recovery receipt cannot authorize another launch.
-2. Correct and review the coordinator's probe-readiness gate offline. Require exact build and
+   receipt, incomplete schema-5 recovery, and later diagnostic closure records cannot authorize
+   another launch.
+2. Keep the corrected, offline-tested coordinator probe-readiness gate. Require exact build and
    routes, complete capture, successful native KIQ/SDMA/engine startup, and successful outer
    accelerator power-up before starting the prepared probe. Keep VM-program and root-repair
    correlation mandatory for the final verdict after workload submission.
-3. Before any later launch, obtain a fresh authorizing recovery state under the existing reset-free
-   policy or begin from a separately reviewed fresh host initialization. Do not infer authorization
-   from zero final ACTIVE/doorbell samples after the failed host-KIQ fence.
+3. Before any later launch, require the reviewed one-use candidate-176 authorization to bind the
+   immutable closure evidence, exact source/build/staged identities, prepared manifest and current
+   ledger preimage. Do not infer authorization from the diagnostic closure records themselves.
 4. On the next reviewed run, require the VMID-2 root repair, Apple's prepared-packet match, the
    corresponding SDMA submission and all three page-table walks before any acceleration claim.
 5. If a non-SYSTEM non-leaf walk entry reports `child-mc2pa=1`, repair that child-PDE producer

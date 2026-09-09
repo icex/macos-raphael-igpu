@@ -1,0 +1,7 @@
+{
+  "status": "failed",
+  "authorizes_launch": false,
+  "authorizes_recovery": false,
+  "authorizes_cleanup": false,
+  "error": "DoorbellZeroError: device: global gate close: global PQ doorbell close preimage changed"
+}
