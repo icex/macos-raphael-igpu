@@ -269,7 +269,7 @@ class ExperimentTests(unittest.TestCase):
                             candidate_directory='run/candidate-174',
                             spec={'candidate_version':'1.0.174'},
                             prelaunch_replacement_reason=
-                                'remove side-effectful SEM diagnostic reads')
+                                'remove unsafe SEM diagnostic reads and preserve bounded critical capture')
             original_manifest = dict(manifest)
             original_manifest.pop('prelaunch_replacement_reason')
             original_manifest['candidate_directory'] = 'run/candidate-173'
