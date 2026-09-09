@@ -1,0 +1,17 @@
+{
+  "firmware_header_sha256": "c152bb08862f62b4ddef1bdf717be56935d4a8f6d214bd05a96237eccbed982c",
+  "mac_kernel_sdk_commit": "05094e5e88cec7caedbfb35e8449ed0db94bf95b",
+  "lilu_version": "1.6.8",
+  "lilu_archive_sha256": "cf658a77e21575f99e0629df3aad282c2c51824d203f4e0b2260c769913815cd",
+  "sdk_tree_sha256": "39036632f485a027f8b75fe5a8cfb18fab79d5c7531adae9dc165096e7e14666",
+  "lilu_resources_sha256": "a68cdd008793057f22512c87911463d2145861fb3268ed9840fceb709fb67a0b",
+  "version": "1.0.178",
+  "source_commit": "ef326108b868a00efb292e481ea2efb866205efa",
+  "source_clean": true,
+  "build_id": "5908f278b80548d6b9c88e2e9a300ae5",
+  "source_sha256": "cc44faa70f6ad2db0f202e8a831897f1f655784edbf7b8faba1d04ce490940ca",
+  "info_sha256": "38a0b2c82d66014323ff65fbe834659ac9bd4821b2cac9d30bb14ee69772937a",
+  "executable_sha256": "0456ad80a694d0ccd1a9fa9297f77ba629af8a620e29c877baa710c8be1006a5",
+  "metal_execution_verified": false,
+  "verified_playable_games": 0
+}

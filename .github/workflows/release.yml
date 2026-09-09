@@ -26,6 +26,10 @@ jobs:
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror -pthread -fsanitize=address,undefined tests/test_diagnostic_records.cpp -o /tmp/record-test
           /tmp/record-test
+          g++ -std=c++17 -Wall -Wextra -Werror -pthread -fsanitize=address,undefined tests/test_backing_trace.cpp -o /tmp/backing-trace-test
+          /tmp/backing-trace-test
+          g++ -std=c++17 -Wall -Wextra -Werror -pthread -fsanitize=address,undefined tests/test_recovery_lease.cpp -o /tmp/recovery-lease-test
+          /tmp/recovery-lease-test
   build:
     needs: test
     runs-on: macos-15-intel

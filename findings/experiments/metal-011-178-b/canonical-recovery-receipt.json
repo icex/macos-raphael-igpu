@@ -1,0 +1,473 @@
+{
+  "authorizes_launch": true,
+  "bar5": {
+    "index": 5,
+    "mmap": true,
+    "offset": 5497558138880,
+    "read": true,
+    "regions": {
+      "0": {
+        "index": 0,
+        "mmap": true,
+        "offset": 0,
+        "read": true,
+        "size": 268435456,
+        "write": true
+      },
+      "2": {
+        "index": 2,
+        "mmap": true,
+        "offset": 2199023255552,
+        "read": true,
+        "size": 2097152,
+        "write": true
+      },
+      "5": {
+        "index": 5,
+        "mmap": true,
+        "offset": 5497558138880,
+        "read": true,
+        "size": 524288,
+        "write": true
+      }
+    },
+    "size": 524288,
+    "write": true
+  },
+  "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+  "commands": [
+    {
+      "before": 2147549184,
+      "command": 196608,
+      "confirmed": true,
+      "label": "destroy all rings",
+      "polls": 6,
+      "response": 2147680256
+    },
+    {
+      "before": 2147680256,
+      "command": 786432,
+      "confirmed": true,
+      "label": "destroy GPCOM ring",
+      "polls": 1,
+      "response": 2148270080
+    }
+  ],
+  "created_epoch": 1788983635.5527403,
+  "device": "0000:7b:00.0",
+  "driver": "vfio-pci",
+  "gc_quiesce": {
+    "active_after": 0,
+    "active_before": 2,
+    "cp_cpc_busy_after": 0,
+    "cp_me_after": 352321536,
+    "cp_me_before": 0,
+    "cp_mec_after": 1342177280,
+    "cp_mec_before": 1342177280,
+    "cp_stat_after": 0,
+    "dequeue_timeouts": 0,
+    "dequeued": 2,
+    "doorbell_range_lower_after": 0,
+    "doorbell_range_upper_after": 0,
+    "forced_inactive": 0,
+    "gfx_needs_unmap": true,
+    "gfx_rb_active_after": 0,
+    "gfx_rb_active_before": 1,
+    "gfx_rb_base_after": 0,
+    "gfx_rb_base_before": 4290764800,
+    "gfx_rb_base_hi_after": 0,
+    "gfx_rb_base_hi_before": 0,
+    "gfx_rb_cntl_after": 0,
+    "gfx_rb_cntl_before": 10489360,
+    "gfx_rb_doorbell_after": 0,
+    "gfx_rb_doorbell_before": 3221226496,
+    "gfx_rb_wptr_after": 0,
+    "gfx_rb_wptr_before": 128,
+    "gfx_rb_wptr_hi_after": 0,
+    "gfx_rb_wptr_hi_before": 0,
+    "gfx_retirement_confirmed": true,
+    "gfx_ring_clean": true,
+    "gfx_was_stale": true,
+    "graphics_pipe_guard": {
+      "pipe1_supported_state": true,
+      "policy": "x6000-24G830-single-legacy-gfx-pipe-v1",
+      "reservation_after": {
+        "checksum": 17394242396367591122,
+        "heap_limit": 251658240,
+        "reservation_end": 268435456,
+        "reservation_start": 251658240,
+        "run_id": "4a45f4a4c1dd49c69fab2dc37e2e4898",
+        "scratch_start": 252706816,
+        "state": 1448362817,
+        "version": 1
+      },
+      "reservation_before": {
+        "checksum": 17394242396367591122,
+        "heap_limit": 251658240,
+        "reservation_end": 268435456,
+        "reservation_start": 251658240,
+        "run_id": "4a45f4a4c1dd49c69fab2dc37e2e4898",
+        "scratch_start": 252706816,
+        "state": 1448362817,
+        "version": 1
+      },
+      "reservation_unchanged": true,
+      "snapshot": {
+        "final_default": {
+          "completed": true,
+          "value": 0
+        },
+        "pipes": [
+          {
+            "active": 1,
+            "base": 4290764800,
+            "base_hi": 0,
+            "cntl": 10489360,
+            "doorbell_control": 3221226496,
+            "doorbell_offset": 1024,
+            "doorbell_status": 3221225472,
+            "intended_pipe": 0,
+            "rb0_active": 1,
+            "rb1_active": 0,
+            "selector": 0,
+            "wptr": 128,
+            "wptr_hi": 0
+          },
+          {
+            "active": 0,
+            "base": 4275878623,
+            "base_hi": 0,
+            "cntl": 10485760,
+            "doorbell_control": 0,
+            "doorbell_offset": 0,
+            "doorbell_status": 0,
+            "intended_pipe": 1,
+            "rb0_active": 1,
+            "rb1_active": 0,
+            "selector": 1,
+            "wptr": 0,
+            "wptr_hi": 0
+          }
+        ]
+      }
+    },
+    "graphics_pipe_proof_complete": true,
+    "graphics_pipes_after_retirement": {
+      "final_default": {
+        "completed": true,
+        "value": 0
+      },
+      "pipes": [
+        {
+          "active": 0,
+          "base": 4290764800,
+          "base_hi": 0,
+          "cntl": 10489360,
+          "doorbell_control": 1024,
+          "doorbell_offset": 1024,
+          "doorbell_status": 0,
+          "intended_pipe": 0,
+          "rb0_active": 0,
+          "rb1_active": 0,
+          "selector": 0,
+          "wptr": 0,
+          "wptr_hi": 0
+        },
+        {
+          "active": 0,
+          "base": 4275878623,
+          "base_hi": 0,
+          "cntl": 10485760,
+          "doorbell_control": 0,
+          "doorbell_offset": 0,
+          "doorbell_status": 0,
+          "intended_pipe": 1,
+          "rb0_active": 0,
+          "rb1_active": 0,
+          "selector": 1,
+          "wptr": 0,
+          "wptr_hi": 0
+        }
+      ]
+    },
+    "graphics_pipes_before": {
+      "final_default": {
+        "completed": true,
+        "value": 0
+      },
+      "pipes": [
+        {
+          "active": 1,
+          "base": 4290764800,
+          "base_hi": 0,
+          "cntl": 10489360,
+          "doorbell_control": 3221226496,
+          "doorbell_offset": 1024,
+          "doorbell_status": 3221225472,
+          "intended_pipe": 0,
+          "rb0_active": 1,
+          "rb1_active": 0,
+          "selector": 0,
+          "wptr": 128,
+          "wptr_hi": 0
+        },
+        {
+          "active": 0,
+          "base": 4275878623,
+          "base_hi": 0,
+          "cntl": 10485760,
+          "doorbell_control": 0,
+          "doorbell_offset": 0,
+          "doorbell_status": 0,
+          "intended_pipe": 1,
+          "rb0_active": 1,
+          "rb1_active": 0,
+          "selector": 1,
+          "wptr": 0,
+          "wptr_hi": 0
+        }
+      ]
+    },
+    "graphics_pipes_final": {
+      "final_default": {
+        "completed": true,
+        "value": 0
+      },
+      "pipes": [
+        {
+          "active": 0,
+          "base": 0,
+          "base_hi": 0,
+          "cntl": 0,
+          "doorbell_control": 0,
+          "doorbell_offset": 0,
+          "doorbell_status": 0,
+          "intended_pipe": 0,
+          "rb0_active": 0,
+          "rb1_active": 0,
+          "selector": 0,
+          "wptr": 0,
+          "wptr_hi": 0
+        },
+        {
+          "active": 0,
+          "base": 4275878623,
+          "base_hi": 0,
+          "cntl": 10485760,
+          "doorbell_control": 0,
+          "doorbell_offset": 0,
+          "doorbell_status": 0,
+          "intended_pipe": 1,
+          "rb0_active": 0,
+          "rb1_active": 0,
+          "selector": 1,
+          "wptr": 0,
+          "wptr_hi": 0
+        }
+      ]
+    },
+    "host_kiq": {
+      "addresses": {
+        "eop": 1048224800768,
+        "fence": 1048224804864,
+        "mqd": 1048224792576,
+        "ring": 1048224727040,
+        "rptr": 1048224796672,
+        "wptr": 1048224796680
+      },
+      "cleanup": {
+        "doorbell_range_lower": 0,
+        "doorbell_range_upper": 0,
+        "hqd_active": 0,
+        "hqd_doorbell": 0,
+        "hqd_rptr": 0,
+        "hqd_wptr_hi": 0,
+        "hqd_wptr_lo": 0,
+        "mec_cntl": 1342177280,
+        "pq_status": 0,
+        "wptr_poll_cntl": 0
+      },
+      "cleanup_confirmed": true,
+      "fence_after": 786938751,
+      "fence_sequence": 786938751,
+      "final_gate": {
+        "active_after": 0,
+        "cp_cpc_busy_after": 0,
+        "cp_stat_after": 0,
+        "doorbell_range_lower_after": 0,
+        "doorbell_range_upper_after": 0,
+        "gfx_retirement_confirmed": true,
+        "gfx_ring_clean": true,
+        "graphics_pipe_proof_complete": true,
+        "pq_status_after": 0,
+        "pq_wptr_poll_after": 0
+      },
+      "gart": {
+        "active": true,
+        "bar_offset": 266321920,
+        "control": 22369281,
+        "end_page": 268434944,
+        "physical_fb": 35433480192,
+        "root": 35699802113,
+        "size": 2105352,
+        "start_page": 268171776
+      },
+      "gfx_active_after_unmap": 0,
+      "gfx_active_before_scrub": 0,
+      "gfx_doorbell_offset": 1024,
+      "graphics_pipes_after_unmap": {
+        "final_default": {
+          "completed": true,
+          "value": 0
+        },
+        "pipes": [
+          {
+            "active": 0,
+            "base": 4290764800,
+            "base_hi": 0,
+            "cntl": 10489360,
+            "doorbell_control": 1024,
+            "doorbell_offset": 1024,
+            "doorbell_status": 0,
+            "intended_pipe": 0,
+            "rb0_active": 0,
+            "rb1_active": 0,
+            "selector": 0,
+            "wptr": 0,
+            "wptr_hi": 0
+          },
+          {
+            "active": 0,
+            "base": 4275878623,
+            "base_hi": 0,
+            "cntl": 10485760,
+            "doorbell_control": 0,
+            "doorbell_offset": 0,
+            "doorbell_status": 0,
+            "intended_pipe": 1,
+            "rb0_active": 0,
+            "rb1_active": 0,
+            "selector": 1,
+            "wptr": 0,
+            "wptr_hi": 0
+          }
+        ]
+      },
+      "hdp_flush": {
+        "posted_read": 512,
+        "remap": 14428
+      },
+      "packet_dwords": 256,
+      "reservation": {
+        "checksum": 17394242396367591122,
+        "consume_hdp_flush": {
+          "posted_read": 512,
+          "remap": 14428
+        },
+        "consumed": true,
+        "heap_limit": 251658240,
+        "reservation_end": 268435456,
+        "reservation_start": 251658240,
+        "run_id": "4a45f4a4c1dd49c69fab2dc37e2e4898",
+        "scratch_start": 252706816,
+        "state": 1448362817,
+        "version": 1
+      },
+      "rptr_after": 256,
+      "selector": 9,
+      "status": "retired"
+    },
+    "pq_status_after": 0,
+    "pq_wptr_poll_after": 0,
+    "queues": [
+      {
+        "me": 2,
+        "pipe": 0,
+        "polls": 1,
+        "queue": 0,
+        "selector": 8
+      },
+      {
+        "me": 2,
+        "pipe": 1,
+        "polls": 1,
+        "queue": 0,
+        "selector": 9
+      }
+    ],
+    "reservation": {
+      "checksum": 17394242396367591122,
+      "consume_hdp_flush": {
+        "posted_read": 512,
+        "remap": 14428
+      },
+      "consumed": true,
+      "heap_limit": 251658240,
+      "reservation_end": 268435456,
+      "reservation_start": 251658240,
+      "run_id": "4a45f4a4c1dd49c69fab2dc37e2e4898",
+      "scratch_start": 252706816,
+      "state": 1448362817,
+      "version": 1
+    },
+    "sdma0_after": 1,
+    "sdma0_before": 0,
+    "sdma0_cntl_after": 195,
+    "sdma0_cntl_before": 262339,
+    "sdma0_ib_after": 256,
+    "sdma0_ib_before": 257,
+    "sdma0_page_ib_after": 256,
+    "sdma0_page_ib_before": 257,
+    "sdma0_page_rb_after": 2156134432,
+    "sdma0_page_rb_before": 2156134433,
+    "sdma0_rb_after": 2156134432,
+    "sdma0_rb_before": 2156134433,
+    "sdma0_rlc_inputs": [
+      {
+        "ib_after": 256,
+        "ib_before": 256,
+        "index": 0,
+        "rb_after": 2147942400,
+        "rb_before": 2147942400
+      },
+      {
+        "ib_after": 256,
+        "ib_before": 256,
+        "index": 1,
+        "rb_after": 2147942400,
+        "rb_before": 2147942400
+      }
+    ],
+    "sdma0_shutdown_trace": [
+      {
+        "before": 257,
+        "readback": 256,
+        "register": 19720,
+        "step": "disable-page-ib",
+        "written": 256
+      },
+      {
+        "before": 2156134433,
+        "readback": 2156134432,
+        "register": 19680,
+        "step": "disable-page-rb",
+        "written": 2156134432
+      }
+    ],
+    "sdma0_status_after": 1189014871,
+    "sdma0_status_before": 1189014871,
+    "status": "quiesced"
+  },
+  "iommu_group": "31",
+  "kernel_cursor_after": "s=98f6cb2295dc45898ee97031451ba7c8;i=3f999;b=5d6f45d043844340b8197751bc26ebb3;m=bd487cdaf;t=65b12361a02db;x=e2716ede24163ddb",
+  "kernel_cursor_before": "s=98f6cb2295dc45898ee97031451ba7c8;i=3f999;b=5d6f45d043844340b8197751bc26ebb3;m=bd487cdaf;t=65b12361a02db;x=e2716ede24163ddb",
+  "kernel_messages": [],
+  "pci_command_after": 3,
+  "pci_command_before": 3,
+  "prior_run_id": "4a45f4a4c1dd49c69fab2dc37e2e4898",
+  "recovery_id": "8fb71c4acf944fa3b6ee545dfb58a448",
+  "reset_methods_after": [],
+  "reset_methods_before": [],
+  "schema": 6,
+  "status": "recovered"
+}

@@ -4,6 +4,7 @@ import argparse
 import ctypes
 import errno
 import fcntl
+import hashlib
 import importlib.util
 import json
 import mmap
@@ -14,7 +15,19 @@ import re
 import struct
 import subprocess
 import time
+from typing import NamedTuple
 import uuid
+
+
+def _load_recovery_lease_v2():
+    path = Path(__file__).with_name('recovery_lease_v2.py')
+    spec = importlib.util.spec_from_file_location('recovery_lease_v2_host', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+RECOVERY_LEASE_V2 = _load_recovery_lease_v2()
 
 DEVICE = '0000:7b:00.0'
 DEVICE_ID = '1002:13c0'
@@ -143,6 +156,12 @@ SDMA_RB_ENABLE_MASK = 0x1
 SDMA_IB_ENABLE_MASK = 0x1
 SDMA_STATUS_IDLE_MASK = 0x1
 STOPPED_WPTR_OBSERVATION_BUDGET_NS = 2_000_000
+UNSUPPORTED_V2_STOPPED_WPTR = 'unsupported_v2_stopped_wptr'
+RECOVERY_HELPER_PATHS = (
+    'tools/vfio-recover.py',
+    'tools/recovery_lease_v2.py',
+    'tools/kiq-recovery-proof.py',
+)
 
 # Crash recovery uses only GPU-local VRAM.  QEMU's IOMMU mappings are gone by
 # the time this process opens VFIO, so rebuilding the KIQ in system memory would
@@ -205,6 +224,30 @@ class RecoveryError(RuntimeError):
     def __init__(self, message, *, evidence=None):
         super().__init__(message)
         self.evidence = evidence
+
+
+class HostKiqLayout(NamedTuple):
+    version: int
+    lease_offset: int
+    lease_end: int
+    ownership_size: int
+    pool_status_offset: int
+    pool_status_size: int
+    ring_offset: int
+    ring_size: int
+    mqd_offset: int
+    mqd_size: int
+    rptr_offset: int
+    wptr_offset: int
+    eop_offset: int
+    eop_size: int
+    fence_offset: int
+
+
+class AuthenticatedV2Lease(NamedTuple):
+    layout: HostKiqLayout
+    proof: dict
+    evidence: object
 
 
 class VfioGroupStatus(ctypes.Structure):
@@ -540,12 +583,20 @@ def queue_selector(me, pipe, queue):
     return pipe | (me << 2) | (queue << 8)
 
 
-def host_kiq_scratch_ranges():
-    return ((HOST_KIQ_RING_OFFSET, HOST_KIQ_RING_SIZE),
-            (HOST_KIQ_MQD_OFFSET, HOST_KIQ_MQD_SIZE),
-            (HOST_KIQ_RPTR_OFFSET, 4), (HOST_KIQ_WPTR_OFFSET, 8),
-            (HOST_KIQ_EOP_OFFSET, HOST_KIQ_EOP_SIZE),
-            (HOST_KIQ_FENCE_OFFSET, 4))
+def host_kiq_scratch_ranges(layout=None):
+    if layout is None:
+        return ((HOST_KIQ_RING_OFFSET, HOST_KIQ_RING_SIZE),
+                (HOST_KIQ_MQD_OFFSET, HOST_KIQ_MQD_SIZE),
+                (HOST_KIQ_RPTR_OFFSET, 4), (HOST_KIQ_WPTR_OFFSET, 8),
+                (HOST_KIQ_EOP_OFFSET, HOST_KIQ_EOP_SIZE),
+                (HOST_KIQ_FENCE_OFFSET, 4))
+    if not isinstance(layout, HostKiqLayout) or layout.version != 2:
+        raise ValueError('host KIQ layout is invalid')
+    return ((layout.ring_offset, layout.ring_size),
+            (layout.mqd_offset, layout.mqd_size),
+            (layout.rptr_offset, 4), (layout.wptr_offset, 8),
+            (layout.eop_offset, layout.eop_size),
+            (layout.fence_offset, 4))
 
 
 def _reservation_checksum(values):
@@ -560,6 +611,111 @@ def _reservation_nonce(run_id):
         raise ValueError('reservation run_id must be 32 lowercase hex characters')
     raw = bytes.fromhex(run_id)
     return struct.unpack('<QQ', raw)
+
+
+def parse_v2_lease_records(records, run_id):
+    """Validate bounded canonical lease records before a caller opens VFIO."""
+    try:
+        return RECOVERY_LEASE_V2.parse_critical_records(
+            records, expected_nonce=_reservation_nonce(run_id))
+    except (TypeError, ValueError, RECOVERY_LEASE_V2.LeaseValidationError) as error:
+        raise RecoveryError('invalid native recovery lease records: ' + str(error)) from error
+
+
+def current_recovery_helpers_sha256():
+    root = Path(__file__).resolve().parents[1]
+    return {relative: hashlib.sha256((root / relative).read_bytes()).hexdigest()
+            for relative in RECOVERY_HELPER_PATHS}
+
+
+def require_recovery_helpers_sha256(observed):
+    expected = current_recovery_helpers_sha256()
+    if (not isinstance(observed, dict) or set(observed) != set(RECOVERY_HELPER_PATHS) or
+            any(not isinstance(value, str) or
+                not re.fullmatch(r'[0-9a-f]{64}', value)
+                for value in observed.values()) or observed != expected):
+        raise RecoveryError('recovery helper hashes do not match the current host tools')
+    return dict(expected)
+
+
+def _v2_host_kiq_layout(evidence):
+    descriptor = evidence.descriptor
+    try:
+        RECOVERY_LEASE_V2.validate_ownership_descriptor(descriptor)
+        ranges = RECOVERY_LEASE_V2.scratch_ranges(descriptor)
+    except RECOVERY_LEASE_V2.LeaseValidationError as error:
+        raise RecoveryError('invalid native recovery lease geometry: ' + str(error)) from error
+    return HostKiqLayout(
+        2, descriptor.lease_offset, descriptor.lease_end,
+        RECOVERY_LEASE_V2.OWNERSHIP_STRUCT.size,
+        descriptor.lease_offset + RECOVERY_LEASE_V2.POOL_STATUS_OFFSET,
+        RECOVERY_LEASE_V2.POOL_STATUS_STRUCT.size,
+        ranges['ring'][0], ranges['ring'][1] - ranges['ring'][0],
+        ranges['mqd'][0], ranges['mqd'][1] - ranges['mqd'][0],
+        ranges['rptr'][0], ranges['wptr'][0], ranges['eop'][0],
+        ranges['eop'][1] - ranges['eop'][0], ranges['fence'][0])
+
+
+def _v2_pool_status_dict(status):
+    if status is None:
+        return None
+    return {
+        'state': status.state,
+        'pool0_before': status.pool0_before, 'pool0_after': status.pool0_after,
+        'pool1_before': status.pool1_before, 'pool1_after': status.pool1_after,
+        'reason': status.reason, 'checksum': status.checksum,
+    }
+
+
+def authenticate_v2_host_kiq_lease(mmio, evidence, run_id):
+    """Bind pre-parsed native ownership to BAR readback before any host write."""
+    layout = _v2_host_kiq_layout(evidence)
+    descriptor = evidence.descriptor
+    try:
+        RECOVERY_LEASE_V2.validate_ownership_descriptor(
+            descriptor, expected_nonce=_reservation_nonce(run_id))
+    except (ValueError, RECOVERY_LEASE_V2.LeaseValidationError) as error:
+        raise RecoveryError('native recovery lease nonce is invalid: ' + str(error)) from error
+    ownership_raw = _read_vram_bytes(mmio, layout.lease_offset, layout.ownership_size)
+    if ownership_raw != descriptor.pack():
+        raise RecoveryError('native recovery lease OWNED readback does not match critical record')
+    pool_raw = _read_vram_bytes(
+        mmio, layout.pool_status_offset, layout.pool_status_size)
+    try:
+        readback = RECOVERY_LEASE_V2.inspect_pool_status_readback(pool_raw, descriptor)
+        if evidence.pool_status is not None:
+            RECOVERY_LEASE_V2.require_published_pool_readback(
+                evidence.pool_status, pool_raw, descriptor)
+    except RECOVERY_LEASE_V2.LeaseValidationError as error:
+        raise RecoveryError('native recovery lease pool readback is invalid: ' + str(error)) \
+            from error
+    if (readback.kind == RECOVERY_LEASE_V2.POOL_READBACK_COMMITTED and
+            readback.status.state == RECOVERY_LEASE_V2.POOL_INVALID):
+        raise RecoveryError('native recovery lease reports an explicit INVALID pool status')
+    proof = {
+        'schema': 2, 'version': descriptor.version, 'state': descriptor.state,
+        'lease_start': descriptor.lease_offset, 'lease_end': descriptor.lease_end,
+        'scratch_start': descriptor.scratch_offset, 'scratch_end': descriptor.scratch_end,
+        'run_id': run_id, 'checksum': descriptor.checksum, 'immutable': True,
+        'pool_readback': readback.kind,
+        'pool_status': _v2_pool_status_dict(readback.status),
+    }
+    return AuthenticatedV2Lease(layout, proof, evidence)
+
+
+def prepare_v2_host_kiq_recovery(mmio, authenticated, run_id):
+    """Recheck immutable ownership and geometry without consuming the descriptor."""
+    if (not isinstance(authenticated, AuthenticatedV2Lease) or
+            authenticated.proof.get('run_id') != run_id):
+        raise RecoveryError('authenticated native recovery lease proof is invalid')
+    canonical = authenticate_v2_host_kiq_lease(
+        mmio, authenticated.evidence, run_id)
+    if canonical.layout != authenticated.layout:
+        raise RecoveryError('authenticated native recovery lease layout is invalid')
+    if canonical.proof != authenticated.proof:
+        raise RecoveryError('authenticated native recovery lease proof changed before recovery')
+    _preflight_host_kiq_vram_writes(mmio, authenticated.layout)
+    return authenticated.proof
 
 
 def host_kiq_reservation_descriptor(run_id, state):
@@ -678,22 +834,29 @@ def valid_apple_graphics_snapshot(snapshot):
 
 def valid_apple_graphics_pipe_guard(proof, run_id):
     """Validate the exact ACTIVE-bound pre-consumption schema-5 guard."""
-    try:
-        fields = struct.unpack(
-            HOST_KIQ_RESERVATION_FORMAT,
-            host_kiq_reservation_descriptor(run_id, HOST_KIQ_RESERVATION_ACTIVE))
-    except (TypeError, ValueError):
-        return False
-    expected_reservation = {
-        'version': fields[1], 'state': fields[2], 'heap_limit': fields[3],
-        'reservation_start': fields[4], 'scratch_start': fields[5],
-        'reservation_end': fields[6], 'run_id': run_id, 'checksum': fields[9],
-    }
+    before = proof.get('reservation_before') if isinstance(proof, dict) else None
+    if isinstance(before, dict) and before.get('schema') == 2:
+        reservation_valid = valid_v2_lease_proof(before, run_id)
+        expected_reservation = before
+    else:
+        try:
+            fields = struct.unpack(
+                HOST_KIQ_RESERVATION_FORMAT,
+                host_kiq_reservation_descriptor(run_id, HOST_KIQ_RESERVATION_ACTIVE))
+        except (TypeError, ValueError):
+            return False
+        expected_reservation = {
+            'version': fields[1], 'state': fields[2], 'heap_limit': fields[3],
+            'reservation_start': fields[4], 'scratch_start': fields[5],
+            'reservation_end': fields[6], 'run_id': run_id, 'checksum': fields[9],
+        }
+        reservation_valid = before == expected_reservation
     return (isinstance(proof, dict) and
             set(proof) == {'policy', 'reservation_before', 'reservation_after',
                            'reservation_unchanged', 'pipe1_supported_state',
                            'snapshot'} and
             proof.get('policy') == APPLE_GRAPHICS_PIPE_POLICY and
+            reservation_valid and
             proof.get('reservation_before') == expected_reservation and
             proof.get('reservation_after') == expected_reservation and
             proof.get('reservation_unchanged') is True and
@@ -701,11 +864,15 @@ def valid_apple_graphics_pipe_guard(proof, run_id):
             valid_apple_graphics_snapshot(proof.get('snapshot')))
 
 
-def guard_apple_graphics_pipes(mmio, run_id):
+def guard_apple_graphics_pipes(mmio, run_id, authenticated_lease=None):
     """Fail before reservation consumption if Apple has a live second gfx pipe."""
-    reservation_before = inspect_host_kiq_reservation(mmio, run_id)
+    reservation_before = (prepare_v2_host_kiq_recovery(
+        mmio, authenticated_lease, run_id) if authenticated_lease is not None else
+        inspect_host_kiq_reservation(mmio, run_id))
     pipes = snapshot_graphics_pipes(mmio)
-    reservation_after = inspect_host_kiq_reservation(mmio, run_id)
+    reservation_after = (prepare_v2_host_kiq_recovery(
+        mmio, authenticated_lease, run_id) if authenticated_lease is not None else
+        inspect_host_kiq_reservation(mmio, run_id))
     unchanged = reservation_before == reservation_after
     if not unchanged:
         raise RecoveryError('ACTIVE reservation changed during graphics pipe guard')
@@ -772,6 +939,52 @@ def valid_consumed_reservation(proof, run_id):
             flush.get('posted_read') == EXPECTED_CONFIG_MEMSIZE)
 
 
+def valid_v2_lease_proof(proof, run_id):
+    keys = {'schema', 'version', 'state', 'lease_start', 'lease_end',
+            'scratch_start', 'scratch_end', 'run_id', 'checksum', 'immutable',
+            'pool_readback', 'pool_status'}
+    if not isinstance(proof, dict) or set(proof) != keys:
+        return False
+    try:
+        descriptor = RECOVERY_LEASE_V2.make_ownership_descriptor(
+            proof['lease_start'], *_reservation_nonce(run_id))
+    except (KeyError, TypeError, ValueError, RECOVERY_LEASE_V2.LeaseValidationError):
+        return False
+    if (proof.get('schema') != 2 or proof.get('version') != descriptor.version or
+            proof.get('state') != descriptor.state or
+            proof.get('lease_end') != descriptor.lease_end or
+            proof.get('scratch_start') != descriptor.scratch_offset or
+            proof.get('scratch_end') != descriptor.scratch_end or
+            proof.get('run_id') != run_id or proof.get('checksum') != descriptor.checksum or
+            proof.get('immutable') is not True or
+            proof.get('pool_readback') not in {
+                RECOVERY_LEASE_V2.POOL_READBACK_ABSENT,
+                RECOVERY_LEASE_V2.POOL_READBACK_UNFINISHED,
+                RECOVERY_LEASE_V2.POOL_READBACK_COMMITTED}):
+        return False
+    pool = proof.get('pool_status')
+    if proof['pool_readback'] != RECOVERY_LEASE_V2.POOL_READBACK_COMMITTED:
+        return pool is None
+    if not isinstance(pool, dict) or set(pool) != {
+            'state', 'pool0_before', 'pool0_after', 'pool1_before', 'pool1_after',
+            'reason', 'checksum'} or pool.get('state') != RECOVERY_LEASE_V2.POOL_ACTIVE:
+        return False
+    try:
+        status = RECOVERY_LEASE_V2.make_pool_status(
+            descriptor, state=pool['state'], pool0_before=pool['pool0_before'],
+            pool0_after=pool['pool0_after'], pool1_before=pool['pool1_before'],
+            pool1_after=pool['pool1_after'], reason=pool['reason'])
+    except (KeyError, TypeError, ValueError, RECOVERY_LEASE_V2.LeaseValidationError):
+        return False
+    return status.checksum == pool.get('checksum')
+
+
+def valid_recovery_lease_proof(proof, run_id):
+    if isinstance(proof, dict) and proof.get('schema') == 2:
+        return valid_v2_lease_proof(proof, run_id)
+    return valid_consumed_reservation(proof, run_id)
+
+
 def prepare_host_kiq_reservation(mmio, run_id):
     """Publish a launch-bound challenge that only the initialized guest activates."""
     descriptor = host_kiq_reservation_descriptor(
@@ -812,22 +1025,30 @@ def _put32(image, offset, value):
     struct.pack_into('<I', image, offset, value & 0xffffffff)
 
 
-def _host_kiq_image(fb_base, fence_sequence, gfx_doorbell_offset):
+def _host_kiq_image(fb_base, fence_sequence, gfx_doorbell_offset, layout=None):
     """Build a v10 compute MQD and ordered UNMAP plus completion fence."""
-    ring_addr = fb_base + HOST_KIQ_RING_OFFSET
-    mqd_addr = fb_base + HOST_KIQ_MQD_OFFSET
-    rptr_addr = fb_base + HOST_KIQ_RPTR_OFFSET
-    wptr_addr = fb_base + HOST_KIQ_WPTR_OFFSET
-    eop_addr = fb_base + HOST_KIQ_EOP_OFFSET
-    fence_addr = fb_base + HOST_KIQ_FENCE_OFFSET
+    ring_offset = HOST_KIQ_RING_OFFSET if layout is None else layout.ring_offset
+    ring_size = HOST_KIQ_RING_SIZE if layout is None else layout.ring_size
+    mqd_offset = HOST_KIQ_MQD_OFFSET if layout is None else layout.mqd_offset
+    mqd_size = HOST_KIQ_MQD_SIZE if layout is None else layout.mqd_size
+    rptr_offset = HOST_KIQ_RPTR_OFFSET if layout is None else layout.rptr_offset
+    wptr_offset = HOST_KIQ_WPTR_OFFSET if layout is None else layout.wptr_offset
+    eop_offset = HOST_KIQ_EOP_OFFSET if layout is None else layout.eop_offset
+    fence_offset = HOST_KIQ_FENCE_OFFSET if layout is None else layout.fence_offset
+    ring_addr = fb_base + ring_offset
+    mqd_addr = fb_base + mqd_offset
+    rptr_addr = fb_base + rptr_offset
+    wptr_addr = fb_base + wptr_offset
+    eop_addr = fb_base + eop_offset
+    fence_addr = fb_base + fence_offset
 
-    ring = bytearray(struct.pack('<I', HOST_KIQ_NOP) * (HOST_KIQ_RING_SIZE // 4))
+    ring = bytearray(struct.pack('<I', HOST_KIQ_NOP) * (ring_size // 4))
     unmap = (HOST_KIQ_UNMAP_GFX[0], HOST_KIQ_UNMAP_GFX[1],
              gfx_doorbell_offset, 0, 0, 0)
     struct.pack_into('<6I', ring, 0, *unmap)
     struct.pack_into('<5I', ring, 24, *HOST_KIQ_WRITE_FENCE,
                      fence_addr & 0xffffffff, fence_addr >> 32, fence_sequence)
-    mqd = bytearray(HOST_KIQ_MQD_SIZE)
+    mqd = bytearray(mqd_size)
     _put32(mqd, 0x000, 0xC0310800)
     _put32(mqd, 0x02C, 1)          # compute_pipelinestat_enable
     for offset in (0x05C, 0x060, 0x068, 0x06C):
@@ -908,17 +1129,21 @@ def _ranges_overlap(first_start, first_size, second_start, second_size):
     return first_start < second_start + second_size and second_start < first_start + first_size
 
 
-def _preflight_host_kiq_vram_writes(mmio):
+def _preflight_host_kiq_vram_writes(mmio, layout=None):
     """Reject a live GART collision before consuming the launch descriptor."""
     _, aperture_size = _framebuffer_aperture(mmio)
     visible = min(aperture_size, VRAM_BAR_SIZE)
-    scratch_end = max(offset + size for offset, size in host_kiq_scratch_ranges())
+    scratch_ranges = host_kiq_scratch_ranges(layout)
+    scratch_end = max(offset + size for offset, size in scratch_ranges)
     if scratch_end > visible:
         raise RecoveryError('host KIQ scratch is outside the framebuffer aperture')
-    write_ranges = ((HOST_KIQ_RESERVATION_OFFSET, HOST_KIQ_RESERVATION_SIZE),
-                    *host_kiq_scratch_ranges())
-    if HOST_KIQ_RESERVATION_OFFSET > visible - HOST_KIQ_RESERVATION_SIZE:
-        raise RecoveryError('host KIQ reservation is outside the framebuffer aperture')
+    if layout is None:
+        write_ranges = ((HOST_KIQ_RESERVATION_OFFSET, HOST_KIQ_RESERVATION_SIZE),
+                        *scratch_ranges)
+        if HOST_KIQ_RESERVATION_OFFSET > visible - HOST_KIQ_RESERVATION_SIZE:
+            raise RecoveryError('host KIQ reservation is outside the framebuffer aperture')
+    else:
+        write_ranges = scratch_ranges
     gart = _runtime_gart_bar_range(mmio, aperture_size)
     if gart['bar_offset'] is not None:
         for offset, size in write_ranges:
@@ -927,7 +1152,8 @@ def _preflight_host_kiq_vram_writes(mmio):
 
 
 def retire_legacy_gfx_with_host_kiq(mmio, prior_run_id, sleep=time.sleep, polls=2000,
-                                    reservation_proof=None):
+                                    reservation_proof=None,
+                                    authenticated_lease=None):
     """Execute graphics UNMAP_QUEUES from a temporary VRAM-backed KIQ.
 
     The transaction never enables PCI bus mastering and never depends on QEMU's
@@ -940,17 +1166,25 @@ def retire_legacy_gfx_with_host_kiq(mmio, prior_run_id, sleep=time.sleep, polls=
     # guard. The recovery coordinator supplies a proof it already consumed
     # through that same path. Do not carry the preflight GART snapshot into KIQ
     # setup: the existing check below derives it again immediately before use.
-    reservation = (consume_host_kiq_reservation(mmio, prior_run_id)
-                   if reservation_proof is None else reservation_proof)
-    if not valid_consumed_reservation(reservation, prior_run_id):
-        raise RecoveryError('consumed host-KIQ reservation proof is invalid')
+    layout = authenticated_lease.layout if authenticated_lease is not None else None
+    if authenticated_lease is not None:
+        if reservation_proof is not None:
+            raise RecoveryError('v2 recovery cannot accept a separate reservation proof')
+        reservation = prepare_v2_host_kiq_recovery(
+            mmio, authenticated_lease, prior_run_id)
+    else:
+        reservation = (consume_host_kiq_reservation(mmio, prior_run_id)
+                       if reservation_proof is None else reservation_proof)
+        if not valid_consumed_reservation(reservation, prior_run_id):
+            raise RecoveryError('consumed host-KIQ reservation proof is invalid')
     fb_base, aperture_size = _framebuffer_aperture(mmio)
-    scratch_end = max(offset + size for offset, size in host_kiq_scratch_ranges())
+    scratch_ranges = host_kiq_scratch_ranges(layout)
+    scratch_end = max(offset + size for offset, size in scratch_ranges)
     if scratch_end > min(aperture_size, VRAM_BAR_SIZE):
         raise RecoveryError('host KIQ scratch is outside the framebuffer aperture')
     gart = _runtime_gart_bar_range(mmio, aperture_size)
     if gart['bar_offset'] is not None:
-        for offset, size in host_kiq_scratch_ranges():
+        for offset, size in scratch_ranges:
             if _ranges_overlap(offset, size, gart['bar_offset'], gart['size']):
                 raise RecoveryError('host KIQ scratch overlaps the live GART page table')
     gfx_doorbell = mmio.read32(CP_RB_DOORBELL_CONTROL_OFFSET)
@@ -960,7 +1194,7 @@ def retire_legacy_gfx_with_host_kiq(mmio, prior_run_id, sleep=time.sleep, polls=
             f'graphics doorbell offset is {gfx_doorbell_offset:#x}, expected 0x400')
     fence_sequence = uuid.uuid4().int & 0xffffffff or 1
     ring, mqd, addresses = _host_kiq_image(
-        fb_base, fence_sequence, gfx_doorbell_offset)
+        fb_base, fence_sequence, gfx_doorbell_offset, layout)
     mec_before = mmio.read32(CP_MEC_CNTL_OFFSET)
     poll_before = mmio.read32(CP_PQ_WPTR_POLL_CNTL_OFFSET)
     pq_status_before = mmio.read32(CP_PQ_STATUS_OFFSET)
@@ -1007,16 +1241,23 @@ def retire_legacy_gfx_with_host_kiq(mmio, prior_run_id, sleep=time.sleep, polls=
 
         # The queue is backed only by BAR0. Populate it after both MECs have
         # stopped, then prove CPU writes reached VRAM before programming HQD.
-        mmio.write_vram(HOST_KIQ_RING_OFFSET, ring)
-        mmio.write_vram(HOST_KIQ_MQD_OFFSET, mqd)
-        mmio.write_vram(HOST_KIQ_RPTR_OFFSET, b'\0' * 4)
-        mmio.write_vram(HOST_KIQ_WPTR_OFFSET,
+        ring_offset = HOST_KIQ_RING_OFFSET if layout is None else layout.ring_offset
+        mqd_offset = HOST_KIQ_MQD_OFFSET if layout is None else layout.mqd_offset
+        rptr_offset = HOST_KIQ_RPTR_OFFSET if layout is None else layout.rptr_offset
+        wptr_offset = HOST_KIQ_WPTR_OFFSET if layout is None else layout.wptr_offset
+        eop_offset = HOST_KIQ_EOP_OFFSET if layout is None else layout.eop_offset
+        eop_size = HOST_KIQ_EOP_SIZE if layout is None else layout.eop_size
+        fence_offset = HOST_KIQ_FENCE_OFFSET if layout is None else layout.fence_offset
+        mmio.write_vram(ring_offset, ring)
+        mmio.write_vram(mqd_offset, mqd)
+        mmio.write_vram(rptr_offset, b'\0' * 4)
+        mmio.write_vram(wptr_offset,
                         struct.pack('<Q', HOST_KIQ_RING_USED_DWORDS))
-        mmio.write_vram(HOST_KIQ_EOP_OFFSET, b'\0' * HOST_KIQ_EOP_SIZE)
-        mmio.write_vram(HOST_KIQ_FENCE_OFFSET, b'\0' * 4)
-        if mmio.read_vram32(HOST_KIQ_RING_OFFSET) != HOST_KIQ_UNMAP_GFX[0]:
+        mmio.write_vram(eop_offset, b'\0' * eop_size)
+        mmio.write_vram(fence_offset, b'\0' * 4)
+        if mmio.read_vram32(ring_offset) != HOST_KIQ_UNMAP_GFX[0]:
             raise RecoveryError('host KIQ ring failed VRAM readback')
-        if mmio.read_vram32(HOST_KIQ_MQD_OFFSET) != 0xC0310800:
+        if mmio.read_vram32(mqd_offset) != 0xC0310800:
             raise RecoveryError('host KIQ MQD failed VRAM readback')
         hdp_flush = mmio.flush_hdp()
         failure_evidence['hdp_flush'] = hdp_flush
@@ -1082,8 +1323,8 @@ def retire_legacy_gfx_with_host_kiq(mmio, prior_run_id, sleep=time.sleep, polls=
             invalidate = mmio.invalidate_hdp_read_cache()
             hdp_read_invalidate['count'] += 1
             hdp_read_invalidate['last'] = invalidate
-            report_after = mmio.read_vram32(HOST_KIQ_RPTR_OFFSET)
-            fence_after = mmio.read_vram32(HOST_KIQ_FENCE_OFFSET)
+            report_after = mmio.read_vram32(rptr_offset)
+            fence_after = mmio.read_vram32(fence_offset)
             polls_completed = attempt + 1
             terminal_poll = {
                 'polls': polls_completed,
@@ -1317,6 +1558,12 @@ def _stopped_wptr_eligibility(host_kiq, forced_inactive):
     if not isinstance(evidence, dict):
         errors.append('host KIQ evidence')
         return {'eligible': False, 'errors': errors}
+    # This exceptional transition still proves the historical fixed scratch
+    # layout. Keep schema-2 recovery fail-closed until its dynamic layout is
+    # covered by the complete stopped-WPTR scan and receipt validator.
+    if isinstance(evidence.get('reservation'), dict) and \
+            evidence['reservation'].get('schema') == 2:
+        return {'eligible': False, 'errors': [UNSUPPORTED_V2_STOPPED_WPTR]}
     sequence = evidence.get('fence_sequence')
     terminal = evidence.get('terminal_poll')
     if (not u32(sequence) or sequence == 0 or
@@ -1369,8 +1616,9 @@ def _stopped_wptr_eligibility(host_kiq, forced_inactive):
             not valid_apple_graphics_snapshot(
                 retired.get('graphics_pipes_after_unmap')) or
             retired['graphics_pipes_after_unmap']['pipes'][0]['active'] & 1 or
-            not valid_consumed_reservation(retired.get('reservation'),
-                                           retired.get('reservation', {}).get('run_id'))):
+            not valid_recovery_lease_proof(
+                retired.get('reservation'),
+                retired.get('reservation', {}).get('run_id'))):
         errors.append('pre-cleanup retirement')
     packet = evidence.get('packet')
     if packet != {'unmap': list(HOST_KIQ_UNMAP_GFX),
@@ -1985,7 +2233,8 @@ def derive_effective_stopped_host_kiq(gc_quiesce, prior_run_id):
 
 
 def quiesce_gc(mmio, sleep=time.sleep, polls=50, kiq_polls=None, prior_run_id=None,
-               reservation_proof=None, graphics_pipe_guard=None):
+               reservation_proof=None, graphics_pipe_guard=None,
+               authenticated_lease=None):
     """Drain GC queues, halt command processors/SDMA, and prove no HQD is active.
 
     Firmware dequeue gets the first chance while the MECs still run. Once QEMU has
@@ -2075,7 +2324,9 @@ def quiesce_gc(mmio, sleep=time.sleep, polls=50, kiq_polls=None, prior_run_id=No
             try:
                 host_kiq = retire_legacy_gfx_with_host_kiq(
                     mmio, prior_run_id, sleep=sleep, polls=kiq_polls,
-                    reservation_proof=reservation_proof)
+                    reservation_proof=(None if authenticated_lease is not None else
+                                       reservation_proof),
+                    authenticated_lease=authenticated_lease)
             except RecoveryError as error:
                 host_kiq = {'status': 'failed', 'error': str(error)}
                 if error.evidence is not None:
@@ -2362,7 +2613,10 @@ def quiesce_gc(mmio, sleep=time.sleep, polls=50, kiq_polls=None, prior_run_id=No
 
 
 def perform_recovery(expected_boot, prior_run_id, state_reader, transport_factory,
-                     journal_reader, sleep=time.sleep, polls=2000):
+                     journal_reader, sleep=time.sleep, polls=2000,
+                     lease_evidence=None, recovery_helpers_sha256=None):
+    helper_hashes = (require_recovery_helpers_sha256(recovery_helpers_sha256)
+                     if recovery_helpers_sha256 is not None else None)
     cursor, _, initial_faults = journal_reader()
     if initial_faults:
         raise RecoveryError('host fault already present at recovery boundary')
@@ -2373,15 +2627,23 @@ def perform_recovery(expected_boot, prior_run_id, state_reader, transport_factor
     commands = []
     with transport_factory() as transport:
         region = transport.metadata()
+        authenticated_lease = (authenticate_v2_host_kiq_lease(
+            transport, lease_evidence, prior_run_id)
+            if lease_evidence is not None else None)
         # The exact Apple build creates only pipe 0. Inspect both pipe banks while
         # the ACTIVE reservation is still reusable, and refuse an unsupported live
         # pipe 1 before consuming it. Selector writes are restored to zero and the
         # reservation is authenticated again on both sides of this bounded guard.
-        graphics_pipe_guard = guard_apple_graphics_pipes(transport, prior_run_id)
-        reservation = consume_host_kiq_reservation(transport, prior_run_id)
+        graphics_pipe_guard = guard_apple_graphics_pipes(
+            transport, prior_run_id, authenticated_lease)
+        reservation = (prepare_v2_host_kiq_recovery(
+            transport, authenticated_lease, prior_run_id)
+            if authenticated_lease is not None else
+            consume_host_kiq_reservation(transport, prior_run_id))
         gc_quiesce = quiesce_gc(transport, sleep, min(polls, 50), polls,
                                 prior_run_id, reservation,
-                                graphics_pipe_guard=graphics_pipe_guard)
+                                graphics_pipe_guard=graphics_pipe_guard,
+                                authenticated_lease=authenticated_lease)
         commands.append(run_command(transport, DESTROY_RINGS, 'destroy all rings', sleep, polls))
         commands.append(run_command(transport, DESTROY_GPCOM_RING, 'destroy GPCOM ring', sleep, polls))
     after = state_reader()
@@ -2401,7 +2663,7 @@ def perform_recovery(expected_boot, prior_run_id, state_reader, transport_factor
         _, stopped_wptr_errors = derive_effective_stopped_host_kiq(
             gc_quiesce, prior_run_id)
         stopped_wptr_proof_valid = not stopped_wptr_errors
-    safe_for_reuse = (valid_consumed_reservation(
+    safe_for_reuse = (valid_recovery_lease_proof(
                           gc_quiesce.get('reservation'), prior_run_id) and
                       stopped_wptr_proof_valid and
                       gc_quiesce['dequeue_timeouts'] == 0 and
@@ -2436,7 +2698,7 @@ def perform_recovery(expected_boot, prior_run_id, state_reader, transport_factor
                       gc_quiesce['gfx_ring_clean'] and
                       gc_quiesce['gfx_retirement_confirmed'] and
                       gc_quiesce['graphics_pipe_proof_complete'])
-    return {
+    receipt = {
         'schema': 6, 'status': 'recovered' if safe_for_reuse else 'incomplete',
         'authorizes_launch': safe_for_reuse, 'boot_id': expected_boot,
         'prior_run_id': prior_run_id, 'device': DEVICE, 'iommu_group': GROUP,
@@ -2448,6 +2710,9 @@ def perform_recovery(expected_boot, prior_run_id, state_reader, transport_factor
         'commands': commands, 'kernel_cursor_before': cursor,
         'kernel_cursor_after': final_cursor, 'kernel_messages': messages,
     }
+    if helper_hashes is not None:
+        receipt['recovery_helpers_sha256'] = helper_hashes
+    return receipt
 
 
 def read_ledger(path):
@@ -2458,9 +2723,15 @@ def read_ledger(path):
     return value
 
 
-def recover(vm, prior_run_id):
+def recover(vm, prior_run_id, lease_evidence=None, recovery_helpers_sha256=None):
     if not re.fullmatch(r'[0-9a-f]{32}', prior_run_id):
         raise RecoveryError('prior run ID must be 32 lowercase hexadecimal characters')
+    if lease_evidence is not None:
+        helper_hashes = require_recovery_helpers_sha256(recovery_helpers_sha256)
+    elif recovery_helpers_sha256 is not None:
+        raise RecoveryError('recovery helper hashes require a schema-2 lease')
+    else:
+        helper_hashes = None
     lock_path = vm/'run/experiment.lock'
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     with lock_path.open('a') as owner:
@@ -2477,7 +2748,12 @@ def recover(vm, prior_run_id):
         path = vm/'run/vfio-recovery'/boot_id/(prior_run_id+'.json')
         if path.exists():
             raise RecoveryError('an immutable recovery receipt already exists for this run')
-        evidence = perform_recovery(boot_id, prior_run_id, host_state, LegacyVfio, kernel_updates)
+        evidence = perform_recovery(
+            boot_id, prior_run_id, host_state, LegacyVfio, kernel_updates,
+            lease_evidence=lease_evidence,
+            recovery_helpers_sha256=helper_hashes)
+        if helper_hashes is not None:
+            evidence['recovery_helpers_sha256'] = helper_hashes
         evidence['recovery_id'] = uuid.uuid4().hex
         evidence['created_epoch'] = time.time()
         write_once(path, evidence)

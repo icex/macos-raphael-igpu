@@ -1,0 +1,160 @@
+{
+  "schema": 1,
+  "purpose": "candidate178-a-lifecycle-and-b-activation-validation",
+  "created_epoch": 1788983421.093525,
+  "a_output_path": "/home/bogdan/macos-vm/run/metal-011-178-a",
+  "a_output_sha256": "1a3c55af81c71d80036b7fae3cbb04252039689efa7b7f37f6128fb95b3e35f3",
+  "a_manifest_sha256": "a2929c4a03d3302e64f80b278e5f7d8cf24210aa6a89e2ae6953ef02957e5540",
+  "a_run_id": "f103e47500ed4a06ae346df23250d95d",
+  "probe_sha256": "076bbc22f0922827ab1d8eda362fa13dea80e2118ab58a1e3e33d76b47e4e743",
+  "verdict_sha256": "842acc29a3842e369708ca037bac74bc0a2b7c505659565ef4d296f43f9b51f6",
+  "serial_sha256": "c4a877508517dc78402e0b82c42dd5a2a20113a90965a27f92f5b0b6d7ac918c",
+  "shutdown_sha256": "e3edcb5e4973ebebc957c093ba96b2ddd54142fa5cb4dd63f3cedcef2168f30e",
+  "canonical_receipt_path": "/home/bogdan/macos-vm/run/vfio-recovery/5d6f45d0-4384-4340-b819-7751bc26ebb3/f103e47500ed4a06ae346df23250d95d.json",
+  "canonical_receipt_sha256": "528a400f4c059bb150ed98f480434599e27fbe3648fc9b6b4f635d6f47b24f4e",
+  "run_receipt_sha256": "e696db64544372dd986df8319c9bd931bf7e2e81a0c89db4ea0eaebeb34a4fd5",
+  "receipt_validation_errors": [],
+  "recovery_id": "0975a837f47b47389c032cdb9a3e9a14",
+  "receipt_status": "recovered",
+  "receipt_authorizes_launch": true,
+  "a_evidence_errors": [],
+  "fresh_host": {
+    "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+    "active_vm": false,
+    "driver": "vfio-pci",
+    "device": "1002:13c0",
+    "iommu_group": "31",
+    "pci_command": 3,
+    "reset_methods": [],
+    "canonical_device": "/sys/devices/pci0000:00/0000:00:08.1/0000:7b:00.0",
+    "power_control": "on",
+    "power_state": "D0",
+    "runtime_status": "active",
+    "enable_count": "0",
+    "sleep_inhibited": true,
+    "watchdogs": {
+      "watchdog": "1",
+      "nmi_watchdog": "1",
+      "hardlockup_panic": "1"
+    },
+    "residual_units": [],
+    "siblings": {
+      "0000:7b:00.0": {
+        "device": "1002:13c0",
+        "driver": "vfio-pci",
+        "iommu_group": "31"
+      },
+      "0000:7b:00.1": {
+        "device": "1002:1640",
+        "driver": "snd_hda_intel",
+        "iommu_group": "32"
+      },
+      "0000:7b:00.2": {
+        "device": "1022:1649",
+        "driver": "ccp",
+        "iommu_group": "33"
+      },
+      "0000:7b:00.3": {
+        "device": "1022:15b6",
+        "driver": "xhci_hcd",
+        "iommu_group": "34"
+      },
+      "0000:7b:00.4": {
+        "device": "1022:15b7",
+        "driver": "xhci_hcd",
+        "iommu_group": "35"
+      },
+      "0000:7b:00.6": {
+        "device": "1022:15e3",
+        "driver": null,
+        "iommu_group": "36"
+      }
+    },
+    "reset_domain": {
+      "canonical_parent": "/sys/devices/pci0000:00/0000:00:08.1",
+      "domain_bus_device": "0000:7b:00",
+      "functions": [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "6"
+      ],
+      "canonical_devices": {
+        "0000:7b:00.0": "/sys/devices/pci0000:00/0000:00:08.1/0000:7b:00.0",
+        "0000:7b:00.1": "/sys/devices/pci0000:00/0000:00:08.1/0000:7b:00.1",
+        "0000:7b:00.2": "/sys/devices/pci0000:00/0000:00:08.1/0000:7b:00.2",
+        "0000:7b:00.3": "/sys/devices/pci0000:00/0000:00:08.1/0000:7b:00.3",
+        "0000:7b:00.4": "/sys/devices/pci0000:00/0000:00:08.1/0000:7b:00.4",
+        "0000:7b:00.6": "/sys/devices/pci0000:00/0000:00:08.1/0000:7b:00.6"
+      },
+      "physical_slot": {
+        "0000:7b:00.0": null,
+        "0000:7b:00.1": null,
+        "0000:7b:00.2": null,
+        "0000:7b:00.3": null,
+        "0000:7b:00.4": null,
+        "0000:7b:00.6": null
+      }
+    },
+    "kernel_release": "7.2.3-1-cachyos-bore",
+    "vfio_module_sha256": "d0bfbf478f892d57eb6f42a0d5d51f20a611bc7ee538643cc820932167686381",
+    "vfio_module_build_id": "a002a05ce4a09429cf6bc9906d1893ec7f304e81",
+    "journal_cursor": "s=98f6cb2295dc45898ee97031451ba7c8;i=3f8ad;b=5d6f45d043844340b8197751bc26ebb3;m=bba7ce343;t=65b121c0f186f;x=d50b7ccc46678efb",
+    "journal_messages": [],
+    "journal_faults": []
+  },
+  "fresh_host_errors": [],
+  "capture_host": {
+    "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+    "kernel": "7.2.3-1-cachyos-bore",
+    "driver": "vfio-pci",
+    "device": "1002:13c0",
+    "iommu_group": "31",
+    "amdgpu_initialized": true,
+    "watchdogs": {
+      "watchdog": "1",
+      "nmi_watchdog": "1",
+      "hardlockup_panic": "1"
+    },
+    "watchdogs_verified": true,
+    "capture_ready": true,
+    "pstore_files": null,
+    "device_pinned_awake": true,
+    "device_accessible": true,
+    "reset_methods": [],
+    "active_vm": false,
+    "sleep_inhibited": true
+  },
+  "capture_errors": [],
+  "vfio_host": {
+    "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+    "active_vm": false,
+    "driver": "vfio-pci",
+    "device": "1002:13c0",
+    "iommu_group": "31",
+    "pci_command": 3,
+    "reset_methods": []
+  },
+  "vfio_errors": [],
+  "active_launch_units": [],
+  "pending_launches": [],
+  "active_sensitive_processes": [],
+  "ledger_path": "/home/bogdan/macos-vm/run/used-gpu-boots/5d6f45d0-4384-4340-b819-7751bc26ebb3.json",
+  "ledger_sha256": "5748a6f05c9029fb132609f97e05c321c439dec22d8582b17599238984bee8b5",
+  "ledger_schema": 4,
+  "ledger_max_launches": 6,
+  "ledger_launch_count": 5,
+  "policy_sha256": "411bb1f98638401753db824b12deb6632e98b03281ea36ec6a545f6c014a2bdf",
+  "activation_a_sha256": "3ab02bfee41d6984cffc7eed9f8869d4414665ec221f1dad32a1117a484a0c8e",
+  "activation_b_path": "/home/bogdan/macos-vm/run/warm-qualification-authorities/5d6f45d0-4384-4340-b819-7751bc26ebb3/4a45f4a4c1dd49c69fab2dc37e2e4898.json",
+  "activation_b_sha256": "558cdb7b1aafb8f480accb027ab0b64f876350edba4a62fb3749482d74120ae1",
+  "b_manifest_sha256": "2e0138dc2aa39928f8897a61da05ed42dd62e1ccf9cd1dd0d04a58b9c6bf7f9c",
+  "b_run_id": "4a45f4a4c1dd49c69fab2dc37e2e4898",
+  "b_output_path": "/home/bogdan/macos-vm/run/metal-011-178-b",
+  "b_output_absent": true,
+  "b_authorization_errors": [],
+  "b_authorization_accepted": true,
+  "repo_clean": true
+}

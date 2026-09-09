@@ -51,6 +51,7 @@ SELECTOR_KEYS = {'sequence', 'phase', 'value', 'attempted', 'completed'}
 ORIGINAL_WPTR_ERROR = (
     'verify host KIQ wptr clear: RecoveryError: host KIQ wptr did not clear')
 ORIGINAL_HOST_ERROR = 'host KIQ cleanup failed: ' + ORIGINAL_WPTR_ERROR
+UNSUPPORTED_V2_STOPPED_WPTR = 'unsupported_v2_stopped_wptr'
 
 
 def _dword(value):
@@ -433,6 +434,12 @@ def _validation_errors(receipt):
     gc = receipt.get('gc_quiesce')
     if not isinstance(gc, dict):
         return sorted(set(errors + ['gc_quiesce']))
+    # Schema 2 relocates every KIQ scratch object into a guest-owned lease.
+    # The stopped-WPTR proof below is intentionally frozen to the historical
+    # fixed schema-1 layout until its full scan/transition contract is revised.
+    if isinstance(gc.get('reservation'), dict) and \
+            gc['reservation'].get('schema') == 2:
+        return [UNSUPPORTED_V2_STOPPED_WPTR]
     if (type(gc.get('forced_inactive')) is not int or
             gc.get('forced_inactive') != 0 or not _validate_execution(gc)):
         errors.append('host_kiq_execution')

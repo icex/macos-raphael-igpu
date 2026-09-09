@@ -7,22 +7,24 @@ device handed over with `vfio-pci` and spoofed as `1002:73ff` (Radeon RX 6600, N
 
 ## Status
 
-As of 2026-09-09, candidate 1.0.177 is the latest controlled hardware result. It successfully
-initialized from candidate 176's validated schema-6 cleanup, repeated native KIQ, SDMA, engine and
-accelerator startup, and ran the prepared Metal probe. The first compute command again failed with
-status 5 and underlying `e00002bd` (`kIOReturnNoMemory`); zero GPU command buffers completed.
+As of 2026-09-09, candidate 1.0.178-B is the latest controlled hardware result. Candidates
+178-A and 178-B used the same prebound build, configuration and probe with separate reviewed
+activations. Both initialized successfully, completed native KIQ, SDMA, engine and accelerator
+startup, and ran the probe. Both first compute commands failed with status 5 and underlying
+`e00002bd` (`kIOReturnNoMemory`); zero GPU command buffers completed.
 
-The candidate-177 trace places observed no-memory queue failures after false resource/memory-map
-preparation and before any `submitBuffer` call. Its finite buffers overflowed and it lacks guest
-process/time/run correlation, so the same path is likely but one retained chain or resource object
-cannot be bound uniquely to the prepared probe. Its independent critical replay remained complete.
-Guest-requested shutdown and normal schema-6 recovery completed; both receipt
-serializations validate, and the host postflight is clean. This supplies one successful
-candidate-176-cleanup-to-candidate-177-reinitialization transition followed by another physical
-cleanup. It does not establish routine repeatability. The reviewed one-time cap revision is
-consumed, the ledger is 4/4, and no fifth launch is admitted. Real Metal compute/rendering and
-desktop acceleration remain unproven. Historical sections below preserve the evidence available
-at their time.
+The candidate-178 observer classified every failed map preparation as `backing-pte`: 483 in A
+and 531 in B, with zero capacity, VA-allocation or unknown cases and zero `submitBuffer` calls.
+Retained samples show flag bit 0 set and an existing GPU virtual address. This narrows the failure
+beyond VA allocation but does not distinguish backing-resource from PTE preparation. The trace
+has no issuer/PID/run correlation, so no retained map object is uniquely attributable to the
+probe. Both guest-requested shutdowns and schema-6 recoveries completed without force clear,
+timeout, host fault or reset, and both receipt serializations validate. The successful
+176-to-177, 177-to-178-A and 178-A-to-178-B transitions provide the planned three-transition
+same-boot sample. They do not prove native guest teardown, unbounded repeatability, the historical
+host-hang mechanism, Metal execution or desktop acceleration. The append-only ledger is terminal
+at 6/6 and admits no seventh launch. Historical sections below preserve the evidence available at
+their time.
 
 ### Candidate 1.0.158: EOP writes traced; execution remains blocked
 
@@ -3738,3 +3740,41 @@ message, and the exact D0/BME-off/topology/watchdog/capture state. This is a sec
 normal physical cleanup and one intervening successful reinitialization, not a repeatability
 sample. The ledger is exhausted at 4/4 and admits no fifth launch. Exact evidence is archived in
 [metal-010-177](experiments/metal-010-177/notes.md).
+
+### 2026-09-09: candidate 178 narrows the map failure and completes three warm transitions
+
+Candidates 178-A and 178-B used one identical build/configuration/probe set under the reviewed
+finite qualification design, with distinct run IDs, manifests, output directories and separately
+reviewed activations. A initialized from candidate 177's validated cleanup; B initialized from
+A's validated cleanup. Both completed native KIQ, one-instance SDMA, engine and outer accelerator
+startup. Along with 176-to-177, these are three measured cleanup-to-restart transitions on the
+same host boot.
+
+The A observer recorded 162 command-buffer calls, 483 mapping batches, 486 resource preparations,
+483 memory-map preparations and zero channel submissions. Its map classifier counted
+`483 backing-pte / 0 capacity / 0 va / 0 unknown`. B recorded 178, 531, 534, 531 and zero,
+respectively, with `531 backing-pte / 0 capacity / 0 va / 0 unknown`. Retained records in both
+runs kept flags `0xb13` and GPU virtual address `0x4000c0000` unchanged across the failed call.
+Bit 0 is set and a VA already exists, excluding the observer's capacity and VA-allocation cases
+for these samples. The remaining class intentionally combines backing-resource and PTE
+preparation; the evidence does not select between them.
+
+The finite A trace dropped 3,164 ordinary and 1,582 notable records; B dropped 3,484 and 1,742.
+Neither trace records issuer PID or probe nonce, so a retained map object cannot be bound
+one-to-one to either probe. Each independent probe enumerated `AMD Radeon Navi23`, advertised
+Metal 3, compiled shaders, and returned status 5 / `e00002bd` on its first committed compute
+command. Both reported zero completed command buffers, rounds, checked values and pixels.
+
+The raw verdicts remain unchanged as `INCONCLUSIVE / sdma_vm_program_missing`. That diagnostic
+is missing because the observed failure occurs before `submitBuffer`; it does not establish a
+separate SDMA/VM defect. No Metal compute or rendering executed successfully.
+
+Both guests exited after their bounded shutdown requests. Each schema-6 recovery dequeued two
+active MEC HQDs with zero timeout or forced clear, retired graphics with a matched host-KIQ fence,
+and measured zero final queue and CP state. Both raw/canonical receipt pairs validate. Fresh
+postflight found no configured host fault or reset match and no remaining VM or recovery process.
+This completes the finite lifecycle sample without reset or rebind, but it does not demonstrate
+native guest teardown, the historical host-hang cause, routine reuse, or behavior across host
+boots. The terminal append-only ledger is 6/6 and authorizes no seventh launch. Exact evidence is
+archived in [metal-011-178-A](experiments/metal-011-178-a/notes.md) and
+[metal-011-178-B](experiments/metal-011-178-b/notes.md).

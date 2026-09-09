@@ -111,6 +111,20 @@ class KiqRecoveryProofTests(unittest.TestCase):
         self.rejected(lambda value: value['gc_quiesce']['host_kiq']['evidence'].update(
             packet=[]))
 
+    def test_schema2_stopped_wptr_is_explicitly_unsupported(self):
+        receipt = self.receipt()
+        reservation = {'schema':2}
+        gc = receipt['gc_quiesce']
+        evidence = gc['host_kiq']['evidence']
+        gc['reservation'] = copy.deepcopy(reservation)
+        evidence['reservation'] = copy.deepcopy(reservation)
+        evidence['retired_before_cleanup']['reservation'] = copy.deepcopy(reservation)
+
+        derived, errors = self.tool.derive_effective_host_kiq(receipt)
+
+        self.assertIsNone(derived)
+        self.assertEqual(errors, ['unsupported_v2_stopped_wptr'])
+
     def test_requires_executed_unmap_fence_and_genuine_dequeue(self):
         mutations = [
             lambda v: v['gc_quiesce'].update(forced_inactive=1),

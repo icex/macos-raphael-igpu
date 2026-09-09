@@ -1,0 +1,11 @@
+GART address fixtures passed
+KIQ address fixtures passed
+KIQ queue preparation fixtures passed
+SDMA topology fixtures passed
+SDMA submit observation fixtures passed
+GPU VM diagnostic fixtures passed
+engine lifecycle fixtures passed
+Recovery reservation fixtures passed
+submission trace fixtures passed
+backing trace fixtures passed
+Recovery lease v2 fixtures passed

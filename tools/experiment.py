@@ -36,6 +36,8 @@ PRELAUNCH_CONTINUATION = {
     'readiness_sha256':'86282b2a881f86b1fd4d770ec7f066c2014aab0b957b7211c0ed6c6f996f9053',
 }
 
+V2_CRITICAL_CAPTURE_MAX_BYTES = 8 * 1024 * 1024
+
 # This is a single reviewed revision of one historical boot's initial
 # validation ceiling. It is deliberately fixed to candidate 176's immutable
 # cleanup and cannot describe another boot, predecessor, or ledger preimage.
@@ -128,21 +130,51 @@ IDENTITY_FIELDS = ('source_commit', 'source_sha256', 'build_id', 'binary_sha256'
 def required_identity(data):
     missing = [key for key in IDENTITY_FIELDS if not data.get(key)]
     if type(data.get('gpu')) is not bool: missing.append('gpu')
+    if data.get('gpu') is True and data.get('recovery_lease_schema') != 2:
+        missing.append('recovery_lease_schema')
+    if data.get('gpu') is True and not data.get('recovery_helpers_sha256'):
+        missing.append('recovery_helpers_sha256')
     return missing
 
 
-def boot_argument_errors(args, requested_diagnostic):
-    switches = {word.split('=', 1)[0]:word.split('=', 1)[1]
-                for word in args.split() if '=' in word}
-    required = dict(rgpu='0xfffa5981', rgpuvmm='3', rgpumem='2', rgpuptb='2',
+def recovery_nonce_words(run_id):
+    # Apple XNU pexpert/gen/bootargs.c getval uses unsigned long long and
+    # argnumcpy case 8 stores the full word; PE_boot_arg_uint64_eq uses this
+    # same path. High-bit 0x-prefixed values therefore retain all 64 bits.
+    if not isinstance(run_id, str) or not re.fullmatch(r'[0-9a-f]{32}', run_id):
+        raise ValueError('run_id must be 32 lowercase hexadecimal characters')
+    return struct.unpack('<QQ', bytes.fromhex(run_id))
+
+
+def _numeric_boot_argument(value):
+    if not isinstance(value, str) or not re.fullmatch(
+            r'(?:0|0x[0-9a-f]+|[1-9][0-9]*)', value):
+        return None
+    parsed = int(value, 0)
+    return parsed if parsed < 1 << 64 else None
+
+
+def boot_argument_errors(args, requested_diagnostic, run_id=None):
+    switch_rows = [word.split('=', 1) for word in args.split() if '=' in word]
+    switches = {key:value for key,value in switch_rows}
+    required = dict(rgpu='0xfffa5981', rgpuvmm='3',
+                    rgpumem='1' if run_id is not None else '2', rgpuptb='2',
                     rgpumqd='2', rgpuhybrid='1')
     errors = []
+    rgpu_keys = [key for key, _ in switch_rows if key.startswith('rgpu')]
+    if len(rgpu_keys) != len(set(rgpu_keys)):
+        errors.append('duplicate_boot_argument')
     if any(switches.get(key) != value for key,value in required.items()):
         errors.append('functional_baseline')
     if not requested_diagnostic or requested_diagnostic not in args.split():
         errors.append('requested_diagnostic')
     if any(key in switches for key in ('rgpucp', 'rgpureset', 'rgpuic', 'rgpurlc', 'rgpufb')):
         errors.append('retired_experiment')
+    if run_id is not None:
+        nonce_lo, nonce_hi = recovery_nonce_words(run_id)
+        if (_numeric_boot_argument(switches.get('rgpurnlo')) != nonce_lo or
+                _numeric_boot_argument(switches.get('rgpurnhi')) != nonce_hi):
+            errors.append('recovery_nonce')
     return errors
 
 
@@ -152,7 +184,7 @@ def raphael_target_marked(config):
             props.get(RAPHAEL_TARGET_KEY) == RAPHAEL_TARGET_MARKER)
 
 
-def current_identity(vm, candidate, requested_diagnostic):
+def current_identity(vm, candidate, requested_diagnostic, run_id=None):
     build = json.loads((candidate / 'build-manifest.json').read_text())
     bundle = candidate / 'RaphaelGPU.kext/Contents'
     expected = dict(binary_sha256=sha((bundle/'MacOS/RaphaelGPU').read_bytes()),
@@ -180,7 +212,7 @@ def current_identity(vm, candidate, requested_diagnostic):
     if not raphael_target_marked(parsed_config):
         raise ValueError('OpenCore config lacks the exact per-device Raphael target marker')
     args = parsed_config['NVRAM']['Add'][BOOT_GUID]['boot-args']
-    boot_errors = boot_argument_errors(args, requested_diagnostic)
+    boot_errors = boot_argument_errors(args, requested_diagnostic, run_id)
     if boot_errors:
         raise ValueError('boot arguments changed: '+','.join(boot_errors))
     extension = vm/'kdk/x/System/Library/Extensions'
@@ -209,11 +241,18 @@ def current_identity(vm, candidate, requested_diagnostic):
                 launch_options={'BOOTDISK_MODE':'custom', 'NVRAM':'stock'},
                 image_id=image_id, guest_build=guest['guest_build'], probe_source_sha256=source_hash,
                 probe_binary_sha256=guest['probe_binary_sha256'], boot_id=host['boot_id'], kernel=host['kernel'],
-                bootdisk_sha256=sha((vm/'OpenCore.qcow2').read_bytes()))
+                bootdisk_sha256=sha((vm/'OpenCore.qcow2').read_bytes()),
+                recovery_helpers_sha256=(
+                    helper('vfio-recover').current_recovery_helpers_sha256()
+                    if run_id is not None else None))
 
 
-def prepare(vm, spec, output, gpu=True):
+def prepare(vm, spec, output, gpu=True, run_id=None):
     card = json.loads(spec.read_text())
+    if gpu and run_id is None:
+        raise ValueError('GPU preparation requires an explicit v2 run_id')
+    if run_id is not None:
+        recovery_nonce_words(run_id)
     candidate = vm/'run'/('candidate-'+card['candidate_version'].split('.')[-1])
     with (vm/'run/redeploy.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -221,12 +260,14 @@ def prepare(vm, spec, output, gpu=True):
         host = host_snapshot()
         if host['active_vm'] or (pending.exists() and any(pending.iterdir())):
             raise ValueError('active or pending VM prevents preparation')
-        identity = current_identity(vm, candidate, card['requested_diagnostic'])
+        identity = current_identity(
+            vm, candidate, card['requested_diagnostic'], run_id if gpu else None)
         if not identity['source_clean']: raise ValueError('commit source and tooling before preparation')
         if card['requested_diagnostic'] not in identity['boot_args'].split():
             raise ValueError('required diagnostic boot argument is absent')
-        identity.update(run_id=uuid.uuid4().hex, max_seconds=card['max_seconds'],
+        identity.update(run_id=run_id or uuid.uuid4().hex, max_seconds=card['max_seconds'],
                         gpu=gpu,
+                        recovery_lease_schema=2 if gpu else None,
                         vfio_device='0000:7b:00.0', experiment=card['id'], spec=card,
                         candidate_directory=str(candidate.relative_to(vm)))
         identity['qemu_version'] = command(['docker', 'run', '--rm', '--entrypoint',
@@ -238,6 +279,85 @@ def prepare(vm, spec, output, gpu=True):
         output.parent.mkdir(parents=True, exist_ok=True)
         write_once(output, identity)
         return identity
+
+
+def canonical_v2_records(serial, expected_build):
+    """Extract every complete v2 wire record from replay and direct logging."""
+    if not isinstance(serial, str) or not isinstance(expected_build, str):
+        raise ValueError('canonical critical capture has invalid arguments')
+    if len(serial.encode('utf-8')) > V2_CRITICAL_CAPTURE_MAX_BYTES:
+        raise ValueError('canonical critical capture exceeds its byte bound')
+    serial = serial.replace('\r', '')
+    if serial and not serial.endswith('\n'):
+        tail = serial.rsplit('\n', 1)[-1]
+        if re.search(r'(?:RaphaelGPU\s+rgpu:\s*@\s+|RGPU_EVENT\s+build=\S+\s+'
+                     r'seq=\d+\s+)XH2(?:\s|$)', tail):
+            raise ValueError('canonical critical capture has an incomplete protocol tail')
+        serial = (serial.rsplit('\n', 1)[0] + '\n') if '\n' in serial else ''
+    counts = []
+    records = {}
+    wire = []
+    build_seen = False
+    direct_builds = set()
+    direct_wire = []
+    structured_builds = set()
+    for line in serial.splitlines():
+        summary = re.search(
+            r'RGPU_RECORDS build=(\S+) count=(\d+) dropped=(\d+) truncated=(\d+)',
+            line)
+        if summary:
+            structured_builds.add(summary[1])
+        if summary and summary[1] == expected_build:
+            if int(summary[3]) or int(summary[4]):
+                raise ValueError('canonical critical capture reports loss')
+            counts.append(int(summary[2]))
+        event = re.search(r'RGPU_EVENT build=(\S+) seq=(\d+) (.+)$', line)
+        if event:
+            structured_builds.add(event[1])
+        if event and event[1] == expected_build:
+            seq, payload = int(event[2]), event[3]
+            previous = records.get(seq)
+            if previous is not None and previous != payload:
+                raise ValueError('canonical critical capture has a conflicting replay')
+            records[seq] = payload
+            build_seen |= payload == 'BUILD: identity='+expected_build
+            if payload.startswith('XH2 '):
+                wire.append(payload)
+            continue
+        direct = re.fullmatch(r'.*RaphaelGPU\s+rgpu:\s*@\s+(.*)', line)
+        if direct:
+            payload = direct[1]
+            direct_build = re.fullmatch(r'BUILD: identity=(\S+)', payload)
+            if direct_build:
+                direct_builds.add(direct_build[1])
+            build_seen |= payload == 'BUILD: identity='+expected_build
+            if payload.startswith('XH2 '):
+                wire.append(payload)
+                direct_wire.append(payload)
+    if direct_builds - {expected_build} or structured_builds - {expected_build}:
+        raise ValueError('canonical critical capture has a conflicting build identity')
+    if counts:
+        count = max(counts)
+        if count > 512:
+            raise ValueError('canonical critical capture exceeds its record bound')
+        if set(records) != set(range(count)) and not (
+                expected_build in direct_builds and direct_wire):
+            raise ValueError('canonical critical capture is incomplete')
+    elif records:
+        raise ValueError('canonical critical capture has events without a summary')
+    if not build_seen:
+        raise ValueError('canonical critical capture has no matching build identity')
+    return wire
+
+
+def recover_v2(recovery_tool, vm, manifest, serial):
+    """Parse and recover through one module instance to preserve strict types."""
+    records = canonical_v2_records(serial, manifest['build_id'])
+    lease_evidence = recovery_tool.parse_v2_lease_records(
+        records, manifest['run_id'])
+    return recovery_tool.recover(
+        vm, manifest['run_id'], lease_evidence=lease_evidence,
+        recovery_helpers_sha256=manifest['recovery_helpers_sha256'])
 
 
 def verify_bootdisk(vm, image_id, expected):
@@ -330,6 +450,19 @@ def write_once(path, value):
     with Path(path).open('x') as stream:
         json.dump(value, stream, indent=2)
         stream.write('\n')
+        stream.flush()
+        os.fsync(stream.fileno())
+    fd = os.open(Path(path).parent, os.O_DIRECTORY)
+    try: os.fsync(fd)
+    finally: os.close(fd)
+
+
+def write_bytes_once(path, value):
+    """Durably preserve already authenticated bytes under an exclusive path."""
+    if not isinstance(value, bytes):
+        raise TypeError('exclusive byte evidence must be bytes')
+    with Path(path).open('xb') as stream:
+        stream.write(value)
         stream.flush()
         os.fsync(stream.fileno())
     fd = os.open(Path(path).parent, os.O_DIRECTORY)
@@ -621,6 +754,12 @@ def _valid_hdp_flush(value):
 
 
 def _valid_reservation(value, prior_run_id):
+    if isinstance(value, dict) and value.get('schema') == 2:
+        try:
+            return helper('vfio-recover').valid_v2_lease_proof(
+                value, prior_run_id)
+        except Exception:
+            return False
     integer_keys = ('version','state','heap_limit','reservation_start',
                     'scratch_start','reservation_end','checksum')
     return (isinstance(value, dict) and
@@ -728,6 +867,13 @@ def _valid_graphics_snapshot(value):
 
 
 def _valid_graphics_guard(value, prior_run_id):
+    before = value.get('reservation_before') if isinstance(value, dict) else None
+    if isinstance(before, dict) and before.get('schema') == 2:
+        try:
+            return helper('vfio-recover').valid_apple_graphics_pipe_guard(
+                value, prior_run_id)
+        except Exception:
+            return False
     expected_reservation = _active_reservation_observation(prior_run_id)
     return (isinstance(value, dict) and
             set(value) == {'policy','reservation_before','reservation_after',
@@ -795,12 +941,25 @@ def _valid_host_kiq(value, reservation, gc, hqd_doorbell_values,
         return False
     if any(type(addresses[key]) is not int for key in addresses):
         return False
-    fb_base = addresses['ring'] - 0x0f100000
+    if isinstance(reservation, dict) and reservation.get('schema') == 2:
+        lease_start = reservation.get('lease_start')
+        if type(lease_start) is not int:
+            return False
+        layout_offsets = {
+            'ring':lease_start+0x1000, 'mqd':lease_start+0x11000,
+            'rptr':lease_start+0x12000, 'wptr':lease_start+0x12008,
+            'eop':lease_start+0x13000, 'fence':lease_start+0x14000,
+        }
+    else:
+        layout_offsets = {
+            'ring':0x0f100000, 'mqd':0x0f110000, 'rptr':0x0f111000,
+            'wptr':0x0f111008, 'eop':0x0f112000, 'fence':0x0f113000,
+        }
+    fb_base = addresses['ring'] - layout_offsets['ring']
     if fb_base <= 0 or fb_base & 0xffffff:
         return False
-    expected_addresses = {name:fb_base+offset for name,offset in {
-        'ring':0x0f100000, 'mqd':0x0f110000, 'rptr':0x0f111000,
-        'wptr':0x0f111008, 'eop':0x0f112000, 'fence':0x0f113000}.items()}
+    expected_addresses = {name:fb_base+offset
+                          for name,offset in layout_offsets.items()}
     if addresses != expected_addresses:
         return False
     cleanup_keys = {'mec_cntl','hqd_active','hqd_doorbell','hqd_rptr',
@@ -927,7 +1086,8 @@ def validate_recovery_receipt(receipt, boot_id, prior_run_id):
         receipt, boot_id, prior_run_id, hqd_doorbell_values=(0,))
 
 
-def validate_recovery_receipt_v6(receipt, boot_id, prior_run_id):
+def validate_recovery_receipt_v6(receipt, boot_id, prior_run_id,
+                                 recovery_helpers_sha256=None):
     """Validate the PAGE/RLC-complete normal-recovery receipt schema."""
     if not isinstance(receipt, dict):
         return ['recovery_receipt']
@@ -936,10 +1096,38 @@ def validate_recovery_receipt_v6(receipt, boot_id, prior_run_id):
         return ['recovery_receipt']
 
     errors = []
+    reservation = gc.get('reservation')
+    v2 = isinstance(reservation, dict) and reservation.get('schema') == 2
+    gart_forbidden_ranges = RECOVERY_V6_MUTATED_RANGES
+    if v2:
+        expected_helper_paths = {
+            'tools/vfio-recover.py', 'tools/recovery_lease_v2.py',
+            'tools/kiq-recovery-proof.py'}
+        receipt_helpers = receipt.get('recovery_helpers_sha256')
+        if (not isinstance(recovery_helpers_sha256, dict) or
+                set(recovery_helpers_sha256) != expected_helper_paths or
+                any(not re.fullmatch(r'[0-9a-f]{64}', str(value))
+                    for value in recovery_helpers_sha256.values()) or
+                receipt_helpers != recovery_helpers_sha256 or
+                not _valid_reservation(reservation, prior_run_id) or
+                'stopped_wptr_doorbell_clear' in gc):
+            errors.append('recovery_receipt')
+        lease_start = reservation.get('lease_start')
+        if type(lease_start) is int:
+            gart_forbidden_ranges = (
+                (lease_start+0x1000, 0x10000),
+                (lease_start+0x11000, 0x800),
+                (lease_start+0x12000, 4),
+                (lease_start+0x12008, 8),
+                (lease_start+0x13000, 0x1000),
+                (lease_start+0x14000, 4),
+            )
+        else:
+            errors.append('recovery_receipt')
     legacy = dict(receipt)
     legacy['schema'] = 5
     legacy_gc = dict(gc)
-    if 'stopped_wptr_doorbell_clear' in gc:
+    if 'stopped_wptr_doorbell_clear' in gc and not v2:
         try:
             derived, proof_errors = helper(
                 'kiq-recovery-proof').derive_effective_host_kiq(receipt)
@@ -962,7 +1150,7 @@ def validate_recovery_receipt_v6(receipt, boot_id, prior_run_id):
     errors.extend(_validate_recovery_receipt(
         legacy, boot_id, prior_run_id,
         hqd_doorbell_values=(0, 0x80000000),
-        gart_forbidden_ranges=RECOVERY_V6_MUTATED_RANGES))
+        gart_forbidden_ranges=gart_forbidden_ranges))
     if receipt.get('schema') != 6:
         errors.append('recovery_receipt')
 
@@ -1059,7 +1247,11 @@ def validate_reuse_receipt(receipt, boot_id, prior_run_id, vm=None,
         except Exception:
             return ['retained_kiq_continuation_receipt']
     if isinstance(receipt, dict) and receipt.get('schema') == 6:
-        return validate_recovery_receipt_v6(receipt, boot_id, prior_run_id)
+        helper_hashes = (manifest.get('recovery_helpers_sha256')
+                         if isinstance(manifest, dict) and
+                         manifest.get('recovery_lease_schema') == 2 else None)
+        return validate_recovery_receipt_v6(
+            receipt, boot_id, prior_run_id, helper_hashes)
     return validate_recovery_receipt(receipt, boot_id, prior_run_id)
 
 
@@ -1410,6 +1602,122 @@ def warm_qualification_authorization(vm, manifest, manifest_path, output,
         activation_sha256, hooks)
 
 
+def candidate179_authorization(vm, manifest, manifest_path, output,
+                               policy_sha256, activation_sha256):
+    """Validate the exact candidate-179 authority without reserving its launch."""
+    retained = helper('retained-kiq-continuation')
+    recovery = helper('vfio-recover')
+    hooks = argparse.Namespace(
+        validate_receipt=validate_recovery_receipt_v6,
+        validate_host=lambda host, boot: retained.host_errors(
+            host, boot, prefix='candidate179 '),
+        validate_vfio=recovery.validate_host_state,
+    )
+    return helper('candidate179-qualification').authorize(
+        vm, manifest, manifest_path, output, policy_sha256,
+        activation_sha256, hooks)
+
+
+def reserve_candidate179_qualification(directory, boot_id, experiment, recovery,
+                                       manifest, manifest_path, output,
+                                       authorization):
+    """Collect the locked live gate and atomically append candidate 179 once."""
+    if (not isinstance(authorization, dict) or
+            boot_id != manifest.get('boot_id') or
+            experiment != manifest.get('run_id') or
+            recovery != authorization.get('receipt')):
+        raise ValueError('candidate179 qualification refused: authority')
+    vm = Path(directory).parent.parent
+    gate_errors = []
+    cursor_before = recovery.get('kernel_cursor_after')
+    before_position = _journal_cursor_position(cursor_before, boot_id)
+    try:
+        capture_host = host_snapshot()
+        gate_errors.extend(admit(
+            manifest, capture_host, {boot_id}, reuse_allowed=True))
+        if capture_host.get('sleep_inhibited') is not True:
+            gate_errors.append('sleep_inhibited')
+    except Exception:
+        capture_host = None
+        gate_errors.append('capture_host')
+    try:
+        retained = helper('retained-kiq-continuation')
+        full_host = retained.collect_fresh_host(cursor_before)
+        gate_errors.extend(retained.host_errors(
+            full_host, boot_id, prefix='candidate179 '))
+    except Exception:
+        full_host = None
+        gate_errors.append('full_host')
+    if isinstance(full_host, dict) and isinstance(capture_host, dict):
+        host_gate = dict(full_host)
+        for key in ('amdgpu_initialized', 'capture_ready', 'watchdogs_verified',
+                    'device_pinned_awake', 'device_accessible', 'pstore_files'):
+            host_gate[key] = capture_host.get(key)
+    else:
+        host_gate = None
+    try:
+        units = active_launch_units()
+    except Exception:
+        units = None
+        gate_errors.append('active_launch_units')
+    if units:
+        gate_errors.append('active_launch_units')
+    pending = vm/'run/launch-pending'
+    try:
+        pending_names = sorted(path.name for path in pending.iterdir())
+    except FileNotFoundError:
+        pending_names = []
+    except OSError:
+        pending_names = None
+        gate_errors.append('pending_launch')
+    if pending_names:
+        gate_errors.append('pending_launch')
+    try:
+        recovery_tool = helper('vfio-recover')
+        vfio_gate = recovery_tool.host_state()
+        gate_errors.extend(recovery_tool.validate_host_state(vfio_gate, boot_id))
+    except Exception:
+        vfio_gate = None
+        gate_errors.append('vfio_host_gate')
+    try:
+        requested = manifest.get('spec', {}).get('requested_diagnostic')
+        identity_gate = current_identity(
+            vm, vm/manifest['candidate_directory'], requested,
+            run_id=manifest['run_id'])
+        identity_gate.update(run_id=manifest['run_id'], recovery_lease_schema=2)
+        gate_errors.extend(validate_identity(
+            {key:manifest[key] for key in identity_gate if key in manifest},
+            identity_gate))
+    except Exception:
+        identity_gate = None
+        gate_errors.append('current_identity')
+    cursor_after = full_host.get('journal_cursor') if isinstance(full_host, dict) else None
+    messages = full_host.get('journal_messages') if isinstance(full_host, dict) else None
+    after_position = _journal_cursor_position(cursor_after, boot_id)
+    if before_position is None or after_position is None or after_position < before_position:
+        gate_errors.append('kernel_cursor')
+    if not isinstance(messages, list):
+        gate_errors.append('kernel_messages')
+    if gate_errors:
+        raise ValueError('candidate179 qualification refused: '+','.join(
+            sorted(set(gate_errors))))
+    gate = {
+        'kernel_cursor_before':cursor_before,
+        'kernel_cursor_after':cursor_after,
+        'kernel_messages':messages,
+        'host_gate':host_gate,
+        'vfio_gate':vfio_gate,
+        'identity_gate':identity_gate,
+        'active_launch_units':units,
+        'pending_launches':pending_names,
+    }
+    qualification = helper('candidate179-qualification')
+    path, updated = qualification.build_reservation(
+        authorization, boot_id, experiment, recovery, gate, time.time())
+    replace_json(path, updated)
+    return cursor_after
+
+
 def reserve_warm_qualification(directory, boot_id, experiment, recovery,
                                manifest, manifest_path, output, authorization):
     """Recheck live gates and append only row 5 or 6 of the finite plan."""
@@ -1580,9 +1888,16 @@ def reserve_boot(directory, boot_id, experiment, recovery=None,
 
 def reserve_launch_and_cursor(directory, boot_id, experiment, recovery,
                               manifest, manifest_path, cap_revision=None,
-                              warm_qualification=None, output=None):
-    if cap_revision is not None and warm_qualification is not None:
+                              warm_qualification=None, output=None,
+                              candidate179=None):
+    modes = sum(value is not None for value in (
+        cap_revision, warm_qualification, candidate179))
+    if modes > 1:
         raise ValueError('mixed launch authority')
+    if candidate179 is not None:
+        return reserve_candidate179_qualification(
+            directory, boot_id, experiment, recovery, manifest,
+            manifest_path, output, candidate179)
     if warm_qualification is not None:
         return reserve_warm_qualification(
             directory, boot_id, experiment, recovery, manifest,
@@ -1705,7 +2020,9 @@ def run_probe(vm, manifest):
 def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=None,
             cap_revision_authority_sha256=None,
             warm_qualification_policy_sha256=None,
-            warm_qualification_activation_sha256=None):
+            warm_qualification_activation_sha256=None,
+            candidate179_policy_sha256=None,
+            candidate179_activation_sha256=None):
     """One bounded launch; a verified prior recovery may authorize same-boot reuse."""
     if bool(resume_prelaunch) != bool(prelaunch_proof):
         raise ValueError('prelaunch continuation requires both evidence paths')
@@ -1718,19 +2035,48 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
         raise ValueError('warm qualification requires policy and activation hashes')
     if warm_requested and (resume_prelaunch or cap_revision_authority_sha256):
         raise ValueError('warm qualification cannot use another launch mode')
+    candidate179_requested = bool(candidate179_policy_sha256 or
+                                  candidate179_activation_sha256)
+    if bool(candidate179_policy_sha256) != bool(candidate179_activation_sha256):
+        raise ValueError('candidate179 qualification requires policy and activation hashes')
+    if candidate179_requested and (resume_prelaunch or
+            cap_revision_authority_sha256 or warm_requested):
+        raise ValueError('candidate179 qualification cannot use another launch mode')
     manifest = json.loads(manifest_path.read_text())
+    if manifest.get('gpu') is True and manifest.get('recovery_lease_schema') != 2:
+        raise ValueError('GPU run requires a v2 recovery lease manifest')
     missing = required_identity(manifest)
     if missing: raise ValueError('incomplete prepared identity: '+','.join(missing))
     if manifest.get('bootdisk_verified') is not True:
         raise ValueError('actual bootdisk content has not been verified')
+    candidate179 = None
+    if candidate179_requested:
+        candidate179, errors = candidate179_authorization(
+            vm, manifest, manifest_path, output,
+            candidate179_policy_sha256, candidate179_activation_sha256)
+        if errors or candidate179 is None:
+            raise ValueError('candidate179 qualification refused: '+','.join(
+                sorted(set(errors or ['candidate179_authority']))))
     supervisor = helper('vm-supervision'); classifier = helper('classify-run')
     guest_shutdown = helper('guest-shutdown')
+    recovery_tool = helper('vfio-recover') if manifest.get('gpu') is True else None
     state = None; probe = None; failure = None; shutdown_result = None; host_messages = []
     recovery_result = None
     running_validated = False
     monitor = None
-    output.mkdir(parents=True, exist_ok=False)
-    write_once(output/'manifest.json', manifest)
+    output_initialized = False
+    def initialize_output():
+        nonlocal output_initialized
+        if output_initialized:
+            return
+        output.mkdir(parents=True, exist_ok=False)
+        if candidate179_requested:
+            write_bytes_once(output/'manifest.json', candidate179['manifest_raw'])
+        else:
+            write_once(output/'manifest.json', manifest)
+        output_initialized = True
+    if not candidate179_requested:
+        initialize_output()
     def cancelled(signum, frame): raise RuntimeError('experiment cancelled')
     def host_fault(signum, frame): raise RuntimeError(monitor.error or 'host monitor aborted exposure')
     previous = signal.signal(signal.SIGTERM, cancelled)
@@ -1740,10 +2086,29 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
             fcntl.flock(owner, fcntl.LOCK_EX | fcntl.LOCK_NB)
             with (vm/'run/redeploy.lock').open('a') as media:
                 fcntl.flock(media, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                if candidate179_requested:
+                    locked, errors = candidate179_authorization(
+                        vm, manifest, manifest_path, output,
+                        candidate179_policy_sha256,
+                        candidate179_activation_sha256)
+                    immutable = ('policy_raw', 'activation_raw', 'manifest_raw',
+                                 'ledger_raw', 'receipt_raws', 'card_raw',
+                                 'design_raw')
+                    changed = ([key for key in immutable
+                                if locked is not None and
+                                locked.get(key) != candidate179.get(key)])
+                    if errors or locked is None or changed:
+                        raise ValueError(
+                            'candidate179 qualification refused: concurrent_change' +
+                            (':' + ','.join(changed) if changed else ''))
+                    candidate179 = locked
+                    initialize_output()
                 pending = vm/'run/launch-pending'; pending.mkdir(exist_ok=True)
                 if any(pending.iterdir()): raise ValueError('another supervised launch is pending')
                 requested = manifest.get('spec', {}).get('requested_diagnostic')
-                observed = current_identity(vm, vm/manifest['candidate_directory'], requested)
+                observed = current_identity(
+                    vm, vm/manifest['candidate_directory'], requested,
+                    manifest['run_id'] if manifest.get('gpu') is True else None)
                 host = host_snapshot(); write_once(output/'host-before.json', host)
                 used = vm/'run/used-gpu-boots'; used.mkdir(exist_ok=True)
                 recovery = None; reuse_errors = []
@@ -1768,7 +2133,9 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                         errors.append('gpu_less_warm_qualification')
                     if host['active_vm']: errors.append('active_vm')
                 elif not resume_prelaunch:
-                    if warm_requested:
+                    if candidate179_requested:
+                        recovery = candidate179['receipt']
+                    elif warm_requested:
                         warm_qualification, reuse_errors = \
                             warm_qualification_authorization(
                                 vm, manifest, manifest_path, output,
@@ -1784,9 +2151,12 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                         if cap_revision is not None:
                             recovery = cap_revision['receipt']
                     else:
-                        recovery, reuse_errors = reuse_authorization(
-                            vm, host['boot_id'], manifest['run_id'], manifest,
-                            manifest_path)
+                        # Schema-2 launches have no generic same-boot authority.
+                        # A reviewed finite policy must select and bind one exact
+                        # launch instead of inheriting the historical rolling cap.
+                        recovery = None
+                        if (used/(host['boot_id']+'.json')).exists():
+                            reuse_errors = ['v2_reuse_requires_finite_authority']
                     errors += reuse_errors
                     errors += admit(manifest, host, {p.stem for p in used.glob('*.json')},
                                     reuse_allowed=recovery is not None)
@@ -1796,7 +2166,7 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                     reservation_cursor = reserve_launch_and_cursor(
                         used, host['boot_id'], manifest['run_id'], recovery,
                         manifest, manifest_path, cap_revision,
-                        warm_qualification, output)
+                        warm_qualification, output, candidate179)
                 cursor = (cursor_result[0] if resume_prelaunch else
                           reservation_cursor or kernel_updates()[0])
                 monitor = HostMonitor(cursor, lambda:os.kill(os.getpid(), signal.SIGUSR1))
@@ -1813,13 +2183,9 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                         write_once(marker, continuation)
                         if continuation_ledger.read_bytes() != continuation_ledger_bytes:
                             raise RuntimeError('boot ledger changed before VFIO continuation')
-                    reservation = helper('vfio-recover').prepare_launch(
-                        host['boot_id'], manifest['run_id'],
-                        **({'expected_pending':True} if resume_prelaunch else {}))
                     if (resume_prelaunch and
                             continuation_ledger.read_bytes() != continuation_ledger_bytes):
                         raise RuntimeError('boot ledger changed during prelaunch continuation')
-                    write_once(output/'recovery-reservation.json', reservation)
                 (vm/'run/serial.log').write_text('')
                 (vm/'run/agent-server-events.jsonl').unlink(missing_ok=True)
                 launch_requested = time.time()
@@ -1908,10 +2274,13 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
             shutdown_result.get('outcome') != 'STOP_UNCONFIRMED' and
             not (monitor and monitor.error)):
         try:
-            recovery_result = helper('vfio-recover').recover(vm, manifest['run_id'])
+            recovery_serial = (vm/'run/serial.log').read_text(errors='replace')
+            recovery_result = recover_v2(
+                recovery_tool, vm, manifest, recovery_serial)
         except BaseException as error:
             recovery_result = {'status':'failed',
                                'error':type(error).__name__+': '+str(error)}
+    initialize_output()
     serial = (vm/'run/serial.log').read_text(errors='replace') if state else ''
     (output/'serial.txt').write_text(serial)
     agent_events = vm/'run/agent-server-events.jsonl'
@@ -1944,12 +2313,15 @@ if __name__ == '__main__':
     parser.add_argument('--spec', type=Path)
     parser.add_argument('--manifest', type=Path)
     parser.add_argument('--output', type=Path)
+    parser.add_argument('--run-id', help='explicit 32-hex launch identity already staged in boot arguments')
     parser.add_argument('--gpu-less', action='store_true', help='prepare a no-passthrough coordinator validation')
     parser.add_argument('--resume-prelaunch', type=Path)
     parser.add_argument('--prelaunch-proof', type=Path)
     parser.add_argument('--cap-revision-authority-sha256')
     parser.add_argument('--warm-qualification-policy-sha256')
     parser.add_argument('--warm-qualification-activation-sha256')
+    parser.add_argument('--candidate179-policy-sha256')
+    parser.add_argument('--candidate179-activation-sha256')
     args = parser.parse_args()
     if ((args.resume_prelaunch or args.prelaunch_proof) and args.action != 'run'):
         parser.error('prelaunch continuation options are only valid with run')
@@ -1969,17 +2341,34 @@ if __name__ == '__main__':
     if warm_requested and (args.resume_prelaunch or
                            args.cap_revision_authority_sha256):
         parser.error('warm qualification cannot be combined with another launch mode')
+    candidate179_requested = bool(args.candidate179_policy_sha256 or
+                                  args.candidate179_activation_sha256)
+    if bool(args.candidate179_policy_sha256) != bool(
+            args.candidate179_activation_sha256):
+        parser.error('candidate179 qualification requires both hashes')
+    if candidate179_requested and args.action != 'run':
+        parser.error('candidate179 qualification is only valid with run')
+    if candidate179_requested and (args.resume_prelaunch or
+            args.cap_revision_authority_sha256 or warm_requested):
+        parser.error('candidate179 qualification cannot be combined with another launch mode')
     if args.gpu_less and args.action != 'prepare':
         parser.error('--gpu-less is only valid with prepare; run uses the explicit prepared mode')
+    if args.run_id and args.action != 'prepare':
+        parser.error('--run-id is only valid with prepare')
+    if args.action == 'prepare' and not args.gpu_less and not args.run_id:
+        parser.error('GPU prepare requires --run-id')
     if args.action == 'host': result = host_snapshot()
     elif args.action == 'prepare':
         if not args.spec or not args.output: parser.error('prepare requires --spec and --output')
-        result = prepare(args.vm_dir.resolve(), args.spec, args.output, gpu=not args.gpu_less)
+        result = prepare(args.vm_dir.resolve(), args.spec, args.output,
+                         gpu=not args.gpu_less, run_id=args.run_id)
     else:
         if not args.manifest or not args.output: parser.error('run requires --manifest and --output')
         result = run_one(args.vm_dir.resolve(), args.manifest, args.output,
                          args.resume_prelaunch, args.prelaunch_proof,
                          args.cap_revision_authority_sha256,
                          args.warm_qualification_policy_sha256,
-                         args.warm_qualification_activation_sha256)
+                         args.warm_qualification_activation_sha256,
+                         args.candidate179_policy_sha256,
+                         args.candidate179_activation_sha256)
     print(json.dumps(result, indent=2))

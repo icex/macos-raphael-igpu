@@ -7,6 +7,7 @@ import subprocess
 import plistlib
 import copy
 import hashlib
+import struct
 import threading
 from unittest.mock import patch
 from types import SimpleNamespace
@@ -22,6 +23,13 @@ class ExperimentTests(unittest.TestCase):
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         return module
+
+    def recovery_helper_hashes(self):
+        return {relative:hashlib.sha256((ROOT/relative).read_bytes()).hexdigest()
+                for relative in (
+                    'tools/vfio-recover.py',
+                    'tools/recovery_lease_v2.py',
+                    'tools/kiq-recovery-proof.py')}
 
     def recovery_receipt(self, tool, prior='a'*32, recovery='b'*32):
         reservation = {
@@ -184,6 +192,56 @@ class ExperimentTests(unittest.TestCase):
             receipt['gc_quiesce'][key] = page_proof[key]
         return receipt
 
+    def v2_critical_payloads(self, run_id):
+        path = ROOT/'tools/recovery_lease_v2.py'
+        spec = importlib.util.spec_from_file_location('lease_v2_experiment_fixture', path)
+        lease = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(lease)
+        nonce = struct.unpack('<QQ', bytes.fromhex(run_id))
+        descriptor = lease.make_ownership_descriptor(0x0a000000, *nonce)
+        status = lease.make_pool_status(
+            descriptor, state=lease.POOL_ACTIVE,
+            pool0_before=0x0e000000, pool0_after=0x0dfeb000,
+            pool1_before=0x0c000000, pool1_after=0x0bfeb000, reason=0)
+        return [
+            lease.format_owned_record(descriptor),
+            lease.format_pool_record(status),
+            'XV2 VMM phase=early enable=1 base=0 arena=0 pool0=0 pool1=0',
+            'XV2 VMM phase=native enable=1 base=0xf405000000 '
+            'arena=0x1234 pool0=0x2345 pool1=0x3456',
+        ]
+
+    def v2_schema6_receipt(self, tool, prior='a'*32):
+        recovery = tool.helper('vfio-recover')
+        wire = tool.helper('recovery_lease_v2')
+        nonce = struct.unpack('<QQ', bytes.fromhex(prior))
+        descriptor = wire.make_ownership_descriptor(0x08000000, *nonce)
+        proof = {
+            'schema':2, 'version':descriptor.version, 'state':descriptor.state,
+            'lease_start':descriptor.lease_offset,
+            'lease_end':descriptor.lease_end,
+            'scratch_start':descriptor.scratch_offset,
+            'scratch_end':descriptor.scratch_end,
+            'run_id':prior, 'checksum':descriptor.checksum,
+            'immutable':True, 'pool_readback':'absent', 'pool_status':None,
+        }
+        self.assertTrue(recovery.valid_v2_lease_proof(proof, prior))
+        receipt = self.schema6_host_kiq_receipt(tool, prior)
+        gc = receipt['gc_quiesce']
+        gc['reservation'] = proof
+        gc['graphics_pipe_guard']['reservation_before'] = proof
+        gc['graphics_pipe_guard']['reservation_after'] = dict(proof)
+        host_kiq = gc['host_kiq']
+        host_kiq['reservation'] = proof
+        fb_base = host_kiq['addresses']['ring'] - tool.RECOVERY_SCRATCH_START
+        host_kiq['addresses'] = {name:fb_base + descriptor.lease_offset + offset
+                                 for name, offset in {
+                                     'ring':0x1000, 'mqd':0x11000,
+                                     'rptr':0x12000, 'wptr':0x12008,
+                                     'eop':0x13000, 'fence':0x14000}.items()}
+        receipt['recovery_helpers_sha256'] = self.recovery_helper_hashes()
+        return receipt
+
     def test_identity_mismatches_and_missing_values_fail_closed(self):
         validate = self.module().validate_identity
         expected = dict(binary_sha256='a'*64, info_sha256='b'*64, boot_args='rgpu=1',
@@ -201,6 +259,70 @@ class ExperimentTests(unittest.TestCase):
         for key in ('source_commit', 'kdk_sha256', 'binary_sha256', 'info_sha256',
                     'config_sha256', 'boot_args', 'image_id', 'probe_binary_sha256'):
             self.assertIn(key, missing)
+        self.assertIn('recovery_lease_schema', check({
+            'build_id':'candidate', 'gpu':True}))
+        self.assertIn('recovery_helpers_sha256', check({
+            'build_id':'candidate', 'gpu':True, 'recovery_lease_schema':2}))
+
+    def test_schema6_v2_receipt_binds_dynamic_lease_and_exact_helpers(self):
+        tool = self.module()
+        prior = 'a'*32
+        receipt = self.v2_schema6_receipt(tool, prior)
+        helpers = receipt['recovery_helpers_sha256']
+        self.assertEqual(tool.validate_recovery_receipt_v6(
+            receipt, 'boot-A', prior, helpers), [])
+        self.assertIn('recovery_receipt', tool.validate_recovery_receipt_v6(
+            receipt, 'boot-A', prior))
+        stale = dict(helpers, **{'tools/vfio-recover.py':'0'*64})
+        self.assertIn('recovery_receipt', tool.validate_recovery_receipt_v6(
+            receipt, 'boot-A', prior, stale))
+        changed = copy.deepcopy(receipt)
+        changed['gc_quiesce']['reservation']['lease_start'] += 0x100000
+        self.assertIn('recovery_receipt', tool.validate_recovery_receipt_v6(
+            changed, 'boot-A', prior, helpers))
+        stopped = copy.deepcopy(receipt)
+        stopped['gc_quiesce']['stopped_wptr_doorbell_clear'] = {}
+        self.assertIn('recovery_receipt', tool.validate_recovery_receipt_v6(
+            stopped, 'boot-A', prior, helpers))
+        overlap = copy.deepcopy(receipt)
+        gart = overlap['gc_quiesce']['host_kiq']['gart']
+        gart['bar_offset'] = overlap['gc_quiesce']['reservation']['lease_start'] + 0x1000
+        gart['root'] = gart['physical_fb'] + gart['bar_offset'] + 1
+        self.assertIn('recovery_receipt', tool.validate_recovery_receipt_v6(
+            overlap, 'boot-A', prior, helpers))
+
+    def test_gpu_run_refuses_manifest_without_v2_before_creating_evidence(self):
+        tool = self.module()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            manifest = {key:'fixture' for key in tool.IDENTITY_FIELDS}
+            manifest.update(gpu=True, bootdisk_verified=True)
+            path = root/'manifest.json'
+            output = root/'evidence'
+            path.write_text(json.dumps(manifest))
+            with self.assertRaisesRegex(ValueError, 'v2 recovery lease'):
+                tool.run_one(root, path, output)
+            self.assertFalse(output.exists())
+
+    def test_run_refuses_existing_output_without_changing_it(self):
+        tool = self.module()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            manifest = {key:'fixture' for key in tool.IDENTITY_FIELDS}
+            manifest.update(
+                gpu=True, bootdisk_verified=True, recovery_lease_schema=2,
+                recovery_helpers_sha256=self.recovery_helper_hashes())
+            path = root/'manifest.json'
+            path.write_text(json.dumps(manifest))
+            output = root/'evidence'
+            output.mkdir()
+            sentinel = output/'verdict.json'
+            sentinel.write_bytes(b'frozen\n')
+            with self.assertRaises(FileExistsError):
+                tool.run_one(root, path, output)
+            self.assertEqual(sentinel.read_bytes(), b'frozen\n')
+            self.assertEqual(sorted(item.name for item in output.iterdir()),
+                             ['verdict.json'])
 
     def test_requested_diagnostic_is_part_of_boot_identity(self):
         validate = self.module().boot_argument_errors
@@ -214,6 +336,176 @@ class ExperimentTests(unittest.TestCase):
         self.assertIn('functional_baseline',
                       validate(baseline.replace('rgpumqd=2', 'rgpumqd=1'), 'rgpusdma=1'))
         self.assertIn('retired_experiment', validate(baseline+' rgpureset=1', 'rgpusdma=1'))
+
+    def test_v2_boot_nonce_is_little_endian_and_bound_to_explicit_run_id(self):
+        tool = self.module()
+        run_id = 'efcdab89674523011032547698badcfe'
+        self.assertEqual(tool.recovery_nonce_words(run_id), (
+            0x0123456789abcdef, 0xfedcba9876543210))
+        baseline = ('-v rgpu=0xfffa5981 rgpuvmm=3 rgpumem=1 rgpuptb=2 '
+                    'rgpumqd=2 rgpuhybrid=1 rgpusdma=1 '
+                    'rgpurnlo=0x0123456789abcdef '
+                    'rgpurnhi=18364758544493064720')
+        self.assertEqual(
+            tool.boot_argument_errors(baseline, 'rgpusdma=1', run_id), [])
+        self.assertIn('recovery_nonce', tool.boot_argument_errors(
+            baseline.replace('rgpurnhi=18364758544493064720', 'rgpurnhi=1'),
+            'rgpusdma=1', run_id))
+        self.assertIn('functional_baseline', tool.boot_argument_errors(
+            baseline.replace('rgpumem=1', 'rgpumem=2'), 'rgpusdma=1', run_id))
+        for duplicate in (
+                'rgpurnlo=1 '+baseline,
+                baseline+' rgpurnlo=0x0123456789abcdef'):
+            self.assertIn('duplicate_boot_argument', tool.boot_argument_errors(
+                duplicate, 'rgpusdma=1', run_id))
+        for malformed in ('A' * 32, 'a' * 31, 'g' * 32):
+            with self.subTest(run_id=malformed):
+                with self.assertRaisesRegex(ValueError, 'run_id'):
+                    tool.recovery_nonce_words(malformed)
+
+    def test_gpu_prepare_requires_explicit_v2_run_id_before_host_or_media_access(self):
+        tool = self.module()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            spec = root / 'spec.json'
+            spec.write_text(json.dumps({'candidate_version':'1.0.179'}))
+            with self.assertRaisesRegex(ValueError, 'explicit v2 run_id'):
+                tool.prepare(root, spec, root/'manifest.json', gpu=True)
+
+    def test_canonical_v2_records_are_extracted_before_recovery_without_tail_guessing(self):
+        tool = self.module()
+        serial = (
+            'RGPU_RECORDS build=abc count=3 dropped=0 truncated=0\n'
+            'RGPU_EVENT build=abc seq=0 BUILD: identity=abc\n'
+            'RGPU_EVENT build=abc seq=1 XH2 OWNED nonce=record\n'
+            'RGPU_EVENT build=abc seq=2 XV2 VMM phase=native enable=1 base=0x1 arena=0x2 pool0=0x3 pool1=0x4\n'
+            'RaphaelGPU rgpu: @ XH2 ABORT nonce=newer-terminal\n'
+            'ordinary unterminated diagnostic')
+        self.assertEqual(tool.canonical_v2_records(serial, 'abc'), [
+            'XH2 OWNED nonce=record',
+            'XH2 ABORT nonce=newer-terminal',
+        ])
+
+    def test_canonical_v2_records_allow_complete_direct_early_crash_evidence(self):
+        tool = self.module()
+        serial = (
+            'RaphaelGPU rgpu: @ BUILD: identity=abc\n'
+            'RaphaelGPU rgpu: @ XH2 OWNED nonce=early\n'
+            'RaphaelGPU rgpu: @ XH2 ABORT nonce=early\n')
+        self.assertEqual(tool.canonical_v2_records(serial, 'abc'), [
+            'XH2 OWNED nonce=early', 'XH2 ABORT nonce=early'])
+
+    def test_canonical_v2_records_reject_gap_beyond_old_129_record_check(self):
+        tool = self.module()
+        lines = ['RGPU_RECORDS build=abc count=131 dropped=0 truncated=0\n']
+        lines.extend(
+            f'RGPU_EVENT build=abc seq={seq} ordinary-{seq}\n'
+            for seq in range(131) if seq != 130)
+        with self.assertRaisesRegex(ValueError, 'canonical critical capture'):
+            tool.canonical_v2_records(''.join(lines), 'abc')
+
+    def test_canonical_v2_records_use_direct_wire_when_replay_crashes_mid_dump(self):
+        tool = self.module()
+        serial = (
+            'RaphaelGPU rgpu: @ BUILD: identity=abc\n'
+            'RaphaelGPU rgpu: @ XH2 OWNED nonce=direct\n'
+            'RGPU_RECORDS build=abc count=131 dropped=0 truncated=0\n'
+            'RGPU_EVENT build=abc seq=0 BUILD: identity=abc\n'
+            'RGPU_EVENT build=abc seq=1 XH2 OWNED nonce=direct\n')
+        self.assertEqual(
+            tool.canonical_v2_records(serial, 'abc'),
+            ['XH2 OWNED nonce=direct', 'XH2 OWNED nonce=direct'])
+
+    def test_canonical_v2_records_reject_incomplete_protocol_tail(self):
+        tool = self.module()
+        serial = (
+            'RaphaelGPU rgpu: @ BUILD: identity=abc\n'
+            'RaphaelGPU rgpu: @ XH2 OWNED nonce=direct\n'
+            'RaphaelGPU rgpu: @ XH2 ABORT nonce=unterminated')
+        with self.assertRaisesRegex(ValueError, 'incomplete protocol'):
+            tool.canonical_v2_records(serial, 'abc')
+
+    def test_canonical_v2_records_ignore_ordinary_unterminated_tail(self):
+        tool = self.module()
+        serial = (
+            'RaphaelGPU rgpu: @ BUILD: identity=abc\n'
+            'RaphaelGPU rgpu: @ XH2 OWNED nonce=direct\n'
+            'ordinary partial line')
+        self.assertEqual(tool.canonical_v2_records(serial, 'abc'), [
+            'XH2 OWNED nonce=direct'])
+
+    def test_canonical_v2_records_reject_mixed_direct_builds(self):
+        tool = self.module()
+        serial = (
+            'RaphaelGPU rgpu: @ BUILD: identity=abc\n'
+            'RaphaelGPU rgpu: @ XH2 OWNED nonce=direct\n'
+            'RaphaelGPU rgpu: @ BUILD: identity=other\n')
+        with self.assertRaisesRegex(ValueError, 'conflicting build'):
+            tool.canonical_v2_records(serial, 'abc')
+
+    def test_canonical_v2_records_reject_foreign_structured_wire(self):
+        tool = self.module()
+        serial = (
+            'RGPU_RECORDS build=abc count=1 dropped=0 truncated=0\n'
+            'RGPU_EVENT build=abc seq=0 BUILD: identity=abc\n'
+            'RGPU_RECORDS build=other count=1 dropped=0 truncated=0\n'
+            'RGPU_EVENT build=other seq=0 XH2 ABORT reason=foreign\n')
+        with self.assertRaisesRegex(ValueError, 'conflicting build'):
+            tool.canonical_v2_records(serial, 'abc')
+
+    def test_canonical_v2_records_bound_raw_input_before_parsing(self):
+        tool = self.module()
+        serial = ('RaphaelGPU rgpu: @ BUILD: identity=abc\n' +
+                  'x' * (8 * 1024 * 1024))
+        with self.assertRaisesRegex(ValueError, 'byte bound'):
+            tool.canonical_v2_records(serial, 'abc')
+
+    def test_real_vfio_parser_rejects_active_then_later_abort(self):
+        tool = self.module()
+        recovery = tool.helper('vfio-recover')
+        run_id = '00112233445566778899aabbccddeeff'
+        owned, active, *_ = self.v2_critical_payloads(run_id)
+        serial = (
+            'RaphaelGPU rgpu: @ BUILD: identity=abc\n'
+            f'RaphaelGPU rgpu: @ {owned}\n'
+            f'RaphaelGPU rgpu: @ {active}\n'
+            'RGPU_RECORDS build=abc count=3 dropped=0 truncated=0\n'
+            'RGPU_EVENT build=abc seq=0 BUILD: identity=abc\n'
+            f'RGPU_EVENT build=abc seq=1 {owned}\n'
+            f'RGPU_EVENT build=abc seq=2 {active}\n'
+            'RaphaelGPU rgpu: @ XH2 ABORT reason=duplicate\n')
+        records = tool.canonical_v2_records(serial, 'abc')
+        self.assertEqual(records[-1], 'XH2 ABORT reason=duplicate')
+        with self.assertRaisesRegex(recovery.RecoveryError, 'invalid native recovery lease'):
+            recovery.parse_v2_lease_records(records, run_id)
+
+    def test_v2_recovery_adapter_keeps_real_module_type_and_helper_hashes(self):
+        tool = self.module()
+        recovery = tool.helper('vfio-recover')
+        run_id = '00112233445566778899aabbccddeeff'
+        owned, active, *_ = self.v2_critical_payloads(run_id)
+        manifest = {
+            'run_id':run_id, 'build_id':'abc',
+            'recovery_helpers_sha256':recovery.current_recovery_helpers_sha256(),
+        }
+        serial = (
+            'RGPU_RECORDS build=abc count=3 dropped=0 truncated=0\n'
+            'RGPU_EVENT build=abc seq=0 BUILD: identity=abc\n'
+            f'RGPU_EVENT build=abc seq=1 {owned}\n'
+            f'RGPU_EVENT build=abc seq=2 {active}\n')
+
+        def recover(vm, prior, *, lease_evidence, recovery_helpers_sha256):
+            self.assertIsInstance(
+                lease_evidence, recovery.RECOVERY_LEASE_V2.LeaseEvidence)
+            self.assertEqual(prior, run_id)
+            self.assertEqual(recovery_helpers_sha256,
+                             manifest['recovery_helpers_sha256'])
+            return {'status':'recovered'}
+
+        with patch.object(recovery, 'recover', side_effect=recover):
+            self.assertEqual(tool.recover_v2(
+                recovery, Path('/not-opened'), manifest, serial),
+                {'status':'recovered'})
 
     def test_raphael_target_marker_is_exact_and_bound_to_the_vbios_device(self):
         tool = self.module()
@@ -483,6 +775,8 @@ class ExperimentTests(unittest.TestCase):
                 manifest = {key:'fixture' for key in tool.IDENTITY_FIELDS}
                 manifest.update(build_id='abc', run_id='a'*32, max_seconds=180,
                     boot_id='boot-A', bootdisk_verified=True, gpu=True,
+                    recovery_lease_schema=2,
+                    recovery_helpers_sha256=self.recovery_helper_hashes(),
                     spec={'requested_diagnostic':'rgpusdma=1'},
                     launch_options={'BOOTDISK_MODE':'custom', 'NVRAM':'stock'},
                     source_clean=True, vfio_device='0000:7b:00.0',
@@ -501,11 +795,7 @@ class ExperimentTests(unittest.TestCase):
                     def start(self): pass
                     def stop(self): pass
 
-                def prepare_launch(*args, **kwargs):
-                    events.append(('prepare', kwargs))
-                    return {'state':'pending'}
-
-                recovery = SimpleNamespace(prepare_launch=prepare_launch)
+                recovery = SimpleNamespace()
                 supervisor = SimpleNamespace(
                     start_locked=lambda *args: (_ for _ in ()).throw(RuntimeError('stop after prepare')),
                     ManagedStopUnconfirmed=type('ManagedStopUnconfirmed',(RuntimeError,),{}))
@@ -537,11 +827,11 @@ class ExperimentTests(unittest.TestCase):
                                           vm/'original', vm/'proof.json')
                 self.assertEqual(result['verdict'], 'INVALID')
                 if mode == 'success':
-                    self.assertEqual(events, [('marker', marker.name),
-                                              ('prepare', {'expected_pending':True})])
+                    self.assertEqual(events, [('marker', marker.name)])
                     self.assertEqual(ledger.read_bytes(), b'ledger-original')
                 else:
-                    self.assertFalse(any(row[0] == 'prepare' for row in events))
+                    self.assertEqual(events, [] if mode == 'existing-marker' else
+                                     [('marker', marker.name)])
 
     def test_legacy_boot_reservation_accepts_one_matching_recovery_receipt(self):
         tool = self.module()
@@ -1005,6 +1295,166 @@ class ExperimentTests(unittest.TestCase):
                     tool.run_one(
                         Path('/nonexistent'), Path('/nonexistent-manifest'),
                         Path('/nonexistent-output'), *positional, **keywords)
+
+    def test_candidate179_api_requires_pair_and_refuses_mixed_modes(self):
+        tool = self.module()
+        cases = (
+            {'candidate179_policy_sha256':'a'*64},
+            {'candidate179_activation_sha256':'b'*64},
+            {'candidate179_policy_sha256':'a'*64,
+             'candidate179_activation_sha256':'b'*64,
+             'warm_qualification_policy_sha256':'c'*64,
+             'warm_qualification_activation_sha256':'d'*64},
+            {'candidate179_policy_sha256':'a'*64,
+             'candidate179_activation_sha256':'b'*64,
+             'cap_revision_authority_sha256':'c'*64},
+        )
+        for keywords in cases:
+            with self.subTest(keywords=keywords):
+                with self.assertRaisesRegex(ValueError, 'candidate179 qualification'):
+                    tool.run_one(
+                        Path('/nonexistent'), Path('/nonexistent-manifest'),
+                        Path('/nonexistent-output'), **keywords)
+
+    def test_candidate179_real_helper_run_adapter_reserves_once(self):
+        from tests.test_candidate179_qualification import (
+            Candidate179QualificationTests, BOOT, RUN)
+        Candidate179QualificationTests.setUpClass()
+        fixture = Candidate179QualificationTests(
+            'test_authorizes_read_only_and_builds_exact_single_append')
+        fixture.setUp()
+        try:
+            tool = self.module()
+            candidate = fixture.helper
+            candidate_authorize = candidate.authorize
+            authorization_calls = []
+            def traced_authorize(*args, **kwargs):
+                result = candidate_authorize(*args, **kwargs)
+                authorization_calls.append(result[1])
+                return result
+            candidate.authorize = traced_authorize
+            manifest = fixture.manifest
+            for key in tool.IDENTITY_FIELDS:
+                if key != 'run_id':
+                    manifest.setdefault(key, 'fixture')
+            manifest.update(
+                guest_build='24G830', vfio_device='0000:7b:00.0',
+                launch_options={'BOOTDISK_MODE':'custom', 'NVRAM':'stock'})
+            fixture.manifest_path.write_text(
+                json.dumps(manifest, sort_keys=True)+'\n')
+            policy = json.loads(fixture.policy_path.read_text())
+            policy.update(
+                manifest_sha256=hashlib.sha256(
+                    fixture.manifest_path.read_bytes()).hexdigest(),
+                experiment_py_sha256=hashlib.sha256(
+                    (ROOT/'tools/experiment.py').read_bytes()).hexdigest())
+            fixture.policy_path.write_text(json.dumps(policy, sort_keys=True)+'\n')
+            policy_sha = hashlib.sha256(fixture.policy_path.read_bytes()).hexdigest()
+            activation = json.loads(fixture.activation_path.read_text())
+            activation.update(
+                policy_sha256=policy_sha,
+                manifest_sha256=policy['manifest_sha256'])
+            fixture.activation_path.write_text(
+                json.dumps(activation, sort_keys=True)+'\n')
+            activation_sha = hashlib.sha256(
+                fixture.activation_path.read_bytes()).hexdigest()
+
+            host = dict(self.host(), boot_id=BOOT, sleep_inhibited=True)
+            prior = json.loads((fixture.vm/'run/vfio-recovery'/BOOT/
+                                (candidate.PRIOR_RUN_ID+'.json')).read_text())
+            cursor = prior['kernel_cursor_after']
+            full_host = {
+                'boot_id':BOOT, 'journal_cursor':cursor,
+                'journal_messages':[], 'journal_faults':[],
+            }
+            retained = SimpleNamespace(
+                collect_fresh_host=lambda before:full_host,
+                host_errors=lambda value, boot, prefix='':[])
+            recovery = tool.helper('vfio-recover')
+            recovery.host_state = lambda:{'boot_id':BOOT}
+            recovery.validate_host_state = lambda value, boot:[]
+            recovered_evidence = []
+            recovery.recover = lambda vm, prior_run_id, **kwargs: (
+                recovered_evidence.append(kwargs) or {'status':'recovered'})
+            classifier = SimpleNamespace(
+                parse_serial=lambda serial:[],
+                classify_probe_readiness=lambda *args:{
+                    'valid':False, 'verdict':'INCONCLUSIVE'},
+                classify=lambda *args:{'valid':False, 'verdict':'INCONCLUSIVE'})
+            serial_payloads = ['BUILD: identity='+manifest['build_id'],
+                               self.v2_critical_payloads(RUN)[0]]
+            serial = (f'RGPU_RECORDS build={manifest["build_id"]} count=2 '
+                      'dropped=0 truncated=0\n' + ''.join(
+                          f'RGPU_EVENT build={manifest["build_id"]} seq={index} '
+                          f'{payload}\n'
+                          for index, payload in enumerate(serial_payloads)))
+            def start_locked(*args):
+                (fixture.vm/'run/serial.log').write_text(serial)
+                return {'cid':'c'*64, 'deadline_epoch':280,
+                        'max_seconds':180}
+            supervisor = SimpleNamespace(
+                start_locked=start_locked,
+                verify=lambda state:None,
+                ManagedStopUnconfirmed=type(
+                    'ManagedStopUnconfirmed',(RuntimeError,),{}),
+                stop_exact=lambda cid:None)
+            shutdown = SimpleNamespace(shutdown=lambda *args, **kwargs:{
+                'cid':'c'*64, 'outcome':'forced'})
+            original_helper = tool.helper
+            def helpers(name):
+                return {
+                    'candidate179-qualification':candidate,
+                    'retained-kiq-continuation':retained,
+                    'vfio-recover':recovery,
+                    'classify-run':classifier,
+                    'vm-supervision':supervisor,
+                    'guest-shutdown':shutdown,
+                }.get(name, original_helper(name))
+            observed = {key:copy.deepcopy(value) for key, value in manifest.items()
+                        if key not in ('run_id', 'recovery_lease_schema', 'spec',
+                                       'gpu', 'max_seconds', 'experiment',
+                                       'candidate_directory', 'vfio_device')}
+            identity_run_ids = []
+            def current_identity(*args, **kwargs):
+                identity_run_ids.append(kwargs.get('run_id', args[3] if len(args) > 3 else None))
+                return copy.deepcopy(observed)
+            now = [100.0]
+            class NoopMonitor:
+                error = None; error_kind = None; messages = []
+                def __init__(self, *args): pass
+                def start(self): pass
+                def stop(self): pass
+            with patch.object(tool, 'helper', side_effect=helpers), \
+                 patch.object(tool, 'current_identity', side_effect=current_identity), \
+                 patch.object(tool, 'host_snapshot', return_value=host), \
+                 patch.object(tool, 'active_launch_units', return_value=[]), \
+                 patch.object(tool, 'running_identity', return_value={
+                     'image_id':manifest['image_id'],
+                     'vfio_args':['vfio-pci,host=0000:7b:00.0']}), \
+                 patch.object(tool, 'HostMonitor', NoopMonitor), \
+                 patch.object(tool.time, 'time', side_effect=lambda:now[0]), \
+                 patch.object(tool.time, 'sleep',
+                              side_effect=lambda n:now.__setitem__(0, now[0]+100)):
+                result = tool.run_one(
+                    fixture.vm, fixture.manifest_path, fixture.output,
+                    candidate179_policy_sha256=policy_sha,
+                    candidate179_activation_sha256=activation_sha)
+
+            self.assertEqual(result['warm_reuse'], 'recovered',
+                             (result, authorization_calls))
+            ledger = json.loads((fixture.vm/'run/used-gpu-boots'/
+                                 (BOOT+'.json')).read_text())
+            self.assertEqual(len(ledger['launches']), 7)
+            self.assertEqual(ledger['launches'][-1]['run_id'], RUN)
+            self.assertEqual(identity_run_ids, [RUN, RUN])
+            self.assertEqual(len(recovered_evidence), 1)
+            self.assertIn('lease_evidence', recovered_evidence[0])
+            self.assertEqual(recovered_evidence[0]['recovery_helpers_sha256'],
+                             manifest['recovery_helpers_sha256'])
+        finally:
+            if 'candidate' in locals() and 'candidate_authorize' in locals():
+                candidate.authorize = candidate_authorize
+            fixture.tearDown()
 
     def test_warm_qualification_dispatch_uses_reviewed_cursor_only(self):
         tool = self.module()
@@ -1776,7 +2226,7 @@ class ExperimentTests(unittest.TestCase):
     def test_probe_is_not_started_without_cleanup_budget(self):
         self.exercise_run('probe-no-budget')
 
-    def test_confirmed_forced_stop_receipt_admits_next_same_boot_launch(self):
+    def test_v2_receipt_does_not_create_generic_same_boot_authority(self):
         tool = self.module()
         with tempfile.TemporaryDirectory() as temp:
             vm = Path(temp); (vm/'run').mkdir()
@@ -1786,6 +2236,8 @@ class ExperimentTests(unittest.TestCase):
                 manifest.update(
                     build_id='abc', run_id=run_id, max_seconds=180,
                     boot_id='boot-A', bootdisk_verified=True, gpu=True,
+                    recovery_lease_schema=2,
+                    recovery_helpers_sha256=self.recovery_helper_hashes(),
                     spec={'run_probe_only_after_native_start':True,
                           'requested_diagnostic':'rgpusdma=1'},
                     launch_options={'BOOTDISK_MODE':'custom', 'NVRAM':'stock'},
@@ -1807,7 +2259,8 @@ class ExperimentTests(unittest.TestCase):
                 'HY: createHybridEngine exit: engine=1 valid=1 available-before=1 status=4',
                 'XJ: AMDHardware::startHWEngines -> 0',
             ]
-            serial = 'RGPU_RECORDS build=abc count=6 dropped=0 truncated=0\n'+''.join(
+            lines.extend(self.v2_critical_payloads('a'*32))
+            serial = f'RGPU_RECORDS build=abc count={len(lines)} dropped=0 truncated=0\n'+''.join(
                 f'RGPU_EVENT build=abc seq={i} {line}\n'
                 for i,line in enumerate(lines))
 
@@ -1833,20 +2286,27 @@ class ExperimentTests(unittest.TestCase):
                         'acpi_request_sent':True,
                         'acpi_request_error':'bounded grace expired'}
 
-            def recover(vm_path, prior):
+            lease_evidence = object()
+            def parse_v2_lease_records(records, prior):
+                calls.append(('parse-v2', prior))
+                return lease_evidence
+
+            def recover(vm_path, prior, *, lease_evidence=None,
+                        recovery_helpers_sha256=None):
+                self.assertIs(lease_evidence, globals_lease_evidence)
+                self.assertEqual(recovery_helpers_sha256,
+                                 manifests[0][0]['recovery_helpers_sha256'])
                 calls.append(('recover', prior))
-                recovery_id = ('f' if prior == 'a'*32 else 'e')*32
+                recovery_id = 'f'*32
                 receipt = self.recovery_receipt(tool, prior, recovery_id)
                 target = vm_path/'run/vfio-recovery/boot-A'
                 target.mkdir(parents=True, exist_ok=True)
                 (target/(prior+'.json')).write_text(json.dumps(receipt))
                 return receipt
 
-            def prepare_launch(expected_boot, run_id):
-                calls.append(('prepare-recovery-reservation', expected_boot, run_id))
-                return {'boot_id':expected_boot, 'run_id':run_id, 'state':'pending'}
-
-            recovery = SimpleNamespace(recover=recover, prepare_launch=prepare_launch)
+            globals_lease_evidence = lease_evidence
+            recovery = SimpleNamespace(
+                recover=recover, parse_v2_lease_records=parse_v2_lease_records)
             guest_shutdown = SimpleNamespace(shutdown=shutdown)
             original_helper = tool.helper
 
@@ -1877,20 +2337,17 @@ class ExperimentTests(unittest.TestCase):
                 second = tool.run_one(vm, manifests[1][1], vm/'evidence-b')
 
             self.assertEqual(first['warm_reuse'], 'recovered')
-            self.assertEqual(second['warm_reuse'], 'recovered')
+            self.assertEqual(second['verdict'], 'INVALID')
+            self.assertIn('v2_reuse_requires_finite_authority', second['error'])
             self.assertEqual([call for call in calls if call[0] == 'start'], [
-                ('start', ['--gpu','0000:7b:00.0','--gpu-id','0x73ff',
-                           '--gpu-rom','run/gpu-patched.rom']),
                 ('start', ['--gpu','0000:7b:00.0','--gpu-id','0x73ff',
                            '--gpu-rom','run/gpu-patched.rom'])])
             self.assertEqual(len([call for call in calls
-                                  if call[0] == 'forced-stop-confirmed']), 2)
+                                  if call[0] == 'forced-stop-confirmed']), 1)
             self.assertNotIn(('unexpected-stop', 'c'*64), calls)
             ledger = json.loads((vm/'run/used-gpu-boots/boot-A.json').read_text())
             self.assertEqual([row['run_id'] for row in ledger['launches']],
-                             ['a'*32, 'b'*32])
-            self.assertEqual(ledger['launches'][1]['prior_run_id'], 'a'*32)
-            self.assertEqual(ledger['launches'][1]['recovery_id'], 'f'*32)
+                             ['a'*32])
             admitted = json.loads(
                 (vm/'run/vfio-recovery/boot-A'/('a'*32+'.json')).read_text())
             self.assertEqual(tool.validate_recovery_receipt(
@@ -1904,6 +2361,8 @@ class ExperimentTests(unittest.TestCase):
             manifest = {key:'fixture' for key in tool.IDENTITY_FIELDS}
             manifest.update(build_id='abc', run_id='a'*32, max_seconds=180, boot_id='boot-A',
                             bootdisk_verified=True, gpu=True,
+                            recovery_lease_schema=2,
+                            recovery_helpers_sha256=self.recovery_helper_hashes(),
                             spec={'run_probe_only_after_native_start': True,
                                   'requested_diagnostic': 'rgpusdma=1'},
                             launch_options={'BOOTDISK_MODE':'custom', 'NVRAM':'stock'},
@@ -1933,10 +2392,9 @@ class ExperimentTests(unittest.TestCase):
                     'XJ: AMDHardware::startHWEngines -> 1',
                     'XJ: AMDGraphicsAccelerator::powerUpHW -> 1',
                 ]
-            serial = 'RGPU_RECORDS build=abc count=6 dropped=0 truncated=0\n'+''.join(
+            lines.extend(self.v2_critical_payloads(manifest['run_id']))
+            serial = f'RGPU_RECORDS build=abc count={len(lines)} dropped=0 truncated=0\n'+''.join(
                 f'RGPU_EVENT build=abc seq={i} {line}\n' for i,line in enumerate(lines))
-            if mode in ('probe-ready', 'probe-no-budget'):
-                serial = serial.replace('count=6', 'count=8')
             def start(*args):
                 calls.append('start'); (vm/'run/serial.log').write_text(serial)
                 if mode == 'gpu-less': self.assertEqual(args[2], [])
@@ -1968,7 +2426,15 @@ class ExperimentTests(unittest.TestCase):
                 ManagedStopUnconfirmed=StopUnconfirmed,
                 stop_exact=lambda cid:calls.append(('stop',cid)))
             guest_shutdown = SimpleNamespace(shutdown=shutdown)
-            def recover(vm_path, prior):
+            lease_evidence = object()
+            def parse_v2_lease_records(records, prior):
+                calls.append(('parse-v2', prior, tuple(records)))
+                return lease_evidence
+            def recover(vm_path, prior, *, lease_evidence=None,
+                        recovery_helpers_sha256=None):
+                self.assertIs(lease_evidence, globals_lease_evidence)
+                self.assertEqual(recovery_helpers_sha256,
+                                 manifest['recovery_helpers_sha256'])
                 calls.append(('recover', prior))
                 receipt = {'schema':2, 'status':'recovered', 'authorizes_launch':True,
                            'boot_id':'boot-A',
@@ -2009,10 +2475,9 @@ class ExperimentTests(unittest.TestCase):
                 target = vm_path/'run/vfio-recovery/boot-A'; target.mkdir(parents=True, exist_ok=True)
                 (target/(prior+'.json')).write_text(json.dumps(receipt))
                 return receipt
-            def prepare_launch(expected_boot, run_id):
-                calls.append(('prepare-recovery-reservation', expected_boot, run_id))
-                return {'boot_id':expected_boot, 'run_id':run_id, 'state':'pending'}
-            recovery = SimpleNamespace(recover=recover, prepare_launch=prepare_launch)
+            globals_lease_evidence = lease_evidence
+            recovery = SimpleNamespace(
+                recover=recover, parse_v2_lease_records=parse_v2_lease_records)
             def probe(vm_path, prepared):
                 calls.append('probe')
                 return {'run_id':prepared['run_id'],
@@ -2041,10 +2506,7 @@ class ExperimentTests(unittest.TestCase):
                 result = tool.run_one(vm, path, out)
                 self.assertEqual(calls.count('start'), 1)
                 if mode != 'gpu-less':
-                    self.assertLess(calls.index(('prepare-recovery-reservation',
-                                                 'boot-A', 'a'*32)),
-                                    calls.index('start'))
-                    self.assertTrue((out/'recovery-reservation.json').exists())
+                    self.assertFalse((out/'recovery-reservation.json').exists())
                 if mode == 'hybrid':
                     self.assertEqual(result['verdict'], 'HYBRID_QUEUE_SUSPECTED')
                     self.assertIn(('guest-shutdown','c'*64, 'fixture'), calls)
@@ -2088,7 +2550,8 @@ class ExperimentTests(unittest.TestCase):
                     self.assertNotIn(('stop','c'*64), calls)
                 if mode == 'unconfirmed':
                     self.assertNotIn(('recover', 'a'*32), calls)
-                elif mode not in ('shutdown-fault', 'monitor-capture', 'monitor-fault'):
+                elif mode not in ('shutdown-fault', 'monitor-capture', 'monitor-fault',
+                                  'capture-loss'):
                     self.assertIn(('recover', 'a'*32), calls)
                 if mode == 'capture-loss': self.assertLess(now[0], 110)
                 self.assertTrue((out/'verdict.json').exists())

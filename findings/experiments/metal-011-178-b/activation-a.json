@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "kind": "two-run-warm-qualification-activation",
+  "stage": "A",
+  "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+  "policy_sha256": "411bb1f98638401753db824b12deb6632e98b03281ea36ec6a545f6c014a2bdf",
+  "ledger_preimage_sha256": "e319d5d954e063a7142bd4873a597cc3bb8ccb9b29d577511eaaf92f924fd496",
+  "manifest_sha256": "a2929c4a03d3302e64f80b278e5f7d8cf24210aa6a89e2ae6953ef02957e5540",
+  "run_id": "f103e47500ed4a06ae346df23250d95d",
+  "prior_run_id": "ff2eb6e2492a4c5c96c6c6a847ed0c26",
+  "recovery_id": "2a24e2279e9b40d383e9f3e23f2c02f7",
+  "canonical_recovery_receipt_sha256": "e2fcf3ba93d88b0e19ac5a71260029ead38b501cf1dc5b2adce0bddd6482c446",
+  "run_recovery_receipt_sha256": "09aa1cfd2433b587d37fa45bc23c75ade7757edbae19711af3c83877a980ce4b",
+  "automatic_retry": false
+}

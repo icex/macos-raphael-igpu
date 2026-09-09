@@ -1,0 +1,261 @@
+{
+  "schema": 1,
+  "purpose": "candidate178-prestage-readiness",
+  "created_epoch": 1788981811.8358967,
+  "source_commit": "ef326108b868a00efb292e481ea2efb866205efa",
+  "source_clean": true,
+  "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+  "receipt_cursor_before": "s=98f6cb2295dc45898ee97031451ba7c8;i=3f3af;b=5d6f45d043844340b8197751bc26ebb3;m=9eef6872c;t=65b105088bc58;x=eaee18820c12763",
+  "retained_host": {
+    "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+    "active_vm": false,
+    "driver": "vfio-pci",
+    "device": "1002:13c0",
+    "iommu_group": "31",
+    "pci_command": 3,
+    "reset_methods": [],
+    "canonical_device": "/sys/devices/pci0000:00/0000:00:08.1/0000:7b:00.0",
+    "power_control": "on",
+    "power_state": "D0",
+    "runtime_status": "active",
+    "enable_count": "0",
+    "sleep_inhibited": true,
+    "watchdogs": {
+      "watchdog": "1",
+      "nmi_watchdog": "1",
+      "hardlockup_panic": "1"
+    },
+    "residual_units": [],
+    "siblings": {
+      "0000:7b:00.0": {
+        "device": "1002:13c0",
+        "driver": "vfio-pci",
+        "iommu_group": "31"
+      },
+      "0000:7b:00.1": {
+        "device": "1002:1640",
+        "driver": "snd_hda_intel",
+        "iommu_group": "32"
+      },
+      "0000:7b:00.2": {
+        "device": "1022:1649",
+        "driver": "ccp",
+        "iommu_group": "33"
+      },
+      "0000:7b:00.3": {
+        "device": "1022:15b6",
+        "driver": "xhci_hcd",
+        "iommu_group": "34"
+      },
+      "0000:7b:00.4": {
+        "device": "1022:15b7",
+        "driver": "xhci_hcd",
+        "iommu_group": "35"
+      },
+      "0000:7b:00.6": {
+        "device": "1022:15e3",
+        "driver": null,
+        "iommu_group": "36"
+      }
+    },
+    "reset_domain": {
+      "canonical_parent": "/sys/devices/pci0000:00/0000:00:08.1",
+      "domain_bus_device": "0000:7b:00",
+      "functions": [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "6"
+      ],
+      "canonical_devices": {
+        "0000:7b:00.0": "/sys/devices/pci0000:00/0000:00:08.1/0000:7b:00.0",
+        "0000:7b:00.1": "/sys/devices/pci0000:00/0000:00:08.1/0000:7b:00.1",
+        "0000:7b:00.2": "/sys/devices/pci0000:00/0000:00:08.1/0000:7b:00.2",
+        "0000:7b:00.3": "/sys/devices/pci0000:00/0000:00:08.1/0000:7b:00.3",
+        "0000:7b:00.4": "/sys/devices/pci0000:00/0000:00:08.1/0000:7b:00.4",
+        "0000:7b:00.6": "/sys/devices/pci0000:00/0000:00:08.1/0000:7b:00.6"
+      },
+      "physical_slot": {
+        "0000:7b:00.0": null,
+        "0000:7b:00.1": null,
+        "0000:7b:00.2": null,
+        "0000:7b:00.3": null,
+        "0000:7b:00.4": null,
+        "0000:7b:00.6": null
+      }
+    },
+    "kernel_release": "7.2.3-1-cachyos-bore",
+    "vfio_module_sha256": "d0bfbf478f892d57eb6f42a0d5d51f20a611bc7ee538643cc820932167686381",
+    "vfio_module_build_id": "a002a05ce4a09429cf6bc9906d1893ec7f304e81",
+    "journal_cursor": "s=98f6cb2295dc45898ee97031451ba7c8;i=3f3af;b=5d6f45d043844340b8197751bc26ebb3;m=9eef6872c;t=65b105088bc58;x=eaee18820c12763",
+    "journal_messages": [],
+    "journal_faults": []
+  },
+  "retained_host_errors": [],
+  "capture_host": {
+    "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+    "kernel": "7.2.3-1-cachyos-bore",
+    "driver": "vfio-pci",
+    "device": "1002:13c0",
+    "iommu_group": "31",
+    "amdgpu_initialized": true,
+    "watchdogs": {
+      "watchdog": "1",
+      "nmi_watchdog": "1",
+      "hardlockup_panic": "1"
+    },
+    "watchdogs_verified": true,
+    "capture_ready": true,
+    "pstore_files": null,
+    "device_pinned_awake": true,
+    "device_accessible": true,
+    "reset_methods": [],
+    "active_vm": false,
+    "sleep_inhibited": true
+  },
+  "capture_admission_errors": [],
+  "vfio_host_state": {
+    "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+    "active_vm": false,
+    "driver": "vfio-pci",
+    "device": "1002:13c0",
+    "iommu_group": "31",
+    "pci_command": 3,
+    "reset_methods": []
+  },
+  "vfio_host_errors": [],
+  "active_launch_units": [],
+  "pending_launches": [],
+  "active_sensitive_processes": [],
+  "active_docker_containers": [],
+  "ledger": {
+    "path": "/home/bogdan/macos-vm/run/used-gpu-boots/5d6f45d0-4384-4340-b819-7751bc26ebb3.json",
+    "sha256": "e319d5d954e063a7142bd4873a597cc3bb8ccb9b29d577511eaaf92f924fd496",
+    "schema": 3,
+    "max_launches": 4,
+    "launch_count": 4,
+    "launch_run_ids": [
+      "e583a1b2d97a4ad3b607c1d20a29a812",
+      "1a065e4f5f674cc0a26d4e9dbdf59649",
+      "e02fbed46a6a4df4ae48d7c1d8597985",
+      "ff2eb6e2492a4c5c96c6c6a847ed0c26"
+    ],
+    "cap_revision_count": 1
+  },
+  "receipts": {
+    "candidate176": {
+      "canonical_path": "/home/bogdan/macos-vm/run/vfio-recovery/5d6f45d0-4384-4340-b819-7751bc26ebb3/e02fbed46a6a4df4ae48d7c1d8597985.json",
+      "canonical_sha256": "4e6c1519f18c0bb60efeb816045eb3aedf6231a0ef8746a530c768996e7e6676",
+      "run_path": "/home/bogdan/macos-vm/run/metal-009-176/recovery.json",
+      "run_sha256": "77b0931dcefe4c710db724d6cedbda22acf42c3c43de2f0aba25546d396ea180",
+      "bytes_semantically_equal": true,
+      "schema": 6,
+      "status": "recovered",
+      "authorizes_launch": true,
+      "prior_run_id": "e02fbed46a6a4df4ae48d7c1d8597985",
+      "run_id": "e02fbed46a6a4df4ae48d7c1d8597985",
+      "recovery_id": "11602bc7c6f84c75afb1f2cb617a319c",
+      "kernel_cursor_after": "s=98f6cb2295dc45898ee97031451ba7c8;i=3f132;b=5d6f45d043844340b8197751bc26ebb3;m=8ed5f525b;t=65b0f4ef18787;x=bdfe8276aeb401dd",
+      "validation_errors": [],
+      "expected_hashes_match": true
+    },
+    "candidate177": {
+      "canonical_path": "/home/bogdan/macos-vm/run/vfio-recovery/5d6f45d0-4384-4340-b819-7751bc26ebb3/ff2eb6e2492a4c5c96c6c6a847ed0c26.json",
+      "canonical_sha256": "e2fcf3ba93d88b0e19ac5a71260029ead38b501cf1dc5b2adce0bddd6482c446",
+      "run_path": "/home/bogdan/macos-vm/run/metal-010-177/recovery.json",
+      "run_sha256": "09aa1cfd2433b587d37fa45bc23c75ade7757edbae19711af3c83877a980ce4b",
+      "bytes_semantically_equal": true,
+      "schema": 6,
+      "status": "recovered",
+      "authorizes_launch": true,
+      "prior_run_id": "ff2eb6e2492a4c5c96c6c6a847ed0c26",
+      "run_id": "ff2eb6e2492a4c5c96c6c6a847ed0c26",
+      "recovery_id": "2a24e2279e9b40d383e9f3e23f2c02f7",
+      "kernel_cursor_after": "s=98f6cb2295dc45898ee97031451ba7c8;i=3f3af;b=5d6f45d043844340b8197751bc26ebb3;m=9eef6872c;t=65b105088bc58;x=eaee18820c12763",
+      "validation_errors": [],
+      "expected_hashes_match": true
+    }
+  },
+  "current_candidate177_staging": {
+    "staging_path": "/home/bogdan/macos-vm/run/candidate-177/staging.json",
+    "staging_sha256": "55187b6647edb65d0150ea646a8984a1502b82ede42d9cb372ab4a71c4f14eb4",
+    "build_manifest_path": "/home/bogdan/macos-vm/run/candidate-177/build-manifest.json",
+    "build_manifest_sha256": "3ee76431767fd29c228c1ee68fa16f3fec7ddc3352ba4dabb54d4acb05502174",
+    "candidate_binary_sha256": "a3a4e5f524f5af0094c2a30ec1fa41841a487c398006f3f3925ccb328dbe0ddd",
+    "candidate_info_sha256": "fb3337ed1706c5e0e1c3ba4881925c3205d242bfec3026c1c8b8f6fac627a06e",
+    "config_path": "/home/bogdan/macos-vm/config.plist",
+    "config_sha256": "e0577821adf106b7ac8f7ad2a7eefb53619726ea4f909e3190a0711639af8ebf",
+    "boot_args": "-v keepsyms=1 tlbto_us=0 vti=9 serial=3 debug=0x108 -lilubetaall rgpudump=40000 rgpu=0xfffa5981 rgpuvmm=3 rgpumem=2 rgpuptb=2 rgpumqd=2 rgpuhybrid=1 rgpusdma=1 rgpuvmroot=1 rgpusubmit=1",
+    "raw_image_path": "/home/bogdan/macos-vm/run/oc-raw.img",
+    "raw_sha256": "c5cfb3a8b1b94e25054c3b3c77a37f37cf90d45dcbd6eea8011bb47ae11c6b1f",
+    "bootdisk_path": "/home/bogdan/macos-vm/OpenCore.qcow2",
+    "bootdisk_sha256": "841531b4fd3a2b4d39e61ceb2f7c2ebdf0b5e0f63e578a87d76f7f0192efe1b8",
+    "esp_files": {
+      "binary_sha256": "a3a4e5f524f5af0094c2a30ec1fa41841a487c398006f3f3925ccb328dbe0ddd",
+      "info_sha256": "fb3337ed1706c5e0e1c3ba4881925c3205d242bfec3026c1c8b8f6fac627a06e",
+      "config_sha256": "e0577821adf106b7ac8f7ad2a7eefb53619726ea4f909e3190a0711639af8ebf"
+    }
+  },
+  "staging_expected_comparisons": {
+    "candidate_binary": {
+      "actual": "a3a4e5f524f5af0094c2a30ec1fa41841a487c398006f3f3925ccb328dbe0ddd",
+      "expected": "a3a4e5f524f5af0094c2a30ec1fa41841a487c398006f3f3925ccb328dbe0ddd",
+      "match": true
+    },
+    "candidate_info": {
+      "actual": "fb3337ed1706c5e0e1c3ba4881925c3205d242bfec3026c1c8b8f6fac627a06e",
+      "expected": "fb3337ed1706c5e0e1c3ba4881925c3205d242bfec3026c1c8b8f6fac627a06e",
+      "match": true
+    },
+    "config": {
+      "actual": "e0577821adf106b7ac8f7ad2a7eefb53619726ea4f909e3190a0711639af8ebf",
+      "expected": "e0577821adf106b7ac8f7ad2a7eefb53619726ea4f909e3190a0711639af8ebf",
+      "match": true
+    },
+    "boot_args": {
+      "actual": "-v keepsyms=1 tlbto_us=0 vti=9 serial=3 debug=0x108 -lilubetaall rgpudump=40000 rgpu=0xfffa5981 rgpuvmm=3 rgpumem=2 rgpuptb=2 rgpumqd=2 rgpuhybrid=1 rgpusdma=1 rgpuvmroot=1 rgpusubmit=1",
+      "expected": "-v keepsyms=1 tlbto_us=0 vti=9 serial=3 debug=0x108 -lilubetaall rgpudump=40000 rgpu=0xfffa5981 rgpuvmm=3 rgpumem=2 rgpuptb=2 rgpumqd=2 rgpuhybrid=1 rgpusdma=1 rgpuvmroot=1 rgpusubmit=1",
+      "match": true
+    },
+    "raw_image": {
+      "actual": "c5cfb3a8b1b94e25054c3b3c77a37f37cf90d45dcbd6eea8011bb47ae11c6b1f",
+      "expected": "c5cfb3a8b1b94e25054c3b3c77a37f37cf90d45dcbd6eea8011bb47ae11c6b1f",
+      "match": true
+    },
+    "bootdisk": {
+      "actual": "841531b4fd3a2b4d39e61ceb2f7c2ebdf0b5e0f63e578a87d76f7f0192efe1b8",
+      "expected": "841531b4fd3a2b4d39e61ceb2f7c2ebdf0b5e0f63e578a87d76f7f0192efe1b8",
+      "match": true
+    },
+    "esp_binary": {
+      "actual": "a3a4e5f524f5af0094c2a30ec1fa41841a487c398006f3f3925ccb328dbe0ddd",
+      "expected": "a3a4e5f524f5af0094c2a30ec1fa41841a487c398006f3f3925ccb328dbe0ddd",
+      "match": true
+    },
+    "esp_info": {
+      "actual": "fb3337ed1706c5e0e1c3ba4881925c3205d242bfec3026c1c8b8f6fac627a06e",
+      "expected": "fb3337ed1706c5e0e1c3ba4881925c3205d242bfec3026c1c8b8f6fac627a06e",
+      "match": true
+    },
+    "esp_config": {
+      "actual": "e0577821adf106b7ac8f7ad2a7eefb53619726ea4f909e3190a0711639af8ebf",
+      "expected": "e0577821adf106b7ac8f7ad2a7eefb53619726ea4f909e3190a0711639af8ebf",
+      "match": true
+    },
+    "build_id": {
+      "actual": "a210b5e45fe94b9cac585127aeeb22b3",
+      "expected": "a210b5e45fe94b9cac585127aeeb22b3",
+      "match": true
+    },
+    "source_commit": {
+      "actual": "02e527dd87c9f053e073ff359f7bf1667f397560",
+      "expected": "02e527dd87c9f053e073ff359f7bf1667f397560",
+      "match": true
+    }
+  },
+  "staging_identity_errors": [],
+  "errors": [],
+  "ready": true
+}
