@@ -149,13 +149,16 @@ HOST_KIQ_SELECTOR = 0x9  # MEC2, pipe 1, queue 0: Apple's measured KIQ.
 HOST_KIQ_UNMAP_GFX = (0xC004A300, 0x30000000, 0x00000400, 0, 0, 0)
 HOST_KIQ_WRITE_FENCE = (0xC0033700, 0x00100500)
 
-# NBIO 7.2 exposes HDP_MEM_FLUSH_CNTL through the final BAR5 page. Linux's
-# amdgpu_hdp_generic_flush writes the remapped register then reads CONFIG_MEMSIZE
-# to order the write. Keep action-register posting reads away from their target.
+# NBIO 7.2 selects either its native HDP_MEM_FLUSH_CNTL address or the final
+# BAR5 page. Linux writes the selected register then reads CONFIG_MEMSIZE to
+# order the write. Keep action-register posting reads away from their target.
 NBIO_SEG2 = 0xd20
 NBIO_REMAP_HDP_MEM_FLUSH_OFFSET = (NBIO_SEG2 + 0x12d) * 4
 NBIO_CONFIG_MEMSIZE_OFFSET = (NBIO_SEG2 + 0x0c3) * 4
+HDP_MEM_FLUSH_NATIVE_OFFSET = (NBIO_SEG2 + 0x0f7) * 4
 HDP_MEM_FLUSH_REMAP_OFFSET = 0x7f000
+HDP_MEM_FLUSH_TARGETS = (HDP_MEM_FLUSH_NATIVE_OFFSET, HDP_MEM_FLUSH_REMAP_OFFSET)
+EXPECTED_CONFIG_MEMSIZE = 0x200
 
 
 class RecoveryError(RuntimeError):
@@ -358,8 +361,9 @@ class LegacyVfio:
 
     def posted_barrier(self):
         value = self.read32(NBIO_CONFIG_MEMSIZE_OFFSET)
-        if value == 0xffffffff:
-            raise RecoveryError('NBIO posted-read barrier returned all ones')
+        if value != EXPECTED_CONFIG_MEMSIZE:
+            raise RecoveryError(
+                f'NBIO CONFIG_MEMSIZE is {value:#x}, expected {EXPECTED_CONFIG_MEMSIZE:#x}')
         return value
 
     def write32(self, offset, value):
@@ -368,10 +372,10 @@ class LegacyVfio:
 
     def flush_hdp(self):
         remap = self.read32(NBIO_REMAP_HDP_MEM_FLUSH_OFFSET)
-        if remap != HDP_MEM_FLUSH_REMAP_OFFSET:
+        if remap not in HDP_MEM_FLUSH_TARGETS or remap & 3 or remap + 4 > len(self.bar):
             raise RecoveryError(
-                f'HDP flush remap is {remap:#x}, expected {HDP_MEM_FLUSH_REMAP_OFFSET:#x}')
-        struct.pack_into('<I', self.bar, HDP_MEM_FLUSH_REMAP_OFFSET, 0)
+                f'HDP flush target is {remap:#x}, expected a source-backed NBIO target')
+        struct.pack_into('<I', self.bar, remap, 0)
         posted = self.posted_barrier()
         return {'remap': remap, 'posted_read': posted}
 
@@ -385,7 +389,9 @@ class LegacyVfio:
             raise RecoveryError('VRAM write is outside BAR0')
         bar = self.bars[VFIO_PCI_BAR0_REGION_INDEX]
         bar[offset:offset+len(data)] = data
-        bar.flush(offset & ~0xfff, (len(data) + (offset & 0xfff) + 0xfff) & ~0xfff)
+        # mmap.flush() is msync(2), which VFIO device mappings reject with
+        # EINVAL. Publication is ordered by the explicit HDP flush and posted
+        # read at each reservation or execution boundary.
 
     def ring_doorbell64(self, index, value):
         if index != 0:
@@ -528,9 +534,10 @@ def valid_consumed_reservation(proof, run_id):
             proof.get('checksum') == expected[9] and
             proof.get('consumed') is True and
             isinstance(flush, dict) and set(flush) == {'remap', 'posted_read'} and
-            flush.get('remap') == HDP_MEM_FLUSH_REMAP_OFFSET and
+            type(flush.get('remap')) is int and
+            flush.get('remap') in HDP_MEM_FLUSH_TARGETS and
             type(flush.get('posted_read')) is int and
-            0 <= flush['posted_read'] < 0xffffffff)
+            flush.get('posted_read') == EXPECTED_CONFIG_MEMSIZE)
 
 
 def prepare_host_kiq_reservation(mmio, run_id):
@@ -546,13 +553,17 @@ def prepare_host_kiq_reservation(mmio, run_id):
 
 
 def prepare_launch(expected_boot, run_id, state_reader=host_state,
-                   transport_factory=LegacyVfio):
+                   transport_factory=LegacyVfio, expected_pending=False):
     """Install the one-launch challenge while the inactive device remains on VFIO."""
     before = state_reader()
     errors = validate_host_state(before, expected_boot)
     if errors:
         raise RecoveryError('pre-challenge gate failed: '+','.join(errors))
     with transport_factory() as transport:
+        prior_pending = None
+        if expected_pending:
+            prior_pending = inspect_host_kiq_reservation(
+                transport, run_id, HOST_KIQ_RESERVATION_PENDING)
         challenge = prepare_host_kiq_reservation(transport, run_id)
         region = transport.metadata()
     after = state_reader()
@@ -562,7 +573,7 @@ def prepare_launch(expected_boot, run_id, state_reader=host_state,
     return {'boot_id':expected_boot, 'run_id':run_id, 'state':'pending',
             'pci_command_before':before['pci_command'],
             'pci_command_after':after['pci_command'], 'vfio_region':region,
-            'challenge':challenge}
+            'prior_pending':prior_pending, 'challenge':challenge}
 
 
 def _put32(image, offset, value):

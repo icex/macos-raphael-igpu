@@ -24,7 +24,7 @@ class FakeTransport:
         self.fail_command = fail_command
         self.events = []
         self.value = 0x80050000
-        self.registers = {}
+        self.registers = {tool.NBIO_CONFIG_MEMSIZE_OFFSET: tool.EXPECTED_CONFIG_MEMSIZE}
         self.vram = {}
         regions = {
             '0': {'index':0, 'size':0x10000000, 'offset':0 << 40,
@@ -146,6 +146,7 @@ class VfioRecoveryTests(unittest.TestCase):
     def test_hdp_flush_validates_remap_and_uses_safe_posted_read(self):
         tool = self.tool
         self.assertEqual(tool.HDP_MEM_FLUSH_REMAP_OFFSET, 0x7f000)
+        self.assertEqual(tool.HDP_MEM_FLUSH_NATIVE_OFFSET, 0x385c)
         self.assertEqual(tool.NBIO_REMAP_HDP_MEM_FLUSH_OFFSET,
                          (0xd20 + 0x12d) * 4)
         self.assertEqual(tool.NBIO_CONFIG_MEMSIZE_OFFSET, (0xd20 + 0xc3) * 4)
@@ -158,10 +159,55 @@ class VfioRecoveryTests(unittest.TestCase):
         evidence = transport.flush_hdp()
         self.assertEqual(evidence, {'remap':0x7f000, 'posted_read':0x200})
         self.assertEqual(struct.unpack_from('<I', transport.bar, 0x7f000)[0], 0)
+
+        struct.pack_into('<I', transport.bar, tool.NBIO_REMAP_HDP_MEM_FLUSH_OFFSET,
+                         tool.HDP_MEM_FLUSH_NATIVE_OFFSET)
+        struct.pack_into('<I', transport.bar, tool.HDP_MEM_FLUSH_NATIVE_OFFSET, 0xfeed)
+        evidence = transport.flush_hdp()
+        self.assertEqual(evidence, {'remap':0x385c, 'posted_read':0x200})
+        self.assertEqual(struct.unpack_from(
+            '<I', transport.bar, tool.HDP_MEM_FLUSH_NATIVE_OFFSET)[0], 0)
         struct.pack_into('<I', transport.bar,
                          tool.NBIO_REMAP_HDP_MEM_FLUSH_OFFSET, 0)
-        with self.assertRaisesRegex(tool.RecoveryError, 'HDP.*remap'):
+        with self.assertRaisesRegex(tool.RecoveryError, 'HDP flush target'):
             transport.flush_hdp()
+
+        struct.pack_into('<I', transport.bar, tool.NBIO_REMAP_HDP_MEM_FLUSH_OFFSET,
+                         tool.HDP_MEM_FLUSH_NATIVE_OFFSET)
+        struct.pack_into('<I', transport.bar, tool.NBIO_CONFIG_MEMSIZE_OFFSET, 0x201)
+        with self.assertRaisesRegex(tool.RecoveryError, 'CONFIG_MEMSIZE'):
+            transport.flush_hdp()
+
+    def test_vram_publication_uses_hdp_instead_of_msync(self):
+        tool = self.tool
+
+        class VfioBar(bytearray):
+            def __init__(self, size):
+                super().__init__(size)
+                self.flush_calls = 0
+
+            def flush(self, offset, size):
+                self.flush_calls += 1
+                raise OSError(22, 'Invalid argument')
+
+        with patch.object(tool, 'VRAM_BAR_SIZE', 0x1000), \
+             patch.object(tool, 'HOST_KIQ_RESERVATION_OFFSET', 0):
+            transport = tool.LegacyVfio()
+            bar0 = VfioBar(tool.VRAM_BAR_SIZE)
+            bar5 = bytearray(0x80000)
+            transport.bars[tool.VFIO_PCI_BAR0_REGION_INDEX] = bar0
+            transport.bar = bar5
+            struct.pack_into('<I', bar5, tool.NBIO_REMAP_HDP_MEM_FLUSH_OFFSET,
+                             tool.HDP_MEM_FLUSH_REMAP_OFFSET)
+            struct.pack_into('<I', bar5, tool.NBIO_CONFIG_MEMSIZE_OFFSET, 0x200)
+
+            result = tool.prepare_host_kiq_reservation(transport, RUN_ID)
+            expected = tool.host_kiq_reservation_descriptor(
+                RUN_ID, tool.HOST_KIQ_RESERVATION_PENDING)
+            observed = bytes(bar0[:len(expected)])
+        self.assertEqual(observed, expected)
+        self.assertEqual(bar0.flush_calls, 0)
+        self.assertEqual(result['hdp_flush'], {'remap': 0x7f000, 'posted_read': 0x200})
 
     def test_bar2_doorbell_uses_aligned_atomic_u64_store(self):
         tool = self.tool
@@ -228,6 +274,12 @@ class VfioRecoveryTests(unittest.TestCase):
         tool = self.tool
         fake = FakeTransport(tool)
         proof = tool.consume_host_kiq_reservation(fake, RUN_ID)
+        self.assertTrue(tool.valid_consumed_reservation(proof, RUN_ID))
+        for key in ('remap', 'posted_read'):
+            broken = dict(proof)
+            broken['consume_hdp_flush'] = dict(proof['consume_hdp_flush'])
+            broken['consume_hdp_flush'][key] = float(broken['consume_hdp_flush'][key])
+            self.assertFalse(tool.valid_consumed_reservation(broken, RUN_ID))
         self.assertEqual(proof['heap_limit'], tool.HOST_KIQ_HEAP_LIMIT)
         self.assertEqual(proof['scratch_start'], tool.HOST_KIQ_RING_OFFSET)
         self.assertTrue(all(fake.read_vram32(
@@ -283,6 +335,33 @@ class VfioRecoveryTests(unittest.TestCase):
         self.assertEqual(evidence['run_id'], RUN_ID)
         self.assertEqual(fake.events[0], 'open')
         self.assertEqual(fake.events[-1], 'close')
+
+    def test_prepare_launch_resume_requires_exact_pending_before_republication(self):
+        tool = self.tool
+        fake = FakeTransport(tool)
+        fake.vram.clear()
+        pending = tool.host_kiq_reservation_descriptor(
+            RUN_ID, tool.HOST_KIQ_RESERVATION_PENDING)
+        fake.vram.update((tool.HOST_KIQ_RESERVATION_OFFSET+n, value)
+                         for n, value in enumerate(pending))
+        states = iter([self.state(), self.state()])
+        evidence = tool.prepare_launch(
+            'boot-A', RUN_ID, lambda:next(states), lambda:fake,
+            expected_pending=True)
+        self.assertEqual(evidence['prior_pending']['run_id'], RUN_ID)
+        self.assertEqual(evidence['prior_pending']['state'],
+                         tool.HOST_KIQ_RESERVATION_PENDING)
+        writes = [event for event in fake.events if isinstance(event, tuple) and
+                  event[0] == 'write-vram']
+        self.assertEqual(writes, [('write-vram', tool.HOST_KIQ_RESERVATION_OFFSET,
+                                  tool.HOST_KIQ_RESERVATION_SIZE)])
+
+        absent = FakeTransport(tool); absent.vram.clear()
+        with self.assertRaisesRegex(tool.RecoveryError, 'reservation launch nonce'):
+            tool.prepare_launch('boot-A', RUN_ID, lambda:self.state(), lambda:absent,
+                                expected_pending=True)
+        self.assertFalse(any(isinstance(event, tuple) and event[0] == 'write-vram'
+                             for event in absent.events))
 
     def test_prepare_launch_rejects_post_write_bus_master_enable(self):
         tool = self.tool

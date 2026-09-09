@@ -255,6 +255,211 @@ class ExperimentTests(unittest.TestCase):
             self.assertEqual(json.loads((root / 'boot-A.json').read_text())['launches'][0]['run_id'],
                              'first')
 
+    def test_prelaunch_continuation_is_exact_and_marker_is_single_use(self):
+        tool = self.module()
+        recovery = tool.helper('vfio-recover')
+        boot = tool.PRELAUNCH_CONTINUATION['boot_id']
+        run = tool.PRELAUNCH_CONTINUATION['run_id']
+        with tempfile.TemporaryDirectory() as temp:
+            vm = Path(temp); original = vm/'run/original'; original.mkdir(parents=True)
+            manifest = {key:'fixture' for key in tool.IDENTITY_FIELDS}
+            manifest.update(boot_id=boot, run_id=run, max_seconds=180, gpu=True,
+                            source_commit='old', source_sha256='driver-tree',
+                            source_clean=True, vfio_device='0000:7b:00.0',
+                            candidate_directory='run/candidate-174',
+                            spec={'candidate_version':'1.0.174'},
+                            prelaunch_replacement_reason=
+                                'remove side-effectful SEM diagnostic reads')
+            original_manifest = dict(manifest)
+            original_manifest.pop('prelaunch_replacement_reason')
+            original_manifest['candidate_directory'] = 'run/candidate-173'
+            original_manifest['spec'] = {'candidate_version':'1.0.173'}
+            manifest_path = vm/'manifest.json'
+            manifest_bytes = json.dumps(manifest).encode()
+            manifest_path.write_bytes(manifest_bytes)
+            original_manifest_bytes = json.dumps(original_manifest).encode()
+            (original/'manifest.json').write_bytes(original_manifest_bytes)
+            verdict = {'valid':False, 'verdict':'INVALID',
+                       'error':'OSError: [Errno 22] Invalid argument'}
+            (original/'verdict.json').write_text(json.dumps(verdict))
+            old_host = dict(self.host(), boot_id=boot, sleep_inhibited=True)
+            (original/'host-before.json').write_text(json.dumps(old_host))
+            (original/'host-after.json').write_text(json.dumps(old_host))
+            descriptor_sha = hashlib.sha256(recovery.host_kiq_reservation_descriptor(
+                run, recovery.HOST_KIQ_RESERVATION_PENDING)).hexdigest()
+            stages = []
+            for request in ('0x3b64','0x3b65','0x3b67','0x3b68','0x3b66','0x3b6a'):
+                stages.append({'operation':'ioctl','request':request,'status':'ok'})
+            for length in (0x10000000, 0x200000, 0x80000):
+                stages += [{'operation':'ioctl','request':'0x3b6c','status':'ok'},
+                           {'operation':'mmap','length':length,'status':'ok'}]
+            stages.append({'operation':'ioctl','request':'0x3b69','status':'ok'})
+            proof_host = dict(boot_id=boot, active_vm=False, driver='vfio-pci',
+                              device='1002:13c0', iommu_group='31', pci_command=3,
+                              reset_methods=[])
+            proof = {'schema':1, 'purpose':'locate prelaunch EINVAL without writes',
+                     'boot_id':boot, 'run_id':run, 'constructor':'ok', 'failure':None,
+                     'descriptor':{'exact_pending_match':True,
+                         'expected_sha256':descriptor_sha, 'observed_sha256':descriptor_sha,
+                         'expected_size':72, 'size':72},
+                     'before':proof_host, 'after':proof_host, 'kernel_messages':[],
+                     'pre_faults':[], 'post_faults':[], 'stages':stages}
+            proof_path = vm/'proof.json'; proof_path.write_text(json.dumps(proof))
+            ledger_dir = vm/'run/used-gpu-boots'; ledger_dir.mkdir(parents=True)
+            ledger_path = ledger_dir/(boot+'.json')
+            ledger_path.write_text(json.dumps({'schema':2, 'boot_id':boot,
+                                               'launches':[{'run_id':run}]}))
+            readiness = {'schema':1,
+                'purpose':'bounded read-only prelaunch HDP readiness',
+                'boot_id':boot, 'run_id':run, 'writes_permitted':False,
+                'marker_created':False, 'constructor':'ok',
+                'failure':'RuntimeError: HDP remap 0x385c != 0x7f000',
+                'descriptor':{'run_id':run,
+                              'state':recovery.HOST_KIQ_RESERVATION_PENDING},
+                'hdp_remap_offset_register':0x385c, 'config_memsize':0x200,
+                'config_memsize_valid':True, 'active_launch_units':[],
+                'kernel_messages_before':[], 'kernel_faults_before':[],
+                'failure_kernel_messages':[], 'failure_kernel_faults':[],
+                'before_pci':proof_host, 'failure_after_pci':proof_host,
+                'ledger_sha256':hashlib.sha256(ledger_path.read_bytes()).hexdigest()}
+            readiness_path = vm/'run/prelaunch-readiness-e583a1b2.json'
+            readiness_path.write_text(json.dumps(readiness))
+            observed = dict(manifest, source_commit='new')
+            current_recovery_host = dict(proof_host)
+            recovery.host_state = lambda:dict(current_recovery_host)
+            pinned = dict(boot_id=boot, run_id=run,
+                original_manifest_sha256=hashlib.sha256(original_manifest_bytes).hexdigest(),
+                replacement_manifest_sha256=hashlib.sha256(manifest_bytes).hexdigest(),
+                proof_sha256=hashlib.sha256(proof_path.read_bytes()).hexdigest(),
+                verdict_sha256=hashlib.sha256((original/'verdict.json').read_bytes()).hexdigest(),
+                output_sha256=tool.evidence_digest(original)[0],
+                readiness_sha256=hashlib.sha256(readiness_path.read_bytes()).hexdigest())
+            with patch.object(tool, 'PRELAUNCH_CONTINUATION', pinned), \
+                 patch.object(tool, 'helper', return_value=recovery), \
+                 patch.object(tool, 'current_qemu_version', return_value='fixture'), \
+                 patch.object(tool, 'active_launch_units', return_value=[]):
+                evidence, got_ledger, raw = tool.validate_prelaunch_continuation(
+                    vm, manifest_path, manifest, original, proof_path, observed,
+                    dict(old_host), ('cursor', [], []))
+                self.assertEqual(evidence['coordinator_commit'],
+                                 tool.command(['git','-C',str(ROOT),'rev-parse','HEAD']))
+                self.assertEqual(got_ledger, ledger_path)
+                self.assertEqual(raw, ledger_path.read_bytes())
+                marker = tool.prelaunch_continuation_marker(vm, boot, run)
+                marker.parent.mkdir()
+                tool.write_once(marker, evidence)
+                with self.assertRaises(FileExistsError): tool.write_once(marker, evidence)
+
+                (original/'supervision.json').write_text('{}')
+                with self.assertRaisesRegex(ValueError, 'original_after_prelaunch'):
+                    tool.validate_prelaunch_continuation(
+                        vm, manifest_path, manifest, original, proof_path, observed,
+                        dict(old_host), ('cursor', [], []))
+                (original/'supervision.json').unlink()
+                ledger_path.write_text(json.dumps({'schema':2, 'boot_id':boot,
+                    'launches':[{'run_id':run}, {'run_id':'f'*32}]}))
+                with self.assertRaisesRegex(ValueError, 'boot_ledger'):
+                    tool.validate_prelaunch_continuation(
+                        vm, manifest_path, manifest, original, proof_path, observed,
+                        dict(old_host), ('cursor', [], []))
+                ledger_path.write_text(json.dumps({'schema':2, 'boot_id':boot,
+                                                   'launches':[{'run_id':run}]}))
+                for field, value, error in (
+                        ('active_vm', True, 'resume_active_vm'),
+                        ('reset_methods', ['bus'], 'resume_reset_method'),
+                        ('pci_command', 7, 'resume_bus_master')):
+                    current_recovery_host[field] = value
+                    with self.assertRaisesRegex(ValueError, error):
+                        tool.validate_prelaunch_continuation(
+                            vm, manifest_path, manifest, original, proof_path, observed,
+                            dict(old_host), ('cursor', [], []))
+                    current_recovery_host[field] = proof_host[field]
+                observed['binary_sha256'] = 'changed'
+                with self.assertRaisesRegex(ValueError, 'binary_sha256'):
+                    tool.validate_prelaunch_continuation(
+                        vm, manifest_path, manifest, original, proof_path, observed,
+                        dict(old_host), ('cursor', [], []))
+                observed['binary_sha256'] = manifest['binary_sha256']
+                with patch.object(tool, 'current_qemu_version', return_value='changed'):
+                    with self.assertRaisesRegex(ValueError, 'qemu_version'):
+                        tool.validate_prelaunch_continuation(
+                            vm, manifest_path, manifest, original, proof_path, observed,
+                            dict(old_host), ('cursor', [], []))
+                with patch.object(tool, 'active_launch_units',
+                                  return_value=['rgpu-launch-stale.service']):
+                    with self.assertRaisesRegex(ValueError, 'active_launch_units'):
+                        tool.validate_prelaunch_continuation(
+                            vm, manifest_path, manifest, original, proof_path, observed,
+                            dict(old_host), ('cursor', [], []))
+
+    def test_run_continuation_consumes_marker_before_prepare_and_never_reserves_boot(self):
+        tool = self.module()
+        for mode in ('success', 'existing-marker', 'changed-ledger'):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as temp:
+                vm = Path(temp); (vm/'run').mkdir()
+                manifest = {key:'fixture' for key in tool.IDENTITY_FIELDS}
+                manifest.update(build_id='abc', run_id='a'*32, max_seconds=180,
+                    boot_id='boot-A', bootdisk_verified=True, gpu=True,
+                    spec={'requested_diagnostic':'rgpusdma=1'},
+                    launch_options={'BOOTDISK_MODE':'custom', 'NVRAM':'stock'},
+                    source_clean=True, vfio_device='0000:7b:00.0',
+                    candidate_directory='run/candidate-173', image_id='sha256:expected')
+                path = vm/'prepared.json'; path.write_text(json.dumps(manifest))
+                ledger_dir = vm/'run/used-gpu-boots'; ledger_dir.mkdir()
+                ledger = ledger_dir/'boot-A.json'; ledger.write_bytes(b'ledger-original')
+                events = []
+                marker = tool.prelaunch_continuation_marker(vm, 'boot-A', 'a'*32)
+                if mode == 'existing-marker':
+                    marker.parent.mkdir(); marker.write_text('{}')
+
+                class NoopMonitor:
+                    error = None; error_kind = None; messages = []
+                    def __init__(self, *args): pass
+                    def start(self): pass
+                    def stop(self): pass
+
+                def prepare_launch(*args, **kwargs):
+                    events.append(('prepare', kwargs))
+                    return {'state':'pending'}
+
+                recovery = SimpleNamespace(prepare_launch=prepare_launch)
+                supervisor = SimpleNamespace(
+                    start_locked=lambda *args: (_ for _ in ()).throw(RuntimeError('stop after prepare')),
+                    ManagedStopUnconfirmed=type('ManagedStopUnconfirmed',(RuntimeError,),{}))
+                original_helper = tool.helper
+                def helpers(name):
+                    if name == 'vfio-recover': return recovery
+                    if name == 'vm-supervision': return supervisor
+                    return original_helper(name)
+                original_write_once = tool.write_once
+                def write_once(path_arg, value):
+                    original_write_once(path_arg, value)
+                    if Path(path_arg) == marker:
+                        events.append(('marker', marker.name))
+                        if mode == 'changed-ledger': ledger.write_bytes(b'ledger-changed')
+
+                host = dict(self.host(), sleep_inhibited=True)
+                continuation = {'schema':1}
+                with patch.object(tool, 'current_identity', return_value=manifest), \
+                     patch.object(tool, 'host_snapshot', return_value=host), \
+                     patch.object(tool, 'kernel_updates', return_value=('cursor', [], [])), \
+                     patch.object(tool, 'validate_prelaunch_continuation',
+                         return_value=(continuation, ledger, b'ledger-original')), \
+                     patch.object(tool, 'HostMonitor', NoopMonitor), \
+                     patch.object(tool, 'helper', side_effect=helpers), \
+                     patch.object(tool, 'write_once', side_effect=write_once), \
+                     patch.object(tool, 'reserve_boot',
+                         side_effect=AssertionError('continuation must not reserve boot')):
+                    result = tool.run_one(vm, path, vm/('output-'+mode),
+                                          vm/'original', vm/'proof.json')
+                self.assertEqual(result['verdict'], 'INVALID')
+                if mode == 'success':
+                    self.assertEqual(events, [('marker', marker.name),
+                                              ('prepare', {'expected_pending':True})])
+                    self.assertEqual(ledger.read_bytes(), b'ledger-original')
+                else:
+                    self.assertFalse(any(row[0] == 'prepare' for row in events))
+
     def test_legacy_boot_reservation_accepts_one_matching_recovery_receipt(self):
         tool = self.module()
         with tempfile.TemporaryDirectory() as temp:
@@ -332,6 +537,18 @@ class ExperimentTests(unittest.TestCase):
         tool = self.module()
         good = self.recovery_receipt(tool)
         self.assertEqual(tool.validate_recovery_receipt(good, 'boot-A', 'a'*32), [])
+        native = json.loads(json.dumps(good))
+        native['gc_quiesce']['reservation']['consume_hdp_flush']['remap'] = 0x385c
+        self.assertEqual(tool.validate_recovery_receipt(native, 'boot-A', 'a'*32), [])
+        native['gc_quiesce']['reservation']['consume_hdp_flush']['posted_read'] = 0x201
+        self.assertIn('recovery_receipt', tool.validate_recovery_receipt(
+            native, 'boot-A', 'a'*32))
+        for key in ('remap', 'posted_read'):
+            noninteger = self.recovery_receipt(tool)
+            value = noninteger['gc_quiesce']['reservation']['consume_hdp_flush'][key]
+            noninteger['gc_quiesce']['reservation']['consume_hdp_flush'][key] = float(value)
+            self.assertIn('recovery_receipt', tool.validate_recovery_receipt(
+                noninteger, 'boot-A', 'a'*32))
         self.assertIn('recovery_receipt', tool.validate_recovery_receipt(
             {key:value for key,value in good.items() if key != 'gc_quiesce'},
             'boot-A', 'a'*32))
