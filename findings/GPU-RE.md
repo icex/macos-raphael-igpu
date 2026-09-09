@@ -3462,6 +3462,12 @@ The earlier walker misdecoded `PAGE_TABLE_BLOCK_SIZE` as the width of every leve
 that field as the leaf width minus 9; `ctrl=0x3b` therefore means a 16-bit leaf with 9-bit
 intermediate directories, and the three `0x400...` targets use root index 64 ([GFXHUB 2.1 source](https://github.com/torvalds/linux/blob/v6.12/drivers/gpu/drm/amd/amdgpu/gfxhub_v2_1.c)).
 
+The first corrected-walker launch stopped before QEMU because Python `mmap.flush()` translated to
+an unsupported `msync(2)` on the VFIO BAR0 device mapping and returned `EINVAL` after the exact
+PENDING reservation bytes were assigned. The transport now relies on its existing explicit HDP
+flush, posted BAR read and reservation readback; a one-shot continuation is limited to the pinned
+prelaunch evidence and consumes a durable boot/run marker before reopening VFIO.
+
 Invalidate semaphore registers are not safe diagnostic samples. Linux's CPU flush path documents
 that a semaphore read returning one acquires ownership and releases it by writing zero
 ([`gmc_v10_0.c`](https://github.com/torvalds/linux/blob/v6.12/drivers/gpu/drm/amd/amdgpu/gmc_v10_0.c#L276-L306));

@@ -16,6 +16,27 @@ int main() {
     for (unsigned i = 0; i < 100; ++i)
         assert(budget.take(false, 4));
 
+    // A repaired VMID can progress through more than 128 clean KIQ submissions.
+    // Retain a bounded clean prefix without ever suppressing the later fault.
+    rgpu::SuccessRecordBudget preClearFaultBudget {};
+    unsigned cleanPreClearRecords = 0;
+    for (unsigned i = 0; i < 160; ++i) {
+        const uint32_t status = 0;
+        cleanPreClearRecords += preClearFaultBudget.take(
+            status == 0, rgpu::kRoutinePreClearRecordLimit) ? 1 : 0;
+    }
+    const uint32_t faultStatus = 0xdead;
+    assert(cleanPreClearRecords == 8 &&
+           preClearFaultBudget.take(
+               faultStatus == 0, rgpu::kRoutinePreClearRecordLimit));
+
+    // The finite first-fault estimate is 199 records; the production capacity
+    // leaves room for all of them rather than dropping everything after 128.
+    static rgpu::DiagnosticRecords<rgpu::kCriticalRecordCapacity, 8>
+        boundedCriticalBurst {};
+    for (unsigned i = 0; i < 199; ++i) boundedCriticalBurst.append("record");
+    assert(boundedCriticalBurst.size() == 199 && boundedCriticalBurst.dropped() == 0);
+
     rgpu::DiagnosticRecords<2, 8> small {};
     char out[8];
     assert(!small.read(0, out));

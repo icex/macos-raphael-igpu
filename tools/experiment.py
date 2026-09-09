@@ -25,6 +25,16 @@ BOOT_GUID = '7C436110-AB2A-4BBB-A880-FE41995C9F82'
 RAPHAEL_DEVICE_PATH = 'PciRoot(0x0)/Pci(0x6,0x0)'
 RAPHAEL_TARGET_KEY = 'rgpu,raphael-target'
 RAPHAEL_TARGET_MARKER = b'RGPU-RAPHAEL\x01'
+PRELAUNCH_CONTINUATION = {
+    'boot_id':'5d6f45d0-4384-4340-b819-7751bc26ebb3',
+    'run_id':'e583a1b2d97a4ad3b607c1d20a29a812',
+    'original_manifest_sha256':'3e55268208543c81963b08b6fa922271324c45a9d1354f012ff069fc815796a4',
+    'replacement_manifest_sha256':None,  # Pinned after candidate 1.0.174 staging audit.
+    'proof_sha256':'8ce5b30f1c2ef9dfac68b00dee29ed8254845dae64dc0832ad4a1295424b034b',
+    'verdict_sha256':'071dc20ef87befa35d77e8ba445310277b75ce1349325504ee6f486de09a9ba7',
+    'output_sha256':'c099c8597f3da6a0f2db059bd3fd8d1fb53280db7dddcb271ddb76fe8c6609fa',
+    'readiness_sha256':'86282b2a881f86b1fd4d770ec7f066c2014aab0b957b7211c0ed6c6f996f9053',
+}
 
 
 def helper(name):
@@ -303,6 +313,233 @@ def write_once(path, value):
     finally: os.close(fd)
 
 
+def evidence_digest(directory):
+    """Bind a continuation to every regular file in immutable prior evidence."""
+    rows = []
+    for path in sorted(Path(directory).iterdir(), key=lambda item:item.name):
+        if not path.is_file() or path.is_symlink():
+            raise ValueError('original output contains unsupported entries')
+        rows.append({'name':path.name, 'sha256':sha(path.read_bytes())})
+    return sha(json.dumps(rows, sort_keys=True, separators=(',', ':')).encode()), rows
+
+
+def active_launch_units():
+    result = subprocess.run([
+        'systemctl', '--user', 'list-units', '--all', '--plain',
+        '--no-legend', 'rgpu-launch-*', 'rgpu-serial-*', 'rgpu-deadline-*'],
+        text=True, capture_output=True, timeout=10)
+    if result.returncode:
+        raise RuntimeError('cannot establish launch-unit state: '+result.stderr.strip())
+    return [line.split()[0] for line in result.stdout.splitlines() if line.split()]
+
+
+def current_qemu_version(image_id):
+    return command(['docker', 'run', '--rm', '--entrypoint', 'qemu-system-x86_64',
+                    image_id, '--version']).splitlines()[0]
+
+
+def prelaunch_continuation_marker(vm, boot_id, run_id):
+    return vm/'run/prelaunch-continuations'/(boot_id+'-'+run_id+'.json')
+
+
+def validate_prelaunch_continuation(vm, manifest_path, manifest, original_output,
+                                    proof_path, observed, host, cursor_result):
+    """Validate the single known EINVAL prelaunch failure without general retries."""
+    errors = []
+    original_output = Path(original_output)
+    proof_path = Path(proof_path)
+    original_manifest_bytes = verdict_bytes = proof_bytes = b''
+    output_sha, inventory = None, []
+    try:
+        original_manifest_bytes = (original_output/'manifest.json').read_bytes()
+        replacement_manifest_bytes = Path(manifest_path).read_bytes()
+        original_manifest = json.loads(original_manifest_bytes)
+        if json.loads(replacement_manifest_bytes) != manifest:
+            errors.append('replacement_manifest')
+        allowed = {'binary_sha256','info_sha256','build_id','source_sha256',
+                   'source_commit','built_from_commit','bootdisk_sha256',
+                   'candidate_directory','spec','prelaunch_replacement_reason'}
+        if set(manifest) != set(original_manifest) | {'prelaunch_replacement_reason'}:
+            errors.append('replacement_manifest')
+        for key in set(original_manifest) - allowed:
+            if manifest.get(key) != original_manifest.get(key):
+                errors.append('replacement_manifest')
+        original_spec = dict(original_manifest.get('spec', {}))
+        replacement_spec = dict(manifest.get('spec', {}))
+        original_spec.pop('candidate_version', None)
+        replacement_spec.pop('candidate_version', None)
+        if (original_spec != replacement_spec or
+                original_manifest.get('spec', {}).get('candidate_version') != '1.0.173' or
+                manifest.get('spec', {}).get('candidate_version') != '1.0.174' or
+                manifest.get('candidate_directory') != 'run/candidate-174' or
+                manifest.get('prelaunch_replacement_reason') !=
+                    'remove side-effectful SEM diagnostic reads'):
+            errors.append('replacement_manifest')
+        verdict_bytes = (original_output/'verdict.json').read_bytes()
+        verdict = json.loads(verdict_bytes)
+        if (verdict.get('valid') is not False or verdict.get('verdict') != 'INVALID' or
+                verdict.get('error') != 'OSError: [Errno 22] Invalid argument'):
+            errors.append('original_error')
+        if ((original_output/'recovery-reservation.json').exists() or
+                (original_output/'supervision.json').exists()):
+            errors.append('original_after_prelaunch')
+        output_sha, inventory = evidence_digest(original_output)
+        for name in ('host-before.json', 'host-after.json'):
+            old_host = json.loads((original_output/name).read_text())
+            if (admit(manifest, old_host, set()) or
+                    old_host.get('sleep_inhibited') is not True):
+                errors.append('original_host_state')
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        errors.append('original_output')
+        output_sha, inventory, verdict_bytes = None, [], b''
+        replacement_manifest_bytes = b''
+
+    recovery = helper('vfio-recover')
+    try:
+        proof_bytes = proof_path.read_bytes()
+        proof = json.loads(proof_bytes)
+        descriptor = proof.get('descriptor', {})
+        proof_keys = {'schema','purpose','boot_id','run_id','constructor','failure',
+                      'descriptor','before','after','kernel_messages','pre_faults',
+                      'post_faults','stages'}
+        expected_descriptor_sha = sha(recovery.host_kiq_reservation_descriptor(
+            manifest['run_id'], recovery.HOST_KIQ_RESERVATION_PENDING))
+        stage_shape = [(row.get('operation'), row.get('request'))
+                       for row in proof.get('stages', [])]
+        expected_stages = [
+            ('ioctl','0x3b64'), ('ioctl','0x3b65'), ('ioctl','0x3b67'),
+            ('ioctl','0x3b68'), ('ioctl','0x3b66'), ('ioctl','0x3b6a'),
+            ('ioctl','0x3b6c'), ('mmap',None), ('ioctl','0x3b6c'),
+            ('mmap',None), ('ioctl','0x3b6c'), ('mmap',None),
+            ('ioctl','0x3b69')]
+        if (set(proof) != proof_keys or proof.get('schema') != 1 or
+                proof.get('purpose') != 'locate prelaunch EINVAL without writes' or
+                proof.get('boot_id') != manifest.get('boot_id') or
+                proof.get('run_id') != manifest.get('run_id') or
+                proof.get('constructor') != 'ok' or proof.get('failure') is not None or
+                set(descriptor) != {'exact_pending_match','expected_sha256',
+                                    'expected_size','observed_sha256','size'} or
+                descriptor.get('exact_pending_match') is not True or
+                descriptor.get('expected_size') != 72 or descriptor.get('size') != 72 or
+                descriptor.get('expected_sha256') != descriptor.get('observed_sha256') or
+                descriptor.get('expected_sha256') != expected_descriptor_sha or
+                recovery.validate_host_state(proof.get('before', {}), manifest['boot_id']) or
+                recovery.validate_host_state(proof.get('after', {}), manifest['boot_id']) or
+                proof.get('kernel_messages') != [] or proof.get('pre_faults') != [] or
+                proof.get('post_faults') != [] or not isinstance(proof.get('stages'), list) or
+                stage_shape != expected_stages or
+                any(row.get('status') != 'ok' for row in proof['stages'])):
+            errors.append('prelaunch_proof')
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        proof_bytes = b''
+        errors.append('prelaunch_proof')
+
+    readiness_path = vm/'run/prelaunch-readiness-e583a1b2.json'
+    readiness = {}
+    try:
+        readiness_bytes = readiness_path.read_bytes()
+        readiness = json.loads(readiness_bytes)
+        if (sha(readiness_bytes) != PRELAUNCH_CONTINUATION['readiness_sha256'] or
+                readiness.get('schema') != 1 or
+                readiness.get('purpose') != 'bounded read-only prelaunch HDP readiness' or
+                readiness.get('boot_id') != manifest.get('boot_id') or
+                readiness.get('run_id') != manifest.get('run_id') or
+                readiness.get('writes_permitted') is not False or
+                readiness.get('marker_created') is not False or
+                readiness.get('failure') !=
+                    'RuntimeError: HDP remap 0x385c != 0x7f000' or
+                readiness.get('constructor') != 'ok' or
+                readiness.get('exact_pending') is not None or
+                readiness.get('descriptor', {}).get('run_id') != manifest.get('run_id') or
+                readiness.get('descriptor', {}).get('state') !=
+                    recovery.HOST_KIQ_RESERVATION_PENDING or
+                readiness.get('hdp_remap_offset_register') != 0x385c or
+                readiness.get('config_memsize') != 0x200 or
+                readiness.get('config_memsize_valid') is not True or
+                readiness.get('active_launch_units') != [] or
+                readiness.get('kernel_messages_before') != [] or
+                readiness.get('kernel_faults_before') != [] or
+                readiness.get('failure_kernel_messages') != [] or
+                readiness.get('failure_kernel_faults') != [] or
+                recovery.validate_host_state(
+                    readiness.get('before_pci', {}), manifest['boot_id']) or
+                recovery.validate_host_state(
+                    readiness.get('failure_after_pci', {}), manifest['boot_id'])):
+            errors.append('prelaunch_readiness')
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        readiness_bytes = b''
+        errors.append('prelaunch_readiness')
+
+    expected_identity = {key:manifest[key] for key in observed if key in manifest}
+    expected_identity.pop('source_commit', None)
+    errors += validate_identity(expected_identity, observed)
+    if (observed.get('source_clean') is not True or
+            observed.get('source_sha256') != manifest.get('source_sha256')):
+        errors.append('source_identity')
+    if current_qemu_version(observed.get('image_id')) != manifest.get('qemu_version'):
+        errors.append('qemu_version')
+    pinned = PRELAUNCH_CONTINUATION
+    if (manifest.get('boot_id') != pinned['boot_id'] or
+            manifest.get('run_id') != pinned['run_id'] or
+            sha(original_manifest_bytes) != pinned['original_manifest_sha256'] or
+            not pinned.get('replacement_manifest_sha256') or
+            sha(replacement_manifest_bytes) != pinned['replacement_manifest_sha256'] or
+            sha(verdict_bytes) != pinned['verdict_sha256'] or
+            output_sha != pinned['output_sha256'] or
+            sha(proof_bytes) != pinned['proof_sha256']):
+        errors.append('continuation_identity')
+    host_errors = admit(manifest, host, {host.get('boot_id')})
+    if host_errors != ['boot_already_used']:
+        errors += ['host_'+error for error in host_errors if error != 'boot_already_used']
+        if 'boot_already_used' not in host_errors: errors.append('ledger_missing')
+    try:
+        recovery_host = recovery.host_state()
+        errors += ['resume_'+error for error in
+                   recovery.validate_host_state(recovery_host, manifest['boot_id'])]
+    except Exception:
+        recovery_host = None
+        errors.append('resume_host_state')
+    cursor, messages, faults = cursor_result
+    if not cursor or messages or faults: errors.append('kernel_cursor')
+    units = active_launch_units()
+    if units: errors.append('active_launch_units')
+
+    ledger_path = vm/'run/used-gpu-boots'/(manifest['boot_id']+'.json')
+    try:
+        ledger_bytes = ledger_path.read_bytes()
+        ledger = json.loads(ledger_bytes)
+        launches = ledger.get('launches')
+        if (ledger.get('schema') != 2 or ledger.get('boot_id') != manifest['boot_id'] or
+                not isinstance(launches, list) or not launches or
+                launches[-1].get('run_id') != manifest['run_id']):
+            errors.append('boot_ledger')
+        if readiness.get('ledger_sha256') != sha(ledger_bytes):
+            errors.append('prelaunch_readiness')
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        ledger_bytes = b''
+        errors.append('boot_ledger')
+    if errors:
+        raise ValueError('prelaunch continuation refused: '+','.join(sorted(set(errors))))
+    return {
+        'schema':1, 'kind':'one-shot-prelaunch-continuation',
+        'boot_id':manifest['boot_id'], 'run_id':manifest['run_id'],
+        'original_output':str(original_output.resolve()),
+        'original_output_sha256':output_sha, 'original_files':inventory,
+        'original_manifest_sha256':sha(original_manifest_bytes),
+        'replacement_manifest_sha256':sha(replacement_manifest_bytes),
+        'original_verdict_sha256':sha(verdict_bytes),
+        'prelaunch_proof':str(proof_path.resolve()),
+        'prelaunch_proof_sha256':sha(proof_bytes),
+        'prelaunch_readiness':str(readiness_path.resolve()),
+        'prelaunch_readiness_sha256':sha(readiness_bytes),
+        'ledger_sha256':sha(ledger_bytes), 'kernel_cursor':cursor,
+        'resume_host_state':recovery_host, 'active_launch_units':units,
+        'coordinator_commit':command(['git','-C',str(ROOT),'rev-parse','HEAD']),
+        'experiment_py_sha256':sha((ROOT/'tools/experiment.py').read_bytes()),
+        'vfio_recover_py_sha256':sha((ROOT/'tools/vfio-recover.py').read_bytes()),
+    }, ledger_path, ledger_bytes
+
+
 def read_boot_ledger(path):
     value = json.loads(Path(path).read_text())
     if 'launches' not in value and 'experiment' in value:
@@ -345,10 +582,8 @@ def _recovery_checksum(prior_run_id):
 
 def _valid_hdp_flush(value):
     return (isinstance(value, dict) and set(value) == {'remap', 'posted_read'} and
-            type(value.get('remap')) is int and value.get('remap') == 0x7f000 and
-            type(value.get('posted_read')) is int and
-            0 <= value['posted_read'] <= 0xffffffff and
-            value['posted_read'] != 0xffffffff)
+            type(value.get('remap')) is int and value.get('remap') in (0x385c, 0x7f000) and
+            type(value.get('posted_read')) is int and value.get('posted_read') == 0x200)
 
 
 def _valid_reservation(value, prior_run_id):
@@ -729,8 +964,10 @@ def run_probe(vm, manifest):
     return dict(run_id=nonce, output=result.stdout, transport_exit=result.returncode)
 
 
-def run_one(vm, manifest_path, output):
+def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=None):
     """One bounded launch; a verified prior recovery may authorize same-boot reuse."""
+    if bool(resume_prelaunch) != bool(prelaunch_proof):
+        raise ValueError('prelaunch continuation requires both evidence paths')
     manifest = json.loads(manifest_path.read_text())
     missing = required_identity(manifest)
     if missing: raise ValueError('incomplete prepared identity: '+','.join(missing))
@@ -757,13 +994,24 @@ def run_one(vm, manifest_path, output):
                 if any(pending.iterdir()): raise ValueError('another supervised launch is pending')
                 requested = manifest.get('spec', {}).get('requested_diagnostic')
                 observed = current_identity(vm, vm/manifest['candidate_directory'], requested)
-                errors = validate_identity({key:manifest[key] for key in observed if key in manifest}, observed)
                 host = host_snapshot(); write_once(output/'host-before.json', host)
                 used = vm/'run/used-gpu-boots'; used.mkdir(exist_ok=True)
                 recovery = None; reuse_errors = []
-                if manifest.get('gpu') is False:
-                    if host['active_vm']: errors.append('active_vm')
+                continuation = None; continuation_ledger = None
+                if resume_prelaunch:
+                    cursor_result = kernel_updates()
+                    continuation, continuation_ledger, continuation_ledger_bytes = \
+                        validate_prelaunch_continuation(
+                            vm, manifest_path, manifest, resume_prelaunch,
+                            prelaunch_proof, observed, host, cursor_result)
+                    errors = []
                 else:
+                    errors = validate_identity(
+                        {key:manifest[key] for key in observed if key in manifest}, observed)
+                if manifest.get('gpu') is False:
+                    if resume_prelaunch: errors.append('gpu_less_continuation')
+                    if host['active_vm']: errors.append('active_vm')
+                elif not resume_prelaunch:
                     recovery, reuse_errors = reuse_authorization(vm, host['boot_id'],
                                                                   manifest['run_id'])
                     errors += reuse_errors
@@ -771,14 +1019,29 @@ def run_one(vm, manifest_path, output):
                                     reuse_allowed=recovery is not None)
                 if not host['sleep_inhibited']: errors.append('sleep_inhibited')
                 if errors: raise ValueError('admission refused: '+','.join(errors))
-                if manifest.get('gpu') is not False:
+                if manifest.get('gpu') is not False and not resume_prelaunch:
                     reserve_boot(used, host['boot_id'], manifest['run_id'], recovery)
-                cursor, _, _ = kernel_updates()
+                cursor = cursor_result[0] if resume_prelaunch else kernel_updates()[0]
                 monitor = HostMonitor(cursor, lambda:os.kill(os.getpid(), signal.SIGUSR1))
                 monitor.start()
                 if manifest.get('gpu') is not False:
+                    if resume_prelaunch:
+                        marker_dir = vm/'run/prelaunch-continuations'
+                        marker_dir.mkdir(exist_ok=True)
+                        marker = prelaunch_continuation_marker(
+                            vm, host['boot_id'], manifest['run_id'])
+                        continuation['marker'] = str(marker.resolve())
+                        write_once(output/'prelaunch-continuation.json', continuation)
+                        # This per-boot/run O_EXCL marker is consumed before VFIO opens.
+                        write_once(marker, continuation)
+                        if continuation_ledger.read_bytes() != continuation_ledger_bytes:
+                            raise RuntimeError('boot ledger changed before VFIO continuation')
                     reservation = helper('vfio-recover').prepare_launch(
-                        host['boot_id'], manifest['run_id'])
+                        host['boot_id'], manifest['run_id'],
+                        **({'expected_pending':True} if resume_prelaunch else {}))
+                    if (resume_prelaunch and
+                            continuation_ledger.read_bytes() != continuation_ledger_bytes):
+                        raise RuntimeError('boot ledger changed during prelaunch continuation')
                     write_once(output/'recovery-reservation.json', reservation)
                 (vm/'run/serial.log').write_text('')
                 (vm/'run/agent-server-events.jsonl').unlink(missing_ok=True)
@@ -905,7 +1168,13 @@ if __name__ == '__main__':
     parser.add_argument('--manifest', type=Path)
     parser.add_argument('--output', type=Path)
     parser.add_argument('--gpu-less', action='store_true', help='prepare a no-passthrough coordinator validation')
+    parser.add_argument('--resume-prelaunch', type=Path)
+    parser.add_argument('--prelaunch-proof', type=Path)
     args = parser.parse_args()
+    if ((args.resume_prelaunch or args.prelaunch_proof) and args.action != 'run'):
+        parser.error('prelaunch continuation options are only valid with run')
+    if bool(args.resume_prelaunch) != bool(args.prelaunch_proof):
+        parser.error('prelaunch continuation requires both evidence paths')
     if args.gpu_less and args.action != 'prepare':
         parser.error('--gpu-less is only valid with prepare; run uses the explicit prepared mode')
     if args.action == 'host': result = host_snapshot()
@@ -914,5 +1183,6 @@ if __name__ == '__main__':
         result = prepare(args.vm_dir.resolve(), args.spec, args.output, gpu=not args.gpu_less)
     else:
         if not args.manifest or not args.output: parser.error('run requires --manifest and --output')
-        result = run_one(args.vm_dir.resolve(), args.manifest, args.output)
+        result = run_one(args.vm_dir.resolve(), args.manifest, args.output,
+                         args.resume_prelaunch, args.prelaunch_proof)
     print(json.dumps(result, indent=2))

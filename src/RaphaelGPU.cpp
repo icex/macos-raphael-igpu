@@ -194,9 +194,10 @@ static const RPatch patches[] {
 // userspace is up. The deferred copy is clean, ordered, and greppable with
 // `log show`; the live serial copy stays as a crash-time fallback.
 static rgpu::DiagnosticRecords<256, 512> diagnostics {};
-static rgpu::DiagnosticRecords<128, 512> criticalRecords {};
+static rgpu::DiagnosticRecords<rgpu::kCriticalRecordCapacity, 512> criticalRecords {};
 static rgpu::SuccessRecordBudget waitStampRecordBudget {};
 static rgpu::SuccessRecordBudget kiqSubmitRecordBudget {};
+static rgpu::SuccessRecordBudget preClearFaultRecordBudget {};
 static rgpu::ObservationBuffer<RaphaelVm::PreparedRequest, 8> vmid2Programs {};
 static rgpu::ObservationBuffer<RaphaelSdma::SubmitInfoObservation, 8> vmid2Submits {};
 static bool vmRootFixEnabled = false;
@@ -3467,8 +3468,10 @@ static uint32_t wrapKiqSubmit(void *self) {
                 const uint32_t status = fbRead(asicInfo, kGcVmFaultSts);
                 const uint64_t address = RaphaelVm::decodeFaultAddress(
                     fbRead(asicInfo, kGcVmFaultLo), fbRead(asicInfo, kGcVmFaultHi));
-                CRLOG("VM: pre-clear-fault seq=%u cntl=%#x status=%#x addr=%#llx",
-                      sequence, c, status, address);
+                if (preClearFaultRecordBudget.take(
+                        status == 0, rgpu::kRoutinePreClearRecordLimit))
+                    CRLOG("VM: pre-clear-fault seq=%u cntl=%#x status=%#x addr=%#llx",
+                          sequence, c, status, address);
             }
         }
         fbWrite(asicInfo, kGcVmFaultCntl, c | 1u);
