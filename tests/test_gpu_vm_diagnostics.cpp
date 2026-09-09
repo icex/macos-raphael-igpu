@@ -377,6 +377,26 @@ int main() {
                 ack17.kind == RaphaelVm::InvalidateRegisterKind::Acknowledge &&
                 ack17.engine == 17 && !outside.valid,
             "prepared register numbers identify the actual invalidate engine and role");
+    uint32_t invalidateReadCount = 0;
+    uint32_t lastInvalidateRead = 0;
+    const auto invalidateReader = [&](uint32_t reg) {
+        ++invalidateReadCount;
+        lastInvalidateRead = reg;
+        return reg ^ 0x55aa55aau;
+    };
+    const auto semSample = RaphaelVm::sampleInvalidateRegister(
+        gc + 0x160f, sem2, invalidateReader);
+    require(!semSample.read && semSample.value == 0 && invalidateReadCount == 0,
+            "sampling a semantic invalidate semaphore never invokes the MMIO reader");
+    const auto reqSample = RaphaelVm::sampleInvalidateRegister(
+        gc + 0x1626, req7, invalidateReader);
+    const auto ackSample = RaphaelVm::sampleInvalidateRegister(
+        gc + 0x1642, ack17, invalidateReader);
+    require(reqSample.read && ackSample.read && invalidateReadCount == 2 &&
+                lastInvalidateRead == gc + 0x1642 &&
+                reqSample.value == ((gc + 0x1626) ^ 0x55aa55aau) &&
+                ackSample.value == ((gc + 0x1642) ^ 0x55aa55aau),
+            "request and acknowledge diagnostics retain ordinary MMIO reads");
     require(RaphaelVm::decodeFaultAddress(0x12345, 0xfffffff4) ==
                 0x400012345000ULL,
             "the 36-bit fault page number is masked and converted to a byte VA");

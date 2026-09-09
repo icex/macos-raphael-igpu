@@ -2631,9 +2631,10 @@ static void dumpGfxHubVm(const char *when) {
          when, tlb, tlb & 1, (tlb >> 3) & 3, l2, l2 & 1,
          fbRead(asicInfo, kGcVmL2Cntl2), fbRead(asicInfo, kGcVmL2Cntl3),
          fbRead(asicInfo, kGcVmL2Status), fbRead(asicInfo, kGcVmCtxDisable));
-    RLOG("XM: %s: INVALIDATE_ENG0 req=%#x ack=%#x sem=%#x  L2_FAULT_CNTL=%#x",
+    RLOG("XM: %s: INVALIDATE_ENG0 req=%#x ack=%#x sem=unread(acquire-risk)  "
+         "L2_FAULT_CNTL=%#x",
          when, fbRead(asicInfo, kGcVmInvEng0Req), fbRead(asicInfo, kGcVmInvEng0Ack),
-         fbRead(asicInfo, kGcVmInvEng0Sem), fbRead(asicInfo, kGcVmFaultCntl));
+         fbRead(asicInfo, kGcVmFaultCntl));
 }
 
 static uint32_t wrapWaitStamp(void *self, uint32_t stamp) {
@@ -4432,13 +4433,12 @@ static void reportVmid2Runtime(const char *phase, uint32_t sequence,
     const uint64_t faultAddress = RaphaelVm::decodeFaultAddress(
         fbRead(asicInfo, kGcVmFaultLo), fbRead(asicInfo, kGcVmFaultHi));
     const uint32_t invControl = fbRead(asicInfo, kGcVmInvCntl);
-    const uint32_t sem0 = fbRead(asicInfo, kGcVmInvEng0Sem);
     const uint32_t req0 = fbRead(asicInfo, kGcVmInvEng0Req);
     const uint32_t ack0 = fbRead(asicInfo, kGcVmInvEng0Ack);
     CRLOG("VM: fault seq=%u phase=%s cntl=%#x status=%#x addr=%#llx | invalidate-order=%#x "
-          "eng0-sem=%#x req=%#x ack=%#x bit2=%u/%u prepared-mask=%#x/%#x",
+          "eng0-sem=unread req=%#x ack=%#x bit2=%u/%u prepared-mask=%#x/%#x",
           sequence, phase, faultControl, faultStatus, faultAddress, invControl,
-          sem0, req0, ack0, (req0 >> 2) & 1u, (ack0 >> 2) & 1u,
+          req0, ack0, (req0 >> 2) & 1u, (ack0 >> 2) & 1u,
           program.words[19], program.words[20]);
     const uint32_t preparedRegs[] {program.words[12], program.words[14],
                                    program.words[16], program.words[18]};
@@ -4453,11 +4453,20 @@ static void reportVmid2Runtime(const char *phase, uint32_t sequence,
             if (decoded.valid) mmioReg += kGcSeg0;
         }
         if (decoded.valid) {
-            const uint32_t value = fbRead(asicInfo, mmioReg);
-            CRLOG("VM: invalidate-live seq=%u phase=%s reg=%#x kind=%s engine=%u "
-                  "value=%#x bit2=%u",
-                  sequence, phase, mmioReg, invalidateRegisterKindName(decoded.kind),
-                  decoded.engine, value, (value >> 2) & 1u);
+            const auto sample = RaphaelVm::sampleInvalidateRegister(
+                mmioReg, decoded,
+                [](uint32_t registerOffset) { return fbRead(asicInfo, registerOffset); });
+            if (!sample.read) {
+                CRLOG("VM: invalidate-live seq=%u phase=%s reg=%#x kind=%s engine=%u "
+                      "value=unread",
+                      sequence, phase, mmioReg, invalidateRegisterKindName(decoded.kind),
+                      decoded.engine);
+            } else {
+                CRLOG("VM: invalidate-live seq=%u phase=%s reg=%#x kind=%s engine=%u "
+                      "value=%#x bit2=%u",
+                      sequence, phase, mmioReg, invalidateRegisterKindName(decoded.kind),
+                      decoded.engine, sample.value, (sample.value >> 2) & 1u);
+            }
         }
     }
 

@@ -569,40 +569,47 @@ Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0
 
     def test_candidate173_parses_walk_entries_and_actual_invalidate_engine(self):
         rows = self.classifier().parse_serial(
-            'RGPU_RECORDS build=abc count=7 dropped=0 truncated=0\n'
+            'RGPU_RECORDS build=abc count=8 dropped=0 truncated=0\n'
             'RGPU_EVENT build=abc seq=0 VM: walk-entry seq=7 va=0x400100000 '
             'n=1 level=1 index=2 table=0x841000000 raw=0xf401200001 '
             'addr=0xf401200000 V=1 S=0 C=0 X=0 R=0 W=0 P=0 TF=0 '
             'child-mc2pa=1\n'
             'RGPU_EVENT build=abc seq=1 VM: invalidate-live seq=7 phase=dispatch+0ms '
+            'reg=0x286f kind=sem engine=2 value=unread\n'
+            'RGPU_EVENT build=abc seq=2 VM: invalidate-live seq=7 phase=dispatch+0ms '
             'reg=0x287f kind=req engine=7 value=0x4 bit2=1\n'
-            'RGPU_EVENT build=abc seq=2 VM: pre-clear-fault seq=7 cntl=0x801 '
+            'RGPU_EVENT build=abc seq=3 VM: pre-clear-fault seq=7 cntl=0x801 '
             'status=0xdead addr=0x400100000\n'
-            'RGPU_EVENT build=abc seq=3 VM: fault seq=7 phase=dispatch+0ms '
+            'RGPU_EVENT build=abc seq=4 VM: fault seq=7 phase=dispatch+0ms '
             'cntl=0x801 status=0xdead addr=0x400100000 | invalidate-order=0x2 '
-            'eng0-sem=0 req=0x4 ack=0 bit2=1/0 prepared-mask=0x4/0x4\n'
-            'RGPU_EVENT build=abc seq=4 SD: runtime seq=7 phase=dispatch+0ms '
+            'eng0-sem=unread req=0x4 ack=0 bit2=1/0 prepared-mask=0x4/0x4\n'
+            'RGPU_EVENT build=abc seq=5 SD: runtime seq=7 phase=dispatch+0ms '
             'cntl=0x1 ucode=0x22 f32=0x33 status=0x2/0x3/0x4/0x5 '
             'utcl-cntl=0x6 page=0x7 rd=0x8 wr=0x9\n'
-            'RGPU_EVENT build=abc seq=5 SD: xnack seq=7 phase=dispatch+0ms '
+            'RGPU_EVENT build=abc seq=6 SD: xnack seq=7 phase=dispatch+0ms '
             'rd=0xa/0xb wr=0xc/0xd\n'
-            'RGPU_EVENT build=abc seq=6 SD: page seq=7 phase=dispatch+0ms '
+            'RGPU_EVENT build=abc seq=7 SD: page seq=7 phase=dispatch+0ms '
             'status=0xe context=0xf ib-cntl=0x10 rptr=0x11 offset=0x12 '
             'base=0x13_00000014 size=0x15\n')
         self.assertEqual([row['kind'] for row in rows],
-                         ['vm_walk_entry', 'vm_invalidate_live', 'vm_pre_clear_fault',
+                         ['vm_walk_entry', 'vm_invalidate_live', 'vm_invalidate_live',
+                          'vm_pre_clear_fault',
                           'vm_fault', 'sdma_runtime', 'sdma_xnack', 'sdma_page_state'])
         self.assertEqual(rows[0]['address'], 0xf401200000)
         self.assertTrue(rows[0]['child_converted'])
-        self.assertEqual(rows[1]['engine'], 7)
-        self.assertTrue(rows[1]['vmid2_bit'])
-        self.assertEqual(rows[2]['fault_status'], 0xdead)
-        self.assertEqual(rows[3]['request_vmid2_bit'], 1)
-        self.assertEqual(rows[4]['utcl_page'], 7)
-        self.assertEqual(rows[4]['ucode_checksum'], 0x22)
-        self.assertEqual(rows[4]['f32_control'], 0x33)
-        self.assertEqual(rows[5]['write_xnack1'], 0xd)
-        self.assertEqual(rows[6]['ib_base'], 0x1300000014)
+        self.assertEqual(rows[1]['register_kind'], 'sem')
+        self.assertIsNone(rows[1]['value'])
+        self.assertIsNone(rows[1]['vmid2_bit'])
+        self.assertEqual(rows[2]['engine'], 7)
+        self.assertTrue(rows[2]['vmid2_bit'])
+        self.assertEqual(rows[3]['fault_status'], 0xdead)
+        self.assertIsNone(rows[4]['semaphore0'])
+        self.assertEqual(rows[4]['request_vmid2_bit'], 1)
+        self.assertEqual(rows[5]['utcl_page'], 7)
+        self.assertEqual(rows[5]['ucode_checksum'], 0x22)
+        self.assertEqual(rows[5]['f32_control'], 0x33)
+        self.assertEqual(rows[6]['write_xnack1'], 0xd)
+        self.assertEqual(rows[7]['ib_base'], 0x1300000014)
 
     def test_candidate173_required_root_repair_fails_closed_and_correlates(self):
         classify = self.classifier().classify
