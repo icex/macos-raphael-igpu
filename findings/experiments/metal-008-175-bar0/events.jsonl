@@ -1,0 +1,52 @@
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 0, "kind": "build", "raw": "BUILD: identity=693734a021524bd29dd71df774d917a3"}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 1, "kind": "vm_program_route", "raw": "VM: route AMDGFX10VMM::prepareVMInvalidateRequest -> ok (org=0xffffff8005c1d217)", "ok": true}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 2, "kind": "other", "raw": "SD: route AMDHardware::initializeHWEngines -> ok (org=0xffffff8005c1d344)"}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 3, "kind": "other", "raw": "SD: route AMDHardware::stopHWEngines -> ok (org=0xffffff8005c1d358)"}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 4, "kind": "other", "raw": "SD: route AMDHardware::powerOffHWEngines -> ok (org=0xffffff8005c1d36c)"}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 5, "kind": "other", "raw": "SD: route AMDHardware::powerOff -> ok (org=0xffffff8005c1d380)"}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 6, "kind": "other", "raw": "SD: route AMDHardware::getHWChannel -> ok (org=0xffffff8005c1d394)"}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 7, "kind": "other", "raw": "SD: route AMDGFX10SDMAChannel::commitIndirectCommandBuffer -> ok (org=0xffffff8005c1d3a8)"}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 8, "kind": "sdma_topology_route", "raw": "SD: topology routes=ok count=7 entries-match=1", "count": 7, "ok": true}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 9, "kind": "route", "raw": "HY: HWLibs hybrid trace route=ok entries-match=1 (max 8 calls)", "ok": true}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 10, "kind": "sdma_route", "raw": "HY: SDMA selector trace route=ok entries-match=1 (max 8 hybrid calls)", "ok": true}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 11, "kind": "sdma_topology", "raw": "SD: topology applied: discovered=1 kept=SDMA0 removed=SDMA1 before initialize", "applied": true}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 12, "kind": "sdma_initialize", "raw": "SD: AMDHardware::initializeHWEngines -> 1 (topology-applied=1)", "result": 1, "applied": true}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 13, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 14, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 15, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 16, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 17, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 18, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 19, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=1", "requested": 2, "selected": 1}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 20, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 21, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=1", "requested": 2, "selected": 1}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 22, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 23, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 24, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 25, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 26, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 27, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 28, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=1", "requested": 2, "selected": 1}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 29, "kind": "other", "raw": "XJ: AMDGraphicsAccelerator::powerUpHW entry"}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 30, "kind": "hybrid_enter", "raw": "HY: createHybridEngine enter: engine=12 available=1", "engine": 12, "available": 1}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 31, "kind": "hybrid_exit", "raw": "HY: createHybridEngine exit: engine=12 valid=1 available-before=1 status=0", "engine": 12, "arguments_valid": 1, "available": 1, "result": 0}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 32, "kind": "kiq", "raw": "XJ:   waitForHwStamp(1) -> 1 caller=x6+0x5c75f", "stamp": 1, "result": 1, "caller": 378719}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 33, "kind": "kiq_submit", "raw": "XJ:   submitKIQFrame -> 1 caller=x6+0x68291", "result": 1, "caller": 426641}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 34, "kind": "hybrid_enter", "raw": "HY: createHybridEngine enter: engine=13 available=1", "engine": 13, "available": 1}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 35, "kind": "hybrid_exit", "raw": "HY: createHybridEngine exit: engine=13 valid=1 available-before=1 status=0", "engine": 13, "arguments_valid": 1, "available": 1, "result": 0}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 36, "kind": "kiq", "raw": "XJ:   waitForHwStamp(2) -> 1 caller=x6+0x5c75f", "stamp": 2, "result": 1, "caller": 378719}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 37, "kind": "kiq_submit", "raw": "XJ:   submitKIQFrame -> 1 caller=x6+0x77587b72", "result": 1, "caller": 2002287474}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 38, "kind": "kiq", "raw": "XJ:   waitForHwStamp(3) -> 1 caller=x6+0x5c75f", "stamp": 3, "result": 1, "caller": 378719}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 39, "kind": "kiq_submit", "raw": "XJ:   submitKIQFrame -> 1 caller=x6+0x77587b72", "result": 1, "caller": 2002287474}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 40, "kind": "kiq", "raw": "XJ:   waitForHwStamp(1) -> 1 caller=x6+0x5a5f0", "stamp": 1, "result": 1, "caller": 370160}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 41, "kind": "other", "raw": "XJ: AMDHardware::powerUpHWEngines -> 1"}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 42, "kind": "hybrid_enter", "raw": "HY: createHybridEngine enter: engine=10 available=1", "engine": 10, "available": 1}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 43, "kind": "sdma_select", "raw": "HY: SDMA select index=0 queue-type=0 found=1 counts=1,0,0,0 queues=1,1,2395152040 occupied=0 callback=0x62c9f", "index": 0, "queue_type": 0, "found": true, "counts": [1, 0, 0, 0]}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 44, "kind": "hybrid_exit", "raw": "HY: createHybridEngine exit: engine=10 valid=1 available-before=1 status=0", "engine": 10, "arguments_valid": 1, "available": 1, "result": 0}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 45, "kind": "hybrid_enter", "raw": "HY: createHybridEngine enter: engine=11 available=1", "engine": 11, "available": 1}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 46, "kind": "sdma_select", "raw": "HY: SDMA select index=0 queue-type=1 found=1 counts=1,0,0,0 queues=1,1,2395152040 occupied=1 callback=0x62c9f", "index": 0, "queue_type": 1, "found": true, "counts": [1, 0, 0, 0]}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 47, "kind": "hybrid_exit", "raw": "HY: createHybridEngine exit: engine=11 valid=1 available-before=1 status=0", "engine": 11, "arguments_valid": 1, "available": 1, "result": 0}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 48, "kind": "sdma_one_start", "raw": "SD: one-instance start -> 1 (SDMA0=0xffffffa8ae857700 SDMA1=0)", "result": 1}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 49, "kind": "engine_start", "raw": "XJ: AMDHardware::startHWEngines -> 1", "result": 1}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 50, "kind": "other", "raw": "XJ: AMDGraphicsAccelerator::powerUpHW -> 1"}
+{"build": "693734a021524bd29dd71df774d917a3", "seq": 51, "kind": "kiq", "raw": "XJ:   waitForHwStamp(1) -> 1 caller=x6+0x73f86", "stamp": 1, "result": 1, "caller": 475014}

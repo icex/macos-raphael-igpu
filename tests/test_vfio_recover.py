@@ -509,9 +509,13 @@ class VfioRecoveryTests(unittest.TestCase):
             tool.GCMC_VM_FB_LOCATION_TOP_OFFSET: 0xf41f,
             tool.CP_RB_DOORBELL_CONTROL_OFFSET: 0xc0000400,
         })
+        reservation = tool.consume_host_kiq_reservation(fake, RUN_ID)
         fake.flush_hdp = lambda:(_ for _ in ()).throw(tool.RecoveryError('bad HDP'))
-        with self.assertRaisesRegex(tool.RecoveryError, 'bad HDP'):
-            tool.retire_legacy_gfx_with_host_kiq(fake, RUN_ID, sleep=lambda _:None, polls=2)
+        with self.assertRaisesRegex(tool.RecoveryError, 'bad HDP') as raised:
+            tool.retire_legacy_gfx_with_host_kiq(
+                fake, RUN_ID, sleep=lambda _:None, polls=2,
+                reservation_proof=reservation)
+        self.assertIsNone(raised.exception.evidence['terminal_poll'])
         self.assertFalse(any(isinstance(event, tuple) and event[0] == 'doorbell64'
                              for event in fake.events))
         mec_writes = [event[2] for event in fake.events if isinstance(event, tuple) and
@@ -536,6 +540,210 @@ class VfioRecoveryTests(unittest.TestCase):
         })
         with self.assertRaisesRegex(tool.RecoveryError, 'completion fence'):
             tool.retire_legacy_gfx_with_host_kiq(fake, RUN_ID, sleep=lambda _:None, polls=2)
+
+    def test_host_kiq_clean_failure_preserves_terminal_and_cleanup_evidence(self):
+        tool = self.tool
+
+        class MissingFence(FakeTransport):
+            def ring_doorbell64(self, index, value):
+                self.events.append(('doorbell64', index, value))
+                self.registers[tool.CP_HQD_PQ_RPTR_OFFSET] = value
+                self.registers[tool.CP_RB_ACTIVE_OFFSET] = 0
+
+        fake = MissingFence(tool)
+        fake.registers.update({
+            tool.GCMC_VM_FB_LOCATION_BASE_OFFSET: 0xf400,
+            tool.GCMC_VM_FB_LOCATION_TOP_OFFSET: 0xf41f,
+            tool.GCMC_VM_FB_OFFSET_OFFSET: 0x840,
+            tool.CP_RB_DOORBELL_CONTROL_OFFSET: 0xc0000400,
+        })
+        with self.assertRaisesRegex(tool.RecoveryError, 'completion fence') as raised:
+            tool.retire_legacy_gfx_with_host_kiq(
+                fake, RUN_ID, sleep=lambda _:None, polls=2)
+
+        evidence = raised.exception.evidence
+        self.assertEqual(evidence['aperture'], {
+            'base': 0xf400000000, 'size': 0x20000000})
+        self.assertEqual(evidence['addresses']['ring'], 0xf40f100000)
+        self.assertEqual(evidence['addresses']['mqd'], 0xf40f110000)
+        self.assertEqual(evidence['addresses']['fence'], 0xf40f113000)
+        self.assertEqual(evidence['packet'], {
+            'unmap': list(tool.HOST_KIQ_UNMAP_GFX),
+            'write_fence': list(tool.HOST_KIQ_WRITE_FENCE),
+            'ring_used_dwords': tool.HOST_KIQ_RING_USED_DWORDS,
+        })
+        self.assertEqual(evidence['terminal_poll'], {
+            'polls': 2,
+            'rptr': tool.HOST_KIQ_RING_USED_DWORDS,
+            'report': 0,
+            'fence': 0,
+        })
+        self.assertIsInstance(evidence['fence_sequence'], int)
+        self.assertNotEqual(evidence['fence_sequence'], 0)
+        self.assertEqual(evidence['cleanup']['errors'], [])
+        self.assertEqual(evidence['cleanup']['readbacks'], {
+            'mec_cntl': tool.CP_MEC_HALT_MASK,
+            'hqd_active': 0,
+            'hqd_doorbell': 0,
+            'hqd_rptr': 0,
+            'hqd_wptr_lo': 0,
+            'hqd_wptr_hi': 0,
+            'pq_status': 0,
+            'doorbell_range_lower': 0,
+            'doorbell_range_upper': 0,
+            'wptr_poll_cntl': 0,
+        })
+
+    def test_host_kiq_combined_failure_preserves_wptr_readback_and_error(self):
+        tool = self.tool
+
+        class MissingFenceAndStickyWptr(FakeTransport):
+            def __init__(self):
+                super().__init__(tool)
+                self.wptr_zero_writes = 0
+
+            def ring_doorbell64(self, index, value):
+                self.events.append(('doorbell64', index, value))
+                self.registers[tool.CP_HQD_PQ_RPTR_OFFSET] = value
+                self.registers[tool.CP_RB_ACTIVE_OFFSET] = 0
+
+            def write32(self, offset, value):
+                if offset == tool.CP_HQD_PQ_WPTR_LO_OFFSET and value == 0:
+                    self.wptr_zero_writes += 1
+                super().write32(offset, value)
+
+            def read32(self, offset):
+                if (offset == tool.CP_HQD_PQ_WPTR_LO_OFFSET and
+                        self.wptr_zero_writes >= 2):
+                    self.events.append(('read', offset))
+                    return tool.HOST_KIQ_RING_USED_DWORDS
+                return super().read32(offset)
+
+        fake = MissingFenceAndStickyWptr()
+        fake.registers.update({
+            tool.GCMC_VM_FB_LOCATION_BASE_OFFSET: 0xf400,
+            tool.GCMC_VM_FB_LOCATION_TOP_OFFSET: 0xf41f,
+            tool.GCMC_VM_FB_OFFSET_OFFSET: 0x840,
+            tool.CP_RB_DOORBELL_CONTROL_OFFSET: 0xc0000400,
+        })
+        with self.assertRaisesRegex(
+                tool.RecoveryError,
+                'completion fence.*host KIQ cleanup failed.*wptr did not clear') as raised:
+            tool.retire_legacy_gfx_with_host_kiq(
+                fake, RUN_ID, sleep=lambda _:None, polls=2)
+
+        evidence = raised.exception.evidence
+        self.assertEqual(evidence['terminal_poll']['rptr'],
+                         tool.HOST_KIQ_RING_USED_DWORDS)
+        self.assertEqual(evidence['terminal_poll']['report'], 0)
+        self.assertEqual(evidence['terminal_poll']['fence'], 0)
+        self.assertEqual(evidence['cleanup']['readbacks']['hqd_wptr_lo'],
+                         tool.HOST_KIQ_RING_USED_DWORDS)
+        self.assertIsNone(evidence['cleanup']['readbacks']['hqd_wptr_hi'])
+        self.assertEqual(evidence['cleanup']['errors'], [
+            'verify host KIQ wptr clear: RecoveryError: '
+            'host KIQ wptr did not clear'])
+
+    def test_host_kiq_failure_keeps_raw_rptr_when_only_report_completed(self):
+        tool = self.tool
+
+        class ReportOnlyAndStickyWptr(FakeTransport):
+            def __init__(self):
+                super().__init__(tool)
+                self.selector = 0
+                self.hqd_active = 0
+                self.wptr_zero_writes = 0
+
+            def read32(self, offset):
+                if offset == tool.CP_HQD_ACTIVE_OFFSET:
+                    return self.hqd_active if self.selector == tool.HOST_KIQ_SELECTOR else 0
+                if offset == tool.CP_HQD_PQ_RPTR_OFFSET:
+                    self.events.append(('read', offset))
+                    return 0
+                if (offset == tool.CP_HQD_PQ_WPTR_LO_OFFSET and
+                        self.wptr_zero_writes >= 2):
+                    self.events.append(('read', offset))
+                    return tool.HOST_KIQ_RING_USED_DWORDS
+                return super().read32(offset)
+
+            def write32(self, offset, value):
+                if offset == tool.GRBM_GFX_CNTL_OFFSET:
+                    self.selector = value
+                if (offset == tool.CP_HQD_ACTIVE_OFFSET and
+                        self.selector == tool.HOST_KIQ_SELECTOR):
+                    self.hqd_active = value & 1
+                if (offset == tool.CP_HQD_DEQUEUE_OFFSET and value == 1 and
+                        self.selector == tool.HOST_KIQ_SELECTOR):
+                    self.hqd_active = 0
+                if offset == tool.CP_HQD_PQ_WPTR_LO_OFFSET and value == 0:
+                    self.wptr_zero_writes += 1
+                super().write32(offset, value)
+
+            def ring_doorbell64(self, index, value):
+                self.events.append(('doorbell64', index, value))
+                sequence = self.read_vram32(
+                    tool.HOST_KIQ_RING_OFFSET +
+                    tool.HOST_KIQ_FENCE_SEQUENCE_DWORD * 4)
+                self.write_vram(tool.HOST_KIQ_RPTR_OFFSET,
+                                struct.pack('<I', value))
+                self.write_vram(tool.HOST_KIQ_FENCE_OFFSET,
+                                struct.pack('<I', sequence))
+                self.registers[tool.CP_RB_ACTIVE_OFFSET] = 0
+
+        fake = ReportOnlyAndStickyWptr()
+        fake.registers.update({
+            tool.GCMC_VM_FB_LOCATION_BASE_OFFSET: 0xf400,
+            tool.GCMC_VM_FB_LOCATION_TOP_OFFSET: 0xf41f,
+            tool.GCMC_VM_FB_OFFSET_OFFSET: 0x840,
+            tool.CP_RB_DOORBELL_CONTROL_OFFSET: 0xc0000400,
+        })
+        with self.assertRaisesRegex(
+                tool.RecoveryError, 'host KIQ cleanup failed.*wptr did not clear') as raised:
+            tool.retire_legacy_gfx_with_host_kiq(
+                fake, RUN_ID, sleep=lambda _:None, polls=2)
+
+        terminal = raised.exception.evidence['terminal_poll']
+        self.assertEqual(terminal['rptr'], 0)
+        self.assertEqual(terminal['report'], tool.HOST_KIQ_RING_USED_DWORDS)
+        self.assertEqual(terminal['fence'],
+                         raised.exception.evidence['fence_sequence'])
+        self.assertEqual(terminal['polls'], 1)
+
+    def test_host_kiq_failure_evidence_survives_recovery_and_cannot_authorize(self):
+        tool = self.tool
+
+        class MissingFence(FakeTransport):
+            def ring_doorbell64(self, index, value):
+                self.events.append(('doorbell64', index, value))
+                self.registers[tool.CP_HQD_PQ_RPTR_OFFSET] = value
+                self.registers[tool.CP_RB_ACTIVE_OFFSET] = 0
+
+        fake = MissingFence(tool)
+        fake.registers.update({
+            tool.GCMC_VM_FB_LOCATION_BASE_OFFSET: 0xf400,
+            tool.GCMC_VM_FB_LOCATION_TOP_OFFSET: 0xf41f,
+            tool.GCMC_VM_FB_OFFSET_OFFSET: 0x840,
+            tool.CP_RB_ACTIVE_OFFSET: 1,
+            tool.CP_RB_DOORBELL_CONTROL_OFFSET: 0xc0000400,
+            tool.CP_RB0_WPTR_OFFSET: 0x80,
+            tool.CP_RB0_BASE_OFFSET: 0x00bfe000,
+            tool.CP_RB0_BASE_HI_OFFSET: 0xf4,
+            tool.CP_RB0_CNTL_OFFSET: 0x00a00e10,
+        })
+        states = iter([self.state(), self.state()])
+        result = tool.perform_recovery(
+            'boot-A', RUN_ID, lambda:next(states), lambda:fake,
+            lambda cursor=None:('cursor-2', [], []), sleep=lambda _:None, polls=2)
+
+        self.assertEqual(result['status'], 'incomplete')
+        self.assertFalse(result['authorizes_launch'])
+        host_kiq = result['gc_quiesce']['host_kiq']
+        self.assertEqual(host_kiq['status'], 'failed')
+        self.assertIn('completion fence', host_kiq['error'])
+        self.assertEqual(host_kiq['evidence']['terminal_poll']['rptr'],
+                         tool.HOST_KIQ_RING_USED_DWORDS)
+        self.assertEqual(host_kiq['evidence']['terminal_poll']['fence'], 0)
+        self.assertFalse(result['gc_quiesce']['gfx_retirement_confirmed'])
 
     def test_stale_graphics_ring_is_unmapped_by_temporary_host_kiq(self):
         tool = self.tool

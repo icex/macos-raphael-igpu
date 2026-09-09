@@ -48,6 +48,8 @@ def _decode_payload(build, seq, payload):
                    available=int(m[3]), result=int(m[4]))
     elif m := re.search(r'AMDHardware::startHWEngines -> (\d+)', payload):
         row.update(kind='engine_start', result=int(m[1]))
+    elif m := re.search(r'AMDGraphicsAccelerator::powerUpHW -> (\d+)', payload):
+        row.update(kind='accelerator_start', result=int(m[1]))
     elif m := re.search(r'SD: channel engine remap (\d+) -> (\d+)', payload):
         row.update(kind='sdma_engine_remap', requested=int(m[1]), selected=int(m[2]))
     elif m := re.fullmatch(r'SD: submit IB\[(\d+)\] (0x[0-9a-fA-F]+) -> (0x[0-9a-fA-F]+) recognized=([01]) entries=(\d+) changed-total=(\d+)', payload):
@@ -288,7 +290,7 @@ def parse_serial(serial):
     return rows + losses
 
 
-def classify(manifest, events, probe):
+def _classify(manifest, events, probe, defer_absent_workload=False):
     def verdict(name, valid=False, stage=None, next_action='repair observation before another experiment'):
         return dict(valid=valid, verdict=name, earliest_failure=stage,
                     evidence=[r.get('raw', r['kind']) for r in events], next_action=next_action)
@@ -303,10 +305,20 @@ def classify(manifest, events, probe):
     if not kinds['build'] or not kinds['route']:
         return verdict('INCONCLUSIVE', stage='identity_or_route_missing')
     required = manifest.get('spec', {}).get('required_observations', [])
+    post_workload_kinds = {
+        'sdma_submit', 'sdma_ib_repair', 'vm_program', 'vm_root_repair',
+        'vm_state', 'vm_walk', 'vm_walk_entry', 'vm_context',
+        'vm_invalidate', 'vm_invalidate_live',
+        'vm_pre_clear_fault', 'vm_fault', 'sdma_runtime', 'sdma_xnack',
+        'sdma_page_state',
+    }
+    require_workload_outcomes = (not defer_absent_workload or
+                                 any(r['kind'] in post_workload_kinds for r in events))
     if 'sdma_vm_program' in required:
         program_routes = [r for r in events if r['kind'] == 'vm_program_route']
         if len(program_routes) != 1 or not program_routes[0].get('ok'):
             return verdict('INVALID', stage='sdma_vm_program_route_guard')
+    if 'sdma_vm_program' in required and require_workload_outcomes:
         submits = [r for r in events if r['kind'] == 'sdma_submit' and
                    r.get('valid') and r.get('vmid') == 2]
         programs = [r for r in events if r['kind'] == 'vm_program' and
@@ -323,7 +335,7 @@ def classify(manifest, events, probe):
             for program in programs)
         if not coherent:
             return verdict('INCONCLUSIVE', stage='sdma_vm_program_mismatch')
-    if 'vmid2_root_repair' in required:
+    if 'vmid2_root_repair' in required and require_workload_outcomes:
         repairs = [r for r in events if r['kind'] == 'vm_root_repair' and
                    r.get('vmid') == 2]
         if not repairs:
@@ -558,6 +570,27 @@ def classify(manifest, events, probe):
         else:
             return verdict('CORE_PROBE_PASS', True, next_action='qualify memory, lifecycle and desktop; core probe alone is insufficient')
     return verdict('EXECUTION_FAILED', True, 'first_submission', 'inspect command completion and checked output')
+
+
+def classify(manifest, events, probe):
+    return _classify(manifest, events, probe)
+
+
+def classify_probe_readiness(manifest, events):
+    """Classify native startup while the workload-dependent records are still absent."""
+    result = _classify(manifest, events, None, defer_absent_workload=True)
+    if result['verdict'] != 'PROBE_NOT_RUN':
+        return result
+    starts = [r for r in events if r['kind'] == 'accelerator_start']
+    if len(starts) != 1:
+        result.update(valid=False, verdict='INCONCLUSIVE',
+                      earliest_failure='accelerator_start_missing',
+                      next_action='wait for the outer accelerator power-up result')
+    elif starts[0].get('result') != 1:
+        result.update(valid=True, verdict='STARTUP_FAILED_LATER',
+                      earliest_failure='accelerator_start',
+                      next_action='trace the outer accelerator power-up failure')
+    return result
 
 
 if __name__ == '__main__':

@@ -3503,7 +3503,7 @@ address is cached. Offline validation compiled the complete kext and passed the 
 retry, activation-before-range-population and KDK route/offset checks. This repair has not run on
 hardware and does not promote candidate 174 to a successful-startup baseline.
 
-### 2026-09-09: startup-only cleanup succeeds; candidate 175 remains untested
+### 2026-09-09: startup-only cleanup succeeds; candidate 175 is prepared
 
 The reviewed one-shot cleanup for candidate 174's exact no-queue stopped state completed on the
 actual device without a reset, driver rebind or launch. Both complete HQD scans found no active
@@ -3525,5 +3525,33 @@ candidate 174, this is the only guest behavior change: mapping can use the owner
 `AMDHWMemory+0x10` before the later global hardware pointer exists, failed attempts remain
 retryable, and only a valid mapping is cached. The `rgpuvmroot=1` diagnostic and all functional
 boot arguments remain unchanged so a future controlled run can first require KIQ startup, then
-resume the still-unresolved VMID-2 root, SDMA submission and page-table observations. Candidate
-175 has not yet run on hardware, and full Metal acceleration remains unproven.
+resume the still-unresolved VMID-2 root, SDMA submission and page-table observations. At this
+point candidate 175 had not yet run on hardware, and full Metal acceleration remained unproven.
+
+### 2026-09-09: candidate 175 confirms BAR0 startup; the probe gate is circular
+
+Candidate 175 loaded build `693734a021524bd29dd71df774d917a3` and confirmed the early-owner
+repair on the actual device. BAR0 mapped successfully, the exact current-run recovery reservation
+became ACTIVE, PM4/KIQ preflight passed, and three native KIQ submissions completed. The native
+one-instance SDMA path, `AMDHardware::startHWEngines`, and outer accelerator `powerUpHW` all
+returned one. The candidate-174 BAR0 startup refusal is therefore repaired on hardware.
+
+The prepared Metal probe did not run. The coordinator used the final classifier as its readiness
+gate, while that classifier correctly required `sdma_vm_program` and `vmid2_root_repair` evidence
+for a final result. Those records require a workload submission, so the gate waited for evidence
+that the withheld workload would have produced. The resulting `INCONCLUSIVE /
+sdma_vm_program_missing` verdict is a harness sequencing result. It is not an observed SDMA or
+Metal failure. The corrected, offline-tested readiness path separately requires the exact
+build/routes, complete capture, native startup and outer accelerator power-up, then allows the
+probe while retaining the VMID-2 program, repair and walk requirements in the final classifier.
+
+The guest shut down cleanly. Normal schema-5 recovery dequeued two active MEC HQDs and observed
+graphics pipe 0 active with its doorbell enabled, but its host-KIQ completion fence value was not
+observed through BAR0 and the host-KIQ write-pointer clear did not read back. Either the selected
+HQD RPTR or the VRAM RPTR report reached `0x100`, and graphics became inactive before scrub, but
+the exception path discarded the exact terminal HQD RPTR, report and fence fields. Recovery
+therefore returned `incomplete`, set `authorizes_launch=false`, and did not prove graphics
+retirement. Zero final ACTIVE and doorbell samples after cleanup do not substitute for the missing
+fence proof. The exact run is archived in
+[metal-008-175-bar0](experiments/metal-008-175-bar0/notes.md). Full Metal execution, the VMID-2
+root repair, and repeatable normal recovery remain unproven.

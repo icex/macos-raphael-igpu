@@ -1,0 +1,328 @@
+{
+  "schema": 5,
+  "status": "incomplete",
+  "authorizes_launch": false,
+  "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+  "prior_run_id": "1a065e4f5f674cc0a26d4e9dbdf59649",
+  "device": "0000:7b:00.0",
+  "iommu_group": "31",
+  "driver": "vfio-pci",
+  "pci_command_before": 3,
+  "pci_command_after": 3,
+  "reset_methods_before": [],
+  "reset_methods_after": [],
+  "bar5": {
+    "index": 5,
+    "size": 524288,
+    "offset": 5497558138880,
+    "read": true,
+    "write": true,
+    "mmap": true,
+    "regions": {
+      "0": {
+        "index": 0,
+        "size": 268435456,
+        "offset": 0,
+        "read": true,
+        "write": true,
+        "mmap": true
+      },
+      "2": {
+        "index": 2,
+        "size": 2097152,
+        "offset": 2199023255552,
+        "read": true,
+        "write": true,
+        "mmap": true
+      },
+      "5": {
+        "index": 5,
+        "size": 524288,
+        "offset": 5497558138880,
+        "read": true,
+        "write": true,
+        "mmap": true
+      }
+    }
+  },
+  "gc_quiesce": {
+    "status": "quiesced",
+    "active_before": 2,
+    "dequeued": 2,
+    "dequeue_timeouts": 0,
+    "forced_inactive": 0,
+    "queues": [
+      {
+        "me": 2,
+        "pipe": 0,
+        "queue": 0,
+        "selector": 8,
+        "polls": 1
+      },
+      {
+        "me": 2,
+        "pipe": 1,
+        "queue": 0,
+        "selector": 9,
+        "polls": 1
+      }
+    ],
+    "cp_me_before": 0,
+    "cp_me_after": 352321536,
+    "cp_mec_before": 1342177280,
+    "cp_mec_after": 1342177280,
+    "cp_stat_after": 0,
+    "cp_cpc_busy_after": 0,
+    "pq_wptr_poll_after": 0,
+    "pq_status_after": 0,
+    "doorbell_range_lower_after": 0,
+    "doorbell_range_upper_after": 0,
+    "graphics_pipe_guard": {
+      "policy": "x6000-24G830-single-legacy-gfx-pipe-v1",
+      "reservation_before": {
+        "version": 1,
+        "state": 1448362817,
+        "heap_limit": 251658240,
+        "reservation_start": 251658240,
+        "scratch_start": 252706816,
+        "reservation_end": 268435456,
+        "run_id": "1a065e4f5f674cc0a26d4e9dbdf59649",
+        "checksum": 2792128486570857407
+      },
+      "reservation_after": {
+        "version": 1,
+        "state": 1448362817,
+        "heap_limit": 251658240,
+        "reservation_start": 251658240,
+        "scratch_start": 252706816,
+        "reservation_end": 268435456,
+        "run_id": "1a065e4f5f674cc0a26d4e9dbdf59649",
+        "checksum": 2792128486570857407
+      },
+      "reservation_unchanged": true,
+      "pipe1_supported_state": true,
+      "snapshot": {
+        "pipes": [
+          {
+            "intended_pipe": 0,
+            "selector": 0,
+            "rb0_active": 1,
+            "rb1_active": 0,
+            "active": 1,
+            "doorbell_control": 3221226496,
+            "doorbell_offset": 1024,
+            "doorbell_status": 3221225472,
+            "wptr": 128,
+            "wptr_hi": 0,
+            "base": 4290764800,
+            "base_hi": 0,
+            "cntl": 10489360
+          },
+          {
+            "intended_pipe": 1,
+            "selector": 1,
+            "rb0_active": 1,
+            "rb1_active": 0,
+            "active": 0,
+            "doorbell_control": 0,
+            "doorbell_offset": 0,
+            "doorbell_status": 0,
+            "wptr": 0,
+            "wptr_hi": 0,
+            "base": 4275878623,
+            "base_hi": 0,
+            "cntl": 10485760
+          }
+        ],
+        "final_default": {
+          "value": 0,
+          "completed": true
+        }
+      }
+    },
+    "graphics_pipes_before": {
+      "pipes": [
+        {
+          "intended_pipe": 0,
+          "selector": 0,
+          "rb0_active": 1,
+          "rb1_active": 0,
+          "active": 1,
+          "doorbell_control": 3221226496,
+          "doorbell_offset": 1024,
+          "doorbell_status": 3221225472,
+          "wptr": 128,
+          "wptr_hi": 0,
+          "base": 4290764800,
+          "base_hi": 0,
+          "cntl": 10489360
+        },
+        {
+          "intended_pipe": 1,
+          "selector": 1,
+          "rb0_active": 1,
+          "rb1_active": 0,
+          "active": 0,
+          "doorbell_control": 0,
+          "doorbell_offset": 0,
+          "doorbell_status": 0,
+          "wptr": 0,
+          "wptr_hi": 0,
+          "base": 4275878623,
+          "base_hi": 0,
+          "cntl": 10485760
+        }
+      ],
+      "final_default": {
+        "value": 0,
+        "completed": true
+      }
+    },
+    "graphics_pipes_after_retirement": {
+      "pipes": [
+        {
+          "intended_pipe": 0,
+          "selector": 0,
+          "rb0_active": 0,
+          "rb1_active": 0,
+          "active": 0,
+          "doorbell_control": 1024,
+          "doorbell_offset": 1024,
+          "doorbell_status": 0,
+          "wptr": 0,
+          "wptr_hi": 0,
+          "base": 4290764800,
+          "base_hi": 0,
+          "cntl": 10489360
+        },
+        {
+          "intended_pipe": 1,
+          "selector": 1,
+          "rb0_active": 0,
+          "rb1_active": 0,
+          "active": 0,
+          "doorbell_control": 0,
+          "doorbell_offset": 0,
+          "doorbell_status": 0,
+          "wptr": 0,
+          "wptr_hi": 0,
+          "base": 4275878623,
+          "base_hi": 0,
+          "cntl": 10485760
+        }
+      ],
+      "final_default": {
+        "value": 0,
+        "completed": true
+      }
+    },
+    "graphics_pipes_final": {
+      "pipes": [
+        {
+          "intended_pipe": 0,
+          "selector": 0,
+          "rb0_active": 0,
+          "rb1_active": 0,
+          "active": 0,
+          "doorbell_control": 0,
+          "doorbell_offset": 0,
+          "doorbell_status": 0,
+          "wptr": 0,
+          "wptr_hi": 0,
+          "base": 0,
+          "base_hi": 0,
+          "cntl": 0
+        },
+        {
+          "intended_pipe": 1,
+          "selector": 1,
+          "rb0_active": 0,
+          "rb1_active": 0,
+          "active": 0,
+          "doorbell_control": 0,
+          "doorbell_offset": 0,
+          "doorbell_status": 0,
+          "wptr": 0,
+          "wptr_hi": 0,
+          "base": 4275878623,
+          "base_hi": 0,
+          "cntl": 10485760
+        }
+      ],
+      "final_default": {
+        "value": 0,
+        "completed": true
+      }
+    },
+    "graphics_pipe_proof_complete": true,
+    "gfx_rb_active_before": 1,
+    "gfx_rb_active_after": 0,
+    "gfx_rb_doorbell_before": 3221226496,
+    "gfx_rb_doorbell_after": 0,
+    "gfx_rb_wptr_before": 128,
+    "gfx_rb_wptr_hi_before": 0,
+    "gfx_rb_wptr_after": 0,
+    "gfx_rb_wptr_hi_after": 0,
+    "gfx_rb_base_before": 4290764800,
+    "gfx_rb_base_after": 0,
+    "gfx_rb_base_hi_before": 0,
+    "gfx_rb_base_hi_after": 0,
+    "gfx_rb_cntl_before": 10489360,
+    "gfx_rb_cntl_after": 0,
+    "gfx_ring_clean": true,
+    "gfx_was_stale": true,
+    "gfx_needs_unmap": true,
+    "gfx_retirement_confirmed": false,
+    "host_kiq": {
+      "status": "failed",
+      "error": "host KIQ completion fence did not execute; host KIQ cleanup failed: verify host KIQ wptr clear: RecoveryError: host KIQ wptr did not clear"
+    },
+    "reservation": {
+      "version": 1,
+      "state": 1448362817,
+      "heap_limit": 251658240,
+      "reservation_start": 251658240,
+      "scratch_start": 252706816,
+      "reservation_end": 268435456,
+      "run_id": "1a065e4f5f674cc0a26d4e9dbdf59649",
+      "checksum": 2792128486570857407,
+      "consume_hdp_flush": {
+        "remap": 14428,
+        "posted_read": 512
+      },
+      "consumed": true
+    },
+    "sdma0_cntl_before": 262339,
+    "sdma0_cntl_after": 195,
+    "sdma0_rb_before": 2156134433,
+    "sdma0_rb_after": 2156134432,
+    "sdma0_ib_before": 257,
+    "sdma0_ib_after": 256,
+    "sdma0_before": 0,
+    "sdma0_after": 1,
+    "active_after": 0
+  },
+  "commands": [
+    {
+      "label": "destroy all rings",
+      "command": 196608,
+      "before": 2147549184,
+      "response": 2147680256,
+      "polls": 6,
+      "confirmed": true
+    },
+    {
+      "label": "destroy GPCOM ring",
+      "command": 786432,
+      "before": 2147680256,
+      "response": 2148270080,
+      "polls": 1,
+      "confirmed": true
+    }
+  ],
+  "kernel_cursor_before": "s=98f6cb2295dc45898ee97031451ba7c8;i=3e3c6;b=5d6f45d043844340b8197751bc26ebb3;m=29dabd8a0;t=65b08ff3e0dcc;x=cbfaffbe11be4d05",
+  "kernel_cursor_after": "s=98f6cb2295dc45898ee97031451ba7c8;i=3e3c6;b=5d6f45d043844340b8197751bc26ebb3;m=29dabd8a0;t=65b08ff3e0dcc;x=cbfaffbe11be4d05",
+  "kernel_messages": [],
+  "recovery_id": "e503b2ca63db4e11a21494d1841dca24",
+  "created_epoch": 1788944062.586939
+}
