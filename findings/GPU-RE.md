@@ -7,19 +7,22 @@ device handed over with `vfio-pci` and spoofed as `1002:73ff` (Radeon RX 6600, N
 
 ## Status
 
-As of 2026-09-09, candidate 1.0.176 is the latest controlled hardware result. It completed
-native KIQ, SDMA, engine and accelerator startup and ran the prepared Metal probe. The first
-compute command failed with status 5 and underlying `e00002bd` (`kIOReturnNoMemory`); zero GPU
-command buffers completed. The VM is stopped, the host remained responsive, and the boot's
-three-launch ledger is full. No retry is authorized.
+As of 2026-09-09, candidate 1.0.177 is the latest controlled hardware result. It successfully
+initialized from candidate 176's validated schema-6 cleanup, repeated native KIQ, SDMA, engine and
+accelerator startup, and ran the prepared Metal probe. The first compute command again failed with
+status 5 and underlying `e00002bd` (`kIOReturnNoMemory`); zero GPU command buffers completed.
 
-Physical schema-6 cleanup reached a matching temporary-KIQ fence and zero final queue/doorbell
-state. The run's committed consumer rejected the receipt because it treated the allocator-excluded
-final 16 MiB as one scratch-write hazard, although the actual recovery writes and GART table are
-disjoint. Independent review narrowed the schema-6 rule to the actual mutation spans; both immutable
-receipt serializations now validate with `[]`. The separate 3/3 launch ceiling still blocks another
-launch. Real Metal compute/rendering and repeatable lifecycle recovery remain unproven. Historical
-sections below preserve the evidence available at their time.
+The candidate-177 trace places observed no-memory queue failures after false resource/memory-map
+preparation and before any `submitBuffer` call. Its finite buffers overflowed and it lacks guest
+process/time/run correlation, so the same path is likely but one retained chain or resource object
+cannot be bound uniquely to the prepared probe. Its independent critical replay remained complete.
+Guest-requested shutdown and normal schema-6 recovery completed; both receipt
+serializations validate, and the host postflight is clean. This supplies one successful
+candidate-176-cleanup-to-candidate-177-reinitialization transition followed by another physical
+cleanup. It does not establish routine repeatability. The reviewed one-time cap revision is
+consumed, the ledger is 4/4, and no fifth launch is admitted. Real Metal compute/rendering and
+desktop acceleration remain unproven. Historical sections below preserve the evidence available
+at their time.
 
 ### Candidate 1.0.158: EOP writes traced; execution remains blocked
 
@@ -3693,3 +3696,45 @@ Independent range review then pinned the schema-6 mutation exclusions to the con
 write, while the exact candidate-176 GART now validates. The corrected consumer passed 346 tests;
 both unchanged receipt serializations return no schema-6 error. This establishes a validated cleanup
 record, not repeatable reinitialization or permission to exceed the independent three-launch policy.
+
+### 2026-09-09: candidate 177 localizes no memory before channel submission
+
+Candidate 177 loaded build `a210b5e45fe94b9cac585127aeeb22b3` through an exact, independently
+reviewed one-launch cap revision. The policy transformation preserved the original three ledger
+rows and appended one fourth row. Native BAR0, KIQ, one-instance SDMA, engine and outer accelerator
+startup succeeded from candidate 176's retired state. This is the first measured reinitialization
+after a fully validated schema-6 normal cleanup.
+
+The unchanged probe enumerated `AMD Radeon Navi23`, advertised Metal 3, compiled shaders, and
+committed its first compute command. It returned status 5 and `e00002bd` (`kIOReturnNoMemory`). No
+command buffer or compute round completed, and no value or pixel was checked. The new hooks observed
+`batchMemoryMapPrepare` return false, zero progress from `BatchPrepareMappings`, false
+`BatchPrepare`, and `e00002bd` in the enclosing command queue. This repeated across at least two
+queue objects and two memory-map objects. `submitBuffer` had zero entries and exits. This
+establishes observed framework resource/mapping preparation failures before the instrumented
+channel submission boundary; they are not GPU completion failures.
+
+The final summary counted 181 command-buffer calls, 540 mapping batches, 543 resource batches, 540
+memory-map preparations and zero channel submissions. Its finite buffers dropped 3,544 ordinary and
+1,772 notable records. Records include kernel object and thread tokens but no guest process,
+timestamp or probe run identity. The separately captured probe returned the same error, every
+retained command-buffer exit reports it, and the shutdown summary covers the probe interval, but no
+single retained chain can be uniquely assigned to that probe. The separate critical replay retained
+158 records with no drop or truncation. The trace therefore does not yet identify the probe's first
+failing resource or distinguish the lower-level allocation/coalescing condition inside the false
+memory-map preparation.
+
+The strict raw verdict remains `INCONCLUSIVE / sdma_vm_program_missing`; it is preserved unchanged.
+No observed work reached `submitBuffer`, so the absent SDMA VM-program, VMID-2 root-repair and
+page-table records are consistent with the earlier failure boundary and do not independently
+identify an SDMA or VM defect.
+
+The guest exited after its bounded shutdown request. Schema-6 recovery dequeued two MEC HQDs,
+retired graphics through the temporary host KIQ, matched fence `688691714`, disabled PAGE IB before
+PAGE RB, halted SDMA idle, and received both PSP acknowledgements. Final queue, pointer, PQ-range
+and doorbell-enable fields were zero. Both receipt serializations validate with `[]`. Fresh
+postflight found no QEMU, recovery process, launch unit or VFIO holder, no kernel fault or reset
+message, and the exact D0/BME-off/topology/watchdog/capture state. This is a second successful
+normal physical cleanup and one intervening successful reinitialization, not a repeatability
+sample. The ledger is exhausted at 4/4 and admits no fifth launch. Exact evidence is archived in
+[metal-010-177](experiments/metal-010-177/notes.md).

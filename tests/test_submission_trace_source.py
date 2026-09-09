@@ -1,0 +1,50 @@
+from pathlib import Path
+import json
+import unittest
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+class SubmissionTraceSourceTests(unittest.TestCase):
+    def test_inactive_map_wrapper_forwards_before_snapshot_reads(self):
+        source = (ROOT / 'src/RaphaelGPU.cpp').read_text()
+        start = source.index('static bool wrapBatchMemoryMapPrepare')
+        end = source.index('static void wrapSubmitBuffer', start)
+        body = source[start:end]
+        gate = body.index('if (!submissionTraceCaptureActive())')
+        direct_forward = body.index(
+            'return FunctionCast(wrapBatchMemoryMapPrepare, orgBatchMemoryMapPrepare)',
+            gate)
+        first_snapshot = body.index('captureMapSnapshot(accelerator, memoryMap)')
+        self.assertLess(gate, direct_forward)
+        self.assertLess(direct_forward, first_snapshot)
+        self.assertEqual(body[:first_snapshot].count('captureMapSnapshot'), 0)
+
+    def test_candidate178_keeps_probe_arguments_and_requires_phase_worker(self):
+        previous = json.loads((ROOT / 'experiments/metal-010.json').read_text())
+        current = json.loads((ROOT / 'experiments/metal-011.json').read_text())
+        self.assertEqual(current['id'], 'metal-011')
+        self.assertEqual(current['candidate_version'], '1.0.178')
+        self.assertEqual(current['requested_diagnostic'],
+                         previous['requested_diagnostic'])
+        self.assertEqual(current['max_seconds'], previous['max_seconds'])
+        self.assertEqual(current['run_probe_only_after_native_start'],
+                         previous['run_probe_only_after_native_start'])
+        self.assertIn('submission_map_phase', current['required_observations'])
+        self.assertEqual(
+            set(current['required_observations']) - {'submission_map_phase'},
+            set(previous['required_observations']))
+        policy = current['repeat_policy']
+        self.assertIn('178-A', policy)
+        self.assertIn('178-B', policy)
+        self.assertIn('180 seconds', policy)
+        self.assertIn('45-second probe', policy)
+        self.assertIn('no automatic retry', policy)
+        self.assertIn('must not drift', policy)
+        self.assertIn('schema-6 recovery receipt', policy)
+        self.assertIn('five-row ledger', policy)
+
+
+if __name__ == '__main__':
+    unittest.main()

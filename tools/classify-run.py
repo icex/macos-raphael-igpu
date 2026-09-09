@@ -42,6 +42,32 @@ def _decode_payload(build, seq, payload):
                    dropped=values[15:17])
     elif payload.startswith('SUB: summary'):
         row.update(kind='submission_trace_summary', ok=False, malformed=True)
+    elif m := re.fullmatch(
+            r'SUB: map-phase seq=(\d+) '
+            r'class=(capacity|va-allocation-reclaim|backing-pte|unknown) '
+            r'accel=(0x[0-9a-fA-F]+|0) map=(0x[0-9a-fA-F]+|0) '
+            r'thread=(0x[0-9a-fA-F]+|0) '
+            r'pre=(\d+)/(\d+)/(0x[0-9a-fA-F]+|0)/(0x[0-9a-fA-F]+|0) '
+            r'post=(\d+)/(\d+)/(0x[0-9a-fA-F]+|0)/(0x[0-9a-fA-F]+|0)',
+            payload):
+        row.update(kind='submission_map_phase', observation_sequence=int(m[1]),
+                   classification=m[2], accelerator=int(m[3], 16),
+                   memory_map=int(m[4], 16), thread=int(m[5], 16),
+                   before=[int(m[6]), int(m[7]), int(m[8], 16), int(m[9], 16)],
+                   after=[int(m[10]), int(m[11]), int(m[12], 16), int(m[13], 16)])
+    elif payload.startswith('SUB: map-phase seq='):
+        row.update(kind='submission_map_phase', ok=False, malformed=True)
+    elif m := re.fullmatch(
+            r'SUB: map-phase-summary total=(\d+) capacity=(\d+) va=(\d+) '
+            r'backing-pte=(\d+) unknown=(\d+) dropped=(\d+)/(\d+)/(\d+)/(\d+)',
+            payload):
+        values = [int(m[index]) for index in range(1, 10)]
+        consistent = values[0] == sum(values[1:5])
+        row.update(kind='submission_map_phase_summary', ok=consistent,
+                   malformed=not consistent, total=values[0],
+                   counts=values[1:5], dropped=values[5:9])
+    elif payload.startswith('SUB: map-phase-summary'):
+        row.update(kind='submission_map_phase_summary', ok=False, malformed=True)
     elif payload == 'SD: topology applied: discovered=1 kept=SDMA0 removed=SDMA1 before initialize':
         row.update(kind='sdma_topology', applied=True)
     elif payload.startswith('SD: topology NOT applied:'):
@@ -298,7 +324,8 @@ def parse_serial(serial):
                             'vm_state', 'vm_walk', 'vm_walk_entry',
                             'vm_invalidate_live', 'vm_pre_clear_fault', 'vm_fault',
                             'sdma_runtime', 'sdma_xnack', 'sdma_page_state', 'sdma_submit',
-                            'submission_trace_summary'):
+                            'submission_trace_summary', 'submission_map_phase',
+                            'submission_map_phase_summary'):
             # These records are formatted by the dedicated observation thread,
             # outside the driver callbacks. Preserve the exact live line until
             # the next immutable structured snapshot includes it.
@@ -343,6 +370,21 @@ def _classify(manifest, events, probe, defer_absent_workload=False):
         if not any(r.get('seq', -1) > trace_routes[0].get('seq', -1)
                    for r in trace_summaries):
             return verdict('INCONCLUSIVE', stage='submission_trace_worker_missing')
+    if 'submission_map_phase' in required:
+        phase_observations = [r for r in events
+                              if r['kind'] == 'submission_map_phase']
+        if any(r.get('malformed') or r.get('ok') is False
+               for r in phase_observations):
+            return verdict('INVALID',
+                           stage='submission_map_phase_observation_malformed')
+        phase_summaries = [r for r in events
+                           if r['kind'] == 'submission_map_phase_summary']
+        if any(not r.get('ok') for r in phase_summaries):
+            return verdict('INVALID', stage='submission_map_phase_worker_malformed')
+        trace_routes = [r for r in events if r['kind'] == 'submission_trace_route']
+        route_sequence = trace_routes[0].get('seq', -1) if len(trace_routes) == 1 else -1
+        if not any(r.get('seq', -1) > route_sequence for r in phase_summaries):
+            return verdict('INCONCLUSIVE', stage='submission_map_phase_worker_missing')
     post_workload_kinds = {
         'sdma_submit', 'sdma_ib_repair', 'vm_program', 'vm_root_repair',
         'vm_state', 'vm_walk', 'vm_walk_entry', 'vm_context',

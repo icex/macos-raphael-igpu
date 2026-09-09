@@ -1,0 +1,274 @@
+{
+  "schema": 1,
+  "kind": "candidate177-authority-readiness",
+  "created_utc": "2026-09-09T17:31:51.634577+00:00",
+  "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+  "candidate176_receipt_path": "/home/bogdan/macos-vm/run/vfio-recovery/5d6f45d0-4384-4340-b819-7751bc26ebb3/e02fbed46a6a4df4ae48d7c1d8597985.json",
+  "journal_cursor_source": "s=98f6cb2295dc45898ee97031451ba7c8;i=3f132;b=5d6f45d043844340b8197751bc26ebb3;m=8ed5f525b;t=65b0f4ef18787;x=bdfe8276aeb401dd",
+  "manifest_path": "/home/bogdan/macos-vm/run/metal-010-177-manifest.json",
+  "manifest_sha256": "d6df93018e721dc42165e8318d879b915e1d880592798478075efc3a469ec821",
+  "authority_path": "/home/bogdan/macos-vm/run/cap-revision-authorities/5d6f45d0-4384-4340-b819-7751bc26ebb3/ff2eb6e2492a4c5c96c6c6a847ed0c26.json",
+  "authority_sha256": "862f504d882b989e70a5096e6d22a1a68acbd28886aea743276a5f2dea5ca351",
+  "ledger_sha256": "0f45b2c01b5ea6863b01bc0777824d8da3c7ee7ea5d1b900616d44cd3a1c95da",
+  "host": {
+    "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+    "active_vm": false,
+    "driver": "vfio-pci",
+    "device": "1002:13c0",
+    "iommu_group": "31",
+    "pci_command": 3,
+    "reset_methods": [],
+    "canonical_device": "/sys/devices/pci0000:00/0000:00:08.1/0000:7b:00.0",
+    "power_control": "on",
+    "power_state": "D0",
+    "runtime_status": "active",
+    "enable_count": "0",
+    "sleep_inhibited": true,
+    "watchdogs": {
+      "watchdog": "1",
+      "nmi_watchdog": "1",
+      "hardlockup_panic": "1"
+    },
+    "residual_units": [],
+    "siblings": {
+      "0000:7b:00.0": {
+        "device": "1002:13c0",
+        "driver": "vfio-pci",
+        "iommu_group": "31"
+      },
+      "0000:7b:00.1": {
+        "device": "1002:1640",
+        "driver": "snd_hda_intel",
+        "iommu_group": "32"
+      },
+      "0000:7b:00.2": {
+        "device": "1022:1649",
+        "driver": "ccp",
+        "iommu_group": "33"
+      },
+      "0000:7b:00.3": {
+        "device": "1022:15b6",
+        "driver": "xhci_hcd",
+        "iommu_group": "34"
+      },
+      "0000:7b:00.4": {
+        "device": "1022:15b7",
+        "driver": "xhci_hcd",
+        "iommu_group": "35"
+      },
+      "0000:7b:00.6": {
+        "device": "1022:15e3",
+        "driver": null,
+        "iommu_group": "36"
+      }
+    },
+    "reset_domain": {
+      "canonical_parent": "/sys/devices/pci0000:00/0000:00:08.1",
+      "domain_bus_device": "0000:7b:00",
+      "functions": [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "6"
+      ],
+      "canonical_devices": {
+        "0000:7b:00.0": "/sys/devices/pci0000:00/0000:00:08.1/0000:7b:00.0",
+        "0000:7b:00.1": "/sys/devices/pci0000:00/0000:00:08.1/0000:7b:00.1",
+        "0000:7b:00.2": "/sys/devices/pci0000:00/0000:00:08.1/0000:7b:00.2",
+        "0000:7b:00.3": "/sys/devices/pci0000:00/0000:00:08.1/0000:7b:00.3",
+        "0000:7b:00.4": "/sys/devices/pci0000:00/0000:00:08.1/0000:7b:00.4",
+        "0000:7b:00.6": "/sys/devices/pci0000:00/0000:00:08.1/0000:7b:00.6"
+      },
+      "physical_slot": {
+        "0000:7b:00.0": null,
+        "0000:7b:00.1": null,
+        "0000:7b:00.2": null,
+        "0000:7b:00.3": null,
+        "0000:7b:00.4": null,
+        "0000:7b:00.6": null
+      }
+    },
+    "kernel_release": "7.2.3-1-cachyos-bore",
+    "vfio_module_sha256": "d0bfbf478f892d57eb6f42a0d5d51f20a611bc7ee538643cc820932167686381",
+    "vfio_module_build_id": "a002a05ce4a09429cf6bc9906d1893ec7f304e81",
+    "journal_cursor": "s=98f6cb2295dc45898ee97031451ba7c8;i=3f338;b=5d6f45d043844340b8197751bc26ebb3;m=9cfa0fd97;t=65b10313332c3;x=7f9ede162d273696",
+    "journal_messages": [
+      "[UFW BLOCK] IN=enp9s0 OUT= MAC=33:33:00:01:00:03:ac:d1:b8:e4:4b:1f:86:dd SRC=fe80:0000:0000:0000:c2e7:e36f:92d4:bd9b DST=ff02:0000:0000:0000:0000:0000:0001:0003 LEN=77 TC=0 HOPLIMIT=1 FLOWLBL=922896 PROTO=UDP SPT=55842 DPT=5355 LEN=37 ",
+      "[UFW BLOCK] IN=enp9s0 OUT= MAC=01:00:5e:00:00:fc:ac:d1:b8:e4:4b:1f:08:00 SRC=192.168.0.31 DST=224.0.0.252 LEN=57 TOS=0x00 PREC=0x00 TTL=1 ID=38896 PROTO=UDP SPT=55842 DPT=5355 LEN=37 ",
+      "[UFW BLOCK] IN=enp9s0 OUT= MAC=33:33:00:01:00:03:ac:d1:b8:e4:4b:1f:86:dd SRC=fe80:0000:0000:0000:c2e7:e36f:92d4:bd9b DST=ff02:0000:0000:0000:0000:0000:0001:0003 LEN=70 TC=0 HOPLIMIT=1 FLOWLBL=690036 PROTO=UDP SPT=56674 DPT=5355 LEN=30 ",
+      "[UFW BLOCK] IN=enp9s0 OUT= MAC=01:00:5e:00:00:fc:ac:d1:b8:e4:4b:1f:08:00 SRC=192.168.0.31 DST=224.0.0.252 LEN=50 TOS=0x00 PREC=0x00 TTL=1 ID=38897 PROTO=UDP SPT=56674 DPT=5355 LEN=30 ",
+      "[UFW BLOCK] IN=enp9s0 OUT= MAC=33:33:00:01:00:03:ac:d1:b8:e4:4b:1f:86:dd SRC=fe80:0000:0000:0000:c2e7:e36f:92d4:bd9b DST=ff02:0000:0000:0000:0000:0000:0001:0003 LEN=70 TC=0 HOPLIMIT=1 FLOWLBL=892348 PROTO=UDP SPT=57925 DPT=5355 LEN=30 ",
+      "[UFW BLOCK] IN=enp9s0 OUT= MAC=01:00:5e:00:00:fc:ac:d1:b8:e4:4b:1f:08:00 SRC=192.168.0.31 DST=224.0.0.252 LEN=50 TOS=0x00 PREC=0x00 TTL=1 ID=38898 PROTO=UDP SPT=57925 DPT=5355 LEN=30 ",
+      "[UFW BLOCK] IN=enp9s0 OUT= MAC=33:33:00:01:00:03:ac:d1:b8:e4:4b:1f:86:dd SRC=fe80:0000:0000:0000:c2e7:e36f:92d4:bd9b DST=ff02:0000:0000:0000:0000:0000:0001:0003 LEN=70 TC=0 HOPLIMIT=1 FLOWLBL=892348 PROTO=UDP SPT=57925 DPT=5355 LEN=30 ",
+      "[UFW BLOCK] IN=enp9s0 OUT= MAC=01:00:5e:00:00:fc:ac:d1:b8:e4:4b:1f:08:00 SRC=192.168.0.31 DST=224.0.0.252 LEN=50 TOS=0x00 PREC=0x00 TTL=1 ID=38900 PROTO=UDP SPT=57925 DPT=5355 LEN=30 ",
+      "[UFW BLOCK] IN=enp9s0 OUT= MAC=01:00:5e:00:00:fc:ac:d1:b8:e4:4b:1f:08:00 SRC=192.168.0.31 DST=224.0.0.252 LEN=50 TOS=0x00 PREC=0x00 TTL=1 ID=38899 PROTO=UDP SPT=56674 DPT=5355 LEN=30 ",
+      "[UFW BLOCK] IN=enp9s0 OUT= MAC=33:33:00:01:00:03:ac:d1:b8:e4:4b:1f:86:dd SRC=fe80:0000:0000:0000:c2e7:e36f:92d4:bd9b DST=ff02:0000:0000:0000:0000:0000:0001:0003 LEN=70 TC=0 HOPLIMIT=1 FLOWLBL=690036 PROTO=UDP SPT=56674 DPT=5355 LEN=30 ",
+      "[UFW BLOCK] IN=enp9s0 OUT= MAC=01:00:5e:00:00:fc:ac:d1:b8:e4:4b:1f:08:00 SRC=192.168.0.31 DST=224.0.0.252 LEN=50 TOS=0x00 PREC=0x00 TTL=1 ID=38901 PROTO=UDP SPT=57419 DPT=5355 LEN=30 ",
+      "[UFW BLOCK] IN=enp9s0 OUT= MAC=33:33:00:01:00:03:ac:d1:b8:e4:4b:1f:86:dd SRC=fe80:0000:0000:0000:c2e7:e36f:92d4:bd9b DST=ff02:0000:0000:0000:0000:0000:0001:0003 LEN=70 TC=0 HOPLIMIT=1 FLOWLBL=80396 PROTO=UDP SPT=57419 DPT=5355 LEN=30 ",
+      "[UFW BLOCK] IN=enp9s0 OUT= MAC=33:33:00:01:00:03:ac:d1:b8:e4:4b:1f:86:dd SRC=fe80:0000:0000:0000:c2e7:e36f:92d4:bd9b DST=ff02:0000:0000:0000:0000:0000:0001:0003 LEN=70 TC=0 HOPLIMIT=1 FLOWLBL=709920 PROTO=UDP SPT=56255 DPT=5355 LEN=30 ",
+      "[UFW BLOCK] IN=enp9s0 OUT= MAC=01:00:5e:00:00:fc:ac:d1:b8:e4:4b:1f:08:00 SRC=192.168.0.31 DST=224.0.0.252 LEN=50 TOS=0x00 PREC=0x00 TTL=1 ID=38902 PROTO=UDP SPT=56255 DPT=5355 LEN=30 ",
+      "[UFW BLOCK] IN=enp9s0 OUT= MAC=33:33:00:01:00:03:ac:d1:b8:e4:4b:1f:86:dd SRC=fe80:0000:0000:0000:c2e7:e36f:92d4:bd9b DST=ff02:0000:0000:0000:0000:0000:0001:0003 LEN=70 TC=0 HOPLIMIT=1 FLOWLBL=80396 PROTO=UDP SPT=57419 DPT=5355 LEN=30 ",
+      "[UFW BLOCK] IN=enp9s0 OUT= MAC=01:00:5e:00:00:fc:ac:d1:b8:e4:4b:1f:08:00 SRC=192.168.0.31 DST=224.0.0.252 LEN=50 TOS=0x00 PREC=0x00 TTL=1 ID=38903 PROTO=UDP SPT=57419 DPT=5355 LEN=30 ",
+      "[UFW BLOCK] IN=enp9s0 OUT= MAC=33:33:00:01:00:03:ac:d1:b8:e4:4b:1f:86:dd SRC=fe80:0000:0000:0000:c2e7:e36f:92d4:bd9b DST=ff02:0000:0000:0000:0000:0000:0001:0003 LEN=70 TC=0 HOPLIMIT=1 FLOWLBL=709920 PROTO=UDP SPT=56255 DPT=5355 LEN=30 ",
+      "[UFW BLOCK] IN=enp9s0 OUT= MAC=01:00:5e:00:00:fc:ac:d1:b8:e4:4b:1f:08:00 SRC=192.168.0.31 DST=224.0.0.252 LEN=50 TOS=0x00 PREC=0x00 TTL=1 ID=38904 PROTO=UDP SPT=56255 DPT=5355 LEN=30 ",
+      "docker0: port 1(vetha7f1aad) entered blocking state",
+      "docker0: port 1(vetha7f1aad) entered disabled state",
+      "vetha7f1aad: entered allmulticast mode",
+      "vetha7f1aad: entered promiscuous mode",
+      "eth0: renamed from vethf5ee11c",
+      "docker0: port 1(vetha7f1aad) entered blocking state",
+      "docker0: port 1(vetha7f1aad) entered forwarding state",
+      "docker0: port 1(vetha7f1aad) entered disabled state",
+      "vethf5ee11c: renamed from eth0",
+      "[UFW BLOCK] IN=docker0 OUT= MAC= SRC=fe80:0000:0000:0000:a883:40ff:fede:b5e3 DST=ff02:0000:0000:0000:0000:0000:0001:0003 LEN=79 TC=0 HOPLIMIT=255 FLOWLBL=919402 PROTO=UDP SPT=5355 DPT=5355 LEN=39 ",
+      "[UFW BLOCK] IN=docker0 OUT= MAC= SRC=172.17.0.1 DST=224.0.0.252 LEN=59 TOS=0x00 PREC=0x00 TTL=255 ID=13678 PROTO=UDP SPT=5355 DPT=5355 LEN=39 ",
+      "docker0: port 1(vetha7f1aad) entered disabled state",
+      "vetha7f1aad (unregistering): left allmulticast mode",
+      "vetha7f1aad (unregistering): left promiscuous mode",
+      "docker0: port 1(vetha7f1aad) entered disabled state",
+      "docker0: port 1(veth3c20d91) entered blocking state",
+      "docker0: port 1(veth3c20d91) entered disabled state",
+      "veth3c20d91: entered allmulticast mode",
+      "veth3c20d91: entered promiscuous mode",
+      "eth0: renamed from veth8419022",
+      "docker0: port 1(veth3c20d91) entered blocking state",
+      "docker0: port 1(veth3c20d91) entered forwarding state",
+      "[UFW BLOCK] IN=docker0 OUT= MAC= SRC=172.17.0.1 DST=224.0.0.252 LEN=59 TOS=0x00 PREC=0x00 TTL=255 ID=13803 PROTO=UDP SPT=5355 DPT=5355 LEN=39 ",
+      "docker0: port 1(veth3c20d91) entered disabled state",
+      "veth8419022: renamed from eth0",
+      "[UFW BLOCK] IN=docker0 OUT= MAC= SRC=fe80:0000:0000:0000:a883:40ff:fede:b5e3 DST=ff02:0000:0000:0000:0000:0000:0001:0003 LEN=79 TC=0 HOPLIMIT=255 FLOWLBL=919402 PROTO=UDP SPT=5355 DPT=5355 LEN=39 ",
+      "docker0: port 1(veth3c20d91) entered disabled state",
+      "veth3c20d91 (unregistering): left allmulticast mode",
+      "veth3c20d91 (unregistering): left promiscuous mode",
+      "docker0: port 1(veth3c20d91) entered disabled state",
+      "docker0: port 1(vethb8616ea) entered blocking state",
+      "docker0: port 1(vethb8616ea) entered disabled state",
+      "vethb8616ea: entered allmulticast mode",
+      "vethb8616ea: entered promiscuous mode",
+      "eth0: renamed from veth9039758",
+      "docker0: port 1(vethb8616ea) entered blocking state",
+      "docker0: port 1(vethb8616ea) entered forwarding state",
+      "[UFW BLOCK] IN=docker0 OUT= MAC= SRC=fe80:0000:0000:0000:a883:40ff:fede:b5e3 DST=ff02:0000:0000:0000:0000:0000:0001:0003 LEN=79 TC=0 HOPLIMIT=255 FLOWLBL=919402 PROTO=UDP SPT=5355 DPT=5355 LEN=39 ",
+      "[UFW BLOCK] IN=docker0 OUT= MAC= SRC=172.17.0.1 DST=224.0.0.252 LEN=59 TOS=0x00 PREC=0x00 TTL=255 ID=13823 PROTO=UDP SPT=5355 DPT=5355 LEN=39 ",
+      "docker0: port 1(vethb8616ea) entered disabled state",
+      "veth9039758: renamed from eth0",
+      "docker0: port 1(vethb8616ea) entered disabled state",
+      "vethb8616ea (unregistering): left allmulticast mode",
+      "vethb8616ea (unregistering): left promiscuous mode",
+      "docker0: port 1(vethb8616ea) entered disabled state",
+      "docker0: port 1(vethd1878fc) entered blocking state",
+      "docker0: port 1(vethd1878fc) entered disabled state",
+      "vethd1878fc: entered allmulticast mode",
+      "vethd1878fc: entered promiscuous mode",
+      "eth0: renamed from veth6089229",
+      "docker0: port 1(vethd1878fc) entered blocking state",
+      "docker0: port 1(vethd1878fc) entered forwarding state",
+      "[UFW BLOCK] IN=docker0 OUT= MAC= SRC=fe80:0000:0000:0000:a883:40ff:fede:b5e3 DST=ff02:0000:0000:0000:0000:0000:0001:0003 LEN=79 TC=0 HOPLIMIT=255 FLOWLBL=919402 PROTO=UDP SPT=5355 DPT=5355 LEN=39 ",
+      "docker0: port 1(vethd1878fc) entered disabled state",
+      "veth6089229: renamed from eth0",
+      "docker0: port 1(vethd1878fc) entered disabled state",
+      "vethd1878fc (unregistering): left allmulticast mode",
+      "vethd1878fc (unregistering): left promiscuous mode",
+      "docker0: port 1(vethd1878fc) entered disabled state",
+      "docker0: port 1(veth7c43226) entered blocking state",
+      "docker0: port 1(veth7c43226) entered disabled state",
+      "veth7c43226: entered allmulticast mode",
+      "veth7c43226: entered promiscuous mode",
+      "eth0: renamed from veth29ed752",
+      "docker0: port 1(veth7c43226) entered blocking state",
+      "docker0: port 1(veth7c43226) entered forwarding state",
+      "docker0: port 1(veth7c43226) entered disabled state",
+      "veth29ed752: renamed from eth0",
+      "[UFW BLOCK] IN=docker0 OUT= MAC= SRC=fe80:0000:0000:0000:a883:40ff:fede:b5e3 DST=ff02:0000:0000:0000:0000:0000:0001:0003 LEN=79 TC=0 HOPLIMIT=255 FLOWLBL=919402 PROTO=UDP SPT=5355 DPT=5355 LEN=39 ",
+      "docker0: port 1(veth7c43226) entered disabled state",
+      "veth7c43226 (unregistering): left allmulticast mode",
+      "veth7c43226 (unregistering): left promiscuous mode",
+      "docker0: port 1(veth7c43226) entered disabled state"
+    ],
+    "journal_faults": []
+  },
+  "external_checks": {
+    "expected_canonical_parent": "/sys/devices/pci0000:00/0000:00:08.1",
+    "observed_canonical_parent": "/sys/devices/pci0000:00/0000:00:08.1",
+    "expected_siblings": {
+      "0000:7b:00.0": {
+        "device": "1002:13c0",
+        "driver": "vfio-pci",
+        "iommu_group": "31"
+      },
+      "0000:7b:00.1": {
+        "device": "1002:1640",
+        "driver": "snd_hda_intel",
+        "iommu_group": "32"
+      },
+      "0000:7b:00.2": {
+        "device": "1022:1649",
+        "driver": "ccp",
+        "iommu_group": "33"
+      },
+      "0000:7b:00.3": {
+        "device": "1022:15b6",
+        "driver": "xhci_hcd",
+        "iommu_group": "34"
+      },
+      "0000:7b:00.4": {
+        "device": "1022:15b7",
+        "driver": "xhci_hcd",
+        "iommu_group": "35"
+      },
+      "0000:7b:00.6": {
+        "device": "1022:15e3",
+        "driver": null,
+        "iommu_group": "36"
+      }
+    },
+    "observed_siblings": {
+      "0000:7b:00.0": {
+        "device": "1002:13c0",
+        "driver": "vfio-pci",
+        "iommu_group": "31"
+      },
+      "0000:7b:00.1": {
+        "device": "1002:1640",
+        "driver": "snd_hda_intel",
+        "iommu_group": "32"
+      },
+      "0000:7b:00.2": {
+        "device": "1022:1649",
+        "driver": "ccp",
+        "iommu_group": "33"
+      },
+      "0000:7b:00.3": {
+        "device": "1022:15b6",
+        "driver": "xhci_hcd",
+        "iommu_group": "34"
+      },
+      "0000:7b:00.4": {
+        "device": "1022:15b7",
+        "driver": "xhci_hcd",
+        "iommu_group": "35"
+      },
+      "0000:7b:00.6": {
+        "device": "1022:15e3",
+        "driver": null,
+        "iommu_group": "36"
+      }
+    },
+    "pci_power_enable": {
+      "pci_command": 3,
+      "power_control": "on",
+      "power_state": "D0",
+      "runtime_status": "active",
+      "enable_count": "0"
+    },
+    "vfio_group_path": "/dev/vfio/31",
+    "visible_vfio_holders": [],
+    "fuser_returncode": 1,
+    "fuser_stdout": "",
+    "fuser_stderr": "",
+    "qemu_or_recovery_processes": []
+  },
+  "errors": []
+}

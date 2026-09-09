@@ -1388,6 +1388,140 @@ def reserve_cap_revision(directory, boot_id, experiment, recovery, manifest,
     return cursor_after
 
 
+def warm_qualification_authorization(vm, manifest, manifest_path, output,
+                                     policy_sha256, activation_sha256,
+                                     classifier=None):
+    """Validate one exact finite candidate-178 activation without reserving it."""
+    classifier = classifier or helper('classify-run')
+    retained = helper('retained-kiq-continuation')
+    recovery = helper('vfio-recover')
+    hooks = argparse.Namespace(
+        validate_receipt=validate_recovery_receipt_v6,
+        validate_running=validate_running,
+        parse_serial=classifier.parse_serial,
+        classify_readiness=classifier.classify_probe_readiness,
+        admit_host=admit,
+        validate_full_host=lambda host, boot: retained.host_errors(
+            host, boot, prefix='warm qualification saved '),
+        validate_vfio=recovery.validate_host_state,
+    )
+    return helper('warm-qualification').authorize(
+        vm, manifest, manifest_path, output, policy_sha256,
+        activation_sha256, hooks)
+
+
+def reserve_warm_qualification(directory, boot_id, experiment, recovery,
+                               manifest, manifest_path, output, authorization):
+    """Recheck live gates and append only row 5 or 6 of the finite plan."""
+    if (not isinstance(authorization, dict) or
+            boot_id != manifest.get('boot_id') or
+            experiment != manifest.get('run_id')):
+        raise ValueError('warm qualification refused: authority')
+    vm = Path(directory).parent.parent
+    policy_sha = authorization.get('policy_sha256')
+    activation_sha = authorization.get('activation_sha256')
+    checked, errors = warm_qualification_authorization(
+        vm, manifest, manifest_path, output, policy_sha, activation_sha)
+    if errors or checked is None or recovery != checked.get('receipt'):
+        raise ValueError('warm qualification refused: '+','.join(
+            sorted(set(errors or ['receipt']))))
+
+    cursor_before = recovery.get('kernel_cursor_after')
+    before_position = _journal_cursor_position(cursor_before, boot_id)
+    gate_errors = []
+    try:
+        capture_host = host_snapshot()
+        gate_errors.extend(admit(
+            manifest, capture_host, {boot_id}, reuse_allowed=True))
+        if capture_host.get('sleep_inhibited') is not True:
+            gate_errors.append('sleep_inhibited')
+    except Exception:
+        capture_host = None; gate_errors.append('capture_host')
+    try:
+        retained = helper('retained-kiq-continuation')
+        full_host = retained.collect_fresh_host(cursor_before)
+        gate_errors.extend(retained.host_errors(
+            full_host, boot_id, prefix='warm qualification '))
+    except Exception:
+        full_host = None; gate_errors.append('full_host')
+    if isinstance(full_host, dict) and isinstance(capture_host, dict):
+        host_gate = dict(full_host)
+        for key in ('amdgpu_initialized', 'capture_ready', 'watchdogs_verified',
+                    'device_pinned_awake', 'device_accessible', 'pstore_files'):
+            host_gate[key] = capture_host.get(key)
+    else:
+        host_gate = None
+    try:
+        units = active_launch_units()
+    except Exception:
+        units = None; gate_errors.append('active_launch_units')
+    if units:
+        gate_errors.append('active_launch_units')
+    pending = vm/'run/launch-pending'
+    try:
+        pending_names = sorted(path.name for path in pending.iterdir())
+    except FileNotFoundError:
+        pending_names = []
+    except OSError:
+        pending_names = None; gate_errors.append('pending_launch')
+    if pending_names:
+        gate_errors.append('pending_launch')
+    try:
+        recovery_tool = helper('vfio-recover')
+        vfio_gate = recovery_tool.host_state()
+        gate_errors.extend(recovery_tool.validate_host_state(vfio_gate, boot_id))
+    except Exception:
+        vfio_gate = None; gate_errors.append('vfio_host_gate')
+    try:
+        requested = manifest.get('spec', {}).get('requested_diagnostic')
+        identity_gate = current_identity(
+            vm, vm/manifest['candidate_directory'], requested)
+        gate_errors.extend(validate_identity(
+            {key:manifest[key] for key in identity_gate if key in manifest},
+            identity_gate))
+    except Exception:
+        identity_gate = None; gate_errors.append('current_identity')
+
+    cursor_after = full_host.get('journal_cursor') if isinstance(full_host, dict) else None
+    messages = full_host.get('journal_messages') if isinstance(full_host, dict) else None
+    after_position = _journal_cursor_position(cursor_after, boot_id)
+    if before_position is None or after_position is None or after_position < before_position:
+        gate_errors.append('kernel_cursor')
+    if not isinstance(messages, list):
+        gate_errors.append('kernel_messages')
+    if gate_errors:
+        raise ValueError('warm qualification refused: '+','.join(
+            sorted(set(gate_errors))))
+
+    final, errors = warm_qualification_authorization(
+        vm, manifest, manifest_path, output, policy_sha, activation_sha)
+    if errors or final is None or final.get('receipt') != recovery:
+        raise ValueError('warm qualification refused: '+','.join(
+            sorted(set(errors or ['receipt']))))
+    immutable = (
+        'policy_raw', 'activation_raw', 'ledger_raw', 'manifest_raws',
+        'receipt_raws', 'candidate176_receipt_raws',
+        'candidate177_receipt_raws', 'a_activation_raw',
+    )
+    if any(final.get(key) != checked.get(key) for key in immutable):
+        raise ValueError('warm qualification refused: concurrent_change')
+    gate = {
+        'kernel_cursor_before':cursor_before,
+        'kernel_cursor_after':cursor_after,
+        'kernel_messages':messages,
+        'host_gate':host_gate,
+        'vfio_gate':vfio_gate,
+        'identity_gate':identity_gate,
+        'active_launch_units':units,
+        'pending_launches':pending_names,
+    }
+    warm = helper('warm-qualification')
+    path, updated = warm.build_reservation(
+        final, boot_id, experiment, recovery, gate, time.time())
+    replace_json(path, updated)
+    return cursor_after
+
+
 def reserve_boot(directory, boot_id, experiment, recovery=None,
                  manifest=None, manifest_path=None):
     if not re.fullmatch(r'[A-Za-z0-9-]+', boot_id):
@@ -1445,7 +1579,14 @@ def reserve_boot(directory, boot_id, experiment, recovery=None,
 
 
 def reserve_launch_and_cursor(directory, boot_id, experiment, recovery,
-                              manifest, manifest_path, cap_revision=None):
+                              manifest, manifest_path, cap_revision=None,
+                              warm_qualification=None, output=None):
+    if cap_revision is not None and warm_qualification is not None:
+        raise ValueError('mixed launch authority')
+    if warm_qualification is not None:
+        return reserve_warm_qualification(
+            directory, boot_id, experiment, recovery, manifest,
+            manifest_path, output, warm_qualification)
     if cap_revision is not None:
         return reserve_cap_revision(
             directory, boot_id, experiment, recovery, manifest,
@@ -1562,12 +1703,21 @@ def run_probe(vm, manifest):
 
 
 def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=None,
-            cap_revision_authority_sha256=None):
+            cap_revision_authority_sha256=None,
+            warm_qualification_policy_sha256=None,
+            warm_qualification_activation_sha256=None):
     """One bounded launch; a verified prior recovery may authorize same-boot reuse."""
     if bool(resume_prelaunch) != bool(prelaunch_proof):
         raise ValueError('prelaunch continuation requires both evidence paths')
     if cap_revision_authority_sha256 and resume_prelaunch:
         raise ValueError('cap revision cannot use prelaunch continuation')
+    warm_requested = bool(warm_qualification_policy_sha256 or
+                          warm_qualification_activation_sha256)
+    if bool(warm_qualification_policy_sha256) != bool(
+            warm_qualification_activation_sha256):
+        raise ValueError('warm qualification requires policy and activation hashes')
+    if warm_requested and (resume_prelaunch or cap_revision_authority_sha256):
+        raise ValueError('warm qualification cannot use another launch mode')
     manifest = json.loads(manifest_path.read_text())
     missing = required_identity(manifest)
     if missing: raise ValueError('incomplete prepared identity: '+','.join(missing))
@@ -1597,7 +1747,8 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                 host = host_snapshot(); write_once(output/'host-before.json', host)
                 used = vm/'run/used-gpu-boots'; used.mkdir(exist_ok=True)
                 recovery = None; reuse_errors = []
-                cap_revision = None; reservation_cursor = None
+                cap_revision = None; warm_qualification = None
+                reservation_cursor = None
                 continuation = None; continuation_ledger = None
                 if resume_prelaunch:
                     cursor_result = kernel_updates()
@@ -1613,9 +1764,20 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                     if resume_prelaunch: errors.append('gpu_less_continuation')
                     if cap_revision_authority_sha256:
                         errors.append('gpu_less_cap_revision')
+                    if warm_requested:
+                        errors.append('gpu_less_warm_qualification')
                     if host['active_vm']: errors.append('active_vm')
                 elif not resume_prelaunch:
-                    if cap_revision_authority_sha256:
+                    if warm_requested:
+                        warm_qualification, reuse_errors = \
+                            warm_qualification_authorization(
+                                vm, manifest, manifest_path, output,
+                                warm_qualification_policy_sha256,
+                                warm_qualification_activation_sha256,
+                                classifier)
+                        if warm_qualification is not None:
+                            recovery = warm_qualification['receipt']
+                    elif cap_revision_authority_sha256:
                         cap_revision, reuse_errors = cap_revision_authorization(
                             vm, manifest, manifest_path,
                             cap_revision_authority_sha256)
@@ -1633,7 +1795,8 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                 if manifest.get('gpu') is not False and not resume_prelaunch:
                     reservation_cursor = reserve_launch_and_cursor(
                         used, host['boot_id'], manifest['run_id'], recovery,
-                        manifest, manifest_path, cap_revision)
+                        manifest, manifest_path, cap_revision,
+                        warm_qualification, output)
                 cursor = (cursor_result[0] if resume_prelaunch else
                           reservation_cursor or kernel_updates()[0])
                 monitor = HostMonitor(cursor, lambda:os.kill(os.getpid(), signal.SIGUSR1))
@@ -1785,6 +1948,8 @@ if __name__ == '__main__':
     parser.add_argument('--resume-prelaunch', type=Path)
     parser.add_argument('--prelaunch-proof', type=Path)
     parser.add_argument('--cap-revision-authority-sha256')
+    parser.add_argument('--warm-qualification-policy-sha256')
+    parser.add_argument('--warm-qualification-activation-sha256')
     args = parser.parse_args()
     if ((args.resume_prelaunch or args.prelaunch_proof) and args.action != 'run'):
         parser.error('prelaunch continuation options are only valid with run')
@@ -1794,6 +1959,16 @@ if __name__ == '__main__':
         parser.error('cap revision authority is only valid with run')
     if args.cap_revision_authority_sha256 and args.resume_prelaunch:
         parser.error('cap revision authority cannot be combined with prelaunch continuation')
+    warm_requested = bool(args.warm_qualification_policy_sha256 or
+                          args.warm_qualification_activation_sha256)
+    if bool(args.warm_qualification_policy_sha256) != bool(
+            args.warm_qualification_activation_sha256):
+        parser.error('warm qualification requires both hashes')
+    if warm_requested and args.action != 'run':
+        parser.error('warm qualification is only valid with run')
+    if warm_requested and (args.resume_prelaunch or
+                           args.cap_revision_authority_sha256):
+        parser.error('warm qualification cannot be combined with another launch mode')
     if args.gpu_less and args.action != 'prepare':
         parser.error('--gpu-less is only valid with prepare; run uses the explicit prepared mode')
     if args.action == 'host': result = host_snapshot()
@@ -1804,5 +1979,7 @@ if __name__ == '__main__':
         if not args.manifest or not args.output: parser.error('run requires --manifest and --output')
         result = run_one(args.vm_dir.resolve(), args.manifest, args.output,
                          args.resume_prelaunch, args.prelaunch_proof,
-                         args.cap_revision_authority_sha256)
+                         args.cap_revision_authority_sha256,
+                         args.warm_qualification_policy_sha256,
+                         args.warm_qualification_activation_sha256)
     print(json.dumps(result, indent=2))

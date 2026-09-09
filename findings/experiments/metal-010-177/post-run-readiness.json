@@ -1,0 +1,161 @@
+{
+  "schema": 1,
+  "kind": "candidate177-post-run-readiness",
+  "created_utc": "2026-09-09T17:40:32.646028+00:00",
+  "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+  "run_id": "ff2eb6e2492a4c5c96c6c6a847ed0c26",
+  "artifacts_sha256": {
+    "manifest.json": "d6df93018e721dc42165e8318d879b915e1d880592798478075efc3a469ec821",
+    "probe.json": "c99cc1a314b4257c6337626dd36688d9d4e60092847c3bb1d4be0bc6db795b9a",
+    "verdict.json": "f9c40dc2304f957d5a8cb3d6ceba417bf9f43ece37aeca4b8ff43aa6b483aa49",
+    "serial.txt": "31dcc1693caf6873e1855d09dcabc9f32599123a02f531262cc4652a70fc6ecb",
+    "events.jsonl": "9813152e5403cfc2b4f6d947c2a36ae8fc93cb7ecafd0817ed9330b8de0cd01c",
+    "agent-server-events.jsonl": "f589694e3bab4abbd68a8141b6c2bd24fc986321b6bed6f7bb020f5746e1bb96",
+    "shutdown.json": "33a0aa3703d4258946f79747731450b30fab77d6492be6c70bd2a2a773e7f335",
+    "recovery.json": "09aa1cfd2433b587d37fa45bc23c75ade7757edbae19711af3c83877a980ce4b",
+    "recovery-reservation.json": "0c461d6b687390db060a2c814ac4dfb22fe2bc038744e828162b7ad3ad9337ca",
+    "host-before.json": "d2d3b118bda837c44c8ea878f7af089e6e5c5767e16912752b92b0f763a0a8ff",
+    "host-after.json": "d2d3b118bda837c44c8ea878f7af089e6e5c5767e16912752b92b0f763a0a8ff",
+    "host-kernel-messages.json": "86f369b51ab444fa75a10e396afa85518f186911acafd39349e967263efdb879",
+    "supervision.json": "fc2d16938eb67535b40ddd289dc7d93184c48b30c6c14ffc440042c9868ee5d1",
+    "running-identity.json": "bd3a8ee4d35ce8a63e87a5279e84a5b289d3987ccffb183d9d0704a9e3b45136"
+  },
+  "canonical_recovery_path": "/home/bogdan/macos-vm/run/vfio-recovery/5d6f45d0-4384-4340-b819-7751bc26ebb3/ff2eb6e2492a4c5c96c6c6a847ed0c26.json",
+  "canonical_recovery_sha256": "e2fcf3ba93d88b0e19ac5a71260029ead38b501cf1dc5b2adce0bddd6482c446",
+  "run_recovery_sha256": "09aa1cfd2433b587d37fa45bc23c75ade7757edbae19711af3c83877a980ce4b",
+  "receipts_json_equal": true,
+  "run_receipt_v6_errors": [],
+  "canonical_receipt_v6_errors": [],
+  "ledger_path": "/home/bogdan/macos-vm/run/used-gpu-boots/5d6f45d0-4384-4340-b819-7751bc26ebb3.json",
+  "ledger_sha256": "e319d5d954e063a7142bd4873a597cc3bb8ccb9b29d577511eaaf92f924fd496",
+  "ledger_schema": 3,
+  "ledger_max_launches": 4,
+  "ledger_launch_count": 4,
+  "host_snapshot": {
+    "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+    "kernel": "7.2.3-1-cachyos-bore",
+    "driver": "vfio-pci",
+    "device": "1002:13c0",
+    "iommu_group": "31",
+    "amdgpu_initialized": true,
+    "watchdogs": {
+      "watchdog": "1",
+      "nmi_watchdog": "1",
+      "hardlockup_panic": "1"
+    },
+    "watchdogs_verified": true,
+    "capture_ready": true,
+    "pstore_files": null,
+    "device_pinned_awake": true,
+    "device_accessible": true,
+    "reset_methods": [],
+    "active_vm": false,
+    "sleep_inhibited": true
+  },
+  "host_snapshot_expected": {
+    "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+    "driver": "vfio-pci",
+    "device": "1002:13c0",
+    "iommu_group": "31",
+    "amdgpu_initialized": true,
+    "watchdogs_verified": true,
+    "capture_ready": true,
+    "device_pinned_awake": true,
+    "device_accessible": true,
+    "reset_methods": [],
+    "active_vm": false,
+    "sleep_inhibited": true
+  },
+  "host_snapshot_errors": [],
+  "full_host": {
+    "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+    "active_vm": false,
+    "driver": "vfio-pci",
+    "device": "1002:13c0",
+    "iommu_group": "31",
+    "pci_command": 3,
+    "reset_methods": [],
+    "canonical_device": "/sys/devices/pci0000:00/0000:00:08.1/0000:7b:00.0",
+    "power_control": "on",
+    "power_state": "D0",
+    "runtime_status": "active",
+    "enable_count": "0",
+    "sleep_inhibited": true,
+    "watchdogs": {
+      "watchdog": "1",
+      "nmi_watchdog": "1",
+      "hardlockup_panic": "1"
+    },
+    "residual_units": [],
+    "siblings": {
+      "0000:7b:00.0": {
+        "device": "1002:13c0",
+        "driver": "vfio-pci",
+        "iommu_group": "31"
+      },
+      "0000:7b:00.1": {
+        "device": "1002:1640",
+        "driver": "snd_hda_intel",
+        "iommu_group": "32"
+      },
+      "0000:7b:00.2": {
+        "device": "1022:1649",
+        "driver": "ccp",
+        "iommu_group": "33"
+      },
+      "0000:7b:00.3": {
+        "device": "1022:15b6",
+        "driver": "xhci_hcd",
+        "iommu_group": "34"
+      },
+      "0000:7b:00.4": {
+        "device": "1022:15b7",
+        "driver": "xhci_hcd",
+        "iommu_group": "35"
+      },
+      "0000:7b:00.6": {
+        "device": "1022:15e3",
+        "driver": null,
+        "iommu_group": "36"
+      }
+    },
+    "reset_domain": {
+      "canonical_parent": "/sys/devices/pci0000:00/0000:00:08.1",
+      "domain_bus_device": "0000:7b:00",
+      "functions": [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "6"
+      ],
+      "canonical_devices": {
+        "0000:7b:00.0": "/sys/devices/pci0000:00/0000:00:08.1/0000:7b:00.0",
+        "0000:7b:00.1": "/sys/devices/pci0000:00/0000:00:08.1/0000:7b:00.1",
+        "0000:7b:00.2": "/sys/devices/pci0000:00/0000:00:08.1/0000:7b:00.2",
+        "0000:7b:00.3": "/sys/devices/pci0000:00/0000:00:08.1/0000:7b:00.3",
+        "0000:7b:00.4": "/sys/devices/pci0000:00/0000:00:08.1/0000:7b:00.4",
+        "0000:7b:00.6": "/sys/devices/pci0000:00/0000:00:08.1/0000:7b:00.6"
+      },
+      "physical_slot": {
+        "0000:7b:00.0": null,
+        "0000:7b:00.1": null,
+        "0000:7b:00.2": null,
+        "0000:7b:00.3": null,
+        "0000:7b:00.4": null,
+        "0000:7b:00.6": null
+      }
+    },
+    "kernel_release": "7.2.3-1-cachyos-bore",
+    "vfio_module_sha256": "d0bfbf478f892d57eb6f42a0d5d51f20a611bc7ee538643cc820932167686381",
+    "vfio_module_build_id": "a002a05ce4a09429cf6bc9906d1893ec7f304e81",
+    "journal_cursor": "s=98f6cb2295dc45898ee97031451ba7c8;i=3f3af;b=5d6f45d043844340b8197751bc26ebb3;m=9eef6872c;t=65b105088bc58;x=eaee18820c12763",
+    "journal_messages": [],
+    "journal_faults": []
+  },
+  "full_host_errors": [],
+  "visible_vfio_holders": [],
+  "qemu_or_recovery_processes": [],
+  "errors": []
+}

@@ -211,6 +211,75 @@ class ClassifyTests(unittest.TestCase):
         self.assertTrue(rows[3]['malformed'])
         self.assertFalse(rows[3]['ok'])
 
+    def test_submission_map_phase_requires_specific_worker_summary(self):
+        classifier = self.classifier()
+        manifest = {'build_id':'abc', 'spec':{'required_observations':[
+                    'submission_trace', 'submission_map_phase']}}
+        base = self.events(available=1, status=0, started=1) + [
+            {'kind':'accelerator_start', 'build':'abc', 'seq':6, 'result':1},
+            {'kind':'submission_trace_route', 'build':'abc', 'seq':7, 'ok':True},
+            {'kind':'submission_trace_summary', 'build':'abc', 'seq':8,
+             'ok':True, 'counts':[[0, 0, 0]] * 5, 'dropped':[0, 0]}]
+        missing = classifier.classify_probe_readiness(manifest, base)
+        self.assertEqual(missing['verdict'], 'INCONCLUSIVE')
+        self.assertEqual(missing['earliest_failure'],
+                         'submission_map_phase_worker_missing')
+
+        malformed = base + [
+            {'kind':'submission_map_phase_summary', 'build':'abc', 'seq':9,
+             'ok':False, 'malformed':True}]
+        result = classifier.classify_probe_readiness(manifest, malformed)
+        self.assertEqual(result['verdict'], 'INVALID')
+        self.assertEqual(result['earliest_failure'],
+                         'submission_map_phase_worker_malformed')
+
+        ready = base + [
+            {'kind':'submission_map_phase_summary', 'build':'abc', 'seq':9,
+             'ok':True, 'total':0, 'counts':[0, 0, 0, 0],
+             'dropped':[0, 0, 0, 0]}]
+        result = classifier.classify_probe_readiness(manifest, ready)
+        self.assertTrue(result['valid'])
+        self.assertEqual(result['verdict'], 'PROBE_NOT_RUN')
+
+        malformed_sample = ready + [
+            {'kind':'submission_map_phase', 'build':'abc', 'seq':10,
+             'ok':False, 'malformed':True}]
+        post_probe_manifest = dict(manifest, run_id='nonce')
+        result = classifier.classify(
+            post_probe_manifest, malformed_sample,
+            {'run_id':'nonce', 'output':'RGPU_EXIT nonce 1\n'})
+        self.assertEqual(result['verdict'], 'INVALID')
+        self.assertEqual(result['earliest_failure'],
+                         'submission_map_phase_observation_malformed')
+
+    def test_submission_map_phase_records_parse_strict_fields(self):
+        rows = self.classifier().parse_serial(
+            'RGPU_RECORDS build=abc count=5 dropped=0 truncated=0\n'
+            'RGPU_EVENT build=abc seq=0 BUILD: identity=abc\n'
+            'RGPU_EVENT build=abc seq=1 SUB: map-phase seq=19 class=backing-pte '
+            'accel=0x100 map=0x200 thread=0x300 pre=7/0/0x20/0 '
+            'post=7/0/0x21/0\n'
+            'RGPU_EVENT build=abc seq=2 SUB: map-phase-summary total=4 capacity=1 '
+            'va=2 backing-pte=1 unknown=0 dropped=0/1/0/0\n'
+            'RGPU_EVENT build=abc seq=3 SUB: map-phase-summary total=four '
+            'capacity=1 va=2 backing-pte=1 unknown=0 dropped=0/1/0/0\n'
+            'RGPU_EVENT build=abc seq=4 SUB: map-phase-summary total=5 capacity=1 '
+            'va=2 backing-pte=1 unknown=0 dropped=0/1/0/0\n')
+        self.assertEqual(rows[1]['kind'], 'submission_map_phase')
+        self.assertEqual(rows[1]['classification'], 'backing-pte')
+        self.assertEqual(rows[1]['before'], [7, 0, 0x20, 0])
+        self.assertEqual(rows[1]['after'], [7, 0, 0x21, 0])
+        self.assertEqual(rows[2]['kind'], 'submission_map_phase_summary')
+        self.assertTrue(rows[2]['ok'])
+        self.assertEqual(rows[2]['counts'], [1, 2, 1, 0])
+        self.assertEqual(rows[2]['dropped'], [0, 1, 0, 0])
+        self.assertEqual(rows[3]['kind'], 'submission_map_phase_summary')
+        self.assertFalse(rows[3]['ok'])
+        self.assertTrue(rows[3]['malformed'])
+        self.assertEqual(rows[4]['kind'], 'submission_map_phase_summary')
+        self.assertFalse(rows[4]['ok'])
+        self.assertTrue(rows[4]['malformed'])
+
     def test_missing_build_or_route_never_valid(self):
         c = self.classifier().classify
         events = self.events()

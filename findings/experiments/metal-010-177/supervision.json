@@ -1,0 +1,11 @@
+{
+  "cid": "9bea52d582a55398938d1100b0ab4927109274463816a4ba00a2b8321d17efcc",
+  "started_at": "2026-09-09T17:36:22.525165608Z",
+  "max_seconds": 180,
+  "deadline_epoch": 1788975562,
+  "timer_unit": "rgpu-deadline-9bea52d582a55398938d1100b0ab4927109274463816a4ba00a2b8321d17efcc.timer",
+  "serial_unit": "rgpu-serial-9bea52d582a55398938d1100b0ab4927109274463816a4ba00a2b8321d17efcc.service",
+  "serial_ready": "/home/bogdan/macos-vm/run/serial-9bea52d582a55398938d1100b0ab4927109274463816a4ba00a2b8321d17efcc.ready",
+  "launch_unit": "rgpu-launch-6f219cff569a494fba674afb58c1549d.service",
+  "launch_deadline_epoch": 1788975562.3698616
+}

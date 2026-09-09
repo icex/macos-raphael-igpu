@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "kind": "candidate177-authority-readiness-host-snapshot-supplement",
+  "created_utc": "2026-09-09T17:33:24.074029+00:00",
+  "base_readiness_path": "/home/bogdan/macos-vm/run/candidate177-authority-readiness.json",
+  "base_readiness_sha256": "2e767ee12f483fbc3b7ce35184285bbc40e92c07574ee60215de2155f38c2d83",
+  "manifest_path": "/home/bogdan/macos-vm/run/metal-010-177-manifest.json",
+  "manifest_sha256": "d6df93018e721dc42165e8318d879b915e1d880592798478075efc3a469ec821",
+  "authority_path": "/home/bogdan/macos-vm/run/cap-revision-authorities/5d6f45d0-4384-4340-b819-7751bc26ebb3/ff2eb6e2492a4c5c96c6c6a847ed0c26.json",
+  "authority_sha256": "862f504d882b989e70a5096e6d22a1a68acbd28886aea743276a5f2dea5ca351",
+  "host_snapshot": {
+    "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+    "kernel": "7.2.3-1-cachyos-bore",
+    "driver": "vfio-pci",
+    "device": "1002:13c0",
+    "iommu_group": "31",
+    "amdgpu_initialized": true,
+    "watchdogs": {
+      "watchdog": "1",
+      "nmi_watchdog": "1",
+      "hardlockup_panic": "1"
+    },
+    "watchdogs_verified": true,
+    "capture_ready": true,
+    "pstore_files": null,
+    "device_pinned_awake": true,
+    "device_accessible": true,
+    "reset_methods": [],
+    "active_vm": false,
+    "sleep_inhibited": true
+  },
+  "expected": {
+    "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+    "driver": "vfio-pci",
+    "device": "1002:13c0",
+    "iommu_group": "31",
+    "amdgpu_initialized": true,
+    "watchdogs_verified": true,
+    "capture_ready": true,
+    "device_pinned_awake": true,
+    "device_accessible": true,
+    "reset_methods": [],
+    "active_vm": false,
+    "sleep_inhibited": true
+  },
+  "errors": []
+}

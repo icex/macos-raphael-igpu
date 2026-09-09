@@ -20,6 +20,7 @@ enum class Phase : uint32_t {
 };
 
 static constexpr size_t KindCount = 5;
+static constexpr uint32_t MaximumPreparedMapCount = 0x3ff;
 
 struct Record {
     Kind kind;
@@ -31,6 +32,98 @@ struct Record {
     uint32_t result;
     uint32_t before;
     uint32_t sequence;
+};
+
+enum class MapPhase : uint32_t {
+    None = 0,
+    Capacity = 1,
+    VirtualAddress = 2,
+    BackingPte = 3,
+    Unknown = 4,
+};
+
+static constexpr size_t MapPhaseCount = 5;
+static constexpr size_t MapSamplesPerPhase = 2;
+static constexpr unsigned MapPhaseSummaryLimit = 32;
+
+struct MapSnapshot {
+    uint32_t batchCount;
+    uint32_t prepareCount;
+    uint32_t flags;
+    uint64_t gpuVirtualAddress;
+    bool available;
+
+    constexpr MapSnapshot(uint32_t batch = 0, uint32_t prepare = 0,
+                          uint32_t mapFlags = 0, uint64_t gpuva = 0,
+                          bool fieldsAvailable = false) :
+        batchCount(batch), prepareCount(prepare), flags(mapFlags),
+        gpuVirtualAddress(gpuva), available(fieldsAvailable) {}
+};
+
+struct MapPrepareObservation {
+    uintptr_t accelerator;
+    uintptr_t memoryMap;
+    uintptr_t threadToken;
+    bool result;
+    MapSnapshot before;
+    MapSnapshot after;
+    uint32_t sequence;
+};
+
+inline MapPhase classifyMapPrepare(const MapPrepareObservation &observation) {
+    if (observation.result) return MapPhase::None;
+    const auto &before = observation.before;
+    const auto &after = observation.after;
+    if (!before.available || !after.available || before.prepareCount != 0 ||
+        after.prepareCount != 0 || before.batchCount != after.batchCount ||
+        ((before.flags & 1u) && !(after.flags & 1u)))
+        return MapPhase::Unknown;
+    if (before.batchCount > MaximumPreparedMapCount) {
+        // The capacity fast path returns without touching the target map.
+        if (before.flags != after.flags ||
+            before.gpuVirtualAddress != after.gpuVirtualAddress)
+            return MapPhase::Unknown;
+        return MapPhase::Capacity;
+    }
+    // Bit zero is authoritative. Flag 0x20 allows a valid assigned address of zero.
+    return (after.flags & 1u) ? MapPhase::BackingPte : MapPhase::VirtualAddress;
+}
+
+constexpr size_t mapPhaseIndex(MapPhase phase) {
+    return static_cast<size_t>(phase);
+}
+
+inline const char *mapPhaseName(MapPhase phase) {
+    switch (phase) {
+        case MapPhase::None: return "none";
+        case MapPhase::Capacity: return "capacity";
+        case MapPhase::VirtualAddress: return "va-allocation-reclaim";
+        case MapPhase::BackingPte: return "backing-pte";
+        case MapPhase::Unknown: return "unknown";
+    }
+    return "unknown";
+}
+
+template <size_t SamplesPerPhase> class MapPhaseStore {
+    rgpu::ObservationBuffer<MapPrepareObservation, SamplesPerPhase>
+        samples_[MapPhaseCount] {};
+    volatile uint64_t counts_[MapPhaseCount] {};
+public:
+    void append(const MapPrepareObservation &observation) {
+        const auto phase = classifyMapPrepare(observation);
+        if (phase == MapPhase::None) return;
+        const auto index = mapPhaseIndex(phase);
+        __atomic_fetch_add(&counts_[index], 1u, __ATOMIC_RELAXED);
+        samples_[index].append(observation);
+    }
+
+    uint64_t count(MapPhase phase) const {
+        return __atomic_load_n(&counts_[mapPhaseIndex(phase)], __ATOMIC_RELAXED);
+    }
+    const rgpu::ObservationBuffer<MapPrepareObservation, SamplesPerPhase> &
+    samples(MapPhase phase) const {
+        return samples_[mapPhaseIndex(phase)];
+    }
 };
 
 constexpr size_t kindIndex(Kind kind) {
