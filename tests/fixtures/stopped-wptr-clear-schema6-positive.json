@@ -1,0 +1,4381 @@
+{
+  "fixture_kind": "synthetic-schema6-stopped-wptr-clear-positive-v1",
+  "synthetic": true,
+  "schema": 6,
+  "prior_run_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "gc_quiesce": {
+    "forced_inactive": 0,
+    "active_after": 0,
+    "cp_stat_after": 0,
+    "cp_cpc_busy_after": 0,
+    "pq_wptr_poll_after": 0,
+    "pq_status_after": 1,
+    "doorbell_range_lower_after": 0,
+    "doorbell_range_upper_after": 0,
+    "gfx_ring_clean": true,
+    "gfx_retirement_confirmed": true,
+    "graphics_pipe_proof_complete": true,
+    "graphics_pipes_after_retirement": {
+      "pipes": [
+        {
+          "intended_pipe": 0,
+          "selector": 0,
+          "rb0_active": 0,
+          "rb1_active": 0,
+          "active": 0,
+          "doorbell_control": 3221226496,
+          "doorbell_offset": 1024,
+          "doorbell_status": 3221225472,
+          "wptr": 128,
+          "wptr_hi": 0,
+          "base": 12574720,
+          "base_hi": 244,
+          "cntl": 10489360
+        },
+        {
+          "intended_pipe": 1,
+          "selector": 1,
+          "rb0_active": 0,
+          "rb1_active": 0,
+          "active": 0,
+          "doorbell_control": 0,
+          "doorbell_offset": 0,
+          "doorbell_status": 0,
+          "wptr": 0,
+          "wptr_hi": 0,
+          "base": 0,
+          "base_hi": 0,
+          "cntl": 0
+        }
+      ],
+      "final_default": {
+        "value": 0,
+        "completed": true
+      }
+    },
+    "reservation": {
+      "version": 1,
+      "state": 1448362817,
+      "heap_limit": 251658240,
+      "reservation_start": 251658240,
+      "scratch_start": 252706816,
+      "reservation_end": 268435456,
+      "run_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "checksum": 12638561746892519431,
+      "consume_hdp_flush": {
+        "remap": 520192,
+        "posted_read": 512
+      },
+      "consumed": true
+    },
+    "host_kiq": {
+      "status": "failed",
+      "error": "host KIQ cleanup failed: verify host KIQ wptr clear: RecoveryError: host KIQ wptr did not clear",
+      "evidence": {
+        "aperture": {
+          "base": 1047972020224,
+          "size": 536870912
+        },
+        "addresses": {
+          "ring": 1048224727040,
+          "mqd": 1048224792576,
+          "rptr": 1048224796672,
+          "wptr": 1048224796680,
+          "eop": 1048224800768,
+          "fence": 1048224804864
+        },
+        "packet": {
+          "unmap": [
+            3221529344,
+            805306368,
+            1024,
+            0,
+            0,
+            0
+          ],
+          "write_fence": [
+            3221436160,
+            1049856
+          ],
+          "ring_used_dwords": 256
+        },
+        "fence_sequence": 123,
+        "gfx_doorbell_offset": 1024,
+        "gart": {
+          "active": false,
+          "bar_offset": null,
+          "size": 0
+        },
+        "reservation": {
+          "version": 1,
+          "state": 1448362817,
+          "heap_limit": 251658240,
+          "reservation_start": 251658240,
+          "scratch_start": 252706816,
+          "reservation_end": 268435456,
+          "run_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "checksum": 12638561746892519431,
+          "consume_hdp_flush": {
+            "remap": 520192,
+            "posted_read": 512
+          },
+          "consumed": true
+        },
+        "hdp_flush": {
+          "remap": 520192,
+          "posted_read": 512
+        },
+        "hdp_read_invalidate": {
+          "count": 1,
+          "last": {
+            "register": 16324,
+            "trigger": 1,
+            "posted_read": 1
+          }
+        },
+        "terminal_poll": {
+          "polls": 1,
+          "rptr": 0,
+          "report": 256,
+          "fence": 123
+        },
+        "activation_readback": 1,
+        "dequeue": {
+          "write_value": 1,
+          "active_samples": [
+            0
+          ],
+          "observed_inactive": true
+        },
+        "retired_before_cleanup": {
+          "status": "retired",
+          "selector": 9,
+          "packet_dwords": 256,
+          "rptr_after": 256,
+          "fence_sequence": 123,
+          "fence_after": 123,
+          "gfx_active_after_unmap": 0,
+          "graphics_pipes_after_unmap": {
+            "pipes": [
+              {
+                "intended_pipe": 0,
+                "selector": 0,
+                "rb0_active": 0,
+                "rb1_active": 0,
+                "active": 0,
+                "doorbell_control": 3221226496,
+                "doorbell_offset": 1024,
+                "doorbell_status": 3221225472,
+                "wptr": 128,
+                "wptr_hi": 0,
+                "base": 12574720,
+                "base_hi": 244,
+                "cntl": 10489360
+              },
+              {
+                "intended_pipe": 1,
+                "selector": 1,
+                "rb0_active": 0,
+                "rb1_active": 0,
+                "active": 0,
+                "doorbell_control": 0,
+                "doorbell_offset": 0,
+                "doorbell_status": 0,
+                "wptr": 0,
+                "wptr_hi": 0,
+                "base": 0,
+                "base_hi": 0,
+                "cntl": 0
+              }
+            ],
+            "final_default": {
+              "value": 0,
+              "completed": true
+            }
+          },
+          "gfx_doorbell_offset": 1024,
+          "addresses": {
+            "ring": 1048224727040,
+            "mqd": 1048224792576,
+            "rptr": 1048224796672,
+            "wptr": 1048224796680,
+            "eop": 1048224800768,
+            "fence": 1048224804864
+          },
+          "gart": {
+            "active": false,
+            "bar_offset": null,
+            "size": 0
+          },
+          "reservation": {
+            "version": 1,
+            "state": 1448362817,
+            "heap_limit": 251658240,
+            "reservation_start": 251658240,
+            "scratch_start": 252706816,
+            "reservation_end": 268435456,
+            "run_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "checksum": 12638561746892519431,
+            "consume_hdp_flush": {
+              "remap": 520192,
+              "posted_read": 512
+            },
+            "consumed": true
+          },
+          "hdp_flush": {
+            "remap": 520192,
+            "posted_read": 512
+          }
+        },
+        "cleanup": {
+          "readbacks": {
+            "mec_cntl": 1342177280,
+            "hqd_active": 0,
+            "hqd_doorbell": 2147483648,
+            "hqd_rptr": 0,
+            "hqd_wptr_lo": 256,
+            "hqd_wptr_hi": null,
+            "pq_status": 1,
+            "doorbell_range_lower": 0,
+            "doorbell_range_upper": 0,
+            "wptr_poll_cntl": 0
+          },
+          "errors": [
+            "verify host KIQ wptr clear: RecoveryError: host KIQ wptr did not clear"
+          ]
+        }
+      }
+    },
+    "stopped_wptr_doorbell_clear": {
+      "status": "cleared",
+      "eligibility": {
+        "eligible": true,
+        "errors": []
+      },
+      "before": {
+        "passes": [
+          {
+            "globals": {
+              "cp_stat": 0,
+              "cpc_busy": 0,
+              "me_cntl": 352321536,
+              "mec_cntl": 1342177280,
+              "pq_wptr_poll_cntl": 0,
+              "pq_status": 1,
+              "doorbell_range_lower": 0,
+              "doorbell_range_upper": 0,
+              "sdma0_cntl": 0,
+              "sdma0_f32_cntl": 1,
+              "sdma0_status": 1,
+              "sdma0_gfx_rb_cntl": 0,
+              "sdma0_gfx_ib_cntl": 0,
+              "sdma0_page_rb_cntl": 2156134432,
+              "sdma0_page_ib_cntl": 256,
+              "sdma0_rlc0_rb_cntl": 0,
+              "sdma0_rlc0_ib_cntl": 0,
+              "sdma0_rlc1_rb_cntl": 0,
+              "sdma0_rlc1_ib_cntl": 0
+            },
+            "compute": [
+              {
+                "me": 1,
+                "pipe": 0,
+                "queue": 0,
+                "selector": 4,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 0,
+                "queue": 1,
+                "selector": 260,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 0,
+                "queue": 2,
+                "selector": 516,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 0,
+                "queue": 3,
+                "selector": 772,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 0,
+                "queue": 4,
+                "selector": 1028,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 0,
+                "queue": 5,
+                "selector": 1284,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 0,
+                "queue": 6,
+                "selector": 1540,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 0,
+                "queue": 7,
+                "selector": 1796,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 1,
+                "queue": 0,
+                "selector": 5,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 1,
+                "queue": 1,
+                "selector": 261,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 1,
+                "queue": 2,
+                "selector": 517,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 1,
+                "queue": 3,
+                "selector": 773,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 1,
+                "queue": 4,
+                "selector": 1029,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 1,
+                "queue": 5,
+                "selector": 1285,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 1,
+                "queue": 6,
+                "selector": 1541,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 1,
+                "queue": 7,
+                "selector": 1797,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 2,
+                "queue": 0,
+                "selector": 6,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 2,
+                "queue": 1,
+                "selector": 262,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 2,
+                "queue": 2,
+                "selector": 518,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 2,
+                "queue": 3,
+                "selector": 774,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 2,
+                "queue": 4,
+                "selector": 1030,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 2,
+                "queue": 5,
+                "selector": 1286,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 2,
+                "queue": 6,
+                "selector": 1542,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 2,
+                "queue": 7,
+                "selector": 1798,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 3,
+                "queue": 0,
+                "selector": 7,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 3,
+                "queue": 1,
+                "selector": 263,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 3,
+                "queue": 2,
+                "selector": 519,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 3,
+                "queue": 3,
+                "selector": 775,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 3,
+                "queue": 4,
+                "selector": 1031,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 3,
+                "queue": 5,
+                "selector": 1287,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 3,
+                "queue": 6,
+                "selector": 1543,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 3,
+                "queue": 7,
+                "selector": 1799,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 0,
+                "queue": 0,
+                "selector": 8,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 0,
+                "queue": 1,
+                "selector": 264,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 0,
+                "queue": 2,
+                "selector": 520,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 0,
+                "queue": 3,
+                "selector": 776,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 0,
+                "queue": 4,
+                "selector": 1032,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 0,
+                "queue": 5,
+                "selector": 1288,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 0,
+                "queue": 6,
+                "selector": 1544,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 0,
+                "queue": 7,
+                "selector": 1800,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 1,
+                "queue": 0,
+                "selector": 9,
+                "active": 0,
+                "doorbell_control": 2147483648
+              },
+              {
+                "me": 2,
+                "pipe": 1,
+                "queue": 1,
+                "selector": 265,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 1,
+                "queue": 2,
+                "selector": 521,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 1,
+                "queue": 3,
+                "selector": 777,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 1,
+                "queue": 4,
+                "selector": 1033,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 1,
+                "queue": 5,
+                "selector": 1289,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 1,
+                "queue": 6,
+                "selector": 1545,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 1,
+                "queue": 7,
+                "selector": 1801,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 2,
+                "queue": 0,
+                "selector": 10,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 2,
+                "queue": 1,
+                "selector": 266,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 2,
+                "queue": 2,
+                "selector": 522,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 2,
+                "queue": 3,
+                "selector": 778,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 2,
+                "queue": 4,
+                "selector": 1034,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 2,
+                "queue": 5,
+                "selector": 1290,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 2,
+                "queue": 6,
+                "selector": 1546,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 2,
+                "queue": 7,
+                "selector": 1802,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 3,
+                "queue": 0,
+                "selector": 11,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 3,
+                "queue": 1,
+                "selector": 267,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 3,
+                "queue": 2,
+                "selector": 523,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 3,
+                "queue": 3,
+                "selector": 779,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 3,
+                "queue": 4,
+                "selector": 1035,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 3,
+                "queue": 5,
+                "selector": 1291,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 3,
+                "queue": 6,
+                "selector": 1547,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 3,
+                "queue": 7,
+                "selector": 1803,
+                "active": 0,
+                "doorbell_control": 0
+              }
+            ],
+            "host_kiq": {
+              "selector": 9,
+              "dequeue": 0,
+              "rptr": 0,
+              "wptr_lo": 256,
+              "wptr_hi": 0
+            }
+          },
+          {
+            "globals": {
+              "cp_stat": 0,
+              "cpc_busy": 0,
+              "me_cntl": 352321536,
+              "mec_cntl": 1342177280,
+              "pq_wptr_poll_cntl": 0,
+              "pq_status": 1,
+              "doorbell_range_lower": 0,
+              "doorbell_range_upper": 0,
+              "sdma0_cntl": 0,
+              "sdma0_f32_cntl": 1,
+              "sdma0_status": 1,
+              "sdma0_gfx_rb_cntl": 0,
+              "sdma0_gfx_ib_cntl": 0,
+              "sdma0_page_rb_cntl": 2156134432,
+              "sdma0_page_ib_cntl": 256,
+              "sdma0_rlc0_rb_cntl": 0,
+              "sdma0_rlc0_ib_cntl": 0,
+              "sdma0_rlc1_rb_cntl": 0,
+              "sdma0_rlc1_ib_cntl": 0
+            },
+            "compute": [
+              {
+                "me": 1,
+                "pipe": 0,
+                "queue": 0,
+                "selector": 4,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 0,
+                "queue": 1,
+                "selector": 260,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 0,
+                "queue": 2,
+                "selector": 516,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 0,
+                "queue": 3,
+                "selector": 772,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 0,
+                "queue": 4,
+                "selector": 1028,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 0,
+                "queue": 5,
+                "selector": 1284,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 0,
+                "queue": 6,
+                "selector": 1540,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 0,
+                "queue": 7,
+                "selector": 1796,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 1,
+                "queue": 0,
+                "selector": 5,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 1,
+                "queue": 1,
+                "selector": 261,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 1,
+                "queue": 2,
+                "selector": 517,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 1,
+                "queue": 3,
+                "selector": 773,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 1,
+                "queue": 4,
+                "selector": 1029,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 1,
+                "queue": 5,
+                "selector": 1285,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 1,
+                "queue": 6,
+                "selector": 1541,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 1,
+                "queue": 7,
+                "selector": 1797,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 2,
+                "queue": 0,
+                "selector": 6,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 2,
+                "queue": 1,
+                "selector": 262,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 2,
+                "queue": 2,
+                "selector": 518,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 2,
+                "queue": 3,
+                "selector": 774,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 2,
+                "queue": 4,
+                "selector": 1030,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 2,
+                "queue": 5,
+                "selector": 1286,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 2,
+                "queue": 6,
+                "selector": 1542,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 2,
+                "queue": 7,
+                "selector": 1798,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 3,
+                "queue": 0,
+                "selector": 7,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 3,
+                "queue": 1,
+                "selector": 263,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 3,
+                "queue": 2,
+                "selector": 519,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 3,
+                "queue": 3,
+                "selector": 775,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 3,
+                "queue": 4,
+                "selector": 1031,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 3,
+                "queue": 5,
+                "selector": 1287,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 3,
+                "queue": 6,
+                "selector": 1543,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 3,
+                "queue": 7,
+                "selector": 1799,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 0,
+                "queue": 0,
+                "selector": 8,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 0,
+                "queue": 1,
+                "selector": 264,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 0,
+                "queue": 2,
+                "selector": 520,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 0,
+                "queue": 3,
+                "selector": 776,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 0,
+                "queue": 4,
+                "selector": 1032,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 0,
+                "queue": 5,
+                "selector": 1288,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 0,
+                "queue": 6,
+                "selector": 1544,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 0,
+                "queue": 7,
+                "selector": 1800,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 1,
+                "queue": 0,
+                "selector": 9,
+                "active": 0,
+                "doorbell_control": 2147483648
+              },
+              {
+                "me": 2,
+                "pipe": 1,
+                "queue": 1,
+                "selector": 265,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 1,
+                "queue": 2,
+                "selector": 521,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 1,
+                "queue": 3,
+                "selector": 777,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 1,
+                "queue": 4,
+                "selector": 1033,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 1,
+                "queue": 5,
+                "selector": 1289,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 1,
+                "queue": 6,
+                "selector": 1545,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 1,
+                "queue": 7,
+                "selector": 1801,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 2,
+                "queue": 0,
+                "selector": 10,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 2,
+                "queue": 1,
+                "selector": 266,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 2,
+                "queue": 2,
+                "selector": 522,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 2,
+                "queue": 3,
+                "selector": 778,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 2,
+                "queue": 4,
+                "selector": 1034,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 2,
+                "queue": 5,
+                "selector": 1290,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 2,
+                "queue": 6,
+                "selector": 1546,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 2,
+                "queue": 7,
+                "selector": 1802,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 3,
+                "queue": 0,
+                "selector": 11,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 3,
+                "queue": 1,
+                "selector": 267,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 3,
+                "queue": 2,
+                "selector": 523,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 3,
+                "queue": 3,
+                "selector": 779,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 3,
+                "queue": 4,
+                "selector": 1035,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 3,
+                "queue": 5,
+                "selector": 1291,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 3,
+                "queue": 6,
+                "selector": 1547,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 3,
+                "queue": 7,
+                "selector": 1803,
+                "active": 0,
+                "doorbell_control": 0
+              }
+            ],
+            "host_kiq": {
+              "selector": 9,
+              "dequeue": 0,
+              "rptr": 0,
+              "wptr_lo": 256,
+              "wptr_hi": 0
+            }
+          }
+        ],
+        "selector_writes": [
+          {
+            "sequence": 0,
+            "phase": "before-pass-1-default",
+            "value": 0,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 1,
+            "phase": "before-pass-1-compute",
+            "value": 4,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 2,
+            "phase": "before-pass-1-compute",
+            "value": 260,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 3,
+            "phase": "before-pass-1-compute",
+            "value": 516,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 4,
+            "phase": "before-pass-1-compute",
+            "value": 772,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 5,
+            "phase": "before-pass-1-compute",
+            "value": 1028,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 6,
+            "phase": "before-pass-1-compute",
+            "value": 1284,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 7,
+            "phase": "before-pass-1-compute",
+            "value": 1540,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 8,
+            "phase": "before-pass-1-compute",
+            "value": 1796,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 9,
+            "phase": "before-pass-1-compute",
+            "value": 5,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 10,
+            "phase": "before-pass-1-compute",
+            "value": 261,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 11,
+            "phase": "before-pass-1-compute",
+            "value": 517,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 12,
+            "phase": "before-pass-1-compute",
+            "value": 773,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 13,
+            "phase": "before-pass-1-compute",
+            "value": 1029,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 14,
+            "phase": "before-pass-1-compute",
+            "value": 1285,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 15,
+            "phase": "before-pass-1-compute",
+            "value": 1541,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 16,
+            "phase": "before-pass-1-compute",
+            "value": 1797,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 17,
+            "phase": "before-pass-1-compute",
+            "value": 6,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 18,
+            "phase": "before-pass-1-compute",
+            "value": 262,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 19,
+            "phase": "before-pass-1-compute",
+            "value": 518,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 20,
+            "phase": "before-pass-1-compute",
+            "value": 774,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 21,
+            "phase": "before-pass-1-compute",
+            "value": 1030,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 22,
+            "phase": "before-pass-1-compute",
+            "value": 1286,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 23,
+            "phase": "before-pass-1-compute",
+            "value": 1542,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 24,
+            "phase": "before-pass-1-compute",
+            "value": 1798,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 25,
+            "phase": "before-pass-1-compute",
+            "value": 7,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 26,
+            "phase": "before-pass-1-compute",
+            "value": 263,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 27,
+            "phase": "before-pass-1-compute",
+            "value": 519,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 28,
+            "phase": "before-pass-1-compute",
+            "value": 775,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 29,
+            "phase": "before-pass-1-compute",
+            "value": 1031,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 30,
+            "phase": "before-pass-1-compute",
+            "value": 1287,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 31,
+            "phase": "before-pass-1-compute",
+            "value": 1543,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 32,
+            "phase": "before-pass-1-compute",
+            "value": 1799,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 33,
+            "phase": "before-pass-1-compute",
+            "value": 8,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 34,
+            "phase": "before-pass-1-compute",
+            "value": 264,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 35,
+            "phase": "before-pass-1-compute",
+            "value": 520,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 36,
+            "phase": "before-pass-1-compute",
+            "value": 776,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 37,
+            "phase": "before-pass-1-compute",
+            "value": 1032,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 38,
+            "phase": "before-pass-1-compute",
+            "value": 1288,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 39,
+            "phase": "before-pass-1-compute",
+            "value": 1544,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 40,
+            "phase": "before-pass-1-compute",
+            "value": 1800,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 41,
+            "phase": "before-pass-1-compute",
+            "value": 9,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 42,
+            "phase": "before-pass-1-compute",
+            "value": 265,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 43,
+            "phase": "before-pass-1-compute",
+            "value": 521,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 44,
+            "phase": "before-pass-1-compute",
+            "value": 777,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 45,
+            "phase": "before-pass-1-compute",
+            "value": 1033,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 46,
+            "phase": "before-pass-1-compute",
+            "value": 1289,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 47,
+            "phase": "before-pass-1-compute",
+            "value": 1545,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 48,
+            "phase": "before-pass-1-compute",
+            "value": 1801,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 49,
+            "phase": "before-pass-1-compute",
+            "value": 10,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 50,
+            "phase": "before-pass-1-compute",
+            "value": 266,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 51,
+            "phase": "before-pass-1-compute",
+            "value": 522,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 52,
+            "phase": "before-pass-1-compute",
+            "value": 778,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 53,
+            "phase": "before-pass-1-compute",
+            "value": 1034,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 54,
+            "phase": "before-pass-1-compute",
+            "value": 1290,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 55,
+            "phase": "before-pass-1-compute",
+            "value": 1546,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 56,
+            "phase": "before-pass-1-compute",
+            "value": 1802,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 57,
+            "phase": "before-pass-1-compute",
+            "value": 11,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 58,
+            "phase": "before-pass-1-compute",
+            "value": 267,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 59,
+            "phase": "before-pass-1-compute",
+            "value": 523,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 60,
+            "phase": "before-pass-1-compute",
+            "value": 779,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 61,
+            "phase": "before-pass-1-compute",
+            "value": 1035,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 62,
+            "phase": "before-pass-1-compute",
+            "value": 1291,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 63,
+            "phase": "before-pass-1-compute",
+            "value": 1547,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 64,
+            "phase": "before-pass-1-compute",
+            "value": 1803,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 65,
+            "phase": "before-pass-2-default",
+            "value": 0,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 66,
+            "phase": "before-pass-2-compute",
+            "value": 4,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 67,
+            "phase": "before-pass-2-compute",
+            "value": 260,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 68,
+            "phase": "before-pass-2-compute",
+            "value": 516,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 69,
+            "phase": "before-pass-2-compute",
+            "value": 772,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 70,
+            "phase": "before-pass-2-compute",
+            "value": 1028,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 71,
+            "phase": "before-pass-2-compute",
+            "value": 1284,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 72,
+            "phase": "before-pass-2-compute",
+            "value": 1540,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 73,
+            "phase": "before-pass-2-compute",
+            "value": 1796,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 74,
+            "phase": "before-pass-2-compute",
+            "value": 5,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 75,
+            "phase": "before-pass-2-compute",
+            "value": 261,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 76,
+            "phase": "before-pass-2-compute",
+            "value": 517,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 77,
+            "phase": "before-pass-2-compute",
+            "value": 773,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 78,
+            "phase": "before-pass-2-compute",
+            "value": 1029,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 79,
+            "phase": "before-pass-2-compute",
+            "value": 1285,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 80,
+            "phase": "before-pass-2-compute",
+            "value": 1541,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 81,
+            "phase": "before-pass-2-compute",
+            "value": 1797,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 82,
+            "phase": "before-pass-2-compute",
+            "value": 6,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 83,
+            "phase": "before-pass-2-compute",
+            "value": 262,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 84,
+            "phase": "before-pass-2-compute",
+            "value": 518,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 85,
+            "phase": "before-pass-2-compute",
+            "value": 774,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 86,
+            "phase": "before-pass-2-compute",
+            "value": 1030,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 87,
+            "phase": "before-pass-2-compute",
+            "value": 1286,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 88,
+            "phase": "before-pass-2-compute",
+            "value": 1542,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 89,
+            "phase": "before-pass-2-compute",
+            "value": 1798,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 90,
+            "phase": "before-pass-2-compute",
+            "value": 7,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 91,
+            "phase": "before-pass-2-compute",
+            "value": 263,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 92,
+            "phase": "before-pass-2-compute",
+            "value": 519,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 93,
+            "phase": "before-pass-2-compute",
+            "value": 775,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 94,
+            "phase": "before-pass-2-compute",
+            "value": 1031,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 95,
+            "phase": "before-pass-2-compute",
+            "value": 1287,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 96,
+            "phase": "before-pass-2-compute",
+            "value": 1543,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 97,
+            "phase": "before-pass-2-compute",
+            "value": 1799,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 98,
+            "phase": "before-pass-2-compute",
+            "value": 8,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 99,
+            "phase": "before-pass-2-compute",
+            "value": 264,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 100,
+            "phase": "before-pass-2-compute",
+            "value": 520,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 101,
+            "phase": "before-pass-2-compute",
+            "value": 776,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 102,
+            "phase": "before-pass-2-compute",
+            "value": 1032,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 103,
+            "phase": "before-pass-2-compute",
+            "value": 1288,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 104,
+            "phase": "before-pass-2-compute",
+            "value": 1544,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 105,
+            "phase": "before-pass-2-compute",
+            "value": 1800,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 106,
+            "phase": "before-pass-2-compute",
+            "value": 9,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 107,
+            "phase": "before-pass-2-compute",
+            "value": 265,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 108,
+            "phase": "before-pass-2-compute",
+            "value": 521,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 109,
+            "phase": "before-pass-2-compute",
+            "value": 777,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 110,
+            "phase": "before-pass-2-compute",
+            "value": 1033,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 111,
+            "phase": "before-pass-2-compute",
+            "value": 1289,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 112,
+            "phase": "before-pass-2-compute",
+            "value": 1545,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 113,
+            "phase": "before-pass-2-compute",
+            "value": 1801,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 114,
+            "phase": "before-pass-2-compute",
+            "value": 10,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 115,
+            "phase": "before-pass-2-compute",
+            "value": 266,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 116,
+            "phase": "before-pass-2-compute",
+            "value": 522,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 117,
+            "phase": "before-pass-2-compute",
+            "value": 778,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 118,
+            "phase": "before-pass-2-compute",
+            "value": 1034,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 119,
+            "phase": "before-pass-2-compute",
+            "value": 1290,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 120,
+            "phase": "before-pass-2-compute",
+            "value": 1546,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 121,
+            "phase": "before-pass-2-compute",
+            "value": 1802,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 122,
+            "phase": "before-pass-2-compute",
+            "value": 11,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 123,
+            "phase": "before-pass-2-compute",
+            "value": 267,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 124,
+            "phase": "before-pass-2-compute",
+            "value": 523,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 125,
+            "phase": "before-pass-2-compute",
+            "value": 779,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 126,
+            "phase": "before-pass-2-compute",
+            "value": 1035,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 127,
+            "phase": "before-pass-2-compute",
+            "value": 1291,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 128,
+            "phase": "before-pass-2-compute",
+            "value": 1547,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 129,
+            "phase": "before-pass-2-compute",
+            "value": 1803,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 130,
+            "phase": "before-final-default",
+            "value": 0,
+            "attempted": true,
+            "completed": true
+          }
+        ],
+        "final_default": {
+          "sequence": 130,
+          "phase": "before-final-default",
+          "value": 0,
+          "attempted": true,
+          "completed": true
+        }
+      },
+      "transition": {
+        "selectors": [
+          {
+            "sequence": 0,
+            "phase": "transition-select-kiq",
+            "value": 9,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 1,
+            "phase": "transition-final-default",
+            "value": 0,
+            "attempted": true,
+            "completed": true
+          }
+        ],
+        "hqd_enable": {
+          "operation": "enable-hqd-doorbell",
+          "offset": 51296,
+          "witness_sequence": 0,
+          "observed_before": 2147483648,
+          "written": 1073741824,
+          "readback": 3221225472,
+          "attempted": true,
+          "completed": true
+        },
+        "global_enable": {
+          "operation": "enable-global-pq-doorbell",
+          "offset": 49888,
+          "witness_sequence": 1,
+          "observed_before": 1,
+          "written": 3,
+          "readback": 3,
+          "attempted": true,
+          "completed": true
+        },
+        "doorbell": {
+          "sequence": 2,
+          "index": 0,
+          "value": 0,
+          "width_bits": 64,
+          "attempted": true,
+          "completed": true
+        },
+        "interim_samples": [
+          {
+            "active": 0,
+            "mec_cntl": 1342177280,
+            "wptr_lo": 0,
+            "wptr_hi": 0
+          }
+        ],
+        "gate_close": {
+          "global": {
+            "operation": "disable-global-pq-doorbell",
+            "offset": 49888,
+            "witness_sequence": 3,
+            "observed_before": 3,
+            "written": 1,
+            "readback": 1,
+            "attempted": true,
+            "completed": true
+          },
+          "hqd": {
+            "operation": "disable-hqd-doorbell",
+            "offset": 51296,
+            "witness_sequence": 4,
+            "observed_before": 3221225472,
+            "written": 2147483648,
+            "readback": 2147483648,
+            "attempted": true,
+            "completed": true
+          }
+        },
+        "final_default": {
+          "sequence": 1,
+          "phase": "transition-final-default",
+          "value": 0,
+          "attempted": true,
+          "completed": true
+        },
+        "timing": {
+          "observation_budget_ns": 2000000,
+          "started_ns": 100,
+          "through_global_close_ns": 1000
+        }
+      },
+      "after": {
+        "passes": [
+          {
+            "globals": {
+              "cp_stat": 0,
+              "cpc_busy": 0,
+              "me_cntl": 352321536,
+              "mec_cntl": 1342177280,
+              "pq_wptr_poll_cntl": 0,
+              "pq_status": 1,
+              "doorbell_range_lower": 0,
+              "doorbell_range_upper": 0,
+              "sdma0_cntl": 0,
+              "sdma0_f32_cntl": 1,
+              "sdma0_status": 1,
+              "sdma0_gfx_rb_cntl": 0,
+              "sdma0_gfx_ib_cntl": 0,
+              "sdma0_page_rb_cntl": 2156134432,
+              "sdma0_page_ib_cntl": 256,
+              "sdma0_rlc0_rb_cntl": 0,
+              "sdma0_rlc0_ib_cntl": 0,
+              "sdma0_rlc1_rb_cntl": 0,
+              "sdma0_rlc1_ib_cntl": 0
+            },
+            "compute": [
+              {
+                "me": 1,
+                "pipe": 0,
+                "queue": 0,
+                "selector": 4,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 0,
+                "queue": 1,
+                "selector": 260,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 0,
+                "queue": 2,
+                "selector": 516,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 0,
+                "queue": 3,
+                "selector": 772,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 0,
+                "queue": 4,
+                "selector": 1028,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 0,
+                "queue": 5,
+                "selector": 1284,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 0,
+                "queue": 6,
+                "selector": 1540,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 0,
+                "queue": 7,
+                "selector": 1796,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 1,
+                "queue": 0,
+                "selector": 5,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 1,
+                "queue": 1,
+                "selector": 261,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 1,
+                "queue": 2,
+                "selector": 517,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 1,
+                "queue": 3,
+                "selector": 773,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 1,
+                "queue": 4,
+                "selector": 1029,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 1,
+                "queue": 5,
+                "selector": 1285,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 1,
+                "queue": 6,
+                "selector": 1541,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 1,
+                "queue": 7,
+                "selector": 1797,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 2,
+                "queue": 0,
+                "selector": 6,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 2,
+                "queue": 1,
+                "selector": 262,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 2,
+                "queue": 2,
+                "selector": 518,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 2,
+                "queue": 3,
+                "selector": 774,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 2,
+                "queue": 4,
+                "selector": 1030,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 2,
+                "queue": 5,
+                "selector": 1286,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 2,
+                "queue": 6,
+                "selector": 1542,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 2,
+                "queue": 7,
+                "selector": 1798,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 3,
+                "queue": 0,
+                "selector": 7,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 3,
+                "queue": 1,
+                "selector": 263,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 3,
+                "queue": 2,
+                "selector": 519,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 3,
+                "queue": 3,
+                "selector": 775,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 3,
+                "queue": 4,
+                "selector": 1031,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 3,
+                "queue": 5,
+                "selector": 1287,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 3,
+                "queue": 6,
+                "selector": 1543,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 3,
+                "queue": 7,
+                "selector": 1799,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 0,
+                "queue": 0,
+                "selector": 8,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 0,
+                "queue": 1,
+                "selector": 264,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 0,
+                "queue": 2,
+                "selector": 520,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 0,
+                "queue": 3,
+                "selector": 776,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 0,
+                "queue": 4,
+                "selector": 1032,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 0,
+                "queue": 5,
+                "selector": 1288,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 0,
+                "queue": 6,
+                "selector": 1544,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 0,
+                "queue": 7,
+                "selector": 1800,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 1,
+                "queue": 0,
+                "selector": 9,
+                "active": 0,
+                "doorbell_control": 2147483648
+              },
+              {
+                "me": 2,
+                "pipe": 1,
+                "queue": 1,
+                "selector": 265,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 1,
+                "queue": 2,
+                "selector": 521,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 1,
+                "queue": 3,
+                "selector": 777,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 1,
+                "queue": 4,
+                "selector": 1033,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 1,
+                "queue": 5,
+                "selector": 1289,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 1,
+                "queue": 6,
+                "selector": 1545,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 1,
+                "queue": 7,
+                "selector": 1801,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 2,
+                "queue": 0,
+                "selector": 10,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 2,
+                "queue": 1,
+                "selector": 266,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 2,
+                "queue": 2,
+                "selector": 522,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 2,
+                "queue": 3,
+                "selector": 778,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 2,
+                "queue": 4,
+                "selector": 1034,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 2,
+                "queue": 5,
+                "selector": 1290,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 2,
+                "queue": 6,
+                "selector": 1546,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 2,
+                "queue": 7,
+                "selector": 1802,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 3,
+                "queue": 0,
+                "selector": 11,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 3,
+                "queue": 1,
+                "selector": 267,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 3,
+                "queue": 2,
+                "selector": 523,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 3,
+                "queue": 3,
+                "selector": 779,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 3,
+                "queue": 4,
+                "selector": 1035,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 3,
+                "queue": 5,
+                "selector": 1291,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 3,
+                "queue": 6,
+                "selector": 1547,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 3,
+                "queue": 7,
+                "selector": 1803,
+                "active": 0,
+                "doorbell_control": 0
+              }
+            ],
+            "host_kiq": {
+              "selector": 9,
+              "dequeue": 0,
+              "rptr": 0,
+              "wptr_lo": 0,
+              "wptr_hi": 0
+            }
+          },
+          {
+            "globals": {
+              "cp_stat": 0,
+              "cpc_busy": 0,
+              "me_cntl": 352321536,
+              "mec_cntl": 1342177280,
+              "pq_wptr_poll_cntl": 0,
+              "pq_status": 1,
+              "doorbell_range_lower": 0,
+              "doorbell_range_upper": 0,
+              "sdma0_cntl": 0,
+              "sdma0_f32_cntl": 1,
+              "sdma0_status": 1,
+              "sdma0_gfx_rb_cntl": 0,
+              "sdma0_gfx_ib_cntl": 0,
+              "sdma0_page_rb_cntl": 2156134432,
+              "sdma0_page_ib_cntl": 256,
+              "sdma0_rlc0_rb_cntl": 0,
+              "sdma0_rlc0_ib_cntl": 0,
+              "sdma0_rlc1_rb_cntl": 0,
+              "sdma0_rlc1_ib_cntl": 0
+            },
+            "compute": [
+              {
+                "me": 1,
+                "pipe": 0,
+                "queue": 0,
+                "selector": 4,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 0,
+                "queue": 1,
+                "selector": 260,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 0,
+                "queue": 2,
+                "selector": 516,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 0,
+                "queue": 3,
+                "selector": 772,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 0,
+                "queue": 4,
+                "selector": 1028,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 0,
+                "queue": 5,
+                "selector": 1284,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 0,
+                "queue": 6,
+                "selector": 1540,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 0,
+                "queue": 7,
+                "selector": 1796,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 1,
+                "queue": 0,
+                "selector": 5,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 1,
+                "queue": 1,
+                "selector": 261,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 1,
+                "queue": 2,
+                "selector": 517,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 1,
+                "queue": 3,
+                "selector": 773,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 1,
+                "queue": 4,
+                "selector": 1029,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 1,
+                "queue": 5,
+                "selector": 1285,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 1,
+                "queue": 6,
+                "selector": 1541,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 1,
+                "queue": 7,
+                "selector": 1797,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 2,
+                "queue": 0,
+                "selector": 6,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 2,
+                "queue": 1,
+                "selector": 262,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 2,
+                "queue": 2,
+                "selector": 518,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 2,
+                "queue": 3,
+                "selector": 774,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 2,
+                "queue": 4,
+                "selector": 1030,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 2,
+                "queue": 5,
+                "selector": 1286,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 2,
+                "queue": 6,
+                "selector": 1542,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 2,
+                "queue": 7,
+                "selector": 1798,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 3,
+                "queue": 0,
+                "selector": 7,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 3,
+                "queue": 1,
+                "selector": 263,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 3,
+                "queue": 2,
+                "selector": 519,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 3,
+                "queue": 3,
+                "selector": 775,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 3,
+                "queue": 4,
+                "selector": 1031,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 3,
+                "queue": 5,
+                "selector": 1287,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 3,
+                "queue": 6,
+                "selector": 1543,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 1,
+                "pipe": 3,
+                "queue": 7,
+                "selector": 1799,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 0,
+                "queue": 0,
+                "selector": 8,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 0,
+                "queue": 1,
+                "selector": 264,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 0,
+                "queue": 2,
+                "selector": 520,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 0,
+                "queue": 3,
+                "selector": 776,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 0,
+                "queue": 4,
+                "selector": 1032,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 0,
+                "queue": 5,
+                "selector": 1288,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 0,
+                "queue": 6,
+                "selector": 1544,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 0,
+                "queue": 7,
+                "selector": 1800,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 1,
+                "queue": 0,
+                "selector": 9,
+                "active": 0,
+                "doorbell_control": 2147483648
+              },
+              {
+                "me": 2,
+                "pipe": 1,
+                "queue": 1,
+                "selector": 265,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 1,
+                "queue": 2,
+                "selector": 521,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 1,
+                "queue": 3,
+                "selector": 777,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 1,
+                "queue": 4,
+                "selector": 1033,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 1,
+                "queue": 5,
+                "selector": 1289,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 1,
+                "queue": 6,
+                "selector": 1545,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 1,
+                "queue": 7,
+                "selector": 1801,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 2,
+                "queue": 0,
+                "selector": 10,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 2,
+                "queue": 1,
+                "selector": 266,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 2,
+                "queue": 2,
+                "selector": 522,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 2,
+                "queue": 3,
+                "selector": 778,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 2,
+                "queue": 4,
+                "selector": 1034,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 2,
+                "queue": 5,
+                "selector": 1290,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 2,
+                "queue": 6,
+                "selector": 1546,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 2,
+                "queue": 7,
+                "selector": 1802,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 3,
+                "queue": 0,
+                "selector": 11,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 3,
+                "queue": 1,
+                "selector": 267,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 3,
+                "queue": 2,
+                "selector": 523,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 3,
+                "queue": 3,
+                "selector": 779,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 3,
+                "queue": 4,
+                "selector": 1035,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 3,
+                "queue": 5,
+                "selector": 1291,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 3,
+                "queue": 6,
+                "selector": 1547,
+                "active": 0,
+                "doorbell_control": 0
+              },
+              {
+                "me": 2,
+                "pipe": 3,
+                "queue": 7,
+                "selector": 1803,
+                "active": 0,
+                "doorbell_control": 0
+              }
+            ],
+            "host_kiq": {
+              "selector": 9,
+              "dequeue": 0,
+              "rptr": 0,
+              "wptr_lo": 0,
+              "wptr_hi": 0
+            }
+          }
+        ],
+        "selector_writes": [
+          {
+            "sequence": 0,
+            "phase": "after-pass-1-default",
+            "value": 0,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 1,
+            "phase": "after-pass-1-compute",
+            "value": 4,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 2,
+            "phase": "after-pass-1-compute",
+            "value": 260,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 3,
+            "phase": "after-pass-1-compute",
+            "value": 516,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 4,
+            "phase": "after-pass-1-compute",
+            "value": 772,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 5,
+            "phase": "after-pass-1-compute",
+            "value": 1028,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 6,
+            "phase": "after-pass-1-compute",
+            "value": 1284,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 7,
+            "phase": "after-pass-1-compute",
+            "value": 1540,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 8,
+            "phase": "after-pass-1-compute",
+            "value": 1796,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 9,
+            "phase": "after-pass-1-compute",
+            "value": 5,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 10,
+            "phase": "after-pass-1-compute",
+            "value": 261,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 11,
+            "phase": "after-pass-1-compute",
+            "value": 517,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 12,
+            "phase": "after-pass-1-compute",
+            "value": 773,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 13,
+            "phase": "after-pass-1-compute",
+            "value": 1029,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 14,
+            "phase": "after-pass-1-compute",
+            "value": 1285,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 15,
+            "phase": "after-pass-1-compute",
+            "value": 1541,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 16,
+            "phase": "after-pass-1-compute",
+            "value": 1797,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 17,
+            "phase": "after-pass-1-compute",
+            "value": 6,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 18,
+            "phase": "after-pass-1-compute",
+            "value": 262,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 19,
+            "phase": "after-pass-1-compute",
+            "value": 518,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 20,
+            "phase": "after-pass-1-compute",
+            "value": 774,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 21,
+            "phase": "after-pass-1-compute",
+            "value": 1030,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 22,
+            "phase": "after-pass-1-compute",
+            "value": 1286,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 23,
+            "phase": "after-pass-1-compute",
+            "value": 1542,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 24,
+            "phase": "after-pass-1-compute",
+            "value": 1798,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 25,
+            "phase": "after-pass-1-compute",
+            "value": 7,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 26,
+            "phase": "after-pass-1-compute",
+            "value": 263,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 27,
+            "phase": "after-pass-1-compute",
+            "value": 519,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 28,
+            "phase": "after-pass-1-compute",
+            "value": 775,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 29,
+            "phase": "after-pass-1-compute",
+            "value": 1031,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 30,
+            "phase": "after-pass-1-compute",
+            "value": 1287,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 31,
+            "phase": "after-pass-1-compute",
+            "value": 1543,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 32,
+            "phase": "after-pass-1-compute",
+            "value": 1799,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 33,
+            "phase": "after-pass-1-compute",
+            "value": 8,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 34,
+            "phase": "after-pass-1-compute",
+            "value": 264,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 35,
+            "phase": "after-pass-1-compute",
+            "value": 520,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 36,
+            "phase": "after-pass-1-compute",
+            "value": 776,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 37,
+            "phase": "after-pass-1-compute",
+            "value": 1032,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 38,
+            "phase": "after-pass-1-compute",
+            "value": 1288,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 39,
+            "phase": "after-pass-1-compute",
+            "value": 1544,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 40,
+            "phase": "after-pass-1-compute",
+            "value": 1800,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 41,
+            "phase": "after-pass-1-compute",
+            "value": 9,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 42,
+            "phase": "after-pass-1-compute",
+            "value": 265,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 43,
+            "phase": "after-pass-1-compute",
+            "value": 521,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 44,
+            "phase": "after-pass-1-compute",
+            "value": 777,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 45,
+            "phase": "after-pass-1-compute",
+            "value": 1033,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 46,
+            "phase": "after-pass-1-compute",
+            "value": 1289,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 47,
+            "phase": "after-pass-1-compute",
+            "value": 1545,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 48,
+            "phase": "after-pass-1-compute",
+            "value": 1801,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 49,
+            "phase": "after-pass-1-compute",
+            "value": 10,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 50,
+            "phase": "after-pass-1-compute",
+            "value": 266,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 51,
+            "phase": "after-pass-1-compute",
+            "value": 522,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 52,
+            "phase": "after-pass-1-compute",
+            "value": 778,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 53,
+            "phase": "after-pass-1-compute",
+            "value": 1034,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 54,
+            "phase": "after-pass-1-compute",
+            "value": 1290,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 55,
+            "phase": "after-pass-1-compute",
+            "value": 1546,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 56,
+            "phase": "after-pass-1-compute",
+            "value": 1802,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 57,
+            "phase": "after-pass-1-compute",
+            "value": 11,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 58,
+            "phase": "after-pass-1-compute",
+            "value": 267,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 59,
+            "phase": "after-pass-1-compute",
+            "value": 523,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 60,
+            "phase": "after-pass-1-compute",
+            "value": 779,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 61,
+            "phase": "after-pass-1-compute",
+            "value": 1035,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 62,
+            "phase": "after-pass-1-compute",
+            "value": 1291,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 63,
+            "phase": "after-pass-1-compute",
+            "value": 1547,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 64,
+            "phase": "after-pass-1-compute",
+            "value": 1803,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 65,
+            "phase": "after-pass-2-default",
+            "value": 0,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 66,
+            "phase": "after-pass-2-compute",
+            "value": 4,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 67,
+            "phase": "after-pass-2-compute",
+            "value": 260,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 68,
+            "phase": "after-pass-2-compute",
+            "value": 516,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 69,
+            "phase": "after-pass-2-compute",
+            "value": 772,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 70,
+            "phase": "after-pass-2-compute",
+            "value": 1028,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 71,
+            "phase": "after-pass-2-compute",
+            "value": 1284,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 72,
+            "phase": "after-pass-2-compute",
+            "value": 1540,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 73,
+            "phase": "after-pass-2-compute",
+            "value": 1796,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 74,
+            "phase": "after-pass-2-compute",
+            "value": 5,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 75,
+            "phase": "after-pass-2-compute",
+            "value": 261,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 76,
+            "phase": "after-pass-2-compute",
+            "value": 517,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 77,
+            "phase": "after-pass-2-compute",
+            "value": 773,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 78,
+            "phase": "after-pass-2-compute",
+            "value": 1029,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 79,
+            "phase": "after-pass-2-compute",
+            "value": 1285,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 80,
+            "phase": "after-pass-2-compute",
+            "value": 1541,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 81,
+            "phase": "after-pass-2-compute",
+            "value": 1797,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 82,
+            "phase": "after-pass-2-compute",
+            "value": 6,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 83,
+            "phase": "after-pass-2-compute",
+            "value": 262,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 84,
+            "phase": "after-pass-2-compute",
+            "value": 518,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 85,
+            "phase": "after-pass-2-compute",
+            "value": 774,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 86,
+            "phase": "after-pass-2-compute",
+            "value": 1030,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 87,
+            "phase": "after-pass-2-compute",
+            "value": 1286,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 88,
+            "phase": "after-pass-2-compute",
+            "value": 1542,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 89,
+            "phase": "after-pass-2-compute",
+            "value": 1798,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 90,
+            "phase": "after-pass-2-compute",
+            "value": 7,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 91,
+            "phase": "after-pass-2-compute",
+            "value": 263,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 92,
+            "phase": "after-pass-2-compute",
+            "value": 519,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 93,
+            "phase": "after-pass-2-compute",
+            "value": 775,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 94,
+            "phase": "after-pass-2-compute",
+            "value": 1031,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 95,
+            "phase": "after-pass-2-compute",
+            "value": 1287,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 96,
+            "phase": "after-pass-2-compute",
+            "value": 1543,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 97,
+            "phase": "after-pass-2-compute",
+            "value": 1799,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 98,
+            "phase": "after-pass-2-compute",
+            "value": 8,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 99,
+            "phase": "after-pass-2-compute",
+            "value": 264,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 100,
+            "phase": "after-pass-2-compute",
+            "value": 520,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 101,
+            "phase": "after-pass-2-compute",
+            "value": 776,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 102,
+            "phase": "after-pass-2-compute",
+            "value": 1032,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 103,
+            "phase": "after-pass-2-compute",
+            "value": 1288,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 104,
+            "phase": "after-pass-2-compute",
+            "value": 1544,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 105,
+            "phase": "after-pass-2-compute",
+            "value": 1800,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 106,
+            "phase": "after-pass-2-compute",
+            "value": 9,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 107,
+            "phase": "after-pass-2-compute",
+            "value": 265,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 108,
+            "phase": "after-pass-2-compute",
+            "value": 521,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 109,
+            "phase": "after-pass-2-compute",
+            "value": 777,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 110,
+            "phase": "after-pass-2-compute",
+            "value": 1033,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 111,
+            "phase": "after-pass-2-compute",
+            "value": 1289,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 112,
+            "phase": "after-pass-2-compute",
+            "value": 1545,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 113,
+            "phase": "after-pass-2-compute",
+            "value": 1801,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 114,
+            "phase": "after-pass-2-compute",
+            "value": 10,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 115,
+            "phase": "after-pass-2-compute",
+            "value": 266,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 116,
+            "phase": "after-pass-2-compute",
+            "value": 522,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 117,
+            "phase": "after-pass-2-compute",
+            "value": 778,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 118,
+            "phase": "after-pass-2-compute",
+            "value": 1034,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 119,
+            "phase": "after-pass-2-compute",
+            "value": 1290,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 120,
+            "phase": "after-pass-2-compute",
+            "value": 1546,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 121,
+            "phase": "after-pass-2-compute",
+            "value": 1802,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 122,
+            "phase": "after-pass-2-compute",
+            "value": 11,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 123,
+            "phase": "after-pass-2-compute",
+            "value": 267,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 124,
+            "phase": "after-pass-2-compute",
+            "value": 523,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 125,
+            "phase": "after-pass-2-compute",
+            "value": 779,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 126,
+            "phase": "after-pass-2-compute",
+            "value": 1035,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 127,
+            "phase": "after-pass-2-compute",
+            "value": 1291,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 128,
+            "phase": "after-pass-2-compute",
+            "value": 1547,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 129,
+            "phase": "after-pass-2-compute",
+            "value": 1803,
+            "attempted": true,
+            "completed": true
+          },
+          {
+            "sequence": 130,
+            "phase": "after-final-default",
+            "value": 0,
+            "attempted": true,
+            "completed": true
+          }
+        ],
+        "final_default": {
+          "sequence": 130,
+          "phase": "after-final-default",
+          "value": 0,
+          "attempted": true,
+          "completed": true
+        }
+      }
+    }
+  }
+}

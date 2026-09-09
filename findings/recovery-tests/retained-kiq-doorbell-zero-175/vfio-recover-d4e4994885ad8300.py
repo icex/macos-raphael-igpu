@@ -4,7 +4,6 @@ import argparse
 import ctypes
 import errno
 import fcntl
-import importlib.util
 import json
 import mmap
 import os
@@ -113,18 +112,9 @@ CP_HQD_PQ_WPTR_HI_OFFSET = (GC_SEG0 + 0x1FE0) * 4
 # confirms the addressing in sdma_5_2_stop_engine: SDMA0 uses block 0x23,
 # base index 0, then the register offsets below.
 SDMA0_CNTL_OFFSET = (GC_SEG0 + 0x001C) * 4
-SDMA0_STATUS_REG_OFFSET = (GC_SEG0 + 0x0025) * 4
 SDMA0_F32_CNTL_OFFSET = (GC_SEG0 + 0x002A) * 4
 SDMA0_GFX_RB_CNTL_OFFSET = (GC_SEG0 + 0x0080) * 4
 SDMA0_GFX_IB_CNTL_OFFSET = (GC_SEG0 + 0x008A) * 4
-SDMA0_PAGE_RB_CNTL_OFFSET = (GC_SEG0 + 0x00D8) * 4
-SDMA0_PAGE_IB_CNTL_OFFSET = (GC_SEG0 + 0x00E2) * 4
-# The retained Navi23 scan establishes the two SDMA0 RLC input queues below.
-# Later generated headers expose more controls, but they are outside this proof.
-SDMA0_RLC_RB_CNTL_OFFSETS = tuple(
-    (GC_SEG0 + 0x0130 + 0x58 * index) * 4 for index in range(2))
-SDMA0_RLC_IB_CNTL_OFFSETS = tuple(
-    (GC_SEG0 + 0x013A + 0x58 * index) * 4 for index in range(2))
 CP_ME_HALT_MASK = 0x15000000  # CE_HALT | PFP_HALT | ME_HALT
 CP_MEC_HALT_MASK = 0x50000000 # MEC_ME1_HALT | MEC_ME2_HALT
 CP_MEC2_HALT_MASK = 0x10000000
@@ -141,8 +131,6 @@ SDMA_HALT_MASK = 0x1
 SDMA_AUTO_CTXSW_ENABLE_MASK = 0x00040000
 SDMA_RB_ENABLE_MASK = 0x1
 SDMA_IB_ENABLE_MASK = 0x1
-SDMA_STATUS_IDLE_MASK = 0x1
-STOPPED_WPTR_OBSERVATION_BUDGET_NS = 2_000_000
 
 # Crash recovery uses only GPU-local VRAM.  QEMU's IOMMU mappings are gone by
 # the time this process opens VFIO, so rebuilding the KIQ in system memory would
@@ -458,7 +446,7 @@ class LegacyVfio:
         return value
 
     def write32(self, offset, value):
-        _store_mmio_u32(self.bar, offset, value)
+        struct.pack_into('<I', self.bar, offset, value)
         self.posted_barrier()
 
     def flush_hdp(self):
@@ -466,7 +454,7 @@ class LegacyVfio:
         if remap not in HDP_MEM_FLUSH_TARGETS or remap & 3 or remap + 4 > len(self.bar):
             raise RecoveryError(
                 f'HDP flush target is {remap:#x}, expected a source-backed NBIO target')
-        _store_mmio_u32(self.bar, remap, 0)
+        struct.pack_into('<I', self.bar, remap, 0)
         posted = self.posted_barrier()
         return {'remap': remap, 'posted_read': posted}
 
@@ -968,13 +956,6 @@ def retire_legacy_gfx_with_host_kiq(mmio, prior_run_id, sleep=time.sleep, polls=
         'hdp_flush': None,
         'hdp_read_invalidate': hdp_read_invalidate,
         'terminal_poll': None,
-        'activation_readback': None,
-        'dequeue': {
-            'write_value': None,
-            'active_samples': [],
-            'observed_inactive': False,
-        },
-        'retired_before_cleanup': None,
         'cleanup': {'readbacks': {}, 'errors': []},
     }
     try:
@@ -1039,9 +1020,7 @@ def retire_legacy_gfx_with_host_kiq(mmio, prior_run_id, sleep=time.sleep, polls=
         mmio.write32(CP_HQD_PERSISTENT_STATE_OFFSET, 0x0BE05300)
         mmio.write32(CP_HQD_IB_CONTROL_OFFSET, 0x00300000)
         mmio.write32(CP_HQD_ACTIVE_OFFSET, 1)
-        activation_readback = mmio.read32(CP_HQD_ACTIVE_OFFSET)
-        failure_evidence['activation_readback'] = activation_readback
-        if not (activation_readback & 1):
+        if not (mmio.read32(CP_HQD_ACTIVE_OFFSET) & 1):
             raise RecoveryError('host KIQ would not activate')
         mmio.write32(CP_PQ_STATUS_OFFSET,
                      pq_status_before | CP_PQ_DOORBELL_ENABLE_MASK)
@@ -1098,13 +1077,9 @@ def retire_legacy_gfx_with_host_kiq(mmio, prior_run_id, sleep=time.sleep, polls=
 
         mmio.write32(GRBM_GFX_CNTL_OFFSET, HOST_KIQ_SELECTOR)
         mmio.write32(CP_HQD_DEQUEUE_OFFSET, 1)
-        failure_evidence['dequeue']['write_value'] = 1
         for _ in range(polls):
-            dequeue_active = mmio.read32(CP_HQD_ACTIVE_OFFSET)
-            failure_evidence['dequeue']['active_samples'].append(dequeue_active)
-            if not (dequeue_active & 1):
+            if not (mmio.read32(CP_HQD_ACTIVE_OFFSET) & 1):
                 retired = True
-                failure_evidence['dequeue']['observed_inactive'] = True
                 break
             sleep(0.001)
         if not retired:
@@ -1118,10 +1093,6 @@ def retire_legacy_gfx_with_host_kiq(mmio, prior_run_id, sleep=time.sleep, polls=
                   'gfx_doorbell_offset': gfx_doorbell_offset,
                   'addresses': addresses, 'gart': gart,
                   'reservation': reservation, 'hdp_flush': hdp_flush}
-        # Cleanup can fail after the packet, graphics UNMAP and genuine HQD
-        # dequeue have all succeeded. Preserve that pre-cleanup result verbatim;
-        # callers must still validate every raw field before using it.
-        failure_evidence['retired_before_cleanup'] = result
     except BaseException as error:
         failure = error
         failure_traceback = error.__traceback__
@@ -1252,715 +1223,6 @@ def retire_legacy_gfx_with_host_kiq(mmio, prior_run_id, sleep=time.sleep, polls=
     return result
 
 
-_STOPPED_WPTR_GLOBAL_OFFSETS = (
-    ('cp_stat', CP_STAT_OFFSET),
-    ('cpc_busy', CP_CPC_BUSY_STAT_OFFSET),
-    ('me_cntl', CP_ME_CNTL_OFFSET),
-    ('mec_cntl', CP_MEC_CNTL_OFFSET),
-    ('pq_wptr_poll_cntl', CP_PQ_WPTR_POLL_CNTL_OFFSET),
-    ('pq_status', CP_PQ_STATUS_OFFSET),
-    ('doorbell_range_lower', CP_MEC_DOORBELL_RANGE_LOWER_OFFSET),
-    ('doorbell_range_upper', CP_MEC_DOORBELL_RANGE_UPPER_OFFSET),
-    ('sdma0_cntl', SDMA0_CNTL_OFFSET),
-    ('sdma0_f32_cntl', SDMA0_F32_CNTL_OFFSET),
-    ('sdma0_status', SDMA0_STATUS_REG_OFFSET),
-    ('sdma0_gfx_rb_cntl', SDMA0_GFX_RB_CNTL_OFFSET),
-    ('sdma0_gfx_ib_cntl', SDMA0_GFX_IB_CNTL_OFFSET),
-    ('sdma0_page_rb_cntl', SDMA0_PAGE_RB_CNTL_OFFSET),
-    ('sdma0_page_ib_cntl', SDMA0_PAGE_IB_CNTL_OFFSET),
-    ('sdma0_rlc0_rb_cntl', SDMA0_RLC_RB_CNTL_OFFSETS[0]),
-    ('sdma0_rlc0_ib_cntl', SDMA0_RLC_IB_CNTL_OFFSETS[0]),
-    ('sdma0_rlc1_rb_cntl', SDMA0_RLC_RB_CNTL_OFFSETS[1]),
-    ('sdma0_rlc1_ib_cntl', SDMA0_RLC_IB_CNTL_OFFSETS[1]),
-)
-
-
-def _stopped_wptr_eligibility(host_kiq, forced_inactive):
-    """Derive the exact sole-WPTR-cleanup failure from raw KIQ evidence."""
-    def u32(value):
-        return type(value) is int and 0 <= value < 0xffffffff
-
-    errors = []
-    expected_error = ('host KIQ cleanup failed: verify host KIQ wptr clear: '
-                      'RecoveryError: host KIQ wptr did not clear')
-    if forced_inactive != 0:
-        errors.append('forced queue clear')
-    if not isinstance(host_kiq, dict) or host_kiq.get('status') != 'failed':
-        errors.append('host KIQ status')
-        return {'eligible': False, 'errors': errors}
-    if host_kiq.get('error') != expected_error:
-        errors.append('host KIQ sole cleanup error')
-    evidence = host_kiq.get('evidence')
-    if not isinstance(evidence, dict):
-        errors.append('host KIQ evidence')
-        return {'eligible': False, 'errors': errors}
-    sequence = evidence.get('fence_sequence')
-    terminal = evidence.get('terminal_poll')
-    if (not u32(sequence) or sequence == 0 or
-            not isinstance(terminal, dict) or
-            set(terminal) != {'polls', 'rptr', 'report', 'fence'} or
-            type(terminal.get('polls')) is not int or
-            not 1 <= terminal.get('polls', 0) <= 10000 or
-            any(not u32(terminal.get(key)) for key in ('rptr', 'report', 'fence')) or
-            terminal.get('polls', 0) < 1 or
-            terminal.get('fence') != sequence or
-            (terminal.get('rptr') != HOST_KIQ_RING_USED_DWORDS and
-             terminal.get('report') != HOST_KIQ_RING_USED_DWORDS)):
-        errors.append('terminal fence')
-    activation = evidence.get('activation_readback')
-    if (not u32(activation) or
-            not activation & 1):
-        errors.append('host KIQ activation')
-    dequeue = evidence.get('dequeue')
-    if (not isinstance(dequeue, dict) or
-            set(dequeue) != {'write_value', 'active_samples', 'observed_inactive'} or
-            dequeue.get('write_value') != 1 or
-            dequeue.get('observed_inactive') is not True or
-            not isinstance(dequeue.get('active_samples'), list) or
-            not dequeue['active_samples'] or
-            any(not u32(value)
-                for value in dequeue['active_samples']) or
-            dequeue['active_samples'][-1] & 1):
-        errors.append('genuine dequeue')
-    retired = evidence.get('retired_before_cleanup')
-    retired_keys = {'status', 'selector', 'packet_dwords', 'rptr_after',
-                    'fence_sequence', 'fence_after', 'gfx_active_after_unmap',
-                    'graphics_pipes_after_unmap', 'gfx_doorbell_offset',
-                    'addresses', 'gart', 'reservation', 'hdp_flush'}
-    if (not isinstance(retired, dict) or set(retired) != retired_keys or
-            any(not u32(retired.get(key)) for key in (
-                'selector', 'packet_dwords', 'rptr_after', 'fence_sequence',
-                'fence_after', 'gfx_active_after_unmap', 'gfx_doorbell_offset')) or
-            retired.get('status') != 'retired' or
-            retired.get('selector') != HOST_KIQ_SELECTOR or
-            retired.get('packet_dwords') != HOST_KIQ_RING_USED_DWORDS or
-            retired.get('rptr_after') != HOST_KIQ_RING_USED_DWORDS or
-            retired.get('fence_sequence') != sequence or
-            retired.get('fence_after') != sequence or
-            retired.get('gfx_active_after_unmap') != 0 or
-            retired.get('gfx_doorbell_offset') != HOST_KIQ_UNMAP_GFX[2] or
-            retired.get('reservation') != evidence.get('reservation') or
-            retired.get('addresses') != evidence.get('addresses') or
-            retired.get('gart') != evidence.get('gart') or
-            retired.get('hdp_flush') != evidence.get('hdp_flush') or
-            not valid_apple_graphics_snapshot(
-                retired.get('graphics_pipes_after_unmap')) or
-            retired['graphics_pipes_after_unmap']['pipes'][0]['active'] & 1 or
-            not valid_consumed_reservation(retired.get('reservation'),
-                                           retired.get('reservation', {}).get('run_id'))):
-        errors.append('pre-cleanup retirement')
-    packet = evidence.get('packet')
-    if packet != {'unmap': list(HOST_KIQ_UNMAP_GFX),
-                  'write_fence': list(HOST_KIQ_WRITE_FENCE),
-                  'ring_used_dwords': HOST_KIQ_RING_USED_DWORDS}:
-        errors.append('host KIQ packet')
-    aperture = evidence.get('aperture')
-    addresses = evidence.get('addresses')
-    if (not isinstance(aperture, dict) or set(aperture) != {'base', 'size'} or
-            not u32(aperture.get('size')) or aperture.get('size') == 0 or
-            type(aperture.get('base')) is not int or aperture['base'] <= 0 or
-            not isinstance(addresses, dict) or set(addresses) != {
-                'ring', 'mqd', 'rptr', 'wptr', 'eop', 'fence'} or
-            addresses != {name: aperture['base'] + offset for name, offset in {
-                'ring': HOST_KIQ_RING_OFFSET, 'mqd': HOST_KIQ_MQD_OFFSET,
-                'rptr': HOST_KIQ_RPTR_OFFSET, 'wptr': HOST_KIQ_WPTR_OFFSET,
-                'eop': HOST_KIQ_EOP_OFFSET, 'fence': HOST_KIQ_FENCE_OFFSET}.items()}):
-        errors.append('host KIQ scratch identity')
-    flush = evidence.get('hdp_flush')
-    if (not isinstance(flush, dict) or set(flush) != {'remap', 'posted_read'} or
-            flush.get('remap') not in HDP_MEM_FLUSH_TARGETS or
-            flush.get('posted_read') != EXPECTED_CONFIG_MEMSIZE):
-        errors.append('host KIQ HDP flush')
-    invalidate = evidence.get('hdp_read_invalidate')
-    last_invalidate = invalidate.get('last') if isinstance(invalidate, dict) else None
-    if (not isinstance(invalidate, dict) or set(invalidate) != {'count', 'last'} or
-            type(invalidate.get('count')) is not int or not terminal or
-            invalidate.get('count') != terminal.get('polls') or
-            not isinstance(last_invalidate, dict) or
-            set(last_invalidate) != {'register', 'trigger', 'posted_read'} or
-            last_invalidate.get('register') != HDP_READ_CACHE_INVALIDATE_OFFSET or
-            last_invalidate.get('trigger') != 1 or
-            not u32(last_invalidate.get('posted_read'))):
-        errors.append('host KIQ HDP invalidate')
-    cleanup = evidence.get('cleanup')
-    expected_cleanup_keys = {
-        'mec_cntl', 'hqd_active', 'hqd_doorbell', 'hqd_rptr',
-        'hqd_wptr_lo', 'hqd_wptr_hi', 'pq_status',
-        'doorbell_range_lower', 'doorbell_range_upper', 'wptr_poll_cntl'}
-    if (not isinstance(cleanup, dict) or set(cleanup) != {'readbacks', 'errors'} or
-            cleanup.get('errors') != [
-                'verify host KIQ wptr clear: RecoveryError: '
-                'host KIQ wptr did not clear'] or
-            not isinstance(cleanup.get('readbacks'), dict) or
-            set(cleanup['readbacks']) != expected_cleanup_keys):
-        errors.append('cleanup evidence')
-    else:
-        reads = cleanup['readbacks']
-        if (not u32(reads.get('mec_cntl')) or
-                reads['mec_cntl'] & CP_MEC_HALT_MASK != CP_MEC_HALT_MASK or
-                reads.get('hqd_active') != 0 or
-                not u32(reads.get('hqd_doorbell')) or
-                reads['hqd_doorbell'] & CP_RB_DOORBELL_ENABLE_MASK or
-                reads.get('hqd_rptr') != 0 or
-                reads.get('hqd_wptr_lo') != HOST_KIQ_RING_USED_DWORDS or
-                reads.get('hqd_wptr_hi') is not None or
-                not u32(reads.get('pq_status')) or
-                reads['pq_status'] & CP_PQ_DOORBELL_ENABLE_MASK or
-                reads.get('doorbell_range_lower') != 0 or
-                reads.get('doorbell_range_upper') != 0 or
-                not u32(reads.get('wptr_poll_cntl')) or
-                reads['wptr_poll_cntl'] & CP_PQ_WPTR_POLL_ENABLE_MASK):
-            errors.append('cleanup readbacks')
-    return {'eligible': not errors, 'errors': errors}
-
-
-def _stopped_wptr_selector(mmio, scan, value, phase):
-    row = {'sequence': len(scan['selector_writes']), 'phase': phase,
-           'value': value, 'attempted': True, 'completed': False}
-    scan['selector_writes'].append(row)
-    try:
-        mmio.write32(GRBM_GFX_CNTL_OFFSET, value)
-        row['completed'] = True
-    except BaseException as error:
-        row['error'] = f'{type(error).__name__}: {error}'
-        raise
-    return row
-
-
-def _capture_stopped_wptr_pass(mmio, scan, phase, observed):
-    _stopped_wptr_selector(mmio, scan, 0, phase+'-default')
-    for label, offset in _STOPPED_WPTR_GLOBAL_OFFSETS:
-        observed['globals'][label] = mmio.read32(offset)
-    for me in (1, 2):
-        for pipe in range(4):
-            for queue in range(8):
-                selector = queue_selector(me, pipe, queue)
-                _stopped_wptr_selector(mmio, scan, selector, phase+'-compute')
-                row = {'me': me, 'pipe': pipe, 'queue': queue,
-                       'selector': selector}
-                observed['compute'].append(row)
-                row['active'] = mmio.read32(CP_HQD_ACTIVE_OFFSET)
-                row['doorbell_control'] = mmio.read32(CP_HQD_PQ_DOORBELL_OFFSET)
-                if selector == HOST_KIQ_SELECTOR:
-                    observed['host_kiq'] = {
-                        'selector': selector,
-                        'dequeue': mmio.read32(CP_HQD_DEQUEUE_OFFSET),
-                        'rptr': mmio.read32(CP_HQD_PQ_RPTR_OFFSET),
-                        'wptr_lo': mmio.read32(CP_HQD_PQ_WPTR_LO_OFFSET),
-                        'wptr_hi': mmio.read32(CP_HQD_PQ_WPTR_HI_OFFSET),
-                    }
-def _capture_stopped_wptr_scan(mmio, label):
-    scan = {'passes': [], 'selector_writes': [],
-            'final_default': {'sequence': None, 'phase': label+'-final-default',
-                              'value': 0, 'attempted': False, 'completed': False}}
-    primary = None
-    try:
-        for pass_index in (1, 2):
-            row = {'globals': {}, 'compute': [], 'host_kiq': None}
-            scan['passes'].append(row)
-            _capture_stopped_wptr_pass(
-                mmio, scan, f'{label}-pass-{pass_index}', row)
-    except BaseException as error:
-        primary = error
-    finally:
-        final = scan['final_default']
-        final['sequence'] = len(scan['selector_writes'])
-        final['attempted'] = True
-        scan['selector_writes'].append(final)
-        try:
-            mmio.write32(GRBM_GFX_CNTL_OFFSET, 0)
-            final['completed'] = True
-        except BaseException as error:
-            final['error'] = f'{type(error).__name__}: {error}'
-            if primary is None:
-                primary = error
-            else:
-                primary = RecoveryError(
-                    f'{primary}; selector restore failed: {error}', evidence=scan)
-    if primary is not None:
-        if isinstance(primary, RecoveryError) and primary.evidence is scan:
-            raise primary
-        raise RecoveryError(str(primary), evidence=scan) from primary
-    return scan
-
-
-def _validate_stopped_wptr_scan(scan, expected_wptr):
-    expected_selector_writes = []
-    sequence = 0
-    expected_selectors = [queue_selector(me, pipe, queue)
-                          for me in (1, 2) for pipe in range(4)
-                          for queue in range(8)]
-    for pass_index in (1, 2):
-        expected_selector_writes.append({
-            'sequence': sequence,
-            'phase': f'before-pass-{pass_index}-default',
-            'value': 0, 'attempted': True, 'completed': True})
-        sequence += 1
-        for selector in expected_selectors:
-            expected_selector_writes.append({
-                'sequence': sequence,
-                'phase': f'before-pass-{pass_index}-compute',
-                'value': selector, 'attempted': True, 'completed': True})
-            sequence += 1
-    # The same exact proof shape is used for the post-transition scan.
-    observed_label = scan.get('final_default', {}).get('phase', '').split('-final-')[0]
-    for row in expected_selector_writes:
-        row['phase'] = row['phase'].replace('before', observed_label, 1)
-    expected_final = {'sequence': sequence,
-                      'phase': observed_label+'-final-default', 'value': 0,
-                      'attempted': True, 'completed': True}
-    expected_selector_writes.append(expected_final)
-    if (not isinstance(scan, dict) or len(scan.get('passes', [])) != 2 or
-            scan['passes'][0] != scan['passes'][1] or
-            observed_label not in ('before', 'after') or
-            scan.get('selector_writes') != expected_selector_writes or
-            scan.get('final_default') != expected_final):
-        raise RecoveryError('stopped-WPTR scan is incomplete or unstable')
-    for observed in scan['passes']:
-        values = observed.get('globals')
-        compute = observed.get('compute')
-        target = observed.get('host_kiq')
-        if (not isinstance(values, dict) or
-                set(values) != {label for label, _ in _STOPPED_WPTR_GLOBAL_OFFSETS} or
-                any(type(value) is not int or value == 0xffffffff
-                    for value in values.values()) or
-                not isinstance(compute, list) or len(compute) != 64 or
-                any(type(row.get(key)) is not int or row.get(key) == 0xffffffff
-                    for row in compute for key in ('active', 'doorbell_control'))):
-            raise RecoveryError('stopped-WPTR scan contains inaccessible fields')
-        if (values['cp_stat'] != 0 or values['cpc_busy'] != 0 or
-                values['me_cntl'] & CP_ME_HALT_MASK != CP_ME_HALT_MASK or
-                values['mec_cntl'] & CP_MEC_HALT_MASK != CP_MEC_HALT_MASK or
-                values['pq_wptr_poll_cntl'] & CP_PQ_WPTR_POLL_ENABLE_MASK or
-                values['pq_status'] & CP_PQ_DOORBELL_ENABLE_MASK or
-                values['doorbell_range_lower'] != 0 or
-                values['doorbell_range_upper'] != 0):
-            raise RecoveryError('stopped-WPTR CP/ingress proof failed')
-        if (values['sdma0_cntl'] & SDMA_AUTO_CTXSW_ENABLE_MASK or
-                values['sdma0_f32_cntl'] & SDMA_HALT_MASK != SDMA_HALT_MASK or
-                values['sdma0_status'] & SDMA_STATUS_IDLE_MASK !=
-                    SDMA_STATUS_IDLE_MASK or
-                any(values[key] & 1 for key in (
-                    'sdma0_gfx_rb_cntl', 'sdma0_gfx_ib_cntl',
-                    'sdma0_page_rb_cntl', 'sdma0_page_ib_cntl',
-                    'sdma0_rlc0_rb_cntl', 'sdma0_rlc0_ib_cntl',
-                    'sdma0_rlc1_rb_cntl', 'sdma0_rlc1_ib_cntl'))):
-            raise RecoveryError('stopped-WPTR SDMA proof failed')
-        expected_rows = [(me, pipe, queue, queue_selector(me, pipe, queue))
-                         for me in (1, 2) for pipe in range(4)
-                         for queue in range(8)]
-        if (any(not isinstance(row, dict) or set(row) != {
-                    'me', 'pipe', 'queue', 'selector', 'active',
-                    'doorbell_control'} or
-                (row['me'], row['pipe'], row['queue'], row['selector']) != expected
-                for row, expected in zip(compute, expected_rows)) or
-                any(row.get('active') & 1 or
-                    row.get('doorbell_control') & CP_RB_DOORBELL_ENABLE_MASK
-                    for row in compute)):
-            raise RecoveryError('stopped-WPTR HQD proof failed')
-        if (not isinstance(target, dict) or
-                set(target) != {'selector', 'dequeue', 'rptr', 'wptr_lo', 'wptr_hi'} or
-                any(type(value) is not int or value == 0xffffffff
-                    for value in target.values()) or
-                target != {'selector': HOST_KIQ_SELECTOR, 'dequeue': 0, 'rptr': 0,
-                           'wptr_lo': expected_wptr, 'wptr_hi': 0}):
-            raise RecoveryError('stopped-WPTR selector 9 proof failed')
-
-
-def _stopped_wptr_scans_match(before, after):
-    for before_pass, after_pass in zip(before['passes'], after['passes']):
-        if before_pass['host_kiq']['wptr_lo'] != HOST_KIQ_RING_USED_DWORDS or \
-                after_pass['host_kiq']['wptr_lo'] != 0:
-            return False
-        before_copy = {key:value for key, value in before_pass.items()}
-        after_copy = {key:value for key, value in after_pass.items()}
-        # JSON-shaped copy avoids mutating the preserved raw observations.
-        before_copy = json.loads(json.dumps(before_copy))
-        after_copy = json.loads(json.dumps(after_copy))
-        before_copy['host_kiq']['wptr_lo'] = 0
-        before_target = next(row for row in before_copy['compute']
-                             if row['selector'] == HOST_KIQ_SELECTOR)
-        after_target = next(row for row in after_copy['compute']
-                            if row['selector'] == HOST_KIQ_SELECTOR)
-        if (before_target['doorbell_control'] & ~CP_RB_DOORBELL_HIT_MASK or
-                after_target['doorbell_control'] & ~CP_RB_DOORBELL_HIT_MASK):
-            return False
-        before_target['doorbell_control'] = after_target['doorbell_control']
-        before_copy['globals']['pq_status'] = after_copy['globals']['pq_status']
-        if (after_copy['globals']['pq_status'] & ~1 or
-                before_copy != after_copy):
-            return False
-    return True
-
-
-def clear_stopped_host_kiq_wptr(mmio, host_kiq, forced_inactive,
-                                clock_ns=time.monotonic_ns):
-    """Clear the sole retained KIQ producer pointer after full stopped proof."""
-    eligibility = _stopped_wptr_eligibility(host_kiq, forced_inactive)
-    result = {'status': 'ineligible', 'eligibility': eligibility,
-              'before': None, 'transition': None, 'after': None}
-    if not eligibility['eligible']:
-        return result
-    try:
-        result['before'] = _capture_stopped_wptr_scan(mmio, 'before')
-        _validate_stopped_wptr_scan(result['before'], HOST_KIQ_RING_USED_DWORDS)
-    except BaseException as error:
-        if isinstance(error, RecoveryError) and error.evidence is not None:
-            result['before'] = error.evidence
-        result['status'] = 'failed'
-        result['error'] = f'{type(error).__name__}: {error}'
-        return result
-
-    transition = {
-        'selectors': [], 'hqd_enable': None, 'global_enable': None,
-        'doorbell': None, 'interim_samples': [],
-        'gate_close': {'global': None, 'hqd': None},
-        'final_default': None,
-        'timing': {'observation_budget_ns': STOPPED_WPTR_OBSERVATION_BUDGET_NS,
-                   'started_ns': None, 'through_global_close_ns': None},
-    }
-    result['transition'] = transition
-    operation_sequence = [0]
-    selected = False
-    hqd_enable_attempted = False
-    global_enable_attempted = False
-    primary = None
-
-    def select(value, phase):
-        row = {'sequence': len(transition['selectors']), 'phase': phase,
-               'value': value, 'attempted': True, 'completed': False}
-        transition['selectors'].append(row)
-        try:
-            mmio.write32(GRBM_GFX_CNTL_OFFSET, value)
-            row['completed'] = True
-        except BaseException as error:
-            row['error'] = f'{type(error).__name__}: {error}'
-            raise
-        return row
-
-    def control(destination, key, operation, offset, written,
-                expected_before, mark_store_attempt):
-        row = {'operation': operation, 'offset': offset,
-               'witness_sequence': operation_sequence[0],
-               'observed_before': None, 'written': written, 'readback': None,
-               'attempted': True, 'completed': False}
-        operation_sequence[0] += 1
-        destination[key] = row
-        try:
-            row['observed_before'] = mmio.read32(offset)
-            if row['observed_before'] != expected_before:
-                raise RecoveryError(
-                    f'{operation} preimage changed: '
-                    f'{row["observed_before"]!r} != {expected_before!r}')
-            mark_store_attempt()
-            mmio.write32(offset, written)
-            row['readback'] = mmio.read32(offset)
-            row['completed'] = True
-        except BaseException as error:
-            row['error'] = f'{type(error).__name__}: {error}'
-            raise
-        return row
-
-    def close_control(destination, key, operation, offset, enable_mask,
-                      known_disabled, allowed_mask):
-        row = {'operation': operation, 'offset': offset,
-               'witness_sequence': operation_sequence[0],
-               'observed_before': None, 'written': None, 'readback': None,
-               'attempted': True, 'completed': False}
-        operation_sequence[0] += 1
-        destination[key] = row
-        anomalies = []
-        try:
-            observed = mmio.read32(offset)
-            row['observed_before'] = observed
-            if type(observed) is not int or not 0 <= observed < 0xffffffff:
-                anomalies.append('pre-read inaccessible; used known disabled value')
-                written = known_disabled
-            else:
-                written = observed & ~enable_mask
-                if observed & ~allowed_mask:
-                    anomalies.append(f'unexpected pre-read bits {observed:#x}')
-        except BaseException as error:
-            anomalies.append(f'pre-read {type(error).__name__}: {error}; '
-                             'used known disabled value')
-            written = known_disabled
-        row['written'] = written
-        try:
-            mmio.write32(offset, written)
-            row['readback'] = mmio.read32(offset)
-            row['completed'] = True
-        except BaseException as error:
-            row['error'] = f'{type(error).__name__}: {error}'
-            if anomalies:
-                row['anomalies'] = anomalies
-            raise
-        readback = row['readback']
-        if (type(readback) is not int or not 0 <= readback < 0xffffffff or
-                readback & enable_mask or readback & ~allowed_mask):
-            anomalies.append(f'unexpected close readback {readback!r}')
-        if anomalies:
-            row['anomalies'] = anomalies
-        return row
-
-    try:
-        selected = True
-        select(HOST_KIQ_SELECTOR, 'transition-select-kiq')
-        target_before = result['before']['passes'][0]['compute'][
-            [row['selector'] for row in result['before']['passes'][0]['compute']]
-            .index(HOST_KIQ_SELECTOR)]['doorbell_control']
-        pq_before = result['before']['passes'][0]['globals']['pq_status']
-        if target_before & ~CP_RB_DOORBELL_HIT_MASK or pq_before & ~1:
-            raise RecoveryError('stopped-WPTR ingress preimage is not status-only')
-        transition['timing']['started_ns'] = clock_ns()
-        def mark_hqd_enable_attempt():
-            nonlocal hqd_enable_attempted
-            hqd_enable_attempted = True
-
-        control(transition, 'hqd_enable',
-            'enable-hqd-doorbell', CP_HQD_PQ_DOORBELL_OFFSET,
-            CP_RB_DOORBELL_ENABLE_MASK, target_before,
-            mark_hqd_enable_attempt)
-        hqd_enabled = transition['hqd_enable']['readback']
-        if (type(hqd_enabled) is not int or hqd_enabled == 0xffffffff or
-                not hqd_enabled & CP_RB_DOORBELL_ENABLE_MASK or
-                hqd_enabled & ~(CP_RB_DOORBELL_ENABLE_MASK |
-                                CP_RB_DOORBELL_HIT_MASK)):
-            raise RecoveryError('stopped-WPTR HQD doorbell would not enable')
-        def mark_global_enable_attempt():
-            nonlocal global_enable_attempted
-            global_enable_attempted = True
-
-        control(transition, 'global_enable',
-            'enable-global-pq-doorbell', CP_PQ_STATUS_OFFSET,
-            pq_before | CP_PQ_DOORBELL_ENABLE_MASK, pq_before,
-            mark_global_enable_attempt)
-        global_enabled = transition['global_enable']['readback']
-        if (type(global_enabled) is not int or global_enabled == 0xffffffff or
-                not global_enabled & CP_PQ_DOORBELL_ENABLE_MASK or
-                global_enabled & ~3):
-            raise RecoveryError('stopped-WPTR global doorbell would not enable')
-        doorbell = {'sequence': operation_sequence[0], 'index': 0, 'value': 0,
-                    'width_bits': 64, 'attempted': True, 'completed': False}
-        operation_sequence[0] += 1
-        transition['doorbell'] = doorbell
-        try:
-            mmio.ring_doorbell64(0, 0)
-            doorbell['completed'] = True
-        except BaseException as error:
-            doorbell['error'] = f'{type(error).__name__}: {error}'
-            raise
-        deadline = transition['timing']['started_ns'] + \
-            STOPPED_WPTR_OBSERVATION_BUDGET_NS
-        while True:
-            sample = {
-                'active': mmio.read32(CP_HQD_ACTIVE_OFFSET),
-                'mec_cntl': mmio.read32(CP_MEC_CNTL_OFFSET),
-                'wptr_lo': mmio.read32(CP_HQD_PQ_WPTR_LO_OFFSET),
-                'wptr_hi': mmio.read32(CP_HQD_PQ_WPTR_HI_OFFSET),
-            }
-            transition['interim_samples'].append(sample)
-            if (any(type(value) is not int or value == 0xffffffff
-                    for value in sample.values()) or sample['active'] & 1 or
-                    sample['mec_cntl'] & CP_MEC_HALT_MASK != CP_MEC_HALT_MASK or
-                    sample['wptr_hi'] != 0 or
-                    sample['wptr_lo'] not in (0, HOST_KIQ_RING_USED_DWORDS)):
-                raise RecoveryError('stopped-WPTR interim state changed')
-            if sample['wptr_lo'] == 0:
-                break
-            if clock_ns() >= deadline:
-                raise RecoveryError('stopped-WPTR doorbell did not latch')
-    except BaseException as error:
-        primary = error
-    finally:
-        cleanup_errors = []
-        # Once either enable has been attempted, close the global bit first and
-        # the HQD bit second even when a posting/readback reported an anomaly.
-        if hqd_enable_attempted or global_enable_attempted:
-            known_pq = result['before']['passes'][0]['globals']['pq_status'] & 1
-            try:
-                row = close_control(
-                    transition['gate_close'], 'global',
-                    'disable-global-pq-doorbell', CP_PQ_STATUS_OFFSET,
-                    CP_PQ_DOORBELL_ENABLE_MASK, known_pq, 3)
-                row = transition['gate_close']['global']
-                if row.get('anomalies'):
-                    cleanup_errors.append('global gate close readback')
-            except BaseException as error:
-                cleanup_errors.append(f'global gate close: {error}')
-            try:
-                transition['timing']['through_global_close_ns'] = clock_ns()
-            except BaseException as error:
-                cleanup_errors.append(f'global close timing: {error}')
-            known_hqd = (result['before']['passes'][0]['compute'][
-                [row['selector'] for row in result['before']['passes'][0]['compute']]
-                .index(HOST_KIQ_SELECTOR)]['doorbell_control'] &
-                CP_RB_DOORBELL_HIT_MASK)
-            try:
-                row = close_control(
-                    transition['gate_close'], 'hqd',
-                    'disable-hqd-doorbell', CP_HQD_PQ_DOORBELL_OFFSET,
-                    CP_RB_DOORBELL_ENABLE_MASK, known_hqd,
-                    CP_RB_DOORBELL_ENABLE_MASK | CP_RB_DOORBELL_HIT_MASK)
-                row = transition['gate_close']['hqd']
-                if row.get('anomalies'):
-                    cleanup_errors.append('HQD gate close readback')
-            except BaseException as error:
-                cleanup_errors.append(f'HQD gate close: {error}')
-        if selected:
-            try:
-                transition['final_default'] = select(
-                    0, 'transition-final-default')
-            except BaseException as error:
-                cleanup_errors.append(f'selector restore: {error}')
-        if cleanup_errors:
-            transition['cleanup_errors'] = cleanup_errors
-            combined = '; '.join(cleanup_errors)
-            primary = RecoveryError(
-                (f'{primary}; ' if primary is not None else '') + combined)
-
-    try:
-        result['after'] = _capture_stopped_wptr_scan(mmio, 'after')
-        _validate_stopped_wptr_scan(result['after'], 0)
-        if not _stopped_wptr_scans_match(result['before'], result['after']):
-            raise RecoveryError('stopped-WPTR state changed outside WPTR/status')
-    except BaseException as error:
-        if isinstance(error, RecoveryError) and error.evidence is not None:
-            result['after'] = error.evidence
-        primary = RecoveryError(
-            (f'{primary}; ' if primary is not None else '') +
-            f'post-scan: {error}')
-    if primary is not None:
-        result['status'] = 'failed'
-        result['error'] = f'{type(primary).__name__}: {primary}'
-        return result
-    result['status'] = 'cleared'
-    return result
-
-
-def valid_stopped_host_kiq_wptr_clear(value, host_kiq, forced_inactive):
-    """Validate the producer's raw stopped-pointer transition, without labels."""
-    try:
-        if (not isinstance(value, dict) or
-                set(value) != {'status', 'eligibility', 'before',
-                               'transition', 'after'} or
-                value.get('status') != 'cleared'):
-            return False
-        eligibility = _stopped_wptr_eligibility(host_kiq, forced_inactive)
-        if not eligibility['eligible'] or value.get('eligibility') != eligibility:
-            return False
-        before, after = value['before'], value['after']
-        _validate_stopped_wptr_scan(before, HOST_KIQ_RING_USED_DWORDS)
-        _validate_stopped_wptr_scan(after, 0)
-        if not _stopped_wptr_scans_match(before, after):
-            return False
-        transition = value['transition']
-        if (not isinstance(transition, dict) or set(transition) != {
-                'selectors', 'hqd_enable', 'global_enable', 'doorbell',
-                'interim_samples', 'gate_close', 'final_default', 'timing'}):
-            return False
-        expected_selectors = [
-            {'sequence': 0, 'phase': 'transition-select-kiq',
-             'value': HOST_KIQ_SELECTOR, 'attempted': True, 'completed': True},
-            {'sequence': 1, 'phase': 'transition-final-default',
-             'value': 0, 'attempted': True, 'completed': True},
-        ]
-        if (transition['selectors'] != expected_selectors or
-                transition['final_default'] != expected_selectors[1]):
-            return False
-        control_keys = {'operation', 'offset', 'witness_sequence',
-                        'observed_before', 'written', 'readback',
-                        'attempted', 'completed'}
-        hqd_enable = transition['hqd_enable']
-        global_enable = transition['global_enable']
-        closes = transition['gate_close']
-        if (not isinstance(closes, dict) or set(closes) != {'global', 'hqd'} or
-                any(not isinstance(row, dict) or set(row) != control_keys
-                    for row in (hqd_enable, global_enable,
-                                closes['global'], closes['hqd'])) or
-                any(row['attempted'] is not True or row['completed'] is not True
-                    for row in (hqd_enable, global_enable,
-                                closes['global'], closes['hqd']))):
-            return False
-        before_target = next(row for row in before['passes'][0]['compute']
-                             if row['selector'] == HOST_KIQ_SELECTOR)
-        before_pq = before['passes'][0]['globals']['pq_status']
-        expected_controls = (
-            (hqd_enable, 'enable-hqd-doorbell', CP_HQD_PQ_DOORBELL_OFFSET,
-             0, before_target['doorbell_control'], CP_RB_DOORBELL_ENABLE_MASK),
-            (global_enable, 'enable-global-pq-doorbell', CP_PQ_STATUS_OFFSET,
-             1, before_pq, before_pq | CP_PQ_DOORBELL_ENABLE_MASK),
-            (closes['global'], 'disable-global-pq-doorbell', CP_PQ_STATUS_OFFSET,
-             3, None, None),
-            (closes['hqd'], 'disable-hqd-doorbell', CP_HQD_PQ_DOORBELL_OFFSET,
-             4, None, None),
-        )
-        for row, operation, offset, sequence, observed, written in expected_controls:
-            if (row['operation'] != operation or row['offset'] != offset or
-                    row['witness_sequence'] != sequence or
-                    (observed is not None and row['observed_before'] != observed) or
-                    (written is not None and row['written'] != written) or
-                    any(type(row[key]) is not int or not 0 <= row[key] < 0xffffffff
-                        for key in ('observed_before', 'written', 'readback'))):
-                return False
-        if (not hqd_enable['readback'] & CP_RB_DOORBELL_ENABLE_MASK or
-                hqd_enable['readback'] & ~(CP_RB_DOORBELL_ENABLE_MASK |
-                                          CP_RB_DOORBELL_HIT_MASK) or
-                not global_enable['readback'] & CP_PQ_DOORBELL_ENABLE_MASK or
-                global_enable['readback'] & ~3 or
-                closes['global']['written'] !=
-                    closes['global']['observed_before'] &
-                    ~CP_PQ_DOORBELL_ENABLE_MASK or
-                closes['global']['readback'] & CP_PQ_DOORBELL_ENABLE_MASK or
-                closes['global']['readback'] & ~1 or
-                closes['hqd']['written'] !=
-                    closes['hqd']['observed_before'] &
-                    ~CP_RB_DOORBELL_ENABLE_MASK or
-                closes['hqd']['readback'] & CP_RB_DOORBELL_ENABLE_MASK or
-                closes['hqd']['readback'] & ~CP_RB_DOORBELL_HIT_MASK):
-            return False
-        if transition['doorbell'] != {
-                'sequence': 2, 'index': 0, 'value': 0, 'width_bits': 64,
-                'attempted': True, 'completed': True}:
-            return False
-        samples = transition['interim_samples']
-        if (not isinstance(samples, list) or not samples or
-                any(not isinstance(row, dict) or
-                    set(row) != {'active', 'mec_cntl', 'wptr_lo', 'wptr_hi'} or
-                    any(type(item) is not int or not 0 <= item < 0xffffffff
-                        for item in row.values()) or
-                    row['active'] & 1 or
-                    row['mec_cntl'] & CP_MEC_HALT_MASK != CP_MEC_HALT_MASK or
-                    row['wptr_lo'] not in (0, HOST_KIQ_RING_USED_DWORDS) or
-                    row['wptr_hi'] != 0 for row in samples) or
-                samples[-1]['wptr_lo'] != 0):
-            return False
-        timing = transition['timing']
-        return (isinstance(timing, dict) and set(timing) == {
-                    'observation_budget_ns', 'started_ns',
-                    'through_global_close_ns'} and
-                timing['observation_budget_ns'] ==
-                    STOPPED_WPTR_OBSERVATION_BUDGET_NS and
-                type(timing['started_ns']) is int and
-                type(timing['through_global_close_ns']) is int and
-                timing['started_ns'] >= 0 and
-                timing['through_global_close_ns'] >= timing['started_ns'] and
-                timing['through_global_close_ns'] - timing['started_ns'] <=
-                    STOPPED_WPTR_OBSERVATION_BUDGET_NS)
-    except (KeyError, StopIteration, TypeError, RecoveryError):
-        return False
-
-
-def derive_effective_stopped_host_kiq(gc_quiesce, prior_run_id):
-    """Run the independent future-schema6 proof validator lazily."""
-    path = Path(__file__).with_name('kiq-recovery-proof.py')
-    spec = importlib.util.spec_from_file_location('kiq_recovery_proof', path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module.derive_effective_host_kiq({
-        'schema': 6, 'prior_run_id': prior_run_id,
-        'gc_quiesce': gc_quiesce})
-
-
 def quiesce_gc(mmio, sleep=time.sleep, polls=50, kiq_polls=None, prior_run_id=None,
                reservation_proof=None, graphics_pipe_guard=None):
     """Drain GC queues, halt command processors/SDMA, and prove no HQD is active.
@@ -2063,97 +1325,35 @@ def quiesce_gc(mmio, sleep=time.sleep, polls=50, kiq_polls=None, prior_run_id=No
             host_kiq = {'status': 'blocked-active-hqd',
                         'selectors': sorted(stuck_selectors)}
 
-        stopped_wptr_eligibility = _stopped_wptr_eligibility(
-            host_kiq, len(stuck)) if host_kiq.get('status') == 'failed' else None
         if host_kiq.get('status') == 'retired':
             graphics_pipes_after_retirement = host_kiq['graphics_pipes_after_unmap']
-        elif stopped_wptr_eligibility and stopped_wptr_eligibility['eligible']:
-            graphics_pipes_after_retirement = \
-                host_kiq['evidence']['retired_before_cleanup'][
-                    'graphics_pipes_after_unmap']
         else:
             graphics_pipes_after_retirement = snapshot_graphics_pipes(mmio)
 
-        # Snapshot every proven SDMA0 input before mutation and reject an
-        # inaccessible register window. The retained Navi23 evidence establishes
-        # GFX, PAGE, RLC0, and RLC1 as the input queues that must be closed.
-        def require_sdma_accessible(value, label):
-            if value == 0xffffffff:
-                raise RecoveryError(f'SDMA0 {label} is inaccessible/all-ones')
-            return value
-
-        def read_sdma(offset, label):
-            return require_sdma_accessible(mmio.read32(offset), label)
-
-        sdma_cntl_before = read_sdma(SDMA0_CNTL_OFFSET, 'control')
-        sdma_rb_before = read_sdma(SDMA0_GFX_RB_CNTL_OFFSET, 'GFX RB control')
-        sdma_ib_before = read_sdma(SDMA0_GFX_IB_CNTL_OFFSET, 'GFX IB control')
-        sdma_page_ib_before = read_sdma(SDMA0_PAGE_IB_CNTL_OFFSET,
-                                        'PAGE IB control')
-        sdma_page_rb_before = read_sdma(SDMA0_PAGE_RB_CNTL_OFFSET,
-                                        'PAGE RB control')
-        sdma_before = read_sdma(SDMA0_F32_CNTL_OFFSET, 'F32 control')
-        sdma_status_before = read_sdma(SDMA0_STATUS_REG_OFFSET, 'status')
-        sdma_rlc_inputs = []
-        for index, (rb_offset, ib_offset) in enumerate(zip(
-                SDMA0_RLC_RB_CNTL_OFFSETS, SDMA0_RLC_IB_CNTL_OFFSETS)):
-            sdma_rlc_inputs.append({
-                'index': index,
-                'rb_before': read_sdma(rb_offset, f'RLC{index} RB control'),
-                'ib_before': read_sdma(ib_offset, f'RLC{index} IB control'),
-            })
-
-        # Close each programmable input before halting the engine. PAGE teardown
-        # is deliberately IB then RB, with an immediate posting/readback proof
-        # for each store, matching the bounded live preparation.
-        sdma_shutdown_trace = []
+        # Linux sdma_v5_2_hw_fini disables context switching and the GFX
+        # ring/IB before halting the engine.  Preserve that order so no SDMA
+        # fetch can race teardown of QEMU's DMA mappings.
+        sdma_cntl_before = mmio.read32(SDMA0_CNTL_OFFSET)
         mmio.write32(SDMA0_CNTL_OFFSET,
                      sdma_cntl_before & ~SDMA_AUTO_CTXSW_ENABLE_MASK)
+        sdma_rb_before = mmio.read32(SDMA0_GFX_RB_CNTL_OFFSET)
         mmio.write32(SDMA0_GFX_RB_CNTL_OFFSET,
                      sdma_rb_before & ~SDMA_RB_ENABLE_MASK)
+        sdma_ib_before = mmio.read32(SDMA0_GFX_IB_CNTL_OFFSET)
         mmio.write32(SDMA0_GFX_IB_CNTL_OFFSET,
                      sdma_ib_before & ~SDMA_IB_ENABLE_MASK)
-        sdma_page_ib_written = sdma_page_ib_before & ~SDMA_IB_ENABLE_MASK
-        mmio.write32(SDMA0_PAGE_IB_CNTL_OFFSET, sdma_page_ib_written)
-        sdma_page_ib_after = mmio.read32(SDMA0_PAGE_IB_CNTL_OFFSET)
-        sdma_shutdown_trace.append({
-            'step': 'disable-page-ib', 'register': SDMA0_PAGE_IB_CNTL_OFFSET,
-            'before': sdma_page_ib_before, 'written': sdma_page_ib_written,
-            'readback': sdma_page_ib_after,
-        })
-        sdma_page_rb_written = sdma_page_rb_before & ~SDMA_RB_ENABLE_MASK
-        mmio.write32(SDMA0_PAGE_RB_CNTL_OFFSET, sdma_page_rb_written)
-        sdma_page_rb_after = mmio.read32(SDMA0_PAGE_RB_CNTL_OFFSET)
-        sdma_shutdown_trace.append({
-            'step': 'disable-page-rb', 'register': SDMA0_PAGE_RB_CNTL_OFFSET,
-            'before': sdma_page_rb_before, 'written': sdma_page_rb_written,
-            'readback': sdma_page_rb_after,
-        })
+        sdma_before = mmio.read32(SDMA0_F32_CNTL_OFFSET)
         mmio.write32(SDMA0_F32_CNTL_OFFSET, sdma_before | SDMA_HALT_MASK)
-
-        sdma_cntl_after = read_sdma(SDMA0_CNTL_OFFSET, 'control')
-        sdma_rb_after = read_sdma(SDMA0_GFX_RB_CNTL_OFFSET, 'GFX RB control')
-        sdma_ib_after = read_sdma(SDMA0_GFX_IB_CNTL_OFFSET, 'GFX IB control')
-        sdma_after = read_sdma(SDMA0_F32_CNTL_OFFSET, 'F32 control')
-        sdma_status_after = read_sdma(SDMA0_STATUS_REG_OFFSET, 'status')
-        for row, rb_offset, ib_offset in zip(
-                sdma_rlc_inputs, SDMA0_RLC_RB_CNTL_OFFSETS,
-                SDMA0_RLC_IB_CNTL_OFFSETS):
-            index = row['index']
-            row['rb_after'] = read_sdma(rb_offset, f'RLC{index} RB control')
-            row['ib_after'] = read_sdma(ib_offset, f'RLC{index} IB control')
-        require_sdma_accessible(sdma_page_ib_after, 'PAGE IB control')
-        require_sdma_accessible(sdma_page_rb_after, 'PAGE RB control')
+        sdma_cntl_after = mmio.read32(SDMA0_CNTL_OFFSET)
+        sdma_rb_after = mmio.read32(SDMA0_GFX_RB_CNTL_OFFSET)
+        sdma_ib_after = mmio.read32(SDMA0_GFX_IB_CNTL_OFFSET)
+        sdma_after = mmio.read32(SDMA0_F32_CNTL_OFFSET)
         if sdma_cntl_after & SDMA_AUTO_CTXSW_ENABLE_MASK:
             raise RecoveryError('SDMA0 context switching would not stop')
         if sdma_rb_after & SDMA_RB_ENABLE_MASK:
-            raise RecoveryError('SDMA0 GFX ring buffer would not stop')
+            raise RecoveryError('SDMA0 ring buffer would not stop')
         if sdma_ib_after & SDMA_IB_ENABLE_MASK:
-            raise RecoveryError('SDMA0 GFX indirect buffer would not stop')
-        if sdma_page_ib_after & SDMA_IB_ENABLE_MASK:
-            raise RecoveryError('SDMA0 PAGE indirect buffer would not stop')
-        if sdma_page_rb_after & SDMA_RB_ENABLE_MASK:
-            raise RecoveryError('SDMA0 PAGE ring buffer would not stop')
+            raise RecoveryError('SDMA0 indirect buffer would not stop')
         if sdma_after & SDMA_HALT_MASK != SDMA_HALT_MASK:
             raise RecoveryError('SDMA0 would not halt')
 
@@ -2216,6 +1416,9 @@ def quiesce_gc(mmio, sleep=time.sleep, polls=50, kiq_polls=None, prior_run_id=No
             valid_apple_graphics_snapshot(graphics_pipes_before) and
             valid_apple_graphics_snapshot(graphics_pipes_after_retirement) and
             valid_apple_graphics_snapshot(graphics_pipes_final))
+        gfx_retirement_confirmed = (not gfx_needs_unmap or
+                                    host_kiq.get('status') == 'retired')
+
         for row in stuck:
             mmio.write32(GRBM_GFX_CNTL_OFFSET, row['selector'])
             mmio.write32(CP_HQD_PQ_DOORBELL_OFFSET, 0)
@@ -2241,26 +1444,6 @@ def quiesce_gc(mmio, sleep=time.sleep, polls=50, kiq_polls=None, prior_run_id=No
                                 ','.join(f'{selector:#x}' for selector in remaining))
         cp_stat_after = mmio.read32(CP_STAT_OFFSET)
         cp_cpc_busy_after = mmio.read32(CP_CPC_BUSY_STAT_OFFSET)
-        stopped_wptr_doorbell_clear = None
-        if host_kiq.get('status') == 'failed':
-            stopped_wptr_doorbell_clear = clear_stopped_host_kiq_wptr(
-                mmio, host_kiq, len(stuck))
-            stopped_wptr_clear_valid = valid_stopped_host_kiq_wptr_clear(
-                stopped_wptr_doorbell_clear, host_kiq, len(stuck))
-            if stopped_wptr_clear_valid:
-                final_globals = stopped_wptr_doorbell_clear['after'][
-                    'passes'][0]['globals']
-                cp_stat_after = final_globals['cp_stat']
-                cp_cpc_busy_after = final_globals['cpc_busy']
-                pq_wptr_poll_after = final_globals['pq_wptr_poll_cntl']
-                pq_status_after = final_globals['pq_status']
-                doorbell_range_lower_after = final_globals['doorbell_range_lower']
-                doorbell_range_upper_after = final_globals['doorbell_range_upper']
-        else:
-            stopped_wptr_clear_valid = False
-        gfx_retirement_confirmed = (not gfx_needs_unmap or
-                                    host_kiq.get('status') == 'retired' or
-                                    stopped_wptr_clear_valid)
         active_after = sum(1 for row in graphics_pipes_final['pipes']
                            if row['active'] & 1)
         if host_kiq.get('status') == 'retired':
@@ -2276,7 +1459,7 @@ def quiesce_gc(mmio, sleep=time.sleep, polls=50, kiq_polls=None, prior_run_id=No
                 'gfx_retirement_confirmed': gfx_retirement_confirmed,
                 'graphics_pipe_proof_complete': graphics_pipe_proof_complete,
             }
-        quiesce_result = {
+        return {
             'status': 'quiesced', 'active_before': len(active),
             'dequeued': len(dequeued), 'dequeue_timeouts': len(stuck),
             'forced_inactive': len(stuck), 'queues': active,
@@ -2319,21 +1502,9 @@ def quiesce_gc(mmio, sleep=time.sleep, polls=50, kiq_polls=None, prior_run_id=No
             'sdma0_rb_after': sdma_rb_after,
             'sdma0_ib_before': sdma_ib_before,
             'sdma0_ib_after': sdma_ib_after,
-            'sdma0_page_ib_before': sdma_page_ib_before,
-            'sdma0_page_ib_after': sdma_page_ib_after,
-            'sdma0_page_rb_before': sdma_page_rb_before,
-            'sdma0_page_rb_after': sdma_page_rb_after,
-            'sdma0_rlc_inputs': sdma_rlc_inputs,
-            'sdma0_status_before': sdma_status_before,
-            'sdma0_status_after': sdma_status_after,
-            'sdma0_shutdown_trace': sdma_shutdown_trace,
             'sdma0_before': sdma_before, 'sdma0_after': sdma_after,
             'active_after': active_after,
         }
-        if stopped_wptr_doorbell_clear is not None:
-            quiesce_result['stopped_wptr_doorbell_clear'] = \
-                stopped_wptr_doorbell_clear
-        return quiesce_result
     finally:
         mmio.write32(GRBM_GFX_CNTL_OFFSET, 0)
 
@@ -2373,14 +1544,8 @@ def perform_recovery(expected_boot, prior_run_id, state_reader, transport_factor
     if implicit_resets:
         raise RecoveryError('VFIO performed a forbidden implicit PCI reset: '+
                             '; '.join(implicit_resets))
-    stopped_wptr_proof_valid = True
-    if gc_quiesce.get('host_kiq', {}).get('status') == 'failed':
-        _, stopped_wptr_errors = derive_effective_stopped_host_kiq(
-            gc_quiesce, prior_run_id)
-        stopped_wptr_proof_valid = not stopped_wptr_errors
     safe_for_reuse = (valid_consumed_reservation(
                           gc_quiesce.get('reservation'), prior_run_id) and
-                      stopped_wptr_proof_valid and
                       gc_quiesce['dequeue_timeouts'] == 0 and
                       gc_quiesce['forced_inactive'] == 0 and
                       gc_quiesce['cp_stat_after'] == 0 and
@@ -2394,27 +1559,14 @@ def perform_recovery(expected_boot, prior_run_id, state_reader, transport_factor
                       gc_quiesce['doorbell_range_lower_after'] == 0 and
                       gc_quiesce['doorbell_range_upper_after'] == 0 and
                       gc_quiesce['sdma0_after'] & SDMA_HALT_MASK == SDMA_HALT_MASK and
-                      gc_quiesce['sdma0_status_after'] & SDMA_STATUS_IDLE_MASK ==
-                          SDMA_STATUS_IDLE_MASK and
                       not (gc_quiesce['sdma0_cntl_after'] & SDMA_AUTO_CTXSW_ENABLE_MASK) and
                       not (gc_quiesce['sdma0_rb_after'] & SDMA_RB_ENABLE_MASK) and
                       not (gc_quiesce['sdma0_ib_after'] & SDMA_IB_ENABLE_MASK) and
-                      gc_quiesce['sdma0_page_rb_after'] ==
-                          gc_quiesce['sdma0_page_rb_before'] & ~SDMA_RB_ENABLE_MASK and
-                      not (gc_quiesce['sdma0_page_rb_after'] & SDMA_RB_ENABLE_MASK) and
-                      gc_quiesce['sdma0_page_ib_after'] ==
-                          gc_quiesce['sdma0_page_ib_before'] & ~SDMA_IB_ENABLE_MASK and
-                      not (gc_quiesce['sdma0_page_ib_after'] & SDMA_IB_ENABLE_MASK) and
-                      all(row['rb_after'] == row['rb_before'] and
-                          row['ib_after'] == row['ib_before'] and
-                          not (row['rb_after'] & SDMA_RB_ENABLE_MASK) and
-                          not (row['ib_after'] & SDMA_IB_ENABLE_MASK)
-                          for row in gc_quiesce['sdma0_rlc_inputs']) and
                       gc_quiesce['gfx_ring_clean'] and
                       gc_quiesce['gfx_retirement_confirmed'] and
                       gc_quiesce['graphics_pipe_proof_complete'])
     return {
-        'schema': 6, 'status': 'recovered' if safe_for_reuse else 'incomplete',
+        'schema': 5, 'status': 'recovered' if safe_for_reuse else 'incomplete',
         'authorizes_launch': safe_for_reuse, 'boot_id': expected_boot,
         'prior_run_id': prior_run_id, 'device': DEVICE, 'iommu_group': GROUP,
         'driver': 'vfio-pci', 'pci_command_before': before['pci_command'],

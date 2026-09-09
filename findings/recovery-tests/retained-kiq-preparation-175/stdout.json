@@ -1,0 +1,7 @@
+{
+  "status": "failed",
+  "authorizes_launch": false,
+  "authorizes_recovery": false,
+  "authorizes_cleanup": false,
+  "error": "PageDisableError: device: WPTR posting/readback failed"
+}

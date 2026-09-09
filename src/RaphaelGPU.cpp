@@ -29,6 +29,7 @@
 #include <Headers/kern_util.hpp>
 #include <Headers/plugin_start.hpp>
 #include "KiqAddresses.hpp"
+#include "KiqQueuePreparation.hpp"
 #include "GartAddresses.hpp"
 #include "DiagnosticRecords.hpp"
 #include "SdmaTopology.hpp"
@@ -3769,36 +3770,46 @@ static bool prepareKiq(uint64_t &mqdAddr, uint64_t &eopAddr, const void *spec) {
 
     fbWrite(asicInfo, kGcGrbmGfxCntl, kKiqSelector);
     reportKiqPreparation("before dequeue");
-    uint32_t active = fbRead(asicInfo, kGcHqdActive);
-    uint32_t poll = fbRead(asicInfo, kGcCpPqWptrPoll);
-    uint32_t doorbell = fbRead(asicInfo, kGcHqdPqDbCtl);
-    if (active == 0xffffffff || poll == 0xffffffff || doorbell == 0xffffffff) {
-        CRLOG("XQ2: dequeue refused: inaccessible queue registers");
-        reportKiqPreparation("dequeue refused");
-        fbWrite(asicInfo, kGcGrbmGfxCntl, 0);
-        return false;
-    }
-    fbWrite(asicInfo, kGcCpPqWptrPoll, poll & ~(1u << 31));
-    fbWrite(asicInfo, kGcHqdPqDbCtl, doorbell & ~(1u << 30));
-    unsigned elapsedUs = 0;
-    if (active & 1) {
-        // fbWrite bypasses the legacy XL write hook. Mode 2 also disables XL's
-        // fake ACTIVE-predicate success if Apple's subsequent setup needs to dequeue.
-        fbWrite(asicInfo, kGcHqdDequeue, 1);
-        while ((active & 1) && elapsedUs < 50000) {
-            IODelay(50);
-            elapsedUs += 50;
-            active = fbRead(asicInfo, kGcHqdActive);
+    auto queueReg = [](RaphaelKiq::QueueRegister reg) {
+        switch (reg) {
+            case RaphaelKiq::QueueRegister::Active: return kGcHqdActive;
+            case RaphaelKiq::QueueRegister::Dequeue: return kGcHqdDequeue;
+            case RaphaelKiq::QueueRegister::Rptr: return kGcHqdPqRptr;
+            case RaphaelKiq::QueueRegister::WptrHi: return kGcHqdPqWptrHi;
+            case RaphaelKiq::QueueRegister::WptrLo: return kGcHqdPqWptrLo;
+            case RaphaelKiq::QueueRegister::Poll: return kGcCpPqWptrPoll;
+            case RaphaelKiq::QueueRegister::Doorbell: return kGcHqdPqDbCtl;
         }
-    }
-    reportKiqPreparation("after dequeue");
-    if (active & 1) {
-        CRLOG("XQ2: dequeue TIMEOUT after %u us; descriptor unchanged, startKIQ blocked",
-             elapsedUs);
+        return kGcHqdActive;
+    };
+    auto prepared = RaphaelKiq::prepareQueueForNativeStart(
+        [=](RaphaelKiq::QueueRegister reg) { return fbRead(asicInfo, queueReg(reg)); },
+        [=](RaphaelKiq::QueueRegister reg, uint32_t value) {
+            fbWrite(asicInfo, queueReg(reg), value);
+        },
+        [](unsigned us) { IODelay(us); });
+    reportKiqPreparation("after queue preparation");
+    if (!prepared.ready()) {
+        using Status = RaphaelKiq::QueuePreparationStatus;
+        if (prepared.status == Status::DequeueTimeout) {
+            CRLOG("XQ2: dequeue TIMEOUT after %u us; descriptor unchanged, startKIQ blocked",
+                  prepared.elapsedUs);
+        } else if (prepared.status == Status::Inaccessible) {
+            CRLOG("XQ2: preparation refused: inaccessible queue registers");
+        } else {
+            CRLOG("XQ2: preparation refused: status=%u ACTIVE=%#x DEQUEUE=%#x "
+                  "RPTR=%#x WPTR=%#x_%08x POLL=%#x DB=%#x",
+                  static_cast<unsigned>(prepared.status), prepared.state.active,
+                  prepared.state.dequeue, prepared.state.rptr, prepared.state.wptrHi,
+                  prepared.state.wptrLo, prepared.state.poll, prepared.state.doorbell);
+        }
+        reportKiqPreparation("preparation refused");
         fbWrite(asicInfo, kGcGrbmGfxCntl, 0);
         return false;
     }
-    fbWrite(asicInfo, kGcHqdDequeue, 0);
+    if (prepared.elapsedUs != 0) {
+        RLOG("XQ2: genuine dequeue completed after %u us", prepared.elapsedUs);
+    }
 
     auto put = [fb, &planned](uint32_t byteOffset, uint32_t value) {
         fb[(planned.imageOffset + byteOffset) / 4] = value;
@@ -3819,7 +3830,7 @@ static bool prepareKiq(uint64_t &mqdAddr, uint64_t &eopAddr, const void *spec) {
     mqdAddr = planned.mqdMc;
     eopAddr = planned.eopMc;
     RLOG("XQ2: preparation complete after %u us; calling native startKIQ with MC pointers",
-         elapsedUs);
+         prepared.elapsedUs);
     return true;
 }
 
