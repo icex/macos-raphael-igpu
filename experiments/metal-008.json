@@ -1,0 +1,43 @@
+{
+  "id": "metal-008",
+  "question": "Does the early-owner BAR0 mapping repair let PM4/KIQ startup complete and reach the existing VMID-2 root and page-table diagnostics?",
+  "candidate_version": "1.0.175",
+  "requested_diagnostic": "rgpuvmroot=1",
+  "behavior_change": "retry BAR0 aperture mapping until success, use the published AMDHWMemory owner before the later global hardware pointer exists, cache only a valid mapping, and cap both allocator ranges before enableAllocations populates them; preserve candidate 174's VMID-2 root diagnostic and all other functional behavior",
+  "required_observations": [
+    "loaded_build",
+    "route_guards",
+    "kiq_stamps",
+    "hybrid_enter",
+    "hybrid_exit",
+    "engine_start",
+    "sdma_topology",
+    "sdma_channel_remap",
+    "sdma_vm_program",
+    "vmid2_root_repair"
+  ],
+  "max_seconds": 180,
+  "prerequisites": [
+    "same_boot_authorizing_startup_noqueue_recovery_receipt",
+    "bar0_early_owner_retry_offline_validated",
+    "amdgpu_initialized_this_boot",
+    "reset_methods_disabled",
+    "sleep_inhibitor_active",
+    "watchdog_and_pstore_verified"
+  ],
+  "repeat_policy": "one authorized run only; require KIQ startup before interpreting later missing observations, then use the three page-table walks to decide whether child PDE production, SDMA UTCL state or firmware is next",
+  "abort_on": [
+    "identity_mismatch",
+    "capture_loss",
+    "bar0_mapping_unavailable",
+    "root_repair_refused",
+    "prepared_root_mismatch",
+    "guest_panic",
+    "terminal_kiq_submit_failure",
+    "sdma_page_timeout",
+    "host_fault",
+    "incomplete_gc_quiesce"
+  ],
+  "outcome_table": "docs/ROADMAP.md M4-M7",
+  "run_probe_only_after_native_start": true
+}

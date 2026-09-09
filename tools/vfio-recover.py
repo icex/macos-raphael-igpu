@@ -58,12 +58,18 @@ CP_MEC_CNTL_OFFSET = (GC_SEG0 + 0x0F55) * 4
 CP_STAT_OFFSET = (GC_SEG0 + 0x0F40) * 4
 CP_CPC_BUSY_STAT_OFFSET = (GC_SEG0 + 0x0E25) * 4
 CP_RB_ACTIVE_OFFSET = (GC_SEG0 + 0x1F40) * 4
+CP_RB1_ACTIVE_OFFSET = (GC_SEG0 + 0x1F41) * 4
 CP_RB_DOORBELL_CONTROL_OFFSET = (GC_SEG0 + 0x1E8D) * 4
 CP_RB0_BASE_OFFSET = (GC_SEG0 + 0x1DE0) * 4
 CP_RB0_CNTL_OFFSET = (GC_SEG0 + 0x1DE1) * 4
 CP_RB0_BASE_HI_OFFSET = (GC_SEG0 + 0x1E51) * 4
 CP_RB0_WPTR_OFFSET = (GC_SEG0 + 0x1DF4) * 4
 CP_RB0_WPTR_HI_OFFSET = (GC_SEG0 + 0x1DF5) * 4
+CP_RB1_BASE_OFFSET = (GC_SEG0 + 0x1E00) * 4
+CP_RB1_CNTL_OFFSET = (GC_SEG0 + 0x1E01) * 4
+CP_RB1_BASE_HI_OFFSET = (GC_SEG0 + 0x1E52) * 4
+CP_RB1_WPTR_OFFSET = (GC_SEG0 + 0x1DF6) * 4
+CP_RB1_WPTR_HI_OFFSET = (GC_SEG0 + 0x1DF7) * 4
 GCMC_VM_FB_LOCATION_BASE_OFFSET = (GC_SEG0 + 0x16FC) * 4
 GCMC_VM_FB_LOCATION_TOP_OFFSET = (GC_SEG0 + 0x16FD) * 4
 GCMC_VM_FB_OFFSET_OFFSET = (GC_SEG0 + 0x16E7) * 4
@@ -112,6 +118,12 @@ CP_ME_HALT_MASK = 0x15000000  # CE_HALT | PFP_HALT | ME_HALT
 CP_MEC_HALT_MASK = 0x50000000 # MEC_ME1_HALT | MEC_ME2_HALT
 CP_MEC2_HALT_MASK = 0x10000000
 CP_RB_DOORBELL_ENABLE_MASK = 0x40000000
+CP_RB_DOORBELL_HIT_MASK = 0x80000000
+CP_RB_DOORBELL_BIF_DROP_MASK = 0x00000002
+CP_RB_DOORBELL_OFFSET_MASK = 0x0ffffffc
+CP_RB_DOORBELL_STATUS_MASK = (CP_RB_DOORBELL_ENABLE_MASK |
+                              CP_RB_DOORBELL_HIT_MASK |
+                              CP_RB_DOORBELL_BIF_DROP_MASK)
 CP_PQ_DOORBELL_ENABLE_MASK = 0x2
 CP_PQ_WPTR_POLL_ENABLE_MASK = 0x80000000
 SDMA_HALT_MASK = 0x1
@@ -148,6 +160,14 @@ HOST_KIQ_NOP = 0xffff1000
 HOST_KIQ_SELECTOR = 0x9  # MEC2, pipe 1, queue 0: Apple's measured KIQ.
 HOST_KIQ_UNMAP_GFX = (0xC004A300, 0x30000000, 0x00000400, 0, 0, 0)
 HOST_KIQ_WRITE_FENCE = (0xC0033700, 0x00100500)
+APPLE_GRAPHICS_PIPE_POLICY = 'x6000-24G830-single-legacy-gfx-pipe-v1'
+
+GRAPHICS_PIPE_DESCRIPTORS = (
+    (0, 0, CP_RB_ACTIVE_OFFSET, CP_RB0_WPTR_OFFSET, CP_RB0_WPTR_HI_OFFSET,
+     CP_RB0_BASE_OFFSET, CP_RB0_BASE_HI_OFFSET, CP_RB0_CNTL_OFFSET),
+    (1, 1, CP_RB1_ACTIVE_OFFSET, CP_RB1_WPTR_OFFSET, CP_RB1_WPTR_HI_OFFSET,
+     CP_RB1_BASE_OFFSET, CP_RB1_BASE_HI_OFFSET, CP_RB1_CNTL_OFFSET),
+)
 
 # NBIO 7.2 selects either its native HDP_MEM_FLUSH_CNTL address or the final
 # BAR5 page. Linux writes the selected register then reads CONFIG_MEMSIZE to
@@ -497,6 +517,130 @@ def inspect_host_kiq_reservation(mmio, run_id, state=HOST_KIQ_RESERVATION_ACTIVE
             'checksum': fields[9]}
 
 
+def snapshot_graphics_pipes(mmio):
+    """Read the conservative 2x2 ACTIVE matrix and restore selector zero."""
+    snapshot = {'pipes': [],
+                'final_default': {'value': 0, 'completed': False}}
+    try:
+        for (pipe, selector, active_offset, wptr_offset, wptr_hi_offset,
+             base_offset, base_hi_offset, cntl_offset) in GRAPHICS_PIPE_DESCRIPTORS:
+            mmio.write32(GRBM_GFX_CNTL_OFFSET, selector)
+            doorbell = mmio.read32(CP_RB_DOORBELL_CONTROL_OFFSET)
+            rb0_active = mmio.read32(CP_RB_ACTIVE_OFFSET)
+            rb1_active = mmio.read32(CP_RB1_ACTIVE_OFFSET)
+            snapshot['pipes'].append({
+                'intended_pipe': pipe,
+                'selector': selector,
+                'rb0_active': rb0_active,
+                'rb1_active': rb1_active,
+                'active': rb0_active if active_offset == CP_RB_ACTIVE_OFFSET
+                          else rb1_active,
+                'doorbell_control': doorbell,
+                'doorbell_offset': doorbell & CP_RB_DOORBELL_OFFSET_MASK,
+                'doorbell_status': doorbell & CP_RB_DOORBELL_STATUS_MASK,
+                'wptr': mmio.read32(wptr_offset),
+                'wptr_hi': mmio.read32(wptr_hi_offset),
+                'base': mmio.read32(base_offset),
+                'base_hi': mmio.read32(base_hi_offset),
+                'cntl': mmio.read32(cntl_offset),
+            })
+    finally:
+        mmio.write32(GRBM_GFX_CNTL_OFFSET, 0)
+        snapshot['final_default']['completed'] = True
+    return snapshot
+
+
+def _graphics_snapshot_accessible(snapshot):
+    fields = ('doorbell_control', 'wptr', 'wptr_hi', 'base', 'base_hi', 'cntl')
+    pipes = snapshot.get('pipes') if isinstance(snapshot, dict) else None
+    return (isinstance(pipes, list) and len(pipes) == 2 and
+            snapshot.get('final_default') == {'value': 0, 'completed': True} and
+            all(row.get(field) != 0xffffffff for row in pipes for field in fields) and
+            pipes[0].get('rb0_active') != 0xffffffff and
+            pipes[1].get('rb1_active') != 0xffffffff)
+
+
+def _apple_pipe1_supported(snapshot):
+    if not _graphics_snapshot_accessible(snapshot):
+        return False
+    pipe0, pipe1 = snapshot['pipes']
+    return (pipe0.get('intended_pipe') == 0 and pipe0.get('selector') == 0 and
+            pipe1.get('intended_pipe') == 1 and pipe1.get('selector') == 1 and
+            not (pipe1.get('rb1_active', 1) & 1) and
+            pipe1.get('doorbell_status') == 0)
+
+
+def valid_apple_graphics_snapshot(snapshot):
+    """Validate a schema-5 two-selector snapshot for Apple's one-pipe policy."""
+    row_keys = {'intended_pipe', 'selector', 'rb0_active', 'rb1_active',
+                'active', 'doorbell_control', 'doorbell_offset',
+                'doorbell_status', 'wptr', 'wptr_hi', 'base', 'base_hi', 'cntl'}
+    if (not isinstance(snapshot, dict) or
+            set(snapshot) != {'pipes', 'final_default'} or
+            not _apple_pipe1_supported(snapshot)):
+        return False
+    for index, row in enumerate(snapshot['pipes']):
+        if (not isinstance(row, dict) or set(row) != row_keys or
+                any(type(value) is not int for value in row.values()) or
+                row['intended_pipe'] != index or row['selector'] != index or
+                row['active'] != row['rb0_active' if index == 0 else 'rb1_active'] or
+                row['doorbell_offset'] !=
+                    (row['doorbell_control'] & CP_RB_DOORBELL_OFFSET_MASK) or
+                row['doorbell_status'] !=
+                    (row['doorbell_control'] & CP_RB_DOORBELL_STATUS_MASK)):
+            return False
+    return True
+
+
+def valid_apple_graphics_pipe_guard(proof, run_id):
+    """Validate the exact ACTIVE-bound pre-consumption schema-5 guard."""
+    try:
+        fields = struct.unpack(
+            HOST_KIQ_RESERVATION_FORMAT,
+            host_kiq_reservation_descriptor(run_id, HOST_KIQ_RESERVATION_ACTIVE))
+    except (TypeError, ValueError):
+        return False
+    expected_reservation = {
+        'version': fields[1], 'state': fields[2], 'heap_limit': fields[3],
+        'reservation_start': fields[4], 'scratch_start': fields[5],
+        'reservation_end': fields[6], 'run_id': run_id, 'checksum': fields[9],
+    }
+    return (isinstance(proof, dict) and
+            set(proof) == {'policy', 'reservation_before', 'reservation_after',
+                           'reservation_unchanged', 'pipe1_supported_state',
+                           'snapshot'} and
+            proof.get('policy') == APPLE_GRAPHICS_PIPE_POLICY and
+            proof.get('reservation_before') == expected_reservation and
+            proof.get('reservation_after') == expected_reservation and
+            proof.get('reservation_unchanged') is True and
+            proof.get('pipe1_supported_state') is True and
+            valid_apple_graphics_snapshot(proof.get('snapshot')))
+
+
+def guard_apple_graphics_pipes(mmio, run_id):
+    """Fail before reservation consumption if Apple has a live second gfx pipe."""
+    reservation_before = inspect_host_kiq_reservation(mmio, run_id)
+    pipes = snapshot_graphics_pipes(mmio)
+    reservation_after = inspect_host_kiq_reservation(mmio, run_id)
+    unchanged = reservation_before == reservation_after
+    if not unchanged:
+        raise RecoveryError('ACTIVE reservation changed during graphics pipe guard')
+    pipe1_supported = _apple_pipe1_supported(pipes)
+    if not pipe1_supported:
+        if not _graphics_snapshot_accessible(pipes):
+            raise RecoveryError('graphics pipe snapshot is inaccessible/all-ones')
+        raise RecoveryError('graphics pipe 1 is live or faulted and unsupported by '
+                            'the Apple single-pipe recovery path')
+    return {
+        'policy': APPLE_GRAPHICS_PIPE_POLICY,
+        'reservation_before': reservation_before,
+        'reservation_after': reservation_after,
+        'reservation_unchanged': unchanged,
+        'pipe1_supported_state': pipe1_supported,
+        'snapshot': pipes,
+    }
+
+
 def consume_host_kiq_reservation(mmio, run_id):
     proof = inspect_host_kiq_reservation(mmio, run_id)
     mmio.write_vram(HOST_KIQ_RESERVATION_OFFSET,
@@ -703,7 +847,7 @@ def retire_legacy_gfx_with_host_kiq(mmio, prior_run_id, sleep=time.sleep, polls=
             if _ranges_overlap(offset, size, gart['bar_offset'], gart['size']):
                 raise RecoveryError('host KIQ scratch overlaps the live GART page table')
     gfx_doorbell = mmio.read32(CP_RB_DOORBELL_CONTROL_OFFSET)
-    gfx_doorbell_offset = gfx_doorbell & 0x03ffffff
+    gfx_doorbell_offset = gfx_doorbell & CP_RB_DOORBELL_OFFSET_MASK
     if gfx_doorbell_offset != HOST_KIQ_UNMAP_GFX[2]:
         raise RecoveryError(
             f'graphics doorbell offset is {gfx_doorbell_offset:#x}, expected 0x400')
@@ -814,8 +958,13 @@ def retire_legacy_gfx_with_host_kiq(mmio, prior_run_id, sleep=time.sleep, polls=
         # RPTR only proves the packet was fetched. The graphics ring must report
         # inactive before any host-side register scrub can count as proof.
         mmio.write32(GRBM_GFX_CNTL_OFFSET, 0)
+        graphics_pipes_after_unmap = None
         for _ in range(polls):
-            gfx_active_after_unmap = mmio.read32(CP_RB_ACTIVE_OFFSET)
+            graphics_pipes_after_unmap = snapshot_graphics_pipes(mmio)
+            gfx_active_after_unmap = graphics_pipes_after_unmap['pipes'][0]['active']
+            if not _apple_pipe1_supported(graphics_pipes_after_unmap):
+                raise RecoveryError('graphics pipe 1 became live or faulted after '
+                                    'the pipe-0 UNMAP_QUEUES')
             if not (gfx_active_after_unmap & 1):
                 break
             sleep(0.001)
@@ -836,6 +985,7 @@ def retire_legacy_gfx_with_host_kiq(mmio, prior_run_id, sleep=time.sleep, polls=
                   'rptr_after': rptr_after,
                   'fence_sequence': fence_sequence, 'fence_after': fence_after,
                   'gfx_active_after_unmap': gfx_active_after_unmap,
+                  'graphics_pipes_after_unmap': graphics_pipes_after_unmap,
                   'gfx_doorbell_offset': gfx_doorbell_offset,
                   'addresses': addresses, 'gart': gart,
                   'reservation': reservation, 'hdp_flush': hdp_flush}
@@ -935,7 +1085,7 @@ def retire_legacy_gfx_with_host_kiq(mmio, prior_run_id, sleep=time.sleep, polls=
 
 
 def quiesce_gc(mmio, sleep=time.sleep, polls=50, kiq_polls=None, prior_run_id=None,
-               reservation_proof=None):
+               reservation_proof=None, graphics_pipe_guard=None):
     """Drain GC queues, halt command processors/SDMA, and prove no HQD is active.
 
     Firmware dequeue gets the first chance while the MECs still run. Once QEMU has
@@ -955,6 +1105,10 @@ def quiesce_gc(mmio, sleep=time.sleep, polls=50, kiq_polls=None, prior_run_id=No
     stuck = []
     host_kiq = {'status': 'not-needed'}
     try:
+        graphics_pipes_before = snapshot_graphics_pipes(mmio)
+        if not _apple_pipe1_supported(graphics_pipes_before):
+            raise RecoveryError('graphics pipe 1 became live or faulted after the '
+                                'pre-consumption guard')
         poll_control = mmio.read32(CP_PQ_WPTR_POLL_CNTL_OFFSET)
         mmio.write32(CP_PQ_WPTR_POLL_CNTL_OFFSET,
                      poll_control & ~CP_PQ_WPTR_POLL_ENABLE_MASK)
@@ -1003,18 +1157,20 @@ def quiesce_gc(mmio, sleep=time.sleep, polls=50, kiq_polls=None, prior_run_id=No
                         stuck_selectors.add(selector)
 
         mmio.write32(GRBM_GFX_CNTL_OFFSET, 0)
-        gfx_rb_active_before = mmio.read32(CP_RB_ACTIVE_OFFSET)
-        gfx_rb_doorbell_before = mmio.read32(CP_RB_DOORBELL_CONTROL_OFFSET)
-        gfx_rb_wptr_before = mmio.read32(CP_RB0_WPTR_OFFSET)
-        gfx_rb_wptr_hi_before = mmio.read32(CP_RB0_WPTR_HI_OFFSET)
-        gfx_rb_base_before = mmio.read32(CP_RB0_BASE_OFFSET)
-        gfx_rb_base_hi_before = mmio.read32(CP_RB0_BASE_HI_OFFSET)
-        gfx_rb_cntl_before = mmio.read32(CP_RB0_CNTL_OFFSET)
+        gfx0_before = graphics_pipes_before['pipes'][0]
+        gfx_rb_active_before = gfx0_before['active']
+        gfx_rb_doorbell_before = gfx0_before['doorbell_control']
+        gfx_rb_wptr_before = gfx0_before['wptr']
+        gfx_rb_wptr_hi_before = gfx0_before['wptr_hi']
+        gfx_rb_base_before = gfx0_before['base']
+        gfx_rb_base_hi_before = gfx0_before['base_hi']
+        gfx_rb_cntl_before = gfx0_before['cntl']
         gfx_needs_unmap = bool((gfx_rb_active_before & 1) or
-                               (gfx_rb_doorbell_before & 0xc0000000))
-        gfx_was_stale = bool(gfx_needs_unmap or gfx_rb_wptr_before or
-                             gfx_rb_wptr_hi_before or gfx_rb_base_before or
-                             gfx_rb_base_hi_before or gfx_rb_cntl_before)
+                               gfx0_before['doorbell_status'])
+        gfx_was_stale = any(
+            (row['active'] & 1) or row['doorbell_status'] or row['wptr'] or
+            row['wptr_hi'] or row['base'] or row['base_hi'] or row['cntl']
+            for row in graphics_pipes_before['pipes'])
         if gfx_needs_unmap and not stuck and prior_run_id is not None:
             try:
                 host_kiq = retire_legacy_gfx_with_host_kiq(
@@ -1027,6 +1183,11 @@ def quiesce_gc(mmio, sleep=time.sleep, polls=50, kiq_polls=None, prior_run_id=No
         elif gfx_needs_unmap:
             host_kiq = {'status': 'blocked-active-hqd',
                         'selectors': sorted(stuck_selectors)}
+
+        if host_kiq.get('status') == 'retired':
+            graphics_pipes_after_retirement = host_kiq['graphics_pipes_after_unmap']
+        else:
+            graphics_pipes_after_retirement = snapshot_graphics_pipes(mmio)
 
         # Linux sdma_v5_2_hw_fini disables context switching and the GFX
         # ring/IB before halting the engine.  Preserve that order so no SDMA
@@ -1094,18 +1255,26 @@ def quiesce_gc(mmio, sleep=time.sleep, polls=50, kiq_polls=None, prior_run_id=No
         mmio.write32(CP_RB0_BASE_OFFSET, 0)
         mmio.write32(CP_RB0_BASE_HI_OFFSET, 0)
         mmio.write32(CP_RB0_CNTL_OFFSET, 0)
-        gfx_rb_active_after = mmio.read32(CP_RB_ACTIVE_OFFSET)
-        gfx_rb_doorbell_after = mmio.read32(CP_RB_DOORBELL_CONTROL_OFFSET)
-        gfx_rb_wptr_after = mmio.read32(CP_RB0_WPTR_OFFSET)
-        gfx_rb_wptr_hi_after = mmio.read32(CP_RB0_WPTR_HI_OFFSET)
-        gfx_rb_base_after = mmio.read32(CP_RB0_BASE_OFFSET)
-        gfx_rb_base_hi_after = mmio.read32(CP_RB0_BASE_HI_OFFSET)
-        gfx_rb_cntl_after = mmio.read32(CP_RB0_CNTL_OFFSET)
+        graphics_pipes_final = snapshot_graphics_pipes(mmio)
+        gfx0_final = graphics_pipes_final['pipes'][0]
+        gfx_rb_active_after = gfx0_final['active']
+        gfx_rb_doorbell_after = gfx0_final['doorbell_control']
+        gfx_rb_wptr_after = gfx0_final['wptr']
+        gfx_rb_wptr_hi_after = gfx0_final['wptr_hi']
+        gfx_rb_base_after = gfx0_final['base']
+        gfx_rb_base_hi_after = gfx0_final['base_hi']
+        gfx_rb_cntl_after = gfx0_final['cntl']
         gfx_ring_clean = ((gfx_rb_active_after & 1) == 0 and
-                          (gfx_rb_doorbell_after & CP_RB_DOORBELL_ENABLE_MASK) == 0 and
+                          gfx0_final['doorbell_status'] == 0 and
                           gfx_rb_wptr_after == 0 and gfx_rb_wptr_hi_after == 0 and
                           gfx_rb_base_after == 0 and gfx_rb_base_hi_after == 0 and
-                          gfx_rb_cntl_after == 0)
+                          gfx_rb_cntl_after == 0 and
+                          _apple_pipe1_supported(graphics_pipes_final))
+        graphics_pipe_proof_complete = (
+            valid_apple_graphics_pipe_guard(graphics_pipe_guard, prior_run_id) and
+            valid_apple_graphics_snapshot(graphics_pipes_before) and
+            valid_apple_graphics_snapshot(graphics_pipes_after_retirement) and
+            valid_apple_graphics_snapshot(graphics_pipes_final))
         gfx_retirement_confirmed = (not gfx_needs_unmap or
                                     host_kiq.get('status') == 'retired')
 
@@ -1134,9 +1303,11 @@ def quiesce_gc(mmio, sleep=time.sleep, polls=50, kiq_polls=None, prior_run_id=No
                                 ','.join(f'{selector:#x}' for selector in remaining))
         cp_stat_after = mmio.read32(CP_STAT_OFFSET)
         cp_cpc_busy_after = mmio.read32(CP_CPC_BUSY_STAT_OFFSET)
+        active_after = sum(1 for row in graphics_pipes_final['pipes']
+                           if row['active'] & 1)
         if host_kiq.get('status') == 'retired':
             host_kiq['final_gate'] = {
-                'active_after': 0,
+                'active_after': active_after,
                 'cp_stat_after': cp_stat_after,
                 'cp_cpc_busy_after': cp_cpc_busy_after,
                 'pq_wptr_poll_after': pq_wptr_poll_after,
@@ -1145,6 +1316,7 @@ def quiesce_gc(mmio, sleep=time.sleep, polls=50, kiq_polls=None, prior_run_id=No
                 'doorbell_range_upper_after': doorbell_range_upper_after,
                 'gfx_ring_clean': gfx_ring_clean,
                 'gfx_retirement_confirmed': gfx_retirement_confirmed,
+                'graphics_pipe_proof_complete': graphics_pipe_proof_complete,
             }
         return {
             'status': 'quiesced', 'active_before': len(active),
@@ -1158,6 +1330,11 @@ def quiesce_gc(mmio, sleep=time.sleep, polls=50, kiq_polls=None, prior_run_id=No
             'pq_status_after': pq_status_after,
             'doorbell_range_lower_after': doorbell_range_lower_after,
             'doorbell_range_upper_after': doorbell_range_upper_after,
+            'graphics_pipe_guard': graphics_pipe_guard,
+            'graphics_pipes_before': graphics_pipes_before,
+            'graphics_pipes_after_retirement': graphics_pipes_after_retirement,
+            'graphics_pipes_final': graphics_pipes_final,
+            'graphics_pipe_proof_complete': graphics_pipe_proof_complete,
             'gfx_rb_active_before': gfx_rb_active_before,
             'gfx_rb_active_after': gfx_rb_active_after,
             'gfx_rb_doorbell_before': gfx_rb_doorbell_before,
@@ -1185,7 +1362,7 @@ def quiesce_gc(mmio, sleep=time.sleep, polls=50, kiq_polls=None, prior_run_id=No
             'sdma0_ib_before': sdma_ib_before,
             'sdma0_ib_after': sdma_ib_after,
             'sdma0_before': sdma_before, 'sdma0_after': sdma_after,
-            'active_after': 0,
+            'active_after': active_after,
         }
     finally:
         mmio.write32(GRBM_GFX_CNTL_OFFSET, 0)
@@ -1203,13 +1380,15 @@ def perform_recovery(expected_boot, prior_run_id, state_reader, transport_factor
     commands = []
     with transport_factory() as transport:
         region = transport.metadata()
-        # Authenticate this exact launch and consume its one-shot reservation
-        # before the first GC/SDMA/PSP register mutation, even when every queue
-        # already looks clean. A missing, pending, corrupt, stale, or replayed
-        # descriptor aborts recovery without touching the engines.
+        # The exact Apple build creates only pipe 0. Inspect both pipe banks while
+        # the ACTIVE reservation is still reusable, and refuse an unsupported live
+        # pipe 1 before consuming it. Selector writes are restored to zero and the
+        # reservation is authenticated again on both sides of this bounded guard.
+        graphics_pipe_guard = guard_apple_graphics_pipes(transport, prior_run_id)
         reservation = consume_host_kiq_reservation(transport, prior_run_id)
         gc_quiesce = quiesce_gc(transport, sleep, min(polls, 50), polls,
-                                prior_run_id, reservation)
+                                prior_run_id, reservation,
+                                graphics_pipe_guard=graphics_pipe_guard)
         commands.append(run_command(transport, DESTROY_RINGS, 'destroy all rings', sleep, polls))
         commands.append(run_command(transport, DESTROY_GPCOM_RING, 'destroy GPCOM ring', sleep, polls))
     after = state_reader()
@@ -1243,9 +1422,10 @@ def perform_recovery(expected_boot, prior_run_id, state_reader, transport_factor
                       not (gc_quiesce['sdma0_rb_after'] & SDMA_RB_ENABLE_MASK) and
                       not (gc_quiesce['sdma0_ib_after'] & SDMA_IB_ENABLE_MASK) and
                       gc_quiesce['gfx_ring_clean'] and
-                      gc_quiesce['gfx_retirement_confirmed'])
+                      gc_quiesce['gfx_retirement_confirmed'] and
+                      gc_quiesce['graphics_pipe_proof_complete'])
     return {
-        'schema': 3, 'status': 'recovered' if safe_for_reuse else 'incomplete',
+        'schema': 5, 'status': 'recovered' if safe_for_reuse else 'incomplete',
         'authorizes_launch': safe_for_reuse, 'boot_id': expected_boot,
         'prior_run_id': prior_run_id, 'device': DEVICE, 'iommu_group': GROUP,
         'driver': 'vfio-pci', 'pci_command_before': before['pci_command'],

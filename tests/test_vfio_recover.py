@@ -24,6 +24,9 @@ class FakeTransport:
         self.fail_command = fail_command
         self.events = []
         self.value = 0x80050000
+        self.gfx_selector = 0
+        self.pipe1_doorbell = 0
+        self.pipe1_rb0_active = 0
         self.registers = {tool.NBIO_CONFIG_MEMSIZE_OFFSET: tool.EXPECTED_CONFIG_MEMSIZE}
         self.vram = {}
         regions = {
@@ -52,11 +55,22 @@ class FakeTransport:
 
     def read32(self, offset):
         self.events.append(('read', offset))
+        if (offset == self.tool.CP_RB_DOORBELL_CONTROL_OFFSET and
+                self.gfx_selector & 0x3 == 1):
+            return self.pipe1_doorbell
+        if (offset == self.tool.CP_RB_ACTIVE_OFFSET and
+                self.gfx_selector & 0x3 == 1):
+            return self.pipe1_rb0_active
         return self.value if offset == self.tool.C2PMSG_64_OFFSET else self.registers.get(offset, 0)
 
     def write32(self, offset, value):
         self.events.append(('write', offset, value))
-        if offset != self.tool.C2PMSG_64_OFFSET:
+        if offset == self.tool.GRBM_GFX_CNTL_OFFSET:
+            self.gfx_selector = value
+        if (offset == self.tool.CP_RB_DOORBELL_CONTROL_OFFSET and
+                self.gfx_selector & 0x3 == 1):
+            self.pipe1_doorbell = value
+        elif offset != self.tool.C2PMSG_64_OFFSET:
             self.registers[offset] = value
         elif value != self.fail_command:
             self.value = self.tool.READY_FLAG | value
@@ -743,6 +757,21 @@ class VfioRecoveryTests(unittest.TestCase):
         self.assertEqual(gc['host_kiq']['status'], 'retired')
         self.assertTrue(gc['gfx_retirement_confirmed'])
         self.assertTrue(gc['gfx_ring_clean'])
+        self.assertTrue(gc['graphics_pipe_proof_complete'])
+        self.assertEqual([row['intended_pipe'] for row in
+                          gc['graphics_pipe_guard']['snapshot']['pipes']],
+                         [0, 1])
+        self.assertEqual([row['intended_pipe'] for row in
+                          gc['graphics_pipes_before']['pipes']], [0, 1])
+        self.assertEqual([row['intended_pipe'] for row in
+                          gc['graphics_pipes_after_retirement']['pipes']],
+                         [0, 1])
+        self.assertEqual([row['intended_pipe'] for row in
+                          gc['graphics_pipes_final']['pipes']], [0, 1])
+        self.assertEqual(gc['host_kiq']['graphics_pipes_after_unmap'],
+                         gc['graphics_pipes_after_retirement'])
+        self.assertEqual(gc['graphics_pipes_final']['pipes'][1]['active'], 0)
+        self.assertEqual(gc['graphics_pipes_final']['pipes'][1]['doorbell_status'], 0)
         self.assertEqual(gc['gfx_rb_base_after'], 0)
         self.assertEqual(gc['gfx_rb_base_hi_after'], 0)
         self.assertEqual(gc['gfx_rb_cntl_after'], 0)
@@ -778,13 +807,132 @@ class VfioRecoveryTests(unittest.TestCase):
         self.assertEqual(proof['state'], tool.HOST_KIQ_RESERVATION_ACTIVE)
         consume = fake.events.index(('write-vram', tool.HOST_KIQ_RESERVATION_OFFSET,
                                      tool.HOST_KIQ_RESERVATION_SIZE))
-        first_gc_write = next(index for index, event in enumerate(fake.events)
-                              if isinstance(event, tuple) and event[0] == 'write' and
-                              event[1] != tool.C2PMSG_64_OFFSET)
-        self.assertLess(consume, first_gc_write)
+        writes_before_consume = [event for event in fake.events[:consume]
+                                 if isinstance(event, tuple) and event[0] == 'write']
+        self.assertTrue(writes_before_consume)
+        self.assertTrue(all(event[1] == tool.GRBM_GFX_CNTL_OFFSET
+                            for event in writes_before_consume))
+        first_engine_write = next(index for index, event in enumerate(fake.events)
+                                  if isinstance(event, tuple) and event[0] == 'write' and
+                                  event[1] not in (tool.GRBM_GFX_CNTL_OFFSET,
+                                                   tool.C2PMSG_64_OFFSET))
+        self.assertLess(consume, first_engine_write)
         self.assertEqual(sum(event == ('write-vram', tool.HOST_KIQ_RESERVATION_OFFSET,
                                       tool.HOST_KIQ_RESERVATION_SIZE)
                              for event in fake.events), 1)
+
+    def test_pipe1_guard_rejects_live_state_without_consuming_active_reservation(self):
+        tool = self.tool
+        for label, active, doorbell in (
+                ('active', 1, 0),
+                ('enabled', 0, tool.CP_RB_DOORBELL_ENABLE_MASK | 0x408),
+                ('hit', 0, tool.CP_RB_DOORBELL_HIT_MASK | 0x408),
+                ('bif-drop', 0, tool.CP_RB_DOORBELL_BIF_DROP_MASK | 0x408)):
+            with self.subTest(label=label):
+                fake = FakeTransport(tool)
+                fake.registers[tool.CP_RB1_ACTIVE_OFFSET] = active
+                fake.pipe1_doorbell = doorbell
+                expected = tool.host_kiq_reservation_descriptor(
+                    RUN_ID, tool.HOST_KIQ_RESERVATION_ACTIVE)
+                with self.assertRaisesRegex(tool.RecoveryError,
+                                             'graphics pipe 1.*unsupported'):
+                    tool.perform_recovery(
+                        'boot-A', RUN_ID, lambda:self.state(), lambda:fake,
+                        lambda cursor=None:('cursor-2', [], []),
+                        sleep=lambda _:None, polls=2)
+                observed = bytes(fake.vram.get(tool.HOST_KIQ_RESERVATION_OFFSET + n, 0)
+                                 for n in range(len(expected)))
+                self.assertEqual(observed, expected)
+                self.assertFalse(any(isinstance(event, tuple) and
+                                     event[0] == 'write-vram'
+                                     for event in fake.events))
+                writes = [event for event in fake.events
+                          if isinstance(event, tuple) and event[0] == 'write']
+                self.assertTrue(writes)
+                self.assertTrue(all(event[1] == tool.GRBM_GFX_CNTL_OFFSET
+                                    for event in writes))
+                self.assertEqual(fake.gfx_selector, 0)
+
+    def test_pipe1_guard_records_stale_programming_as_observation_only(self):
+        tool = self.tool
+        fake = FakeTransport(tool)
+        fake.registers.update({
+            tool.CP_RB1_WPTR_OFFSET: 0x80,
+            tool.CP_RB1_BASE_OFFSET: 0x123400,
+            tool.CP_RB1_BASE_HI_OFFSET: 0xf4,
+            tool.CP_RB1_CNTL_OFFSET: 0xa00e10,
+        })
+        guard = tool.guard_apple_graphics_pipes(fake, RUN_ID)
+        pipe1 = guard['snapshot']['pipes'][1]
+        self.assertTrue(guard['reservation_unchanged'])
+        self.assertTrue(guard['pipe1_supported_state'])
+        self.assertEqual(pipe1['active'], 0)
+        self.assertEqual(pipe1['doorbell_status'], 0)
+        self.assertEqual(pipe1['base'], 0x123400)
+        self.assertEqual(pipe1['base_hi'], 0xf4)
+        self.assertEqual(pipe1['cntl'], 0xa00e10)
+        self.assertEqual(fake.gfx_selector, 0)
+        self.assertFalse(any(event == ('read', tool.GRBM_GFX_CNTL_OFFSET)
+                             for event in fake.events))
+        self.assertEqual([event for event in fake.events
+                          if isinstance(event, tuple) and event[:2] ==
+                          ('write', tool.GRBM_GFX_CNTL_OFFSET)][-1],
+                         ('write', tool.GRBM_GFX_CNTL_OFFSET, 0))
+
+    def test_pipe1_guard_records_ambiguous_off_diagonal_active_without_blocking(self):
+        tool = self.tool
+        fake = FakeTransport(tool)
+        fake.pipe1_rb0_active = 1
+        guard = tool.guard_apple_graphics_pipes(fake, RUN_ID)
+        pipe1 = guard['snapshot']['pipes'][1]
+        self.assertEqual(pipe1['rb0_active'], 1)
+        self.assertEqual(pipe1['rb1_active'], 0)
+        self.assertTrue(guard['pipe1_supported_state'])
+
+        fake = FakeTransport(tool)
+        fake.pipe1_rb0_active = 0xffffffff
+        guard = tool.guard_apple_graphics_pipes(fake, RUN_ID)
+        self.assertEqual(guard['snapshot']['pipes'][1]['rb0_active'], 0xffffffff)
+        self.assertTrue(guard['pipe1_supported_state'])
+
+    def test_pipe1_guard_rejects_all_ones_observation_before_consumption(self):
+        tool = self.tool
+        fake = FakeTransport(tool)
+        fake.registers[tool.CP_RB1_WPTR_OFFSET] = 0xffffffff
+        expected = tool.host_kiq_reservation_descriptor(
+            RUN_ID, tool.HOST_KIQ_RESERVATION_ACTIVE)
+        with self.assertRaisesRegex(tool.RecoveryError, 'inaccessible/all-ones'):
+            tool.perform_recovery(
+                'boot-A', RUN_ID, lambda:self.state(), lambda:fake,
+                lambda cursor=None:('cursor-2', [], []),
+                sleep=lambda _:None, polls=2)
+        observed = bytes(fake.vram.get(tool.HOST_KIQ_RESERVATION_OFFSET + n, 0)
+                         for n in range(len(expected)))
+        self.assertEqual(observed, expected)
+        self.assertFalse(any(isinstance(event, tuple) and event[0] == 'write-vram'
+                             for event in fake.events))
+
+    def test_pipe_guard_rechecks_unchanged_active_descriptor_after_selectors(self):
+        tool = self.tool
+
+        class ChangingReservation(FakeTransport):
+            def write32(self, offset, value):
+                super().write32(offset, value)
+                selector_writes = sum(event[:2] == ('write', offset)
+                                      for event in self.events
+                                      if isinstance(event, tuple))
+                if (offset == tool.GRBM_GFX_CNTL_OFFSET and value == 0 and
+                        selector_writes == 3):
+                    self.vram[tool.HOST_KIQ_RESERVATION_OFFSET] ^= 1
+
+        fake = ChangingReservation(tool)
+        with self.assertRaisesRegex(tool.RecoveryError, 'reservation'):
+            tool.perform_recovery(
+                'boot-A', RUN_ID, lambda:self.state(), lambda:fake,
+                lambda cursor=None:('cursor-2', [], []),
+                sleep=lambda _:None, polls=2)
+        self.assertFalse(any(isinstance(event, tuple) and event[0] == 'write-vram'
+                             for event in fake.events))
 
     def test_clean_recovery_rejects_absent_pending_corrupt_wrong_nonce_and_replay(self):
         tool = self.tool
@@ -920,7 +1068,7 @@ class VfioRecoveryTests(unittest.TestCase):
         self.assertEqual(evidence['gc_quiesce']['status'], 'quiesced')
         self.assertEqual(evidence['gc_quiesce']['host_kiq'], {'status':'not-needed'})
         self.assertTrue(evidence['authorizes_launch'])
-        self.assertEqual(evidence['schema'], 3)
+        self.assertEqual(evidence['schema'], 5)
         self.assertEqual(evidence['reset_methods_before'], [])
         self.assertEqual(evidence['reset_methods_after'], [])
 
@@ -999,6 +1147,35 @@ class VfioRecoveryTests(unittest.TestCase):
         self.assertFalse(result['authorizes_launch'])
         self.assertFalse(result['gc_quiesce']['gfx_ring_clean'])
         self.assertTrue(all(row['confirmed'] for row in result['commands']))
+
+    def test_pipe1_appearance_after_guard_makes_schema5_receipt_incomplete(self):
+        tool = self.tool
+
+        class AppearingPipe1(FakeTransport):
+            def __init__(self):
+                super().__init__(tool)
+                self.pipe1_active_reads = 0
+
+            def read32(self, offset):
+                if (offset == tool.CP_RB1_ACTIVE_OFFSET and
+                        self.gfx_selector & 0x3 == 1):
+                    self.pipe1_active_reads += 1
+                    self.events.append(('read', offset))
+                    return 1 if self.pipe1_active_reads >= 4 else 0
+                return super().read32(offset)
+
+        fake = AppearingPipe1()
+        states = iter([self.state(), self.state()])
+        result = tool.perform_recovery(
+            'boot-A', RUN_ID, lambda:next(states), lambda:fake,
+            lambda cursor=None:('cursor-2', [], []), sleep=lambda _:None, polls=2)
+        self.assertEqual(result['schema'], 5)
+        self.assertEqual(result['status'], 'incomplete')
+        self.assertFalse(result['authorizes_launch'])
+        gc = result['gc_quiesce']
+        self.assertFalse(gc['graphics_pipe_proof_complete'])
+        self.assertEqual(gc['graphics_pipes_final']['pipes'][1]['active'], 1)
+        self.assertEqual(fake.gfx_selector, 0)
 
     def test_gc_quiesce_force_clears_stuck_hqd_only_after_mec_halt(self):
         tool = self.tool

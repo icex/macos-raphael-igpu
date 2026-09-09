@@ -3476,3 +3476,54 @@ its ring path uses the same acquire-before-invalidate and release-after-invalida
 Diagnostics therefore leave decoded semaphore values explicitly unread while retaining request
 and acknowledge reads. This removes an acquisition risk; it does not establish that a diagnostic
 read caused any earlier GPU fault.
+
+### 2026-09-09: candidate 174 refuses KIQ startup without a BAR0 mapping
+
+The controlled candidate-174 continuation loaded build
+`b60df7448ea24106ae4300f6760cb171` and reached PM4 engine initialization. The serial mux split
+one diagnostic across lines 2918 and 2920; together it reads `XQ2: preflight failed: BAR0 mapping
+unavailable`. The following intact line reads `XQ2: startKIQ refused: preflight or genuine
+dequeue failed`. The PM4 engine then returned zero, the live-mapping partial cleanup returned one,
+and both `powerUpHWEngines` and accelerator `powerUpHW` returned zero.
+
+This is a startup refusal, not an SDMA execution result. No KIQ submit, SDMA VM programming,
+VMID-2 callback or page-table walk ran, so candidate 173's root repair and corrected walker remain
+untested on hardware. The classifier's `sdma_vm_program_missing` label describes the later missing
+observation but is not the earliest concrete boundary. The guest honored the shutdown request and
+halted cleanly. Rootless recovery failed closed because the guest had never activated the exact
+host-KIQ lifetime reservation; that receipt does not authorize another launch. The immutable
+record is archived in [metal-007-174-prelaunch-continuation](experiments/metal-007-174-prelaunch-continuation/notes.md).
+
+The pending BAR0-startup repair follows ownership visible in the 24G830 X6000 binary:
+`AMDHWMemory::init` stores its interface owner at `self+0x10`, and `AMDHardware::init` stores its
+`IOPCIDevice` at the same offset. The mapping helper can therefore use the memory object's owner
+before the later global hardware pointer is published, then call the established PCI-map and
+map-virtual-address vtable entries. Failed or unavailable attempts remain retryable; only a valid
+address is cached. Offline validation compiled the complete kext and passed the early-owner,
+retry, activation-before-range-population and KDK route/offset checks. This repair has not run on
+hardware and does not promote candidate 174 to a successful-startup baseline.
+
+### 2026-09-09: startup-only cleanup succeeds; candidate 175 remains untested
+
+The reviewed one-shot cleanup for candidate 174's exact no-queue stopped state completed on the
+actual device without a reset, driver rebind or launch. Both complete HQD scans found no active
+queue or enabled doorbell, both graphics pipes were inactive with their doorbells disabled, and
+the immediate pre-write SDMA state was accessible, idle and disabled. The transaction halted the
+already-idle CP and SDMA engines, received exact PSP responses `0x80030000` and `0x800c0000`, then
+consumed the PENDING reservation last. PCI command remained 3, reset methods remained empty, and
+the captured host journal interval contained no new message or fault.
+
+The authorizing schema-4 receipt SHA-256 is
+`a511e06af4fcdc07961bfc3f9dd0a83e340ee866086ed84b99f558978f28b175`. It binds the unchanged
+launch-ledger preimage plus unique recovery and attempt IDs, so it permits one later reservation
+and cannot be replayed. This result proves only the bounded startup/no-queue cleanup for that
+state. It does not prove normal recovery after a fully started guest, warm reinitialization,
+candidate 175 startup, or Metal execution.
+
+Candidate 175 packages the already offline-validated BAR0 early-owner/retry repair. Relative to
+candidate 174, this is the only guest behavior change: mapping can use the owner published at
+`AMDHWMemory+0x10` before the later global hardware pointer exists, failed attempts remain
+retryable, and only a valid mapping is cached. The `rgpuvmroot=1` diagnostic and all functional
+boot arguments remain unchanged so a future controlled run can first require KIQ startup, then
+resume the still-unresolved VMID-2 root, SDMA submission and page-table observations. Candidate
+175 has not yet run on hardware, and full Metal acceleration remains unproven.

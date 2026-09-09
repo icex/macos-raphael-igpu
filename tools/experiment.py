@@ -655,6 +655,71 @@ def _valid_gart(value):
                  RECOVERY_SCRATCH_START < offset + value['size']))
 
 
+def _active_reservation_observation(prior_run_id):
+    return {
+        'version':RECOVERY_RESERVATION_VERSION,
+        'state':RECOVERY_RESERVATION_ACTIVE,
+        'heap_limit':RECOVERY_HEAP_LIMIT,
+        'reservation_start':RECOVERY_RESERVATION_START,
+        'scratch_start':RECOVERY_SCRATCH_START,
+        'reservation_end':RECOVERY_RESERVATION_END,
+        'run_id':prior_run_id,
+        'checksum':_recovery_checksum(prior_run_id),
+    }
+
+
+def _valid_graphics_snapshot(value):
+    row_keys = {'intended_pipe','selector','rb0_active','rb1_active','active',
+                'doorbell_control','doorbell_offset','doorbell_status','wptr',
+                'wptr_hi','base','base_hi','cntl'}
+    if (not isinstance(value, dict) or set(value) != {'pipes','final_default'} or
+            value.get('final_default') != {'value':0, 'completed':True}):
+        return False
+    pipes = value.get('pipes')
+    if not isinstance(pipes, list) or len(pipes) != 2:
+        return False
+    for index, row in enumerate(pipes):
+        if (not isinstance(row, dict) or set(row) != row_keys or
+                any(type(item) is not int for item in row.values()) or
+                row['intended_pipe'] != index or row['selector'] != index or
+                row['active'] != row['rb0_active' if index == 0 else 'rb1_active'] or
+                row['doorbell_offset'] != (row['doorbell_control'] & 0x0ffffffc) or
+                row['doorbell_status'] != (row['doorbell_control'] & 0xc0000002)):
+            return False
+        for key in ('active','doorbell_control','wptr','wptr_hi','base','base_hi','cntl'):
+            if row[key] == 0xffffffff:
+                return False
+    pipe1 = pipes[1]
+    return not (pipe1['rb1_active'] & 1) and pipe1['doorbell_status'] == 0
+
+
+def _valid_graphics_guard(value, prior_run_id):
+    expected_reservation = _active_reservation_observation(prior_run_id)
+    return (isinstance(value, dict) and
+            set(value) == {'policy','reservation_before','reservation_after',
+                           'reservation_unchanged','pipe1_supported_state','snapshot'} and
+            value.get('policy') == 'x6000-24G830-single-legacy-gfx-pipe-v1' and
+            value.get('reservation_before') == expected_reservation and
+            value.get('reservation_after') == expected_reservation and
+            value.get('reservation_unchanged') is True and
+            value.get('pipe1_supported_state') is True and
+            _valid_graphics_snapshot(value.get('snapshot')))
+
+
+def _graphics_was_stale(snapshot):
+    return any((row['active'] & 1) or row['doorbell_status'] or row['wptr'] or
+               row['wptr_hi'] or row['base'] or row['base_hi'] or row['cntl']
+               for row in snapshot['pipes'])
+
+
+def _graphics_final_clean(snapshot):
+    if not _valid_graphics_snapshot(snapshot):
+        return False
+    pipe0 = snapshot['pipes'][0]
+    return all(pipe0[key] == 0 for key in (
+        'active','doorbell_control','wptr','wptr_hi','base','base_hi','cntl'))
+
+
 def _valid_host_kiq(value, reservation, gc):
     if not isinstance(value, dict):
         return False
@@ -662,7 +727,7 @@ def _valid_host_kiq(value, reservation, gc):
                      'fence_sequence','fence_after','gfx_active_after_unmap',
                      'gfx_active_before_scrub','gfx_doorbell_offset','addresses',
                      'gart','reservation','hdp_flush','cleanup_confirmed','cleanup',
-                     'final_gate'}
+                     'graphics_pipes_after_unmap','final_gate'}
     if set(value) != expected_keys:
         return False
     fence = value.get('fence_sequence')
@@ -684,6 +749,10 @@ def _valid_host_kiq(value, reservation, gc):
             value.get('reservation') != reservation or
             not _valid_hdp_flush(value.get('hdp_flush')) or
             not _valid_gart(value.get('gart')) or
+            not _valid_graphics_snapshot(value.get('graphics_pipes_after_unmap')) or
+            value.get('graphics_pipes_after_unmap') !=
+                gc.get('graphics_pipes_after_retirement') or
+            value['graphics_pipes_after_unmap']['pipes'][0]['active'] & 1 or
             value.get('cleanup_confirmed') is not True):
         return False
     if not isinstance(addresses, dict) or set(addresses) != {
@@ -718,7 +787,7 @@ def _valid_host_kiq(value, reservation, gc):
     expected_gate = {key:gc.get(key) for key in (
         'active_after','cp_stat_after','cp_cpc_busy_after','pq_wptr_poll_after',
         'pq_status_after','doorbell_range_lower_after','doorbell_range_upper_after',
-        'gfx_ring_clean','gfx_retirement_confirmed')}
+        'gfx_ring_clean','gfx_retirement_confirmed','graphics_pipe_proof_complete')}
     return (isinstance(gate, dict) and set(gate) == set(expected_gate) and
             all(type(gate.get(key)) is type(expected) and gate.get(key) == expected
                 for key, expected in expected_gate.items()))
@@ -726,7 +795,7 @@ def _valid_host_kiq(value, reservation, gc):
 
 def validate_recovery_receipt(receipt, boot_id, prior_run_id):
     errors = []
-    exact = {'schema':3, 'status':'recovered', 'authorizes_launch':True,
+    exact = {'schema':5, 'status':'recovered', 'authorizes_launch':True,
              'boot_id':boot_id,
              'prior_run_id':prior_run_id, 'device':'0000:7b:00.0',
              'iommu_group':'31', 'driver':'vfio-pci'}
@@ -773,12 +842,28 @@ def validate_recovery_receipt(receipt, boot_id, prior_run_id):
             type(gc.get('sdma0_rb_after')) is not int or gc['sdma0_rb_after'] & 1 != 0 or
             type(gc.get('sdma0_ib_after')) is not int or gc['sdma0_ib_after'] & 1 != 0 or
             gc.get('gfx_ring_clean') is not True or
-            gc.get('gfx_retirement_confirmed') is not True):
+            gc.get('gfx_retirement_confirmed') is not True or
+            gc.get('graphics_pipe_proof_complete') is not True):
         errors.append('recovery_receipt')
     if isinstance(gc, dict):
         reservation = gc.get('reservation')
         if not _valid_reservation(reservation, prior_run_id):
             errors.append('recovery_receipt')
+        guard = gc.get('graphics_pipe_guard')
+        before = gc.get('graphics_pipes_before')
+        after_retirement = gc.get('graphics_pipes_after_retirement')
+        final = gc.get('graphics_pipes_final')
+        if (not _valid_graphics_guard(guard, prior_run_id) or
+                not _valid_graphics_snapshot(before) or
+                not _valid_graphics_snapshot(after_retirement) or
+                not _graphics_final_clean(final)):
+            errors.append('recovery_receipt')
+        if _valid_graphics_snapshot(before):
+            pipe0 = before['pipes'][0]
+            needs_unmap = bool((pipe0['active'] & 1) or pipe0['doorbell_status'])
+            if (gc.get('gfx_needs_unmap') is not needs_unmap or
+                    gc.get('gfx_was_stale') is not _graphics_was_stale(before)):
+                errors.append('recovery_receipt')
         host_kiq = gc.get('host_kiq')
         if gc.get('gfx_needs_unmap') is True:
             if not _valid_host_kiq(host_kiq, reservation, gc):
@@ -798,6 +883,33 @@ def validate_recovery_receipt(receipt, boot_id, prior_run_id):
     return sorted(set(errors))
 
 
+def validate_reuse_receipt(receipt, boot_id, prior_run_id, vm=None):
+    """Dispatch normal and startup-only receipts without weakening either schema."""
+    if isinstance(receipt, dict) and receipt.get('schema') == 4:
+        errors = []
+        try:
+            errors.extend(helper('startup-noqueue-recover').validate_receipt(
+                receipt, boot_id, prior_run_id, vm))
+        except Exception:
+            errors.append('startup_noqueue_receipt')
+        for key in ('recovery_id', 'attempt_id'):
+            if not re.fullmatch(r'[0-9a-f]{32}', str(receipt.get(key, ''))):
+                errors.append('startup_noqueue_receipt')
+        if vm is not None:
+            try:
+                raw = (Path(vm) / 'run/used-gpu-boots' /
+                       (boot_id + '.json')).read_bytes()
+                if (not re.fullmatch(r'[0-9a-f]{64}',
+                                     str(receipt.get('ledger_sha256', ''))) or
+                        hashlib.sha256(raw).hexdigest() !=
+                        receipt.get('ledger_sha256')):
+                    errors.append('startup_noqueue_receipt')
+            except OSError:
+                errors.append('startup_noqueue_receipt')
+        return sorted(set(errors))
+    return validate_recovery_receipt(receipt, boot_id, prior_run_id)
+
+
 def reuse_authorization(vm, boot_id, run_id):
     path = vm/'run/used-gpu-boots'/(boot_id+'.json')
     if not path.exists(): return None, []
@@ -809,11 +921,23 @@ def reuse_authorization(vm, boot_id, run_id):
     if len(launches) >= 3: return None, ['launch_ceiling']
     prior = launches[-1].get('run_id')
     receipt_path = vm/'run/vfio-recovery'/boot_id/(str(prior)+'.json')
+    error_key = 'recovery_receipt'
+    if not receipt_path.exists():
+        startup_path = (vm/'run/startup-noqueue-recovery'/boot_id/
+                        (str(prior)+'.json'))
+        if startup_path.exists():
+            receipt_path = startup_path
+            error_key = 'startup_noqueue_receipt'
     try: receipt = json.loads(receipt_path.read_text())
-    except (OSError, ValueError): return None, ['recovery_receipt']
-    errors = validate_recovery_receipt(receipt, boot_id, prior)
-    if receipt.get('recovery_id') in {row.get('recovery_id') for row in launches}:
-        errors.append('recovery_receipt')
+    except (OSError, ValueError): return None, [error_key]
+    errors = validate_reuse_receipt(receipt, boot_id, prior, vm)
+    used_recovery_ids = {row.get('recovery_id') for row in launches}
+    if receipt.get('recovery_id') in used_recovery_ids:
+        errors.append(error_key)
+    if receipt.get('schema') == 4:
+        used_attempt_ids = {row.get('attempt_id') for row in launches}
+        if receipt.get('attempt_id') in used_attempt_ids:
+            errors.append('startup_noqueue_receipt')
     return (receipt if not errors else None), sorted(set(errors))
 
 
@@ -842,16 +966,35 @@ def reserve_boot(directory, boot_id, experiment, recovery=None):
                           'launches':[{'run_id':experiment, 'reserved_epoch':time.time()}]})
         return
     if recovery is None: raise FileExistsError(path)
+    ledger_raw = path.read_bytes()
     ledger = read_boot_ledger(path); launches = ledger.get('launches', [])
     prior = launches[-1].get('run_id') if launches else None
-    errors = validate_recovery_receipt(recovery, boot_id, prior)
+    startup = isinstance(recovery, dict) and recovery.get('schema') == 4
+    error_key = 'startup_noqueue_receipt' if startup else 'recovery_receipt'
+    vm = directory.parent.parent
+    errors = validate_reuse_receipt(recovery, boot_id, prior, vm if startup else None)
     if len(launches) >= 3: errors.append('launch_ceiling')
     if any(row.get('run_id') == experiment for row in launches): errors.append('run_id_reused')
     if recovery.get('recovery_id') in {row.get('recovery_id') for row in launches}:
-        errors.append('recovery_receipt')
+        errors.append(error_key)
+    if startup and recovery.get('attempt_id') in {
+            row.get('attempt_id') for row in launches}:
+        errors.append('startup_noqueue_receipt')
+    # The startup-only proof binds the exact newline-preserving ledger preimage.
+    # Re-read immediately before append so an admission-time proof cannot reserve
+    # against a stale or reformatted ledger.
+    if startup:
+        current_raw = path.read_bytes()
+        if (current_raw != ledger_raw or
+                hashlib.sha256(current_raw).hexdigest() !=
+                recovery.get('ledger_sha256')):
+            errors.append('startup_noqueue_receipt')
     if errors: raise ValueError('reuse reservation refused: '+','.join(sorted(set(errors))))
-    launches.append({'run_id':experiment, 'reserved_epoch':time.time(),
-                     'recovery_id':recovery['recovery_id'], 'prior_run_id':prior})
+    reservation = {'run_id':experiment, 'reserved_epoch':time.time(),
+                   'recovery_id':recovery['recovery_id'], 'prior_run_id':prior}
+    if startup:
+        reservation['attempt_id'] = recovery['attempt_id']
+    launches.append(reservation)
     ledger.update(schema=2, boot_id=boot_id, max_launches=3, launches=launches)
     ledger.pop('experiment', None)
     replace_json(path, ledger)

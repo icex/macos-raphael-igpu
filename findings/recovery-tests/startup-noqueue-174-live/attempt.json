@@ -1,0 +1,22 @@
+{
+  "archive_sha256": "d92043abcbd6d921c01db404db38dc1e7dbfd6a92e5624e1b5cc97961664b4c3",
+  "attempt_id": "f11105d537dd4ff097476de97a7620a4",
+  "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+  "build_id": "b60df7448ea24106ae4300f6760cb171",
+  "created_epoch": 1788942828.1728716,
+  "guest_source_commit": "178a181d7921b389bea08411e4470d19c5c6f68c",
+  "guest_source_sha256": "3fdc64886bb60b4f242b0f638ed86f93874ad86a678ac5590e1b748b5d3810c5",
+  "inspection_sha256": "42b7549d1964a5c4f7117c08afb246a3c406f0817e4374c8df2b51280d823d9c",
+  "kind": "startup-noqueue-attempt",
+  "ledger_sha256": "2d15f0cbb73d71e8efaf2a951f13c707726e9b98279a0e85208253f1941410d3",
+  "prior_run_id": "e583a1b2d97a4ad3b607c1d20a29a812",
+  "recovery_id": "70463a1f1b3e4dc4899a175e64103df8",
+  "schema": 1,
+  "source_hashes": {
+    "experiment.py": "4e8eef678cbcdedbdbc87959bc71af8714e4a1339ebbe772bcad6830f877f89a",
+    "inspect-noqueue.py": "8c37ed8951be05009b14e2843efe2e26ad293597d9c8a9e8da9fb62d3f62cad5",
+    "inspection.json": "42b7549d1964a5c4f7117c08afb246a3c406f0817e4374c8df2b51280d823d9c",
+    "startup-noqueue-recover.py": "bed28d30c1c707156f78c29aa846698b292d007e6500f8ef528b77292e6959fc",
+    "vfio-recover.py": "b0ca780828e615d6ad5d17b360d739c1619e279e4f0e37077eb0c79ecb697298"
+  }
+}

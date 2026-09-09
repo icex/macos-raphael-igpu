@@ -1,0 +1,69 @@
+{
+  "schema": 1,
+  "kind": "one-shot-prelaunch-continuation",
+  "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+  "run_id": "e583a1b2d97a4ad3b607c1d20a29a812",
+  "original_output": "/home/bogdan/macos-vm/run/metal-007-173-geometry",
+  "original_output_sha256": "c099c8597f3da6a0f2db059bd3fd8d1fb53280db7dddcb271ddb76fe8c6609fa",
+  "original_files": [
+    {
+      "name": "agent-server-events.jsonl",
+      "sha256": "fc01003b5f7b69101508914c479a6b0ecb9be818eb561ae77778313fd7bcd2fc"
+    },
+    {
+      "name": "events.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "host-after.json",
+      "sha256": "d2d3b118bda837c44c8ea878f7af089e6e5c5767e16912752b92b0f763a0a8ff"
+    },
+    {
+      "name": "host-before.json",
+      "sha256": "d2d3b118bda837c44c8ea878f7af089e6e5c5767e16912752b92b0f763a0a8ff"
+    },
+    {
+      "name": "host-kernel-messages.json",
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    },
+    {
+      "name": "manifest.json",
+      "sha256": "3e55268208543c81963b08b6fa922271324c45a9d1354f012ff069fc815796a4"
+    },
+    {
+      "name": "serial.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "shutdown.json",
+      "sha256": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+    },
+    {
+      "name": "verdict.json",
+      "sha256": "071dc20ef87befa35d77e8ba445310277b75ce1349325504ee6f486de09a9ba7"
+    }
+  ],
+  "original_manifest_sha256": "3e55268208543c81963b08b6fa922271324c45a9d1354f012ff069fc815796a4",
+  "replacement_manifest_sha256": "535ab074affacd019ce9fb389cb9657f610d6cbf7dcca7738de5cc7d298f0ddc",
+  "original_verdict_sha256": "071dc20ef87befa35d77e8ba445310277b75ce1349325504ee6f486de09a9ba7",
+  "prelaunch_proof": "/home/bogdan/macos-vm/run/prelaunch-einval-probe-e583a1b2.json",
+  "prelaunch_proof_sha256": "8ce5b30f1c2ef9dfac68b00dee29ed8254845dae64dc0832ad4a1295424b034b",
+  "prelaunch_readiness": "/home/bogdan/macos-vm/run/prelaunch-readiness-e583a1b2.json",
+  "prelaunch_readiness_sha256": "86282b2a881f86b1fd4d770ec7f066c2014aab0b957b7211c0ed6c6f996f9053",
+  "ledger_sha256": "2d15f0cbb73d71e8efaf2a951f13c707726e9b98279a0e85208253f1941410d3",
+  "kernel_cursor": "s=98f6cb2295dc45898ee97031451ba7c8;i=3de99;b=5d6f45d043844340b8197751bc26ebb3;m=f7aa1da1;t=65b07593c52cd;x=406734b216ea3c05",
+  "resume_host_state": {
+    "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+    "active_vm": false,
+    "driver": "vfio-pci",
+    "device": "1002:13c0",
+    "iommu_group": "31",
+    "pci_command": 3,
+    "reset_methods": []
+  },
+  "active_launch_units": [],
+  "coordinator_commit": "46c5b130d9b09976fedeee3d2f3f788282ce909a",
+  "experiment_py_sha256": "55b15e8ad4449ef060717780f546b1c50a5f9efdead639ae0859b8a1d092136c",
+  "vfio_recover_py_sha256": "eecbea8ae75fff2ba24a99a9c3cfac102ed312209d250f8a63a742a701f35b34",
+  "marker": "/home/bogdan/macos-vm/run/prelaunch-continuations/5d6f45d0-4384-4340-b819-7751bc26ebb3-e583a1b2d97a4ad3b607c1d20a29a812.json"
+}

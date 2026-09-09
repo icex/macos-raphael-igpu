@@ -2886,22 +2886,35 @@ static void disableCtx0Retry() {
 // BAR0 maps the visible portion of VRAM. The GART walker below converts a
 // validated physical framebuffer root into an offset within this existing map.
 static volatile uint32_t *fbAperture() {
-    static volatile uint32_t *cached {};
-    static bool tried = false;
-    if (tried) return cached;
-    tried = true;
-    if (hwObj == nullptr) return nullptr;
-    auto pci = *reinterpret_cast<void **>(reinterpret_cast<uint8_t *>(hwObj) + 0x10);
-    if (pci == nullptr) return nullptr;
-    auto vt = *reinterpret_cast<uint64_t **>(pci);
-    auto mapFn = reinterpret_cast<void *(*)(void *, uint32_t, uint32_t)>(vt[0x908 / 8]);
-    auto map = mapFn(pci, 0x10, 0);
-    if (map == nullptr) { RLOG("XN: BAR0 map failed"); return nullptr; }
-    auto mvt = *reinterpret_cast<uint64_t **>(map);
-    auto getVA = reinterpret_cast<uint64_t (*)(void *)>(mvt[0x118 / 8]);
-    cached = reinterpret_cast<volatile uint32_t *>(getVA(map));
-    RLOG("XN: BAR0 mapped at %p", cached);
-    return cached;
+    static void *cached {};
+    auto result = RaphaelRecovery::establishBarMapping(
+        cached, hwObj, hwMemObject, [](void *pci) -> void * {
+            auto vt = *reinterpret_cast<uint64_t **>(pci);
+            auto mapFn = reinterpret_cast<void *(*)(void *, uint32_t, uint32_t)>(
+                vt[0x908 / 8]);
+            auto map = mapFn(pci, 0x10, 0);
+            if (map == nullptr) return nullptr;
+            auto mvt = *reinterpret_cast<uint64_t **>(map);
+            auto getVA = reinterpret_cast<uint64_t (*)(void *)>(mvt[0x118 / 8]);
+            return reinterpret_cast<void *>(getVA(map));
+        });
+    switch (result.status) {
+        case RaphaelRecovery::BarMappingStatus::OwnerUnavailable:
+            RLOG("XN: BAR0 mapping unavailable: hardware owner absent");
+            break;
+        case RaphaelRecovery::BarMappingStatus::PciUnavailable:
+            RLOG("XN: BAR0 mapping unavailable: PCI owner absent");
+            break;
+        case RaphaelRecovery::BarMappingStatus::MappingFailed:
+            RLOG("XN: BAR0 map failed");
+            break;
+        case RaphaelRecovery::BarMappingStatus::Mapped:
+            RLOG("XN: BAR0 mapped at %p", result.address);
+            break;
+        case RaphaelRecovery::BarMappingStatus::Cached:
+            break;
+    }
+    return reinterpret_cast<volatile uint32_t *>(result.address);
 }
 
 // The recorded memory sizes bound the existing 256MiB BAR0 mapping; never infer
@@ -4762,6 +4775,9 @@ static uint32_t wrapHwMemEnable(void *self) {
                     RLOG("XH: no valid pending recovery reservation; allocator sizes remain "
                          "%#llx/%#llx", q(0x40), q(0x48));
                 }
+            } else {
+                RLOG("XH: recovery reservation unavailable: BAR0 mapping not established; "
+                     "allocator sizes remain %#llx/%#llx", q(0x40), q(0x48));
             }
         }
         RLOG("XH: enableAllocations entry: pool0=%p pool1=%p size0=%#llx size1=%#llx "
