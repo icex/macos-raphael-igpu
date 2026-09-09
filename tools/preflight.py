@@ -123,30 +123,55 @@ def main():
         if not ok: bad += 1
         print(f"{name:26s} {off_s:>9s}  {sym:44s} {note}")
 
-    # The recovery reservation is useful only when both allocator limits are
-    # capped before the original enableAllocations implementation can create
-    # either BAR0 pool. Keep this ordering in the deployment preflight rather
-    # than relying only on the hosted header fixture.
+    # Recovery v2 must acquire and publish a native hardware lease before VMM,
+    # then run Apple's pool initializer exactly once and exclude that same full
+    # address from both software pools before admitting clients. Keep these
+    # production wiring checks in the deployment preflight rather than relying
+    # only on the hosted helper fixture.
     source = SRC.read_text()
-    wrapper_start = source.find("static uint32_t wrapHwMemEnable(void *self) {")
-    wrapper_end = source.find("static uint32_t wrapPpPowerUp", wrapper_start)
-    wrapper = source[wrapper_start:wrapper_end]
-    ordered = [wrapper.find(token) for token in (
-        "RaphaelRecovery::activate(descriptor, pool0, pool1)",
-        "q(0x40) = pool0", "q(0x48) = pool1",
-        "FunctionCast(wrapHwMemEnable, orgHwMemEnable)(self)")]
+    wrapper_start = source.find("static bool wrapHwMemEnable(void *self) {")
+    wrapper_end = source.find("//\n// Clearing the flag", wrapper_start)
+    wrapper = source[wrapper_start:wrapper_end] if wrapper_end > wrapper_start else ""
+    ready_start = source.find("static void wrapVmmSetVSReady(void *self, uint32_t ready) {")
+    ready_end = source.find("static void wrapVmmSetAlloc", ready_start)
+    ready_wrapper = source[ready_start:ready_end] if ready_end > ready_start else ""
+    vmm_alloc_start = ready_end
+    vmm_alloc_end = source.find("static void probeRlc", vmm_alloc_start)
+    vmm_alloc_wrapper = (source[vmm_alloc_start:vmm_alloc_end]
+                         if vmm_alloc_end > vmm_alloc_start else "")
+    vmm_enable_guard = vmm_alloc_wrapper.find("if (enable != 0)")
+    vmm_native_record = vmm_alloc_wrapper.find("XV2 VMM phase=native")
+    pool_helper = wrapper.find("RaphaelRecoveryV2::establishPools(")
+    pool_order = [pool_helper] + [wrapper.find(token, pool_helper) for token in (
+        "FunctionCast(wrapHwMemEnable, orgHwMemEnable)(self)",
+        "vt[0x198 / 8] != x6Base + kOffHwMemReserve",
+        "publishRecoveryPoolStatus(status)")]
+    owner_order = [ready_wrapper.find(token) for token in (
+        "isRaphaelHardware(hardware)",
+        "vt[0x180 / 8] != x6Base + kOffHwAppendReserved",
+        "appendReserved(hardware, 0, RaphaelRecoveryV2::LeaseSize, 0x1000)",
+        "recoveryLeaseDisjointFromLiveGart(descriptor)",
+        "RaphaelRecoveryV2::publishRecord(")]
     routed = "orgHwMemEnable = patcher.routeFunction(addr + kOffHwMemEnable" in source
-    full_bar_visible = source.count(
-        "RaphaelRecovery::barVisibleBytes(size0, size1)") >= 2
-    reservation_ok = (wrapper_start >= 0 and wrapper_end > wrapper_start and routed and
-                      all(position >= 0 for position in ordered) and
-                      ordered == sorted(ordered) and full_bar_visible)
-    print(f"recovery reservation {'ok (both pools capped; full BAR remains visible)' if reservation_ok else 'INVALID ORDER, ROUTE, OR BAR BOUND'}")
+    reservation_ok = (
+        wrapper_start >= 0 and wrapper_end > wrapper_start and
+        ready_start >= 0 and ready_end > ready_start and routed and
+        all(position >= 0 for position in pool_order + owner_order) and
+        pool_order == sorted(pool_order) and owner_order == sorted(owner_order) and
+        wrapper.count("FunctionCast(wrapHwMemEnable, orgHwMemEnable)(self)") == 3 and
+        "static uint32_t wrapHwMemEnable" not in source and
+        "RaphaelRecovery::activate(" not in source and
+        vmm_enable_guard >= 0 and vmm_native_record >= 0 and
+        vmm_enable_guard < vmm_native_record and
+        "XH2 ABORT reason=duplicate-ready" in ready_wrapper and
+        "XH2 ABORT reason=pool-owner" in wrapper and
+        "XH2 ABORT reason=duplicate-pool" in wrapper)
+    print(f"recovery reservation {'ok (native v2 lease; one pool init; fail-closed duplicates)' if reservation_ok else 'INVALID V2 ORDER, ABI, ROUTE, OR OWNER GUARD'}")
     if not reservation_ok:
         bad += 1
 
     prepare_start = source.find("static void wrapVmmPrepare(void *self")
-    prepare_end = source.find("static uint32_t wrapHwMemSetVSReady", prepare_start)
+    prepare_end = source.find("static bool recoveryLeaseDisjointFromLiveGart", prepare_start)
     prepare = source[prepare_start:prepare_end]
     prepare_order = [prepare.find(token) for token in (
         "RaphaelVm::prepareInvalidateInfo(",
@@ -208,7 +233,7 @@ def main():
         print(f"\npreflight: {bad} problem(s) -- NOT safe to deploy")
         return 1
     print("\npreflight: route scopes checked, constants checked, prologues checked, "
-          "allocator ordering checked, patterns unique")
+          "recovery-v2 ordering checked, patterns unique")
     return 0
 
 sys.exit(main())

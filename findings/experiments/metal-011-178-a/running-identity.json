@@ -1,0 +1,7 @@
+{
+  "vfio_args": [
+    "vfio-pci,host=0000:7b:00.0,bus=pcie.0,x-pci-vendor-id=0x1002,x-pci-device-id=0x73ff,romfile=/run/vm/gpu.rom"
+  ],
+  "argv_sha256": "2b7a7c886d688c09d169abff83e0f6959cf4374bd49409217edaf25d2d7ba222",
+  "image_id": "sha256:3a3c82c79bc4e73531f819ccdfa4053b3084efd7c1f645678dbf8b4b3a24369c"
+}

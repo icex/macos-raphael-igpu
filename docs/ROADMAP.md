@@ -1,8 +1,9 @@
 # Raphael iGPU acceleration roadmap
 
 Updated 2026-09-09. Last successful hardware startup and latest controlled guest attempt:
-candidate 1.0.177; its one-shot qualification consumed the revised boot ledger's fourth and
-final launch;
+candidate 1.0.178-B. The bounded 178-A/B sequence completed the third measured
+cleanup-to-restart transition on this host boot; its terminal ledger is 6/6 and admits no
+seventh launch;
 published research snapshot: `v1.0.159-preview.1`. This document is the authoritative current roadmap.
 Historical hypotheses in `findings/GPU-RE.md` remain evidence, not instructions.
 
@@ -177,6 +178,22 @@ transition followed by another successful physical cleanup, not routine repeatab
 is now 4/4 and admits no fifth launch. See the
 [candidate-177 evidence](../findings/experiments/metal-010-177/notes.md).
 
+Candidate 1.0.178 then ran twice with one identical, prebound build/configuration/probe and
+separate A/B manifests and activations. Both runs repeated native KIQ, SDMA, engine and outer
+accelerator startup. The new observer classified all failed map preparations as `backing-pte`:
+483 in A and 531 in B, with zero capacity, VA-allocation or unknown cases and zero
+`submitBuffer` calls. Retained samples had flag bit 0 set and an existing nonzero GPU virtual
+address, narrowing the failure beyond VA allocation but not distinguishing backing-resource
+from PTE preparation. Neither trace identifies the issuing PID or binds one retained map object
+to the probe. Each probe again returned status 5 / `e00002bd` with zero completed command
+buffers. Both guest-requested shutdowns and schema-6 cleanups completed without force clear,
+timeout, host fault or reset. Together with 176-to-177, the successful 177-to-178-A and
+178-A-to-178-B restarts provide three measured cleanup-to-restart transitions on this boot.
+This bounded result does not prove Metal execution, native guest teardown, the historical
+host-hang cause, or routine reuse. The ledger is terminal at 6/6. See the
+[candidate-178-A evidence](../findings/experiments/metal-011-178-a/notes.md) and
+[candidate-178-B evidence](../findings/experiments/metal-011-178-b/notes.md).
+
 For future schema-6 recovery, the automatic stopped-WPTR path is available only after a terminal
 host-KIQ fence, pre-scrub UNMAP proof, genuine dequeue, and a sole pointer-clear cleanup failure. It
 then requires a fresh halted/disabled scan, issues one native 64-bit zero doorbell, closes the global
@@ -214,13 +231,13 @@ single clean run is not repeatability evidence. There is no defensible overall p
 | [x] | Wrong-kext route regression prevented for current scopes | `route-domains.py` and regression tests; not a complete C++ verifier |
 | [x] | Optional hybrid diagnostic built | 1.0.162, exact entry guards, `rgpuhybrid=1`, native result preserved |
 | [x] | Hybrid diagnostic validated on hardware | 1.0.163: complete records; type10 fails after type10/type11 success |
-| [ ] | Repeatable clean initial state | Candidates 176 and 177 completed validated normal schema-6 cleanup, and candidate 177 measured one warm reinitialization; repeatability remains unproved |
+| [ ] | Repeatable clean initial state | Candidates 176, 177, 178-A and 178-B completed validated normal schema-6 cleanup, with three measured same-boot cleanup-to-restart transitions; clean state across independent host boots remains unproved |
 | [x] | Native hybrid queues / complete engine startup | Candidate 171 maps residual engine-2 channels to real SDMA0; hybrid status 0 and native start/power-up 1 on hardware |
 | [ ] | Correct Metal compute and offscreen rendering | First command buffer fails; zero results checked |
 | [ ] | Per-process memory, synchronization and resource lifecycle | Must be exercised after first real completion |
 | [ ] | Accelerated desktop and presentation | WindowServer panic repair is not proof of accelerated composition |
 | [ ] | Physical iGPU display output | DCN 3.1.5 path remains a separate open milestone |
-| [ ] | Reliable shutdown/restart and host stability | Two validated normal cleanups and one measured warm restart completed without a host fault; the historical host-hang mechanism and routine reliability remain unresolved |
+| [ ] | Reliable shutdown/restart and host stability | Four validated normal cleanups and three measured same-boot restarts completed without a host fault; native teardown, the historical host-hang mechanism and routine reliability remain unresolved |
 | [ ] | Desktop performance and release qualification | Deferred until compute, render, presentation and lifecycle pass |
 
 Authoritative recordings:
@@ -469,11 +486,12 @@ Physical display work must not be mistaken for a prerequisite to an offscreen co
   retired without force clear, the KIQ rptr and unique fence advance, the graphics ring is
   inactive before scrub, and final PQ polling, gate, ranges, selectors and engines read clean.
 - [x] Hardware-qualify the reservation activation, HDP flush, temporary-KIQ fence and complete
-  cleanup evidence, then consume that receipt in one same-boot reinitialization. Candidate 176
-  measured the physical cleanup path, the corrected schema-6 consumer validates its unchanged
-  receipt, and candidate 177 successfully initialized from that state. Candidate 177's normal
-  schema-6 cleanup also validates. These two cleanup records and one intervening reinitialization
-  do not establish routine repeatability; the revised boot ledger is exhausted at 4/4.
+  cleanup evidence, then consume validated receipts in bounded same-boot reinitializations.
+  Candidates 176, 177, 178-A and 178-B produced validated normal schema-6 cleanups; the
+  176-to-177, 177-to-178-A and 178-A-to-178-B transitions all reinitialized successfully without
+  force clear, reset or host fault. This completes the planned three-transition sample on one
+  host boot, but does not prove native guest teardown, the historical host-hang mechanism or
+  routine reuse. The terminal ledger is 6/6 and admits no seventh launch.
 - [x] Reject incomplete recovery: any dequeue timeout, forced ACTIVE clear, nonzero `CP_STAT`
   or nonzero `CP_CPC_BUSY_STAT` prevents warm reuse even when halt bits and ACTIVE read back.
 - [x] On a runtime observation/capture failure after exact QEMU identity validation, request
@@ -565,23 +583,26 @@ date for the unknown hardware defects until M2 has localized them.
 
 ## 8. Next controlled experiment
 
-1. Preserve the complete candidate-176 and candidate-177 evidence, both schema-6 receipt
-   serializations from each run, the consumed cap authority, the unchanged first three ledger rows,
-   and the full schema-3 4/4 ledger. Admit no fifth launch on this boot.
+1. Preserve the complete candidate-176 through candidate-178 evidence, both schema-6 receipt
+   serializations from every run, all consumed authorities and activations, and every append-only
+   ledger row. The current ledger is terminal at 6/6; admit no seventh launch on this boot.
 2. Keep the reviewed schema-6 descriptor and host-KIQ mutation spans pinned to the producer layout
    and retain live GART validation before descriptor consumption. Candidate 176 and 177 both
    measured disjoint GART/write ranges and completed normal recovery.
-3. Investigate the pre-submit `kIOReturnNoMemory` offline at the resource and memory-map preparation
-   boundary. Distinguish allocation/coalescing policy, per-map preparation, and mapping-batch
-   progress before proposing a behavior change. Do not treat missing SDMA VM/root records as an
-   independent SDMA failure when no observed call reached `submitBuffer`.
-4. Use candidate 178's accepted bounded map-phase observer to retain preparation counts, flags and
-   GPU virtual-address state around the existing failure boundary; it deliberately adds no issuer
-   or PID attribution. The identical A/B lifecycle sequence remains conditional on the
-   [metal-011 card](../experiments/metal-011.json), the
-   [reviewed two-run design](superpowers/specs/2026-09-09-two-run-warm-qualification-design.md),
-   exact shared artifacts and separate activation reviews. The current 4/4 ledger remains binding
-   until an exact A activation is approved and reserved.
+3. Continue the pre-submit `kIOReturnNoMemory` investigation offline at the resource and
+   memory-map preparation boundary. Candidate 178 excluded the instrumented capacity and
+   VA-allocation branches for 483 A and 531 B failures; the next source-backed diagnostic must
+   distinguish backing-resource preparation from PTE preparation without claiming issuer/PID
+   correlation. Do not treat missing SDMA VM/root records as an independent SDMA failure when no
+   observed call reached `submitBuffer`. Use the current
+   [hardware-hypothesis matrix](../findings/research/2026-09-metal-integration/hypotheses-hardware.md)
+   and [Raphael/Navi Linux comparison](../findings/research/2026-09-metal-integration/raphael-navi-linux.md)
+   as source inputs rather than changing hardware behavior speculatively.
+4. Treat the [metal-011 card](../experiments/metal-011.json) and
+   [reviewed two-run design](superpowers/specs/2026-09-09-two-run-warm-qualification-design.md)
+   as completed finite qualification records. Preserve the identical A/B artifact identity,
+   separate activations and three measured transitions. Any later hardware experiment needs a new
+   explicit policy and artifact review; no launch is admitted by the terminal 6/6 ledger.
 
 An interactive QEMU display remains gated on the checked compute/render probe, so desktop
 testing cannot mistake Metal enumeration for execution.

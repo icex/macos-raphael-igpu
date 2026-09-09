@@ -8,6 +8,14 @@ import unittest
 TOOL = Path(__file__).resolve().parents[1] / 'tools/build-release.py'
 
 class ReleaseBuildTests(unittest.TestCase):
+    def test_release_documents_include_authoritative_status(self):
+        spec = importlib.util.spec_from_file_location('release_build', TOOL)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        self.assertIn('status.md', module.RELEASE_DOCUMENTS)
+        for relative in module.RELEASE_DOCUMENTS:
+            self.assertTrue((TOOL.parents[1] / relative).is_file(), relative)
+
     def test_rejects_executable_or_wrong_architecture_as_kext(self):
         self.assertTrue(TOOL.is_file(), 'release builder is missing')
         spec = importlib.util.spec_from_file_location('release_build', TOOL)

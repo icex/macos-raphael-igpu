@@ -1,6 +1,7 @@
 import importlib.util
 import json
 from pathlib import Path
+import struct
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,6 +23,72 @@ class ClassifyTests(unittest.TestCase):
                 ('hybrid_exit', {'available': available, 'result': status}),
                 ('engine_start', {'result': started})]
         return [dict(kind=k, build='abc', seq=i, **v) for i, (k, v) in enumerate(rows)]
+
+    def v2_startup(self, *, native_base=0xf405000000, native_arena=0x1234,
+                   pool0=0x2345, pool1=0x3456, include_pool=True):
+        lease_path = ROOT / 'tools/recovery_lease_v2.py'
+        spec = importlib.util.spec_from_file_location('lease_v2_fixture', lease_path)
+        lease = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(lease)
+        nonce = (0x0123456789abcdef, 0xfedcba9876543210)
+        run_id = struct.pack('<QQ', *nonce).hex()
+        descriptor = lease.make_ownership_descriptor(0x0a000000, *nonce)
+        status = lease.make_pool_status(
+            descriptor, state=lease.POOL_ACTIVE,
+            pool0_before=0x0e000000, pool0_after=0x0dfeb000,
+            pool1_before=0x0c000000, pool1_after=0x0bfeb000, reason=0)
+        payloads = [
+            'BUILD: identity=abc',
+            'HY: HWLibs hybrid trace route=ok entries-match=1',
+            'XJ: waitForHwStamp(1) -> 1',
+            'HY: createHybridEngine enter: engine=1 available=1',
+            'HY: createHybridEngine exit: engine=1 valid=1 available-before=1 status=0',
+            'XJ: AMDHardware::startHWEngines -> 1',
+            'XJ: AMDGraphicsAccelerator::powerUpHW -> 1',
+            lease.format_owned_record(descriptor),
+        ]
+        if include_pool:
+            payloads.append(lease.format_pool_record(status))
+        payloads.extend([
+            'XV2 VMM phase=early enable=1 base=0 arena=0 pool0=0 pool1=0',
+            f'XV2 VMM phase=native enable=1 base={native_base:#x} '
+            f'arena={native_arena:#x} pool0={pool0:#x} pool1={pool1:#x}',
+        ])
+        serial = ''.join(
+            f'RGPU_EVENT build=abc seq={index} {payload}\n'
+            for index, payload in enumerate(payloads))
+        serial = (f'RGPU_RECORDS build=abc count={len(payloads)} dropped=0 '
+                  f'truncated=0\n' + serial)
+        manifest = {'build_id':'abc', 'run_id':run_id,
+                    'recovery_lease_schema':2, 'spec':{}}
+        return manifest, self.classifier().parse_serial(serial)
+
+    def test_v2_vmm_readiness_allows_early_null_only_after_complete_native_state(self):
+        classifier = self.classifier()
+        manifest, events = self.v2_startup()
+        vmm = [row for row in events if row['kind'] == 'vmm_readiness']
+        self.assertEqual([row['phase'] for row in vmm], ['early', 'native'])
+        self.assertEqual(vmm[-1]['base'], 0xf405000000)
+        result = classifier.classify_probe_readiness(manifest, events)
+        self.assertTrue(result['valid'])
+        self.assertEqual(result['verdict'], 'PROBE_NOT_RUN')
+
+    def test_v2_vmm_readiness_refuses_missing_pool_overlap_and_null_allocator(self):
+        classifier = self.classifier()
+        cases = (
+            ('pool', dict(include_pool=False), 'INCONCLUSIVE',
+             'recovery_lease_pool_missing'),
+            ('overlap', dict(native_base=0xf409000000), 'INVALID',
+             'vmm_native_arena_overlap'),
+            ('allocator', dict(pool1=0), 'STARTUP_FAILED_LATER',
+             'vmm_native_arena'),
+        )
+        for label, kwargs, verdict, stage in cases:
+            with self.subTest(label=label):
+                manifest, events = self.v2_startup(**kwargs)
+                result = classifier.classify_probe_readiness(manifest, events)
+                self.assertEqual(result['verdict'], verdict)
+                self.assertEqual(result['earliest_failure'], stage)
 
     def candidate175_startup(self, classifier):
         spec = json.loads((ROOT / 'experiments/metal-008.json').read_text())
@@ -210,6 +277,93 @@ class ClassifyTests(unittest.TestCase):
         self.assertEqual(rows[3]['kind'], 'submission_trace_route')
         self.assertTrue(rows[3]['malformed'])
         self.assertFalse(rows[3]['ok'])
+
+    def test_backing_allocation_records_parse_strict_live_snapshots_and_counts(self):
+        rows = self.classifier().parse_serial(
+            'RGPU_RECORDS build=abc count=6 dropped=0 truncated=0\n'
+            'RGPU_EVENT build=abc seq=0 BUILD: identity=abc\n'
+            'RGPU_EVENT build=abc seq=1 SUB: routes=ok count=6 entries-match=1 '
+            'capture=armed\n'
+            'RGPU_EVENT build=abc seq=2 SUB: backing seq=17 object=0x1234 '
+            'thread=0x5678 result=0 '
+            'pre=1/0x200000/0x9000/0/0x4000/0x81 '
+            'post=1/0x200000/0x9000/0xa000/0x4000/0x91 state=live\n'
+            'RGPU_EVENT build=abc seq=3 SUB: backing-summary completed=7 true=2 '
+            'false=5 dropped=1 state=live\n'
+            'RGPU_EVENT build=abc seq=4 SUB: backing-summary completed=8 true=2 '
+            'false=5 dropped=1 state=live\n'
+            'RGPU_EVENT build=abc seq=5 SUB: backing seq=18 object=0x1234 '
+            'thread=0x5678 result=1 '
+            'pre=1/0x200000/0x9000/0/0x4000/0x81 '
+            'post=1/0x200000/0x9000/0xa000/0x4000/0x91 state=live\n')
+        self.assertTrue(rows[1]['ok'])
+        sample = rows[2]
+        self.assertEqual(sample['kind'], 'submission_backing_allocation')
+        self.assertTrue(sample['ok'])
+        self.assertEqual(sample['observation_sequence'], 17)
+        self.assertEqual(sample['backing'], 0x1234)
+        self.assertEqual(sample['thread'], 0x5678)
+        self.assertFalse(sample['result'])
+        self.assertEqual(sample['before'], {
+            'available': True, 'length': 0x200000, 'owner': 0x9000,
+            'element': 0, 'raw120': 0x4000, 'flags': 0x81})
+        self.assertEqual(sample['after']['element'], 0xa000)
+        self.assertTrue(rows[3]['ok'])
+        self.assertEqual(rows[3]['completed'], 7)
+        self.assertEqual(rows[3]['successful'], 2)
+        self.assertEqual(rows[3]['failed'], 5)
+        self.assertFalse(rows[4]['ok'])
+        self.assertTrue(rows[4]['malformed'])
+        self.assertFalse(rows[5]['ok'])
+        self.assertTrue(rows[5]['malformed'])
+
+    def test_backing_allocation_readiness_requires_six_routes_and_worker_only(self):
+        classifier = self.classifier()
+        manifest = {'build_id':'abc', 'spec':{'required_observations':[
+                    'submission_trace', 'submission_backing_allocation']}}
+        base = self.events(available=1, status=0, started=1) + [
+            {'kind':'accelerator_start', 'build':'abc', 'seq':6, 'result':1},
+            {'kind':'submission_trace_summary', 'build':'abc', 'seq':8,
+             'ok':True, 'counts':[[0, 0, 0]] * 5, 'dropped':[0, 0]}]
+
+        legacy_route = base + [
+            {'kind':'submission_trace_route', 'build':'abc', 'seq':7,
+             'ok':True, 'count':5}]
+        result = classifier.classify_probe_readiness(manifest, legacy_route)
+        self.assertEqual(result['verdict'], 'INVALID')
+        self.assertEqual(result['earliest_failure'],
+                         'submission_backing_allocation_route_guard')
+
+        route = {'kind':'submission_trace_route', 'build':'abc', 'seq':7,
+                 'ok':True, 'count':6}
+        missing = classifier.classify_probe_readiness(manifest, base + [route])
+        self.assertEqual(missing['verdict'], 'INCONCLUSIVE')
+        self.assertEqual(missing['earliest_failure'],
+                         'submission_backing_allocation_worker_missing')
+
+        malformed = base + [route,
+            {'kind':'submission_backing_allocation_summary', 'build':'abc',
+             'seq':9, 'ok':False, 'malformed':True}]
+        result = classifier.classify_probe_readiness(manifest, malformed)
+        self.assertEqual(result['verdict'], 'INVALID')
+        self.assertEqual(result['earliest_failure'],
+                         'submission_backing_allocation_worker_malformed')
+
+        ready = base + [route,
+            {'kind':'submission_backing_allocation_summary', 'build':'abc',
+             'seq':9, 'ok':True, 'completed':0, 'successful':0,
+             'failed':0, 'dropped':0}]
+        result = classifier.classify_probe_readiness(manifest, ready)
+        self.assertTrue(result['valid'])
+        self.assertEqual(result['verdict'], 'PROBE_NOT_RUN')
+
+        malformed_sample = ready + [
+            {'kind':'submission_backing_allocation', 'build':'abc', 'seq':10,
+             'ok':False, 'malformed':True}]
+        result = classifier.classify_probe_readiness(manifest, malformed_sample)
+        self.assertEqual(result['verdict'], 'INVALID')
+        self.assertEqual(result['earliest_failure'],
+                         'submission_backing_allocation_observation_malformed')
 
     def test_submission_map_phase_requires_specific_worker_summary(self):
         classifier = self.classifier()
@@ -989,6 +1143,21 @@ Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0
         live = [row for row in rows if row.get('source') == 'live-observation']
         self.assertEqual([row['kind'] for row in live],
                          ['vm_invalidate', 'vm_context', 'sdma_submit'])
+        self.assertFalse(any(row['kind'] == 'capture_loss' for row in rows))
+
+    def test_live_backing_observations_survive_until_next_structured_snapshot(self):
+        rows = self.classifier().parse_serial(
+            'RGPU_EVENT build=abc seq=0 BUILD: identity=abc\n'
+            'RGPU_RECORDS build=abc count=1 dropped=0 truncated=0\n'
+            'RaphaelGPU rgpu: @ SUB: backing seq=17 object=0x1234 thread=0x5678 '
+            'result=0 pre=1/0x200000/0x9000/0/0x4000/0x81 '
+            'post=1/0x200000/0x9000/0/0x4000/0x81 state=live\n'
+            'RaphaelGPU rgpu: @ SUB: backing-summary completed=1 true=0 false=1 '
+            'dropped=0 state=live\n')
+        live = [row for row in rows if row.get('source') == 'live-observation']
+        self.assertEqual([row['kind'] for row in live], [
+            'submission_backing_allocation',
+            'submission_backing_allocation_summary'])
         self.assertFalse(any(row['kind'] == 'capture_loss' for row in rows))
 
 

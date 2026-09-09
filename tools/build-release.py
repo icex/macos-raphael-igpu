@@ -15,6 +15,13 @@ import zipfile
 import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
+RELEASE_DOCUMENTS = (
+    'README.md',
+    'status.md',
+    'docs/supported-games.md',
+    'docs/releases.md',
+    'build-support/LICENSE.amdgpu',
+)
 
 
 def validate_macho(data):
@@ -87,8 +94,7 @@ def build(toolchain, output):
         with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as package:
             for path in sorted(bundle.rglob('*')):
                 if path.is_file(): package.write(path, path.relative_to(bundle.parent))
-            for path in ('README.md', 'docs/supported-games.md', 'docs/releases.md',
-                         'build-support/LICENSE.amdgpu'):
+            for path in RELEASE_DOCUMENTS:
                 package.write(ROOT / path, path)
             package.writestr('build-manifest.json', json.dumps(manifest, indent=2)+'\n')
         (output / 'SHA256SUMS').write_text(hashlib.sha256(archive.read_bytes()).hexdigest()+'  '+archive.name+'\n')

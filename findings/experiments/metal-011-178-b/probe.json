@@ -1,0 +1,5 @@
+{
+  "run_id": "4a45f4a4c1dd49c69fab2dc37e2e4898",
+  "output": "RGPU_METAL_STAGE enumerate\nRGPU_METAL_STAGE compile_shaders\nRGPU_METAL_STAGE compute\nRGPU_METAL_STAGE commit\nRGPU_METAL_RESULT {\"passed\":false,\"run_id\":\"4a45f4a4c1dd49c69fab2dc37e2e4898\",\"device\":\"AMD Radeon Navi23\",\"registry_id\":4294968075,\"metal3\":true,\"render_pixels_checked\":0,\"seed\":3390759816,\"completed_command_buffers\":0,\"compute_rounds\":0,\"error\":\"command failed: status=5 error=Error Domain=MTLCommandBufferErrorDomain Code=1 \\\"Internal Error (e00002bd:Internal Error)\\\" UserInfo={NSLocalizedDescription=Internal Error (e00002bd:Internal Error)}\",\"compute_values_checked\":0}\n\nRGPU_EXIT 4a45f4a4c1dd49c69fab2dc37e2e4898 1\n",
+  "transport_exit": 0
+}

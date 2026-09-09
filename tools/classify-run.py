@@ -5,6 +5,15 @@ import importlib.util
 import json
 from pathlib import Path
 import re
+import struct
+
+
+def _recovery_lease_v2():
+    path = Path(__file__).with_name('recovery_lease_v2.py')
+    spec = importlib.util.spec_from_file_location('recovery_lease_v2_classifier', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _decode_payload(build, seq, payload):
@@ -27,7 +36,7 @@ def _decode_payload(build, seq, payload):
             r'capture=(armed|disabled)', payload):
         row.update(kind='submission_trace_route', count=int(m[2]),
                    entries_match=bool(int(m[3])), capture=m[4],
-                   ok=(m[1] == 'ok' and m[2] == '5' and m[3] == '1' and
+                   ok=(m[1] == 'ok' and m[2] in ('5', '6') and m[3] == '1' and
                        m[4] == 'armed'))
     elif payload.startswith('SUB: routes='):
         row.update(kind='submission_trace_route', ok=False, malformed=True)
@@ -68,6 +77,55 @@ def _decode_payload(build, seq, payload):
                    counts=values[1:5], dropped=values[5:9])
     elif payload.startswith('SUB: map-phase-summary'):
         row.update(kind='submission_map_phase_summary', ok=False, malformed=True)
+    elif m := re.fullmatch(
+            r'SUB: backing seq=(\d+) object=(0x[0-9a-fA-F]+|0) '
+            r'thread=(0x[0-9a-fA-F]+|0) result=([01]) '
+            r'pre=([01])/(0x[0-9a-fA-F]+|0)/(0x[0-9a-fA-F]+|0)/'
+            r'(0x[0-9a-fA-F]+|0)/(0x[0-9a-fA-F]+|0)/(0x[0-9a-fA-F]+|0) '
+            r'post=([01])/(0x[0-9a-fA-F]+|0)/(0x[0-9a-fA-F]+|0)/'
+            r'(0x[0-9a-fA-F]+|0)/(0x[0-9a-fA-F]+|0)/(0x[0-9a-fA-F]+|0) '
+            r'state=live', payload):
+        def snapshot(start):
+            return dict(available=bool(int(m[start])), length=int(m[start + 1], 16),
+                        owner=int(m[start + 2], 16), element=int(m[start + 3], 16),
+                        raw120=int(m[start + 4], 16), flags=int(m[start + 5], 16))
+        failure_sample = m[4] == '0'
+        row.update(kind='submission_backing_allocation', ok=failure_sample,
+                   malformed=not failure_sample,
+                   observation_sequence=int(m[1]), backing=int(m[2], 16),
+                   thread=int(m[3], 16), result=bool(int(m[4])),
+                   before=snapshot(5), after=snapshot(11), state='live')
+    elif payload.startswith('SUB: backing seq='):
+        row.update(kind='submission_backing_allocation', ok=False, malformed=True)
+    elif m := re.fullmatch(
+            r'SUB: backing-summary completed=(\d+) true=(\d+) false=(\d+) '
+            r'dropped=(\d+) state=live', payload):
+        completed, successful, failed, dropped = map(int, m.groups())
+        consistent = completed == successful + failed
+        row.update(kind='submission_backing_allocation_summary', ok=consistent,
+                   malformed=not consistent, completed=completed,
+                   successful=successful, failed=failed, dropped=dropped,
+                   state='live')
+    elif payload.startswith('SUB: backing-summary'):
+        row.update(kind='submission_backing_allocation_summary', ok=False,
+                   malformed=True)
+    elif payload.startswith('XH2 OWNED'):
+        row.update(kind='recovery_lease_owned')
+    elif payload.startswith('XH2 POOL'):
+        row.update(kind='recovery_lease_pool')
+    elif payload.startswith('XH2 '):
+        row.update(kind='recovery_lease_wire', ok=False, malformed=True)
+    elif m := re.fullmatch(
+            r'XV2 VMM phase=(early|native) enable=(\d+) '
+            r'base=(0|0x[1-9a-f][0-9a-f]*) '
+            r'arena=(0|0x[0-9a-f]+) '
+            r'pool0=(0|0x[0-9a-f]+) '
+            r'pool1=(0|0x[0-9a-f]+)', payload):
+        row.update(kind='vmm_readiness', phase=m[1], enable=int(m[2]),
+                   base=int(m[3], 16), arena=int(m[4], 16),
+                   pool0=int(m[5], 16), pool1=int(m[6], 16), ok=True)
+    elif payload.startswith('XV2 VMM'):
+        row.update(kind='vmm_readiness', ok=False, malformed=True)
     elif payload == 'SD: topology applied: discovered=1 kept=SDMA0 removed=SDMA1 before initialize':
         row.update(kind='sdma_topology', applied=True)
     elif payload.startswith('SD: topology NOT applied:'):
@@ -295,7 +353,7 @@ def parse_serial(serial):
     for timeout in hardware_timeouts:
         timeout['build'] = raw_build
     for build, count in counts.items():
-        if any((build, seq) not in records for seq in range(min(count, 129))):
+        if any((build, seq) not in records for seq in range(count)):
             losses.append(dict(kind='capture_loss', build=build, reason='snapshot incomplete'))
     for build, _ in records:
         if build not in counts:
@@ -315,7 +373,9 @@ def parse_serial(serial):
         if row.get('build') not in counts:
             row['source'] = 'raw-fallback'
             terminal_live.append(row)
-        elif row['kind'] == 'submission_trace_route':
+        elif row['kind'] in ('submission_trace_route', 'recovery_lease_owned',
+                             'recovery_lease_pool', 'recovery_lease_wire',
+                             'vmm_readiness'):
             # Route readiness is emitted once from the kext-load callback and is
             # safe to consume before the next immutable replay snapshot.
             row['source'] = 'live-readiness'
@@ -325,7 +385,9 @@ def parse_serial(serial):
                             'vm_invalidate_live', 'vm_pre_clear_fault', 'vm_fault',
                             'sdma_runtime', 'sdma_xnack', 'sdma_page_state', 'sdma_submit',
                             'submission_trace_summary', 'submission_map_phase',
-                            'submission_map_phase_summary'):
+                            'submission_map_phase_summary',
+                            'submission_backing_allocation',
+                            'submission_backing_allocation_summary'):
             # These records are formatted by the dedicated observation thread,
             # outside the driver callbacks. Preserve the exact live line until
             # the next immutable structured snapshot includes it.
@@ -358,6 +420,37 @@ def _classify(manifest, events, probe, defer_absent_workload=False):
     if not kinds['build'] or not kinds['route']:
         return verdict('INCONCLUSIVE', stage='identity_or_route_missing')
     required = manifest.get('spec', {}).get('required_observations', [])
+    if manifest.get('recovery_lease_schema') == 2:
+        lease = _recovery_lease_v2()
+        wire = [r.get('raw', '') for r in events
+                if r['kind'] in ('recovery_lease_owned', 'recovery_lease_pool',
+                                 'recovery_lease_wire')]
+        try:
+            expected_nonce = struct.unpack('<QQ', bytes.fromhex(manifest['run_id']))
+            evidence = lease.parse_critical_records(wire, expected_nonce=expected_nonce)
+        except (KeyError, TypeError, ValueError, lease.LeaseValidationError):
+            return verdict('INCONCLUSIVE', stage='recovery_lease_pool_missing')
+        if evidence.pool_status is None or evidence.pool_status.state != lease.POOL_ACTIVE:
+            return verdict('INCONCLUSIVE', stage='recovery_lease_pool_missing')
+        vmm = [r for r in events if r['kind'] == 'vmm_readiness']
+        if any(not r.get('ok') for r in vmm):
+            return verdict('INVALID', stage='vmm_readiness_malformed')
+        native = [r for r in vmm if r.get('phase') == 'native']
+        if not native:
+            return verdict('INCONCLUSIVE', stage='vmm_native_readiness_missing')
+        final = native[-1]
+        if (final.get('enable') != 1 or not final.get('base') or
+                not final.get('arena') or not final.get('pool0') or
+                not final.get('pool1')):
+            return verdict('STARTUP_FAILED_LATER', True, 'vmm_native_arena',
+                           'inspect the final native VMM arena and allocator fields')
+        arena_offset = final['base'] & (lease.VRAM_BAR_SIZE - 1)
+        arena_end = arena_offset + 0x04400000
+        descriptor = evidence.descriptor
+        if (arena_end > lease.VRAM_BAR_SIZE or
+                (arena_offset < descriptor.lease_end and
+                 descriptor.lease_offset < arena_end)):
+            return verdict('INVALID', stage='vmm_native_arena_overlap')
     if 'submission_trace' in required:
         trace_routes = [r for r in events if r['kind'] == 'submission_trace_route']
         if not trace_routes:
@@ -385,6 +478,31 @@ def _classify(manifest, events, probe, defer_absent_workload=False):
         route_sequence = trace_routes[0].get('seq', -1) if len(trace_routes) == 1 else -1
         if not any(r.get('seq', -1) > route_sequence for r in phase_summaries):
             return verdict('INCONCLUSIVE', stage='submission_map_phase_worker_missing')
+    if 'submission_backing_allocation' in required:
+        backing_observations = [
+            r for r in events if r['kind'] == 'submission_backing_allocation']
+        if any(r.get('malformed') or r.get('ok') is False
+               for r in backing_observations):
+            return verdict('INVALID',
+                           stage='submission_backing_allocation_observation_malformed')
+        trace_routes = [r for r in events if r['kind'] == 'submission_trace_route']
+        if not trace_routes:
+            return verdict('INCONCLUSIVE',
+                           stage='submission_backing_allocation_route_missing')
+        if (len(trace_routes) != 1 or not trace_routes[0].get('ok') or
+                trace_routes[0].get('count') != 6):
+            return verdict('INVALID',
+                           stage='submission_backing_allocation_route_guard')
+        backing_summaries = [
+            r for r in events
+            if r['kind'] == 'submission_backing_allocation_summary']
+        if any(not r.get('ok') for r in backing_summaries):
+            return verdict('INVALID',
+                           stage='submission_backing_allocation_worker_malformed')
+        route_sequence = trace_routes[0].get('seq', -1)
+        if not any(r.get('seq', -1) > route_sequence for r in backing_summaries):
+            return verdict('INCONCLUSIVE',
+                           stage='submission_backing_allocation_worker_missing')
     post_workload_kinds = {
         'sdma_submit', 'sdma_ib_repair', 'vm_program', 'vm_root_repair',
         'vm_state', 'vm_walk', 'vm_walk_entry', 'vm_context',

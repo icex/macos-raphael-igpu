@@ -1,4 +1,5 @@
 import importlib.util
+import hashlib
 import json
 from pathlib import Path
 import struct
@@ -13,6 +14,14 @@ RUN_ID = 'a' * 32
 def load_tool():
     path = ROOT / 'tools/vfio-recover.py'
     spec = importlib.util.spec_from_file_location('vfio_recover', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_lease_tool():
+    path = ROOT / 'tools/recovery_lease_v2.py'
+    spec = importlib.util.spec_from_file_location('recovery_lease_v2_test', path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -388,6 +397,290 @@ class VfioRecoveryTests(unittest.TestCase):
         with self.assertRaisesRegex(tool.RecoveryError, 'reservation'):
             tool.consume_host_kiq_reservation(fake, RUN_ID)
 
+    def test_v2_lease_authentication_derives_dynamic_kiq_image_without_writes(self):
+        tool = self.tool
+        wire = load_lease_tool()
+        nonce = struct.unpack('<QQ', bytes.fromhex(RUN_ID))
+        descriptor = wire.make_ownership_descriptor(0x0a000000, *nonce)
+        status = wire.make_pool_status(
+            descriptor, state=wire.POOL_ACTIVE,
+            pool0_before=0x0e000000, pool0_after=0x0dfeb000,
+            pool1_before=0x0c000000, pool1_after=0x0bfeb000, reason=0)
+        evidence = tool.parse_v2_lease_records([
+            wire.format_owned_record(descriptor), wire.format_pool_record(status),
+        ], RUN_ID)
+        fake = FakeTransport(tool)
+        fake.vram.update((descriptor.lease_offset + offset, value)
+                         for offset, value in enumerate(descriptor.pack()))
+        fake.vram.update((descriptor.lease_offset + wire.POOL_STATUS_OFFSET + offset, value)
+                         for offset, value in enumerate(status.pack()))
+
+        authenticated = tool.authenticate_v2_host_kiq_lease(fake, evidence, RUN_ID)
+        layout = authenticated.layout
+        self.assertEqual(tool.host_kiq_scratch_ranges(layout), (
+            (0x0a001000, 0x10000), (0x0a011000, 0x800),
+            (0x0a012000, 4), (0x0a012008, 8),
+            (0x0a013000, 0x1000), (0x0a014000, 4),
+        ))
+        ring, mqd, addresses = tool._host_kiq_image(
+            0xf400000000, 0x13579bdf, 0x400, layout)
+        self.assertEqual(addresses, {
+            'ring':0xf40a001000, 'mqd':0xf40a011000,
+            'rptr':0xf40a012000, 'wptr':0xf40a012008,
+            'eop':0xf40a013000, 'fence':0xf40a014000,
+        })
+        self.assertEqual(len(ring), 0x10000)
+        self.assertEqual(len(mqd), 0x800)
+        self.assertEqual(authenticated.proof['pool_readback'], 'committed')
+        self.assertFalse(any(isinstance(event, tuple) and event[0] == 'write-vram'
+                             for event in fake.events))
+
+    def test_v2_lease_accepts_commit_before_log_but_rejects_corrupt_readback(self):
+        tool = self.tool
+        wire = load_lease_tool()
+        nonce = struct.unpack('<QQ', bytes.fromhex(RUN_ID))
+        descriptor = wire.make_ownership_descriptor(0x09000000, *nonce)
+        status = wire.make_pool_status(
+            descriptor, state=wire.POOL_ACTIVE,
+            pool0_before=0x0e000000, pool0_after=0x0dfeb000,
+            pool1_before=0x0c000000, pool1_after=0x0bfeb000, reason=0)
+        owned_only = tool.parse_v2_lease_records(
+            [wire.format_owned_record(descriptor)], RUN_ID)
+        fake = FakeTransport(tool)
+        fake.vram.update((descriptor.lease_offset + offset, value)
+                         for offset, value in enumerate(descriptor.pack()))
+        fake.vram.update((descriptor.lease_offset + wire.POOL_STATUS_OFFSET + offset, value)
+                         for offset, value in enumerate(status.pack()))
+
+        authenticated = tool.authenticate_v2_host_kiq_lease(fake, owned_only, RUN_ID)
+        self.assertEqual(authenticated.proof['pool_readback'], 'committed')
+        self.assertEqual(authenticated.proof['pool_status']['state'], wire.POOL_ACTIVE)
+        self.assertFalse(any(isinstance(event, tuple) and event[0] == 'write-vram'
+                             for event in fake.events))
+
+        fake.vram[descriptor.lease_offset] ^= 1
+        with self.assertRaisesRegex(tool.RecoveryError, 'OWNED readback'):
+            tool.authenticate_v2_host_kiq_lease(fake, owned_only, RUN_ID)
+        self.assertFalse(any(isinstance(event, tuple) and event[0] == 'write-vram'
+                             for event in fake.events))
+
+    def test_v2_explicit_invalid_pool_status_refuses_host_kiq(self):
+        tool = self.tool
+        wire = load_lease_tool()
+        nonce = struct.unpack('<QQ', bytes.fromhex(RUN_ID))
+        descriptor = wire.make_ownership_descriptor(0x09000000, *nonce)
+        status = wire.make_pool_status(
+            descriptor, state=wire.POOL_INVALID,
+            pool0_before=0x0e000000, pool0_after=0x0e000000,
+            pool1_before=0x0c000000, pool1_after=0x0c000000, reason=2)
+        evidence = tool.parse_v2_lease_records([
+            wire.format_owned_record(descriptor), wire.format_pool_record(status),
+        ], RUN_ID)
+        fake = FakeTransport(tool)
+        fake.vram.update((descriptor.lease_offset + offset, value)
+                         for offset, value in enumerate(descriptor.pack()))
+        fake.vram.update((descriptor.lease_offset + wire.POOL_STATUS_OFFSET + offset, value)
+                         for offset, value in enumerate(status.pack()))
+
+        with self.assertRaisesRegex(tool.RecoveryError, 'INVALID'):
+            tool.authenticate_v2_host_kiq_lease(fake, evidence, RUN_ID)
+        self.assertFalse(any(isinstance(event, tuple) and event[0] == 'write-vram'
+                             for event in fake.events))
+
+    def test_v2_owned_only_early_crash_keeps_descriptor_immutable(self):
+        tool = self.tool
+        wire = load_lease_tool()
+        nonce = struct.unpack('<QQ', bytes.fromhex(RUN_ID))
+        descriptor = wire.make_ownership_descriptor(0x08000000, *nonce)
+        evidence = tool.parse_v2_lease_records(
+            [wire.format_owned_record(descriptor)], RUN_ID)
+        fake = FakeTransport(tool)
+        fake.vram.update((descriptor.lease_offset + offset, value)
+                         for offset, value in enumerate(descriptor.pack()))
+
+        authenticated = tool.authenticate_v2_host_kiq_lease(fake, evidence, RUN_ID)
+        before = bytes(fake.vram.get(descriptor.lease_offset + offset, 0)
+                       for offset in range(wire.OWNERSHIP_STRUCT.size))
+        proof = tool.prepare_v2_host_kiq_recovery(fake, authenticated, RUN_ID)
+        after = bytes(fake.vram.get(descriptor.lease_offset + offset, 0)
+                      for offset in range(wire.OWNERSHIP_STRUCT.size))
+        self.assertEqual(before, after)
+        self.assertEqual(proof, authenticated.proof)
+        self.assertEqual(proof['pool_readback'], 'absent')
+        self.assertFalse(any(isinstance(event, tuple) and event[0] == 'write-vram'
+                             for event in fake.events))
+
+        forged = tool.AuthenticatedV2Lease(
+            authenticated.layout._replace(ring_offset=0x1000),
+            authenticated.proof, authenticated.evidence)
+        with self.assertRaisesRegex(tool.RecoveryError, 'layout'):
+            tool.prepare_v2_host_kiq_recovery(fake, forged, RUN_ID)
+
+        forged_proof = dict(authenticated.proof, scratch_start=0x1000)
+        forged = tool.AuthenticatedV2Lease(
+            authenticated.layout, forged_proof, authenticated.evidence)
+        with self.assertRaisesRegex(tool.RecoveryError, 'proof'):
+            tool.prepare_v2_host_kiq_recovery(fake, forged, RUN_ID)
+
+    def test_v2_host_kiq_retirement_writes_only_dynamic_authenticated_scratch(self):
+        tool = self.tool
+        wire = load_lease_tool()
+        nonce = struct.unpack('<QQ', bytes.fromhex(RUN_ID))
+        descriptor = wire.make_ownership_descriptor(0x08000000, *nonce)
+        evidence = tool.parse_v2_lease_records(
+            [wire.format_owned_record(descriptor)], RUN_ID)
+
+        class DynamicHostKiqTransport(FakeTransport):
+            def __init__(self):
+                super().__init__(tool)
+                self.selector = 0
+                self.hqd_active = 0
+                self.dynamic_layout = None
+
+            def read32(self, offset):
+                if offset == tool.CP_HQD_ACTIVE_OFFSET:
+                    return self.hqd_active if self.selector == tool.HOST_KIQ_SELECTOR else 0
+                if (offset == tool.CP_HQD_PQ_RPTR_OFFSET and
+                        self.selector == tool.HOST_KIQ_SELECTOR and self.hqd_active and
+                        ('doorbell64', 0, tool.HOST_KIQ_RING_USED_DWORDS) in self.events):
+                    return tool.HOST_KIQ_RING_USED_DWORDS
+                return super().read32(offset)
+
+            def write32(self, offset, value):
+                if offset == tool.GRBM_GFX_CNTL_OFFSET:
+                    self.selector = value
+                if offset == tool.CP_HQD_ACTIVE_OFFSET and self.selector == tool.HOST_KIQ_SELECTOR:
+                    self.hqd_active = value & 1
+                if (offset == tool.CP_HQD_DEQUEUE_OFFSET and value == 1 and
+                        self.selector == tool.HOST_KIQ_SELECTOR):
+                    self.hqd_active = 0
+                super().write32(offset, value)
+
+            def ring_doorbell64(self, index, value):
+                self.events.append(('doorbell64', index, value))
+                sequence = self.read_vram32(
+                    self.dynamic_layout.ring_offset +
+                    tool.HOST_KIQ_FENCE_SEQUENCE_DWORD * 4)
+                self.write_vram(
+                    self.dynamic_layout.fence_offset, struct.pack('<I', sequence))
+                self.registers[tool.CP_HQD_PQ_RPTR_OFFSET] = value
+                self.registers[tool.CP_RB_ACTIVE_OFFSET] = 0
+
+        fake = DynamicHostKiqTransport()
+        fake.vram.update((descriptor.lease_offset + offset, value)
+                         for offset, value in enumerate(descriptor.pack()))
+        fake.registers[tool.GCMC_VM_FB_LOCATION_BASE_OFFSET] = 0xf400
+        fake.registers[tool.GCMC_VM_FB_LOCATION_TOP_OFFSET] = 0xf41f
+        fake.registers[tool.CP_RB_DOORBELL_CONTROL_OFFSET] = 0xc0000400
+        fake.registers[tool.CP_MEC_CNTL_OFFSET] = tool.CP_MEC_HALT_MASK
+        authenticated = tool.authenticate_v2_host_kiq_lease(fake, evidence, RUN_ID)
+        fake.dynamic_layout = authenticated.layout
+        descriptor_before = descriptor.pack()
+
+        result = tool.retire_legacy_gfx_with_host_kiq(
+            fake, RUN_ID, sleep=lambda _:None, polls=3,
+            authenticated_lease=authenticated)
+
+        dynamic_ranges = tool.host_kiq_scratch_ranges(authenticated.layout)
+        scratch_writes = [event for event in fake.events
+                          if isinstance(event, tuple) and event[0] == 'write-vram']
+        self.assertTrue(scratch_writes)
+        self.assertTrue(all(any(start == event[1] and size == event[2]
+                                for start, size in dynamic_ranges)
+                            for event in scratch_writes))
+        self.assertFalse(any(event[1] in {tool.HOST_KIQ_RING_OFFSET,
+                                         tool.HOST_KIQ_MQD_OFFSET,
+                                         tool.HOST_KIQ_FENCE_OFFSET}
+                             for event in scratch_writes))
+        self.assertEqual(
+            bytes(fake.vram.get(descriptor.lease_offset + offset, 0)
+                  for offset in range(len(descriptor_before))), descriptor_before)
+        self.assertEqual(result['addresses']['ring'], 0xf408001000)
+        self.assertEqual(result['reservation'], authenticated.proof)
+
+    def test_v2_perform_recovery_authenticates_before_clean_quiesce(self):
+        tool = self.tool
+        wire = load_lease_tool()
+        nonce = struct.unpack('<QQ', bytes.fromhex(RUN_ID))
+        descriptor = wire.make_ownership_descriptor(0x08000000, *nonce)
+        evidence = tool.parse_v2_lease_records(
+            [wire.format_owned_record(descriptor)], RUN_ID)
+        fake = FakeTransport(tool)
+        fake.vram.update((descriptor.lease_offset + offset, value)
+                         for offset, value in enumerate(descriptor.pack()))
+        states = iter([self.state(), self.state()])
+
+        result = tool.perform_recovery(
+            'boot-A', RUN_ID, lambda:next(states), lambda:fake,
+            lambda cursor=None:('cursor-2', [], []), sleep=lambda _:None, polls=2,
+            lease_evidence=evidence)
+
+        self.assertEqual(result['status'], 'recovered')
+        self.assertTrue(result['authorizes_launch'])
+        self.assertEqual(result['gc_quiesce']['reservation']['schema'], 2)
+        self.assertTrue(result['gc_quiesce']['reservation']['immutable'])
+        self.assertFalse(any(isinstance(event, tuple) and event[0] == 'write-vram'
+                             for event in fake.events))
+
+        corrupt = FakeTransport(tool)
+        corrupt.vram.update((descriptor.lease_offset + offset, value)
+                            for offset, value in enumerate(descriptor.pack()))
+        corrupt.vram[descriptor.lease_offset] ^= 1
+        with self.assertRaisesRegex(tool.RecoveryError, 'OWNED readback'):
+            tool.perform_recovery(
+                'boot-A', RUN_ID, lambda:self.state(), lambda:corrupt,
+                lambda cursor=None:('cursor-2', [], []), sleep=lambda _:None, polls=2,
+                lease_evidence=evidence)
+        self.assertFalse(any(isinstance(event, tuple) and event[0] in {
+            'write', 'write-vram', 'doorbell64'} for event in corrupt.events))
+
+    def test_v2_recover_requires_exact_helper_hashes_before_host_access(self):
+        expected = self.tool.current_recovery_helpers_sha256()
+        self.assertEqual(set(expected), {
+            'tools/vfio-recover.py',
+            'tools/recovery_lease_v2.py',
+            'tools/kiq-recovery-proof.py',
+        })
+        for relative, digest in expected.items():
+            self.assertEqual(
+                digest, hashlib.sha256((ROOT / relative).read_bytes()).hexdigest())
+
+        with tempfile.TemporaryDirectory() as temp, \
+             patch.object(self.tool, 'host_state') as host_state:
+            with self.assertRaisesRegex(
+                    self.tool.RecoveryError, 'recovery helper hashes'):
+                self.tool.recover(
+                    Path(temp), RUN_ID, lease_evidence=object(),
+                    recovery_helpers_sha256=dict(expected,
+                        **{'tools/recovery_lease_v2.py':'0' * 64}))
+            host_state.assert_not_called()
+
+    def test_v2_recover_receipt_preserves_validated_helper_hashes(self):
+        tool = self.tool
+        helpers = tool.current_recovery_helpers_sha256()
+        lease_evidence = object()
+        with tempfile.TemporaryDirectory() as temp:
+            vm = Path(temp)
+            (vm / 'run/used-gpu-boots').mkdir(parents=True)
+            (vm / 'run/used-gpu-boots/boot-A.json').write_text(json.dumps({
+                'boot_id':'boot-A', 'launches':[{'run_id':RUN_ID}],
+            }))
+            recovered = {
+                'schema':6, 'status':'recovered', 'authorizes_launch':True,
+                'boot_id':'boot-A', 'prior_run_id':RUN_ID,
+            }
+            with patch.object(tool, 'host_state', return_value=self.state()), \
+                 patch.object(tool, 'perform_recovery', return_value=recovered) as perform:
+                receipt = tool.recover(
+                    vm, RUN_ID, lease_evidence=lease_evidence,
+                    recovery_helpers_sha256=helpers)
+
+            self.assertEqual(receipt['recovery_helpers_sha256'], helpers)
+            self.assertEqual(perform.call_args.kwargs, {
+                'lease_evidence':lease_evidence,
+                'recovery_helpers_sha256':helpers,
+            })
+
     def test_stale_reservation_from_another_launch_is_rejected(self):
         tool = self.tool
         fake = FakeTransport(tool, run_id='b' * 32)
@@ -416,14 +709,19 @@ class VfioRecoveryTests(unittest.TestCase):
         self.assertEqual(evidence['run_id'], RUN_ID)
         self.assertEqual(evidence['state'], 'pending')
 
-    def test_forced_allocator_enable_runs_recovery_reservation_wrapper(self):
+    def test_allocator_uses_one_native_enable_and_no_six_byte_ready_route(self):
         source = (ROOT/'src/RaphaelGPU.cpp').read_text()
-        start = source.index('static uint32_t wrapHwMemSetVSReady')
-        end = source.index('static uint32_t wrapVmmSetVSReady', start)
+        self.assertNotIn('wrapHwMemSetVSReady', source)
+        self.assertNotIn('kOffHwMemSetVSReady', source)
+        self.assertNotIn('orgHwMemSetVSReady', source)
+        start = source.index('static bool wrapHwMemEnable(void *self) {')
+        end = source.index('\n}\n', start) + 2
         body = source[start:end]
-        self.assertIn('wrapHwMemEnable(self);', body)
-        self.assertNotIn('reinterpret_cast<uint32_t (*)(void *)>(orgHwMemEnable)(self)',
-                         body)
+        self.assertEqual(body.count(
+            'FunctionCast(wrapHwMemEnable, orgHwMemEnable)(self)'), 3)
+        self.assertNotIn('wrapHwMemEnable(self);', source)
+        self.assertIn('RaphaelRecoveryV2::establishPools(', body)
+        self.assertIn('publishRecoveryPoolStatus(status)', body)
 
     def test_prepare_launch_checks_host_before_and_after_vfio_challenge(self):
         tool = self.tool

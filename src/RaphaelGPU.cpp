@@ -37,8 +37,10 @@
 #include "GpuVmDiagnostics.hpp"
 #include "ObservationBuffer.hpp"
 #include "SubmissionTrace.hpp"
+#include "BackingTrace.hpp"
 #include "EngineLifecycle.hpp"
 #include "RecoveryReservation.hpp"
+#include "RecoveryLease.hpp"
 #if __has_include("BuildIdentity.hpp")
 #include "BuildIdentity.hpp"
 #else
@@ -196,9 +198,10 @@ static const RPatch patches[] {
 // userspace is up. The deferred copy is clean, ordered, and greppable with
 // `log show`; the live serial copy stays as a crash-time fallback.
 static rgpu::DiagnosticRecords<256, 512> diagnostics {};
-// Candidate submission tracing can add at most 174 records: 64 ordinary, 32
-// notable, 32 original summaries, 8 phase samples, 32 phase summaries and 6
-// route/readiness records. 512 retains that bounded set alongside the existing
+// Candidate submission tracing can add at most 211 records: 64 ordinary, 32
+// notable, 32 original summaries, 8 phase samples, 32 phase summaries, four
+// backing-allocation samples, 32 backing summaries and seven route/readiness
+// records. 512 retains that bounded set alongside the existing
 // VM/SDMA evidence budget.
 static rgpu::DiagnosticRecords<rgpu::kCriticalRecordCapacity, 512> criticalRecords {};
 static rgpu::SuccessRecordBudget waitStampRecordBudget {};
@@ -209,6 +212,7 @@ static rgpu::ObservationBuffer<RaphaelSdma::SubmitInfoObservation, 8> vmid2Submi
 static RaphaelSubmit::Store<64, 32> submissionTrace {};
 static RaphaelSubmit::MapPhaseStore<RaphaelSubmit::MapSamplesPerPhase>
     submissionMapPhases {};
+static RaphaelBacking::Store<4> submissionBackingAllocations {};
 static volatile uint32_t nextSubmissionTraceSequence = 0;
 static bool submissionTraceEnabled = false;
 static volatile bool submissionTraceRoutesReady = false;
@@ -299,7 +303,8 @@ static bool rlcProbeEnabled2 = false;
 // So: observe first (which of the two is happening), and only then decide.
 static uint32_t vmmProbeMode = 0;
 
-// rgpumem: 1 = report AMDHWMemory's pool state, 2 = also call enableAllocations().
+// rgpumem reports AMDHWMemory's pool state. The old mode-2 early enable graft was
+// removed: Apple's one native enable is now the only pool initialization epoch.
 //
 // The accelerator's PerformanceStatisticsAccum shows the driver allocating happily in GART
 // (gartUsedBytes ~4.8 MB, 19 surfaces, 105 textures, 4 2D contexts) while VRAM is flat zero:
@@ -325,6 +330,14 @@ static uint32_t vmmProbeMode = 0;
 // powerUp never built them, calling enableAllocations achieves nothing and the real fix is
 // upstream. So mode 1 only reports, and mode 2 acts. Do not skip mode 1.
 static uint32_t memProbeMode = 0;
+static bool recoveryLeaseConfigured = false;
+static uint64_t recoveryNonceLo = 0;
+static uint64_t recoveryNonceHi = 0;
+static RaphaelRecoveryV2::LeaseState recoveryLeaseState {};
+static void *recoveryLeaseElement = nullptr;
+static bool recoveryPoolStatusPublished = false;
+static void *recoveryLeaseMemoryOwner = nullptr;
+static void *recoveryLeaseHardwareOwner = nullptr;
 
 // rgpuptb=1 retains the legacy post-invalidation root-register experiment.
 // Mode 2 supplies the GC physical FB_OFFSET to HWLibs' native physical-base
@@ -341,7 +354,8 @@ static uint32_t ptbFixMode = 0;
 static uint32_t mqdFixMode = 0;
 static void *hwMemObject = nullptr;
 static volatile uint32_t *fbAperture();
-static uint32_t wrapHwMemEnable(void *self);
+static bool wrapHwMemEnable(void *self);
+static bool isRaphaelHardware(void *self);
 
 static void reportCpState(const char *when);
 static void primeIcacheOnly();
@@ -352,7 +366,6 @@ static void reportKiqPreparation(const char *stage);
 static mach_vm_address_t orgVmmInit = 0;
 static mach_vm_address_t orgVmmSetAlloc = 0;
 static mach_vm_address_t orgVmmSetVSReady = 0;
-static mach_vm_address_t orgHwMemSetVSReady = 0;
 static mach_vm_address_t orgVmmFillRegs = 0;
 static mach_vm_address_t orgVmmPrepare = 0;
 static mach_vm_address_t orgVmmProgInv = 0;
@@ -361,6 +374,7 @@ static mach_vm_address_t orgBatchPrepareMappings = 0;
 static mach_vm_address_t orgBatchPrepare = 0;
 static mach_vm_address_t orgBatchMemoryMapPrepare = 0;
 static mach_vm_address_t orgSubmitBuffer = 0;
+static mach_vm_address_t orgBackingAllocPhysical = 0;
 // Slide of AMDRadeonX6000, so a captured return address can be reported as a file offset
 // that llvm-nm can name. Static analysis could not identify the caller of
 // setMemoryAllocationsEnabled: it is a virtual call, and vtable slot 0x148 is used by
@@ -485,10 +499,11 @@ static constexpr size_t kOffPpPowerUp    = 0x101a0;    // AmdPowerPlayHelper::po
 // AMDRadeonX6000, the accelerator.
 static constexpr size_t kOffHwMemVram   = 0x527a4;    // AMDHWMemory::initVRAMInfo [x6]
 static constexpr size_t kOffHwMemEnable = 0x52a1e;    // AMDHWMemory::enableAllocations [x6]
+static constexpr size_t kOffHwMemReserve = 0x5343c;   // AMDHWMemory::reserve [x6] (called only)
 static constexpr size_t kOffVmmInit     = 0x56d3a;    // AMDHWVMM::init [x6]
 static constexpr size_t kOffVmmSetAlloc = 0x5791e;    // AMDHWVMM::setMemoryAllocationsEnabled [x6]
 static constexpr size_t kOffVmmSetVSReady = 0x578ce;  // AMDHWVMM::setVirtualSpaceReady [x6]
-static constexpr size_t kOffHwMemSetVSReady = 0x52c3a; // AMDHWMemory::setVirtualSpaceReady [x6]
+static constexpr size_t kOffHwAppendReserved = 0x72afe; // AMDHardware::appendToReservedVRAMOffset [x6] (called only)
 static constexpr size_t kOffVmmFillRegs = 0x62400;    // AMDGFX10VMM::fillVMRegisters [x6]
 static constexpr size_t kOffVmmPrepare  = 0x6249c;    // __ZN26AMDRadeonX6000_AMDGFX10VMM26prepareVMInvalidateRequestEP25AMD_VM_INVALIDATE_REQUESTPK22AMD_VM_INVALIDATE_INFOb [x6]
 static constexpr size_t kOffVmmProgInv  = 0x6278a;    // AMDGFX10VMM::programAndInvalidateVM [x6]
@@ -517,6 +532,7 @@ static constexpr size_t kOffBatchPrepareMappings = 0x18256; // __ZN31AMDRadeonX6
 static constexpr size_t kOffBatchPrepare = 0x184d8; // __ZN31AMDRadeonX6000_AMDAccelResource12BatchPrepareEP37AMDRadeonX6000_AMDGraphicsAcceleratorPKPS_j [x6]
 static constexpr size_t kOffBatchMemoryMapPrepare = 0x6550; // __ZN37AMDRadeonX6000_AMDGraphicsAccelerator21batchMemoryMapPrepareEP16IOAccelMemoryMap [x6]
 static constexpr size_t kOffSubmitBuffer = 0xb83e; // __ZN30AMDRadeonX6000_AMDAccelChannel12submitBufferEP24IOAccelCommandDescriptor [x6]
+static constexpr size_t kOffBackingAllocPhysical = 0x3aa76; // __ZN32AMDRadeonX6000_AMDAccelVidMemory13allocPhysicalEv [x6]
 // GFX_CTRL command encodings, from upstream psp_gfx_if.h.
 static constexpr uint32_t kC2PMsg64        = 0x80;       // MP0 C2PMSG_64, IP-relative
 static constexpr uint32_t kHwIpMp0         = 0x4b;
@@ -2365,7 +2381,7 @@ static constexpr uint32_t kGcFbBase   = 0x295c;   // GC 0x1260 + gc_10_3 0x16fc
 static constexpr uint32_t kGcFbTop    = 0x295d;   // GC 0x1260 + gc_10_3 0x16fd
 static constexpr uint32_t kGcFbOffset = 0x2947;   // GC 0x1260 + gc_10_3 0x16e7
 
-// Give the accelerator's two memory pools a range that is not inverted.
+// Keep the first functional lease experiment inside the CPU-visible BAR.
 //
 // With TTL up and the aperture corrected, the first command buffer still dies on
 //     AMD ERROR! Failed to allocate size:65536. There is 0 free memory remaining
@@ -2383,17 +2399,15 @@ static constexpr uint32_t kGcFbOffset = 0x2947;   // GC 0x1260 + gc_10_3 0x16e7
 //     unequal -> IOAccelMemoryAllocator::init_pool(base + [0x40],
 //                                                  base + [0x48], 0)    for both pools
 // (names recovered from the external relocations at 0x52a58/0x52a6b/0x52a7e/0x52a9a).
-// The unequal form wants [0x40] <= [0x48]; here it is 512 MB vs 256 MB, so the pool is
-// handed 0xf420000000..0xf410000000 -- backwards, hence a pool with nothing in it.
+// The three-argument overload is (totalEnd, reservedStart, reservedLength), so the
+// native 512/256/0 call is valid. This first lease experiment still equalises to
+// 256 MiB because the secondary native reserved-VRAM cursor has not been measured;
+// restoring the full logical carveout is a separate change.
 //
-// Every Navi 2x Mac has a resizable BAR as large as its VRAM, so on Apple hardware
-// these are always equal and the two-argument path is the one that ships. This iGPU's
-// BAR0 is 256 MB against a 512 MB carveout ("Memory at fc20000000 [size=256M]", no
-// rebar capability), which is why the rarely-taken branch is reached at all.
-//
-// So equalise on the SMALLER of the two. That is the aperture, so every byte the pool
-// hands out is inside the BAR the CPU can actually reach; the cost is half the
-// carveout. Raising it to the full 512 MB is a separate experiment.
+// For this first lease experiment, equalise on the smaller measured value. That is
+// the CPU-visible aperture on this host, so every address used by the recovery
+// protocol stays inside the mapped BAR. Restoring the 512/256 native size pair is a
+// separate experiment after the secondary reserved-VRAM cursor is measured.
 static uint32_t wrapHwMemVram(void *self) {
     auto r = FunctionCast(wrapHwMemVram, orgHwMemVram)(self);
     if (self == nullptr) return r;
@@ -2405,8 +2419,8 @@ static uint32_t wrapHwMemVram(void *self) {
          r, q(0x50), q(0x58), q(0x60), q(0x40), q(0x48), q(0x68), q(0x70));
     if ((mask & XH) != 0 && q(0x40) != q(0x48) && q(0x40) != 0 && q(0x48) != 0) {
         uint64_t use = q(0x40) < q(0x48) ? q(0x40) : q(0x48);
-        RLOG("XH: pool sizes differ (%#llx vs %#llx) -- enableAllocations would build an "
-             "inverted range; using %#llx (%llu MB) for both",
+        RLOG("XH: pool sizes differ (%#llx total vs %#llx visible) -- retaining the "
+             "BAR-visible compatibility size %#llx (%llu MB) for both",
              q(0x40), q(0x48), use, use >> 20);
         q(0x40) = use;
         q(0x48) = use;
@@ -2465,6 +2479,10 @@ static uint32_t wrapPm4Mqd(void *self, uint32_t ring) {
 }
 
 static uint32_t wrapKiqStart(void *self, uint64_t a, uint64_t b, void *spec, uint32_t *out) {
+    if (recoveryLeaseConfigured && !recoveryLeaseState.kiqAllowed()) {
+        RLOG("XH: startKIQ refused before native call: no valid OWNED lease");
+        return 0xe00002bc;
+    }
     if (mqdFixMode == 2 && !prepareKiq(a, b, spec)) {
         RLOG("XQ2: startKIQ refused: preflight or genuine dequeue failed");
         return 0xe00002bc; // same failure used by Apple's startKIQ queue-spec check
@@ -3998,77 +4016,173 @@ static void wrapVmmPrepare(void *self, void *prepared, const void *info, bool al
     }
 }
 
-static uint32_t wrapHwMemSetVSReady(void *self, uint32_t ready) {
-    auto r = FunctionCast(wrapHwMemSetVSReady, orgHwMemSetVSReady)(self, ready);
-    if (self == nullptr) return r;
-    hwMemObject = self;
-    auto f = reinterpret_cast<uint8_t *>(self);
-    auto q = [f](size_t o) -> uint64_t & { return *reinterpret_cast<uint64_t *>(f + o); };
-    RLOG("XM: AMDHWMemory::setVirtualSpaceReady(%u) | size0=%#llx size1=%#llx "
-         "poolA(0x68)=%#llx poolB(0x70)=%#llx  [caller x6+%#llx]",
-         ready, q(0x40), q(0x48), q(0x68), q(0x70),
-         reinterpret_cast<uint64_t>(__builtin_return_address(0)) - x6Base);
-    static bool tried = false;
-    if (ready != 0 && memProbeMode >= 2 && !tried && orgHwMemEnable != 0) {
-        tried = true;
-        if (q(0x68) == 0 || q(0x70) == 0) {
-            RLOG("XM: NOT calling enableAllocations: pool pointers are null (A=%#llx B=%#llx), "
-                 "so it would bail silently -- the pools are built upstream of the ttlPowerUp "
-                 "failure and that is the thing to fix",
-                 q(0x68), q(0x70));
-        } else {
-            RLOG("XM: calling AMDHWMemory::enableAllocations() -- nothing else does, and the "
-                 "VRAM heap is empty without it");
-            wrapHwMemEnable(self);
-            RLOG("XM: after enableAllocations: size0=%#llx size1=%#llx poolA=%#llx poolB=%#llx",
-                 q(0x40), q(0x48), q(0x68), q(0x70));
-        }
-    }
-    return r;
+static bool recoveryLeaseDisjointFromLiveGart(
+        const RaphaelRecoveryV2::OwnershipDescriptor &descriptor) {
+    if (asicInfo == nullptr) return false;
+    RaphaelGart::Aperture aperture {};
+    RaphaelGart::Range range {};
+    RaphaelGart::Table table {};
+    const uint64_t root =
+        (static_cast<uint64_t>(fbRead(asicInfo, kGcVmCtx0PtbHi)) << 32) |
+        fbRead(asicInfo, kGcVmCtx0PtbLo);
+    const uint32_t control = fbRead(asicInfo, kGcVmCtx0Cntl);
+    const bool decoded = gartApertureInfo(aperture) && gartRange(range) &&
+        RaphaelGart::physicalTable(aperture, range, control, root, table);
+    const bool disjoint = decoded && RaphaelRecoveryV2::disjointFromRange(
+        descriptor, table.offset, table.bytes, aperture.visibleBytes);
+    RLOG("XH: v2 live GART validation decoded=%u table=%#llx-%#llx "
+         "lease=%#llx-%#llx disjoint=%u", decoded, table.offset,
+         table.offset + table.bytes, descriptor.leaseOffset,
+         descriptor.leaseEnd, disjoint);
+    return disjoint;
 }
 
-static uint32_t wrapVmmSetVSReady(void *self, uint32_t ready) {
-    auto r = FunctionCast(wrapVmmSetVSReady, orgVmmSetVSReady)(self, ready);
-    if (self == nullptr) return r;
+static void wrapVmmSetVSReady(void *self, uint32_t ready) {
+    auto native = [&] { FunctionCast(wrapVmmSetVSReady, orgVmmSetVSReady)(self, ready); };
+    if (self == nullptr) { native(); return; }
     vmmObject = self;
     auto f = reinterpret_cast<uint8_t *>(self);
     auto q = [f](size_t o) { return *reinterpret_cast<void **>(f + o); };
-    RLOG("XV: setVirtualSpaceReady(%u) -> %u | m_0x20=%p m_0x28=%p  [caller x6+%#llx]",
-         ready, r, q(0x20), q(0x28),
+    bool owned = true;
+    if (ready != 0 && recoveryLeaseConfigured) {
+        const auto memory = reinterpret_cast<uint8_t *>(hwMemObject);
+        const uint64_t visible = memory != nullptr
+            ? RaphaelRecoveryV2::compatibilityPoolSize(
+                  RaphaelRecoveryV2::nativePoolSizes(
+                      *reinterpret_cast<uint64_t *>(memory + 0x40),
+                      *reinterpret_cast<uint64_t *>(memory + 0x48)))
+            : 0;
+        void *hardware = q(0x10);
+        using AppendReserved = uint64_t (*)(void *, uint32_t, uint64_t, uint32_t);
+        AppendReserved appendReserved = nullptr;
+        const bool acquisitionExpected = recoveryLeaseState.canAcquire();
+        owned = RaphaelRecoveryV2::establishBeforeVmm(
+            recoveryLeaseState, recoveryNonceLo, recoveryNonceHi, visible,
+            [&]() {
+                if (hardware == nullptr || memory == nullptr ||
+                    *reinterpret_cast<void **>(memory + 0x10) != hardware ||
+                    !isRaphaelHardware(hardware))
+                    return false;
+                auto vt = *reinterpret_cast<uint64_t **>(hardware);
+                if (vt == nullptr || vt[0x180 / 8] != x6Base + kOffHwAppendReserved)
+                    return false;
+                appendReserved = reinterpret_cast<AppendReserved>(vt[0x180 / 8]);
+                return true;
+            },
+            [&]() -> uint64_t {
+                return appendReserved(hardware, 0, RaphaelRecoveryV2::LeaseSize, 0x1000);
+            },
+            [&](const RaphaelRecoveryV2::OwnershipDescriptor &descriptor) {
+                return recoveryLeaseDisjointFromLiveGart(descriptor);
+            },
+            [&](const RaphaelRecoveryV2::OwnershipDescriptor &descriptor) {
+                auto fb = fbAperture();
+                if (fb == nullptr) return false;
+                auto write = [fb](uint64_t base, uint32_t word, uint32_t value) {
+                    fb[base / 4 + word] = value;
+                };
+                auto read = [fb](uint64_t base, uint32_t word) {
+                    return fb[base / 4 + word];
+                };
+                auto fence = [] { OSSynchronizeIO(); };
+                const uint64_t statusBase = descriptor.leaseOffset +
+                                            RaphaelRecoveryV2::PoolStatusOffset;
+                if (!RaphaelRecoveryV2::clearRecord<RaphaelRecoveryV2::PoolStatus>(
+                        [&](uint32_t i, uint32_t v) { write(statusBase, i, v); },
+                        [&](uint32_t i) { return read(statusBase, i); }, fence))
+                    return false;
+                if (!RaphaelRecoveryV2::publishRecord(
+                        descriptor,
+                        [&](uint32_t i, uint32_t v) {
+                            write(descriptor.leaseOffset +
+                                  RaphaelRecoveryV2::OwnershipOffset, i, v);
+                        },
+                        [&](uint32_t i) {
+                            return read(descriptor.leaseOffset +
+                                        RaphaelRecoveryV2::OwnershipOffset, i);
+                        }, fence))
+                    return false;
+                const auto nonce = RaphaelRecoveryV2::logNonce(descriptor);
+                CRLOG("XH2 OWNED nonce=%016llx_%016llx gen=1 lease=%#llx-%#llx "
+                      "scratch=%#llx-%#llx checksum=%#llx", nonce.first,
+                      nonce.second, descriptor.leaseOffset, descriptor.leaseEnd,
+                      descriptor.scratchOffset, descriptor.scratchEnd,
+                      descriptor.checksum);
+                return true;
+            }, native);
+        if (!owned && !acquisitionExpected) {
+            CRLOG("XH2 ABORT reason=duplicate-ready nonce=%016llx_%016llx",
+                  recoveryNonceLo, recoveryNonceHi);
+        }
+        if (owned) {
+            const uint64_t memoryBase = *reinterpret_cast<uint64_t *>(memory + 0x50);
+            const uint64_t vmmBase = *reinterpret_cast<uint64_t *>(f + 0x50);
+            const bool baseOk = vmmBase >= memoryBase;
+            const uint64_t vmmOffset = baseOk ? vmmBase - memoryBase : UINT64_MAX;
+            const bool vmmOwned = baseOk && RaphaelRecoveryV2::disjointFromRange(
+                recoveryLeaseState.ownership(), vmmOffset, 0x04400000, visible);
+            if (!vmmOwned) {
+                recoveryLeaseState.invalidate();
+                owned = false;
+                CRLOG("XH2 ABORT reason=vmm-range nonce=%016llx_%016llx",
+                      recoveryNonceLo, recoveryNonceHi);
+                RLOG("XH: v2 native VMM reservation rejected base=%#llx offset=%#llx "
+                     "bytes=%#x visible=%#llx", vmmBase, vmmOffset, 0x04400000, visible);
+            }
+        }
+        if (owned) {
+            __atomic_store_n(&recoveryLeaseHardwareOwner, hardware, __ATOMIC_RELEASE);
+            __atomic_store_n(&recoveryLeaseMemoryOwner, memory, __ATOMIC_RELEASE);
+        }
+    } else {
+        native();
+    }
+    const uint64_t vmmBase = *reinterpret_cast<uint64_t *>(f + 0x50);
+    RLOG("XV: setVirtualSpaceReady(%u) | m_0x20=%p m_0x28=%p vmmBase(+50)=%#llx "
+         "lease-owned=%u [caller x6+%#llx]",
+         ready, q(0x20), q(0x28), vmmBase, owned,
          reinterpret_cast<uint64_t>(__builtin_return_address(0)) - x6Base);
-    if (ready != 0 && vmmProbeMode >= 3 && q(0x28) == nullptr && orgVmmSetAlloc != 0) {
+    if (owned && ready != 0 && vmmProbeMode >= 3 && q(0x28) == nullptr &&
+        orgVmmSetAlloc != 0) {
         RLOG("XV: driving setMemoryAllocationsEnabled(true) from here, because nothing else "
              "does and m_0x28 is the DMA paging channel endVMPTUpdate dereferences");
-        reinterpret_cast<uint32_t (*)(void *, uint32_t)>(orgVmmSetAlloc)(self, 1);
+        reinterpret_cast<void (*)(void *, uint32_t)>(orgVmmSetAlloc)(self, 1);
+        CRLOG("XV2 VMM phase=early enable=1 base=%#llx arena=%p pool0=%p pool1=%p",
+              *reinterpret_cast<uint64_t *>(f + 0x50), q(0x58), q(0x78), q(0x80));
         RLOG("XV: after forced enable: m_0x20=%p m_0x28=%p m_0x30=%p -> %s",
              q(0x20), q(0x28), *reinterpret_cast<void **>(f + 0x30),
              q(0x28) != nullptr ? "DMA PAGING CHANNEL PRESENT"
                                 : "still NULL, endVMPTUpdate will panic");
     }
-    return r;
 }
 
-static uint32_t wrapVmmSetAlloc(void *self, uint32_t enable) {
-    if (self == nullptr)
-        return FunctionCast(wrapVmmSetAlloc, orgVmmSetAlloc)(self, enable);
+static void wrapVmmSetAlloc(void *self, uint32_t enable) {
+    if (self == nullptr) {
+        FunctionCast(wrapVmmSetAlloc, orgVmmSetAlloc)(self, enable);
+        return;
+    }
     auto f = reinterpret_cast<uint8_t *>(self);
     auto slot = [f](size_t o) -> void *& { return *reinterpret_cast<void **>(f + o); };
     vmmObject = self;
-    RLOG("XV: setMemoryAllocationsEnabled(%u) entry: m_0x20=%p m_0x28=%p m_0x30=%p "
-         "nest(0x3c)=%u  [caller x6+%#llx]", enable, slot(0x20), slot(0x28), slot(0x30),
-         *reinterpret_cast<uint32_t *>(f + 0x3c),
-         reinterpret_cast<uint64_t>(__builtin_return_address(0)) - x6Base);
+    CRLOG("XV: setMemoryAllocationsEnabled(%u) entry: m_0x20=%p m_0x28=%p m_0x30=%p "
+          "nest(0x3c)=%u  [caller x6+%#llx]", enable, slot(0x20), slot(0x28),
+          slot(0x30), *reinterpret_cast<uint32_t *>(f + 0x3c),
+          reinterpret_cast<uint64_t>(__builtin_return_address(0)) - x6Base);
     if (enable != 0 && vmmProbeMode >= 2 && slot(0x20) != nullptr && slot(0x28) == nullptr) {
         RLOG("XV: clearing m_0x20 so the guard at 0x5793d falls through and the channel is "
              "built; setMemoryAllocationsEnabled reassigns m_0x20 itself at 0x5795c");
         slot(0x20) = nullptr;
     }
-    auto r = FunctionCast(wrapVmmSetAlloc, orgVmmSetAlloc)(self, enable);
+    FunctionCast(wrapVmmSetAlloc, orgVmmSetAlloc)(self, enable);
+    if (enable != 0) {
+        CRLOG("XV2 VMM phase=native enable=%u base=%#llx arena=%p pool0=%p pool1=%p",
+              enable, *reinterpret_cast<uint64_t *>(f + 0x50), slot(0x58),
+              slot(0x78), slot(0x80));
+    }
     RLOG("XV: setMemoryAllocationsEnabled(%u) exit:  m_0x20=%p m_0x28=%p m_0x30=%p -> %s",
          enable, slot(0x20), slot(0x28), slot(0x30),
          slot(0x28) != nullptr ? "DMA PAGING CHANNEL PRESENT"
                                : "still NULL, endVMPTUpdate will panic");
-    return r;
 }
 
 static void probeRlc() {
@@ -4648,6 +4762,19 @@ static bool wrapBatchMemoryMapPrepare(void *accelerator, void *memoryMap) {
     return result;
 }
 
+static bool wrapBackingAllocPhysical(void *backing) {
+    if (!submissionTraceCaptureActive())
+        return FunctionCast(wrapBackingAllocPhysical, orgBackingAllocPhysical)(backing);
+    return RaphaelBacking::observe(
+        true, backing, reinterpret_cast<uintptr_t>(current_thread()),
+        __sync_add_and_fetch(&nextSubmissionTraceSequence, 1u),
+        submissionBackingAllocations,
+        [](void *object) {
+            return FunctionCast(wrapBackingAllocPhysical, orgBackingAllocPhysical)(object);
+        },
+        [](const void *object) { return RaphaelBacking::captureSnapshot(object); });
+}
+
 static void wrapSubmitBuffer(void *channel, void *descriptor) {
     captureSubmissionTrace(RaphaelSubmit::Kind::SubmitBuffer,
                            RaphaelSubmit::Phase::Entry, channel, descriptor,
@@ -4671,6 +4798,11 @@ static void publishPendingSubmissionTrace() {
     static unsigned phaseQuietPolls = 0;
     static unsigned phaseSummaryRecords = 0;
     static bool phaseDirty = false;
+    static size_t backingCursor = 0;
+    static uint64_t lastBackingCompleted = 0;
+    static unsigned backingDirtyPolls = 0;
+    static unsigned backingSummaryRecords = 0;
+    static bool backingDirty = false;
     bool publishedNotable = false;
     RaphaelSubmit::Record record {};
     while (recordCursor < submissionTrace.records().size() &&
@@ -4783,6 +4915,50 @@ static void publishPendingSubmissionTrace() {
         phaseQuietPolls = 0;
     }
     lastPhaseTotal = phaseTotal;
+
+    RaphaelBacking::Observation backingObservation {};
+    while (backingCursor < submissionBackingAllocations.failures().size() &&
+           submissionBackingAllocations.failures().read(backingCursor,
+                                                         backingObservation)) {
+        ++backingCursor;
+        const auto &before = backingObservation.before;
+        const auto &after = backingObservation.after;
+        CRLOG("SUB: backing seq=%u object=%#llx thread=%#llx result=%u "
+              "pre=%u/%#llx/%#llx/%#llx/%#llx/%#x "
+              "post=%u/%#llx/%#llx/%#llx/%#llx/%#x state=live",
+              backingObservation.sequence,
+              static_cast<uint64_t>(backingObservation.backing),
+              static_cast<uint64_t>(backingObservation.threadToken),
+              backingObservation.result,
+              before.available, before.length, static_cast<uint64_t>(before.owner),
+              before.element, before.raw120, before.flags,
+              after.available, after.length, static_cast<uint64_t>(after.owner),
+              after.element, after.raw120, after.flags);
+    }
+    // Load each result counter once. The sum describes this live snapshot; sample
+    // publication and drops may legitimately lag while another callback is active.
+    const uint64_t backingTrue = submissionBackingAllocations.successful();
+    const uint64_t backingFalse = submissionBackingAllocations.failed();
+    const uint64_t backingCompleted = backingTrue + backingFalse;
+    if (backingCompleted != lastBackingCompleted) {
+        backingDirty = true;
+    }
+    // Six-second cadence keeps the initial record plus continuous dirty updates
+    // within 31 records over the bounded 180-second observation lifetime.
+    if (backingDirty && backingDirtyPolls < 600) ++backingDirtyPolls;
+    const bool initialBacking = backingSummaryRecords == 0 &&
+        __atomic_load_n(&submissionTraceRoutesReady, __ATOMIC_ACQUIRE);
+    const bool periodicBacking = backingDirty && backingDirtyPolls >= 600;
+    if (backingSummaryRecords < 32 &&
+        (initialBacking || periodicBacking)) {
+        CRLOG("SUB: backing-summary completed=%llu true=%llu false=%llu "
+              "dropped=%llu state=live", backingCompleted, backingTrue,
+              backingFalse, submissionBackingAllocations.failures().dropped());
+        ++backingSummaryRecords;
+        backingDirty = false;
+        backingDirtyPolls = 0;
+    }
+    lastBackingCompleted = backingCompleted;
 }
 
 static void publishPendingVmObservations() {
@@ -5016,54 +5192,126 @@ static uint32_t wrapAccPowerUpHW(void *self) {
     return r;
 }
 
-static uint32_t wrapHwMemEnable(void *self) {
-    if (self != nullptr) {
-        auto f = reinterpret_cast<uint8_t *>(self);
-        auto q = [f](size_t o) -> uint64_t & {
-            return *reinterpret_cast<uint64_t *>(f + o);
-        };
-        // The coordinator writes a launch-bound PENDING challenge before QEMU.
-        // Activate it immediately before Apple's only two BAR0 allocators are
-        // constructed. Capping both pool sizes reserves the final 16 MiB for
-        // the descriptor, temporary host KIQ, and the independently validated
-        // GART table. A missing/stale challenge leaves the normal sizes alone.
-        if ((mask & XH) != 0) {
-            auto fb = fbAperture();
-            if (fb != nullptr) {
-                RaphaelRecovery::Descriptor descriptor {};
-                auto words = reinterpret_cast<uint32_t *>(&descriptor);
-                constexpr size_t count = sizeof(descriptor) / sizeof(uint32_t);
-                for (size_t i = 0; i < count; ++i)
-                    words[i] = fb[RaphaelRecovery::ReservationOffset / 4 + i];
-                uint64_t pool0 = q(0x40), pool1 = q(0x48);
-                if (RaphaelRecovery::activate(descriptor, pool0, pool1)) {
-                    q(0x40) = pool0;
-                    q(0x48) = pool1;
-                    for (size_t i = 0; i < count; ++i)
-                        fb[RaphaelRecovery::ReservationOffset / 4 + i] = words[i];
-                    bool readback = true;
-                    for (size_t i = 0; i < count; ++i)
-                        readback &= fb[RaphaelRecovery::ReservationOffset / 4 + i] == words[i];
-                    RLOG("XH: recovery reservation ACTIVE nonce=%#llx_%016llx heap=%#llx "
-                         "scratch=%#llx readback=%u", descriptor.nonceHi,
-                         descriptor.nonceLo, pool0, descriptor.scratchOffset, readback);
-                } else {
-                    RLOG("XH: no valid pending recovery reservation; allocator sizes remain "
-                         "%#llx/%#llx", q(0x40), q(0x48));
-                }
-            } else {
-                RLOG("XH: recovery reservation unavailable: BAR0 mapping not established; "
-                     "allocator sizes remain %#llx/%#llx", q(0x40), q(0x48));
-            }
+static bool publishRecoveryPoolStatus(const RaphaelRecoveryV2::PoolStatus &status) {
+    if (recoveryPoolStatusPublished) return false;
+    if (!RaphaelRecoveryV2::validOwnership(
+            recoveryLeaseState.ownership(), recoveryNonceLo, recoveryNonceHi,
+            hwMemObject != nullptr
+                ? RaphaelRecoveryV2::compatibilityPoolSize(
+                      RaphaelRecoveryV2::nativePoolSizes(
+                          *reinterpret_cast<uint64_t *>(
+                              reinterpret_cast<uint8_t *>(hwMemObject) + 0x40),
+                          *reinterpret_cast<uint64_t *>(
+                              reinterpret_cast<uint8_t *>(hwMemObject) + 0x48)))
+                : 0) ||
+        !RaphaelRecoveryV2::validPoolStatus(status, recoveryLeaseState.ownership()))
+        return false;
+    auto fb = fbAperture();
+    if (fb == nullptr) return false;
+    const uint64_t base = status.leaseOffset + RaphaelRecoveryV2::PoolStatusOffset;
+    auto fence = [] { OSSynchronizeIO(); };
+    bool written = RaphaelRecoveryV2::publishRecord(
+        status,
+        [=](uint32_t i, uint32_t value) { fb[base / 4 + i] = value; },
+        [=](uint32_t i) { return fb[base / 4 + i]; }, fence);
+    if (!written) return false;
+    recoveryPoolStatusPublished = true;
+    const auto nonce = RaphaelRecoveryV2::logNonce(status);
+    CRLOG("XH2 POOL state=%s nonce=%016llx_%016llx gen=1 lease=%#llx-%#llx "
+          "pool0=%#llx->%#llx pool1=%#llx->%#llx reason=%llu checksum=%#llx",
+          status.state == RaphaelRecoveryV2::PoolActive ? "ACTIVE" : "INVALID",
+          nonce.first, nonce.second, status.leaseOffset, status.leaseEnd,
+          status.pool0Before, status.pool0After, status.pool1Before, status.pool1After,
+          status.reason, status.checksum);
+    return true;
+}
+
+static bool wrapHwMemEnable(void *self) {
+    if (self == nullptr)
+        return FunctionCast(wrapHwMemEnable, orgHwMemEnable)(self);
+    auto f = reinterpret_cast<uint8_t *>(self);
+    auto q = [f](size_t o) -> uint64_t & {
+        return *reinterpret_cast<uint64_t *>(f + o);
+    };
+    if (recoveryLeaseConfigured) {
+        void *expectedMemory = __atomic_load_n(
+            &recoveryLeaseMemoryOwner, __ATOMIC_ACQUIRE);
+        void *expectedHardware = __atomic_load_n(
+            &recoveryLeaseHardwareOwner, __ATOMIC_ACQUIRE);
+        void *actualHardware = *reinterpret_cast<void **>(f + 0x10);
+        auto vt = *reinterpret_cast<uint64_t **>(self);
+        if (self != expectedMemory || actualHardware != expectedHardware ||
+            expectedHardware == nullptr || vt == nullptr ||
+            vt[0x198 / 8] != x6Base + kOffHwMemReserve) {
+            recoveryLeaseState.invalidate();
+            CRLOG("XH2 ABORT reason=pool-owner nonce=%016llx_%016llx",
+                  recoveryNonceLo, recoveryNonceHi);
+            RLOG("XH: v2 pool owner rejected memory=%p/%p hardware=%p/%p reserve=%#llx",
+                 self, expectedMemory, actualHardware, expectedHardware,
+                 vt != nullptr ? vt[0x198 / 8] : 0);
+            return false;
         }
-        RLOG("XH: enableAllocations entry: pool0=%p pool1=%p size0=%#llx size1=%#llx "
-             "base=%#llx",
-             reinterpret_cast<void *>(q(0x68)), reinterpret_cast<void *>(q(0x70)),
-             q(0x40), q(0x48), q(0x50));
     }
-    auto r = FunctionCast(wrapHwMemEnable, orgHwMemEnable)(self);
-    RLOG("XH: enableAllocations -> %u", r);
-    return r;
+    hwMemObject = self;
+    RLOG("XH: enableAllocations entry: pool0=%p pool1=%p size0=%#llx size1=%#llx "
+         "base=%#llx", reinterpret_cast<void *>(q(0x68)),
+         reinterpret_cast<void *>(q(0x70)), q(0x40), q(0x48), q(0x50));
+    if (!recoveryLeaseConfigured) {
+        auto r = FunctionCast(wrapHwMemEnable, orgHwMemEnable)(self);
+        RLOG("XH: enableAllocations -> %u (v2 lease disabled)", r);
+        return r;
+    }
+    recoveryLeaseElement = nullptr;
+    auto result = RaphaelRecoveryV2::establishPools(
+        recoveryLeaseState, q(0x50),
+        [&] { return FunctionCast(wrapHwMemEnable, orgHwMemEnable)(self); },
+        [&]() -> RaphaelRecoveryV2::PoolFreeSnapshot {
+            auto pool0 = reinterpret_cast<uint8_t *>(q(0x68));
+            auto pool1 = reinterpret_cast<uint8_t *>(q(0x70));
+            if (pool0 == nullptr || pool1 == nullptr) return {false, 0, 0};
+            return {true, *reinterpret_cast<uint64_t *>(pool0 + 0x50),
+                          *reinterpret_cast<uint64_t *>(pool1 + 0x50)};
+        },
+        [&](uint64_t address, uint64_t length) {
+            RaphaelRecoveryV2::NativeReserveEvidence evidence {};
+            auto vt = *reinterpret_cast<uint64_t **>(self);
+            if (!__atomic_load_n(&raphaelTargetConfirmed, __ATOMIC_ACQUIRE) ||
+                vt == nullptr || vt[0x198 / 8] != x6Base + kOffHwMemReserve)
+                return evidence;
+            auto reserve = reinterpret_cast<bool (*)(void *, void **, uint64_t,
+                                                      uint64_t, bool, uint32_t)>(
+                vt[0x198 / 8]);
+            evidence.returned = reserve(self, &recoveryLeaseElement, address,
+                                        length, true, 0x22);
+            evidence.element = recoveryLeaseElement;
+            if (recoveryLeaseElement != nullptr) {
+                auto element = reinterpret_cast<uint8_t *>(recoveryLeaseElement);
+                evidence.pool0Start = *reinterpret_cast<uint64_t *>(element + 0x20);
+                evidence.pool1Start = *reinterpret_cast<uint64_t *>(element + 0x50);
+            }
+            return evidence;
+        },
+        [&](const RaphaelRecoveryV2::PoolStatus &status) {
+            return publishRecoveryPoolStatus(status);
+        });
+    if (!result.active) {
+        if (result.reason == RaphaelRecoveryV2::ReasonDuplicateEpoch) {
+            CRLOG("XH2 ABORT reason=duplicate-pool nonce=%016llx_%016llx",
+                  recoveryNonceLo, recoveryNonceHi);
+        }
+        RLOG("XH: v2 pool exclusion failed reason=%llu native=%u reserve=%u "
+             "element=%p starts=%#llx/%#llx expected=%#llx "
+             "pool0=%#llx->%#llx pool1=%#llx->%#llx",
+             result.reason, result.nativeResult, result.reserve.returned,
+             result.reserve.element, result.reserve.pool0Start,
+             result.reserve.pool1Start, result.fullAddress,
+             result.before.pool0, result.after.pool0,
+             result.before.pool1, result.after.pool1);
+        return 0;
+    }
+    RLOG("XH: enableAllocations -> %u; v2 lease ACTIVE element=%p full=%#llx",
+         result.nativeResult, result.reserve.element, result.fullAddress);
+    return result.nativeResult;
 }
 
 //
@@ -5354,7 +5602,7 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
         if (mask & P1) reprobeGpu();
     } else if (kexts[KextX6000].loadIndex == index) {
         RLOG("X6000 loaded, mask=0x%x", mask);
-        if (mask & XH) {
+        if ((mask & XH) || recoveryLeaseConfigured) {
             orgHwMemVram = patcher.routeFunction(addr + kOffHwMemVram,
                              reinterpret_cast<mach_vm_address_t>(wrapHwMemVram), true);
             RLOG("route AMDHWMemory::initVRAMInfo -> %s (org=0x%llx)",
@@ -5368,7 +5616,7 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
         }
         x6Base = addr;
         if (vmmProbeMode != 0 || memProbeMode != 0 || ptbFixMode != 0 ||
-            vmRootFixEnabled) {
+            vmRootFixEnabled || recoveryLeaseConfigured) {
             orgVmmInit = patcher.routeFunction(addr + kOffVmmInit,
                            reinterpret_cast<mach_vm_address_t>(wrapVmmInit), true);
             RLOG("route AMDHWVMM::init -> %s (org=0x%llx)",
@@ -5396,11 +5644,6 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
                      orgVmmProgInv ? "ok" : "FAILED", orgVmmProgInv);
                 patcher.clearError();
             }
-            orgHwMemSetVSReady = patcher.routeFunction(addr + kOffHwMemSetVSReady,
-                                 reinterpret_cast<mach_vm_address_t>(wrapHwMemSetVSReady), true);
-            RLOG("route AMDHWMemory::setVirtualSpaceReady -> %s (org=0x%llx)",
-                 orgHwMemSetVSReady ? "ok" : "FAILED", orgHwMemSetVSReady);
-            patcher.clearError();
             orgVmmSetVSReady = patcher.routeFunction(addr + kOffVmmSetVSReady,
                                  reinterpret_cast<mach_vm_address_t>(wrapVmmSetVSReady), true);
             RLOG("route AMDHWVMM::setVirtualSpaceReady -> %s (org=0x%llx)",
@@ -5453,6 +5696,7 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
             static const uint8_t submitEntry[] = {0x55, 0x48, 0x89, 0xe5, 0x41,
                 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53, 0x48, 0x81, 0xec,
                 0x08, 0x01, 0x00, 0x00};
+            static const uint8_t backingAllocEntry[] = {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53, 0x48, 0x83, 0xec, 0x18};
             bool entriesMatch =
                 entryMatches(addr, sz, kOffProcessCommandBuffer,
                              processEntry, sizeof(processEntry)) &&
@@ -5463,7 +5707,9 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
                 entryMatches(addr, sz, kOffBatchMemoryMapPrepare,
                              mapEntry, sizeof(mapEntry)) &&
                 entryMatches(addr, sz, kOffSubmitBuffer,
-                             submitEntry, sizeof(submitEntry));
+                             submitEntry, sizeof(submitEntry)) &&
+                entryMatches(addr, sz, kOffBackingAllocPhysical,
+                             backingAllocEntry, sizeof(backingAllocEntry));
             if (entriesMatch) {
                 struct { size_t off; mach_vm_address_t *org; void *fn; const char *name; } t[] {
                     {kOffProcessCommandBuffer, &orgProcessCommandBuffer,
@@ -5476,6 +5722,9 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
                      reinterpret_cast<void *>(wrapBatchMemoryMapPrepare), "batchMemoryMapPrepare"},
                     {kOffSubmitBuffer, &orgSubmitBuffer,
                      reinterpret_cast<void *>(wrapSubmitBuffer), "submitBuffer"},
+                    {kOffBackingAllocPhysical, &orgBackingAllocPhysical,
+                     reinterpret_cast<void *>(wrapBackingAllocPhysical),
+                     "AMDAccelVidMemory::allocPhysical"},
                 };
                 for (auto &e : t) {
                     *e.org = patcher.routeFunction(addr + e.off,
@@ -5487,9 +5736,9 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
             }
             bool ready = entriesMatch && orgProcessCommandBuffer &&
                 orgBatchPrepareMappings && orgBatchPrepare && orgBatchMemoryMapPrepare &&
-                orgSubmitBuffer;
+                orgSubmitBuffer && orgBackingAllocPhysical;
             __atomic_store_n(&submissionTraceRoutesReady, ready, __ATOMIC_RELEASE);
-            CRLOG("SUB: routes=%s count=5 entries-match=%u capture=%s",
+            CRLOG("SUB: routes=%s count=6 entries-match=%u capture=%s",
                   ready ? "ok" : "FAILED", entriesMatch, ready ? "armed" : "disabled");
         }
         // Exact complete instructions displaced by the five new X6000 routes.
@@ -5624,12 +5873,18 @@ static void pluginStart() {
          "diagnostic-only until the bounded BAR0 walk proves their address form",
          vmRootFixEnabled, vmRootFixEnabled ? "ARMED" : "off");
     uint32_t mem = 0;
-    if (PE_parse_boot_argn("rgpumem", &mem, sizeof(mem)) && mem <= 2) {
+    if (PE_parse_boot_argn("rgpumem", &mem, sizeof(mem)) && mem <= 1) {
         memProbeMode = mem;
-        RLOG("rgpumem=%u: %s AMDHWMemory's pool pointers at +0x68/+0x70, which are what "
-             "enableAllocations gates on and which have never been logged", mem,
-             mem >= 2 ? "report and act on" : "report");
+        RLOG("rgpumem=%u: report AMDHWMemory pool pointers and native one-init state", mem);
     }
+    bool nonceLoPresent = PE_parse_boot_argn("rgpurnlo", &recoveryNonceLo,
+                                             sizeof(recoveryNonceLo));
+    bool nonceHiPresent = PE_parse_boot_argn("rgpurnhi", &recoveryNonceHi,
+                                             sizeof(recoveryNonceHi));
+    recoveryLeaseConfigured = nonceLoPresent && nonceHiPresent;
+    RLOG("XH: dynamic recovery lease %s nonce=%016llx_%016llx",
+          recoveryLeaseConfigured ? "configured" : "disabled",
+          recoveryNonceLo, recoveryNonceHi);
     uint32_t vmp = 0;
     if (PE_parse_boot_argn("rgpuvmm", &vmp, sizeof(vmp)) && vmp <= 3) {
         vmmProbeMode = vmp;

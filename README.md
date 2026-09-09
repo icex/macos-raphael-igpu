@@ -17,66 +17,24 @@ evidence required before adding another compatibility patch.
 
 ## Status
 
-**Experimental; full Metal acceleration is not working.** Hardware-tested **1.0.171**
-repairs Raphael's one-instance SDMA topology and X6000's residual engine-2 channel lookup.
-On the latest clean launch, native hybrid creation, engine start and power-up all succeeded,
-and KIQ stamps 1 through 6 completed. The first paging submission then timed out on SDMA0.
+**Experimental; full Metal acceleration is not working.** The authoritative living state,
+including exact candidate identities, evidence, safety constraints, and the next reviewed step,
+is maintained in [status.md](status.md).
 
-[Clean-run serial evidence](findings/metal-tests/20260908T052603Z-8dad7535/serial.txt)
-and [automated verdict](findings/metal-tests/20260908T052603Z-8dad7535/result.json)
-are retained. Later experimental builds 1.0.160/161 had incorrectly placed diagnostic
-hooks and are excluded from conclusions about the hybrid-engine failure. A later
-third same-boot launch then inherited active ME2 HQDs from the fully started guest and failed a
-KIQ stamp before the Metal probe. Candidate 1.0.170 fixed the coordinator and cleanup checks, but
-its SDMA repair targeted the fixed channel template. Exact 24G830 disassembly shows the hardware
-packet address instead comes from `AMD_SUBMIT_COMMAND_BUFFER_INFO + 0x58 + 0x28*i`. Candidate
-1.0.171 observed those entries without modifying them. Linux's
-SDMA 5.2 implementation confirms that an indirect packet carries a full GPU virtual address plus
-its VMID, so converting the measured VMID 2 address to an MC physical address would be invalid.
-Its original VM-context hook did not run because Apple builds this context program inside the
-SDMA command stream. Candidate 1.0.172 captures the complete native
-`prepareVMInvalidateRequest` output from a safe prologue. Candidate 1.0.173 adds a separately
-gated VMID-2 root-domain correction and correlates its prepared packet, live registers, SDMA
-state and three diagnostic page-table walks. The root-only correction remains an experiment
-until hardware shows whether child page-directory pointers are already physical. Routine success
-records are capped so a later timeout remains observable. Metal execution remains unverified.
+Candidate 1.0.178 completed native accelerator startup, KIQ setup, and both separately authorized
+same-build diagnostic runs. Three consecutive cleanup-to-reinitialization transitions were also
+validated. Metal enumerates the device and compiles the probe pipeline, but the first command is
+rejected with `kIOReturnNoMemory` during resource preparation: every captured outer map failure
+ended in the backing/PTE phase, `submitBuffer` was never reached, and zero compute or render work
+completed. SDMA execution and physical-display integration remain downstream gates rather than
+the currently observed blocker.
 
-| Stage | Verified state |
-|---|---|
-| VBIOS graft and OpenCore/Lilu delivery | Controller and plugin load before AMD initialization |
-| PSP firmware loading | TOC/TMR established; successful IP firmware loads recorded |
-| SMU | Apple's dummy backend avoids the host CPU's SMU mailbox |
-| GC/TTL initialization and accelerator attach | Reached in the clean run |
-| VRAM and initial GART | 256 MB allocator; native physical root `0x84fdfc001` verified |
-| Command processor / KIQ | Initial native submissions execute; stamps 1 through 6 completed in 1.0.171 |
-| Hybrid engines | One-instance repair succeeds; native start/power-up return 1 in 1.0.171 |
-| Metal | Metal 3 device enumerates; **zero completed compute/render submissions** |
-| Physical display | DCN 3.1.5 path remains incomplete |
-| Games | **Zero verified playable games**; [compatibility list](docs/supported-games.md) |
-| Host stability | Three historical hard hangs; cause unresolved |
-
-A percentage would obscure the remaining unknowns. Driver enumeration and queue setup
-are milestones, not a measure of end-to-end rendering completeness.
-
-The [candidate-166 warm launch](findings/experiments/hybrid-004-166-reuse/notes.md) includes
-the first complete native engine startup. The [third launch](findings/experiments/metal-001-166-reuse/notes.md)
-proves PSP ring destruction alone does not clear GC queues after a fully started guest is
-force-stopped. Candidate 1.0.171 also produced the first fully authorizing reset-free recovery
-after native startup: two active HQDs dequeued immediately, no queue was force-cleared, CP status
-was idle, SDMA halted, and both PSP teardown commands completed. Candidate 1.0.173 keeps those
-fail-closed lifecycle rules and records the actual per-submission SDMA VMID/IB fields plus the 21
-dwords Apple uses to form the matching VM program packet, and can repair only the exact marked
-VMID-2 root when `rgpuvmroot=1` is explicit. It allows warm reuse only after real
-queue dequeue with idle CP status. The one-way amdgpu-to-vfio
-handoff disables the unsafe PCI reset method before granting user access; later cleanup remains
-rootless. Full Metal remains unavailable. Published 1.0.159 remains the earlier research snapshot.
-
-The repair is scoped by a byte-exact `rgpu,raphael-target` device property coupled to the
-grafted VBIOS. The tooling verifies that identity before a physical experiment, so the
-real Navi23 `0x73ff` PCI identity alone can never select Raphael-specific topology code.
-
-See [release builds](docs/releases.md), [current research corrections](findings/GPU-RE.md),
-and [historical bring-up notes](docs/bring-up-history.md).
+Historical evidence remains available in the [1.0.171 clean run](findings/metal-tests/20260908T052603Z-8dad7535/serial.txt),
+the [candidate-166 warm launch](findings/experiments/hybrid-004-166-reuse/notes.md), the
+[third same-boot launch](findings/experiments/metal-001-166-reuse/notes.md), and the
+[bring-up history](docs/bring-up-history.md). See also the [roadmap](docs/ROADMAP.md),
+[current reverse-engineering corrections](findings/GPU-RE.md), [release builds](docs/releases.md),
+and [game-status criteria](docs/supported-games.md).
 
 ### Host protection and automatic execution test
 
@@ -98,7 +56,8 @@ Bounded launches prefer the build- and boot-bound root agent. If that transport 
 coordinator now uses the exact-container, QEMU-peer-verified ACPI request before force-stop. The
 combined request gets at most 20 seconds while the original timer stays armed. A runtime capture
 failure follows this graceful path after exact identity validation. Wrong-image and host-fault
-paths still stop directly. Validation of native GPU teardown and a subsequent warm launch is pending.
+paths still stop directly. Current recovery receipts and warm-qualification limits are recorded in
+[status.md](status.md).
 
 To request an earlier bounded shutdown:
 

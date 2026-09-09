@@ -79,6 +79,20 @@ class StoppedWptrRecoveryTests(unittest.TestCase):
         return copy.deepcopy(json.loads(FIXTURE.read_text())[
             'gc_quiesce']['host_kiq'])
 
+    def test_schema2_stopped_wptr_is_ineligible_before_register_access(self):
+        host_kiq = self._failed_host_kiq()
+        reservation = {'schema':2}
+        host_kiq['evidence']['reservation'] = copy.deepcopy(reservation)
+        host_kiq['evidence']['retired_before_cleanup']['reservation'] = \
+            copy.deepcopy(reservation)
+
+        eligibility = self.tool._stopped_wptr_eligibility(host_kiq, 0)
+
+        self.assertEqual(eligibility, {
+            'eligible':False,
+            'errors':['unsupported_v2_stopped_wptr'],
+        })
+
     def _stopped_transport(self):
         tool = self.tool
 
