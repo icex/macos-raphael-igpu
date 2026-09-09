@@ -987,6 +987,98 @@ class ExperimentTests(unittest.TestCase):
                          Path('/nonexistent-output'), Path('/prior-output'),
                          Path('/proof'), 'a'*64)
 
+    def test_warm_qualification_api_requires_pair_and_refuses_mixed_modes(self):
+        tool = self.module()
+        calls = (
+            ((), {'warm_qualification_policy_sha256':'a'*64}),
+            ((), {'warm_qualification_activation_sha256':'b'*64}),
+            ((), {'cap_revision_authority_sha256':'c'*64,
+                  'warm_qualification_policy_sha256':'a'*64,
+                  'warm_qualification_activation_sha256':'b'*64}),
+            ((Path('/prior'), Path('/proof')), {
+                'warm_qualification_policy_sha256':'a'*64,
+                'warm_qualification_activation_sha256':'b'*64}),
+        )
+        for positional, keywords in calls:
+            with self.subTest(positional=positional, keywords=keywords):
+                with self.assertRaisesRegex(ValueError, 'warm qualification'):
+                    tool.run_one(
+                        Path('/nonexistent'), Path('/nonexistent-manifest'),
+                        Path('/nonexistent-output'), *positional, **keywords)
+
+    def test_warm_qualification_dispatch_uses_reviewed_cursor_only(self):
+        tool = self.module()
+        warm = {'stage':'A'}
+        with patch.object(tool, 'reserve_warm_qualification',
+                          return_value='fresh-cursor') as reserve, \
+             patch.object(tool, 'reserve_cap_revision') as cap, \
+             patch.object(tool, 'reserve_boot') as ordinary, \
+             patch.object(tool, 'kernel_updates',
+                          side_effect=AssertionError('must use warm interval cursor')):
+            cursor = tool.reserve_launch_and_cursor(
+                Path('/tmp/used'), 'boot-A', 'd'*32, {'schema':6},
+                {'run_id':'d'*32}, Path('/tmp/manifest'), None, warm,
+                Path('/tmp/output'))
+        self.assertEqual(cursor, 'fresh-cursor')
+        reserve.assert_called_once()
+        cap.assert_not_called()
+        ordinary.assert_not_called()
+
+    def test_warm_reservation_revalidates_identity_host_and_exact_bytes(self):
+        tool = self.module()
+        with tempfile.TemporaryDirectory() as temp:
+            vm = Path(temp); used = vm/'run/used-gpu-boots'; used.mkdir(parents=True)
+            manifest = {
+                'boot_id':'boot-A', 'run_id':'d'*32,
+                'candidate_directory':'run/candidate-178',
+                'spec':{'requested_diagnostic':'rgpusubmit=1'},
+                'image_id':'image', 'build_id':'build', 'source_sha256':'source',
+                'bootdisk_sha256':'disk', 'source_clean':True,
+                'vfio_device':'0000:7b:00.0', 'max_seconds':180,
+            }
+            manifest_path = vm/'run/a.json'; manifest_path.write_text('{}\n')
+            output = vm/'run/out'
+            receipt = {'kernel_cursor_after':'s=x;i=10;b=boot-A;m=1'}
+            identity = {key:manifest[key] for key in (
+                'image_id', 'build_id', 'source_sha256', 'boot_id',
+                'bootdisk_sha256')}
+            authorization = {
+                'policy_sha256':'a'*64, 'activation_sha256':'b'*64,
+                'receipt':receipt, 'policy_raw':b'p', 'activation_raw':b'a',
+                'ledger_raw':b'l', 'manifest_raws':[b'm1', b'm2'],
+                'receipt_raws':[b'r1', b'r2'],
+                'candidate176_receipt_raws':[b'c1', b'c2'],
+            }
+            final = dict(authorization)
+            full_host = {'boot_id':'boot-A', 'journal_cursor':'s=x;i=11;b=boot-A;m=2',
+                         'journal_messages':['routine'], 'journal_faults':[]}
+            capture_host = dict(self.host(), boot_id='boot-A', sleep_inhibited=True)
+            vfio = {'boot_id':'boot-A', 'driver':'vfio-pci'}
+            warm_tool = SimpleNamespace(
+                authorize=lambda *args:(final, []),
+                build_reservation=lambda *args:(used/'boot-A.json', {'schema':4}))
+            retained = SimpleNamespace(
+                collect_fresh_host=lambda cursor:full_host,
+                host_errors=lambda host, boot, prefix='':[])
+            recovery = SimpleNamespace(
+                host_state=lambda:vfio,
+                validate_host_state=lambda state, boot:[])
+            original_helper = tool.helper
+            def helpers(name):
+                return {'warm-qualification':warm_tool,
+                        'retained-kiq-continuation':retained,
+                        'vfio-recover':recovery}.get(name, original_helper(name))
+            with patch.object(tool, 'helper', side_effect=helpers), \
+                 patch.object(tool, 'host_snapshot', return_value=capture_host), \
+                 patch.object(tool, 'active_launch_units', return_value=[]), \
+                 patch.object(tool, 'current_identity', return_value=identity), \
+                 patch.object(tool, 'replace_json') as replace:
+                cursor = tool.reserve_warm_qualification(
+                    used, 'boot-A', manifest['run_id'], receipt, manifest,
+                    manifest_path, output, authorization)
+            self.assertEqual(cursor, full_host['journal_cursor'])
+            replace.assert_called_once_with(used/'boot-A.json', {'schema':4})
+
     def test_reuse_requires_latest_predecessor_and_stops_at_three_launches(self):
         tool = self.module()
         with tempfile.TemporaryDirectory() as temp:

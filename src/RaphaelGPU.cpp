@@ -196,8 +196,10 @@ static const RPatch patches[] {
 // userspace is up. The deferred copy is clean, ordered, and greppable with
 // `log show`; the live serial copy stays as a crash-time fallback.
 static rgpu::DiagnosticRecords<256, 512> diagnostics {};
-// Candidate submission tracing can add at most 134 records; 512 retains that
-// bounded set alongside the existing VM/SDMA evidence budget.
+// Candidate submission tracing can add at most 174 records: 64 ordinary, 32
+// notable, 32 original summaries, 8 phase samples, 32 phase summaries and 6
+// route/readiness records. 512 retains that bounded set alongside the existing
+// VM/SDMA evidence budget.
 static rgpu::DiagnosticRecords<rgpu::kCriticalRecordCapacity, 512> criticalRecords {};
 static rgpu::SuccessRecordBudget waitStampRecordBudget {};
 static rgpu::SuccessRecordBudget kiqSubmitRecordBudget {};
@@ -205,6 +207,8 @@ static rgpu::SuccessRecordBudget preClearFaultRecordBudget {};
 static rgpu::ObservationBuffer<RaphaelVm::PreparedRequest, 8> vmid2Programs {};
 static rgpu::ObservationBuffer<RaphaelSdma::SubmitInfoObservation, 8> vmid2Submits {};
 static RaphaelSubmit::Store<64, 32> submissionTrace {};
+static RaphaelSubmit::MapPhaseStore<RaphaelSubmit::MapSamplesPerPhase>
+    submissionMapPhases {};
 static volatile uint32_t nextSubmissionTraceSequence = 0;
 static bool submissionTraceEnabled = false;
 static volatile bool submissionTraceRoutesReady = false;
@@ -4602,15 +4606,45 @@ static bool wrapBatchPrepare(void *accelerator, void *const *resources, uint32_t
     return result;
 }
 
+static RaphaelSubmit::MapSnapshot captureMapSnapshot(void *accelerator,
+                                                     void *memoryMap) {
+    if (accelerator == nullptr || memoryMap == nullptr)
+        return RaphaelSubmit::MapSnapshot {};
+    auto acceleratorBytes = static_cast<uint8_t *>(accelerator);
+    auto mapBytes = static_cast<uint8_t *>(memoryMap);
+    return RaphaelSubmit::MapSnapshot {
+        __atomic_load_n(reinterpret_cast<volatile uint32_t *>(
+                            acceleratorBytes + 0x1fb0), __ATOMIC_RELAXED),
+        __atomic_load_n(reinterpret_cast<volatile uint32_t *>(
+                            mapBytes + 0xc), __ATOMIC_RELAXED),
+        __atomic_load_n(reinterpret_cast<volatile uint32_t *>(
+                            mapBytes + 0x10), __ATOMIC_RELAXED),
+        __atomic_load_n(reinterpret_cast<volatile uint64_t *>(
+                            mapBytes + 0x98), __ATOMIC_RELAXED),
+        true
+    };
+}
+
 static bool wrapBatchMemoryMapPrepare(void *accelerator, void *memoryMap) {
+    if (!submissionTraceCaptureActive())
+        return FunctionCast(wrapBatchMemoryMapPrepare, orgBatchMemoryMapPrepare)(
+            accelerator, memoryMap);
+    auto before = captureMapSnapshot(accelerator, memoryMap);
     captureSubmissionTrace(RaphaelSubmit::Kind::MemoryMapPrepare,
                            RaphaelSubmit::Phase::Entry, accelerator, memoryMap,
                            0, 0, 0);
     bool result = FunctionCast(wrapBatchMemoryMapPrepare, orgBatchMemoryMapPrepare)(
         accelerator, memoryMap);
+    auto after = captureMapSnapshot(accelerator, memoryMap);
     captureSubmissionTrace(RaphaelSubmit::Kind::MemoryMapPrepare,
                            RaphaelSubmit::Phase::Exit, accelerator, memoryMap,
                            0, result, 0);
+    submissionMapPhases.append(RaphaelSubmit::MapPrepareObservation {
+        reinterpret_cast<uintptr_t>(accelerator),
+        reinterpret_cast<uintptr_t>(memoryMap),
+        reinterpret_cast<uintptr_t>(current_thread()), result, before, after,
+        __sync_add_and_fetch(&nextSubmissionTraceSequence, 1u)
+    });
     return result;
 }
 
@@ -4628,10 +4662,15 @@ static void publishPendingSubmissionTrace() {
     if (!submissionTraceEnabled) return;
     static size_t recordCursor = 0;
     static size_t notableCursor = 0;
+    static size_t phaseCursors[RaphaelSubmit::MapPhaseCount] {};
     static uint64_t lastTotal = 0;
     static unsigned quietPolls = 0;
     static unsigned summaryRecords = 0;
     static bool dirty = false;
+    static uint64_t lastPhaseTotal = 0;
+    static unsigned phaseQuietPolls = 0;
+    static unsigned phaseSummaryRecords = 0;
+    static bool phaseDirty = false;
     bool publishedNotable = false;
     RaphaelSubmit::Record record {};
     while (recordCursor < submissionTrace.records().size() &&
@@ -4655,6 +4694,27 @@ static void publishPendingSubmissionTrace() {
               static_cast<uint64_t>(record.subject), static_cast<uint64_t>(record.object),
               static_cast<uint64_t>(record.threadToken), record.requested, record.result,
               record.before);
+    }
+    RaphaelSubmit::MapPrepareObservation mapObservation {};
+    for (size_t index = 1; index < RaphaelSubmit::MapPhaseCount; ++index) {
+        auto mapPhase = static_cast<RaphaelSubmit::MapPhase>(index);
+        const auto &samples = submissionMapPhases.samples(mapPhase);
+        while (phaseCursors[index] < samples.size() &&
+               samples.read(phaseCursors[index], mapObservation)) {
+            ++phaseCursors[index];
+            CRLOG("SUB: map-phase seq=%u class=%s accel=%#llx map=%#llx thread=%#llx "
+                  "pre=%u/%u/%#x/%#llx post=%u/%u/%#x/%#llx",
+                  mapObservation.sequence, RaphaelSubmit::mapPhaseName(mapPhase),
+                  static_cast<uint64_t>(mapObservation.accelerator),
+                  static_cast<uint64_t>(mapObservation.memoryMap),
+                  static_cast<uint64_t>(mapObservation.threadToken),
+                  mapObservation.before.batchCount, mapObservation.before.prepareCount,
+                  mapObservation.before.flags,
+                  mapObservation.before.gpuVirtualAddress,
+                  mapObservation.after.batchCount, mapObservation.after.prepareCount,
+                  mapObservation.after.flags,
+                  mapObservation.after.gpuVirtualAddress);
+        }
     }
 
     uint64_t entries[RaphaelSubmit::KindCount] {};
@@ -4692,6 +4752,37 @@ static void publishPendingSubmissionTrace() {
         quietPolls = 0;
     }
     lastTotal = total;
+
+    uint64_t phaseCounts[RaphaelSubmit::MapPhaseCount] {};
+    uint64_t phaseDrops[RaphaelSubmit::MapPhaseCount] {};
+    uint64_t phaseTotal = 0;
+    for (size_t index = 1; index < RaphaelSubmit::MapPhaseCount; ++index) {
+        auto phase = static_cast<RaphaelSubmit::MapPhase>(index);
+        phaseCounts[index] = submissionMapPhases.count(phase);
+        phaseDrops[index] = submissionMapPhases.samples(phase).dropped();
+        phaseTotal += phaseCounts[index];
+    }
+    if (phaseTotal != lastPhaseTotal) {
+        phaseDirty = true;
+        phaseQuietPolls = 0;
+    } else if (phaseDirty && phaseQuietPolls < 10) {
+        ++phaseQuietPolls;
+    }
+    bool initialPhase = phaseSummaryRecords == 0 &&
+        __atomic_load_n(&submissionTraceRoutesReady, __ATOMIC_ACQUIRE);
+    bool settledPhase = phaseDirty && phaseQuietPolls >= 10;
+    if (phaseSummaryRecords < RaphaelSubmit::MapPhaseSummaryLimit &&
+        (initialPhase || settledPhase)) {
+        CRLOG("SUB: map-phase-summary total=%llu capacity=%llu va=%llu "
+              "backing-pte=%llu unknown=%llu dropped=%llu/%llu/%llu/%llu",
+              phaseTotal, phaseCounts[1], phaseCounts[2], phaseCounts[3],
+              phaseCounts[4], phaseDrops[1], phaseDrops[2], phaseDrops[3],
+              phaseDrops[4]);
+        ++phaseSummaryRecords;
+        phaseDirty = false;
+        phaseQuietPolls = 0;
+    }
+    lastPhaseTotal = phaseTotal;
 }
 
 static void publishPendingVmObservations() {
