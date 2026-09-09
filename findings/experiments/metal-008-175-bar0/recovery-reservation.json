@@ -1,0 +1,50 @@
+{
+  "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+  "run_id": "1a065e4f5f674cc0a26d4e9dbdf59649",
+  "state": "pending",
+  "pci_command_before": 3,
+  "pci_command_after": 3,
+  "vfio_region": {
+    "index": 5,
+    "size": 524288,
+    "offset": 5497558138880,
+    "read": true,
+    "write": true,
+    "mmap": true,
+    "regions": {
+      "0": {
+        "index": 0,
+        "size": 268435456,
+        "offset": 0,
+        "read": true,
+        "write": true,
+        "mmap": true
+      },
+      "2": {
+        "index": 2,
+        "size": 2097152,
+        "offset": 2199023255552,
+        "read": true,
+        "write": true,
+        "mmap": true
+      },
+      "5": {
+        "index": 5,
+        "size": 524288,
+        "offset": 5497558138880,
+        "read": true,
+        "write": true,
+        "mmap": true
+      }
+    }
+  },
+  "prior_pending": null,
+  "challenge": {
+    "run_id": "1a065e4f5f674cc0a26d4e9dbdf59649",
+    "state": "pending",
+    "hdp_flush": {
+      "remap": 14428,
+      "posted_read": 512
+    }
+  }
+}

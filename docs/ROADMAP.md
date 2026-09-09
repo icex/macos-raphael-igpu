@@ -1,7 +1,7 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-09-09. Last successful hardware startup: candidate 1.0.171; latest controlled
-guest attempt: candidate 1.0.174; next candidate: 1.0.175 with the reviewed BAR0-startup repair;
+Updated 2026-09-09. Last successful hardware startup and latest controlled guest attempt:
+candidate 1.0.175; next launch requires a new authorizing recovery state;
 published research snapshot: `v1.0.159-preview.1`. This document is the authoritative current roadmap.
 Historical hypotheses in `findings/GPU-RE.md` remain evidence, not instructions.
 
@@ -88,8 +88,18 @@ The [reviewed startup-only no-queue cleanup](../findings/recovery-tests/startup-
 has since run once on candidate 174's exact stopped state and produced an authorizing schema-4
 receipt. It found no active compute or graphics queue, halted the already-idle engines, received
 both exact PSP destroy acknowledgements, consumed the PENDING reservation last, and recorded no
-new host kernel message or fault. This is live proof of that bounded cleanup path; it does not
-validate candidate 175, Metal execution, or normal recovery after a fully started guest.
+new host kernel message or fault. Candidate 1.0.175 then used that receipt once. Its early-owner
+repair mapped BAR0, activated the current-run reservation, passed three native KIQ submissions,
+and completed native engine and accelerator startup. This confirms the BAR0 hardware repair.
+The probe did not run because the coordinator required workload-generated VMID-2 diagnostics
+before it would start the workload; the final verdict remains strict while the readiness gate is
+corrected and tested offline. Normal schema-5 recovery after shutdown dequeued two MEC HQDs, but its
+host-KIQ fence value was not observed through BAR0 and its write-pointer clear did not read back.
+Either the selected HQD RPTR or the VRAM RPTR report reached `0x100`, and graphics became inactive
+before scrub, but the exception path discarded the exact terminal HQD RPTR, report and fence
+fields. Recovery is `incomplete` and non-authorizing even though final ACTIVE and doorbell samples
+were zero. Full Metal execution, VMID-2 root repair, and repeatable normal recovery remain
+unproven. See the [candidate-175 evidence](../findings/experiments/metal-008-175-bar0/notes.md).
 
 ## 1. What is actually complete
 
@@ -460,15 +470,17 @@ date for the unknown hardware defects until M2 has localized them.
 
 ## 8. Next controlled experiment
 
-1. Preserve the stopped VFIO state while verifying the complete candidate and recovery identity
-   chain; do not rebind or reset the PCI device.
-2. Build and stage candidate 1.0.175 with the already offline-validated BAR0-aperture availability
-   and activation-ordering repair that addresses the candidate-174 PM4/KIQ startup refusal.
-3. Preserve the exact successful startup-only cleanup receipt and its unchanged ledger preimage;
-   it authorizes one candidate-175 reservation and must not be replayed.
-4. For the one reviewed candidate-175 launch, require KIQ startup before
-   interpreting any later absence. Then require the VMID-2 root repair, Apple's prepared-packet
-   match, the corresponding SDMA submission and all three page-table walks.
+1. Preserve the stopped VFIO state and the complete candidate-175 evidence. Its consumed startup
+   receipt and incomplete normal-recovery receipt cannot authorize another launch.
+2. Correct and review the coordinator's probe-readiness gate offline. Require exact build and
+   routes, complete capture, successful native KIQ/SDMA/engine startup, and successful outer
+   accelerator power-up before starting the prepared probe. Keep VM-program and root-repair
+   correlation mandatory for the final verdict after workload submission.
+3. Before any later launch, obtain a fresh authorizing recovery state under the existing reset-free
+   policy or begin from a separately reviewed fresh host initialization. Do not infer authorization
+   from zero final ACTIVE/doorbell samples after the failed host-KIQ fence.
+4. On the next reviewed run, require the VMID-2 root repair, Apple's prepared-packet match, the
+   corresponding SDMA submission and all three page-table walks before any acceleration claim.
 5. If a non-SYSTEM non-leaf walk entry reports `child-mc2pa=1`, repair that child-PDE producer
    before another run. If all child pointers are physical, use the captured SDMA UTCL/XNACK/page
    state and actual invalidate-engine bit 2 to choose between invalidation and firmware.

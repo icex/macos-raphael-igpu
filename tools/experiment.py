@@ -1222,7 +1222,7 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                         e['build'] == manifest['build_id'] for e in events) and not any(
                         e['kind'] == 'capture_loss' for e in events):
                     break
-                result = classifier.classify(manifest, events, None)
+                result = classifier.classify_probe_readiness(manifest, events)
                 if result['verdict'] == 'PROBE_NOT_RUN':
                     if manifest['spec'].get('run_probe_only_after_native_start') is True and probe_fits(time.time(), state['launch_deadline_epoch'], state['deadline_epoch'],
                                   probe_seconds=50):

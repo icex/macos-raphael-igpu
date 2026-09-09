@@ -966,6 +966,12 @@ class ExperimentTests(unittest.TestCase):
     def test_kernel_fault_during_shutdown_invalidates_result(self):
         self.exercise_run('shutdown-fault')
 
+    def test_probe_runs_exactly_once_after_native_readiness(self):
+        self.exercise_run('probe-ready')
+
+    def test_probe_is_not_started_without_cleanup_budget(self):
+        self.exercise_run('probe-no-budget')
+
     def test_confirmed_forced_stop_receipt_admits_next_same_boot_launch(self):
         tool = self.module()
         with tempfile.TemporaryDirectory() as temp:
@@ -1099,6 +1105,9 @@ class ExperimentTests(unittest.TestCase):
                             launch_options={'BOOTDISK_MODE':'custom', 'NVRAM':'stock'},
                             source_clean=True, vfio_device='0000:7b:00.0',
                             candidate_directory='run/candidate-163', image_id='sha256:expected')
+            if mode in ('probe-ready', 'probe-no-budget'):
+                manifest['spec']['required_observations'] = [
+                    'sdma_vm_program', 'vmid2_root_repair']
             path = vm/'prepared.json'; path.write_text(json.dumps(manifest))
             host = dict(self.host(), sleep_inhibited=True)
             if mode == 'gpu-less':
@@ -1109,13 +1118,27 @@ class ExperimentTests(unittest.TestCase):
                      'HY: createHybridEngine enter: engine=1 available=1',
                      'HY: createHybridEngine exit: engine=1 valid=1 available-before=1 status=4',
                      'XJ: AMDHardware::startHWEngines -> 0']
+            if mode in ('probe-ready', 'probe-no-budget'):
+                lines = [
+                    'BUILD: identity=abc',
+                    'VM: route AMDGFX10VMM::prepareVMInvalidateRequest -> ok (org=0xffffff8000000000)',
+                    'HY: HWLibs hybrid trace route=ok entries-match=1',
+                    'XJ:   waitForHwStamp(1) -> 1',
+                    'HY: createHybridEngine enter: engine=1 available=1',
+                    'HY: createHybridEngine exit: engine=1 valid=1 available-before=1 status=0',
+                    'XJ: AMDHardware::startHWEngines -> 1',
+                    'XJ: AMDGraphicsAccelerator::powerUpHW -> 1',
+                ]
             serial = 'RGPU_RECORDS build=abc count=6 dropped=0 truncated=0\n'+''.join(
                 f'RGPU_EVENT build=abc seq={i} {line}\n' for i,line in enumerate(lines))
+            if mode in ('probe-ready', 'probe-no-budget'):
+                serial = serial.replace('count=6', 'count=8')
             def start(*args):
                 calls.append('start'); (vm/'run/serial.log').write_text(serial)
                 if mode == 'gpu-less': self.assertEqual(args[2], [])
                 if mode == 'unconfirmed': raise StopUnconfirmed('pending service stop unknown')
-                return dict(cid='c'*64, deadline_epoch=280, max_seconds=180)
+                deadline = 160 if mode == 'probe-no-budget' else 280
+                return dict(cid='c'*64, deadline_epoch=deadline, max_seconds=180)
             if mode == 'capture-loss': serial = serial.replace('dropped=0','dropped=1')
             class StopUnconfirmed(RuntimeError): pass
             def verify(state):
@@ -1186,6 +1209,10 @@ class ExperimentTests(unittest.TestCase):
                 calls.append(('prepare-recovery-reservation', expected_boot, run_id))
                 return {'boot_id':expected_boot, 'run_id':run_id, 'state':'pending'}
             recovery = SimpleNamespace(recover=recover, prepare_launch=prepare_launch)
+            def probe(vm_path, prepared):
+                calls.append('probe')
+                return {'run_id':prepared['run_id'],
+                        'output':'RGPU_EXIT '+prepared['run_id']+' 1\n'}
             original_helper = tool.helper
             def helpers(name):
                 if name == 'vm-supervision': return supervisor
@@ -1203,6 +1230,7 @@ class ExperimentTests(unittest.TestCase):
                  patch.object(tool, 'running_identity', return_value=actual), \
                  patch.object(tool, 'kernel_updates', side_effect=kernel), \
                  patch.object(tool, 'HostMonitor', monitor_type), \
+                 patch.object(tool, 'run_probe', side_effect=probe), \
                  patch.object(tool.time, 'time', side_effect=lambda:now[0]), \
                  patch.object(tool.time, 'sleep', side_effect=lambda n:now.__setitem__(0,now[0]+n)):
                 out = vm/'evidence'
@@ -1242,6 +1270,14 @@ class ExperimentTests(unittest.TestCase):
                     self.assertEqual(result['verdict'], 'INVALID')
                     self.assertIn(('stop','c'*64), calls)
                     self.assertNotIn(('guest-shutdown','c'*64, 'fixture'), calls)
+                elif mode in ('probe-ready', 'probe-no-budget'):
+                    self.assertEqual(result['verdict'], 'INCONCLUSIVE')
+                    self.assertEqual(result['earliest_failure'],
+                                     'sdma_vm_program_missing')
+                    self.assertEqual(calls.count('probe'),
+                                     1 if mode == 'probe-ready' else 0)
+                    self.assertEqual((out/'probe.json').exists(),
+                                     mode == 'probe-ready')
                 else:
                     self.assertEqual(result['verdict'], 'INVALID')
                     self.assertIn(('guest-shutdown','c'*64, 'fixture'), calls)

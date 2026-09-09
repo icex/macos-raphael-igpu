@@ -182,7 +182,9 @@ EXPECTED_CONFIG_MEMSIZE = 0x200
 
 
 class RecoveryError(RuntimeError):
-    pass
+    def __init__(self, message, *, evidence=None):
+        super().__init__(message)
+        self.evidence = evidence
 
 
 class VfioGroupStatus(ctypes.Structure):
@@ -861,10 +863,29 @@ def retire_legacy_gfx_with_host_kiq(mmio, prior_run_id, sleep=time.sleep, polls=
     retired = False
     gfx_active_after_unmap = None
     fence_after = 0
+    report_after = 0
+    polls_completed = 0
+    terminal_poll = None
     hdp_flush = None
     result = None
     failure = None
     failure_traceback = None
+    failure_evidence = {
+        'aperture': {'base': fb_base, 'size': aperture_size},
+        'addresses': addresses,
+        'packet': {
+            'unmap': list(HOST_KIQ_UNMAP_GFX),
+            'write_fence': list(HOST_KIQ_WRITE_FENCE),
+            'ring_used_dwords': HOST_KIQ_RING_USED_DWORDS,
+        },
+        'fence_sequence': fence_sequence,
+        'gfx_doorbell_offset': gfx_doorbell_offset,
+        'gart': gart,
+        'reservation': reservation,
+        'hdp_flush': None,
+        'terminal_poll': None,
+        'cleanup': {'readbacks': {}, 'errors': []},
+    }
     try:
         mmio.write32(CP_MEC_CNTL_OFFSET, mec_before | CP_MEC_HALT_MASK)
         if mmio.read32(CP_MEC_CNTL_OFFSET) & CP_MEC_HALT_MASK != CP_MEC_HALT_MASK:
@@ -884,6 +905,7 @@ def retire_legacy_gfx_with_host_kiq(mmio, prior_run_id, sleep=time.sleep, polls=
         if mmio.read_vram32(HOST_KIQ_MQD_OFFSET) != 0xC0310800:
             raise RecoveryError('host KIQ MQD failed VRAM readback')
         hdp_flush = mmio.flush_hdp()
+        failure_evidence['hdp_flush'] = hdp_flush
 
         mmio.write32(GRBM_GFX_CNTL_OFFSET, HOST_KIQ_SELECTOR)
         if mmio.read32(CP_HQD_ACTIVE_OFFSET) & 1:
@@ -941,17 +963,24 @@ def retire_legacy_gfx_with_host_kiq(mmio, prior_run_id, sleep=time.sleep, polls=
         mmio.ring_doorbell64(0, HOST_KIQ_RING_USED_DWORDS)
         for attempt in range(polls):
             rptr_after = mmio.read32(CP_HQD_PQ_RPTR_OFFSET)
-            report = mmio.read_vram32(HOST_KIQ_RPTR_OFFSET)
+            report_after = mmio.read_vram32(HOST_KIQ_RPTR_OFFSET)
             fence_after = mmio.read_vram32(HOST_KIQ_FENCE_OFFSET)
+            polls_completed = attempt + 1
+            terminal_poll = {
+                'polls': polls_completed,
+                'rptr': rptr_after,
+                'report': report_after,
+                'fence': fence_after,
+            }
             if ((rptr_after == HOST_KIQ_RING_USED_DWORDS or
-                 report == HOST_KIQ_RING_USED_DWORDS) and
+                 report_after == HOST_KIQ_RING_USED_DWORDS) and
                     fence_after == fence_sequence):
                 rptr_after = HOST_KIQ_RING_USED_DWORDS
                 break
             sleep(0.001)
         else:
             if (rptr_after == HOST_KIQ_RING_USED_DWORDS or
-                    report == HOST_KIQ_RING_USED_DWORDS):
+                    report_after == HOST_KIQ_RING_USED_DWORDS):
                 raise RecoveryError('host KIQ completion fence did not execute')
             raise RecoveryError('host KIQ did not consume graphics UNMAP_QUEUES')
 
@@ -993,7 +1022,25 @@ def retire_legacy_gfx_with_host_kiq(mmio, prior_run_id, sleep=time.sleep, polls=
         failure = error
         failure_traceback = error.__traceback__
 
+    failure_evidence['terminal_poll'] = terminal_poll
+
     cleanup_errors = []
+    cleanup_readbacks = {
+        'mec_cntl': None,
+        'hqd_active': None,
+        'hqd_doorbell': None,
+        'hqd_rptr': None,
+        'hqd_wptr_lo': None,
+        'hqd_wptr_hi': None,
+        'pq_status': None,
+        'doorbell_range_lower': None,
+        'doorbell_range_upper': None,
+        'wptr_poll_cntl': None,
+    }
+    failure_evidence['cleanup'] = {
+        'readbacks': cleanup_readbacks,
+        'errors': cleanup_errors,
+    }
 
     def cleanup(label, action):
         try:
@@ -1004,6 +1051,20 @@ def retire_legacy_gfx_with_host_kiq(mmio, prior_run_id, sleep=time.sleep, polls=
     def require(label, condition):
         if not condition:
             raise RecoveryError(label)
+
+    def verify_readback(key, offset, label, predicate):
+        value = mmio.read32(offset)
+        cleanup_readbacks[key] = value
+        require(label, predicate(value))
+
+    def verify_wptr_clear():
+        lo = mmio.read32(CP_HQD_PQ_WPTR_LO_OFFSET)
+        cleanup_readbacks['hqd_wptr_lo'] = lo
+        if lo != 0:
+            raise RecoveryError('host KIQ wptr did not clear')
+        hi = mmio.read32(CP_HQD_PQ_WPTR_HI_OFFSET)
+        cleanup_readbacks['hqd_wptr_hi'] = hi
+        require('host KIQ wptr did not clear', hi == 0)
 
     cleanup('halt MECs', lambda:mmio.write32(
         CP_MEC_CNTL_OFFSET, mec_before | CP_MEC_HALT_MASK))
@@ -1025,40 +1086,43 @@ def retire_legacy_gfx_with_host_kiq(mmio, prior_run_id, sleep=time.sleep, polls=
     cleanup('disable wptr polling', lambda:mmio.write32(
         CP_PQ_WPTR_POLL_CNTL_OFFSET,
         poll_before & ~CP_PQ_WPTR_POLL_ENABLE_MASK))
-    cleanup('verify MEC halt', lambda:require(
-        'MEC halt did not read back',
-        mmio.read32(CP_MEC_CNTL_OFFSET) & CP_MEC_HALT_MASK == CP_MEC_HALT_MASK))
-    cleanup('verify host KIQ inactive', lambda:require(
-        'host KIQ active did not clear', not (mmio.read32(CP_HQD_ACTIVE_OFFSET) & 1)))
-    cleanup('verify host KIQ doorbell disabled', lambda:require(
+    cleanup('verify MEC halt', lambda:verify_readback(
+        'mec_cntl', CP_MEC_CNTL_OFFSET, 'MEC halt did not read back',
+        lambda value:value & CP_MEC_HALT_MASK == CP_MEC_HALT_MASK))
+    cleanup('verify host KIQ inactive', lambda:verify_readback(
+        'hqd_active', CP_HQD_ACTIVE_OFFSET, 'host KIQ active did not clear',
+        lambda value:not (value & 1)))
+    cleanup('verify host KIQ doorbell disabled', lambda:verify_readback(
+        'hqd_doorbell', CP_HQD_PQ_DOORBELL_OFFSET,
         'host KIQ doorbell did not disable',
-        not (mmio.read32(CP_HQD_PQ_DOORBELL_OFFSET) & CP_RB_DOORBELL_ENABLE_MASK)))
-    cleanup('verify host KIQ rptr clear', lambda:require(
-        'host KIQ rptr did not clear', mmio.read32(CP_HQD_PQ_RPTR_OFFSET) == 0))
-    cleanup('verify host KIQ wptr clear', lambda:require(
-        'host KIQ wptr did not clear',
-        mmio.read32(CP_HQD_PQ_WPTR_LO_OFFSET) == 0 and
-        mmio.read32(CP_HQD_PQ_WPTR_HI_OFFSET) == 0))
-    cleanup('verify PQ doorbell gate disabled', lambda:require(
-        'PQ doorbell gate did not disable',
-        not (mmio.read32(CP_PQ_STATUS_OFFSET) & CP_PQ_DOORBELL_ENABLE_MASK)))
-    cleanup('verify doorbell lower range disabled', lambda:require(
-        'doorbell lower range did not disable',
-        mmio.read32(CP_MEC_DOORBELL_RANGE_LOWER_OFFSET) == 0))
-    cleanup('verify doorbell upper range disabled', lambda:require(
-        'doorbell upper range did not disable',
-        mmio.read32(CP_MEC_DOORBELL_RANGE_UPPER_OFFSET) == 0))
-    cleanup('verify wptr polling disabled', lambda:require(
+        lambda value:not (value & CP_RB_DOORBELL_ENABLE_MASK)))
+    cleanup('verify host KIQ rptr clear', lambda:verify_readback(
+        'hqd_rptr', CP_HQD_PQ_RPTR_OFFSET, 'host KIQ rptr did not clear',
+        lambda value:value == 0))
+    cleanup('verify host KIQ wptr clear', verify_wptr_clear)
+    cleanup('verify PQ doorbell gate disabled', lambda:verify_readback(
+        'pq_status', CP_PQ_STATUS_OFFSET, 'PQ doorbell gate did not disable',
+        lambda value:not (value & CP_PQ_DOORBELL_ENABLE_MASK)))
+    cleanup('verify doorbell lower range disabled', lambda:verify_readback(
+        'doorbell_range_lower', CP_MEC_DOORBELL_RANGE_LOWER_OFFSET,
+        'doorbell lower range did not disable', lambda value:value == 0))
+    cleanup('verify doorbell upper range disabled', lambda:verify_readback(
+        'doorbell_range_upper', CP_MEC_DOORBELL_RANGE_UPPER_OFFSET,
+        'doorbell upper range did not disable', lambda value:value == 0))
+    cleanup('verify wptr polling disabled', lambda:verify_readback(
+        'wptr_poll_cntl', CP_PQ_WPTR_POLL_CNTL_OFFSET,
         'wptr polling did not disable',
-        not (mmio.read32(CP_PQ_WPTR_POLL_CNTL_OFFSET) &
-             CP_PQ_WPTR_POLL_ENABLE_MASK)))
+        lambda value:not (value & CP_PQ_WPTR_POLL_ENABLE_MASK)))
     cleanup('restore default selector', lambda:mmio.write32(GRBM_GFX_CNTL_OFFSET, 0))
 
     if cleanup_errors:
         prefix = f'{failure}; ' if failure is not None else ''
-        raise RecoveryError(prefix+'host KIQ cleanup failed: '+'; '.join(cleanup_errors)) \
+        raise RecoveryError(prefix+'host KIQ cleanup failed: '+'; '.join(cleanup_errors),
+                            evidence=failure_evidence) \
             from failure
     if failure is not None:
+        if isinstance(failure, RecoveryError):
+            failure.evidence = failure_evidence
         raise failure.with_traceback(failure_traceback)
     # Preserve the cleanup readbacks, rather than reducing them to a boolean.
     # Receipt admission can then reject a forged or incomplete cleanup claim.
@@ -1178,6 +1242,8 @@ def quiesce_gc(mmio, sleep=time.sleep, polls=50, kiq_polls=None, prior_run_id=No
                     reservation_proof=reservation_proof)
             except RecoveryError as error:
                 host_kiq = {'status': 'failed', 'error': str(error)}
+                if error.evidence is not None:
+                    host_kiq['evidence'] = error.evidence
         elif gfx_needs_unmap and not stuck:
             host_kiq = {'status': 'blocked-no-launch-id'}
         elif gfx_needs_unmap:

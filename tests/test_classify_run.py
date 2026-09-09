@@ -1,4 +1,5 @@
 import importlib.util
+import json
 from pathlib import Path
 import unittest
 
@@ -21,6 +22,130 @@ class ClassifyTests(unittest.TestCase):
                 ('hybrid_exit', {'available': available, 'result': status}),
                 ('engine_start', {'result': started})]
         return [dict(kind=k, build='abc', seq=i, **v) for i, (k, v) in enumerate(rows)]
+
+    def candidate175_startup(self, classifier):
+        spec = json.loads((ROOT / 'experiments/metal-008.json').read_text())
+        captured = [json.loads(line) for line in
+                    (ROOT / 'tests/fixtures/metal-008-175-events.jsonl').read_text().splitlines()]
+        serial = ''.join(
+            f"RGPU_EVENT build={row['build']} seq={row['seq']} {row['raw']}\n"
+            for row in captured)
+        serial += (f"RGPU_RECORDS build={captured[0]['build']} "
+                   f"count={len(captured)} dropped=0 truncated=0\n")
+        events = classifier.parse_serial(serial)
+        return {
+            'build_id':'693734a021524bd29dd71df774d917a3',
+            'run_id':'1a065e4f5f674cc0a26d4e9dbdf59649',
+            'spec':spec,
+        }, events
+
+    def test_candidate175_capture_is_probe_ready_but_final_verdict_remains_strict(self):
+        classifier = self.classifier()
+        manifest, events = self.candidate175_startup(classifier)
+
+        incomplete = classifier.classify_probe_readiness(manifest, events[:50])
+        self.assertEqual(incomplete['verdict'], 'INCONCLUSIVE')
+        self.assertEqual(incomplete['earliest_failure'], 'accelerator_start_missing')
+
+        for startup in (events[:51], events):
+            readiness = classifier.classify_probe_readiness(manifest, startup)
+            self.assertEqual(readiness['verdict'], 'PROBE_NOT_RUN')
+            self.assertTrue(readiness['valid'])
+
+        final = classifier.classify(manifest, events, None)
+        self.assertEqual(final['verdict'], 'INCONCLUSIVE')
+        self.assertEqual(final['earliest_failure'], 'sdma_vm_program_missing')
+
+    def test_probe_readiness_keeps_preworkload_safety_gates(self):
+        classifier = self.classifier()
+        manifest, captured = self.candidate175_startup(classifier)
+
+        mutations = []
+        wrong_build = [dict(row) for row in captured]
+        wrong_build[0]['build'] = 'wrong'
+        mutations.append((wrong_build, 'INVALID', 'loaded_build'))
+        bad_route = [dict(row) for row in captured]
+        next(row for row in bad_route if row['kind'] == 'route')['ok'] = False
+        mutations.append((bad_route, 'INVALID', 'route_guards'))
+        bad_vm_route = [dict(row) for row in captured]
+        next(row for row in bad_vm_route if row['kind'] == 'vm_program_route')['ok'] = False
+        mutations.append((bad_vm_route, 'INVALID', 'sdma_vm_program_route_guard'))
+        bad_topology_count = [dict(row) for row in captured]
+        next(row for row in bad_topology_count
+             if row['kind'] == 'sdma_topology_route')['count'] = 6
+        mutations.append((bad_topology_count, 'INVALID', 'sdma_channel_route_guard'))
+        failed_kiq = [dict(row) for row in captured]
+        next(row for row in reversed(failed_kiq)
+             if row['kind'] == 'kiq_submit')['result'] = 0
+        mutations.append((failed_kiq, 'BASELINE_BLOCKED', 'kiq'))
+        late_kiq = [dict(row) for row in captured[:51]] + [
+            {'kind':'kiq_submit', 'build':manifest['build_id'], 'seq':51,
+             'result':0}]
+        mutations.append((late_kiq, 'BASELINE_BLOCKED', 'kiq'))
+        failed_start = [dict(row) for row in captured]
+        next(row for row in failed_start if row['kind'] == 'engine_start')['result'] = 0
+        mutations.append((failed_start, 'STARTUP_FAILED_LATER', 'engine_start'))
+        failed_accelerator = [dict(row) for row in captured]
+        next(row for row in failed_accelerator
+             if row['kind'] == 'accelerator_start')['result'] = 0
+        mutations.append((failed_accelerator, 'STARTUP_FAILED_LATER',
+                          'accelerator_start'))
+        capture_loss = [dict(row) for row in captured] + [
+            {'kind':'capture_loss', 'build':manifest['build_id'], 'reason':'overflow'}]
+        mutations.append((capture_loss, 'INCONCLUSIVE', 'capture_loss'))
+        page_timeout = [dict(row) for row in captured[:51]] + [
+            {'kind':'sdma_page_timeout', 'build':manifest['build_id'], 'seq':51}]
+        mutations.append((page_timeout, 'SDMA_PAGE_TIMEOUT', 'sdma0_page'))
+        panic = [dict(row) for row in captured[:51]] + [
+            {'kind':'guest_panic', 'build':manifest['build_id'], 'seq':51,
+             'symbol':'panic'}]
+        mutations.append((panic, 'GUEST_PANIC', 'guest_panic:panic'))
+
+        for events, verdict, stage in mutations:
+            with self.subTest(stage=stage):
+                result = classifier.classify_probe_readiness(manifest, events)
+                self.assertEqual(result['verdict'], verdict)
+                self.assertEqual(result['earliest_failure'], stage)
+
+    def test_probe_readiness_rejects_partial_or_refused_workload_evidence(self):
+        classifier = self.classifier()
+        manifest, captured = self.candidate175_startup(classifier)
+        base = [dict(row) for row in captured]
+        build = manifest['build_id']
+
+        submit_only = base + [
+            {'kind':'sdma_submit', 'build':build, 'seq':52, 'vmid':2,
+             'valid':True, 'ib0':0x400100000, 'ib1':0, 'vm_sequence':7}]
+        result = classifier.classify_probe_readiness(manifest, submit_only)
+        self.assertEqual(result['earliest_failure'], 'sdma_vm_program_missing')
+
+        for kind in ('vm_context', 'sdma_ib_repair'):
+            with self.subTest(standalone_workload_kind=kind):
+                observed = base + [{'kind':kind, 'build':build, 'seq':52}]
+                result = classifier.classify_probe_readiness(manifest, observed)
+                self.assertEqual(result['earliest_failure'],
+                                 'sdma_vm_program_missing')
+
+        program = {'kind':'vm_program', 'build':build, 'seq':52, 'hub':0, 'vmid':2,
+                   'start':0x400000000, 'end':0x400ffffff,
+                   'root':0x840abc000, 'reprogram':True,
+                   'info_words':list(range(10)), 'words':list(range(21))}
+        submit = {'kind':'sdma_submit', 'build':build, 'seq':53, 'vmid':2,
+                  'valid':True, 'ib0':0x400100000, 'ib1':0, 'vm_sequence':7}
+        refusal = {'kind':'vm_root_repair', 'build':build, 'seq':54,
+                   'vm_sequence':7, 'vmid':2, 'repaired':False,
+                   'reason':'system-root', 'prepared_match':True}
+        result = classifier.classify_probe_readiness(
+            manifest, base + [program, submit, refusal])
+        self.assertEqual(result['earliest_failure'],
+                         'vmid2_root_repair_refused:system-root')
+
+        mismatch = dict(refusal, repaired=True, reason='repaired',
+                        prepared_match=False)
+        result = classifier.classify_probe_readiness(
+            manifest, base + [program, submit, mismatch])
+        self.assertEqual(result['verdict'], 'INVALID')
+        self.assertEqual(result['earliest_failure'], 'vmid2_root_prepared_mismatch')
 
     def test_missing_build_or_route_never_valid(self):
         c = self.classifier().classify
