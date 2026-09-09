@@ -33,9 +33,28 @@ class ExperimentTests(unittest.TestCase):
             'consumed':True,
             'consume_hdp_flush':{'remap':0x7f000, 'posted_read':0x200},
         }
+        active_observation = {key:value for key,value in reservation.items()
+                              if key not in ('consumed', 'consume_hdp_flush')}
+        def graphics_snapshot():
+            def row(pipe):
+                doorbell = 0
+                return {
+                    'intended_pipe':pipe, 'selector':pipe,
+                    'rb0_active':0, 'rb1_active':0, 'active':0,
+                    'doorbell_control':doorbell,
+                    'doorbell_offset':doorbell & 0x0ffffffc,
+                    'doorbell_status':doorbell & 0xc0000002,
+                    'wptr':0, 'wptr_hi':0, 'base':0, 'base_hi':0, 'cntl':0,
+                }
+            return {'pipes':[row(0), row(1)],
+                    'final_default':{'value':0, 'completed':True}}
+        guard_snapshot = graphics_snapshot()
+        before_snapshot = graphics_snapshot()
+        after_snapshot = graphics_snapshot()
+        final_snapshot = graphics_snapshot()
         regions = json.loads(json.dumps(tool.RECOVERY_BAR_REGIONS))
         return {
-            'schema':3, 'status':'recovered', 'authorizes_launch':True,
+            'schema':5, 'status':'recovered', 'authorizes_launch':True,
             'boot_id':'boot-A', 'prior_run_id':prior, 'recovery_id':recovery,
             'device':'0000:7b:00.0', 'iommu_group':'31', 'driver':'vfio-pci',
             'pci_command_before':3, 'pci_command_after':3,
@@ -51,8 +70,20 @@ class ExperimentTests(unittest.TestCase):
                 'sdma0_after':1, 'sdma0_cntl_after':0,
                 'sdma0_rb_after':0, 'sdma0_ib_after':0,
                 'gfx_ring_clean':True, 'gfx_retirement_confirmed':True,
+                'graphics_pipe_proof_complete':True,
                 'gfx_needs_unmap':False, 'gfx_was_stale':False,
                 'host_kiq':{'status':'not-needed'}, 'reservation':reservation,
+                'graphics_pipe_guard':{
+                    'policy':'x6000-24G830-single-legacy-gfx-pipe-v1',
+                    'reservation_before':active_observation,
+                    'reservation_after':dict(active_observation),
+                    'reservation_unchanged':True,
+                    'pipe1_supported_state':True,
+                    'snapshot':guard_snapshot,
+                },
+                'graphics_pipes_before':before_snapshot,
+                'graphics_pipes_after_retirement':after_snapshot,
+                'graphics_pipes_final':final_snapshot,
                 'gfx_rb_active_after':0, 'gfx_rb_doorbell_after':0,
                 'gfx_rb_wptr_after':0, 'gfx_rb_wptr_hi_after':0,
                 'gfx_rb_base_after':0, 'gfx_rb_base_hi_after':0,
@@ -71,9 +102,15 @@ class ExperimentTests(unittest.TestCase):
         physical_fb = 0x840000000
         gart_offset = 0x0e000000
         gc.update(gfx_needs_unmap=True, gfx_was_stale=True)
+        before_pipe0 = gc['graphics_pipes_before']['pipes'][0]
+        before_pipe0.update(rb0_active=1, active=1,
+                            doorbell_control=0xc0000400,
+                            doorbell_offset=0x400,
+                            doorbell_status=0xc0000000)
         gc['host_kiq'] = {
             'status':'retired', 'selector':9, 'cleanup_confirmed':True,
             'gfx_active_after_unmap':0, 'gfx_active_before_scrub':0,
+            'graphics_pipes_after_unmap':gc['graphics_pipes_after_retirement'],
             'packet_dwords':0x100, 'rptr_after':0x100,
             'fence_sequence':0x12345678, 'fence_after':0x12345678,
             'gfx_doorbell_offset':0x400,
@@ -97,7 +134,8 @@ class ExperimentTests(unittest.TestCase):
                 'cp_cpc_busy_after':0, 'pq_wptr_poll_after':0,
                 'pq_status_after':0, 'doorbell_range_lower_after':0,
                 'doorbell_range_upper_after':0,
-                'gfx_ring_clean':True, 'gfx_retirement_confirmed':True},
+                'gfx_ring_clean':True, 'gfx_retirement_confirmed':True,
+                'graphics_pipe_proof_complete':True},
         }
         return receipt
 
@@ -566,6 +604,9 @@ class ExperimentTests(unittest.TestCase):
                         'cleanup_confirmed':True,
                         'gfx_active_after_unmap':0,
                         'gfx_active_before_scrub':0,
+                        'graphics_pipes_after_unmap':
+                            recovered_stale_gfx['gc_quiesce'][
+                                'graphics_pipes_after_retirement'],
                         'packet_dwords':0x100,
                         'rptr_after':0x100,
                         'fence_sequence':0x12345678,
@@ -591,8 +632,15 @@ class ExperimentTests(unittest.TestCase):
                             'pq_status_after':0, 'doorbell_range_lower_after':0,
                             'doorbell_range_upper_after':0,
                             'gfx_ring_clean':True,
-                            'gfx_retirement_confirmed':True}},
+                            'gfx_retirement_confirmed':True,
+                            'graphics_pipe_proof_complete':True}},
         })
+        before_pipe0 = recovered_stale_gfx['gc_quiesce'][
+            'graphics_pipes_before']['pipes'][0]
+        before_pipe0.update(rb0_active=1, active=1,
+                            doorbell_control=0xc0000400,
+                            doorbell_offset=0x400,
+                            doorbell_status=0xc0000000)
         self.assertEqual(tool.validate_recovery_receipt(
             recovered_stale_gfx, 'boot-A', 'a'*32), [])
         recovered_stale_gfx['gc_quiesce']['host_kiq']['cleanup_confirmed'] = False
@@ -626,7 +674,7 @@ class ExperimentTests(unittest.TestCase):
         # Receipt schemas are deliberately not backward-compatible: adding a
         # proof changes the version and older receipts fail closed.
         self.assertIn('recovery_receipt', tool.validate_recovery_receipt(
-            changed(('schema',), 2), 'boot-A', 'a'*32))
+            changed(('schema',), 3), 'boot-A', 'a'*32))
 
         for index, expected in tool.RECOVERY_BAR_REGIONS.items():
             for field, value in expected.items():
@@ -717,6 +765,127 @@ class ExperimentTests(unittest.TestCase):
             broken['gc_quiesce'] = dict(good['gc_quiesce'], **{key:value})
             self.assertIn('recovery_receipt', tool.validate_recovery_receipt(
                 broken, 'boot-A', 'a'*32))
+
+    def test_schema5_rejects_unsafe_or_missing_pipe_proof(self):
+        tool = self.module()
+        good = self.recovery_receipt(tool)
+
+        def copy():
+            return json.loads(json.dumps(good))
+
+        for stage in ('graphics_pipe_guard', 'graphics_pipes_before',
+                      'graphics_pipes_after_retirement', 'graphics_pipes_final'):
+            with self.subTest(stage=stage, condition='active'):
+                broken = copy()
+                snapshot = (broken['gc_quiesce'][stage]['snapshot']
+                            if stage == 'graphics_pipe_guard'
+                            else broken['gc_quiesce'][stage])
+                snapshot['pipes'][1].update(rb1_active=1, active=1)
+                self.assertIn('recovery_receipt', tool.validate_recovery_receipt(
+                    broken, 'boot-A', 'a'*32))
+            with self.subTest(stage=stage, condition='doorbell'):
+                broken = copy()
+                snapshot = (broken['gc_quiesce'][stage]['snapshot']
+                            if stage == 'graphics_pipe_guard'
+                            else broken['gc_quiesce'][stage])
+                snapshot['pipes'][1].update(
+                    doorbell_control=0x40000408, doorbell_offset=0x408,
+                    doorbell_status=0x40000000)
+                self.assertIn('recovery_receipt', tool.validate_recovery_receipt(
+                    broken, 'boot-A', 'a'*32))
+
+        broken = copy()
+        broken['gc_quiesce'].pop('graphics_pipes_before')
+        self.assertIn('recovery_receipt', tool.validate_recovery_receipt(
+            broken, 'boot-A', 'a'*32))
+        broken = copy()
+        broken['gc_quiesce']['graphics_pipe_guard']['reservation_after']['checksum'] ^= 1
+        self.assertIn('recovery_receipt', tool.validate_recovery_receipt(
+            broken, 'boot-A', 'a'*32))
+        broken = copy()
+        broken['gc_quiesce']['graphics_pipe_proof_complete'] = False
+        self.assertIn('recovery_receipt', tool.validate_recovery_receipt(
+            broken, 'boot-A', 'a'*32))
+
+        # Off-diagonal ACTIVE cells have no source-backed meaning. Preserve them
+        # as raw evidence without treating even all-ones as a pipe-1 claim.
+        observed = copy()
+        for key in ('snapshot',):
+            observed['gc_quiesce']['graphics_pipe_guard'][key][
+                'pipes'][1]['rb0_active'] = 0xffffffff
+        for stage in ('graphics_pipes_before', 'graphics_pipes_after_retirement',
+                      'graphics_pipes_final'):
+            observed['gc_quiesce'][stage]['pipes'][1]['rb0_active'] = 0xffffffff
+        self.assertEqual(tool.validate_recovery_receipt(
+            observed, 'boot-A', 'a'*32), [])
+
+    def test_startup_schema4_is_fallback_and_both_ids_are_single_use(self):
+        tool = self.module()
+        with tempfile.TemporaryDirectory() as temp:
+            vm = Path(temp)
+            used = vm/'run/used-gpu-boots'; used.mkdir(parents=True)
+            prior, current = 'a'*32, 'b'*32
+            ledger = {'schema':2, 'boot_id':'boot-A', 'max_launches':3,
+                      'launches':[{'run_id':prior}]}
+            (used/'boot-A.json').write_text(json.dumps(ledger) + '\n')
+            receipt = {'schema':4, 'recovery_id':'c'*32, 'attempt_id':'d'*32,
+                       'ledger_sha256':hashlib.sha256(
+                           (used/'boot-A.json').read_bytes()).hexdigest()}
+            target = vm/'run/startup-noqueue-recovery/boot-A'; target.mkdir(parents=True)
+            (target/(prior+'.json')).write_text(json.dumps(receipt))
+            calls = []
+            startup = SimpleNamespace(validate_receipt=lambda value, boot, run, root:
+                (calls.append((value, boot, run, root)) or []))
+            with patch.object(tool, 'helper', return_value=startup):
+                authorization, errors = tool.reuse_authorization(
+                    vm, 'boot-A', current)
+                self.assertEqual(errors, [])
+                self.assertEqual(authorization, receipt)
+                tool.reserve_boot(used, 'boot-A', current, authorization)
+            self.assertEqual([call[3] for call in calls], [vm, vm])
+            updated = json.loads((used/'boot-A.json').read_text())
+            self.assertEqual(updated['launches'][1]['recovery_id'], 'c'*32)
+            self.assertEqual(updated['launches'][1]['attempt_id'], 'd'*32)
+
+            # Either identity being present in a prior launch makes a new
+            # startup receipt a replay.
+            for field in ('recovery_id', 'attempt_id'):
+                replay = dict(receipt, recovery_id='e'*32, attempt_id='f'*32)
+                replay[field] = updated['launches'][1][field]
+                replay['ledger_sha256'] = hashlib.sha256(
+                    (used/'boot-A.json').read_bytes()).hexdigest()
+                with patch.object(tool, 'helper', return_value=startup):
+                    with self.assertRaisesRegex(ValueError, 'startup_noqueue_receipt'):
+                        tool.reserve_boot(used, 'boot-A', '1'*32, replay)
+
+    def test_startup_schema4_rechecks_raw_ledger_before_reservation(self):
+        tool = self.module()
+        with tempfile.TemporaryDirectory() as temp:
+            vm = Path(temp)
+            used = vm/'run/used-gpu-boots'; used.mkdir(parents=True)
+            prior = 'a'*32
+            path = used/'boot-A.json'
+            path.write_text(json.dumps({'schema':2, 'boot_id':'boot-A',
+                                        'max_launches':3,
+                                        'launches':[{'run_id':prior}]}) + '\n')
+            receipt = {'schema':4, 'recovery_id':'c'*32, 'attempt_id':'d'*32,
+                       'ledger_sha256':hashlib.sha256(path.read_bytes()).hexdigest()}
+            target = vm/'run/startup-noqueue-recovery/boot-A'; target.mkdir(parents=True)
+            (target/(prior+'.json')).write_text(json.dumps(receipt))
+            startup = SimpleNamespace(validate_receipt=lambda *args:[])
+            with patch.object(tool, 'helper', return_value=startup):
+                authorization, errors = tool.reuse_authorization(
+                    vm, 'boot-A', 'b'*32)
+            self.assertEqual(errors, [])
+
+            # Preserve the JSON value but alter its exact byte preimage between
+            # admission and reservation.
+            path.write_text(json.dumps(json.loads(path.read_text()), indent=2) + '\n')
+            before = path.read_bytes()
+            with patch.object(tool, 'helper', return_value=startup):
+                with self.assertRaisesRegex(ValueError, 'startup_noqueue_receipt'):
+                    tool.reserve_boot(used, 'boot-A', 'b'*32, authorization)
+            self.assertEqual(path.read_bytes(), before)
 
     def test_remaining_budget_uses_earlier_launch_cap(self):
         eligible = self.module().probe_fits

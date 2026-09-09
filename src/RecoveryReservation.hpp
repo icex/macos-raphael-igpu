@@ -14,6 +14,41 @@ constexpr uint64_t ReservationOffset = HeapLimit;
 constexpr uint64_t ScratchOffset = 0x0f100000ULL;
 constexpr uint64_t ReservationEnd = 0x10000000ULL;
 
+enum class BarMappingStatus : uint32_t {
+    Cached,
+    OwnerUnavailable,
+    PciUnavailable,
+    MappingFailed,
+    Mapped,
+};
+
+struct BarMappingResult {
+    void *address;
+    BarMappingStatus status;
+};
+
+// AMDHWMemory::init stores its IAMDHWInterface owner at +0x10. AMDHardware is
+// that interface on 24G830 and stores its IOPCIDevice at the same offset.
+// Cache only a successful mapping: an early unavailable owner must not poison a
+// later call after hardware publication.
+template <typename Mapper>
+inline BarMappingResult establishBarMapping(
+    void *&cached, void *publishedHardware, void *memory, Mapper mapper) {
+    if (cached != nullptr) return {cached, BarMappingStatus::Cached};
+    void *hardware = publishedHardware;
+    if (hardware == nullptr && memory != nullptr)
+        hardware = *reinterpret_cast<void **>(
+            reinterpret_cast<uint8_t *>(memory) + 0x10);
+    if (hardware == nullptr) return {nullptr, BarMappingStatus::OwnerUnavailable};
+    void *pci = *reinterpret_cast<void **>(
+        reinterpret_cast<uint8_t *>(hardware) + 0x10);
+    if (pci == nullptr) return {nullptr, BarMappingStatus::PciUnavailable};
+    void *address = mapper(pci);
+    if (address == nullptr) return {nullptr, BarMappingStatus::MappingFailed};
+    cached = address;
+    return {cached, BarMappingStatus::Mapped};
+}
+
 struct Descriptor {
     uint64_t magic;
     uint32_t version;

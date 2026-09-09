@@ -1,8 +1,9 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-09-09. Hardware baseline: candidate 1.0.171; next candidate: 1.0.173; published
-research snapshot: `v1.0.159-preview.1`. This document is the authoritative current
-roadmap. Historical hypotheses in `findings/GPU-RE.md` remain evidence, not instructions.
+Updated 2026-09-09. Last successful hardware startup: candidate 1.0.171; latest controlled
+guest attempt: candidate 1.0.174; next candidate: 1.0.175 with the reviewed BAR0-startup repair;
+published research snapshot: `v1.0.159-preview.1`. This document is the authoritative current roadmap.
+Historical hypotheses in `findings/GPU-RE.md` remain evidence, not instructions.
 
 **Objective:** real, correct GPU compute and rendering in the Sequoia VM on the existing
 Raphael iGPU, followed by usable desktop rendering through the VM display and a repeatable
@@ -71,6 +72,24 @@ domain while GFXHUB consumes the physical domain. Candidate 173 converts only th
 private request copy behind `rgpuvmroot=1`, verifies Apple's output, and records correlated live
 registers plus three page-table walks. This remains diagnostic until hardware shows whether each
 non-SYSTEM child PDE is already physical; the walker never repairs what the GPU consumes.
+Candidate 174 removed invalidate-semaphore diagnostic reads, eliminating their documented
+acquisition risk, and preserved all bounded critical records. Its one controlled launch stopped
+earlier: PM4/KIQ preflight reported
+`BAR0 mapping unavailable` and `startKIQ` refused to proceed. The PM4 engine returned failure and
+the native partial cleanup completed. No KIQ submission, VMID-2 callback or page-table walk ran,
+so the root repair and walker remain untested on hardware. The guest shut down cleanly. Normal
+recovery then failed closed because the guest had never activated the host-KIQ reservation; this
+result does not authorize another same-boot launch. The current repair retries BAR0 mapping until
+successful and can reach the published hardware owner through `AMDHWMemory+0x10` before the later
+global hardware pointer is available. It caches only a successful mapping and caps both allocator
+ranges before `enableAllocations` populates them. The complete kext compiles and the ordering,
+early-owner/retry fixture and KDK preflight pass offline; none of this is hardware validation.
+The [reviewed startup-only no-queue cleanup](../findings/recovery-tests/startup-noqueue-174-live/notes.md)
+has since run once on candidate 174's exact stopped state and produced an authorizing schema-4
+receipt. It found no active compute or graphics queue, halted the already-idle engines, received
+both exact PSP destroy acknowledgements, consumed the PENDING reservation last, and recorded no
+new host kernel message or fault. This is live proof of that bounded cleanup path; it does not
+validate candidate 175, Metal execution, or normal recovery after a fully started guest.
 
 ## 1. What is actually complete
 
@@ -95,7 +114,7 @@ single clean run is not repeatability evidence. There is no defensible overall p
 | [x] | Wrong-kext route regression prevented for current scopes | `route-domains.py` and regression tests; not a complete C++ verifier |
 | [x] | Optional hybrid diagnostic built | 1.0.162, exact entry guards, `rgpuhybrid=1`, native result preserved |
 | [x] | Hybrid diagnostic validated on hardware | 1.0.163: complete records; type10 fails after type10/type11 success |
-| [ ] | Repeatable clean initial state | Launch-bound BAR0/BAR2/BAR5 host-KIQ recovery passes offline tests; descriptor activation, GPU fence and warm reinitialization are not yet hardware-proven |
+| [ ] | Repeatable clean initial state | Startup-only no-queue cleanup succeeded once on candidate 174's exact stopped state; normal schema-5 recovery and warm reinitialization remain hardware-unproven |
 | [x] | Native hybrid queues / complete engine startup | Candidate 171 maps residual engine-2 channels to real SDMA0; hybrid status 0 and native start/power-up 1 on hardware |
 | [ ] | Correct Metal compute and offscreen rendering | First command buffer fails; zero results checked |
 | [ ] | Per-process memory, synchronization and resource lifecycle | Must be exercised after first real completion |
@@ -439,18 +458,20 @@ date for the unknown hardware defects until M2 has localized them.
   [VFIO](https://docs.kernel.org/driver-api/vfio.html),
   [AMDGPU hardware structure](https://docs.kernel.org/gpu/amdgpu/driver-core.html).
 
-## 8. Next same-boot experiment
+## 8. Next controlled experiment
 
-1. Keep the current VFIO ownership and sleep inhibitor; do not rebind or reset the PCI bus.
-2. Build and stage candidate 1.0.173 from one reviewed commit, then verify source, kext, ESP,
-   boot arguments, KDK offsets and the predecessor recovery receipt as one identity chain.
-3. Run `metal-007` once with `rgpuvmroot=1`. Require a repaired root, an exact match in Apple's
-   prepared packet, the same sequence on the VMID-2 SDMA submission, and all three walks.
-4. If any non-SYSTEM non-leaf walk entry reports `child-mc2pa=1`, repair that child-PDE producer
+1. Preserve the stopped VFIO state while verifying the complete candidate and recovery identity
+   chain; do not rebind or reset the PCI device.
+2. Build and stage candidate 1.0.175 with the already offline-validated BAR0-aperture availability
+   and activation-ordering repair that addresses the candidate-174 PM4/KIQ startup refusal.
+3. Preserve the exact successful startup-only cleanup receipt and its unchanged ledger preimage;
+   it authorizes one candidate-175 reservation and must not be replayed.
+4. For the one reviewed candidate-175 launch, require KIQ startup before
+   interpreting any later absence. Then require the VMID-2 root repair, Apple's prepared-packet
+   match, the corresponding SDMA submission and all three page-table walks.
+5. If a non-SYSTEM non-leaf walk entry reports `child-mc2pa=1`, repair that child-PDE producer
    before another run. If all child pointers are physical, use the captured SDMA UTCL/XNACK/page
    state and actual invalidate-engine bit 2 to choose between invalidation and firmware.
-5. Recover rootlessly. Continue on this boot only if the receipt again records no dequeue
-   timeout, no forced clear, idle CP status, halted SDMA and confirmed PSP teardown.
 
 An interactive QEMU display remains gated on the checked compute/render probe, so desktop
 testing cannot mistake Metal enumeration for execution.
