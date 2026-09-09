@@ -29,7 +29,7 @@ PRELAUNCH_CONTINUATION = {
     'boot_id':'5d6f45d0-4384-4340-b819-7751bc26ebb3',
     'run_id':'e583a1b2d97a4ad3b607c1d20a29a812',
     'original_manifest_sha256':'3e55268208543c81963b08b6fa922271324c45a9d1354f012ff069fc815796a4',
-    'replacement_manifest_sha256':None,  # Pinned after candidate 1.0.174 staging audit.
+    'replacement_manifest_sha256':'535ab074affacd019ce9fb389cb9657f610d6cbf7dcca7738de5cc7d298f0ddc',
     'proof_sha256':'8ce5b30f1c2ef9dfac68b00dee29ed8254845dae64dc0832ad4a1295424b034b',
     'verdict_sha256':'071dc20ef87befa35d77e8ba445310277b75ce1349325504ee6f486de09a9ba7',
     'output_sha256':'c099c8597f3da6a0f2db059bd3fd8d1fb53280db7dddcb271ddb76fe8c6609fa',
@@ -373,7 +373,7 @@ def validate_prelaunch_continuation(vm, manifest_path, manifest, original_output
                 manifest.get('spec', {}).get('candidate_version') != '1.0.174' or
                 manifest.get('candidate_directory') != 'run/candidate-174' or
                 manifest.get('prelaunch_replacement_reason') !=
-                    'remove side-effectful SEM diagnostic reads'):
+                    'remove unsafe SEM diagnostic reads and preserve bounded critical capture'):
             errors.append('replacement_manifest')
         verdict_bytes = (original_output/'verdict.json').read_bytes()
         verdict = json.loads(verdict_bytes)
