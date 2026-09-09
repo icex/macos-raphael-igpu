@@ -36,6 +36,30 @@ PRELAUNCH_CONTINUATION = {
     'readiness_sha256':'86282b2a881f86b1fd4d770ec7f066c2014aab0b957b7211c0ed6c6f996f9053',
 }
 
+# This is a single reviewed revision of one historical boot's initial
+# validation ceiling. It is deliberately fixed to candidate 176's immutable
+# cleanup and cannot describe another boot, predecessor, or ledger preimage.
+CAP_REVISION_BOOT_ID = '5d6f45d0-4384-4340-b819-7751bc26ebb3'
+CAP_REVISION_PRIOR_RUN_ID = 'e02fbed46a6a4df4ae48d7c1d8597985'
+CAP_REVISION_RECOVERY_ID = '11602bc7c6f84c75afb1f2cb617a319c'
+CAP_REVISION_LEDGER_SHA256 = '0f45b2c01b5ea6863b01bc0777824d8da3c7ee7ea5d1b900616d44cd3a1c95da'
+CAP_REVISION_CANONICAL_RECEIPT_SHA256 = '4e6c1519f18c0bb60efeb816045eb3aedf6231a0ef8746a530c768996e7e6676'
+CAP_REVISION_RUN_RECEIPT_SHA256 = '77b0931dcefe4c710db724d6cedbda22acf42c3c43de2f0aba25546d396ea180'
+CAP_REVISION_RANGE_AUDIT_SHA256 = 'a6ad51f95e3608f47afd951f970c3f4ed849db8ad0e0aee225790c1d26875ae2'
+CAP_REVISION_CANDIDATE176_CONSUMER_SHA256 = '055e44ca0cd7c06e37a98739ccbed67e3b0578c4416c7e24fb90f2b3db0929be'
+CAP_REVISION_CANDIDATE176_PRODUCER_SHA256 = '8ff51636013da702fed170933ef69f62ae15bbf91d1e59011dc140b9782ee39d'
+CAP_REVISION_PURPOSE = 'm7-normal-recovery-qualification'
+CAP_REVISION_AUTHORITY_FIELDS = {
+    'schema', 'kind', 'boot_id', 'ledger_preimage_sha256', 'prior_run_id',
+    'recovery_id', 'canonical_recovery_receipt_sha256',
+    'run_recovery_receipt_sha256', 'range_audit_sha256', 'design_sha256',
+    'candidate176_consumer_sha256', 'candidate176_recovery_producer_sha256',
+    'candidate177_experiment_py_sha256',
+    'candidate177_recovery_producer_sha256', 'manifest_sha256',
+    'next_run_id', 'from_max_launches', 'to_max_launches',
+    'additional_launches', 'automatic_extension', 'purpose',
+}
+
 
 def helper(name):
     spec = importlib.util.spec_from_file_location(name.replace('-', '_'), Path(__file__).with_name(name+'.py'))
@@ -563,6 +587,16 @@ RECOVERY_HEAP_LIMIT = 0x0f000000
 RECOVERY_RESERVATION_START = 0x0f000000
 RECOVERY_SCRATCH_START = 0x0f100000
 RECOVERY_RESERVATION_END = 0x10000000
+# Schema 5 conservatively excluded the whole recovery reservation above the
+# scratch start. Schema 6 pins the bytes its producer can mutate: consuming the
+# 72-byte descriptor, then the bounded host-KIQ image through its fence DWORD.
+RECOVERY_LEGACY_GART_EXCLUSION = (
+    (RECOVERY_SCRATCH_START, RECOVERY_RESERVATION_END - RECOVERY_SCRATCH_START),
+)
+RECOVERY_V6_MUTATED_RANGES = (
+    (RECOVERY_RESERVATION_START, 72),
+    (RECOVERY_SCRATCH_START, 0x0f113004 - RECOVERY_SCRATCH_START),
+)
 
 
 def _recovery_checksum(prior_run_id):
@@ -625,7 +659,7 @@ def _valid_recovery_regions(value):
             top == RECOVERY_BAR_REGIONS['5'] and regions == RECOVERY_BAR_REGIONS)
 
 
-def _valid_gart(value):
+def _valid_gart(value, forbidden_ranges=RECOVERY_LEGACY_GART_EXCLUSION):
     keys = {'control','root','start_page','end_page','physical_fb',
             'bar_offset','size','active'}
     if not isinstance(value, dict) or set(value) != keys:
@@ -651,8 +685,8 @@ def _valid_gart(value):
             value['size'] == expected_size and 0 < value['size'] <= 0x10000000 and
             (value['root'] & ~0xfff) - value['physical_fb'] == offset and
             offset + value['size'] <= 0x10000000 and
-            not (offset < RECOVERY_RESERVATION_END and
-                 RECOVERY_SCRATCH_START < offset + value['size']))
+            not any(offset < start + size and start < offset + value['size']
+                    for start, size in forbidden_ranges))
 
 
 def _active_reservation_observation(prior_run_id):
@@ -720,7 +754,8 @@ def _graphics_final_clean(snapshot):
         'active','doorbell_control','wptr','wptr_hi','base','base_hi','cntl'))
 
 
-def _valid_host_kiq(value, reservation, gc, hqd_doorbell_values):
+def _valid_host_kiq(value, reservation, gc, hqd_doorbell_values,
+                    gart_forbidden_ranges=RECOVERY_LEGACY_GART_EXCLUSION):
     if not isinstance(value, dict):
         return False
     expected_keys = {'status','selector','packet_dwords','rptr_after',
@@ -748,7 +783,7 @@ def _valid_host_kiq(value, reservation, gc, hqd_doorbell_values):
             value.get('gfx_doorbell_offset') != 0x400 or
             value.get('reservation') != reservation or
             not _valid_hdp_flush(value.get('hdp_flush')) or
-            not _valid_gart(value.get('gart')) or
+            not _valid_gart(value.get('gart'), gart_forbidden_ranges) or
             not _valid_graphics_snapshot(value.get('graphics_pipes_after_unmap')) or
             value.get('graphics_pipes_after_unmap') !=
                 gc.get('graphics_pipes_after_retirement') or
@@ -795,7 +830,8 @@ def _valid_host_kiq(value, reservation, gc, hqd_doorbell_values):
 
 
 def _validate_recovery_receipt(receipt, boot_id, prior_run_id,
-                               hqd_doorbell_values):
+                               hqd_doorbell_values,
+                               gart_forbidden_ranges=RECOVERY_LEGACY_GART_EXCLUSION):
     errors = []
     exact = {'schema':5, 'status':'recovered', 'authorizes_launch':True,
              'boot_id':boot_id,
@@ -869,7 +905,7 @@ def _validate_recovery_receipt(receipt, boot_id, prior_run_id,
         host_kiq = gc.get('host_kiq')
         if gc.get('gfx_needs_unmap') is True:
             if not _valid_host_kiq(host_kiq, reservation, gc,
-                                   hqd_doorbell_values):
+                                   hqd_doorbell_values, gart_forbidden_ranges):
                 errors.append('recovery_receipt')
         elif (gc.get('gfx_needs_unmap') is not False or
               host_kiq != {'status':'not-needed'}):
@@ -925,7 +961,8 @@ def validate_recovery_receipt_v6(receipt, boot_id, prior_run_id):
     legacy['gc_quiesce'] = legacy_gc
     errors.extend(_validate_recovery_receipt(
         legacy, boot_id, prior_run_id,
-        hqd_doorbell_values=(0, 0x80000000)))
+        hqd_doorbell_values=(0, 0x80000000),
+        gart_forbidden_ranges=RECOVERY_V6_MUTATED_RANGES))
     if receipt.get('schema') != 6:
         errors.append('recovery_receipt')
 
@@ -1068,6 +1105,155 @@ def reuse_authorization(vm, boot_id, run_id, manifest=None, manifest_path=None):
     return (receipt if not errors else None), sorted(set(errors))
 
 
+def cap_revision_authority_path(vm, boot_id, run_id):
+    return (Path(vm) / 'run/cap-revision-authorities' / boot_id /
+            (run_id + '.json'))
+
+
+def cap_revision_authorization(vm, manifest, manifest_path,
+                               expected_authority_sha256):
+    """Validate the one candidate-176-to-177 cap revision without consuming it."""
+    errors = []
+    boot_id = manifest.get('boot_id') if isinstance(manifest, dict) else None
+    run_id = manifest.get('run_id') if isinstance(manifest, dict) else None
+    spec = manifest.get('spec') if isinstance(manifest, dict) else None
+    if (boot_id != CAP_REVISION_BOOT_ID or
+            not re.fullmatch(r'[0-9a-f]{32}', str(run_id or '')) or
+            manifest.get('gpu') is not True or
+            manifest.get('candidate_directory') != 'run/candidate-177' or
+            type(manifest.get('max_seconds')) is not int or
+            manifest.get('max_seconds') != 180 or
+            not isinstance(spec, dict) or spec.get('candidate_version') != '1.0.177' or
+            spec.get('id') != 'metal-010' or manifest.get('experiment') != 'metal-010' or
+            spec.get('requested_diagnostic') != 'rgpusubmit=1' or
+            type(spec.get('max_seconds')) is not int or
+            spec.get('max_seconds') != 180):
+        return None, ['cap_revision_manifest']
+    if not re.fullmatch(r'[0-9a-f]{64}', str(expected_authority_sha256 or '')):
+        return None, ['cap_revision_authority']
+
+    authority_path = cap_revision_authority_path(vm, boot_id, run_id)
+    ledger_path = Path(vm)/'run/used-gpu-boots'/(boot_id+'.json')
+    canonical_path = (Path(vm)/'run/vfio-recovery'/boot_id/
+                      (CAP_REVISION_PRIOR_RUN_ID+'.json'))
+    run_path = Path(vm)/'run/metal-009-176/recovery.json'
+    manifest_path = Path(manifest_path)
+    try:
+        authority_raw = authority_path.read_bytes()
+        authority = json.loads(authority_raw)
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return None, ['cap_revision_authority']
+    if sha(authority_raw) != expected_authority_sha256:
+        errors.append('cap_revision_authority')
+
+    try:
+        manifest_raw = manifest_path.read_bytes()
+        if json.loads(manifest_raw) != manifest:
+            errors.append('cap_revision_manifest')
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        manifest_raw = b''
+        errors.append('cap_revision_manifest')
+
+    try:
+        ledger_raw = ledger_path.read_bytes()
+        ledger = json.loads(ledger_raw)
+        launches = ledger.get('launches') if isinstance(ledger, dict) else None
+        if (sha(ledger_raw) != CAP_REVISION_LEDGER_SHA256 or
+                not isinstance(ledger, dict) or
+                ledger.get('schema') != 2 or ledger.get('boot_id') != boot_id or
+                ledger.get('max_launches') != 3 or
+                not isinstance(launches, list) or len(launches) != 3 or
+                any(not isinstance(row, dict) for row in launches) or
+                launches[-1].get('run_id') != CAP_REVISION_PRIOR_RUN_ID or
+                any(row.get('run_id') == run_id for row in launches) or
+                CAP_REVISION_RECOVERY_ID in {
+                    row.get('recovery_id') for row in launches}):
+            errors.append('cap_revision_ledger')
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        ledger_raw = b''; ledger = None
+        errors.append('cap_revision_ledger')
+
+    receipt_raws = []
+    receipts = []
+    for path, expected_hash in (
+            (canonical_path, CAP_REVISION_CANONICAL_RECEIPT_SHA256),
+            (run_path, CAP_REVISION_RUN_RECEIPT_SHA256)):
+        try:
+            raw = path.read_bytes(); value = json.loads(raw)
+            receipt_raws.append(raw); receipts.append(value)
+            if sha(raw) != expected_hash:
+                errors.append('cap_revision_receipt')
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            errors.append('cap_revision_receipt')
+    receipt = receipts[0] if receipts else None
+    if (len(receipts) != 2 or receipts[0] != receipts[1] or
+            not isinstance(receipt, dict) or
+            receipt.get('recovery_id') != CAP_REVISION_RECOVERY_ID or
+            validate_recovery_receipt_v6(
+                receipt, boot_id, CAP_REVISION_PRIOR_RUN_ID)):
+        errors.append('cap_revision_receipt')
+
+    artifacts = {
+        'range_audit_sha256':ROOT/'findings/experiments/metal-009-176/recovery-gart-range-audit.md',
+        'design_sha256':ROOT/'docs/superpowers/specs/2026-09-09-same-boot-qualification-cap-revision-design.md',
+        'candidate177_experiment_py_sha256':Path(__file__).resolve(),
+        'candidate177_recovery_producer_sha256':ROOT/'tools/vfio-recover.py',
+    }
+    artifact_hashes = {}
+    try:
+        artifact_hashes = {key:sha(path.read_bytes())
+                           for key, path in artifacts.items()}
+    except OSError:
+        errors.append('cap_revision_source')
+    if (artifact_hashes.get('range_audit_sha256') !=
+            CAP_REVISION_RANGE_AUDIT_SHA256):
+        errors.append('cap_revision_evidence')
+
+    fixed = {
+        'schema':1, 'kind':'same-boot-qualification-cap-revision',
+        'boot_id':CAP_REVISION_BOOT_ID,
+        'ledger_preimage_sha256':CAP_REVISION_LEDGER_SHA256,
+        'prior_run_id':CAP_REVISION_PRIOR_RUN_ID,
+        'recovery_id':CAP_REVISION_RECOVERY_ID,
+        'canonical_recovery_receipt_sha256':
+            CAP_REVISION_CANONICAL_RECEIPT_SHA256,
+        'run_recovery_receipt_sha256':CAP_REVISION_RUN_RECEIPT_SHA256,
+        'range_audit_sha256':CAP_REVISION_RANGE_AUDIT_SHA256,
+        'candidate176_consumer_sha256':
+            CAP_REVISION_CANDIDATE176_CONSUMER_SHA256,
+        'candidate176_recovery_producer_sha256':
+            CAP_REVISION_CANDIDATE176_PRODUCER_SHA256,
+        'design_sha256':artifact_hashes.get('design_sha256'),
+        'candidate177_experiment_py_sha256':
+            artifact_hashes.get('candidate177_experiment_py_sha256'),
+        'candidate177_recovery_producer_sha256':
+            artifact_hashes.get('candidate177_recovery_producer_sha256'),
+        'manifest_sha256':sha(manifest_raw),
+        'next_run_id':run_id,
+        'from_max_launches':3, 'to_max_launches':4,
+        'additional_launches':1, 'automatic_extension':False,
+        'purpose':CAP_REVISION_PURPOSE,
+    }
+    if (not isinstance(authority, dict) or
+            set(authority) != CAP_REVISION_AUTHORITY_FIELDS or
+            any(type(authority.get(key)) is not type(value) or
+                authority.get(key) != value for key, value in fixed.items())):
+        errors.append('cap_revision_authority')
+    if errors:
+        return None, sorted(set(errors))
+    return {
+        'authority':authority,
+        'authority_path':authority_path,
+        'authority_raw':authority_raw,
+        'authority_sha256':expected_authority_sha256,
+        'ledger_path':ledger_path,
+        'ledger_raw':ledger_raw,
+        'receipt':receipt,
+        'receipt_raws':receipt_raws,
+        'manifest_raw':manifest_raw,
+    }, []
+
+
 def replace_json(path, value):
     path = Path(path)
     temp = path.with_name(path.name+'.new-'+uuid.uuid4().hex)
@@ -1081,6 +1267,125 @@ def replace_json(path, value):
         finally: os.close(directory)
     finally:
         temp.unlink(missing_ok=True)
+
+
+def _journal_cursor_position(cursor, boot_id):
+    if not isinstance(cursor, str):
+        return None
+    match = re.search(r'(?:^|;)i=([0-9a-f]+);b=([A-Za-z0-9-]+)(?:;|$)',
+                      cursor)
+    if (not match or
+            match[2].replace('-', '').lower() != boot_id.replace('-', '').lower()):
+        return None
+    return int(match[1], 16)
+
+
+def reserve_cap_revision(directory, boot_id, experiment, recovery, manifest,
+                         manifest_path, authorization):
+    """Atomically record the sole 3-to-4 policy revision and fourth launch."""
+    if (not isinstance(manifest, dict) or boot_id != manifest.get('boot_id') or
+            experiment != manifest.get('run_id') or
+            not isinstance(authorization, dict)):
+        raise ValueError('cap revision refused: cap_revision_authority')
+    vm = Path(directory).parent.parent
+    expected_sha = authorization.get('authority_sha256')
+    checked, errors = cap_revision_authorization(
+        vm, manifest, manifest_path, expected_sha)
+    if (errors or checked is None or recovery != checked['receipt']):
+        raise ValueError('cap revision refused: '+','.join(
+            sorted(set(errors or ['cap_revision_receipt']))))
+
+    fresh_host = host_snapshot()
+    host_errors = admit(manifest, fresh_host, {boot_id}, reuse_allowed=True)
+    if fresh_host.get('sleep_inhibited') is not True:
+        host_errors.append('sleep_inhibited')
+    try:
+        units = active_launch_units()
+    except Exception:
+        units = None; host_errors.append('active_launch_units')
+    if units:
+        host_errors.append('active_launch_units')
+    pending = vm/'run/launch-pending'
+    try:
+        pending_names = sorted(path.name for path in pending.iterdir())
+    except FileNotFoundError:
+        pending_names = []
+    except OSError:
+        pending_names = None; host_errors.append('pending_launch')
+    if pending_names:
+        host_errors.append('pending_launch')
+
+    try:
+        recovery_tool = helper('vfio-recover')
+        vfio_gate = recovery_tool.host_state()
+        host_errors.extend(recovery_tool.validate_host_state(vfio_gate, boot_id))
+    except Exception:
+        vfio_gate = None; host_errors.append('vfio_host_gate')
+    if host_errors:
+        raise ValueError('cap revision refused: '+','.join(sorted(set(host_errors))))
+
+    cursor_before = recovery.get('kernel_cursor_after')
+    before_position = _journal_cursor_position(cursor_before, boot_id)
+    if before_position is None:
+        raise ValueError('cap revision refused: kernel_cursor')
+    try:
+        cursor_after, messages, faults = kernel_updates(cursor_before)
+    except Exception:
+        raise ValueError('cap revision refused: kernel_cursor') from None
+    after_position = _journal_cursor_position(cursor_after, boot_id)
+    implicit_resets = [message for message in messages if re.search(
+        r'vfio-pci 0000:7b:00\.0: (?:resetting|reset done)\b',
+        message, re.I)]
+    if after_position is None or after_position < before_position:
+        errors.append('kernel_cursor')
+    cap_faults = list(faults) + [message for message in messages if re.search(
+        r'BUG:|Oops:|Hardware Error|IO_PAGE_FAULT|hard LOCKUP|soft lockup|MCE:|'
+        r'AMD-Vi:.*fault|vfio.*(?:error|failed)', message, re.I)]
+    if cap_faults:
+        errors.append('kernel_fault')
+    if implicit_resets:
+        errors.append('implicit_reset')
+    if errors:
+        raise ValueError('cap revision refused: '+','.join(sorted(set(errors))))
+
+    # Repeat every immutable binding after the live gates and journal scan. The
+    # bytes used for the transition may not change between review and replace.
+    final, errors = cap_revision_authorization(
+        vm, manifest, manifest_path, expected_sha)
+    if errors or final is None:
+        raise ValueError('cap revision refused: '+','.join(
+            sorted(set(errors or ['cap_revision_authority']))))
+    for key in ('authority_raw', 'ledger_raw', 'receipt_raws', 'manifest_raw'):
+        if final[key] != checked[key]:
+            raise ValueError('cap revision refused: concurrent_change')
+
+    ledger = json.loads(final['ledger_raw'])
+    launches = list(ledger['launches'])
+    revision = {
+        'authority_sha256':expected_sha,
+        'ledger_preimage_sha256':CAP_REVISION_LEDGER_SHA256,
+        'from_max_launches':3, 'to_max_launches':4,
+        'additional_launches':1, 'purpose':CAP_REVISION_PURPOSE,
+        'kernel_cursor_before':cursor_before,
+        'kernel_cursor_after':cursor_after,
+        'kernel_messages':messages,
+        'host_gate':fresh_host,
+        'vfio_gate':vfio_gate,
+        'active_launch_units':units,
+        'pending_launches':pending_names,
+    }
+    launches.append({
+        'run_id':experiment, 'reserved_epoch':time.time(),
+        'recovery_id':CAP_REVISION_RECOVERY_ID,
+        'prior_run_id':CAP_REVISION_PRIOR_RUN_ID,
+        'cap_revision_authority_sha256':expected_sha,
+        'qualification':CAP_REVISION_PURPOSE,
+    })
+    updated = dict(ledger)
+    updated.update(schema=3, initial_max_launches=3, max_launches=4,
+                   cap_revisions=[revision], launches=launches)
+    replace_json(final['ledger_path'], updated)
+    return cursor_after
 
 
 def reserve_boot(directory, boot_id, experiment, recovery=None,
@@ -1137,6 +1442,16 @@ def reserve_boot(directory, boot_id, experiment, recovery=None,
     ledger.update(schema=2, boot_id=boot_id, max_launches=3, launches=launches)
     ledger.pop('experiment', None)
     replace_json(path, ledger)
+
+
+def reserve_launch_and_cursor(directory, boot_id, experiment, recovery,
+                              manifest, manifest_path, cap_revision=None):
+    if cap_revision is not None:
+        return reserve_cap_revision(
+            directory, boot_id, experiment, recovery, manifest,
+            manifest_path, cap_revision)
+    reserve_boot(directory, boot_id, experiment, recovery, manifest, manifest_path)
+    return kernel_updates()[0]
 
 
 def probe_fits(now, launch_deadline, container_deadline, probe_seconds=45, cleanup_seconds=25):
@@ -1246,10 +1561,13 @@ def run_probe(vm, manifest):
     return dict(run_id=nonce, output=result.stdout, transport_exit=result.returncode)
 
 
-def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=None):
+def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=None,
+            cap_revision_authority_sha256=None):
     """One bounded launch; a verified prior recovery may authorize same-boot reuse."""
     if bool(resume_prelaunch) != bool(prelaunch_proof):
         raise ValueError('prelaunch continuation requires both evidence paths')
+    if cap_revision_authority_sha256 and resume_prelaunch:
+        raise ValueError('cap revision cannot use prelaunch continuation')
     manifest = json.loads(manifest_path.read_text())
     missing = required_identity(manifest)
     if missing: raise ValueError('incomplete prepared identity: '+','.join(missing))
@@ -1279,6 +1597,7 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                 host = host_snapshot(); write_once(output/'host-before.json', host)
                 used = vm/'run/used-gpu-boots'; used.mkdir(exist_ok=True)
                 recovery = None; reuse_errors = []
+                cap_revision = None; reservation_cursor = None
                 continuation = None; continuation_ledger = None
                 if resume_prelaunch:
                     cursor_result = kernel_updates()
@@ -1292,20 +1611,31 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                         {key:manifest[key] for key in observed if key in manifest}, observed)
                 if manifest.get('gpu') is False:
                     if resume_prelaunch: errors.append('gpu_less_continuation')
+                    if cap_revision_authority_sha256:
+                        errors.append('gpu_less_cap_revision')
                     if host['active_vm']: errors.append('active_vm')
                 elif not resume_prelaunch:
-                    recovery, reuse_errors = reuse_authorization(
-                        vm, host['boot_id'], manifest['run_id'], manifest,
-                        manifest_path)
+                    if cap_revision_authority_sha256:
+                        cap_revision, reuse_errors = cap_revision_authorization(
+                            vm, manifest, manifest_path,
+                            cap_revision_authority_sha256)
+                        if cap_revision is not None:
+                            recovery = cap_revision['receipt']
+                    else:
+                        recovery, reuse_errors = reuse_authorization(
+                            vm, host['boot_id'], manifest['run_id'], manifest,
+                            manifest_path)
                     errors += reuse_errors
                     errors += admit(manifest, host, {p.stem for p in used.glob('*.json')},
                                     reuse_allowed=recovery is not None)
                 if not host['sleep_inhibited']: errors.append('sleep_inhibited')
                 if errors: raise ValueError('admission refused: '+','.join(errors))
                 if manifest.get('gpu') is not False and not resume_prelaunch:
-                    reserve_boot(used, host['boot_id'], manifest['run_id'], recovery,
-                                 manifest, manifest_path)
-                cursor = cursor_result[0] if resume_prelaunch else kernel_updates()[0]
+                    reservation_cursor = reserve_launch_and_cursor(
+                        used, host['boot_id'], manifest['run_id'], recovery,
+                        manifest, manifest_path, cap_revision)
+                cursor = (cursor_result[0] if resume_prelaunch else
+                          reservation_cursor or kernel_updates()[0])
                 monitor = HostMonitor(cursor, lambda:os.kill(os.getpid(), signal.SIGUSR1))
                 monitor.start()
                 if manifest.get('gpu') is not False:
@@ -1454,11 +1784,16 @@ if __name__ == '__main__':
     parser.add_argument('--gpu-less', action='store_true', help='prepare a no-passthrough coordinator validation')
     parser.add_argument('--resume-prelaunch', type=Path)
     parser.add_argument('--prelaunch-proof', type=Path)
+    parser.add_argument('--cap-revision-authority-sha256')
     args = parser.parse_args()
     if ((args.resume_prelaunch or args.prelaunch_proof) and args.action != 'run'):
         parser.error('prelaunch continuation options are only valid with run')
     if bool(args.resume_prelaunch) != bool(args.prelaunch_proof):
         parser.error('prelaunch continuation requires both evidence paths')
+    if args.cap_revision_authority_sha256 and args.action != 'run':
+        parser.error('cap revision authority is only valid with run')
+    if args.cap_revision_authority_sha256 and args.resume_prelaunch:
+        parser.error('cap revision authority cannot be combined with prelaunch continuation')
     if args.gpu_less and args.action != 'prepare':
         parser.error('--gpu-less is only valid with prepare; run uses the explicit prepared mode')
     if args.action == 'host': result = host_snapshot()
@@ -1468,5 +1803,6 @@ if __name__ == '__main__':
     else:
         if not args.manifest or not args.output: parser.error('run requires --manifest and --output')
         result = run_one(args.vm_dir.resolve(), args.manifest, args.output,
-                         args.resume_prelaunch, args.prelaunch_proof)
+                         args.resume_prelaunch, args.prelaunch_proof,
+                         args.cap_revision_authority_sha256)
     print(json.dumps(result, indent=2))

@@ -1,7 +1,7 @@
 # Raphael iGPU acceleration roadmap
 
 Updated 2026-09-09. Last successful hardware startup and latest controlled guest attempt:
-candidate 1.0.175; next launch requires a new authorizing recovery state;
+candidate 1.0.176; its one-shot run consumed the boot ledger's third and final launch;
 published research snapshot: `v1.0.159-preview.1`. This document is the authoritative current roadmap.
 Historical hypotheses in `findings/GPU-RE.md` remain evidence, not instructions.
 
@@ -139,8 +139,27 @@ the [doorbell-zero and closure archive](../findings/recovery-tests/retained-kiq-
 The schema-6 normal-recovery producer and validator now preserve PAGE IB-then-RB shutdown evidence,
 require the PAGE/GFX/RLC inputs disabled and SDMA idle, and accept selector doorbell cleanup only as
 exact zero or HIT-only with the enable bit clear. The integrated focused suite passes offline. This
-schema has not produced an authorizing hardware receipt, and the old failed schema-5 receipt remains
-unchanged.
+schema first ran on hardware after candidate 176. Physical cleanup completed, but the receipt does
+not validate under the run's committed consumer because its GART check conflates the
+allocator-excluded reservation with the much smaller ranges recovery actually writes. Independent
+review narrowed only the schema-6 exclusion to the exact descriptor and conservative host-KIQ
+mutation spans; 346 tests pass and both immutable receipt serializations now validate with `[]`.
+The old failed schema-5 receipt remains unchanged.
+
+Candidate 1.0.176 used the reviewed same-boot continuation once. It repeated candidate 175's native
+KIQ, SDMA, engine and outer accelerator startup success, then passed the corrected readiness gate and
+ran the prepared Metal probe. The first compute command ended in status 5 with underlying
+`e00002bd` (`kIOReturnNoMemory`); zero command buffers, compute rounds, values or pixels completed.
+No SDMA VM-program, VMID-2 root-repair or page-table-walk record appeared, so classification is
+`INCONCLUSIVE / sdma_vm_program_missing`. Guest-requested shutdown succeeded. Schema-6 recovery
+dequeued both MEC HQDs, matched the temporary-KIQ fence, and measured zero final queue, graphics and
+doorbell state without a host fault. Its active GART table at `[0x0fdfc000,0x0fffe008)` overlaps the
+consumer's overly broad exclusion interval `[0x0f100000,0x10000000)`, so the run's original consumer
+rejected it. Actual recovery writes end at `0x0f113004`, before the GART starts; the ranges are
+disjoint. The
+reviewed correction now validates the unchanged receipt. The separate 3/3 launch ceiling still
+blocks reuse on this boot. See the
+[candidate-176 evidence](../findings/experiments/metal-009-176/notes.md).
 
 For future schema-6 recovery, the automatic stopped-WPTR path is available only after a terminal
 host-KIQ fence, pre-scrub UNMAP proof, genuine dequeue, and a sole pointer-clear cleanup failure. It
@@ -352,8 +371,10 @@ changes a return value or bypasses allocation/queue initialization cannot pass.
 
 ### M4 — First correct compute, with fault localization
 
-- [ ] Run the existing precompiled probe, then split into diagnostic subcases only if the
-  combined case cannot distinguish allocation, copy/synchronization, compute or completion.
+- [x] Run the existing precompiled probe after complete native startup. Candidate 176's first
+  compute command returned status 5 / `kIOReturnNoMemory` with zero completed command buffers.
+- [ ] Split the failure into bounded diagnostic subcases that distinguish allocation and resource
+  setup from VM programming, submission and completion; no SDMA VM-program record was emitted.
 - [ ] Follow one submission end-to-end: user Metal request → kernel client/resource VM →
   packet/IB → GPU progress/fence memory → interrupt/completion → userspace callback.
 - [ ] If no progress, inspect only that engine's queue and addresses. If GPU memory/fence
@@ -433,7 +454,9 @@ Physical display work must not be mistaken for a prerequisite to an offscreen co
   inactive before scrub, and final PQ polling, gate, ranges, selectors and engines read clean.
 - [ ] Hardware-qualify the reservation activation, HDP flush, temporary-KIQ fence and complete
   cleanup evidence. Then consume that receipt in one successful same-boot reinitialization.
-  Offline tests alone do not prove this transaction on Raphael hardware.
+  Candidate 176 measured the physical cleanup path, and the independently corrected schema-6
+  consumer validates its unchanged receipt. A subsequent initialization remains untested, and the
+  separate 3/3 launch ceiling blocks reuse on the current boot.
 - [x] Reject incomplete recovery: any dequeue timeout, forced ACTIVE clear, nonzero `CP_STAT`
   or nonzero `CP_CPC_BUSY_STAT` prevents warm reuse even when halt bits and ACTIVE read back.
 - [x] On a runtime observation/capture failure after exact QEMU identity validation, request
@@ -525,21 +548,22 @@ date for the unknown hardware defects until M2 has localized them.
 
 ## 8. Next controlled experiment
 
-1. Preserve the stopped VFIO state and the complete candidate-175 evidence. Its consumed startup
-   receipt, incomplete schema-5 recovery, and later diagnostic closure records cannot authorize
-   another launch.
-2. Keep the corrected, offline-tested coordinator probe-readiness gate. Require exact build and
-   routes, complete capture, successful native KIQ/SDMA/engine startup, and successful outer
-   accelerator power-up before starting the prepared probe. Keep VM-program and root-repair
-   correlation mandatory for the final verdict after workload submission.
-3. Before any later launch, require the reviewed one-use candidate-176 authorization to bind the
-   immutable closure evidence, exact source/build/staged identities, prepared manifest and current
-   ledger preimage. Do not infer authorization from the diagnostic closure records themselves.
-4. On the next reviewed run, require the VMID-2 root repair, Apple's prepared-packet match, the
-   corresponding SDMA submission and all three page-table walks before any acceleration claim.
-5. If a non-SYSTEM non-leaf walk entry reports `child-mc2pa=1`, repair that child-PDE producer
-   before another run. If all child pointers are physical, use the captured SDMA UTCL/XNACK/page
-   state and actual invalidate-engine bit 2 to choose between invalidation and firmware.
+1. Preserve the complete candidate-176 evidence, both immutable schema-6 receipt serializations,
+   their successful corrected-consumer validation, and the now-full 3/3 boot ledger. Do not launch
+   or retry again under the current ceiling.
+2. Keep the reviewed schema-6 descriptor and host-KIQ mutation spans pinned to the producer layout.
+   Separately harden recovery ordering so any descriptor/GART overlap is rejected before consuming
+   the descriptor; candidate 176's measured ranges were disjoint.
+3. Localize the first Metal command's `kIOReturnNoMemory` before another hardware plan. Separate
+   allocation/resource setup from VM programming, submission and completion, and retain the absence
+   of SDMA VM-program/root-repair records as an observation rather than proof of where it failed.
+4. Admit no current-boot launch under the existing 3/3 ceiling. Review any future bounded lifecycle
+   qualification policy separately; the ceiling is a safety policy, not a measured hardware limit.
+   The proposed one-launch revision remains conditional on the
+   [reviewed cap design](superpowers/specs/2026-09-09-same-boot-qualification-cap-revision-design.md),
+   the final [metal-010 trace card](../experiments/metal-010.json), an immutable candidate-177
+   manifest and authority, and final independent host evidence. None of those documents alone
+   authorizes a launch.
 
 An interactive QEMU display remains gated on the checked compute/render probe, so desktop
 testing cannot mistake Metal enumeration for execution.

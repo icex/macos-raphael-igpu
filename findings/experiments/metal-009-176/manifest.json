@@ -1,0 +1,89 @@
+{
+  "binary_sha256": "0933daeb474adf99906d9f0068eca6553acc0add6d72618a5c2e6f67c913e38a",
+  "info_sha256": "849df353aecc20db06e9af73d4e0c82872214d509280e27f9f980c2010b6b45d",
+  "config_sha256": "3871b0e648a1fce838553020585f105c26aeaf9a5cc626494abf00b13b6d1162",
+  "build_id": "ac3732d072174d2d847dacec4e9982c2",
+  "source_sha256": "1acc13c83a526a71d34d7004cba7ed1ede870c0a4cec7a771f90e49d9958eefb",
+  "source_commit": "5792fa7abe26fceea4be42074e3323c259da5bf1",
+  "source_clean": true,
+  "built_from_commit": "5792fa7abe26fceea4be42074e3323c259da5bf1",
+  "kdk_sha256": {
+    "HWLibs": "9a10fe21b61437fba11bad2c2221307317ddd02893a82a7d753317879682786d",
+    "Framebuffer": "0f4b79b62fa66bbf5a907274d1f5442aeda4ba4ee4b67c216c01757dee7e4505",
+    "X6000": "2e364270c3243c532a9428c670313d5afd20406e42d64edb4fa8f3572504104e"
+  },
+  "build_inputs_sha256": "22e368df68a6daf7962904669f99cf3d296564999c26be2457ca40922b1e311f",
+  "boot_args": "-v keepsyms=1 tlbto_us=0 vti=9 serial=3 debug=0x108 -lilubetaall rgpudump=40000 rgpu=0xfffa5981 rgpuvmm=3 rgpumem=2 rgpuptb=2 rgpumqd=2 rgpuhybrid=1 rgpusdma=1 rgpuvmroot=1",
+  "harness_sha256": {
+    "macos-vm.sh": "0cb9b3becd83cd90f4af2cdf29194e400fb38724e172533169fd4bdbb24b9ba7",
+    "vm-supervision.py": "79fce0b0eaa97df3f3bf59cfb370d54c9fdeaf3046ef3e9f38bad431fbd6ae34",
+    "sercat.py": "c39f0d230fae056a841ffea928c1e9903325fa4fdaaf338adc3ee3feb9d13ec3",
+    "agent-server.py": "2a9d83751b4c1fc600d057e4277873e45430396443dea4d8bf289ff66198b73a",
+    "gx": "73f8912b4699ae286593bb4abb7194f778264322a4a6674a14d64d426eb3dcf6",
+    "gpu-bind.sh": "1cf65291e7da752afb70593e447f0a7c20e8bd70e6fdc61060063ad25e4fba8d"
+  },
+  "rom_sha256": "3c6977ee2769b0b5fe96c2f99581806afe53f93e108fcff2f0c177a276c1e901",
+  "launch_options": {
+    "BOOTDISK_MODE": "custom",
+    "NVRAM": "stock"
+  },
+  "image_id": "sha256:3a3c82c79bc4e73531f819ccdfa4053b3084efd7c1f645678dbf8b4b3a24369c",
+  "guest_build": "24G830",
+  "probe_source_sha256": "f0fc0ced81fe70732c3491cff1557a83d85c9ccb8c18a6303f9070ae1f969d77",
+  "probe_binary_sha256": "1637e4b31bca0a1bdc400f96e34b344a823de1b408a8d1677d6bcca475c8c787",
+  "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+  "kernel": "7.2.3-1-cachyos-bore",
+  "bootdisk_sha256": "0c388a9327f22475116e68cceac4f029b300fdfd2f4aebac9a79b1ef7451c686",
+  "run_id": "e02fbed46a6a4df4ae48d7c1d8597985",
+  "max_seconds": 180,
+  "gpu": true,
+  "vfio_device": "0000:7b:00.0",
+  "experiment": "metal-009",
+  "spec": {
+    "id": "metal-009",
+    "question": "After verified same-boot cleanup, does candidate 176 execute the prepared Metal compute/render probe, with VMID-2 root repair and page-table evidence explaining the result?",
+    "candidate_version": "1.0.176",
+    "requested_diagnostic": "rgpuvmroot=1",
+    "behavior_change": "use the corrected coordinator readiness gate to start one prepared probe only after exact identity, route, capture, native KIQ/SDMA/engine and outer accelerator startup checks; before Apple's native KIQ creation, require the selected queue to become inactive with ingress disabled, initialize RPTR and both WPTR halves to zero with effective readback, and refuse activation if that safety state cannot be established; preserve candidate 175's BAR0 early-owner repair, VMID-2 root diagnostic, boot arguments, routes, and all other functional behavior",
+    "required_observations": [
+      "loaded_build",
+      "route_guards",
+      "kiq_stamps",
+      "hybrid_enter",
+      "hybrid_exit",
+      "engine_start",
+      "sdma_topology",
+      "sdma_channel_remap",
+      "sdma_vm_program",
+      "vmid2_root_repair"
+    ],
+    "max_seconds": 180,
+    "prerequisites": [
+      "same_boot_candidate176_one_use_authorization",
+      "inactive_kiq_pointer_guard_offline_validated",
+      "bar0_early_owner_retry_hardware_validated",
+      "amdgpu_initialized_this_boot",
+      "reset_methods_disabled",
+      "sleep_inhibitor_active",
+      "watchdog_and_pstore_verified"
+    ],
+    "repeat_policy": "one authorized run only; require exact candidate and route identity, complete capture, successful native KIQ/SDMA/engine startup and outer accelerator power-up before one prepared probe, then require VMID-2 root repair, SDMA programming and page-table evidence for the final verdict",
+    "abort_on": [
+      "identity_mismatch",
+      "capture_loss",
+      "bar0_mapping_unavailable",
+      "root_repair_refused",
+      "prepared_root_mismatch",
+      "guest_panic",
+      "terminal_kiq_submit_failure",
+      "sdma_page_timeout",
+      "host_fault",
+      "incomplete_gc_quiesce"
+    ],
+    "outcome_table": "docs/ROADMAP.md M4-M7",
+    "run_probe_only_after_native_start": true
+  },
+  "candidate_directory": "run/candidate-176",
+  "qemu_version": "QEMU emulator version 10.1.2",
+  "bootdisk_verified": true
+}

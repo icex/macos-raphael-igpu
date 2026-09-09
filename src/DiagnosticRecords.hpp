@@ -3,7 +3,7 @@
 #include <stdint.h>
 
 namespace rgpu {
-static constexpr size_t kCriticalRecordCapacity = 256;
+static constexpr size_t kCriticalRecordCapacity = 512;
 static constexpr uint64_t kRoutinePreClearRecordLimit = 8;
 
 class SuccessRecordBudget {

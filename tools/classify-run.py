@@ -22,6 +22,26 @@ def _decode_payload(build, seq, payload):
                          payload)
         row.update(kind='sdma_topology_route', count=int(m[2]) if m else 0,
                    ok=bool(m and m[1] == 'ok' and m[3] == '1'))
+    elif m := re.fullmatch(
+            r'SUB: routes=(ok|FAILED) count=(\d+) entries-match=([01]) '
+            r'capture=(armed|disabled)', payload):
+        row.update(kind='submission_trace_route', count=int(m[2]),
+                   entries_match=bool(int(m[3])), capture=m[4],
+                   ok=(m[1] == 'ok' and m[2] == '5' and m[3] == '1' and
+                       m[4] == 'armed'))
+    elif payload.startswith('SUB: routes='):
+        row.update(kind='submission_trace_route', ok=False, malformed=True)
+    elif m := re.fullmatch(
+            r'SUB: summary process=(\d+)/(\d+)/(\d+) '
+            r'mappings=(\d+)/(\d+)/(\d+) prepare=(\d+)/(\d+)/(\d+) '
+            r'map=(\d+)/(\d+)/(\d+) submit=(\d+)/(\d+)/(\d+) '
+            r'dropped=(\d+)/(\d+)', payload):
+        values = [int(m[index]) for index in range(1, 18)]
+        row.update(kind='submission_trace_summary', ok=True,
+                   counts=[values[index:index + 3] for index in range(0, 15, 3)],
+                   dropped=values[15:17])
+    elif payload.startswith('SUB: summary'):
+        row.update(kind='submission_trace_summary', ok=False, malformed=True)
     elif payload == 'SD: topology applied: discovered=1 kept=SDMA0 removed=SDMA1 before initialize':
         row.update(kind='sdma_topology', applied=True)
     elif payload.startswith('SD: topology NOT applied:'):
@@ -269,10 +289,16 @@ def parse_serial(serial):
         if row.get('build') not in counts:
             row['source'] = 'raw-fallback'
             terminal_live.append(row)
+        elif row['kind'] == 'submission_trace_route':
+            # Route readiness is emitted once from the kext-load callback and is
+            # safe to consume before the next immutable replay snapshot.
+            row['source'] = 'live-readiness'
+            terminal_live.append(row)
         elif row['kind'] in ('vm_invalidate', 'vm_context', 'vm_program', 'vm_root_repair',
                             'vm_state', 'vm_walk', 'vm_walk_entry',
                             'vm_invalidate_live', 'vm_pre_clear_fault', 'vm_fault',
-                            'sdma_runtime', 'sdma_xnack', 'sdma_page_state', 'sdma_submit'):
+                            'sdma_runtime', 'sdma_xnack', 'sdma_page_state', 'sdma_submit',
+                            'submission_trace_summary'):
             # These records are formatted by the dedicated observation thread,
             # outside the driver callbacks. Preserve the exact live line until
             # the next immutable structured snapshot includes it.
@@ -305,6 +331,18 @@ def _classify(manifest, events, probe, defer_absent_workload=False):
     if not kinds['build'] or not kinds['route']:
         return verdict('INCONCLUSIVE', stage='identity_or_route_missing')
     required = manifest.get('spec', {}).get('required_observations', [])
+    if 'submission_trace' in required:
+        trace_routes = [r for r in events if r['kind'] == 'submission_trace_route']
+        if not trace_routes:
+            return verdict('INCONCLUSIVE', stage='submission_trace_route_missing')
+        if len(trace_routes) != 1 or not trace_routes[0].get('ok'):
+            return verdict('INVALID', stage='submission_trace_route_guard')
+        trace_summaries = [r for r in events if r['kind'] == 'submission_trace_summary']
+        if any(not r.get('ok') for r in trace_summaries):
+            return verdict('INVALID', stage='submission_trace_worker_malformed')
+        if not any(r.get('seq', -1) > trace_routes[0].get('seq', -1)
+                   for r in trace_summaries):
+            return verdict('INCONCLUSIVE', stage='submission_trace_worker_missing')
     post_workload_kinds = {
         'sdma_submit', 'sdma_ib_repair', 'vm_program', 'vm_root_repair',
         'vm_state', 'vm_walk', 'vm_walk_entry', 'vm_context',
@@ -409,7 +447,8 @@ def _classify(manifest, events, probe, defer_absent_workload=False):
         return verdict('GUEST_PANIC', True, stage,
                        'decode the symbolicated fault and repair it offline; no retry')
     seqs = sorted(r['seq'] for r in events if 'seq' in r and
-                  r.get('source') not in ('raw-terminal', 'live-observation'))
+                  r.get('source') not in ('raw-terminal', 'live-observation',
+                                          'live-readiness'))
     if (any(r['kind'] == 'capture_loss' for r in events) or
             seqs != list(range(len(seqs)))):
         return verdict('INCONCLUSIVE', stage='capture_loss')
