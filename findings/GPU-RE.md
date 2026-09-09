@@ -3457,3 +3457,7 @@ only non-SYSTEM non-leaf table pointers for CPU inspection. It never rewrites a 
 address or submitted GPU virtual address. A `raw=0xf4... child-mc2pa=1` result selects child-PDE
 production as the next fix; physical children instead direct investigation to the recorded actual
 invalidate engine and SDMA UTCL/XNACK/page state. No response-mode or firmware change is included.
+
+The earlier walker misdecoded `PAGE_TABLE_BLOCK_SIZE` as the width of every level. Linux programs
+that field as the leaf width minus 9; `ctrl=0x3b` therefore means a 16-bit leaf with 9-bit
+intermediate directories, and the three `0x400...` targets use root index 64 ([GFXHUB 2.1 source](https://github.com/torvalds/linux/blob/v6.12/drivers/gpu/drm/amd/amdgpu/gfxhub_v2_1.c)).

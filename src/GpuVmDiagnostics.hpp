@@ -282,33 +282,40 @@ inline PageTableEntry decodePageTableEntry(uint64_t tablePhysical, uint32_t leve
     };
 }
 
-// PAGE_TABLE_DEPTH is the number of PDE levels above the leaf PTB. Each
-// level consumes PAGE_TABLE_BLOCK_SIZE VA bits. The root and each child table
-// must be CPU-visible through BAR0 before one qword is read. Data-page leaf
-// addresses and the submitted VA are diagnostic values only and are never
-// translated by this helper.
+// PAGE_TABLE_DEPTH is the number of PDE levels above the leaf PTB. Hardware
+// encodes the leaf width as PAGE_TABLE_BLOCK_SIZE + 9; intermediate directories
+// consume 9 bits, while the root consumes all remaining high PFN bits. The root
+// and each child table must be CPU-visible through BAR0 before one qword is read.
+// Data-page leaf addresses and the submitted VA are diagnostic values only and
+// are never translated by this helper.
 template <typename Read64>
 inline PageTableWalk walkPageTables(uint64_t root, uint32_t control, uint64_t va,
                                     const FramebufferAperture &aperture,
                                     Read64 read64) {
     PageTableWalk result {};
     const uint32_t depth = (control >> 1) & 3u;
-    const uint32_t blockSize = (control >> 3) & 0xfu;
+    const uint32_t encodedBlockSize = (control >> 3) & 0xfu;
     constexpr uint64_t pdeAddressMask = 0x0000ffffffffffc0ULL;
     const uint64_t rootFlags = root & ~pdeAddressMask;
     if ((control & 1u) == 0 || va > 0x0000ffffffffffffULL ||
-        (depth != 0 && (blockSize == 0 || blockSize > 15)) ||
         (rootFlags != 1 && rootFlags != 5) || !validAperture(aperture))
         return result;
     uint64_t table = physicalTableAddress(root & pdeAddressMask, aperture);
     if (table == 0) return result;
     result.valid = true;
-    const uint32_t width = depth == 0 ? 36u : blockSize;
-    const uint64_t mask = (1ULL << width) - 1;
+    const uint32_t leafWidth = depth == 0 ? 36u : encodedBlockSize + 9u;
+    const uint64_t leafMask = (1ULL << leafWidth) - 1;
     for (int level = static_cast<int>(depth); level >= 0; --level) {
-        const uint32_t shift = 12u + static_cast<uint32_t>(level) * blockSize;
+        const uint32_t unsignedLevel = static_cast<uint32_t>(level);
+        const uint32_t shift = level == 0
+            ? 12u
+            : 12u + leafWidth + (unsignedLevel - 1u) * 9u;
         if (shift >= 48) { result.valid = false; return result; }
-        const uint64_t index = (va >> shift) & mask;
+        const uint64_t index = level == 0
+            ? (va >> shift) & leafMask
+            : unsignedLevel == depth
+                ? va >> shift
+                : (va >> shift) & 0x1ffu;
         if (index > (aperture.visibleBytes - 8) / 8 ||
             table < aperture.physicalBase ||
             table - aperture.physicalBase > aperture.visibleBytes - 8 -
@@ -324,6 +331,7 @@ inline PageTableWalk walkPageTables(uint64_t root, uint32_t control, uint64_t va
         auto &entry = result.entries[result.count++];
         entry = decodePageTableEntry(table, static_cast<uint32_t>(level), index, raw);
         if (!entry.valid) return result;
+        if (entry.translateFurther) return result;
         if (level == 0 || entry.pdeAsPte) {
             result.complete = true;
             return result;

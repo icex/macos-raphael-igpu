@@ -189,17 +189,18 @@ int main() {
     require(RaphaelVm::physicalTableAddress(0x400100000ULL, aperture) == 0,
             "VM virtual addresses are never treated as page-directory storage");
 
-    // Depth 2, block size 9: root[16] -> child[0] -> leaf[256/192].
+    // Control 0x3b encodes depth 1 and block_size - 9 == 7, so its decoded
+    // 16-bit leaf geometry is root[64] -> leaf[256/192/512].
     // Child table pointers are deliberately in logical MC space, as Apple's
     // getPDEValue emits them; the walker must convert only those non-leaf pointers.
     alignas(uint64_t) uint64_t pageTables[0x10000 / 8] {};
     auto store = [&](uint64_t physicalAddress, uint64_t value) {
         pageTables[(physicalAddress - aperture.physicalBase) / 8] = value;
     };
-    store(0x840000000ULL + 16 * 8, 0xf400001001ULL);
-    store(0x840001000ULL + 0 * 8, 0xf400002001ULL);
+    store(0x840000000ULL + 64 * 8, 0xf400002001ULL);
     store(0x840002000ULL + 256 * 8, 0xf401000071ULL);
     store(0x840002000ULL + 192 * 8, 0x123450000077ULL);
+    store(0x840002000ULL + 512 * 8, 0xabcde0000071ULL);
     auto reader = [&](uint64_t physicalAddress, uint64_t &value) {
         if (physicalAddress < aperture.physicalBase ||
             physicalAddress + 8 > aperture.physicalBase + sizeof(pageTables)) return false;
@@ -207,37 +208,106 @@ int main() {
         return true;
     };
     auto walkA = RaphaelVm::walkPageTables(
-        0x840000001ULL, 1u | (2u << 1) | (9u << 3), 0x400100000ULL,
-        aperture, reader);
-    require(walkA.valid && walkA.complete && walkA.count == 3 &&
-                walkA.entries[0].childConverted && walkA.entries[1].childConverted &&
-                !walkA.entries[2].childConverted &&
-                walkA.entries[2].valid && walkA.entries[2].readable &&
-                walkA.entries[2].writeable && walkA.entries[2].executable,
+        0x840000001ULL, 0x3b, 0x400100000ULL, aperture, reader);
+    require(walkA.valid && walkA.complete && walkA.count == 2 &&
+                walkA.entries[0].index == 64 && walkA.entries[0].childConverted &&
+                walkA.entries[1].index == 256 && !walkA.entries[1].childConverted &&
+                walkA.entries[1].valid && walkA.entries[1].readable &&
+                walkA.entries[1].writeable && walkA.entries[1].executable,
             "multi-level walk converts child PDEs and decodes the final leaf");
     auto walkB = RaphaelVm::walkPageTables(
-        0x840000001ULL, 1u | (2u << 1) | (9u << 3), 0x4000c0000ULL,
-        aperture, reader);
-    require(walkB.valid && walkB.complete && walkB.entries[2].raw == 0x123450000077ULL,
+        0x840000001ULL, 0x3b, 0x4000c0000ULL, aperture, reader);
+    require(walkB.valid && walkB.complete && walkB.count == 2 &&
+                walkB.entries[0].index == 64 && walkB.entries[1].index == 192 &&
+                walkB.entries[1].raw == 0x123450000077ULL,
             "a second VMID2 VA selects its own decoded leaf");
-    store(0x840000000ULL + 16 * 8, 0xf400001003ULL);
+    auto walkC = RaphaelVm::walkPageTables(
+        0x840000001ULL, 0x3b, 0x400200000ULL, aperture, reader);
+    require(walkC.valid && walkC.complete && walkC.count == 2 &&
+                walkC.entries[0].index == 64 && walkC.entries[1].index == 512 &&
+                walkC.entries[1].raw == 0xabcde0000071ULL,
+            "a 16-bit leaf index is not truncated to the encoded seven bits");
+
+    store(0x840000000ULL + 64 * 8, 0xf400002003ULL);
     auto systemPde = RaphaelVm::walkPageTables(
-        0x840000001ULL, 1u | (2u << 1) | (9u << 3), 0x400100000ULL,
-        aperture, reader);
+        0x840000001ULL, 0x3b, 0x400100000ULL, aperture, reader);
     require(systemPde.valid && !systemPde.complete && systemPde.count == 1 &&
                 systemPde.entries[0].system,
             "a SYSTEM child PDE is decoded but never followed through BAR0");
-    store(0x840000000ULL + 16 * 8,
+    store(0x840000000ULL + 64 * 8,
           0xf401000071ULL | (1ULL << 54));
     auto hugeLeaf = RaphaelVm::walkPageTables(
-        0x840000001ULL, 1u | (2u << 1) | (9u << 3), 0x400100000ULL,
-        aperture, reader);
+        0x840000001ULL, 0x3b, 0x400100000ULL, aperture, reader);
     require(hugeLeaf.valid && hugeLeaf.complete && hugeLeaf.count == 1 &&
                 hugeLeaf.entries[0].pdeAsPte && !hugeLeaf.entries[0].childConverted,
             "PDE_PTE terminates the walk and its data address is never converted");
-    auto invalidWalk = RaphaelVm::walkPageTables(
-        0x840000001ULL, 1u | (2u << 1), 0x400100000ULL, aperture, reader);
-    require(!invalidWalk.valid, "a multilevel context with zero block size is rejected");
+    store(0x840000000ULL + 64 * 8, 0xf400002001ULL);
+    store(0x840002000ULL + 256 * 8, 0xf401000071ULL | (1ULL << 56));
+    auto translateFurther = RaphaelVm::walkPageTables(
+        0x840000001ULL, 0x3b, 0x400100000ULL, aperture, reader);
+    require(translateFurther.valid && !translateFurther.complete &&
+                translateFurther.count == 2 &&
+                translateFurther.entries[1].translateFurther,
+            "unsupported TRANSLATE_FURTHER leaves remain decoded but incomplete");
+
+    // Encoded block size zero means a 9-bit leaf, not an invalid context:
+    // depth 2 is root[16] -> intermediate[0] -> leaf[256].
+    store(0x840000000ULL + 16 * 8, 0xf400004001ULL);
+    store(0x840004000ULL + 0 * 8, 0xf400005001ULL);
+    store(0x840005000ULL + 256 * 8, 0x567890000071ULL);
+    auto encodedZero = RaphaelVm::walkPageTables(
+        0x840000001ULL, 0x5, 0x400100000ULL, aperture, reader);
+    require(encodedZero.valid && encodedZero.complete && encodedZero.count == 3 &&
+                encodedZero.entries[0].index == 16 &&
+                encodedZero.entries[1].index == 0 &&
+                encodedZero.entries[2].index == 256 &&
+                encodedZero.entries[2].raw == 0x567890000071ULL,
+            "encoded zero walks a 512-entry leaf through 9-bit directories");
+
+    // Depth 3 with decoded block size 10 consumes 9 bits per intermediate:
+    // VA 0x30201406000 is root[3] -> intermediate[4] -> intermediate[5] -> leaf[6].
+    auto depthThreeReader = [&](uint64_t physicalAddress, uint64_t &value) {
+        if (physicalAddress == 0x840000018ULL) value = 0xf400006001ULL;
+        else if (physicalAddress == 0x840006020ULL) value = 0xf400007001ULL;
+        else if (physicalAddress == 0x840007028ULL) value = 0xf400008001ULL;
+        else if (physicalAddress == 0x840008030ULL) value = 0x6789a0000071ULL;
+        else return false;
+        return true;
+    };
+    auto depthThree = RaphaelVm::walkPageTables(
+        0x840000001ULL, 0xf, 0x30201406000ULL, aperture, depthThreeReader);
+    require(depthThree.valid && depthThree.complete && depthThree.count == 4 &&
+                depthThree.entries[0].index == 3 &&
+                depthThree.entries[1].index == 4 &&
+                depthThree.entries[2].index == 5 &&
+                depthThree.entries[3].index == 6,
+            "depth-three geometry keeps intermediate directories at nine bits");
+    unsigned unsupportedGeometryReads = 0;
+    auto unsupportedGeometryReader = [&](uint64_t, uint64_t &) {
+        ++unsupportedGeometryReads;
+        return false;
+    };
+    auto unsupportedGeometry = RaphaelVm::walkPageTables(
+        0x840000001ULL, 0x7f, 0, aperture, unsupportedGeometryReader);
+    require(!unsupportedGeometry.valid && unsupportedGeometryReads == 0,
+            "a depth-three root shift beyond the 48-bit VA is refused before reading");
+
+    // A root can contain more than 512 entries. The reader intentionally has
+    // no entry at root[1], which catches a 9-bit root mask aliasing root[513].
+    auto highRootReader = [&](uint64_t physicalAddress, uint64_t &value) {
+        if (physicalAddress == 0x840001008ULL) value = 0xf400009001ULL;
+        else if (physicalAddress == 0x840009800ULL) value = 0x789ab0000071ULL;
+        else return false;
+        return true;
+    };
+    auto highRoot = RaphaelVm::walkPageTables(
+        0x840000001ULL, 0x3b, 0x2010100000ULL, aperture, highRootReader);
+    require(highRoot.valid && highRoot.complete && highRoot.count == 2 &&
+                highRoot.entries[0].index == 513 &&
+                highRoot.entries[1].index == 256 &&
+                highRoot.entries[1].raw == 0x789ab0000071ULL,
+            "the root uses the full high PFN index without a 512-entry alias");
+
     auto wideFlatIndex = RaphaelVm::walkPageTables(
         0x840000001ULL, 1u, 1ULL << 44, aperture, reader);
     require(!wideFlatIndex.valid,
@@ -248,6 +318,21 @@ int main() {
     require(RaphaelVm::physicalTableAddress(0xf400000040ULL, edge) == 0x840000040ULL &&
                 RaphaelVm::physicalTableAddress(0xf400000080ULL, edge) == 0,
             "table translation admits only exact qwords inside the visible BAR boundary");
+    unsigned edgeReads = 0;
+    auto edgeReader = [&](uint64_t physicalAddress, uint64_t &value) {
+        ++edgeReads;
+        if (physicalAddress != 0x840000078ULL) return false;
+        value = 0x123450000071ULL;
+        return true;
+    };
+    auto lastBarQword = RaphaelVm::walkPageTables(
+        0x840000041ULL, 1u, 7ULL << 12, edge, edgeReader);
+    require(lastBarQword.valid && lastBarQword.complete && edgeReads == 1,
+            "the last complete BAR qword remains readable");
+    auto beyondBar = RaphaelVm::walkPageTables(
+        0x840000041ULL, 1u, 8ULL << 12, edge, edgeReader);
+    require(!beyondBar.valid && edgeReads == 1,
+            "a qword starting exactly at the BAR upper edge is refused before reading");
 
     RaphaelVm::FramebufferAperture reservedBar {
         0xf400000000ULL, 0xf41fffffffULL, 0x840000000ULL, 0x10000000ULL};
