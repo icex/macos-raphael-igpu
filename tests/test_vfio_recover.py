@@ -30,6 +30,9 @@ class FakeTransport:
         self.registers = {
             tool.NBIO_CONFIG_MEMSIZE_OFFSET: tool.EXPECTED_CONFIG_MEMSIZE,
             tool.SDMA0_STATUS_REG_OFFSET: tool.SDMA_STATUS_IDLE_MASK,
+            tool.GCMC_VM_FB_LOCATION_BASE_OFFSET: 0xf400,
+            tool.GCMC_VM_FB_LOCATION_TOP_OFFSET: 0xf41f,
+            tool.GCMC_VM_FB_OFFSET_OFFSET: 0x840,
         }
         self.vram = {}
         regions = {
@@ -494,27 +497,31 @@ class VfioRecoveryTests(unittest.TestCase):
             self.tool.retire_legacy_gfx_with_host_kiq(
                 fake, RUN_ID, sleep=lambda _:None, polls=2)
 
-    def test_host_kiq_rejects_runtime_gart_overlap_before_writing_vram(self):
+    def test_host_kiq_rejects_runtime_gart_overlap_before_any_vram_write(self):
         tool = self.tool
-        fake = FakeTransport(tool)
         physical_fb = 0x840000000
-        fake.registers.update({
-            tool.GCMC_VM_FB_LOCATION_BASE_OFFSET: 0xf400,
-            tool.GCMC_VM_FB_LOCATION_TOP_OFFSET: 0xf41f,
-            tool.GCMC_VM_FB_OFFSET_OFFSET: physical_fb >> 24,
-            tool.GCVM_CONTEXT0_CNTL_OFFSET: 1,
-            tool.GCVM_CONTEXT0_PTB_LO_OFFSET:
-                (physical_fb + tool.HOST_KIQ_RING_OFFSET) & 0xffffffff | 1,
-            tool.GCVM_CONTEXT0_PTB_HI_OFFSET:
-                (physical_fb + tool.HOST_KIQ_RING_OFFSET) >> 32,
-            tool.GCVM_CONTEXT0_START_LO_OFFSET: 0,
-            tool.GCVM_CONTEXT0_END_LO_OFFSET: 0,
-        })
-        with self.assertRaisesRegex(tool.RecoveryError, 'GART page table'):
-            tool.retire_legacy_gfx_with_host_kiq(fake, RUN_ID, sleep=lambda _:None, polls=2)
-        self.assertFalse(any(isinstance(event, tuple) and event[0] == 'write-vram' and
-                             event[1] >= tool.HOST_KIQ_RING_OFFSET
-                             for event in fake.events))
+        for label, offset in (
+                ('descriptor', tool.HOST_KIQ_RESERVATION_OFFSET),
+                ('scratch', tool.HOST_KIQ_RING_OFFSET)):
+            with self.subTest(label=label):
+                fake = FakeTransport(tool)
+                root = physical_fb + offset
+                fake.registers.update({
+                    tool.GCMC_VM_FB_LOCATION_BASE_OFFSET: 0xf400,
+                    tool.GCMC_VM_FB_LOCATION_TOP_OFFSET: 0xf41f,
+                    tool.GCMC_VM_FB_OFFSET_OFFSET: physical_fb >> 24,
+                    tool.GCVM_CONTEXT0_CNTL_OFFSET: 1,
+                    tool.GCVM_CONTEXT0_PTB_LO_OFFSET: (root & 0xffffffff) | 1,
+                    tool.GCVM_CONTEXT0_PTB_HI_OFFSET: root >> 32,
+                    tool.GCVM_CONTEXT0_START_LO_OFFSET: 0,
+                    tool.GCVM_CONTEXT0_END_LO_OFFSET: 0,
+                })
+                with self.assertRaisesRegex(tool.RecoveryError, 'GART page table'):
+                    tool.retire_legacy_gfx_with_host_kiq(
+                        fake, RUN_ID, sleep=lambda _:None, polls=2)
+                self.assertFalse(any(isinstance(event, tuple) and
+                                     event[0] == 'write-vram'
+                                     for event in fake.events))
 
     def test_host_kiq_rejects_untranslatable_enabled_gart_root(self):
         tool = self.tool
@@ -531,9 +538,52 @@ class VfioRecoveryTests(unittest.TestCase):
         })
         with self.assertRaisesRegex(tool.RecoveryError, 'translate.*GART'):
             tool.retire_legacy_gfx_with_host_kiq(fake, RUN_ID, sleep=lambda _:None, polls=2)
-        self.assertFalse(any(isinstance(event, tuple) and event[0] == 'write-vram' and
-                             event[1] >= tool.HOST_KIQ_RING_OFFSET
+        self.assertFalse(any(isinstance(event, tuple) and event[0] == 'write-vram'
                              for event in fake.events))
+
+    def test_recovery_preflights_gart_before_consuming_reservation(self):
+        tool = self.tool
+        physical_fb = 0x840000000
+        cases = (
+            ('descriptor-overlap', {
+                tool.GCVM_CONTEXT0_PTB_LO_OFFSET:
+                    (physical_fb + tool.HOST_KIQ_RESERVATION_OFFSET) & 0xffffffff | 1,
+                tool.GCVM_CONTEXT0_PTB_HI_OFFSET:
+                    (physical_fb + tool.HOST_KIQ_RESERVATION_OFFSET) >> 32,
+            }),
+            ('scratch-overlap', {
+                tool.GCVM_CONTEXT0_PTB_LO_OFFSET:
+                    (physical_fb + tool.HOST_KIQ_RING_OFFSET) & 0xffffffff | 1,
+                tool.GCVM_CONTEXT0_PTB_HI_OFFSET:
+                    (physical_fb + tool.HOST_KIQ_RING_OFFSET) >> 32,
+            }),
+            ('malformed-root', {
+                tool.GCVM_CONTEXT0_PTB_LO_OFFSET: 0x12345001,
+                tool.GCVM_CONTEXT0_PTB_HI_OFFSET: 0x2,
+            }),
+        )
+        for label, root in cases:
+            with self.subTest(label=label):
+                fake = FakeTransport(tool)
+                fake.registers.update({
+                    tool.GCMC_VM_FB_LOCATION_BASE_OFFSET: 0xf400,
+                    tool.GCMC_VM_FB_LOCATION_TOP_OFFSET: 0xf41f,
+                    tool.GCMC_VM_FB_OFFSET_OFFSET: physical_fb >> 24,
+                    tool.GCVM_CONTEXT0_CNTL_OFFSET: 1,
+                    tool.GCVM_CONTEXT0_START_LO_OFFSET: 0,
+                    tool.GCVM_CONTEXT0_END_LO_OFFSET: 0,
+                    tool.CP_RB_ACTIVE_OFFSET: 1,
+                    tool.CP_RB_DOORBELL_CONTROL_OFFSET: 0xc0000400,
+                })
+                fake.registers.update(root)
+                with self.assertRaisesRegex(tool.RecoveryError, 'GART'):
+                    tool.perform_recovery(
+                        'boot-A', RUN_ID, lambda:self.state(), lambda:fake,
+                        lambda cursor=None:('cursor-2', [], []),
+                        sleep=lambda _:None, polls=2)
+                self.assertFalse(any(isinstance(event, tuple) and
+                                     event[0] == 'write-vram'
+                                     for event in fake.events))
 
     def test_host_kiq_rejects_nonflat_or_malformed_enabled_gart(self):
         tool = self.tool

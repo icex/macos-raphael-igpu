@@ -648,6 +648,345 @@ class ExperimentTests(unittest.TestCase):
                     tool.reserve_boot(used, 'boot-A', current, receipt,
                                       manifest, manifest_path)
 
+    def cap_revision_fixture(self, tool, vm):
+        boot, prior, current = 'boot-A', 'a'*32, 'd'*32
+        used = vm/'run/used-gpu-boots'; used.mkdir(parents=True)
+        ledger = {'schema':2, 'boot_id':boot, 'max_launches':3,
+                  'launches':[{'run_id':'8'*32, 'reserved_epoch':1.0},
+                              {'run_id':'9'*32, 'reserved_epoch':2.0,
+                               'prior_run_id':'8'*32, 'recovery_id':'1'*32},
+                              {'run_id':prior, 'reserved_epoch':3.0,
+                               'prior_run_id':'9'*32, 'recovery_id':'2'*32}]}
+        ledger_path = used/(boot+'.json')
+        ledger_path.write_text(json.dumps(ledger, indent=2)+'\n')
+
+        receipt = self.schema6_host_kiq_receipt(tool, prior)
+        receipt.update(boot_id=boot, recovery_id='c'*32,
+                       kernel_cursor_after='s=x;i=10;b=boot-A;m=1')
+        canonical = vm/'run/vfio-recovery'/boot/(prior+'.json')
+        canonical.parent.mkdir(parents=True)
+        canonical.write_text(json.dumps(receipt, indent=2)+'\n')
+        run_copy = vm/'run/metal-009-176/recovery.json'
+        run_copy.parent.mkdir(parents=True)
+        run_copy.write_text(json.dumps(receipt, separators=(',', ':'))+'\n')
+
+        manifest = {'boot_id':boot, 'run_id':current, 'max_seconds':180,
+                    'source_clean':True, 'vfio_device':'0000:7b:00.0',
+                    'gpu':True, 'candidate_directory':'run/candidate-177',
+                    'experiment':'metal-010',
+                    'spec':{'id':'metal-010', 'candidate_version':'1.0.177',
+                            'requested_diagnostic':'rgpusubmit=1',
+                            'max_seconds':180}}
+        manifest_path = vm/'run/candidate-177-manifest.json'
+        manifest_path.write_text(json.dumps(manifest, indent=2)+'\n')
+
+        tool.CAP_REVISION_BOOT_ID = boot
+        tool.CAP_REVISION_PRIOR_RUN_ID = prior
+        tool.CAP_REVISION_RECOVERY_ID = receipt['recovery_id']
+        tool.CAP_REVISION_LEDGER_SHA256 = hashlib.sha256(
+            ledger_path.read_bytes()).hexdigest()
+        tool.CAP_REVISION_CANONICAL_RECEIPT_SHA256 = hashlib.sha256(
+            canonical.read_bytes()).hexdigest()
+        tool.CAP_REVISION_RUN_RECEIPT_SHA256 = hashlib.sha256(
+            run_copy.read_bytes()).hexdigest()
+
+        authority = {
+            'schema':1, 'kind':'same-boot-qualification-cap-revision',
+            'boot_id':boot,
+            'ledger_preimage_sha256':tool.CAP_REVISION_LEDGER_SHA256,
+            'prior_run_id':prior, 'recovery_id':receipt['recovery_id'],
+            'canonical_recovery_receipt_sha256':
+                tool.CAP_REVISION_CANONICAL_RECEIPT_SHA256,
+            'run_recovery_receipt_sha256':tool.CAP_REVISION_RUN_RECEIPT_SHA256,
+            'range_audit_sha256':hashlib.sha256(
+                (ROOT/'findings/experiments/metal-009-176/'
+                 'recovery-gart-range-audit.md').read_bytes()).hexdigest(),
+            'candidate176_consumer_sha256':
+                tool.CAP_REVISION_CANDIDATE176_CONSUMER_SHA256,
+            'candidate176_recovery_producer_sha256':
+                tool.CAP_REVISION_CANDIDATE176_PRODUCER_SHA256,
+            'design_sha256':hashlib.sha256(
+                (ROOT/'docs/superpowers/specs/'
+                 '2026-09-09-same-boot-qualification-cap-revision-design.md').read_bytes()).hexdigest(),
+            'candidate177_experiment_py_sha256':hashlib.sha256(
+                (ROOT/'tools/experiment.py').read_bytes()).hexdigest(),
+            'candidate177_recovery_producer_sha256':hashlib.sha256(
+                (ROOT/'tools/vfio-recover.py').read_bytes()).hexdigest(),
+            'manifest_sha256':hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+            'next_run_id':current, 'from_max_launches':3,
+            'to_max_launches':4, 'additional_launches':1,
+            'automatic_extension':False,
+            'purpose':'m7-normal-recovery-qualification',
+        }
+        authority_path = (vm/'run/cap-revision-authorities'/boot/
+                          (current+'.json'))
+        authority_path.parent.mkdir(parents=True)
+        authority_path.write_text(json.dumps(authority, indent=2)+'\n')
+        authority_sha = hashlib.sha256(authority_path.read_bytes()).hexdigest()
+        return (ledger_path, ledger, receipt, manifest, manifest_path,
+                authority_path, authority_sha)
+
+    def test_exact_cap_revision_preserves_three_rows_and_consumes_launch_four(self):
+        tool = self.module()
+        with tempfile.TemporaryDirectory() as temp:
+            vm = Path(temp)
+            (ledger_path, before, receipt, manifest, manifest_path,
+             authority_path, authority_sha) = self.cap_revision_fixture(tool, vm)
+            authorization, errors = tool.cap_revision_authorization(
+                vm, manifest, manifest_path, authority_sha)
+            self.assertEqual(errors, [])
+
+            host = dict(self.host(), sleep_inhibited=True, pstore_files=None)
+            vfio_host = {'boot_id':'boot-A', 'active_vm':False,
+                         'driver':'vfio-pci', 'device':'1002:13c0',
+                         'iommu_group':'31', 'pci_command':3,
+                         'reset_methods':[]}
+            recovery_tool = SimpleNamespace(
+                host_state=lambda:vfio_host,
+                validate_host_state=lambda state, boot:[])
+            with patch.object(tool, 'host_snapshot', return_value=host), \
+                 patch.object(tool, 'active_launch_units', return_value=[]), \
+                 patch.object(tool, 'helper', return_value=recovery_tool), \
+                 patch.object(tool, 'kernel_updates',
+                              return_value=('s=x;i=11;b=boot-A;m=2',
+                                            ['routine'], [])) as journal:
+                cursor = tool.reserve_cap_revision(
+                    ledger_path.parent, manifest['boot_id'], manifest['run_id'],
+                    receipt, manifest, manifest_path, authorization)
+
+            journal.assert_called_once_with('s=x;i=10;b=boot-A;m=1')
+            self.assertEqual(cursor, 's=x;i=11;b=boot-A;m=2')
+            after = json.loads(ledger_path.read_text())
+            self.assertEqual(after['schema'], 3)
+            self.assertEqual(after['initial_max_launches'], 3)
+            self.assertEqual(after['max_launches'], 4)
+            self.assertEqual(after['launches'][:3], before['launches'])
+            self.assertEqual(len(after['launches']), 4)
+            self.assertEqual(after['launches'][3]['run_id'], manifest['run_id'])
+            self.assertEqual(after['launches'][3]['recovery_id'], receipt['recovery_id'])
+            self.assertEqual(after['launches'][3]['cap_revision_authority_sha256'],
+                             authority_sha)
+            self.assertEqual(len(after['cap_revisions']), 1)
+            revision = after['cap_revisions'][0]
+            self.assertEqual({key:revision[key] for key in (
+                'authority_sha256', 'ledger_preimage_sha256',
+                'from_max_launches', 'to_max_launches',
+                'additional_launches', 'purpose', 'kernel_cursor_before',
+                'kernel_cursor_after', 'kernel_messages')}, {
+                    'authority_sha256':authority_sha,
+                    'ledger_preimage_sha256':tool.CAP_REVISION_LEDGER_SHA256,
+                    'from_max_launches':3, 'to_max_launches':4,
+                    'additional_launches':1,
+                    'purpose':'m7-normal-recovery-qualification',
+                    'kernel_cursor_before':'s=x;i=10;b=boot-A;m=1',
+                    'kernel_cursor_after':'s=x;i=11;b=boot-A;m=2',
+                    'kernel_messages':['routine'],
+                })
+            self.assertEqual(revision['host_gate']['pstore_files'], None)
+            self.assertEqual(revision['vfio_gate'], vfio_host)
+
+            replay, replay_errors = tool.cap_revision_authorization(
+                vm, manifest, manifest_path, authority_sha)
+            self.assertIsNone(replay)
+            self.assertIn('cap_revision_ledger', replay_errors)
+
+    def test_cap_revision_binds_authority_manifest_receipts_sources_and_preimage(self):
+        cases = ('no-authority', 'authority-sha', 'authority-field',
+                 'coordinator-source', 'producer-source', 'manifest',
+                 'wrong-boot', 'wrong-candidate', 'wrong-version',
+                 'wrong-card', 'wrong-diagnostic', 'wrong-deadline', 'wrong-mode',
+                 'canonical-receipt', 'run-receipt', 'ledger',
+                 'malformed-ledger', 'malformed-row',
+                 'reused-run', 'reused-recovery', 'schema3-four-entries')
+        for case in cases:
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as temp:
+                tool = self.module(); vm = Path(temp)
+                (ledger_path, _, _, manifest, manifest_path,
+                 authority_path, authority_sha) = self.cap_revision_fixture(tool, vm)
+                if case == 'no-authority':
+                    authority_sha = None
+                elif case == 'authority-sha':
+                    authority_sha = '0'*64
+                elif case == 'authority-field':
+                    value = json.loads(authority_path.read_text())
+                    value['automatic_extension'] = True
+                    authority_path.write_text(json.dumps(value, indent=2)+'\n')
+                    authority_sha = hashlib.sha256(authority_path.read_bytes()).hexdigest()
+                elif case in ('coordinator-source', 'producer-source'):
+                    value = json.loads(authority_path.read_text())
+                    key = ('candidate177_experiment_py_sha256'
+                           if case == 'coordinator-source'
+                           else 'candidate177_recovery_producer_sha256')
+                    value[key] = '0'*64
+                    authority_path.write_text(json.dumps(value, indent=2)+'\n')
+                    authority_sha = hashlib.sha256(authority_path.read_bytes()).hexdigest()
+                elif case == 'manifest':
+                    manifest_path.write_bytes(manifest_path.read_bytes()+b' ')
+                elif case.startswith('wrong-'):
+                    changed = copy.deepcopy(manifest)
+                    if case == 'wrong-boot':
+                        changed['boot_id'] = 'boot-B'
+                    elif case == 'wrong-candidate':
+                        changed['candidate_directory'] = 'run/candidate-178'
+                    elif case == 'wrong-version':
+                        changed['spec']['candidate_version'] = '1.0.178'
+                    elif case == 'wrong-card':
+                        changed['spec']['id'] = 'metal-011'
+                    elif case == 'wrong-diagnostic':
+                        changed['spec']['requested_diagnostic'] = 'rgpuvmroot=1'
+                    elif case == 'wrong-mode':
+                        changed['gpu'] = False
+                    else:
+                        changed['max_seconds'] = 181
+                    authorization, errors = tool.cap_revision_authorization(
+                        vm, changed, manifest_path, authority_sha)
+                    self.assertIsNone(authorization)
+                    self.assertTrue(errors)
+                    continue
+                elif case == 'canonical-receipt':
+                    path = vm/'run/vfio-recovery/boot-A'/('a'*32+'.json')
+                    path.write_bytes(path.read_bytes()+b' ')
+                elif case == 'run-receipt':
+                    path = vm/'run/metal-009-176/recovery.json'
+                    path.write_bytes(path.read_bytes()+b' ')
+                elif case == 'ledger':
+                    ledger_path.write_bytes(ledger_path.read_bytes()+b' ')
+                elif case == 'malformed-ledger':
+                    ledger_path.write_text('[]\n')
+                elif case == 'malformed-row':
+                    ledger = json.loads(ledger_path.read_text())
+                    ledger['launches'][1] = 'malformed'
+                    ledger_path.write_text(json.dumps(ledger, indent=2)+'\n')
+                else:
+                    ledger = json.loads(ledger_path.read_text())
+                    if case == 'reused-run':
+                        ledger['launches'][0]['run_id'] = manifest['run_id']
+                    elif case == 'reused-recovery':
+                        ledger['launches'][0]['recovery_id'] = 'c'*32
+                    else:
+                        ledger.update(schema=3, initial_max_launches=3,
+                                      max_launches=4, cap_revisions=[{}])
+                        ledger['launches'].append({'run_id':'e'*32})
+                    ledger_path.write_text(json.dumps(ledger, indent=2)+'\n')
+                    if case == 'schema3-four-entries':
+                        value = json.loads(authority_path.read_text())
+                        value['ledger_preimage_sha256'] = hashlib.sha256(
+                            ledger_path.read_bytes()).hexdigest()
+                        authority_path.write_text(json.dumps(value, indent=2)+'\n')
+                        authority_sha = hashlib.sha256(
+                            authority_path.read_bytes()).hexdigest()
+                authorization, errors = tool.cap_revision_authorization(
+                    vm, manifest, manifest_path, authority_sha)
+                self.assertIsNone(authorization)
+                self.assertTrue(errors)
+
+    def test_cap_revision_reservation_arguments_must_match_manifest(self):
+        tool = self.module()
+        with tempfile.TemporaryDirectory() as temp:
+            vm = Path(temp)
+            (ledger_path, _, receipt, manifest, manifest_path,
+             _, authority_sha) = self.cap_revision_fixture(tool, vm)
+            authorization, errors = tool.cap_revision_authorization(
+                vm, manifest, manifest_path, authority_sha)
+            self.assertEqual(errors, [])
+            before = ledger_path.read_bytes()
+            for boot, run in (('boot-B', manifest['run_id']),
+                              (manifest['boot_id'], 'e'*32)):
+                with self.subTest(boot=boot, run=run):
+                    with self.assertRaisesRegex(ValueError, 'cap revision refused'):
+                        tool.reserve_cap_revision(
+                            ledger_path.parent, boot, run, receipt, manifest,
+                            manifest_path, authorization)
+                    self.assertEqual(ledger_path.read_bytes(), before)
+
+    def test_cap_revision_rejects_fault_or_reset_before_writing_ledger(self):
+        for message, faults in (
+                ('Hardware Error', ['Hardware Error']),
+                ('vfio-pci 0000:7b:00.0: resetting', [])):
+            with self.subTest(message=message), tempfile.TemporaryDirectory() as temp:
+                tool = self.module(); vm = Path(temp)
+                (ledger_path, _, receipt, manifest, manifest_path,
+                 _, authority_sha) = self.cap_revision_fixture(tool, vm)
+                before = ledger_path.read_bytes()
+                authorization, errors = tool.cap_revision_authorization(
+                    vm, manifest, manifest_path, authority_sha)
+                self.assertEqual(errors, [])
+                host = dict(self.host(), sleep_inhibited=True, pstore_files=None)
+                recovery_tool = SimpleNamespace(
+                    host_state=lambda:{'boot_id':'boot-A'},
+                    validate_host_state=lambda state, boot:[])
+                with patch.object(tool, 'host_snapshot', return_value=host), \
+                     patch.object(tool, 'active_launch_units', return_value=[]), \
+                     patch.object(tool, 'helper', return_value=recovery_tool), \
+                     patch.object(tool, 'kernel_updates',
+                                  return_value=('s=x;i=11;b=boot-A;m=2',
+                                                [message], faults)):
+                    with self.assertRaisesRegex(ValueError, 'cap revision refused'):
+                        tool.reserve_cap_revision(
+                            ledger_path.parent, manifest['boot_id'],
+                            manifest['run_id'], receipt, manifest,
+                            manifest_path, authorization)
+                self.assertEqual(ledger_path.read_bytes(), before)
+
+    def test_cap_revision_rejects_missing_reversed_or_raced_journal_boundary(self):
+        cases = ('missing-start', 'missing-end', 'reversed', 'ledger-race')
+        for case in cases:
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as temp:
+                tool = self.module(); vm = Path(temp)
+                (ledger_path, _, receipt, manifest, manifest_path,
+                 _, authority_sha) = self.cap_revision_fixture(tool, vm)
+                authorization, errors = tool.cap_revision_authorization(
+                    vm, manifest, manifest_path, authority_sha)
+                self.assertEqual(errors, [])
+                if case == 'missing-start':
+                    receipt['kernel_cursor_after'] = None
+                end = {'missing-end':None,
+                       'reversed':'s=x;i=0f;b=boot-A;m=2'}.get(
+                           case, 's=x;i=11;b=boot-A;m=2')
+                def journal(_cursor):
+                    if case == 'ledger-race':
+                        ledger_path.write_bytes(ledger_path.read_bytes()+b' ')
+                    return end, [], []
+                host = dict(self.host(), sleep_inhibited=True, pstore_files=None)
+                recovery_tool = SimpleNamespace(
+                    host_state=lambda:{'boot_id':'boot-A'},
+                    validate_host_state=lambda state, boot:[])
+                before = ledger_path.read_bytes()
+                with patch.object(tool, 'host_snapshot', return_value=host), \
+                     patch.object(tool, 'active_launch_units', return_value=[]), \
+                     patch.object(tool, 'helper', return_value=recovery_tool), \
+                     patch.object(tool, 'kernel_updates', side_effect=journal):
+                    with self.assertRaisesRegex(ValueError, 'cap revision refused'):
+                        tool.reserve_cap_revision(
+                            ledger_path.parent, manifest['boot_id'],
+                            manifest['run_id'], receipt, manifest,
+                            manifest_path, authorization)
+                after = ledger_path.read_bytes()
+                if case == 'ledger-race':
+                    self.assertEqual(after, before+b' ')
+                else:
+                    self.assertEqual(after, before)
+
+    def test_cap_revision_cursor_is_used_without_starting_a_new_journal_interval(self):
+        tool = self.module()
+        with patch.object(tool, 'reserve_cap_revision', return_value='fresh-cursor') as cap, \
+             patch.object(tool, 'reserve_boot') as ordinary, \
+             patch.object(tool, 'kernel_updates',
+                          side_effect=AssertionError('must use reviewed interval cursor')):
+            cursor = tool.reserve_launch_and_cursor(
+                Path('/tmp/used'), 'boot-A', 'd'*32, {'schema':6},
+                {'run_id':'d'*32}, Path('/tmp/manifest'), {'authority':{}})
+        self.assertEqual(cursor, 'fresh-cursor')
+        cap.assert_called_once()
+        ordinary.assert_not_called()
+
+    def test_cap_revision_api_refuses_prelaunch_continuation(self):
+        tool = self.module()
+        with self.assertRaisesRegex(ValueError, 'cap revision cannot use'):
+            tool.run_one(Path('/nonexistent'), Path('/nonexistent-manifest'),
+                         Path('/nonexistent-output'), Path('/prior-output'),
+                         Path('/proof'), 'a'*64)
+
     def test_reuse_requires_latest_predecessor_and_stops_at_three_launches(self):
         tool = self.module()
         with tempfile.TemporaryDirectory() as temp:
@@ -797,6 +1136,76 @@ class ExperimentTests(unittest.TestCase):
             schema6, 'boot-A', 'a'*32), [])
         self.assertIn('recovery_receipt', tool.validate_recovery_receipt(
             schema6, 'boot-A', 'a'*32))
+
+    def test_schema6_gart_excludes_recovery_writes_instead_of_reserved_heap(self):
+        tool = self.module()
+        receipt = self.schema6_host_kiq_receipt(tool)
+        gart = receipt['gc_quiesce']['host_kiq']['gart']
+        gart.update({
+            'root':0x840000000 + 0x0fdfc000 + 1,
+            'start_page':0xffbfa00,
+            'end_page':0xffffe00,
+            'bar_offset':0x0fdfc000,
+            'size':0x202008,
+        })
+
+        self.assertEqual(tool.validate_recovery_receipt_v6(
+            receipt, 'boot-A', 'a'*32), [])
+
+        legacy = copy.deepcopy(receipt)
+        legacy['schema'] = 5
+        gc = legacy['gc_quiesce']
+        for key in ('sdma0_page_ib_before', 'sdma0_page_ib_after',
+                    'sdma0_page_rb_before', 'sdma0_page_rb_after',
+                    'sdma0_status_before', 'sdma0_status_after',
+                    'sdma0_shutdown_trace', 'sdma0_rlc_inputs'):
+            gc.pop(key)
+        self.assertIn('recovery_receipt', tool.validate_recovery_receipt(
+            legacy, 'boot-A', 'a'*32))
+
+    def test_schema6_gart_rejects_descriptor_and_host_kiq_write_spans(self):
+        tool = self.module()
+
+        def receipt_with_gart(offset, size):
+            receipt = self.schema6_host_kiq_receipt(tool)
+            gart = receipt['gc_quiesce']['host_kiq']['gart']
+            gart.update({
+                'root':gart['physical_fb'] + offset + 1,
+                'start_page':0,
+                'end_page':size // 8 - 1,
+                'bar_offset':offset,
+                'size':size,
+            })
+            return receipt
+
+        for label, offset, size, accepted in (
+                ('before-descriptor', 0x0efff000, 0x1000, True),
+                ('descriptor', 0x0f000000, 0x8, False),
+                ('after-descriptor', 0x0f001000, 0x8, True),
+                ('before-host-kiq', 0x0f0ff000, 0x1000, True),
+                ('host-kiq-start', 0x0f100000, 0x8, False),
+                ('host-kiq-tail', 0x0f113000, 0x8, False),
+                ('after-host-kiq', 0x0f114000, 0x8, True)):
+            with self.subTest(label=label):
+                errors = tool.validate_recovery_receipt_v6(
+                    receipt_with_gart(offset, size), 'boot-A', 'a'*32)
+                self.assertEqual(errors == [], accepted)
+
+    def test_schema6_recovery_write_range_pins_match_producer(self):
+        consumer = self.module()
+        path = ROOT / 'tools/vfio-recover.py'
+        spec = importlib.util.spec_from_file_location('vfio_recover_ranges', path)
+        producer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(producer)
+        scratch = producer.host_kiq_scratch_ranges()
+
+        self.assertEqual(consumer.RECOVERY_V6_MUTATED_RANGES, (
+            (producer.HOST_KIQ_RESERVATION_OFFSET,
+             producer.HOST_KIQ_RESERVATION_SIZE),
+            (min(start for start, _ in scratch),
+             max(start + size for start, size in scratch) -
+                 min(start for start, _ in scratch)),
+        ))
 
     def test_schema6_accepts_only_disabled_host_kiq_doorbell_status(self):
         tool = self.module()

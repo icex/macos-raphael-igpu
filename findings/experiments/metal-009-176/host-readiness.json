@@ -1,0 +1,227 @@
+{
+  "authorizes_cleanup": false,
+  "authorizes_launch": false,
+  "authorizes_recovery": false,
+  "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+  "captured_epoch": 1788968022.7051957,
+  "closure_summary": {
+    "authorizes_cleanup": false,
+    "authorizes_launch": false,
+    "authorizes_recovery": false,
+    "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+    "kind": "retained-kiq-global-doorbell-close",
+    "run_id": "1a065e4f5f674cc0a26d4e9dbdf59649",
+    "schema": 1,
+    "status": "completed-nonauthorizing"
+  },
+  "collection": {
+    "mmio_accessed": false,
+    "read_only": true,
+    "sudo_used": false,
+    "sysfs_written": false,
+    "vfio_opened": false,
+    "vm_operation": false
+  },
+  "errors": [],
+  "failed_receipt_summary": {
+    "authorizes_launch": false,
+    "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+    "prior_run_id": "1a065e4f5f674cc0a26d4e9dbdf59649",
+    "recovery_id": "e503b2ca63db4e11a21494d1841dca24",
+    "schema": 5,
+    "status": "incomplete"
+  },
+  "host": {
+    "active_vm": false,
+    "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+    "canonical_device": "/sys/devices/pci0000:00/0000:00:08.1/0000:7b:00.0",
+    "device": "1002:13c0",
+    "driver": "vfio-pci",
+    "enable_count": "0",
+    "iommu_group": "31",
+    "kernel_release": "7.2.3-1-cachyos-bore",
+    "pci_command": 3,
+    "power_control": "on",
+    "power_state": "D0",
+    "reset_domain": {
+      "canonical_devices": {
+        "0000:7b:00.0": "/sys/devices/pci0000:00/0000:00:08.1/0000:7b:00.0",
+        "0000:7b:00.1": "/sys/devices/pci0000:00/0000:00:08.1/0000:7b:00.1",
+        "0000:7b:00.2": "/sys/devices/pci0000:00/0000:00:08.1/0000:7b:00.2",
+        "0000:7b:00.3": "/sys/devices/pci0000:00/0000:00:08.1/0000:7b:00.3",
+        "0000:7b:00.4": "/sys/devices/pci0000:00/0000:00:08.1/0000:7b:00.4",
+        "0000:7b:00.6": "/sys/devices/pci0000:00/0000:00:08.1/0000:7b:00.6"
+      },
+      "canonical_parent": "/sys/devices/pci0000:00/0000:00:08.1",
+      "domain_bus_device": "0000:7b:00",
+      "functions": [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "6"
+      ],
+      "physical_slot": {
+        "0000:7b:00.0": null,
+        "0000:7b:00.1": null,
+        "0000:7b:00.2": null,
+        "0000:7b:00.3": null,
+        "0000:7b:00.4": null,
+        "0000:7b:00.6": null
+      }
+    },
+    "reset_methods": [],
+    "residual_units": [],
+    "runtime_status": "active",
+    "siblings": {
+      "0000:7b:00.0": {
+        "device": "1002:13c0",
+        "driver": "vfio-pci",
+        "iommu_group": "31"
+      },
+      "0000:7b:00.1": {
+        "device": "1002:1640",
+        "driver": "snd_hda_intel",
+        "iommu_group": "32"
+      },
+      "0000:7b:00.2": {
+        "device": "1022:1649",
+        "driver": "ccp",
+        "iommu_group": "33"
+      },
+      "0000:7b:00.3": {
+        "device": "1022:15b6",
+        "driver": "xhci_hcd",
+        "iommu_group": "34"
+      },
+      "0000:7b:00.4": {
+        "device": "1022:15b7",
+        "driver": "xhci_hcd",
+        "iommu_group": "35"
+      },
+      "0000:7b:00.6": {
+        "device": "1022:15e3",
+        "driver": null,
+        "iommu_group": "36"
+      }
+    },
+    "sleep_inhibited": true,
+    "vfio_module_build_id": "a002a05ce4a09429cf6bc9906d1893ec7f304e81",
+    "vfio_module_sha256": "d0bfbf478f892d57eb6f42a0d5d51f20a611bc7ee538643cc820932167686381",
+    "watchdogs": {
+      "hardlockup_panic": "1",
+      "nmi_watchdog": "1",
+      "watchdog": "1"
+    }
+  },
+  "immutable_artifacts": {
+    "failed_candidate175_receipt": {
+      "expected_sha256": "9cf80653e198faa09c6f4da456e8495e07a045015c6ac0b64a7561ffbfc85fc7",
+      "matches": true,
+      "path": "/home/bogdan/macos-vm/run/vfio-recovery/5d6f45d0-4384-4340-b819-7751bc26ebb3/1a065e4f5f674cc0a26d4e9dbdf59649.json",
+      "sha256": "9cf80653e198faa09c6f4da456e8495e07a045015c6ac0b64a7561ffbfc85fc7"
+    },
+    "final_global_doorbell_closure": {
+      "expected_sha256": "173c020e378c74dbb647adcca15e4ebe26e146a694351ac8bbb3d28c8f684756",
+      "matches": true,
+      "path": "/home/bogdan/macos-vm/run/retained-kiq-global-doorbell-closures/5d6f45d0-4384-4340-b819-7751bc26ebb3-1a065e4f5f674cc0a26d4e9dbdf59649.json",
+      "sha256": "173c020e378c74dbb647adcca15e4ebe26e146a694351ac8bbb3d28c8f684756"
+    },
+    "ledger": {
+      "expected_sha256": "69b8e1464a6866d3da2518e5db7222b0d557e0eb7f3ac3c27ebffbec139b9d15",
+      "matches": true,
+      "path": "/home/bogdan/macos-vm/run/used-gpu-boots/5d6f45d0-4384-4340-b819-7751bc26ebb3.json",
+      "sha256": "69b8e1464a6866d3da2518e5db7222b0d557e0eb7f3ac3c27ebffbec139b9d15"
+    }
+  },
+  "inhibitor": {
+    "listed": {
+      "argv": [
+        "systemd-inhibit",
+        "--list",
+        "--no-pager",
+        "--no-legend"
+      ],
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "NetworkManager                     0    root   912    NetworkManager  sleep                                                                      NetworkManager needs to turn off networks                  delay\nUPower                             0    root   1292   upowerd         sleep                                                                      Pause device polling                                       delay\nPowerDevil                         1000 bogdan 1670   org_kde_powerde handle-power-key:handle-suspend-key:handle-hibernate-key:handle-lid-switch KDE handles power events                                   block\nRaphael GPU hardware qualification 1000 bogdan 6215   systemd-inhibit sleep:idle                                                                 Keep host awake during bounded VFIO work                   block\nSunshine                           1000 bogdan 145129 systemd-inhibit sleep:idle                                                                 streaming session active                                   block\ncompositor                         1000 bogdan 1483   kwin_wayland    sleep                                                                      Ensuring that the screen gets locked before going to sleep delay\n"
+    },
+    "unit_show": {
+      "argv": [
+        "systemctl",
+        "--user",
+        "show",
+        "rgpu-work-inhibit.service",
+        "-p",
+        "ActiveState",
+        "-p",
+        "SubState",
+        "-p",
+        "MainPID",
+        "-p",
+        "ExecMainStatus",
+        "-p",
+        "FragmentPath",
+        "--no-pager"
+      ],
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "ActiveState=active\nSubState=running\nFragmentPath=/run/user/1000/systemd/transient/rgpu-work-inhibit.service\nMainPID=6215\nExecMainStatus=0\n"
+    }
+  },
+  "journal": {
+    "current_cursor": "s=98f6cb2295dc45898ee97031451ba7c8;i=3edf0;b=5d6f45d043844340b8197751bc26ebb3;m=830207023;t=65b0e91b2a54f;x=6f6844e71cd0599c",
+    "faults": [],
+    "messages": [
+      "[UFW BLOCK] IN=enp9s0 OUT= MAC=34:5a:60:50:e9:3e:20:28:bc:1f:a2:da:08:00 SRC=192.168.0.13 DST=192.168.0.43 LEN=43 TOS=0x00 PREC=0x00 TTL=64 ID=2987 DF PROTO=UDP SPT=49840 DPT=49154 LEN=23 ",
+      "docker0: port 1(veth430e973) entered blocking state",
+      "docker0: port 1(veth430e973) entered disabled state",
+      "veth430e973: entered allmulticast mode",
+      "veth430e973: entered promiscuous mode",
+      "eth0: renamed from veth6bd6aae",
+      "docker0: port 1(veth430e973) entered blocking state",
+      "docker0: port 1(veth430e973) entered forwarding state",
+      "[UFW BLOCK] IN=docker0 OUT= MAC= SRC=fe80:0000:0000:0000:a883:40ff:fede:b5e3 DST=ff02:0000:0000:0000:0000:0000:0001:0003 LEN=79 TC=0 HOPLIMIT=255 FLOWLBL=919402 PROTO=UDP SPT=5355 DPT=5355 LEN=39 ",
+      "docker0: port 1(veth430e973) entered disabled state",
+      "veth6bd6aae: renamed from eth0",
+      "[UFW BLOCK] IN=docker0 OUT= MAC= SRC=172.17.0.1 DST=224.0.0.252 LEN=59 TOS=0x00 PREC=0x00 TTL=255 ID=45155 PROTO=UDP SPT=5355 DPT=5355 LEN=39 ",
+      "docker0: port 1(veth430e973) entered disabled state",
+      "veth430e973 (unregistering): left allmulticast mode",
+      "veth430e973 (unregistering): left promiscuous mode",
+      "docker0: port 1(veth430e973) entered disabled state"
+    ],
+    "reset_messages": [],
+    "source_cursor": "s=98f6cb2295dc45898ee97031451ba7c8;i=3ebc5;b=5d6f45d043844340b8197751bc26ebb3;m=67a7664b2;t=65b0cdc0899de;x=ca40ee6277dcbb21"
+  },
+  "kind": "candidate176-host-readiness",
+  "ledger_summary": {
+    "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+    "launch_count": 2,
+    "launches": [
+      {
+        "reserved_epoch": 1788934306.1812477,
+        "run_id": "e583a1b2d97a4ad3b607c1d20a29a812"
+      },
+      {
+        "attempt_id": "f11105d537dd4ff097476de97a7620a4",
+        "prior_run_id": "e583a1b2d97a4ad3b607c1d20a29a812",
+        "recovery_id": "70463a1f1b3e4dc4899a175e64103df8",
+        "reserved_epoch": 1788943896.2080986,
+        "run_id": "1a065e4f5f674cc0a26d4e9dbdf59649"
+      }
+    ],
+    "max_launches": 3,
+    "schema": 2
+  },
+  "prior_run_id": "1a065e4f5f674cc0a26d4e9dbdf59649",
+  "processes": {
+    "docker_active_rows": [],
+    "docker_returncode": 0,
+    "matching_qemu_or_recovery": [],
+    "ps_returncode": 0,
+    "residual_user_units": []
+  },
+  "schema": 1,
+  "status": "ready"
+}

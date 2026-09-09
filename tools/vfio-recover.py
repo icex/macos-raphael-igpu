@@ -727,6 +727,10 @@ def guard_apple_graphics_pipes(mmio, run_id):
 
 def consume_host_kiq_reservation(mmio, run_id):
     proof = inspect_host_kiq_reservation(mmio, run_id)
+    # Zeroing the 72-byte descriptor is itself a VRAM write. Derive and
+    # validate the live GART here so no caller can consume first and check the
+    # descriptor range afterward.
+    _preflight_host_kiq_vram_writes(mmio)
     mmio.write_vram(HOST_KIQ_RESERVATION_OFFSET,
                     b'\0' * HOST_KIQ_RESERVATION_SIZE)
     proof['consume_hdp_flush'] = mmio.flush_hdp()
@@ -904,6 +908,24 @@ def _ranges_overlap(first_start, first_size, second_start, second_size):
     return first_start < second_start + second_size and second_start < first_start + first_size
 
 
+def _preflight_host_kiq_vram_writes(mmio):
+    """Reject a live GART collision before consuming the launch descriptor."""
+    _, aperture_size = _framebuffer_aperture(mmio)
+    visible = min(aperture_size, VRAM_BAR_SIZE)
+    scratch_end = max(offset + size for offset, size in host_kiq_scratch_ranges())
+    if scratch_end > visible:
+        raise RecoveryError('host KIQ scratch is outside the framebuffer aperture')
+    write_ranges = ((HOST_KIQ_RESERVATION_OFFSET, HOST_KIQ_RESERVATION_SIZE),
+                    *host_kiq_scratch_ranges())
+    if HOST_KIQ_RESERVATION_OFFSET > visible - HOST_KIQ_RESERVATION_SIZE:
+        raise RecoveryError('host KIQ reservation is outside the framebuffer aperture')
+    gart = _runtime_gart_bar_range(mmio, aperture_size)
+    if gart['bar_offset'] is not None:
+        for offset, size in write_ranges:
+            if _ranges_overlap(offset, size, gart['bar_offset'], gart['size']):
+                raise RecoveryError('host KIQ VRAM write overlaps the live GART page table')
+
+
 def retire_legacy_gfx_with_host_kiq(mmio, prior_run_id, sleep=time.sleep, polls=2000,
                                     reservation_proof=None):
     """Execute graphics UNMAP_QUEUES from a temporary VRAM-backed KIQ.
@@ -914,9 +936,10 @@ def retire_legacy_gfx_with_host_kiq(mmio, prior_run_id, sleep=time.sleep, polls=
     """
     if not 1 <= polls <= 10000:
         raise ValueError('host KIQ polls must be 1..10000')
-    # The recovery coordinator supplies this proof after consuming the ACTIVE
-    # launch reservation at the recovery boundary. Standalone diagnostic calls
-    # consume once here, before their first GC mutation.
+    # consume_host_kiq_reservation performs the standalone pre-write GART
+    # guard. The recovery coordinator supplies a proof it already consumed
+    # through that same path. Do not carry the preflight GART snapshot into KIQ
+    # setup: the existing check below derives it again immediately before use.
     reservation = (consume_host_kiq_reservation(mmio, prior_run_id)
                    if reservation_proof is None else reservation_proof)
     if not valid_consumed_reservation(reservation, prior_run_id):

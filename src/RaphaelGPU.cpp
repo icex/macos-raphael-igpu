@@ -36,6 +36,7 @@
 #include "SdmaAddresses.hpp"
 #include "GpuVmDiagnostics.hpp"
 #include "ObservationBuffer.hpp"
+#include "SubmissionTrace.hpp"
 #include "EngineLifecycle.hpp"
 #include "RecoveryReservation.hpp"
 #if __has_include("BuildIdentity.hpp")
@@ -195,12 +196,18 @@ static const RPatch patches[] {
 // userspace is up. The deferred copy is clean, ordered, and greppable with
 // `log show`; the live serial copy stays as a crash-time fallback.
 static rgpu::DiagnosticRecords<256, 512> diagnostics {};
+// Candidate submission tracing can add at most 134 records; 512 retains that
+// bounded set alongside the existing VM/SDMA evidence budget.
 static rgpu::DiagnosticRecords<rgpu::kCriticalRecordCapacity, 512> criticalRecords {};
 static rgpu::SuccessRecordBudget waitStampRecordBudget {};
 static rgpu::SuccessRecordBudget kiqSubmitRecordBudget {};
 static rgpu::SuccessRecordBudget preClearFaultRecordBudget {};
 static rgpu::ObservationBuffer<RaphaelVm::PreparedRequest, 8> vmid2Programs {};
 static rgpu::ObservationBuffer<RaphaelSdma::SubmitInfoObservation, 8> vmid2Submits {};
+static RaphaelSubmit::Store<64, 32> submissionTrace {};
+static volatile uint32_t nextSubmissionTraceSequence = 0;
+static bool submissionTraceEnabled = false;
+static volatile bool submissionTraceRoutesReady = false;
 static bool vmRootFixEnabled = false;
 static volatile bool raphaelTargetConfirmed = false;
 // Published once by the early framebuffer callback and read later by the VM
@@ -345,6 +352,11 @@ static mach_vm_address_t orgHwMemSetVSReady = 0;
 static mach_vm_address_t orgVmmFillRegs = 0;
 static mach_vm_address_t orgVmmPrepare = 0;
 static mach_vm_address_t orgVmmProgInv = 0;
+static mach_vm_address_t orgProcessCommandBuffer = 0;
+static mach_vm_address_t orgBatchPrepareMappings = 0;
+static mach_vm_address_t orgBatchPrepare = 0;
+static mach_vm_address_t orgBatchMemoryMapPrepare = 0;
+static mach_vm_address_t orgSubmitBuffer = 0;
 // Slide of AMDRadeonX6000, so a captured return address can be reported as a file offset
 // that llvm-nm can name. Static analysis could not identify the caller of
 // setMemoryAllocationsEnabled: it is a virtual call, and vtable slot 0x148 is used by
@@ -494,6 +506,13 @@ static constexpr size_t kOffPm4GfxMqd    = 0x6952a;  // AMDGFX10PM4Engine::initG
 static constexpr size_t kOffKiqMapQ      = 0x8e45e;  // AMDGFX10KIQHWChannel::submitMapQueuesPacket [x6]
 static constexpr size_t kOffKiqSubmit    = 0x5c716;  // AMDKIQHWChannel::submitKIQFrame [x6]
 static constexpr size_t kOffWaitStamp    = 0x4c520;  // AMDHWChannel::waitForHwStamp [x6]
+// Observation-only submission boundaries in the exact 24G830 X6000 image. Keep
+// the full symbols here because BatchPrepare is a substring of BatchPrepareMappings.
+static constexpr size_t kOffProcessCommandBuffer = 0x9ca6; // __ZN35AMDRadeonX6000_AMDAccelCommandQueue20processCommandBufferEjj [x6]
+static constexpr size_t kOffBatchPrepareMappings = 0x18256; // __ZN31AMDRadeonX6000_AMDAccelResource20BatchPrepareMappingsEP37AMDRadeonX6000_AMDGraphicsAcceleratorPKPS_j [x6]
+static constexpr size_t kOffBatchPrepare = 0x184d8; // __ZN31AMDRadeonX6000_AMDAccelResource12BatchPrepareEP37AMDRadeonX6000_AMDGraphicsAcceleratorPKPS_j [x6]
+static constexpr size_t kOffBatchMemoryMapPrepare = 0x6550; // __ZN37AMDRadeonX6000_AMDGraphicsAccelerator21batchMemoryMapPrepareEP16IOAccelMemoryMap [x6]
+static constexpr size_t kOffSubmitBuffer = 0xb83e; // __ZN30AMDRadeonX6000_AMDAccelChannel12submitBufferEP24IOAccelCommandDescriptor [x6]
 // GFX_CTRL command encodings, from upstream psp_gfx_if.h.
 static constexpr uint32_t kC2PMsg64        = 0x80;       // MP0 C2PMSG_64, IP-relative
 static constexpr uint32_t kHwIpMp0         = 0x4b;
@@ -4521,6 +4540,160 @@ static void reportVmid2Runtime(const char *phase, uint32_t sequence,
     if (walk && submit != nullptr) reportVmid2Walk(sequence, program, *submit);
 }
 
+static bool submissionTraceCaptureActive() {
+    return submissionTraceEnabled &&
+        __atomic_load_n(&submissionTraceRoutesReady, __ATOMIC_ACQUIRE) &&
+        __atomic_load_n(&raphaelTargetConfirmed, __ATOMIC_ACQUIRE);
+}
+
+static void captureSubmissionTrace(RaphaelSubmit::Kind kind, RaphaelSubmit::Phase phase,
+                                   const void *subject, const void *object,
+                                   uint32_t requested, uint32_t result, uint32_t before) {
+    if (!submissionTraceCaptureActive()) return;
+    RaphaelSubmit::Record record {
+        kind, phase, reinterpret_cast<uintptr_t>(subject),
+        reinterpret_cast<uintptr_t>(object), reinterpret_cast<uintptr_t>(current_thread()),
+        requested, result, before,
+        __sync_add_and_fetch(&nextSubmissionTraceSequence, 1u)
+    };
+    submissionTrace.append(record);
+}
+
+static void wrapProcessCommandBuffer(void *queue, uint32_t first, uint32_t second) {
+    if (!submissionTraceCaptureActive()) {
+        FunctionCast(wrapProcessCommandBuffer, orgProcessCommandBuffer)(queue, first, second);
+        return;
+    }
+    auto error = reinterpret_cast<volatile uint32_t *>(
+        static_cast<uint8_t *>(queue) + 0x610);
+    uint32_t before = __atomic_load_n(error, __ATOMIC_RELAXED);
+    captureSubmissionTrace(RaphaelSubmit::Kind::ProcessCommandBuffer,
+                           RaphaelSubmit::Phase::Entry, queue, nullptr,
+                           first, second, before);
+    FunctionCast(wrapProcessCommandBuffer, orgProcessCommandBuffer)(queue, first, second);
+    uint32_t after = __atomic_load_n(error, __ATOMIC_RELAXED);
+    captureSubmissionTrace(RaphaelSubmit::Kind::ProcessCommandBuffer,
+                           RaphaelSubmit::Phase::Exit, queue, nullptr,
+                           first, after, before);
+}
+
+static uint32_t wrapBatchPrepareMappings(void *accelerator, void *const *resources,
+                                         uint32_t count) {
+    captureSubmissionTrace(RaphaelSubmit::Kind::BatchPrepareMappings,
+                           RaphaelSubmit::Phase::Entry, accelerator, resources,
+                           count, 0, 0);
+    auto result = FunctionCast(wrapBatchPrepareMappings, orgBatchPrepareMappings)(
+        accelerator, resources, count);
+    captureSubmissionTrace(RaphaelSubmit::Kind::BatchPrepareMappings,
+                           RaphaelSubmit::Phase::Exit, accelerator, resources,
+                           count, result, 0);
+    return result;
+}
+
+static bool wrapBatchPrepare(void *accelerator, void *const *resources, uint32_t count) {
+    captureSubmissionTrace(RaphaelSubmit::Kind::BatchPrepare,
+                           RaphaelSubmit::Phase::Entry, accelerator, resources,
+                           count, 0, 0);
+    bool result = FunctionCast(wrapBatchPrepare, orgBatchPrepare)(
+        accelerator, resources, count);
+    captureSubmissionTrace(RaphaelSubmit::Kind::BatchPrepare,
+                           RaphaelSubmit::Phase::Exit, accelerator, resources,
+                           count, result, 0);
+    return result;
+}
+
+static bool wrapBatchMemoryMapPrepare(void *accelerator, void *memoryMap) {
+    captureSubmissionTrace(RaphaelSubmit::Kind::MemoryMapPrepare,
+                           RaphaelSubmit::Phase::Entry, accelerator, memoryMap,
+                           0, 0, 0);
+    bool result = FunctionCast(wrapBatchMemoryMapPrepare, orgBatchMemoryMapPrepare)(
+        accelerator, memoryMap);
+    captureSubmissionTrace(RaphaelSubmit::Kind::MemoryMapPrepare,
+                           RaphaelSubmit::Phase::Exit, accelerator, memoryMap,
+                           0, result, 0);
+    return result;
+}
+
+static void wrapSubmitBuffer(void *channel, void *descriptor) {
+    captureSubmissionTrace(RaphaelSubmit::Kind::SubmitBuffer,
+                           RaphaelSubmit::Phase::Entry, channel, descriptor,
+                           0, 0, 0);
+    FunctionCast(wrapSubmitBuffer, orgSubmitBuffer)(channel, descriptor);
+    captureSubmissionTrace(RaphaelSubmit::Kind::SubmitBuffer,
+                           RaphaelSubmit::Phase::Exit, channel, descriptor,
+                           0, 0, 0);
+}
+
+static void publishPendingSubmissionTrace() {
+    if (!submissionTraceEnabled) return;
+    static size_t recordCursor = 0;
+    static size_t notableCursor = 0;
+    static uint64_t lastTotal = 0;
+    static unsigned quietPolls = 0;
+    static unsigned summaryRecords = 0;
+    static bool dirty = false;
+    bool publishedNotable = false;
+    RaphaelSubmit::Record record {};
+    while (recordCursor < submissionTrace.records().size() &&
+           submissionTrace.records().read(recordCursor, record)) {
+        ++recordCursor;
+        CRLOG("SUB: trace seq=%u kind=%s phase=%s subject=%#llx object=%#llx thread=%#llx "
+              "requested=%u result=%u before=%u",
+              record.sequence, RaphaelSubmit::kindName(record.kind),
+              RaphaelSubmit::phaseName(record.phase),
+              static_cast<uint64_t>(record.subject), static_cast<uint64_t>(record.object),
+              static_cast<uint64_t>(record.threadToken), record.requested, record.result,
+              record.before);
+    }
+    while (notableCursor < submissionTrace.notableRecords().size() &&
+           submissionTrace.notableRecords().read(notableCursor, record)) {
+        ++notableCursor;
+        publishedNotable = true;
+        CRLOG("SUB: notable seq=%u kind=%s subject=%#llx object=%#llx thread=%#llx "
+              "requested=%u result=%u before=%u",
+              record.sequence, RaphaelSubmit::kindName(record.kind),
+              static_cast<uint64_t>(record.subject), static_cast<uint64_t>(record.object),
+              static_cast<uint64_t>(record.threadToken), record.requested, record.result,
+              record.before);
+    }
+
+    uint64_t entries[RaphaelSubmit::KindCount] {};
+    uint64_t exits[RaphaelSubmit::KindCount] {};
+    uint64_t notable[RaphaelSubmit::KindCount] {};
+    uint64_t total = 0;
+    for (size_t i = 0; i < RaphaelSubmit::KindCount; ++i) {
+        auto kind = static_cast<RaphaelSubmit::Kind>(i);
+        entries[i] = submissionTrace.entries(kind);
+        exits[i] = submissionTrace.exits(kind);
+        notable[i] = submissionTrace.notable(kind);
+        total += entries[i] + exits[i];
+    }
+    if (total != lastTotal) {
+        dirty = true;
+        quietPolls = 0;
+    } else if (dirty && quietPolls < 10) {
+        ++quietPolls;
+    }
+    // A zero-count record proves that the worker saw an armed route set. Thereafter
+    // summarize settled bursts and retained anomalies, with an explicit global cap.
+    bool initial = summaryRecords == 0 &&
+        __atomic_load_n(&submissionTraceRoutesReady, __ATOMIC_ACQUIRE);
+    bool settled = dirty && quietPolls >= 10;
+    if (summaryRecords < 32 && (initial || publishedNotable || settled)) {
+        CRLOG("SUB: summary process=%llu/%llu/%llu mappings=%llu/%llu/%llu "
+              "prepare=%llu/%llu/%llu map=%llu/%llu/%llu submit=%llu/%llu/%llu "
+              "dropped=%llu/%llu",
+              entries[0], exits[0], notable[0], entries[1], exits[1], notable[1],
+              entries[2], exits[2], notable[2], entries[3], exits[3], notable[3],
+              entries[4], exits[4], notable[4], submissionTrace.records().dropped(),
+              submissionTrace.notableRecords().dropped());
+        ++summaryRecords;
+        dirty = false;
+        quietPolls = 0;
+    }
+    lastTotal = total;
+}
+
 static void publishPendingVmObservations() {
     static size_t programCursor = 0;
     static size_t submitCursor = 0;
@@ -4603,6 +4776,7 @@ static void publishPendingVmObservations() {
             reportVmid2Runtime("dispatch+100ms", sampledSequence, *matched, &submit, false);
         }
     }
+    publishPendingSubmissionTrace();
 }
 
 static bool startOneSdmaEngine(void *engine) {
@@ -5174,6 +5348,59 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
                 patcher.clearError();
             }
         }
+        if (submissionTraceEnabled) {
+            // Each pattern ends on an instruction boundary and stops before the
+            // first RIP-relative instruction. They are exact for 24G830.
+            static const uint8_t processEntry[] = {0x55, 0x48, 0x89, 0xe5, 0x41,
+                0x57, 0x41, 0x56, 0x41, 0x54, 0x53, 0x41, 0x89, 0xd6, 0x41, 0x89, 0xf7};
+            static const uint8_t mappingsEntry[] = {0x55, 0x48, 0x89, 0xe5, 0x41,
+                0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53, 0x48, 0x83, 0xec, 0x18};
+            static const uint8_t prepareEntry[] = {0x55, 0x48, 0x89, 0xe5, 0x41,
+                0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53, 0x48, 0x83, 0xec, 0x68};
+            static const uint8_t mapEntry[] = {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57,
+                0x41, 0x56, 0x53, 0x50, 0x48, 0x89, 0xf3, 0x49, 0x89, 0xfe};
+            static const uint8_t submitEntry[] = {0x55, 0x48, 0x89, 0xe5, 0x41,
+                0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53, 0x48, 0x81, 0xec,
+                0x08, 0x01, 0x00, 0x00};
+            bool entriesMatch =
+                entryMatches(addr, sz, kOffProcessCommandBuffer,
+                             processEntry, sizeof(processEntry)) &&
+                entryMatches(addr, sz, kOffBatchPrepareMappings,
+                             mappingsEntry, sizeof(mappingsEntry)) &&
+                entryMatches(addr, sz, kOffBatchPrepare,
+                             prepareEntry, sizeof(prepareEntry)) &&
+                entryMatches(addr, sz, kOffBatchMemoryMapPrepare,
+                             mapEntry, sizeof(mapEntry)) &&
+                entryMatches(addr, sz, kOffSubmitBuffer,
+                             submitEntry, sizeof(submitEntry));
+            if (entriesMatch) {
+                struct { size_t off; mach_vm_address_t *org; void *fn; const char *name; } t[] {
+                    {kOffProcessCommandBuffer, &orgProcessCommandBuffer,
+                     reinterpret_cast<void *>(wrapProcessCommandBuffer), "processCommandBuffer"},
+                    {kOffBatchPrepareMappings, &orgBatchPrepareMappings,
+                     reinterpret_cast<void *>(wrapBatchPrepareMappings), "BatchPrepareMappings"},
+                    {kOffBatchPrepare, &orgBatchPrepare,
+                     reinterpret_cast<void *>(wrapBatchPrepare), "BatchPrepare"},
+                    {kOffBatchMemoryMapPrepare, &orgBatchMemoryMapPrepare,
+                     reinterpret_cast<void *>(wrapBatchMemoryMapPrepare), "batchMemoryMapPrepare"},
+                    {kOffSubmitBuffer, &orgSubmitBuffer,
+                     reinterpret_cast<void *>(wrapSubmitBuffer), "submitBuffer"},
+                };
+                for (auto &e : t) {
+                    *e.org = patcher.routeFunction(addr + e.off,
+                                 reinterpret_cast<mach_vm_address_t>(e.fn), true);
+                    CRLOG("SUB: route %s -> %s (org=%#llx)", e.name,
+                          *e.org ? "ok" : "FAILED", *e.org);
+                    patcher.clearError();
+                }
+            }
+            bool ready = entriesMatch && orgProcessCommandBuffer &&
+                orgBatchPrepareMappings && orgBatchPrepare && orgBatchMemoryMapPrepare &&
+                orgSubmitBuffer;
+            __atomic_store_n(&submissionTraceRoutesReady, ready, __ATOMIC_RELEASE);
+            CRLOG("SUB: routes=%s count=5 entries-match=%u capture=%s",
+                  ready ? "ok" : "FAILED", entriesMatch, ready ? "armed" : "disabled");
+        }
         // Exact complete instructions displaced by the five new X6000 routes.
         // The start/powerOff patterns extend to 21 bytes because byte 16 is in
         // the middle of their first memory-operand instruction.
@@ -5270,6 +5497,12 @@ static void pluginStart() {
                                              sizeof(sdmaTopology)) && sdmaTopology == 1;
     RLOG("rgpusdma=%u: Raphael one-instance SDMA topology correction %s",
          sdmaTopologyEnabled, sdmaTopologyEnabled ? "enabled" : "disabled");
+    uint32_t submissionTrace = 0;
+    submissionTraceEnabled = PE_parse_boot_argn("rgpusubmit", &submissionTrace,
+                                                sizeof(submissionTrace)) &&
+        submissionTrace == 1;
+    RLOG("rgpusubmit=%u: bounded 24G830 pre-submission tracing %s",
+         submissionTraceEnabled, submissionTraceEnabled ? "enabled" : "disabled");
     uint32_t cps = 0;
     if (PE_parse_boot_argn("rgpucp", &cps, sizeof(cps)) && cps == 1) {
         cpSurgeryEnabled = true;

@@ -147,6 +147,70 @@ class ClassifyTests(unittest.TestCase):
         self.assertEqual(result['verdict'], 'INVALID')
         self.assertEqual(result['earliest_failure'], 'vmid2_root_prepared_mismatch')
 
+    def test_submission_trace_readiness_requires_routes_and_worker_not_workload_calls(self):
+        classifier = self.classifier()
+        manifest = {'build_id':'abc', 'spec':{'required_observations':[
+                    'submission_trace']}}
+        base = self.events(available=1, status=0, started=1) + [
+            {'kind':'accelerator_start', 'build':'abc', 'seq':6, 'result':1}]
+
+        missing = classifier.classify_probe_readiness(manifest, base)
+        self.assertEqual(missing['verdict'], 'INCONCLUSIVE')
+        self.assertEqual(missing['earliest_failure'], 'submission_trace_route_missing')
+
+        failed = base + [
+            {'kind':'submission_trace_route', 'build':'abc', 'seq':7, 'ok':False}]
+        result = classifier.classify_probe_readiness(manifest, failed)
+        self.assertEqual(result['verdict'], 'INVALID')
+        self.assertEqual(result['earliest_failure'], 'submission_trace_route_guard')
+
+        malformed = base + [
+            {'kind':'submission_trace_route', 'build':'abc', 'seq':7,
+             'ok':False, 'malformed':True}]
+        result = classifier.classify_probe_readiness(manifest, malformed)
+        self.assertEqual(result['verdict'], 'INVALID')
+        self.assertEqual(result['earliest_failure'], 'submission_trace_route_guard')
+
+        route = {'kind':'submission_trace_route', 'build':'abc', 'seq':7, 'ok':True}
+        worker_missing = classifier.classify_probe_readiness(manifest, base + [route])
+        self.assertEqual(worker_missing['earliest_failure'],
+                         'submission_trace_worker_missing')
+
+        malformed_worker = base + [route,
+            {'kind':'submission_trace_summary', 'build':'abc', 'seq':8,
+             'ok':False, 'malformed':True}]
+        result = classifier.classify_probe_readiness(manifest, malformed_worker)
+        self.assertEqual(result['verdict'], 'INVALID')
+        self.assertEqual(result['earliest_failure'],
+                         'submission_trace_worker_malformed')
+
+        ready = base + [route,
+            {'kind':'submission_trace_summary', 'build':'abc', 'seq':8,
+             'ok':True, 'counts':[[0, 0, 0]] * 5, 'dropped':[0, 0]}]
+        result = classifier.classify_probe_readiness(manifest, ready)
+        self.assertTrue(result['valid'])
+        self.assertEqual(result['verdict'], 'PROBE_NOT_RUN')
+
+    def test_submission_trace_records_parse_strict_route_and_worker_readiness(self):
+        rows = self.classifier().parse_serial(
+            'RGPU_RECORDS build=abc count=4 dropped=0 truncated=0\n'
+            'RGPU_EVENT build=abc seq=0 BUILD: identity=abc\n'
+            'RGPU_EVENT build=abc seq=1 SUB: routes=ok count=5 entries-match=1 '
+            'capture=armed\n'
+            'RGPU_EVENT build=abc seq=2 SUB: summary process=0/0/0 '
+            'mappings=0/0/0 prepare=0/0/0 map=0/0/0 submit=0/0/0 '
+            'dropped=0/0\n'
+            'RGPU_EVENT build=abc seq=3 SUB: routes=ok count=five entries-match=1 '
+            'capture=armed\n')
+        self.assertEqual(rows[1]['kind'], 'submission_trace_route')
+        self.assertTrue(rows[1]['ok'])
+        self.assertEqual(rows[2]['kind'], 'submission_trace_summary')
+        self.assertTrue(rows[2]['ok'])
+        self.assertEqual(rows[2]['counts'], [[0, 0, 0]] * 5)
+        self.assertEqual(rows[3]['kind'], 'submission_trace_route')
+        self.assertTrue(rows[3]['malformed'])
+        self.assertFalse(rows[3]['ok'])
+
     def test_missing_build_or_route_never_valid(self):
         c = self.classifier().classify
         events = self.events()

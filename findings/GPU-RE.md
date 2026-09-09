@@ -7,9 +7,19 @@ device handed over with `vfio-pci` and spoofed as `1002:73ff` (Radeon RX 6600, N
 
 ## Status
 
-Development paused at the user's request on 2026-09-07 after testing 1.0.158.
-The VM is stopped and research agents are halted. Real Metal execution remains
-unproven; the next proposed PSP response-address diagnostic has not been implemented.
+As of 2026-09-09, candidate 1.0.176 is the latest controlled hardware result. It completed
+native KIQ, SDMA, engine and accelerator startup and ran the prepared Metal probe. The first
+compute command failed with status 5 and underlying `e00002bd` (`kIOReturnNoMemory`); zero GPU
+command buffers completed. The VM is stopped, the host remained responsive, and the boot's
+three-launch ledger is full. No retry is authorized.
+
+Physical schema-6 cleanup reached a matching temporary-KIQ fence and zero final queue/doorbell
+state. The run's committed consumer rejected the receipt because it treated the allocator-excluded
+final 16 MiB as one scratch-write hazard, although the actual recovery writes and GART table are
+disjoint. Independent review narrowed the schema-6 rule to the actual mutation spans; both immutable
+receipt serializations now validate with `[]`. The separate 3/3 launch ceiling still blocks another
+launch. Real Metal compute/rendering and repeatable lifecycle recovery remain unproven. Historical
+sections below preserve the evidence available at their time.
 
 ### Candidate 1.0.158: EOP writes traced; execution remains blocked
 
@@ -3646,3 +3656,40 @@ uses the existing aligned native-width DWORD store for `write32` and HDP flush w
 in-memory packet construction still uses `struct.pack_into`. This mechanism is a correctness defect
 and the replacement is offline-tested, but it is not evidence that the transient clear caused a
 past crash. It also does not alter the earlier native 64-bit doorbell-zero observation.
+
+### 2026-09-09: candidate 176 runs the Metal probe; the first command returns no memory
+
+Candidate 176 loaded build `ac3732d072174d2d847dacec4e9982c2` and used the reviewed retained-KIQ
+continuation once. The native startup evidence repeated the successful BAR0 mapping, KIQ submissions
+and stamps, one-instance SDMA topology and channel remaps, engine start, and outer accelerator
+power-up. The corrected coordinator gate then ran the prepared Metal probe.
+
+The probe enumerated `AMD Radeon Navi23`, advertised Metal 3, compiled shaders, and committed its
+first compute command. It returned command-buffer status 5 with `e00002bd`, which the local SDK maps
+to `kIOReturnNoMemory`. No command buffer or compute round completed; no values or pixels were
+checked. The capture contains no subsequent SDMA VM-program, VMID-2 root-repair, or page-table-walk
+record. The strict verdict is `INCONCLUSIVE / sdma_vm_program_missing`. This is a measured Metal
+execution failure, but it does not identify whether memory allocation, kernel resource setup, VM
+programming, submission, or completion produced the error.
+
+The guest exited after its bounded shutdown request. Schema-6 recovery dequeued two MEC HQDs,
+retired graphics through the temporary host KIQ, and matched fence `1047195047`. Final sampled
+graphics pipe 0, HQD, pointer, PQ and doorbell fields were zero; PAGE inputs were disabled in order,
+SDMA was halted and idle, and both PSP destroy commands were acknowledged. The host journal has no
+configured GPU/IOMMU fault or reset match, and fresh postflight found no QEMU, launch unit, pending
+launch, or VFIO group holder with bus mastering still disabled.
+
+The physical cleanup did not yield a valid authorization receipt at run time. The active GART
+page-table range is `[0x0fdfc000,0x0fffe008)`. The committed consumer treated the whole
+allocator-excluded interval `[0x0f100000,0x10000000)` as scratch and consequently returned
+`recovery_receipt`, but actual descriptor and temporary-KIQ writes end at `0x0f113004`, before the
+GART begins. Preserve both raw receipt copies. A later corrected consumer does not override the
+now-full 3/3 boot ledger, which separately forbids another launch under the existing policy. See
+[metal-009-176](experiments/metal-009-176/notes.md).
+
+Independent range review then pinned the schema-6 mutation exclusions to the consumed descriptor
+`[0x0f000000,0x0f000048)` and conservative host-KIQ span
+`[0x0f100000,0x0f113004)`. Boundary and true-overlap fixtures preserve rejection where recovery can
+write, while the exact candidate-176 GART now validates. The corrected consumer passed 346 tests;
+both unchanged receipt serializations return no schema-6 error. This establishes a validated cleanup
+record, not repeatable reinitialization or permission to exceed the independent three-launch policy.
