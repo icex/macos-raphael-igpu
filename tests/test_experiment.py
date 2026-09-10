@@ -1219,6 +1219,144 @@ class ExperimentTests(unittest.TestCase):
                             vm, manifest_path, manifest, original, proof_path, observed,
                             dict(old_host), ('cursor', [], []))
 
+    def test_candidate188_prelaunch_continuation_accepts_only_exact_frozen_proof(self):
+        tool = self.module()
+        with tempfile.TemporaryDirectory() as temp:
+            vm = Path(temp); original = vm/'original'; original.mkdir()
+            boot = '3bca3e47-1f28-4f78-af00-5dbf76b00620'
+            run = 'cb1d0aadd8186205d867a23fe175c336'
+            old = {key:'fixed' for key in tool.IDENTITY_FIELDS}
+            old.update(boot_id=boot, run_id=run, source_commit='old-commit',
+                       source_sha256='driver-tree', candidate_directory='run/candidate-188',
+                       harness_sha256={'macos-vm.sh':'old-launcher',
+                                       'vm-supervision.py':'supervisor'},
+                       gpu=True, max_seconds=180, source_clean=True,
+                       vfio_device='0000:7b:00.0')
+            for name, value in (
+                    ('manifest.json', old),
+                    ('verdict.json', {'valid':False, 'error':'RuntimeError: supervised launcher is not running'}),
+                    ('host-before.json', {'boot_id':boot}),
+                    ('host-after.json', {'boot_id':boot})):
+                (original/name).write_text(json.dumps(value))
+            new = copy.deepcopy(old)
+            new['source_commit'] = 'reviewed-commit'
+            new['harness_sha256']['macos-vm.sh'] = 'fixed-launcher'
+            new['harness_sha256']['vm-supervision.py'] = 'fixed-supervisor'
+            manifest_path = vm/'manifest.json'; manifest_path.write_text(json.dumps(new))
+            ledger = vm/'ledger.json'
+            ledger.write_bytes((json.dumps({'schema':2, 'boot_id':boot, 'max_launches':3,
+                'launches':[{'run_id':run}]}, separators=(',', ':'))).encode())
+            proof = {
+                'schema':1, 'kind':'candidate188-x11-prelaunch', 'boot_id':boot,
+                'run_id':run, 'original_manifest_sha256':tool.sha((original/'manifest.json').read_bytes()),
+                'original_output_sha256':tool.evidence_digest(original)[0],
+                'ledger_sha256':tool.sha(ledger.read_bytes()),
+                'failing_launcher_sha256':'old-launcher',
+                'supervisor_sha256':'supervisor',
+                'launcher_log_sha256':'launcher-log',
+                'docker_evidence_sha256':'docker-evidence',
+                'evidence_inventory':{'launcher_log':'evidence/launcher.log',
+                    'unit_journal':'evidence/journal.log',
+                    'failing_launcher':'evidence/launcher.sh',
+                    'failing_supervisor':'evidence/supervisor.py',
+                    'docker_events':'evidence/docker.json',
+                    'boot_ledger':'evidence/ledger.json'},
+                'service':{'unit':'rgpu-launch-f356b4cfc9a0451a9afda1e4dfb206f0.service',
+                           'invocation_id':'3d4b03acac054b10b63dd7a842db319f',
+                           'pid':25105, 'start_us':1789060599622815,
+                           'end_us':1789060599863115, 'exit_status':1,
+                           'before_container_identification':True},
+                'docker_events':{'since_us':1789060599500000,
+                                 'until_us':1789060600100000,
+                                 'stdout_sha256':tool.sha(b''), 'event_count':0},
+                'replacement_manifest_sha256':tool.sha(manifest_path.read_bytes()),
+                'repaired_launcher_sha256':'fixed-launcher',
+                'repaired_supervisor_sha256':'fixed-supervisor',
+                'coordinator_commit':'reviewed-commit'}
+            proof_path = vm/'proof.json'; proof_path.write_text(json.dumps(proof))
+            proof_sha = tool.sha(proof_path.read_bytes())
+            observed = copy.deepcopy(new); observed['source_clean'] = True
+            host = dict(self.host(), boot_id=boot, sleep_inhibited=True)
+            pins = {'boot_id':boot, 'run_id':run,
+                    'original_manifest_sha256':proof['original_manifest_sha256'],
+                    'original_output_sha256':proof['original_output_sha256'],
+                    'ledger_sha256':proof['ledger_sha256'],
+                    'failing_launcher_sha256':'old-launcher',
+                    'supervisor_sha256':'supervisor',
+                    'launcher_log_sha256':'launcher-log',
+                    'docker_evidence_sha256':'docker-evidence',
+                    'unit_journal_sha256':'journal',
+                    'evidence_inventory':proof['evidence_inventory']}
+            evidence_dir = vm/'evidence'; evidence_dir.mkdir()
+            (evidence_dir/'launcher.log').write_bytes(b'error: no X11 socket at /tmp/.X11-unix/X0\n')
+            (evidence_dir/'journal.log').write_bytes(b'journal')
+            (evidence_dir/'launcher.sh').write_bytes(b'old launcher')
+            (evidence_dir/'supervisor.py').write_bytes(b'supervisor')
+            docker_frozen = {'schema':1,
+                'command':['docker','events','--since','2026-09-10T20:16:39.500+03:00',
+                           '--until','2026-09-10T20:16:40.100+03:00','--format','{{json .}}'],
+                'service_start_realtime_us':1789060599622815,
+                'service_end_realtime_us':1789060599863115,
+                'stdout_sha256':tool.sha(b''), 'events':[], 'exit_status':0}
+            (evidence_dir/'docker.json').write_text(json.dumps(docker_frozen))
+            (evidence_dir/'ledger.json').write_bytes(ledger.read_bytes())
+            pins.update(launcher_log_sha256=tool.sha((evidence_dir/'launcher.log').read_bytes()),
+                        unit_journal_sha256=tool.sha(b'journal'),
+                        failing_launcher_sha256=tool.sha(b'old launcher'),
+                        supervisor_sha256=tool.sha(b'supervisor'),
+                        docker_evidence_sha256=tool.sha((evidence_dir/'docker.json').read_bytes()))
+            old['harness_sha256']['macos-vm.sh'] = pins['failing_launcher_sha256']
+            old['harness_sha256']['vm-supervision.py'] = pins['supervisor_sha256']
+            (original/'manifest.json').write_text(json.dumps(old))
+            proof['original_manifest_sha256'] = tool.sha((original/'manifest.json').read_bytes())
+            proof['original_output_sha256'] = tool.evidence_digest(original)[0]
+            pins['original_manifest_sha256'] = proof['original_manifest_sha256']
+            pins['original_output_sha256'] = proof['original_output_sha256']
+            proof.update(launcher_log_sha256=pins['launcher_log_sha256'],
+                         docker_evidence_sha256=pins['docker_evidence_sha256'],
+                         failing_launcher_sha256=pins['failing_launcher_sha256'],
+                         supervisor_sha256=pins['supervisor_sha256'])
+            proof_path.write_text(json.dumps(proof)); proof_sha = tool.sha(proof_path.read_bytes())
+            with patch.object(tool, 'PRELAUNCH188_CONTINUATION', pins), \
+                 patch.object(tool, 'ROOT', vm), \
+                 patch.object(tool, 'active_launch_units', return_value=[]), \
+                 patch.object(tool, 'command', return_value='reviewed-commit'):
+                evidence, got_ledger, raw = tool.validate_prelaunch188_continuation(
+                    vm, manifest_path, new, original, proof_path, proof_sha,
+                    observed, host, ('cursor', [], []), ledger)
+                self.assertEqual(evidence['kind'], 'candidate188-x11-prelaunch')
+                self.assertEqual(got_ledger, ledger)
+                self.assertEqual(raw, ledger.read_bytes())
+                mutations = (
+                    ('manifest', lambda: new.__setitem__('binary_sha256', 'changed')),
+                    ('output', lambda: (original/'extra').write_text('changed')),
+                    ('ledger', lambda: ledger.write_bytes(b'changed')),
+                    ('proof', lambda: proof_path.write_text('{}')),
+                    ('malformed-service', lambda: proof_path.write_text(json.dumps(
+                        dict(proof, service=[])))),
+                    ('malformed-docker-events', lambda: proof_path.write_text(json.dumps(
+                        dict(proof, docker_events=[])))),
+                    ('marker', lambda: (vm/'run/prelaunch-continuations'/
+                        f'{boot}-{run}.json').parent.mkdir(parents=True, exist_ok=True) or
+                        (vm/'run/prelaunch-continuations'/f'{boot}-{run}.json').write_text('{}')),
+                )
+                for label, mutate in mutations:
+                    with self.subTest(label=label):
+                        saved = (copy.deepcopy(new),
+                                 {p.name:p.read_bytes() for p in original.iterdir()},
+                                 ledger.read_bytes(), proof_path.read_bytes())
+                        mutate()
+                        with self.assertRaises(ValueError):
+                            tool.validate_prelaunch188_continuation(
+                                vm, manifest_path, new, original, proof_path, proof_sha,
+                                observed, host, ('cursor', [], []), ledger)
+                        new.clear(); new.update(saved[0])
+                        for p in original.iterdir(): p.unlink()
+                        for name, data in saved[1].items(): (original/name).write_bytes(data)
+                        ledger.write_bytes(saved[2]); proof_path.write_bytes(saved[3])
+                        marker = vm/'run/prelaunch-continuations'/f'{boot}-{run}.json'
+                        marker.unlink(missing_ok=True)
+
     def test_run_continuation_consumes_marker_before_prepare_and_never_reserves_boot(self):
         tool = self.module()
         for mode in ('success', 'existing-marker', 'changed-ledger'):
