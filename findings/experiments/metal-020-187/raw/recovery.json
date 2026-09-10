@@ -1,0 +1,4 @@
+{
+  "status": "failed",
+  "error": "CriticalReplayError: CR2 incomplete attempt exceeds the terminal prefix"
+}

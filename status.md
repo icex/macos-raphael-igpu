@@ -1,15 +1,120 @@
 # Raphael iGPU: current technical status
 
-## Fresh boot — candidate 187 preparation
+## GDB is qualified for source-level Raphael debugging
 
-User confirmed reboot. Boot `888a196d-562a-4e7f-ba4e-8f2243b9633a`;
-one authorized amdgpu-to-VFIO handoff succeeded. Watchdogs and capture checks
-pass, GPU is active/on with empty reset methods, group31 is accessible, no VM
-is running, and the sleep inhibitor is active. Pstore listing is unavailable.
-The reviewed PCI fix is committed locally on dev at `57c3ee1`; nothing pushed.
-Candidate186 staging is sealed against reuse. Candidate187/metal-020 is being
-prepared with unchanged driver source and the same headless Lilu and safety
-contracts, using a fresh build/run identity. No GPU cycle has occurred this boot.
+The subsequent GPU-less source cycle authenticated live
+`as.rgpu.RaphaelGPU` at `0xffffff800e47c000` by UUID
+`474EF697-FC28-3BA2-83A4-763D76C8E200` and instruction bytes. A hardware
+breakpoint requested at source line532 resolved to optimized executable line542
+in `criticalDumpThread` and hit at `0xffffff800e481411`. Locals, CPU registers
+and stack were inspected. `si` advanced RIP to `0xffffff800e481413`; detach
+resumed execution. ACPI shutdown was requested, then the exact CID was stopped
+after the bounded grace period. No VM remains. Several scalars were optimized
+out; the captured UART structure was initialized and not failed at the stop.
+Debugger timing prevents interpreting this as a natural UART-failure test.
+
+Reusable tool: `tools/gdb-kext-source.py`; five focused tests passed in
+`tests/test_gdb_kext_source.py`. The tool is scoped to the pinned 24G830 kernel
+and this exact private debug artifact; its hard-coded offsets are not a generic
+KDK locator. Research and evidence paths:
+`findings/research/2026-09-10-gdb-kext-source-preparation.md`.
+Production187, canonical media and GPU state were not changed by qualification.
+
+Next GPU investigation uses breakpoints and target memory: catch the VM entry
+update boundary (`wrapVmmUpdateEntries`) and inspect source/destination/count,
+template, conversion decision and native output; correlate the actual VMID1
+root and child/leaf table addresses with the faulting submission. Separately,
+catch the UART failure branch after its predicate is satisfied to distinguish
+byte-ready timeout from snapshot deadline without attributing debugger-induced
+delays to normal operation. Do not relax recovery or capture acceptance.
+
+The GPU fault itself is NOT fixed. Host remains on boot
+`888a196d-562a-4e7f-ba4e-8f2243b9633a`, with no candidate187 recovery receipt.
+A GPU-attached test requires a clean, admitted device state; debugger access does
+not reset hardware or authorize reuse. GPU cycle count remains9.
+
+## GDB cycle — kernel breakpoint and single-step verified
+
+One fresh GPU-less run at `run/gdb-runtime-fix-20260910T203000Z` resolved the
+missing kernel text relocation: reported KASLR `0x1b400000` plus collection
+placement `0xe8000`, total `0x1b4e8000`. Isolating the KDK executable from its
+adjacent incompatible DWARF5 dSYM also fixed GDB symbol loading. A named hardware
+breakpoint in `mach_absolute_time` hit at `0xffffff801b9389e4`. CPU registers
+and stack memory were read, then `si` advanced RIP seven bytes to
+`0xffffff801b9389eb`, matching the decoded instruction. Detach resumed the
+guest; exact-CID ACPI shutdown completed and no VM remains.
+
+Runtime code bytes and segment mapping matched the KDK. Runtime LC_UUID was
+not decoded in this cycle; this limits the identity claim. No GPU was attached,
+so the GPU cycle count remains9 and candidate187 recovery remains unverified.
+Next work is a bounded, UUID-checked kext locator and source breakpoint generator,
+with the existing private DWARF4 kext qualified only in a GPU-less private guest.
+No claim of hardware fault repair or desktop Metal success is made.
+
+## Historical — initial debugger setup, before corrected mapping
+
+Normal GPU iterations are paused at the user's request. Two isolated GPU-less
+qualifications were performed; neither exposed VFIO/DRI nor counted as a GPU
+cycle. The first failed before kernel boot. The second booted successfully and
+GDB interrupted mapped kernel code at `0xffffff801853c429`, reading CPU
+registers, memory and disassembly. A named hardware breakpoint was accepted but
+never hit: the bytes at KDK `_mach_absolute_time` plus reported KASLR slide
+`0x18000000` did not match the pinned symbol. Named breakpoints, instruction
+stepping and source-level stepping are therefore NOT yet qualified. The second
+VM exited under its 180-second supervisor and no VM remains.
+
+Next prerequisite: authenticate the actual guest kernel collection/fileset UUID
+and segment-to-runtime mapping. KC relocation is a hypothesis; mismatched guest
+binary or runtime patching must also be excluded. No further GPU run or recovery
+is authorized by debugger access. Report and raw evidence paths:
+`findings/research/2026-09-10-gpueless-gdb-qualification.md`.
+
+A separate private Raphael debug artifact was built once with `-O2 -g
+-gdwarf-4`, preserving tracked source and production toolchain files. Matching
+executable/dSYM UUID: `474EF697-FC28-3BA2-83A4-763D76C8E200`. GDB loading the
+dSYM resolves `pluginStart` and `wrapGfx10PowerUp` to source lines and optimized
+variable-location ranges. Artifact and proof:
+`/home/bogdan/macos-vm/run/debug-symbols-187-20260910T154947Z-08911110`.
+It is not deployed and is not the production187 binary.
+
+The completed capture audit is
+`findings/research/2026-09-10-candidate187-capture.md`: repeated incomplete UART
+emission from snapshot3 onward, not an oversized CR2 record. Existing capture
+remains invalid and cannot authorize recovery. COM1 long-line truncation is
+separate. No attempt was made to relax the capture/recovery gates.
+
+## Candidate 187 run — PCI path restored, capture failed
+
+Run `a89f6fadf08d2f6bf55a53e6c7b4196c` completed once on boot
+`888a196d-562a-4e7f-ba4e-8f2243b9633a`. The explicit VFIO placement was
+observed at guest `pcie.0` slot 6 function 0, matching the OpenCore property
+path, and `marked=1` was observed. Native startup progressed past the earlier
+lease boundary: SDMA topology applied, XH2 `OWNED`, active pool, KIQ success,
+and PM4/SDMA0/VCN0 engine power-up all passed. Route installation and engine
+startup are distinct; both passed.
+
+The run reached a VMID1 fault with status `0x101b3a` at VA `0x400580000`.
+The walk recorded root `0xf40b6ff000`, relative PDE physical
+`0x84b700000`, then a missing leaf at index 1408. No Metal probe ran. At the
+180-second deadline critical capture remained incomplete, so the authoritative
+classifier returned `INVALID` with `capture_loss`; recovery was refused because
+the CR2 attempt exceeded the terminal prefix, and no recovery receipt exists.
+Shutdown completed after the guest request. Host-after matches host-before:
+same boot, VFIO active, reset methods empty, and no active VM.
+
+| Boundary | Verified result |
+|---|---|
+| Guest PCI identity | `pcie.0` slot 6 function 0; OpenCore marker `marked=1` |
+| Native readiness | SDMA topology, OWNED lease, active pool, KIQ, and engines passed |
+| VMID1 / Metal | VMID1 fault `0x101b3a`; no probe result |
+| Capture / recovery | 180-second capture loss; recovery refused; no receipt |
+| Host / shutdown | Same boot; bounded guest-request exit; recovery unverified |
+
+This is actual GPU cycle **9 overall**, **5 since the post-182 Astra review**, and
+**1 since the post-186 Astra review**. The broader unresolved execution streak is
+not reset. Frozen text
+and metadata evidence is archived under
+`findings/experiments/metal-020-187/raw`; no GPU retry is authorized.
 
 ## Astra assessment accepted; PCI-path correction verified offline
 
