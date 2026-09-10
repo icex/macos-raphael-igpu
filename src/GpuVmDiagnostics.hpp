@@ -263,7 +263,11 @@ inline LocalInvalidateInfo prepareInvalidateInfo(
     }
     if (!request.valid) return result;
     if (request.hub != 0) { result.reason = RootRepairReason::WrongHub; return result; }
-    if (request.vmid != 2) { result.reason = RootRepairReason::WrongVmid; return result; }
+    // VMID0 owns the legacy GART. Hub-0 VMIDs 1..15 are client contexts eligible
+    // for repair when the root is non-SYSTEM and lies in the published MC range.
+    if (request.vmid == 0 || request.vmid >= 16) {
+        result.reason = RootRepairReason::WrongVmid; return result;
+    }
     if (!request.reprogram) {
         result.reason = RootRepairReason::NotReprogrammed; return result;
     }
@@ -320,7 +324,8 @@ inline InvalidateRequest observeInvalidateRequest(const uint8_t *bytes, size_t s
     result.end = readU64(bytes + 0x10);
     result.root = readU64(bytes + 0x18);
     result.flags = readU32(bytes + 0x20);
-    result.reprogram = bytes[0x24] != 0;
+    // The pinned native encoder compares this byte to exactly one.
+    result.reprogram = bytes[0x24] == 1;
     return result;
 }
 

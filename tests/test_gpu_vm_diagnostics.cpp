@@ -111,6 +111,24 @@ int main() {
                 RaphaelVm::readU64(captured179.bytes + 0x18) == 0x84b6f3000ULL,
             "candidate 179 zero-attribute VMID2 root is converted without adding flags");
 
+    // Candidate 188 captured an unconverted root on faulting hub-0 VMID1. The
+    // client-VMID policy and address-domain evidence establish the expected
+    // conversion; the capture alone does not prove that the root caused the fault.
+    put32(4, 1);
+    put64(0x18, 0xf40b6ff000ULL);
+    auto captured188 = RaphaelVm::prepareInvalidateInfo(
+        bytes, sizeof(bytes), true, true, 0xf400, 0xf41f, 0x840);
+    require(captured188.valid && captured188.eligible && captured188.repaired &&
+                captured188.nativeRoot == 0x84b6ff000ULL,
+            "candidate 188 hub-0 VMID1 root converts from MC to physical space");
+    for (uint32_t clientVmid = 1; clientVmid < 16; ++clientVmid) {
+        put32(4, clientVmid);
+        put64(0x18, 0xf40b6ff000ULL);
+        require(RaphaelVm::prepareInvalidateInfo(
+                    bytes, sizeof(bytes), true, true, 0xf400, 0xf41f, 0x840).repaired,
+                "all hub-0 client VMIDs share the framebuffer-root conversion policy");
+    }
+
     put64(8, 0x400000000ULL);
     put64(0x10, 0x400ffffffULL);
 
@@ -141,8 +159,16 @@ int main() {
             bytes, sizeof(bytes), variant == 4 ? false : true, true,
             0xf400, 0xf41f, 0x840);
         require(!result.repaired,
-                "only enabled hub0 VMID2 reprogram requests are eligible");
+                "only enabled hub-0 client-VMID reprogram requests are eligible");
     }
+    put32(0, 0); put32(4, 1); put64(0x18, 0xf40b6ff000ULL);
+    bytes[0x24] = 2;
+    auto noncanonicalReprogram = RaphaelVm::prepareInvalidateInfo(
+        bytes, sizeof(bytes), true, true, 0xf400, 0xf41f, 0x840);
+    require(!noncanonicalReprogram.repaired &&
+                noncanonicalReprogram.reason == RaphaelVm::RootRepairReason::NotReprogrammed &&
+                !RaphaelVm::observeInvalidateRequest(bytes, sizeof(bytes)).reprogram,
+            "native reprogramming requires the request byte to equal exactly one");
     put32(0, 0); put32(4, 2); bytes[0x24] = 1;
     require(!RaphaelVm::prepareInvalidateInfo(
                 bytes, 0x27, true, true, 0xf400, 0xf41f, 0x840).valid,
@@ -167,7 +193,7 @@ int main() {
     };
     require(reasonFor(1, 2, true, 0xf401234001ULL, 0xf400, 0xf41f, 0x840) ==
                 RaphaelVm::RootRepairReason::WrongHub &&
-            reasonFor(0, 3, true, 0xf401234001ULL, 0xf400, 0xf41f, 0x840) ==
+            reasonFor(0, 16, true, 0xf401234001ULL, 0xf400, 0xf41f, 0x840) ==
                 RaphaelVm::RootRepairReason::WrongVmid &&
             reasonFor(0, 2, false, 0xf401234001ULL, 0xf400, 0xf41f, 0x840) ==
                 RaphaelVm::RootRepairReason::NotReprogrammed &&
