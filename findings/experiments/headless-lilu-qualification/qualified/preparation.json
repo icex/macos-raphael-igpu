@@ -1,0 +1,53 @@
+{
+  "status": "completed-patcher-dispatch-verified",
+  "lilu_injected": true,
+  "readback_verified": true,
+  "source_lilu_sha256": {
+    "executable": "53b5a19812e66eeea3d3b874fe642f441cbfeccd171fb5ba05dc2e0ced3b8887",
+    "info": "6714fee51444238c0540814729767485572441435bcf36a158571cf78317a669"
+  },
+  "readback_lilu_sha256": {
+    "executable": "53b5a19812e66eeea3d3b874fe642f441cbfeccd171fb5ba05dc2e0ced3b8887",
+    "info": "6714fee51444238c0540814729767485572441435bcf36a158571cf78317a669"
+  },
+  "private_config_boot_args_verified": [
+    "-liluheadless",
+    "rgpudump=5000"
+  ],
+  "mcopy_commands": [
+    "mcopy -s -o -i oc-private.img@@1048576 /tmp/lilu-headless-build.oeqNe7/verified-output/Lilu.kext ::/EFI/OC/Kexts/",
+    "mcopy -o -i oc-private.img@@1048576 config-headless.plist ::/EFI/OC/config.plist"
+  ],
+  "no_launch": true,
+  "run": {
+    "cid": "268701270b6f17f0c5065c7c89e66f989feaf8a01199154434717ce723a2fd3e",
+    "max_seconds": 180,
+    "shutdown": "forced-after-acpi-request",
+    "build_identity": "68b28f81b7d5404cb69a7baf2f6117c5",
+    "bootargs_verified": [
+      "-liluheadless",
+      "rgpudump=5000"
+    ],
+    "patcher_ready": true,
+    "loadKinfo": true,
+    "topology": {
+      "vfio_args": [],
+      "dri": false,
+      "graphics": [
+        "-vga",
+        "none",
+        "-display",
+        "none"
+      ],
+      "serial_channels": [
+        "serial0",
+        "critical1"
+      ]
+    },
+    "captures": {
+      "serial.log": "91139ac4c4c485283619f32e049a4f535f5274f96d5f9add0e4461fb1ae324f1",
+      "critical.log": "42f450e5092ca3b7efeef41c3b42aa6c5a70f2b567b227c5a5c31c4375bba1ac",
+      "vm-launch.log": "580a81fedf0dbb7141937e51b36a9053da947965336b63ae0854a312453024fd"
+    }
+  }
+}
