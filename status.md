@@ -1,11 +1,13 @@
-# Candidate 189 pending identity — not deployed (2026-09-10)
+# Candidate 190 pending identity — not deployed (2026-09-10)
 
-Candidate 189 metadata preparation updates only both `kext/Info.plist` version
-fields to `1.0.189`; the checked-in `kext/bin/RaphaelGPU` and candidate 188
-artifacts remain unchanged. No candidate 189 card, build, staging, deployment,
-VM, or hardware run exists. The current source mapping correction is under
-offline audit; candidate 188 evidence and its valid cleanup receipt remain
-historical and are not claims of desktop Metal execution.
+Candidate 190 metadata preparation updates only both `kext/Info.plist` version
+fields to `1.0.190`; the checked-in `kext/bin/RaphaelGPU` and candidate 188
+artifacts remain unchanged. Candidate 189 output is frozen as a prelaunch
+observer failure and produced no GPU cycle; its staging remains present but no
+189 run was reserved or started. The current ledger has one of three entries
+consumed. No candidate 190 card, build, deployment, VM, or hardware run exists.
+The current source mapping correction is under offline audit; no acceleration
+claim is made.
 
 # Offline mapping correction and source audit (2026-09-10)
 

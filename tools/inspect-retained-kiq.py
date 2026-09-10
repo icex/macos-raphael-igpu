@@ -405,19 +405,46 @@ def _active_units():
     return [line.split()[0] for line in result.stdout.splitlines() if line.split()]
 
 
+def _sleep_inhibited():
+    """Require one well-formed logind block inhibitor covering sleep and idle."""
+    try:
+        result = subprocess.run(
+            ['busctl', '--system', '--json=short', 'call',
+             'org.freedesktop.login1', '/org/freedesktop/login1',
+             'org.freedesktop.login1.Manager', 'ListInhibitors'],
+            text=True, capture_output=True, timeout=15, check=False)
+        if result.returncode:
+            return False
+        payload = json.loads(result.stdout)
+        if (payload.get('type') != 'a(ssssuu)' or type(payload.get('data')) is not list or
+                len(payload['data']) != 1 or type(payload['data'][0]) is not list):
+            return False
+        matching = False
+        for fields in payload['data'][0]:
+            if (type(fields) is not list or len(fields) != 6 or
+                    not all(isinstance(fields[i], str) for i in range(4)) or
+                    not all(type(fields[i]) is int and 0 <= fields[i] < 1 << 32
+                            for i in (4, 5))):
+                return False
+            what, _who, _why, mode = fields[:4]
+            if mode == 'block' and len(what.split(':')) == 2 and \
+                    set(what.split(':')) == {'sleep', 'idle'}:
+                matching = True
+        return matching
+    except (OSError, subprocess.SubprocessError, ValueError, TypeError, AttributeError):
+        return False
+
+
 def collect_host():
     host = RECOVERY.host_state()
     device = Path('/sys/bus/pci/devices') / DEVICE
-    inhibitor = subprocess.run(
-        ['systemctl', '--user', 'is-active', '--quiet', 'rgpu-work-inhibit.service'],
-        timeout=5)
     host.update({
         'canonical_device': str(device.resolve(strict=True)),
         'power_control': _read(device/'power/control'),
         'power_state': _read(device/'power_state'),
         'runtime_status': _read(device/'power/runtime_status'),
         'enable_count': _read(device/'enable'),
-        'sleep_inhibited': inhibitor.returncode == 0,
+        'sleep_inhibited': _sleep_inhibited(),
         'watchdogs': {name: _read(Path('/proc/sys/kernel')/name)
                       for name in ('watchdog', 'nmi_watchdog', 'hardlockup_panic')},
         'residual_units': _active_units(), 'siblings': _siblings(),
