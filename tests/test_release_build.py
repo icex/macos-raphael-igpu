@@ -4,6 +4,7 @@ from pathlib import Path
 import struct
 import tempfile
 import unittest
+from unittest import mock
 
 TOOL = Path(__file__).resolve().parents[1] / 'tools/build-release.py'
 
@@ -47,3 +48,27 @@ class ReleaseBuildTests(unittest.TestCase):
             (sdk / 'header.h').write_text('original SDK')
             (lilu / 'header.h').write_text('different Lilu')
             with self.assertRaises(ValueError): module.verify_toolchain(root, expected)
+
+    def test_private_debug_script_adds_only_requested_debug_flags(self):
+        spec = importlib.util.spec_from_file_location('release_build', TOOL)
+        module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+        original = b'FLAGS=(-target x86_64-apple-macos10.15 -mkernel -O2\n  -fno-c++-static-destructors)\n'
+        patched = module.debug_build_script(original)
+        self.assertIn(b'-mkernel -O2 -g -gdwarf-4\n', patched)
+        self.assertEqual(patched.count(b'-g'), 2)  # -g and -gdwarf-4
+        self.assertNotEqual(module.sha256(original), module.sha256(patched))
+        with self.assertRaisesRegex(ValueError, 'exactly once'):
+            module.debug_build_script(original.replace(b'-mkernel -O2\n', b'-mkernel -O0\n'))
+
+    def test_debug_identity_requires_matching_executable_and_dsym_uuid(self):
+        spec = importlib.util.spec_from_file_location('release_build', TOOL)
+        module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+        responses = ['UUID: AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE (x86_64) file',
+                     'UUID: AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE (x86_64) dsym']
+        with mock.patch.object(module.subprocess, 'check_output', side_effect=responses):
+            self.assertEqual(module.verify_debug_uuids(Path('/x'), Path('/d')),
+                             'AAAAAAAABBBBCCCCDDDDEEEEEEEEEEEE'.lower())
+        with mock.patch.object(module.subprocess, 'check_output', side_effect=[responses[0],
+                'UUID: 11111111-2222-3333-4444-555555555555 (x86_64) dsym']):
+            with self.assertRaisesRegex(ValueError, 'UUID mismatch'):
+                module.verify_debug_uuids(Path('/x'), Path('/d'))

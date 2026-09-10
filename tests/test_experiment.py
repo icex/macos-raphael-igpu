@@ -654,7 +654,18 @@ class ExperimentTests(unittest.TestCase):
         old = {'BOOTDISK_MODE':'custom', 'NVRAM':'stock'}
         self.assertEqual(tool.launch_options({'launch_options':old}), old)
         with self.assertRaisesRegex(ValueError, 'launch options'):
-            tool.launch_options({'launch_options':dict(old, GENERIC_GRAPHICS='on')})
+                tool.launch_options({'launch_options':dict(old, GENERIC_GRAPHICS='on')})
+
+    def test_debugger_launch_options_require_exact_gdb_on_no_graphics_contract(self):
+        tool = self.module()
+        expected = {'BOOTDISK_MODE':'custom', 'NVRAM':'stock',
+                    'GENERIC_GRAPHICS':'off', 'GDB':'on'}
+        self.assertEqual(tool.launch_options({'launch_options':expected}), expected)
+        for bad in (dict(expected, GDB='off'), dict(expected, GDB='1'),
+                    dict(expected, EXTRA='on'),
+                    {'BOOTDISK_MODE':'custom', 'NVRAM':'stock', 'GDB':'on'}):
+            with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, 'launch options'):
+                tool.launch_options({'launch_options':bad})
 
     def test_critical_replay_manifest_selector_is_explicit_and_numeric(self):
         tool = self.module()

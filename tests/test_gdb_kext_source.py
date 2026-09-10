@@ -59,19 +59,40 @@ class GdbKextSourceTests(unittest.TestCase):
 
     def test_generator_has_caps_authentication_and_top_level_step(self):
         text = tool.generate(0xffffff801b6e8000, "474ef697fc283ba283a4763d76c8e200",
-                             "/tmp/kernel.symbols", "/tmp/RaphaelGPU.dSYM")
+                             "/tmp/kernel.symbols", "/tmp/RaphaelGPU.dSYM",
+                             0x42130, "wrapVmmUpdateEntries",
+                             bytes.fromhex("554889e541574156"), [0x42200, 0x42220],
+                             "/tmp/rgpu-release-old/src")
         self.assertIn("MAX_HEADER = 65536", text)
         self.assertIn("MAX_KMODS = 256", text)
         self.assertIn("KMOD_NAME = 0x10", text)
         self.assertIn("KMOD_ADDRESS = 0x9c", text)
         self.assertIn("EXPECTED_UUID = '474ef697fc283ba283a4763d76c8e200'", text)
-        self.assertIn("gdb.decode_line('RaphaelGPU.cpp:532')", text)
-        self.assertIn("gdb.execute('hbreak *%#x'", text)
+        self.assertIn("FUNCTION_OFFSET = 0x42130", text)
+        self.assertIn("WRAPPER_NAME = 'wrapVmmUpdateEntries'", text)
+        self.assertIn("set substitute-path /tmp/rgpu-release-old/src /tmp/source", text)
+        for register in ('rdi', 'rsi', 'rdx', 'rcx', 'r8', 'r9'):
+            self.assertIn("$entry_" + register, text)
+        self.assertIn("safe_memory('self-before'", text)
+        self.assertIn("finish", text)
+        self.assertIn("safe_memory('self-after-return'", text)
+        self.assertIn("GPU addresses; intentionally not dereferenced", text)
+        self.assertIn("runtime wrapper bytes mismatch", text)
+        self.assertIn("native boundary stop PC mismatch", text)
+        self.assertIn("native boundary thread mismatch", text)
+        self.assertIn("return thread mismatch", text)
+        self.assertIn("return stop PC mismatch", text)
+        self.assertIn("print cachedFbOffset", text)
+        self.assertIn("info source", text)
+        self.assertIn("info locals", text)
         self.assertIn("walk_kmods", text)
         self.assertIn("runtime_data[0] + 0x214938", text)
-        self.assertIn("criticalDumpThread bytes mismatch", text)
-        self.assertLess(text.index("continue\nprintf \"SOURCE_BREAKPOINT_HIT"),
-                        text.index("set $before_pc=$pc\nsi\nprintf \"AFTER_SOURCE_STEP"))
+        self.assertNotIn("criticalDumpThread", text)
+
+    def test_function_offset_is_positive_and_uuid_can_come_from_binary(self):
+        with self.assertRaisesRegex(ValueError, "function offset"):
+            tool.generate(0xffffff801b6e8000, "474ef697fc283ba283a4763d76c8e200",
+                          "/tmp/kernel", "/tmp/dsym", 0, "wrapVmmUpdateEntries")
 
 
 if __name__ == "__main__":

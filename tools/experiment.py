@@ -95,6 +95,39 @@ def amdgpu_initialized(journal):
     return bool(completed) and not failed
 
 
+def sleep_inhibited():
+    """Return whether logind has a block inhibitor covering sleep and idle."""
+    try:
+        result = subprocess.run(
+            ['busctl', '--system', '--json=short', 'call',
+             'org.freedesktop.login1', '/org/freedesktop/login1',
+             'org.freedesktop.login1.Manager', 'ListInhibitors'],
+            text=True, capture_output=True, timeout=15, check=False)
+        if result.returncode != 0:
+            return False
+        payload = json.loads(result.stdout)
+        if (payload.get('type') != 'a(ssssuu)' or type(payload.get('data')) is not list or
+                len(payload['data']) != 1 or type(payload['data'][0]) is not list):
+            return False
+        matching = False
+        for fields in payload['data'][0]:
+            if type(fields) is not list:
+                return False
+            if (len(fields) != 6 or not all(isinstance(fields[i], str) for i in range(4)) or
+                    not all(type(fields[i]) is int and 0 <= fields[i] < 1 << 32
+                            for i in (4, 5))):
+                return False
+            what, _who, _why, mode = fields[:4]
+            if mode != 'block':
+                continue
+            scopes = what.split(':')
+            if len(scopes) == 2 and set(scopes) == {'sleep', 'idle'}:
+                matching = True
+        return matching
+    except (OSError, subprocess.SubprocessError, ValueError, TypeError, AttributeError):
+        return False
+
+
 def host_snapshot():
     device = Path('/sys/bus/pci/devices/0000:7b:00.0')
     def read(path):
@@ -126,8 +159,7 @@ def host_snapshot():
                 reset_methods=(None if reset_method_text is None else
                                reset_method_text.split()),
                 active_vm=any(n == 'macos-sequoia' or n.startswith('rgpu-launch-') for n in active.splitlines()),
-                sleep_inhibited=subprocess.run(['systemctl', '--user', 'is-active', '--quiet',
-                                                'rgpu-work-inhibit.service']).returncode == 0)
+                sleep_inhibited=sleep_inhibited())
 
 
 IDENTITY_FIELDS = ('source_commit', 'source_sha256', 'build_id', 'binary_sha256', 'info_sha256',
@@ -157,8 +189,9 @@ def launch_options(data):
         return historical
     value = data.get('launch_options')
     headless = dict(historical, GENERIC_GRAPHICS='off')
-    if type(value) is not dict or value not in (historical, headless):
-        raise ValueError('launch options must select the exact historical or no-graphics contract')
+    debugger = dict(headless, GDB='on')
+    if type(value) is not dict or value not in (historical, headless, debugger):
+        raise ValueError('launch options must select the exact historical, no-graphics, or debugger contract')
     return dict(value)
 
 
