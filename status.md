@@ -27,6 +27,27 @@ The next action is review of the single debug build and its retained
 source/artifact identities before any candidate 188 staging or hardware
 execution.
 
+The authorized candidate 188 staging attempt stopped before transaction on a
+staging-tool `NameError`: `verify_build_inputs` referenced the validated card
+out of scope while invoking debug provenance checks. No media, metadata,
+deployment, VM, or GPU state changed and no GPU cycle occurred. The fix is now
+prepared in the repository with explicit source-pin parameter wiring; focused
+staging/metadata tests pass (40). Root must commit the fix and authorize a
+replacement build before staging; the original artifact identity record is
+unchanged.
+
+The single authorized offline candidate 188 debug build completed from clean
+worktree commit `670c6ab1b27087fe6a7acf78593094b3e54dbd2e`. Build stdout/stderr
+is retained at `/home/bogdan/macos-vm/run/candidate-188-build.log`; archive
+SHA-256 is `4fa83af4d48279ae4ed808726b74c9c7765a97224d5e28acba624960723901de`.
+The extracted candidate and retained dSYM/source are under
+`/home/bogdan/macos-vm/run/candidate-188` and
+`/home/bogdan/macos-vm/run/candidate-188-dist/debug-symbols`; identity record
+is `/home/bogdan/macos-vm/run/candidate-188-build-identities.json`. Debug UUID
+is `7c6ca35e9c8734b9be394271166a6dc2` for both executable and dSYM, with
+debug-source hash `38bb2edfea12c0fc5185b46e866ee7e58c4833bc3021f3646901b3da575eca7c`.
+No staging, deployment, VM, or GPU cycle occurred.
+
 # Raphael iGPU: current technical status
 
 ## GDB is qualified for source-level Raphael debugging

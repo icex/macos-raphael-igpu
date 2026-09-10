@@ -478,6 +478,13 @@ class Candidate186StageTests(unittest.TestCase):
                         manifest, builder, executable, debug_dir,
                         canonical["tracked_source_sha256"])
 
+    def test_stage_wires_validated_card_source_pin_into_build_verification(self):
+        source = TOOL.read_text()
+        call = source[source.index("identities, manifest, archive = verify_build_inputs("):]
+        call = call[:call.index("\n    candidate186")]
+        self.assertIn("image_id, card.get(\"raphael_source_sha256\")", call)
+        self.assertIn("card_source_sha256", source[source.index("def verify_build_inputs"):source.index("def active_or_pending_vm")])
+
     def test_lilu_bundle_refuses_wrong_executable_or_info_bytes(self):
         durable = Path("/home/bogdan/macos-vm/run/headless-lilu-verified-53b5a19812e6")
         bundle = durable / "Lilu.kext"

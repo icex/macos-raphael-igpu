@@ -327,7 +327,8 @@ def validate_debug_symbols(manifest, builder, executable, debug_dir,
 
 
 def verify_build_inputs(experiment, builder, expected_commit,
-                        expected_identities_sha256, image_id):
+                        expected_identities_sha256, image_id,
+                        card_source_sha256):
     if sha_file(IDENTITIES) != expected_identities_sha256:
         raise RuntimeError("candidate build-identity record changed")
     identities = json.loads(IDENTITIES.read_text())
@@ -382,7 +383,7 @@ def verify_build_inputs(experiment, builder, expected_commit,
     if (CANDIDATE_VERSION, CARD_ID) == ("1.0.188", "metal-021"):
         validate_debug_symbols(manifest, builder, executable,
                                DIST / "debug-symbols",
-                               card.get("raphael_source_sha256"))
+                               card_source_sha256)
 
     checksum_fields = sums.read_text().split()
     if checksum_fields != [identities["archive_sha256"], archive.name]:
@@ -645,7 +646,7 @@ def stage(expected_commit, expected_boot_id, expected_card_sha256,
     builder = load_module("candidate180_build", WT / "tools/build-release.py")
     identities, manifest, archive = verify_build_inputs(
         experiment, builder, expected_commit, expected_identities_sha256,
-        image_id)
+        image_id, card.get("raphael_source_sha256"))
     candidate186 = (CANDIDATE_VERSION, CARD_ID) in (
         ("1.0.186", "metal-019"), ("1.0.187", "metal-020"),
         ("1.0.188", "metal-021"))
