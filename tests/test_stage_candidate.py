@@ -324,10 +324,10 @@ class Candidate186StageTests(unittest.TestCase):
         self.assertIn("unchanged 45-second Metal probe", accepted["behavior_change"])
         self.assertEqual(accepted["launch_options"]["GENERIC_GRAPHICS"], "off")
 
-    def test_staging_defaults_select_candidate186(self):
+    def test_staging_defaults_select_candidate187(self):
         tool = load_tool()
         self.assertEqual((tool.CANDIDATE_VERSION, tool.CARD_ID),
-                         ("1.0.186", "metal-019"))
+                         ("1.0.187", "metal-020"))
 
     def test_candidate186_boot_contract_adds_headless_flag_once(self):
         updates = self.tool.candidate_boot_argument_updates(self.card, 0x12, 0x34)
@@ -352,6 +352,34 @@ class Candidate186StageTests(unittest.TestCase):
                         stage.index("armed_exclusive_link("))
 
     def test_candidate186_requires_explicit_lilu_pins(self):
+        with self.assertRaisesRegex(RuntimeError, "Lilu bundle"):
+            self.tool.validate_lilu_inputs(None, None, None, None)
+
+    def test_candidate187_selects_fresh_pci_slot6_card_with_lilu_pins(self):
+        self.tool.configure("1.0.187", "metal-020")
+        raw = (ROOT / "experiments/metal-020.json").read_bytes()
+        card = self.tool.validate_card(raw, hashlib.sha256(raw).hexdigest())
+        self.assertEqual(card["candidate_version"], "1.0.187")
+        self.assertEqual(card["required_boot_flags"], ["-liluheadless"])
+        self.assertEqual(card["functional_boot_arguments"],
+                         {"rgpuvmroot": "4", "rgpudump": "5000"})
+        self.assertEqual(card["raphael_source_sha256"],
+                         "db511634c6d292ef3a65285e56bd5cf5f9e03cf4c20680a27b96c46a18f2e9b0")
+        self.assertIn("metal-019-186", card["regression_baselines"]["immediate"])
+
+    def test_candidate187_rejects_missing_headless_flag_or_wrong_source_pin(self):
+        self.tool.configure("1.0.187", "metal-020")
+        raw = json.loads((ROOT / "experiments/metal-020.json").read_text())
+        for mutation in (
+                {"required_boot_flags": []},
+                {"raphael_source_sha256": "0" * 64}):
+            bad = dict(raw, **mutation)
+            encoded = (json.dumps(bad) + "\n").encode()
+            with self.assertRaisesRegex(RuntimeError, "candidate card contract"):
+                self.tool.validate_card(encoded, hashlib.sha256(encoded).hexdigest())
+
+    def test_candidate187_requires_explicit_lilu_pins(self):
+        self.tool.configure("1.0.187", "metal-020")
         with self.assertRaisesRegex(RuntimeError, "Lilu bundle"):
             self.tool.validate_lilu_inputs(None, None, None, None)
 

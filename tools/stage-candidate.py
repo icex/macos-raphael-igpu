@@ -29,8 +29,8 @@ import uuid
 
 VM = Path.home() / "macos-vm"
 ROOT = Path(__file__).resolve().parents[1]
-CANDIDATE_VERSION = "1.0.186"
-CARD_ID = "metal-019"
+CANDIDATE_VERSION = "1.0.187"
+CARD_ID = "metal-020"
 SUPPORTED_CARD_DIAGNOSTICS = {
     ("1.0.180", "metal-013"): "rgpusubmit=1",
     ("1.0.181", "metal-014"): "rgpusubmit=1",
@@ -39,6 +39,7 @@ SUPPORTED_CARD_DIAGNOSTICS = {
     ("1.0.184", "metal-017"): "rgpuvmdiag=1",
     ("1.0.185", "metal-018"): "rgpuvmdiag=1",
     ("1.0.186", "metal-019"): "rgpuvmdiag=1",
+    ("1.0.187", "metal-020"): "rgpuvmdiag=1",
 }
 
 
@@ -105,7 +106,7 @@ def validate_card(raw, expected_sha256):
             for key, value in exact.items()):
         raise RuntimeError("candidate card contract mismatch")
     if pair in (("1.0.184", "metal-017"), ("1.0.185", "metal-018"),
-                ("1.0.186", "metal-019")):
+                ("1.0.186", "metal-019"), ("1.0.187", "metal-020")):
         candidate_contract = {
             "critical_replay_tolerance": "terminal-prefix",
             "recovery_critical_replay_tolerance": "terminal-prefix-open",
@@ -124,7 +125,7 @@ def validate_card(raw, expected_sha256):
     if pair in (("1.0.184", "metal-017"), ("1.0.185", "metal-018")) and \
             card.get("functional_boot_arguments") != {"rgpuvmroot": "4"}:
         raise RuntimeError("candidate card contract mismatch")
-    if pair == ("1.0.186", "metal-019"):
+    if pair in (("1.0.186", "metal-019"), ("1.0.187", "metal-020")):
         candidate186_contract = {
             "functional_boot_arguments": {"rgpuvmroot": "4", "rgpudump": "5000"},
             "required_boot_flags": ["-liluheadless"],
@@ -535,9 +536,10 @@ def stage(expected_commit, expected_boot_id, expected_card_sha256,
     identities, manifest, archive = verify_build_inputs(
         experiment, builder, expected_commit, expected_identities_sha256,
         image_id)
-    candidate186 = (CANDIDATE_VERSION, CARD_ID) == ("1.0.186", "metal-019")
+    candidate186 = (CANDIDATE_VERSION, CARD_ID) in (
+        ("1.0.186", "metal-019"), ("1.0.187", "metal-020"))
     if candidate186 and identities["source_sha256"] != card["raphael_source_sha256"]:
-        raise RuntimeError("candidate 186 changed the candidate 185 Raphael source")
+        raise RuntimeError("candidate 186/187 changed the candidate 185 Raphael source")
     lilu = (validate_lilu_inputs(
         lilu_bundle, expected_lilu_executable_sha256,
         expected_lilu_info_sha256, expected_lilu_build_manifest_sha256)
