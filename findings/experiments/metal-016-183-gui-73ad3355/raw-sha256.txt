@@ -1,0 +1,13 @@
+e2647bc44ee05519c399d94163c6e3739faa1fb6df3bd8c78217aa334a0e1acd  findings/experiments/metal-016-183-gui-73ad3355/raw/agent-server-events.jsonl
+a4ed908959093593091461cc8667aa1845025d7a69084536b0f2e1a7597dc01f  findings/experiments/metal-016-183-gui-73ad3355/raw/events.jsonl
+dff80636236e38c0c44d1480a8e74388e4e2a3127bb2c40a15b9414edc7c8ad7  findings/experiments/metal-016-183-gui-73ad3355/raw/host-after.json
+dff80636236e38c0c44d1480a8e74388e4e2a3127bb2c40a15b9414edc7c8ad7  findings/experiments/metal-016-183-gui-73ad3355/raw/host-before.json
+d95602e853498523ebde440182c7d52b4c4892ac9bc015140cc8a503837bf88a  findings/experiments/metal-016-183-gui-73ad3355/raw/host-kernel-messages.json
+b78905e67974809e085849001514a6c934d314bc43de2e0ae71a26ddc5470c11  findings/experiments/metal-016-183-gui-73ad3355/raw/manifest.json
+4d896e153fafbc59072eb82014e591dff8536c31d449f63f9a3e032b5052fc49  findings/experiments/metal-016-183-gui-73ad3355/raw/operator.log
+ddb66b00adb660c710cd8bc4db03fd37ab569908563630f4f1c5b99d3370055b  findings/experiments/metal-016-183-gui-73ad3355/raw/recovery.json
+790961400decb4bf0297545db6439cea2bb21d095bd921bf147f68e852f5d016  findings/experiments/metal-016-183-gui-73ad3355/raw/running-identity.json
+a8c7aeda24244094d2a153df066d3857f3adfa823bb4ff62bbe72a79180c765b  findings/experiments/metal-016-183-gui-73ad3355/raw/serial.txt
+a78ae63f0ebcc7bc97dcf492926f75dfbd86a5756448f700d4ddbe9c96b838ef  findings/experiments/metal-016-183-gui-73ad3355/raw/shutdown.json
+7ac98e72d946c99963480fa4a039e86a0a7686dd6a4be009a7e1534c6032d605  findings/experiments/metal-016-183-gui-73ad3355/raw/supervision.json
+4d896e153fafbc59072eb82014e591dff8536c31d449f63f9a3e032b5052fc49  findings/experiments/metal-016-183-gui-73ad3355/raw/verdict.json
