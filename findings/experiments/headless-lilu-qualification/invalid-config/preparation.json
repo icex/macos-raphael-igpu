@@ -1,0 +1,99 @@
+{
+  "kind": "headless-lilu-cpu-qualification-preparation",
+  "status": "completed-invalid-artifact-not-loaded",
+  "lilu_injected": false,
+  "gpu_passthrough": false,
+  "dri_device": false,
+  "files": {
+    "vm/mac_hdd_ng.img": {
+      "sha256": "6e0d0e047b8864c3fe7e6cfe2eca4a1af2a9b69b593b016e494dde1e14a0b3d4",
+      "bytes": 41796632576
+    },
+    "vm/OpenCore.qcow2": {
+      "sha256": "1dc61cf61dc0a98d4370fcb36608421d4077283f1ca46260aaa9f562d1a27843",
+      "bytes": 21233664
+    },
+    "vm/env": {
+      "sha256": "a0576ce546d48cfb31521ab128261a924a57309bb8a5e6a478961189bcc67dcb",
+      "bytes": 233
+    },
+    "vm/config.plist": {
+      "sha256": "535edecd9f280ea84c4619be9a9d479a112485e0271d32303e1f1a510027189f",
+      "bytes": 109648
+    },
+    "vm/config-headless.plist": {
+      "sha256": "182956f7a8a2007e1d0ca45ba4f1df247bae0c3c2b78bfd1bb3e6e6c9cfa70b5",
+      "bytes": 109661
+    },
+    "vm/macos-vm.sh": {
+      "sha256": "6819d3b9b4d3857e56da66f3cefe9fd7e3a1a61b4d34951a59495fd3b9f791b5",
+      "bytes": 14760
+    },
+    "vm/vm-entry.sh": {
+      "sha256": "1235ca9ee131b4adde6595da7719b0feb90a80e53cc10e75f285ca3c0be0be80",
+      "bytes": 3244
+    },
+    "vm/vm-supervision.py": {
+      "sha256": "f5bc60f0ff67de50390722eae5d286f216bbf83ebd2e60ad012641946d024b94",
+      "bytes": 28738
+    },
+    "vm/sercat.py": {
+      "sha256": "9d386cd3081e3b08dfb1354cb2645609b73840b488d485a4ce2df3a6d7bb759e",
+      "bytes": 1931
+    },
+    "vm/agent-server.py": {
+      "sha256": "2a9d83751b4c1fc600d057e4277873e45430396443dea4d8bf289ff66198b73a",
+      "bytes": 2314
+    },
+    "vm/gx": {
+      "sha256": "73f8912b4699ae286593bb4abb7194f778264322a4a6674a14d64d426eb3dcf6",
+      "bytes": 361
+    },
+    "vm/gpu-bind.sh": {
+      "sha256": "1cf65291e7da752afb70593e447f0a7c20e8bd70e6fdc61060063ad25e4fba8d",
+      "bytes": 5133
+    },
+    "vm/run/candidate-185/RaphaelGPU.kext/Contents/MacOS/RaphaelGPU": {
+      "sha256": "1aec6dc79bb506ab303acde484da69f93d27bb900feb9fd8a80862aaafd3dd1e",
+      "bytes": 725552
+    }
+  },
+  "lilu_artifact": "/tmp/lilu-headless-build.oeqNe7/verified-output/Lilu.kext",
+  "lilu_executable_sha256": "53b5a19812e66eeea3d3b874fe642f441cbfeccd171fb5ba05dc2e0ced3b8887",
+  "launch_procedure": [
+    "inject audited Lilu into private ESP only",
+    "run vm-supervision.py start --max-seconds 180 with no GPU args and critical serial",
+    "verify exact CID and inspect serial for build plus patcher readiness",
+    "ACPI shutdown then exact-CID cleanup"
+  ],
+  "run": {
+    "cid": "af7ce9f05f9a22ae275b4e07269a84e45bcd1a7ef4899cf40378b1bbb17a0dba",
+    "max_seconds": 180,
+    "shutdown": "forced-after-acpi-request",
+    "build_marker": "68b28f81b7d5404cb69a7baf2f6117c5",
+    "build_marker_observed": true,
+    "headless_bootargs_observed": false,
+    "patcher_ready_observed": false,
+    "loadKinfo_observed": false,
+    "reason": "private config plist was not embedded in private ESP; guest used old boot arguments and rejected duplicate Lilu UUID",
+    "topology": {
+      "vfio_args": [],
+      "dri": false,
+      "graphics": [
+        "-vga",
+        "none",
+        "-display",
+        "none"
+      ],
+      "serial_channels": [
+        "serial0",
+        "critical1"
+      ]
+    },
+    "captures": {
+      "serial.log": "74ccbb03bccb9aee88f70e44b016649f50004a2974318965d9ce2d8e016f4c8c",
+      "critical.log": "6e2268a94bdefd9ae906f0ea3692dd3f884cd16d8a70563764935bd5eef20654",
+      "vm-launch.log": "0ced2ab6ff494124ddb3ea5d55705beffa0f6fa78884a6c2dde9a654ffadd4a8"
+    }
+  }
+}

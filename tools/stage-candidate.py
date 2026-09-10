@@ -20,15 +20,17 @@ import re
 import secrets
 import shutil
 import signal
+import struct
 import subprocess
 import sys
+import tempfile
 import uuid
 
 
 VM = Path.home() / "macos-vm"
 ROOT = Path(__file__).resolve().parents[1]
-CANDIDATE_VERSION = "1.0.185"
-CARD_ID = "metal-018"
+CANDIDATE_VERSION = "1.0.186"
+CARD_ID = "metal-019"
 SUPPORTED_CARD_DIAGNOSTICS = {
     ("1.0.180", "metal-013"): "rgpusubmit=1",
     ("1.0.181", "metal-014"): "rgpusubmit=1",
@@ -36,6 +38,7 @@ SUPPORTED_CARD_DIAGNOSTICS = {
     ("1.0.183", "metal-016"): "rgpusubmit=1",
     ("1.0.184", "metal-017"): "rgpuvmdiag=1",
     ("1.0.185", "metal-018"): "rgpuvmdiag=1",
+    ("1.0.186", "metal-019"): "rgpuvmdiag=1",
 }
 
 
@@ -101,11 +104,11 @@ def validate_card(raw, expected_sha256):
             type(card.get(key)) is not type(value) or card.get(key) != value
             for key, value in exact.items()):
         raise RuntimeError("candidate card contract mismatch")
-    if pair in (("1.0.184", "metal-017"), ("1.0.185", "metal-018")):
+    if pair in (("1.0.184", "metal-017"), ("1.0.185", "metal-018"),
+                ("1.0.186", "metal-019")):
         candidate_contract = {
             "critical_replay_tolerance": "terminal-prefix",
             "recovery_critical_replay_tolerance": "terminal-prefix-open",
-            "functional_boot_arguments": {"rgpuvmroot": "4"},
             "conditional_diagnostic_observations": [
                 "vmid1_fault_walk", "vmid1_fault_walk_view",
                 "vmid1_fault_walk_entry",
@@ -117,6 +120,19 @@ def validate_card(raw, expected_sha256):
             },
         }
         if any(card.get(key) != value for key, value in candidate_contract.items()):
+            raise RuntimeError("candidate card contract mismatch")
+    if pair in (("1.0.184", "metal-017"), ("1.0.185", "metal-018")) and \
+            card.get("functional_boot_arguments") != {"rgpuvmroot": "4"}:
+        raise RuntimeError("candidate card contract mismatch")
+    if pair == ("1.0.186", "metal-019"):
+        candidate186_contract = {
+            "functional_boot_arguments": {"rgpuvmroot": "4", "rgpudump": "5000"},
+            "required_boot_flags": ["-liluheadless"],
+            "raphael_source_sha256":
+                "db511634c6d292ef3a65285e56bd5cf5f9e03cf4c20680a27b96c46a18f2e9b0",
+        }
+        if any(card.get(key) != value
+               for key, value in candidate186_contract.items()):
             raise RuntimeError("candidate card contract mismatch")
     transport_path = Path(__file__).with_name("critical-transport.py")
     spec = importlib.util.spec_from_file_location("critical_transport", transport_path)
@@ -325,6 +341,16 @@ def candidate_boot_argument_updates(card, nonce_lo, nonce_hi):
     return updates
 
 
+def candidate_boot_flags(card):
+    flags = card.get("required_boot_flags", [])
+    if (not isinstance(flags, list) or
+            any(not isinstance(flag, str) or
+                not re.fullmatch(r"-[a-z][a-z0-9]*", flag) for flag in flags) or
+            len(set(flags)) != len(flags)):
+        raise RuntimeError("candidate card boot flags are invalid")
+    return flags
+
+
 def make_staged_config(experiment, card, run_id):
     original = (VM / "config.plist").read_bytes()
     xml = original.index(b"<?xml")
@@ -339,8 +365,11 @@ def make_staged_config(experiment, card, run_id):
 
     nonce_lo, nonce_hi = experiment.recovery_nonce_words(run_id)
     updates = candidate_boot_argument_updates(card, nonce_lo, nonce_hi)
+    flags = candidate_boot_flags(card)
     words = [word for word in old_words
-             if word.split("=", 1)[0] not in updates]
+             if word.split("=", 1)[0] not in updates and
+             word.split("=", 1)[0] not in flags]
+    words.extend(flags)
     words.extend(f"{key}={value}" for key, value in updates.items())
     boot_args = " ".join(words)
     nvram["boot-args"] = boot_args
@@ -384,12 +413,112 @@ def file_has_sha(path, expected):
         return False
 
 
+def validate_lilu_inputs(bundle, executable_sha256, info_sha256,
+                         build_manifest_sha256):
+    if bundle is None:
+        raise RuntimeError("Lilu bundle is required for candidate 186")
+    bundle = Path(bundle).resolve()
+    executable = bundle / "Contents/MacOS/Lilu"
+    info_path = bundle / "Contents/Info.plist"
+    manifest_path = bundle.parent / "build-manifest.json"
+    if not bundle.is_dir():
+        raise RuntimeError("Lilu bundle is missing")
+    for label, path in (("executable", executable), ("Info.plist", info_path),
+                        ("build manifest", manifest_path)):
+        if not path.is_file():
+            raise RuntimeError(f"Lilu {label} is missing")
+    for value, label in ((executable_sha256, "Lilu executable digest"),
+                         (info_sha256, "Lilu Info.plist digest"),
+                         (build_manifest_sha256, "Lilu build manifest digest")):
+        exact_hex(value, 64, label)
+    if sha_file(executable) != executable_sha256:
+        raise RuntimeError("Lilu executable changed")
+    if sha_file(info_path) != info_sha256:
+        raise RuntimeError("Lilu Info.plist changed")
+    if sha_file(manifest_path) != build_manifest_sha256:
+        raise RuntimeError("Lilu build manifest changed")
+    info = plistlib.loads(info_path.read_bytes())
+    if (info.get("CFBundleIdentifier"), info.get("CFBundleExecutable"),
+            info.get("CFBundleVersion")) != ("as.vit9696.Lilu", "Lilu", "1.6.8"):
+        raise RuntimeError("Lilu bundle identity mismatch")
+    data = executable.read_bytes()
+    if len(data) < 32 or struct.unpack_from("<4I", data)[:2] != (
+            0xFEEDFACF, 0x1000007) or struct.unpack_from("<4I", data)[3] != 11:
+        raise RuntimeError("Lilu executable is not an x86_64 MH_KEXT_BUNDLE")
+    manifest = json.loads(manifest_path.read_text())
+    exact = {
+        "product": "Lilu", "version": "1.6.8",
+        "bundle_id": "as.vit9696.Lilu", "architecture": "x86_64",
+        "macho_type": "MH_KEXT_BUNDLE", "signed": False,
+        "executable_sha256": executable_sha256,
+        "info_plist_sha256": info_sha256,
+    }
+    if any(type(manifest.get(key)) is not type(value) or manifest.get(key) != value
+           for key, value in exact.items()):
+        raise RuntimeError("Lilu build manifest identity mismatch")
+    return {
+        "lilu_bundle": str(bundle),
+        "lilu_build_manifest": str(manifest_path.resolve()),
+        "lilu_build_manifest_sha256": build_manifest_sha256,
+        "lilu_executable_sha256": executable_sha256,
+        "lilu_info_sha256": info_sha256,
+    }
+
+
+def candidate_image_files(experiment, image, lilu=False, offset=1048576):
+    observed = experiment.image_files(image, offset)
+    if lilu:
+        address = str(image) + (f"@@{offset}" if offset else "")
+        env = dict(os.environ, MTOOLS_SKIP_CHECK="1")
+        def read(name):
+            return subprocess.check_output(
+                ["mtype", "-i", address, "::/EFI/OC/" + name],
+                env=env, timeout=15)
+        observed.update({
+            "lilu_executable_sha256": sha_bytes(read(
+                "Kexts/Lilu.kext/Contents/MacOS/Lilu")),
+            "lilu_info_sha256": sha_bytes(read(
+                "Kexts/Lilu.kext/Contents/Info.plist")),
+        })
+    return observed
+
+
+def stage_lilu_image(experiment, image, bundle, expected, offset=1048576):
+    """Replace Lilu on a private image and publish only a complete readback."""
+    with tempfile.TemporaryDirectory(prefix="lilu-stage-", dir=image.parent) as temporary:
+        staged = Path(temporary) / image.name
+        shutil.copyfile(image, staged)
+        address = str(staged) + (f"@@{offset}" if offset else "")
+        env = dict(os.environ, MTOOLS_SKIP_CHECK="1")
+        subprocess.run(
+            ["mdeltree", "-i", address, "::/EFI/OC/Kexts/Lilu.kext"],
+            env=env, capture_output=True, timeout=15)
+        subprocess.run(
+            ["mcopy", "-s", "-o", "-i", address, str(bundle),
+             "::/EFI/OC/Kexts/"], env=env, check=True,
+            capture_output=True, timeout=30)
+        errors = experiment.validate_identity(
+            expected, candidate_image_files(experiment, staged, lilu=True,
+                                            offset=offset))
+        if errors:
+            raise RuntimeError("Lilu ESP readback mismatch: " + ",".join(errors))
+        backup = image.with_name(image.name + ".backup-" + uuid.uuid4().hex)
+        os.link(image, backup)
+        with staged.open("rb") as stream:
+            os.fsync(stream.fileno())
+        staged.replace(image)
+        sync_dir(image.parent)
+    return {"backup": str(backup)}
+
+
 class StageInterrupted(Exception):
     pass
 
 
 def stage(expected_commit, expected_boot_id, expected_card_sha256,
-          expected_identities_sha256, image_id):
+          expected_identities_sha256, image_id, lilu_bundle=None,
+          expected_lilu_executable_sha256=None, expected_lilu_info_sha256=None,
+          expected_lilu_build_manifest_sha256=None):
     exact_hex(expected_commit, 40, "source commit")
     exact_hex(expected_identities_sha256, 64, "build-identities digest")
     if re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-"
@@ -406,6 +535,13 @@ def stage(expected_commit, expected_boot_id, expected_card_sha256,
     identities, manifest, archive = verify_build_inputs(
         experiment, builder, expected_commit, expected_identities_sha256,
         image_id)
+    candidate186 = (CANDIDATE_VERSION, CARD_ID) == ("1.0.186", "metal-019")
+    if candidate186 and identities["source_sha256"] != card["raphael_source_sha256"]:
+        raise RuntimeError("candidate 186 changed the candidate 185 Raphael source")
+    lilu = (validate_lilu_inputs(
+        lilu_bundle, expected_lilu_executable_sha256,
+        expected_lilu_info_sha256, expected_lilu_build_manifest_sha256)
+            if candidate186 else None)
 
     if RUN_ID_FILE.exists():
         raise RuntimeError(f"candidate-{NUMBER} run ID already selected; automatic retry refused")
@@ -431,7 +567,7 @@ def stage(expected_commit, expected_boot_id, expected_card_sha256,
     config_backup = config_path.with_name(config_path.name + ".backup-" + token)
     temporary = [private_raw, preimage_verify, candidate_qcow, candidate_verify,
                  final_verify, rollback_verify, config_temp]
-    private_stage_backup = None
+    private_stage_backups = []
     original_observed = None
     raw_preimage_sha = None
     boot_preimage_sha = None
@@ -486,6 +622,9 @@ def stage(expected_commit, expected_boot_id, expected_card_sha256,
                     "info_sha256": identities["info_sha256"],
                     "config_sha256": sha_bytes(staged_config),
                 }
+                if candidate186:
+                    expected.update({key: lilu[key] for key in (
+                        "lilu_executable_sha256", "lilu_info_sha256")})
 
                 # Never let mtools touch the published raw ESP.  stage_image performs
                 # its own copy/verify/replace transaction on this private copy only.
@@ -494,16 +633,22 @@ def stage(expected_commit, expected_boot_id, expected_card_sha256,
                     os.fsync(stream.fileno())
                 private_stage = experiment.stage_image(
                     private_raw, CANDIDATE / "RaphaelGPU.kext", staged_config)
-                private_stage_backup = Path(private_stage["backup"])
+                private_stage_backups.append(Path(private_stage["backup"]))
+                if candidate186:
+                    lilu_stage = stage_lilu_image(
+                        experiment, private_raw, Path(lilu["lilu_bundle"]), expected)
+                    private_stage_backups.append(Path(lilu_stage["backup"]))
                 errors = experiment.validate_identity(
-                    expected, experiment.image_files(private_raw))
+                    expected, candidate_image_files(
+                        experiment, private_raw, lilu=candidate186))
                 if errors:
                     raise RuntimeError("private raw ESP readback failed: " + ",".join(errors))
 
                 qconvert(image_id, private_raw, "raw", candidate_qcow, "qcow2")
                 qconvert(image_id, candidate_qcow, "qcow2", candidate_verify, "raw")
                 errors = experiment.validate_identity(
-                    expected, experiment.image_files(candidate_verify))
+                    expected, candidate_image_files(
+                        experiment, candidate_verify, lilu=candidate186))
                 if errors:
                     raise RuntimeError("candidate qcow2 readback failed: " + ",".join(errors))
                 candidate_verify.unlink()
@@ -572,6 +717,8 @@ def stage(expected_commit, expected_boot_id, expected_card_sha256,
                     qemu_version=qemu_version,
                     boot_args=boot_args,
                 )
+                if candidate186:
+                    staging.update(lilu)
                 if "critical_replay_transport" in card:
                     staging["critical_replay_transport"] = card[
                         "critical_replay_transport"]
@@ -601,12 +748,14 @@ def stage(expected_commit, expected_boot_id, expected_card_sha256,
                 sync_dir(VM / "run")
 
                 errors = experiment.validate_identity(
-                    expected, experiment.image_files(raw_image))
+                    expected, candidate_image_files(
+                        experiment, raw_image, lilu=candidate186))
                 if errors or sha_file(config_path) != expected["config_sha256"]:
                     raise RuntimeError("published raw/config identity mismatch")
                 qconvert(image_id, bootdisk, "qcow2", final_verify, "raw")
                 errors = experiment.validate_identity(
-                    expected, experiment.image_files(final_verify))
+                    expected, candidate_image_files(
+                        experiment, final_verify, lilu=candidate186))
                 if errors:
                     raise RuntimeError("published qcow2 readback failed: " + ",".join(errors))
                 final_verify.unlink()
@@ -706,8 +855,7 @@ def stage(expected_commit, expected_boot_id, expected_card_sha256,
                 raise
             finally:
                 signal.signal(signal.SIGTERM, previous_sigterm)
-                if private_stage_backup is not None:
-                    temporary.append(private_stage_backup)
+                temporary.extend(private_stage_backups)
                 for path in temporary:
                     try:
                         path.unlink()
@@ -727,13 +875,20 @@ def main():
     parser.add_argument("--image-id", required=True)
     parser.add_argument("--candidate-version", default=CANDIDATE_VERSION)
     parser.add_argument("--card-id", default=CARD_ID)
+    parser.add_argument("--lilu-bundle", type=Path)
+    parser.add_argument("--expected-lilu-executable-sha256")
+    parser.add_argument("--expected-lilu-info-sha256")
+    parser.add_argument("--expected-lilu-build-manifest-sha256")
     args = parser.parse_args()
     if not args.execute:
         parser.error("refusing mutation without the reviewed --execute flag")
     configure(args.candidate_version, args.card_id)
     stage(args.expected_commit, args.expected_boot_id,
           args.expected_card_sha256, args.expected_identities_sha256,
-          args.image_id)
+          args.image_id, args.lilu_bundle,
+          args.expected_lilu_executable_sha256,
+          args.expected_lilu_info_sha256,
+          args.expected_lilu_build_manifest_sha256)
 
 
 if __name__ == "__main__":

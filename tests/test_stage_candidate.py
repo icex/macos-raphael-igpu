@@ -3,7 +3,9 @@ import importlib.util
 import json
 from pathlib import Path
 import re
+import tempfile
 import unittest
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -276,8 +278,9 @@ class Candidate185StageTests(unittest.TestCase):
         self.assertEqual(
             self.tool.validate_card(raw, hashlib.sha256(raw).hexdigest()), self.card)
 
-    def test_staging_defaults_select_candidate185(self):
+    def test_candidate185_remains_explicitly_selectable(self):
         tool = load_tool()
+        tool.configure("1.0.185", "metal-018")
         self.assertEqual((tool.CANDIDATE_VERSION, tool.CARD_ID),
                          ("1.0.185", "metal-018"))
 
@@ -300,6 +303,115 @@ class Candidate185StageTests(unittest.TestCase):
         raw = (ROOT / "experiments/metal-017.json").read_bytes()
         card = self.tool.validate_card(raw, hashlib.sha256(raw).hexdigest())
         self.assertEqual(card["requested_diagnostic"], "rgpuvmdiag=1")
+
+
+class Candidate186StageTests(unittest.TestCase):
+    def setUp(self):
+        self.tool = load_tool()
+        self.tool.configure("1.0.186", "metal-019")
+        self.card = json.loads((ROOT / "experiments/metal-019.json").read_text())
+
+    def test_exact_metal019_contract_pins_headless_lilu_and_delay(self):
+        raw = (ROOT / "experiments/metal-019.json").read_bytes()
+        accepted = self.tool.validate_card(raw, hashlib.sha256(raw).hexdigest())
+        self.assertEqual(accepted["candidate_version"], "1.0.186")
+        self.assertEqual(accepted["required_boot_flags"], ["-liluheadless"])
+        self.assertEqual(accepted["functional_boot_arguments"], {
+            "rgpuvmroot": "4", "rgpudump": "5000"})
+        self.assertEqual(accepted["raphael_source_sha256"],
+                         "db511634c6d292ef3a65285e56bd5cf5f9e03cf4c20680a27b96c46a18f2e9b0")
+        self.assertEqual(accepted["max_seconds"], 180)
+        self.assertIn("unchanged 45-second Metal probe", accepted["behavior_change"])
+        self.assertEqual(accepted["launch_options"]["GENERIC_GRAPHICS"], "off")
+
+    def test_staging_defaults_select_candidate186(self):
+        tool = load_tool()
+        self.assertEqual((tool.CANDIDATE_VERSION, tool.CARD_ID),
+                         ("1.0.186", "metal-019"))
+
+    def test_candidate186_boot_contract_adds_headless_flag_once(self):
+        updates = self.tool.candidate_boot_argument_updates(self.card, 0x12, 0x34)
+        self.assertEqual(updates["rgpudump"], "5000")
+        self.assertEqual(self.tool.candidate_boot_flags(self.card), ["-liluheadless"])
+
+    def test_candidate186_build_validation_requires_version_186_info_plist(self):
+        source = TOOL.read_text()
+        self.assertIn("CANDIDATE_VERSION, CANDIDATE_VERSION", source)
+        self.assertIn("candidate_version=CANDIDATE_VERSION", source)
+        self.assertIn('identities["source_sha256"] != card["raphael_source_sha256"]',
+                      source)
+
+    def test_staging_metadata_records_lilu_provenance_and_readbacks(self):
+        source = TOOL.read_text()
+        stage = source[source.index("def stage("):source.index("def main(")]
+        self.assertIn("staging.update(lilu)", stage)
+        self.assertGreaterEqual(stage.count("candidate_image_files("), 4)
+        self.assertLess(stage.index("candidate qcow2 readback failed"),
+                        stage.index("armed_replace(private_raw"))
+        self.assertLess(stage.index("published qcow2 readback failed"),
+                        stage.index("armed_exclusive_link("))
+
+    def test_candidate186_requires_explicit_lilu_pins(self):
+        with self.assertRaisesRegex(RuntimeError, "Lilu bundle"):
+            self.tool.validate_lilu_inputs(None, None, None, None)
+
+    def test_lilu_bundle_refuses_wrong_executable_or_info_bytes(self):
+        durable = Path("/home/bogdan/macos-vm/run/headless-lilu-verified-53b5a19812e6")
+        bundle = durable / "Lilu.kext"
+        manifest = durable / "build-manifest.json"
+        expected = self.tool.validate_lilu_inputs(
+            bundle,
+            "53b5a19812e66eeea3d3b874fe642f441cbfeccd171fb5ba05dc2e0ced3b8887",
+            "6714fee51444238c0540814729767485572441435bcf36a158571cf78317a669",
+            "e5d2554d29658699dd9535a9b8dd38ca9aae5aa5a12f65508b083d3c519cf378")
+        self.assertEqual(expected["lilu_bundle"], str(bundle.resolve()))
+        self.assertEqual(expected["lilu_build_manifest"], str(manifest.resolve()))
+        for key in ("lilu_executable_sha256", "lilu_info_sha256"):
+            kwargs = {
+                "lilu_executable_sha256": expected["lilu_executable_sha256"],
+                "lilu_info_sha256": expected["lilu_info_sha256"],
+            }
+            kwargs[key] = "0" * 64
+            with self.subTest(key=key), self.assertRaisesRegex(RuntimeError, "Lilu .* changed"):
+                self.tool.validate_lilu_inputs(
+                    bundle, kwargs["lilu_executable_sha256"],
+                    kwargs["lilu_info_sha256"], expected["lilu_build_manifest_sha256"])
+
+    def test_wrong_lilu_or_config_readback_does_not_replace_private_image(self):
+        expected = {
+            "binary_sha256": "1" * 64, "info_sha256": "2" * 64,
+            "config_sha256": "3" * 64, "lilu_executable_sha256": "4" * 64,
+            "lilu_info_sha256": "5" * 64,
+        }
+        experiment = type("Experiment", (), {"validate_identity": staticmethod(
+            lambda wanted, seen: [key for key, value in wanted.items()
+                                  if seen.get(key) != value])})()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            image = root / "private.raw"
+            image.write_bytes(b"original-private-image")
+            bundle = root / "Lilu.kext"
+            (bundle / "Contents/MacOS").mkdir(parents=True)
+            (bundle / "Contents/MacOS/Lilu").write_bytes(b"lilu")
+            (bundle / "Contents/Info.plist").write_bytes(b"info")
+            for key in ("lilu_executable_sha256", "config_sha256"):
+                with self.subTest(key=key):
+                    observed = dict(expected, **{key: "f" * 64})
+                    with mock.patch.object(self.tool.subprocess, "run"), \
+                            mock.patch.object(self.tool, "candidate_image_files",
+                                              return_value=observed), \
+                            self.assertRaisesRegex(RuntimeError, "ESP readback mismatch"):
+                        self.tool.stage_lilu_image(
+                            experiment, image, bundle, expected)
+                    self.assertEqual(image.read_bytes(), b"original-private-image")
+                    self.assertEqual(list(root.glob("private.raw.backup-*")), [])
+
+    def test_candidate185_card_and_absent_flags_remain_historical(self):
+        self.tool.configure("1.0.185", "metal-018")
+        raw = (ROOT / "experiments/metal-018.json").read_bytes()
+        historical = self.tool.validate_card(raw, hashlib.sha256(raw).hexdigest())
+        self.assertEqual(self.tool.candidate_boot_flags(historical), [])
+        self.assertEqual(historical["functional_boot_arguments"], {"rgpuvmroot": "4"})
 
 
 if __name__ == "__main__":

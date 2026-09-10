@@ -1,0 +1,4 @@
+{
+  "status": "failed",
+  "error": "ValueError: dedicated critical producer readiness is absent or conflicting"
+}

@@ -1,0 +1,19 @@
+{
+  "vfio_args": [
+    "vfio-pci,host=0000:7b:00.0,bus=pcie.0,x-pci-vendor-id=0x1002,x-pci-device-id=0x73ff,romfile=/run/vm/gpu.rom"
+  ],
+  "serial_args": [
+    "socket,id=rgpu_critical,path=/run/vm/critical.sock,server=on,wait=off",
+    "isa-serial,chardev=rgpu_critical,index=1",
+    "socket,id=rgpu_console,path=/run/vm/serial.sock,server=on,wait=off",
+    "isa-serial,chardev=rgpu_console,index=0"
+  ],
+  "graphics_args": [
+    "-vga",
+    "none",
+    "-display",
+    "none"
+  ],
+  "argv_sha256": "8b453de85ecb2954f33aadcab55ee8d41bc990221556bf93c8283e2959861244",
+  "image_id": "sha256:3a3c82c79bc4e73531f819ccdfa4053b3084efd7c1f645678dbf8b4b3a24369c"
+}

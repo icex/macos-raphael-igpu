@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "version": "1.0.185",
+  "source_commit": "c499829dd134402dc9f7227363740720c1a89a15",
+  "source_clean": true,
+  "physical_tested": false,
+  "worktree": "/home/bogdan/macos-vm/run/worktrees/candidate-185",
+  "extracted_candidate": "/home/bogdan/macos-vm/run/candidate-185",
+  "archive": "/home/bogdan/macos-vm/run/candidate-185-dist/RaphaelGPU-1.0.185-experimental.zip",
+  "archive_sha256": "58dbfbd4535f3bd3b12848fae798443f130eaad478f49b5f78ec3945c2675308",
+  "sha256sums_sha256": "7f7d2e5e37a61c88614371dfcbc845f9db5f109495c03dececfa23ac5a52a996",
+  "build_log": "/home/bogdan/macos-vm/run/candidate-185-build.log",
+  "build_log_sha256": "6e8c9a5d81a587470ea072dd3f7f659609c48bc1cca425845b80ca788ace0035",
+  "build_manifest_sha256": "cfe4b1b0bdc269e1c9bdcf8ec91f23c4e17ec07bec0878241a7b3e57111ed36d",
+  "build_id": "68b28f81b7d5404cb69a7baf2f6117c5",
+  "source_sha256": "db511634c6d292ef3a65285e56bd5cf5f9e03cf4c20680a27b96c46a18f2e9b0",
+  "executable_sha256": "1aec6dc79bb506ab303acde484da69f93d27bb900feb9fd8a80862aaafd3dd1e",
+  "info_sha256": "a5d2a8e641fae87aa9ce49ccbb45ec338d25b510969d5d6d92b99098d3f2e5b5",
+  "card_sha256": "1718fc26ffd45550cf9d0187c697af80abeff3ac29ec58ec3899657c6c43985a",
+  "card_path": "experiments/metal-018.json",
+  "firmware_header_sha256": "c152bb08862f62b4ddef1bdf717be56935d4a8f6d214bd05a96237eccbed982c",
+  "toolchain": {
+    "path": "/home/bogdan/macos-vm/build",
+    "mac_kernel_sdk_commit": "05094e5e88cec7caedbfb35e8449ed0db94bf95b",
+    "sdk_tree_sha256": "39036632f485a027f8b75fe5a8cfb18fab79d5c7531adae9dc165096e7e14666",
+    "lilu_version": "1.6.8",
+    "lilu_archive_sha256": "cf658a77e21575f99e0629df3aad282c2c51824d203f4e0b2260c769913815cd",
+    "lilu_resources_sha256": "a68cdd008793057f22512c87911463d2145861fb3268ed9840fceb709fb67a0b"
+  },
+  "kdk": {
+    "build": "24G830",
+    "hwlibs_sha256": "9a10fe21b61437fba11bad2c2221307317ddd02893a82a7d753317879682786d",
+    "x6000_sha256": "2e364270c3243c532a9428c670313d5afd20406e42d64edb4fa8f3572504104e",
+    "framebuffer_sha256": "0f4b79b62fa66bbf5a907274d1f5442aeda4ba4ee4b67c216c01757dee7e4505"
+  },
+  "macho": {
+    "magic": "0xfeedfacf",
+    "cpu": "0x01000007",
+    "filetype": 11,
+    "subtype": "0x00000003"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "automatic_retry": false,
+  "boot_id": "73ad3355-80a7-48f1-a8dd-e6f770b41de8",
+  "canonical_recovery_receipt_sha256": "d2e2fad9244033002bdd3643e72049e9b4f4b858080aa8fa0cadd91d095ad367",
+  "kind": "one-run-qualification-activation",
+  "ledger_preimage_sha256": "2f715f2067a57cf502ae61d64a745121fd385556b055ad36f04480fadf000b83",
+  "manifest_sha256": "e23b8013bbc8ecdc4374dedc0e89afd6b63287ba1c35450515b59c828e8cafd1",
+  "policy_sha256": "4b092ebd67911ccbe79c67807f97e3991ddaa865e9d2ace5ff5fc5b341ff1fca",
+  "prior_run_id": "4661e574bbd5695d00176d85bfa87325",
+  "recovery_id": "8447b84dca024433a6754a53464e9c14",
+  "run_id": "2ef50dc9d8b466c5f2521208b5ba87ea",
+  "run_recovery_receipt_sha256": "d2e2fad9244033002bdd3643e72049e9b4f4b858080aa8fa0cadd91d095ad367",
+  "schema": 1,
+  "stage": "ONLY"
+}

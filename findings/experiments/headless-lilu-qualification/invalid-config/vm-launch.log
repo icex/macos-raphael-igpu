@@ -1,0 +1,41 @@
+macOS VM
+  mode        run
+  vCPUs       8
+  RAM         19G
+  disk bus    ahci
+  audio       none
+  nvram       stock
+  bootdisk    custom
+  nic         vmxnet3
+  gl          off
+  serial      on
+  critical    on
+  gdb         off
+  gpu         none
+  disk        /home/bogdan/macos-vm/run/headless-lilu-qualification-20260910T140718Z/vm/mac_hdd_ng.img (256G max, 39G used on host)
+  ssh         ssh -p 50922 user@localhost
+QEMU graphics policy: GENERIC_GRAPHICS=off
+++ id -u
+++ id -g
++ sudo chown 1000:1000 /dev/kvm
+++ id -u
+++ id -g
++ sudo chown -R 1000:1000 /dev/snd
++ true
++ [[ 19 = max ]]
++ [[ 19 = half ]]
+++ id -u
+++ id -g
++ sudo chown -R 1000:1000 /dev/snd
++ true
++ exec qemu-system-x86_64 -m 19000 -cpu Haswell-noTSX,kvm=on,vendor=GenuineIntel,+invtsc,vmware-cpuid-freq=on -machine q35,accel=kvm:tcg -smp 8,sockets=1,cores=8,threads=1 -device qemu-xhci,id=xhci -device usb-kbd,bus=xhci.0 -device usb-tablet,bus=xhci.0 -device 'isa-applesmc,osk=ourhardworkbythesewordsguardedpleasedontsteal(c)AppleComputerInc' -drive if=pflash,format=raw,readonly=on,file=/home/arch/OSX-KVM/OVMF_CODE.fd -drive if=pflash,format=raw,file=/home/arch/OSX-KVM/OVMF_VARS.fd -smbios type=2 -device ich9-ahci,id=sata -drive id=OpenCoreBoot,if=none,snapshot=on,format=qcow2,file=/home/arch/OSX-KVM/OpenCore/OpenCore.qcow2 -device ide-hd,bus=sata.2,drive=OpenCoreBoot -drive id=MacHDD,if=none,file=/home/arch/OSX-KVM/mac_hdd_ng.img,format=qcow2 -device ide-hd,bus=sata.4,drive=MacHDD -netdev user,id=net0,hostfwd=tcp::10022-:22,hostfwd=tcp::5900-:5900, -device vmxnet3,netdev=net0,id=net0,mac=B0:E5:EF:61:72:21 -monitor stdio -boot menu=on -vga none -chardev socket,id=rgpu_critical,path=/run/vm/critical.sock,server=on,wait=off -device isa-serial,chardev=rgpu_critical,index=1 -chardev socket,id=rgpu_console,path=/run/vm/serial.sock,server=on,wait=off -device isa-serial,chardev=rgpu_console,index=0 -display none -chardev socket,id=mon1,path=/run/vm/monitor.sock,server=on,wait=off -mon chardev=mon1,mode=readline
+QEMU 10.1.2 monitor - type 'help' for more information
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=01h].ECX.pcid [bit 17]
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=01h].ECX.pcid [bit 17]
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=01h].ECX.pcid [bit 17]
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=01h].ECX.pcid [bit 17]
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=01h].ECX.pcid [bit 17]
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=01h].ECX.pcid [bit 17]
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=01h].ECX.pcid [bit 17]
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=01h].ECX.pcid [bit 17]
+(qemu) qemu-system-x86_64: terminating on signal 15

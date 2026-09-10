@@ -1,0 +1,41 @@
+diff --git a/Lilu/PrivateHeaders/kern_config.hpp b/Lilu/PrivateHeaders/kern_config.hpp
+--- a/Lilu/PrivateHeaders/kern_config.hpp
++++ b/Lilu/PrivateHeaders/kern_config.hpp
+@@ -26,6 +27,7 @@
+ 	static constexpr const char *bootargForce {"-liluforce"};       // Force enable the kext (including single user mode)
+ 	static constexpr const char *bootargDebug {"-liludbg"};         // Enable debug logging
+ 	static constexpr const char *bootargDebugAll {"-liludbgall"};   // Enable debug logging (for Lilu and all the plugins)
++	static constexpr const char *bootargHeadless {"-liluheadless"}; // Initialise via policy without a screen-enable event
+ 	static constexpr const char *bootargSlow {"-liluslow"};         // Prefer less destructive userspace measures
+ 	static constexpr const char *bootargFast {"-lilufast"};         // Prefer faster userspace measures
+ 	static constexpr const char *bootargLowMem {"-lilulowmem"};     // Disable decompression
+@@ -213,6 +214,7 @@
+ 	 *  Do not patch dyld shared cache unless asked
+ 	 */
+ 	bool preferSlowMode {false};
++	bool headlessInit {false};
+ 
+ 	/**
+ 	 *  Allow decompression
+diff --git a/Lilu/Sources/kern_start.cpp b/Lilu/Sources/kern_start.cpp
+--- a/Lilu/Sources/kern_start.cpp
++++ b/Lilu/Sources/kern_start.cpp
+@@ -300,6 +300,8 @@
+ 		preferSlowMode = false;
+ 	}
+ 
++	headlessInit = checkKernelArgument(bootargHeadless);
++
+ 	if (!preferSlowMode && getKernelVersion() <= KernelVersion::Mavericks) {
+ 		// Since vm_shared_region_map_file interface is a little different
+ 		if (!isDisabled) SYSLOG("config", "enforcing -liluslow on Mavericks and lower");
+@@ -344,7 +346,7 @@
+ 	}
+ 
+ #if defined(__x86_64__)
+-	if (getKernelVersion() >= KernelVersion::BigSur) {
++	if (getKernelVersion() >= KernelVersion::BigSur && !headlessInit) {
+ 		if (performEarlyInit()) {
+ 			startSuccess = true;
+ 			return true;
+ 		} else {

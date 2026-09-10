@@ -1,0 +1,146 @@
+{
+  "schema": 1,
+  "kind": "metal-018-185-frozen-evidence",
+  "run_id": "2ef50dc9d8b466c5f2521208b5ba87ea",
+  "boot_id": "73ad3355-80a7-48f1-a8dd-e6f770b41de8",
+  "files": [
+    {
+      "path": "activation.json",
+      "source": "/home/bogdan/macos-vm/run/one-run-qualification-authorities/73ad3355-80a7-48f1-a8dd-e6f770b41de8/2ef50dc9d8b466c5f2521208b5ba87ea.json",
+      "sha256": "7076d8328552683824abef35fe8f34e23908086afcdaf0134d7b08d0287bd181",
+      "bytes": 799
+    },
+    {
+      "path": "build-identities.json",
+      "source": "/home/bogdan/macos-vm/run/candidate-185-build-identities.json",
+      "sha256": "6862ecf47dc09ff30dad5ae391ef63b52a696163c14cdff9804722a08df7f51e",
+      "bytes": 2236
+    },
+    {
+      "path": "host-after.json",
+      "source": "/home/bogdan/macos-vm/run/metal-018-185/host-after.json",
+      "sha256": "dff80636236e38c0c44d1480a8e74388e4e2a3127bb2c40a15b9414edc7c8ad7",
+      "bytes": 501
+    },
+    {
+      "path": "ledger.json",
+      "source": "/home/bogdan/macos-vm/run/used-gpu-boots/73ad3355-80a7-48f1-a8dd-e6f770b41de8.json",
+      "sha256": "5ca6d116d551dc29a958d4849d5b22b6ce9495ff2acf106ad6550b8f79dd42c8",
+      "bytes": 771
+    },
+    {
+      "path": "manifest.json",
+      "source": "/home/bogdan/macos-vm/run/metal-018-185-manifest.json",
+      "sha256": "e23b8013bbc8ecdc4374dedc0e89afd6b63287ba1c35450515b59c828e8cafd1",
+      "bytes": 9735
+    },
+    {
+      "path": "notes.md",
+      "source": "generated archive note",
+      "sha256": "2f8c1087003b2c3b28b844d556e39c28911c6400c0a252ef47b277dc6b8192f7",
+      "bytes": 1559
+    },
+    {
+      "path": "operator.log",
+      "source": "/home/bogdan/macos-vm/run/metal-018-185-operator.log",
+      "sha256": "983799c1985c68460cbc253ef596a8241ef5b1f96e23b998596785f3134d8019",
+      "bytes": 486
+    },
+    {
+      "path": "policy.json",
+      "source": "/home/bogdan/macos-vm/run/one-run-qualification-authorities/73ad3355-80a7-48f1-a8dd-e6f770b41de8/2ef50dc9d8b466c5f2521208b5ba87ea.policy.json",
+      "sha256": "4b092ebd67911ccbe79c67807f97e3991ddaa865e9d2ace5ff5fc5b341ff1fca",
+      "bytes": 2264
+    },
+    {
+      "path": "run-output/agent-server-events.jsonl",
+      "source": "/home/bogdan/macos-vm/run/metal-018-185/agent-server-events.jsonl",
+      "sha256": "2b5a85de7ce396be62ab621a9edfc2bbc7e7d130862204bd09336890aed36cec",
+      "bytes": 72
+    },
+    {
+      "path": "run-output/capture-sha256.json",
+      "source": "/home/bogdan/macos-vm/run/metal-018-185/capture-sha256.json",
+      "sha256": "4c1b820bb857814d1e1af6352e1e273242887cf80c3f15a27434e57f64517a53",
+      "bytes": 173
+    },
+    {
+      "path": "run-output/critical.txt",
+      "source": "/home/bogdan/macos-vm/run/metal-018-185/critical.txt",
+      "sha256": "ab710717ef19c8a691c8885ac055f4660bdfd3df37a1976202f9b375211324d6",
+      "bytes": 2549
+    },
+    {
+      "path": "run-output/events.jsonl",
+      "source": "/home/bogdan/macos-vm/run/metal-018-185/events.jsonl",
+      "sha256": "ace1279524440b9a016bd08a300eb1de550e44c683a8a5e6ba456eac0304ecbd",
+      "bytes": 298
+    },
+    {
+      "path": "run-output/host-after.json",
+      "source": "/home/bogdan/macos-vm/run/metal-018-185/host-after.json",
+      "sha256": "dff80636236e38c0c44d1480a8e74388e4e2a3127bb2c40a15b9414edc7c8ad7",
+      "bytes": 501
+    },
+    {
+      "path": "run-output/host-before.json",
+      "source": "/home/bogdan/macos-vm/run/metal-018-185/host-before.json",
+      "sha256": "dff80636236e38c0c44d1480a8e74388e4e2a3127bb2c40a15b9414edc7c8ad7",
+      "bytes": 501
+    },
+    {
+      "path": "run-output/host-kernel-messages.json",
+      "source": "/home/bogdan/macos-vm/run/metal-018-185/host-kernel-messages.json",
+      "sha256": "3dda4259ddb830ecd8238a865b5eaa349d3bcaee5e454e99fa5d5b01b14e9596",
+      "bytes": 2344
+    },
+    {
+      "path": "run-output/manifest.json",
+      "source": "/home/bogdan/macos-vm/run/metal-018-185/manifest.json",
+      "sha256": "e23b8013bbc8ecdc4374dedc0e89afd6b63287ba1c35450515b59c828e8cafd1",
+      "bytes": 9735
+    },
+    {
+      "path": "run-output/recovery.json",
+      "source": "/home/bogdan/macos-vm/run/metal-018-185/recovery.json",
+      "sha256": "a0c2ac968f67fad207d44e1aa18a39d21156704210e9ef4d7fb303e7d502014c",
+      "bytes": 114
+    },
+    {
+      "path": "run-output/running-identity.json",
+      "source": "/home/bogdan/macos-vm/run/metal-018-185/running-identity.json",
+      "sha256": "e14ec542cae5220a21c0ba0ce1066fb9e7f8a3ea6456a2c82df6369172909786",
+      "bytes": 659
+    },
+    {
+      "path": "run-output/serial.txt",
+      "source": "/home/bogdan/macos-vm/run/metal-018-185/serial.txt",
+      "sha256": "514abea543f1ccd0d8cb65842ca10e4b18cd34c4e624c5af9496d122b4980be8",
+      "bytes": 125364
+    },
+    {
+      "path": "run-output/shutdown.json",
+      "source": "/home/bogdan/macos-vm/run/metal-018-185/shutdown.json",
+      "sha256": "f2502512cd083bbced2a9524950138a33de395e6bcbaf0e4b12b76dd3b285b9f",
+      "bytes": 309
+    },
+    {
+      "path": "run-output/supervision.json",
+      "source": "/home/bogdan/macos-vm/run/metal-018-185/supervision.json",
+      "sha256": "1179c681fb761296d3c507ecbde9a6767bc1a6deaf54393a16db2a8a82029306",
+      "bytes": 903
+    },
+    {
+      "path": "run-output/verdict.json",
+      "source": "/home/bogdan/macos-vm/run/metal-018-185/verdict.json",
+      "sha256": "983799c1985c68460cbc253ef596a8241ef5b1f96e23b998596785f3134d8019",
+      "bytes": 486
+    },
+    {
+      "path": "staging.json",
+      "source": "/home/bogdan/macos-vm/run/candidate-185/staging.json",
+      "sha256": "22c9c90dce52a7e8259cf763487fc25ac36c220cf02f9849d9d7b1c35337aa05",
+      "bytes": 2983
+    }
+  ]
+}

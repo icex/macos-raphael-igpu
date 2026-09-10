@@ -1,6 +1,220 @@
 # Raphael iGPU: current technical status
 
-## Current milestone — candidate 185 reviewed; build pending
+## Latest CPU-only qualification — headless Lilu dispatch verified
+
+The audited Lilu 1.6.8 artifact was injected into isolated private media and
+read back byte-exact. One bounded no-GPU qualification then observed the exact
+candidate-185 build, `-liluheadless rgpudump=5000`, `patcher ready`, and
+`loadKinfo` indices 1/2/3 with `err=0`. The run used zero VFIO/DRI,
+`-vga none -display none`, and both serial channels; it ended with the reviewed
+ACPI request and exact-CID forced stop. This verifies Lilu initialization, plugin patcher callback dispatch, and
+kext lookup registration only; no GPU or Metal execution was performed and no recovery
+proof was required. Evidence is archived under
+`findings/experiments/headless-lilu-qualification/qualified/` and the private
+run metadata. The fresh boot remains
+`81e1e41f-f11b-40d0-b202-20850c245ead`, iGPU on amdgpu, unresolved GPU count 7.
+
+The prior invalid qualification is preserved below for the preparation failure
+and corrected media workflow.
+
+## Latest CPU-only qualification — invalid preparation, GPU untouched
+
+The headless Lilu build passed 5 focused builder tests, exact24G830 kernel import
+checks and all12 Lilu exports imported by candidate185. Executable SHA-256:
+`53b5a19812e66eeea3d3b874fe642f441cbfeccd171fb5ba05dc2e0ced3b8887`.
+
+One isolated GPU-less qualification ran in
+`/home/bogdan/macos-vm/run/headless-lilu-qualification-20260910T140718Z`.
+Zero VFIO/DRI and no generic adapter were verified; the185 BUILD marker appeared.
+However, the operator failed to embed its modified private plist in the ESP;
+observed args still had `rgpudump=40000` and no `-liluheadless`. This run does
+not test the proposed initialization fix. Serial also reports a rejected duplicate
+Lilu UUID, which alone does not establish which copy was rejected. No patcher
+readiness was observed. Exact-CID forced stop followed an ACPI request.
+
+Correction followed in a fresh private media set; both exact config and Lilu
+were read back from the final qcow2 image before the qualification above. No new
+GPU cycle, handoff, sudo, or ledger use occurred; unresolved GPU count remains7.
+The fresh host GPU remains on amdgpu.
+
+## Current work — headless Lilu correction, no GPU exposure
+
+The opt-in `-liluheadless` source patch now applies to both pinned Lilu 1.6.8
+preimages. It bypasses the console trigger on Big Sur+ only when requested;
+default/older-kernel behavior and existing policy initialization guards remain.
+Two focused integration tests passed, including compiled actual `registerPolicy`
+branches and independent refusal of modified source/header inputs. Coordinator
+review rejected and corrected an earlier malformed draft and unnecessary slow-mode
+change before any build or deployment. These tests do not prove macOS execution.
+
+A separate offline Lilu build recipe is in progress; the patched Lilu has not been
+deployed. Next planned validation is GPU-less macOS patcher dispatch, then normal
+GPU admission only if the new artifact and guest evidence pass. The fresh boot
+remains `81e1e41f-f11b-40d0-b202-20850c245ead`, iGPU on amdgpu; no sudo/handoff,
+new GPU cycle, candidate bump, merge, or push has occurred.
+
+Cost controls: one owner per code surface, concise evidence reports, targeted
+regression tests, coordinator audit, and no repeated full suites/releases without
+new changes. Two independent current surfaces are source preparation and Lilu
+build tooling. Preserve the user's `.gitignore` change.
+
+## Reboot resumed; candidate 185 earliest-boundary diagnosis (2026-09-10)
+
+Live read-only verification by the coordinator reports boot
+`81e1e41f-f11b-40d0-b202-20850c245ead`, amdgpu initialized, no active VM, active
+watchdogs/capture checks, and restored sleep inhibition. No device handoff or GPU
+cycle has occurred on this boot. Work is using one implementation agent plus
+coordinator audit to limit token use.
+
+Offline comparison found candidate 185 never observed Lilu dispatch its patcher callback:
+there is no `patcher ready`, `loadKinfo`, or AMD kext callback, so no framebuffer,
+HWLibs, or X6000 patch/route was installed. The ensuing zero-width GPUCAP, BGM
+`0xc00c0203`, and PPLIB panic therefore precede the intended candidate-183 path.
+The new COM2 worker also cannot announce readiness before its configured 40-second
+initial sleep, later than this panic. Pinned Lilu proves both Force registrations
+returned successfully under its API lock; worker ordering is not the cause. The
+source-backed hypothesis is that removing generic display removed Lilu's required
+early `kPEEnableScreen` initialization trigger. `-liluslow` does not bypass the
+Big Sur console path. Smallest proposed correction is an opt-in, pinned Lilu
+headless mode that selects its existing TrustedBSD policy initialization while
+retaining the no-generic/no-ramfb topology, then gate hardware on patcher dispatch,
+callbacks/routes, and corrected-first-GPUCAP evidence. No
+implementation or hardware retry has started. Detailed evidence:
+`findings/research/2026-09-10-candidate185-investigation.md`.
+
+## Resumed at user request — offline diagnosis first (2026-09-10)
+
+The user has authorized resuming testing and development. Live verification still
+shows boot `73ad3355-80a7-48f1-a8dd-e6f770b41de8`, no active VM, awake VFIO
+iGPU and active sleep inhibitor/watchdogs. Candidate 185's missing recovery
+receipt still blocks GPU reuse; the resume instruction does not override that
+gate. No new GPU cycle has occurred (unresolved count 7).
+
+Two Sol agents are independently tracing the candidate185 BGM panic and missing
+COM2 producer readiness against the frozen evidence and actual source. The
+coordinator is checking live safety and recovery state. Implementation and offline
+regression tests will follow verified findings; no hardware retry is authorized
+by an old receipt. Preserve the unrelated existing `.gitignore` change.
+
+The stopped-state handoff below remains the authoritative last-run evidence;
+only its user-pause instruction has been superseded by the new resume request.
+
+## STOPPED at user request — candidate 185 failed (2026-09-10)
+
+The user requested stopping after this attempt and updating this file for another
+model. **Do not start another iteration or hardware test without a new user
+instruction.** Candidate 185 ran once and failed. No functional desktop Metal
+acceleration has been demonstrated. The VM is stopped; the host remained up.
+Only evidence archival and this handoff followed the user's stop request.
+
+| Boundary | Candidate 185 result |
+|---|---|
+| Launch admission | Passed; exact run-scoped authority; ledger now 2/3 |
+| Running topology | Raphael VFIO, COM1 index 0, COM2 index 1, `-vga none -display none` |
+| Guest boot | Candidate 185 loaded; WindowServer reached framebuffer power-up |
+| Guest failure | `AmdPowerPlayHelper::powerUp` / BGM event `0xc00c0203` panic |
+| Critical capture | No `RGPU_UART_READY` or CR2; only early firmware/OpenCore output |
+| VMID1 diagnostic / Metal probe | Not reached; neither fault hypothesis nor acceleration tested |
+| Shutdown | Exited after ACPI request; identity-bound guest shutdown unavailable |
+| Recovery | Refused before recovery: required dedicated critical readiness absent |
+| Host | Same boot, no active VM, watchdogs/inhibitor active; no reported host fault |
+
+### Exact current identities and frozen evidence
+
+- Source: `c499829dd134402dc9f7227363740720c1a89a15` on local `dev`;
+  detached worktree `/home/bogdan/macos-vm/run/worktrees/candidate-185` is frozen.
+- Run: `2ef50dc9d8b466c5f2521208b5ba87ea`; card `metal-018`; version `1.0.185`.
+- Build: `68b28f81b7d5404cb69a7baf2f6117c5`.
+- Manifest: `/home/bogdan/macos-vm/run/metal-018-185-manifest.json`, SHA-256
+  `e23b8013bbc8ecdc4374dedc0e89afd6b63287ba1c35450515b59c828e8cafd1`.
+- Frozen output: `/home/bogdan/macos-vm/run/metal-018-185`;
+  repository archive: `findings/experiments/metal-018-185/raw`.
+- Serial SHA-256: `514abea543f1ccd0d8cb65842ca10e4b18cd34c4e624c5af9496d122b4980be8`.
+- Critical SHA-256: `ab710717ef19c8a691c8885ac055f4660bdfd3df37a1976202f9b375211324d6`.
+- Operator log SHA-256: `983799c1985c68460cbc253ef596a8241ef5b1f96e23b998596785f3134d8019`.
+
+The classifier correctly refuses incomplete critical evidence. Its
+`identity_or_route_missing` label is a capture/validation boundary, **not the
+functional cause of the guest panic**. COM1 directly records this earlier event:
+
+```text
+panic(cpu 1 ...): "[0:5:0][PPLIB] Failed to send PPLIB IRI to Accelerator.
+TTL Error Message: {... Error SW_IP_CLIENT_ID__BGM:
+event_id=0xc00c0203 event_info:type=3 hw_id=0 ...}"
+Panicked task ... pid 160: WindowServer
+AMDRadeonX6000_AmdRadeonController::doGPUPanic
+AMDRadeonX6000_AmdPowerPlayHelper::powerUp
+AMDRadeonX6000_AmdRadeonController::powerUp
+AMDRadeonX6000_AmdRadeonFramebuffer::enableController
+IOFramebuffer::open
+```
+
+Final machine-readable results:
+
+```text
+verdict=INVALID
+early validation boundary=identity_or_route_missing
+termination=critical capture remained incomplete at exposure deadline
+shutdown=exited-after-acpi-request; acpi_request_sent=true
+request_sent=false; request_error=guest identity transport failed
+recovery=failed: dedicated critical producer readiness is absent or conflicting
+```
+
+### Reuse is NOT authorized on this boot
+
+Current boot is `73ad3355-80a7-48f1-a8dd-e6f770b41de8`. The used-boot ledger
+has two launches of ceiling three, SHA-256
+`5ca6d116d551dc29a958d4849d5b22b6ce9495ff2acf106ad6550b8f79dd42c8`.
+Numerical capacity is **not** permission to reuse: candidate 185 produced no
+recovery receipt. The old GUI-183 receipt remains byte-identical at
+`d2e2fad9244033002bdd3643e72049e9b4f4b858080aa8fa0cadd91d095ad367`,
+but is no longer the latest-run recovery and must not authorize another launch.
+No manual cleanup, reset, rebind, retry, sudo, or budget extension was attempted.
+ACPI exit is not proof of a clean GPU. Preserve existing gates.
+
+Post-run snapshot: `driver=vfio-pci`, group 31 accessible and pinned awake,
+`amdgpu_initialized=true`, all three watchdog sysctls `1`, capture configuration
+verified, `active_vm=false`, `sleep_inhibited=true`; `pstore_files=null` means
+its listing was unavailable, not a verified empty pstore. Sleep inhibitor remains
+active as previously requested; it was not changed by this handoff.
+
+### Regression comparison and next-model questions (offline only while paused)
+
+Source/host fixes before this run passed 624 Python tests with one explicit skip;
+exact 24G830 preflight and candidate build passed. Dedicated COM2 had passed
+10/10 CPU-only real-QEMU qualification cases. These checks did not establish
+that the delayed macOS critical producer can emit before an early guest panic.
+Candidate 184 never launched; its final identity propagation bug was fixed in
+185 and actual admission now passed. It contributes zero GPU test cycles.
+
+Candidate 185 preserved candidate 183's functional driver path, but removed the
+generic adapter per user instruction and added COM2 plus observation-only VMID1
+diagnostics. The earlier framebuffer panic and missing critical readiness are
+observed; attribution to the no-generic topology, warm-device state, or worker
+scheduling has **not** been established. Do not call VMID1 conversion fixed or
+regressed: its diagnostic and the unchanged Metal probe were not reached.
+
+When the user resumes, the next model should first inspect the frozen serial
+leading up to the BGM event, compare the actual prior 183 boundary, and audit
+critical-worker scheduling versus panic time. Keep the user prohibition on a
+generic GPU. Repairing capture alone cannot authorize a device recovery without
+the required authenticated lifetime/lease evidence. No new implementation or
+hardware procedure has been approved by this failed run.
+
+Conservative unresolved actual-GPU streak: **7** (179, 180, 181, 182, 183,
+GUI-183, 185). No demonstrated functional progress resets it. Mandatory Astra
+xhigh review completed after 182; three actual GPU cycles have followed that
+review. Preserve the AGENTS.md fourth-stalled-cycle trigger and reconstruct
+from evidence if the next model uses a more precise boundary accounting.
+Relevant interpretation aid: `findings/research/2026-09-10-candidate185-evidence-checklist.md`.
+Build and admission reviews: `findings/research/2026-09-10-candidate185-*.md`.
+No merge or push to main occurred. Documentation below is historical and is
+superseded by this stopped-state section wherever it describes pending launch
+or recovered-device eligibility.
+
+---
+
+## Current milestone — candidate 185 built and staged; admission review pending
 
 Candidate 184 was refused before reservation and QEMU because the final identity
 check omitted the manifest's no-generic-graphics launch options. No GPU exposure
@@ -21,7 +235,7 @@ Independent review and coordinator audit cleared the source changes.
 | Authority namespace | Exclusive run-scoped creation; old 184 authority unchanged |
 | Regression checks | 624 Python tests successful, one explicit skip; syntax checks passed |
 | Capture lifecycle | Earlier 10/10 real CPU-only COM2 qualification remains applicable |
-| Candidate 185 | Source reviewed; clean-worktree build and admission pending |
+| Candidate 185 | Clean-worktree build and staging passed; final admission review pending |
 | Metal execution/desktop | Still unverified; no new GPU run |
 
 Four reviewed runtime harness files were deployed before candidate 184's refusal;
@@ -29,6 +243,20 @@ all five recovery helpers remain unchanged. The next test is bounded to 180
 seconds with the unchanged 45-second probe, no generic graphics adapter and no
 automatic retry. Headless diagnostic capture does not provide a visible desktop.
 Details: `findings/plans/2026-09-10-candidate184-prelaunch-refusal-followup.md`.
+
+Candidate 185 source commit is `c499829dd134402dc9f7227363740720c1a89a15`.
+Run `2ef50dc9d8b466c5f2521208b5ba87ea`, build
+`68b28f81b7d5404cb69a7baf2f6117c5`, manifest SHA-256
+`e23b8013bbc8ecdc4374dedc0e89afd6b63287ba1c35450515b59c828e8cafd1`.
+Fresh run-scoped policy SHA-256
+`4b092ebd67911ccbe79c67807f97e3991ddaa865e9d2ace5ff5fc5b341ff1fca`
+and activation SHA-256
+`7076d8328552683824abef35fe8f34e23908086afcdaf0134d7b08d0287bd181`
+bind the unchanged GUI-183 recovery and ledger preimage. No reservation has
+occurred. The archive was built with the recorded pinned inputs; its build report
+records physical testing as false. The staged
+bootdisk SHA-256 is
+`1dc61cf61dc0a98d4370fcb36608421d4077283f1ca46260aaa9f562d1a27843`.
 
 The final tiny-guest fixture is 1,144,917 bytes (complete baseline plus maximum
 snapshot), SHA-256 `83be7814817571a62e58879602b051615940d4bf6b840ae38cdecfa88eedafa5`.

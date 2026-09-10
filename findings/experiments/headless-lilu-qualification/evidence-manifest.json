@@ -1,0 +1,50 @@
+{
+  "invalid-config/agent-server-events.jsonl": {
+    "bytes": 1632,
+    "sha256": "b02ac57a510538d62acbd890648b259d0e9854c366e6ea4e93b1040cf121bc0f"
+  },
+  "invalid-config/critical.log": {
+    "bytes": 2549,
+    "sha256": "6e2268a94bdefd9ae906f0ea3692dd3f884cd16d8a70563764935bd5eef20654"
+  },
+  "invalid-config/preparation.json": {
+    "bytes": 3528,
+    "sha256": "21ea3888cbd96ba28bcfce1fbd113a443310fe53525f84f3597f1bb08f3c64ae"
+  },
+  "invalid-config/serial.log": {
+    "bytes": 115516,
+    "sha256": "74ccbb03bccb9aee88f70e44b016649f50004a2974318965d9ce2d8e016f4c8c"
+  },
+  "invalid-config/supervision.json": {
+    "bytes": 936,
+    "sha256": "92e8f31a578c07eec4f0ddd2a5aaaba998220ada87b9ebd21a0e2b832d728085"
+  },
+  "invalid-config/vm-launch.log": {
+    "bytes": 2925,
+    "sha256": "0ced2ab6ff494124ddb3ea5d55705beffa0f6fa78884a6c2dde9a654ffadd4a8"
+  },
+  "qualified/agent-server-events.jsonl": {
+    "bytes": 3088,
+    "sha256": "373dcfb7da171e58a372e9503c154dd8b71a2dc82c42be1d4293140a289957c7"
+  },
+  "qualified/critical.log": {
+    "bytes": 4590,
+    "sha256": "42f450e5092ca3b7efeef41c3b42aa6c5a70f2b567b227c5a5c31c4375bba1ac"
+  },
+  "qualified/preparation.json": {
+    "bytes": 1726,
+    "sha256": "3fd95a0e8ca2fcdbbe4c1811f84f5a2367c226f876efb72ad814f48f200b722a"
+  },
+  "qualified/serial.log": {
+    "bytes": 118969,
+    "sha256": "91139ac4c4c485283619f32e049a4f535f5274f96d5f9add0e4461fb1ae324f1"
+  },
+  "qualified/supervision.json": {
+    "bytes": 938,
+    "sha256": "6288725af2552d77fdcc980e605cdf7fecb06038b925a4763fa850178ec75784"
+  },
+  "qualified/vm-launch.log": {
+    "bytes": 2926,
+    "sha256": "580a81fedf0dbb7141937e51b36a9053da947965336b63ae0854a312453024fd"
+  }
+}
