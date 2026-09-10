@@ -89,6 +89,14 @@ def validate_card(raw, expected_sha256):
             type(card.get(key)) is not type(value) or card.get(key) != value
             for key, value in exact.items()):
         raise RuntimeError("candidate card contract mismatch")
+    transport_path = Path(__file__).with_name("critical-transport.py")
+    spec = importlib.util.spec_from_file_location("critical_transport", transport_path)
+    transport = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(transport)
+    try:
+        transport.validate(card)
+    except ValueError as error:
+        raise RuntimeError(str(error)) from error
     picker_timeout = card.get("guest_picker_timeout_seconds")
     if (picker_timeout is not None and
             (type(picker_timeout) is not int or
@@ -277,6 +285,8 @@ def make_staged_config(experiment, card, run_id):
         "rgpurnlo": f"0x{nonce_lo:x}",
         "rgpurnhi": f"0x{nonce_hi:x}",
     }
+    if experiment.critical_replay_transport(card) is not None:
+        updates["rgpucr2uart"] = "2"
     functional = card.get("functional_boot_arguments", {})
     if not isinstance(functional, dict) or any(
             not re.fullmatch(r"rgpu[a-z]+", key) or key in updates or
@@ -295,6 +305,10 @@ def make_staged_config(experiment, card, run_id):
         boot_args, card["requested_diagnostic"], run_id)
     if errors:
         raise RuntimeError("numeric nonce config rejected: " + ",".join(errors))
+    try:
+        experiment.helper('critical-transport').validate_boot_args(boot_args, card)
+    except ValueError as error:
+        raise RuntimeError(str(error)) from error
     return original, header + plistlib.dumps(config), boot_args, nonce_lo, nonce_hi
 
 
@@ -513,6 +527,11 @@ def stage(expected_commit, expected_boot_id, expected_card_sha256,
                     qemu_version=qemu_version,
                     boot_args=boot_args,
                 )
+                if "critical_replay_transport" in card:
+                    staging["critical_replay_transport"] = card[
+                        "critical_replay_transport"]
+                    staging["critical_transport_validator_sha256"] = sha_file(
+                        ROOT / "tools/critical-transport.py")
                 staging_record_bytes = (json.dumps(staging, indent=2) + "\n").encode()
                 staging_record_sha = sha_bytes(staging_record_bytes)
                 write_synced_exclusive(pending_record, staging_record_bytes)

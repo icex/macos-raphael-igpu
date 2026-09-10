@@ -3,7 +3,12 @@
 import socket, sys, time
 import os, os.path
 VM = os.path.dirname(os.path.abspath(__file__))
-p = os.environ.get("VM_SERIAL", os.path.join(VM, "run", "serial.sock"))
+channel = os.environ.get("VM_SERIAL_CHANNEL")
+if channel is not None and channel not in ("console", "critical"):
+    sys.exit("invalid serial channel")
+p = os.environ.get("VM_SERIAL_SOCKET", os.environ.get(
+    "VM_SERIAL", os.path.join(VM, "run", "serial.sock")))
+output = os.environ.get("VM_SERIAL_OUTPUT", os.path.join(VM, "run", "serial.log"))
 for _ in range(60):
     try:
         s = socket.socket(socket.AF_UNIX); s.connect(p); break
@@ -20,12 +25,13 @@ s.settimeout(1)
 # file ended at "BdsDxe: starting Boot0001" with 304 bytes, which says nothing about how far
 # the guest actually got. An fsync per chunk costs nothing at these volumes (a few hundred
 # kilobytes over a boot) and is the difference between having evidence and guessing.
-with open(os.path.join(VM, "run", "serial.log"), "ab", buffering=0) as f:
+with open(output, "ab", buffering=0) as f:
     # Optional launch-specific proof: published only after connect and log open.
     ready = os.environ.get("VM_SERIAL_READY")
     if ready:
         with open(ready, "w") as marker:
-            marker.write(os.environ["VM_SERIAL_CID"])
+            token = os.environ["VM_SERIAL_CID"]
+            marker.write(token if channel is None else token + " " + channel)
     while True:
         try:
             d = s.recv(65536)

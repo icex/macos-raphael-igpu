@@ -22,6 +22,7 @@
 #include <IOKit/IOService.h>
 #include <IOKit/IORegistryEntry.h>
 #include <IOKit/IOLib.h>
+#include <kern/clock.h>
 #include <kern/thread.h>
 #include <stdarg.h>
 #include <Headers/kern_api.hpp>
@@ -45,6 +46,7 @@
 #include "RecoveryLease.hpp"
 #include "RecoveryLifetime.hpp"
 #include "CriticalReplay.hpp"
+#include "CriticalUart.hpp"
 #if __has_include("BuildIdentity.hpp")
 #include "BuildIdentity.hpp"
 #else
@@ -209,6 +211,7 @@ static rgpu::DiagnosticRecords<256, 512> diagnostics {};
 // samples, eight submit-correlation records and one route record. 512 retains
 // that bounded set alongside the existing VM/SDMA evidence budget.
 static rgpu::DiagnosticRecords<rgpu::kCriticalRecordCapacity, 512> criticalRecords {};
+static bool criticalUartEnabled = false;
 static rgpu::SuccessRecordBudget waitStampRecordBudget {};
 static rgpu::SuccessRecordBudget kiqSubmitRecordBudget {};
 static rgpu::SuccessRecordBudget preClearFaultRecordBudget {};
@@ -222,6 +225,7 @@ static volatile uint32_t nextSubmissionTraceSequence = 0;
 static bool submissionTraceEnabled = false;
 static volatile bool submissionTraceRoutesReady = false;
 static bool vmRootFixEnabled = false;
+static bool vmFaultDiagEnabled = false;
 // rgpuvmroot: 1 repairs only the VMID2 root; 2/3 retain the historical template
 // hooks; 4 converts the separately supplied real entry source at the SDMA update
 // boundary verified in X6000 24G830.
@@ -250,6 +254,7 @@ static volatile uint32_t cachedFbOffset = 0;
 static volatile bool cachedFbPublished = false;
 static volatile uint32_t nextVmObservationSequence = 0;
 static volatile uint32_t latestVmid2ProgramSequence = 0;
+static RaphaelVm::FaultObservationStore<2> vmid1Faults {};
 
 static void diagAppend(bool critical, const char *fmt, ...) {
     char text[512];
@@ -446,23 +451,105 @@ static void diagDumpThread(void *, wait_result_t) {
     }
     SYSLOG("rgpu", "==== deferred diagnostics end (dropped=%llu truncated=%llu) ====",
            diagnostics.dropped(), diagnostics.truncated());
-    // Replay complete immutable prefixes using short, integrity-bound physical
-    // lines. Native startup can finish after the first dump. A reservation whose
-    // release publication is still pending suppresses the whole snapshot attempt.
+    // Historical cards keep their byte-identical COM1 replay path. COM2 cards use
+    // the independent worker below, so they cannot queue behind this SYSLOG burst.
+    if (!criticalUartEnabled) {
+        for (unsigned replay = 0; replay < 18; ++replay) {
+            const size_t count = criticalRecords.size();
+            const uint64_t dropped = criticalRecords.dropped();
+            const uint64_t truncated = criticalRecords.truncated();
+            const bool complete = rgpu::CriticalReplayV2::emitSnapshot(
+                RGPU_BUILD_ID, replay, count, dropped, truncated,
+                [](size_t sequence,
+                   char (&record)[rgpu::CriticalReplayV2::kRecordStorageBytes]) {
+                    return criticalRecords.read(sequence, record);
+                },
+                [](const char *line) { SYSLOG("rgpu", "%s", line); });
+            if (!complete)
+                SYSLOG("rgpu", "critical replay snapshot %u deferred", replay);
+            IOSleep(10000);
+        }
+    }
+    thread_terminate(current_thread());
+}
+
+struct CriticalPortIo {
+    uint8_t read(uint16_t port) const {
+        uint8_t value;
+        asm volatile("inb %1, %0" : "=a"(value) : "Nd"(port));
+        return value;
+    }
+    void write(uint16_t port, uint8_t value) const {
+        asm volatile("outb %0, %1" : : "a"(value), "Nd"(port));
+    }
+    uint64_t micros() const {
+        uint64_t absolute = 0;
+        uint64_t nanoseconds = 0;
+        clock_get_uptime(&absolute);
+        absolutetime_to_nanoseconds(absolute, &nanoseconds);
+        return nanoseconds / 1000;
+    }
+    void delay(unsigned us) const { IODelay(us); }
+};
+
+static void criticalDumpThread(void *, wait_result_t) {
+    static constexpr uint64_t kWorkerTimeoutUs = UINT64_C(180000000);
+    CriticalPortIo io;
+    const uint64_t workerStarted = io.micros();
+    const rgpu::CriticalWorkerBudget budget(workerStarted, kWorkerTimeoutUs);
+    const unsigned initialSleepMs = budget.cappedSleepMs(io.micros(), diagDumpDelayMs);
+    if (initialSleepMs != 0) IOSleep(initialSleepMs);
+    if (budget.remainingUs(io.micros()) == 0) {
+        SYSLOG("rgpu", "critical COM2 worker deadline exhausted before readiness");
+        thread_terminate(current_thread());
+        return;
+    }
+    rgpu::CriticalUart<CriticalPortIo> uart(io);
+    const bool initialized = uart.initialize();
+    const uint64_t readyTimeoutUs = budget.cappedOperationUs(
+        io.micros(), decltype(uart)::kByteTimeoutUs * 80);
+    if (!initialized || readyTimeoutUs == 0 ||
+        !uart.writeReady(RGPU_BUILD_ID, readyTimeoutUs)) {
+        SYSLOG("rgpu", "critical COM2 producer readiness failed");
+        thread_terminate(current_thread());
+        return;
+    }
+
+    // Keep the complete worker within the existing 180-second observation window.
+    // A blocked attempt consumes only the remaining window, and never emits END.
     for (unsigned replay = 0; replay < 18; ++replay) {
-        const size_t count = criticalRecords.size();
-        const uint64_t dropped = criticalRecords.dropped();
-        const uint64_t truncated = criticalRecords.truncated();
-        const bool complete = rgpu::CriticalReplayV2::emitSnapshot(
-            RGPU_BUILD_ID, replay, count, dropped, truncated,
-            [](size_t sequence,
-               char (&record)[rgpu::CriticalReplayV2::kRecordStorageBytes]) {
-                return criticalRecords.read(sequence, record);
-            },
-            [](const char *line) { SYSLOG("rgpu", "%s", line); });
-        if (!complete)
-            SYSLOG("rgpu", "critical replay snapshot %u deferred", replay);
-        IOSleep(10000);
+        const uint64_t remaining = budget.remainingUs(io.micros());
+        if (remaining == 0) break;
+        // Keep a healthy UART configured so FCR reset cannot discard queued tail
+        // bytes. Only a failed prior attempt reinitializes before its retry.
+        if (uart.failed() && !uart.initialize()) {
+            SYSLOG("rgpu", "critical COM2 snapshot %u initialization failed", replay);
+        } else {
+            const uint64_t snapshotRemaining = budget.remainingUs(io.micros());
+            if (snapshotRemaining == 0) break;
+            uart.beginSnapshot(snapshotRemaining < decltype(uart)::kSnapshotTimeoutUs ?
+                               snapshotRemaining : decltype(uart)::kSnapshotTimeoutUs);
+            const bool complete = rgpu::CriticalReplayV2::emitSnapshot(
+                RGPU_BUILD_ID, replay, criticalRecords.size(), criticalRecords.dropped(),
+                criticalRecords.truncated(),
+                [](size_t sequence,
+                   char (&record)[rgpu::CriticalReplayV2::kRecordStorageBytes]) {
+                    return criticalRecords.read(sequence, record);
+                },
+                [&](const char *line) { uart(line); });
+            if (!complete)
+                SYSLOG("rgpu", "critical replay snapshot %u deferred", replay);
+            else if (uart.failed())
+                SYSLOG("rgpu", "critical COM2 snapshot %u transmission failed", replay);
+        }
+        const uint64_t remainingUs = budget.remainingUs(io.micros());
+        if (remainingUs == 0) break;
+        if (remainingUs >= UINT64_C(10000000))
+            IOSleep(10000);
+        else if (remainingUs >= 1000)
+            IOSleep(static_cast<unsigned>(remainingUs / 1000));
+        else
+            IODelay(static_cast<unsigned>(remainingUs));
     }
     thread_terminate(current_thread());
 }
@@ -3552,14 +3639,17 @@ static uint32_t wrapKiqSubmit(void *self) {
     // definitely the command processor's.
     if (mask & XK) {
         uint32_t c = fbRead(asicInfo, kGcVmFaultCntl);
-        if (vmRootFixEnabled) {
+        if (vmRootFixEnabled || vmFaultDiagEnabled) {
             const uint32_t sequence = __atomic_load_n(
                 &latestVmid2ProgramSequence, __ATOMIC_ACQUIRE);
-            if (sequence != 0) {
+            if (vmFaultDiagEnabled || (vmRootFixEnabled && sequence != 0)) {
                 const uint32_t status = fbRead(asicInfo, kGcVmFaultSts);
                 const uint64_t address = RaphaelVm::decodeFaultAddress(
                     fbRead(asicInfo, kGcVmFaultLo), fbRead(asicInfo, kGcVmFaultHi));
-                if (preClearFaultRecordBudget.take(
+                if (vmFaultDiagEnabled && status != 0)
+                    vmid1Faults.capture(status, address);
+                if (vmRootFixEnabled && sequence != 0 &&
+                    preClearFaultRecordBudget.take(
                         status == 0, rgpu::kRoutinePreClearRecordLimit))
                     CRLOG("VM: pre-clear-fault seq=%u cntl=%#x status=%#x addr=%#llx",
                           sequence, c, status, address);
@@ -4774,6 +4864,83 @@ static void reportVmid2Walk(uint32_t sequence, const RaphaelVm::PreparedRequest 
     }
 }
 
+static void publishVmid1FaultWalks() {
+    if (!vmFaultDiagEnabled || asicInfo == nullptr) return;
+    static size_t cursor = 0;
+    RaphaelVm::FaultObservation fault {};
+    while (cursor < 2 && vmid1Faults.read(cursor, fault)) {
+        ++cursor;
+        constexpr auto ctx = RaphaelVm::contextRegisters(1);
+        auto rd = [](uint32_t relative) { return fbRead(asicInfo, kGcSeg0 + relative); };
+        const uint32_t before[] {rd(ctx.control), rd(ctx.ptbLo), rd(ctx.ptbHi),
+                                 rd(ctx.startLo), rd(ctx.startHi),
+                                 rd(ctx.endLo), rd(ctx.endHi)};
+        const uint64_t root = RaphaelVm::join(before[1], before[2]);
+        const uint64_t start = RaphaelVm::join(before[3], before[4]) << 12;
+        const uint64_t end = (RaphaelVm::join(before[5], before[6]) << 12) | 0xfffULL;
+        RaphaelVm::FramebufferAperture aperture {};
+        auto fb = fbAperture();
+        const bool apertureValid = fb != nullptr && vmid2Aperture(aperture);
+        auto reader = [&](uint64_t physical, uint64_t &value) {
+            if (!apertureValid || physical < aperture.physicalBase ||
+                physical - aperture.physicalBase > aperture.visibleBytes - 8)
+                return false;
+            const uint64_t dword = (physical - aperture.physicalBase) / 4;
+            value = RaphaelVm::join(fb[dword], fb[dword + 1]);
+            return true;
+        };
+        const auto relative = RaphaelVm::walkPageTables(
+            root, before[0], start, fault.address, aperture, reader);
+        const auto absolute = RaphaelVm::walkPageTables(
+            root, before[0], fault.address, aperture, reader);
+        const uint32_t after[] {rd(ctx.control), rd(ctx.ptbLo), rd(ctx.ptbHi),
+                                rd(ctx.startLo), rd(ctx.startHi),
+                                rd(ctx.endLo), rd(ctx.endHi)};
+        bool contextStable = true;
+        for (size_t i = 0; i < 7; ++i) contextStable &= before[i] == after[i];
+        const auto decoded = RaphaelVm::decodeFaultStatus(fault.status);
+        const bool addressInContext = fault.address >= start && fault.address <= end;
+        CRLOG("VM: fault-walk vmid=%u status=%#x fault-va=%#llx cid=%u walker=%u "
+              "permission=%#x mapping=%u rw=%u atomic=%u ctl=%#x root=%#llx "
+              "start=%#llx end=%#llx aperture=%u context-stable=%u "
+              "address-in-context=%u timing=worker-after-latch tables-non-atomic=1",
+              decoded.vmid, fault.status, fault.address, decoded.cid,
+              decoded.walkerError, decoded.permissionFaults, decoded.mappingError,
+              decoded.write, decoded.atomic, before[0], root, start, end,
+              apertureValid, contextStable, addressInContext);
+        const RaphaelVm::PageTableWalk *walks[] {&relative, &absolute};
+        const char *views[] {"relative", "absolute"};
+        for (size_t view = 0; view < 2; ++view) {
+            const auto &walk = *walks[view];
+            CRLOG("VM: fault-walk-view status=%#x fault-va=%#llx view=%s valid=%u "
+                  "complete=%u count=%u",
+                  fault.status, fault.address, views[view], walk.valid,
+                  walk.complete, walk.count);
+            for (uint32_t n = 0; n < walk.count; ++n) {
+                const auto &e = walk.entries[n];
+                CRLOG("VM: fault-walk-entry status=%#x fault-va=%#llx view=%s n=%u "
+                      "level=%u index=%llu "
+                      "table=%#llx raw=%#llx entry-addr=%#llx V=%u S=%u X=%u R=%u W=%u "
+                      "P=%u TF=%u mc2pa-eligible=%u child-mc2pa=%u",
+                      fault.status, fault.address, views[view], n, e.level, e.index,
+                      e.tablePhysical, e.raw,
+                      e.address, e.valid, e.system, e.executable, e.readable,
+                      e.writeable, e.pdeAsPte, e.translateFurther,
+                      !e.system && !e.pdeAsPte, e.childConverted);
+            }
+        }
+    }
+    static RaphaelVm::FaultRejectionSchedule rejectionSchedule {};
+    const uint64_t rejected = vmid1Faults.nonVmid1() + vmid1Faults.duplicates() +
+        vmid1Faults.contention() + vmid1Faults.full();
+    if (rejectionSchedule.shouldPublish(rejected)) {
+        CRLOG("VM: fault-capture rejected non-vmid1=%llu duplicate=%llu "
+              "contention=%llu capacity=%llu",
+              vmid1Faults.nonVmid1(), vmid1Faults.duplicates(),
+              vmid1Faults.contention(), vmid1Faults.full());
+    }
+}
+
 static void reportVmid2Runtime(const char *phase, uint32_t sequence,
                                const RaphaelVm::PreparedRequest &program,
                                const RaphaelSdma::SubmitInfoObservation *submit, bool walk) {
@@ -5269,6 +5436,7 @@ static void publishPendingVmEntryUpdates() {
 }
 
 static void publishPendingVmObservations() {
+    publishVmid1FaultWalks();
     static size_t programCursor = 0;
     static size_t submitCursor = 0;
     static RaphaelVm::PreparedRequest programCache[8] {};
@@ -6194,6 +6362,16 @@ static void pluginStart() {
         submissionTrace == 1;
     RLOG("rgpusubmit=%u: bounded 24G830 pre-submission tracing %s",
          submissionTraceEnabled, submissionTraceEnabled ? "enabled" : "disabled");
+    uint32_t vmFaultDiag = 0;
+    vmFaultDiagEnabled = PE_parse_boot_argn("rgpuvmdiag", &vmFaultDiag,
+                                           sizeof(vmFaultDiag)) && vmFaultDiag == 1;
+    RLOG("rgpuvmdiag=%u: bounded VMID1 fault-selected page-table diagnostics %s",
+         vmFaultDiagEnabled, vmFaultDiagEnabled ? "enabled" : "disabled");
+    uint32_t criticalUart = 0;
+    criticalUartEnabled = PE_parse_boot_argn("rgpucr2uart", &criticalUart,
+                                             sizeof(criticalUart)) && criticalUart == 2;
+    RLOG("rgpucr2uart=%u: dedicated polling-only COM2 critical replay %s",
+         criticalUartEnabled ? 2 : 0, criticalUartEnabled ? "enabled" : "disabled");
     uint32_t cps = 0;
     if (PE_parse_boot_argn("rgpucp", &cps, sizeof(cps)) && cps == 1) {
         cpSurgeryEnabled = true;
@@ -6315,6 +6493,12 @@ static void pluginStart() {
         thread_deallocate(th);
     else
         RLOG("could not start the deferred diagnostics thread");
+    if (criticalUartEnabled) {
+        if (kernel_thread_start(criticalDumpThread, nullptr, &th) == KERN_SUCCESS)
+            thread_deallocate(th);
+        else
+            RLOG("could not start the critical COM2 thread");
+    }
     if (kernel_thread_start(vmObservationThread, nullptr, &th) == KERN_SUCCESS)
         thread_deallocate(th);
     else

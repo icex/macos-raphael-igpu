@@ -575,6 +575,47 @@ def parse_serial(serial, *, critical_replay_schema=None, expected_build=None,
     return rows
 
 
+def parse_console_lifecycle(serial, expected_build):
+    """Read only console identity and panic evidence for dedicated CR2 runs."""
+    identities = set(re.findall(
+        r'RaphaelGPU\s+rgpu:\s*@\s+BUILD: identity=(\S+)',
+        serial.replace('\r', '')))
+    if identities - {expected_build}:
+        raise ValueError('console has a conflicting build identity')
+    return [dict(row, build=expected_build)
+            for row in _parse_legacy_serial(serial)
+            if row.get('kind') == 'guest_panic']
+
+
+def parse_manifest_files(manifest, run):
+    contract_path = Path(__file__).with_name('critical-transport.py')
+    spec = importlib.util.spec_from_file_location('critical_transport_contract', contract_path)
+    contract = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(contract)
+    transport = contract.validate(manifest)
+    tolerance = manifest.get('critical_replay_tolerance')
+    if transport is None:
+        return parse_serial(
+            (run / 'serial.txt').read_text(errors='replace'),
+            critical_replay_schema=manifest.get('critical_replay_schema'),
+            expected_build=(manifest.get('build_id')
+                            if 'critical_replay_schema' in manifest else None),
+            critical_replay_tolerance=tolerance)
+    critical = (run / 'critical.txt').read_text(errors='replace')
+    events = parse_serial(critical, critical_replay_schema=2,
+                          expected_build=manifest.get('build_id'),
+                          critical_replay_tolerance=tolerance)
+    ready_state = contract.producer_ready_state(critical, manifest.get('build_id'))
+    if ready_state != 'valid':
+        events.append(dict(
+            kind='capture_loss', build=manifest.get('build_id'),
+            reason='dedicated critical producer readiness is absent or conflicting',
+            definitive=ready_state == 'conflicting'))
+    events += parse_console_lifecycle(
+        (run / 'serial.txt').read_text(errors='replace'), manifest.get('build_id'))
+    return events
+
+
 def _classify(manifest, events, probe, defer_absent_workload=False):
     def verdict(name, valid=False, stage=None, next_action='repair observation before another experiment'):
         return dict(valid=valid, verdict=name, earliest_failure=stage,
@@ -1166,11 +1207,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     run = args.run_directory
     manifest = json.loads((run / 'manifest.json').read_text())
-    events = parse_serial(
-        (run / 'serial.txt').read_text(errors='replace'),
-        critical_replay_schema=manifest.get('critical_replay_schema'),
-        expected_build=(manifest.get('build_id')
-                        if 'critical_replay_schema' in manifest else None))
+    events = parse_manifest_files(manifest, run)
     probe_path = run / 'probe.json'
     probe = json.loads(probe_path.read_text()) if probe_path.exists() else None
     print(json.dumps(classify(manifest, events, probe), indent=2))

@@ -58,12 +58,15 @@ DEV=0000:7b:00.0
 IMAGE="${IMAGE:-sickcodes/docker-osx:latest}"
 
 WANT_GPU=0
-case "${1:-}" in
-    --gpu)    WANT_GPU=1; shift ;;
-    # Still accepted so iterate.sh / bootonly.sh keep working unchanged; it is now the
-    # default, so it does nothing.
-    --no-gpu) shift ;;
-esac
+WANT_CRITICAL=0
+while [[ "${1:-}" == --* ]]; do
+    case "$1" in
+        --gpu) WANT_GPU=1; shift ;;
+        --no-gpu) shift ;;
+        --critical-serial) WANT_CRITICAL=1; shift ;;
+        *) break ;;
+    esac
+done
 
 # Hard cap on how long QEMU may hold the iGPU, in seconds. GPU launches require
 # a finite positive value; GPUless launches only need supervised serial capture.
@@ -213,6 +216,10 @@ fi
 
 mv -f run/serial.log "run/serial-$(date +%H%M%S).log" 2>/dev/null || true
 : > run/serial.log
+if (( WANT_CRITICAL )); then
+    mv -f run/critical.log "run/critical-$(date +%H%M%S).log" 2>/dev/null || true
+    : > run/critical.log
+fi
 # The manager owns launch, serial capture, and the exact-container deadline. Its
 # launch cap and failure cleanup are installed BEFORE Docker can create QEMU, so
 # caller exit cannot strand a container between creation and deadline arming.
@@ -223,10 +230,16 @@ cap=0
 # start() acquires this same lock, rechecks pending/running guests, and holds it
 # until the launched container is identifiable. No media writes follow this point.
 flock -u 9
-python3 ./vm-supervision.py start --vm-dir "$PWD" --max-seconds "$cap" -- "${GPU_ARGS[@]}" \
+SUPERVISION_ARGS=(start --vm-dir "$PWD" --max-seconds "$cap")
+(( WANT_CRITICAL == 0 )) || SUPERVISION_ARGS+=(--critical-serial)
+python3 ./vm-supervision.py "${SUPERVISION_ARGS[@]}" -- "${GPU_ARGS[@]}" \
     > run/supervision-result.json
 if (( cap > 0 )); then
     echo "iGPU exposure capped at ${cap}s from container start; supervision: run/supervision.json"
 fi
-echo "VM relaunched; serial draining to run/serial.log under user systemd"
+if (( WANT_CRITICAL )); then
+    echo "VM relaunched; console and critical capture draining to run/serial.log and run/critical.log under user systemd"
+else
+    echo "VM relaunched; serial draining to run/serial.log under user systemd"
+fi
 ./milestones.py list | tail -5

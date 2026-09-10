@@ -13,6 +13,46 @@ static void require(bool condition, const char *message) {
 }
 
 int main() {
+    auto sdmaFault = RaphaelVm::decodeFaultStatus(0x101b3a);
+    require(sdmaFault.vmid == 1 && sdmaFault.cid == 13 &&
+                sdmaFault.walkerError == 5 && sdmaFault.permissionFaults == 3 &&
+                sdmaFault.mappingError && !sdmaFault.write && !sdmaFault.atomic,
+            "candidate-183 SDMA0 fault fields decode from the GC10 status word");
+    auto cpfFault = RaphaelVm::decodeFaultStatus(0x1009ba);
+    require(cpfFault.vmid == 1 && cpfFault.cid == 4 &&
+                cpfFault.walkerError == 5 && cpfFault.permissionFaults == 0xb &&
+                cpfFault.mappingError,
+            "candidate-183 CPF fault fields decode from the GC10 status word");
+    require(RaphaelVm::decodeFaultStatus(0x2009bb).vmid == 2,
+            "VMID2 remains distinct from the candidate-183 VMID1 faults");
+
+    RaphaelVm::FaultObservationStore<2> faultStore;
+    require(!faultStore.capture(0x2009bb, 0x400200000ULL),
+            "a non-VMID1 fault cannot occupy a diagnostic slot");
+    require(faultStore.capture(0x101b3a, 0x400900000ULL) &&
+                !faultStore.capture(0x101b3a, 0x400900000ULL) &&
+                faultStore.capture(0x1009ba, 0x401180000ULL),
+            "only distinct VMID1 status-address pairs occupy the two slots");
+    require(!faultStore.capture(0x101d3a, 0x402000000ULL),
+            "a third distinct VMID1 fault is refused after the fixed capacity");
+    require(faultStore.nonVmid1() == 1 && faultStore.duplicates() == 1 &&
+                faultStore.contention() == 0 && faultStore.full() == 1,
+            "every refused fault category remains observable to the worker");
+    RaphaelVm::FaultRejectionSchedule rejectionSchedule;
+    unsigned rejectionReports = 0;
+    for (uint64_t rejected = 0; rejected < 1000000; ++rejected)
+        rejectionReports += rejectionSchedule.shouldPublish(rejected);
+    require(rejectionReports == 8,
+            "fault rejection reporting remains bounded under continuous callbacks");
+    RaphaelVm::FaultObservation capturedFault {};
+    require(faultStore.read(0, capturedFault) &&
+                capturedFault.status == 0x101b3a &&
+                capturedFault.address == 0x400900000ULL &&
+                faultStore.read(1, capturedFault) &&
+                capturedFault.status == 0x1009ba &&
+                capturedFault.address == 0x401180000ULL,
+            "fault observations publish complete fixed slots in capture order");
+
     alignas(uint64_t) unsigned char bytes[0x28] {};
     auto put32 = [&](size_t offset, uint32_t value) {
         std::memcpy(bytes + offset, &value, sizeof(value));
@@ -234,6 +274,11 @@ int main() {
                 !candidate182View.entries[0].childConverted &&
                 candidate182View.entries[1].index == 256,
             "the candidate-182 zero-attribute root walks relative to the VM context start");
+    auto absoluteCandidate182View = RaphaelVm::walkPageTables(
+        0x840000000ULL, 0x3b, 0x400100000ULL, aperture, reader);
+    require(absoluteCandidate182View.valid &&
+                absoluteCandidate182View.entries[0].index == 64,
+            "the absolute view reports a different root index for the same fault VA");
     auto belowContextStart = RaphaelVm::walkPageTables(
         0x840000000ULL, 0x3b, 0x400000000ULL, 0x3ffffffffULL, aperture, reader);
     require(!belowContextStart.valid,
