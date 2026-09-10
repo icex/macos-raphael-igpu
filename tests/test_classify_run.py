@@ -638,6 +638,125 @@ class ClassifyTests(unittest.TestCase):
             'translate_further': False, 'mc2pa_eligible': True,
             'child_converted': False})
 
+    def test_candidate191_vmid11_fault_uses_generic_bounded_schema(self):
+        payloads = [
+            'VM: fault-walk vmid=11 status=0xb0093a fault-va=0x400300000 cid=4 '
+            'walker=5 permission=0x3 mapping=1 rw=0 atomic=0 ctl=0x51 '
+            'root=0x84b000000 start=0x400000000 end=0x400ffffff aperture=1 '
+            'context-stable=1 address-in-context=1 '
+            'timing=worker-after-latch tables-non-atomic=1',
+            'VM: fault-walk-view status=0xb0093a fault-va=0x400300000 view=relative '
+            'valid=1 complete=0 count=1',
+            'VM: fault-walk-entry status=0xb0093a fault-va=0x400300000 view=relative '
+            'n=0 level=2 index=0 table=0 raw=0 entry-addr=0 '
+            'V=0 S=0 X=0 R=0 W=0 P=0 TF=0 '
+            'mc2pa-eligible=1 child-mc2pa=0',
+            'VM: fault-walk-view status=0xb0093a fault-va=0x400300000 view=absolute '
+            'valid=1 complete=0 count=0',
+        ]
+        rows = self.classifier().parse_serial(
+            ''.join(snapshot_lines(payloads)), critical_replay_schema=2,
+            expected_build=CR2_BUILD)
+        self.assertEqual([row['kind'] for row in rows],
+                         ['client_fault_walk', 'client_fault_walk_view',
+                          'client_fault_walk_entry', 'client_fault_walk_view'])
+        self.assertEqual((rows[0]['vmid'], rows[0]['cid'], rows[1]['vmid']),
+                         (11, 4, 11))
+        self.assertEqual(rows[2]['vmid'], 11)
+
+        vmid0 = payloads[1].replace('0xb0093a', '0x93a')
+        rejected = self.classifier().parse_serial(
+            ''.join(snapshot_lines([vmid0])), critical_replay_schema=2,
+            expected_build=CR2_BUILD)
+        self.assertEqual(rejected[0]['kind'], 'capture_loss')
+
+    def test_generic_fault_walk_requires_complete_consistent_group(self):
+        header = (
+            'VM: fault-walk vmid=11 status=0xb0093a fault-va=0x400300000 cid=4 '
+            'walker=5 permission=0x3 mapping=1 rw=0 atomic=0 ctl=0x51 '
+            'root=0x84b000000 start=0x400000000 end=0x400ffffff aperture=1 '
+            'context-stable=1 address-in-context=1 '
+            'timing=worker-after-latch tables-non-atomic=1')
+        relative = (
+            'VM: fault-walk-view status=0xb0093a fault-va=0x400300000 view=relative '
+            'valid=1 complete=0 count=1')
+        entry = (
+            'VM: fault-walk-entry status=0xb0093a fault-va=0x400300000 view=relative '
+            'n=0 level=2 index=0 table=0 raw=0 entry-addr=0 '
+            'V=0 S=0 X=0 R=0 W=0 P=0 TF=0 '
+            'mc2pa-eligible=1 child-mc2pa=0')
+        second_entry = entry.replace('n=0 level=2', 'n=1 level=1')
+        absolute = (
+            'VM: fault-walk-view status=0xb0093a fault-va=0x400300000 view=absolute '
+            'valid=1 complete=0 count=0')
+        malformed_groups = {
+            'orphan view': ([relative], True),
+            'pending prefix with unrelated later record': (
+                [header, relative, entry, 'XJ: submitKIQFrame -> 1 caller=x6+0x1'],
+                False),
+            'pending absolute entries': (
+                [header, relative, entry, absolute.replace('count=0', 'count=2'),
+                 entry.replace('view=relative', 'view=absolute')], False),
+            'count mismatch': ([header, relative, absolute], True),
+            'cross-context view': (
+                [header, relative.replace('0xb0093a', '0xc0093a'), absolute], True),
+            'entry index sequence': ([
+                header, relative.replace('count=1', 'count=2'),
+                second_entry, entry, absolute], True),
+        }
+        for name, (payloads, definitive) in malformed_groups.items():
+            with self.subTest(name=name):
+                rows = self.classifier().parse_serial(
+                    ''.join(snapshot_lines(payloads)), critical_replay_schema=2,
+                    expected_build=CR2_BUILD)
+                self.assertFalse(any(row['kind'].startswith('client_fault_walk')
+                                     for row in rows))
+                losses = [row for row in rows if row['kind'] == 'capture_loss' and
+                          'generic client fault-walk group' in row['reason']]
+                self.assertTrue(losses)
+                self.assertEqual(any(row['definitive'] for row in losses), definitive)
+
+    def test_generic_fault_walk_all_proper_prefixes_are_pending(self):
+        payloads = [
+            'VM: fault-walk vmid=11 status=0xb0093a fault-va=0x400300000 cid=4 '
+            'walker=5 permission=0x3 mapping=1 rw=0 atomic=0 ctl=0x51 '
+            'root=0x84b000000 start=0x400000000 end=0x400ffffff aperture=1 '
+            'context-stable=1 address-in-context=1 '
+            'timing=worker-after-latch tables-non-atomic=1',
+            'VM: fault-walk-view status=0xb0093a fault-va=0x400300000 view=relative '
+            'valid=1 complete=0 count=1',
+            'VM: fault-walk-entry status=0xb0093a fault-va=0x400300000 view=relative '
+            'n=0 level=2 index=0 table=0 raw=0 entry-addr=0 '
+            'V=0 S=0 X=0 R=0 W=0 P=0 TF=0 mc2pa-eligible=1 child-mc2pa=0',
+            'VM: fault-walk-view status=0xb0093a fault-va=0x400300000 view=absolute '
+            'valid=1 complete=0 count=2',
+            'VM: fault-walk-entry status=0xb0093a fault-va=0x400300000 view=absolute '
+            'n=0 level=2 index=0 table=0 raw=0 entry-addr=0 '
+            'V=0 S=0 X=0 R=0 W=0 P=0 TF=0 mc2pa-eligible=1 child-mc2pa=0',
+            'VM: fault-walk-entry status=0xb0093a fault-va=0x400300000 view=absolute '
+            'n=1 level=1 index=0 table=0 raw=0 entry-addr=0 '
+            'V=0 S=0 X=0 R=0 W=0 P=0 TF=0 mc2pa-eligible=1 child-mc2pa=0',
+        ]
+        classifier = self.classifier()
+        for length in range(1, len(payloads)):
+            with self.subTest(prefix_length=length):
+                rows = classifier.parse_serial(
+                    ''.join(snapshot_lines(payloads[:length])),
+                    critical_replay_schema=2, expected_build=CR2_BUILD)
+                losses = [row for row in rows if row['kind'] == 'capture_loss']
+                self.assertEqual(len(losses), 1)
+                self.assertFalse(losses[0]['definitive'])
+        complete = classifier.parse_serial(
+            ''.join(snapshot_lines(payloads)), critical_replay_schema=2,
+            expected_build=CR2_BUILD)
+        self.assertFalse(any(row['kind'] == 'capture_loss' for row in complete))
+        extra = classifier.parse_serial(
+            ''.join(snapshot_lines(payloads + [payloads[-1].replace('n=1', 'n=2')])),
+            critical_replay_schema=2, expected_build=CR2_BUILD)
+        losses = [row for row in extra if row['kind'] == 'capture_loss']
+        self.assertEqual(len(losses), 1)
+        self.assertTrue(losses[0]['definitive'])
+
     def test_real_cpp_decoder_and_printf_output_round_trips_through_cr2(self):
         source = r'''
 #include <cstdio>
@@ -722,23 +841,29 @@ int main() {
                     ''.join(snapshot_lines([payload])), critical_replay_schema=2,
                     expected_build=CR2_BUILD)
                 self.assertEqual([row['kind'] for row in rows], ['capture_loss'])
-                self.assertIn('VMID1 fault-walk', rows[0]['reason'])
+                self.assertIn('client fault-walk', rows[0]['reason'])
                 self.assertTrue(rows[0]['definitive'])
 
-    def test_more_than_two_distinct_vmid1_fault_pairs_is_capture_loss(self):
+    def test_more_than_two_distinct_client_fault_pairs_is_capture_loss(self):
         classifier = self.classifier()
         payloads = []
         for index in range(3):
-            status = (0x101b3a, 0x1009ba, 0x101b3a)[index]
-            cid = (13, 4, 13)[index]
-            permission = (3, 0xb, 3)[index]
+            status = (0x101b3a, 0xb0093a, 0xf0093a)[index]
+            vmid = (1, 11, 15)[index]
+            cid = (13, 4, 4)[index]
+            permission = (3, 3, 3)[index]
             payloads.append(
-                f'VM: fault-walk vmid=1 status={status:#x} '
+                f'VM: fault-walk vmid={vmid} status={status:#x} '
                 f'fault-va={0x4000 + index * 0x1000:#x} cid={cid} walker=5 '
                 f'permission={permission:#x} mapping=1 rw=0 atomic=0 ctl=0x51 '
                 'root=0x840001000 start=0x1000 end=0x8fff aperture=1 '
                 'context-stable=1 address-in-context=1 '
                 'timing=worker-after-latch tables-non-atomic=1')
+            for view in ('relative', 'absolute'):
+                payloads.append(
+                    f'VM: fault-walk-view status={status:#x} '
+                    f'fault-va={0x4000 + index * 0x1000:#x} view={view} '
+                    'valid=1 complete=0 count=0')
         rows = classifier.parse_serial(
             ''.join(snapshot_lines(payloads)), critical_replay_schema=2,
             expected_build=CR2_BUILD)
@@ -751,7 +876,7 @@ int main() {
         baseline = classifier.classify_probe_readiness(manifest, events)
         fault = classifier._decode_payload(
             'abc', len(events),
-            'VM: fault-walk-view status=0x10123 fault-va=0x4000 '
+            'VM: fault-walk-view status=0x101b3a fault-va=0x4000 '
             'view=relative valid=1 complete=0 count=0')
         observed = classifier.classify_probe_readiness(manifest, events + [fault])
         self.assertEqual(observed['verdict'], baseline['verdict'])

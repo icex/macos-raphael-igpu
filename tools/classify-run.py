@@ -226,7 +226,7 @@ def _decode_payload(build, seq, payload):
             'write': (status >> 18) & 1, 'atomic': (status >> 19) & 1,
             'vmid': (status >> 20) & 0xf,
         }
-        valid = (int(m[1]) == decoded['vmid'] == 1 and int(m[4]) == decoded['cid'] and
+        valid = (int(m[1]) == decoded['vmid'] and 1 <= decoded['vmid'] < 16 and int(m[4]) == decoded['cid'] and
                  int(m[5]) == decoded['walker'] and permission == decoded['permission'] and
                  int(m[7]) == decoded['mapping'] and int(m[8]) == decoded['write'] and
                  int(m[9]) == decoded['atomic'] and
@@ -235,7 +235,7 @@ def _decode_payload(build, seq, payload):
                      for value in (fault_va, root, start, end)) and
                  address_in_context == (start <= fault_va <= end))
         if valid:
-            row.update(kind='vmid1_fault_walk', vmid=1, status=status,
+            row.update(kind=('vmid1_fault_walk' if decoded['vmid'] == 1 else 'client_fault_walk'), vmid=decoded['vmid'], status=status,
                        fault_va=fault_va, cid=int(m[4]), walker_error=int(m[5]),
                        permission_faults=permission, mapping_error=bool(int(m[7])),
                        write=bool(int(m[8])), atomic=bool(int(m[9])), control=control,
@@ -244,25 +244,28 @@ def _decode_payload(build, seq, payload):
                        context_bounds_valid=start <= end,
                        address_in_context=address_in_context)
         else:
-            row.update(kind='capture_loss', reason='malformed VMID1 fault-walk record',
+            row.update(kind='capture_loss', reason='malformed client fault-walk record',
                        definitive=True)
     elif payload.startswith('VM: fault-walk vmid='):
-        row.update(kind='capture_loss', reason='malformed VMID1 fault-walk record',
+        row.update(kind='capture_loss', reason='malformed client fault-walk record',
                    definitive=True)
     elif m := re.fullmatch(
             r'VM: fault-walk-view status=(0x[0-9a-fA-F]+|0) '
             r'fault-va=(0x[0-9a-fA-F]+|0) view=(relative|absolute) '
             r'valid=([01]) complete=([01]) count=(\d+)', payload):
         status, fault_va, count = int(m[1], 16), int(m[2], 16), int(m[6])
-        if status <= 0xffffffff and fault_va <= 0xffffffffffffffff and count <= 4:
-            row.update(kind='vmid1_fault_walk_view', status=status,
+        vmid = (status >> 20) & 0xf
+        if (status <= 0xffffffff and fault_va <= 0xffffffffffffffff and count <= 4 and
+                1 <= vmid < 16):
+            row.update(kind=('vmid1_fault_walk_view' if vmid == 1 else
+                             'client_fault_walk_view'), vmid=vmid, status=status,
                        fault_va=fault_va, view=m[3], valid=bool(int(m[4])),
                        complete=bool(int(m[5])), count=count)
         else:
             row.update(kind='capture_loss',
-                       reason='malformed VMID1 fault-walk view record', definitive=True)
+                       reason='malformed client fault-walk view record', definitive=True)
     elif payload.startswith('VM: fault-walk-view status='):
-        row.update(kind='capture_loss', reason='malformed VMID1 fault-walk view record',
+        row.update(kind='capture_loss', reason='malformed client fault-walk view record',
                    definitive=True)
     elif m := re.fullmatch(
             r'VM: fault-walk-entry status=(0x[0-9a-fA-F]+|0) '
@@ -285,7 +288,8 @@ def _decode_payload(build, seq, payload):
         )
         decoded_address = raw & (0x0000fffffffff000 if leaf else
                                  0x0000ffffffffffc0)
-        valid = (status <= 0xffffffff and number < 4 and level < 4 and
+        vmid = (status >> 20) & 0xf
+        valid = (status <= 0xffffffff and 1 <= vmid < 16 and number < 4 and level < 4 and
                  all(value <= 0xffffffffffffffff
                      for value in (fault_va, index, table, raw, address)) and
                  emitted == tuple(int(value) for value in decoded) and
@@ -294,16 +298,17 @@ def _decode_payload(build, seq, payload):
             names = ('valid', 'system', 'executable', 'readable', 'writeable',
                      'pde_as_pte', 'translate_further', 'mc2pa_eligible',
                      'child_converted')
-            row.update(kind='vmid1_fault_walk_entry', status=status,
+            row.update(kind=('vmid1_fault_walk_entry' if vmid == 1 else
+                             'client_fault_walk_entry'), vmid=vmid, status=status,
                        fault_va=fault_va, view=m[3], number=number, level=level,
                        index=index, table=table, raw_entry=raw, address=address,
                        attributes={name:bool(int(m[position]))
                                    for name, position in zip(names, range(10, 19))})
         else:
             row.update(kind='capture_loss',
-                       reason='malformed VMID1 fault-walk entry record', definitive=True)
+                       reason='malformed client fault-walk entry record', definitive=True)
     elif payload.startswith('VM: fault-walk-entry status='):
-        row.update(kind='capture_loss', reason='malformed VMID1 fault-walk entry record',
+        row.update(kind='capture_loss', reason='malformed client fault-walk entry record',
                    definitive=True)
     elif m := re.fullmatch(
             r'VM: route AMDHWVMContext::updateContiguousPTEsWithDMAUsingAddr '
@@ -597,7 +602,8 @@ def _parse_legacy_serial(serial):
                             'submission_backing_allocation',
                             'submission_backing_allocation_summary',
                             'vmid1_fault_walk', 'vmid1_fault_walk_view',
-                            'vmid1_fault_walk_entry'):
+                            'vmid1_fault_walk_entry', 'client_fault_walk',
+                            'client_fault_walk_view', 'client_fault_walk_entry'):
             # These records are formatted by the dedicated observation thread,
             # outside the driver callbacks. Preserve the exact live line until
             # the next immutable structured snapshot includes it.
@@ -651,11 +657,64 @@ def parse_serial(serial, *, critical_replay_schema=None, expected_build=None,
             f'RGPU_EVENT build={expected_build} seq={seq} {payload}\n'
             for seq, payload in enumerate(snapshot['records'])))
     rows = _parse_legacy_serial(synthetic)
+    generic_kinds = ('client_fault_walk', 'client_fault_walk_view',
+                     'client_fault_walk_entry')
+    generic_keys = {(row.get('status'), row.get('fault_va')) for row in rows
+                    if row.get('kind') in generic_kinds}
+    invalid_generic_keys = {}
+    for key in generic_keys:
+        grouped = [row for row in rows
+                   if row.get('kind') in generic_kinds and
+                   (row.get('status'), row.get('fault_va')) == key]
+        position = 0
+        complete = False
+        prefix_ended = False
+        contradictory = not grouped or grouped[0]['kind'] != 'client_fault_walk'
+        position += not contradictory
+        for view in ('relative', 'absolute'):
+            if contradictory or position == len(grouped):
+                break
+            current = grouped[position]
+            if (current['kind'] != 'client_fault_walk_view' or
+                    current['view'] != view):
+                contradictory = True
+                break
+            position += 1
+            for number in range(current['count']):
+                if position == len(grouped):
+                    prefix_ended = True
+                    break
+                entry = grouped[position]
+                if (entry['kind'] != 'client_fault_walk_entry' or
+                        entry['view'] != view or entry['number'] != number):
+                    contradictory = True
+                    break
+                position += 1
+            if contradictory or prefix_ended:
+                break
+        else:
+            complete = position == len(grouped)
+            contradictory = not complete
+        if not complete:
+            invalid_generic_keys[key] = contradictory
+    if invalid_generic_keys:
+        rows = [row for row in rows
+                if not (row.get('kind') in generic_kinds and
+                        (row.get('status'), row.get('fault_va')) in
+                        invalid_generic_keys)]
+        for status, fault_va in sorted(invalid_generic_keys):
+            definitive = invalid_generic_keys[(status, fault_va)]
+            rows.append(dict(
+                kind='capture_loss', build=expected_build,
+                status=status, fault_va=fault_va,
+                reason=('contradictory' if definitive else 'incomplete') +
+                       ' generic client fault-walk group',
+                definitive=definitive))
     fault_pairs = {(row.get('status'), row.get('fault_va')) for row in rows
-                   if row.get('kind') == 'vmid1_fault_walk'}
+                   if row.get('kind') in ('vmid1_fault_walk', 'client_fault_walk')}
     if len(fault_pairs) > 2:
         rows.append(dict(kind='capture_loss', build=expected_build,
-                         reason='VMID1 fault-walk contains more than two distinct pairs',
+                         reason='client fault-walk contains more than two distinct pairs',
                          definitive=True))
     if snapshot.get('tolerance'):
         # Tolerated corruption is evidence, never a loss: the terminal snapshot's

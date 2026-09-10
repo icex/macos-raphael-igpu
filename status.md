@@ -1,9 +1,40 @@
-# Current status — candidate 190 recovered; candidate 191 pending (2026-09-10)
+# Current status — candidate 192 prepared offline; prior candidate 191 execution failed (2026-09-11)
 
-**Desktop Metal remains unproven. GPU cleanup succeeded without reboot.**
-Candidate 190's GPU experiment remains INVALID because critical capture was
-incomplete. Its later, separate hardware recovery completed successfully and
-has an independently validated schema-6 receipt. Do not repeat that recovery.
+## Candidate 192 offline preparation handoff (2026-09-11)
+
+The host has rebooted into boot `ac38a04c-de54-43b3-8141-414d5ea8a459`.
+The same-boot launch ledger has **zero rows consumed**; no GPU experiment has
+run on this boot, and host handoff authentication remains pending. Historical
+candidate 191 boot `3bca3e47-1f28-4f78-af00-5dbf76b00620` remains exhausted at
+3/3 launches. The unresolved GPU-execution streak remains **12 actual cycles**;
+the review batch remains **1 attempt since Astra**.
+
+Candidate 192 / metal-026 is prepared offline with the known candidate 191
+custom-boot settings: headless Lilu, dynamic `GDB=on`, `GENERIC_GRAPHICS=off`,
+180-second exposure, and the unchanged native 45-second Metal probe. Its scope
+is worker-time observation of the actual faulting client VMID 1..15 using the
+existing mapping behavior. Generic-client fault-walk records are conditional;
+the card makes no claim that root, child, or prepared-request correlation is
+complete. The current source-tree digest pinned by the card is
+`e2eb4769e41af10dcbb48f315446030fdd8af0632fa5f6de8ec8f9abba630526`.
+
+| Offline preparation | Result |
+|---|---|
+| Candidate/card | `1.0.192` / `metal-026` |
+| Card SHA-256 | `6452f113812901ae1265f9c31f52e6dcabe727aa21c248e9a675124a691941da` |
+| Metadata/stage tests | 48 passed |
+| C++ VM diagnostics sanitizer fixture | passed (ASan/UBSan) |
+| Exact-KDK preflight | passed (24G830; existing `kOffVmmInit` name skip) |
+| Full Python suite | 722 tests run, OK (3 skipped) |
+| Generic-client parser audit | passed (77 focused tests plus exhaustive-prefix coverage) |
+| GPU cycles on current boot | 0 |
+| Blocking issue | host handoff authentication pending |
+
+
+**Desktop Metal remains unproven. No further GPU launch is admitted.** Candidate
+191 demonstrated complete CR2 capture under real QEMU load, but the unchanged
+native Metal probe timed out at its first command-buffer completion. Cleanup
+left graphics retirement incomplete, and the prior candidate 191 boot ledger is exhausted.
 
 ## Current plan and review accounting
 
@@ -17,29 +48,30 @@ Implementation-agent assessment and final independent integration audit passed;
 see `findings/research/2026-09-10-astra-post190-assessment.md` and
 `findings/research/2026-09-10-candidate191-integration-audit.md`.
 
-- Unresolved GPU-execution streak: **11 actual cycles overall**.
+- Unresolved GPU-execution streak: **12 actual cycles overall**.
 - Last reviewed batch: **187, 188, 190**; 189 never exposed the GPU.
-- Next batch: **0 attempts since this review**. A review does not erase the
+- Current batch: **1 attempt since this review: 191**. Its complete capture is
+  meaningful transport progress, but its failed Metal completion does not reset
+  the execution streak. A review does not erase the
   unresolved issue, count recovery as an experiment, or increase a boot budget.
-- Current boot `3bca3e47-1f28-4f78-af00-5dbf76b00620`: **2 of 3 launches used**.
+- Current boot `3bca3e47-1f28-4f78-af00-5dbf76b00620`: **3 of 3 launches used**.
 
-The revised candidate 191 / metal-025 keeps the exact candidate-190 GPU source
+Candidate 191 / metal-025 kept the exact candidate-190 GPU source
 SHA-256 `7515f121230fbd26e32b198bd622e106155708e4108d9def96dcc7daa9d173f3`,
 the known-booting dynamic-slide configuration, headless Lilu, and `GDB=on`.
-The primary test is complete CR2 capture followed promptly by the unchanged
+Its primary test was complete CR2 capture followed promptly by the unchanged
 45-second Metal probe: three randomized compute rounds (196,608 values), four
 command-buffer completions, and all 4,096 rendered/readback pixels. Identity,
 native-start, capture, time-fit, 180-second exposure, and cleanup gates remain.
-Passing the probe would prove compute/render execution, not yet desktop
-presentation or repeatable crash recovery.
+The probe did not pass, so it proved neither compute/render execution nor
+desktop presentation.
 
 No new GPU behavior is bundled. The host collector now drains independently of
 its generation-tracked fsync worker; short writes, socket/disk failures and
 final-sync timeout remain failures. The debugger derives its live serial input
-from the exact supervised CID. These fixes have offline regression coverage;
-real Btrfs/QEMU capture reliability is not yet demonstrated. Synchronous file
-writes can still contend with fsync. Repeated transport failure must be
-investigated without consuming further GPU attempts.
+from the exact supervised CID. These fixes have offline regression coverage and
+candidate 191 demonstrated complete real Btrfs/QEMU capture. Synchronous file
+writes can still contend with fsync.
 
 The proposed early-GDB `slide=0` implementation was rejected before build or
 hardware use and archived under `findings/research/blocked-early-gdb-2026-09-10/`.
@@ -49,12 +81,139 @@ omitted the demonstrated `0xe8000` kernel-collection placement. Qualify a
 corrected nonzero-slide early rendezvous separately without GPU exposure; do
 not make that unfinished tool the next functional test's prerequisite.
 
-Candidate 191 metadata requires a new exact artifact identity under the existing
-staging contract. **Build, staging, and launch have not happened.** The revised
-offline Python suite reports 718 tests with 3 skipped; independent integration
-review passed. All 17 C++ sanitizer fixtures also passed, with no subsequent
-changes to those sources or fixtures. The earlier 726-test Python qualification
-included the subsequently archived early-debugger draft and is historical.
+Candidate 191 was built exactly once with debug symbols from clean detached
+commit `acbb6a8dc00775abccd2deb76c189f0a6c6f88bc`. The archive at
+`/home/bogdan/macos-vm/run/candidate-191-dist/RaphaelGPU-1.0.191-experimental.zip`
+has SHA-256
+`a39419bac951e7e67538eb528347a136f5c988ed1f9dc46be6f7916f79bdad01`.
+Its executable SHA-256 is
+`54a72a855c9096a5bd7e158aca4c5501a5ac661e93f40631bf62ae76141ff235`,
+build ID is `fb72743f19c6425f8a850da877d28df4`, and executable/dSYM UUID is
+`3208f400ebfd32e599bdfd665ebbc1fc`. The extracted build manifest SHA-256 is
+`1ccfc0a151a3db0009d440f344fb5a6fc6bfd3bf91c362aa422e56d28b543b28`;
+the build log SHA-256 is
+`14c652af4fcdfeaafe8a7d0d1b8d4a6e8598f53ea93faa1cb08938a4e52d6fd4`.
+The identity record at
+`/home/bogdan/macos-vm/run/candidate-191-build-identities.json` has SHA-256
+`58c8793c1af850a94299f3919ed39d5dc72f9ea5abda75007548163d7ca46dba`.
+It pins the exact SDK, Lilu, firmware, headless-Lilu, source, private debug-script,
+archive, manifest, executable, dSYM, and log identities. Canonical inputs matched
+before and after the private debug build, and the source hash remained the exact
+candidate-190 value above. Archive checksum, Mach-O, plist/manifest, and matching
+dSYM UUID validation passed. Exact-KDK preflight passed all route, constant,
+recovery, callback, ABI, and byte-pattern gates; the focused release and current
+normal-GDB suite passed 32 tests. The rejected early-rendezvous generator was not
+used and remains only in its archived patch.
+
+The first staging request refused before writes because the initially generated
+identity record used noncanonical field names (`candidate`, `archive_path`, and
+`manifest_path`) instead of the staging schema's `version`, `archive`,
+`build_manifest_sha256`, `worktree`, and `extracted_candidate` fields. That exact
+rejected record is preserved as
+`/home/bogdan/macos-vm/run/candidate-191-build-identities.rejected-schema-91cf3399fb8a8e946fa14849dcb0242f07f13e2f16ac480670c8463770ea86d1.json`,
+whose SHA-256 is the embedded `91cf3399fb8a8e946fa14849dcb0242f07f13e2f16ac480670c8463770ea86d1`.
+The corrected canonical record was derived from the unchanged existing build;
+the actual `verify_build_inputs` staging validator accepts every required field,
+artifact hash, manifest/source binding, debug-symbol identity, archive checksum,
+and pinned Docker image identity. No rebuild, staging write, launch, or GPU cycle
+occurred during this metadata correction.
+
+After the final generic-fault diagnostic patch, Python discovery ran 719 tests:
+`OK (skipped=3)`. Independent integration review found no blocker. The
+current-source exact-KDK preflight passed route ownership, constants, prologues,
+recovery-v2/v3 ordering, VM callback/entry/correlation, pointer-width ABI, and
+all eight exact byte-pattern checks; it retained only the existing explicit
+`kOffVmmInit` symbol-name skip. All 17 C++ sanitizer fixtures passed on the
+prior candidate source. The subsequently changed VM diagnostic source and its
+fixture were rerun alone under the sanitizers and passed; the other 16 fixtures
+were not rerun on this current tree. This final validation performed no build,
+staging, hardware operation, or GPU cycle. The earlier
+726-test Python qualification included the subsequently archived early-debugger
+draft and is historical; the candidate 191 hardware run is counted above.
+
+## Candidate 191 execution and recovery evidence
+
+Frozen experiment: `/home/bogdan/macos-vm/run/metal-025-191`, run ID
+`20187457d3e5ad837617f89efa477219`, supervised CID
+`7b21158bcb22841ad70f017dbba7ccbbff0c2f5b3533326787f4f78a39f31b38`.
+The authoritative manifest SHA-256 is
+`8271c546213e449d73c0ef4ae2e6b8fb5b6ebb22fdbe6d6f4a5f88e25127c1d9`;
+the one-run policy and activation SHA-256 values are
+`06e5e008f59a93b5d26b8f6fe19fc8104985b2ad938a638ad6532ea466d3e3b6`
+and `d85618767dbb9927d799f67318e372406853ce843fe8f688e72a621b9721966d`.
+The ledger consumed its third and final row. No debugger, retry, extension,
+reset, or driver rebind occurred.
+
+The strict native probe enumerated `AMD Radeon Navi23` with Metal 3, compiled
+the shaders, entered compute and committed the command buffer. It then reported
+`GPU completion timeout after 5 seconds`, with zero completed command buffers,
+zero compute rounds and no render readback. The checked verdict is valid
+`EXECUTION_FAILED` at `first_submission`; its SHA-256 is
+`b8c3f6ba481f07104f523eab74f68c9c707d72e578f0551ab55772a252a66d63`.
+
+Offline analysis decoded the retained `0xb0093a` fault at `0x400300000` as a
+VMID11, CID4/CPF read mapping fault. The existing two-slot recorder discarded
+it because it accepted only VMID1 and the worker always read context 1. The
+approved observation-only fix now accepts client VMIDs 1 through 15 within the
+same combined two-slot bound and selects the decoded context's existing
+control/PTB/start/end bank in the worker. The callback still copies only status
+and address; it adds no MMIO, GPU write, route, or deadline change. VMID1 parser
+kinds remain compatible, generic clients receive bounded typed records, and
+the worker still labels its context and table observations as after-latch and
+non-atomic. Sanitized C++ diagnostics and 77 parser tests passed, and replaying
+the frozen 191 evidence retained `EXECUTION_FAILED` at `first_submission`.
+Per-client prepared-request correlation remains pending because the current
+sequence and storage are VMID2-owned; no root or entry conversion defect has
+been established. This offline change has not been built, staged, or used on
+hardware. See `findings/research/2026-09-10-candidate191-fault-analysis.md`.
+The probe record SHA-256 is
+`c69369703d7b26f1495ff1e3ffafa7d16d507d6c4413288d6b4aa31438e3a665`.
+
+Unlike candidate 190, CR2 capture completed under the real workload. The
+560,666-byte `critical.txt` has SHA-256
+`d3ac2d3ba32dc9308943846b58d73ef3f36935bbc4d37c891cc7d8093670bd71`;
+the 423,512-byte `serial.txt` has SHA-256
+`5c791de22e64dbe0d8e013a9baa2dd247ba45d64c87dc9614bd2b0b2e26e562d`.
+Recovery replay accepted snapshot 7 with 300 records, zero corrupt lines, no
+incomplete snapshot and no open attempt. It preserves the native VMID2 repair
+to root `0x84b6f3000`, complete mapping walks, submissions and the later fault at
+`0x400300000`. The replay SHA-256 is
+`063fa53cdabd29dbaee58bf535048076900b294bead79d93b57e951ac093d004`.
+
+Recovery did not complete. Schema-6 `recovery.json` reports `incomplete` and
+`authorizes_launch=false`: host KIQ did not consume graphics `UNMAP_QUEUES`, its
+write pointer did not clear, and `gfx_retirement_confirmed=false` and
+`gfx_ring_clean=false`. Active queues reached zero without a dequeue timeout or
+forced-inactive fallback, and the graphics-pipe proof completed, but those facts
+do not weaken the failed final gate. Recovery SHA-256 is
+`0d5420be9c85a5bc22ef43f166ec14203ddb70448c4e059866227add594b864e`.
+Shutdown was forced after the bounded guest request because no ACPI grace
+remained. Host-after reports no active VM, `vfio-pci`, an accessible pinned-awake
+device, active sleep inhibitor and verified watchdogs; its SHA-256 is
+`baaaa152974422b2a42d3efbe839ef154778ca2456ae9e043edd0ee0210366b0`.
+Incomplete retirement and the exhausted ledger block all launches and cleanup
+retries.
+
+Two prelaunch corrections remain in the audit trail. The first staging attempt
+rejected a noncanonical identity schema before writes. The corrected identity
+record SHA-256 is
+`58c8793c1af850a94299f3919ed39d5dc72f9ea5abda75007548163d7ca46dba`.
+The first prepared manifest then exposed the old live collector SHA-256
+`9d386cd3081e3b08dfb1354cb2645609b73840b488d485a4ce2df3a6d7bb759e`.
+That manifest is preserved as superseded with SHA-256
+`ffdbcf8304937a6d56c21462e75b0a5c0e0f4fef5c8dc2a6aafb59dfaab60547`.
+Only `sercat.py` was atomically deployed, with reviewed SHA-256
+`3dd229f4ea4df1c0d3a9f3c5f50becd69b2664bf85ebe8c515893488ceaa4ad8`,
+before sealing the authoritative manifest.
+
+Although candidate 191 retained `GDB=on`, attaching after the real probe failure
+was unsafe within the bounded shutdown and cleanup sequence. The forced shutdown
+had no remaining ACPI grace, so there was no authenticated post-probe debugger
+window. The rejected early-rendezvous design remains research only. Any future
+debugger experiment needs a separately qualified rendezvous and cannot bypass
+the current recovery and ledger blocks.
+
+Concise notes: `findings/experiments/metal-025-191/notes.md`.
 
 ## Candidate 190 execution and recovery evidence
 

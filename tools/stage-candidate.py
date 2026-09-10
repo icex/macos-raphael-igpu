@@ -47,6 +47,7 @@ SUPPORTED_CARD_DIAGNOSTICS = {
     ("1.0.189", "metal-023"): "rgpuvmdiag=1",
     ("1.0.190", "metal-024"): "rgpuvmdiag=1",
     ("1.0.191", "metal-025"): "rgpuvmdiag=1",
+    ("1.0.192", "metal-026"): "rgpuvmdiag=1",
 }
 
 
@@ -116,7 +117,7 @@ def validate_card(raw, expected_sha256):
                 ("1.0.186", "metal-019"), ("1.0.187", "metal-020"),
                 ("1.0.188", "metal-021"), ("1.0.188", "metal-022"),
                 ("1.0.189", "metal-023"), ("1.0.190", "metal-024"),
-                ("1.0.191", "metal-025")):
+                ("1.0.191", "metal-025"), ("1.0.192", "metal-026")):
         candidate_contract = {
             "critical_replay_tolerance": "terminal-prefix",
             "recovery_critical_replay_tolerance": "terminal-prefix-open",
@@ -126,10 +127,17 @@ def validate_card(raw, expected_sha256):
                 "gdb_vmid1_wrap_vmm_prepare_original_info",
                 "gdb_vmid1_wrap_vmm_prepare_native_info",
                 "gdb_vmid1_prepared_root", "gdb_hub0_vmid1_reprogram1",
-            ] if pair == ("1.0.191", "metal-025") else [
+            ] if pair == ("1.0.191", "metal-025") else ([
+                "vmid1_fault_walk", "vmid1_fault_walk_view",
+                "vmid1_fault_walk_entry", "client_fault_walk",
+                "client_fault_walk_view", "client_fault_walk_entry",
+                "gdb_vmid1_wrap_vmm_prepare_original_info",
+                "gdb_vmid1_wrap_vmm_prepare_native_info",
+                "gdb_vmid1_prepared_root", "gdb_hub0_vmid1_reprogram1",
+            ] if pair == ("1.0.192", "metal-026") else [
                 "vmid1_fault_walk", "vmid1_fault_walk_view",
                 "vmid1_fault_walk_entry",
-            ]),
+            ])),
             "launch_options": ({
                 "BOOTDISK_MODE": "custom", "NVRAM": "stock",
                 "GENERIC_GRAPHICS": "off", "GDB": "on",
@@ -137,7 +145,8 @@ def validate_card(raw, expected_sha256):
                           ("1.0.188", "metal-022"),
                           ("1.0.189", "metal-023"),
                           ("1.0.190", "metal-024"),
-                          ("1.0.191", "metal-025")) else {
+                          ("1.0.191", "metal-025"),
+                          ("1.0.192", "metal-026")) else {
                 "BOOTDISK_MODE": "custom", "NVRAM": "stock",
                 "GENERIC_GRAPHICS": "off",
             }),
@@ -150,11 +159,13 @@ def validate_card(raw, expected_sha256):
     if pair in (("1.0.186", "metal-019"), ("1.0.187", "metal-020"),
                 ("1.0.188", "metal-021"), ("1.0.188", "metal-022"),
                 ("1.0.189", "metal-023"), ("1.0.190", "metal-024"),
-                ("1.0.191", "metal-025")):
+                ("1.0.191", "metal-025"), ("1.0.192", "metal-026")):
         candidate186_contract = {
             "functional_boot_arguments": {"rgpuvmroot": "4", "rgpudump": "5000"},
             "required_boot_flags": ["-liluheadless"],
             "raphael_source_sha256": (
+                "e2eb4769e41af10dcbb48f315446030fdd8af0632fa5f6de8ec8f9abba630526"
+                if pair == ("1.0.192", "metal-026") else
                 "7515f121230fbd26e32b198bd622e106155708e4108d9def96dcc7daa9d173f3"
                 if pair in (("1.0.189", "metal-023"),
                             ("1.0.190", "metal-024"),
@@ -166,7 +177,7 @@ def validate_card(raw, expected_sha256):
             raise RuntimeError("candidate card contract mismatch")
     if pair in (("1.0.188", "metal-021"), ("1.0.188", "metal-022"),
                 ("1.0.189", "metal-023"), ("1.0.190", "metal-024"),
-                ("1.0.191", "metal-025")):
+                ("1.0.191", "metal-025"), ("1.0.192", "metal-026")):
         required = card.get("required_observations", [])
         prerequisites = card.get("prerequisites", [])
         expected_gdb = ({"gdb_vmid1_wrap_vmm_update_entries_inputs",
@@ -176,7 +187,8 @@ def validate_card(raw, expected_sha256):
                          "gdb_vmid1_wrap_vmm_prepare_native_info",
                          "gdb_vmid1_prepared_root", "gdb_hub0_vmid1_reprogram1"})
         observed = (card.get("conditional_diagnostic_observations", [])
-                    if pair == ("1.0.191", "metal-025") else required)
+                    if pair in (("1.0.191", "metal-025"),
+                                ("1.0.192", "metal-026")) else required)
         if (not expected_gdb.issubset(observed) or
                 "gdb_debug_artifact_and_symbol_provenance_pinned" not in prerequisites):
             raise RuntimeError("candidate card contract mismatch")
@@ -415,7 +427,8 @@ def verify_build_inputs(experiment, builder, expected_commit,
     builder.validate_macho(executable.read_bytes())
     if (CANDIDATE_VERSION, CARD_ID) in (
             ("1.0.188", "metal-021"), ("1.0.189", "metal-023"),
-            ("1.0.190", "metal-024"), ("1.0.191", "metal-025")):
+            ("1.0.190", "metal-024"), ("1.0.191", "metal-025"),
+            ("1.0.192", "metal-026")):
         validate_debug_symbols(manifest, builder, executable,
                                DIST / "debug-symbols",
                                card_source_sha256)
@@ -865,7 +878,8 @@ def stage(expected_commit, expected_boot_id, expected_card_sha256,
     candidate186 = (CANDIDATE_VERSION, CARD_ID) in (
         ("1.0.186", "metal-019"), ("1.0.187", "metal-020"),
         ("1.0.188", "metal-021"), ("1.0.189", "metal-023"),
-        ("1.0.190", "metal-024"), ("1.0.191", "metal-025"))
+        ("1.0.190", "metal-024"), ("1.0.191", "metal-025"),
+        ("1.0.192", "metal-026"))
     if candidate186 and identities["source_sha256"] != card["raphael_source_sha256"]:
         raise RuntimeError("candidate source differs from its experiment card")
     lilu = (validate_lilu_inputs(
