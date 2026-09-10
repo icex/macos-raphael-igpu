@@ -1,0 +1,1 @@
+9efb977fa6046e8fe837e59d3c744c68915b2d96ccfcd72f4e23061cdc975f55  /home/bogdan/macos-vm/run/candidate-182-manifest.json

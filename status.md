@@ -1,6 +1,142 @@
 # Raphael iGPU: current technical status
 
-## Candidate 182 resumed after reboot — 2026-09-10
+## Candidate 182 result: fourth stalled cycle; mandatory review — 2026-09-10
+
+**Full desktop Metal is still not working.** The mandatory review is completed
+and audited; candidate 183 is being implemented offline under the plan below.
+Run `113c5b949683bf38fd5a807447088a69` used source
+`70b7f127ca0ddc6c8404eff48897001368d0acca`, build
+`9f8584cf8a0246308772d6958443e503`, binary SHA-256
+`e26f707160a540123fc4bdf5bc2fd295c5e7fab737509258f9953ada8b3a26a0`,
+on boot `d67da91d-94e6-42f0-8dd1-78b42f5496e1`. Evidence is frozen under
+`~/macos-vm/run/metal-015-182/` and mirrored unchanged under
+`findings/experiments/metal-015-182/raw/` with a SHA-256 inventory. The sealed manifest SHA-256 is
+`9efb977fa6046e8fe837e59d3c744c68915b2d96ccfcd72f4e23061cdc975f55`.
+
+**Functional boundary.** Native accelerator startup, lease ownership, ACTIVE
+pool exclusion, VALID lifetime, native VMM arena, KIQ stamps and the VMID2 root
+repair repeated. The early gate explicitly reported `marked=1 aperture=1 mode=3`.
+The repaired root again matched live `0x84b6f3000`. Nevertheless:
+
+```text
+VM: fault seq=1 phase=prepared ... status=0x2009bb addr=0x400200000
+VM: entry-conv mode=3 routes=1/1 pde=0/0/183/0/0 pte=0/0/23/2410/0 inactive=0/0 dropped=175/2425
+VM: entry-sample kind=pde ... original=0 result=0 domain=outside
+SD: submit vmid=2 ... IB0=0x400100000 IB1=0 seq=0
+VM: submit-correlation refused: ... no in-range program
+```
+
+All first-eight PDE samples and all first-eight PTE samples have address zero;
+the full counters show **zero converted PDEs/PTEs and no pre-gate calls**. Opening
+the identity gate earlier did not expose the child addresses. This refutes the
+gate-timing explanation as sufficient. Investigate where the nonzero child
+addresses are actually inserted: these functions may be used to make attribute
+templates with address zero, with another caller adding addresses later. That is
+a hypothesis from the run, now **confirmed independently in KDK disassembly by
+Astra and the coordinator**: `AMDHWVMContext::mapVMPTE` clears EDX at `0x559ab`
+before the PTE virtual call (`+0x1e0`) and at `0x55a4d` before the PDE virtual call
+(`+0x1d8`). The real address goes separately in RCX, while the returned template
+goes in R8, to `updateContiguousPTEsWithDMAUsingAddr` at `0x559d7`/`0x55a6d`.
+The completed review selected the narrow updater boundary described below;
+hardware execution still requires offline validation and finite admission. The submitted-IB
+walk was unobserved because correlation failed; do not call it a walk regression.
+No identity-bound Metal probe result was produced. Candidate181 reached probe
+commit; 182 has not demonstrated that outcome. Its final retained native/background
+submission summary is `submit=43/43/0` (event 173), so it must not be described as
+having fewer total submissions than 181's reported 18. These counts are not
+completed GPU work; the capture abort prevents a clean probe regression comparison.
+
+**Capture and cleanup.** The live coordinator aborted on definitive capture loss,
+then requested guest shutdown and ultimately forced the exact container closed.
+Raw verdict remains `INVALID`, earliest stage `vmid2_entry_conversion_no_pde`,
+error `RuntimeError: definitive critical capture loss; aborting exposure`.
+The recovery-only parser recovered checksum-clean snapshot 3 (205 records,
+CRC32 3562850089, FNV1a64 7163687658012943284) despite 69 corrupted lines in
+earlier transport; there was no open final attempt. Raw serial SHA-256:
+`7366a5c22e027f4235c3ba3799b28f4e9d7309ff074dc2b69174984e6577a705`.
+Automatic schema-3 cleanup **succeeded**, receipt
+`13c92dcc904742ce8fd4de28a3fb1988`, `authorizes_launch=true`. Graphics retirement
+and final inactive state were confirmed, both PSP destroys acknowledged, and
+the recovery-interval kernel message list is empty. The whole-run capture contains
+32 Docker/UFW networking messages; no captured GPU/IOMMU fault was identified.
+The host remains on the same
+boot and QEMU is stopped. This demonstrates successful cleanup after this forced
+closure, not universal recovery or permission to bypass one-run admission gates.
+
+**Streak: 4 actual GPU cycles (179, 180, 181, 182)** with unresolved SDMA/VM memory
+faults. Routine retries remain paused until the reviewed next candidate passes
+offline checks and separate finite admission. The required Astra xhigh review
+completed as `astra_post182`; current `report-astra.md` SHA-256 is
+`98a247bacc8f2d2e0db4d8e7bc3164a57f19df3dc0a6901488d54548df0f3037`.
+The coordinator read it, independently checked the zero-template/separate-address
+call chain, and accepted the narrow source-operand correction and bounded pending
+capture design. Both implementation agents have assessed it and are implementing
+the reviewed correction and regression checks.
+The previous report is archived unchanged at
+`findings/research/2026-09-10-post182-astra/report-astra-before182.md` (SHA-256
+`5314d914023ea152ee54313f8bd3ec4bb80ba33ff8d1b6b87f70ef13b5500d3a`).
+The current boot ledger remains **1/3 consumed**. The receipt is not a generic
+reuse override: the next run needs the reviewed one-run policy with no budget
+extension. Nothing was pushed to main.
+
+### Candidate 183 implementation and discriminating test
+
+1. Route exactly one real-address boundary, `updateContiguousPTEsWithDMAUsingAddr`
+   (`0x55cda`), after exact ABI/prologue review. In explicit mode 4, convert only
+   the real entry source for valid non-SYSTEM templates. Preserve destination,
+   template, count and increment; validate the entire batch span and arithmetic.
+   Preserve root repair and existing lease/engine settings. No speculative VMID9
+   or global `adjustVRAMAddress` change in this candidate.
+2. Add production-path tests for native zero-address templates plus separate MC
+   sources, encoded packet fields, SYSTEM/unmap/physical/outside controls and
+   batch overflow/aperture boundaries. Capture bounded actual-source samples and
+   counters; distinguish packet construction from hardware execution.
+3. Keep the recovery parser and five receipt-bound helpers unchanged. Treat only
+   the established recoverable missing-chunk case as pending during the existing
+   live deadline. Pending exposes no admissible events and cannot launch a probe.
+   Test the frozen 182 streaming prefixes; integrity conflicts remain fatal and
+   unresolved final capture remains invalid. Report termination cause separately
+   from the final scientific boundary.
+4. Replace the ineffective template-counter acceptance with real-source evidence.
+   Make correlation failures explain their actual predicate; do not manufacture
+   cross-thread association. Check readiness against native activity preceding
+   the probe. Missing descriptive walks are not completed GPU work or regressions.
+5. Coordinator audits, combined regression suite, one build, exact staging and
+   finite same-boot admission. One unchanged 180-second run and 45-second probe.
+   Success for this boundary requires real source conversion plus downstream
+   paging progress; full acceleration still requires checked results and desktop
+   presentation. If a later VMID9 root fault appears, record it as the next
+   measured boundary. No automatic retry after inconclusive evidence.
+
+**Pre-build audit corrections.** The new updater forwards the native call before
+publishing returned-call observations. Counters are cumulative lower bounds;
+bounded sample omissions are intentional, not CR2 transport loss. Publication
+uses exponential thresholds plus first conversion/refusal signals, so continuous
+activity cannot prevent readiness by keeping a quiescence timer reset. Mode 4
+retains root repair and its prepared-match check without requiring a fabricated
+cross-thread association or an unobserved walk to admit the probe. Legacy mode-3
+acceptance remains separate. Combined verification passed **535 Python tests and
+16 C++ sanitizer fixtures**, route ownership and diff checks. Log:
+`~/macos-vm/run/candidate-183-final-offline-verification.log`, SHA-256
+`fad37311f1d1b399c546d8df2e24b1829c18af9a9cefdb8b1c64af11d0408903`.
+The log's final hash-printing command had an awk quoting error; the test steps
+and their recorded exits all passed. Hashes were read separately. A subsequent
+test-only correction strengthens the sample parser fixture to assert successful
+decoding for every expected record, including the exact `template=0x1` spelling;
+its focused rerun passed **65/65**. Log:
+`~/macos-vm/run/candidate-183-classifier-final.log`, SHA-256
+`12acb79e8fa5877f19abbef78e23327903b71608565f999f5dddf89264cfb017`.
+No candidate 183 hardware cycle has occurred.
+
+**User-requested boot speed change.** Read-only inspection found the guest
+OpenCore picker timeout set to 45 seconds, with `ShowPicker=true` and
+`TakeoffDelay=0`. The next staged image will use a card-pinned 5-second timeout,
+preserving recovery selection. This can remove up to 40 seconds of picker wait;
+the actual improvement has not yet been measured. The transform belongs inside
+normal staging and sealing; candidate 182 evidence and the host bootloader are
+unchanged.
+
+## Historical pre-run record: candidate 182 resumed after reboot — 2026-09-10
 
 Current boot is `d67da91d-94e6-42f0-8dd1-78b42f5496e1`. The user confirmed the
 reboot. The ordinary amdgpu-first handoff completed once; Raphael is now on

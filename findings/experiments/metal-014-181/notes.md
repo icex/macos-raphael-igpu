@@ -58,3 +58,8 @@ the next experiment needs a fresh host boot.
 Two earlier launch attempts on this boot were refused at admission before any device
 access (`v2_reuse_requires_finite_authority`, then the identity gate's lease schema);
 their outputs are preserved under `run/candidate-181-refused-admission/`.
+## Superseding interpretation for candidate 183 planning
+
+Candidate 182 supersedes the earlier gate-timing explanation. Its counters and samples still saw only zero template addresses even though the native marker preceded VMM arena creation; the stopped-table MC child remains candidate 181's inherited observation. KDK disassembly established the missing boundary: `getPDEValue` and `getPTEValue` return an address-free template, while `AMDHWVMContext::updateContiguousPTEsWithDMAUsingAddr` receives the separate real address as its source operand. Candidate 183 tests conversion at that one updater boundary; it does not change the existing native initialization or allocator sequence.
+
+Candidate 181 did not demonstrate a prepared-phase walk. Its stopped-device table inspection and conversion counters remain frozen evidence. Candidate 183 requires a returned converted child sample with the expected caller, template flags, framebuffer arithmetic, and computed composition. That proves source forwarding through the native updater, not the bytes of an SDMA packet or its execution. A mapping fault, checked workload result, and the unchanged probe remain the evidence for actual GPU execution.

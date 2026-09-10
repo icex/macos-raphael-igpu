@@ -1,0 +1,13 @@
+92c83b00f49cde30bbf444dc1fce80bb4aaf9581d1ffa2cacfe522bda6945214  /home/bogdan/macos-vm/run/metal-015-182/agent-server-events.jsonl
+58e6730ab681d0df97ffb52d8a81daba2125cb1e7780e13602f4e54e0b54b51b  /home/bogdan/macos-vm/run/metal-015-182/events.jsonl
+224364e83b4b67d72fd0ed5ee1f1e9bef04f9a615233694e65abf20149c85ee7  /home/bogdan/macos-vm/run/metal-015-182/host-after.json
+224364e83b4b67d72fd0ed5ee1f1e9bef04f9a615233694e65abf20149c85ee7  /home/bogdan/macos-vm/run/metal-015-182/host-before.json
+97ad74e22344e009da9c4cce6c17e4e30d7e8e45ecea32323ff81334d467476d  /home/bogdan/macos-vm/run/metal-015-182/host-kernel-messages.json
+9efb977fa6046e8fe837e59d3c744c68915b2d96ccfcd72f4e23061cdc975f55  /home/bogdan/macos-vm/run/metal-015-182/manifest.json
+5c55867d16b2f5bdb2006c76f1776aeacfa1bb3106d7b5c356855cad8bc8c9be  /home/bogdan/macos-vm/run/metal-015-182/recovery-replay.json
+3c8d786b0f72f867e9edaa091c0f2b74f2508d76d7b451bdcd3647e91ee3de85  /home/bogdan/macos-vm/run/metal-015-182/recovery.json
+f5045f3332b38375d0696b565db98ad78303a1a7f0de4d391edfd1d18607c628  /home/bogdan/macos-vm/run/metal-015-182/running-identity.json
+7366a5c22e027f4235c3ba3799b28f4e9d7309ff074dc2b69174984e6577a705  /home/bogdan/macos-vm/run/metal-015-182/serial.txt
+f88bf2d4d87908032ac8f7eb9d2002fcdb6b41dbcc397b93113009656b8b9b4c  /home/bogdan/macos-vm/run/metal-015-182/shutdown.json
+7eb686be37075736832a0cfa6f3ea8b143d6a21611500cbcd2f5c29d5792f95f  /home/bogdan/macos-vm/run/metal-015-182/supervision.json
+993af4a336f82387b9e59b2e052db71bfe4c8546a0d20341f2479cc4e9aa3a79  /home/bogdan/macos-vm/run/metal-015-182/verdict.json

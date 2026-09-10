@@ -1,346 +1,369 @@
-# Astra adversarial review: a capped-out native VMM arena
+# Astra adversarial review after candidate 182
 
-**Review cut:** 2026-09-09 21:45 UTC / 2026-09-10 local. Reviewed on dev, HEAD
-ef326108b868a00efb292e481ea2efb866205efa, against current status.md, exact
-24G830 binaries, frozen runs, and concurrent uncommitted implementation.
-This is the mandatory fourth-cycle review, using gpt-6-astra / xhigh.
+Date: 2026-09-10. Reviewer: gpt-6-astra, xhigh. Source reviewed:
+`70b7f127ca0ddc6c8404eff48897001368d0acca`.
 
-The requested prompt was:
+**The page-entry correction is applied at the wrong data-flow boundary.** Exact
+24G830 callers deliberately pass zero to `getPDEValue` and `getPTEValue`, obtain
+attribute templates, then supply the real address separately to an SDMA packet
+builder. Candidate 182's earlier gate cannot correct those separately supplied
+addresses. This mechanism is now verified in the KDK, not merely inferred from
+zero samples. It explains why the chosen correction makes no conversions; it
+does not by itself prove every observed GPU fault has this sole cause.
 
-> review whatever the current status.md of this project is, check its documentation, methodology, tests, experiments. figure out why this fails and report back in a report-astra.md file for other agents to review
+Full checked Metal work and desktop acceleration remain unproved. Keep the
+unresolved SDMA/VM fault streak at **four actual cycles, 179–182**. Offline
+findings do not reset it. This report is assessment input, not hardware admission.
 
-The original report is preserved byte-for-byte at
-[the dated archive](findings/research/astra-reviews/2026-09-09-2138-original/report-astra.md),
-SHA-256 0ebfab9c494ee8183392c6d03bcec0c58132b154dc30733528b3f6f095fcf3bf.
-This review modified only this report. No VM, device/VFIO/MMIO access, sudo,
-reset, recovery, build, deployment, ledger mutation, or commit was performed.
+## Scope and evidence quality
 
-## Finding and decision
+I read `status.md` first. This review used repository files, frozen captures,
+local KDK bytes/disassembly and cached Linux source. I made no VM launch, device
+access, reset, sudo invocation, build, staging change or implementation edit.
+Only this report was written. No fresh full unit-test result is claimed.
 
-**The strongest current explanation is more specific than general VRAM exhaustion:
-the 240 MiB cap excludes the upper part of Apple's fixed 68 MiB VMM arena. Native
-VMM initialization then cannot reserve that arena in its software pool and can
-leave the page-table allocators uncreated.** Existing logs check only whether the
-DMA paging channel exists, missing this distinct failure after channel creation.
+I independently verified all **13** candidate-182 raw-file hashes against
+`findings/experiments/metal-015-182/raw-sha256.txt`, and checked each repository
+copy against its original in `/home/bogdan/macos-vm/run/metal-015-182/`.
+The old report's archived SHA-256 remains
+`5314d914023ea152ee54313f8bd3ec4bb80ba33ff8d1b6b87f70ef13b5500d3a`.
 
-The exact binary establishes the complete reservation/rejection chain below.
-The captured pool sizes and inferred arena interval satisfy its failure condition.
-The final runtime fields VMM+0x58/+0x78/+0x80 were not recorded, so this is a
-strong, mechanically specified causal hypothesis, **not yet a measured attribution
-of candidate178's failed map to that branch**. Live dispatch, intervening pool
-mutation, and the failed map's selected backend remain runtime checks.
+The reviewed X6000 executable is
+`/home/bogdan/macos-vm/kdk/x/System/Library/Extensions/AMDRadeonX6000.kext/Contents/MacOS/AMDRadeonX6000`,
+SHA-256 `2e364270c3243c532a9428c670313d5afd20406e42d64edb4fa8f3572504104e`.
+Offsets below are virtual offsets in that exact binary. I resolved vtable entries
+from Mach-O segment mappings and matched symbol names in
+`/home/bogdan/macos-vm/re/x6000.nm`; instruction listings are in adjacent
+`x6000.asm`.
 
-Prioritize this chain and its smallest observation before another broad hypothesis
-matrix or an unchanged diagnostic run. Complete and review the native recovery
-lease because the old fixed range has a demonstrated ownership conflict. Retain
-256/256 MiB semantics and early VMM channel creation for the first functional
-candidate; remove the obsolete early software-pool initialization and 240 MiB rewrite.
-The first test should check the native VMM arena and its two allocators, then reuse
-the unchanged checked Metal probe. Submission is progress, not desktop acceleration.
+Candidate 181's stopped-device root entry
+`0x200000f40b6f4001` is recorded in its
+[notes](findings/experiments/metal-014-181/notes.md). No standalone raw BAR dump
+was supplied or located, and the coordinator confirmed not personally inspecting
+that dump. Treat it as an inherited documented observation, **not a binary dump
+independently reverified by this review**. The KDK mechanism and candidate-182
+zero-address samples do not depend on upgrading that evidence.
 
-The stalled issue remains unresolved across **at least four actual cycles**:
+## Ranked causes and limits
 
-| Cycle | Run ID | Observation |
+| Priority | Finding | Confidence and consequence |
 |---|---|---|
-| 176 | e02fbed46a6a4df4ae48d7c1d8597985 | NoMemory; no completed Metal command |
-| 177 | ff2eb6e2492a4c5c96c6c6a847ed0c26 | NoMemory; zero observed submit entries |
-| 178-A | f103e47500ed4a06ae346df23250d95d | 483 backing/PTE failures; zero submit entries |
-| 178-B | 4a45f4a4c1dd49c69fab2dc37e2e4898 | 531 backing/PTE failures; zero submit entries |
+| 1 | Real PDE/PTE addresses bypass the conversion hooks | Confirmed native call chain; the current functional intervention is ineffective on this path. Correct the entry-value operand at its real consumer. |
+| 2 | Probe/user-queue page-directory roots have a separate unconverted path | Candidate 181's raw diagnostics identify probe VMID 9 and an MC-valued CTX9 root. VMID2-only root repair cannot establish full Metal sufficiency. Keep this as the next measured boundary, without bundling a broad VMID rewrite into the immediate experiment. |
+| 3 | Live capture handling aborts on an END-bearing damaged replay that a later permitted replay can replace | Reproduced from frozen prefixes. The abort is fail-closed under current policy, but final-file parser tests do not establish a usable live experiment. |
+| 4 | Correlation requirements suppress the promised walk | Source requires same-thread preparation/submission and other predicates; current records hide which failed. Missing walk is a measurement limitation, not proof of a new mapping regression. |
+| 5 | Diagnostic geometry and remaining SDMA/VM attributes are not independently qualified | Relative indexing matches the documented native layout, but a fixture cannot prove hardware indexing. Translation, invalidation, synchronization and user-queue programming can remain later blockers. |
 
-Offline discoveries do not reset this count or reopen the terminal 6/6 ledger.
+The original identity-gate timing explanation is insufficient and no longer the
+leading cause. The observed wrappers have valid routes, correct argument register
+placement, and zero inactive calls. There is no evidence here for an ABI shift
+that accidentally reads the wrong argument; the callers actually zero that
+argument. Exact prologues prove routing compatibility, not that the selected
+argument carries the value needing repair.
 
-## Newly resolved native failure chain
+## 1. Exact native producer-to-packet chain
 
-All X6000 offsets refer to executable SHA-256
-2e364270c3243c532a9428c670313d5afd20406e42d64edb4fa8f3572504104e.
-IOAcceleratorFamily2 refers to
-1700f3badafbb9014d55b7f6ecde5cdff0d585bd1f0e143c9f8465e4466e5d35.
-I independently verified both local hashes, read the instruction intervals, and
-resolved the cited vtable entries from Mach-O segments with llvm-nm symbol names.
+`AMDGFX10VMM` vtable `0x176f78`, address point `+0x10`:
 
-### 1. Top-down allocation gives the VMM a fixed 68 MiB address
-
-AMDHWVMM::setVirtualSpaceReady(true), X6000 0x578ce, calls hardware vslot +0x180
-with type 1, size 0x04400000, alignment 0x1000 (0x578e3..0x578f2). The
-Navi23 table resolves this to AMDHardware::appendToReservedVRAMOffset at
-0x72afe. With equal size fields, type 1 falls back to the type-0 top-down cursor.
-
-The method adds framebuffer base and stores the full result at VMM+0x50
-(0x57908..0x57915). It is native **void**; old wrappers incorrectly logged an
-incidental 32-bit return. Combining logged low value 191922176, the exact
-store sequence, and framebuffer base 0xf400000000 yields:
-
-| Range | Half-open interval |
+| Slot | Resolved target |
 |---|---|
-| Inferred VMM BAR offsets | [0x0b708000, 0x0fb08000) |
-| Inferred full VMM addresses | [0xf40b708000, 0xf40fb08000) |
-| Capped software pool | [0xf400000000, 0xf40f000000) |
+| `+0x1d8` | `getPDEValue` at `0x629c6` |
+| `+0x1e0` | `getPTEValue` at `0x62a14` |
 
-The arena extends **0x00b08000 bytes, 11.03125 MiB**, beyond the capped pool.
-171 and 178-B record the same inferred VMM base. The defect is an end-address
-mismatch, not merely insufficient total free bytes elsewhere: fixed reservation
-requires the entire interval represented in a free span.
+The implemented signatures in [RaphaelGPU.cpp](src/RaphaelGPU.cpp) correctly
+place `this` in RDI, level in ESI, address in RDX; PTE flags use ECX and fragment
+uses R8D. Native PDE encoding masks RDX at `0x629f8`. Native PTE encoding masks
+RDX at `0x62a48`. This validates the ABI but also makes the following caller
+instructions decisive.
 
-### 2. The VMM guard skips channel creation, not arena reservation
+### Leaf PTE path
 
-AMDHWVMM::setMemoryAllocationsEnabled(true) begins at 0x5791e.
-At 0x57938..0x5793d, non-null VMM+0x20 jumps to **0x57ba8**, not the return.
-The skipped block creates the channel and attaches existing contexts.
-The common continuation always performs:
+Inside `AMDHWVMContext::mapVMPTE`, starting at `0x5560c`:
 
-1. Obtain the handler through hardware vslot +0x2c8.
-2. Call handler vslot +0x1d8 with VMM+0x50, length 0x04400000,
-   flags 0x80000, Boolean true, origin 0x22, and operation 0x19.
-3. Store its result at VMM+0x58.
-4. Return if that result is null.
+```text
+0x55999  RDI = context+0x18 (VMM)
+0x5599d  ECX = context+0x108 (VmMapFlags)
+0x559ab  xor edx, edx
+0x559ad  call VMM vslot +0x1e0           # getPTEValue(level, 0, flags, fragment)
+0x559be  RSI += parent-table storage address
+0x559c4  RCX = context+0xf8             # real page address, separate operand
+0x559ce  R8 = RAX                      # returned attribute template
+0x559d1  R9 = per-entry address increment
+0x559d7  call updateContiguousPTEsWithDMAUsingAddr
+```
 
-The factory call is at 0x57bdc; store/null branch are 0x57be3..0x57bea.
-Nesting at VMM+0x3c is not this initialization gate.
+Earlier, `0x557ad` obtains a backing segment's address. For non-SYSTEM memory,
+`0x557bd..0x557e3` passes it through memory slot `+0x200`, then stores the result
+at context `+0xf8`. Thus nonzero backing addresses exist without ever entering
+`getPTEValue`'s RDX parameter.
 
-Early rgpuvmm=3 can therefore create +0x20/+0x28/+0x30 while software pools
-are empty, fail arena reservation, and leave those channel pointers present.
-The later native enable **retries the arena even when the channel already exists**.
-Calling the entire method idempotently skipped once +0x20 exists was incomplete.
+### Child PDE path
 
-### 3. The exact factory reserves the arena through AMDHWMemory
+```text
+0x55a1e  R12 = child allocation's +0x20 address
+0x55a39  call memory vslot +0x200
+0x55a3f  R12 = returned address
+0x55a4d  xor edx, edx
+0x55a4f  call VMM vslot +0x1d8           # getPDEValue(level, 0)
+0x55a55  EDX = 1                       # one entry
+0x55a5d  RSI = destination parent entry
+0x55a60  RCX = R12                     # real child address
+0x55a67  R8 = RAX                      # returned attribute template
+0x55a6a  R9 = 0                        # no increment for one child
+0x55a6d  call updateContiguousPTEsWithDMAUsingAddr
+```
 
-| Dispatch | Exact target |
+This is the exact counterexample missing from the current tests: converting
+zero before template creation leaves the separately supplied child unchanged.
+The recorded candidate-181 qword is consistent with combining template
+`0x2000000000000001` and child `0xf40b6f4000`; the physical-form child would be
+`0x84b6f4000`, producing `0x200000084b6f4001` with the same attributes.
+That consistency is not a new hardware read.
+
+### What the existing native address adjustment actually does
+
+`AMDHWMemory` vtable `0x172080 + 0x10 + 0x200` resolves to
+`adjustVRAMAddress` at `0x53b78`. Its complete arithmetic is:
+
+```text
+base = memory+0x60
+if base <= address < base + (memory+0x1b8) * (memory+0x40):
+    address -= base
+return address
+```
+
+It is conditional base subtraction; it does not implement Raphael's
+`address - mcBase + physicalBase`. Its current object fields were not captured
+here. Do not globally replace this helper merely because of its name: its other
+callers and their expected address domains require separate proof.
+
+### The final SDMA packet retains the real address
+
+`updateContiguousPTEsWithDMAUsingAddr` begins at `0x55cda`. Its five numeric
+arguments are destination, entry count, real entry-value address, template,
+and increment. It saves RCX in R15 at `0x55cf3`, doubles the entry count at
+`0x55d14`, and forwards the real address in R9 at `0x55d9e`/`0x55de6` to channel
+vslot `+0x330`. R8 carries the template. The destination is independent.
+
+The SDMA channel table `0x178c28 + 0x10 + 0x330` resolves to
+`writeWritePTEPDECommand` at `0x6774a`. It emits:
+
+| Packet byte offset | Operand |
 |---|---|
-| Navi23 hardware table 0x185010, address point +0x10, slot +0x2c8 | Getter 0x9df5e returns hardware+0x18, the handler |
-| AMDHWHandler table 0x16f698, address point +0x10, slot +0x1d8 | createVidMemoryWithPhysicalAddress at 0x4ab86 |
-| Factory call 0x4abb6 | AMDAccelVidMemory::withPhysicalAddress at 0x3a830 |
-| Hardware slot +0x2d8 inside that factory | Getter 0x9df76 returns hardware+0x370, the memory object |
-| AMDHWMemory table 0x172080, address point +0x10, slot +0x198 | AMDHWMemory::reserve at 0x5343c |
+| `+0x00` | Opcode `0x0c` |
+| `+0x04/+0x08` | Destination address from RDX |
+| `+0x0c/+0x10` | Template from R8 |
+| `+0x14/+0x18` | Real entry-value address from R9 |
+| `+0x1c/+0x20` | Increment from the stack argument |
+| `+0x24` | Entry count minus one, derived from the dword count |
 
-The true argument selects withPhysicalAddress's reserve branch
-(0x3a88e..0x3a8c7). It passes the exact full address and length into
-AMDHWMemory::reserve, with both-pools true. A false result releases the video
-object and returns null (0x3a8ce..0x3a8eb). **This path does not need to call
-AMDAccelVidMemory::allocPhysical at 0x3aa76.**
+No MC-to-physical conversion occurs in this encoder. Cached Linux
+`sdma_v5_2.c:1110` uses the same distinct destination/flags/value/increment
+layout. `gmc_v10_0.c:454` converts non-SYSTEM directory addresses, and
+`amdgpu_gmc.c:1199` defines the MC-to-physical arithmetic. These files are under
+`/home/bogdan/macos-vm/run/research/metal-integration-20260909/cache/linux-stable-v7.2.3/drivers/gpu/drm/amd/amdgpu/`.
+They support the domain distinction; they do not prove Apple's entire remaining
+VM configuration works on Raphael.
 
-AMDHWMemory::reserve first calls framework interval reserve on pool +0x68
-(0x53487..0x5349f). Framework containment requires the requested start/end
-inside one free interval (0x1f986..0x1f998). A pool ending at
-base+0x0f000000 cannot reserve an arena ending at base+0x0fb08000.
-It fails before the second pool. This also explains why the 4 MiB
-allocateLargeBlocks error string can disappear: fixed-address reserve failure
-does not use that diagnostic path.
+**Correction boundary:** a reviewed wrapper at the contiguous-update function
+can convert the real entry-value address while preserving the destination,
+template, count and increment. The final packet emitter is another possible
+observation boundary; do not implement both corrections. Check exact ABI and
+displaced instructions for the selected route before using it.
 
-### 4. Channel presence does not imply page-table allocation readiness
+At this boundary, SYSTEM is **encoded template bit 1**, not source
+`VmMapFlags` bit 3. Preserve SYSTEM entries even if their numeric address overlaps
+the MC interval. Preserve invalid/unmap operations, unrelated and already physical
+addresses. Prove the whole arithmetic progression
+`address + (count - 1) * increment` stays within the eligible aperture without
+overflow before converting a batch; checking its first address alone is
+insufficient. Count units differ between the two candidate boundaries. Never
+translate the packet destination, submitted IB GPUVA, or flags merely because
+another operand needs translation. Keep callback work bounded and free of MMIO,
+allocation, waits and formatted logging.
 
-Only a non-null arena at VMM+0x58 reaches:
+## 2. A separate root path remains downstream
 
-- Native clearWithDMA of the arena, 0x57c00..0x57c0b, then channel submission
-  handling at 0x57c10..0x57c37.
-- Creation and initialization of a **64 MiB allocator at VMM+0x78**,
-  0x57c3d..0x57ca2.
-- Creation and initialization of a **4 MiB allocator at VMM+0x80**,
-  0x57ca4..0x57d13.
+Candidate-181 raw [serial](findings/experiments/metal-014-181/serial.txt) lines
+7339 and 9230 identify `Proc 387 probe, pasid 1, VMID 9`, VMPD
+`0xf40b6f3000`. The register dump at lines 7782/9492 contains
+`0x1679 = 0x0b6f3000`, `0x167a = 0xf4`: the CTX9 PTB low/high pair under the
+established register stride. UQ/MAP_PROCESS diagnostics nearby also retain the
+MC-valued root. These are native raw diagnostic records, not independently
+checksummed CR2 register samples, so retain that provenance.
 
-AMDHWVMM::allocVMBlock, 0x57ed2, returns false immediately when +0x78
-is null (0x57ee3..0x57eea, failure 0x57f71). Valid task VA and an existing
-DMA channel can therefore coexist with no usable VM page-table allocator.
-That fits candidate178's assigned-VA, backing/PTE failure family.
-The failed live map's selected backend remains unrecorded; keep that final
-association conditional.
+`prepareInvalidateInfo` in [GpuVmDiagnostics.hpp](src/GpuVmDiagnostics.hpp)
+explicitly refuses VMIDs other than 2. A successful corrected paging path would
+therefore not establish that the probe's user-queue root is fixed. The immediate
+experiment should resolve the entry-value boundary first; if it advances, trace
+the actual user-queue/MAP_PROCESS root producer and measure the active probe
+VMID before another narrowly defined change. Do not infer that the SDMA prepare
+callback necessarily owns that separate programming path.
 
-**Smallest discriminating observation:** extend the existing VMM set-allocation
-wrapper's scalar record with full +0x50 and pointers +0x58/+0x78/+0x80 before
-and after early and final native calls. Distinguish those calls and record
-pool sizes/identities at the final one. No new private route or virtual invocation
-is needed to read these established fields. Non-null pointers are prerequisites;
-verify initialized extents/free state before claiming usable allocators.
-Capture entry and native clear progress so a stall before return is not mistaken
-for absence of initialization.
+## 3. Capture and experiment methodology
 
-## Other report claims checked against source
+I replayed the actual candidate-182 capture prefixes through the current
+`parse_serial(..., critical_replay_tolerance='terminal-prefix')`:
 
-**The proposed total/visible swap is wrong.** Native initialization clamps size1
-to size0 only when size1 > size0 (0x525f5..0x52603). Swapping the measured
-512/256 to 256/512 collapses back to 256/256.
+| Prefix ending at END record | Result |
+|---|---|
+| Physical line 3736, snapshot 0 | Accepted; 179 records |
+| Line 7737, snapshot 1 | Accepted; 191 records |
+| Line 11909, snapshot 2 | `CR2 snapshot has a missing chunk`, `definitive=True` |
+| Line 13600, snapshot 3 | Accepted; 205 records |
 
-Framework init_pool with three numeric arguments at 0x1facc means
-(totalEnd, reservedStart, reservedLength). X6000's unequal branch calls it with
-(base+512MiB, base+256MiB, 0), then reserves [0,base) separately.
-It does not create an inverted interval.
+Final snapshot 3 has 20,677 bytes, 589 chunks, CRC32 `0xd45cc729`, FNV1a64
+`0x636a87f859b623b4`, zero dropped/truncated records. There are 69 earlier
+corrupt lines. I reproduced acceptance with **open-attempt tolerance disabled**;
+final acceptance is available under the functional terminal-prefix policy too.
+This does not change the frozen `INVALID` verdict or retrospectively authorize
+the probe.
 
-The zero-length reservation is also **not a no-op**. Framework reserve's interior
-branch 0x1fa49..0x1fab2 inserts a zero-length allocated element and another free
-node at the marker. Free bytes do not decrease, but contiguous allocation checks
-the next address-list boundary (allocPages, 0x1fce2..0x1fd19). This represents
-a placement seam at the BAR boundary; noncontiguous allocations may handle pieces
-separately. Simple capacity arithmetic does not reproduce this policy.
+`experiment.py:2411` aborts as soon as the third row is observed. The later clean
+snapshot was unavailable at that decision, so aborting was consistent with its
+current fail-closed rule. Nevertheless, calling this category irrecoverably
+"definitive" is inconsistent with the replay protocol's ability to replace a
+damaged attempt. Testing only final captures misses this live transition. Guest
+crash diagnostics still interleave character-by-character with CR2 transport;
+checksums detect damage but do not prevent that transport failure.
 
-**The old recovery interval lacks exclusive ownership.** Descriptor 0x0f000000
-and scratch [0x0f100000,0x0f113004) lie inside the inferred VMM arena.
-Later pool capping cannot exclude earlier top-down reservations. Actual corruption
-of the overlapping bytes was not captured, but the ownership design is unsound.
-The proposed uncapped diagnostic leaving scratch there is rejected. Moving it to
-an apparently empty fixed gap is unsupported without the older native owner ranges.
+A narrowly reviewed host-only improvement can treat **only recoverable missing
+chunks under the pinned terminal-prefix live policy** as pending while the
+existing exposure deadline continues. Pending must provide no admissible events,
+no probe launch, no fallback to a stale snapshot, and no additional exposure
+budget. Only a subsequent snapshot accepted by the unchanged parser can restore
+readiness. Valid-data conflicts, foreign/stale identity, changed prefixes,
+aggregate checksum errors, reported overflow and ABORT remain fatal or
+non-admissible. If sufficient evidence never arrives, finalization remains
+incomplete. This bounded wait extends time under incomplete transport evidence,
+so its exact control flow needs coordinator and implementation review before
+hardware. It is not a broad tolerance relaxation.
 
-**Duplicate initialization is real, but does not isolate the historical regression.**
-init_pool rebuilds allocator state, and both 171 and 178 have an early forced
-call followed by a native call. No preserved object is proved to be a live
-allocation from those same software pools between calls. VMM top-down allocation,
-MQD/EOP offsets, and SYSTEM-backed rings are different domains.
+Prefer keeping the receipt-bound `critical-replay.py` and other recovery helpers
+unchanged for this control-flow repair. Altering their hashes affects whether the
+existing receipt can be consumed; never rewrite a frozen receipt to compensate.
 
-Removing the obsolete forced call allows one authoritative initialization followed
-by lease exclusion. Retaining rgpuvmm=3 is compatible with the later arena retry
-shown above; its early channel creation originally preceded the forced memory
-initialization anyway. Native powerUpHW intentionally enables the software pools
-after engine startup. This source ordering supports the selected placement;
-validate startup after removal because project adaptations can introduce dependencies.
+There is also an independent readiness problem. Running
+`classify_probe_readiness` on snapshots 0, 1 and final 3 returns
+`vmid2_entry_conversion_no_pde`. Native/background VM activity makes
+`require_workload_outcomes` true, and the classifier then demands a converted PDE
+at hooks that receive zero. Removing the capture abort alone would **not** have
+made the current run probe-ready. Replace this ineffective evidence requirement
+with the new real-address observation; do not merely relabel zero conversions a
+success.
 
-**Replace the 183 MiB/four-connector inference with an actual consumer.**
-reserveNDRVSpace, X6000 0x52f2, reserves an NDRV/framebuffer extent, then
-attempts a fixed **160 MiB** at base+NDRVSize (0x5437..0x544e).
-Navi23's default hardware size getter at 0x9df00 returns 5 MiB; a valid
-framebuffer fbrs attribute can override it. Failure aborts powerUpHW
-(0x50af..0x50b1). This is a concrete capacity consumer to observe if necessary.
-The runtime fbrs amount and allocation occupancy were not captured here.
-Do not infer per-head consumption from the MQD address or reduce connectors yet.
+The final verdict combines two different facts: `earliest_failure` comes from a
+final reclassification, while `verdict=INVALID` and `error` are overwritten by the
+stored live abort at `experiment.py:2495..2504`. Record termination reason and
+functional boundary separately so reviewers cannot mistake their ordering.
 
-**Historical SDMA remains downstream.** 171 reached WindowServer paging work.
-Its later dump shows a consumed GFX IB and unconsumed SDMA paging IB at different
-VAs. Q1 HALT follows a restart path, so it does not establish the pre-timeout
-cause. Same VMID does not give different IBs identical mappings or invalidation
-history. Restored arena initialization itself emits native DMA clear work before
-the Metal probe; an SDMA problem may reappear there. Recovery must cover that work.
+## 4. Correlation, walker and regression claims
 
-## Version-2 lease: reasonable architecture, incomplete integration
+`RaphaelGPU.cpp:5218..5246` requires matching thread tokens, temporal ordering,
+VMID/range predicates, and a retained preparation. Its fallback still requires
+the same thread. Candidate 182 has a complete VMID2 preparation covering
+`0..0xffffffffffffffff`, followed by three valid SDMA submissions for
+`0x400100000`, all reported with sequence zero and "no in-range program".
+The observed range fits. The message collapses other possible rejection causes;
+prepare thread tokens and submission event order are not emitted, so these
+records cannot establish which predicate failed.
 
-The selected architecture is reasonable: outside-VRAM launch challenge, one
-native type-0 allocation before VMM, immutable OWNED proof, and separate pool
-status. With 256/256 semantics the later type-1 VMM request uses the same cursor
-and moves below the lease. Exclude the exact full lease address in both software
-pools before the memory-enable wrapper returns. Native powerUpHW tests that
-return at 0x509f before NDRV reservation/client enable, preserving a false result.
+Before relying on this as acceptance, test the production matcher with native
+initialization ordering, cross-thread preparation/submission, replacement of a
+VMID context, and bounded-buffer saturation. Emit the rejected predicate and
+minimal immutable identity/order fields. Do not pair events merely by nearest
+sequence or matching VMID; that would manufacture causal evidence. A worker-side
+snapshot of an identified live context can be useful descriptive evidence even
+without submission correlation, but must be labelled accordingly.
 
-The first candidate must verify the dynamic VMM arena is below and disjoint
-from the lease, within the pool, and compatible with native/GART ownership.
-Wire arithmetic alone cannot establish this.
+The current walker subtracts context start. Its fixture deliberately places an
+entry where that subtraction looks. This tests arithmetic and bounds, not the
+hardware's interpretation. With control `0x3b`, start `0x400000000`, and the
+first submitted IB, the absolute and relative views choose root entries 64 and
+0 respectively. Preserve that uncertainty; label the current layout as an
+inference until independently established. Zero-attribute native roots are a
+separate, directly observed accepted root form. A CPU diagnostic that translates
+an MC child to make it readable does not prove the GPU can follow that raw child.
 
-The worktree changed concurrently. These issues were sent to the coordinator;
-they are **snapshot findings, not claims about final corrected code**:
-
-| Priority | Snapshot issue | Required check |
+| Checkpoint | Candidate 182 evidence | Regression limit |
 |---|---|---|
-| Blocking | Guest OWNED/POOL text printed nonce high then low; Python interpreted low then high | Actual producer text and struct bytes round-trip with unequal nonce halves |
-| Blocking | Optional status readback treated arbitrary bad state/checksum as unfinished | Only the defined unpublished marker is unfinished; corrupt committed or contradictory published data refuses recovery |
-| Blocking | Route, epoch, native ownership, and admission checks were still separate from helper tests | Exercise exact production readiness, failure propagation, duplicate, disable/free, and no-client paths |
-| High | One-shot ACTIVE publication could remain while later duplicate/invalid epoch failed | No accepted stale ACTIVE after ownership/exclusion lifetime ends |
-| High | Tested establishPools sequencing was not yet the actual wrapper in an inspected snapshot | Integrate the tested production sequence or directly test the wrapper |
+| Startup, lease, VMM allocators, KIQ | Repeated in complete CR2 records | Retained baseline progress |
+| VMID2 root | Prepared/live `0x84b6f3000`, matches | Root repair repeated |
+| Entry conversion | PDE `0/0/183/0/0`; PTE `0/0/23/2410/0`; inactive `0/0` | Intervention ineffective; first eight samples per kind are zero, not proof that every address in every native path is zero |
+| GPU fault | Prepared-phase `0x2009bb` at `0x400200000` | VM/SDMA failure persists; exact fault/IB causality not captured |
+| Submission | Final native/background summary `43/43/0` | Not 43 probe submissions or completed buffers; do not compare it as inferior to 181's count 18 |
+| Checked probe and desktop | No identity-bound probe result | Missing result under aborted exposure; no acceleration pass and no clean probe regression comparison |
+| Cleanup | Receipt `13c92dcc904742ce8fd4de28a3fb1988`, recovered and authorizing | One successful forced-close cleanup; 181's failed graphics retirement remains a repeatability counterexample |
 
-The coordinator independently found overlapping issues and is directing fixes.
-This report is assessment input, not launch approval. OWNED-only early-crash
-recovery must never imply no queues. Missing ownership/locator proof cannot
-authorize guessed scratch. Historical v1 receipt compatibility does not admit v1
-for a new launch.
+The outer recovery receipt is schema **6**, using the schema-3 lifetime/lease
+recovery path. Its recovery-interval `kernel_messages` is empty. The full run's
+`host-kernel-messages.json` contains **32** Docker/UFW messages, with no observed
+GPU/IOMMU fault in that list. These are different intervals. Neither establishes
+universal freedom from host crashes.
 
-## Methodology and test review
+## 5. Tests and documentation that must change before the next cycle
 
-I freshly verified **all 27 hashes in 178-A and 29 in 178-B**.
-Final traces show 483 and 531 backing/PTE failures, zero capacity/VA/unknown
-classifications, zero submit entries, and zero completed Metal commands.
-Those 1,014 calls include retries/background work; they are not independent
-resources or GPU cycles. Sample identities do not bind maps to probe buffers.
+The recorded 522 Python tests and 14 C++ sanitizer fixtures test substantial
+software properties, but did not exercise the native composition that defeated
+the correction. Add a small number of evidence-driven production-path tests:
 
-| Evidence | Reached stage | Limit |
-|---|---|---|
-| 166-reuse / 170 | Occupied-channel diagnostics; 14 / 23 exact allocator-error-string matches in these archives | Older configurations; unequal observer coverage |
-| 171 | Three valid archived SDMA submission records; fourteen 4 MiB allocation errors | Failed workload, no Metal acceptance |
-| 175 | Active cap, no retained equivalent client submission evidence | Probe withheld; not a completed Metal attempt |
-| 176 | NoMemory, no retained valid SDMA submit | Lacks the later direct submit observer |
-| 177 / 178-A / 178-B | Explicit zero submit entries and failed probe | Native VMM arena/allocator state not captured |
+1. **Template plus separate address.** Reproduce both exact KDK call shapes:
+   zero address to getPDE/getPTE, nonzero source to the contiguous updater, then
+   encoded SDMA packet. The current implementation must demonstrably retain the
+   MC entry value; the selected correction must change only the appropriate value
+   words. Include SYSTEM, unmap, physical/outside domains, aperture endpoints,
+   multi-entry span overflow, and the two count units.
+2. **Readiness using the actual 182 sequence.** Native VM activity precedes the
+   user probe. Good startup cannot require a probe result before launch; actual
+   faults and invalid gates cannot be ignored. Old template counters cannot be
+   mandatory proof of new address conversion.
+3. **Streaming capture, not only complete files.** Feed the archived 0/1/2/3
+   prefixes through live decision logic. Verify pending never admits a probe or
+   receipt, clean successor restores only verified evidence, and the unchanged
+   deadline still terminates without a successor. Keep adversarial conflict,
+   identity, overflow, ABORT and integrity fixtures fatal/non-admissible.
+4. **Production correlation and capture coverage.** Test the actual matching
+   predicates and distinguish rejected association from missing preparation.
+   Exercise saturation and publication ordering, not just handcrafted matched
+   records. A missing walk must not become a fabricated successful walk.
 
-report.md counts 24 errors in 170; I counted **23 exact matches** for
-"AMD ERROR! Failed to allocate" in this repository archive. Interleaving or a
-different retained file may explain it. This minor discrepancy does not affect
-the lost-stage conclusion, whose build/configuration confounding remains explicit.
+Correct the still-stale claims in candidate-181 notes, `docs/release-notes.md`
+and the candidate-182 roadmap paragraph: the gate explanation was an untested
+hypothesis, and the promised prepared-phase walk was not what the implementation
+performed. Keep frozen manifests and raw evidence unchanged; add a superseding
+interpretation. The current status already identifies several of these limits,
+but older nearby prose remains misleading.
 
-Three test gaps matter:
+## One discriminating next experiment
 
-1. **Mock ordering is not native initialization proof.** Fake successful append,
-   enable, and reserve callbacks validate a helper's ordering, not the VMM
-   continuation, arena factory, zero-length seam, allocator reset, or DMA clear.
-   Add a source-grounded dependency fixture for a fixed arena crossing the cap
-   and the final VMM retry, then measure corresponding fields in the admitted run.
-2. **The allocPhysical observer does not cover the newly resolved factory.**
-   Its immutable samples and independent live counters avoid old slot races.
-   Zero failures there cannot refute fixed-address VMM reservation failure.
-   Native false also need not mean exhausted bytes: a nonzero incoming element
-   returns false immediately, and flags affect later return paths.
-3. **The regression tool overstates some evidence.** In the inspected
-   functional-regression.py, positive counters alone produce stages called
-   compute/render acceptance; receipt booleans alone produce cleanup.
-   Startup identity plus no capture-loss record may produce negative evidence
-   without whole-workload coverage. Reuse production probe/receipt validators
-   or label these claimed partial progress. A startup-only zero summary must
-   not prove later absence. The complete manually reviewed A/B traces still
-   support their actual conclusion.
+**Hypothesis:** native SDMA PDE/PTE update packets embed framebuffer MC addresses
+because the real entry-value operand bypasses the current conversion. Converting
+that operand for valid non-SYSTEM entries should produce physical child/page
+addresses and can advance execution beyond the present paging fault.
 
-Do not repeat the stalled workload merely to collect a fifth repetition.
-Preserve frozen raw verdicts, but distinguish functional outcome, observed
-boundary, capture sufficiency, and lifecycle. Lifecycle passing does not
-substitute for acceleration.
+First complete the offline call-chain/ABI audit and tests above, fix the host
+measurement blockers, and have the coordinator plus implementation agents assess
+this report. Keep the existing lease, recovery gates, memory sizing, engine
+topology, probe, and finite admission rules. Select **one** correction boundary
+for the entry-value operand; do not combine it with speculative UQ root, shader,
+connector, or global address-helper rewrites.
 
-## Revised hypothesis and smallest useful functional test
+For a separately admitted single run, retain bounded samples of context/channel
+identity, destination, source before/after, encoded template, count, increment,
+address domain and resulting native packet fields. Require evidence that the
+real MC source crossed the intended boundary, including a child PDE. Retain
+SYSTEM/no-op observations as controls. Capture raw directory/leaf content through
+the established safe worker path when the mapping identity is actually known;
+keep inferred geometry and uncorrelated snapshots explicitly labelled.
 
-**H1:** the late cap prevents fixed-address acquisition of the VMM's 68 MiB arena;
-the paging channel exists but its page-table allocators do not. Removing the cap
-through an exclusively owned compact lease should allow the final native VMM
-call to create them. This can re-expose the historical SDMA paging/clear stall.
+| Result | Interpretation and next decision |
+|---|---|
+| Real MC source converts; native packet/raw entries agree; paging advances | Meaningful boundary progress. Run the unchanged checked probe if all existing admission/readiness conditions hold; then locate any next measured fault, including user-queue roots. |
+| No eligible real source reaches the new boundary | Coverage/dispatch hypothesis fails. Investigate offline; do not rename the candidate and retry unchanged. |
+| Input changes but emitted value or stored entry does not | The intervention is not on the final consumer, or updates do not execute. Separate packet construction from write completion before changing more VM state. |
+| Correct raw physical entries exist but the same mapped address still faults | Address-domain correction alone is insufficient. Use the actual failing context and fault to discriminate geometry, permissions, invalidation and queue state. |
+| Capture/correlation remains insufficient | No functional attribution. Apply the existing bounded stop and authenticated cleanup; no automatic retry. |
 
-Before hardware, the coordinator and implementation agents should verify the
-dispatch chain above, add existing-wrapper observations, close lease/parser
-defects, and test receipt compatibility and production sequencing. Keep 256/256,
-rgpuvmm=3, current SDMA/PTE behavior, VBIOS connectors, and the acceptance probe.
-Restoring 512/256 changes the secondary top-down domain and is a later experiment.
-
-Once a separate finite experiment is validly admitted:
-
-| Observation | Required/predicted result | Interpretation |
-|---|---|---|
-| Early VMM enable, before pools | Channel present; arena may be null | Expected early arena miss does not alone stop startup |
-| Lease and sole pool enable | Native ownership; 256/256 fields; exact both-pool lease exclusion | Ownership/capacity prerequisite |
-| Final native VMM enable | +0x58/+0x78/+0x80 initialized; arena inside pool and disjoint from lease | Direct progress through the identified boundary |
-| Native arena clear | Progress/completion evidence or localized stall | SDMA may receive work before Metal probe |
-| Unchanged probe | Compare preparation/submission against 171 and 178-B; check expected values/pixels | Submission is progress, full correctness still required |
-| Cleanup | Existing independent queues, GART, PSP, journal, receipt checks | Normal, early failure, and crash cases remain distinct |
-
-If final arena/allocators stay absent, inspect the exact factory and actual native
-intervals; do not move to shader/display changes. If they initialize but maps
-still fail, H1 alone is insufficient: follow the concrete backing return and
-selected commit callback/range. If native clear or submitted work stalls, record
-the reached boundary and investigate its exact queue/VM/fence state.
-If startup regresses after removing early memory enable, explain that dependency;
-it is not a clean refutation of H1.
-
-**No new GPU run occurred. Metal execution and desktop acceleration remain
-undemonstrated.** This report claims neither completion nor hardware approval.
-
-## Evidence anchors and snapshot limits
-
-- Authoritative [status.md](status.md), frozen
-  [171](findings/experiments/metal-005-171/),
-  [178-A](findings/experiments/metal-011-178-a/),
-  [178-B](findings/experiments/metal-011-178-b/).
-- Exact X6000 listing: /home/bogdan/macos-vm/re/x6000.asm. Executable:
-  /home/bogdan/macos-vm/kdk/x/System/Library/Extensions/AMDRadeonX6000.kext/Contents/MacOS/AMDRadeonX6000.
-- Framework listing: /tmp/ioaccel.dis. Reviewed executable:
-  /tmp/kdk-forensics.HZuAtO/IOAcceleratorFamily2. Durable KDK extraction and
-  hash instructions are in
-  [report-backing-review.md](findings/research/2026-09-metal-integration/report-backing-review.md).
-- Related reviews: [memory](findings/research/report-memory-review.md),
-  [recovery](findings/research/2026-09-metal-integration/report-recovery-review.md),
-  [original external report](report.md). The new VMM continuation analysis
-  supersedes interpretations that treat channel presence as arena readiness.
-- Mid-review hashes identify criticized concurrent snapshots:
-  RaphaelGPU.cpp e206b20612b46948944f4662dc2aaa375a1762b4932882c9d942b54fc34de92e;
-  RecoveryLease.hpp aa6be6adc4f04d7e23f0d2c3eda7d78cc583f156c953029136fb48768b6e90f6;
-  recovery_lease_v2.py e81fd24e7571a4b0d9f89d728614a3e6dd912a1f45dcc37f8050bf7bd0078f04;
-  functional-regression.py 370496633b22fb2e2d83aa30cf79cba1d6621f618b1485be94efb28a667591c6.
-  These are development snapshots, not release identities.
-
-Fresh checks were read-only hash, text/JSON, native dispatch, and instruction
-analysis. No fresh driver/unit-test pass or native execution result is claimed.
+Correct compute values, rendered pixels and later real desktop presentation are
+still required. A conversion counter, readable diagnostic walk, completed paging
+packet, or successful cleanup is a milestone, not full acceleration.

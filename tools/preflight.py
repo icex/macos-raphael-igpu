@@ -202,6 +202,45 @@ def main():
     if not prepare_ok:
         bad += 1
 
+    update_start = source.find("static void wrapVmmUpdateEntries(void *self")
+    update_end = source.find("static bool recoveryLeaseDisjointFromLiveGart", update_start)
+    update = source[update_start:update_end] if update_end > update_start else ""
+    update_order = [update.find(token) for token in (
+        "RaphaelVm::prepareEntryUpdate(",
+        "RaphaelVm::forwardEntryUpdate(native, self, decision)",
+        "vmUpdateChildSamples.append(decision)",
+        "__atomic_fetch_add(&vmUpdateCounts[")]
+    update_forbidden = ("fbRead(", "fbWrite(", "RLOG(", "CRLOG(", "IOSleep(",
+                        "fbAperture(", "IOLock", "new ", "alloc(")
+    update_guard = (
+        "static const uint8_t updateEntry[]" in source and
+        "0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41," in source and
+        "0x55, 0x41, 0x54, 0x53, 0x48, 0x83, 0xec, 0x48" in source and
+        "entryMatches(\n                    addr, sz, kOffVmmUpdateEntries" in source and
+        "orgVmmUpdateEntries = patcher.routeFunction(" in source)
+    update_ok = (
+        update_start >= 0 and update_end > update_start and
+        all(position >= 0 for position in update_order) and
+        update_order == sorted(update_order) and
+        not any(token in update for token in update_forbidden) and
+        "vmRootFixMode == 4" in update and
+        "__atomic_load_n(&raphaelTargetConfirmed, __ATOMIC_ACQUIRE)" in update and
+        "__atomic_load_n(&cachedFbPublished, __ATOMIC_ACQUIRE)" in update and
+        update_guard)
+    print(f"VM entry callback    {'ok (source-only/native/sample/count; exact route guard)' if update_ok else 'INVALID ORDER, HOT-PATH OPERATION, OR ROUTE GUARD'}")
+    if not update_ok:
+        bad += 1
+
+    correlation_ok = (
+        "const auto correlation = RaphaelVm::correlateSubmit(" in source and
+        "correlation.matchedIndex != RaphaelVm::kNoProgramMatch" in source and
+        "RaphaelVm::correlationReasonName(correlation.reason)" in source and
+        "VM: correlate-submit order=%u thread=0x%llx hint=%u result=%u reason=%s" in source and
+        "static bool submitFitsProgram" not in source)
+    print(f"VM correlation      {'ok (tested same-thread/order/range matcher)' if correlation_ok else 'INVALID OR DUPLICATE PRODUCTION MATCHER'}")
+    if not correlation_ok:
+        bad += 1
+
     setvm_pointer_abi = ("static uintptr_t wrapGfx10SetVMRegs(void *self)" in source and
                          "static uint32_t wrapGfx10SetVMRegs(void *self)" not in source)
     print(f"setVMRegisters ABI   {'ok (pointer-width return)' if setvm_pointer_abi else 'INVALID RETURN TYPE'}")

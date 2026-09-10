@@ -1,3 +1,9 @@
+Experimental RaphaelGPU 1.0.183 candidate for macOS Sequoia 15.7.9 (24G830).
+
+Candidate 1.0.183 is the next separately admitted functional experiment. KDK disassembly and candidate 182 show that `getPDEValue`/`getPTEValue` form zero-address templates while `AMDHWVMContext::updateContiguousPTEsWithDMAUsingAddr` receives the separate real source address. In `rgpuvmroot=4`, the single updater route converts only that real source operand for a valid non-SYSTEM entry whose complete batch stays inside the framebuffer aperture. It preserves the destination, template, count, increment, native VMM allocators, root repair, engine settings, and recovery protocol.
+
+The card requires a returned child updater sample proving converted source forwarding and the expected entry composition, and records bounded source-domain and submit-correlation diagnostics. This is not an observation of encoded SDMA packet bytes or proof that the GPU executed them. The run remains bounded to 180 seconds with one unchanged 45-second probe, schema-2 capture, schema-3 recovery, no budget extension, and no automatic retry. It compares candidates 182, 181, and 171. Build, staging, preparation, and hardware execution remain separate reviewed steps.
+
 Experimental RaphaelGPU 1.0.182 candidate for macOS Sequoia 15.7.9 (24G830).
 
 Candidate 1.0.182 keeps the mode-3 entry conversion and adds what candidate 181 showed was missing: the Raphael marker is confirmed at `AMDHWVMM::init`, before the VMM arena exists, so the conversion gate cannot open late; every `getPDEValue`/`getPTEValue` call is sampled with its address domain and calls made before the gate are counted; the VMID2 page tables are walked through BAR0 at the prepared phase. Candidate 181 reached the probe (GPU completion timeout, 18 submissions) and its stopped-device page directory held an unconverted MC child address.

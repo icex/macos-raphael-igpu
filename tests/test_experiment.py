@@ -734,6 +734,29 @@ class ExperimentTests(unittest.TestCase):
         self.assertTrue(tool.definitive_capture_loss(corrupt))
         self.assertTrue(tool.definitive_capture_loss(legacy))
 
+    def test_live_capture_state_never_admits_pending_evidence(self):
+        tool = self.module()
+        pending = [{'kind':'capture_loss',
+                    'reason':'CR2: CR2 snapshot has a missing chunk',
+                    'definitive':False}]
+        fatal = [dict(pending[0], definitive=True)]
+        abort = [{'kind':'recovery_lease_wire', 'raw':'XH2 ABORT reason=duplicate'}]
+        self.assertEqual(tool.live_capture_state([]), 'complete')
+        self.assertEqual(tool.live_capture_state(pending), 'pending')
+        self.assertEqual(tool.live_capture_state(fatal), 'fatal')
+        self.assertEqual(tool.live_capture_state(abort), 'fatal')
+
+    def test_candidate182_recovery_receipt_remains_valid_with_sealed_helpers(self):
+        tool = self.module()
+        archive = ROOT / 'findings/experiments/metal-015-182/raw'
+        manifest = json.loads((archive / 'manifest.json').read_text())
+        receipt = json.loads((archive / 'recovery.json').read_text())
+        self.assertEqual(tool.validate_recovery_receipt_v6(
+            receipt, manifest['boot_id'], manifest['run_id'],
+            manifest['recovery_helpers_sha256']), [])
+        self.assertEqual(self.recovery_helper_hashes(3),
+                         manifest['recovery_helpers_sha256'])
+
     def test_legacy_recovery_keeps_strict_unrelated_replay_conflict_gate(self):
         tool = self.module()
         run_id = '00112233445566778899aabbccddeeff'
@@ -2538,6 +2561,9 @@ class ExperimentTests(unittest.TestCase):
     def test_definitive_capture_loss_stops_without_using_remaining_budget(self):
         self.exercise_run('capture-loss')
 
+    def test_pending_capture_uses_existing_deadline_without_running_probe(self):
+        self.exercise_run('capture-pending-timeout')
+
     def test_runtime_abort_after_validated_launch_attempts_guest_shutdown_first(self):
         self.exercise_run('runtime-abort')
 
@@ -2829,6 +2855,13 @@ class ExperimentTests(unittest.TestCase):
             if mode == 'gpu-less': actual['vfio_args'] = []
             monitor_type = ImmediateMonitor if mode in ('monitor-capture', 'monitor-fault') \
                 else tool.HostMonitor
+            original_parse_manifest_serial = tool.parse_manifest_serial
+            def parse_manifest_serial(classifier, prepared, captured):
+                if mode == 'capture-pending-timeout':
+                    return [{'kind':'capture_loss', 'build':prepared['build_id'],
+                             'reason':'CR2: CR2 snapshot has a missing chunk',
+                             'definitive':False}]
+                return original_parse_manifest_serial(classifier, prepared, captured)
             with patch.object(tool, 'current_identity', return_value=manifest), \
                  patch.object(tool, 'host_snapshot', return_value=host), \
                  patch.object(tool, 'helper', side_effect=helpers), \
@@ -2836,6 +2869,8 @@ class ExperimentTests(unittest.TestCase):
                  patch.object(tool, 'kernel_updates', side_effect=kernel), \
                  patch.object(tool, 'HostMonitor', monitor_type), \
                  patch.object(tool, 'run_probe', side_effect=probe), \
+                 patch.object(tool, 'parse_manifest_serial',
+                              side_effect=parse_manifest_serial), \
                  patch.object(tool.time, 'time', side_effect=lambda:now[0]), \
                  patch.object(tool.time, 'sleep', side_effect=lambda n:now.__setitem__(0,now[0]+n)):
                 out = vm/'evidence'
@@ -2872,6 +2907,13 @@ class ExperimentTests(unittest.TestCase):
                     self.assertEqual(result['verdict'], 'INVALID')
                     self.assertIn(('stop','c'*64), calls)
                     self.assertNotIn(('guest-shutdown','c'*64, 'fixture'), calls)
+                elif mode == 'capture-pending-timeout':
+                    self.assertEqual(result['verdict'], 'INVALID')
+                    self.assertIn('critical capture remained incomplete',
+                                  result['termination_reason'])
+                    self.assertEqual(result['termination_reason'], result['error'])
+                    self.assertEqual(calls.count('probe'), 0)
+                    self.assertGreaterEqual(now[0], 255)
                 elif mode in ('probe-ready', 'probe-no-budget'):
                     self.assertEqual(result['verdict'], 'INCONCLUSIVE')
                     self.assertEqual(result['earliest_failure'],
@@ -2890,6 +2932,11 @@ class ExperimentTests(unittest.TestCase):
                                   'capture-loss'):
                     self.assertIn(('recover', 'a'*32), calls)
                 if mode == 'capture-loss': self.assertLess(now[0], 110)
+                if mode == 'capture-loss':
+                    self.assertEqual(result['termination_reason'], result['error'])
+                    self.assertIn('definitive critical capture loss',
+                                  result['termination_reason'])
+                    self.assertIn('functional_boundary', result)
                 self.assertTrue((out/'verdict.json').exists())
                 self.assertTrue((vm/'run/used-gpu-boots/boot-A.json').exists())
                 second = tool.run_one(vm,path,vm/'second')
