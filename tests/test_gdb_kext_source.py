@@ -62,7 +62,7 @@ class GdbKextSourceTests(unittest.TestCase):
                              "/tmp/kernel.symbols", "/tmp/RaphaelGPU.dSYM",
                              0x42130, "wrapVmmUpdateEntries",
                              bytes.fromhex("554889e541574156"), [0x42200, 0x42220],
-                             "/tmp/rgpu-release-old/src")
+                             "/tmp/rgpu-release-old/src", 0xf40b702c00)
         self.assertIn("MAX_HEADER = 65536", text)
         self.assertIn("MAX_KMODS = 256", text)
         self.assertIn("KMOD_NAME = 0x10", text)
@@ -71,17 +71,21 @@ class GdbKextSourceTests(unittest.TestCase):
         self.assertIn("FUNCTION_OFFSET = 0x42130", text)
         self.assertIn("WRAPPER_NAME = 'wrapVmmUpdateEntries'", text)
         self.assertIn("set substitute-path /tmp/rgpu-release-old/src /tmp/source", text)
+        self.assertIn("TARGET_GPU_ADDRESS = 1048163920896", text)
+        self.assertLess(text.index("disable 2"), text.index("continue\npython\nif int"))
+        self.assertLess(text.index("disable 1\nenable 2\nenable 3"),
+                        text.index("condition 2"))
         for register in ('rdi', 'rsi', 'rdx', 'rcx', 'r8', 'r9'):
             self.assertIn("$entry_" + register, text)
         self.assertIn("safe_memory('self-before'", text)
-        self.assertIn("finish", text)
+        self.assertIn("hbreak *$entry_return", text)
         self.assertIn("safe_memory('self-after-return'", text)
         self.assertIn("GPU addresses; intentionally not dereferenced", text)
         self.assertIn("runtime wrapper bytes mismatch", text)
         self.assertIn("native boundary stop PC mismatch", text)
-        self.assertIn("native boundary thread mismatch", text)
-        self.assertIn("return thread mismatch", text)
+        self.assertIn("native call identity mismatch", text)
         self.assertIn("return stop PC mismatch", text)
+        self.assertIn("return stack mismatch", text)
         self.assertIn("print cachedFbOffset", text)
         self.assertIn("info source", text)
         self.assertIn("info locals", text)
@@ -93,6 +97,75 @@ class GdbKextSourceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "function offset"):
             tool.generate(0xffffff801b6e8000, "474ef697fc283ba283a4763d76c8e200",
                           "/tmp/kernel", "/tmp/dsym", 0, "wrapVmmUpdateEntries")
+
+    def test_native_call_identity_uses_frame_return_and_stable_arguments(self):
+        entry_args = (0x1000, 0x2000, 1, 0x3000, 0x271, 0x10000)
+        self.assertTrue(tool.matching_native_call(
+            0x8000, 0x9000, entry_args, 0x7ff8, 0x9000,
+            (0x1000, 0x2000, 1, 0x4000, 0x271, 0x10000)))
+        for rbp, saved_return, outgoing in (
+                (0x7000, 0x9000, entry_args),
+                (0x7ff8, 0xa000, entry_args),
+                (0x7ff8, 0x9000, (0x1001, *entry_args[1:])),
+                (0x7ff8, 0x9000, (*entry_args[:4], 0x272, entry_args[5]))):
+            self.assertFalse(tool.matching_native_call(
+                0x8000, 0x9000, entry_args, rbp, saved_return, outgoing))
+
+    def test_target_coverage_is_overflow_safe_and_boundary_exact(self):
+        target = 0xf40b702c00
+        self.assertTrue(tool.update_covers(target, 1, target))
+        self.assertTrue(tool.update_covers(target - 8, 2, target))
+        self.assertFalse(tool.update_covers(target - 8, 1, target))
+        self.assertFalse(tool.update_covers(target, 0, target))
+        self.assertFalse(tool.update_covers(0, 1 << 61, target))
+
+    def test_invalidate_info_and_prepared_root_decode_are_exact_and_bounded(self):
+        raw = bytearray(0x28)
+        struct.pack_into("<IIQQQI", raw, 0, 0, 1, 0x400000000,
+                         0x23ffffffff, 0xf40b6ff000, 0xff)
+        raw[0x24] = 1
+        self.assertEqual(tool.decode_invalidate_info(bytes(raw)),
+                         (0, 1, 0xf40b6ff000, 1))
+        with self.assertRaisesRegex(ValueError, "0x28"):
+            tool.decode_invalidate_info(bytes(raw[:-1]))
+        prepared = bytearray(0x54)
+        struct.pack_into("<I", prepared, 4, 0x4b6ff000)
+        struct.pack_into("<I", prepared, 12, 0x8)
+        self.assertEqual(tool.decode_prepared_root(bytes(prepared)), 0x84b6ff000)
+        with self.assertRaisesRegex(ValueError, "0x54"):
+            tool.decode_prepared_root(bytes(prepared[:-1]))
+
+    def test_vmid1_root_scenario_captures_request_native_copy_and_prepared_output(self):
+        text = tool.generate(0xffffff801b6e8000, "474ef697fc283ba283a4763d76c8e200",
+                             "/tmp/kernel.symbols", "/tmp/RaphaelGPU.dSYM",
+                             0x41000, "wrapVmmPrepare",
+                             bytes.fromhex("554889e541574156"), [0x41100],
+                             "/tmp/rgpu-release-old/src", scenario="vmid1-root")
+        self.assertIn("SCENARIO = 'vmid1-root'", text)
+        self.assertIn("hub == 0 and vmid == 1 and reprogram == 1", text)
+        self.assertIn("safe_memory('vmid1-original-info'", text)
+        self.assertIn("safe_memory('vmid1-native-info'", text)
+        self.assertIn("VMID1_ORIGINAL_ROOT", text)
+        self.assertIn("VMID1_NATIVE_ROOT", text)
+        self.assertIn("VMID1_PREPARED_CPU_OUTPUT", text)
+        self.assertIn("ACTUAL_REGISTER_PROGRAMMING_UNESTABLISHED", text)
+        self.assertIn("$rdi==$entry_rdi && $rsi==$entry_rsi && $rcx==$entry_rcx", text)
+        self.assertNotIn("$rdx==$entry_rdx", text)
+
+    def test_vmid1_root_rejects_artifact_without_frame_pointer_prologue(self):
+        with self.assertRaisesRegex(ValueError, "frame-pointer prologue"):
+            tool.generate(0xffffff801b6e8000, "474ef697fc283ba283a4763d76c8e200",
+                          "/tmp/kernel", "/tmp/dsym", 0x41000,
+                          "wrapVmmPrepare", bytes.fromhex("4883ec2841574156"),
+                          [0x41100], scenario="vmid1-root")
+
+    def test_prepare_native_call_pair_allows_copied_info_pointer(self):
+        self.assertTrue(tool.matching_native_call(
+            0x8000, 0x9000, (1, 2, 3, 4), 0x7ff8, 0x9000,
+            (1, 2, 99, 4), stable_indices=(0, 1, 3)))
+        self.assertFalse(tool.matching_native_call(
+            0x8000, 0x9000, (1, 2, 3, 4), 0x7ff8, 0x9000,
+            (1, 7, 99, 4), stable_indices=(0, 1, 3)))
 
 
 if __name__ == "__main__":

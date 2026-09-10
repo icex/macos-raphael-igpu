@@ -1,7 +1,9 @@
 import hashlib
+import copy
 import gzip
 import importlib.util
 import json
+import plistlib
 from pathlib import Path
 import re
 import tempfile
@@ -412,6 +414,21 @@ class Candidate186StageTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "candidate card contract"):
                 self.tool.validate_card(encoded, hashlib.sha256(encoded).hexdigest())
 
+    def test_candidate189_selects_corrected_client_root_card(self):
+        self.tool.configure("1.0.189", "metal-023")
+        raw = (ROOT / "experiments/metal-023.json").read_bytes()
+        card = self.tool.validate_card(raw, hashlib.sha256(raw).hexdigest())
+        self.assertEqual(card["raphael_source_sha256"],
+                         "7515f121230fbd26e32b198bd622e106155708e4108d9def96dcc7daa9d173f3")
+        self.assertEqual(card["max_seconds"], 180)
+        self.assertTrue(card["run_probe_only_after_native_start"])
+        self.assertEqual(card["launch_options"]["GDB"], "on")
+        old = dict(card, raphael_source_sha256=
+                   "db511634c6d292ef3a65285e56bd5cf5f9e03cf4c20680a27b96c46a18f2e9b0")
+        encoded = (json.dumps(old) + "\n").encode()
+        with self.assertRaisesRegex(RuntimeError, "candidate card contract"):
+            self.tool.validate_card(encoded, hashlib.sha256(encoded).hexdigest())
+
     def test_candidate188_debug_symbols_require_retained_files_and_matching_provenance(self):
         self.tool.configure("1.0.188", "metal-021")
         with tempfile.TemporaryDirectory() as directory:
@@ -542,6 +559,62 @@ class Candidate186StageTests(unittest.TestCase):
         historical = self.tool.validate_card(raw, hashlib.sha256(raw).hexdigest())
         self.assertEqual(self.tool.candidate_boot_flags(historical), [])
         self.assertEqual(historical["functional_boot_arguments"], {"rgpuvmroot": "4"})
+
+
+class Candidate188ResealTests(unittest.TestCase):
+    def setUp(self):
+        self.tool = load_tool()
+
+    def config(self, run_id):
+        lo, hi = self.tool.struct.unpack("<QQ", bytes.fromhex(run_id))
+        return {"NVRAM":{"Add":{self.tool.load_module(
+            "experiment_fixture", ROOT/"tools/experiment.py").BOOT_GUID:{
+                "boot-args":f"keep=1 rgpurnlo=0x{lo:x} rgpurnhi=0x{hi:x}"}}},
+                "Misc":{"Boot":{"Timeout":5}}}
+
+    def test_reseal_accepts_only_the_two_fresh_nonce_values(self):
+        old = "cb1d0aadd8186205d867a23fe175c336"
+        new = "c04e68a9874ba382fd61facb1ad73b61"
+        self.tool.validate_nonce_only_reseal(self.config(old), self.config(new), old, new)
+        changed = self.config(new); changed["Misc"]["Boot"]["Timeout"] = 6
+        with self.assertRaisesRegex(RuntimeError, "nonce-only"):
+            self.tool.validate_nonce_only_reseal(self.config(old), changed, old, new)
+
+    def test_reseal_nonce_comparison_accepts_binary_plist_fields(self):
+        old = "cb1d0aadd8186205d867a23fe175c336"
+        new = "c04e68a9874ba382fd61facb1ad73b61"
+        original = self.config(old)
+        replacement = self.config(new)
+        original["DeviceProperties"] = {"Add": {"PciRoot(0x0)": {
+            "ATY,bin_image": b"\x00\xff", "model": b"Raphael\x00"}}}
+        replacement["DeviceProperties"] = copy.deepcopy(
+            original["DeviceProperties"])
+        encoded = plistlib.dumps(original)
+        self.assertEqual(plistlib.loads(encoded)["DeviceProperties"],
+                         original["DeviceProperties"])
+        self.tool.validate_nonce_only_reseal(
+            plistlib.loads(encoded), replacement, old, new)
+
+    def test_reseal_preimage_hash_mismatch_refuses_before_publication(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp)/"media"; path.write_bytes(b"original")
+            self.tool.validate_reseal_preimages({"media":path},
+                {"media":hashlib.sha256(b"original").hexdigest()})
+            with self.assertRaisesRegex(RuntimeError, "preimage"):
+                self.tool.validate_reseal_preimages({"media":path}, {"media":"0"*64})
+
+    def test_reseal_rollback_restores_every_published_preimage(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); published = {}
+            rows = []
+            for name in ("raw", "boot", "config"):
+                target=root/name; backup=root/(name+".backup")
+                target.write_bytes(b"new"); backup.write_bytes(("old-"+name).encode())
+                published[name] = True; rows.append((name,target,backup))
+            self.tool.rollback_reseal(rows, published)
+            for name,target,backup in rows:
+                self.assertEqual(target.read_bytes(), ("old-"+name).encode())
+                self.assertFalse(backup.exists())
 
 
 if __name__ == "__main__":

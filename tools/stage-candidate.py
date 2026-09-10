@@ -9,6 +9,7 @@ created.
 """
 
 import argparse
+import copy
 import fcntl
 import gzip
 import hashlib
@@ -42,6 +43,8 @@ SUPPORTED_CARD_DIAGNOSTICS = {
     ("1.0.186", "metal-019"): "rgpuvmdiag=1",
     ("1.0.187", "metal-020"): "rgpuvmdiag=1",
     ("1.0.188", "metal-021"): "rgpuvmdiag=1",
+    ("1.0.188", "metal-022"): "rgpuvmdiag=1",
+    ("1.0.189", "metal-023"): "rgpuvmdiag=1",
 }
 
 
@@ -109,7 +112,8 @@ def validate_card(raw, expected_sha256):
         raise RuntimeError("candidate card contract mismatch")
     if pair in (("1.0.184", "metal-017"), ("1.0.185", "metal-018"),
                 ("1.0.186", "metal-019"), ("1.0.187", "metal-020"),
-                ("1.0.188", "metal-021")):
+                ("1.0.188", "metal-021"), ("1.0.188", "metal-022"),
+                ("1.0.189", "metal-023")):
         candidate_contract = {
             "critical_replay_tolerance": "terminal-prefix",
             "recovery_critical_replay_tolerance": "terminal-prefix-open",
@@ -120,7 +124,9 @@ def validate_card(raw, expected_sha256):
             "launch_options": ({
                 "BOOTDISK_MODE": "custom", "NVRAM": "stock",
                 "GENERIC_GRAPHICS": "off", "GDB": "on",
-            } if pair == ("1.0.188", "metal-021") else {
+            } if pair in (("1.0.188", "metal-021"),
+                          ("1.0.188", "metal-022"),
+                          ("1.0.189", "metal-023")) else {
                 "BOOTDISK_MODE": "custom", "NVRAM": "stock",
                 "GENERIC_GRAPHICS": "off",
             }),
@@ -131,21 +137,30 @@ def validate_card(raw, expected_sha256):
             card.get("functional_boot_arguments") != {"rgpuvmroot": "4"}:
         raise RuntimeError("candidate card contract mismatch")
     if pair in (("1.0.186", "metal-019"), ("1.0.187", "metal-020"),
-                ("1.0.188", "metal-021")):
+                ("1.0.188", "metal-021"), ("1.0.188", "metal-022"),
+                ("1.0.189", "metal-023")):
         candidate186_contract = {
             "functional_boot_arguments": {"rgpuvmroot": "4", "rgpudump": "5000"},
             "required_boot_flags": ["-liluheadless"],
-            "raphael_source_sha256":
-                "db511634c6d292ef3a65285e56bd5cf5f9e03cf4c20680a27b96c46a18f2e9b0",
+            "raphael_source_sha256": (
+                "7515f121230fbd26e32b198bd622e106155708e4108d9def96dcc7daa9d173f3"
+                if pair == ("1.0.189", "metal-023") else
+                "db511634c6d292ef3a65285e56bd5cf5f9e03cf4c20680a27b96c46a18f2e9b0"),
         }
         if any(card.get(key) != value
                for key, value in candidate186_contract.items()):
             raise RuntimeError("candidate card contract mismatch")
-    if pair == ("1.0.188", "metal-021"):
+    if pair in (("1.0.188", "metal-021"), ("1.0.188", "metal-022"),
+                ("1.0.189", "metal-023")):
         required = card.get("required_observations", [])
         prerequisites = card.get("prerequisites", [])
-        if ("gdb_vmid1_wrap_vmm_update_entries_inputs" not in required or
-                "gdb_vmid1_wrap_vmm_update_entries_native_output" not in required or
+        expected_gdb = ({"gdb_vmid1_wrap_vmm_update_entries_inputs",
+                         "gdb_vmid1_wrap_vmm_update_entries_native_output"}
+                        if pair == ("1.0.188", "metal-021") else
+                        {"gdb_vmid1_wrap_vmm_prepare_original_info",
+                         "gdb_vmid1_wrap_vmm_prepare_native_info",
+                         "gdb_vmid1_prepared_root", "gdb_hub0_vmid1_reprogram1"})
+        if (not expected_gdb.issubset(required) or
                 "gdb_debug_artifact_and_symbol_provenance_pinned" not in prerequisites):
             raise RuntimeError("candidate card contract mismatch")
     transport_path = Path(__file__).with_name("critical-transport.py")
@@ -234,7 +249,7 @@ def verify_worktree_before_import(expected_commit):
 
 
 def validate_debug_symbols(manifest, builder, executable, debug_dir,
-                           source_sha256):
+                           source_sha256, canonical_root=ROOT):
     """Authenticate the retained private debug bundle against the staged kext."""
     debug = manifest.get("debug_symbols")
     if not isinstance(debug, dict):
@@ -266,8 +281,8 @@ def validate_debug_symbols(manifest, builder, executable, debug_dir,
         raise RuntimeError("debug symbol provenance is malformed") from error
     if not isinstance(before, dict) or before != after:
         raise RuntimeError("canonical debug inputs changed")
-    canonical_script = ROOT / "tools/build-kext.sh"
-    canonical_inputs = ROOT / "build-support/inputs.json"
+    canonical_script = canonical_root / "tools/build-kext.sh"
+    canonical_inputs = canonical_root / "build-support/inputs.json"
     expected_before = {
         "build_script_sha256": sha_file(canonical_script),
         "tracked_source_sha256": source_sha256,
@@ -309,7 +324,8 @@ def validate_debug_symbols(manifest, builder, executable, debug_dir,
             '#define RGPU_BUILD_ID "' + manifest.get("build_id", "") + '"\n'):
         raise RuntimeError("debug build identity source mismatch")
     try:
-        expected_firmware = gzip.decompress((ROOT / "build-support/rlc_fw.h.gz").read_bytes())
+        expected_firmware = gzip.decompress(
+            (canonical_root / "build-support/rlc_fw.h.gz").read_bytes())
     except (OSError, EOFError, gzip.BadGzipFile) as error:
         raise RuntimeError("pinned firmware source unavailable") from error
     if firmware.read_bytes() != expected_firmware:
@@ -380,7 +396,8 @@ def verify_build_inputs(experiment, builder, expected_commit,
             CANDIDATE_VERSION, CANDIDATE_VERSION):
         raise RuntimeError("candidate Info.plist version mismatch")
     builder.validate_macho(executable.read_bytes())
-    if (CANDIDATE_VERSION, CARD_ID) == ("1.0.188", "metal-021"):
+    if (CANDIDATE_VERSION, CARD_ID) in (
+            ("1.0.188", "metal-021"), ("1.0.189", "metal-023")):
         validate_debug_symbols(manifest, builder, executable,
                                DIST / "debug-symbols",
                                card_source_sha256)
@@ -504,6 +521,186 @@ def write_synced_exclusive(path, data):
         stream.write(data)
         stream.flush()
         os.fsync(stream.fileno())
+
+
+def validate_reseal_preimages(paths, expected):
+    """Refuse before publication unless every named live preimage is exact."""
+    if set(paths) != set(expected) or any(
+            not re.fullmatch(r"[0-9a-f]{64}", str(expected.get(name, ""))) or
+            sha_file(path) != expected[name] for name, path in paths.items()):
+        raise RuntimeError("candidate 188 reseal preimage changed")
+
+
+def validate_nonce_only_reseal(original, replacement, old_run_id, new_run_id):
+    """Prove that a prepared config changes only the two recovery nonce words."""
+    experiment = load_module("reseal_experiment", ROOT / "tools/experiment.py")
+    old_lo, old_hi = experiment.recovery_nonce_words(old_run_id)
+    new_lo, new_hi = experiment.recovery_nonce_words(new_run_id)
+    if old_run_id == new_run_id:
+        raise RuntimeError("candidate 188 reseal requires a fresh run ID")
+    copies = []
+    for config, lo, hi in ((original, old_lo, old_hi),
+                           (replacement, new_lo, new_hi)):
+        try:
+            value = copy.deepcopy(config)
+            nvram = value["NVRAM"]["Add"][experiment.BOOT_GUID]
+            words = nvram["boot-args"].split()
+            switches = dict(word.split("=", 1) for word in words if "=" in word)
+            if (switches.get("rgpurnlo") != f"0x{lo:x}" or
+                    switches.get("rgpurnhi") != f"0x{hi:x}"):
+                raise RuntimeError("nonce mismatch")
+            nvram["boot-args"] = " ".join(word for word in words
+                if word.split("=", 1)[0] not in ("rgpurnlo", "rgpurnhi"))
+            copies.append(value)
+        except (KeyError, TypeError, ValueError, RuntimeError):
+            raise RuntimeError("candidate 188 reseal is not nonce-only") from None
+    if copies[0] != copies[1]:
+        raise RuntimeError("candidate 188 reseal is not nonce-only")
+
+
+def rollback_reseal(rows, published):
+    """Restore exact hard-linked preimages for a partially published reseal."""
+    errors = []
+    for name, target, backup in rows:
+        try:
+            if published.get(name) and Path(backup).exists():
+                os.replace(backup, target)
+            elif Path(backup).exists():
+                Path(backup).unlink()
+        except BaseException as error:
+            errors.append(f"{name}:{type(error).__name__}:{error}")
+    if errors:
+        raise RuntimeError("candidate 188 reseal rollback incomplete: " + ";".join(errors))
+
+
+def reseal_candidate188(expected_commit, expected_boot_id, expected_card_sha256,
+                        run_id, image_id, expected_staging_sha256,
+                        expected_raw_sha256, expected_bootdisk_sha256,
+                        expected_config_sha256):
+    """Reseal candidate 188 media for one fresh nonce; never replace its staging."""
+    if (CANDIDATE_VERSION, CARD_ID) != ("1.0.188", "metal-022"):
+        raise RuntimeError("reseal requires exact candidate 188 / metal-022")
+    exact_hex(run_id, 32, "run ID")
+    exact_hex(expected_commit, 40, "coordinator commit")
+    for value, label in ((expected_staging_sha256, "staging digest"),
+                         (expected_raw_sha256, "raw preimage"),
+                         (expected_bootdisk_sha256, "bootdisk preimage"),
+                         (expected_config_sha256, "config preimage")):
+        exact_hex(value, 64, label)
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}", str(image_id or "")):
+        raise RuntimeError("Docker image must be an exact sha256 identity")
+    if ROOT.resolve() != Path(command(["git", "-C", str(ROOT), "rev-parse", "--show-toplevel"])).resolve():
+        raise RuntimeError("reseal tool is outside its repository")
+    if (command(["git", "-C", str(ROOT), "rev-parse", "HEAD"]) != expected_commit or
+            command(["git", "-C", str(ROOT), "status", "--porcelain"])):
+        raise RuntimeError("reseal coordinator worktree is not the reviewed clean commit")
+    card = validate_card(CARD.read_bytes(), expected_card_sha256)
+    if command(["docker", "image", "inspect", "--format", "{{.Id}}", image_id]) != image_id:
+        raise RuntimeError("Docker image identity changed")
+    experiment = load_module("candidate188_reseal_experiment", ROOT / "tools/experiment.py")
+    staging_path = CANDIDATE / "staging.json"
+    if sha_file(staging_path) != expected_staging_sha256:
+        raise RuntimeError("candidate 188 staging record changed")
+    staging = json.loads(staging_path.read_text())
+    bundle = CANDIDATE / "RaphaelGPU.kext"
+    if (staging.get("candidate_version") != "1.0.188" or
+            staging.get("run_id") != "cb1d0aadd8186205d867a23fe175c336" or
+            sha_file(bundle/"Contents/MacOS/RaphaelGPU") != staging.get("executable_sha256") or
+            sha_file(bundle/"Contents/Info.plist") != staging.get("info_manifest_sha256")):
+        raise RuntimeError("candidate 188 artifact differs from its staging record")
+    build_root = Path(staging.get("worktree", WT))
+    if (command(["git", "-C", str(build_root), "rev-parse", "HEAD"]) !=
+            staging.get("source_commit") or
+            command(["git", "-C", str(build_root), "status", "--porcelain"])):
+        raise RuntimeError("candidate 188 build worktree provenance changed")
+    build_manifest = json.loads((CANDIDATE / "build-manifest.json").read_text())
+    builder = load_module("candidate188_reseal_builder",
+                          build_root / "tools/build-release.py")
+    validate_debug_symbols(
+        build_manifest, builder, bundle / "Contents/MacOS/RaphaelGPU",
+        DIST / "debug-symbols", staging["source_sha256"], build_root)
+    record_dir = VM / "run/candidate-188-reseals"
+    record_path = record_dir / (run_id + ".json")
+    if record_path.exists():
+        raise RuntimeError("candidate 188 reseal run ID already exists")
+    raw_image, bootdisk, config_path = (VM/"run/oc-raw.img", VM/"OpenCore.qcow2", VM/"config.plist")
+    expected_preimages = {"raw":expected_raw_sha256, "boot":expected_bootdisk_sha256,
+                          "config":expected_config_sha256}
+    paths = {"raw":raw_image, "boot":bootdisk, "config":config_path}
+    token = uuid.uuid4().hex
+    private_raw = VM/f"run/.candidate188-reseal-{token}.raw"
+    candidate_qcow = VM/f".OpenCore-candidate188-reseal-{token}.qcow2"
+    verify_raw = VM/f"run/.candidate188-reseal-verify-{token}.raw"
+    config_temp = VM/f".config-candidate188-reseal-{token}.plist"
+    backups = {name:path.with_name(path.name+f".backup-reseal-{token}")
+               for name,path in paths.items()}
+    published = {name:False for name in paths}
+    with (VM/"run/experiment.lock").open("a") as experiment_lock:
+      fcntl.flock(experiment_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+      with (VM/"run/redeploy.lock").open("a") as media_lock:
+        fcntl.flock(media_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        if Path("/proc/sys/kernel/random/boot_id").read_text().strip() != expected_boot_id:
+            raise RuntimeError("reseal boot authority changed")
+        if active_or_pending_vm(): raise RuntimeError("active or pending VM prevents reseal")
+        validate_reseal_preimages(paths, expected_preimages)
+        try:
+            original_bytes, staged_bytes, boot_args, nonce_lo, nonce_hi = \
+                make_staged_config(experiment, card, run_id)
+            xml = original_bytes.index(b"<?xml"); staged_xml = staged_bytes.index(b"<?xml")
+            validate_nonce_only_reseal(plistlib.loads(original_bytes[xml:]),
+                                       plistlib.loads(staged_bytes[staged_xml:]),
+                                       staging["run_id"], run_id)
+            shutil.copyfile(raw_image, private_raw)
+            experiment.stage_image(private_raw, bundle, staged_bytes)
+            qconvert(image_id, private_raw, "raw", candidate_qcow, "qcow2")
+            qconvert(image_id, candidate_qcow, "qcow2", verify_raw, "raw")
+            intended = dict(binary_sha256=staging["executable_sha256"],
+                            info_sha256=staging["info_manifest_sha256"],
+                            config_sha256=sha_bytes(staged_bytes))
+            for image in (private_raw, verify_raw):
+                errors = experiment.validate_identity(intended, experiment.image_files(image))
+                if errors: raise RuntimeError("resealed media readback failed: "+",".join(errors))
+            validate_reseal_preimages(paths, expected_preimages)
+            for path in (private_raw, candidate_qcow):
+                with path.open("rb") as stream:
+                    os.fsync(stream.fileno())
+            for name,path in paths.items(): os.link(path, backups[name])
+            write_synced_exclusive(config_temp, staged_bytes)
+            validate_reseal_preimages(paths, expected_preimages)
+            armed_replace(private_raw, raw_image, published, "raw")
+            armed_replace(candidate_qcow, bootdisk, published, "boot")
+            armed_replace(config_temp, config_path, published, "config")
+            errors = experiment.validate_identity(intended, experiment.image_files(raw_image))
+            if errors or sha_file(config_path) != intended["config_sha256"]:
+                raise RuntimeError("published reseal raw/config readback failed")
+            verify_raw.unlink(missing_ok=True)
+            qconvert(image_id, bootdisk, "qcow2", verify_raw, "raw")
+            errors = experiment.validate_identity(intended, experiment.image_files(verify_raw))
+            if errors: raise RuntimeError("published reseal qcow readback failed: "+",".join(errors))
+            sync_dir(VM); sync_dir(VM/"run")
+            record_dir.mkdir(parents=True, exist_ok=True)
+            record = {"schema":1,"kind":"candidate188-nonce-reseal",
+                "boot_id":expected_boot_id,"run_id":run_id,"prior_run_id":staging["run_id"],
+                "coordinator_commit":expected_commit,
+                "experiment_card_sha256":expected_card_sha256,
+                "image_id":image_id,
+                "candidate_staging_sha256":expected_staging_sha256,
+                "preimages":expected_preimages,"boot_args":boot_args,
+                "nonce_lo":nonce_lo,"nonce_hi":nonce_hi,
+                "binary_sha256":intended["binary_sha256"],
+                "info_sha256":intended["info_sha256"],
+                "config_sha256":intended["config_sha256"],
+                "raw_sha256":sha_file(raw_image),"bootdisk_sha256":sha_file(bootdisk),
+                "backups":{name:str(path) for name,path in backups.items()}}
+            write_synced_exclusive(record_path, json.dumps(record, indent=2)+"\n")
+            sync_dir(record_dir)
+            return record
+        except BaseException:
+            rollback_reseal([(name,paths[name],backups[name]) for name in paths], published)
+            sync_dir(VM); sync_dir(VM/"run")
+            raise
+        finally:
+            for path in (private_raw,candidate_qcow,verify_raw,config_temp): path.unlink(missing_ok=True)
 
 
 def armed_replace(source, target, published, name, replace=os.replace):
@@ -649,9 +846,9 @@ def stage(expected_commit, expected_boot_id, expected_card_sha256,
         image_id, card.get("raphael_source_sha256"))
     candidate186 = (CANDIDATE_VERSION, CARD_ID) in (
         ("1.0.186", "metal-019"), ("1.0.187", "metal-020"),
-        ("1.0.188", "metal-021"))
+        ("1.0.188", "metal-021"), ("1.0.189", "metal-023"))
     if candidate186 and identities["source_sha256"] != card["raphael_source_sha256"]:
-        raise RuntimeError("candidate 186/187 changed the candidate 185 Raphael source")
+        raise RuntimeError("candidate source differs from its experiment card")
     lilu = (validate_lilu_inputs(
         lilu_bundle, expected_lilu_executable_sha256,
         expected_lilu_info_sha256, expected_lilu_build_manifest_sha256)
@@ -993,10 +1190,23 @@ def main():
     parser.add_argument("--expected-lilu-executable-sha256")
     parser.add_argument("--expected-lilu-info-sha256")
     parser.add_argument("--expected-lilu-build-manifest-sha256")
+    parser.add_argument("--reseal-run-id")
+    parser.add_argument("--expected-staging-sha256")
+    parser.add_argument("--expected-raw-sha256")
+    parser.add_argument("--expected-bootdisk-sha256")
+    parser.add_argument("--expected-config-sha256")
     args = parser.parse_args()
     if not args.execute:
         parser.error("refusing mutation without the reviewed --execute flag")
     configure(args.candidate_version, args.card_id)
+    if args.reseal_run_id:
+        result = reseal_candidate188(
+            args.expected_commit, args.expected_boot_id,
+            args.expected_card_sha256, args.reseal_run_id, args.image_id,
+            args.expected_staging_sha256, args.expected_raw_sha256,
+            args.expected_bootdisk_sha256, args.expected_config_sha256)
+        print(json.dumps(result, indent=2))
+        return
     stage(args.expected_commit, args.expected_boot_id,
           args.expected_card_sha256, args.expected_identities_sha256,
           args.image_id, args.lilu_bundle,

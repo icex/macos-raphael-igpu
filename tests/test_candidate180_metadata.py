@@ -38,10 +38,10 @@ class Candidate180MetadataTests(unittest.TestCase):
         self.assertIn('no automatic retry', card['repeat_policy'])
         self.assertEqual(card['regression_baselines']['immediate'], 'run/metal-013-180')
 
-    def test_bundle_metadata_is_exact_latest_candidate188_version(self):
+    def test_bundle_metadata_pending_candidate189_preserves_candidate188_card(self):
         info = plistlib.loads((ROOT / 'kext/Info.plist').read_bytes())
-        self.assertEqual(info['CFBundleShortVersionString'], '1.0.188')
-        self.assertEqual(info['CFBundleVersion'], '1.0.188')
+        self.assertEqual(info['CFBundleShortVersionString'], '1.0.189')
+        self.assertEqual(info['CFBundleVersion'], '1.0.189')
         latest = json.loads((ROOT / 'experiments/metal-021.json').read_text())
         self.assertEqual(latest['id'], 'metal-021')
         self.assertEqual(latest['candidate_version'], '1.0.188')
