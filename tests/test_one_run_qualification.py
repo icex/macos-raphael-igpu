@@ -236,5 +236,17 @@ class OneRunQualificationTests(unittest.TestCase):
         self.assertEqual(after, before)
 
 
+class CoordinatorIdentityGateTests(unittest.TestCase):
+    def test_reservation_identity_gate_uses_manifest_lease_schema(self):
+        source = (ROOT / 'tools/experiment.py').read_text()
+        start = source.index('def reserve_candidate179_qualification')
+        end = source.index('def reserve_warm_qualification', start)
+        body = source[start:end]
+        gate = body[body.index('identity_gate = current_identity('):]
+        self.assertIn("recovery_lease_schema=manifest.get('recovery_lease_schema', 2))",
+                      gate[:gate.index('identity_gate.update(')])
+        self.assertIn("helper_name = authorization.get('helper_name'", body)
+
+
 if __name__ == '__main__':
     unittest.main()
