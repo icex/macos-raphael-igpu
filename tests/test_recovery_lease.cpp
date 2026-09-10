@@ -1,9 +1,11 @@
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <map>
 #include <string>
+#include <thread>
 
 #include "../src/RecoveryLease.hpp"
 
@@ -182,6 +184,31 @@ int main() {
             ordered.phase() == Phase::Invalid,
             "duplicate ready epoch performs no second native mutation");
 
+    for (unsigned iteration = 0; iteration < 1000; ++iteration) {
+        LeaseState concurrentReady {};
+        std::atomic<unsigned> readyThreads {0};
+        std::atomic<unsigned> appendCalls {0};
+        std::atomic<unsigned> nativeCalls {0};
+        auto attempt = [&] {
+            ++readyThreads;
+            while (readyThreads.load() != 2) std::this_thread::yield();
+            establishBeforeVmm(
+                concurrentReady, nonceLo, nonceHi, 0x10000000,
+                [] { return true; },
+                [&] { ++appendCalls; return 0x0faf3000ULL; },
+                [](const OwnershipDescriptor &) { return true; },
+                [](const OwnershipDescriptor &) { return true; },
+                [&] { ++nativeCalls; });
+        };
+        std::thread first(attempt);
+        std::thread second(attempt);
+        first.join();
+        second.join();
+        require(appendCalls.load() == 1 && nativeCalls.load() <= 1 &&
+                concurrentReady.phase() == Phase::Invalid,
+                "concurrent ready calls permit at most one append/native epoch");
+    }
+
     LeaseState wrongOwner {};
     unsigned ownerAppend = 0, ownerNative = 0;
     require(!establishBeforeVmm(wrongOwner, nonceLo, nonceHi, 0x10000000,
@@ -261,6 +288,30 @@ int main() {
                                   goodFullAddress, goodFullAddress, goodFullAddress),
             "ACTIVE cannot be republished or reuse a stale element");
 
+    for (unsigned iteration = 0; iteration < 2000; ++iteration) {
+        LeaseState raced {};
+        require(raced.publishOwned(owned) && raced.beginPoolInit() &&
+                raced.finishPoolInit(active, reinterpret_cast<void *>(0x1234),
+                                     goodFullAddress, goodFullAddress,
+                                     goodFullAddress),
+                "commit/invalidate race fixture reaches POOL_VERIFIED");
+        std::atomic<unsigned> ready {0};
+        std::thread committer([&] {
+            ++ready;
+            while (ready.load() != 2) std::this_thread::yield();
+            raced.commitPoolPublication();
+        });
+        std::thread invalidator([&] {
+            ++ready;
+            while (ready.load() != 2) std::this_thread::yield();
+            raced.invalidate();
+        });
+        committer.join();
+        invalidator.join();
+        require(raced.phase() == Phase::Invalid && !raced.clientsAllowed(),
+                "concurrent invalidation is terminal and cannot reopen ACTIVE");
+    }
+
     LeaseState failed {};
     require(failed.publishOwned(owned) && failed.beginPoolInit(),
             "failure fixture reaches the pool exclusion phase");
@@ -307,9 +358,16 @@ int main() {
                     !nativeOrder.clientsAllowed(),
                     "ACTIVE publishes after verified exclusion while clients stay blocked");
             return true;
+        },
+        [&](const PoolStatus &status) {
+            require(poolSequence++ == 5 && status.state == PoolActive &&
+                    nativeOrder.phase() == Phase::PoolVerified &&
+                    !nativeOrder.clientsAllowed(),
+                    "durable lifetime authorization precedes client admission");
+            return true;
         });
-    require(poolResult.active && nativeOrder.clientsAllowed() && poolSequence == 5,
-            "native callback ordering admits clients only after ACTIVE publication");
+    require(poolResult.active && nativeOrder.clientsAllowed() && poolSequence == 6,
+            "native callback ordering admits clients only after both publications");
 
     LeaseState nativeHiddenFailure {};
     require(nativeHiddenFailure.publishOwned(owned),
@@ -330,7 +388,8 @@ int main() {
             require(status.state == PoolInvalid && status.reason == ReasonPoolDelta,
                     "hidden second-pool failure publishes terminal INVALID");
             return true;
-        });
+        },
+        [](const PoolStatus &) { return true; });
     require(!hidden.active && hidden.reason == ReasonPoolDelta &&
             nativeHiddenFailure.phase() == Phase::Invalid,
             "native true plus unchanged pool1 remains fail closed");
@@ -356,18 +415,50 @@ int main() {
             require(!writebackFailure.clientsAllowed(),
                     "failed ACTIVE publication never exposes ordinary clients");
             return status.state == PoolInvalid;
-        });
+        },
+        [](const PoolStatus &) { return true; });
     require(!writeback.active && writeback.reason == ReasonWriteback &&
             writebackPublications == 2 &&
             writebackFailure.phase() == Phase::Invalid &&
             !writebackFailure.clientsAllowed(),
             "ACTIVE writeback failure publishes terminal INVALID and fails closed");
 
+    LeaseState lifetimeFailure {};
+    require(lifetimeFailure.publishOwned(owned),
+            "lifetime failure fixture starts OWNED");
+    unsigned lifetimePublications = 0;
+    auto lifetimeRejected = establishPools(lifetimeFailure, 0xf400000000ULL,
+        [] { return 1u; },
+        [read = 0u]() mutable {
+            const bool before = read++ == 0;
+            return PoolFreeSnapshot {true,
+                before ? 0x10000000ULL : 0x0ffeb000ULL,
+                before ? 0x10000000ULL : 0x0ffeb000ULL};
+        },
+        [](uint64_t address, uint64_t) {
+            return NativeReserveEvidence {true, reinterpret_cast<void *>(0x1234),
+                                          address, address};
+        },
+        [&](const PoolStatus &) { ++lifetimePublications; return true; },
+        [&](const PoolStatus &status) {
+            require(status.state == PoolActive &&
+                    lifetimeFailure.phase() == Phase::PoolVerified &&
+                    !lifetimeFailure.clientsAllowed(),
+                    "failed lifetime readback is observed before client admission");
+            return false;
+        });
+    require(!lifetimeRejected.active && lifetimeRejected.reason == ReasonWriteback &&
+            lifetimePublications == 2 &&
+            lifetimeFailure.phase() == Phase::Invalid &&
+            !lifetimeFailure.clientsAllowed(),
+            "lifetime publication failure leaves the pool epoch fail closed");
+
     unsigned duplicateNativeEnable = 0;
     auto duplicatePool = establishPools(nativeOrder, 0xf400000000ULL,
         [&] { ++duplicateNativeEnable; return 1u; },
         [] { return PoolFreeSnapshot {true, 1, 1}; },
         [](uint64_t, uint64_t) { return NativeReserveEvidence {}; },
+        [](const PoolStatus &) { return true; },
         [](const PoolStatus &) { return true; });
     require(!duplicatePool.active && duplicatePool.reason == ReasonDuplicateEpoch &&
             duplicateNativeEnable == 0 && nativeOrder.phase() == Phase::Invalid,
@@ -383,6 +474,7 @@ int main() {
             ++dirtyReserveCalls;
             return NativeReserveEvidence {};
         },
+        [](const PoolStatus &) { return true; },
         [](const PoolStatus &) { return true; });
     require(!dirtyFalse.active && dirtyFalse.reason == ReasonNativeEnable &&
             dirtyFalse.nativeResult == 0 && dirtyReserveCalls == 0,

@@ -236,59 +236,77 @@ inline uint64_t compatibilityPoolSize(NativePoolSizes sizes) {
 }
 
 enum class Phase : uint32_t {
-    Requested, Owned, PoolInitializing, PoolVerified, Active, Invalid
+    Requested, OwnershipPublishing, Owned, PoolInitializing, PoolVerified,
+    Active, Invalid
 };
 
 class LeaseState {
 public:
-    bool publishOwned(const OwnershipDescriptor &value) {
-        if (phase_ != Phase::Requested) return false;
+    bool beginOwnershipPublication() {
+        return transition(Phase::Requested, Phase::OwnershipPublishing);
+    }
+
+    bool finishOwnershipPublication(const OwnershipDescriptor &value) {
+        if (phase() != Phase::OwnershipPublishing) return false;
         owned_ = value;
-        phase_ = Phase::Owned;
-        return true;
+        return transition(Phase::OwnershipPublishing, Phase::Owned);
+    }
+
+    bool publishOwned(const OwnershipDescriptor &value) {
+        return beginOwnershipPublication() && finishOwnershipPublication(value);
     }
 
     bool beginPoolInit() {
-        if (phase_ != Phase::Owned || poolInitAttempted_) return false;
-        poolInitAttempted_ = true;
-        phase_ = Phase::PoolInitializing;
-        return true;
+        return transition(Phase::Owned, Phase::PoolInitializing);
     }
 
     bool finishPoolInit(const PoolStatus &status, void *element,
                         uint64_t fullAddress, uint64_t pool0ElementStart,
                         uint64_t pool1ElementStart) {
-        if (phase_ != Phase::PoolInitializing) return false;
+        if (phase() != Phase::PoolInitializing) return false;
         if (element == nullptr || pool0ElementStart != fullAddress ||
             pool1ElementStart != fullAddress || status.state != PoolActive ||
             !validPoolStatus(status, owned_)) {
-            phase_ = Phase::Invalid;
+            invalidate();
             return false;
         }
         retainedElement_ = element;
-        phase_ = Phase::PoolVerified;
-        return true;
+        return transition(Phase::PoolInitializing, Phase::PoolVerified);
     }
 
     bool commitPoolPublication() {
-        if (phase_ != Phase::PoolVerified) return false;
-        phase_ = Phase::Active;
-        return true;
+        return transition(Phase::PoolVerified, Phase::Active);
     }
 
-    void invalidate() { phase_ = Phase::Invalid; }
-    bool canAcquire() const { return phase_ == Phase::Requested; }
-    bool kiqAllowed() const { return phase_ == Phase::Owned ||
-                                    phase_ == Phase::PoolInitializing ||
-                                    phase_ == Phase::Active; }
-    bool clientsAllowed() const { return phase_ == Phase::Active; }
-    Phase phase() const { return phase_; }
+    void invalidate() {
+        __atomic_store_n(&phase_, raw(Phase::Invalid), __ATOMIC_RELEASE);
+    }
+    bool canAcquire() const { return phase() == Phase::Requested; }
+    bool kiqAllowed() const {
+        const auto current = phase();
+        return current == Phase::Owned || current == Phase::PoolInitializing ||
+               current == Phase::Active;
+    }
+    bool clientsAllowed() const { return phase() == Phase::Active; }
+    Phase phase() const {
+        return static_cast<Phase>(
+            __atomic_load_n(&phase_, __ATOMIC_ACQUIRE));
+    }
     const OwnershipDescriptor &ownership() const { return owned_; }
     void *retainedElement() const { return retainedElement_; }
 
 private:
-    Phase phase_ {Phase::Requested};
-    bool poolInitAttempted_ {false};
+    static constexpr uint32_t raw(Phase phase) {
+        return static_cast<uint32_t>(phase);
+    }
+    bool transition(Phase from, Phase to) {
+        uint32_t expected = raw(from);
+        return __atomic_compare_exchange_n(
+            &phase_, &expected, raw(to), false,
+            __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE);
+    }
+
+    uint32_t phase_ {raw(Phase::Requested)};
     OwnershipDescriptor owned_ {};
     void *retainedElement_ {nullptr};
 };
@@ -319,10 +337,12 @@ struct PoolActivationResult {
 // The routed enable callback uses this exact sequence: one native pool init,
 // snapshot both allocators, reserve the full software-domain lease address,
 // snapshot both again, then publish a terminal status before admitting clients.
-template <typename NativeEnable, typename ReadFree, typename Reserve, typename Publish>
+template <typename NativeEnable, typename ReadFree, typename Reserve,
+          typename Publish, typename AuthorizeClients>
 inline PoolActivationResult establishPools(
     LeaseState &state, uint64_t memoryBase, NativeEnable nativeEnable,
-    ReadFree readFree, Reserve reserve, Publish publish) {
+    ReadFree readFree, Reserve reserve, Publish publish,
+    AuthorizeClients authorizeClients) {
     PoolActivationResult result {};
     if (!state.beginPoolInit()) {
         result.reason = ReasonDuplicateEpoch;
@@ -360,7 +380,8 @@ inline PoolActivationResult establishPools(
             result.before.pool1, result.after.pool1, ReasonNone);
         if (state.finishPoolInit(status, result.reserve.element, result.fullAddress,
                                 result.reserve.pool0Start, result.reserve.pool1Start) &&
-            publish(status) && state.commitPoolPublication()) {
+            publish(status) && authorizeClients(status) &&
+            state.commitPoolPublication()) {
             result.active = true;
             return result;
         }
@@ -382,7 +403,7 @@ inline bool establishBeforeVmm(LeaseState &state, uint64_t nonceLo,
                                uint64_t nonceHi, uint64_t visibleBytes,
                                Preflight preflight, Append append, Validate validate,
                                Publish publish, NativeVmm nativeVmm) {
-    if (!state.canAcquire()) {
+    if (!state.beginOwnershipPublication()) {
         state.invalidate();
         return false;
     }
@@ -393,7 +414,8 @@ inline bool establishBeforeVmm(LeaseState &state, uint64_t nonceLo,
     const uint64_t leaseOffset = append();
     const auto owned = makeOwnership(leaseOffset, nonceLo, nonceHi);
     const bool accepted = validOwnership(owned, nonceLo, nonceHi, visibleBytes) &&
-                          validate(owned) && publish(owned) && state.publishOwned(owned);
+                          validate(owned) && publish(owned) &&
+                          state.finishOwnershipPublication(owned);
     if (!accepted) state.invalidate();
     if (accepted) nativeVmm();
     return accepted;

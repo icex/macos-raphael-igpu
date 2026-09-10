@@ -27,6 +27,29 @@ def load_lease_tool():
     return module
 
 
+def make_v3_evidence(tool, fake):
+    wire = load_lease_tool()
+    nonce = struct.unpack('<QQ', bytes.fromhex(RUN_ID))
+    descriptor = wire.make_ownership_descriptor(0x08000000, *nonce)
+    pool = wire.make_pool_status(
+        descriptor, state=wire.POOL_ACTIVE,
+        pool0_before=0x0e000000, pool0_after=0x0dfeb000,
+        pool1_before=0x0c000000, pool1_after=0x0bfeb000, reason=0)
+    evidence = tool.parse_v2_lease_records([
+        wire.format_owned_record(descriptor), wire.format_pool_record(pool),
+    ], RUN_ID)
+    owned_raw = descriptor.pack()
+    pool_raw = pool.pack()
+    lifetime = tool._recovery_lifetime_v3().make_valid_marker(owned_raw, pool_raw).pack()
+    for offset, raw in (
+            (descriptor.lease_offset, owned_raw),
+            (descriptor.lease_offset + wire.POOL_STATUS_OFFSET, pool_raw),
+            (descriptor.lease_offset + tool._recovery_lifetime_v3().LIFETIME_OFFSET,
+             lifetime)):
+        fake.vram.update((offset + index, value) for index, value in enumerate(raw))
+    return evidence, descriptor, pool, lifetime
+
+
 class FakeTransport:
     def __init__(self, tool, *, fail_command=None, run_id=RUN_ID):
         self.tool = tool
@@ -654,6 +677,152 @@ class VfioRecoveryTests(unittest.TestCase):
                     recovery_helpers_sha256=dict(expected,
                         **{'tools/recovery_lease_v2.py':'0' * 64}))
             host_state.assert_not_called()
+
+    def test_schema3_helper_identity_adds_capture_and_lifetime_without_changing_v2(self):
+        tool = self.tool
+        self.assertEqual(set(tool.current_recovery_helpers_sha256(2)), {
+            'tools/vfio-recover.py',
+            'tools/recovery_lease_v2.py',
+            'tools/kiq-recovery-proof.py',
+        })
+        expected_v3 = {
+            'tools/vfio-recover.py',
+            'tools/recovery_lease_v2.py',
+            'tools/kiq-recovery-proof.py',
+            'tools/critical-replay.py',
+            'tools/recovery_lifetime_v3.py',
+        }
+        helpers = tool.current_recovery_helpers_sha256(3)
+        self.assertEqual(set(helpers), expected_v3)
+        self.assertEqual(tool.require_recovery_helpers_sha256(helpers, 3), helpers)
+        with self.assertRaisesRegex(tool.RecoveryError, 'recovery helper hashes'):
+            tool.require_recovery_helpers_sha256(
+                tool.current_recovery_helpers_sha256(2), 3)
+
+    def test_schema3_authentication_requires_active_pool_and_exact_valid_lifetime(self):
+        tool = self.tool
+        fake = FakeTransport(tool)
+        evidence, descriptor, pool, valid_raw = make_v3_evidence(tool, fake)
+        authenticated = tool.authenticate_v3_host_kiq_lease(fake, evidence, RUN_ID)
+        self.assertEqual(authenticated.lifetime_raw, valid_raw)
+        self.assertEqual(authenticated.proof['schema'], 3)
+        self.assertEqual(authenticated.proof['lease_version'], 2)
+        self.assertEqual(authenticated.proof['lifetime_version'], 3)
+        self.assertIsNone(authenticated.proof['lifetime_readbacks']['pre_scratch'])
+
+        for label, raw in (
+                ('absent', bytes(len(valid_raw))),
+                ('ABORT', tool._recovery_lifetime_v3().make_abort_marker(
+                    tool._recovery_lifetime_v3().make_valid_marker(
+                        descriptor.pack(), pool.pack()),
+                    tool._recovery_lifetime_v3().REASON_POOL_OWNER).pack())):
+            with self.subTest(label=label):
+                broken = FakeTransport(tool)
+                broken_evidence, broken_descriptor, _, _ = make_v3_evidence(tool, broken)
+                lifetime_offset = (broken_descriptor.lease_offset +
+                                   tool._recovery_lifetime_v3().LIFETIME_OFFSET)
+                broken.vram.update((lifetime_offset + index, value)
+                                   for index, value in enumerate(raw))
+                with self.assertRaisesRegex(tool.RecoveryError, 'lifetime marker'):
+                    tool.authenticate_v3_host_kiq_lease(
+                        broken, broken_evidence, RUN_ID)
+                self.assertFalse(any(isinstance(event, tuple) and event[0] in {
+                    'write', 'write-vram', 'doorbell64'} for event in broken.events))
+
+        owned_only = tool.parse_v2_lease_records(
+            [tool.RECOVERY_LEASE_V2.format_owned_record(evidence.descriptor)], RUN_ID)
+        with self.assertRaisesRegex(tool.RecoveryError, 'ACTIVE pool'):
+            tool.authenticate_v3_host_kiq_lease(fake, owned_only, RUN_ID)
+
+    def test_schema3_lifetime_is_rechecked_immediately_before_first_scratch_write(self):
+        tool = self.tool
+
+        class AbortOnMecHalt(FakeTransport):
+            def __init__(self):
+                super().__init__(tool)
+                self.abort_raw = None
+                self.lifetime_offset = None
+
+            def write32(self, offset, value):
+                super().write32(offset, value)
+                if (offset == tool.CP_MEC_CNTL_OFFSET and self.abort_raw is not None):
+                    self.vram.update((self.lifetime_offset + index, byte)
+                                     for index, byte in enumerate(self.abort_raw))
+
+        fake = AbortOnMecHalt()
+        evidence, descriptor, pool, _ = make_v3_evidence(tool, fake)
+        authenticated = tool.authenticate_v3_host_kiq_lease(fake, evidence, RUN_ID)
+        valid = tool._recovery_lifetime_v3().make_valid_marker(
+            descriptor.pack(), pool.pack())
+        fake.abort_raw = tool._recovery_lifetime_v3().make_abort_marker(
+            valid, tool._recovery_lifetime_v3().REASON_DUPLICATE_READY).pack()
+        fake.lifetime_offset = (descriptor.lease_offset +
+                                tool._recovery_lifetime_v3().LIFETIME_OFFSET)
+        fake.registers[tool.CP_RB_DOORBELL_CONTROL_OFFSET] = 0xc0000400
+        fake.registers[tool.CP_MEC_CNTL_OFFSET] = tool.CP_MEC_HALT_MASK
+
+        with self.assertRaisesRegex(tool.RecoveryError, 'lifetime marker'):
+            tool.retire_legacy_gfx_with_host_kiq(
+                fake, RUN_ID, sleep=lambda _:None, polls=2,
+                authenticated_lease=authenticated)
+        self.assertFalse(any(isinstance(event, tuple) and event[0] == 'write-vram'
+                             for event in fake.events))
+
+    def test_schema3_perform_recovery_records_two_exact_lifetime_observations(self):
+        tool = self.tool
+        fake = FakeTransport(tool)
+        evidence, _, _, lifetime_raw = make_v3_evidence(tool, fake)
+        states = iter([self.state(), self.state()])
+        result = tool.perform_recovery(
+            'boot-A', RUN_ID, lambda:next(states), lambda:fake,
+            lambda cursor=None:('cursor-2', [], []), sleep=lambda _:None, polls=2,
+            lease_evidence=evidence, recovery_lease_schema=3)
+
+        proof = result['gc_quiesce']['reservation']
+        self.assertEqual(result['recovery_lease_schema'], 3)
+        self.assertTrue(tool.valid_v3_lease_proof(proof, RUN_ID))
+        self.assertEqual(proof['lifetime_readbacks'], {
+            'authenticated': lifetime_raw.hex(),
+            'pre_scratch': lifetime_raw.hex(),
+        })
+        for path in (
+                ('lifetime_readbacks', 'authenticated'),
+                ('lifetime_readbacks', 'pre_scratch'),
+                ('lifetime_status', 'checksum'),
+                ('lifetime_status', 'reason')):
+            with self.subTest(path=path):
+                changed = json.loads(json.dumps(proof))
+                container = changed[path[0]]
+                container[path[1]] = (False if path == ('lifetime_status', 'reason')
+                                       else container[path[1]] ^ 1
+                                       if isinstance(container[path[1]], int)
+                                       else '0' * 176)
+                self.assertFalse(tool.valid_v3_lease_proof(changed, RUN_ID))
+
+    def test_schema3_recover_rejects_schema2_helper_map_before_host_access(self):
+        tool = self.tool
+        with tempfile.TemporaryDirectory() as temp, patch.object(
+                tool, 'host_state') as host_state:
+            with self.assertRaisesRegex(tool.RecoveryError, 'recovery helper hashes'):
+                tool.recover(
+                    Path(temp), RUN_ID, lease_evidence=object(),
+                    recovery_helpers_sha256=tool.current_recovery_helpers_sha256(2),
+                    recovery_lease_schema=3)
+            host_state.assert_not_called()
+
+    def test_native_schema_zero_and_boolean_refuse_before_transport_access(self):
+        tool = self.tool
+        for schema in (0, False, True, 4):
+            with self.subTest(schema=schema):
+                opens = []
+                with self.assertRaisesRegex(
+                        tool.RecoveryError, 'recovery lease schema must be 2 or 3'):
+                    tool.perform_recovery(
+                        'boot-A', RUN_ID, lambda:self.state(),
+                        lambda:opens.append(True),
+                        lambda cursor=None:('cursor-2', [], []),
+                        lease_evidence=object(), recovery_lease_schema=schema)
+                self.assertEqual(opens, [])
 
     def test_v2_recover_receipt_preserves_validated_helper_hashes(self):
         tool = self.tool

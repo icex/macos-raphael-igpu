@@ -16,6 +16,14 @@ def _recovery_lease_v2():
     return module
 
 
+def _critical_replay():
+    path = Path(__file__).with_name('critical-replay.py')
+    spec = importlib.util.spec_from_file_location('critical_replay_classifier', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def _decode_payload(build, seq, payload):
     row = dict(build=build, seq=seq, kind='other', raw=payload)
     if payload == 'BUILD: identity='+str(build):
@@ -284,7 +292,7 @@ def _decode_payload(build, seq, payload):
     return row
 
 
-def parse_serial(serial):
+def _parse_legacy_serial(serial):
     records, losses, counts, raw_records, panics, hardware_timeouts = {}, [], {}, [], [], []
     raw_builds = set()
     serial = serial.replace('\r', '')
@@ -405,6 +413,39 @@ def parse_serial(serial):
     return rows + losses
 
 
+def parse_serial(serial, *, critical_replay_schema=None, expected_build=None):
+    if critical_replay_schema is None:
+        return _parse_legacy_serial(serial)
+    if critical_replay_schema != 2 or not isinstance(expected_build, str):
+        return [dict(kind='capture_loss', build=expected_build,
+                     reason='CR2 selection is invalid', definitive=True)]
+    replay = _critical_replay()
+    try:
+        snapshot = replay.parse(serial, expected_build)
+    except replay.CriticalReplayError as error:
+        message = str(error)
+        pending = any(fragment in message for fragment in (
+            'missing CR2 transport', 'missing END', 'incomplete transport line'))
+        return [dict(kind='capture_loss', build=expected_build,
+                     reason='CR2: ' + message, definitive=not pending)]
+    synthetic = (
+        f'RGPU_RECORDS build={expected_build} count={snapshot["count"]} '
+        'dropped=0 truncated=0\n' + ''.join(
+            f'RGPU_EVENT build={expected_build} seq={seq} {payload}\n'
+            for seq, payload in enumerate(snapshot['records'])))
+    rows = _parse_legacy_serial(synthetic)
+    terminal = []
+    for row in _parse_legacy_serial(serial):
+        if (row['kind'] == 'guest_panic' or
+                row.get('source') == 'raw-terminal'):
+            row = dict(row, build=expected_build)
+            terminal.append(row)
+    seen = {(row['kind'], row.get('raw'), row.get('seq')) for row in rows}
+    rows.extend(row for row in terminal
+                if (row['kind'], row.get('raw'), row.get('seq')) not in seen)
+    return rows
+
+
 def _classify(manifest, events, probe, defer_absent_workload=False):
     def verdict(name, valid=False, stage=None, next_action='repair observation before another experiment'):
         return dict(valid=valid, verdict=name, earliest_failure=stage,
@@ -420,7 +461,7 @@ def _classify(manifest, events, probe, defer_absent_workload=False):
     if not kinds['build'] or not kinds['route']:
         return verdict('INCONCLUSIVE', stage='identity_or_route_missing')
     required = manifest.get('spec', {}).get('required_observations', [])
-    if manifest.get('recovery_lease_schema') == 2:
+    if manifest.get('recovery_lease_schema') in (2, 3):
         lease = _recovery_lease_v2()
         wire = [r.get('raw', '') for r in events
                 if r['kind'] in ('recovery_lease_owned', 'recovery_lease_pool',
@@ -798,7 +839,11 @@ if __name__ == '__main__':
     args = parser.parse_args()
     run = args.run_directory
     manifest = json.loads((run / 'manifest.json').read_text())
-    events = parse_serial((run / 'serial.txt').read_text(errors='replace'))
+    events = parse_serial(
+        (run / 'serial.txt').read_text(errors='replace'),
+        critical_replay_schema=manifest.get('critical_replay_schema'),
+        expected_build=(manifest.get('build_id')
+                        if 'critical_replay_schema' in manifest else None))
     probe_path = run / 'probe.json'
     probe = json.loads(probe_path.read_text()) if probe_path.exists() else None
     print(json.dumps(classify(manifest, events, probe), indent=2))

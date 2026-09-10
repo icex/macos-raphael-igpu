@@ -56,6 +56,24 @@ int main() {
                 RaphaelVm::readU64(bytes + 0x18) == 0xf401234001ULL,
             "the caller-owned invalidate request remains untouched");
 
+    // Candidate 179 captured this exact VMID2 request immediately before the
+    // first real SDMA PAGE submission. Apple's native encoder accepts the
+    // zero-attribute root and copies it into the PTB register words unchanged.
+    put64(8, 0);
+    put64(0x10, UINT64_MAX);
+    put64(0x18, 0xf40b6f3000ULL);
+    put32(0x20, 0xff);
+    auto captured179 = RaphaelVm::prepareInvalidateInfo(
+        bytes, sizeof(bytes), true, true, 0xf400, 0xf41f, 0x840);
+    require(captured179.valid && captured179.eligible && captured179.repaired &&
+                captured179.originalRoot == 0xf40b6f3000ULL &&
+                captured179.nativeRoot == 0x84b6f3000ULL &&
+                RaphaelVm::readU64(captured179.bytes + 0x18) == 0x84b6f3000ULL,
+            "candidate 179 zero-attribute VMID2 root is converted without adding flags");
+
+    put64(8, 0x400000000ULL);
+    put64(0x10, 0x400ffffffULL);
+
     put64(0x18, 0xf401234005ULL);
     auto cached = RaphaelVm::prepareInvalidateInfo(
         bytes, sizeof(bytes), true, true, 0xf400, 0xf41f, 0x840);

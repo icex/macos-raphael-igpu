@@ -1,8 +1,11 @@
 import importlib.util
 import json
 from pathlib import Path
+import re
 import struct
 import unittest
+
+from tests.test_critical_replay import BUILD as CR2_BUILD, snapshot_lines
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -25,7 +28,8 @@ class ClassifyTests(unittest.TestCase):
         return [dict(kind=k, build='abc', seq=i, **v) for i, (k, v) in enumerate(rows)]
 
     def v2_startup(self, *, native_base=0xf405000000, native_arena=0x1234,
-                   pool0=0x2345, pool1=0x3456, include_pool=True):
+                   pool0=0x2345, pool1=0x3456, include_pool=True,
+                   lease_schema=2):
         lease_path = ROOT / 'tools/recovery_lease_v2.py'
         spec = importlib.util.spec_from_file_location('lease_v2_fixture', lease_path)
         lease = importlib.util.module_from_spec(spec)
@@ -60,7 +64,7 @@ class ClassifyTests(unittest.TestCase):
         serial = (f'RGPU_RECORDS build=abc count={len(payloads)} dropped=0 '
                   f'truncated=0\n' + serial)
         manifest = {'build_id':'abc', 'run_id':run_id,
-                    'recovery_lease_schema':2, 'spec':{}}
+                    'recovery_lease_schema':lease_schema, 'spec':{}}
         return manifest, self.classifier().parse_serial(serial)
 
     def test_v2_vmm_readiness_allows_early_null_only_after_complete_native_state(self):
@@ -88,6 +92,53 @@ class ClassifyTests(unittest.TestCase):
                 manifest, events = self.v2_startup(**kwargs)
                 result = classifier.classify_probe_readiness(manifest, events)
                 self.assertEqual(result['verdict'], verdict)
+                self.assertEqual(result['earliest_failure'], stage)
+
+    def test_schema3_keeps_native_lease_and_vmm_readiness_fail_closed(self):
+        classifier = self.classifier()
+        cases = []
+
+        manifest, events = self.v2_startup(lease_schema=3)
+        cases.append(('missing-owned', manifest,
+                      [dict(row, kind='diagnostic', raw='ordinary')
+                       if row['kind'] == 'recovery_lease_owned' else row
+                       for row in events],
+                      'recovery_lease_pool_missing'))
+
+        manifest, events = self.v2_startup(lease_schema=3)
+        malformed_owned = [dict(row, raw='XH2 OWNED malformed')
+                           if row['kind'] == 'recovery_lease_owned' else row
+                           for row in events]
+        cases.append(('malformed-owned', manifest, malformed_owned,
+                      'recovery_lease_pool_missing'))
+
+        manifest, events = self.v2_startup(lease_schema=3)
+        malformed_pool = [dict(row, raw='XH2 POOL malformed')
+                          if row['kind'] == 'recovery_lease_pool' else row
+                          for row in events]
+        cases.append(('malformed-pool', manifest, malformed_pool,
+                      'recovery_lease_pool_missing'))
+
+        manifest, events = self.v2_startup(lease_schema=3)
+        malformed_vmm = [dict(row, ok=False)
+                         if row['kind'] == 'vmm_readiness' and
+                         row.get('phase') == 'native' else row
+                         for row in events]
+        cases.append(('malformed-vmm', manifest, malformed_vmm,
+                      'vmm_readiness_malformed'))
+
+        manifest, events = self.v2_startup(lease_schema=3)
+        missing_vmm = [row for row in events
+                       if row['kind'] != 'vmm_readiness' or
+                       row.get('phase') != 'native']
+        cases.append(('missing-vmm', manifest, missing_vmm,
+                      'vmm_native_readiness_missing'))
+
+        for label, manifest, events, stage in cases:
+            with self.subTest(label=label):
+                result = classifier.classify_probe_readiness(manifest, events)
+                self.assertEqual(result['verdict'], 'INCONCLUSIVE' if
+                                 stage != 'vmm_readiness_malformed' else 'INVALID')
                 self.assertEqual(result['earliest_failure'], stage)
 
     def candidate175_startup(self, classifier):
@@ -493,6 +544,68 @@ class ClassifyTests(unittest.TestCase):
         self.assertEqual(rows[0]['kind'], 'build')
         rows = parse(summary+line+line.replace('identity=abc', 'identity=def'))
         self.assertTrue(any(r['kind'] == 'capture_loss' for r in rows))
+
+    def test_explicit_cr2_selection_reconstructs_snapshot_for_classification(self):
+        classifier = self.classifier()
+        payloads = [
+            'BUILD: identity=' + CR2_BUILD,
+            'HY: HWLibs hybrid trace route=ok entries-match=1',
+        ]
+        rows = classifier.parse_serial(
+            ''.join(snapshot_lines(payloads)), critical_replay_schema=2,
+            expected_build=CR2_BUILD)
+        self.assertEqual([row['kind'] for row in rows], ['build', 'route'])
+        self.assertFalse(any(row['kind'] == 'capture_loss' for row in rows))
+
+    def test_malformed_selected_cr2_never_downgrades_to_valid_legacy_replay(self):
+        classifier = self.classifier()
+        payloads = ['BUILD: identity=' + CR2_BUILD]
+        cr2 = ''.join(snapshot_lines(payloads)).replace('c=', 'c=deadbeef', 1)
+        legacy = (
+            f'RGPU_RECORDS build={CR2_BUILD} count=1 dropped=0 truncated=0\n'
+            f'RGPU_EVENT build={CR2_BUILD} seq=0 BUILD: identity={CR2_BUILD}\n')
+
+        selected = classifier.parse_serial(
+            cr2 + legacy, critical_replay_schema=2,
+            expected_build=CR2_BUILD)
+        historical = classifier.parse_serial(cr2 + legacy)
+
+        self.assertEqual([row['kind'] for row in selected], ['capture_loss'])
+        self.assertIn('CR2', selected[0]['reason'])
+        self.assertEqual([row['kind'] for row in historical], ['build'])
+
+    def test_cr2_selection_requires_pinned_build_and_known_schema(self):
+        classifier = self.classifier()
+        serial = ''.join(snapshot_lines(['BUILD: identity=' + CR2_BUILD]))
+        for schema, build in ((2, None), (3, CR2_BUILD)):
+            with self.subTest(schema=schema, build=build):
+                rows = classifier.parse_serial(
+                    serial, critical_replay_schema=schema,
+                    expected_build=build)
+                self.assertEqual([row['kind'] for row in rows], ['capture_loss'])
+
+    def test_live_cr2_prefix_is_pending_until_complete_snapshot_arrives(self):
+        classifier = self.classifier()
+        lines = snapshot_lines(['BUILD: identity=' + CR2_BUILD])
+        pending = classifier.parse_serial(
+            ''.join(lines[:-1]), critical_replay_schema=2,
+            expected_build=CR2_BUILD)
+        complete = classifier.parse_serial(
+            ''.join(lines), critical_replay_schema=2,
+            expected_build=CR2_BUILD)
+        self.assertEqual([row['kind'] for row in pending], ['capture_loss'])
+        self.assertFalse(pending[0]['definitive'])
+        self.assertEqual([row['kind'] for row in complete], ['build'])
+
+    def test_complete_but_corrupt_cr2_snapshot_is_definitive_capture_loss(self):
+        classifier = self.classifier()
+        lines = snapshot_lines(['BUILD: identity=' + CR2_BUILD])
+        lines[-1] = re.sub(r'crc=[0-9a-f]{8}', 'crc=deadbeef', lines[-1])
+        rows = classifier.parse_serial(
+            ''.join(lines), critical_replay_schema=2,
+            expected_build=CR2_BUILD)
+        self.assertEqual([row['kind'] for row in rows], ['capture_loss'])
+        self.assertTrue(rows[0]['definitive'])
 
     def test_unterminated_replay_tail_is_ignored_until_complete(self):
         parse = self.classifier().parse_serial

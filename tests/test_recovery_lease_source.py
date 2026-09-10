@@ -6,6 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = (ROOT / "src" / "RaphaelGPU.cpp").read_text()
 PREFLIGHT = (ROOT / "tools" / "preflight.py").read_text()
+LEASE = (ROOT / "src" / "RecoveryLease.hpp").read_text()
 
 
 class RecoveryLeaseProductionTests(unittest.TestCase):
@@ -29,6 +30,20 @@ class RecoveryLeaseProductionTests(unittest.TestCase):
                        r'nonce\.second', re.S))
         self.assertNotIn('CRLOG("XH2:', SOURCE)
 
+    def test_lease_phase_transitions_are_atomic_and_invalidation_is_terminal(self):
+        state = LEASE[LEASE.index("class LeaseState"):
+                      LEASE.index("struct PoolFreeSnapshot")]
+        self.assertRegex(
+            state, re.compile(r"__atomic_compare_exchange_n\(\s*&phase_"))
+        self.assertIn("__atomic_store_n(&phase_", state)
+        establish = LEASE[LEASE.index("inline bool establishBeforeVmm"):
+                          LEASE.index("} // namespace RaphaelRecoveryV2")]
+        claim = establish.index("state.beginOwnershipPublication()")
+        preflight = establish.index("preflight()")
+        self.assertLess(claim, preflight)
+        self.assertIn("uint32_t phase_", state)
+        self.assertNotIn("Phase phase_", state)
+
     def test_ready_wrapper_preflights_owner_method_and_gart_before_publication(self):
         wrapper = self._function(
             "static void wrapVmmSetVSReady", "static void wrapVmmSetAlloc")
@@ -43,6 +58,52 @@ class RecoveryLeaseProductionTests(unittest.TestCase):
         self.assertIn("if (owned && ready != 0", wrapper)
         self.assertIn("XH2 ABORT reason=duplicate-ready", wrapper)
         self.assertIn("XH2 ABORT reason=vmm-range", wrapper)
+
+    def test_lifetime_marker_is_cleared_before_owned_and_authorizes_before_clients(self):
+        self.assertIn('#include "RecoveryLifetime.hpp"', SOURCE)
+        ready = self._function(
+            "static void wrapVmmSetVSReady", "static void wrapVmmSetAlloc")
+        lifetime_clear = ready.index(
+            "RaphaelRecoveryV3::LifetimeOffset")
+        owned_publish = ready.index("RaphaelRecoveryV2::publishRecord(")
+        self.assertLess(lifetime_clear, owned_publish)
+        self.assertRegex(
+            ready,
+            re.compile(r"RaphaelRecoveryV2::clearRecord<\s*"
+                       r"RaphaelRecoveryV3::LifetimeStatus>"))
+
+        pool = self._function(
+            "static bool wrapHwMemEnable", "//\n// Clearing the flag")
+        active_publish = pool.index("publishRecoveryPoolStatus(status)")
+        lifetime_publish = pool.index("authorizeRecoveryClients(status)")
+        self.assertLess(active_publish, lifetime_publish)
+
+    def test_every_late_v2_abort_poison_is_requested_before_diagnostic(self):
+        ready = self._function(
+            "static void wrapVmmSetVSReady", "static void wrapVmmSetAlloc")
+        pool = self._function(
+            "static bool wrapHwMemEnable", "//\n// Clearing the flag")
+        for body, reason, diagnostic in (
+                (ready, "LifetimeReasonDuplicateReady",
+                 "XH2 ABORT reason=duplicate-ready"),
+                (ready, "LifetimeReasonVmmRange",
+                 "XH2 ABORT reason=vmm-range"),
+                (pool, "LifetimeReasonPoolOwner",
+                 "XH2 ABORT reason=pool-owner"),
+                (pool, "LifetimeReasonDuplicatePool",
+                 "XH2 ABORT reason=duplicate-pool")):
+            poison = body.index("abortRecoveryLifetime(\n", 0,
+                                body.index(diagnostic))
+            self.assertIn(reason, body[poison:body.index(diagnostic)])
+
+        abort_helper = self._function(
+            "static void abortRecoveryLifetime", "static bool authorizeRecoveryClients")
+        request = abort_helper.index("recoveryLifetimeGate.requestAbort(reason)")
+        invalidate = abort_helper.index("recoveryLeaseState.invalidate()")
+        durable = abort_helper.index(
+            "request == RaphaelRecoveryV3::AbortRequest::Owner")
+        self.assertLess(request, invalidate)
+        self.assertLess(invalidate, durable)
 
     def test_pool_wrapper_uses_tested_one_epoch_helper_and_bool_abi(self):
         wrapper = self._function(
@@ -77,6 +138,12 @@ class RecoveryLeaseProductionTests(unittest.TestCase):
                 'isRaphaelHardware(hardware)',
                 'vt[0x180 / 8] != x6Base + kOffHwAppendReserved',
                 'recoveryLeaseDisjointFromLiveGart(descriptor)',
+                'RaphaelRecoveryV3::LifetimeOffset',
+                'authorizeRecoveryClients(status)',
+                'LifetimeReasonDuplicateReady',
+                'LifetimeReasonVmmRange',
+                'LifetimeReasonPoolOwner',
+                'LifetimeReasonDuplicatePool',
                 'XH2 ABORT reason=duplicate-ready',
                 'XH2 ABORT reason=pool-owner',
                 'XH2 ABORT reason=duplicate-pool'):

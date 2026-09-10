@@ -145,12 +145,14 @@ def main():
     pool_order = [pool_helper] + [wrapper.find(token, pool_helper) for token in (
         "FunctionCast(wrapHwMemEnable, orgHwMemEnable)(self)",
         "vt[0x198 / 8] != x6Base + kOffHwMemReserve",
-        "publishRecoveryPoolStatus(status)")]
+        "publishRecoveryPoolStatus(status)",
+        "authorizeRecoveryClients(status)")]
     owner_order = [ready_wrapper.find(token) for token in (
         "isRaphaelHardware(hardware)",
         "vt[0x180 / 8] != x6Base + kOffHwAppendReserved",
         "appendReserved(hardware, 0, RaphaelRecoveryV2::LeaseSize, 0x1000)",
         "recoveryLeaseDisjointFromLiveGart(descriptor)",
+        "RaphaelRecoveryV3::LifetimeOffset",
         "RaphaelRecoveryV2::publishRecord(")]
     routed = "orgHwMemEnable = patcher.routeFunction(addr + kOffHwMemEnable" in source
     reservation_ok = (
@@ -161,12 +163,20 @@ def main():
         wrapper.count("FunctionCast(wrapHwMemEnable, orgHwMemEnable)(self)") == 3 and
         "static uint32_t wrapHwMemEnable" not in source and
         "RaphaelRecovery::activate(" not in source and
+        '#include "RecoveryLifetime.hpp"' in source and
+        "RaphaelRecoveryV3::publishValidLifetime" in source and
+        "RaphaelRecoveryV3::publishAbortLifetime" in source and
+        "recoveryLifetimeGate.beginValidPublication()" in source and
         vmm_enable_guard >= 0 and vmm_native_record >= 0 and
         vmm_enable_guard < vmm_native_record and
+        "LifetimeReasonDuplicateReady" in ready_wrapper and
+        "LifetimeReasonVmmRange" in ready_wrapper and
+        "LifetimeReasonPoolOwner" in wrapper and
+        "LifetimeReasonDuplicatePool" in wrapper and
         "XH2 ABORT reason=duplicate-ready" in ready_wrapper and
         "XH2 ABORT reason=pool-owner" in wrapper and
         "XH2 ABORT reason=duplicate-pool" in wrapper)
-    print(f"recovery reservation {'ok (native v2 lease; one pool init; fail-closed duplicates)' if reservation_ok else 'INVALID V2 ORDER, ABI, ROUTE, OR OWNER GUARD'}")
+    print(f"recovery reservation {'ok (native v2 lease; durable v3 lifetime; one pool init)' if reservation_ok else 'INVALID V2/V3 ORDER, ABI, ROUTE, OR OWNER GUARD'}")
     if not reservation_ok:
         bad += 1
 
@@ -233,7 +243,7 @@ def main():
         print(f"\npreflight: {bad} problem(s) -- NOT safe to deploy")
         return 1
     print("\npreflight: route scopes checked, constants checked, prologues checked, "
-          "recovery-v2 ordering checked, patterns unique")
+          "recovery-v2/v3 ordering checked, patterns unique")
     return 0
 
 sys.exit(main())

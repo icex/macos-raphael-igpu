@@ -29,6 +29,24 @@ def _load_recovery_lease_v2():
 
 RECOVERY_LEASE_V2 = _load_recovery_lease_v2()
 
+
+def _load_recovery_lifetime_v3():
+    path = Path(__file__).with_name('recovery_lifetime_v3.py')
+    spec = importlib.util.spec_from_file_location('recovery_lifetime_v3_host', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_RECOVERY_LIFETIME_V3 = None
+
+
+def _recovery_lifetime_v3():
+    global _RECOVERY_LIFETIME_V3
+    if _RECOVERY_LIFETIME_V3 is None:
+        _RECOVERY_LIFETIME_V3 = _load_recovery_lifetime_v3()
+    return _RECOVERY_LIFETIME_V3
+
 DEVICE = '0000:7b:00.0'
 DEVICE_ID = '1002:13c0'
 GROUP = '31'
@@ -157,11 +175,17 @@ SDMA_IB_ENABLE_MASK = 0x1
 SDMA_STATUS_IDLE_MASK = 0x1
 STOPPED_WPTR_OBSERVATION_BUDGET_NS = 2_000_000
 UNSUPPORTED_V2_STOPPED_WPTR = 'unsupported_v2_stopped_wptr'
-RECOVERY_HELPER_PATHS = (
+UNSUPPORTED_V3_STOPPED_WPTR = 'unsupported_v3_stopped_wptr'
+RECOVERY_HELPER_PATHS_V2 = (
     'tools/vfio-recover.py',
     'tools/recovery_lease_v2.py',
     'tools/kiq-recovery-proof.py',
 )
+RECOVERY_HELPER_PATHS_V3 = RECOVERY_HELPER_PATHS_V2 + (
+    'tools/critical-replay.py',
+    'tools/recovery_lifetime_v3.py',
+)
+RECOVERY_HELPER_PATHS = RECOVERY_HELPER_PATHS_V2
 
 # Crash recovery uses only GPU-local VRAM.  QEMU's IOMMU mappings are gone by
 # the time this process opens VFIO, so rebuilding the KIQ in system memory would
@@ -248,6 +272,13 @@ class AuthenticatedV2Lease(NamedTuple):
     layout: HostKiqLayout
     proof: dict
     evidence: object
+
+
+class AuthenticatedV3Lease(NamedTuple):
+    layout: HostKiqLayout
+    proof: dict
+    evidence: object
+    lifetime_raw: bytes
 
 
 class VfioGroupStatus(ctypes.Structure):
@@ -622,15 +653,27 @@ def parse_v2_lease_records(records, run_id):
         raise RecoveryError('invalid native recovery lease records: ' + str(error)) from error
 
 
-def current_recovery_helpers_sha256():
+def _recovery_helper_paths(recovery_lease_schema):
+    if type(recovery_lease_schema) is not int:
+        raise RecoveryError('recovery lease schema must be 2 or 3')
+    if recovery_lease_schema == 2:
+        return RECOVERY_HELPER_PATHS_V2
+    if recovery_lease_schema == 3:
+        return RECOVERY_HELPER_PATHS_V3
+    raise RecoveryError('recovery lease schema must be 2 or 3')
+
+
+def current_recovery_helpers_sha256(recovery_lease_schema=2):
+    paths = _recovery_helper_paths(recovery_lease_schema)
     root = Path(__file__).resolve().parents[1]
     return {relative: hashlib.sha256((root / relative).read_bytes()).hexdigest()
-            for relative in RECOVERY_HELPER_PATHS}
+            for relative in paths}
 
 
-def require_recovery_helpers_sha256(observed):
-    expected = current_recovery_helpers_sha256()
-    if (not isinstance(observed, dict) or set(observed) != set(RECOVERY_HELPER_PATHS) or
+def require_recovery_helpers_sha256(observed, recovery_lease_schema=2):
+    paths = _recovery_helper_paths(recovery_lease_schema)
+    expected = current_recovery_helpers_sha256(recovery_lease_schema)
+    if (not isinstance(observed, dict) or set(observed) != set(paths) or
             any(not isinstance(value, str) or
                 not re.fullmatch(r'[0-9a-f]{64}', value)
                 for value in observed.values()) or observed != expected):
@@ -703,13 +746,82 @@ def authenticate_v2_host_kiq_lease(mmio, evidence, run_id):
     return AuthenticatedV2Lease(layout, proof, evidence)
 
 
+def _lifetime_status_dict(status):
+    return {name: getattr(status, name) for name in status._fields}
+
+
+def _v3_proof(v2_proof, lifetime_status, authenticated_raw,
+              pre_scratch_raw=None):
+    proof = dict(v2_proof)
+    proof['schema'] = 3
+    proof['lease_version'] = proof.pop('version')
+    proof['lifetime_version'] = lifetime_status.version
+    proof['lifetime_status'] = _lifetime_status_dict(lifetime_status)
+    proof['lifetime_readbacks'] = {
+        'authenticated': authenticated_raw.hex(),
+        'pre_scratch': None if pre_scratch_raw is None else pre_scratch_raw.hex(),
+    }
+    return proof
+
+
+def authenticate_v3_host_kiq_lease(mmio, evidence, run_id):
+    """Authenticate v2 ownership plus the persistent schema-3 lifetime marker."""
+    authenticated = authenticate_v2_host_kiq_lease(mmio, evidence, run_id)
+    if (authenticated.proof.get('pool_readback') !=
+            RECOVERY_LEASE_V2.POOL_READBACK_COMMITTED or
+            evidence.pool_status is None or
+            evidence.pool_status.state != RECOVERY_LEASE_V2.POOL_ACTIVE):
+        raise RecoveryError('schema-3 recovery requires an exact ACTIVE pool record')
+    owned_raw = evidence.descriptor.pack()
+    pool_raw = evidence.pool_status.pack()
+    lifetime = _recovery_lifetime_v3()
+    lifetime_offset = (authenticated.layout.lease_offset +
+                       lifetime.LIFETIME_OFFSET)
+    raw = _read_vram_bytes(
+        mmio, lifetime_offset, lifetime.LIFETIME_STRUCT.size)
+    try:
+        status = lifetime.require_valid_readback(
+            raw, owned_raw, pool_raw)
+    except lifetime.LifetimeValidationError as error:
+        raise RecoveryError('native recovery lifetime marker is invalid: ' + str(error)) \
+            from error
+    return AuthenticatedV3Lease(
+        authenticated.layout,
+        _v3_proof(authenticated.proof, status, raw), evidence, raw)
+
+
+def _authenticate_native_host_kiq_lease(mmio, evidence, run_id,
+                                        recovery_lease_schema):
+    if recovery_lease_schema == 2:
+        return authenticate_v2_host_kiq_lease(mmio, evidence, run_id)
+    if recovery_lease_schema == 3:
+        return authenticate_v3_host_kiq_lease(mmio, evidence, run_id)
+    raise RecoveryError('recovery lease schema must be 2 or 3')
+
+
+def _recheck_v3_lifetime(mmio, authenticated, run_id):
+    if not isinstance(authenticated, AuthenticatedV3Lease):
+        raise RecoveryError('authenticated schema-3 recovery lease proof is invalid')
+    canonical = authenticate_v3_host_kiq_lease(
+        mmio, authenticated.evidence, run_id)
+    if (canonical.layout != authenticated.layout or
+            canonical.lifetime_raw != authenticated.lifetime_raw or
+            canonical.proof != authenticated.proof):
+        raise RecoveryError('authenticated schema-3 recovery lease changed before recovery')
+    proof = dict(authenticated.proof)
+    proof['lifetime_readbacks'] = dict(proof['lifetime_readbacks'])
+    proof['lifetime_readbacks']['pre_scratch'] = canonical.lifetime_raw.hex()
+    return proof
+
+
 def prepare_v2_host_kiq_recovery(mmio, authenticated, run_id):
     """Recheck immutable ownership and geometry without consuming the descriptor."""
-    if (not isinstance(authenticated, AuthenticatedV2Lease) or
+    if (not isinstance(authenticated, (AuthenticatedV2Lease, AuthenticatedV3Lease)) or
             authenticated.proof.get('run_id') != run_id):
         raise RecoveryError('authenticated native recovery lease proof is invalid')
-    canonical = authenticate_v2_host_kiq_lease(
-        mmio, authenticated.evidence, run_id)
+    canonical = (_authenticate_native_host_kiq_lease(
+        mmio, authenticated.evidence, run_id,
+        3 if isinstance(authenticated, AuthenticatedV3Lease) else 2))
     if canonical.layout != authenticated.layout:
         raise RecoveryError('authenticated native recovery lease layout is invalid')
     if canonical.proof != authenticated.proof:
@@ -835,8 +947,11 @@ def valid_apple_graphics_snapshot(snapshot):
 def valid_apple_graphics_pipe_guard(proof, run_id):
     """Validate the exact ACTIVE-bound pre-consumption schema-5 guard."""
     before = proof.get('reservation_before') if isinstance(proof, dict) else None
-    if isinstance(before, dict) and before.get('schema') == 2:
-        reservation_valid = valid_v2_lease_proof(before, run_id)
+    if isinstance(before, dict) and before.get('schema') in (2, 3):
+        reservation_valid = (valid_v2_lease_proof(before, run_id)
+                             if before.get('schema') == 2 else
+                             valid_v3_lease_proof(
+                                 before, run_id, require_pre_scratch=False))
         expected_reservation = before
     else:
         try:
@@ -979,9 +1094,59 @@ def valid_v2_lease_proof(proof, run_id):
     return status.checksum == pool.get('checksum')
 
 
+def valid_v3_lease_proof(proof, run_id, *, require_pre_scratch=True):
+    if not isinstance(proof, dict):
+        return False
+    base_keys = {'schema', 'lease_version', 'lifetime_version', 'state',
+                 'lease_start', 'lease_end', 'scratch_start', 'scratch_end',
+                 'run_id', 'checksum', 'immutable', 'pool_readback', 'pool_status',
+                 'lifetime_status', 'lifetime_readbacks'}
+    if set(proof) != base_keys or proof.get('schema') != 3:
+        return False
+    v2 = dict(proof)
+    for key in ('lifetime_version', 'lifetime_status', 'lifetime_readbacks'):
+        v2.pop(key)
+    v2['schema'] = 2
+    v2['version'] = v2.pop('lease_version', None)
+    if not valid_v2_lease_proof(v2, run_id):
+        return False
+    lifetime = _recovery_lifetime_v3()
+    try:
+        descriptor = RECOVERY_LEASE_V2.make_ownership_descriptor(
+            proof['lease_start'], *_reservation_nonce(run_id))
+        pool = proof['pool_status']
+        status = RECOVERY_LEASE_V2.make_pool_status(
+            descriptor, state=pool['state'], pool0_before=pool['pool0_before'],
+            pool0_after=pool['pool0_after'], pool1_before=pool['pool1_before'],
+            pool1_after=pool['pool1_after'], reason=pool['reason'])
+        marker = lifetime.make_valid_marker(
+            descriptor.pack(), status.pack())
+    except (KeyError, TypeError, ValueError,
+            RECOVERY_LEASE_V2.LeaseValidationError,
+            lifetime.LifetimeValidationError):
+        return False
+    readbacks = proof.get('lifetime_readbacks')
+    lifetime_status = proof.get('lifetime_status')
+    expected_raw = marker.pack().hex()
+    return (
+        proof.get('lease_version') == descriptor.version and
+        proof.get('lifetime_version') == lifetime.LIFETIME_VERSION and
+        isinstance(lifetime_status, dict) and
+        set(lifetime_status) == set(marker._fields) and
+        all(type(value) is int for value in lifetime_status.values()) and
+        lifetime_status == _lifetime_status_dict(marker) and
+        isinstance(readbacks, dict) and
+        set(readbacks) == {'authenticated', 'pre_scratch'} and
+        readbacks.get('authenticated') == expected_raw and
+        (readbacks.get('pre_scratch') == expected_raw if require_pre_scratch
+         else readbacks.get('pre_scratch') in (None, expected_raw)))
+
+
 def valid_recovery_lease_proof(proof, run_id):
     if isinstance(proof, dict) and proof.get('schema') == 2:
         return valid_v2_lease_proof(proof, run_id)
+    if isinstance(proof, dict) and proof.get('schema') == 3:
+        return valid_v3_lease_proof(proof, run_id)
     return valid_consumed_reservation(proof, run_id)
 
 
@@ -1248,6 +1413,13 @@ def retire_legacy_gfx_with_host_kiq(mmio, prior_run_id, sleep=time.sleep, polls=
         eop_offset = HOST_KIQ_EOP_OFFSET if layout is None else layout.eop_offset
         eop_size = HOST_KIQ_EOP_SIZE if layout is None else layout.eop_size
         fence_offset = HOST_KIQ_FENCE_OFFSET if layout is None else layout.fence_offset
+        if isinstance(authenticated_lease, AuthenticatedV3Lease):
+            # This full OWNED/POOL/lifetime readback is deliberately adjacent to
+            # the first scratch write. A late guest ABORT cannot race an earlier
+            # authentication and leave the host using the dynamic scratch arena.
+            reservation = _recheck_v3_lifetime(
+                mmio, authenticated_lease, prior_run_id)
+            failure_evidence['reservation'] = reservation
         mmio.write_vram(ring_offset, ring)
         mmio.write_vram(mqd_offset, mqd)
         mmio.write_vram(rptr_offset, b'\0' * 4)
@@ -1559,11 +1731,14 @@ def _stopped_wptr_eligibility(host_kiq, forced_inactive):
         errors.append('host KIQ evidence')
         return {'eligible': False, 'errors': errors}
     # This exceptional transition still proves the historical fixed scratch
-    # layout. Keep schema-2 recovery fail-closed until its dynamic layout is
+    # layout. Keep native recovery fail-closed until its dynamic layout is
     # covered by the complete stopped-WPTR scan and receipt validator.
     if isinstance(evidence.get('reservation'), dict) and \
-            evidence['reservation'].get('schema') == 2:
-        return {'eligible': False, 'errors': [UNSUPPORTED_V2_STOPPED_WPTR]}
+            evidence['reservation'].get('schema') in (2, 3):
+        schema = evidence['reservation']['schema']
+        return {'eligible': False, 'errors': [
+            UNSUPPORTED_V2_STOPPED_WPTR if schema == 2 else
+            UNSUPPORTED_V3_STOPPED_WPTR]}
     sequence = evidence.get('fence_sequence')
     terminal = evidence.get('terminal_poll')
     if (not u32(sequence) or sequence == 0 or
@@ -2614,8 +2789,17 @@ def quiesce_gc(mmio, sleep=time.sleep, polls=50, kiq_polls=None, prior_run_id=No
 
 def perform_recovery(expected_boot, prior_run_id, state_reader, transport_factory,
                      journal_reader, sleep=time.sleep, polls=2000,
-                     lease_evidence=None, recovery_helpers_sha256=None):
-    helper_hashes = (require_recovery_helpers_sha256(recovery_helpers_sha256)
+                     lease_evidence=None, recovery_helpers_sha256=None,
+                     recovery_lease_schema=None):
+    native_schema = ((2 if recovery_lease_schema is None else recovery_lease_schema)
+                     if lease_evidence is not None else None)
+    if recovery_lease_schema is not None and lease_evidence is None:
+        raise RecoveryError('recovery lease schema requires native lease evidence')
+    if (native_schema is not None and
+            (type(native_schema) is not int or native_schema not in (2, 3))):
+        raise RecoveryError('recovery lease schema must be 2 or 3')
+    helper_hashes = (require_recovery_helpers_sha256(
+                         recovery_helpers_sha256, native_schema)
                      if recovery_helpers_sha256 is not None else None)
     cursor, _, initial_faults = journal_reader()
     if initial_faults:
@@ -2627,8 +2811,8 @@ def perform_recovery(expected_boot, prior_run_id, state_reader, transport_factor
     commands = []
     with transport_factory() as transport:
         region = transport.metadata()
-        authenticated_lease = (authenticate_v2_host_kiq_lease(
-            transport, lease_evidence, prior_run_id)
+        authenticated_lease = (_authenticate_native_host_kiq_lease(
+            transport, lease_evidence, prior_run_id, native_schema)
             if lease_evidence is not None else None)
         # The exact Apple build creates only pipe 0. Inspect both pipe banks while
         # the ACTIVE reservation is still reusable, and refuse an unsupported live
@@ -2640,6 +2824,9 @@ def perform_recovery(expected_boot, prior_run_id, state_reader, transport_factor
             transport, authenticated_lease, prior_run_id)
             if authenticated_lease is not None else
             consume_host_kiq_reservation(transport, prior_run_id))
+        if isinstance(authenticated_lease, AuthenticatedV3Lease):
+            reservation = _recheck_v3_lifetime(
+                transport, authenticated_lease, prior_run_id)
         gc_quiesce = quiesce_gc(transport, sleep, min(polls, 50), polls,
                                 prior_run_id, reservation,
                                 graphics_pipe_guard=graphics_pipe_guard,
@@ -2712,6 +2899,8 @@ def perform_recovery(expected_boot, prior_run_id, state_reader, transport_factor
     }
     if helper_hashes is not None:
         receipt['recovery_helpers_sha256'] = helper_hashes
+    if native_schema == 3:
+        receipt['recovery_lease_schema'] = 3
     return receipt
 
 
@@ -2723,14 +2912,23 @@ def read_ledger(path):
     return value
 
 
-def recover(vm, prior_run_id, lease_evidence=None, recovery_helpers_sha256=None):
+def recover(vm, prior_run_id, lease_evidence=None, recovery_helpers_sha256=None,
+            recovery_lease_schema=None):
     if not re.fullmatch(r'[0-9a-f]{32}', prior_run_id):
         raise RecoveryError('prior run ID must be 32 lowercase hexadecimal characters')
     if lease_evidence is not None:
-        helper_hashes = require_recovery_helpers_sha256(recovery_helpers_sha256)
+        native_schema = (2 if recovery_lease_schema is None else
+                         recovery_lease_schema)
+        if type(native_schema) is not int or native_schema not in (2, 3):
+            raise RecoveryError('recovery lease schema must be 2 or 3')
+        helper_hashes = require_recovery_helpers_sha256(
+            recovery_helpers_sha256, native_schema)
     elif recovery_helpers_sha256 is not None:
-        raise RecoveryError('recovery helper hashes require a schema-2 lease')
+        raise RecoveryError('recovery helper hashes require a native lease')
+    elif recovery_lease_schema is not None:
+        raise RecoveryError('recovery lease schema requires native lease evidence')
     else:
+        native_schema = None
         helper_hashes = None
     lock_path = vm/'run/experiment.lock'
     lock_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2748,10 +2946,15 @@ def recover(vm, prior_run_id, lease_evidence=None, recovery_helpers_sha256=None)
         path = vm/'run/vfio-recovery'/boot_id/(prior_run_id+'.json')
         if path.exists():
             raise RecoveryError('an immutable recovery receipt already exists for this run')
+        recovery_options = {
+            'lease_evidence': lease_evidence,
+            'recovery_helpers_sha256': helper_hashes,
+        }
+        if recovery_lease_schema is not None:
+            recovery_options['recovery_lease_schema'] = native_schema
         evidence = perform_recovery(
             boot_id, prior_run_id, host_state, LegacyVfio, kernel_updates,
-            lease_evidence=lease_evidence,
-            recovery_helpers_sha256=helper_hashes)
+            **recovery_options)
         if helper_hashes is not None:
             evidence['recovery_helpers_sha256'] = helper_hashes
         evidence['recovery_id'] = uuid.uuid4().hex

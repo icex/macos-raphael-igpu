@@ -1,5 +1,187 @@
 # Raphael iGPU: current technical status
 
+## Candidate 180 preparation after reboot — 2026-09-10
+
+New host boot verified: `5aa7641a-6dd5-4cb6-a482-5bd1b15fa946`.
+amdgpu initialized Raphael and currently owns group31; watchdog/NMI/panic and
+crash capture pass, no VM/pending launch or fresh-boot ledger exists. The user
+sleep inhibitor was restored without sudo and is active. Pre-bind reset method
+`bus` is baseline state, not permission to reset; normal preparation must still
+disable reset methods and bind through the reviewed path.
+
+Candidate 180 selects CR2 transport 2 and recovery schema3 via `metal-013`.
+Its functional hypothesis is the zero-attribute VMID2 root repair described below.
+Readiness review found the classifier's native ownership/VMM gate omitted schema3;
+that is fixed with missing/malformed schema3 fixtures (56 classifier tests pass).
+The nonce-bound staging transaction was adapted from the audited 179 transaction
+with pinned inputs, backups, atomic publication and rollback; independent review
+and final source freeze precede build/staging. No GPU run has occurred this boot.
+
+User requested a visible GUI. Existing QEMU argv already uses VMware VGA and
+`-display gtk,gl=on` alongside the passed-through Raphael device. Host X11 access
+was verified. The next bounded launch will expose that window without topology
+changes; it displays the virtual VMware framebuffer, not direct iGPU scanout.
+
+## Capture/cleanup repair verified offline — 2026-09-10 05:47 UTC
+
+**Completed:** three implementation/review agents delivered CR2 capture framing,
+strict host reconstruction, and schema3 persistent lifecycle authentication.
+Coordinator audited the diffs and test evidence. Final verification: **484/484
+Python tests, 14/14 C++ fixtures, whole-driver syntax and exact-24G830 KDK
+preflight passed**. Lease activation/invalidation race tests also passed TSan.
+Independent guest and VFIO reviews returned GO after the reported races were fixed.
+No new hardware cycle, deployment, artifact build, or main push occurred.
+
+Evidence: `~/macos-vm/run/capture-cleanup-verification/`, including
+`python-discovery.log` SHA-256
+`0107707218d89990f5fe575810367955be21f25a8e267d21cdd926aab0c1234c`,
+`cpp-fixtures.log` SHA-256
+`6a5bee171ab4370c7c6291205ebfbf9c8a185b8f6018928ec1f8de5ccff52b24`,
+`guest-verification-summary.txt`, and exact source hashes. The following chronology
+records the implementation and review decisions; final results above supersede
+its intermediate pending statements.
+
+**Hardware handoff:** candidate179 remains non-authorizing. Its schema2 ACTIVE
+record can survive late invalidation, its replay is malformed, and it has no
+schema3 lifecycle marker or valid recovery receipt. Neither selective log parsing
+nor new code establishes safe cleanup of that frozen run. A clean host reboot is
+required before the next GPU experiment under the project's gates. Same-boot
+ledger is exhausted at seven launches; no allowance was bypassed or renewed here.
+After reboot: verify amdgpu-initialized baseline and existing safety gates, build
+one new candidate from reviewed source, explicitly select CR2/schema3 in its
+manifest, and run a bounded functional/cleanup qualification. Pre-VALID crashes
+and stopped-WPTR exceptional recovery remain unsupported; do not claim universal
+crash recovery or desktop Metal from these offline results.
+
+User requested multiple implementation agents, coordinator audit, then testing.
+Three agents are assigned guest capture framing, host reconstruction/regressions,
+and independent cleanup-state review. No additional GPU cycle has run.
+CR2 replay uses <=40-byte hex chunks with build/snapshot/record identity and CRC32;
+an END record verifies a complete immutable-prefix snapshot and its aggregate
+digests. All physical lines are designed below 240 bytes including SYSLOG overhead.
+The legacy candidate179 capture stays invalid and frozen.
+
+The cleanup audit found that BAR OWNED and ACTIVE can survive a later ABORT;
+those bytes cannot replace missing terminal log evidence. A complete replay
+snapshot also cannot prove no later invalidation before a crash. A persistent
+monotonic invalidation marker is being designed for future candidates. The prior
+dev-only relaxation of unrelated replay conflicts is being removed from legacy
+recovery admission; arbitrary corruption could otherwise conceal an ABORT.
+Host boot remains unchanged and sleep inhibition active. Current179 has no valid
+recovery receipt; new software cannot retroactively add its missing marker.
+
+Implementation work is split into three bounded components:
+
+- Guest CR2 framing and lifecycle integration: short hex chunks with checked
+  snapshot manifests, prechecked ready slots, immutable record prefixes.
+- Host CR2 reconstruction/classification and schema3 recovery integration:
+  explicit transport selection, no downgrade on malformed new-format evidence,
+  preservation of legacy refusal and frozen179 evidence.
+- Independent lifecycle core and tests: 88-byte record at lease+0x200, bound to
+  OWNED/POOL checksums and nonce; state publication last, monotonic abort poisoning,
+  crash-prefix and activation/abort race tests. Exact VALID readbacks required
+  before admission and before recovery writes.
+
+The lifecycle marker cannot authorize early initialization failures before ACTIVE
+POOL publication. That limitation must remain explicit. All current work is offline;
+source changes alone do not clear the GPU or create another run allowance.
+
+Verification so far: CR2 guest and host agree on the shared 184/511-byte vector
+(18 chunks, CRC `c8001837`, FNV `2231439245f39550`). Producer and lifecycle C++
+fixtures pass ASan/UBSan; initial host CR2/consumer integration passes 17 focused
+tests. Independent review accepted the framing bounds (197-byte chunk lines,
+231-byte END lines including the measured prefix/newline). Guest whole-source
+syntax passed with existing Lilu deprecation warnings. These are component results;
+final integrated verification is pending.
+
+Review corrections made before deployment: short build-ID rejection was reproduced
+under ASan and fixed; VALID publication refuses any nonzero existing marker state
+and verifies zero before writing; client admission stays blocked during both pool
+and lifetime publication. A newly identified race in the older LeaseState phase
+is being corrected with atomic transitions before acceptance. Host receipts retain
+exact marker reads, with a second full validation immediately before scratch writes.
+
+## Latest run: candidate 179 — 2026-09-10 03:31 UTC
+
+The user approved the prepared one-run policy. Run
+`bbbe52426889a90fec1680d5c808dd97` launched at 03:29:00 UTC and ended at
+03:31:39 UTC. Evidence: `~/macos-vm/run/metal-012-179/`. This section supersedes
+the pre-run status below; no second launch is authorized or attempted.
+
+**Meaningful progress past 178-B:** frozen serial line 15519, event 65:
+```text
+XV2 VMM phase=native enable=1 base=0xf40b6f3000 arena=0xffffff9b1637c280 pool0=0xffffffa4b0190180 pool1=0xffffffa4b0190200
+```
+Both software pools exclude the native lease `[0xfaf3000,0xfb08000)` with exact
+`0x10000000 -> 0xffeb000` free-byte changes. Paging submissions now reach SDMA
+(events 81 and 180); the old pre-submission/VMM-arena boundary is crossed.
+The previous at-least-four-cycle streak is retired on this evidence, not on a
+successful Metal result. New downstream issue count: **one actual cycle**.
+
+**Current functional failure:** SDMA paging fetch faults at `0x400180000`,
+`VM_FAULT_STATUS=0x201b3a`. Captured VMID2 root is `0xf40b6f3000`, with root repair
+declined as `unsupported-flags`. BAR-to-MC root translation is under offline
+investigation; this is a hypothesis, not yet a proven fault mechanism. No completed
+Metal probe or functional desktop is demonstrated.
+
+**Capture/cleanup regression:** raw verdict is `INVALID`, earliest failure
+`recovery_lease_pool_missing`, with `definitive critical capture loss; aborting exposure`.
+The capture includes a complete later ACTIVE record but corrupted/interleaved
+structured replay. Recovery refused with
+`ValueError: canonical critical capture has a conflicting replay`; no valid recovery
+receipt exists. Preserve the raw verdict; later records do not erase capture ambiguity.
+Shutdown was forced after the guest shutdown request. No further device access or
+GPU retries are being attempted; agents are auditing the capture offline.
+
+Final host snapshot: same boot, vfio-pci, no active VM, watchdogs/capture/sleep
+inhibition active. Operator confirmed no QEMU process remains and no host GPU fault
+in the captured kernel messages. Device release is not proof of cleaned GPU state.
+
+| Boundary | 179 result |
+|---|---|
+| Native VMM arena and allocator construction | Passed |
+| Paging SDMA dispatch | Reached; GPU memory fault |
+| Correct Metal compute/render | Not demonstrated; no probe result |
+| Validated cleanup/reuse | Failed closed on capture conflict |
+
+### Post-run offline findings and changes
+
+The native-root refusal is now reproduced by a regression fixture. The captured
+root has zero low attributes; request `flags=0xff` is a separate field. Exact KDK
+code at `0x624ed..0x624f8` copies the root into prepared PTB words. The old helper
+allowed only root attributes 1 or 5. The agent added observed form 0 within the
+existing Raphael/hub0/VMID2/reprogram/aperture gates; SYSTEM and unknown forms
+remain refused. The fixture failed before the predicate change and passed under
+ASan/UBSan and release-style UBSan afterward. Coordinator reviewed the two-file
+diff. It is **dev source only**, not rebuilt or deployed. Hardware causality is
+still untested; a later qualified experiment must show repaired/prepared/live
+root `0x84b6f3000` and actual PAGE progress.
+
+Capture root cause is more precise than random serial corruption: the structured
+POOL replay reaches exactly **255 visible characters** (81-byte envelope plus
+174 payload bytes), truncating the checksum after `0x3410` and losing the newline.
+Its direct 210-character line is complete. Local Lilu formats into 1024 bytes,
+so the demonstrated limit is downstream of that formatter. Other replay records
+also truncate at this boundary. An unrelated seq84 replay additionally suffers
+transient serial corruption. Internal `truncated=0` tracks the 512-byte storage
+slot and does not detect transport truncation. All agents agree malformed POOL
+replay must continue to block frozen179 recovery. A future compact/chunked replay
+format with bounded physical lines and end-to-end integrity is needed; parser-only
+tolerance cannot make this capture valid.
+
+A separate dev-only recovery extractor now limits unrelated replay conflicts to
+experiment classification while retaining all XH2 ambiguity/identity/bounds
+refusals. Its focused 13-test run passed, including unchanged classifier failure
+cases. The real frozen179 capture still fails strict parsing with
+`malformed XH2 POOL record`; no recovery was attempted through this code. Test log:
+`/tmp/candidate179-recovery-extractor-tests.log`, SHA-256
+`763b7e7bfa13fc451258b27e5433af0f3c47903fb3f2a2168b7e8cf8a56be3be`.
+These post-run changes are uncommitted/unbuilt and cannot replace the pinned
+candidate179 helper identity. Next prerequisite is reliable critical replay
+transport and a reviewed recovery path; no new GPU allowance is active.
+
+## Pre-run preparation and historical context
+
 **Standing escalation rule (2026-09-10):** after a fourth consecutive GPU test
 cycle with the same unresolved issue, pause routine retries and obtain a
 `gpt-6-astra` / `xhigh` adversarial review using the user's exact prompt. Archive
@@ -16,7 +198,7 @@ The original report is preserved in `findings/research/astra-reviews/2026-09-09-
 Current offline work corrects native recovery ownership and adds backing allocation
 observations; it has not demonstrated functional progress or reset the streak.
 
-Last updated: **2026-09-09 22:49 UTC**. Maintained by the coordinator after each hardware run,
+Last updated: **2026-09-09 23:24 UTC**. Maintained by the coordinator after each hardware run,
 material finding, implementation change, or review correction. This is the current review entry
 point; older handoffs and chronological findings can contain superseded conclusions.
 
@@ -33,10 +215,44 @@ the native both-pool reserve ABI. See
 `findings/research/2026-09-metal-integration/lease-v2-verification.md`.
 Candidate metadata is now 1.0.179, and the new experiment card is `metal-012`.
 The independent one-run policy is only offline code: no live authority or activation
-has been created, and it does not itself approve a seventh launch. No new build,
-deployment, GPU cycle, or ledger admission
-has occurred; last hardware evidence remains 178-B and the streak remains at least four.
-Next is one clean candidate build and a staging-only transaction. The existing
+has been created, and it does not itself approve a seventh launch. The candidate
+has now been built exactly once from clean detached commit
+`29df146165dec1bbab4829a845aca5e7621c87b9` and staged with verified readbacks;
+no GPU cycle or ledger admission has occurred. Last hardware evidence remains 178-B and the streak remains
+at least four. Build ID is `aae8954f05dd497ba9019529e6fec39e`; executable SHA-256
+is `5642d859aa53b6de849af04c26de0f2682299bfb6d38f4ffb1cc4f40b839c4c7` and ZIP
+SHA-256 is `747893ea69c2e0021f35bb84109c6f59fa2346e0792c22b4ee5529468ab63255`.
+Full identities and logs are in `~/macos-vm/run/candidate-179-build-identities.json`
+and `candidate-179-verification.log`. Archive integrity, clean source, version,
+embedded build ID, and x86_64 kext metadata verified. Production build warnings
+are Lilu route deprecations and cross-toolchain option/path warnings.
+Actual-artifact exact-KDK preflight passed; its sole symbol-name lookup skip,
+`kOffVmmInit=0x56d3a`, was independently verified against the exact symbol and
+17-byte prologue with no RIP-relative operand. Evidence:
+`~/macos-vm/run/candidate-179-preflight.log` (SHA-256
+`9cc35583dd43e3ba526d24cc205c84bc1569f384e87429ef31c510318811e222`).
+The staging-only transaction passed independent review and completed successfully.
+An interrupt window between file replacement and rollback bookkeeping was corrected
+and tested offline before execution. Raw/config/qcow readbacks and all backups match.
+Run identity is `bbbe52426889a90fec1680d5c808dd97`; staging record
+`~/macos-vm/run/candidate-179/staging.json` SHA-256 is
+`d35150d0b83fcbfc5b66a32988e555783da2e3a31d14a1d458f903c230e03912`.
+Reviewed script and log are preserved as `run/candidate179-stage-e887303d.py`
+and `.log`. No hardware launch occurred and the live ledger remains 6/6 with
+unchanged SHA-256 `8105707580a4d89b2e883be90730e1e84ad32f42e69a0310264f3e5431f0260f`.
+Manifest sealing and draft-only one-run packet generation passed. Manifest
+`run/candidate179-qualification-manifests/179.json` SHA-256:
+`f6c86824ef8e140ece9476f3d11f388f7336b9e7afe359f69b98db42e37bf05d`.
+Draft packet is `~/macos-vm/run/candidate179-review/`; policy SHA-256
+`3398648a794835b2cb2344e69ddda57dae1ae25b2fc3b1a0ab7e7917c608e3ed`,
+activation SHA-256 `c988cc79a72d3ddc1361ba8c415de6954555e062649ca86182a480e84f87bd97`.
+The real authorization validator accepted these drafts in a disposable VM tree.
+No live authority exists. Coordinator reviewed the packet: exactly one additional
+launch, 180-second VM limit, 45-second probe limit, no automatic retry/extension,
+preserved six-row ledger and exact 178-B receipts. Await explicit user renewal of
+this exhausted run budget before live activation; general resume was not interpreted
+as permission to bypass AGENTS.md's exhausted-budget prohibition. No reboot requested.
+The existing
 `redeploy.sh` is not a staging-only command and must not be used for this preparation.
 
 **Work resumed:** the user supplied `report-astra.md` and `report.md` and requested
@@ -102,16 +318,18 @@ number of patches or the advertised Metal version.
   admitted by the completed two-run plan. Its terminal boot ledger is **6/6**; a new finite
   experiment must preserve that history and review fresh hardware prerequisites.
 - **Implementation:** candidate 178 is an observation change, not a functional memory fix.
-  The narrow `AMDAccelVidMemory::allocPhysical` observer is being implemented with production
-  helper tests; the earlier commit-correlation design is superseded. Recovery lease implementation
-  is authorized offline under the agreed immutable ownership and separate pool-status contract. No build or deployment has occurred.
+  Candidate 179 now contains the native lease, full-pool correction, VMM diagnostics,
+  and bounded `AMDAccelVidMemory::allocPhysical` observer. The earlier commit-correlation
+  design is superseded. Offline integration passed and the candidate is built; deployment
+  and functional validation remain outstanding.
 - **Research:** Metal and Raphael/Navi/Linux reports are written. The combined list of exactly
   20 potential issues is written and cross-reviewed. Further research and the native
   commit-target analysis have resumed against both external reports.
 - **Documentation:** candidate 178 archives and roadmap updates are written on `dev` and
   reviewed. Archive checksum and identity checks passed; small wording corrections are underway.
-- **Integration:** no merge or push to `main` until full acceleration is demonstrated. No new
-  release, push, or build was performed after the 178-A/B runs.
+- **Integration:** no merge or push to `main` until full acceleration is demonstrated.
+  One local dev milestone and one isolated experimental build were completed. No push
+  or published release was performed.
 
 | Owner | Active responsibility |
 |---|---|
@@ -121,8 +339,8 @@ number of patches or the advertised Metal version.
 | `harness_v2` | Sol agent integrating prestaged nonce identity, canonical recovery records and VMM readiness |
 
 `astra_stall_review` completed the required review; its report and accepted next
-test are linked below. The guest helper's focused sanitizer fixture passes;
-production integration and the full affected test suite remain in progress.
+test are linked below. Guest and host integration passed the combined offline suite;
+the agents are now verifying the built artifact and preparing staging without launch.
 
 Implementation and testing are delegated to agents; the coordinator reviews their changes.
 Other reviewers should provide sourced suggestions rather than start another VM or touch the GPU.

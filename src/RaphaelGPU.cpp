@@ -41,6 +41,8 @@
 #include "EngineLifecycle.hpp"
 #include "RecoveryReservation.hpp"
 #include "RecoveryLease.hpp"
+#include "RecoveryLifetime.hpp"
+#include "CriticalReplay.hpp"
 #if __has_include("BuildIdentity.hpp")
 #include "BuildIdentity.hpp"
 #else
@@ -336,6 +338,10 @@ static uint64_t recoveryNonceHi = 0;
 static RaphaelRecoveryV2::LeaseState recoveryLeaseState {};
 static void *recoveryLeaseElement = nullptr;
 static bool recoveryPoolStatusPublished = false;
+static RaphaelRecoveryV2::PoolStatus recoveryActivePoolStatus {};
+static volatile bool recoveryActivePoolStatusReady = false;
+static RaphaelRecoveryV3::LifetimeStatus recoveryLifetimeStatus {};
+static RaphaelRecoveryV3::LifetimeGate recoveryLifetimeGate {};
 static void *recoveryLeaseMemoryOwner = nullptr;
 static void *recoveryLeaseHardwareOwner = nullptr;
 
@@ -418,17 +424,22 @@ static void diagDumpThread(void *, wait_result_t) {
     }
     SYSLOG("rgpu", "==== deferred diagnostics end (dropped=%llu truncated=%llu) ====",
            diagnostics.dropped(), diagnostics.truncated());
-    // Replay only critical records. Native startup can finish after the first dump.
-    // Immutable slots allow snapshots while callbacks append, without serial under
-    // a lock. A pending reservation is retried at the next snapshot, never read.
+    // Replay complete immutable prefixes using short, integrity-bound physical
+    // lines. Native startup can finish after the first dump. A reservation whose
+    // release publication is still pending suppresses the whole snapshot attempt.
     for (unsigned replay = 0; replay < 18; ++replay) {
-        size_t count = criticalRecords.size();
-        SYSLOG("rgpu", "RGPU_RECORDS build=%s count=%lu dropped=%llu truncated=%llu",
-               RGPU_BUILD_ID, count, criticalRecords.dropped(), criticalRecords.truncated());
-        for (size_t i = 0; i < count; ++i) {
-            if (criticalRecords.read(i, text))
-                SYSLOG("rgpu", "RGPU_EVENT build=%s seq=%lu %s", RGPU_BUILD_ID, i, text);
-        }
+        const size_t count = criticalRecords.size();
+        const uint64_t dropped = criticalRecords.dropped();
+        const uint64_t truncated = criticalRecords.truncated();
+        const bool complete = rgpu::CriticalReplayV2::emitSnapshot(
+            RGPU_BUILD_ID, replay, count, dropped, truncated,
+            [](size_t sequence,
+               char (&record)[rgpu::CriticalReplayV2::kRecordStorageBytes]) {
+                return criticalRecords.read(sequence, record);
+            },
+            [](const char *line) { SYSLOG("rgpu", "%s", line); });
+        if (!complete)
+            SYSLOG("rgpu", "critical replay snapshot %u deferred", replay);
         IOSleep(10000);
     }
     thread_terminate(current_thread());
@@ -4037,6 +4048,74 @@ static bool recoveryLeaseDisjointFromLiveGart(
     return disjoint;
 }
 
+static bool writeRecoveryLifetime(
+        const RaphaelRecoveryV3::LifetimeStatus &status, bool aborting) {
+    auto fb = fbAperture();
+    if (fb == nullptr) return false;
+    const uint64_t base = status.leaseOffset + RaphaelRecoveryV3::LifetimeOffset;
+    auto write = [=](uint32_t i, uint32_t value) {
+        fb[base / sizeof(uint32_t) + i] = value;
+    };
+    auto read = [=](uint32_t i) {
+        return fb[base / sizeof(uint32_t) + i];
+    };
+    auto fence = [] { OSSynchronizeIO(); };
+    return aborting
+        ? RaphaelRecoveryV3::publishAbortLifetime(status, write, read, fence)
+        : RaphaelRecoveryV3::publishValidLifetime(status, write, read, fence);
+}
+
+static void abortRecoveryLifetime(RaphaelRecoveryV3::LifetimeReason reason) {
+    const auto request = recoveryLifetimeGate.requestAbort(reason);
+    recoveryLeaseState.invalidate();
+    if (request == RaphaelRecoveryV3::AbortRequest::Owner) {
+        const auto aborted = RaphaelRecoveryV3::makeAbortLifetime(
+            recoveryLifetimeStatus, reason);
+        const bool published = writeRecoveryLifetime(aborted, true);
+        if (published) recoveryLifetimeStatus = aborted;
+        recoveryLifetimeGate.finishAbortPublication(published);
+        CRLOG("XH3 LIFETIME state=ABORT reason=%u nonce=%016llx_%016llx "
+              "durable=%u", static_cast<uint32_t>(reason), recoveryNonceLo,
+              recoveryNonceHi, published);
+    }
+}
+
+static bool authorizeRecoveryClients(
+        const RaphaelRecoveryV2::PoolStatus &status) {
+    if (!__atomic_load_n(&recoveryActivePoolStatusReady, __ATOMIC_ACQUIRE) ||
+        __builtin_memcmp(&status, &recoveryActivePoolStatus, sizeof(status)) != 0 ||
+        recoveryLeaseState.phase() != RaphaelRecoveryV2::Phase::PoolVerified ||
+        recoveryLeaseState.clientsAllowed() ||
+        !RaphaelRecoveryV2::validPoolStatus(
+            recoveryActivePoolStatus, recoveryLeaseState.ownership()) ||
+        !recoveryLifetimeGate.beginValidPublication())
+        return false;
+
+    const auto valid = RaphaelRecoveryV3::makeValidLifetime(
+        recoveryLeaseState.ownership(), recoveryActivePoolStatus);
+    recoveryLifetimeStatus = valid;
+    const bool published = writeRecoveryLifetime(valid, false);
+    const auto completion = recoveryLifetimeGate.finishValidPublication(published);
+    if (completion == RaphaelRecoveryV3::ValidCompletion::Active) {
+        if (!published || !recoveryLifetimeGate.clientsAllowed()) return false;
+        CRLOG("XH3 LIFETIME state=VALID nonce=%016llx_%016llx checksum=%#llx",
+              recoveryNonceLo, recoveryNonceHi, valid.checksum);
+        return true;
+    }
+    if (completion == RaphaelRecoveryV3::ValidCompletion::AbortOwner) {
+        const auto reason = static_cast<RaphaelRecoveryV3::LifetimeReason>(
+            recoveryLifetimeGate.abortReason());
+        const auto aborted = RaphaelRecoveryV3::makeAbortLifetime(valid, reason);
+        const bool abortPublished = writeRecoveryLifetime(aborted, true);
+        if (abortPublished) recoveryLifetimeStatus = aborted;
+        recoveryLifetimeGate.finishAbortPublication(abortPublished);
+        CRLOG("XH3 LIFETIME state=ABORT reason=%u nonce=%016llx_%016llx "
+              "durable=%u", static_cast<uint32_t>(reason), recoveryNonceLo,
+              recoveryNonceHi, abortPublished);
+    }
+    return false;
+}
+
 static void wrapVmmSetVSReady(void *self, uint32_t ready) {
     auto native = [&] { FunctionCast(wrapVmmSetVSReady, orgVmmSetVSReady)(self, ready); };
     if (self == nullptr) { native(); return; }
@@ -4091,6 +4170,13 @@ static void wrapVmmSetVSReady(void *self, uint32_t ready) {
                         [&](uint32_t i, uint32_t v) { write(statusBase, i, v); },
                         [&](uint32_t i) { return read(statusBase, i); }, fence))
                     return false;
+                const uint64_t lifetimeBase = descriptor.leaseOffset +
+                                              RaphaelRecoveryV3::LifetimeOffset;
+                if (!RaphaelRecoveryV2::clearRecord<
+                        RaphaelRecoveryV3::LifetimeStatus>(
+                        [&](uint32_t i, uint32_t v) { write(lifetimeBase, i, v); },
+                        [&](uint32_t i) { return read(lifetimeBase, i); }, fence))
+                    return false;
                 if (!RaphaelRecoveryV2::publishRecord(
                         descriptor,
                         [&](uint32_t i, uint32_t v) {
@@ -4111,6 +4197,8 @@ static void wrapVmmSetVSReady(void *self, uint32_t ready) {
                 return true;
             }, native);
         if (!owned && !acquisitionExpected) {
+            abortRecoveryLifetime(
+                RaphaelRecoveryV3::LifetimeReasonDuplicateReady);
             CRLOG("XH2 ABORT reason=duplicate-ready nonce=%016llx_%016llx",
                   recoveryNonceLo, recoveryNonceHi);
         }
@@ -4122,7 +4210,7 @@ static void wrapVmmSetVSReady(void *self, uint32_t ready) {
             const bool vmmOwned = baseOk && RaphaelRecoveryV2::disjointFromRange(
                 recoveryLeaseState.ownership(), vmmOffset, 0x04400000, visible);
             if (!vmmOwned) {
-                recoveryLeaseState.invalidate();
+                abortRecoveryLifetime(RaphaelRecoveryV3::LifetimeReasonVmmRange);
                 owned = false;
                 CRLOG("XH2 ABORT reason=vmm-range nonce=%016llx_%016llx",
                       recoveryNonceLo, recoveryNonceHi);
@@ -5216,6 +5304,10 @@ static bool publishRecoveryPoolStatus(const RaphaelRecoveryV2::PoolStatus &statu
         [=](uint32_t i) { return fb[base / 4 + i]; }, fence);
     if (!written) return false;
     recoveryPoolStatusPublished = true;
+    if (status.state == RaphaelRecoveryV2::PoolActive) {
+        recoveryActivePoolStatus = status;
+        __atomic_store_n(&recoveryActivePoolStatusReady, true, __ATOMIC_RELEASE);
+    }
     const auto nonce = RaphaelRecoveryV2::logNonce(status);
     CRLOG("XH2 POOL state=%s nonce=%016llx_%016llx gen=1 lease=%#llx-%#llx "
           "pool0=%#llx->%#llx pool1=%#llx->%#llx reason=%llu checksum=%#llx",
@@ -5243,7 +5335,7 @@ static bool wrapHwMemEnable(void *self) {
         if (self != expectedMemory || actualHardware != expectedHardware ||
             expectedHardware == nullptr || vt == nullptr ||
             vt[0x198 / 8] != x6Base + kOffHwMemReserve) {
-            recoveryLeaseState.invalidate();
+            abortRecoveryLifetime(RaphaelRecoveryV3::LifetimeReasonPoolOwner);
             CRLOG("XH2 ABORT reason=pool-owner nonce=%016llx_%016llx",
                   recoveryNonceLo, recoveryNonceHi);
             RLOG("XH: v2 pool owner rejected memory=%p/%p hardware=%p/%p reserve=%#llx",
@@ -5293,9 +5385,14 @@ static bool wrapHwMemEnable(void *self) {
         },
         [&](const RaphaelRecoveryV2::PoolStatus &status) {
             return publishRecoveryPoolStatus(status);
+        },
+        [&](const RaphaelRecoveryV2::PoolStatus &status) {
+            return authorizeRecoveryClients(status);
         });
     if (!result.active) {
         if (result.reason == RaphaelRecoveryV2::ReasonDuplicateEpoch) {
+            abortRecoveryLifetime(
+                RaphaelRecoveryV3::LifetimeReasonDuplicatePool);
             CRLOG("XH2 ABORT reason=duplicate-pool nonce=%016llx_%016llx",
                   recoveryNonceLo, recoveryNonceHi);
         }

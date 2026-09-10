@@ -36,7 +36,10 @@ class WarmQualificationTests(unittest.TestCase):
         return SimpleNamespace(
             validate_receipt=lambda receipt, boot, prior: [],
             validate_running=lambda manifest, running: [],
-            parse_serial=classifier.parse_serial,
+            parse_serial=lambda manifest, serial: classifier.parse_serial(
+                serial,
+                critical_replay_schema=manifest.get('critical_replay_schema'),
+                expected_build=manifest.get('build_id')),
             classify_readiness=lambda manifest, events: {
                 'valid': True, 'verdict': 'PROBE_NOT_RUN'},
             admit_host=lambda manifest, host, boots, reuse_allowed=False: [],
@@ -235,7 +238,7 @@ class WarmQualificationTests(unittest.TestCase):
                   "dropped=0 truncated=0\n"
                   f"RGPU_EVENT build={f.manifest_a['build_id']} seq=0 "
                   f"BUILD: identity={f.manifest_a['build_id']}\n")
-        events = self.hooks().parse_serial(serial)
+        events = self.hooks().parse_serial(f.manifest_a, serial)
         (f.output_a / 'events.jsonl').write_text(
             ''.join(json.dumps(event) + '\n' for event in events))
         (f.output_a / 'serial.txt').write_text(serial)
