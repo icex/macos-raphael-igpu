@@ -1,0 +1,4 @@
+{
+  "status": "failed",
+  "error": "CriticalReplayError: CR2 snapshot has a missing chunk"
+}

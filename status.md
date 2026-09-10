@@ -1,5 +1,123 @@
 # Raphael iGPU: current technical status
 
+## Candidate 183 result: source correction observed; hardware retirement blocks reuse
+
+### Latest outcome: reconstruction passed; hardware retirement incomplete
+
+The reviewed one-use recovery wrapper executed once after **548 Python tests**
+passed and independent source/proof review. It successfully reconstructed the
+terminal snapshot through the unchanged parser and admitted normal schema-3
+cleanup. **The remaining failure is hardware retirement, not capture validation.**
+Receipt `3b9e76e85ad349d2a480b4f154d2609c` is `incomplete`,
+`authorizes_launch=false`, SHA-256
+`914c2ea652ea076e8168f362543200f69af0e7037f4011aba745018e71513c17`.
+
+```text
+gc_quiesce: active_before=9 dequeued=1 dequeue_timeouts=8 forced_inactive=8
+host_kiq: status=blocked-active-hqd
+gfx_retirement_confirmed=false gfx_ring_clean=false
+active_after=0 gfx_rb_active_after=0
+PSP destroy-all-rings: confirmed
+PSP destroy-GPCOM-ring: confirmed
+kernel_messages=[]
+```
+
+Zero final active bits after forced disable are not proof of clean retirement.
+The recovery helper correctly refuses reuse. The host stayed on the same boot;
+no additional device action or launch is authorized by the remaining 2/3 ledger.
+A fresh host boot is required before another GPU experiment under the current
+safety gates. No reset or second cleanup attempt will bypass this result.
+Original serial, failed automatic-recovery result, and `INCONCLUSIVE` functional
+verdict remain unchanged. The proof, durable attempt and new result are separate.
+Result SHA-256 `9c712d4c536a065e343f97f3b7f27f28dc4ee58056d682c5cb90a689a1624e75`;
+attempt SHA-256 `1b21d97a6496d9c00750a0b7a77cda0d62faf2776ab0f85d1aedc8e6d5c86eee`.
+Regression log `~/macos-vm/run/candidate183-recovery-final-regression.log`, SHA-256
+`f7b9e433afb6ff1e30a4e0003c524f401d77fb95fc70f8d385818b6ca9981815`.
+
+Next work must separate capture reliability from the later lifecycle fault:
+preserve mode-4 source conversion, investigate `doStop`'s KIQ frame and queue
+progress using frozen evidence, and make the next probe's admission observable.
+Do not assume the unobserved VMID9 path is the current cause or repeat candidate
+183 unchanged. The 5-second guest picker setting remains staged and verified.
+
+### Original run result and recovery investigation history
+
+The following records the original failure and investigation before the latest
+recovery outcome above. **Desktop Metal is not yet functional.** Run
+`f1728b74e128c5acd35661334bff12be` used the sealed candidate below on the same boot
+at `2026-09-10T09:06:25.104Z`, with the verified 5-second picker setting. It reached
+the 180-second bound, requested shutdown and forced the exact QEMU container
+closed. No valid Metal probe verdict was produced. The host remains on boot
+`d67da91d-94e6-42f0-8dd1-78b42f5496e1`; watchdogs and sleep inhibition remain active.
+
+**Preliminary functional evidence (raw serial, not an accepted final CR2
+snapshot):** the mode-4 route and gate installed; conversion counters reached
+206 then 347. A returned child sample reported
+`source=0xf40b6f4000 result=0x84b6f4000 template=0x2000000000000001`.
+VMID2 dispatch fault samples at 0/1/10/100 ms reported status zero. Later raw
+fault diagnostics showed `0x101b3a @ 0x400900000` and
+`0x1009ba @ 0x401180000`, followed by stamp timeouts. Native submission counts
+reached `113/113/0`; this is not a completed-work count. Agents are comparing
+the later fault boundary with the prior VMID2 failure and Astra's VMID9 hypothesis.
+
+**Capture and cleanup:** raw verdict is `INCONCLUSIVE`, earliest failure
+`identity_or_route_missing`, evidence `capture_loss`, termination reason null.
+Automatic recovery returned `failed` with
+`CriticalReplayError: CR2 snapshot has a missing chunk`; no authorizing receipt
+was issued. Ledger is now **2/3 used**, but remaining numerical budget does not
+authorize another launch without successful cleanup. No alternate hardware
+cleanup, reset, or retry has been attempted. An offline capture audit is checking
+whether the unchanged validator has any admissible final evidence; guards are
+not being relaxed.
+
+**Offline capture audit:** the latest manifested snapshot 3 is missing all four
+chunks of record 134, destroyed by concurrent AMD console output. Earlier
+snapshot 2 is complete (267 records). Using its exact record 134 bytes for an
+offline diagnostic reconstruction makes snapshot 3's existing CRC/FNV match
+all 285 records. The unchanged parser and `recover-frozen-run.build_proof`
+nevertheless reject this transcript. No reconstructed stream has authorized
+hardware access. Agents are designing and independently auditing an explicit
+proof with original-input provenance, complete terminal integrity checks and
+unchanged live lifetime/ownership gates before considering recovery.
+The design is recorded in `findings/research/2026-09-10-post183-capture.md`.
+Independent review approved an insertion-only, run-specific recovery wrapper;
+implementation and tests are in progress. It preserves every original byte and
+adds only the four donor-derived chunks immediately before the original terminal
+END. The unchanged parser must accept that full derived transcript. The proof
+will be recovery-only, with explicit provenance and one-use execution; it will
+not change the functional verdict or authorize another launch. No recovery
+execution has occurred. CRC/FNV provide accidental-corruption integrity checks,
+not cryptographic authentication.
+The frozen wrapper is `tools/candidate183-recovery-repair.py`, SHA-256
+`5421088fd8302116d5ea413937572aa2687ac84acf46bbd6d437740b5999c956`.
+Its 13 focused tests passed. Proof-only output in the original run directory,
+`candidate183-recovery-repair-proof.json`, has SHA-256
+`5e2c287356cd3721d481aad6dd9a0422a218d7674c8b9e23624bda3f5db0ad14`.
+It records insertion offset 1511806, donor snapshot 2, terminal snapshot 3,
+285 records, 971 chunks, CRC32 `f18488f3`, FNV `72e0f4557e90ee72`, and derived
+transcript SHA-256 `73aac21e747be5e14178b2bf2e38424dee03214d0a9beb89eff023ce1d47a364`.
+Root reviewed these identities. Full Python regression and independent final
+source/proof review remain before a single cleanup attempt.
+
+**Functional review:** raw dispatch evidence includes two completed walks through
+physical child `0x84b6f4000` and clear fault samples through 100 ms. The later KIQ
+timeout caller `x6+0x68707` maps to `AMDGFX10PM4Engine::doStop(bool)`, which is a
+lifecycle stop path; it does not identify a failed workload packet. No VMID9/probe
+process record was observed, so the VMID9 hypothesis remains untested. The earlier
+paging boundary appears improved, but final evidence validation is still pending.
+
+The first timestamped guest `launchd` message was about 18.2 seconds after
+supervision start (versus roughly 70 seconds for 182); this is an approximate
+whole-startup comparison, not isolated picker timing.
+
+Frozen serial: `~/macos-vm/run/metal-016-183/serial.txt`, SHA-256
+`af132e635729bee36634c4bd4f5280bf63735183f88b465e8a3d34c1c0df0ce1`.
+Verdict SHA-256 `4d896e153fafbc59072eb82014e591dff8536c31d449f63f9a3e032b5052fc49`;
+recovery SHA-256 `ddb66b00adb660c710cd8bc4db03fd37ab569908563630f4f1c5b99d3370055b`.
+The streak is conservatively **5 cycles (179–183)** until meaningful progress
+past the fault is established from reviewed evidence. The mandatory review after
+cycle 182 was completed and directly informed 183; no routine retry is underway.
+
 ## Candidate 182 result: fourth stalled cycle; mandatory review — 2026-09-10
 
 **Full desktop Metal is still not working.** The mandatory review is completed
@@ -80,6 +198,18 @@ reuse override: the next run needs the reviewed one-run policy with no budget
 extension. Nothing was pushed to main.
 
 ### Candidate 183 implementation and discriminating test
+
+**Built and staged, not yet launched.** Source `94ca24a403135e42af808b83028be48b3709b3b8`,
+build `1d5f98d2e5b641eeab1869987f569e73`, binary SHA-256
+`d238309a4073395e4f8fe6e85980b9479e8b988a1fff5ce7e4a05b920b91cd5a`.
+Run ID `f1728b74e128c5acd35661334bff12be`; sealed manifest
+`~/macos-vm/run/candidate-183-manifest.json`, SHA-256
+`e809cee6b8dc3cb8749d56dcedeb4dcdb55ab98caf21ee3a5bdd7de59f660775`.
+Actual bundle/KDK/firmware preflight passed. Staged picker timeout is verified
+at 5 seconds with `ShowPicker=true`. Independent read-only host review found
+the same boot, no running VM, ledger 1/3, valid matching recovery receipts and
+unchanged helper pins, active sleep inhibition and watchdog capture. Finite
+one-run policy creation/review remains before hardware; no budget extension.
 
 1. Route exactly one real-address boundary, `updateContiguousPTEsWithDMAUsingAddr`
    (`0x55cda`), after exact ABI/prologue review. In explicit mode 4, convert only
