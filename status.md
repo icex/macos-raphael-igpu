@@ -1,5 +1,16 @@
 # Raphael iGPU: current technical status
 
+## Fresh boot — candidate 187 preparation
+
+User confirmed reboot. Boot `888a196d-562a-4e7f-ba4e-8f2243b9633a`;
+one authorized amdgpu-to-VFIO handoff succeeded. Watchdogs and capture checks
+pass, GPU is active/on with empty reset methods, group31 is accessible, no VM
+is running, and the sleep inhibitor is active. Pstore listing is unavailable.
+The reviewed PCI fix is committed locally on dev at `57c3ee1`; nothing pushed.
+Candidate186 staging is sealed against reuse. Candidate187/metal-020 is being
+prepared with unchanged driver source and the same headless Lilu and safety
+contracts, using a fresh build/run identity. No GPU cycle has occurred this boot.
+
 ## Astra assessment accepted; PCI-path correction verified offline
 
 The mandatory Astra review is complete and accepted. Frozen evidence
