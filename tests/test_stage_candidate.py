@@ -429,6 +429,16 @@ class Candidate186StageTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "candidate card contract"):
             self.tool.validate_card(encoded, hashlib.sha256(encoded).hexdigest())
 
+    def test_candidate190_preserves_candidate189_gpu_source(self):
+        self.tool.configure("1.0.190", "metal-024")
+        raw = (ROOT / "experiments/metal-024.json").read_bytes()
+        card = self.tool.validate_card(raw, hashlib.sha256(raw).hexdigest())
+        self.assertEqual(card["raphael_source_sha256"],
+                         "7515f121230fbd26e32b198bd622e106155708e4108d9def96dcc7daa9d173f3")
+        self.assertIn("strict_logind_sleep_idle_observer_reviewed",
+                      card["prerequisites"])
+        self.assertEqual(card["launch_options"]["GDB"], "on")
+
     def test_candidate188_debug_symbols_require_retained_files_and_matching_provenance(self):
         self.tool.configure("1.0.188", "metal-021")
         with tempfile.TemporaryDirectory() as directory:

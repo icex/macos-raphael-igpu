@@ -80,6 +80,22 @@ class RetainedKiqTests(unittest.TestCase):
             'vfio_module_build_id': self.tool.VFIO_MODULE_BUILD_ID,
         }
 
+    def test_sleep_inhibitor_uses_strict_logind_scope_not_user_service(self):
+        payload = {"type":"a(ssssuu)", "data":[[
+            ["sleep:idle", "root", "GPU work", "block", 0, 1234]]]}
+        completed = subprocess.CompletedProcess([], 0, json.dumps(payload), "")
+        with patch.object(self.tool.subprocess, 'run', return_value=completed) as run:
+            self.assertTrue(self.tool._sleep_inhibited())
+        self.assertEqual(run.call_args.args[0][0], 'busctl')
+        self.assertNotIn('rgpu-work-inhibit.service', run.call_args.args[0])
+        for malformed in (
+                {"type":"a(ssssuu)", "data":[[["sleep", "root", "x", "block", 0, 1]]]},
+                {"type":"a(ssssuu)", "data":[[["sleep:idle", "root", "x", "delay", 0, 1]]]},
+                {"type":"a(ssssuu)", "data":[[["sleep:idle", "root", "x", "block", -1, 1]]]}):
+            result = subprocess.CompletedProcess([], 0, json.dumps(malformed), "")
+            with patch.object(self.tool.subprocess, 'run', return_value=result):
+                self.assertFalse(self.tool._sleep_inhibited())
+
     def proof(self):
         ledger = {'schema': 2, 'boot_id': self.tool.BOOT_ID, 'max_launches': 3,
                   'launches': [{'run_id': 'e583a1b2d97a4ad3b607c1d20a29a812'},
