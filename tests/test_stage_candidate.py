@@ -1,9 +1,11 @@
 import hashlib
+import gzip
 import importlib.util
 import json
 from pathlib import Path
 import re
 import tempfile
+import shutil
 import unittest
 from unittest import mock
 
@@ -324,10 +326,10 @@ class Candidate186StageTests(unittest.TestCase):
         self.assertIn("unchanged 45-second Metal probe", accepted["behavior_change"])
         self.assertEqual(accepted["launch_options"]["GENERIC_GRAPHICS"], "off")
 
-    def test_staging_defaults_select_candidate187(self):
+    def test_staging_defaults_select_candidate188(self):
         tool = load_tool()
         self.assertEqual((tool.CANDIDATE_VERSION, tool.CARD_ID),
-                         ("1.0.187", "metal-020"))
+                         ("1.0.188", "metal-021"))
 
     def test_candidate186_boot_contract_adds_headless_flag_once(self):
         updates = self.tool.candidate_boot_argument_updates(self.card, 0x12, 0x34)
@@ -382,6 +384,99 @@ class Candidate186StageTests(unittest.TestCase):
         self.tool.configure("1.0.187", "metal-020")
         with self.assertRaisesRegex(RuntimeError, "Lilu bundle"):
             self.tool.validate_lilu_inputs(None, None, None, None)
+
+    def test_candidate188_selects_gdb_mapping_capture_card_with_inherited_pins(self):
+        self.tool.configure("1.0.188", "metal-021")
+        raw = (ROOT / "experiments/metal-021.json").read_bytes()
+        card = self.tool.validate_card(raw, hashlib.sha256(raw).hexdigest())
+        self.assertEqual(card["candidate_version"], "1.0.188")
+        self.assertIn("gdb_vmid1_wrap_vmm_update_entries_inputs",
+                      card["required_observations"])
+        self.assertIn("gdb_vmid1_wrap_vmm_update_entries_native_output",
+                      card["required_observations"])
+        self.assertEqual(card["required_boot_flags"], ["-liluheadless"])
+        self.assertEqual(card["raphael_source_sha256"],
+                         "db511634c6d292ef3a65285e56bd5cf5f9e03cf4c20680a27b96c46a18f2e9b0")
+
+    def test_candidate188_rejects_missing_debug_capture_prerequisite_or_observation(self):
+        self.tool.configure("1.0.188", "metal-021")
+        original = json.loads((ROOT / "experiments/metal-021.json").read_text())
+        for mutation in (
+                {"prerequisites": [p for p in original["prerequisites"]
+                                    if p != "gdb_debug_artifact_and_symbol_provenance_pinned"]},
+                {"required_observations": [o for o in original["required_observations"]
+                                            if o != "gdb_vmid1_wrap_vmm_update_entries_native_output"]},
+                {"raphael_source_sha256": "0" * 64}):
+            bad = dict(original, **mutation)
+            encoded = (json.dumps(bad) + "\n").encode()
+            with self.assertRaisesRegex(RuntimeError, "candidate card contract"):
+                self.tool.validate_card(encoded, hashlib.sha256(encoded).hexdigest())
+
+    def test_candidate188_debug_symbols_require_retained_files_and_matching_provenance(self):
+        self.tool.configure("1.0.188", "metal-021")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            debug_dir = root / "debug-symbols"
+            dsym = debug_dir / "RaphaelGPU.dSYM/Contents/Resources/DWARF"
+            dsym.mkdir(parents=True)
+            source = debug_dir / "source"
+            shutil.copytree(ROOT / "src", source)
+            build_id = "build-identity-test"
+            (source / "BuildIdentity.hpp").write_text(
+                '#define RGPU_BUILD_ID "' + build_id + '"\n')
+            (source / "rlc_fw.h").write_bytes(gzip.decompress(
+                (ROOT / "build-support/rlc_fw.h.gz").read_bytes()))
+            def digest(path, excluded=()):
+                result = hashlib.sha256()
+                for item in sorted(path.rglob('*')):
+                    if item.is_file() and item.name not in excluded:
+                        result.update(item.relative_to(path).as_posix().encode() + b'\0' +
+                                     hashlib.sha256(item.read_bytes()).digest())
+                return result.hexdigest()
+            tracked_source = digest(source, ("BuildIdentity.hpp", "rlc_fw.h"))
+            executable = root / "RaphaelGPU"
+            executable.write_bytes(b"debug executable")
+            dwarf = dsym / "RaphaelGPU"
+            dwarf.write_bytes(b"debug dwarf")
+            script = debug_dir / "build-kext-debug.sh"
+            canonical_script = ROOT / "tools/build-kext.sh"
+            script.write_bytes(canonical_script.read_bytes().replace(
+                b"-mkernel -O2\n", b"-mkernel -O2 -g -gdwarf-4\n"))
+            canonical = {"build_script_sha256": hashlib.sha256(canonical_script.read_bytes()).hexdigest(),
+                         "tracked_source_sha256": tracked_source,
+                         "inputs_sha256": hashlib.sha256((ROOT / "build-support/inputs.json").read_bytes()).hexdigest()}
+            debug = {
+                "schema": 1, "flags": ["-O2", "-g", "-gdwarf-4"],
+                "private_build_script_sha256": hashlib.sha256(script.read_bytes()).hexdigest(),
+                "canonical_inputs_before": canonical,
+                "canonical_inputs_after": canonical,
+                "executable_uuid": "c" * 32, "dsym_uuid": "c" * 32,
+                "executable_sha256": hashlib.sha256(executable.read_bytes()).hexdigest(),
+                "dsym_dwarf_sha256": hashlib.sha256(dwarf.read_bytes()).hexdigest(),
+                "debug_source_sha256": digest(source),
+            }
+            manifest = {"debug_symbols": debug, "build_id": build_id}
+            (debug_dir / "debug-manifest.json").write_text(json.dumps(debug))
+            builder = mock.Mock()
+            builder.verify_debug_uuids.return_value = "c" * 32
+            builder.tree_digest.side_effect = digest
+            builder.debug_build_script.side_effect = lambda data: data.replace(
+                b"-mkernel -O2\n", b"-mkernel -O2 -g -gdwarf-4\n")
+            accepted = self.tool.validate_debug_symbols(
+                manifest, builder, executable, debug_dir, canonical["tracked_source_sha256"])
+            self.assertEqual(accepted, debug)
+            for mutation, message in (
+                    ({"flags": ["-O0", "-g", "-gdwarf-4"]}, "flags mismatch"),
+                    ({"dsym_dwarf_sha256": "0" * 64}, "debug DWARF changed"),
+                    ({"canonical_inputs_after": dict(canonical, inputs_sha256="0" * 64)},
+                     "canonical debug inputs changed")):
+                bad = dict(debug, **mutation)
+                manifest["debug_symbols"] = bad
+                (debug_dir / "debug-manifest.json").write_text(json.dumps(bad))
+                with self.subTest(message=message), self.assertRaisesRegex(RuntimeError, message):
+                    self.tool.validate_debug_symbols(
+                        manifest, builder, executable, debug_dir,
+                        canonical["tracked_source_sha256"])
 
     def test_lilu_bundle_refuses_wrong_executable_or_info_bytes(self):
         durable = Path("/home/bogdan/macos-vm/run/headless-lilu-verified-53b5a19812e6")

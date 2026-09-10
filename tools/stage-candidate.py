@@ -10,6 +10,7 @@ created.
 
 import argparse
 import fcntl
+import gzip
 import hashlib
 import importlib.util
 import json
@@ -29,8 +30,8 @@ import uuid
 
 VM = Path.home() / "macos-vm"
 ROOT = Path(__file__).resolve().parents[1]
-CANDIDATE_VERSION = "1.0.187"
-CARD_ID = "metal-020"
+CANDIDATE_VERSION = "1.0.188"
+CARD_ID = "metal-021"
 SUPPORTED_CARD_DIAGNOSTICS = {
     ("1.0.180", "metal-013"): "rgpusubmit=1",
     ("1.0.181", "metal-014"): "rgpusubmit=1",
@@ -40,6 +41,7 @@ SUPPORTED_CARD_DIAGNOSTICS = {
     ("1.0.185", "metal-018"): "rgpuvmdiag=1",
     ("1.0.186", "metal-019"): "rgpuvmdiag=1",
     ("1.0.187", "metal-020"): "rgpuvmdiag=1",
+    ("1.0.188", "metal-021"): "rgpuvmdiag=1",
 }
 
 
@@ -106,7 +108,8 @@ def validate_card(raw, expected_sha256):
             for key, value in exact.items()):
         raise RuntimeError("candidate card contract mismatch")
     if pair in (("1.0.184", "metal-017"), ("1.0.185", "metal-018"),
-                ("1.0.186", "metal-019"), ("1.0.187", "metal-020")):
+                ("1.0.186", "metal-019"), ("1.0.187", "metal-020"),
+                ("1.0.188", "metal-021")):
         candidate_contract = {
             "critical_replay_tolerance": "terminal-prefix",
             "recovery_critical_replay_tolerance": "terminal-prefix-open",
@@ -114,18 +117,21 @@ def validate_card(raw, expected_sha256):
                 "vmid1_fault_walk", "vmid1_fault_walk_view",
                 "vmid1_fault_walk_entry",
             ],
-            "launch_options": {
-                "BOOTDISK_MODE": "custom",
-                "NVRAM": "stock",
+            "launch_options": ({
+                "BOOTDISK_MODE": "custom", "NVRAM": "stock",
+                "GENERIC_GRAPHICS": "off", "GDB": "on",
+            } if pair == ("1.0.188", "metal-021") else {
+                "BOOTDISK_MODE": "custom", "NVRAM": "stock",
                 "GENERIC_GRAPHICS": "off",
-            },
+            }),
         }
         if any(card.get(key) != value for key, value in candidate_contract.items()):
             raise RuntimeError("candidate card contract mismatch")
     if pair in (("1.0.184", "metal-017"), ("1.0.185", "metal-018")) and \
             card.get("functional_boot_arguments") != {"rgpuvmroot": "4"}:
         raise RuntimeError("candidate card contract mismatch")
-    if pair in (("1.0.186", "metal-019"), ("1.0.187", "metal-020")):
+    if pair in (("1.0.186", "metal-019"), ("1.0.187", "metal-020"),
+                ("1.0.188", "metal-021")):
         candidate186_contract = {
             "functional_boot_arguments": {"rgpuvmroot": "4", "rgpudump": "5000"},
             "required_boot_flags": ["-liluheadless"],
@@ -134,6 +140,13 @@ def validate_card(raw, expected_sha256):
         }
         if any(card.get(key) != value
                for key, value in candidate186_contract.items()):
+            raise RuntimeError("candidate card contract mismatch")
+    if pair == ("1.0.188", "metal-021"):
+        required = card.get("required_observations", [])
+        prerequisites = card.get("prerequisites", [])
+        if ("gdb_vmid1_wrap_vmm_update_entries_inputs" not in required or
+                "gdb_vmid1_wrap_vmm_update_entries_native_output" not in required or
+                "gdb_debug_artifact_and_symbol_provenance_pinned" not in prerequisites):
             raise RuntimeError("candidate card contract mismatch")
     transport_path = Path(__file__).with_name("critical-transport.py")
     spec = importlib.util.spec_from_file_location("critical_transport", transport_path)
@@ -220,6 +233,99 @@ def verify_worktree_before_import(expected_commit):
         raise RuntimeError("candidate worktree is dirty")
 
 
+def validate_debug_symbols(manifest, builder, executable, debug_dir,
+                           source_sha256):
+    """Authenticate the retained private debug bundle against the staged kext."""
+    debug = manifest.get("debug_symbols")
+    if not isinstance(debug, dict):
+        raise RuntimeError("debug symbol provenance is missing")
+    exact_flags = ["-O2", "-g", "-gdwarf-4"]
+    if debug.get("schema") != 1 or debug.get("flags") != exact_flags:
+        raise RuntimeError("debug symbol flags mismatch")
+    dsym = debug_dir / "RaphaelGPU.dSYM"
+    source_dir = debug_dir / "source"
+    dwarf = dsym / "Contents/Resources/DWARF/RaphaelGPU"
+    private_script = debug_dir / "build-kext-debug.sh"
+    debug_manifest = debug_dir / "debug-manifest.json"
+    for label, path in (("dSYM", dsym), ("debug source", source_dir), ("dSYM DWARF", dwarf),
+                        ("private build script", private_script),
+                        ("debug manifest", debug_manifest)):
+        if not path.exists():
+            raise RuntimeError(f"retained {label} is missing")
+    try:
+        before = debug["canonical_inputs_before"]
+        after = debug["canonical_inputs_after"]
+        private_sha = debug["private_build_script_sha256"]
+        dwarf_sha = debug["dsym_dwarf_sha256"]
+        executable_sha = debug["executable_sha256"]
+        debug_source_sha = debug["debug_source_sha256"]
+        executable_uuid = exact_hex(debug["executable_uuid"], 32,
+                                    "debug executable UUID")
+        dsym_uuid = exact_hex(debug["dsym_uuid"], 32, "debug dSYM UUID")
+    except (KeyError, TypeError, ValueError) as error:
+        raise RuntimeError("debug symbol provenance is malformed") from error
+    if not isinstance(before, dict) or before != after:
+        raise RuntimeError("canonical debug inputs changed")
+    canonical_script = ROOT / "tools/build-kext.sh"
+    canonical_inputs = ROOT / "build-support/inputs.json"
+    expected_before = {
+        "build_script_sha256": sha_file(canonical_script),
+        "tracked_source_sha256": source_sha256,
+        "inputs_sha256": sha_file(canonical_inputs),
+    }
+    if before != expected_before:
+        raise RuntimeError("canonical debug inputs do not match repository")
+    if sha_file(private_script) != private_sha:
+        raise RuntimeError("private debug build script changed")
+    try:
+        expected_script = builder.debug_build_script(canonical_script.read_bytes())
+    except (OSError, ValueError) as error:
+        raise RuntimeError("canonical debug build script unavailable") from error
+    if private_script.read_bytes() != expected_script:
+        raise RuntimeError("private debug build script content mismatch")
+    if sha_file(dwarf) != dwarf_sha:
+        raise RuntimeError("debug DWARF changed")
+    if sha_file(executable) != executable_sha:
+        raise RuntimeError("debug executable differs from staged kext")
+    if before.get("tracked_source_sha256") != source_sha256:
+        raise RuntimeError("debug source provenance mismatch")
+    # The debug build source includes two generated inputs in addition to
+    # tracked src; authenticate both views separately.
+    try:
+        if builder.tree_digest(source_dir) != debug_source_sha:
+            raise RuntimeError("debug source artifact changed")
+        tracked = hashlib.sha256()
+        for path in sorted(source_dir.rglob('*')):
+            if path.is_file() and path.name not in ("BuildIdentity.hpp", "rlc_fw.h"):
+                tracked.update(path.relative_to(source_dir).as_posix().encode() + b'\0' +
+                               hashlib.sha256(path.read_bytes()).digest())
+        if tracked.hexdigest() != source_sha256:
+            raise RuntimeError("debug source provenance mismatch")
+    except OSError as error:
+        raise RuntimeError("debug source artifact unavailable") from error
+    build_identity = source_dir / "BuildIdentity.hpp"
+    firmware = source_dir / "rlc_fw.h"
+    if (build_identity.read_text() !=
+            '#define RGPU_BUILD_ID "' + manifest.get("build_id", "") + '"\n'):
+        raise RuntimeError("debug build identity source mismatch")
+    try:
+        expected_firmware = gzip.decompress((ROOT / "build-support/rlc_fw.h.gz").read_bytes())
+    except (OSError, EOFError, gzip.BadGzipFile) as error:
+        raise RuntimeError("pinned firmware source unavailable") from error
+    if firmware.read_bytes() != expected_firmware:
+        raise RuntimeError("debug firmware source mismatch")
+    try:
+        observed_uuid = builder.verify_debug_uuids(executable, dsym)
+    except (OSError, subprocess.SubprocessError, ValueError) as error:
+        raise RuntimeError("debug UUID authentication failed") from error
+    if observed_uuid != executable_uuid or observed_uuid != dsym_uuid:
+        raise RuntimeError("debug UUID provenance mismatch")
+    retained = json.loads(debug_manifest.read_text())
+    if retained != debug:
+        raise RuntimeError("retained debug manifest differs from build manifest")
+    return debug
+
+
 def verify_build_inputs(experiment, builder, expected_commit,
                         expected_identities_sha256, image_id):
     if sha_file(IDENTITIES) != expected_identities_sha256:
@@ -273,6 +379,10 @@ def verify_build_inputs(experiment, builder, expected_commit,
             CANDIDATE_VERSION, CANDIDATE_VERSION):
         raise RuntimeError("candidate Info.plist version mismatch")
     builder.validate_macho(executable.read_bytes())
+    if (CANDIDATE_VERSION, CARD_ID) == ("1.0.188", "metal-021"):
+        validate_debug_symbols(manifest, builder, executable,
+                               DIST / "debug-symbols",
+                               card.get("raphael_source_sha256"))
 
     checksum_fields = sums.read_text().split()
     if checksum_fields != [identities["archive_sha256"], archive.name]:
@@ -537,7 +647,8 @@ def stage(expected_commit, expected_boot_id, expected_card_sha256,
         experiment, builder, expected_commit, expected_identities_sha256,
         image_id)
     candidate186 = (CANDIDATE_VERSION, CARD_ID) in (
-        ("1.0.186", "metal-019"), ("1.0.187", "metal-020"))
+        ("1.0.186", "metal-019"), ("1.0.187", "metal-020"),
+        ("1.0.188", "metal-021"))
     if candidate186 and identities["source_sha256"] != card["raphael_source_sha256"]:
         raise RuntimeError("candidate 186/187 changed the candidate 185 Raphael source")
     lilu = (validate_lilu_inputs(

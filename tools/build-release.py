@@ -5,6 +5,7 @@ import gzip
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import plistlib
 import shutil
@@ -43,6 +44,33 @@ def tree_digest(root):
     return digest.hexdigest()
 
 
+def sha256(value):
+    return hashlib.sha256(value).hexdigest()
+
+
+def debug_build_script(original):
+    needle = b'-mkernel -O2\n'
+    if original.count(needle) != 1:
+        raise ValueError('private debug flag insertion point must occur exactly once')
+    return original.replace(needle, b'-mkernel -O2 -g -gdwarf-4\n')
+
+
+def _dwarfdump_uuid(path):
+    output = subprocess.check_output(['llvm-dwarfdump', '--uuid', str(path)], text=True)
+    match = re.search(r'UUID:\s*([0-9A-Fa-f-]{36})\s', output)
+    if not match:
+        raise ValueError(f'UUID absent for {path}')
+    return match.group(1).lower().replace('-', '')
+
+
+def verify_debug_uuids(executable, dsym):
+    executable_uuid = _dwarfdump_uuid(executable)
+    dsym_uuid = _dwarfdump_uuid(dsym)
+    if executable_uuid != dsym_uuid:
+        raise ValueError('executable/dSYM UUID mismatch')
+    return executable_uuid
+
+
 def verify_toolchain(toolchain, inputs):
     for key, relative in (('sdk_tree_sha256', 'MacKernelSDK-master'),
                           ('lilu_resources_sha256', 'liludbg/Lilu.kext/Contents/Resources')):
@@ -50,11 +78,17 @@ def verify_toolchain(toolchain, inputs):
             raise ValueError(f'{relative} differs from the pinned release inputs')
 
 
-def build(toolchain, output):
+def build(toolchain, output, debug_symbols=False):
     subprocess.run([os.sys.executable, str(ROOT / 'tools/route-domains.py'),
                     str(ROOT / 'src/RaphaelGPU.cpp')], check=True)
     inputs = json.loads((ROOT / 'build-support/inputs.json').read_text())
     verify_toolchain(toolchain, inputs)
+    canonical_script = ROOT / 'tools/build-kext.sh'
+    canonical_before = {
+        'build_script_sha256': sha256(canonical_script.read_bytes()),
+        'tracked_source_sha256': tree_digest(ROOT / 'src'),
+        'inputs_sha256': sha256((ROOT / 'build-support/inputs.json').read_bytes()),
+    }
     firmware = gzip.decompress((ROOT / 'build-support/rlc_fw.h.gz').read_bytes())
     if hashlib.sha256(firmware).hexdigest() != inputs['firmware_header_sha256']:
         raise ValueError('firmware build input hash mismatch')
@@ -74,13 +108,44 @@ def build(toolchain, output):
         for name in ('MacKernelSDK-master', 'liludbg', 'cctools-inst'):
             path = toolchain / name
             if path.exists(): (stage / name).symlink_to(path, target_is_directory=True)
-        subprocess.run(['bash', str(ROOT / 'tools/build-kext.sh'), str(source),
+        build_script = canonical_script
+        private_script_sha256 = None
+        if debug_symbols:
+            build_script = stage / 'build-kext-debug.sh'
+            build_script.write_bytes(debug_build_script(canonical_script.read_bytes()))
+            private_script_sha256 = sha256(build_script.read_bytes())
+        subprocess.run(['bash', str(build_script), str(source),
                         'RaphaelGPU', info['CFBundleIdentifier'], version], check=True,
                        env=dict(os.environ, BUILD=str(stage)))
         bundle = stage / 'out/RaphaelGPU/RaphaelGPU.kext'
         executable = bundle / 'Contents/MacOS/RaphaelGPU'
         validate_macho(executable.read_bytes())
         (bundle / 'Contents/Info.plist').write_bytes(plistlib.dumps(info))
+        debug_manifest = None
+        if debug_symbols:
+            dsym = stage / 'RaphaelGPU.dSYM'
+            subprocess.run(['dsymutil', str(executable), '-o', str(dsym)], check=True)
+            executable_uuid = verify_debug_uuids(executable, dsym)
+            dwarf = dsym / 'Contents/Resources/DWARF/RaphaelGPU'
+            debug_manifest = {
+                'schema': 1,
+                'flags': ['-O2', '-g', '-gdwarf-4'],
+                'private_build_script_sha256': private_script_sha256,
+                'canonical_inputs_before': canonical_before,
+                'executable_uuid': executable_uuid,
+                'executable_sha256': sha256(executable.read_bytes()),
+                'dsym_uuid': executable_uuid,
+                'dsym_dwarf_sha256': sha256(dwarf.read_bytes()),
+                'debug_source_sha256': tree_digest(source),
+            }
+            canonical_after = {
+                'build_script_sha256': sha256(canonical_script.read_bytes()),
+                'tracked_source_sha256': tree_digest(ROOT / 'src'),
+                'inputs_sha256': sha256((ROOT / 'build-support/inputs.json').read_bytes()),
+            }
+            if canonical_after != canonical_before:
+                raise ValueError('canonical build inputs changed during debug build')
+            debug_manifest['canonical_inputs_after'] = canonical_after
         commit = subprocess.check_output(['git','rev-parse','HEAD'], cwd=ROOT, text=True).strip()
         manifest = dict(inputs, version=version, source_commit=commit,
                         source_clean=not bool(subprocess.check_output(
@@ -89,6 +154,8 @@ def build(toolchain, output):
                         info_sha256=hashlib.sha256((bundle / 'Contents/Info.plist').read_bytes()).hexdigest(),
                         executable_sha256=hashlib.sha256(executable.read_bytes()).hexdigest(),
                         metal_execution_verified=False, verified_playable_games=0)
+        if debug_manifest is not None:
+            manifest['debug_symbols'] = debug_manifest
         output.mkdir(parents=True, exist_ok=True)
         archive = output / f'RaphaelGPU-{version}-experimental.zip'
         with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as package:
@@ -98,6 +165,13 @@ def build(toolchain, output):
                 package.write(ROOT / path, path)
             package.writestr('build-manifest.json', json.dumps(manifest, indent=2)+'\n')
         (output / 'SHA256SUMS').write_text(hashlib.sha256(archive.read_bytes()).hexdigest()+'  '+archive.name+'\n')
+        if debug_manifest is not None:
+            debug_dir = output / 'debug-symbols'
+            shutil.copytree(dsym, debug_dir / 'RaphaelGPU.dSYM')
+            shutil.copytree(source, debug_dir / 'source')
+            shutil.copy2(build_script, debug_dir / 'build-kext-debug.sh')
+            (debug_dir / 'debug-manifest.json').write_text(
+                json.dumps(debug_manifest, indent=2) + '\n')
         print(archive)
 
 
@@ -105,5 +179,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--toolchain', required=True, type=Path)
     parser.add_argument('--output', required=True, type=Path)
+    parser.add_argument('--debug-symbols', action='store_true',
+                        help='build the deployed binary with -O2 -g -gdwarf-4 and retain its matching dSYM')
     args = parser.parse_args()
-    build(args.toolchain.resolve(), args.output.resolve())
+    build(args.toolchain.resolve(), args.output.resolve(), args.debug_symbols)
