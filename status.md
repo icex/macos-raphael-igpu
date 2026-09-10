@@ -1,20 +1,34 @@
 # Raphael iGPU: current technical status
 
-## Current milestone — dedicated capture implemented and offline verified
+## Current milestone — candidate 185 reviewed; build pending
 
-The COM2 transport and VMID1 fault diagnostic are implemented on `dev`. Agents
-wrote and tested the changes; independent review and coordinator audit found
-and resolved worker-deadline and standalone-classifier readiness gaps. Existing
-candidate worktrees and live VM harness files remain untouched.
+Candidate 184 was refused before reservation and QEMU because the final identity
+check omitted the manifest's no-generic-graphics launch options. No GPU exposure
+or recovery occurred; the unresolved GPU-cycle count remains 6. Its output,
+policy, activation and artifacts are frozen. The host ledger is unchanged at one
+launch of three on boot `73ad3355-80a7-48f1-a8dd-e6f770b41de8`.
+
+Agents repaired exact option propagation at both final reservation paths and
+added run-scoped policy filenames, retaining legacy compatibility and refusing
+fallback around invalid scoped policies. Existing caps, receipts, identity checks
+and reservation rules remain enforced. Candidate 185 / `metal-018` preserves the
+reviewed driver and COM2/VMID1 diagnostic; it does not add a functional GPU fix.
+Independent review and coordinator audit cleared the source changes.
 
 | Boundary | Verified result |
 |---|---|
-| Guest writer | Independent worker, bounded waits, unchanged CR2 format, no COM1 fallback |
-| Capture lifecycle | 10/10 real CPU-only Docker/systemd/QEMU qualification cases passed |
-| Host regressions | 594 Python tests run successfully, one explicit skip |
-| Driver fixtures | COM2 and VMID1 ASan/UBSan checks passed |
-| Driver build | Exact 24G830 preflight and production-configuration cross-build passed |
+| Final admission | Exact launch options propagated; mismatch prevents ledger write |
+| Authority namespace | Exclusive run-scoped creation; old 184 authority unchanged |
+| Regression checks | 624 Python tests successful, one explicit skip; syntax checks passed |
+| Capture lifecycle | Earlier 10/10 real CPU-only COM2 qualification remains applicable |
+| Candidate 185 | Source reviewed; clean-worktree build and admission pending |
 | Metal execution/desktop | Still unverified; no new GPU run |
+
+Four reviewed runtime harness files were deployed before candidate 184's refusal;
+all five recovery helpers remain unchanged. The next test is bounded to 180
+seconds with the unchanged 45-second probe, no generic graphics adapter and no
+automatic retry. Headless diagnostic capture does not provide a visible desktop.
+Details: `findings/plans/2026-09-10-candidate184-prelaunch-refusal-followup.md`.
 
 The final tiny-guest fixture is 1,144,917 bytes (complete baseline plus maximum
 snapshot), SHA-256 `83be7814817571a62e58879602b051615940d4bf6b840ae38cdecfa88eedafa5`.
@@ -53,13 +67,65 @@ Driver source is unchanged from `d421120`; both bundle versions are `1.0.184`.
 The new parser was checked with production C++ formatting and decoding for
 both known fault statuses, zero entries, `0x61` read/write entries and nonzero
 SYSTEM/PDE/TF fields. It retains invalid context state as diagnostic data and
-does not gate probe readiness on fault presence. Candidate build, deployment,
-staging and the fresh same-boot authority are still pending. Inert inspection of the pinned
+does not gate probe readiness on fault presence. Inert inspection of the pinned
 Docker image found exactly one `-vga vmware` and no `-display` in `Launch.sh`
 (SHA-256 `ae6050750f4ba26fbe85785da909b8f7d34fab064b6539d9a3f1903abf3fe302`).
 The inspected container was never started and was removed by exact ID. This
 corrected a fixture assumption before launch; display options currently originate
 in the host launcher. Plan: `findings/plans/2026-09-10-post-com2-candidate.md`.
+
+### Candidate 184 artifacts and admission preparation
+
+Candidate source is committed on `dev` as
+`ec02aacea85fe5d652b5da0cee2e8eda344ef278`; detached worktree
+`~/macos-vm/run/worktrees/candidate-184` is clean. Build, four-file runtime
+deployment and boot-artifact staging completed. No guest launch has occurred.
+
+```text
+build_id       3b398d6d46e14fc89c40d62c4868f407
+run_id         f32c2266a96dd7e3c91a46b85ac7878d
+kext_sha256    e66062ce0934881c4f777520d2cd3fa1c742ecfe7bc250f5d9749dc3b8a40d5e
+archive_sha256 78f5b478093ffd60b298b685640ddf01f6bf5cf63eabf8411af8bb40e2bdc761
+staging_sha256 591f23047e3995316b16cc5e9aa96e09588fcd1eab098d90120195c469b43a24
+manifest_sha256 35b2d1ac983a3b5730c51693460ace4a52d69e58e166641091cf5e275a4f8df3
+bootdisk_sha256 7e37a084299b147b1228def489e957da0976a8d90cff2078bc534566917a1801
+```
+
+Manifest: `~/macos-vm/run/metal-017-184-manifest.json`. It selects
+`GENERIC_GRAPHICS=off`, COM2, `rgpuvmdiag=1`, `rgpuvmroot=4`, `rgpusubmit=1`,
+`rgpudump=40000`, and the exact numeric run nonce. Runtime deployment record:
+`~/macos-vm/run/harness-deployment-20260910T115451Z-four-runtime-ec02aace-r2.json`,
+SHA-256 `1e1d480a3377917f8249de060818e3493524780c82c231482174360821eda227`.
+Original files are archived under `run/harness-preimages/`.
+
+The latest read-only host snapshot confirms amdgpu initialization this boot,
+vfio-pci ownership, group 31 accessibility, device pinned awake, no reset methods,
+all watchdogs enabled, capture ready, sleep inhibited and no active VM. The
+ledger remains 1/3 and the canonical recovery receipt remains byte-identical.
+### Candidate 184 invocation refused before reservation
+
+The single invocation reached the final locked admission check and refused:
+
+```text
+ValueError: one-run qualification refused: harness_sha256,launch_options
+```
+
+No reservation, QEMU process, GPU exposure, probe or recovery occurred. Output
+`~/macos-vm/run/metal-017-184` is frozen with `verdict=INVALID`; this is an
+admission failure, not a driver regression. `shutdown.json` is null and both
+captures are empty. Operator log SHA-256:
+`1028ebaea272e83ce983f2641dc53f880a676a8c14ac37b8c71a0bd99179bc35`.
+The unresolved GPU-cycle count remains six.
+
+The cause is localized: the final reservation path's `current_identity` call
+omits `launch_options_expected`, so it reconstructs historical options and omits
+the new `vm-entry.sh` harness pin. Preparation and the outer live-identity path
+already pass the selected options. The independent authorization review checked
+`authorize`, which does not execute this later reservation gate. The fix must
+propagate the exact manifest options and add a regression at that actual gate;
+identity equality must remain enforced. Candidate-184 worktree, output, policy
+and activation are preserved. A fresh attempted run requires reviewed source
+and authority handling, with no cap extension or silent reuse of this output.
 
 ## Current viewing requirement — no generic QEMU GPU
 

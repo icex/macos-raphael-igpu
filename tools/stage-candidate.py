@@ -27,19 +27,20 @@ import uuid
 
 VM = Path.home() / "macos-vm"
 ROOT = Path(__file__).resolve().parents[1]
-CANDIDATE_VERSION = "1.0.184"
-CARD_ID = "metal-017"
+CANDIDATE_VERSION = "1.0.185"
+CARD_ID = "metal-018"
 SUPPORTED_CARD_DIAGNOSTICS = {
     ("1.0.180", "metal-013"): "rgpusubmit=1",
     ("1.0.181", "metal-014"): "rgpusubmit=1",
     ("1.0.182", "metal-015"): "rgpusubmit=1",
     ("1.0.183", "metal-016"): "rgpusubmit=1",
     ("1.0.184", "metal-017"): "rgpuvmdiag=1",
+    ("1.0.185", "metal-018"): "rgpuvmdiag=1",
 }
 
 
 def configure(version, card_id):
-    """Select the exact reviewed candidate/card pair; defaults are 1.0.184."""
+    """Select the exact reviewed candidate/card pair; defaults are 1.0.185."""
     global CANDIDATE_VERSION, CARD_ID, NUMBER, WT, CANDIDATE, DIST, IDENTITIES
     global RUN_ID_FILE, CARD
     if not re.fullmatch(r"1\.0\.(1[0-9]{2})", version):
@@ -100,8 +101,8 @@ def validate_card(raw, expected_sha256):
             type(card.get(key)) is not type(value) or card.get(key) != value
             for key, value in exact.items()):
         raise RuntimeError("candidate card contract mismatch")
-    if pair == ("1.0.184", "metal-017"):
-        candidate184 = {
+    if pair in (("1.0.184", "metal-017"), ("1.0.185", "metal-018")):
+        candidate_contract = {
             "critical_replay_tolerance": "terminal-prefix",
             "recovery_critical_replay_tolerance": "terminal-prefix-open",
             "functional_boot_arguments": {"rgpuvmroot": "4"},
@@ -115,7 +116,7 @@ def validate_card(raw, expected_sha256):
                 "GENERIC_GRAPHICS": "off",
             },
         }
-        if any(card.get(key) != value for key, value in candidate184.items()):
+        if any(card.get(key) != value for key, value in candidate_contract.items()):
             raise RuntimeError("candidate card contract mismatch")
     transport_path = Path(__file__).with_name("critical-transport.py")
     spec = importlib.util.spec_from_file_location("critical_transport", transport_path)

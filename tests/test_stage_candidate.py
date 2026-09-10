@@ -195,8 +195,9 @@ class Candidate184StageTests(unittest.TestCase):
         raw, digest = self.encoded()
         self.assertEqual(self.tool.validate_card(raw, digest), self.card)
 
-    def test_staging_defaults_select_candidate184(self):
+    def test_explicit_candidate184_remains_selectable(self):
         tool = load_tool()
+        tool.configure("1.0.184", "metal-017")
         self.assertEqual((tool.CANDIDATE_VERSION, tool.CARD_ID),
                          ("1.0.184", "metal-017"))
 
@@ -262,6 +263,43 @@ class Candidate184StageTests(unittest.TestCase):
     def test_staging_metadata_preserves_new_launch_contract(self):
         source = TOOL.read_text()
         self.assertIn('staging["launch_options"] = card["launch_options"]', source)
+
+
+class Candidate185StageTests(unittest.TestCase):
+    def setUp(self):
+        self.tool = load_tool()
+        self.tool.configure("1.0.185", "metal-018")
+        self.card = json.loads((ROOT / "experiments/metal-018.json").read_text())
+
+    def test_exact_metal018_contract_is_accepted(self):
+        raw = (json.dumps(self.card, sort_keys=True) + "\n").encode()
+        self.assertEqual(
+            self.tool.validate_card(raw, hashlib.sha256(raw).hexdigest()), self.card)
+
+    def test_staging_defaults_select_candidate185(self):
+        tool = load_tool()
+        self.assertEqual((tool.CANDIDATE_VERSION, tool.CARD_ID),
+                         ("1.0.185", "metal-018"))
+
+    def test_checked_in_metal018_preserves_candidate184_contract(self):
+        card = self.tool.validate_card(
+            (ROOT / "experiments/metal-018.json").read_bytes(),
+            hashlib.sha256((ROOT / "experiments/metal-018.json").read_bytes()).hexdigest())
+        self.assertEqual(card["requested_diagnostic"], "rgpuvmdiag=1")
+        self.assertEqual(card["functional_boot_arguments"], {"rgpuvmroot": "4"})
+        self.assertEqual(card["critical_replay_transport"], TRANSPORT)
+        self.assertEqual(card["launch_options"]["GENERIC_GRAPHICS"], "off")
+        self.assertEqual(card["conditional_diagnostic_observations"], [
+            "vmid1_fault_walk", "vmid1_fault_walk_view", "vmid1_fault_walk_entry"])
+        self.assertIn("candidate 184 had no GPU run", card["repeat_policy"])
+        self.assertEqual(card["regression_baselines"]["immediate"],
+                         "run/metal-016-183-gui-73ad3355")
+
+    def test_historical_candidate184_pair_remains_supported(self):
+        self.tool.configure("1.0.184", "metal-017")
+        raw = (ROOT / "experiments/metal-017.json").read_bytes()
+        card = self.tool.validate_card(raw, hashlib.sha256(raw).hexdigest())
+        self.assertEqual(card["requested_diagnostic"], "rgpuvmdiag=1")
 
 
 if __name__ == "__main__":

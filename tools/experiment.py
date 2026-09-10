@@ -1940,7 +1940,8 @@ def reserve_candidate179_qualification(directory, boot_id, experiment, recovery,
         identity_gate = current_identity(
             vm, vm/manifest['candidate_directory'], requested,
             run_id=manifest['run_id'],
-            recovery_lease_schema=manifest.get('recovery_lease_schema', 2))
+            recovery_lease_schema=manifest.get('recovery_lease_schema', 2),
+            launch_options_expected=launch_options(manifest))
         identity_gate.update(run_id=manifest['run_id'],
                              recovery_lease_schema=manifest.get('recovery_lease_schema', 2))
         gate_errors.extend(validate_identity(
@@ -2041,7 +2042,10 @@ def reserve_warm_qualification(directory, boot_id, experiment, recovery,
     try:
         requested = manifest.get('spec', {}).get('requested_diagnostic')
         identity_gate = current_identity(
-            vm, vm/manifest['candidate_directory'], requested)
+            vm, vm/manifest['candidate_directory'], requested,
+            run_id=manifest.get('run_id'),
+            recovery_lease_schema=manifest.get('recovery_lease_schema', 2),
+            launch_options_expected=launch_options(manifest))
         gate_errors.extend(validate_identity(
             {key:manifest[key] for key in identity_gate if key in manifest},
             identity_gate))
