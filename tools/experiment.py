@@ -1802,7 +1802,8 @@ def reserve_candidate179_qualification(directory, boot_id, experiment, recovery,
         requested = manifest.get('spec', {}).get('requested_diagnostic')
         identity_gate = current_identity(
             vm, vm/manifest['candidate_directory'], requested,
-            run_id=manifest['run_id'])
+            run_id=manifest['run_id'],
+            recovery_lease_schema=manifest.get('recovery_lease_schema', 2))
         identity_gate.update(run_id=manifest['run_id'],
                              recovery_lease_schema=manifest.get('recovery_lease_schema', 2))
         gate_errors.extend(validate_identity(
