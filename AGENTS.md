@@ -8,6 +8,11 @@
 - Read `status.md` before continuing; verify live host and repository state before
   hardware work. Older reports may contain superseded conclusions.
 - Use agents to write and test code; the primary agent coordinates and audits.
+- Select lower-cost agents by task: prefer `gpt-5.6-luna` for routine edits,
+  packaging, and execution of reviewed test/staging procedures; use
+  `gpt-5.6-sol` for driver/recovery implementation and difficult debugging.
+  The coordinator audits results. Do not interrupt an active hardware operation
+  or build merely to switch models. Preserve the mandatory Astra review below.
 - Check for regressions on every change and hardware cycle. Keep frozen evidence
   intact and distinguish unobserved behavior from a demonstrated regression.
 - Update `status.md` with technical evidence and show a brief progress table and

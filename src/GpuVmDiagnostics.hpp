@@ -298,7 +298,8 @@ inline PageTableEntry decodePageTableEntry(uint64_t tablePhysical, uint32_t leve
 // Data-page leaf addresses and the submitted VA are diagnostic values only and
 // are never translated by this helper.
 template <typename Read64>
-inline PageTableWalk walkPageTables(uint64_t root, uint32_t control, uint64_t va,
+inline PageTableWalk walkPageTables(uint64_t root, uint32_t control,
+                                    uint64_t contextStart, uint64_t va,
                                     const FramebufferAperture &aperture,
                                     Read64 read64) {
     PageTableWalk result {};
@@ -306,9 +307,12 @@ inline PageTableWalk walkPageTables(uint64_t root, uint32_t control, uint64_t va
     const uint32_t encodedBlockSize = (control >> 3) & 0xfu;
     constexpr uint64_t pdeAddressMask = 0x0000ffffffffffc0ULL;
     const uint64_t rootFlags = root & ~pdeAddressMask;
-    if ((control & 1u) == 0 || va > 0x0000ffffffffffffULL ||
-        (rootFlags != 1 && rootFlags != 5) || !validAperture(aperture))
+    if ((control & 1u) == 0 || contextStart > va ||
+        va > 0x0000ffffffffffffULL ||
+        (rootFlags != 0 && rootFlags != 1 && rootFlags != 5) ||
+        !validAperture(aperture))
         return result;
+    const uint64_t relativeVa = va - contextStart;
     uint64_t table = physicalTableAddress(root & pdeAddressMask, aperture);
     if (table == 0) return result;
     result.valid = true;
@@ -321,10 +325,10 @@ inline PageTableWalk walkPageTables(uint64_t root, uint32_t control, uint64_t va
             : 12u + leafWidth + (unsignedLevel - 1u) * 9u;
         if (shift >= 48) { result.valid = false; return result; }
         const uint64_t index = level == 0
-            ? (va >> shift) & leafMask
+            ? (relativeVa >> shift) & leafMask
             : unsignedLevel == depth
-                ? va >> shift
-                : (va >> shift) & 0x1ffu;
+                ? relativeVa >> shift
+                : (relativeVa >> shift) & 0x1ffu;
         if (index > (aperture.visibleBytes - 8) / 8 ||
             table < aperture.physicalBase ||
             table - aperture.physicalBase > aperture.visibleBytes - 8 -
@@ -352,6 +356,15 @@ inline PageTableWalk walkPageTables(uint64_t root, uint32_t control, uint64_t va
         table = child;
     }
     return result;
+}
+
+// Contexts whose programmed start is zero retain the conventional absolute-VA
+// view used by the older diagnostics and fixtures.
+template <typename Read64>
+inline PageTableWalk walkPageTables(uint64_t root, uint32_t control, uint64_t va,
+                                    const FramebufferAperture &aperture,
+                                    Read64 read64) {
+    return walkPageTables(root, control, 0, va, aperture, read64);
 }
 
 // GC 10.3 exposes 16 contexts. Control registers have stride one; each root,

@@ -190,6 +190,25 @@ class OneRunQualificationTests(unittest.TestCase):
                 self.assertTrue(any(error.endswith(label) or error.endswith('_authority')
                                     for error in errors), errors)
 
+    def test_recovery_only_replay_selector_is_pinned_between_card_and_manifest(self):
+        policy = json.loads(self.policy_path.read_text())
+        card = copy.deepcopy(self.card)
+        card['recovery_critical_replay_tolerance'] = 'terminal-prefix-open'
+        manifest = copy.deepcopy(self.manifest)
+        manifest['spec'] = card
+        manifest['recovery_critical_replay_tolerance'] = 'terminal-prefix-open'
+        helpers = self.helper.current_recovery_helpers_sha256(3)
+        self.assertTrue(self.helper._manifest_ok(manifest, card, policy, helpers))
+        for value in (None, 'terminal-prefix', True):
+            with self.subTest(value=value):
+                changed = copy.deepcopy(manifest)
+                if value is None:
+                    changed.pop('recovery_critical_replay_tolerance')
+                else:
+                    changed['recovery_critical_replay_tolerance'] = value
+                self.assertFalse(self.helper._manifest_ok(
+                    changed, card, policy, helpers))
+
     def test_resealed_duplicate_or_retired_argument_is_rejected(self):
         for extra in (' rgpurnlo=1', ' rgpucp=0'):
             with self.subTest(extra=extra):

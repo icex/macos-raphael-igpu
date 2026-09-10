@@ -55,6 +55,11 @@ def build_proof(vm, run_dir, tolerance):
     manifest = json.loads(manifest_bytes)
     if manifest.get('critical_replay_schema') != 2 or manifest.get('recovery_lease_schema') != 3:
         raise ValueError('frozen-run recovery needs CR2 transport and schema-3 recovery')
+    explicit_tolerance = manifest.get('recovery_critical_replay_tolerance')
+    if (explicit_tolerance is not None and
+            tolerance != explicit_tolerance):
+        raise ValueError(
+            'requested tolerance does not match explicit recovery selector')
     replay = load('critical-replay')
     serial = serial_bytes.decode('utf-8', errors='replace')
     strict_error = None

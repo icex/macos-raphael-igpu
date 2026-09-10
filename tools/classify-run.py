@@ -589,10 +589,17 @@ def _classify(manifest, events, probe, defer_absent_workload=False):
         'vm_state', 'vm_walk', 'vm_walk_entry', 'vm_context',
         'vm_invalidate', 'vm_invalidate_live',
         'vm_pre_clear_fault', 'vm_fault', 'sdma_runtime', 'sdma_xnack',
-        'sdma_page_state', 'vm_entry_conversion', 'vm_entry_sample',
+        'sdma_page_state',
     }
     require_workload_outcomes = (not defer_absent_workload or
                                  any(r['kind'] in post_workload_kinds for r in events))
+    if 'vmid2_entry_gate' in required:
+        gates = [r for r in events if r['kind'] == 'vm_entry_gate']
+        if not gates:
+            return verdict('INCONCLUSIVE', stage='vmid2_entry_gate_missing')
+        if (len(gates) != 1 or not gates[0].get('marked') or
+                not gates[0].get('aperture') or gates[0].get('mode') != 3):
+            return verdict('INVALID', stage='vmid2_entry_gate_state')
     if 'sdma_vm_program' in required:
         program_routes = [r for r in events if r['kind'] == 'vm_program_route']
         if len(program_routes) != 1 or not program_routes[0].get('ok'):
@@ -619,22 +626,24 @@ def _classify(manifest, events, probe, defer_absent_workload=False):
         if (len(entry_routes) != 2 or
                 any(not r.get('ok') or not r.get('entry') for r in entry_routes.values())):
             return verdict('INVALID', stage='vmid2_entry_conversion_route_guard')
-    if 'vmid2_entry_conversion' in required and require_workload_outcomes:
+    if 'vmid2_entry_conversion' in required:
         conversions = [r for r in events if r['kind'] == 'vm_entry_conversion']
-        if not conversions:
+        if not conversions and require_workload_outcomes:
             return verdict('INCONCLUSIVE', stage='vmid2_entry_conversion_missing')
-        final = conversions[-1]
-        if (final.get('mode') != 3 or not final.get('pde_route') or
-                not final.get('pte_route')):
-            return verdict('INVALID', stage='vmid2_entry_conversion_mode')
-        if any(final.get('inactive', (0, 0))):
-            return verdict('INVALID', stage='vmid2_entry_conversion_inactive',
-                           next_action='page-table producers ran before the conversion gate opened; fix the gate before retry')
-        if final['pde']['converted'] == 0:
+        final = conversions[-1] if conversions else None
+        if final is not None:
+            if (final.get('mode') != 3 or not final.get('pde_route') or
+                    not final.get('pte_route')):
+                return verdict('INVALID', stage='vmid2_entry_conversion_mode')
+            if any(final.get('inactive', (0, 0))):
+                return verdict('INVALID', stage='vmid2_entry_conversion_inactive',
+                               next_action='page-table producers ran before the conversion gate opened; fix the gate before retry')
+            if final['pde']['invalid'] or final['pte']['invalid']:
+                return verdict('INVALID', stage='vmid2_entry_conversion_aperture')
+        if (require_workload_outcomes and final is not None and
+                final['pde']['converted'] == 0):
             return verdict('INCONCLUSIVE', stage='vmid2_entry_conversion_no_pde',
                            next_action='no child PDE crossed the aperture; inspect samples before retry')
-        if final['pde']['invalid'] or final['pte']['invalid']:
-            return verdict('INVALID', stage='vmid2_entry_conversion_aperture')
     if 'vmid2_root_repair' in required and require_workload_outcomes:
         repairs = [r for r in events if r['kind'] == 'vm_root_repair' and
                    r.get('vmid') == 2]
@@ -660,12 +669,54 @@ def _classify(manifest, events, probe, defer_absent_workload=False):
                   r.get('vm_sequence') in correlated]
         if not states:
             return verdict('INCONCLUSIVE', stage='vmid2_root_state_missing')
-        targets = {0x400100000, 0x4000c0000, 0x400200000}
-        if not any(targets <= {r.get('va') for r in events
-                              if r['kind'] == 'vm_walk' and
-                              r.get('vm_sequence') == sequence}
-                   for sequence in correlated):
-            return verdict('INCONCLUSIVE', stage='vmid2_root_walk_missing')
+        if 'vmid2_walk_hardware' not in required:
+            targets = {0x400100000, 0x4000c0000, 0x400200000}
+            if not any(targets <= {r.get('va') for r in events
+                                  if r['kind'] == 'vm_walk' and
+                                  r.get('vm_sequence') == sequence}
+                       for sequence in correlated):
+                return verdict('INCONCLUSIVE', stage='vmid2_root_walk_missing')
+    if 'vmid2_walk_hardware' in required and require_workload_outcomes:
+        submits = sorted((r for r in events if r['kind'] == 'sdma_submit' and
+                          r.get('valid') and r.get('vmid') == 2 and
+                          r.get('vm_sequence')),
+                         key=lambda r: r.get('seq', -1))
+        first = submits[0] if submits else None
+        addresses = ([value for value in
+                      (first.get('ib0', 0), first.get('ib1', 0)) if value]
+                     if first else [])
+        if not addresses:
+            return verdict('INCONCLUSIVE', stage='vmid2_walk_hardware_missing')
+        sequence = first['vm_sequence']
+        if any(r['kind'] == 'vm_fault' and r.get('vm_sequence') == sequence and
+               r.get('fault_status') and r.get('fault_address') in addresses
+               for r in events):
+            return verdict('EXECUTION_FAILED', True, 'vmid2_mapping_fault',
+                           'the submitted VMID2 address still faults; do not retry unchanged')
+        for address in addresses:
+            walks = [r for r in events if r['kind'] == 'vm_walk' and
+                     r.get('vm_sequence') == sequence and r.get('va') == address]
+            if not walks:
+                return verdict('INCONCLUSIVE', stage='vmid2_walk_hardware_missing')
+            complete = [r for r in walks if r.get('valid') and r.get('complete')]
+            if not complete:
+                return verdict('INCONCLUSIVE', stage='vmid2_walk_hardware_incomplete')
+            walk = complete[-1]
+            entries = sorted((r for r in events if r['kind'] == 'vm_walk_entry' and
+                              r.get('vm_sequence') == sequence and
+                              r.get('va') == address and
+                              r.get('seq', -1) > walk.get('seq', -1)),
+                             key=lambda r: r.get('ordinal', -1))
+            entries = entries[:walk.get('count', 0)]
+            if (len(entries) != walk.get('count') or
+                    [r.get('ordinal') for r in entries] != list(range(len(entries)))):
+                return verdict('INCONCLUSIVE', stage='vmid2_walk_hardware_incomplete')
+            children = [r for r in entries if r.get('level', 0) > 0 and
+                        not r.get('pde_as_pte')]
+            if not children:
+                return verdict('INCONCLUSIVE', stage='vmid2_walk_hardware_incomplete')
+            if any(r.get('child_converted') for r in children):
+                return verdict('INVALID', stage='vmid2_walk_hardware_child_translation')
     panics = [r for r in events if r['kind'] == 'guest_panic']
     raw_sdma = [r for r in events if r['kind'] == 'sdma_page_timeout' and
                 r.get('source') == 'raw-terminal']

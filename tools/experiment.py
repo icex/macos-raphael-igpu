@@ -287,6 +287,12 @@ def prepare(vm, spec, output, gpu=True, run_id=None):
             if replay_schema != 2:
                 raise ValueError('critical replay tolerance requires schema 2 transport')
             identity['critical_replay_tolerance'] = tolerance
+        recovery_tolerance = recovery_critical_replay_tolerance(card)
+        if 'recovery_critical_replay_tolerance' in card:
+            if not gpu or replay_schema != 2 or lease_schema != 3:
+                raise ValueError(
+                    'recovery critical replay tolerance requires GPU CR2 schema-3 recovery')
+            identity['recovery_critical_replay_tolerance'] = recovery_tolerance
         identity['qemu_version'] = command(['docker', 'run', '--rm', '--entrypoint',
             'qemu-system-x86_64', identity['image_id'], '--version']).splitlines()[0]
         verify_bootdisk(vm, identity['image_id'], identity)
@@ -375,13 +381,14 @@ def recover_v2(recovery_tool, vm, manifest, serial, replay_evidence=None):
     manifest selects that tolerance, so the caller can preserve them beside the
     receipt. Strict transport leaves it untouched.
     """
+    validate_manifest_replay_contract(manifest)
     lease_schema = manifest.get('recovery_lease_schema')
     if type(lease_schema) is not int or lease_schema not in (2, 3):
         raise ValueError('recovery lease schema must be numeric 2 or 3')
     if lease_schema == 3:
         if manifest.get('critical_replay_schema') != 2:
             raise ValueError('schema-3 recovery requires complete CR2 transport')
-        tolerance = critical_replay_tolerance(manifest)
+        tolerance = recovery_critical_replay_tolerance(manifest)
         replay = helper('critical-replay')
         snapshot = (replay.parse(serial, manifest['build_id']) if tolerance is None else
                     replay.parse(serial, manifest['build_id'], tolerate_corruption=True,
@@ -452,6 +459,7 @@ def critical_replay_schema(data):
 
 
 CRITICAL_REPLAY_TOLERANCES = ('terminal-prefix', 'terminal-prefix-open')
+RECOVERY_CRITICAL_REPLAY_TOLERANCES = ('terminal-prefix-open',)
 
 
 def critical_replay_tolerance(data):
@@ -462,6 +470,41 @@ def critical_replay_tolerance(data):
     if tolerance not in CRITICAL_REPLAY_TOLERANCES:
         raise ValueError('critical replay tolerance must be terminal-prefix or terminal-prefix-open')
     return tolerance
+
+
+def recovery_critical_replay_tolerance(data):
+    """Return recovery's selector, preserving manifests created before it existed."""
+    key = 'recovery_critical_replay_tolerance'
+    if key not in data:
+        return critical_replay_tolerance(data)
+    tolerance = data[key]
+    if tolerance not in RECOVERY_CRITICAL_REPLAY_TOLERANCES:
+        raise ValueError(
+            'recovery critical replay tolerance must be terminal-prefix-open')
+    return tolerance
+
+
+def validate_manifest_replay_contract(manifest):
+    """Bind a new recovery-only selector to the embedded experiment card."""
+    critical_replay_schema(manifest)
+    critical_replay_tolerance(manifest)
+    key = 'recovery_critical_replay_tolerance'
+    spec = manifest.get('spec')
+    manifest_has_selector = key in manifest
+    card_has_selector = isinstance(spec, dict) and key in spec
+    if not manifest_has_selector and not card_has_selector:
+        return None
+    recovery_tolerance = recovery_critical_replay_tolerance(manifest)
+    if (not manifest_has_selector or not card_has_selector or
+            spec.get(key) != recovery_tolerance):
+        raise ValueError(
+            'recovery critical replay tolerance does not match experiment card')
+    if (manifest.get('gpu') is not True or
+            manifest.get('critical_replay_schema') != 2 or
+            manifest.get('recovery_lease_schema') != 3):
+        raise ValueError(
+            'recovery critical replay tolerance requires GPU CR2 schema-3 recovery')
+    return None
 
 
 def verify_bootdisk(vm, image_id, expected):
@@ -2188,6 +2231,7 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
             cap_revision_authority_sha256 or warm_requested):
         raise ValueError('candidate179 qualification cannot use another launch mode')
     manifest = json.loads(manifest_path.read_text())
+    validate_manifest_replay_contract(manifest)
     if (manifest.get('gpu') is True and
             manifest.get('recovery_lease_schema') not in (2, 3)):
         raise ValueError('GPU run requires a supported recovery lease manifest')

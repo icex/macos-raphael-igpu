@@ -1229,6 +1229,141 @@ Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0
         result = classify(manifest, good, None)
         self.assertNotIn('vmid2_entry_conversion', result.get('earliest_failure') or '')
 
+    def test_candidate182_requires_exact_early_entry_gate(self):
+        classifier = self.classifier()
+        manifest = {'build_id': 'abc', 'spec': {'required_observations': [
+                    'vmid2_entry_gate']}}
+        base = self.events(available=1, status=0, started=1) + [
+            dict(kind='accelerator_start', build='abc', seq=6, result=1)]
+
+        missing = classifier.classify_probe_readiness(manifest, base)
+        self.assertEqual(missing['earliest_failure'], 'vmid2_entry_gate_missing')
+
+        for label, gate in (
+                ('unmarked', dict(marked=False, aperture=True, mode=3)),
+                ('aperture', dict(marked=True, aperture=False, mode=3)),
+                ('mode', dict(marked=True, aperture=True, mode=2))):
+            with self.subTest(label=label):
+                result = classifier.classify_probe_readiness(
+                    manifest, base + [dict(kind='vm_entry_gate', build='abc', seq=7,
+                                           **gate)])
+                self.assertEqual(result['verdict'], 'INVALID')
+                self.assertEqual(result['earliest_failure'], 'vmid2_entry_gate_state')
+
+        good = classifier.classify_probe_readiness(
+            manifest, base + [dict(kind='vm_entry_gate', build='abc', seq=7,
+                                   marked=True, aperture=True, mode=3)])
+        self.assertEqual(good['verdict'], 'PROBE_NOT_RUN')
+
+        preworkload_manifest = {'build_id': 'abc', 'spec': {
+            'required_observations': ['vmid2_entry_conversion', 'vmid2_entry_gate',
+                                      'vmid2_walk_hardware']}}
+        preworkload = base + [
+            dict(kind='vm_entry_gate', build='abc', seq=7,
+                 marked=True, aperture=True, mode=3),
+            dict(kind='vm_entry_route', build='abc', seq=8,
+                 method='getPDEValue', ok=True, entry=True),
+            dict(kind='vm_entry_route', build='abc', seq=9,
+                 method='getPTEValue', ok=True, entry=True),
+            dict(kind='vm_entry_conversion', build='abc', seq=10, mode=3,
+                 pde_route=True, pte_route=True, inactive=(0, 0),
+                 pde={'converted': 0, 'physical': 0, 'outside': 2,
+                      'system': 0, 'invalid': 0},
+                 pte={'converted': 0, 'physical': 0, 'outside': 4,
+                      'system': 3, 'invalid': 0}),
+            dict(kind='vm_entry_sample', build='abc', seq=11)]
+        ready = classifier.classify_probe_readiness(preworkload_manifest, preworkload)
+        self.assertEqual(ready['verdict'], 'PROBE_NOT_RUN')
+
+        for label, field, value in (
+                ('mode', 'mode', 2),
+                ('route', 'pde_route', False)):
+            with self.subTest(preworkload_summary=label):
+                malformed = [dict(row) for row in preworkload]
+                next(row for row in malformed
+                     if row['kind'] == 'vm_entry_conversion')[field] = value
+                malformed_result = classifier.classify_probe_readiness(
+                    preworkload_manifest, malformed)
+                self.assertEqual(malformed_result['verdict'], 'INVALID')
+                self.assertEqual(malformed_result['earliest_failure'],
+                                 'vmid2_entry_conversion_mode')
+
+        inactive = [dict(row) for row in preworkload]
+        next(row for row in inactive
+             if row['kind'] == 'vm_entry_conversion')['inactive'] = (1, 0)
+        inactive_result = classifier.classify_probe_readiness(
+            preworkload_manifest, inactive)
+        self.assertEqual(inactive_result['verdict'], 'INVALID')
+        self.assertEqual(inactive_result['earliest_failure'],
+                         'vmid2_entry_conversion_inactive')
+
+        invalid = [dict(row) for row in preworkload]
+        conversion = next(row for row in invalid
+                          if row['kind'] == 'vm_entry_conversion')
+        conversion['pde'] = dict(conversion['pde'], invalid=1)
+        invalid_result = classifier.classify_probe_readiness(
+            preworkload_manifest, invalid)
+        self.assertEqual(invalid_result['verdict'], 'INVALID')
+        self.assertEqual(invalid_result['earliest_failure'],
+                         'vmid2_entry_conversion_aperture')
+
+    def test_candidate182_requires_submitted_ib_walk_with_physical_raw_children(self):
+        classifier = self.classifier()
+        manifest = {'build_id': 'abc', 'spec': {'required_observations': [
+                    'vmid2_walk_hardware']}}
+        base = self.events(available=1, status=0, started=1) + [
+            dict(kind='accelerator_start', build='abc', seq=6, result=1),
+            dict(kind='sdma_submit', build='abc', seq=7, vmid=2, valid=True,
+                 ib0=0x400180000, ib1=0, vm_sequence=9)]
+        missing = classifier.classify(manifest, base, None)
+        self.assertEqual(missing['earliest_failure'], 'vmid2_walk_hardware_missing')
+
+        walk = dict(kind='vm_walk', build='abc', seq=8, vm_sequence=9,
+                    va=0x400180000, valid=True, complete=True, count=2)
+        child = dict(kind='vm_walk_entry', build='abc', seq=9, vm_sequence=9,
+                     va=0x400180000, ordinal=0, level=1, valid=True,
+                     system=False, pde_as_pte=False, child_converted=False,
+                     address=0x84b6f4000)
+        leaf = dict(kind='vm_walk_entry', build='abc', seq=10, vm_sequence=9,
+                    va=0x400180000, ordinal=1, level=0, valid=True,
+                    system=False, pde_as_pte=False, child_converted=False,
+                    address=0x841800000)
+        good_events = base + [walk, child, leaf]
+        good = classifier.classify(manifest, good_events, None)
+        self.assertEqual(good['verdict'], 'PROBE_NOT_RUN')
+
+        correlated_manifest = {'build_id': 'abc', 'spec': {
+            'required_observations': ['vmid2_root_repair', 'vmid2_walk_hardware']}}
+        correlated = good_events + [
+            dict(kind='vm_root_repair', build='abc', seq=11, vm_sequence=9,
+                 vmid=2, repaired=True, reason='repaired', prepared_match=True),
+            dict(kind='vm_state', build='abc', seq=12, vm_sequence=9, vmid=2,
+                 phase='dispatch+0ms')]
+        submitted_only = classifier.classify(correlated_manifest, correlated, None)
+        self.assertEqual(submitted_only['verdict'], 'PROBE_NOT_RUN')
+
+        translated = [dict(row) for row in good_events]
+        next(row for row in translated if row['kind'] == 'vm_walk_entry' and
+             row['level'] == 1)['child_converted'] = True
+        bad_child = classifier.classify(manifest, translated, None)
+        self.assertEqual(bad_child['verdict'], 'INVALID')
+        self.assertEqual(bad_child['earliest_failure'],
+                         'vmid2_walk_hardware_child_translation')
+
+        incomplete = [dict(row) for row in good_events]
+        next(row for row in incomplete if row['kind'] == 'vm_walk')['complete'] = False
+        bad_walk = classifier.classify(manifest, incomplete, None)
+        self.assertEqual(bad_walk['earliest_failure'],
+                         'vmid2_walk_hardware_incomplete')
+
+        fault = good_events + [dict(
+            kind='vm_fault', build='abc', seq=11, vm_sequence=9,
+            phase='dispatch+0ms', fault_status=0x201b3b,
+            fault_address=0x400180000)]
+        mapped_fault = classifier.classify(manifest, fault, None)
+        self.assertEqual(mapped_fault['verdict'], 'EXECUTION_FAILED')
+        self.assertEqual(mapped_fault['earliest_failure'], 'vmid2_mapping_fault')
+
     def test_cr2_terminal_prefix_tolerance_reports_evidence_not_loss(self):
         payloads = ['BUILD: identity=' + CR2_BUILD, 'XH3 LIFETIME state=VALID nonce=1_2']
         complete_one = snapshot_lines(payloads[:1], snapshot=1)

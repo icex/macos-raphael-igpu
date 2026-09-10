@@ -4688,7 +4688,8 @@ static bool submitFitsProgram(const RaphaelSdma::SubmitInfoObservation &submit,
 }
 
 static void reportVmid2Walk(uint32_t sequence, const RaphaelVm::PreparedRequest &program,
-                            const RaphaelSdma::SubmitInfoObservation &submit) {
+                            const RaphaelSdma::SubmitInfoObservation &submit,
+                            uint64_t contextStart) {
     RaphaelVm::FramebufferAperture aperture {};
     auto fb = fbAperture();
     if (fb == nullptr || !vmid2Aperture(aperture)) {
@@ -4721,7 +4722,11 @@ static void reportVmid2Walk(uint32_t sequence, const RaphaelVm::PreparedRequest 
             // The prepared request does not carry context control. The live
             // value is read here, outside the callback and its caller locks.
             fbRead(asicInfo, kGcSeg0 + RaphaelVm::contextRegisters(2).control),
-            va, aperture, reader);
+            // Candidate 181's frozen root has its only entry at index zero for
+            // VAs beginning at the live nonzero context start. Treating the VA
+            // as context-relative is a diagnostic reconstruction of that
+            // observed layout; hardware success remains the deciding evidence.
+            contextStart, va, aperture, reader);
         CRLOG("VM: walk seq=%u va=%#llx root=%#llx valid=%u complete=%u count=%u",
               sequence, va, program.nativeRoot, walk.valid, walk.complete, walk.count);
         for (uint32_t n = 0; n < walk.count; ++n) {
@@ -4820,7 +4825,8 @@ static void reportVmid2Runtime(const char *phase, uint32_t sequence,
           fbRead(asicInfo, kSdmaPageIbRptr), fbRead(asicInfo, kSdmaPageIbOff),
           fbRead(asicInfo, kSdmaPageIbHi), fbRead(asicInfo, kSdmaPageIbLo),
           fbRead(asicInfo, kSdmaPageIbSize));
-    if (walk && submit != nullptr) reportVmid2Walk(sequence, program, *submit);
+    if (walk && submit != nullptr)
+        reportVmid2Walk(sequence, program, *submit, start);
 }
 
 static bool submissionTraceCaptureActive() {
@@ -5197,10 +5203,11 @@ static void publishPendingVmObservations() {
               program.preparedRootMatches);
         if (programCount < sizeof(programCache) / sizeof(programCache[0]))
             programCache[programCount++] = program;
-        // This is the earliest worker-side sample, normally before SDMA dispatch
-        // and therefore before a later KIQ diagnostic clears the fault latch.
+        // This is the earliest worker-side register sample. Page-table walking
+        // waits for a correlated submit so an unmapped hard-coded VA cannot be
+        // mistaken for a conversion failure.
         if (programCount == 1)
-            reportVmid2Runtime("prepared", program.sequence, program, nullptr, true);
+            reportVmid2Runtime("prepared", program.sequence, program, nullptr, false);
     }
     RaphaelSdma::SubmitInfoObservation submit {};
     while (submitCursor < vmid2Submits.size() && vmid2Submits.read(submitCursor, submit)) {
