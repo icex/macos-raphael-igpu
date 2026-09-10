@@ -227,7 +227,11 @@ static mach_vm_address_t orgVmmGetPte {};
 // Page-table entry conversions: lifetime counters per kind and domain, plus a
 // bounded first-sample buffer per kind. Producers never log, allocate or wait.
 static volatile uint64_t vmEntryCounts[2][RaphaelVm::kEntryDomainCount] {};
-static rgpu::ObservationBuffer<RaphaelVm::EntryConversionSample, 4> vmEntrySamples[2] {};
+// Calls that arrived before the aperture snapshot and Raphael marker were
+// both published pass through unconverted; count them so a silent early
+// producer cannot hide behind the active-phase counters.
+static volatile uint64_t vmEntryInactive[2] {};
+static rgpu::ObservationBuffer<RaphaelVm::EntryConversionSample, 8> vmEntrySamples[2] {};
 static volatile bool raphaelTargetConfirmed = false;
 // Published once by the early framebuffer callback and read later by the VM
 // callback. Keeping this snapshot avoids MMIO under X6000's unknown VM locks.
@@ -3640,7 +3644,16 @@ static bool regWritable(const char *name, uint32_t reg, uint32_t xorMask) {
 }
 
 static bool wrapVmmInit(void *self, void *hwIface, uint32_t flags) {
+    // Candidate 181 found VMID2's first page-table block carrying an unconverted
+    // MC address although every counted producer call was classified outside
+    // the aperture: the earliest entries are written before any later gate can
+    // open. Confirm the exact Raphael marker here, before the VMM can allocate,
+    // so the entry-conversion gate is decided by the aperture snapshot alone.
+    const bool markedAtInit = hwIface != nullptr && isRaphaelHardware(hwIface);
     auto r = FunctionCast(wrapVmmInit, orgVmmInit)(self, hwIface, flags);
+    if (vmRootFixMode >= 2)
+        CRLOG("VM: entry-gate init marked=%u aperture=%u mode=%u", markedAtInit,
+              __atomic_load_n(&cachedFbPublished, __ATOMIC_ACQUIRE), vmRootFixMode);
     if (self != nullptr) {
         auto f = reinterpret_cast<uint8_t *>(self);
         auto q = [f](size_t o) { return *reinterpret_cast<void **>(f + o); };
@@ -4058,9 +4071,8 @@ static uint64_t convertVmEntryAddress(RaphaelVm::EntryKind kind, uint32_t level,
     const size_t k = kind == RaphaelVm::EntryKind::Pde ? 0 : 1;
     __atomic_fetch_add(&vmEntryCounts[k][static_cast<size_t>(domain)], 1u,
                        __ATOMIC_RELAXED);
-    if (domain == RaphaelVm::EntryDomain::Converted)
-        vmEntrySamples[k].append(RaphaelVm::EntryConversionSample {
-            kind, level, flags, address, result});
+    vmEntrySamples[k].append(RaphaelVm::EntryConversionSample {
+        kind, level, flags, address, result, domain});
     return result;
 }
 
@@ -4074,6 +4086,8 @@ static uint64_t wrapVmmGetPde(void *self, uint32_t level, uint64_t address) {
     if (vmEntryConversionActive(2))
         address = convertVmEntryAddress(RaphaelVm::EntryKind::Pde, level, 0, false,
                                         address);
+    else
+        __atomic_fetch_add(&vmEntryInactive[0], 1u, __ATOMIC_RELAXED);
     return FunctionCast(wrapVmmGetPde, orgVmmGetPde)(self, level, address);
 }
 
@@ -4084,6 +4098,8 @@ static uint64_t wrapVmmGetPte(void *self, uint32_t level, uint64_t address,
     if (vmEntryConversionActive(3))
         address = convertVmEntryAddress(RaphaelVm::EntryKind::Pte, level, flags,
                                         (flags & 0x8u) != 0, address);
+    else
+        __atomic_fetch_add(&vmEntryInactive[1], 1u, __ATOMIC_RELAXED);
     return FunctionCast(wrapVmmGetPte, orgVmmGetPte)(self, level, address, flags,
                                                      fragment);
 }
@@ -5118,7 +5134,8 @@ static void publishPendingVmEntryConversions() {
     static unsigned summaries = 0;
     static size_t sampleCursor[2] {};
     uint64_t c[2][RaphaelVm::kEntryDomainCount];
-    uint64_t total = 0;
+    uint64_t total = __atomic_load_n(&vmEntryInactive[0], __ATOMIC_RELAXED) +
+        __atomic_load_n(&vmEntryInactive[1], __ATOMIC_RELAXED);
     for (size_t k = 0; k < 2; ++k)
         for (size_t d = 0; d < RaphaelVm::kEntryDomainCount; ++d) {
             c[k][d] = __atomic_load_n(&vmEntryCounts[k][d], __ATOMIC_RELAXED);
@@ -5128,10 +5145,12 @@ static void publishPendingVmEntryConversions() {
         lastTotal = total;
         ++summaries;
         CRLOG("VM: entry-conv mode=%u routes=%u/%u pde=%llu/%llu/%llu/%llu/%llu "
-              "pte=%llu/%llu/%llu/%llu/%llu dropped=%llu/%llu",
+              "pte=%llu/%llu/%llu/%llu/%llu inactive=%llu/%llu dropped=%llu/%llu",
               vmRootFixMode, orgVmmGetPde != 0, orgVmmGetPte != 0,
               c[0][0], c[0][1], c[0][2], c[0][3], c[0][4],
               c[1][0], c[1][1], c[1][2], c[1][3], c[1][4],
+              __atomic_load_n(&vmEntryInactive[0], __ATOMIC_RELAXED),
+              __atomic_load_n(&vmEntryInactive[1], __ATOMIC_RELAXED),
               vmEntrySamples[0].dropped(), vmEntrySamples[1].dropped());
     }
     for (size_t k = 0; k < 2; ++k) {
@@ -5139,9 +5158,11 @@ static void publishPendingVmEntryConversions() {
         while (sampleCursor[k] < vmEntrySamples[k].size() &&
                vmEntrySamples[k].read(sampleCursor[k], sample)) {
             ++sampleCursor[k];
-            CRLOG("VM: entry-sample kind=%s level=%u flags=%#x original=%#llx result=%#llx",
+            CRLOG("VM: entry-sample kind=%s level=%u flags=%#x original=%#llx result=%#llx "
+                  "domain=%s",
                   sample.kind == RaphaelVm::EntryKind::Pde ? "pde" : "pte",
-                  sample.level, sample.flags, sample.original, sample.result);
+                  sample.level, sample.flags, sample.original, sample.result,
+                  RaphaelVm::entryDomainName(sample.domain));
         }
     }
 }
@@ -5179,7 +5200,7 @@ static void publishPendingVmObservations() {
         // This is the earliest worker-side sample, normally before SDMA dispatch
         // and therefore before a later KIQ diagnostic clears the fault latch.
         if (programCount == 1)
-            reportVmid2Runtime("prepared", program.sequence, program, nullptr, false);
+            reportVmid2Runtime("prepared", program.sequence, program, nullptr, true);
     }
     RaphaelSdma::SubmitInfoObservation submit {};
     while (submitCursor < vmid2Submits.size() && vmid2Submits.read(submitCursor, submit)) {

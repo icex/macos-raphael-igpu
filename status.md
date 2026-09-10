@@ -1,5 +1,150 @@
 # Raphael iGPU: current technical status
 
+## Candidate 181 run and candidate 182 preparation — 2026-09-10 08:20 UTC
+
+Coordinator note by Claude Code (session `015gka3zkh6eBg2CtqZx8MSQ`), acting on the user's
+"fix it and run it again" instruction. Full desktop Metal is **still not working**.
+
+**Hardware result (run `8a6beaeb1b5f5800a7e01c1e1954c4b5`, evidence
+`findings/experiments/metal-014-181/`).** Candidate 181 (`rgpuvmroot=3`: convert child
+PDE and non-SYSTEM PTE addresses through the same aperture arithmetic as the proven VMID2
+root repair) installed both routes, repeated the native startup, lease, VMM arena and root
+repair, and for the first time in a warm launch the probe reached `commit`: it ended with
+`GPU completion timeout after 5 seconds` after 18 channel submissions instead of the old
+`e00002bd`. The first GPU fault is unchanged from 179/181: SDMA0 read under VMID 2 with
+`MAPPING_ERROR` at `0x400180000` (`VM_FAULT_STATUS=0x201b3b`), then the page queue stall.
+The conversion counters classified every counted producer call as outside the MC
+aperture (`pde=0/0/43/0/0 pte=0/0/5/301/0`), while a read-only BAR0 dump of the stopped
+device shows VMID2's root page directory entry 0 = `0x200000f40b6f4001`: `getPDEValue`'s
+exact encoding around an **unconverted** MC child address. The rule is right; the earliest
+entries (the first arena block is the VMID2 root) were produced before the wrapper
+counted anything. Candidate 182 confirms the Raphael marker at `AMDHWVMM::init`, samples
+every `getPDEValue`/`getPTEValue` call with its address domain, counts calls that arrive
+before the gate, and walks the VMID2 tables through BAR0 at the prepared phase.
+
+**Cleanup.** Candidate 180's frozen state was retired first (schema-6 receipt
+`74d7749f63c04cdaa0034df35c58d308`, recovered and authorizing) using the reviewed
+terminal-prefix CR2 tolerance: the clean snapshot 3 (181 records, CRC `0x0d541f1e`)
+with 27 garbled physical lines counted as corruption and every valid chunk of the
+incomplete attempt matching the prefix (`candidate180-recovery-replay-proof.json`).
+Candidate 181's own capture was cut off by the forced stop during replay; the new
+`terminal-prefix-open` rule decodes it (terminal snapshot 2, 164 records, no abort,
+lifetime VALID), but its schema-3 recovery ended **incomplete**: three MEC HQDs dequeued
+cleanly, CP idle, both PSP acknowledgements, no kernel message, yet the temporary host
+KIQ did not consume graphics `UNMAP_QUEUES` (the faulted CP left the graphics ring
+active). `authorizes_launch=false`; the ledger is 2/3 and **no further launch is
+admitted on this boot**. The next experiment needs a fresh host boot, the amdgpu-first
+handoff (`SUDO_ASKPASS=... sudo -A ./gpu-bind.sh` in `~/macos-vm`), then the ordinary
+first-launch path for candidate 182 (card `experiments/metal-015.json`).
+
+**Same-boot reuse.** The coordinator refuses generic same-boot reuse for lease-schema
+launches; `tools/one-run-qualification.py` now provides the finite authority as a
+policy-pinned generalization of the candidate-179 helper (`--one-run-policy-sha256` /
+`--one-run-activation-sha256`). Two admission refusals preceded the 181 launch, both
+before device access (missing authority; identity gate computed helper hashes for lease
+schema 2). Their outputs are kept under `run/candidate-181-refused-admission/`.
+
+**Streak accounting.** The unresolved SDMA/VM memory-fault issue now spans three cycles
+(179, 180, 181); the fourth-cycle adversarial review rule in AGENTS.md applies before a
+fifth. Meaningful progress in 181: probe committed, a channel submission count of 18, and
+a directly observed page-table content defect with its producer identified.
+
+**Offline state.** dev `HEAD` carries candidates 181/182; 513 Python tests, the C++
+sanitizer fixtures, route ownership, exact-KDK preflight (both new prologues) and the
+cross-build pass. Nothing was pushed to main.
+
+
+## PAUSED at user request — 2026-09-10 06:27 UTC
+
+The user requested: stop after updating this file; do not start new iterations.
+Active investigation/implementation agents were interrupted. **No new GPU run,
+cleanup attempt, reset, or recovery-proof migration was started.** The proposed
+`candidate180-recovery-repair.py` and its tests do not exist yet. Repository code
+remains the reviewed dev milestone `9030f1140ec308ed75aba03e7acedace8416312d`;
+only coordinator documentation and model-selection instructions changed afterward.
+Nothing was pushed to main. Sleep inhibition remains active in the last observed
+host state.
+
+### Final known result
+
+Full desktop Metal is **not working**. Candidate180 did prove the zero-attribute
+VMID2 repair: independently checksum-validated snapshot0 records 73/74 show
+original root `0xf40b6f3000`, repaired/native/prepared/live root `0x84b6f3000`,
+`repaired=1`, `reason=repaired`, and both match checks true. The earliest validated
+new fault (record76) is `VM_FAULT_STATUS=0x2009bb` at `0x400200000`; paging SDMA
+still does not demonstrate successful execution. No identity-bound Metal probe
+result exists. Keep the broader unresolved SDMA memory-fault streak conservatively
+at **two cycles (179,180)**; do not reset it solely because the address repair
+worked. The mandatory fourth-cycle adversarial-review rule still applies.
+
+### Capture and cleanup evidence
+
+Raw verdict/recovery stay INVALID/failed and must not be rewritten. Both agents
+independently validated complete snapshots 0,1,3 with the existing per-chunk CRC,
+aggregate CRC/FNV, count, and prefix checks. Snapshot2 contains character-level
+console interleaving: 27 malformed transport-bearing lines, first at serial line
+8464, only 218 intact chunks, no valid END. The final snapshot3 is a contiguous
+clean block at lines 12715–13253: 181 records, 18847 bytes, 538 chunks,
+CRC `0x0d541f1e`, FNV `0x3b0a2fab724073a0`, zero drop/truncation. It extends the
+validated earlier prefixes, and no transport marker follows its END.
+
+Snapshot3 contains nonce-bound OWNED, ACTIVE POOL, and XH3 VALID. The expected
+lifetime checksum reconstructed from ownership and pool records is
+`0x0f4523b0ec420869`, matching the guest record. **This is guest evidence, not
+current BAR authentication.** No valid recovery receipt exists. QEMU stopped;
+host responsiveness, vfio accessibility, and an awake device do not prove cleanup.
+
+Frozen raw serial SHA-256:
+`af976400493d4b4e5299caee89a9363966029cad0834aa3bace76ec45219c6c8`.
+All 12 raw output files are hashed in
+`~/macos-vm/run/candidate-180-evidence-sha256.txt` (inventory SHA-256
+`b73f72e170c46627865ba414ec3b4e99d8ff949250301c444ae6ffd52aef9934`).
+Final host snapshot `candidate-180-final-host.json` is byte-identical to the run's
+`host-after.json` (SHA-256 `4565fc54fb00ae0364546bb72fc1de7d63eae0a8ce1022066122f39a1fb87dc7`).
+Current boot ledger has one row, SHA-256
+`fe4c707f0d0c2f2b163cd5e16e841f33b956c4f5dff87137408465d85979f95d`.
+
+### Pending proposal, not implemented or authorized by execution
+
+On a future resume, assess a narrowly pinned recovery-proof migration for this
+run: validate the terminal contiguous CR2 block, require consistency with every
+prior complete snapshot **and every earlier valid-CRC chunk** (including incomplete
+snapshots), reject later transport/conflicting records/ABORT, pin raw serial,
+manifest, original failure, and migration-helper hashes in a separate exclusive
+proof. Only after independent code/tests review could it call the unchanged
+pinned schema3 VFIO validator, requiring exact current OWNED/ACTIVE POOL/VALID
+BAR reads and another full read immediately before scratch writes. Preserve the
+original failed receipt and write any repair receipt separately. Do not manually
+filter the serial capture, bypass helper hashes, or infer current marker state.
+No reboot is requested at this pause; the no-reboot cleanup proposal is untested.
+
+## Candidate 180 hardware result — 2026-09-10 06:17 UTC launch
+
+Run `7966fb1045ddeae71535030cd94deab1`, evidence `~/macos-vm/run/metal-013-180/`,
+boot `5aa7641a-6dd5-4cb6-a482-5bd1b15fa946`. Source milestone `9030f11` was
+built exactly once and staged/verified. Build ID `51f32e118fba4ec396ced9af51875499`;
+manifest SHA `dc32a52e8b12d8a3c91295423771971f3731d2d4435cea0b9be949dcdaea19b7`.
+QEMU argv confirms GTK/VMware virtual display plus VFIO Raphael attachment.
+No independent window-content proof or accelerated desktop result was obtained.
+
+Raw verdict is **INVALID**, `identity_or_route_missing`, evidence `capture_loss`.
+Recovery refused with `CriticalReplayError: CR2 physical line bound exceeded`.
+The guest was forced closed after its shutdown request; QEMU is stopped and the
+host is responsive. **GPU cleanup is unvalidated**; device accessibility and a
+healthy host snapshot are not a valid cleanup receipt. No retry is being attempted.
+
+Direct serial confirms OWNED, ACTIVE POOL, and `XH3 LIFETIME state=VALID` at lines
+2551, 2734, 2735, followed by non-null native VMM allocators. CR2 END records are
+present, but GPU restart diagnostics interleave with physical replay lines and
+strict reconstruction rejects the capture. Agents are examining checksummed
+records offline to separate the functional fault from transport corruption.
+Root repair / meaningful progress past 179 is not yet claimed. This is the second
+actual cycle since 179 crossed the old VMM failure boundary; do not reset that
+count until a new boundary is demonstrated.
+
+Routine operations now use Luna, with Sol for driver/recovery investigation and
+coordinator audit. The mandatory fourth-stalled-cycle Astra escalation remains.
+
 ## Candidate 180 preparation after reboot — 2026-09-10
 
 New host boot verified: `5aa7641a-6dd5-4cb6-a482-5bd1b15fa946`.

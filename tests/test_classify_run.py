@@ -1144,9 +1144,9 @@ Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0
             'RGPU_EVENT build=abc seq=1 VM: route AMDGFX10VMM::getPTEValue -> FAILED '
             '(entry=0 org=0x0)\n'
             'RGPU_EVENT build=abc seq=2 VM: entry-conv mode=3 routes=1/1 '
-            'pde=5/0/0/0/0 pte=12/1/300/44/0 dropped=1/8\n'
+            'pde=5/0/0/0/0 pte=12/1/300/44/0 inactive=2/0 dropped=1/8\n'
             'RGPU_EVENT build=abc seq=3 VM: entry-sample kind=pde level=1 flags=0 '
-            'original=0xf40b6f4000 result=0x84b6f4000\n')
+            'original=0xf40b6f4000 result=0x84b6f4000 domain=converted\n')
         self.assertEqual([row['kind'] for row in rows],
                          ['vm_entry_route', 'vm_entry_route', 'vm_entry_conversion',
                           'vm_entry_sample'])
@@ -1158,8 +1158,15 @@ Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0
         self.assertEqual(rows[2]['pte'], {'converted': 12, 'physical': 1, 'outside': 300,
                                           'system': 44, 'invalid': 0})
         self.assertEqual(rows[2]['dropped_samples'], (1, 8))
+        self.assertEqual(rows[2]['inactive'], (2, 0))
         self.assertEqual(rows[3]['original'], 0xf40b6f4000)
         self.assertEqual(rows[3]['result'], 0x84b6f4000)
+        self.assertEqual(rows[3]['domain'], 'converted')
+        legacy = self.classifier().parse_serial(
+            'RGPU_RECORDS build=abc count=1 dropped=0 truncated=0\n'
+            'RGPU_EVENT build=abc seq=0 VM: entry-conv mode=3 routes=1/1 '
+            'pde=0/0/43/0/0 pte=0/0/5/301/0 dropped=0/0\n')
+        self.assertEqual(legacy[0]['inactive'], (0, 0))
 
     def test_candidate181_required_entry_conversion_fails_closed(self):
         classify = self.classifier().classify
@@ -1208,6 +1215,13 @@ Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0
         result = classify(manifest, bad_aperture, None)
         self.assertEqual(result['verdict'], 'INVALID')
         self.assertEqual(result['earliest_failure'], 'vmid2_entry_conversion_aperture')
+
+        inactive = routes + workload + [dict(
+            kind='vm_entry_conversion', build='abc', seq=5, mode=3,
+            pde_route=True, pte_route=True, inactive=(7, 0), **counts)]
+        result = classify(manifest, inactive, None)
+        self.assertEqual(result['verdict'], 'INVALID')
+        self.assertEqual(result['earliest_failure'], 'vmid2_entry_conversion_inactive')
 
         good = routes + workload + [dict(
             kind='vm_entry_conversion', build='abc', seq=5, mode=3,

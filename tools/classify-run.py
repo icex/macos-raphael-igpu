@@ -184,17 +184,22 @@ def _decode_payload(build, seq, payload):
                    alternate=bool(int(m[8])),
                    info_words=[int(value, 16) for value in m[9].split(',')],
                    words=[int(value, 16) for value in m[10].split(',')])
-    elif m := re.fullmatch(r'VM: entry-conv mode=(\d+) routes=([01])/([01]) pde=(\d+)/(\d+)/(\d+)/(\d+)/(\d+) pte=(\d+)/(\d+)/(\d+)/(\d+)/(\d+) dropped=(\d+)/(\d+)', payload):
+    elif m := re.fullmatch(r'VM: entry-gate init marked=([01]) aperture=([01]) mode=(\d+)', payload):
+        row.update(kind='vm_entry_gate', marked=bool(int(m[1])),
+                   aperture=bool(int(m[2])), mode=int(m[3]))
+    elif m := re.fullmatch(r'VM: entry-conv mode=(\d+) routes=([01])/([01]) pde=(\d+)/(\d+)/(\d+)/(\d+)/(\d+) pte=(\d+)/(\d+)/(\d+)/(\d+)/(\d+)(?: inactive=(\d+)/(\d+))? dropped=(\d+)/(\d+)', payload):
         row.update(kind='vm_entry_conversion', mode=int(m[1]),
                    pde_route=bool(int(m[2])), pte_route=bool(int(m[3])),
                    pde={'converted':int(m[4]), 'physical':int(m[5]), 'outside':int(m[6]),
                         'system':int(m[7]), 'invalid':int(m[8])},
                    pte={'converted':int(m[9]), 'physical':int(m[10]), 'outside':int(m[11]),
                         'system':int(m[12]), 'invalid':int(m[13])},
-                   dropped_samples=(int(m[14]), int(m[15])))
-    elif m := re.fullmatch(r'VM: entry-sample kind=(pde|pte) level=(\d+) flags=(0x[0-9a-fA-F]+|0) original=(0x[0-9a-fA-F]+|0) result=(0x[0-9a-fA-F]+|0)', payload):
+                   inactive=(int(m[14] or 0), int(m[15] or 0)),
+                   dropped_samples=(int(m[16]), int(m[17])))
+    elif m := re.fullmatch(r'VM: entry-sample kind=(pde|pte) level=(\d+) flags=(0x[0-9a-fA-F]+|0) original=(0x[0-9a-fA-F]+|0) result=(0x[0-9a-fA-F]+|0)(?: domain=([a-z-]+))?', payload):
         row.update(kind='vm_entry_sample', entry=m[1], level=int(m[2]),
-                   flags=int(m[3], 16), original=int(m[4], 16), result=int(m[5], 16))
+                   flags=int(m[3], 16), original=int(m[4], 16), result=int(m[5], 16),
+                   domain=m[6])
     elif m := re.fullmatch(r'VM: route AMDGFX10VMM::(getPDEValue|getPTEValue) -> (ok|FAILED) \(entry=([01]) org=(0x[0-9a-fA-F]+)\)', payload):
         row.update(kind='vm_entry_route', method=m[1], ok=m[2] == 'ok',
                    entry=bool(int(m[3])))
@@ -427,7 +432,7 @@ def _parse_legacy_serial(serial):
     return rows + losses
 
 
-CRITICAL_REPLAY_TOLERANCES = (None, 'terminal-prefix')
+CRITICAL_REPLAY_TOLERANCES = (None, 'terminal-prefix', 'terminal-prefix-open')
 
 
 def parse_serial(serial, *, critical_replay_schema=None, expected_build=None,
@@ -444,7 +449,8 @@ def parse_serial(serial, *, critical_replay_schema=None, expected_build=None,
     try:
         snapshot = replay.parse(
             serial, expected_build,
-            tolerate_corruption=critical_replay_tolerance == 'terminal-prefix')
+            tolerate_corruption=critical_replay_tolerance is not None,
+            open_attempt=critical_replay_tolerance == 'terminal-prefix-open')
     except replay.CriticalReplayError as error:
         message = str(error)
         pending = any(fragment in message for fragment in (
@@ -466,7 +472,8 @@ def parse_serial(serial, *, critical_replay_schema=None, expected_build=None,
                          corrupt_lines=snapshot['corrupt_lines'],
                          corrupt_reasons=snapshot['corrupt_reasons'],
                          incomplete_snapshots=snapshot['incomplete_snapshots'],
-                         terminal_snapshot=snapshot['snapshot']))
+                         terminal_snapshot=snapshot['snapshot'],
+                         open_attempt=snapshot.get('open_attempt')))
     terminal = []
     for row in _parse_legacy_serial(serial):
         if (row['kind'] == 'guest_panic' or
@@ -620,6 +627,9 @@ def _classify(manifest, events, probe, defer_absent_workload=False):
         if (final.get('mode') != 3 or not final.get('pde_route') or
                 not final.get('pte_route')):
             return verdict('INVALID', stage='vmid2_entry_conversion_mode')
+        if any(final.get('inactive', (0, 0))):
+            return verdict('INVALID', stage='vmid2_entry_conversion_inactive',
+                           next_action='page-table producers ran before the conversion gate opened; fix the gate before retry')
         if final['pde']['converted'] == 0:
             return verdict('INCONCLUSIVE', stage='vmid2_entry_conversion_no_pde',
                            next_action='no child PDE crossed the aperture; inspect samples before retry')

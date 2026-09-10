@@ -40,10 +40,21 @@ class Candidate180MetadataTests(unittest.TestCase):
 
     def test_bundle_and_release_metadata_are_exact_candidate_version(self):
         info = plistlib.loads((ROOT / 'kext/Info.plist').read_bytes())
-        self.assertEqual(info['CFBundleShortVersionString'], '1.0.181')
-        self.assertEqual(info['CFBundleVersion'], '1.0.181')
+        self.assertEqual(info['CFBundleShortVersionString'], '1.0.182')
+        self.assertEqual(info['CFBundleVersion'], '1.0.182')
         notes = (ROOT / 'docs/release-notes.md').read_text()
-        self.assertTrue(notes.startswith('Experimental RaphaelGPU 1.0.181 '))
+        self.assertTrue(notes.startswith('Experimental RaphaelGPU 1.0.182 '))
+
+    def test_candidate182_card_keeps_conversion_and_adds_early_gate(self):
+        previous = json.loads((ROOT / 'experiments/metal-014.json').read_text())
+        card = json.loads((ROOT / 'experiments/metal-015.json').read_text())
+        self.assertEqual(card['id'], 'metal-015')
+        self.assertEqual(card['candidate_version'], '1.0.182')
+        self.assertEqual(card['functional_boot_arguments'], previous['functional_boot_arguments'])
+        self.assertEqual(card['critical_replay_tolerance'], 'terminal-prefix')
+        self.assertEqual(card['required_observations'], previous['required_observations'])
+        self.assertIn('AMDHWVMM::init', card['behavior_change'])
+        self.assertEqual(card['regression_baselines']['immediate'], 'run/metal-014-181')
 
 
 if __name__ == '__main__':

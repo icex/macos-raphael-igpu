@@ -384,7 +384,15 @@ def recover_v2(recovery_tool, vm, manifest, serial, replay_evidence=None):
         tolerance = critical_replay_tolerance(manifest)
         replay = helper('critical-replay')
         snapshot = (replay.parse(serial, manifest['build_id']) if tolerance is None else
-                    replay.parse(serial, manifest['build_id'], tolerate_corruption=True))
+                    replay.parse(serial, manifest['build_id'], tolerate_corruption=True,
+                                 open_attempt=tolerance == 'terminal-prefix-open'))
+        open_attempt = snapshot.get('open_attempt')
+        if open_attempt is not None:
+            # Records the cut-off attempt added beyond the terminal prefix are
+            # the only unknown; an abort among them refuses recovery outright.
+            # The persistent lifetime marker is authenticated by recovery itself.
+            if any('ABORT' in record for record in open_attempt['complete_records']):
+                raise ValueError('open CR2 attempt records an abort')
         snapshot_records = snapshot['records']
         if tolerance is not None and replay_evidence is not None:
             replay_evidence.update({
@@ -392,6 +400,7 @@ def recover_v2(recovery_tool, vm, manifest, serial, replay_evidence=None):
                     'tolerance', 'snapshot', 'count', 'corrupt_lines',
                     'corrupt_line_numbers', 'corrupt_reasons',
                     'incomplete_snapshots', 'crc32', 'fnv1a64')})
+            replay_evidence['open_attempt'] = snapshot.get('open_attempt')
             replay_evidence['serial_sha256'] = sha(serial.encode('utf-8'))
         if any(record == 'XH2' for record in snapshot_records):
             raise ValueError('schema-3 recovery has a malformed XH2 record')
@@ -442,7 +451,7 @@ def critical_replay_schema(data):
     return schema
 
 
-CRITICAL_REPLAY_TOLERANCES = ('terminal-prefix',)
+CRITICAL_REPLAY_TOLERANCES = ('terminal-prefix', 'terminal-prefix-open')
 
 
 def critical_replay_tolerance(data):
@@ -451,7 +460,7 @@ def critical_replay_tolerance(data):
         return None
     tolerance = data['critical_replay_tolerance']
     if tolerance not in CRITICAL_REPLAY_TOLERANCES:
-        raise ValueError('critical replay tolerance must be terminal-prefix')
+        raise ValueError('critical replay tolerance must be terminal-prefix or terminal-prefix-open')
     return tolerance
 
 

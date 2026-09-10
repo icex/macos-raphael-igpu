@@ -64,8 +64,12 @@ def build_proof(vm, run_dir, tolerance):
         strict_error = str(error)
     if strict_error is None:
         raise ValueError('strict CR2 parse succeeds; use the ordinary recovery path')
-    snapshot = replay.parse(serial, manifest['build_id'], tolerate_corruption=True)
+    snapshot = replay.parse(serial, manifest['build_id'], tolerate_corruption=True,
+                            open_attempt=tolerance == 'terminal-prefix-open')
     records = snapshot['records']
+    open_attempt = snapshot.get('open_attempt')
+    if open_attempt is not None:
+        records = records + open_attempt['complete_records']
     aborts = [record for record in records if 'ABORT' in record]
     if aborts:
         raise ValueError('terminal snapshot contains an abort record: ' + aborts[0])
@@ -98,6 +102,7 @@ def build_proof(vm, run_dir, tolerance):
         'corrupt_line_numbers': snapshot['corrupt_line_numbers'],
         'corrupt_reasons': snapshot['corrupt_reasons'],
         'incomplete_snapshots': snapshot['incomplete_snapshots'],
+        'open_attempt': open_attempt,
         'crc32': snapshot['crc32'],
         'fnv1a64': snapshot['fnv1a64'],
         'lifetime_records': valid,
@@ -110,7 +115,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--vm-dir', required=True, type=Path)
     parser.add_argument('--run-dir', required=True, type=Path)
-    parser.add_argument('--tolerance', required=True, choices=['terminal-prefix'])
+    parser.add_argument('--tolerance', required=True,
+                        choices=['terminal-prefix', 'terminal-prefix-open'])
     parser.add_argument('--execute', action='store_true',
                         help='perform the recovery; absent means write the proof and stop')
     args = parser.parse_args()

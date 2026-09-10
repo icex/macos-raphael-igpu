@@ -268,5 +268,52 @@ class TerminalPrefixToleranceTests(unittest.TestCase):
             self.replay.parse(''.join(changed + three), BUILD, tolerate_corruption=True)
 
 
+class OpenAttemptToleranceTests(unittest.TestCase):
+    def setUp(self):
+        spec = importlib.util.spec_from_file_location(
+            'critical_replay_open', ROOT / 'tools/critical-replay.py')
+        self.replay = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.replay)
+        self.first = ['BUILD: identity=' + BUILD, 'XH3 LIFETIME state=VALID']
+        self.later = self.first + ['SD: submit vmid=2', 'VM: fault status=0x201b3b']
+        self.complete = snapshot_lines(self.first, snapshot=2)
+        cut = snapshot_lines(self.later, snapshot=3)
+        self.cut = cut[:5] + [cut[5][:40]]   # forced stop mid-chunk, no newline
+
+    def test_open_attempt_returns_terminal_prefix_and_extra_records(self):
+        serial = ''.join(self.complete + self.cut)
+        with self.assertRaisesRegex(self.replay.CriticalReplayError, 'incomplete transport line'):
+            self.replay.parse(serial, BUILD, tolerate_corruption=True)
+        result = self.replay.parse(serial, BUILD, tolerate_corruption=True, open_attempt=True)
+        self.assertEqual(result['records'], self.first)
+        self.assertEqual(result['tolerance'], 'terminal-prefix-open')
+        open_attempt = result['open_attempt']
+        self.assertEqual(open_attempt['snapshot'], 3)
+        self.assertTrue(open_attempt['truncated_tail'])
+        self.assertEqual(open_attempt['complete_records'],
+                         ['SD: submit vmid=2', 'VM: fault status=0x201b3b'])
+        self.assertEqual(open_attempt['partial_records'], 0)
+        cut_chunk = self.cut[:4] + [self.cut[4][:60]]
+        result = self.replay.parse(''.join(self.complete + cut_chunk), BUILD,
+                                   tolerate_corruption=True, open_attempt=True)
+        self.assertEqual(result['open_attempt']['complete_records'], ['SD: submit vmid=2'])
+        self.assertEqual(result['open_attempt']['partial_records'], 0)
+
+    def test_open_attempt_still_refuses_prefix_conflicts_and_needs_terminal(self):
+        conflicting = snapshot_lines(['BUILD: identity=' + BUILD, 'XH3 LIFETIME state=ABORT'],
+                                     snapshot=3)[:-1]
+        with self.assertRaisesRegex(self.replay.CriticalReplayError, 'conflicts with the terminal prefix'):
+            self.replay.parse(''.join(self.complete + conflicting), BUILD,
+                              tolerate_corruption=True, open_attempt=True)
+        with self.assertRaisesRegex(self.replay.CriticalReplayError, 'latest attempt is incomplete'):
+            self.replay.parse(''.join(self.cut), BUILD, tolerate_corruption=True, open_attempt=True)
+        with self.assertRaisesRegex(self.replay.CriticalReplayError, 'requires terminal-prefix'):
+            self.replay.parse(''.join(self.complete), BUILD, open_attempt=True)
+        clean = self.replay.parse(''.join(self.complete), BUILD,
+                                  tolerate_corruption=True, open_attempt=True)
+        self.assertIsNone(clean['open_attempt'])
+        self.assertEqual(clean['records'], self.first)
+
+
 if __name__ == '__main__':
     unittest.main()

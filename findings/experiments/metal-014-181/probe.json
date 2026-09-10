@@ -1,0 +1,5 @@
+{
+  "run_id": "8a6beaeb1b5f5800a7e01c1e1954c4b5",
+  "output": "RGPU_METAL_STAGE enumerate\nRGPU_METAL_STAGE compile_shaders\nRGPU_METAL_STAGE compute\nRGPU_METAL_STAGE commit\nRGPU_METAL_RESULT {\"passed\":false,\"run_id\":\"8a6beaeb1b5f5800a7e01c1e1954c4b5\",\"device\":\"AMD Radeon Navi23\",\"registry_id\":4294968056,\"metal3\":true,\"render_pixels_checked\":0,\"seed\":1671655735,\"completed_command_buffers\":0,\"compute_rounds\":0,\"error\":\"GPU completion timeout after 5 seconds\",\"compute_values_checked\":0}\n\nRGPU_EXIT 8a6beaeb1b5f5800a7e01c1e1954c4b5 1\n",
+  "transport_exit": 0
+}

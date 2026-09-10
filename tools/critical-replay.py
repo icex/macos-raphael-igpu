@@ -128,6 +128,8 @@ def _reconstruct(snapshot, expected_build):
 
 
 TOLERANCE_TERMINAL_PREFIX = 'terminal-prefix'
+TOLERANCE_TERMINAL_PREFIX_OPEN = 'terminal-prefix-open'
+TOLERANCES = (TOLERANCE_TERMINAL_PREFIX, TOLERANCE_TERMINAL_PREFIX_OPEN)
 
 
 def _record_chunks(record):
@@ -137,7 +139,7 @@ def _record_chunks(record):
             for part in range(parts)]
 
 
-def parse(serial, expected_build, tolerate_corruption=False):
+def parse(serial, expected_build, tolerate_corruption=False, open_attempt=False):
     """Return the latest complete CR2 snapshot bound to ``expected_build``.
 
     Strict mode (the default) refuses the whole capture on any malformed,
@@ -148,17 +150,30 @@ def parse(serial, expected_build, tolerate_corruption=False):
     terminal complete snapshot; the latest attempt must be complete; and no
     transport line of any kind may follow the terminal manifest. Conflicting
     valid chunks or manifests remain fatal in both modes.
+
+    ``open_attempt`` (only with ``tolerate_corruption``) additionally accepts a
+    capture whose latest attempt was cut off, as a forced stop during replay
+    leaves it: its valid chunks must still reproduce the terminal prefix, and the
+    records it adds beyond that prefix are returned separately as
+    ``open_records`` (complete ones decoded, partial ones counted) so the caller
+    can refuse an abort and require the persistent lifetime marker instead of
+    treating the serial as complete.
     """
+    if open_attempt and not tolerate_corruption:
+        raise CriticalReplayError('CR2 open-attempt tolerance requires terminal-prefix')
     if (not isinstance(serial, str) or not isinstance(expected_build, str) or
             not re.fullmatch(r'[0-9a-f]{32}', expected_build)):
         raise CriticalReplayError('CR2 parser arguments are invalid')
     if len(serial.encode('utf-8')) > MAX_INPUT_BYTES:
         raise CriticalReplayError('CR2 input byte bound exceeded')
     serial = serial.replace('\r', '')
+    truncated_tail = False
     if serial and not serial.endswith('\n'):
         tail = serial.rsplit('\n', 1)[-1]
         if 'RGPU_CR2' in tail or 'RGPU_END2' in tail:
-            raise CriticalReplayError('CR2 has an incomplete transport line')
+            if not open_attempt:
+                raise CriticalReplayError('CR2 has an incomplete transport line')
+            truncated_tail = True
         serial = serial.rsplit('\n', 1)[0] + ('\n' if '\n' in serial else '')
 
     snapshots = {}
@@ -248,17 +263,61 @@ def parse(serial, expected_build, tolerate_corruption=False):
     complete_numbers = [number for number, value in snapshots.items()
                         if value['end'] is not None]
     # The guest never starts a later attempt after a complete one unless it has
-    # more to say; an incomplete later attempt therefore hides records.
-    if not complete_numbers or max(snapshots) != max(complete_numbers):
+    # more to say; an incomplete later attempt therefore hides records unless the
+    # caller explicitly accepts an open attempt and checks the lifetime marker.
+    if not complete_numbers:
         raise CriticalReplayError('CR2 latest attempt is incomplete')
+    if max(snapshots) != max(complete_numbers) and not open_attempt:
+        raise CriticalReplayError('CR2 latest attempt is incomplete')
+    if truncated_tail and max(snapshots) == max(complete_numbers):
+        raise CriticalReplayError('CR2 has transport after the terminal manifest')
     terminal_number = max(complete_numbers)
     terminal = snapshots[terminal_number]
     records = _reconstruct(terminal, expected_build)
-    if any(line_number > terminal['end_line'] for line_number in marker_lines):
+    open_number = max(snapshots) if max(snapshots) != terminal_number else None
+    if open_number is None and any(line_number > terminal['end_line']
+                                   for line_number in marker_lines):
         raise CriticalReplayError('CR2 has transport after the terminal manifest')
+    open_records = None
+    if open_number is not None:
+        latest = snapshots[open_number]
+        by_record = {}
+        for (record, part), (parts, size, payload, _) in latest['chunks'].items():
+            by_record.setdefault(record, {})[part] = (parts, payload)
+        complete_extra, partial_extra = [], 0
+        for record in sorted(by_record):
+            chunks = by_record[record]
+            parts = {value[0] for value in chunks.values()}
+            if record < len(records):
+                expected = _record_chunks(records[record])
+                for part, (count, payload) in chunks.items():
+                    if (part >= len(expected) or expected[part][1] != count or
+                            expected[part][2] != payload):
+                        raise CriticalReplayError(
+                            'CR2 open attempt conflicts with the terminal prefix')
+                continue
+            if len(parts) == 1 and set(chunks) == set(range(next(iter(parts)))):
+                data = b''.join(chunks[part][1] for part in sorted(chunks))
+                if len(data) > MAX_RECORD_BYTES or any(
+                        byte < 0x20 or byte > 0x7e for byte in data):
+                    raise CriticalReplayError('CR2 open attempt has a malformed record')
+                complete_extra.append((record, data.decode('ascii')))
+            else:
+                partial_extra += 1
+        expected_next = len(records)
+        for index, (record, _) in enumerate(complete_extra):
+            if record != expected_next + index:
+                partial_extra += 1
+        open_records = {
+            'snapshot': open_number,
+            'valid_chunks': len(latest['chunks']),
+            'truncated_tail': truncated_tail,
+            'complete_records': [text for _, text in complete_extra],
+            'partial_records': partial_extra,
+        }
     incomplete = []
     for snapshot_number in sorted(snapshots):
-        if snapshot_number == terminal_number:
+        if snapshot_number == terminal_number or snapshot_number == open_number:
             continue
         earlier = snapshots[snapshot_number]
         try:
@@ -290,6 +349,9 @@ def parse(serial, expected_build, tolerate_corruption=False):
     result['corrupt_line_numbers'] = [line_number for line_number, _ in corrupt_lines]
     result['corrupt_reasons'] = sorted({reason for _, reason in corrupt_lines})
     result['incomplete_snapshots'] = incomplete
+    if open_attempt:
+        result['tolerance'] = TOLERANCE_TERMINAL_PREFIX_OPEN
+        result['open_attempt'] = open_records
     return result
 
 
