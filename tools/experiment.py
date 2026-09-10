@@ -1709,17 +1709,28 @@ def warm_qualification_authorization(vm, manifest, manifest_path, output,
 
 
 def candidate179_authorization(vm, manifest, manifest_path, output,
-                               policy_sha256, activation_sha256):
-    """Validate the exact candidate-179 authority without reserving its launch."""
+                               policy_sha256, activation_sha256,
+                               helper_name='candidate179-qualification',
+                               label='candidate179'):
+    """Validate one exact finite authority without reserving its launch.
+
+    The candidate-179 helper pins its identities as constants; the generic
+    one-run helper pins them inside its policy. Both share this gate wiring.
+    """
     retained = helper('retained-kiq-continuation')
     recovery = helper('vfio-recover')
+    helper_hashes = (manifest.get('recovery_helpers_sha256')
+                     if isinstance(manifest, dict) else None)
     hooks = argparse.Namespace(
-        validate_receipt=validate_recovery_receipt_v6,
+        validate_receipt=(
+            validate_recovery_receipt_v6 if helper_name == 'candidate179-qualification'
+            else lambda receipt, boot, prior: validate_recovery_receipt_v6(
+                receipt, boot, prior, helper_hashes)),
         validate_host=lambda host, boot: retained.host_errors(
-            host, boot, prefix='candidate179 '),
+            host, boot, prefix=label + ' '),
         validate_vfio=recovery.validate_host_state,
     )
-    return helper('candidate179-qualification').authorize(
+    return helper(helper_name).authorize(
         vm, manifest, manifest_path, output, policy_sha256,
         activation_sha256, hooks)
 
@@ -1733,6 +1744,8 @@ def reserve_candidate179_qualification(directory, boot_id, experiment, recovery,
             experiment != manifest.get('run_id') or
             recovery != authorization.get('receipt')):
         raise ValueError('candidate179 qualification refused: authority')
+    helper_name = authorization.get('helper_name', 'candidate179-qualification')
+    label = authorization.get('label', 'candidate179')
     vm = Path(directory).parent.parent
     gate_errors = []
     cursor_before = recovery.get('kernel_cursor_after')
@@ -1750,7 +1763,7 @@ def reserve_candidate179_qualification(directory, boot_id, experiment, recovery,
         retained = helper('retained-kiq-continuation')
         full_host = retained.collect_fresh_host(cursor_before)
         gate_errors.extend(retained.host_errors(
-            full_host, boot_id, prefix='candidate179 '))
+            full_host, boot_id, prefix=label + ' '))
     except Exception:
         full_host = None
         gate_errors.append('full_host')
@@ -1790,7 +1803,8 @@ def reserve_candidate179_qualification(directory, boot_id, experiment, recovery,
         identity_gate = current_identity(
             vm, vm/manifest['candidate_directory'], requested,
             run_id=manifest['run_id'])
-        identity_gate.update(run_id=manifest['run_id'], recovery_lease_schema=2)
+        identity_gate.update(run_id=manifest['run_id'],
+                             recovery_lease_schema=manifest.get('recovery_lease_schema', 2))
         gate_errors.extend(validate_identity(
             {key:manifest[key] for key in identity_gate if key in manifest},
             identity_gate))
@@ -1805,7 +1819,7 @@ def reserve_candidate179_qualification(directory, boot_id, experiment, recovery,
     if not isinstance(messages, list):
         gate_errors.append('kernel_messages')
     if gate_errors:
-        raise ValueError('candidate179 qualification refused: '+','.join(
+        raise ValueError(label + ' qualification refused: '+','.join(
             sorted(set(gate_errors))))
     gate = {
         'kernel_cursor_before':cursor_before,
@@ -1817,7 +1831,7 @@ def reserve_candidate179_qualification(directory, boot_id, experiment, recovery,
         'active_launch_units':units,
         'pending_launches':pending_names,
     }
-    qualification = helper('candidate179-qualification')
+    qualification = helper(helper_name)
     path, updated = qualification.build_reservation(
         authorization, boot_id, experiment, recovery, gate, time.time())
     replace_json(path, updated)
@@ -2128,8 +2142,23 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
             warm_qualification_policy_sha256=None,
             warm_qualification_activation_sha256=None,
             candidate179_policy_sha256=None,
-            candidate179_activation_sha256=None):
+            candidate179_activation_sha256=None,
+            one_run_policy_sha256=None,
+            one_run_activation_sha256=None):
     """One bounded launch; a verified prior recovery may authorize same-boot reuse."""
+    one_run_requested = bool(one_run_policy_sha256 or one_run_activation_sha256)
+    if bool(one_run_policy_sha256) != bool(one_run_activation_sha256):
+        raise ValueError('one-run qualification requires policy and activation hashes')
+    if one_run_requested and (candidate179_policy_sha256 or
+                              candidate179_activation_sha256):
+        raise ValueError('one-run qualification cannot use another launch mode')
+    qualification_helper = 'candidate179-qualification'
+    qualification_label = 'candidate179'
+    if one_run_requested:
+        candidate179_policy_sha256 = one_run_policy_sha256
+        candidate179_activation_sha256 = one_run_activation_sha256
+        qualification_helper = 'one-run-qualification'
+        qualification_label = 'one-run'
     if bool(resume_prelaunch) != bool(prelaunch_proof):
         raise ValueError('prelaunch continuation requires both evidence paths')
     if cap_revision_authority_sha256 and resume_prelaunch:
@@ -2160,10 +2189,11 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
     if candidate179_requested:
         candidate179, errors = candidate179_authorization(
             vm, manifest, manifest_path, output,
-            candidate179_policy_sha256, candidate179_activation_sha256)
+            candidate179_policy_sha256, candidate179_activation_sha256,
+            qualification_helper, qualification_label)
         if errors or candidate179 is None:
-            raise ValueError('candidate179 qualification refused: '+','.join(
-                sorted(set(errors or ['candidate179_authority']))))
+            raise ValueError(qualification_label + ' qualification refused: '+','.join(
+                sorted(set(errors or [qualification_label + '_authority']))))
     supervisor = helper('vm-supervision'); classifier = helper('classify-run')
     guest_shutdown = helper('guest-shutdown')
     recovery_tool = helper('vfio-recover') if manifest.get('gpu') is True else None
@@ -2197,7 +2227,8 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                     locked, errors = candidate179_authorization(
                         vm, manifest, manifest_path, output,
                         candidate179_policy_sha256,
-                        candidate179_activation_sha256)
+                        candidate179_activation_sha256,
+                        qualification_helper, qualification_label)
                     immutable = ('policy_raw', 'activation_raw', 'manifest_raw',
                                  'ledger_raw', 'receipt_raws', 'card_raw',
                                  'design_raw')
@@ -2431,7 +2462,19 @@ if __name__ == '__main__':
     parser.add_argument('--warm-qualification-activation-sha256')
     parser.add_argument('--candidate179-policy-sha256')
     parser.add_argument('--candidate179-activation-sha256')
+    parser.add_argument('--one-run-policy-sha256')
+    parser.add_argument('--one-run-activation-sha256')
     args = parser.parse_args()
+    one_run_requested = bool(args.one_run_policy_sha256 or
+                             args.one_run_activation_sha256)
+    if bool(args.one_run_policy_sha256) != bool(args.one_run_activation_sha256):
+        parser.error('one-run qualification requires both hashes')
+    if one_run_requested and args.action != 'run':
+        parser.error('one-run qualification is only valid with run')
+    if one_run_requested and (args.resume_prelaunch or args.cap_revision_authority_sha256 or
+                              args.warm_qualification_policy_sha256 or
+                              args.candidate179_policy_sha256):
+        parser.error('one-run qualification cannot be combined with another launch mode')
     if ((args.resume_prelaunch or args.prelaunch_proof) and args.action != 'run'):
         parser.error('prelaunch continuation options are only valid with run')
     if bool(args.resume_prelaunch) != bool(args.prelaunch_proof):
@@ -2479,5 +2522,7 @@ if __name__ == '__main__':
                          args.warm_qualification_policy_sha256,
                          args.warm_qualification_activation_sha256,
                          args.candidate179_policy_sha256,
-                         args.candidate179_activation_sha256)
+                         args.candidate179_activation_sha256,
+                         args.one_run_policy_sha256,
+                         args.one_run_activation_sha256)
     print(json.dumps(result, indent=2))
