@@ -1,5 +1,108 @@
 # Raphael iGPU: current technical status
 
+## Resume: GUI visibility and capture investigation — 2026-09-10
+
+**Same-boot cleanup succeeded.** The independently reviewed one-use runner
+`tools/gui183-recovery-once.py` (SHA-256
+`23a25da9972f6a29ae15a6421369c1653af8d7ddc038a0f222db030251bc9ecc`)
+executed exactly once after 576 Python tests passed (one explicit live skip).
+Canonical receipt SHA-256
+`d2e2fad9244033002bdd3643e72049e9b4f4b858080aa8fa0cadd91d095ad367`
+reports `status=recovered`, `authorizes_launch=true`:
+
+```text
+active_before=2 dequeued=2 dequeue_timeouts=0 forced_inactive=0
+gfx_retirement_confirmed=true gfx_ring_clean=true
+PSP destroy-all-rings=confirmed destroy-GPCOM-ring=confirmed
+kernel_messages=[]
+```
+
+The coordinator inspected the durable result; the operator verified the same
+boot, accessible vfio-pci device, blank reset methods, no VM and active sleep
+inhibitor afterward. Evidence is separately archived in
+`findings/experiments/metal-016-183-gui-73ad3355/recovery-migration/`.
+This demonstrates recovery for this run after requested guest shutdown. It does
+not establish recovery from every crash or forced close. The frozen functional
+verdict remains INCONCLUSIVE; no relaunch has occurred. The next diagnostic and
+launch still require their normal staging/identity and remaining-budget checks.
+
+The user reported that no QEMU window appeared during the preceding run.
+The earlier GTK/process observation did not establish visibility. A subsequent
+diskless, no-VFIO smoke test on the same desktop produced a focused QEMU X11
+window, with both GL on and off. This proves the display route can work; it does
+not reconstruct the historical window's placement or contents. A standalone
+window-state and screenshot observer is implemented, with review in progress.
+The coordinator inspected its diskless QEMU screenshot (expected uninitialized
+guest display). Evidence is archived under
+`findings/research/2026-09-10-gui-visibility/`; screenshot SHA-256
+`e008c3c5c85e18793f80e4b34afc086a22e9e9196eda418fee2b23483b831841`.
+This is host-window validation, not macOS rendering. Investigation:
+`findings/research/2026-09-10-gui-visibility.md`.
+
+All 13 archived GUI-run hashes were verified. Offline capture investigation
+found an intact snapshot 0 (186 records, 662 chunks) and a damaged terminal
+snapshot 1 (265 records, 915 manifested chunks, 508 valid chunks). The 407
+missing chunks belong to the earlier immutable prefix. Donor reconstruction
+matches the original terminal CRC/FNV. The proof-only tool is implemented and
+under independent review; proof SHA-256
+`59809d556b050cd8f1b1629601efdffedec34b37ab8cfbabdb3204429abaf3fb`,
+derived capture SHA-256
+`d33deff7cd420013a290d195967c0e43689c3810422b9647b8336a83180f0675`.
+It explicitly sets `authorizes_gpu_action=false`. A separate one-use cleanup
+runner was reviewed and executed as recorded above. The original transcript
+remains inadmissible; the reviewed derived transcript enabled cleanup only. Concurrent
+Apple console output visibly interleaves with the replay before host collection;
+`sercat.py` fsync cannot repair that corruption. A durable independent capture
+transport remains a design task, not an implemented fix.
+
+Offline driver review decoded both recurring post-183 faults as **VMID1**:
+`0x101b3a @ 0x400900000` (SDMA0) and `0x1009ba @ 0x401180000` (CPF).
+The coordinator verified the raw words and local register masks. The successful
+VMID2 walks do not inspect these faulting mappings. Proposed next driver test:
+bounded, observation-only capture of the fault-selected VMID1 context and exact
+address, comparing relative and absolute walk indices without modifying page
+tables. See `findings/research/2026-09-10-post183-fault-boundary.md`.
+
+Host boot remains `73ad3355-80a7-48f1-a8dd-e6f770b41de8`, iGPU on vfio-pci,
+reset methods empty, no macOS VM active, sleep inhibitor active. No additional
+GPU experiment cycle was consumed; the unresolved count remains 6. Cleanup did
+not consume a VM launch, reset the fault streak, or extend the run budget.
+
+## User-requested GUI observation after reboot — 2026-09-10
+
+**No desktop Metal success was verified.** The user explicitly requested a direct
+visible launch of the existing candidate after reboot. This was a manual viewing
+run, not a new driver fix. New boot `73ad3355-80a7-48f1-a8dd-e6f770b41de8` passed
+host checks; normal amdgpu-first handoff succeeded and sleep inhibition was
+recreated. Candidate 183 was reused without rebuilding. Fresh staging outputs
+under `run/candidate-183-gui-73ad3355` preserved the original candidate artifacts
+and supplied a new nonce/run ID through the unchanged staging transaction.
+
+Run `4661e574bbd5695d00176d85bfa87325`, build
+`1d5f98d2e5b641eeab1869987f569e73`, manifest SHA-256
+`b78905e67974809e085849001514a6c934d314bc43de2e0ae71a26ddc5470c11`.
+QEMU was launched with the current GUI environment at `09:51:53.304Z` and a
+180-second bound. Independent visual confirmation of the desktop is absent.
+The guest exited after the shutdown request (`exited-after-guest-request`).
+No active VM remains. This was the first GPU launch on the new boot (ledger 1/3).
+
+Raw diagnostics again recorded `converted=206`, then `converted=347`, with no
+inactive/invalid-aperture/overflow/span counts. A pending WindowServer command
+was reported on VMID2, followed by a KIQ stamp timeout. No `RGPU_METAL_STAGE`
+marker or valid probe result was captured; no panic marker was seen in this log.
+The final verdict remains `INCONCLUSIVE`, `identity_or_route_missing`,
+`capture_loss`. Recovery failed before receipt creation with
+`CriticalReplayError: CR2 snapshot has a missing chunk`.
+
+Serial SHA-256 `a8c7aeda24244094d2a153df066d3857f3adfa823bb4ff62bbe72a79180c765b`.
+Original run evidence is under `~/macos-vm/run/metal-016-183-gui-73ad3355`.
+**No reuse is authorized by the remaining numerical budget.** No alternate
+cleanup or second launch has been attempted. The prior run-specific recovery
+wrapper pins another run and boot and cannot be used here. Further hardware
+testing is paused pending admissible capture and successful cleanup.
+Conservative unresolved-cycle accounting is now 6 (179–183 plus this explicitly
+requested GUI observation); the prior Astra review was completed after cycle 182.
+
 ## Candidate 183 result: source correction observed; hardware retirement blocks reuse
 
 ### Latest outcome: reconstruction passed; hardware retirement incomplete

@@ -1,0 +1,1 @@
+{"ok": true, "reason": "visible", "screenshot": "/tmp/rgpu-gui-observe-20260910-i.png", "window": {"current_desktop": 0, "desktop": 0, "height": 514, "states": ["_NET_WM_STATE_FOCUSED"], "title": "QEMU (rgpu-gui-observe-20260910-i) [Paused]", "width": 640, "window_id": "0x1000009", "wm_state": "Normal", "x": 3567, "y": 867}}
