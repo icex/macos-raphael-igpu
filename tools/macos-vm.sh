@@ -115,13 +115,20 @@ for f in mac_hdd_ng.img OpenCore.qcow2 env; do
 done
 [[ "${MODE}" == run ]] || [[ -e "${VM_DIR}/BaseSystem.img" ]] || die "missing BaseSystem.img"
 
-# X11: the QEMU window is an X client, so it needs the Xwayland socket plus a cookie.
-[[ -S /tmp/.X11-unix/X0 ]] || die "no X11 socket at /tmp/.X11-unix/X0"
-XAUTH="${XAUTHORITY:-}"
-if [[ -z "${XAUTH}" || ! -r "${XAUTH}" ]]; then
-    XAUTH="$(ls -1t /run/user/"$(id -u)"/xauth_* 2>/dev/null | head -1 || true)"
+case "${GENERIC_GRAPHICS}" in on|off) ;; *) die "unknown generic graphics setting ${GENERIC_GRAPHICS}" ;; esac
+XAUTH=""
+if [[ "${GENERIC_GRAPHICS}" == on ]]; then
+    # The historical QEMU window is an X client and needs Xwayland plus a cookie.
+    [[ -S /tmp/.X11-unix/X0 ]] || die "no X11 socket at /tmp/.X11-unix/X0"
+    XAUTH="${XAUTHORITY:-}"
+    if [[ -z "${XAUTH}" || ! -r "${XAUTH}" ]]; then
+        XAUTH="$(ls -1t /run/user/"$(id -u)"/xauth_* 2>/dev/null | head -1 || true)"
+    fi
+    [[ -n "${XAUTH}" && -r "${XAUTH}" ]] || die "no readable X authority file; set XAUTHORITY"
+else
+    # A display-less diagnostic run has no host audio consumer either.
+    AUDIO=none
 fi
-[[ -n "${XAUTH}" && -r "${XAUTH}" ]] || die "no readable X authority file; set XAUTHORITY"
 
 # RAM: macOS + Xcode wants a lot, the host still needs room to breathe.
 if [[ "${RAM_GB}" == auto ]]; then
@@ -153,7 +160,6 @@ esac
 mkdir -p "${VM_DIR}/run"
 EXTRA_QEMU="-chardev socket,id=mon1,path=/run/vm/monitor.sock,server=on,wait=off -mon chardev=mon1,mode=readline ${EXTRA_QEMU}"
 
-case "${GENERIC_GRAPHICS}" in on|off) ;; *) die "unknown generic graphics setting ${GENERIC_GRAPHICS}" ;; esac
 # Without gl=on, every guest frame is copied by the CPU and pushed over X11.
 # The authenticated no-graphics mode injects `-display none`; vm-entry.sh
 # validates that exact option before executing the image launcher.
@@ -229,9 +235,6 @@ NOPICKER=true
 DOCKER_ARGS=(
     --rm --name "${NAME}"
     --device /dev/kvm
-    # X11 clients use MIT-SHM; without the host IPC namespace the X server
-    # rejects the shared segments and the QEMU window dies on startup.
-    --ipc=host
     # QEMU's SLIRP stack only ever uses the FIRST nameserver in the container's
     # resolv.conf, and this network's router refuses DNS from docker containers.
     # Without this the guest resolves nothing and macOS reports "recovery server
@@ -240,10 +243,6 @@ DOCKER_ARGS=(
     --dns 9.9.9.9
     -p "127.0.0.1:${SSH_PORT}:10022"
     -p "127.0.0.1:${SCREEN_PORT}:5900"
-    -v /tmp/.X11-unix:/tmp/.X11-unix
-    -v "${XAUTH}:/home/arch/.Xauthority:ro"
-    -e DISPLAY="${DISPLAY:-:0}"
-    -e XAUTHORITY=/home/arch/.Xauthority
     -v "${VM_DIR}/mac_hdd_ng.img:/home/arch/OSX-KVM/mac_hdd_ng.img"
     -v "${VM_DIR}/run:/run/vm"
     -v "${VM_DIR}/vm-entry.sh:/entry.sh:ro"
@@ -265,6 +264,13 @@ DOCKER_ARGS=(
     "${GPU_ARGS[@]}"
     "${GDB_ARGS[@]}"
 )
+
+if [[ "${GENERIC_GRAPHICS}" == on ]]; then
+    # X11 clients use MIT-SHM; without host IPC the window dies on startup.
+    DOCKER_ARGS+=(--ipc=host -v /tmp/.X11-unix:/tmp/.X11-unix
+                 -v "${XAUTH}:/home/arch/.Xauthority:ro"
+                 -e DISPLAY="${DISPLAY:-:0}" -e XAUTHORITY=/home/arch/.Xauthority)
+fi
 
 # Host GPU node only accelerates the QEMU GTK window. Headless no-graphics runs
 # have no display backend and must not inherit this unrelated host device.

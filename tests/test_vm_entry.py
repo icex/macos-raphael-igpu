@@ -114,6 +114,39 @@ class VmEntryTests(unittest.TestCase):
                 else:
                     self.assertEqual(argv[argv.index("-vga") + 1], "vmware")
 
+    def test_headless_launcher_reaches_docker_without_x11_or_host_media_devices(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            vm = Path(temporary)
+            launcher = vm / "macos-vm.sh"
+            launcher.write_bytes((ROOT / "tools/macos-vm.sh").read_bytes())
+            launcher.chmod(0o700)
+            for name in ("mac_hdd_ng.img", "OpenCore.qcow2", "env", "vm-entry.sh"):
+                (vm / name).touch()
+            bindir = vm / "bin"; bindir.mkdir()
+            capture = vm / "docker-argv.txt"
+            docker = bindir / "docker"
+            docker.write_text("#!/bin/sh\n"
+                              "[ \"$1\" = info ] && exit 0\n"
+                              "printf '%s\\n' \"$@\" > \"$DOCKER_CAPTURE\"\n")
+            docker.chmod(0o700)
+            env = dict(os.environ, PATH=str(bindir) + os.pathsep + os.environ["PATH"],
+                       GENERIC_GRAPHICS="off", AUDIO="pa", GL="off",
+                       DOCKER_CAPTURE=str(capture), DISPLAY="", XAUTHORITY="",
+                       GPU="", GPU_ID="", GPU_ROM="", GPU_SUB="", EXTRA="",
+                       SERIAL="off", CRITICAL_SERIAL="off", GDB="off")
+            result = subprocess.run([str(launcher), "run"], env=env, text=True,
+                                    capture_output=True, timeout=5)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            argv = capture.read_text().splitlines()
+            self.assertIn("run", argv)
+            self.assertIn("GENERIC_GRAPHICS=off", argv)
+            self.assertIn("AUDIO_DRIVER=none", argv)
+            joined = "\n".join(argv)
+            self.assertIn("-display none", joined)
+            for forbidden in ("/tmp/.X11-unix", ".Xauthority", "DISPLAY=", "--ipc=host",
+                              "/dev/dri", "/dev/snd", "/pulse"):
+                self.assertNotIn(forbidden, joined)
+
 
 if __name__ == "__main__":
     unittest.main()
