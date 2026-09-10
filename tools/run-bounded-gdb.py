@@ -57,10 +57,16 @@ def main():
     parser.add_argument("--kernel-symbols", required=True, type=Path)
     parser.add_argument("--raphael-binary", required=True, type=Path)
     parser.add_argument("--raphael-dsym", required=True, type=Path)
+    parser.add_argument("--scenario", choices=("entry-update", "vmid1-root"), default="entry-update")
+    parser.add_argument("--target-gpu-address")
     parser.add_argument("--docker", default="docker")
     args = parser.parse_args()
     if not re.fullmatch(r"[0-9a-f]{32}", args.build_id):
         parser.error("invalid build identity")
+    if args.scenario == "entry-update" and args.target_gpu_address is None:
+        parser.error("--target-gpu-address is required for entry-update")
+    if args.scenario == "vmid1-root" and args.target_gpu_address is not None:
+        parser.error("--target-gpu-address is not used for vmid1-root")
     state = json.loads(args.supervision.read_text())
     cid = state.get("cid")
     if not isinstance(cid, str) or not re.fullmatch(r"[0-9a-f]{64}", cid):
@@ -84,7 +90,10 @@ def main():
     subprocess.run([sys.executable, str(args.generator), "--runtime-kernel-text", hex(runtime_text),
                     "--raphael-binary", str(args.raphael_binary),
                     "--kernel-symbols", str(args.kernel_symbols),
-                    "--raphael-dsym", str(args.raphael_dsym), "--output", str(script)],
+                    "--raphael-dsym", str(args.raphael_dsym),
+                    "--scenario", args.scenario,
+                    *(["--target-gpu-address", args.target_gpu_address] if args.target_gpu_address else []),
+                    "--output", str(script)],
                    check=True, timeout=5)
     transcript = args.output / "gdb-transcript.log"
     normal_detach = False
@@ -117,11 +126,14 @@ def main():
             raise RuntimeError(f"capture failed ({capture_error}); detach/resume failed: {cleanup['output']}")
         raise capture_error
     transcript_text = transcript.read_text(errors="replace")
-    required = ("WRAPPER_ENTRY_HIT", "NATIVE_CALL_BOUNDARY", "WRAPPER_CPU_RETURN_HIT")
+    required = (("VMID1_WRAPPER_ENTRY_HIT", "VMID1_NATIVE_CALL_BOUNDARY", "VMID1_PREPARED_CPU_OUTPUT", "WRAPPER_CPU_RETURN_HIT")
+                if args.scenario == "vmid1-root" else
+                ("WRAPPER_ENTRY_HIT", "NATIVE_CALL_BOUNDARY", "WRAPPER_CPU_RETURN_HIT"))
     if not all(marker in transcript_text for marker in required):
         raise RuntimeError("GDB transcript lacks complete bounded capture")
     (args.output / "result.json").write_text(json.dumps({
         "cid": cid, "runtime_kernel_text": hex(runtime_text), "build_id": args.build_id,
+        "scenario": args.scenario, "target_gpu_address": args.target_gpu_address,
         "complete": True, "gpu_completion_established": False,
         "atomic_hardware_snapshot": False}, indent=2) + "\n")
 

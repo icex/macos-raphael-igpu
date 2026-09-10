@@ -69,3 +69,51 @@ The 180-second exposure, 45-second probe gate, COM2 critical transport,
 recovery lease, and cleanup gates remain unchanged. GDB observations are
 diagnostic evidence only: VMID1 correlation and any native mapping result must
 be established by the captured evidence rather than assumed.
+
+## Continuation capture evidence and correction
+
+The continuation authenticated build `fbfd23fe695d4c5dab219f6f5822d409` at
+kmod base `0xffffff800ce7c000`. The wrapper entry hit with self
+`0xffffff94ee4c6280`, destination `0xf40b6f4060`, count `1`, source
+`0xf40a71b000`, template `0x271`, and increment `0x10000`. These GPU addresses
+were not dereferenced. The destination belongs to the previously observed
+eligible VMID2 table, not the hypothesized missing VMID1 entry at
+`0xf40b702c00`. The entry-time `decision` print preceded initialization and is
+invalid evidence.
+
+Another QEMU CPU hit a native boundary first. QEMU CPU identity is not XNU call
+identity, so the helper refused to attribute outgoing arguments and detached.
+The frozen transcript SHA-256 is
+`c68ee25233af98ec41aa8b28588a478c8fdefc685f69bbe60ed79a8ef1eabbdb`;
+the successful error-detach record SHA-256 is
+`dab5bd29f8939e89efd494121b5091fb0a83b251e8c89d738c9a8bb2083ad955`.
+
+The corrected helper pairs the native stop by the exact wrapper frame and saved
+return address, while requiring self, destination, count, template and increment
+to match; source may change through conversion. Native breakpoints remain
+disabled until the selected entry hits. Return capture uses an explicit
+breakpoint conditioned on the saved stack position. Decision locals are
+requested only at the initialized native-call boundary.
+
+The optional next filter targets `0xf40b702c00`, derived from the repeated 187
+and 188 VMID1 fault evidence. It selects the first overflow-safe update range
+covering that GPU address. This is a hypothesis filter: no observed update does
+not prove causality, and an observed update may be an unmap or invalid template.
+The capture must report template, decision and outgoing source. CPU return still
+does not establish GPU completion or an atomic snapshot.
+
+## Candidate 189 VMID1-root capture input
+
+Candidate 189 must use the previously qualified isolated kernel executable at
+`/home/bogdan/macos-vm/run/gdb-source-kext-prep-20260910T204500Z/kernel.symbols`
+(SHA-256 `04a501246caf768356f4090a8fd662daf5bbc949993353526c66771f5ba1d8e4`).
+Its directory contains no adjacent kernel dSYM. Do not point GDB at the KDK's
+`kernel.development`: its adjacent DWARF5 dSYM previously crashed this GDB.
+
+After the candidate 189 binary and matching dSYM exist, generate and inspect the
+`vmid1-root` script against those actual artifacts before calling the debugger
+path ready. The bounded runner invocation must pass the isolated executable as
+`--kernel-symbols`, the candidate 189 binary/dSYM, its actual build identity,
+and `--scenario vmid1-root`. This scenario takes no `--target-gpu-address`.
+It records CPU request/native-copy/prepared values; it does not establish the
+eventual context-register value or GPU completion.

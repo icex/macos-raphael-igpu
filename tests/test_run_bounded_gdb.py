@@ -39,7 +39,8 @@ class RunnerTests(unittest.TestCase):
                 '--serial', str(root / 'serial.log'), '--output', str(output),
                 '--build-id', self.BUILD, '--gdb', str(gdb),
                 '--generator', str(generator), '--kernel-symbols', '/tmp/kernel',
-                '--raphael-binary', '/tmp/raphael', '--raphael-dsym', '/tmp/dsym']
+                '--raphael-binary', '/tmp/raphael', '--raphael-dsym', '/tmp/dsym',
+                '--scenario', 'vmid1-root']
         with patch.object(tool, 'verify_port'), patch.object(sys, 'argv', argv):
             tool.main()
         return output
@@ -78,6 +79,16 @@ class RunnerTests(unittest.TestCase):
                     'returncode': 0, 'detached': True, 'output': ''}) as detach:
                 self.run_main(root, generator, gdb)
         detach.assert_called_once_with(str(gdb))
+
+    def test_vmid1_root_capture_requires_root_specific_markers(self):
+        markers = ("VMID1_WRAPPER_ENTRY_HIT\nVMID1_NATIVE_CALL_BOUNDARY\n"
+                   "VMID1_PREPARED_CPU_OUTPUT\nWRAPPER_CPU_RETURN_HIT")
+        root, generator, gdb = self.fixture("print(" + repr(markers) + ")\n")
+        output = self.run_main(root, generator, gdb)
+        result = json.loads((output / "result.json").read_text())
+        self.assertEqual(result["scenario"], "vmid1-root")
+        self.assertIsNone(result["target_gpu_address"])
+        self.assertFalse(result["gpu_completion_established"])
 
     def test_missing_markers_is_rejected(self):
         root, generator, gdb = self.fixture("print('not a qualified capture')\n")

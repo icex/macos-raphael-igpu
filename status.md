@@ -1,3 +1,12 @@
+# Candidate 189 pending identity — not deployed (2026-09-10)
+
+Candidate 189 metadata preparation updates only both `kext/Info.plist` version
+fields to `1.0.189`; the checked-in `kext/bin/RaphaelGPU` and candidate 188
+artifacts remain unchanged. No candidate 189 card, build, staging, deployment,
+VM, or hardware run exists. The current source mapping correction is under
+offline audit; candidate 188 evidence and its valid cleanup receipt remain
+historical and are not claims of desktop Metal execution.
+
 # Offline mapping correction and source audit (2026-09-10)
 
 The working source now repairs eligible hub-0 client roots for VMIDs **1–15**,
@@ -83,9 +92,10 @@ Continuation output is frozen at
 schema 6 reports `recovered` and `authorizes_launch=true`. This is a valid
 cleanup receipt, not Metal execution success.
 
-Current discriminator is corrected: `src/GpuVmDiagnostics.hpp:266` excludes
-every VMID other than 2 from root repair, and the prepare wrapper retains
-observations only for VMID2. The live
+For the candidate 188 source, `src/GpuVmDiagnostics.hpp:266` excluded every
+VMID other than 2 from root repair, and its prepare wrapper retained
+observations only for VMID2. The current audited source is fixed separately;
+the live
 VMID1 root was `0xf40b6ff000` and remained unconverted. The CPU walker silently
 translated its physical table address to `0x84b6ff000`; therefore raw zero at
 leaf index 1408 is a reconstructed CPU view, not proof of the first GPU
