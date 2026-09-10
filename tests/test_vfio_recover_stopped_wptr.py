@@ -93,6 +93,20 @@ class StoppedWptrRecoveryTests(unittest.TestCase):
             'errors':['unsupported_v2_stopped_wptr'],
         })
 
+    def test_schema3_stopped_wptr_is_explicitly_ineligible(self):
+        host_kiq = self._failed_host_kiq()
+        reservation = {'schema':3}
+        host_kiq['evidence']['reservation'] = copy.deepcopy(reservation)
+        host_kiq['evidence']['retired_before_cleanup']['reservation'] = \
+            copy.deepcopy(reservation)
+
+        eligibility = self.tool._stopped_wptr_eligibility(host_kiq, 0)
+
+        self.assertEqual(eligibility, {
+            'eligible':False,
+            'errors':['unsupported_v3_stopped_wptr'],
+        })
+
     def _stopped_transport(self):
         tool = self.tool
 

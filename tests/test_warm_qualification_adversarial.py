@@ -25,7 +25,7 @@ class WarmQualificationAdversarialTests(unittest.TestCase):
             classify_readiness=lambda manifest, events: {
                 'valid': True, 'verdict': 'PROBE_NOT_RUN'},
             admit_host=lambda manifest, host, boots, reuse_allowed=False: [],
-            parse_serial=lambda serial: parsed_events,
+            parse_serial=lambda manifest, serial: parsed_events,
         )
 
     @staticmethod

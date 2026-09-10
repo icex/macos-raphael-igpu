@@ -24,12 +24,17 @@ class ExperimentTests(unittest.TestCase):
         spec.loader.exec_module(module)
         return module
 
-    def recovery_helper_hashes(self):
+    def recovery_helper_hashes(self, schema=2):
+        paths = [
+            'tools/vfio-recover.py',
+            'tools/recovery_lease_v2.py',
+            'tools/kiq-recovery-proof.py',
+        ]
+        if schema == 3:
+            paths += ['tools/critical-replay.py',
+                      'tools/recovery_lifetime_v3.py']
         return {relative:hashlib.sha256((ROOT/relative).read_bytes()).hexdigest()
-                for relative in (
-                    'tools/vfio-recover.py',
-                    'tools/recovery_lease_v2.py',
-                    'tools/kiq-recovery-proof.py')}
+                for relative in paths}
 
     def recovery_receipt(self, tool, prior='a'*32, recovery='b'*32):
         reservation = {
@@ -242,6 +247,48 @@ class ExperimentTests(unittest.TestCase):
         receipt['recovery_helpers_sha256'] = self.recovery_helper_hashes()
         return receipt
 
+    def v3_schema6_receipt(self, tool, prior='a'*32):
+        receipt = self.v2_schema6_receipt(tool, prior)
+        old = receipt['gc_quiesce']['reservation']
+        wire = tool.helper('recovery_lease_v2')
+        lifetime = tool.helper('recovery_lifetime_v3')
+        descriptor = wire.make_ownership_descriptor(
+            old['lease_start'], *struct.unpack('<QQ', bytes.fromhex(prior)))
+        pool = wire.make_pool_status(
+            descriptor, state=wire.POOL_ACTIVE,
+            pool0_before=0x0e000000, pool0_after=0x0dfeb000,
+            pool1_before=0x0c000000, pool1_after=0x0bfeb000, reason=0)
+        marker = lifetime.make_valid_marker(
+            descriptor.pack(), pool.pack())
+        proof = {
+            'schema':3, 'lease_version':2, 'lifetime_version':3,
+            'state':old['state'], 'lease_start':old['lease_start'],
+            'lease_end':old['lease_end'], 'scratch_start':old['scratch_start'],
+            'scratch_end':old['scratch_end'], 'run_id':prior,
+            'checksum':old['checksum'], 'immutable':True,
+            'pool_readback':'committed',
+            'pool_status':{
+                'state':pool.state,
+                'pool0_before':pool.pool0_before,
+                'pool0_after':pool.pool0_after,
+                'pool1_before':pool.pool1_before,
+                'pool1_after':pool.pool1_after,
+                'reason':pool.reason, 'checksum':pool.checksum,
+            },
+            'lifetime_status':marker._asdict(),
+            'lifetime_readbacks':{
+                'authenticated':marker.pack().hex(),
+                'pre_scratch':marker.pack().hex()},
+        }
+        gc = receipt['gc_quiesce']
+        gc['reservation'] = proof
+        gc['graphics_pipe_guard']['reservation_before'] = proof
+        gc['graphics_pipe_guard']['reservation_after'] = copy.deepcopy(proof)
+        gc['host_kiq']['reservation'] = proof
+        receipt['recovery_lease_schema'] = 3
+        receipt['recovery_helpers_sha256'] = self.recovery_helper_hashes(3)
+        return receipt
+
     def test_identity_mismatches_and_missing_values_fail_closed(self):
         validate = self.module().validate_identity
         expected = dict(binary_sha256='a'*64, info_sha256='b'*64, boot_args='rgpu=1',
@@ -263,6 +310,10 @@ class ExperimentTests(unittest.TestCase):
             'build_id':'candidate', 'gpu':True}))
         self.assertIn('recovery_helpers_sha256', check({
             'build_id':'candidate', 'gpu':True, 'recovery_lease_schema':2}))
+        self.assertNotIn('recovery_lease_schema', check({
+            'build_id':'candidate', 'gpu':True, 'recovery_lease_schema':3}))
+        self.assertIn('recovery_lease_schema', check({
+            'build_id':'candidate', 'gpu':True, 'recovery_lease_schema':4}))
 
     def test_schema6_v2_receipt_binds_dynamic_lease_and_exact_helpers(self):
         tool = self.module()
@@ -291,7 +342,26 @@ class ExperimentTests(unittest.TestCase):
         self.assertIn('recovery_receipt', tool.validate_recovery_receipt_v6(
             overlap, 'boot-A', prior, helpers))
 
-    def test_gpu_run_refuses_manifest_without_v2_before_creating_evidence(self):
+    def test_schema6_v3_receipt_requires_lifetime_proof_and_exact_helpers(self):
+        tool = self.module()
+        prior = 'a' * 32
+        receipt = self.v3_schema6_receipt(tool, prior)
+        helpers = receipt['recovery_helpers_sha256']
+        self.assertEqual(tool.validate_recovery_receipt_v6(
+            receipt, 'boot-A', prior, helpers), [])
+        for changed in (
+                dict(receipt, recovery_lease_schema=2),
+                dict(receipt, recovery_helpers_sha256={
+                    **helpers, 'tools/recovery_lifetime_v3.py':'0' * 64}),
+                dict(receipt, recovery_helpers_sha256={
+                    key:value for key, value in helpers.items()
+                    if key != 'tools/critical-replay.py'})):
+            with self.subTest(keys=changed.keys()):
+                self.assertIn('recovery_receipt',
+                    tool.validate_recovery_receipt_v6(
+                        changed, 'boot-A', prior, helpers))
+
+    def test_gpu_run_refuses_manifest_without_supported_lease_before_evidence(self):
         tool = self.module()
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -300,7 +370,7 @@ class ExperimentTests(unittest.TestCase):
             path = root/'manifest.json'
             output = root/'evidence'
             path.write_text(json.dumps(manifest))
-            with self.assertRaisesRegex(ValueError, 'v2 recovery lease'):
+            with self.assertRaisesRegex(ValueError, 'supported recovery lease'):
                 tool.run_one(root, path, output)
             self.assertFalse(output.exists())
 
@@ -363,13 +433,13 @@ class ExperimentTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'run_id'):
                     tool.recovery_nonce_words(malformed)
 
-    def test_gpu_prepare_requires_explicit_v2_run_id_before_host_or_media_access(self):
+    def test_gpu_prepare_requires_explicit_run_id_before_host_or_media_access(self):
         tool = self.module()
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             spec = root / 'spec.json'
             spec.write_text(json.dumps({'candidate_version':'1.0.179'}))
-            with self.assertRaisesRegex(ValueError, 'explicit v2 run_id'):
+            with self.assertRaisesRegex(ValueError, 'explicit run_id'):
                 tool.prepare(root, spec, root/'manifest.json', gpu=True)
 
     def test_canonical_v2_records_are_extracted_before_recovery_without_tail_guessing(self):
@@ -460,6 +530,61 @@ class ExperimentTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'byte bound'):
             tool.canonical_v2_records(serial, 'abc')
 
+    def test_manifest_serial_parser_selects_cr2_only_when_explicit(self):
+        tool = self.module()
+        calls = []
+        classifier = SimpleNamespace(parse_serial=lambda serial, **kwargs:
+                                     calls.append((serial, kwargs)) or [])
+        tool.parse_manifest_serial(
+            classifier, {'build_id':'a' * 32, 'critical_replay_schema':2}, 'new')
+        tool.parse_manifest_serial(classifier, {'build_id':'legacy'}, 'old')
+        self.assertEqual(calls, [
+            ('new', {'critical_replay_schema':2, 'expected_build':'a' * 32}),
+            ('old', {}),
+        ])
+
+    def test_critical_replay_manifest_selector_is_explicit_and_numeric(self):
+        tool = self.module()
+        self.assertIsNone(tool.critical_replay_schema({}))
+        self.assertEqual(tool.critical_replay_schema(
+            {'critical_replay_schema':2}), 2)
+        for value in ('2', True, 1, 3):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ValueError, 'critical replay schema'):
+                    tool.critical_replay_schema({'critical_replay_schema':value})
+
+    def test_only_definitive_cr2_capture_errors_abort_exposure(self):
+        tool = self.module()
+        pending = [{'kind':'capture_loss', 'reason':'CR2: snapshot is missing END',
+                    'definitive':False}]
+        corrupt = [{'kind':'capture_loss', 'reason':'CR2: snapshot CRC mismatch',
+                    'definitive':True}]
+        legacy = [{'kind':'capture_loss', 'reason':'conflicting replay'}]
+        self.assertFalse(tool.definitive_capture_loss(pending))
+        self.assertTrue(tool.definitive_capture_loss(corrupt))
+        self.assertTrue(tool.definitive_capture_loss(legacy))
+
+    def test_legacy_recovery_keeps_strict_unrelated_replay_conflict_gate(self):
+        tool = self.module()
+        run_id = '00112233445566778899aabbccddeeff'
+        owned, active, *_ = self.v2_critical_payloads(run_id)
+        recovery = tool.helper('vfio-recover')
+        manifest = {
+            'run_id':run_id, 'build_id':'abc',
+            'recovery_lease_schema':2,
+            'recovery_helpers_sha256':recovery.current_recovery_helpers_sha256(),
+        }
+        serial = (
+            'RaphaelGPU rgpu: @ BUILD: identity=abc\n'
+            f'RaphaelGPU rgpu: @ {owned}\n'
+            f'RaphaelGPU rgpu: @ {active}\n'
+            'RGPU_RECORDS build=abc count=2 dropped=0 truncated=0\n'
+            'RGPU_EVENT build=abc seq=0 BUILD: identity=abc\n'
+            'RGPU_EVENT build=abc seq=1 ordinary intact\n'
+            'RGPU_EVENT build=abc seq=1 ordinary transport-garble\n')
+        with self.assertRaisesRegex(ValueError, 'conflicting replay'):
+            tool.recover_v2(recovery, Path('/not-opened'), manifest, serial)
+
     def test_real_vfio_parser_rejects_active_then_later_abort(self):
         tool = self.module()
         recovery = tool.helper('vfio-recover')
@@ -486,6 +611,7 @@ class ExperimentTests(unittest.TestCase):
         owned, active, *_ = self.v2_critical_payloads(run_id)
         manifest = {
             'run_id':run_id, 'build_id':'abc',
+            'recovery_lease_schema':2,
             'recovery_helpers_sha256':recovery.current_recovery_helpers_sha256(),
         }
         serial = (
@@ -506,6 +632,46 @@ class ExperimentTests(unittest.TestCase):
             self.assertEqual(tool.recover_v2(
                 recovery, Path('/not-opened'), manifest, serial),
                 {'status':'recovered'})
+
+    def test_v3_recovery_adapter_requires_complete_cr2_and_passes_schema(self):
+        tool = self.module()
+        run_id = '00112233445566778899aabbccddeeff'
+        wire_records = ['XH2 OWNED exact', 'XH2 POOL exact']
+        records = ['ordinary {:03d}'.format(index) for index in range(510)] + \
+            wire_records
+        evidence = object()
+        calls = []
+        recovery = SimpleNamespace(
+            parse_v2_lease_records=lambda observed, nonce:
+                calls.append(('parse', observed, nonce)) or evidence,
+            recover=lambda vm, nonce, **kwargs:
+                calls.append(('recover', vm, nonce, kwargs)) or
+                {'status':'recovered'},
+        )
+        replay = SimpleNamespace(parse=lambda serial, build:
+                                 {'records':records, 'build':build})
+        manifest = {
+            'run_id':run_id, 'build_id':'b' * 32,
+            'critical_replay_schema':2, 'recovery_lease_schema':3,
+            'recovery_helpers_sha256':self.recovery_helper_hashes(3),
+        }
+        with patch.object(tool, 'helper', return_value=replay):
+            self.assertEqual(tool.recover_v2(
+                recovery, Path('/not-opened'), manifest, 'cr2 wire'),
+                {'status':'recovered'})
+        self.assertEqual(calls[0], ('parse', wire_records, run_id))
+        self.assertEqual(calls[1][3], {
+            'lease_evidence':evidence,
+            'recovery_helpers_sha256':manifest['recovery_helpers_sha256'],
+            'recovery_lease_schema':3,
+        })
+
+        for bad_schema in (None, True, 1, 4):
+            with self.subTest(schema=bad_schema):
+                bad_manifest = dict(manifest, recovery_lease_schema=bad_schema)
+                with self.assertRaisesRegex(ValueError, 'lease schema'):
+                    tool.recover_v2(
+                        recovery, Path('/not-opened'), bad_manifest, 'cr2 wire')
 
     def test_raphael_target_marker_is_exact_and_bound_to_the_vbios_device(self):
         tool = self.module()

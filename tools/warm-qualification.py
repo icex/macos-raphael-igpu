@@ -339,7 +339,7 @@ def _a_evidence(vm, policy, activation, manifest_a, hooks):
     if values['manifest.json'] != manifest_a or not serial:
         errors.append('warm_qualification_a_evidence')
     try:
-        if hooks.parse_serial(serial.decode('utf-8')) != events:
+        if hooks.parse_serial(manifest_a, serial.decode('utf-8')) != events:
             errors.append('warm_qualification_a_evidence')
     except (AttributeError, UnicodeDecodeError, ValueError, TypeError):
         errors.append('warm_qualification_a_evidence')

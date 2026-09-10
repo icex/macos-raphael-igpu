@@ -130,7 +130,8 @@ IDENTITY_FIELDS = ('source_commit', 'source_sha256', 'build_id', 'binary_sha256'
 def required_identity(data):
     missing = [key for key in IDENTITY_FIELDS if not data.get(key)]
     if type(data.get('gpu')) is not bool: missing.append('gpu')
-    if data.get('gpu') is True and data.get('recovery_lease_schema') != 2:
+    if (data.get('gpu') is True and
+            data.get('recovery_lease_schema') not in (2, 3)):
         missing.append('recovery_lease_schema')
     if data.get('gpu') is True and not data.get('recovery_helpers_sha256'):
         missing.append('recovery_helpers_sha256')
@@ -184,7 +185,8 @@ def raphael_target_marked(config):
             props.get(RAPHAEL_TARGET_KEY) == RAPHAEL_TARGET_MARKER)
 
 
-def current_identity(vm, candidate, requested_diagnostic, run_id=None):
+def current_identity(vm, candidate, requested_diagnostic, run_id=None,
+                     recovery_lease_schema=2):
     build = json.loads((candidate / 'build-manifest.json').read_text())
     bundle = candidate / 'RaphaelGPU.kext/Contents'
     expected = dict(binary_sha256=sha((bundle/'MacOS/RaphaelGPU').read_bytes()),
@@ -243,14 +245,21 @@ def current_identity(vm, candidate, requested_diagnostic, run_id=None):
                 probe_binary_sha256=guest['probe_binary_sha256'], boot_id=host['boot_id'], kernel=host['kernel'],
                 bootdisk_sha256=sha((vm/'OpenCore.qcow2').read_bytes()),
                 recovery_helpers_sha256=(
-                    helper('vfio-recover').current_recovery_helpers_sha256()
+                    helper('vfio-recover').current_recovery_helpers_sha256(
+                        recovery_lease_schema)
                     if run_id is not None else None))
 
 
 def prepare(vm, spec, output, gpu=True, run_id=None):
     card = json.loads(spec.read_text())
+    replay_schema = critical_replay_schema(card)
+    lease_schema = card.get('recovery_lease_schema', 2)
+    if type(lease_schema) is not int or lease_schema not in (2, 3):
+        raise ValueError('recovery lease schema must be numeric 2 or 3')
+    if gpu and lease_schema == 3 and replay_schema != 2:
+        raise ValueError('schema-3 recovery lease requires critical replay schema 2')
     if gpu and run_id is None:
-        raise ValueError('GPU preparation requires an explicit v2 run_id')
+        raise ValueError('GPU preparation requires an explicit run_id')
     if run_id is not None:
         recovery_nonce_words(run_id)
     candidate = vm/'run'/('candidate-'+card['candidate_version'].split('.')[-1])
@@ -261,15 +270,18 @@ def prepare(vm, spec, output, gpu=True, run_id=None):
         if host['active_vm'] or (pending.exists() and any(pending.iterdir())):
             raise ValueError('active or pending VM prevents preparation')
         identity = current_identity(
-            vm, candidate, card['requested_diagnostic'], run_id if gpu else None)
+            vm, candidate, card['requested_diagnostic'], run_id if gpu else None,
+            lease_schema)
         if not identity['source_clean']: raise ValueError('commit source and tooling before preparation')
         if card['requested_diagnostic'] not in identity['boot_args'].split():
             raise ValueError('required diagnostic boot argument is absent')
         identity.update(run_id=run_id or uuid.uuid4().hex, max_seconds=card['max_seconds'],
                         gpu=gpu,
-                        recovery_lease_schema=2 if gpu else None,
+                        recovery_lease_schema=lease_schema if gpu else None,
                         vfio_device='0000:7b:00.0', experiment=card['id'], spec=card,
                         candidate_directory=str(candidate.relative_to(vm)))
+        if replay_schema is not None:
+            identity['critical_replay_schema'] = replay_schema
         identity['qemu_version'] = command(['docker', 'run', '--rm', '--entrypoint',
             'qemu-system-x86_64', identity['image_id'], '--version']).splitlines()[0]
         verify_bootdisk(vm, identity['image_id'], identity)
@@ -352,12 +364,55 @@ def canonical_v2_records(serial, expected_build):
 
 def recover_v2(recovery_tool, vm, manifest, serial):
     """Parse and recover through one module instance to preserve strict types."""
-    records = canonical_v2_records(serial, manifest['build_id'])
+    lease_schema = manifest.get('recovery_lease_schema')
+    if type(lease_schema) is not int or lease_schema not in (2, 3):
+        raise ValueError('recovery lease schema must be numeric 2 or 3')
+    if lease_schema == 3:
+        if manifest.get('critical_replay_schema') != 2:
+            raise ValueError('schema-3 recovery requires complete CR2 transport')
+        snapshot_records = helper('critical-replay').parse(
+            serial, manifest['build_id'])['records']
+        if any(record == 'XH2' for record in snapshot_records):
+            raise ValueError('schema-3 recovery has a malformed XH2 record')
+        records = [record for record in snapshot_records
+                   if record.startswith('XH2 ')]
+    else:
+        records = canonical_v2_records(serial, manifest['build_id'])
     lease_evidence = recovery_tool.parse_v2_lease_records(
         records, manifest['run_id'])
-    return recovery_tool.recover(
-        vm, manifest['run_id'], lease_evidence=lease_evidence,
-        recovery_helpers_sha256=manifest['recovery_helpers_sha256'])
+    arguments = {
+        'lease_evidence':lease_evidence,
+        'recovery_helpers_sha256':manifest['recovery_helpers_sha256'],
+    }
+    if lease_schema == 3:
+        arguments['recovery_lease_schema'] = 3
+    return recovery_tool.recover(vm, manifest['run_id'], **arguments)
+
+
+def parse_manifest_serial(classifier, manifest, serial):
+    schema = manifest.get('critical_replay_schema')
+    if schema is None:
+        return classifier.parse_serial(serial)
+    return classifier.parse_serial(
+        serial, critical_replay_schema=schema,
+        expected_build=manifest.get('build_id'))
+
+
+def definitive_capture_loss(events):
+    return any(
+        event.get('kind') == 'capture_loss' and (
+            event.get('definitive') is True or
+            event.get('reason') in ('overflow', 'conflicting replay'))
+        for event in events)
+
+
+def critical_replay_schema(data):
+    if 'critical_replay_schema' not in data:
+        return None
+    schema = data['critical_replay_schema']
+    if type(schema) is not int or schema != 2:
+        raise ValueError('critical replay schema must be numeric 2')
+    return schema
 
 
 def verify_bootdisk(vm, image_id, expected):
@@ -754,10 +809,11 @@ def _valid_hdp_flush(value):
 
 
 def _valid_reservation(value, prior_run_id):
-    if isinstance(value, dict) and value.get('schema') == 2:
+    if isinstance(value, dict) and value.get('schema') in (2, 3):
         try:
-            return helper('vfio-recover').valid_v2_lease_proof(
-                value, prior_run_id)
+            validator = ('valid_v3_lease_proof' if value.get('schema') == 3
+                         else 'valid_v2_lease_proof')
+            return getattr(helper('vfio-recover'), validator)(value, prior_run_id)
         except Exception:
             return False
     integer_keys = ('version','state','heap_limit','reservation_start',
@@ -868,7 +924,7 @@ def _valid_graphics_snapshot(value):
 
 def _valid_graphics_guard(value, prior_run_id):
     before = value.get('reservation_before') if isinstance(value, dict) else None
-    if isinstance(before, dict) and before.get('schema') == 2:
+    if isinstance(before, dict) and before.get('schema') in (2, 3):
         try:
             return helper('vfio-recover').valid_apple_graphics_pipe_guard(
                 value, prior_run_id)
@@ -941,7 +997,7 @@ def _valid_host_kiq(value, reservation, gc, hqd_doorbell_values,
         return False
     if any(type(addresses[key]) is not int for key in addresses):
         return False
-    if isinstance(reservation, dict) and reservation.get('schema') == 2:
+    if isinstance(reservation, dict) and reservation.get('schema') in (2, 3):
         lease_start = reservation.get('lease_start')
         if type(lease_start) is not int:
             return False
@@ -1097,12 +1153,17 @@ def validate_recovery_receipt_v6(receipt, boot_id, prior_run_id,
 
     errors = []
     reservation = gc.get('reservation')
-    v2 = isinstance(reservation, dict) and reservation.get('schema') == 2
+    native_schema = (reservation.get('schema') if isinstance(reservation, dict)
+                     else None)
+    native = native_schema in (2, 3)
     gart_forbidden_ranges = RECOVERY_V6_MUTATED_RANGES
-    if v2:
+    if native:
         expected_helper_paths = {
             'tools/vfio-recover.py', 'tools/recovery_lease_v2.py',
             'tools/kiq-recovery-proof.py'}
+        if native_schema == 3:
+            expected_helper_paths |= {
+                'tools/critical-replay.py', 'tools/recovery_lifetime_v3.py'}
         receipt_helpers = receipt.get('recovery_helpers_sha256')
         if (not isinstance(recovery_helpers_sha256, dict) or
                 set(recovery_helpers_sha256) != expected_helper_paths or
@@ -1110,6 +1171,10 @@ def validate_recovery_receipt_v6(receipt, boot_id, prior_run_id,
                     for value in recovery_helpers_sha256.values()) or
                 receipt_helpers != recovery_helpers_sha256 or
                 not _valid_reservation(reservation, prior_run_id) or
+                (native_schema == 3 and
+                 receipt.get('recovery_lease_schema') != 3) or
+                (native_schema == 2 and
+                 'recovery_lease_schema' in receipt) or
                 'stopped_wptr_doorbell_clear' in gc):
             errors.append('recovery_receipt')
         lease_start = reservation.get('lease_start')
@@ -1127,7 +1192,7 @@ def validate_recovery_receipt_v6(receipt, boot_id, prior_run_id,
     legacy = dict(receipt)
     legacy['schema'] = 5
     legacy_gc = dict(gc)
-    if 'stopped_wptr_doorbell_clear' in gc and not v2:
+    if 'stopped_wptr_doorbell_clear' in gc and not native:
         try:
             derived, proof_errors = helper(
                 'kiq-recovery-proof').derive_effective_host_kiq(receipt)
@@ -1249,7 +1314,7 @@ def validate_reuse_receipt(receipt, boot_id, prior_run_id, vm=None,
     if isinstance(receipt, dict) and receipt.get('schema') == 6:
         helper_hashes = (manifest.get('recovery_helpers_sha256')
                          if isinstance(manifest, dict) and
-                         manifest.get('recovery_lease_schema') == 2 else None)
+                         manifest.get('recovery_lease_schema') in (2, 3) else None)
         return validate_recovery_receipt_v6(
             receipt, boot_id, prior_run_id, helper_hashes)
     return validate_recovery_receipt(receipt, boot_id, prior_run_id)
@@ -1590,7 +1655,8 @@ def warm_qualification_authorization(vm, manifest, manifest_path, output,
     hooks = argparse.Namespace(
         validate_receipt=validate_recovery_receipt_v6,
         validate_running=validate_running,
-        parse_serial=classifier.parse_serial,
+        parse_serial=lambda evidence_manifest, serial:
+            parse_manifest_serial(classifier, evidence_manifest, serial),
         classify_readiness=classifier.classify_probe_readiness,
         admit_host=admit,
         validate_full_host=lambda host, boot: retained.host_errors(
@@ -2043,8 +2109,9 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
             cap_revision_authority_sha256 or warm_requested):
         raise ValueError('candidate179 qualification cannot use another launch mode')
     manifest = json.loads(manifest_path.read_text())
-    if manifest.get('gpu') is True and manifest.get('recovery_lease_schema') != 2:
-        raise ValueError('GPU run requires a v2 recovery lease manifest')
+    if (manifest.get('gpu') is True and
+            manifest.get('recovery_lease_schema') not in (2, 3)):
+        raise ValueError('GPU run requires a supported recovery lease manifest')
     missing = required_identity(manifest)
     if missing: raise ValueError('incomplete prepared identity: '+','.join(missing))
     if manifest.get('bootdisk_verified') is not True:
@@ -2108,7 +2175,8 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                 requested = manifest.get('spec', {}).get('requested_diagnostic')
                 observed = current_identity(
                     vm, vm/manifest['candidate_directory'], requested,
-                    manifest['run_id'] if manifest.get('gpu') is True else None)
+                    manifest['run_id'] if manifest.get('gpu') is True else None,
+                    manifest.get('recovery_lease_schema', 2))
                 host = host_snapshot(); write_once(output/'host-before.json', host)
                 used = vm/'run/used-gpu-boots'; used.mkdir(exist_ok=True)
                 recovery = None; reuse_errors = []
@@ -2214,9 +2282,8 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                 supervisor.verify(state)
                 if monitor.error: raise RuntimeError(monitor.error)
                 serial = (vm/'run/serial.log').read_text(errors='replace')
-                events = classifier.parse_serial(serial)
-                if any(e['kind'] == 'capture_loss' and e.get('reason') in
-                       ('overflow', 'conflicting replay') for e in events):
+                events = parse_manifest_serial(classifier, manifest, serial)
+                if definitive_capture_loss(events):
                     raise RuntimeError('definitive critical capture loss; aborting exposure')
                 if manifest.get('gpu') is False and any(e['kind'] == 'build' and
                         e['build'] == manifest['build_id'] for e in events) and not any(
@@ -2286,7 +2353,7 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
     agent_events = vm/'run/agent-server-events.jsonl'
     if agent_events.is_file():
         (output/'agent-server-events.jsonl').write_bytes(agent_events.read_bytes())
-    events = classifier.parse_serial(serial)
+    events = parse_manifest_serial(classifier, manifest, serial)
     (output/'events.jsonl').write_text(''.join(json.dumps(e)+'\n' for e in events))
     if probe is not None: write_once(output/'probe.json', probe)
     write_once(output/'shutdown.json', shutdown_result)

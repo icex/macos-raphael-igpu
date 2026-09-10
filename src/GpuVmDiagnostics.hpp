@@ -147,9 +147,11 @@ inline bool validAperture(const FramebufferAperture &aperture) {
 }
 
 // X6000's getPDEValue retains bits 47:6 of an allocation address and adds
-// VALID. Captured roots also carry CACHE (bit 2). Reject every other low-bit
-// form, especially SYSTEM, rather than guessing how an unfamiliar request is
-// encoded. The caller's 0x28-byte object is copied before any edit.
+// VALID. Some captured roots also carry CACHE (bit 2), while candidate 179's
+// native VMID2 request carried no low attributes and X6000 copied that raw
+// root into its PTB register words. Preserve those observed forms and reject
+// every other one, especially SYSTEM. The caller's 0x28-byte object is copied
+// before any edit.
 inline LocalInvalidateInfo prepareInvalidateInfo(
     const uint8_t *source, size_t size, bool enabled, bool markedRaphael,
     uint32_t rawFbBase, uint32_t rawFbTop, uint32_t rawFbOffset) {
@@ -181,7 +183,7 @@ inline LocalInvalidateInfo prepareInvalidateInfo(
     if ((attributes & (1ULL << 1)) != 0) {
         result.reason = RootRepairReason::SystemRoot; return result;
     }
-    if (attributes != 1 && attributes != 5) {
+    if (attributes != 0 && attributes != 1 && attributes != 5) {
         result.reason = RootRepairReason::UnsupportedFlags; return result;
     }
     const uint64_t address = request.root & pdeAddressMask;
