@@ -1,4 +1,60 @@
-# Candidate 188 current state — prelaunch refusal (2026-09-10)
+# Offline mapping correction and source audit (2026-09-10)
+
+The working source now repairs eligible hub-0 client roots for VMIDs **1–15**,
+instead of only VMID2. VMID0 remains on the separate legacy GART path. Existing
+target, aperture, SYSTEM, known-attribute and address-range checks remain; no
+new register writes or ordering changes were added. The decoder now matches
+X6000's exact `info[0x24] == 1` reprogram predicate.
+
+The failing regression uses the captured VMID1 root `0xf40b6ff000`, framebuffer
+base/top/offset `0xf400/0xf41f/0x840`, and independently derived expected root
+`0x84b6ff000`. It failed before the correction and passes afterward. This proves
+the helper correction, **not GPU completion**. The exact X6000 prepare method
+(`0x6249c`, root copies at `0x624ed–0x624f8`) preserves the supplied root in
+prepared words at `+4/+0xc`; a live VMID1 call and subsequent execution still
+need authenticated GDB capture.
+
+Independent review passed. Verification: **689 Python tests, 3 skipped**;
+the focused C++ fixture passed ASan/UBSan, and the nine-fixture C++ UBSan loop
+passed. Full Python log: `/tmp/linux-vm-exact-unittest-20260910.log`, SHA-256
+`06c0c54c15c40aae9a27de28845cca506d5920592179d98cabff258cc6474558`.
+The private compile also passed, with route ownership verified. Output directory:
+`/home/bogdan/macos-vm/run/offline-client-root-fix-20260910T184927Z`;
+executable SHA-256
+`1bc7979cd1980e789c350631f896c1babd8a3670d570e0e10f3bed84ceaaf90c`.
+Its manifest correctly says `source_clean=false` and
+`metal_execution_verified=false`. This is a compile qualification using the
+existing version field, not a replacement candidate 188 or an admitted release.
+Only explanatory comments changed after this compile; a future deployable build
+needs a distinct reviewed candidate identity and its own source/build manifest.
+No GPU cycle or staging was performed for this source correction. The deployed
+188 artifact remains unchanged. Cycle accounting stays **10 overall / 2 since
+post-186 review**; the pending 188 debugger-only card does not deploy this fix.
+
+Research and limitations:
+
+- [Apple documentation, open source and native binary comparison](findings/research/2026-09-10-apple-vm-source-comparison.md)
+  separates public Metal resource semantics, generic XNU DMA mapping, community
+  APU fixes and exact X6000 instructions. No reviewed public Apple source supplies
+  the private GFX10 page-table implementation. NootedRed's framebuffer-offset fix
+  is relevant precedent, not a compatible formula to copy blindly.
+- [Exact Linux and native geometry comparison](findings/research/2026-09-10-linux-vm-exact.md)
+  pins upstream source and distinguishes root/PDE conversion from the generic
+  VRAM PTE update path. Apple emits BFS4 in the captured hierarchy; Linux's BFS9
+  layout is not a drop-in replacement. TF remains an unsupported incomplete
+  diagnostic boundary, not proof of an absent leaf.
+- [Independent mapping/ABI audit](findings/research/2026-09-10-mapping-independent-audit.md)
+  verifies native argument layouts and identifies tests that enforced the old
+  VMID2 restriction. CPU reconstruction of MC pointers does not establish what
+  the GPU successfully fetched.
+- [Ordering and lifetime audit](findings/research/2026-09-10-vm-ordering-audit.md)
+  finds no missing direct contiguous-update caller. Repeated aperture publication
+  is a design hazard if values change concurrently; no torn tuple or stale-pointer
+  use has been demonstrated. SDMA completion/fence/invalidate ordering is still
+  unverified. VMID2 diagnostic correlation remains intentionally VMID2-only;
+  it must not be reused as evidence for VMID1.
+
+# Candidate 188 runtime state — continuation capture loss (2026-09-10)
 
 Candidate 188 build, staging, and preparation completed on boot
 `3bca3e47-1f28-4f78-af00-5dbf76b00620`. Build commit is
@@ -9,13 +65,37 @@ manifest SHA-256 is `5f6dcff73c1b7df66ffe9b78459aed88178a3a33f213310d20c23c25d3f
 staging record SHA-256 is `4df591ae25454e937fa15d6f266c23fed85796c4f1fdedcbf890fd82b86f1553`;
 the single ledger reservation is run ID `cb1d0aadd8186205d867a23fe175c336`.
 
-The authorized GPU-attached launch request stopped before Docker/QEMU because
+The first GPU-attached launch request stopped before Docker/QEMU because
 `/tmp/.X11-unix/X0` was absent. No container was created, so no guest shutdown,
 VFIO open, guest boot, GDB hit, or exposure occurred. Frozen evidence is in
-`findings/research/2026-09-10-candidate188-prelaunch-evidence/`.
+`findings/research/2026-09-10-candidate188-prelaunch-evidence/`. A reviewed
+bounded continuation then reached the guest but ended `INCONCLUSIVE` with
+`capture_loss` because the CR2 transport line was incomplete. GDB reached the
+target on QEMU CPU thread 8; CPU thread 1 reached the native-call breakpoint
+next. The CPU-number check rejected the pair before capturing outgoing
+arguments, so an argument mismatch was not established. The
+uninitialized entry decision is invalid evidence and ignored. The same VMID1
+fault was `0x101b3a` at VA `0x400580000`, PDE `0x200000084b700001`, leaf index
+1408, raw entry `0`.
+
+Continuation output is frozen at
+`/home/bogdan/macos-vm/run/metal-021-188-continuation-output`; `recovery.json`
+schema 6 reports `recovered` and `authorizes_launch=true`. This is a valid
+cleanup receipt, not Metal execution success.
+
+Current discriminator is corrected: `src/GpuVmDiagnostics.hpp:266` excludes
+every VMID other than 2 from root repair, and the prepare wrapper retains
+observations only for VMID2. The live
+VMID1 root was `0xf40b6ff000` and remained unconverted. The CPU walker silently
+translated its physical table address to `0x84b6ff000`; therefore raw zero at
+leaf index 1408 is a reconstructed CPU view, not proof of the first GPU
+failure, and the GPU may fail before the leaf. The next GDB target is
+`wrapVmmPrepare`, guarded to hub 0 / VMID1 / reprogram 1, capturing original and
+native info plus prepared root, then correlating the later PTB. Existing valid
+recovery and cycle counts remain unchanged.
 
 A separate private GPU-less qualification at
-`/home/bogdan/macos-vm/run/headless-no-x11-qualification-20260910` subsequently
+`/home/bogdan/macos-vm/run/headless-no-x11-qualification-20260910` first
 booted Darwin 24.6.0 with `-vga none -display none`, without X11 or VFIO.
 Kernel text was `0xffffff8009ee8000-0xffffff800a8e8000`. Its supervisor requested
 shutdown and then forcibly stopped the exact container; the container and
@@ -23,10 +103,12 @@ capture units are absent. This verifies headless kernel boot and capture,
 not Metal or graceful guest shutdown. No actual GPU cycle was added.
 
 The launcher and external-inhibitor fixes passed offline and runtime checks;
-the combined regression suite passed 679 tests with 3 skipped. The upcoming test is
-the exact bounded proof continuation for 188 while leaving the ledger
-unchanged; no desktop Metal claim is made. The unresolved actual-GPU history
-remains 9 cycles (one since post-186 review).
+the combined regression suite passed 679 tests with 3 skipped. This records
+actual GPU cycle **10 overall, 2 since post-186 review**; the pre-Docker failure
+and GPU-less runs are not cycles. The ledger remains unchanged; the one-shot
+prelaunch marker was consumed by the continuation. Root
+is auditing a finite reuse admission and frame-pair fix before any further
+launch; no desktop Metal claim is made.
 
 Historical preparation/build attempts remain in dated research records.
 

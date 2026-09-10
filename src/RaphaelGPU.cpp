@@ -226,9 +226,10 @@ static bool submissionTraceEnabled = false;
 static volatile bool submissionTraceRoutesReady = false;
 static bool vmRootFixEnabled = false;
 static bool vmFaultDiagEnabled = false;
-// rgpuvmroot: 1 repairs only the VMID2 root; 2/3 retain the historical template
-// hooks; 4 converts the separately supplied real entry source at the SDMA update
-// boundary verified in X6000 24G830.
+// rgpuvmroot: enabled modes repair hub-0 client roots (VMIDs 1..15) while leaving
+// VMID0's legacy GART alone; 2/3 retain the historical template hooks; 4 converts
+// the separately supplied real entry source at the SDMA update boundary verified
+// in X6000 24G830.
 static uint32_t vmRootFixMode = 0;
 static mach_vm_address_t orgVmmGetPde {};
 static mach_vm_address_t orgVmmGetPte {};
@@ -6399,7 +6400,7 @@ static void pluginStart() {
     if (PE_parse_boot_argn("rgpuvmroot", &vmroot, sizeof(vmroot)) && vmroot <= 4)
         vmRootFixMode = vmroot;
     vmRootFixEnabled = vmRootFixMode >= 1;
-    RLOG("rgpuvmroot=%u: VMID2 GFXHUB root MC-to-physical repair %s; child PDE "
+    RLOG("rgpuvmroot=%u: client GFXHUB root MC-to-physical repair %s; child PDE "
          "template conversion %s; video-memory PTE template conversion %s; real entry "
          "source conversion %s",
          vmRootFixMode, vmRootFixEnabled ? "ARMED" : "off",
