@@ -1,0 +1,2 @@
+{"kind": "capture_loss", "build": "fbfd23fe695d4c5dab219f6f5822d409", "reason": "CR2: missing CR2 transport", "definitive": false}
+{"kind": "capture_loss", "build": "fbfd23fe695d4c5dab219f6f5822d409", "reason": "dedicated critical producer readiness is absent or conflicting", "definitive": false}

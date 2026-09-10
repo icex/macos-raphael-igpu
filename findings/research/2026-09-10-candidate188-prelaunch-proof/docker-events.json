@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "command": [
+    "docker",
+    "events",
+    "--since",
+    "2026-09-10T20:16:39.500+03:00",
+    "--until",
+    "2026-09-10T20:16:40.100+03:00",
+    "--format",
+    "{{json .}}"
+  ],
+  "service_start_realtime_us": 1789060599622815,
+  "service_end_realtime_us": 1789060599863115,
+  "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "events": [],
+  "exit_status": 0
+}

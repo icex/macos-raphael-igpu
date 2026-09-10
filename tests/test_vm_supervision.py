@@ -96,6 +96,12 @@ elif command == "systemctl":
         print("LoadState=loaded\nActiveState=inactive")
         executable = saved[saved.index("--") + 1:]
         print("ExecStart={ argv[]=" + " ".join(executable) + " ; }")
+elif command == "busctl":
+    rows = [["sleep:idle", "fixture", "reason", "block", 1000, 123]] if state.get(
+        "logind_inhibited") else []
+    if state.get("malformed_inhibitor"):
+        rows.append(["broken"])
+    print(json.dumps({"type":"a(ssssuu)", "data":[rows]}))
 else:
     sys.exit(91)
 '''
@@ -110,7 +116,7 @@ class SupervisionTests(unittest.TestCase):
         (self.vm / "sercat.py").write_text("raise SystemExit(0)\n")
         binaries = self.vm / "bin"
         binaries.mkdir()
-        for command in ("docker", "systemd-run", "systemctl", "systemd-inhibit"):
+        for command in ("docker", "systemd-run", "systemctl", "systemd-inhibit", "busctl"):
             path = binaries / command
             path.write_text(FIXTURE_COMMAND)
             path.chmod(0o700)
@@ -221,6 +227,40 @@ class SupervisionTests(unittest.TestCase):
                             for cmd, args in self.calls()))
         self.assertTrue(any(cmd == "systemctl" and state["serial_unit"] in args
                             for cmd, args in self.calls()))
+
+    def test_headless_collector_reuses_verified_logind_block_inhibitor(self):
+        self.env["GENERIC_GRAPHICS"] = "off"
+        self.fixture["logind_inhibited"] = True; self.save()
+        result = self.arm()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        serial = [args for cmd,args in self.calls() if cmd == 'systemd-run'
+                  and any(a.startswith('--unit=rgpu-serial-') for a in args)][0]
+        self.assertNotIn(str(self.vm/'bin/systemd-inhibit'), serial)
+        self.assertIn(str(self.vm/'sercat.py'), serial)
+
+    def test_headless_collector_refuses_without_logind_block_inhibitor(self):
+        self.env["GENERIC_GRAPHICS"] = "off"
+        self.fixture["logind_inhibited"] = False; self.save()
+        result = self.arm()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('block inhibitor', result.stderr)
+
+    def test_headless_collector_rejects_malformed_trailing_inhibitor(self):
+        self.env["GENERIC_GRAPHICS"] = "off"
+        self.fixture.update(logind_inhibited=True, malformed_inhibitor=True); self.save()
+        result = self.arm()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('block inhibitor', result.stderr)
+
+    def test_verify_refuses_lost_external_inhibitor(self):
+        self.env["GENERIC_GRAPHICS"] = "off"
+        self.fixture["logind_inhibited"] = True; self.save()
+        result = self.arm(); self.assertEqual(result.returncode, 0, result.stderr)
+        (self.vm/'run/supervision.json').write_text(result.stdout)
+        state = self.fixture; state["logind_inhibited"] = False; self.save()
+        checked = self.run_tool('verify', '--state', str(self.vm/'run/supervision.json'))
+        self.assertNotEqual(checked.returncode, 0)
+        self.assertIn('inhibitor was lost', checked.stderr)
 
     def test_dedicated_transport_arms_two_channel_bound_collectors(self):
         result = self.arm(critical=True)
@@ -408,6 +448,8 @@ class SupervisionTests(unittest.TestCase):
 
     def test_graphics_policy_is_explicitly_forwarded_without_extra(self):
         self.env["GENERIC_GRAPHICS"] = "off"
+        self.fixture["logind_inhibited"] = True
+        self.save()
         script = self.vm / "macos-vm.sh"
         script.write_text("#!/bin/sh\nexec sleep 30\n"); script.chmod(0o700)
         result = self.run_tool("start", "--vm-dir", str(self.vm), "--max-seconds", "180")

@@ -1,0 +1,7 @@
+Starting [systemd-run] /usr/bin/python3 /home/bogdan/macos-vm/run/worktrees/candidate-188/tools/vm-supervision.py launch --vm-dir /home/bogdan/macos-vm --name rgpu-launch-f356b4cfc9a0451a9afda1e4dfb206f0 --max-seconds 180 --critical-serial -- --gpu 0000:7b:00.0 --gpu-id 0x73ff --gpu-rom run/gpu-patched.rom...
+Started [systemd-run] /usr/bin/python3 /home/bogdan/macos-vm/run/worktrees/candidate-188/tools/vm-supervision.py launch --vm-dir /home/bogdan/macos-vm --name rgpu-launch-f356b4cfc9a0451a9afda1e4dfb206f0 --max-seconds 180 --critical-serial -- --gpu 0000:7b:00.0 --gpu-id 0x73ff --gpu-rom run/gpu-patched.rom.
+VM supervision refused: VM launcher exited before container identification
+rgpu-launch-f356b4cfc9a0451a9afda1e4dfb206f0.service: Main process exited, code=exited, status=1/FAILURE
+rgpu-launch-f356b4cfc9a0451a9afda1e4dfb206f0.service: Failed with result 'exit-code'.
+Stopped [systemd-run] /usr/bin/python3 /home/bogdan/macos-vm/run/worktrees/candidate-188/tools/vm-supervision.py launch --vm-dir /home/bogdan/macos-vm --name rgpu-launch-f356b4cfc9a0451a9afda1e4dfb206f0 --max-seconds 180 --critical-serial -- --gpu 0000:7b:00.0 --gpu-id 0x73ff --gpu-rom run/gpu-patched.rom.
+rgpu-launch-f356b4cfc9a0451a9afda1e4dfb206f0.service: Consumed 143ms CPU time over 240ms wall clock time, 83M memory peak.

@@ -1,52 +1,34 @@
-# Candidate 188 preparation — debug provenance contract (2026-09-10)
+# Candidate 188 current state — prelaunch refusal (2026-09-10)
 
-The current host handoff is on boot `3bca3e47-1f28-4f78-af00-5dbf76b00620`,
-with VFIO/group access, active power, empty reset methods, watchdogs, and sleep
-inhibition verified; no new GPU experiment cycle occurred. Candidate 188/card 021 metadata preserves candidate
-187 functional behavior and adds an opt-in private `-O2 -g -gdwarf-4` capture
-at `wrapVmmUpdateEntries` for VMID1 source/destination/count/template,
-conversion decision, and native output. Staging now requires the retained dSYM,
-DWARF, private build script, and debug manifest to match the release manifest,
-including executable/dSYM UUID, executable and DWARF hashes, exact flags,
-private-script hash, and unchanged canonical pre/post input hashes. The source
-pin remains `db511634c6d292ef3a65285e56bd5cf5f9e03cf4c20680a27b96c46a18f2e9b0`.
-Focused metadata/staging tests pass (39). VMID1 correlation remains to be
-established by the debug capture; no capture result is guaranteed. Hardware
-awaits offline debugger188 audit, build, and staging. Candidate 187's missing
-receipt prohibits reuse of its old boot; it does not block this fresh boot.
-The unresolved actual-GPU count remains 9 (one cycle since the post186 review).
+Candidate 188 build, staging, and preparation completed on boot
+`3bca3e47-1f28-4f78-af00-5dbf76b00620`. Build commit is
+`5623d076a1855d7e33747c0c20de52a56f495993`, archive SHA-256 is
+`3502ea8e0271e04733af236f6d980fdf61a7a3ea449da46ec9c3a0a50ae3f9f9`, and the
+debug executable/dSYM UUID is `991549896385377caa3ade02134636af`. Prepared
+manifest SHA-256 is `5f6dcff73c1b7df66ffe9b78459aed88178a3a33f213310d20c23c25d3f89673`;
+staging record SHA-256 is `4df591ae25454e937fa15d6f266c23fed85796c4f1fdedcbf890fd82b86f1553`;
+the single ledger reservation is run ID `cb1d0aadd8186205d867a23fe175c336`.
 
-Offline regression on candidate 188 metadata, staging, debugger, and release
-tooling completed in one serialized run: `python3 -m unittest discover -s tests
--p 'test_*.py'` passed **672 tests** with 3 skips. `python3
-tools/route-domains.py src/RaphaelGPU.cpp` passed. Repository-local KDK
-preflight could not run because its expected `tools/kdk/x/.../AMDRadeonX6000HWLibs`
-binary is absent; this is input unavailability, not a regression. No build,
-staging, VM, or GPU cycle occurred; the runner-failure-path audit is complete.
-The next action is review of the single debug build and its retained
-source/artifact identities before any candidate 188 staging or hardware
-execution.
+The authorized GPU-attached launch request stopped before Docker/QEMU because
+`/tmp/.X11-unix/X0` was absent. No container was created, so no guest shutdown,
+VFIO open, guest boot, GDB hit, or exposure occurred. Frozen evidence is in
+`findings/research/2026-09-10-candidate188-prelaunch-evidence/`.
 
-The authorized candidate 188 staging attempt stopped before transaction on a
-staging-tool `NameError`: `verify_build_inputs` referenced the validated card
-out of scope while invoking debug provenance checks. No media, metadata,
-deployment, VM, or GPU state changed and no GPU cycle occurred. The fix is now
-prepared in the repository with explicit source-pin parameter wiring; focused
-staging/metadata tests pass (40). Root must commit the fix and authorize a
-replacement build before staging; the original artifact identity record is
-unchanged.
+A separate private GPU-less qualification at
+`/home/bogdan/macos-vm/run/headless-no-x11-qualification-20260910` subsequently
+booted Darwin 24.6.0 with `-vga none -display none`, without X11 or VFIO.
+Kernel text was `0xffffff8009ee8000-0xffffff800a8e8000`. Its supervisor requested
+shutdown and then forcibly stopped the exact container; the container and
+capture units are absent. This verifies headless kernel boot and capture,
+not Metal or graceful guest shutdown. No actual GPU cycle was added.
 
-The single authorized offline candidate 188 debug build completed from clean
-worktree commit `670c6ab1b27087fe6a7acf78593094b3e54dbd2e`. Build stdout/stderr
-is retained at `/home/bogdan/macos-vm/run/candidate-188-build.log`; archive
-SHA-256 is `4fa83af4d48279ae4ed808726b74c9c7765a97224d5e28acba624960723901de`.
-The extracted candidate and retained dSYM/source are under
-`/home/bogdan/macos-vm/run/candidate-188` and
-`/home/bogdan/macos-vm/run/candidate-188-dist/debug-symbols`; identity record
-is `/home/bogdan/macos-vm/run/candidate-188-build-identities.json`. Debug UUID
-is `7c6ca35e9c8734b9be394271166a6dc2` for both executable and dSYM, with
-debug-source hash `38bb2edfea12c0fc5185b46e866ee7e58c4833bc3021f3646901b3da575eca7c`.
-No staging, deployment, VM, or GPU cycle occurred.
+The launcher and external-inhibitor fixes passed offline and runtime checks;
+the combined regression suite passed 679 tests with 3 skipped. The upcoming test is
+the exact bounded proof continuation for 188 while leaving the ledger
+unchanged; no desktop Metal claim is made. The unresolved actual-GPU history
+remains 9 cycles (one since post-186 review).
+
+Historical preparation/build attempts remain in dated research records.
 
 # Raphael iGPU: current technical status
 

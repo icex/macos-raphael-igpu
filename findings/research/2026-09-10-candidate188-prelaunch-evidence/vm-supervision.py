@@ -30,34 +30,6 @@ class ManagedStopUnconfirmed(RuntimeError):
     pass
 
 
-def logind_block_inhibited():
-    try:
-        result = subprocess.run(
-            [binary("busctl"), "--system", "--json=short", "call",
-             "org.freedesktop.login1", "/org/freedesktop/login1",
-             "org.freedesktop.login1.Manager", "ListInhibitors"],
-            text=True, capture_output=True, timeout=15, check=False)
-        if result.returncode:
-            return False
-        payload = json.loads(result.stdout)
-        if (payload.get("type") != "a(ssssuu)" or type(payload.get("data")) is not list or
-                len(payload["data"]) != 1 or type(payload["data"][0]) is not list):
-            return False
-        matching = False
-        for fields in payload["data"][0]:
-            if (type(fields) is not list or len(fields) != 6 or
-                    not all(isinstance(fields[index], str) for index in range(4)) or
-                    not all(type(fields[index]) is int and 0 <= fields[index] < 1 << 32
-                            for index in (4, 5))):
-                return False
-            scopes = fields[0].split(":")
-            if fields[3] == "block" and len(scopes) == 2 and set(scopes) == {"sleep", "idle"}:
-                matching = True
-        return matching
-    except (OSError, subprocess.SubprocessError, ValueError, TypeError, AttributeError):
-        return False
-
-
 def full_cid(value):
     if not CID_PATTERN.fullmatch(value):
         raise ValueError("container identity must be a full 64-digit hexadecimal ID")
@@ -133,11 +105,6 @@ def verify(state, require_ready=True):
     expected_deadline = math.floor(started_epoch + maximum) if maximum else None
     if state["started_at"] != started_at or state["deadline_epoch"] != expected_deadline:
         raise RuntimeError("saved supervision identity/deadline does not match this container start")
-    external_inhibitor = state.get("external_inhibitor", False)
-    if type(external_inhibitor) is not bool:
-        raise RuntimeError("saved inhibitor mode is invalid")
-    if external_inhibitor and not logind_block_inhibited():
-        raise RuntimeError("existing sleep:idle block inhibitor was lost")
     if maximum:
         if expected_deadline <= time.time():
             raise RuntimeError("container exposure deadline has already elapsed")
@@ -289,9 +256,6 @@ def arm(vm, cid, maximum, critical_enabled=False):
             ["--", docker, "stop", "--time", "0", cid])
         timer_unit = timer_base + ".timer"
     stop_command = shlex.join([docker, "stop", "--time", "0", cid])
-    headless = os.environ.get("GENERIC_GRAPHICS") == "off"
-    if headless and not logind_block_inhibited():
-        raise RuntimeError("headless capture requires an existing sleep:idle block inhibitor")
     channels = [("serial", "console")]
     if critical_enabled:
         channels.append(("critical", "critical"))
@@ -304,23 +268,19 @@ def arm(vm, cid, maximum, critical_enabled=False):
         ready_paths[stem] = ready
         units[stem] = unit_base + ".service"
         explicit = ([f"--setenv=VM_SERIAL_CHANNEL={channel}"] if critical_enabled else [])
-        collector = [sys.executable, "-u", str(vm / "sercat.py")]
-        if not headless:
-            collector = [binary("systemd-inhibit"), "--what=sleep:idle",
-                         f"--who=macOS VM {channel}",
-                         "--why=Keep capture and the VM awake", *collector]
         run(base + [f"--unit={unit_base}", "--service-type=exec",
                     f"--property=WorkingDirectory={vm}", "--property=TimeoutStopSec=15s",
                     f"--property=ExecStopPost={stop_command}",
                     f"--setenv=VM_SERIAL_SOCKET={vm / ('run/' + stem + '.sock')}",
                     f"--setenv=VM_SERIAL_OUTPUT={vm / ('run/' + stem + '.log')}",
                     f"--setenv=VM_SERIAL_READY={ready}", f"--setenv=VM_SERIAL_CID={cid}"] +
-            explicit + endpoint + ["--", *collector])
+            explicit + endpoint + ["--", binary("systemd-inhibit"), "--what=sleep:idle",
+                        f"--who=macOS VM {channel}", "--why=Keep capture and the VM awake",
+                        sys.executable, "-u", str(vm / "sercat.py")])
     state = {"cid": cid, "started_at": started_at, "max_seconds": maximum,
              "deadline_epoch": deadline, "timer_unit": timer_unit,
              "serial_unit": units["serial"], "serial_ready": str(ready_paths["serial"]),
-             "critical_enabled": bool(critical_enabled),
-             "external_inhibitor": headless}
+             "critical_enabled": bool(critical_enabled)}
     if critical_enabled:
         state.update(critical_unit=units["critical"],
                      critical_ready=str(ready_paths["critical"]))

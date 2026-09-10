@@ -38,6 +38,29 @@ PRELAUNCH_CONTINUATION = {
     'readiness_sha256':'86282b2a881f86b1fd4d770ec7f066c2014aab0b957b7211c0ed6c6f996f9053',
 }
 
+# A distinct one-shot continuation for candidate 188's authenticated X11
+# preflight exit.  It deliberately shares no evidence or policy with 173/174.
+PRELAUNCH188_CONTINUATION = {
+    'boot_id':'3bca3e47-1f28-4f78-af00-5dbf76b00620',
+    'run_id':'cb1d0aadd8186205d867a23fe175c336',
+    'original_manifest_sha256':'5f6dcff73c1b7df66ffe9b78459aed88178a3a33f213310d20c23c25d3f89673',
+    'original_output_sha256':'8df4dff44a4fe48216d59787ef4c7d4ba7cdabb65a9c31718c01fec3792e82c8',
+    'ledger_sha256':'a77043b05bec577bec12a7fba397621aeed4a5267239357477c44982386cc2a1',
+    'failing_launcher_sha256':'b3b3c32c7fb86f80760538b708c22f93878ebe0901b7cc2535cc250600b76a3f',
+    'supervisor_sha256':'f5bc60f0ff67de50390722eae5d286f216bbf83ebd2e60ad012641946d024b94',
+    'launcher_log_sha256':'030f9cff7ff084563726911d2754a4aab32dee1abf4588935b0b00be8678b3e9',
+    'docker_evidence_sha256':'26c264055a7d0def85e6b4e14b2488e92a182064c38af82b5f4f10b2a301a506',
+    'evidence_inventory': {
+        'launcher_log':'findings/research/2026-09-10-candidate188-prelaunch-evidence/vm-launch.log',
+        'unit_journal':'findings/research/2026-09-10-candidate188-prelaunch-evidence/rgpu-launch-f356b4cfc9a0451a9afda1e4dfb206f0.user-journal.log',
+        'failing_launcher':'findings/research/2026-09-10-candidate188-prelaunch-evidence/macos-vm.sh',
+        'failing_supervisor':'findings/research/2026-09-10-candidate188-prelaunch-evidence/vm-supervision.py',
+        'docker_events':'findings/research/2026-09-10-candidate188-prelaunch-proof/docker-events.json',
+        'boot_ledger':'findings/research/2026-09-10-candidate188-prelaunch-proof/boot-ledger.json',
+    },
+    'unit_journal_sha256':'de7174163daae94cee610d8989c19b5a8cc76dad99aada054c8c5bfe403453d8',
+}
+
 V2_CRITICAL_CAPTURE_MAX_BYTES = 8 * 1024 * 1024
 
 # This is a single reviewed revision of one historical boot's initial
@@ -770,9 +793,154 @@ def prelaunch_continuation_marker(vm, boot_id, run_id):
     return vm/'run/prelaunch-continuations'/(boot_id+'-'+run_id+'.json')
 
 
+def validate_prelaunch188_continuation(vm, manifest_path, manifest,
+                                       original_output, proof_path,
+                                       expected_proof_sha256, observed, host,
+                                       cursor_result, ledger_path=None):
+    """Validate candidate 188's exact pre-Docker X11 failure and only its repair."""
+    errors = []
+    pinned = PRELAUNCH188_CONTINUATION
+    original_output = Path(original_output); proof_path = Path(proof_path)
+    ledger_path = (Path(ledger_path) if ledger_path is not None else
+                   vm/'run/used-gpu-boots'/(manifest.get('boot_id', '')+'.json'))
+    try:
+        proof_raw = proof_path.read_bytes(); proof = json.loads(proof_raw)
+        original_manifest_raw = (original_output/'manifest.json').read_bytes()
+        original_manifest = json.loads(original_manifest_raw)
+        replacement_raw = Path(manifest_path).read_bytes()
+        ledger_raw = ledger_path.read_bytes()
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        raise ValueError('candidate188 prelaunch continuation refused: evidence') from None
+    if not all(isinstance(value, dict) for value in
+               (proof, original_manifest, manifest)):
+        raise ValueError('candidate188 prelaunch continuation refused: evidence')
+    if (not re.fullmatch(r'[0-9a-f]{64}', str(expected_proof_sha256 or '')) or
+            sha(proof_raw) != expected_proof_sha256):
+        errors.append('proof_hash')
+    required = {'schema','kind','boot_id','run_id','original_manifest_sha256',
+                'original_output_sha256','ledger_sha256','failing_launcher_sha256',
+                'supervisor_sha256','launcher_log_sha256','service','docker_events',
+                'docker_evidence_sha256',
+                'evidence_inventory',
+                'replacement_manifest_sha256','repaired_launcher_sha256',
+                'repaired_supervisor_sha256','coordinator_commit'}
+    if set(proof) != required or proof.get('schema') != 1 or proof.get('kind') != 'candidate188-x11-prelaunch':
+        errors.append('proof_schema')
+    for key in ('boot_id','run_id','original_manifest_sha256','original_output_sha256',
+                'ledger_sha256','failing_launcher_sha256','supervisor_sha256'):
+        if proof.get(key) != pinned.get(key): errors.append(key)
+    for key in ('launcher_log_sha256','docker_evidence_sha256'):
+        if proof.get(key) != pinned.get(key): errors.append(key)
+    inventory = proof.get('evidence_inventory')
+    if inventory != pinned.get('evidence_inventory'):
+        errors.append('evidence_inventory')
+        inventory = {}
+    evidence_raw = {}
+    for role, relative in inventory.items():
+        try: evidence_raw[role] = (ROOT/relative).read_bytes()
+        except OSError: errors.append('evidence_inventory')
+    if (sha(evidence_raw.get('launcher_log', b'')) != pinned['launcher_log_sha256'] or
+            evidence_raw.get('launcher_log') != b'error: no X11 socket at /tmp/.X11-unix/X0\n' or
+            sha(evidence_raw.get('unit_journal', b'')) != pinned['unit_journal_sha256'] or
+            sha(evidence_raw.get('failing_launcher', b'')) != pinned['failing_launcher_sha256'] or
+            sha(evidence_raw.get('failing_supervisor', b'')) != pinned['supervisor_sha256'] or
+            sha(evidence_raw.get('docker_events', b'')) != pinned['docker_evidence_sha256'] or
+            sha(evidence_raw.get('boot_ledger', b'')) != pinned['ledger_sha256'] or
+            evidence_raw.get('boot_ledger') != ledger_raw):
+        errors.append('evidence_files')
+    try:
+        docker_frozen = json.loads(evidence_raw.get('docker_events', b''))
+        if (docker_frozen.get('events') != [] or docker_frozen.get('exit_status') != 0 or
+                docker_frozen.get('stdout_sha256') != sha(b'') or
+                docker_frozen.get('service_start_realtime_us') != 1789060599622815 or
+                docker_frozen.get('service_end_realtime_us') != 1789060599863115 or
+                docker_frozen.get('command') != ['docker','events','--since',
+                    '2026-09-10T20:16:39.500+03:00','--until',
+                    '2026-09-10T20:16:40.100+03:00','--format','{{json .}}']):
+            errors.append('docker_evidence')
+    except (ValueError, TypeError, json.JSONDecodeError, AttributeError):
+        errors.append('docker_evidence')
+    if (sha(original_manifest_raw) != pinned['original_manifest_sha256'] or
+            evidence_digest(original_output)[0] != pinned['original_output_sha256']):
+        errors.append('original_output')
+    if sha(ledger_raw) != pinned['ledger_sha256']:
+        errors.append('ledger')
+    try:
+        ledger = json.loads(ledger_raw); launches = ledger.get('launches')
+        if (ledger.get('schema') != 2 or ledger.get('boot_id') != pinned['boot_id'] or
+                ledger.get('max_launches') != 3 or not isinstance(launches, list) or
+                len(launches) != 1 or launches[0].get('run_id') != pinned['run_id']):
+            errors.append('ledger')
+    except (ValueError, TypeError, json.JSONDecodeError): errors.append('ledger')
+    service = proof.get('service', {})
+    if not isinstance(service, dict): service = {}; errors.append('service')
+    if service != {'unit':'rgpu-launch-f356b4cfc9a0451a9afda1e4dfb206f0.service',
+                   'invocation_id':'3d4b03acac054b10b63dd7a842db319f',
+                   'pid':25105, 'start_us':1789060599622815,
+                   'end_us':1789060599863115, 'exit_status':1,
+                   'before_container_identification':True}:
+        errors.append('service')
+    docker_events = proof.get('docker_events', {})
+    if not isinstance(docker_events, dict): docker_events = {}; errors.append('docker_events')
+    if (set(docker_events) != {'since_us','until_us','stdout_sha256','event_count'} or
+            docker_events.get('since_us', 0) > service.get('start_us', 0) or
+            docker_events.get('until_us', 0) < service.get('end_us', 0) or
+            docker_events.get('stdout_sha256') != sha(b'') or
+            docker_events.get('event_count') != 0):
+        errors.append('docker_events')
+    replacement = json.loads(replacement_raw)
+    if not isinstance(replacement, dict):
+        raise ValueError('candidate188 prelaunch continuation refused: replacement_manifest')
+    if replacement != manifest or sha(replacement_raw) != proof.get('replacement_manifest_sha256'):
+        errors.append('replacement_manifest')
+    allowed = {'source_commit'}
+    old_compare = dict(original_manifest); new_compare = dict(replacement)
+    old_harness = dict(old_compare.get('harness_sha256', {}))
+    new_harness = dict(new_compare.get('harness_sha256', {}))
+    for name in ('macos-vm.sh','vm-supervision.py'):
+        old_harness.pop(name, None); new_harness.pop(name, None)
+    old_compare['harness_sha256'] = old_harness; new_compare['harness_sha256'] = new_harness
+    for key in allowed: old_compare.pop(key, None); new_compare.pop(key, None)
+    if old_compare != new_compare:
+        errors.append('replacement_delta')
+    if (original_manifest.get('harness_sha256', {}).get('macos-vm.sh') != pinned['failing_launcher_sha256'] or
+            original_manifest.get('harness_sha256', {}).get('vm-supervision.py') != pinned['supervisor_sha256'] or
+            replacement.get('harness_sha256', {}).get('macos-vm.sh') != proof.get('repaired_launcher_sha256') or
+            replacement.get('harness_sha256', {}).get('vm-supervision.py') != proof.get('repaired_supervisor_sha256') or
+            replacement.get('source_commit') != proof.get('coordinator_commit') or
+            command(['git','-C',str(ROOT),'rev-parse','HEAD']) != proof.get('coordinator_commit')):
+        errors.append('reviewed_repair')
+    expected_identity = {key:manifest[key] for key in observed if key in manifest}
+    if validate_identity(expected_identity, observed) or observed.get('source_clean') is not True:
+        errors.append('identity')
+    host_errors = admit(manifest, host, {host.get('boot_id')}, reuse_allowed=True)
+    errors += ['host_'+error for error in host_errors]
+    cursor, messages, faults = cursor_result
+    if not cursor or messages or faults: errors.append('kernel_cursor')
+    if active_launch_units(): errors.append('active_launch_units')
+    if prelaunch_continuation_marker(vm, pinned['boot_id'], pinned['run_id']).exists():
+        errors.append('marker_used')
+    if errors:
+        raise ValueError('candidate188 prelaunch continuation refused: '+','.join(sorted(set(errors))))
+    return ({'schema':1, 'kind':'candidate188-x11-prelaunch',
+             'boot_id':pinned['boot_id'], 'run_id':pinned['run_id'],
+             'proof':str(proof_path.resolve()), 'proof_sha256':sha(proof_raw),
+             'original_output':str(original_output.resolve()),
+             'original_output_sha256':pinned['original_output_sha256'],
+             'ledger_sha256':sha(ledger_raw),
+             'replacement_manifest_sha256':sha(replacement_raw),
+             'coordinator_commit':proof['coordinator_commit']}, ledger_path, ledger_raw)
+
+
 def validate_prelaunch_continuation(vm, manifest_path, manifest, original_output,
-                                    proof_path, observed, host, cursor_result):
+                                    proof_path, observed, host, cursor_result,
+                                    expected_proof_sha256=None):
     """Validate the single known EINVAL prelaunch failure without general retries."""
+    if (manifest.get('boot_id'), manifest.get('run_id')) == (
+            PRELAUNCH188_CONTINUATION['boot_id'], PRELAUNCH188_CONTINUATION['run_id']):
+        return validate_prelaunch188_continuation(
+            vm, manifest_path, manifest, original_output, proof_path,
+            expected_proof_sha256, observed, host, cursor_result)
     errors = []
     original_output = Path(original_output)
     proof_path = Path(proof_path)
@@ -2399,7 +2567,8 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
             candidate179_policy_sha256=None,
             candidate179_activation_sha256=None,
             one_run_policy_sha256=None,
-            one_run_activation_sha256=None):
+            one_run_activation_sha256=None,
+            prelaunch_proof_sha256=None):
     """One bounded launch; a verified prior recovery may authorize same-boot reuse."""
     one_run_requested = bool(one_run_policy_sha256 or one_run_activation_sha256)
     if bool(one_run_policy_sha256) != bool(one_run_activation_sha256):
@@ -2416,6 +2585,8 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
         qualification_label = 'one-run'
     if bool(resume_prelaunch) != bool(prelaunch_proof):
         raise ValueError('prelaunch continuation requires both evidence paths')
+    if prelaunch_proof_sha256 and not resume_prelaunch:
+        raise ValueError('prelaunch proof hash requires continuation')
     if cap_revision_authority_sha256 and resume_prelaunch:
         raise ValueError('cap revision cannot use prelaunch continuation')
     warm_requested = bool(warm_qualification_policy_sha256 or
@@ -2524,7 +2695,8 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                     continuation, continuation_ledger, continuation_ledger_bytes = \
                         validate_prelaunch_continuation(
                             vm, manifest_path, manifest, resume_prelaunch,
-                            prelaunch_proof, observed, host, cursor_result)
+                            prelaunch_proof, observed, host, cursor_result,
+                            prelaunch_proof_sha256)
                     errors = []
                 else:
                     errors = validate_identity(
@@ -2755,6 +2927,7 @@ if __name__ == '__main__':
     parser.add_argument('--gpu-less', action='store_true', help='prepare a no-passthrough coordinator validation')
     parser.add_argument('--resume-prelaunch', type=Path)
     parser.add_argument('--prelaunch-proof', type=Path)
+    parser.add_argument('--prelaunch-proof-sha256')
     parser.add_argument('--cap-revision-authority-sha256')
     parser.add_argument('--warm-qualification-policy-sha256')
     parser.add_argument('--warm-qualification-activation-sha256')
@@ -2777,6 +2950,8 @@ if __name__ == '__main__':
         parser.error('prelaunch continuation options are only valid with run')
     if bool(args.resume_prelaunch) != bool(args.prelaunch_proof):
         parser.error('prelaunch continuation requires both evidence paths')
+    if args.prelaunch_proof_sha256 and not args.resume_prelaunch:
+        parser.error('prelaunch proof hash requires continuation')
     if args.cap_revision_authority_sha256 and args.action != 'run':
         parser.error('cap revision authority is only valid with run')
     if args.cap_revision_authority_sha256 and args.resume_prelaunch:
@@ -2822,5 +2997,6 @@ if __name__ == '__main__':
                          args.candidate179_policy_sha256,
                          args.candidate179_activation_sha256,
                          args.one_run_policy_sha256,
-                         args.one_run_activation_sha256)
+                         args.one_run_activation_sha256,
+                         args.prelaunch_proof_sha256)
     print(json.dumps(result, indent=2))
