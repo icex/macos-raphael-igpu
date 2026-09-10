@@ -584,13 +584,28 @@ date for the unknown hardware defects until M2 has localized them.
 ## 7b. Candidates 181 and 182 (2026-09-10)
 
 Candidate 181 (`rgpuvmroot=3`) reached the probe commit and a GPU completion timeout after
-18 submissions; the stopped-device page directory shows `getPDEValue` output around an
-unconverted MC child address written before the conversion gate opened. Candidate 182 opens
-the gate at `AMDHWVMM::init`, samples every producer address, and walks VMID2's tables at the
-prepared phase. Run 181's recovery ended incomplete (host KIQ graphics retirement), so the
-next launch requires a fresh host boot. See `findings/experiments/metal-014-181/notes.md`.
+18 submissions. Its stopped-device page directory was reported to contain an unconverted
+MC child address. Candidate 182 opened the gate at `AMDHWVMM::init`, but still converted
+zero entries, with `inactive=0/0`; the same VMID2 fault remained. Exact KDK caller analysis
+now proves that `getPDEValue`/`getPTEValue` receive zero addresses to create templates.
+The real address reaches `updateContiguousPTEsWithDMAUsingAddr` separately. Earlier
+gate timing was therefore insufficient. Diagnostic walks occur on correlated dispatch,
+not at the prepared phase; 182's correlation failed and no walk was observed.
+
+Candidate 182's automatic cleanup after forced closure succeeded with a valid schema-6
+receipt and no recovery-interval kernel messages. M7 is still incomplete: this is one
+successful cleanup, not repeatable lifecycle qualification. M4–M6 remain incomplete.
+The unresolved fault streak is four (179–182); mandatory Astra xhigh review is in progress.
+See `status.md` and `findings/experiments/metal-015-182/notes.md` for current boot/budget facts.
 
 ## 8. Next controlled experiment
+
+**Current direction after 182:** finish and audit the mandatory Astra report, then test
+conversion of the real page-table entry source address while preserving destination and
+SYSTEM addresses. Resolve the live replay pending/terminal distinction without relaxing
+parser acceptance. Record exact success/failure observations before another bounded run.
+The numbered plan below is historical candidate-178 context; its old boot ledger does
+not describe the current host boot.
 
 1. Preserve the complete candidate-176 through candidate-178 evidence, both schema-6 receipt
    serializations from every run, all consumed authorities and activations, and every append-only

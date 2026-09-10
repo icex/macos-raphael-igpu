@@ -89,7 +89,28 @@ def validate_card(raw, expected_sha256):
             type(card.get(key)) is not type(value) or card.get(key) != value
             for key, value in exact.items()):
         raise RuntimeError("candidate card contract mismatch")
+    picker_timeout = card.get("guest_picker_timeout_seconds")
+    if (picker_timeout is not None and
+            (type(picker_timeout) is not int or
+             not 1 <= picker_timeout <= 300)):
+        raise RuntimeError("guest picker timeout must be an integer from 1 to 300 seconds")
     return card
+
+
+def apply_guest_picker_timeout(config, card):
+    """Apply an optional candidate-pinned OpenCore picker timeout in memory."""
+    timeout = card.get("guest_picker_timeout_seconds")
+    if timeout is None:
+        return
+    if type(timeout) is not int or not 1 <= timeout <= 300:
+        raise RuntimeError("guest picker timeout must be an integer from 1 to 300 seconds")
+    try:
+        boot = config["Misc"]["Boot"]
+    except (KeyError, TypeError):
+        raise RuntimeError("OpenCore Misc.Boot section is missing")
+    if boot.get("ShowPicker") is not True:
+        raise RuntimeError("guest picker timeout requires ShowPicker=true")
+    boot["Timeout"] = timeout
 
 
 def load_module(name, path):
@@ -237,6 +258,7 @@ def make_staged_config(experiment, card, run_id):
     xml = original.index(b"<?xml")
     header = original[:xml]
     config = plistlib.loads(original[xml:])
+    apply_guest_picker_timeout(config, card)
     nvram = config["NVRAM"]["Add"][experiment.BOOT_GUID]
     old_words = nvram["boot-args"].split()
     retired = {"rgpucp", "rgpureset", "rgpuic", "rgpurlc", "rgpufb"}

@@ -40,10 +40,10 @@ class Candidate180MetadataTests(unittest.TestCase):
 
     def test_bundle_and_release_metadata_are_exact_candidate_version(self):
         info = plistlib.loads((ROOT / 'kext/Info.plist').read_bytes())
-        self.assertEqual(info['CFBundleShortVersionString'], '1.0.182')
-        self.assertEqual(info['CFBundleVersion'], '1.0.182')
+        self.assertEqual(info['CFBundleShortVersionString'], '1.0.183')
+        self.assertEqual(info['CFBundleVersion'], '1.0.183')
         notes = (ROOT / 'docs/release-notes.md').read_text()
-        self.assertTrue(notes.startswith('Experimental RaphaelGPU 1.0.182 '))
+        self.assertTrue(notes.startswith('Experimental RaphaelGPU 1.0.183 '))
 
     def test_candidate182_card_keeps_conversion_and_adds_early_gate(self):
         previous = json.loads((ROOT / 'experiments/metal-014.json').read_text())

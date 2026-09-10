@@ -35,6 +35,8 @@
 #include "SdmaTopology.hpp"
 #include "SdmaAddresses.hpp"
 #include "GpuVmDiagnostics.hpp"
+#include "VmEntryUpdate.hpp"
+#include "VmProgramCorrelation.hpp"
 #include "ObservationBuffer.hpp"
 #include "SubmissionTrace.hpp"
 #include "BackingTrace.hpp"
@@ -203,8 +205,9 @@ static rgpu::DiagnosticRecords<256, 512> diagnostics {};
 // Candidate submission tracing can add at most 211 records: 64 ordinary, 32
 // notable, 32 original summaries, 8 phase samples, 32 phase summaries, four
 // backing-allocation samples, 32 backing summaries and seven route/readiness
-// records. 512 retains that bounded set alongside the existing
-// VM/SDMA evidence budget.
+// records. Mode 4 adds at most 69 exponential/safety summaries, 24 returned-call
+// samples, eight submit-correlation records and one route record. 512 retains
+// that bounded set alongside the existing VM/SDMA evidence budget.
 static rgpu::DiagnosticRecords<rgpu::kCriticalRecordCapacity, 512> criticalRecords {};
 static rgpu::SuccessRecordBudget waitStampRecordBudget {};
 static rgpu::SuccessRecordBudget kiqSubmitRecordBudget {};
@@ -219,11 +222,13 @@ static volatile uint32_t nextSubmissionTraceSequence = 0;
 static bool submissionTraceEnabled = false;
 static volatile bool submissionTraceRoutesReady = false;
 static bool vmRootFixEnabled = false;
-// rgpuvmroot: 1 repairs only the VMID2 root, 2 also converts child PDE table
-// addresses, 3 also converts non-SYSTEM (video-memory) PTE page addresses.
+// rgpuvmroot: 1 repairs only the VMID2 root; 2/3 retain the historical template
+// hooks; 4 converts the separately supplied real entry source at the SDMA update
+// boundary verified in X6000 24G830.
 static uint32_t vmRootFixMode = 0;
 static mach_vm_address_t orgVmmGetPde {};
 static mach_vm_address_t orgVmmGetPte {};
+static mach_vm_address_t orgVmmUpdateEntries {};
 // Page-table entry conversions: lifetime counters per kind and domain, plus a
 // bounded first-sample buffer per kind. Producers never log, allocate or wait.
 static volatile uint64_t vmEntryCounts[2][RaphaelVm::kEntryDomainCount] {};
@@ -232,6 +237,10 @@ static volatile uint64_t vmEntryCounts[2][RaphaelVm::kEntryDomainCount] {};
 // producer cannot hide behind the active-phase counters.
 static volatile uint64_t vmEntryInactive[2] {};
 static rgpu::ObservationBuffer<RaphaelVm::EntryConversionSample, 8> vmEntrySamples[2] {};
+static volatile uint64_t vmUpdateCounts[RaphaelVm::kUpdateDomainCount] {};
+static rgpu::ObservationBuffer<RaphaelVm::EntryUpdateDecision, 8> vmUpdateChildSamples {};
+static rgpu::ObservationBuffer<RaphaelVm::EntryUpdateDecision, 8> vmUpdateEligibleSamples {};
+static rgpu::ObservationBuffer<RaphaelVm::EntryUpdateDecision, 8> vmUpdateControlSamples {};
 static volatile bool raphaelTargetConfirmed = false;
 // Published once by the early framebuffer callback and read later by the VM
 // callback. Keeping this snapshot avoids MMIO under X6000's unknown VM locks.
@@ -533,6 +542,7 @@ static constexpr size_t kOffVmmPrepare  = 0x6249c;    // __ZN26AMDRadeonX6000_AM
 static constexpr size_t kOffVmmProgInv  = 0x6278a;    // AMDGFX10VMM::programAndInvalidateVM [x6]
 static constexpr size_t kOffVmmGetPde   = 0x629c6;    // __ZN26AMDRadeonX6000_AMDGFX10VMM11getPDEValueE15eAMD_VMPT_LEVELy [x6]
 static constexpr size_t kOffVmmGetPte   = 0x62a14;    // __ZN26AMDRadeonX6000_AMDGFX10VMM11getPTEValueE15eAMD_VMPT_LEVELyN24AMDRadeonX6000_IAMDHWVMM10VmMapFlagsEj [x6]
+static constexpr size_t kOffVmmUpdateEntries = 0x55cda; // __ZN29AMDRadeonX6000_AMDHWVMContext36updateContiguousPTEsWithDMAUsingAddrEyyyyy [x6]
 static constexpr size_t kOffAccPowerUpHW = 0x4e0c;   // AMDGraphicsAccelerator::powerUpHW [x6]
 static constexpr size_t kOffHwPowerUp    = 0x99618;  // AMDNavi23Hardware::powerUp [x6]
 static constexpr size_t kOffGfx10PowerUp = 0x73e68;  // AMDGFX10Hardware::powerUp [x6]
@@ -4077,7 +4087,7 @@ static uint64_t convertVmEntryAddress(RaphaelVm::EntryKind kind, uint32_t level,
 }
 
 static bool vmEntryConversionActive(uint32_t minimumMode) {
-    return vmRootFixMode >= minimumMode &&
+    return vmRootFixMode >= minimumMode && vmRootFixMode <= 3 &&
         __atomic_load_n(&raphaelTargetConfirmed, __ATOMIC_ACQUIRE) &&
         __atomic_load_n(&cachedFbPublished, __ATOMIC_ACQUIRE);
 }
@@ -4102,6 +4112,45 @@ static uint64_t wrapVmmGetPte(void *self, uint32_t level, uint64_t address,
         __atomic_fetch_add(&vmEntryInactive[1], 1u, __ATOMIC_RELAXED);
     return FunctionCast(wrapVmmGetPte, orgVmmGetPte)(self, level, address, flags,
                                                      fragment);
+}
+
+// X6000 24G830 builds an attribute-only PDE/PTE template, then passes the real
+// address separately in the third numeric argument here. Candidate 182's
+// getPDEValue/getPTEValue hooks therefore never saw that address. Convert only
+// this source operand; destination, count, template and increment remain native.
+// This callback can run under X6000 VM locks, so it uses only cached state, pure
+// arithmetic, atomics and bounded append-only observations.
+static void wrapVmmUpdateEntries(void *self, uint64_t destination, uint64_t count,
+                                 uint64_t source, uint64_t templateValue,
+                                 uint64_t increment) {
+    const uint64_t returnAddress =
+        reinterpret_cast<uint64_t>(__builtin_return_address(0));
+    const uint64_t callerOffset = x6Base != 0 && returnAddress >= x6Base
+        ? returnAddress - x6Base : UINT64_MAX;
+    const bool active = vmRootFixMode == 4 &&
+        __atomic_load_n(&raphaelTargetConfirmed, __ATOMIC_ACQUIRE) &&
+        __atomic_load_n(&cachedFbPublished, __ATOMIC_ACQUIRE);
+    const auto decision = RaphaelVm::prepareEntryUpdate(
+        active,
+        __atomic_load_n(&cachedFbBase, __ATOMIC_RELAXED),
+        __atomic_load_n(&cachedFbTop, __ATOMIC_RELAXED),
+        __atomic_load_n(&cachedFbOffset, __ATOMIC_RELAXED),
+        callerOffset, destination, count, source, templateValue, increment);
+    auto native = FunctionCast(wrapVmmUpdateEntries, orgVmmUpdateEntries);
+    RaphaelVm::forwardEntryUpdate(native, self, decision);
+
+    if (decision.domain == RaphaelVm::UpdateDomain::Converted) {
+        if (decision.producer == RaphaelVm::UpdateProducer::Child)
+            vmUpdateChildSamples.append(decision);
+        else
+            vmUpdateEligibleSamples.append(decision);
+    } else {
+        vmUpdateControlSamples.append(decision);
+    }
+    // Publish the cumulative returned-call count after the corresponding
+    // sample is either ready or deliberately omitted by the bounded buffer.
+    __atomic_fetch_add(&vmUpdateCounts[static_cast<size_t>(decision.domain)], 1u,
+                       __ATOMIC_RELEASE);
 }
 
 static bool recoveryLeaseDisjointFromLiveGart(
@@ -4671,22 +4720,6 @@ static bool vmid2Aperture(RaphaelVm::FramebufferAperture &aperture) {
     return RaphaelVm::validAperture(aperture);
 }
 
-static bool submitFitsProgram(const RaphaelSdma::SubmitInfoObservation &submit,
-                              const RaphaelVm::PreparedRequest &program) {
-    if (!submit.layoutValid || submit.vmid != 2 || !program.valid ||
-        program.request.hub != 0 || program.request.vmid != 2 ||
-        !program.request.reprogram || submit.entries == 0 || submit.entries > 4)
-        return false;
-    bool sawAddress = false;
-    for (uint32_t n = 0; n < submit.entries; ++n) {
-        const uint64_t address = submit.addresses[n];
-        if (address == 0) continue;
-        sawAddress = true;
-        if (address < program.request.start || address > program.request.end) return false;
-    }
-    return sawAddress;
-}
-
 static void reportVmid2Walk(uint32_t sequence, const RaphaelVm::PreparedRequest &program,
                             const RaphaelSdma::SubmitInfoObservation &submit,
                             uint64_t contextStart) {
@@ -5135,7 +5168,7 @@ static void publishPendingSubmissionTrace() {
 // Bounded summary of the child PDE / VRAM PTE conversions: at most 24 changed
 // summaries plus the first four converted samples of each kind.
 static void publishPendingVmEntryConversions() {
-    if (vmRootFixMode < 2) return;
+    if (vmRootFixMode < 2 || vmRootFixMode > 3) return;
     static uint64_t lastTotal = 0;
     static unsigned summaries = 0;
     static size_t sampleCursor[2] {};
@@ -5170,6 +5203,68 @@ static void publishPendingVmEntryConversions() {
                   sample.level, sample.flags, sample.original, sample.result,
                   RaphaelVm::entryDomainName(sample.domain));
         }
+    }
+}
+
+static void publishVmUpdateSample(const char *bucket,
+                                  const RaphaelVm::EntryUpdateDecision &sample) {
+    CRLOG("VM: entry-update-sample bucket=%s caller=x6+0x%llx producer=%s domain=%s "
+          "destination=0x%llx count=%llu source=0x%llx result=0x%llx template=0x%llx "
+          "increment=0x%llx constructed=0x%llx state=returned",
+          bucket, sample.callerOffset, RaphaelVm::updateProducerName(sample.producer),
+          RaphaelVm::updateDomainName(sample.domain), sample.destination, sample.count,
+          sample.source, sample.result, sample.templateValue, sample.increment,
+          sample.constructed);
+}
+
+// Cumulative snapshots use exponential activity thresholds plus immediate first
+// conversion/safety-domain signals. They remain bounded without requiring a
+// continuously active callback stream to become quiet.
+static void publishPendingVmEntryUpdates() {
+    if (vmRootFixMode != 4) return;
+    static RaphaelVm::UpdateSummarySchedule summarySchedule {};
+    static size_t childCursor = 0;
+    static size_t eligibleCursor = 0;
+    static size_t controlCursor = 0;
+    uint64_t counts[RaphaelVm::kUpdateDomainCount] {};
+    for (size_t n = 0; n < RaphaelVm::kUpdateDomainCount; ++n)
+        counts[n] = __atomic_load_n(&vmUpdateCounts[n], __ATOMIC_ACQUIRE);
+    if (summarySchedule.shouldPublish(counts)) {
+        using D = RaphaelVm::UpdateDomain;
+        CRLOG("VM: entry-update mode=4 route=%u inactive=%llu converted=%llu physical=%llu "
+              "outside=%llu system=%llu invalid-template=%llu invalid-aperture=%llu "
+              "empty=%llu overflow=%llu span=%llu zero=%llu omitted-child=%llu "
+              "omitted-eligible=%llu omitted-control=%llu",
+              orgVmmUpdateEntries != 0,
+              counts[static_cast<size_t>(D::Inactive)],
+              counts[static_cast<size_t>(D::Converted)],
+              counts[static_cast<size_t>(D::AlreadyPhysical)],
+              counts[static_cast<size_t>(D::Outside)],
+              counts[static_cast<size_t>(D::System)],
+              counts[static_cast<size_t>(D::InvalidTemplate)],
+              counts[static_cast<size_t>(D::InvalidAperture)],
+              counts[static_cast<size_t>(D::Empty)],
+              counts[static_cast<size_t>(D::Overflow)],
+              counts[static_cast<size_t>(D::SpanOutside)],
+              counts[static_cast<size_t>(D::ZeroSource)],
+              vmUpdateChildSamples.dropped(), vmUpdateEligibleSamples.dropped(),
+              vmUpdateControlSamples.dropped());
+    }
+    RaphaelVm::EntryUpdateDecision sample {};
+    while (childCursor < vmUpdateChildSamples.size() &&
+           vmUpdateChildSamples.read(childCursor, sample)) {
+        ++childCursor;
+        publishVmUpdateSample("child", sample);
+    }
+    while (eligibleCursor < vmUpdateEligibleSamples.size() &&
+           vmUpdateEligibleSamples.read(eligibleCursor, sample)) {
+        ++eligibleCursor;
+        publishVmUpdateSample("eligible", sample);
+    }
+    while (controlCursor < vmUpdateControlSamples.size() &&
+           vmUpdateControlSamples.read(controlCursor, sample)) {
+        ++controlCursor;
+        publishVmUpdateSample("control", sample);
     }
 }
 
@@ -5212,39 +5307,25 @@ static void publishPendingVmObservations() {
     RaphaelSdma::SubmitInfoObservation submit {};
     while (submitCursor < vmid2Submits.size() && vmid2Submits.read(submitCursor, submit)) {
         ++submitCursor;
-        const RaphaelVm::PreparedRequest *matched = nullptr;
-        for (size_t n = programCount; n > 0; --n) {
-            const auto &candidate = programCache[n - 1];
-            if (candidate.threadToken == submit.threadToken &&
-                candidate.sequence == submit.vmProgramSequence &&
-                candidate.sequence < submit.eventOrder &&
-                submitFitsProgram(submit, candidate)) {
-                matched = &candidate;
-                break;
-            }
-        }
-        // A later prepare on the same thread can publish between the target prepare
-        // and this callback. Recover the exact predecessor from the bounded copies,
-        // but never pair across threads or outside the captured VM range.
-        if (matched == nullptr) {
-            for (size_t n = programCount; n > 0; --n) {
-                const auto &candidate = programCache[n - 1];
-                if (candidate.threadToken == submit.threadToken &&
-                    candidate.sequence < submit.eventOrder &&
-                    submitFitsProgram(submit, candidate)) {
-                    matched = &candidate;
-                    break;
-                }
-            }
-        }
+        const uint32_t hint = submit.vmProgramSequence;
+        const auto correlation = RaphaelVm::correlateSubmit(
+            submit, programCache, programCount);
+        const RaphaelVm::PreparedRequest *matched =
+            correlation.matchedIndex != RaphaelVm::kNoProgramMatch
+                ? &programCache[correlation.matchedIndex] : nullptr;
         submit.vmProgramSequence = matched != nullptr ? matched->sequence : 0;
         CRLOG("SD: submit vmid=%u flags=%#x entries=%u valid=%u IB0=%#llx IB1=%#llx seq=%u",
               submit.vmid, submit.flags, submit.entries, submit.layoutValid,
               submit.addresses[0], submit.addresses[1], submit.vmProgramSequence);
-        if (matched == nullptr) {
-            CRLOG("VM: submit-correlation refused: vmid=%u thread=%#llx no in-range program",
-                  submit.vmid, static_cast<uint64_t>(submit.threadToken));
-        }
+        CRLOG("VM: correlate-submit order=%u thread=0x%llx hint=%u result=%u reason=%s "
+              "retained=%llu same-thread=%llu earlier=%llu in-range=%llu",
+              submit.eventOrder, static_cast<uint64_t>(submit.threadToken), hint,
+              submit.vmProgramSequence,
+              RaphaelVm::correlationReasonName(correlation.reason),
+              static_cast<uint64_t>(correlation.retained),
+              static_cast<uint64_t>(correlation.sameThread),
+              static_cast<uint64_t>(correlation.earlier),
+              static_cast<uint64_t>(correlation.inRange));
         if (submit.layoutValid && matched != nullptr && sampledSequence == 0) {
             sampledSequence = matched->sequence;
             reportVmid2Runtime("dispatch+0ms", sampledSequence, *matched, &submit, true);
@@ -5257,6 +5338,7 @@ static void publishPendingVmObservations() {
         }
     }
     publishPendingVmEntryConversions();
+    publishPendingVmEntryUpdates();
     publishPendingSubmissionTrace();
 }
 
@@ -5860,7 +5942,7 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
             CRLOG("VM: route AMDGFX10VMM::prepareVMInvalidateRequest -> %s (org=0x%llx)",
                   orgVmmPrepare ? "ok" : "FAILED", orgVmmPrepare);
             patcher.clearError();
-            if (vmRootFixMode >= 2) {
+            if (vmRootFixMode >= 2 && vmRootFixMode <= 3) {
                 // Complete displaced spans of 14 and 15 bytes with no branch or
                 // RIP-relative operand; getPDEValue's first jne begins at +14.
                 static const uint8_t pdeEntry[] = {0x55, 0x48, 0x89, 0xe5, 0xff, 0xc6,
@@ -5875,7 +5957,7 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
                 CRLOG("VM: route AMDGFX10VMM::getPDEValue -> %s (entry=%u org=0x%llx)",
                       orgVmmGetPde ? "ok" : "FAILED", pdeMatches, orgVmmGetPde);
                 patcher.clearError();
-                if (vmRootFixMode >= 3) {
+                if (vmRootFixMode == 3) {
                     const bool pteMatches = entryMatches(addr, sz, kOffVmmGetPte,
                                                          pteEntry, sizeof(pteEntry));
                     if (pteMatches)
@@ -5885,6 +5967,26 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
                           orgVmmGetPte ? "ok" : "FAILED", pteMatches, orgVmmGetPte);
                     patcher.clearError();
                 }
+            }
+            if (vmRootFixMode == 4) {
+                // Complete first 17 bytes: frame setup, callee-saved pushes and
+                // stack allocation. No branch or RIP-relative operand occurs in
+                // this guarded span in the pinned 24G830 X6000 image.
+                static const uint8_t updateEntry[] = {
+                    0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41,
+                    0x55, 0x41, 0x54, 0x53, 0x48, 0x83, 0xec, 0x48};
+                const bool updateMatches = entryMatches(
+                    addr, sz, kOffVmmUpdateEntries, updateEntry,
+                    sizeof(updateEntry));
+                if (updateMatches)
+                    orgVmmUpdateEntries = patcher.routeFunction(
+                        addr + kOffVmmUpdateEntries,
+                        reinterpret_cast<mach_vm_address_t>(wrapVmmUpdateEntries), true);
+                CRLOG("VM: route AMDHWVMContext::updateContiguousPTEsWithDMAUsingAddr "
+                      "-> %s (entry=%u org=0x%llx)",
+                      orgVmmUpdateEntries ? "ok" : "FAILED", updateMatches,
+                      orgVmmUpdateEntries);
+                patcher.clearError();
             }
             if (ptbFixMode != 2) {
                 orgVmmProgInv = patcher.routeFunction(addr + kOffVmmProgInv,
@@ -6116,13 +6218,15 @@ static void pluginStart() {
              : ptbm == 1 ? "legacy post-invalidation PTB experiment" : "reporting only");
     }
     uint32_t vmroot = 0;
-    if (PE_parse_boot_argn("rgpuvmroot", &vmroot, sizeof(vmroot)) && vmroot <= 3)
+    if (PE_parse_boot_argn("rgpuvmroot", &vmroot, sizeof(vmroot)) && vmroot <= 4)
         vmRootFixMode = vmroot;
     vmRootFixEnabled = vmRootFixMode >= 1;
     RLOG("rgpuvmroot=%u: VMID2 GFXHUB root MC-to-physical repair %s; child PDE "
-         "conversion %s; video-memory PTE conversion %s",
+         "template conversion %s; video-memory PTE template conversion %s; real entry "
+         "source conversion %s",
          vmRootFixMode, vmRootFixEnabled ? "ARMED" : "off",
-         vmRootFixMode >= 2 ? "ARMED" : "off", vmRootFixMode >= 3 ? "ARMED" : "off");
+         vmRootFixMode == 2 || vmRootFixMode == 3 ? "ARMED" : "off",
+         vmRootFixMode == 3 ? "ARMED" : "off", vmRootFixMode == 4 ? "ARMED" : "off");
     uint32_t mem = 0;
     if (PE_parse_boot_argn("rgpumem", &mem, sizeof(mem)) && mem <= 1) {
         memProbeMode = mem;

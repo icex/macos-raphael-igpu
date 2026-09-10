@@ -34,6 +34,10 @@ jobs:
           /tmp/critical-replay-test
           g++ -std=c++17 -Wall -Wextra -Werror -pthread -fsanitize=address,undefined tests/test_recovery_lifetime.cpp -o /tmp/recovery-lifetime-test
           /tmp/recovery-lifetime-test
+          g++ -std=c++17 -Wall -Wextra -Werror -fsanitize=address,undefined tests/test_vm_entry_update.cpp -o /tmp/vm-entry-update-test
+          ASAN_OPTIONS=detect_leaks=1 /tmp/vm-entry-update-test
+          g++ -std=c++17 -Wall -Wextra -Werror -fsanitize=address,undefined tests/test_vm_program_correlation.cpp -o /tmp/vm-program-correlation-test
+          ASAN_OPTIONS=detect_leaks=1 /tmp/vm-program-correlation-test
   build:
     needs: test
     runs-on: macos-15-intel

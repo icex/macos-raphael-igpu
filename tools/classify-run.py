@@ -7,6 +7,15 @@ from pathlib import Path
 import re
 import struct
 
+ENTRY_MC_BASE = 0xf400000000
+ENTRY_PHYSICAL_BASE = 0x840000000
+ENTRY_APERTURE_SIZE = 0x20000000
+ENTRY_CHILD_CALLER = 0x55a72
+ENTRY_UPDATE_COUNT_KEYS = (
+    'converted', 'physical', 'outside', 'system', 'invalid_template',
+    'invalid_aperture', 'empty', 'overflow', 'span', 'zero')
+ENTRY_UPDATE_OMISSION_KEYS = ('child', 'eligible', 'control')
+
 
 def _recovery_lease_v2():
     path = Path(__file__).with_name('recovery_lease_v2.py')
@@ -200,6 +209,82 @@ def _decode_payload(build, seq, payload):
         row.update(kind='vm_entry_sample', entry=m[1], level=int(m[2]),
                    flags=int(m[3], 16), original=int(m[4], 16), result=int(m[5], 16),
                    domain=m[6])
+    elif m := re.fullmatch(
+            r'VM: route AMDHWVMContext::updateContiguousPTEsWithDMAUsingAddr '
+            r'-> (ok|FAILED) \(entry=([01]) org=(0x[0-9a-fA-F]+)\)', payload):
+        row.update(kind='vm_entry_update_route', ok=m[1] == 'ok',
+                   entry=bool(int(m[2])), original=int(m[3], 16))
+    elif payload.startswith(
+            'VM: route AMDHWVMContext::updateContiguousPTEsWithDMAUsingAddr'):
+        row.update(kind='vm_entry_update_route', ok=False, malformed=True)
+    elif m := re.fullmatch(
+            r'VM: entry-update mode=(\d+) route=([01]) inactive=(\d+) '
+            r'converted=(\d+) physical=(\d+) outside=(\d+) system=(\d+) '
+            r'invalid-template=(\d+) invalid-aperture=(\d+) empty=(\d+) '
+            r'overflow=(\d+) span=(\d+) zero=(\d+) '
+            r'omitted-child=(\d+) omitted-eligible=(\d+) omitted-control=(\d+)',
+            payload):
+        names = ('converted', 'physical', 'outside', 'system', 'invalid_template',
+                 'invalid_aperture', 'empty', 'overflow', 'span', 'zero')
+        row.update(kind='vm_entry_update', mode=int(m[1]), route=bool(int(m[2])),
+                   inactive=int(m[3]),
+                   counts={name:int(m[index]) for index, name in enumerate(names, 4)},
+                   omitted={'child':int(m[14]), 'eligible':int(m[15]),
+                            'control':int(m[16])}, ok=True)
+    elif payload.startswith('VM: entry-update mode='):
+        row.update(kind='vm_entry_update', ok=False, malformed=True)
+    elif m := re.fullmatch(
+            r'VM: entry-update-sample bucket=(child|eligible|control) '
+            r'caller=x6\+(0x[0-9a-fA-F]+) producer=(child|leaf|unmap|other) '
+            r'domain=(converted|physical|outside|system|invalid-template|'
+            r'invalid-aperture|empty|overflow|span|zero) '
+            r'destination=(0x[0-9a-fA-F]+) count=(\d+) '
+            r'source=(0x[0-9a-fA-F]+) result=(0x[0-9a-fA-F]+) '
+            r'template=(0x[0-9a-fA-F]+) increment=(0x[0-9a-fA-F]+) '
+            r'constructed=(0x[0-9a-fA-F]+) state=returned', payload):
+        row.update(kind='vm_entry_update_sample', bucket=m[1], caller=int(m[2], 16),
+                   producer=m[3], domain=m[4], destination=int(m[5], 16),
+                   count=int(m[6]), source=int(m[7], 16), result=int(m[8], 16),
+                   template=int(m[9], 16), increment=int(m[10], 16),
+                   constructed=int(m[11], 16), state='returned', ok=True)
+    elif payload.startswith('VM: entry-update-sample'):
+        row.update(kind='vm_entry_update_sample', ok=False, malformed=True)
+    elif m := re.fullmatch(
+            r'VM: correlate-submit order=(\d+) thread=(0x[0-9a-fA-F]+) '
+            r'hint=(\d+) result=(\d+) reason=(matched|invalid-submit|no-program|'
+            r'no-same-thread|no-earlier|no-in-range) retained=(\d+) '
+            r'same-thread=(\d+) earlier=(\d+) in-range=(\d+)', payload):
+        result = int(m[4])
+        reason = m[5]
+        retained = int(m[6])
+        predicate_counts = tuple(int(m[index]) for index in range(7, 10))
+        same_thread_count, earlier_count, in_range_count = predicate_counts
+        same_thread, earlier, in_range = (
+            value > 0 for value in predicate_counts)
+        hierarchy = (retained >= same_thread_count >= earlier_count >=
+                     in_range_count)
+        expected = {
+            'matched': (result > 0 and retained > 0 and same_thread and earlier and
+                        in_range),
+            'invalid-submit': (result == 0 and not same_thread and not earlier and
+                               not in_range),
+            'no-program': (result == 0 and retained == 0 and not same_thread and
+                           not earlier and not in_range),
+            'no-same-thread': (result == 0 and retained > 0 and not same_thread and
+                               not earlier and not in_range),
+            'no-earlier': (result == 0 and same_thread and not earlier and
+                           not in_range),
+            'no-in-range': (result == 0 and same_thread and earlier and not in_range),
+        }
+        consistent = hierarchy and expected[reason]
+        row.update(kind='vm_submit_correlation', order=int(m[1]),
+                   thread=int(m[2], 16), hint=int(m[3]), result=result,
+                   reason=reason, retained=retained,
+                   same_thread=predicate_counts[0], earlier=predicate_counts[1],
+                   in_range=predicate_counts[2], ok=consistent,
+                   malformed=not consistent)
+    elif payload.startswith('VM: correlate-submit'):
+        row.update(kind='vm_submit_correlation', ok=False, malformed=True)
     elif m := re.fullmatch(r'VM: route AMDGFX10VMM::(getPDEValue|getPTEValue) -> (ok|FAILED) \(entry=([01]) org=(0x[0-9a-fA-F]+)\)', payload):
         row.update(kind='vm_entry_route', method=m[1], ok=m[2] == 'ok',
                    entry=bool(int(m[3])))
@@ -453,9 +538,13 @@ def parse_serial(serial, *, critical_replay_schema=None, expected_build=None,
             open_attempt=critical_replay_tolerance == 'terminal-prefix-open')
     except replay.CriticalReplayError as error:
         message = str(error)
+        recoverable_missing_chunk = (
+            critical_replay_tolerance == replay.TOLERANCE_TERMINAL_PREFIX and
+            message == 'CR2 snapshot has a missing chunk')
         pending = any(fragment in message for fragment in (
             'missing CR2 transport', 'missing END', 'incomplete transport line',
-            'latest attempt is incomplete', 'after the terminal manifest'))
+            'latest attempt is incomplete', 'after the terminal manifest')) or \
+            recoverable_missing_chunk
         return [dict(kind='capture_loss', build=expected_build,
                      reason='CR2: ' + message, definitive=not pending)]
     synthetic = (
@@ -595,11 +684,136 @@ def _classify(manifest, events, probe, defer_absent_workload=False):
                                  any(r['kind'] in post_workload_kinds for r in events))
     if 'vmid2_entry_gate' in required:
         gates = [r for r in events if r['kind'] == 'vm_entry_gate']
+        expected_mode = 4 if 'vmid2_entry_update' in required else 3
         if not gates:
             return verdict('INCONCLUSIVE', stage='vmid2_entry_gate_missing')
         if (len(gates) != 1 or not gates[0].get('marked') or
-                not gates[0].get('aperture') or gates[0].get('mode') != 3):
+                not gates[0].get('aperture') or
+                gates[0].get('mode') != expected_mode):
             return verdict('INVALID', stage='vmid2_entry_gate_state')
+    correlations = [r for r in events if r['kind'] == 'vm_submit_correlation']
+    if any(not r.get('ok') for r in correlations):
+        return verdict('INVALID', stage='vmid2_submit_correlation_malformed')
+    if 'vmid2_entry_update' in required:
+        routes = [r for r in events if r['kind'] == 'vm_entry_update_route']
+        if (len(routes) != 1 or not routes[0].get('ok') or
+                not routes[0].get('entry')):
+            return verdict('INVALID', stage='vmid2_entry_update_route_guard')
+        summaries = [r for r in events if r['kind'] == 'vm_entry_update']
+        if not summaries:
+            return verdict('INCONCLUSIVE', stage='vmid2_entry_update_missing')
+        if any(not row.get('ok') for row in summaries):
+            return verdict('INVALID', stage='vmid2_entry_update_state')
+        previous = None
+        for row in summaries:
+            row_counts = row.get('counts')
+            row_omitted = row.get('omitted')
+            if (not isinstance(row_counts, dict) or
+                    set(row_counts) != set(ENTRY_UPDATE_COUNT_KEYS) or
+                    any(type(value) is not int or value < 0
+                        for value in row_counts.values()) or
+                    not isinstance(row_omitted, dict) or
+                    set(row_omitted) != set(ENTRY_UPDATE_OMISSION_KEYS) or
+                    any(type(value) is not int or value < 0
+                        for value in row_omitted.values()) or
+                    type(row.get('inactive')) is not int or
+                    row.get('inactive') < 0):
+                return verdict('INVALID', stage='vmid2_entry_update_state')
+            current = ((row['inactive'],) +
+                       tuple(row_counts[key] for key in ENTRY_UPDATE_COUNT_KEYS) +
+                       tuple(row_omitted[key] for key in ENTRY_UPDATE_OMISSION_KEYS))
+            if (previous is not None and
+                    any(value < old for value, old in zip(current, previous))):
+                return verdict('INVALID', stage='vmid2_entry_update_state')
+            previous = current
+        if any(row.get('mode') != 4 or row.get('route') is not True
+               for row in summaries):
+            return verdict('INVALID', stage='vmid2_entry_update_state')
+        summary = summaries[-1]
+        counts = summary.get('counts')
+        omitted = summary.get('omitted')
+        if (summary.get('mode') != 4 or summary.get('route') is not True or
+                summary.get('inactive') != 0 or
+                any(counts.get(key) for key in ('invalid_aperture', 'overflow', 'span'))):
+            return verdict('INVALID', stage='vmid2_entry_update_state')
+        samples = [r for r in events if r['kind'] == 'vm_entry_update_sample']
+        if any(not r.get('ok') for r in samples):
+            return verdict('INVALID', stage='vmid2_entry_update_sample_malformed')
+
+        domain_keys = {
+            'converted':'converted', 'physical':'physical', 'outside':'outside',
+            'system':'system', 'invalid-template':'invalid_template',
+            'invalid-aperture':'invalid_aperture', 'empty':'empty',
+            'overflow':'overflow', 'span':'span', 'zero':'zero'}
+        for row in samples:
+            key = domain_keys.get(row.get('domain'))
+            if key is None:
+                return verdict('INVALID', stage='vmid2_entry_update_sample_malformed')
+            caller = row.get('caller')
+            expected_producer = ('leaf' if caller == 0x559dc else
+                                 'child' if caller == ENTRY_CHILD_CALLER else
+                                 'unmap' if caller == 0x561f6 else 'other')
+            if row.get('producer') != expected_producer:
+                return verdict('INVALID', stage='vmid2_entry_update_sample_malformed')
+        if any(row.get('domain') == 'converted' and
+               row.get('bucket') not in ('child', 'eligible')
+               for row in samples):
+            return verdict('INVALID', stage='vmid2_entry_update_control')
+        if any(row.get('domain') in ('invalid-aperture', 'overflow', 'span')
+               for row in samples):
+            return verdict('INVALID', stage='vmid2_entry_update_state')
+        controls = [row for row in samples if row.get('domain') != 'converted']
+        if any(row.get('bucket') != 'control' or
+               type(row.get('source')) is not int or
+               type(row.get('result')) is not int or
+               row.get('source') != row.get('result') or
+               type(row.get('template')) is not int or
+               type(row.get('constructed')) is not int or
+               row.get('constructed') != row.get('template') | row.get('result') or
+               row.get('state') != 'returned' for row in controls):
+            return verdict('INVALID', stage='vmid2_entry_update_control')
+
+        def valid_converted(row):
+            source = row.get('source')
+            result = row.get('result')
+            template = row.get('template')
+            constructed = row.get('constructed')
+            count = row.get('count')
+            increment = row.get('increment')
+            if (type(source) is not int or type(result) is not int or
+                    type(template) is not int or type(constructed) is not int or
+                    type(count) is not int or count <= 0 or
+                    type(increment) is not int or increment < 0):
+                return False
+            steps = count - 1
+            if increment and steps > ((1 << 64) - 1) // increment:
+                return False
+            span = steps * increment
+            if source > (1 << 64) - 1 - span:
+                return False
+            return (template & 1 == 1 and template & 2 == 0 and
+                    ENTRY_MC_BASE <= source < ENTRY_MC_BASE + ENTRY_APERTURE_SIZE and
+                    source + span < ENTRY_MC_BASE + ENTRY_APERTURE_SIZE and
+                    ENTRY_PHYSICAL_BASE <= result <
+                        ENTRY_PHYSICAL_BASE + ENTRY_APERTURE_SIZE and
+                    result + span < ENTRY_PHYSICAL_BASE + ENTRY_APERTURE_SIZE and
+                    result == source - ENTRY_MC_BASE + ENTRY_PHYSICAL_BASE and
+                    constructed == template | result and
+                    row.get('bucket') in ('child', 'eligible') and
+                    row.get('state') == 'returned')
+
+        converted = [r for r in samples if r.get('domain') == 'converted']
+        if any(not valid_converted(row) for row in converted):
+            return verdict('INVALID', stage='vmid2_entry_update_child_invalid')
+        children = [r for r in converted if r.get('bucket') == 'child' and
+                    r.get('producer') == 'child' and
+                    r.get('caller') == ENTRY_CHILD_CALLER and r.get('count') == 1]
+        if not children:
+            return verdict('INCONCLUSIVE', stage='vmid2_entry_update_child_missing')
+        if any(r['kind'] == 'vm_fault' and r.get('fault_status')
+               for r in events):
+            return verdict('EXECUTION_FAILED', True, 'vmid2_mapping_fault',
+                           'the VMID2 mapping still faults; do not retry unchanged')
     if 'sdma_vm_program' in required:
         program_routes = [r for r in events if r['kind'] == 'vm_program_route']
         if len(program_routes) != 1 or not program_routes[0].get('ok'):
@@ -657,25 +871,26 @@ def _classify(manifest, events, probe, defer_absent_workload=False):
                            next_action='inspect the refusal reason; do not retry unchanged')
         if any(not r.get('prepared_match') for r in repaired):
             return verdict('INVALID', stage='vmid2_root_prepared_mismatch')
-        sequence_ids = {r.get('vm_sequence') for r in repaired}
-        submits = [r for r in events if r['kind'] == 'sdma_submit' and
-                   r.get('valid') and r.get('vmid') == 2 and
-                   r.get('vm_sequence') in sequence_ids]
-        if not submits:
-            return verdict('INCONCLUSIVE', stage='vmid2_root_submit_mismatch')
-        correlated = {r.get('vm_sequence') for r in submits}
-        states = [r for r in events if r['kind'] == 'vm_state' and
-                  r.get('vmid') == 2 and r.get('phase') == 'dispatch+0ms' and
-                  r.get('vm_sequence') in correlated]
-        if not states:
-            return verdict('INCONCLUSIVE', stage='vmid2_root_state_missing')
-        if 'vmid2_walk_hardware' not in required:
-            targets = {0x400100000, 0x4000c0000, 0x400200000}
-            if not any(targets <= {r.get('va') for r in events
-                                  if r['kind'] == 'vm_walk' and
-                                  r.get('vm_sequence') == sequence}
-                       for sequence in correlated):
-                return verdict('INCONCLUSIVE', stage='vmid2_root_walk_missing')
+        if 'vmid2_entry_update' not in required:
+            sequence_ids = {r.get('vm_sequence') for r in repaired}
+            submits = [r for r in events if r['kind'] == 'sdma_submit' and
+                       r.get('valid') and r.get('vmid') == 2 and
+                       r.get('vm_sequence') in sequence_ids]
+            if not submits:
+                return verdict('INCONCLUSIVE', stage='vmid2_root_submit_mismatch')
+            correlated = {r.get('vm_sequence') for r in submits}
+            states = [r for r in events if r['kind'] == 'vm_state' and
+                      r.get('vmid') == 2 and r.get('phase') == 'dispatch+0ms' and
+                      r.get('vm_sequence') in correlated]
+            if not states:
+                return verdict('INCONCLUSIVE', stage='vmid2_root_state_missing')
+            if 'vmid2_walk_hardware' not in required:
+                targets = {0x400100000, 0x4000c0000, 0x400200000}
+                if not any(targets <= {r.get('va') for r in events
+                                      if r['kind'] == 'vm_walk' and
+                                      r.get('vm_sequence') == sequence}
+                           for sequence in correlated):
+                    return verdict('INCONCLUSIVE', stage='vmid2_root_walk_missing')
     if 'vmid2_walk_hardware' in required and require_workload_outcomes:
         submits = sorted((r for r in events if r['kind'] == 'sdma_submit' and
                           r.get('valid') and r.get('vmid') == 2 and

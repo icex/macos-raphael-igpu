@@ -102,6 +102,41 @@ class Candidate180StageTests(unittest.TestCase):
             re.compile(r"recovery_lease_schema=card\["
                        r"['\"]recovery_lease_schema['\"]\]"))
 
+    def test_optional_picker_timeout_changes_only_open_core_boot_timeout(self):
+        config = {
+            "Misc": {"Boot": {"ShowPicker": True, "Timeout": 45,
+                                "TakeoffDelay": 0}},
+            "NVRAM": {"Add": {"unchanged": {"boot-args": "rgpusubmit=1"}}},
+        }
+        self.tool.apply_guest_picker_timeout(
+            config, dict(self.card, guest_picker_timeout_seconds=5))
+        self.assertEqual(config["Misc"]["Boot"]["Timeout"], 5)
+        self.assertTrue(config["Misc"]["Boot"]["ShowPicker"])
+        self.assertEqual(config["Misc"]["Boot"]["TakeoffDelay"], 0)
+        self.assertEqual(config["NVRAM"],
+                         {"Add": {"unchanged": {"boot-args": "rgpusubmit=1"}}})
+
+    def test_absent_picker_timeout_preserves_historical_config(self):
+        config = {"Misc": {"Boot": {"ShowPicker": True, "Timeout": 45}}}
+        before = json.loads(json.dumps(config))
+        self.tool.apply_guest_picker_timeout(config, self.card)
+        self.assertEqual(config, before)
+
+    def test_picker_timeout_rejects_bad_type_range_or_hidden_picker(self):
+        for value in (True, 0, 301, "5"):
+            with self.assertRaisesRegex(RuntimeError, "guest picker timeout"):
+                self.tool.apply_guest_picker_timeout(
+                    {"Misc": {"Boot": {"ShowPicker": True}}},
+                    dict(self.card, guest_picker_timeout_seconds=value))
+            raw, digest = self.encoded_card(
+                {"guest_picker_timeout_seconds": value})
+            with self.assertRaisesRegex(RuntimeError, "guest picker timeout"):
+                self.tool.validate_card(raw, digest)
+        with self.assertRaisesRegex(RuntimeError, "ShowPicker=true"):
+            self.tool.apply_guest_picker_timeout(
+                {"Misc": {"Boot": {"ShowPicker": False}}},
+                dict(self.card, guest_picker_timeout_seconds=5))
+
 
 if __name__ == "__main__":
     unittest.main()

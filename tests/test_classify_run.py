@@ -1,4 +1,5 @@
 import importlib.util
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -1229,6 +1230,208 @@ Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0
         result = classify(manifest, good, None)
         self.assertNotIn('vmid2_entry_conversion', result.get('earliest_failure') or '')
 
+    def test_candidate183_entry_update_records_are_structured(self):
+        rows = self.classifier().parse_serial(
+            'RGPU_RECORDS build=abc count=5 dropped=0 truncated=0\n'
+            'RGPU_EVENT build=abc seq=0 VM: route '
+            'AMDHWVMContext::updateContiguousPTEsWithDMAUsingAddr -> ok '
+            '(entry=1 org=0xffffff8000055cda)\n'
+            'RGPU_EVENT build=abc seq=1 VM: entry-update mode=4 route=1 inactive=0 '
+            'converted=1 physical=1 outside=0 system=0 invalid-template=0 '
+            'invalid-aperture=0 empty=0 overflow=0 span=0 zero=0 '
+            'omitted-child=0 omitted-eligible=0 omitted-control=0\n'
+            'RGPU_EVENT build=abc seq=2 VM: entry-update-sample bucket=child '
+            'caller=x6+0x55a72 producer=child domain=converted destination=0x84b6f3000 '
+            'count=1 source=0xf40b6f4000 result=0x84b6f4000 '
+            'template=0x2000000000000001 increment=0x0 constructed=0x200000084b6f4001 '
+            'state=returned\n'
+            'RGPU_EVENT build=abc seq=3 VM: entry-update-sample bucket=control '
+            'caller=x6+0x559dc producer=leaf domain=physical destination=0x84b6f3008 '
+            'count=1 source=0x84b6f5000 result=0x84b6f5000 template=0x1 increment=0x1000 '
+            'constructed=0x84b6f5001 state=returned\n'
+            'RGPU_EVENT build=abc seq=4 VM: correlate-submit order=9 thread=0x1234 '
+            'hint=7 result=7 reason=matched retained=3 same-thread=3 earlier=2 in-range=1\n')
+        self.assertEqual([row['kind'] for row in rows], [
+            'vm_entry_update_route', 'vm_entry_update',
+            'vm_entry_update_sample', 'vm_entry_update_sample',
+            'vm_submit_correlation'])
+        self.assertTrue(all(row.get('ok') for row in rows))
+        self.assertTrue(rows[0]['ok'] and rows[0]['entry'])
+        self.assertEqual(rows[1]['mode'], 4)
+        self.assertEqual(rows[1]['counts']['converted'], 1)
+        self.assertEqual(rows[1]['omitted'], {'child':0, 'eligible':0, 'control':0})
+        self.assertEqual(rows[2]['caller'], 0x55a72)
+        self.assertEqual(rows[2]['constructed'], 0x200000084b6f4001)
+        self.assertEqual(rows[4]['reason'], 'matched')
+        self.assertEqual(rows[4]['result'], 7)
+        self.assertEqual(rows[4]['same_thread'], 3)
+
+        malformed = self.classifier().parse_serial(
+            'RGPU_RECORDS build=abc count=1 dropped=0 truncated=0\n'
+            'RGPU_EVENT build=abc seq=0 VM: correlate-submit order=9 thread=0x1234 '
+            'hint=7 result=7 reason=matched retained=3 same-thread=0 earlier=2 in-range=1\n')
+        self.assertFalse(malformed[0]['ok'])
+
+    def test_candidate183_requires_real_child_entry_construction_without_walk(self):
+        classifier = self.classifier()
+        manifest = {'build_id':'abc', 'spec':{'required_observations':[
+            'vmid2_entry_gate', 'vmid2_entry_update']}}
+        base = self.events(available=1, status=0, started=1) + [
+            dict(kind='accelerator_start', build='abc', seq=6, result=1),
+            dict(kind='vm_entry_gate', build='abc', seq=7,
+                 marked=True, aperture=True, mode=4)]
+        route = dict(kind='vm_entry_update_route', build='abc', seq=8,
+                     ok=True, entry=True)
+        summary = dict(
+            kind='vm_entry_update', build='abc', seq=9, mode=4, route=True,
+            inactive=0,
+            counts={'converted':1, 'physical':1, 'outside':0, 'system':0,
+                    'invalid_template':0, 'invalid_aperture':0, 'empty':0,
+                    'overflow':0, 'span':0, 'zero':0},
+            omitted={'child':0, 'eligible':0, 'control':0}, ok=True)
+        initial_summary = dict(
+            summary, counts=dict(summary['counts'], converted=0, physical=0))
+        final_summary = dict(summary, seq=10)
+        child = dict(
+            kind='vm_entry_update_sample', build='abc', seq=10,
+            bucket='child', caller=0x55a72, producer='child', domain='converted',
+            destination=0x84b6f3000, count=1, source=0xf40b6f4000,
+            result=0x84b6f4000, template=0x2000000000000001,
+            increment=0, constructed=0x200000084b6f4001, state='returned', ok=True)
+        control = dict(
+            kind='vm_entry_update_sample', build='abc', seq=11,
+            bucket='control', caller=0x559dc, producer='leaf', domain='physical',
+            destination=0x84b6f3008, count=1, source=0x84b6f5000,
+            result=0x84b6f5000, template=1, increment=0x1000,
+            constructed=0x84b6f5001, state='returned', ok=True)
+        late_child = dict(child, seq=11)
+        late_control = dict(control, seq=12)
+        good_events = base + [route, initial_summary, final_summary,
+                              late_child, late_control]
+
+        good = classifier.classify_probe_readiness(manifest, good_events)
+        self.assertEqual(good['verdict'], 'PROBE_NOT_RUN')
+        self.assertTrue(good['valid'])
+        self.assertFalse(any(row['kind'] in ('vm_walk', 'vm_walk_entry')
+                             for row in good_events))
+
+        cases = []
+        cases.append(('route-missing', base + [summary, child, control],
+                      'INVALID', 'vmid2_entry_update_route_guard'))
+        cases.append(('summary-missing', base + [route, child, control],
+                      'INCONCLUSIVE', 'vmid2_entry_update_missing'))
+        child_omitted = dict(summary,
+                             omitted=dict(summary['omitted'], child=1))
+        no_child = base + [route, child_omitted, dict(control, seq=10)]
+        cases.append(('child-missing', no_child, 'INCONCLUSIVE',
+                      'vmid2_entry_update_child_missing'))
+        for field in ('inactive',):
+            changed = dict(summary, **{field:1})
+            cases.append((field, base + [route, changed, child, control],
+                          'INVALID', 'vmid2_entry_update_state'))
+        for field in ('invalid_aperture', 'overflow', 'span'):
+            changed = dict(summary, counts=dict(summary['counts'], **{field:1}))
+            cases.append((field, base + [route, changed, child, control],
+                          'INVALID', 'vmid2_entry_update_state'))
+        omitted_control = dict(summary,
+                               counts=dict(summary['counts'], physical=2),
+                               omitted=dict(summary['omitted'], control=1))
+        accepted_omission = classifier.classify_probe_readiness(
+            manifest, base + [route, omitted_control, child, control])
+        self.assertEqual(accepted_omission['verdict'], 'PROBE_NOT_RUN')
+        summary_behind_samples = dict(
+            summary, counts=dict(summary['counts'], converted=0, physical=0),
+            omitted=dict(summary['omitted'], control=3))
+        skewed = classifier.classify_probe_readiness(
+            manifest, base + [route, summary_behind_samples, child, control])
+        self.assertEqual(skewed['verdict'], 'PROBE_NOT_RUN')
+        wrong_delta = dict(child, result=child['result'] + 0x1000,
+                           constructed=child['constructed'] + 0x1000)
+        cases.append(('delta', base + [route, summary, wrong_delta, control],
+                      'INVALID', 'vmid2_entry_update_child_invalid'))
+        wrong_constructed = dict(child, constructed=child['constructed'] ^ 0x1000)
+        cases.append(('constructed', base + [route, summary, wrong_constructed, control],
+                      'INVALID', 'vmid2_entry_update_child_invalid'))
+        wrong_producer = dict(child, producer='leaf')
+        cases.append(('producer-caller',
+                      base + [route, summary, wrong_producer, control],
+                      'INVALID', 'vmid2_entry_update_sample_malformed'))
+        invalid_template = dict(child, template=child['template'] & ~1)
+        cases.append(('template-valid', base + [route, summary, invalid_template, control],
+                      'INVALID', 'vmid2_entry_update_child_invalid'))
+        system_template = dict(child, template=child['template'] | 2,
+                               constructed=(child['template'] | 2) | child['result'])
+        cases.append(('template-system', base + [route, summary, system_template, control],
+                      'INVALID', 'vmid2_entry_update_child_invalid'))
+        span_outside = dict(child, count=2, source=0xf41ffff000,
+                            result=0x85ffff000, increment=0x1000,
+                            constructed=child['template'] | 0x85ffff000)
+        cases.append(('source-span', base + [route, summary, span_outside, control],
+                      'INVALID', 'vmid2_entry_update_child_invalid'))
+        overflow = dict(child, count=3, increment=(1 << 63))
+        cases.append(('source-overflow', base + [route, summary, overflow, control],
+                      'INVALID', 'vmid2_entry_update_child_invalid'))
+        changed_control = dict(control, result=control['result'] + 0x1000,
+                               constructed=control['constructed'] + 0x1000)
+        cases.append(('control-mutated', base + [route, summary, child, changed_control],
+                      'INVALID', 'vmid2_entry_update_control'))
+        lagged_fatal_sample = dict(control, domain='overflow')
+        cases.append(('lagged-fatal-sample',
+                      base + [route, summary, child, lagged_fatal_sample],
+                      'INVALID', 'vmid2_entry_update_state'))
+        converted_control = dict(control, domain='converted', source=0xf40b6f5000,
+                                 result=0x84b6f5000)
+        changed = dict(summary, counts=dict(summary['counts'], converted=2, physical=0))
+        cases.append(('control-converted', base + [route, changed, child, converted_control],
+                      'INVALID', 'vmid2_entry_update_control'))
+        fault = dict(kind='vm_fault', build='abc', seq=13, vm_sequence=1,
+                     fault_status=0x2009bb, fault_address=0x400200000)
+        cases.append(('fault', good_events + [fault], 'EXECUTION_FAILED',
+                      'vmid2_mapping_fault'))
+        regressed = dict(summary, seq=13,
+                         counts=dict(summary['counts'], converted=0))
+        cases.append(('summary-regressed', good_events + [regressed],
+                      'INVALID', 'vmid2_entry_update_state'))
+        submit = dict(kind='sdma_submit', build='abc', seq=13, vmid=2,
+                      valid=True, entries=1, ib0=0x400100000, ib1=0)
+        for label, events, verdict, stage in cases:
+            with self.subTest(label=label):
+                result = classifier.classify_probe_readiness(manifest, events)
+                self.assertEqual(result['verdict'], verdict)
+                self.assertEqual(result['earliest_failure'], stage)
+
+        correlation = dict(kind='vm_submit_correlation', build='abc', seq=14,
+                           order=9, thread=0x1234, hint=7, result=0,
+                           reason='no-in-range', retained=3, same_thread=2,
+                           earlier=1, in_range=0, ok=True, malformed=False)
+        interleaved = dict(kind='other', build='abc', seq=14,
+                           raw='unrelated concurrent record')
+        descriptive = classifier.classify_probe_readiness(
+            manifest, good_events + [submit, interleaved,
+                                     dict(correlation, seq=15)])
+        self.assertEqual(descriptive['verdict'], 'PROBE_NOT_RUN')
+
+        root_manifest = {'build_id':'abc', 'spec':{'required_observations':[
+            'vmid2_entry_gate', 'vmid2_entry_update', 'vmid2_root_repair']}}
+        repair = dict(kind='vm_root_repair', build='abc', seq=13,
+                      vm_sequence=7, vmid=2, repaired=True, reason='repaired',
+                      prepared_match=True)
+        unmatched_submit = dict(submit, seq=14, vm_sequence=0)
+        unmatched_correlation = dict(correlation, seq=15, result=0,
+                                     reason='no-in-range', in_range=0)
+        actual_182_shape = classifier.classify_probe_readiness(
+            root_manifest, good_events + [repair, unmatched_submit,
+                                          unmatched_correlation])
+        self.assertEqual(actual_182_shape['verdict'], 'PROBE_NOT_RUN')
+        self.assertNotIn('walk', actual_182_shape.get('earliest_failure') or '')
+        refused = classifier.classify_probe_readiness(
+            root_manifest, good_events + [dict(repair, repaired=False,
+                                               reason='not-raphael'),
+                                          unmatched_submit, unmatched_correlation])
+        self.assertEqual(refused['verdict'], 'INCONCLUSIVE')
+        self.assertEqual(refused['earliest_failure'],
+                         'vmid2_root_repair_refused:not-raphael')
+
     def test_candidate182_requires_exact_early_entry_gate(self):
         classifier = self.classifier()
         manifest = {'build_id': 'abc', 'spec': {'required_observations': [
@@ -1399,6 +1602,56 @@ Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0
             critical_replay_tolerance='lenient')
         self.assertEqual(invalid[0]['kind'], 'capture_loss')
         self.assertTrue(invalid[0]['definitive'])
+
+    def test_candidate182_live_prefixes_keep_missing_chunk_pending_until_clean_replay(self):
+        archive = ROOT / 'findings/experiments/metal-015-182/raw'
+        serial_raw = (archive / 'serial.txt').read_bytes()
+        manifest = json.loads((archive / 'manifest.json').read_text())
+        self.assertEqual(
+            hashlib.sha256(serial_raw).hexdigest(),
+            '7366a5c22e027f4235c3ba3799b28f4e9d7309ff074dc2b69174984e6577a705')
+        lines = serial_raw.decode('utf-8', errors='replace').splitlines(keepends=True)
+        ends = [index + 1 for index, line in enumerate(lines)
+                if 'RGPU_END2' in line]
+        self.assertEqual(ends, [3736, 7737, 11909, 13600])
+
+        classifier = self.classifier()
+        selected = []
+        for end in ends:
+            selected.append(classifier.parse_serial(
+                ''.join(lines[:end]), critical_replay_schema=2,
+                expected_build=manifest['build_id'],
+                critical_replay_tolerance='terminal-prefix'))
+
+        for rows in selected[:2] + selected[3:]:
+            self.assertFalse(any(row['kind'] == 'capture_loss' for row in rows))
+        pending = selected[2]
+        self.assertEqual(len(pending), 1)
+        self.assertEqual(pending[0]['kind'], 'capture_loss')
+        self.assertEqual(pending[0]['reason'],
+                         'CR2: CR2 snapshot has a missing chunk')
+        self.assertFalse(pending[0]['definitive'])
+        readiness = classifier.classify_probe_readiness(manifest, pending)
+        self.assertNotEqual(readiness['verdict'], 'PROBE_NOT_RUN')
+        self.assertEqual(readiness['earliest_failure'], 'identity_or_route_missing')
+
+    def test_missing_chunk_is_pending_only_for_terminal_prefix(self):
+        payloads = ['BUILD: identity=' + CR2_BUILD, 'second record']
+        broken = snapshot_lines(payloads, snapshot=2)
+        del broken[2]
+        serial = ''.join(broken)
+        classifier = self.classifier()
+        cases = ((None, True), ('terminal-prefix', False),
+                 ('terminal-prefix-open', True))
+        for tolerance, definitive in cases:
+            with self.subTest(tolerance=tolerance):
+                kwargs = dict(critical_replay_schema=2,
+                              expected_build=CR2_BUILD)
+                if tolerance is not None:
+                    kwargs['critical_replay_tolerance'] = tolerance
+                rows = classifier.parse_serial(serial, **kwargs)
+                self.assertEqual([row['kind'] for row in rows], ['capture_loss'])
+                self.assertIs(rows[0]['definitive'], definitive)
 
     def test_candidate173_required_root_repair_fails_closed_and_correlates(self):
         classify = self.classifier().classify

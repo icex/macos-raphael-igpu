@@ -449,6 +449,16 @@ def definitive_capture_loss(events):
         for event in events)
 
 
+def live_capture_state(events):
+    """Classify evidence availability without admitting an incomplete snapshot."""
+    if (definitive_capture_loss(events) or
+            any(event.get('kind') == 'recovery_lease_wire' for event in events)):
+        return 'fatal'
+    if any(event.get('kind') == 'capture_loss' for event in events):
+        return 'pending'
+    return 'complete'
+
+
 def critical_replay_schema(data):
     if 'critical_replay_schema' not in data:
         return None
@@ -2252,6 +2262,7 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
     guest_shutdown = helper('guest-shutdown')
     recovery_tool = helper('vfio-recover') if manifest.get('gpu') is True else None
     state = None; probe = None; failure = None; shutdown_result = None; host_messages = []
+    capture_pending = False
     recovery_result = None
     running_validated = False
     monitor = None
@@ -2408,8 +2419,14 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                 if monitor.error: raise RuntimeError(monitor.error)
                 serial = (vm/'run/serial.log').read_text(errors='replace')
                 events = parse_manifest_serial(classifier, manifest, serial)
-                if definitive_capture_loss(events):
+                capture_state = live_capture_state(events)
+                if capture_state == 'fatal':
                     raise RuntimeError('definitive critical capture loss; aborting exposure')
+                if capture_state == 'pending':
+                    capture_pending = True
+                    time.sleep(0.5)
+                    continue
+                capture_pending = False
                 if manifest.get('gpu') is False and any(e['kind'] == 'build' and
                         e['build'] == manifest['build_id'] for e in events) and not any(
                         e['kind'] == 'capture_loss' for e in events):
@@ -2424,6 +2441,9 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                     if decisive_since is None: decisive_since = time.time()
                     if time.time()-decisive_since >= 2: break
                 time.sleep(0.5)
+            if capture_pending:
+                raise RuntimeError(
+                    'critical capture remained incomplete at exposure deadline')
             shutdown_result = guest_shutdown.shutdown(
                 vm, state, expected_build=manifest['guest_build'], grace=20)
     except BaseException as error:
@@ -2489,6 +2509,8 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
     if replay_evidence: write_once(output/'recovery-replay.json', replay_evidence)
     result = classifier.classify(manifest, events, probe)
     result['warm_reuse'] = (recovery_result or {'status':'not-attempted'})['status']
+    result['functional_boundary'] = result.get('earliest_failure')
+    result['termination_reason'] = failure
     if manifest.get('gpu') is False and not failure:
         result.update(valid=False, verdict='GPULESS_CAPTURE_CHECK',
                       next_action='no GPU execution tested; inspect captured build and cleanup')
