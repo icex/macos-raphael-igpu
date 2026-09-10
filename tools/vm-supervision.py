@@ -452,6 +452,7 @@ def start_locked(vm, maximum, gpu_args, critical_enabled=False):
     env_keys = DOCKER_ENV + ("PATH", "DISPLAY", "XAUTHORITY", "XDG_RUNTIME_DIR", "IMAGE",
                            "VCPUS", "RAM_GB", "DISK_BUS", "AUDIO", "NVRAM", "BOOTDISK_MODE",
                            "NIC", "GL", "GDB", "SSH_PORT", "SCREEN_PORT")
+    env_keys += ("GENERIC_GRAPHICS",)
     endpoint = [f"--setenv={key}={os.environ.get(key, '')}" for key in env_keys]
     # A GPUless request cannot inherit hidden passthrough from the manager or
     # caller. GPU options are supplied solely by the validated launcher flags.

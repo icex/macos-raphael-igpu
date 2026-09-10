@@ -35,6 +35,7 @@ GPU_ROM="${GPU_ROM:-}"         # video BIOS image for the passed-through GPU
 GPU_SUB="${GPU_SUB:-}"         # spoof subsystem ids too, as "vendor:device"
 SERIAL="${SERIAL:-on}"         # on = expose a serial port at run/serial.sock
 CRITICAL_SERIAL="${CRITICAL_SERIAL:-off}" # on = dedicated CR2 UART at COM2
+GENERIC_GRAPHICS="${GENERIC_GRAPHICS:-on}" # off = authenticated headless/no-VGA path
 GDB="${GDB:-off}"              # on = gdbstub on 127.0.0.1:1234 | wait = also start halted
 SSH_PORT="${SSH_PORT:-50922}"
 SCREEN_PORT="${SCREEN_PORT:-5900}"
@@ -152,8 +153,13 @@ esac
 mkdir -p "${VM_DIR}/run"
 EXTRA_QEMU="-chardev socket,id=mon1,path=/run/vm/monitor.sock,server=on,wait=off -mon chardev=mon1,mode=readline ${EXTRA_QEMU}"
 
+case "${GENERIC_GRAPHICS}" in on|off) ;; *) die "unknown generic graphics setting ${GENERIC_GRAPHICS}" ;; esac
 # Without gl=on, every guest frame is copied by the CPU and pushed over X11.
-[[ "${GL}" == on ]] && EXTRA_QEMU="-display gtk,gl=on ${EXTRA_QEMU}"
+# The authenticated no-graphics mode injects `-display none`; vm-entry.sh
+# validates that exact option before executing the image launcher.
+[[ "${GENERIC_GRAPHICS}" == on && "${GL}" == on ]] && \
+    EXTRA_QEMU="-display gtk,gl=on ${EXTRA_QEMU}"
+[[ "${GENERIC_GRAPHICS}" == off ]] && EXTRA_QEMU="-display none ${EXTRA_QEMU}"
 
 # A 16550 serial port on a unix socket. macOS does not run a login shell on it,
 # but the kernel can be told to log there, which is the only way to capture an
@@ -252,15 +258,15 @@ DOCKER_ARGS=(
     -e CPUID_FLAGS='kvm=on,vendor=GenuineIntel,+invtsc,vmware-cpuid-freq=on'
     -e "CPU_STRING=${VCPUS},sockets=1,cores=${VCPUS},threads=1"
     -e "EXTRA=${EXTRA_QEMU}"
+    -e "GENERIC_GRAPHICS=${GENERIC_GRAPHICS}"
     "${AUDIO_ARGS[@]}"
     "${GPU_ARGS[@]}"
     "${GDB_ARGS[@]}"
 )
 
-# Host GPU node: accelerates the QEMU window itself on the host side.
-# It does NOT give the guest graphics acceleration -- macOS has no driver for
-# RDNA 4 (RX 9070 XT) or for AMD integrated graphics, so passthrough is pointless here.
-[[ -e /dev/dri ]] && DOCKER_ARGS+=(--device /dev/dri)
+# Host GPU node only accelerates the QEMU GTK window. Headless no-graphics runs
+# have no display backend and must not inherit this unrelated host device.
+[[ "${GENERIC_GRAPHICS}" == on && -e /dev/dri ]] && DOCKER_ARGS+=(--device /dev/dri)
 
 if [[ "${BOOTDISK_MODE}" == custom ]]; then
     DOCKER_ARGS+=(-v "${VM_DIR}/OpenCore.qcow2:/home/arch/OSX-KVM/OpenCore/OpenCore.qcow2"

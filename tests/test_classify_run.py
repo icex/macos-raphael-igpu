@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import re
 import struct
+import subprocess
 import tempfile
 import unittest
 
@@ -600,6 +601,174 @@ class ClassifyTests(unittest.TestCase):
             expected_build=CR2_BUILD)
         self.assertEqual([row['kind'] for row in rows], ['build', 'route'])
         self.assertFalse(any(row['kind'] == 'capture_loss' for row in rows))
+
+    def test_vmid1_fault_walk_records_decode_typed_bounded_fields_from_cr2(self):
+        classifier = self.classifier()
+        payloads = [
+            'VM: fault-walk vmid=1 status=0x101b3a fault-va=0x400900000 cid=13 '
+            'walker=5 permission=0x3 mapping=1 rw=0 atomic=0 ctl=0x51 '
+            'root=0 start=0 end=0xffffffffffffffff aperture=1 '
+            'context-stable=1 address-in-context=1 '
+            'timing=worker-after-latch tables-non-atomic=1',
+            'VM: fault-walk-view status=0x101b3a fault-va=0x400900000 view=relative '
+            'valid=1 complete=1 count=2',
+            'VM: fault-walk-entry status=0x101b3a fault-va=0x400900000 view=relative '
+            'n=1 level=2 index=17 table=0 raw=0 '
+            'entry-addr=0 V=0 S=0 X=0 R=0 W=0 P=0 TF=0 '
+            'mc2pa-eligible=1 child-mc2pa=0',
+        ]
+        rows = classifier.parse_serial(
+            ''.join(snapshot_lines(payloads)), critical_replay_schema=2,
+            expected_build=CR2_BUILD)
+        self.assertEqual([row['kind'] for row in rows], [
+            'vmid1_fault_walk', 'vmid1_fault_walk_view',
+            'vmid1_fault_walk_entry'])
+        self.assertEqual(rows[0]['fault_va'], 0x400900000)
+        self.assertEqual(rows[0]['context'], {'start': 0, 'end': 0xffffffffffffffff})
+        self.assertEqual((rows[0]['cid'], rows[0]['walker_error'],
+                          rows[0]['permission_faults'], rows[0]['mapping_error']),
+                         (13, 5, 3, True))
+        self.assertTrue(rows[0]['context_stable'])
+        self.assertEqual(rows[1]['view'], 'relative')
+        self.assertEqual(rows[1]['count'], 2)
+        self.assertEqual(rows[2]['number'], 1)
+        self.assertEqual(rows[2]['attributes'], {
+            'valid': False, 'system': False, 'executable': False,
+            'readable': False, 'writeable': False, 'pde_as_pte': False,
+            'translate_further': False, 'mc2pa_eligible': True,
+            'child_converted': False})
+
+    def test_real_cpp_decoder_and_printf_output_round_trips_through_cr2(self):
+        source = r'''
+#include <cstdio>
+#include "src/GpuVmDiagnostics.hpp"
+static void header(unsigned status, unsigned long long va) {
+    auto d = RaphaelVm::decodeFaultStatus(status);
+    std::printf("VM: fault-walk vmid=%u status=%#x fault-va=%#llx cid=%u walker=%u permission=%#x mapping=%u rw=%u atomic=%u ctl=%#x root=%#llx start=%#llx end=%#llx aperture=%u context-stable=%u address-in-context=%u timing=worker-after-latch tables-non-atomic=1\n",
+        d.vmid, status, va, d.cid, d.walkerError, d.permissionFaults,
+        d.mappingError, d.write, d.atomic, 0u, 0ULL, 0ULL, ~0ULL, 1u, 1u, 1u);
+}
+int main() {
+    header(0x101b3a, 0x400900000ULL);
+    header(0x1009ba, 0x401180000ULL);
+    unsigned long long raws[] = {0, 0x61, (1ULL << 1) | (1ULL << 54) |
+                                  (1ULL << 56) | 0x12345000ULL};
+    for (unsigned n = 0; n < 3; ++n) {
+        auto e = RaphaelVm::decodePageTableEntry(0, 2, 17, raws[n]);
+        std::printf("VM: fault-walk-entry status=%#x fault-va=%#llx view=relative n=%u level=%u index=%llu table=%#llx raw=%#llx entry-addr=%#llx V=%u S=%u X=%u R=%u W=%u P=%u TF=%u mc2pa-eligible=%u child-mc2pa=%u\n",
+            0x101b3a, 0x400900000ULL, n, e.level, e.index, e.tablePhysical,
+            e.raw, e.address, e.valid, e.system, e.executable, e.readable,
+            e.writeable, e.pdeAsPte, e.translateFurther,
+            !e.system && !e.pdeAsPte, e.childConverted);
+    }
+}
+'''
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            cpp = path / 'fixture.cpp'
+            binary = path / 'fixture'
+            cpp.write_text(source)
+            subprocess.run(
+                ['c++', '-std=c++17', '-I', str(ROOT), str(cpp), '-o', str(binary)],
+                check=True, capture_output=True, text=True)
+            payloads = subprocess.run(
+                [str(binary)], check=True, capture_output=True, text=True
+            ).stdout.splitlines()
+        rows = self.classifier().parse_serial(
+            ''.join(snapshot_lines(payloads)), critical_replay_schema=2,
+            expected_build=CR2_BUILD)
+        self.assertEqual([row['kind'] for row in rows], [
+            'vmid1_fault_walk', 'vmid1_fault_walk', 'vmid1_fault_walk_entry',
+            'vmid1_fault_walk_entry', 'vmid1_fault_walk_entry'])
+        self.assertEqual((rows[0]['walker_error'], rows[0]['permission_faults']),
+                         (5, 3))
+        self.assertEqual((rows[1]['walker_error'], rows[1]['permission_faults']),
+                         (5, 0xb))
+        self.assertEqual(rows[2]['raw_entry'], 0)
+        self.assertFalse(rows[2]['attributes']['valid'])
+        self.assertEqual(rows[3]['raw_entry'], 0x61)
+        self.assertEqual(
+            (rows[3]['attributes']['valid'], rows[3]['attributes']['executable'],
+             rows[3]['attributes']['readable'], rows[3]['attributes']['writeable']),
+            (True, False, True, True))
+        self.assertEqual(rows[4]['address'], 0x12345000)
+        self.assertTrue(rows[4]['attributes']['system'])
+        self.assertTrue(rows[4]['attributes']['pde_as_pte'])
+        self.assertTrue(rows[4]['attributes']['translate_further'])
+        self.assertFalse(rows[4]['attributes']['mc2pa_eligible'])
+
+    def test_malformed_or_out_of_bounds_vmid1_protocol_is_capture_loss(self):
+        classifier = self.classifier()
+        malformed = (
+            'VM: fault-walk-view status=0x101b3a fault-va=0x400900000 '
+            'view=absolute valid=1 complete=1 count=5',
+            'VM: fault-walk vmid=2 status=0x101b3a fault-va=0x400900000 cid=13 '
+            'walker=5 permission=0x3 mapping=1 rw=0 atomic=0 ctl=0x51 '
+            'root=0x840001000 start=0x1000 end=0x8fff aperture=1 '
+            'context-stable=1 address-in-context=1 '
+            'timing=worker-after-latch tables-non-atomic=1',
+            'VM: fault-walk-entry status=0x101b3a fault-va=0x400900000 view=relative '
+            'n=4 level=4 index=17 table=0x840001000 raw=0x61 '
+            'entry-addr=0x840002000 V=1 S=0 X=0 R=1 W=1 P=0 TF=0 '
+            'mc2pa-eligible=1 child-mc2pa=0',
+            'VM: fault-walk-entry status=0x101b3a fault-va=0x400900000 view=relative '
+            'n=0 level=2 index=17 table=0 raw=0 entry-addr=0 '
+            'V=1 S=0 X=0 R=1 W=1 P=0 TF=0 '
+            'mc2pa-eligible=1 child-mc2pa=0',
+        )
+        for payload in malformed:
+            with self.subTest(payload=payload):
+                rows = classifier.parse_serial(
+                    ''.join(snapshot_lines([payload])), critical_replay_schema=2,
+                    expected_build=CR2_BUILD)
+                self.assertEqual([row['kind'] for row in rows], ['capture_loss'])
+                self.assertIn('VMID1 fault-walk', rows[0]['reason'])
+                self.assertTrue(rows[0]['definitive'])
+
+    def test_more_than_two_distinct_vmid1_fault_pairs_is_capture_loss(self):
+        classifier = self.classifier()
+        payloads = []
+        for index in range(3):
+            status = (0x101b3a, 0x1009ba, 0x101b3a)[index]
+            cid = (13, 4, 13)[index]
+            permission = (3, 0xb, 3)[index]
+            payloads.append(
+                f'VM: fault-walk vmid=1 status={status:#x} '
+                f'fault-va={0x4000 + index * 0x1000:#x} cid={cid} walker=5 '
+                f'permission={permission:#x} mapping=1 rw=0 atomic=0 ctl=0x51 '
+                'root=0x840001000 start=0x1000 end=0x8fff aperture=1 '
+                'context-stable=1 address-in-context=1 '
+                'timing=worker-after-latch tables-non-atomic=1')
+        rows = classifier.parse_serial(
+            ''.join(snapshot_lines(payloads)), critical_replay_schema=2,
+            expected_build=CR2_BUILD)
+        self.assertTrue(any(row['kind'] == 'capture_loss' and
+                            'more than two' in row['reason'] for row in rows))
+
+    def test_vmid1_diagnostics_do_not_gate_native_probe_readiness(self):
+        classifier = self.classifier()
+        manifest, events = self.v2_startup()
+        baseline = classifier.classify_probe_readiness(manifest, events)
+        fault = classifier._decode_payload(
+            'abc', len(events),
+            'VM: fault-walk-view status=0x10123 fault-va=0x4000 '
+            'view=relative valid=1 complete=0 count=0')
+        observed = classifier.classify_probe_readiness(manifest, events + [fault])
+        self.assertEqual(observed['verdict'], baseline['verdict'])
+        self.assertEqual(observed['earliest_failure'], baseline['earliest_failure'])
+
+    def test_vmid1_invalid_context_is_diagnostic_not_transport_loss(self):
+        payload = (
+            'VM: fault-walk vmid=1 status=0x1009ba fault-va=0x401180000 cid=4 '
+            'walker=5 permission=0xb mapping=1 rw=0 atomic=0 ctl=0 '
+            'root=0 start=0x9000 end=0x1000 aperture=0 context-stable=1 '
+            'address-in-context=0 timing=worker-after-latch tables-non-atomic=1')
+        rows = self.classifier().parse_serial(
+            ''.join(snapshot_lines([payload])), critical_replay_schema=2,
+            expected_build=CR2_BUILD)
+        self.assertEqual([row['kind'] for row in rows], ['vmid1_fault_walk'])
+        self.assertFalse(rows[0]['context_bounds_valid'])
+        self.assertFalse(rows[0]['address_in_context'])
 
     def test_malformed_selected_cr2_never_downgrades_to_valid_legacy_replay(self):
         classifier = self.classifier()

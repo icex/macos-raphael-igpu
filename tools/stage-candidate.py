@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stage the exact candidate 1.0.180 transaction without launching a VM.
+"""Stage a narrowly reviewed candidate transaction without launching a VM.
 
 This preserves the reviewed candidate-179 transaction boundaries. It refuses
 to do anything unless --execute and every candidate-specific identity pin are
@@ -27,12 +27,19 @@ import uuid
 
 VM = Path.home() / "macos-vm"
 ROOT = Path(__file__).resolve().parents[1]
-CANDIDATE_VERSION = "1.0.180"
-CARD_ID = "metal-013"
+CANDIDATE_VERSION = "1.0.184"
+CARD_ID = "metal-017"
+SUPPORTED_CARD_DIAGNOSTICS = {
+    ("1.0.180", "metal-013"): "rgpusubmit=1",
+    ("1.0.181", "metal-014"): "rgpusubmit=1",
+    ("1.0.182", "metal-015"): "rgpusubmit=1",
+    ("1.0.183", "metal-016"): "rgpusubmit=1",
+    ("1.0.184", "metal-017"): "rgpuvmdiag=1",
+}
 
 
 def configure(version, card_id):
-    """Select the exact candidate this transaction stages; defaults are 1.0.180."""
+    """Select the exact reviewed candidate/card pair; defaults are 1.0.184."""
     global CANDIDATE_VERSION, CARD_ID, NUMBER, WT, CANDIDATE, DIST, IDENTITIES
     global RUN_ID_FILE, CARD
     if not re.fullmatch(r"1\.0\.(1[0-9]{2})", version):
@@ -76,10 +83,14 @@ def validate_card(raw, expected_sha256):
         card = json.loads(raw)
     except (TypeError, ValueError, json.JSONDecodeError) as error:
         raise RuntimeError("candidate card is not valid JSON") from error
+    pair = (CANDIDATE_VERSION, CARD_ID)
+    requested_diagnostic = SUPPORTED_CARD_DIAGNOSTICS.get(pair)
+    if requested_diagnostic is None:
+        raise RuntimeError("unsupported candidate card pair")
     exact = {
         "id": CARD_ID,
         "candidate_version": CANDIDATE_VERSION,
-        "requested_diagnostic": "rgpusubmit=1",
+        "requested_diagnostic": requested_diagnostic,
         "max_seconds": 180,
         "run_probe_only_after_native_start": True,
         "critical_replay_schema": 2,
@@ -89,6 +100,23 @@ def validate_card(raw, expected_sha256):
             type(card.get(key)) is not type(value) or card.get(key) != value
             for key, value in exact.items()):
         raise RuntimeError("candidate card contract mismatch")
+    if pair == ("1.0.184", "metal-017"):
+        candidate184 = {
+            "critical_replay_tolerance": "terminal-prefix",
+            "recovery_critical_replay_tolerance": "terminal-prefix-open",
+            "functional_boot_arguments": {"rgpuvmroot": "4"},
+            "conditional_diagnostic_observations": [
+                "vmid1_fault_walk", "vmid1_fault_walk_view",
+                "vmid1_fault_walk_entry",
+            ],
+            "launch_options": {
+                "BOOTDISK_MODE": "custom",
+                "NVRAM": "stock",
+                "GENERIC_GRAPHICS": "off",
+            },
+        }
+        if any(card.get(key) != value for key, value in candidate184.items()):
+            raise RuntimeError("candidate card contract mismatch")
     transport_path = Path(__file__).with_name("critical-transport.py")
     spec = importlib.util.spec_from_file_location("critical_transport", transport_path)
     transport = importlib.util.module_from_spec(spec)
@@ -261,6 +289,41 @@ def select_run_id():
     return run_id
 
 
+def candidate_boot_argument_updates(card, nonce_lo, nonce_hi):
+    """Return the exact reviewed functional and diagnostic boot-argument map."""
+    pair = (card.get("candidate_version"), card.get("id"))
+    requested = SUPPORTED_CARD_DIAGNOSTICS.get(pair)
+    if requested is None or card.get("requested_diagnostic") != requested:
+        raise RuntimeError("unsupported candidate card diagnostic")
+    diagnostic_key, diagnostic_value = requested.split("=", 1)
+    updates = {
+        "rgpu": "0xfffa5981",
+        "rgpuvmm": "3",
+        "rgpumem": "1",
+        "rgpuptb": "2",
+        "rgpumqd": "2",
+        "rgpuhybrid": "1",
+        "rgpusubmit": "1",
+        "rgpurnlo": f"0x{nonce_lo:x}",
+        "rgpurnhi": f"0x{nonce_hi:x}",
+    }
+    if "critical_replay_transport" in card:
+        updates["rgpucr2uart"] = "2"
+    functional = card.get("functional_boot_arguments", {})
+    if not isinstance(functional, dict) or any(
+            not re.fullmatch(r"rgpu[a-z]+", key) or key in updates or
+            not isinstance(value, str) or not re.fullmatch(r"[0-9a-fx]+", value)
+            for key, value in functional.items()):
+        raise RuntimeError("candidate card functional boot arguments are invalid")
+    if diagnostic_key in functional:
+        raise RuntimeError("candidate diagnostic must not be duplicated")
+    updates.update(functional)
+    if diagnostic_key in updates and updates[diagnostic_key] != diagnostic_value:
+        raise RuntimeError("candidate diagnostic conflicts with functional baseline")
+    updates[diagnostic_key] = diagnostic_value
+    return updates
+
+
 def make_staged_config(experiment, card, run_id):
     original = (VM / "config.plist").read_bytes()
     xml = original.index(b"<?xml")
@@ -274,26 +337,7 @@ def make_staged_config(experiment, card, run_id):
         raise RuntimeError("retired rgpu boot argument remains")
 
     nonce_lo, nonce_hi = experiment.recovery_nonce_words(run_id)
-    updates = {
-        "rgpu": "0xfffa5981",
-        "rgpuvmm": "3",
-        "rgpumem": "1",
-        "rgpuptb": "2",
-        "rgpumqd": "2",
-        "rgpuhybrid": "1",
-        "rgpusubmit": "1",
-        "rgpurnlo": f"0x{nonce_lo:x}",
-        "rgpurnhi": f"0x{nonce_hi:x}",
-    }
-    if experiment.critical_replay_transport(card) is not None:
-        updates["rgpucr2uart"] = "2"
-    functional = card.get("functional_boot_arguments", {})
-    if not isinstance(functional, dict) or any(
-            not re.fullmatch(r"rgpu[a-z]+", key) or key in updates or
-            not isinstance(value, str) or not re.fullmatch(r"[0-9a-fx]+", value)
-            for key, value in functional.items()):
-        raise RuntimeError("candidate card functional boot arguments are invalid")
-    updates.update(functional)
+    updates = candidate_boot_argument_updates(card, nonce_lo, nonce_hi)
     words = [word for word in old_words
              if word.split("=", 1)[0] not in updates]
     words.extend(f"{key}={value}" for key, value in updates.items())
@@ -532,6 +576,8 @@ def stage(expected_commit, expected_boot_id, expected_card_sha256,
                         "critical_replay_transport"]
                     staging["critical_transport_validator_sha256"] = sha_file(
                         ROOT / "tools/critical-transport.py")
+                if "launch_options" in card:
+                    staging["launch_options"] = card["launch_options"]
                 staging_record_bytes = (json.dumps(staging, indent=2) + "\n").encode()
                 staging_record_sha = sha_bytes(staging_record_bytes)
                 write_synced_exclusive(pending_record, staging_record_bytes)

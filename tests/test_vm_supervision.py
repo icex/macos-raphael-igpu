@@ -406,6 +406,17 @@ class SupervisionTests(unittest.TestCase):
                             for a in commands[0]))
         self.assertEqual(json.loads((self.vm / "run/supervision.json").read_text())["cid"], CID)
 
+    def test_graphics_policy_is_explicitly_forwarded_without_extra(self):
+        self.env["GENERIC_GRAPHICS"] = "off"
+        script = self.vm / "macos-vm.sh"
+        script.write_text("#!/bin/sh\nexec sleep 30\n"); script.chmod(0o700)
+        result = self.run_tool("start", "--vm-dir", str(self.vm), "--max-seconds", "180")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        launch = next(args for cmd, args in self.calls() if cmd == "systemd-run"
+                      and any(a.startswith("--unit=rgpu-launch-") for a in args))
+        self.assertIn("--setenv=GENERIC_GRAPHICS=off", launch)
+        self.assertIn("--setenv=EXTRA=", launch)
+
     def test_cleanup_without_identity_targets_only_unique_launch_name(self):
         name = "rgpu-launch-" + "b" * 32
         result = self.run_tool("cleanup", "--vm-dir", str(self.vm), "--name", name)

@@ -149,6 +149,17 @@ def required_identity(data):
     return missing
 
 
+def launch_options(data):
+    historical = {'BOOTDISK_MODE':'custom', 'NVRAM':'stock'}
+    if 'launch_options' not in data:
+        return historical
+    value = data.get('launch_options')
+    headless = dict(historical, GENERIC_GRAPHICS='off')
+    if type(value) is not dict or value not in (historical, headless):
+        raise ValueError('launch options must select the exact historical or no-graphics contract')
+    return dict(value)
+
+
 def recovery_nonce_words(run_id):
     # Apple XNU pexpert/gen/bootargs.c getval uses unsigned long long and
     # argnumcpy case 8 stores the full word; PE_boot_arg_uint64_eq uses this
@@ -197,7 +208,7 @@ def raphael_target_marked(config):
 
 
 def current_identity(vm, candidate, requested_diagnostic, run_id=None,
-                     recovery_lease_schema=2):
+                     recovery_lease_schema=2, launch_options_expected=None):
     build = json.loads((candidate / 'build-manifest.json').read_text())
     bundle = candidate / 'RaphaelGPU.kext/Contents'
     expected = dict(binary_sha256=sha((bundle/'MacOS/RaphaelGPU').read_bytes()),
@@ -210,10 +221,15 @@ def current_identity(vm, candidate, requested_diagnostic, run_id=None,
         raise ValueError('candidate build inputs differ from current pinned inputs')
     if sha(gzip.decompress((ROOT/'build-support/rlc_fw.h.gz').read_bytes())) != inputs['firmware_header_sha256']:
         raise ValueError('firmware payload differs from the compiled input')
-    if os.environ.get('BOOTDISK_MODE', 'custom') != 'custom':
+    options = launch_options({'launch_options': launch_options_expected or
+                              {'BOOTDISK_MODE':'custom', 'NVRAM':'stock'}})
+    if os.environ.get('BOOTDISK_MODE', 'custom') != options['BOOTDISK_MODE']:
         raise ValueError('only the prepared custom bootdisk is admitted')
-    if os.environ.get('NVRAM', 'stock') != 'stock':
+    if os.environ.get('NVRAM', 'stock') != options['NVRAM']:
         raise ValueError('persistent NVRAM is not admitted for the fixed baseline')
+    if options.get('GENERIC_GRAPHICS') == 'off' and os.environ.get(
+            'GENERIC_GRAPHICS', 'off') != 'off':
+        raise ValueError('generic graphics launch option changed')
     builder = helper('build-release')
     source_digest = builder.tree_digest(ROOT/'src')
     if source_digest != build['source_sha256']: raise ValueError('current source differs from built source')
@@ -242,16 +258,19 @@ def current_identity(vm, candidate, requested_diagnostic, run_id=None,
     image_name = os.environ.get('IMAGE', 'sickcodes/docker-osx:latest')
     image_id = command(['docker', 'image', 'inspect', '--format', '{{.Id}}', image_name])
     host = host_snapshot()
+    harness_names = ['macos-vm.sh', 'vm-supervision.py', 'sercat.py',
+                     'agent-server.py', 'gx', 'gpu-bind.sh']
+    if options.get('GENERIC_GRAPHICS') == 'off':
+        harness_names.append('vm-entry.sh')
     return dict(image, build_id=build['build_id'], source_sha256=source_digest,
                 source_commit=command(['git', '-C', str(ROOT), 'rev-parse', 'HEAD']),
                 source_clean=not bool(command(['git', '-C', str(ROOT), 'status', '--porcelain'])),
                 built_from_commit=build['source_commit'], kdk_sha256=kdk,
                 build_inputs_sha256=sha((ROOT/'build-support/inputs.json').read_bytes()),
                 boot_args=args,
-                harness_sha256={name:sha((vm/name).read_bytes()) for name in
-                    ('macos-vm.sh', 'vm-supervision.py', 'sercat.py', 'agent-server.py', 'gx', 'gpu-bind.sh')},
+                harness_sha256={name:sha((vm/name).read_bytes()) for name in harness_names},
                 rom_sha256=sha((vm/'run/gpu-patched.rom').read_bytes()),
-                launch_options={'BOOTDISK_MODE':'custom', 'NVRAM':'stock'},
+                launch_options=options,
                 image_id=image_id, guest_build=guest['guest_build'], probe_source_sha256=source_hash,
                 probe_binary_sha256=guest['probe_binary_sha256'], boot_id=host['boot_id'], kernel=host['kernel'],
                 bootdisk_sha256=sha((vm/'OpenCore.qcow2').read_bytes()),
@@ -265,6 +284,8 @@ def prepare(vm, spec, output, gpu=True, run_id=None):
     card = json.loads(spec.read_text())
     replay_schema = critical_replay_schema(card)
     transport = critical_replay_transport(card)
+    options = launch_options({'launch_options': card.get(
+        'launch_options', {'BOOTDISK_MODE':'custom', 'NVRAM':'stock'})})
     lease_schema = card.get('recovery_lease_schema', 2)
     if type(lease_schema) is not int or lease_schema not in (2, 3):
         raise ValueError('recovery lease schema must be numeric 2 or 3')
@@ -283,7 +304,7 @@ def prepare(vm, spec, output, gpu=True, run_id=None):
             raise ValueError('active or pending VM prevents preparation')
         identity = current_identity(
             vm, candidate, card['requested_diagnostic'], run_id if gpu else None,
-            lease_schema)
+            lease_schema, options)
         if not identity['source_clean']: raise ValueError('commit source and tooling before preparation')
         if card['requested_diagnostic'] not in identity['boot_args'].split():
             raise ValueError('required diagnostic boot argument is absent')
@@ -2157,6 +2178,7 @@ def validate_running(manifest, observed):
     if manifest['image_id'] != observed.get('image_id'): errors.append('image_id')
     vfio = observed.get('vfio_args', [])
     serial = observed.get('serial_args', [])
+    graphics = observed.get('graphics_args', [])
     console = [
         'socket,id=rgpu_console,path=/run/vm/serial.sock,server=on,wait=off',
         'isa-serial,chardev=rgpu_console,index=0']
@@ -2168,6 +2190,9 @@ def validate_running(manifest, observed):
     if ((dedicated and sorted(serial) != sorted(expected_serial)) or
             (not dedicated and any('rgpu_critical' in value for value in serial))):
         errors.append('critical_uart_topology')
+    if manifest.get('launch_options', {}).get('GENERIC_GRAPHICS') == 'off' and \
+            graphics != ['-vga', 'none', '-display', 'none']:
+        errors.append('generic_graphics')
     if manifest.get('gpu') is False:
         if vfio: errors.append('unexpected_vfio_device')
         return errors
@@ -2192,7 +2217,14 @@ for pid in os.listdir('/proc'):
        (arg==b'-chardev' and args[index+1].startswith(b'socket,id=rgpu_')) or
        (arg==b'-device' and args[index+1].startswith(b'isa-serial'))):
     selected.append(args[index+1].decode())
-  rows.append({'vfio_args':[a.decode() for a in args if a.startswith(b'vfio-pci,')], 'serial_args':selected, 'argv_sha256':hashlib.sha256(raw).hexdigest()})
+  graphics=[]
+  generic=(b'VGA',b'vmware-svga',b'bochs-display',b'ramfb',b'secondary-vga',b'ati-vga',b'cirrus-vga')
+  for index,arg in enumerate(args[:-1]):
+   value=args[index+1]
+   device=value.split(b',',1)[0]
+   if arg in (b'-vga',b'-display') or (arg==b'-device' and (device in generic or device.startswith(b'qxl') or device.startswith(b'virtio-vga') or device.startswith(b'virtio-gpu'))):
+    graphics.extend((arg.decode(),value.decode()))
+  rows.append({'vfio_args':[a.decode() for a in args if a.startswith(b'vfio-pci,')], 'serial_args':selected, 'graphics_args':graphics, 'argv_sha256':hashlib.sha256(raw).hexdigest()})
 assert len(rows)==1
 print(json.dumps(rows[0]))
 '''
@@ -2321,6 +2353,7 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
     if (manifest.get('gpu') is True and
             manifest.get('recovery_lease_schema') not in (2, 3)):
         raise ValueError('GPU run requires a supported recovery lease manifest')
+    launch_options(manifest)
     missing = required_identity(manifest)
     if missing: raise ValueError('incomplete prepared identity: '+','.join(missing))
     if manifest.get('bootdisk_verified') is not True:
@@ -2388,7 +2421,8 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                 observed = current_identity(
                     vm, vm/manifest['candidate_directory'], requested,
                     manifest['run_id'] if manifest.get('gpu') is True else None,
-                    manifest.get('recovery_lease_schema', 2))
+                    manifest.get('recovery_lease_schema', 2),
+                    launch_options(manifest))
                 transport_contract().validate_boot_args(
                     observed['boot_args'], manifest)
                 host = host_snapshot(); write_once(output/'host-before.json', host)

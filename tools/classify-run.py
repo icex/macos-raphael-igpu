@@ -210,6 +210,102 @@ def _decode_payload(build, seq, payload):
                    flags=int(m[3], 16), original=int(m[4], 16), result=int(m[5], 16),
                    domain=m[6])
     elif m := re.fullmatch(
+            r'VM: fault-walk vmid=(\d+) status=(0x[0-9a-fA-F]+|0) '
+            r'fault-va=(0x[0-9a-fA-F]+|0) cid=(\d+) walker=(\d+) '
+            r'permission=(0x[0-9a-fA-F]+|0) mapping=([01]) rw=([01]) atomic=([01]) '
+            r'ctl=(0x[0-9a-fA-F]+|0) root=(0x[0-9a-fA-F]+|0) '
+            r'start=(0x[0-9a-fA-F]+|0) end=(0x[0-9a-fA-F]+|0) aperture=([01]) '
+            r'context-stable=([01]) address-in-context=([01]) '
+            r'timing=worker-after-latch tables-non-atomic=1', payload):
+        values = [int(m[index], 16) for index in (2, 3, 6, 10, 11, 12, 13)]
+        status, fault_va, permission, control, root, start, end = values
+        address_in_context = bool(int(m[16]))
+        decoded = {
+            'walker': (status >> 1) & 7, 'permission': (status >> 4) & 0xf,
+            'mapping': (status >> 8) & 1, 'cid': (status >> 9) & 0x1ff,
+            'write': (status >> 18) & 1, 'atomic': (status >> 19) & 1,
+            'vmid': (status >> 20) & 0xf,
+        }
+        valid = (int(m[1]) == decoded['vmid'] == 1 and int(m[4]) == decoded['cid'] and
+                 int(m[5]) == decoded['walker'] and permission == decoded['permission'] and
+                 int(m[7]) == decoded['mapping'] and int(m[8]) == decoded['write'] and
+                 int(m[9]) == decoded['atomic'] and
+                 status <= 0xffffffff and control <= 0xffffffff and
+                 all(value <= 0xffffffffffffffff
+                     for value in (fault_va, root, start, end)) and
+                 address_in_context == (start <= fault_va <= end))
+        if valid:
+            row.update(kind='vmid1_fault_walk', vmid=1, status=status,
+                       fault_va=fault_va, cid=int(m[4]), walker_error=int(m[5]),
+                       permission_faults=permission, mapping_error=bool(int(m[7])),
+                       write=bool(int(m[8])), atomic=bool(int(m[9])), control=control,
+                       root=root, context={'start':start, 'end':end},
+                       aperture=bool(int(m[14])), context_stable=bool(int(m[15])),
+                       context_bounds_valid=start <= end,
+                       address_in_context=address_in_context)
+        else:
+            row.update(kind='capture_loss', reason='malformed VMID1 fault-walk record',
+                       definitive=True)
+    elif payload.startswith('VM: fault-walk vmid='):
+        row.update(kind='capture_loss', reason='malformed VMID1 fault-walk record',
+                   definitive=True)
+    elif m := re.fullmatch(
+            r'VM: fault-walk-view status=(0x[0-9a-fA-F]+|0) '
+            r'fault-va=(0x[0-9a-fA-F]+|0) view=(relative|absolute) '
+            r'valid=([01]) complete=([01]) count=(\d+)', payload):
+        status, fault_va, count = int(m[1], 16), int(m[2], 16), int(m[6])
+        if status <= 0xffffffff and fault_va <= 0xffffffffffffffff and count <= 4:
+            row.update(kind='vmid1_fault_walk_view', status=status,
+                       fault_va=fault_va, view=m[3], valid=bool(int(m[4])),
+                       complete=bool(int(m[5])), count=count)
+        else:
+            row.update(kind='capture_loss',
+                       reason='malformed VMID1 fault-walk view record', definitive=True)
+    elif payload.startswith('VM: fault-walk-view status='):
+        row.update(kind='capture_loss', reason='malformed VMID1 fault-walk view record',
+                   definitive=True)
+    elif m := re.fullmatch(
+            r'VM: fault-walk-entry status=(0x[0-9a-fA-F]+|0) '
+            r'fault-va=(0x[0-9a-fA-F]+|0) view=(relative|absolute) n=(\d+) '
+            r'level=(\d+) index=(\d+) table=(0x[0-9a-fA-F]+|0) '
+            r'raw=(0x[0-9a-fA-F]+|0) entry-addr=(0x[0-9a-fA-F]+|0) '
+            r'V=([01]) S=([01]) X=([01]) R=([01]) W=([01]) P=([01]) TF=([01]) '
+            r'mc2pa-eligible=([01]) child-mc2pa=([01])', payload):
+        status, fault_va = int(m[1], 16), int(m[2], 16)
+        number, level, index = int(m[4]), int(m[5]), int(m[6])
+        table, raw, address = int(m[7], 16), int(m[8], 16), int(m[9], 16)
+        emitted = tuple(int(m[position]) for position in range(10, 18))
+        pde_as_pte = bool(raw & (1 << 54))
+        leaf = level == 0 or pde_as_pte
+        decoded = (
+            bool(raw & (1 << 0)), bool(raw & (1 << 1)),
+            bool(raw & (1 << 4)), bool(raw & (1 << 5)),
+            bool(raw & (1 << 6)), pde_as_pte,
+            bool(raw & (1 << 56)), not bool(raw & (1 << 1)) and not pde_as_pte,
+        )
+        decoded_address = raw & (0x0000fffffffff000 if leaf else
+                                 0x0000ffffffffffc0)
+        valid = (status <= 0xffffffff and number < 4 and level < 4 and
+                 all(value <= 0xffffffffffffffff
+                     for value in (fault_va, index, table, raw, address)) and
+                 emitted == tuple(int(value) for value in decoded) and
+                 address == decoded_address)
+        if valid:
+            names = ('valid', 'system', 'executable', 'readable', 'writeable',
+                     'pde_as_pte', 'translate_further', 'mc2pa_eligible',
+                     'child_converted')
+            row.update(kind='vmid1_fault_walk_entry', status=status,
+                       fault_va=fault_va, view=m[3], number=number, level=level,
+                       index=index, table=table, raw_entry=raw, address=address,
+                       attributes={name:bool(int(m[position]))
+                                   for name, position in zip(names, range(10, 19))})
+        else:
+            row.update(kind='capture_loss',
+                       reason='malformed VMID1 fault-walk entry record', definitive=True)
+    elif payload.startswith('VM: fault-walk-entry status='):
+        row.update(kind='capture_loss', reason='malformed VMID1 fault-walk entry record',
+                   definitive=True)
+    elif m := re.fullmatch(
             r'VM: route AMDHWVMContext::updateContiguousPTEsWithDMAUsingAddr '
             r'-> (ok|FAILED) \(entry=([01]) org=(0x[0-9a-fA-F]+)\)', payload):
         row.update(kind='vm_entry_update_route', ok=m[1] == 'ok',
@@ -499,7 +595,9 @@ def _parse_legacy_serial(serial):
                             'submission_trace_summary', 'submission_map_phase',
                             'submission_map_phase_summary',
                             'submission_backing_allocation',
-                            'submission_backing_allocation_summary'):
+                            'submission_backing_allocation_summary',
+                            'vmid1_fault_walk', 'vmid1_fault_walk_view',
+                            'vmid1_fault_walk_entry'):
             # These records are formatted by the dedicated observation thread,
             # outside the driver callbacks. Preserve the exact live line until
             # the next immutable structured snapshot includes it.
@@ -553,6 +651,12 @@ def parse_serial(serial, *, critical_replay_schema=None, expected_build=None,
             f'RGPU_EVENT build={expected_build} seq={seq} {payload}\n'
             for seq, payload in enumerate(snapshot['records'])))
     rows = _parse_legacy_serial(synthetic)
+    fault_pairs = {(row.get('status'), row.get('fault_va')) for row in rows
+                   if row.get('kind') == 'vmid1_fault_walk'}
+    if len(fault_pairs) > 2:
+        rows.append(dict(kind='capture_loss', build=expected_build,
+                         reason='VMID1 fault-walk contains more than two distinct pairs',
+                         definitive=True))
     if snapshot.get('tolerance'):
         # Tolerated corruption is evidence, never a loss: the terminal snapshot's
         # digests and every valid earlier chunk were checked against the prefix.
