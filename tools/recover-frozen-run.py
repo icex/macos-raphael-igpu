@@ -75,6 +75,12 @@ def build_proof(vm, run_dir, tolerance):
     helpers = {relative: sha_bytes((ROOT / relative).read_bytes()) for relative in (
         'tools/critical-replay.py', 'tools/vfio-recover.py', 'tools/recovery_lease_v2.py',
         'tools/recovery_lifetime_v3.py', 'tools/experiment.py', 'tools/recover-frozen-run.py')}
+    # The frozen manifest pins the helper set that failed to decode the capture.
+    # The receipt is produced by the current helpers, whose hashes the next
+    # manifest will pin; both sets are preserved here for the audit trail.
+    original_helpers = manifest.get('recovery_helpers_sha256')
+    if not isinstance(original_helpers, dict) or not original_helpers:
+        raise ValueError('frozen manifest lacks recovery helper hashes')
     return manifest, serial, {
         'schema': 1,
         'kind': 'frozen-run-terminal-prefix-recovery-proof',
@@ -96,6 +102,7 @@ def build_proof(vm, run_dir, tolerance):
         'fnv1a64': snapshot['fnv1a64'],
         'lifetime_records': valid,
         'helper_sha256': helpers,
+        'original_recovery_helpers_sha256': original_helpers,
     }
 
 
@@ -122,7 +129,10 @@ def main():
         return
     experiment = load('experiment')
     recovery_tool = experiment.helper('vfio-recover')
-    manifest = dict(manifest, critical_replay_tolerance=args.tolerance)
+    vfio = load('vfio-recover')
+    current_helpers = vfio.current_recovery_helpers_sha256(3)
+    manifest = dict(manifest, critical_replay_tolerance=args.tolerance,
+                    recovery_helpers_sha256=current_helpers)
     replay_evidence = {}
     try:
         result = experiment.recover_v2(recovery_tool, vm, manifest, serial, replay_evidence)
@@ -130,6 +140,7 @@ def main():
         result = {'status': 'failed', 'error': type(error).__name__ + ': ' + str(error)}
     result_path = run_dir / 'recovery-retry.json'
     write_once(result_path, {'proof_sha256': sha_bytes(proof_path.read_bytes()),
+                             'recovery_helpers_sha256': current_helpers,
                              'replay': replay_evidence, 'recovery': result})
     print(json.dumps(result, indent=2))
     if result.get('status') != 'recovered':
