@@ -1,0 +1,23 @@
+{
+  "tolerance": "terminal-prefix-open",
+  "snapshot": 3,
+  "count": 22,
+  "corrupt_lines": 1,
+  "corrupt_line_numbers": [
+    97
+  ],
+  "corrupt_reasons": [
+    "invalid chunk bounds"
+  ],
+  "incomplete_snapshots": [
+    {
+      "snapshot": 1,
+      "valid_chunks": 36,
+      "has_end": false
+    }
+  ],
+  "crc32": 322326944,
+  "fnv1a64": 7303988215905449096,
+  "open_attempt": null,
+  "serial_sha256": "f270a613fe9420a3e404791bfc394e4f977662dcc6b008ba06119676952da4df"
+}

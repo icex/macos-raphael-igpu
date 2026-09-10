@@ -208,7 +208,9 @@ if [[ -n "${GPU}" ]]; then
     # over, leaving every BAR unmapped so the AMD driver never even matches. Measured
     # with and without resource-reservation hints, with hotplug=off, and with
     # npci=0x2000. Do not reintroduce the root port without solving that first.
-    vf="-device vfio-pci,host=${GPU},bus=pcie.0"
+    # Keep the endpoint at the OpenCore DeviceProperties path
+    # PciRoot(0x0)/Pci(0x6,0x0), independent of optional display devices.
+    vf="-device vfio-pci,host=${GPU},bus=pcie.0,addr=0x6"
     [[ -n "${GPU_ID}" ]] && vf+=",x-pci-vendor-id=0x1002,x-pci-device-id=${GPU_ID}"
     if [[ -n "${GPU_SUB}" ]]; then
         vf+=",x-pci-sub-vendor-id=0x${GPU_SUB%%:*},x-pci-sub-device-id=0x${GPU_SUB##*:}"
