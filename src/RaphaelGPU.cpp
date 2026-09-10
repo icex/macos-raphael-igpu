@@ -219,6 +219,15 @@ static volatile uint32_t nextSubmissionTraceSequence = 0;
 static bool submissionTraceEnabled = false;
 static volatile bool submissionTraceRoutesReady = false;
 static bool vmRootFixEnabled = false;
+// rgpuvmroot: 1 repairs only the VMID2 root, 2 also converts child PDE table
+// addresses, 3 also converts non-SYSTEM (video-memory) PTE page addresses.
+static uint32_t vmRootFixMode = 0;
+static mach_vm_address_t orgVmmGetPde {};
+static mach_vm_address_t orgVmmGetPte {};
+// Page-table entry conversions: lifetime counters per kind and domain, plus a
+// bounded first-sample buffer per kind. Producers never log, allocate or wait.
+static volatile uint64_t vmEntryCounts[2][RaphaelVm::kEntryDomainCount] {};
+static rgpu::ObservationBuffer<RaphaelVm::EntryConversionSample, 4> vmEntrySamples[2] {};
 static volatile bool raphaelTargetConfirmed = false;
 // Published once by the early framebuffer callback and read later by the VM
 // callback. Keeping this snapshot avoids MMIO under X6000's unknown VM locks.
@@ -518,6 +527,8 @@ static constexpr size_t kOffHwAppendReserved = 0x72afe; // AMDHardware::appendTo
 static constexpr size_t kOffVmmFillRegs = 0x62400;    // AMDGFX10VMM::fillVMRegisters [x6]
 static constexpr size_t kOffVmmPrepare  = 0x6249c;    // __ZN26AMDRadeonX6000_AMDGFX10VMM26prepareVMInvalidateRequestEP25AMD_VM_INVALIDATE_REQUESTPK22AMD_VM_INVALIDATE_INFOb [x6]
 static constexpr size_t kOffVmmProgInv  = 0x6278a;    // AMDGFX10VMM::programAndInvalidateVM [x6]
+static constexpr size_t kOffVmmGetPde   = 0x629c6;    // __ZN26AMDRadeonX6000_AMDGFX10VMM11getPDEValueE15eAMD_VMPT_LEVELy [x6]
+static constexpr size_t kOffVmmGetPte   = 0x62a14;    // __ZN26AMDRadeonX6000_AMDGFX10VMM11getPTEValueE15eAMD_VMPT_LEVELyN24AMDRadeonX6000_IAMDHWVMM10VmMapFlagsEj [x6]
 static constexpr size_t kOffAccPowerUpHW = 0x4e0c;   // AMDGraphicsAccelerator::powerUpHW [x6]
 static constexpr size_t kOffHwPowerUp    = 0x99618;  // AMDNavi23Hardware::powerUp [x6]
 static constexpr size_t kOffGfx10PowerUp = 0x73e68;  // AMDGFX10Hardware::powerUp [x6]
@@ -4027,6 +4038,56 @@ static void wrapVmmPrepare(void *self, void *prepared, const void *info, bool al
     }
 }
 
+// AMDGFX10VMM::getPDEValue(level, tableAddress) and getPTEValue(level, pageAddress,
+// flags, fragment) keep the address bits they receive and add attributes only.
+// Apple's video-memory objects carry framebuffer MC addresses, while GFXHUB
+// consumes physical table and page addresses. Candidate 180 proved that rule for
+// the VMID2 root: the prepared root 0x84b6f3000 matched the live register and the
+// walker then faulted one level below with MAPPING_ERROR. These wrappers apply
+// the identical aperture arithmetic to the entries below the root. They run under
+// X6000 locks: cached snapshots, pure arithmetic, atomic counters, lock-free
+// samples; no MMIO, log, allocation or wait.
+static uint64_t convertVmEntryAddress(RaphaelVm::EntryKind kind, uint32_t level,
+                                      uint32_t flags, bool system, uint64_t address) {
+    const uint32_t fbBase = __atomic_load_n(&cachedFbBase, __ATOMIC_RELAXED);
+    const uint32_t fbTop = __atomic_load_n(&cachedFbTop, __ATOMIC_RELAXED);
+    const uint32_t fbOffset = __atomic_load_n(&cachedFbOffset, __ATOMIC_RELAXED);
+    uint64_t result = address;
+    const auto domain = RaphaelVm::convertEntryAddress(address, system, fbBase, fbTop,
+                                                       fbOffset, result);
+    const size_t k = kind == RaphaelVm::EntryKind::Pde ? 0 : 1;
+    __atomic_fetch_add(&vmEntryCounts[k][static_cast<size_t>(domain)], 1u,
+                       __ATOMIC_RELAXED);
+    if (domain == RaphaelVm::EntryDomain::Converted)
+        vmEntrySamples[k].append(RaphaelVm::EntryConversionSample {
+            kind, level, flags, address, result});
+    return result;
+}
+
+static bool vmEntryConversionActive(uint32_t minimumMode) {
+    return vmRootFixMode >= minimumMode &&
+        __atomic_load_n(&raphaelTargetConfirmed, __ATOMIC_ACQUIRE) &&
+        __atomic_load_n(&cachedFbPublished, __ATOMIC_ACQUIRE);
+}
+
+static uint64_t wrapVmmGetPde(void *self, uint32_t level, uint64_t address) {
+    if (vmEntryConversionActive(2))
+        address = convertVmEntryAddress(RaphaelVm::EntryKind::Pde, level, 0, false,
+                                        address);
+    return FunctionCast(wrapVmmGetPde, orgVmmGetPde)(self, level, address);
+}
+
+// VmMapFlags bit 3 becomes PTE SYSTEM (24G830 0x62a18..0x62a2b): a system page keeps
+// its guest physical address; only video-memory pages live in the MC aperture.
+static uint64_t wrapVmmGetPte(void *self, uint32_t level, uint64_t address,
+                              uint32_t flags, uint32_t fragment) {
+    if (vmEntryConversionActive(3))
+        address = convertVmEntryAddress(RaphaelVm::EntryKind::Pte, level, flags,
+                                        (flags & 0x8u) != 0, address);
+    return FunctionCast(wrapVmmGetPte, orgVmmGetPte)(self, level, address, flags,
+                                                     fragment);
+}
+
 static bool recoveryLeaseDisjointFromLiveGart(
         const RaphaelRecoveryV2::OwnershipDescriptor &descriptor) {
     if (asicInfo == nullptr) return false;
@@ -5049,6 +5110,42 @@ static void publishPendingSubmissionTrace() {
     lastBackingCompleted = backingCompleted;
 }
 
+// Bounded summary of the child PDE / VRAM PTE conversions: at most 24 changed
+// summaries plus the first four converted samples of each kind.
+static void publishPendingVmEntryConversions() {
+    if (vmRootFixMode < 2) return;
+    static uint64_t lastTotal = 0;
+    static unsigned summaries = 0;
+    static size_t sampleCursor[2] {};
+    uint64_t c[2][RaphaelVm::kEntryDomainCount];
+    uint64_t total = 0;
+    for (size_t k = 0; k < 2; ++k)
+        for (size_t d = 0; d < RaphaelVm::kEntryDomainCount; ++d) {
+            c[k][d] = __atomic_load_n(&vmEntryCounts[k][d], __ATOMIC_RELAXED);
+            total += c[k][d];
+        }
+    if (total != lastTotal && summaries < 24) {
+        lastTotal = total;
+        ++summaries;
+        CRLOG("VM: entry-conv mode=%u routes=%u/%u pde=%llu/%llu/%llu/%llu/%llu "
+              "pte=%llu/%llu/%llu/%llu/%llu dropped=%llu/%llu",
+              vmRootFixMode, orgVmmGetPde != 0, orgVmmGetPte != 0,
+              c[0][0], c[0][1], c[0][2], c[0][3], c[0][4],
+              c[1][0], c[1][1], c[1][2], c[1][3], c[1][4],
+              vmEntrySamples[0].dropped(), vmEntrySamples[1].dropped());
+    }
+    for (size_t k = 0; k < 2; ++k) {
+        RaphaelVm::EntryConversionSample sample {};
+        while (sampleCursor[k] < vmEntrySamples[k].size() &&
+               vmEntrySamples[k].read(sampleCursor[k], sample)) {
+            ++sampleCursor[k];
+            CRLOG("VM: entry-sample kind=%s level=%u flags=%#x original=%#llx result=%#llx",
+                  sample.kind == RaphaelVm::EntryKind::Pde ? "pde" : "pte",
+                  sample.level, sample.flags, sample.original, sample.result);
+        }
+    }
+}
+
 static void publishPendingVmObservations() {
     static size_t programCursor = 0;
     static size_t submitCursor = 0;
@@ -5131,6 +5228,7 @@ static void publishPendingVmObservations() {
             reportVmid2Runtime("dispatch+100ms", sampledSequence, *matched, &submit, false);
         }
     }
+    publishPendingVmEntryConversions();
     publishPendingSubmissionTrace();
 }
 
@@ -5734,6 +5832,32 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
             CRLOG("VM: route AMDGFX10VMM::prepareVMInvalidateRequest -> %s (org=0x%llx)",
                   orgVmmPrepare ? "ok" : "FAILED", orgVmmPrepare);
             patcher.clearError();
+            if (vmRootFixMode >= 2) {
+                // Complete displaced spans of 14 and 15 bytes with no branch or
+                // RIP-relative operand; getPDEValue's first jne begins at +14.
+                static const uint8_t pdeEntry[] = {0x55, 0x48, 0x89, 0xe5, 0xff, 0xc6,
+                    0x8b, 0x87, 0x34, 0x0b, 0x00, 0x00, 0x39, 0xc6};
+                static const uint8_t pteEntry[] = {0x55, 0x48, 0x89, 0xe5, 0x89, 0xc8,
+                    0xc1, 0xe8, 0x02, 0x83, 0xe0, 0x02, 0x41, 0x89, 0xc9};
+                const bool pdeMatches = entryMatches(addr, sz, kOffVmmGetPde, pdeEntry,
+                                                     sizeof(pdeEntry));
+                if (pdeMatches)
+                    orgVmmGetPde = patcher.routeFunction(addr + kOffVmmGetPde,
+                        reinterpret_cast<mach_vm_address_t>(wrapVmmGetPde), true);
+                CRLOG("VM: route AMDGFX10VMM::getPDEValue -> %s (entry=%u org=0x%llx)",
+                      orgVmmGetPde ? "ok" : "FAILED", pdeMatches, orgVmmGetPde);
+                patcher.clearError();
+                if (vmRootFixMode >= 3) {
+                    const bool pteMatches = entryMatches(addr, sz, kOffVmmGetPte,
+                                                         pteEntry, sizeof(pteEntry));
+                    if (pteMatches)
+                        orgVmmGetPte = patcher.routeFunction(addr + kOffVmmGetPte,
+                            reinterpret_cast<mach_vm_address_t>(wrapVmmGetPte), true);
+                    CRLOG("VM: route AMDGFX10VMM::getPTEValue -> %s (entry=%u org=0x%llx)",
+                          orgVmmGetPte ? "ok" : "FAILED", pteMatches, orgVmmGetPte);
+                    patcher.clearError();
+                }
+            }
             if (ptbFixMode != 2) {
                 orgVmmProgInv = patcher.routeFunction(addr + kOffVmmProgInv,
                                 reinterpret_cast<mach_vm_address_t>(wrapVmmProgInv), true);
@@ -5964,11 +6088,13 @@ static void pluginStart() {
              : ptbm == 1 ? "legacy post-invalidation PTB experiment" : "reporting only");
     }
     uint32_t vmroot = 0;
-    vmRootFixEnabled = PE_parse_boot_argn("rgpuvmroot", &vmroot, sizeof(vmroot)) &&
-        vmroot == 1;
-    RLOG("rgpuvmroot=%u: VMID2 GFXHUB root MC-to-physical repair %s; child PDEs remain "
-         "diagnostic-only until the bounded BAR0 walk proves their address form",
-         vmRootFixEnabled, vmRootFixEnabled ? "ARMED" : "off");
+    if (PE_parse_boot_argn("rgpuvmroot", &vmroot, sizeof(vmroot)) && vmroot <= 3)
+        vmRootFixMode = vmroot;
+    vmRootFixEnabled = vmRootFixMode >= 1;
+    RLOG("rgpuvmroot=%u: VMID2 GFXHUB root MC-to-physical repair %s; child PDE "
+         "conversion %s; video-memory PTE conversion %s",
+         vmRootFixMode, vmRootFixEnabled ? "ARMED" : "off",
+         vmRootFixMode >= 2 ? "ARMED" : "off", vmRootFixMode >= 3 ? "ARMED" : "off");
     uint32_t mem = 0;
     if (PE_parse_boot_argn("rgpumem", &mem, sizeof(mem)) && mem <= 1) {
         memProbeMode = mem;
