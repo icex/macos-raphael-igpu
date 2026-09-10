@@ -34,6 +34,7 @@ GPU_ID="${GPU_ID:-}"           # spoof this PCI device id to the guest, e.g. 0x7
 GPU_ROM="${GPU_ROM:-}"         # video BIOS image for the passed-through GPU
 GPU_SUB="${GPU_SUB:-}"         # spoof subsystem ids too, as "vendor:device"
 SERIAL="${SERIAL:-on}"         # on = expose a serial port at run/serial.sock
+CRITICAL_SERIAL="${CRITICAL_SERIAL:-off}" # on = dedicated CR2 UART at COM2
 GDB="${GDB:-off}"              # on = gdbstub on 127.0.0.1:1234 | wait = also start halted
 SSH_PORT="${SSH_PORT:-50922}"
 SCREEN_PORT="${SCREEN_PORT:-5900}"
@@ -157,9 +158,16 @@ EXTRA_QEMU="-chardev socket,id=mon1,path=/run/vm/monitor.sock,server=on,wait=off
 # A 16550 serial port on a unix socket. macOS does not run a login shell on it,
 # but the kernel can be told to log there, which is the only way to capture an
 # early-boot panic that never reaches the framebuffer.
+case "${SERIAL}" in on|off) ;; *) die "unknown serial setting ${SERIAL}" ;; esac
+case "${CRITICAL_SERIAL}" in on|off) ;; *) die "unknown critical serial setting ${CRITICAL_SERIAL}" ;; esac
 if [[ "${SERIAL}" == on ]]; then
     rm -f "${VM_DIR}/run/serial.sock"
-    EXTRA_QEMU="-serial unix:/run/vm/serial.sock,server=on,wait=off ${EXTRA_QEMU}"
+    EXTRA_QEMU="-chardev socket,id=rgpu_console,path=/run/vm/serial.sock,server=on,wait=off -device isa-serial,chardev=rgpu_console,index=0 ${EXTRA_QEMU}"
+fi
+if [[ "${CRITICAL_SERIAL}" == on ]]; then
+    [[ "${SERIAL}" == on ]] || die "critical serial requires the console serial channel"
+    rm -f "${VM_DIR}/run/critical.sock"
+    EXTRA_QEMU="-chardev socket,id=rgpu_critical,path=/run/vm/critical.sock,server=on,wait=off -device isa-serial,chardev=rgpu_critical,index=1 ${EXTRA_QEMU}"
 fi
 
 # QEMU's gdbstub. Debugs the guest kernel from outside, with no guest cooperation
@@ -281,6 +289,7 @@ macOS VM
   nic         ${NIC}
   gl          ${GL}
   serial      ${SERIAL}
+  critical    ${CRITICAL_SERIAL}
   gdb         ${GDB}
   gpu         ${GPU:-none}${GPU_ID:+ (spoofed as ${GPU_ID})}
   disk        ${VM_DIR}/mac_hdd_ng.img (256G max, $(du -h "${VM_DIR}/mac_hdd_ng.img" | cut -f1) used on host)

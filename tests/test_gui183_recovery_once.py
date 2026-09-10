@@ -22,6 +22,29 @@ def load_tool():
 
 
 class Gui183RecoveryOnceTests(unittest.TestCase):
+    @contextlib.contextmanager
+    def frozen_source_tree(self, tool):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for relative in tool.SOURCES:
+                target = root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                source = (ROOT / 'tests/fixtures/gui183-pinned-experiment.py'
+                          if relative == 'tools/experiment.py' else ROOT / relative)
+                data = source.read_bytes()
+                self.assertEqual(hashlib.sha256(data).hexdigest(),
+                                 tool.SOURCES[relative], relative)
+                target.write_bytes(data)
+            original = tool.ROOT
+            original_validate = tool.validate_sources
+            tool.ROOT = root
+            tool.validate_sources = lambda: original_validate(root)
+            try:
+                yield
+            finally:
+                tool.ROOT = original
+                tool.validate_sources = original_validate
+
     def test_execute_once_writes_attempt_before_callback_and_result(self):
         tool = load_tool()
         with tempfile.TemporaryDirectory() as temporary:
@@ -116,7 +139,8 @@ class Gui183RecoveryOnceTests(unittest.TestCase):
         if not run.exists(): self.skipTest('frozen GUI run unavailable')
         before = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
                   for p in run.iterdir() if p.is_file()}
-        derived, proof = tool.validate_reviewed_proof(vm)
+        with self.frozen_source_tree(tool):
+            derived, proof = tool.validate_reviewed_proof(vm)
         after = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
                  for p in run.iterdir() if p.is_file()}
         self.assertEqual(before, after)
@@ -133,12 +157,18 @@ class Gui183RecoveryOnceTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'SHA-256'):
                 tool.validate_sources(root)
 
+    def test_current_experiment_source_is_rejected_by_frozen_runner(self):
+        tool = load_tool()
+        with self.assertRaisesRegex(ValueError, 'tools/experiment.py SHA-256 mismatch'):
+            tool.validate_sources(ROOT)
+
     def test_missing_reviewed_proof_refuses(self):
         tool = load_tool()
         with tempfile.TemporaryDirectory() as temporary:
             vm = Path(temporary); (vm / 'run/metal-016-183-gui-73ad3355').mkdir(parents=True)
-            with self.assertRaises(FileNotFoundError):
-                tool.validate_reviewed_proof(vm)
+            with self.frozen_source_tree(tool):
+                with self.assertRaises(FileNotFoundError):
+                    tool.validate_reviewed_proof(vm)
 
     def test_canonical_receipt_requires_exact_json_and_hashes_bytes(self):
         tool = load_tool()

@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import re
 import struct
+import tempfile
 import unittest
 
 from tests.test_critical_replay import BUILD as CR2_BUILD, snapshot_lines
@@ -77,6 +78,48 @@ class ClassifyTests(unittest.TestCase):
         result = classifier.classify_probe_readiness(manifest, events)
         self.assertTrue(result['valid'])
         self.assertEqual(result['verdict'], 'PROBE_NOT_RUN')
+
+    def test_console_lifecycle_ignores_cr2_noise_and_ready_marker(self):
+        classifier = self.classifier()
+        console = (
+            'RGPU_UART_READY v=1 b=' + CR2_BUILD + ' port=2\n'
+            'CR2 v=2 malformed from COM1\n'
+            'Unexpected kernel trap number: 14, RIP: 0x10, CR2: 0x20\n')
+        rows = classifier.parse_console_lifecycle(console, CR2_BUILD)
+        self.assertEqual([row['kind'] for row in rows], ['guest_panic'])
+        self.assertEqual(rows[0]['build'], CR2_BUILD)
+
+    def test_console_lifecycle_refuses_conflicting_driver_identity(self):
+        classifier = self.classifier()
+        console = 'RaphaelGPU rgpu: @ BUILD: identity=' + ('b' * 32) + '\n'
+        with self.assertRaisesRegex(ValueError, 'conflicting build identity'):
+            classifier.parse_console_lifecycle(console, CR2_BUILD)
+
+    def test_manifested_files_require_exact_completed_producer_ready(self):
+        classifier = self.classifier()
+        transport = {'kind':'isa-serial', 'version':1, 'index':1,
+                     'io_base':760, 'baud':115200,
+                     'socket':'run/critical.sock', 'capture':'critical.txt'}
+        manifest = {'build_id':CR2_BUILD, 'critical_replay_schema':2,
+                    'critical_replay_transport':transport}
+        cr2 = ''.join(snapshot_lines(['BUILD: identity=' + CR2_BUILD]))
+        marker = f'RGPU_UART_READY v=1 b={CR2_BUILD} port=2\n'
+        with tempfile.TemporaryDirectory() as temporary:
+            run = Path(temporary)
+            (run / 'serial.txt').write_text('')
+            for label, prefix, definitive in (
+                    ('missing', '', False),
+                    ('wrong', marker.replace('port=2', 'port=1'), True),
+                    ('duplicate', marker + marker, True)):
+                with self.subTest(label=label):
+                    (run / 'critical.txt').write_text(prefix + cr2)
+                    rows = classifier.parse_manifest_files(manifest, run)
+                    loss = [row for row in rows if row['kind'] == 'capture_loss']
+                    self.assertEqual(len(loss), 1)
+                    self.assertEqual(loss[0]['definitive'], definitive)
+            (run / 'critical.txt').write_text(marker + cr2)
+            rows = classifier.parse_manifest_files(manifest, run)
+            self.assertFalse(any(row['kind'] == 'capture_loss' for row in rows))
 
     def test_v2_vmm_readiness_refuses_missing_pool_overlap_and_null_allocator(self):
         classifier = self.classifier()

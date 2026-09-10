@@ -15,6 +15,9 @@ from types import SimpleNamespace
 from tests.test_critical_replay import BUILD as CR2_BUILD, snapshot_lines
 
 ROOT = Path(__file__).resolve().parents[1]
+TRANSPORT = {
+    'kind':'isa-serial', 'version':1, 'index':1, 'io_base':760,
+    'baud':115200, 'socket':'run/critical.sock', 'capture':'critical.txt'}
 
 
 class ExperimentTests(unittest.TestCase):
@@ -577,6 +580,54 @@ class ExperimentTests(unittest.TestCase):
             ('new', {'critical_replay_schema':2, 'expected_build':'a' * 32}),
             ('old', {}),
         ])
+
+    def test_transport_contract_is_symmetric_with_embedded_card(self):
+        tool = self.module()
+        manifest = {'critical_replay_schema':2,
+                    'critical_replay_transport':TRANSPORT,
+                    'spec':{'critical_replay_schema':2,
+                            'critical_replay_transport':TRANSPORT}}
+        self.assertEqual(tool.critical_replay_transport(manifest), TRANSPORT)
+        tool.validate_manifest_replay_contract(manifest)
+        for changed in (
+                dict(manifest, spec={'critical_replay_schema':2}),
+                dict(manifest, critical_replay_transport=dict(TRANSPORT, index=0))):
+            with self.assertRaisesRegex(ValueError, 'critical replay transport'):
+                tool.validate_manifest_replay_contract(changed)
+
+    def test_producer_ready_is_unique_exact_and_build_bound(self):
+        tool = self.module()
+        build = 'a' * 32
+        line = f'RGPU_UART_READY v=1 b={build} port=2\n'
+        self.assertTrue(tool.critical_uart_ready(line, build))
+        for capture in ('', line + line, line.replace('port=2', 'port=1'),
+                        line.replace(build, 'b' * 32), line.rstrip('\n')):
+            self.assertFalse(tool.critical_uart_ready(capture, build))
+
+    def test_dedicated_recovery_refuses_complete_wire_without_ready_marker(self):
+        tool = self.module()
+        manifest = {'build_id':'a' * 32, 'critical_replay_schema':2,
+                    'critical_replay_transport':TRANSPORT,
+                    'spec':{'critical_replay_schema':2,
+                            'critical_replay_transport':TRANSPORT},
+                    'recovery_lease_schema':3}
+        with self.assertRaisesRegex(ValueError, 'producer readiness'):
+            tool.recover_v2(SimpleNamespace(), Path('/not-opened'), manifest,
+                            'CR2 v=2 s=0 BEGIN\n')
+
+    def test_running_identity_requires_exact_manifested_uart_topology(self):
+        tool = self.module()
+        manifest = {'image_id':'img', 'gpu':False, 'critical_replay_schema':2,
+                    'critical_replay_transport':TRANSPORT}
+        good = {'image_id':'img', 'vfio_args':[], 'serial_args':[
+            'socket,id=rgpu_console,path=/run/vm/serial.sock,server=on,wait=off',
+            'isa-serial,chardev=rgpu_console,index=0',
+            'socket,id=rgpu_critical,path=/run/vm/critical.sock,server=on,wait=off',
+            'isa-serial,chardev=rgpu_critical,index=1']}
+        self.assertEqual(tool.validate_running(manifest, good), [])
+        bad = copy.deepcopy(good)
+        bad['serial_args'][-1] = 'isa-serial,chardev=rgpu_critical,index=0'
+        self.assertIn('critical_uart_topology', tool.validate_running(manifest, bad))
 
     def test_critical_replay_manifest_selector_is_explicit_and_numeric(self):
         tool = self.module()

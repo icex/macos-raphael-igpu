@@ -69,14 +69,6 @@ def helper(name):
     return module
 
 
-def transport_contract():
-    path = Path(__file__).with_name('critical-transport.py')
-    spec = importlib.util.spec_from_file_location('critical_transport_contract', path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 def command(args, timeout=15):
     return subprocess.check_output(args, text=True, timeout=timeout).strip()
 
@@ -143,9 +135,6 @@ def required_identity(data):
         missing.append('recovery_lease_schema')
     if data.get('gpu') is True and not data.get('recovery_helpers_sha256'):
         missing.append('recovery_helpers_sha256')
-    if ('critical_replay_transport' in data and
-            not data.get('critical_transport_validator_sha256')):
-        missing.append('critical_transport_validator_sha256')
     return missing
 
 
@@ -264,7 +253,6 @@ def current_identity(vm, candidate, requested_diagnostic, run_id=None,
 def prepare(vm, spec, output, gpu=True, run_id=None):
     card = json.loads(spec.read_text())
     replay_schema = critical_replay_schema(card)
-    transport = critical_replay_transport(card)
     lease_schema = card.get('recovery_lease_schema', 2)
     if type(lease_schema) is not int or lease_schema not in (2, 3):
         raise ValueError('recovery lease schema must be numeric 2 or 3')
@@ -287,7 +275,6 @@ def prepare(vm, spec, output, gpu=True, run_id=None):
         if not identity['source_clean']: raise ValueError('commit source and tooling before preparation')
         if card['requested_diagnostic'] not in identity['boot_args'].split():
             raise ValueError('required diagnostic boot argument is absent')
-        transport_contract().validate_boot_args(identity['boot_args'], card)
         identity.update(run_id=run_id or uuid.uuid4().hex, max_seconds=card['max_seconds'],
                         gpu=gpu,
                         recovery_lease_schema=lease_schema if gpu else None,
@@ -295,10 +282,6 @@ def prepare(vm, spec, output, gpu=True, run_id=None):
                         candidate_directory=str(candidate.relative_to(vm)))
         if replay_schema is not None:
             identity['critical_replay_schema'] = replay_schema
-        if transport is not None:
-            identity['critical_replay_transport'] = transport
-            identity['critical_transport_validator_sha256'] = sha(
-                Path(__file__).with_name('critical-transport.py').read_bytes())
         tolerance = critical_replay_tolerance(card)
         if tolerance is not None:
             if replay_schema != 2:
@@ -399,9 +382,6 @@ def recover_v2(recovery_tool, vm, manifest, serial, replay_evidence=None):
     receipt. Strict transport leaves it untouched.
     """
     validate_manifest_replay_contract(manifest)
-    if critical_replay_transport(manifest) is not None and not critical_uart_ready(
-            serial, manifest.get('build_id')):
-        raise ValueError('dedicated critical producer readiness is absent or conflicting')
     lease_schema = manifest.get('recovery_lease_schema')
     if type(lease_schema) is not int or lease_schema not in (2, 3):
         raise ValueError('recovery lease schema must be numeric 2 or 3')
@@ -461,27 +441,6 @@ def parse_manifest_serial(classifier, manifest, serial):
         critical_replay_tolerance=tolerance)
 
 
-def parse_manifest_captures(classifier, manifest, serial, critical=None):
-    if critical_replay_transport(manifest) is None:
-        return parse_manifest_serial(classifier, manifest, serial)
-    if critical is None:
-        return [dict(kind='capture_loss', build=manifest.get('build_id'),
-                     reason='dedicated critical capture is missing', definitive=True)]
-    rows = parse_manifest_serial(classifier, manifest, critical)
-    ready_state = transport_contract().producer_ready_state(
-        critical, manifest.get('build_id'))
-    if ready_state != 'valid':
-        rows.append(dict(kind='capture_loss', build=manifest.get('build_id'),
-                         reason='dedicated critical producer readiness is absent or conflicting',
-                         definitive=ready_state == 'conflicting'))
-    try:
-        rows += classifier.parse_console_lifecycle(serial, manifest.get('build_id'))
-    except ValueError as error:
-        rows.append(dict(kind='capture_loss', build=manifest.get('build_id'),
-                         reason=str(error), definitive=True))
-    return rows
-
-
 def definitive_capture_loss(events):
     return any(
         event.get('kind') == 'capture_loss' and (
@@ -507,14 +466,6 @@ def critical_replay_schema(data):
     if type(schema) is not int or schema != 2:
         raise ValueError('critical replay schema must be numeric 2')
     return schema
-
-
-def critical_replay_transport(data):
-    return transport_contract().validate(data)
-
-
-def critical_uart_ready(capture, expected_build):
-    return transport_contract().producer_ready_state(capture, expected_build) == 'valid'
 
 
 CRITICAL_REPLAY_TOLERANCES = ('terminal-prefix', 'terminal-prefix-open')
@@ -547,13 +498,8 @@ def validate_manifest_replay_contract(manifest):
     """Bind a new recovery-only selector to the embedded experiment card."""
     critical_replay_schema(manifest)
     critical_replay_tolerance(manifest)
-    transport = critical_replay_transport(manifest)
-    spec = manifest.get('spec')
-    card_transport = (critical_replay_transport(spec)
-                      if isinstance(spec, dict) else None)
-    if transport != card_transport:
-        raise ValueError('critical replay transport does not match experiment card')
     key = 'recovery_critical_replay_tolerance'
+    spec = manifest.get('spec')
     manifest_has_selector = key in manifest
     card_has_selector = isinstance(spec, dict) and key in spec
     if not manifest_has_selector and not card_has_selector:
@@ -2156,18 +2102,6 @@ def validate_running(manifest, observed):
     errors = []
     if manifest['image_id'] != observed.get('image_id'): errors.append('image_id')
     vfio = observed.get('vfio_args', [])
-    serial = observed.get('serial_args', [])
-    console = [
-        'socket,id=rgpu_console,path=/run/vm/serial.sock,server=on,wait=off',
-        'isa-serial,chardev=rgpu_console,index=0']
-    critical = [
-        'socket,id=rgpu_critical,path=/run/vm/critical.sock,server=on,wait=off',
-        'isa-serial,chardev=rgpu_critical,index=1']
-    dedicated = critical_replay_transport(manifest) is not None
-    expected_serial = console + (critical if dedicated else [])
-    if ((dedicated and sorted(serial) != sorted(expected_serial)) or
-            (not dedicated and any('rgpu_critical' in value for value in serial))):
-        errors.append('critical_uart_topology')
     if manifest.get('gpu') is False:
         if vfio: errors.append('unexpected_vfio_device')
         return errors
@@ -2186,13 +2120,7 @@ for pid in os.listdir('/proc'):
  try:raw=open('/proc/'+pid+'/cmdline','rb').read();args=raw.split(b'\\0')
  except OSError:continue
  if args and args[0].split(b'/')[-1]==b'qemu-system-x86_64':
-  selected=[]
-  for index,arg in enumerate(args[:-1]):
-   if ((arg==b'-serial') or
-       (arg==b'-chardev' and args[index+1].startswith(b'socket,id=rgpu_')) or
-       (arg==b'-device' and args[index+1].startswith(b'isa-serial'))):
-    selected.append(args[index+1].decode())
-  rows.append({'vfio_args':[a.decode() for a in args if a.startswith(b'vfio-pci,')], 'serial_args':selected, 'argv_sha256':hashlib.sha256(raw).hexdigest()})
+  rows.append({'vfio_args':[a.decode() for a in args if a.startswith(b'vfio-pci,')], 'argv_sha256':hashlib.sha256(raw).hexdigest()})
 assert len(rows)==1
 print(json.dumps(rows[0]))
 '''
@@ -2314,10 +2242,6 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
         raise ValueError('candidate179 qualification cannot use another launch mode')
     manifest = json.loads(manifest_path.read_text())
     validate_manifest_replay_contract(manifest)
-    dedicated_critical = critical_replay_transport(manifest) is not None
-    if dedicated_critical and manifest.get('critical_transport_validator_sha256') != sha(
-            Path(__file__).with_name('critical-transport.py').read_bytes()):
-        raise ValueError('critical transport validator identity changed')
     if (manifest.get('gpu') is True and
             manifest.get('recovery_lease_schema') not in (2, 3)):
         raise ValueError('GPU run requires a supported recovery lease manifest')
@@ -2389,8 +2313,6 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                     vm, vm/manifest['candidate_directory'], requested,
                     manifest['run_id'] if manifest.get('gpu') is True else None,
                     manifest.get('recovery_lease_schema', 2))
-                transport_contract().validate_boot_args(
-                    observed['boot_args'], manifest)
                 host = host_snapshot(); write_once(output/'host-before.json', host)
                 used = vm/'run/used-gpu-boots'; used.mkdir(exist_ok=True)
                 recovery = None; reuse_errors = []
@@ -2469,8 +2391,6 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                             continuation_ledger.read_bytes() != continuation_ledger_bytes):
                         raise RuntimeError('boot ledger changed during prelaunch continuation')
                 (vm/'run/serial.log').write_text('')
-                if dedicated_critical:
-                    (vm/'run/critical.log').write_bytes(b'')
                 (vm/'run/agent-server-events.jsonl').unlink(missing_ok=True)
                 launch_requested = time.time()
                 # Lock already held. start_locked creates its durable reservation
@@ -2481,8 +2401,7 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                 gpu_args = [] if manifest.get('gpu') is False else [
                     '--gpu', manifest['vfio_device'], '--gpu-id', '0x73ff', '--gpu-rom', 'run/gpu-patched.rom']
                 try:
-                    state = supervisor.start_locked(
-                        vm, manifest['max_seconds'], gpu_args, dedicated_critical)
+                    state = supervisor.start_locked(vm, manifest['max_seconds'], gpu_args)
                 finally:
                     for key,value in old_env.items():
                         if value is None: os.environ.pop(key, None)
@@ -2499,10 +2418,7 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                 supervisor.verify(state)
                 if monitor.error: raise RuntimeError(monitor.error)
                 serial = (vm/'run/serial.log').read_text(errors='replace')
-                critical = ((vm/'run/critical.log').read_text(errors='replace')
-                            if dedicated_critical else None)
-                events = parse_manifest_captures(
-                    classifier, manifest, serial, critical)
+                events = parse_manifest_serial(classifier, manifest, serial)
                 capture_state = live_capture_state(events)
                 if capture_state == 'fatal':
                     raise RuntimeError('definitive critical capture loss; aborting exposure')
@@ -2517,11 +2433,6 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                     break
                 result = classifier.classify_probe_readiness(manifest, events)
                 if result['verdict'] == 'PROBE_NOT_RUN':
-                    if dedicated_critical and not critical_uart_ready(
-                            critical, manifest['build_id']):
-                        capture_pending = True
-                        time.sleep(0.5)
-                        continue
                     if manifest['spec'].get('run_probe_only_after_native_start') is True and probe_fits(time.time(), state['launch_deadline_epoch'], state['deadline_epoch'],
                                   probe_seconds=50):
                         probe = run_probe(vm, manifest)
@@ -2576,30 +2487,19 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
             shutdown_result.get('outcome') != 'STOP_UNCONFIRMED' and
             not (monitor and monitor.error)):
         try:
-            recovery_serial = ((vm/'run/critical.log').read_text(errors='replace')
-                               if dedicated_critical else
-                               (vm/'run/serial.log').read_text(errors='replace'))
+            recovery_serial = (vm/'run/serial.log').read_text(errors='replace')
             recovery_result = recover_v2(
                 recovery_tool, vm, manifest, recovery_serial, replay_evidence)
         except BaseException as error:
             recovery_result = {'status':'failed',
                                'error':type(error).__name__+': '+str(error)}
     initialize_output()
-    serial_bytes = (vm/'run/serial.log').read_bytes() if state else b''
-    serial = serial_bytes.decode(errors='replace')
-    (output/'serial.txt').write_bytes(serial_bytes)
-    critical = None
-    if dedicated_critical:
-        critical_path = vm/'run/critical.log'
-        critical_bytes = critical_path.read_bytes() if state and critical_path.exists() else b''
-        critical = critical_bytes.decode(errors='replace')
-        (output/'critical.txt').write_bytes(critical_bytes)
-        write_once(output/'capture-sha256.json', {
-            'serial.txt': sha(serial_bytes), 'critical.txt': sha(critical_bytes)})
+    serial = (vm/'run/serial.log').read_text(errors='replace') if state else ''
+    (output/'serial.txt').write_text(serial)
     agent_events = vm/'run/agent-server-events.jsonl'
     if agent_events.is_file():
         (output/'agent-server-events.jsonl').write_bytes(agent_events.read_bytes())
-    events = parse_manifest_captures(classifier, manifest, serial, critical)
+    events = parse_manifest_serial(classifier, manifest, serial)
     (output/'events.jsonl').write_text(''.join(json.dumps(e)+'\n' for e in events))
     if probe is not None: write_once(output/'probe.json', probe)
     write_once(output/'shutdown.json', shutdown_result)

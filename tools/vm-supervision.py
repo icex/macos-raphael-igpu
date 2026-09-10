@@ -126,6 +126,9 @@ def verify(state, require_ready=True):
             raise RuntimeError("exposure service does not stop this exact container")
     elif state["timer_unit"] is not None:
         raise RuntimeError("unexpected timer for GPUless capture")
+    critical_enabled = state.get("critical_enabled", False)
+    if type(critical_enabled) is not bool:
+        raise RuntimeError("saved critical transport mode is invalid")
     serial_name = f"rgpu-serial-{cid}.service"
     if state["serial_unit"] != serial_name:
         raise RuntimeError("saved serial service does not belong to this container")
@@ -133,8 +136,20 @@ def verify(state, require_ready=True):
     if (serial.get("LoadState"), serial.get("ActiveState"), serial.get("SubState")) != (
             "loaded", "active", "running") or int(serial.get("MainPID", "0")) <= 0:
         raise RuntimeError("serial capture service is not running")
-    if require_ready and Path(state["serial_ready"]).read_text() != cid:
+    expected_serial_ready = cid + " console" if critical_enabled else cid
+    if require_ready and Path(state["serial_ready"]).read_text() != expected_serial_ready:
         raise RuntimeError("serial capture has not connected and opened its log")
+    if critical_enabled:
+        critical_name = f"rgpu-critical-{cid}.service"
+        if state.get("critical_unit") != critical_name:
+            raise RuntimeError("saved critical service does not belong to this container")
+        critical = properties(critical_name)
+        if (critical.get("LoadState"), critical.get("ActiveState"),
+                critical.get("SubState")) != ("loaded", "active", "running") or int(
+                    critical.get("MainPID", "0")) <= 0:
+            raise RuntimeError("critical capture service is not running")
+        if require_ready and Path(state["critical_ready"]).read_text() != cid + " critical":
+            raise RuntimeError("critical capture has not connected and opened its log")
     if maximum and expected_deadline <= time.time():
         raise RuntimeError("exposure deadline elapsed during verification")
 
@@ -216,7 +231,7 @@ def shutdown(state, grace=20):
     return {"cid": cid, "outcome": "exited-after-request" if requested else "already-stopped"}
 
 
-def arm(vm, cid, maximum):
+def arm(vm, cid, maximum, critical_enabled=False):
     started_at, started_epoch = inspect(cid)
     deadline = math.floor(started_epoch + maximum) if maximum else None
     if deadline is not None and deadline <= time.time():
@@ -240,24 +255,40 @@ def arm(vm, cid, maximum):
                     "--property=Restart=on-failure", "--property=RestartSec=1s"] + endpoint +
             ["--", docker, "stop", "--time", "0", cid])
         timer_unit = timer_base + ".timer"
-    serial_base = f"rgpu-serial-{cid}"
-    ready = vm / "run" / f"serial-{cid}.ready"
-    ready.unlink(missing_ok=True)
     stop_command = shlex.join([docker, "stop", "--time", "0", cid])
-    run(base + [f"--unit={serial_base}", "--service-type=exec",
-                f"--property=WorkingDirectory={vm}", "--property=TimeoutStopSec=15s",
-                f"--property=ExecStopPost={stop_command}", f"--setenv=VM_SERIAL={vm / 'run/serial.sock'}",
-                f"--setenv=VM_SERIAL_READY={ready}", f"--setenv=VM_SERIAL_CID={cid}"] +
-        endpoint + ["--", binary("systemd-inhibit"), "--what=sleep:idle", "--who=macOS VM serial",
-                    "--why=Keep serial capture and the VM awake", sys.executable, "-u", str(vm / "sercat.py")])
+    channels = [("serial", "console")]
+    if critical_enabled:
+        channels.append(("critical", "critical"))
+    ready_paths = {}
+    units = {}
+    for stem, channel in channels:
+        unit_base = f"rgpu-{stem}-{cid}"
+        ready = vm / "run" / f"{stem}-{cid}.ready"
+        ready.unlink(missing_ok=True)
+        ready_paths[stem] = ready
+        units[stem] = unit_base + ".service"
+        explicit = ([f"--setenv=VM_SERIAL_CHANNEL={channel}"] if critical_enabled else [])
+        run(base + [f"--unit={unit_base}", "--service-type=exec",
+                    f"--property=WorkingDirectory={vm}", "--property=TimeoutStopSec=15s",
+                    f"--property=ExecStopPost={stop_command}",
+                    f"--setenv=VM_SERIAL_SOCKET={vm / ('run/' + stem + '.sock')}",
+                    f"--setenv=VM_SERIAL_OUTPUT={vm / ('run/' + stem + '.log')}",
+                    f"--setenv=VM_SERIAL_READY={ready}", f"--setenv=VM_SERIAL_CID={cid}"] +
+            explicit + endpoint + ["--", binary("systemd-inhibit"), "--what=sleep:idle",
+                        f"--who=macOS VM {channel}", "--why=Keep capture and the VM awake",
+                        sys.executable, "-u", str(vm / "sercat.py")])
     state = {"cid": cid, "started_at": started_at, "max_seconds": maximum,
              "deadline_epoch": deadline, "timer_unit": timer_unit,
-             "serial_unit": serial_base + ".service", "serial_ready": str(ready)}
+             "serial_unit": units["serial"], "serial_ready": str(ready_paths["serial"]),
+             "critical_enabled": bool(critical_enabled)}
+    if critical_enabled:
+        state.update(critical_unit=units["critical"],
+                     critical_ready=str(ready_paths["critical"]))
     verify(state, require_ready=False)
-    until = time.monotonic() + 60
-    while not ready.is_file():
+    until = time.monotonic() + 60  # One shared absolute readiness deadline.
+    while not all(path.is_file() for path in ready_paths.values()):
         if time.monotonic() >= until or (deadline is not None and time.time() >= deadline):
-            raise RuntimeError("serial capture did not become ready before its deadline")
+            raise RuntimeError("capture channels did not become ready before their shared deadline")
         time.sleep(0.1)
     verify(state)
     return state
@@ -279,7 +310,8 @@ def cleanup(vm, name):
         cid = None
     if cid:
         stop_exact(cid)
-        for unit in (f"rgpu-serial-{cid}.service", f"rgpu-deadline-{cid}.timer"):
+        for unit in (f"rgpu-serial-{cid}.service", f"rgpu-critical-{cid}.service",
+                     f"rgpu-deadline-{cid}.timer"):
             try:
                 run([binary("systemctl"), "--user", "stop", unit])
             except Exception:
@@ -293,7 +325,7 @@ def cleanup(vm, name):
     (vm / 'run/launch-pending' / name).unlink(missing_ok=True)
 
 
-def launch(vm, name, maximum, gpu_args):
+def launch(vm, name, maximum, gpu_args, critical_enabled=False):
     """Foreground lifetime of a user service, with cleanup also in ExecStopPost."""
     vm = vm.resolve()
     name = launch_name(name)
@@ -304,10 +336,12 @@ def launch(vm, name, maximum, gpu_args):
     try:
         # A prior socket must never satisfy this launch's readiness check.
         (vm / "run/serial.sock").unlink(missing_ok=True)
+        (vm / "run/critical.sock").unlink(missing_ok=True)
         with (vm / "run/vm-launch.log").open("w") as log:
             child = subprocess.Popen([str(vm / "macos-vm.sh"), "run", *gpu_args], cwd=vm,
                                      env=dict(os.environ, NAME=name, GPU="", GPU_ID="", GPU_ROM="",
-                                              GPU_SUB="", EXTRA="", SERIAL="on"),
+                                              GPU_SUB="", EXTRA="", SERIAL="on",
+                                              CRITICAL_SERIAL="on" if critical_enabled else "off"),
                                      stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
         until = time.monotonic() + 30
         while True:
@@ -339,7 +373,7 @@ def launch(vm, name, maximum, gpu_args):
             if info.get("Status") != "created" or time.monotonic() >= until:
                 raise RuntimeError("identified container failed to reach running state")
             time.sleep(0.1)
-        state = arm(vm, cid, maximum)
+        state = arm(vm, cid, maximum, critical_enabled)
         # Existing guest tools address this familiar name; all supervision uses CID.
         run([binary("docker"), "rename", cid, "macos-sequoia"])
         agent_source = Path(__file__).with_name('agent-server.py')
@@ -388,7 +422,7 @@ def launch(vm, name, maximum, gpu_args):
         cleanup(vm, name)
 
 
-def start(vm, maximum, gpu_args):
+def start(vm, maximum, gpu_args, critical_enabled=False):
     with (vm / 'run/redeploy.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         pending = vm / 'run/launch-pending'
@@ -401,10 +435,10 @@ def start(vm, maximum, gpu_args):
         if any(name == 'macos-sequoia' or name.startswith('rgpu-launch-')
                for name in active.splitlines()):
             raise RuntimeError('active or pending VM already owns the media')
-        return start_locked(vm, maximum, gpu_args)
+        return start_locked(vm, maximum, gpu_args, critical_enabled)
 
 
-def start_locked(vm, maximum, gpu_args):
+def start_locked(vm, maximum, gpu_args, critical_enabled=False):
     vm = vm.resolve()
     name = "rgpu-launch-" + uuid.uuid4().hex
     # Durable admission survives the short-lived caller dying before Docker has
@@ -432,7 +466,10 @@ def start_locked(vm, maximum, gpu_args):
         # additionally uses StartedAt; neither phase can extend GPU exposure.
         command += [f"--property=RuntimeMaxSec={maximum}s"]
     command += endpoint + ["--", sys.executable, helper, "launch", "--vm-dir", str(vm),
-                           "--name", name, "--max-seconds", str(maximum), "--", *gpu_args]
+                           "--name", name, "--max-seconds", str(maximum)]
+    if critical_enabled:
+        command.append("--critical-serial")
+    command += ["--", *gpu_args]
     try:
         run(command)
         ready = vm / "run" / (name + ".json")
@@ -471,6 +508,7 @@ def main():
     create.add_argument("--vm-dir", type=Path, required=True)
     create.add_argument("--cid", required=True)
     create.add_argument("--max-seconds", required=True)
+    create.add_argument("--critical-serial", action="store_true")
     halt = commands.add_parser("shutdown")
     halt.add_argument("--state", type=Path, required=True)
     halt.add_argument("--grace-seconds", default="20")
@@ -483,6 +521,7 @@ def main():
             sub.add_argument("--name", required=True)
         if verb != "cleanup":
             sub.add_argument("--max-seconds", required=True)
+            sub.add_argument("--critical-serial", action="store_true")
             sub.add_argument("gpu_args", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     cid = None
@@ -502,12 +541,12 @@ def main():
             if "--gpu" in gpu_args and maximum == 0:
                 raise ValueError("GPU launches require a positive exposure cap")
             if args.command == "launch":
-                launch(args.vm_dir, args.name, maximum, gpu_args)
+                launch(args.vm_dir, args.name, maximum, gpu_args, args.critical_serial)
                 return 0
-            state = start(args.vm_dir, maximum, gpu_args)
+            state = start(args.vm_dir, maximum, gpu_args, args.critical_serial)
         elif args.command == "arm":
             cid = full_cid(args.cid)
-            state = arm(args.vm_dir, cid, seconds(args.max_seconds))
+            state = arm(args.vm_dir, cid, seconds(args.max_seconds), args.critical_serial)
         else:
             state = json.loads(args.state.read_text())
             cid = full_cid(state["cid"])
@@ -519,7 +558,8 @@ def main():
         if cid:
             try:
                 stop_exact(cid)
-                for unit in (f"rgpu-serial-{cid}.service", f"rgpu-deadline-{cid}.timer"):
+                for unit in (f"rgpu-serial-{cid}.service", f"rgpu-critical-{cid}.service",
+                             f"rgpu-deadline-{cid}.timer"):
                     try:
                         run([binary("systemctl"), "--user", "stop", unit])
                     except Exception:

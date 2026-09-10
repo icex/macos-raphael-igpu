@@ -67,6 +67,17 @@ class RedeployTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertNotIn("VM relaunched", result.stdout)
 
+    def test_critical_transport_rotates_both_logs_and_requests_dual_supervision(self):
+        (self.vm / "run/serial.log").write_bytes(b"old console")
+        (self.vm / "run/critical.log").write_bytes(b"old critical")
+        result = self.run_script("--no-gpu", "--critical-serial")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        call = json.loads((self.vm / "run/supervisor-call.json").read_text())
+        self.assertIn("--critical-serial", call)
+        self.assertEqual((self.vm / "run/serial.log").read_bytes(), b"")
+        self.assertEqual((self.vm / "run/critical.log").read_bytes(), b"")
+        self.assertIn("critical.log", result.stdout)
+
     def test_active_vm_is_refused_before_any_disk_mutation(self):
         (self.vm / 'bin/docker').write_text(
             '#!/bin/sh\nif [ "$1" = ps ]; then echo macos-sequoia; exit 0; fi\n'

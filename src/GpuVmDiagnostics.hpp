@@ -101,6 +101,100 @@ struct ContextRegisters {
     uint32_t endHi;
 };
 
+struct FaultStatus {
+    uint32_t moreFaults;
+    uint32_t walkerError;
+    uint32_t permissionFaults;
+    uint32_t mappingError;
+    uint32_t cid;
+    uint32_t write;
+    uint32_t atomic;
+    uint32_t vmid;
+};
+
+constexpr FaultStatus decodeFaultStatus(uint32_t status) {
+    return {status & 1u, (status >> 1) & 7u, (status >> 4) & 0xfu,
+            (status >> 8) & 1u, (status >> 9) & 0x1ffu,
+            (status >> 18) & 1u, (status >> 19) & 1u,
+            (status >> 20) & 0xfu};
+}
+
+struct FaultObservation {
+    uint32_t status;
+    uint64_t address;
+};
+
+// A callback may arrive under unknown driver locks. Serialize with a single
+// non-blocking claim, reject non-VMID1 and duplicates before occupying a slot,
+// and release-publish each complete fixed slot independently for the worker.
+template <size_t Capacity> class FaultObservationStore {
+    static_assert(Capacity > 0, "nonempty fault observation store required");
+    struct Slot { unsigned ready; FaultObservation value; } slots_[Capacity] {};
+    unsigned busy_ {};
+    uint64_t nonVmid1_ {};
+    uint64_t duplicate_ {};
+    uint64_t contention_ {};
+    uint64_t full_ {};
+public:
+    bool capture(uint32_t status, uint64_t address) {
+        if (decodeFaultStatus(status).vmid != 1) {
+            __atomic_fetch_add(&nonVmid1_, 1, __ATOMIC_RELAXED);
+            return false;
+        }
+        unsigned expected = 0;
+        if (!__atomic_compare_exchange_n(&busy_, &expected, 1u, false,
+                                         __ATOMIC_ACQUIRE, __ATOMIC_RELAXED))
+        {
+            __atomic_fetch_add(&contention_, 1, __ATOMIC_RELAXED);
+            return false;
+        }
+        size_t empty = Capacity;
+        for (size_t i = 0; i < Capacity; ++i) {
+            if (__atomic_load_n(&slots_[i].ready, __ATOMIC_ACQUIRE)) {
+                if (slots_[i].value.status == status &&
+                    slots_[i].value.address == address) {
+                    __atomic_fetch_add(&duplicate_, 1, __ATOMIC_RELAXED);
+                    __atomic_store_n(&busy_, 0u, __ATOMIC_RELEASE);
+                    return false;
+                }
+            } else if (empty == Capacity) {
+                empty = i;
+            }
+        }
+        if (empty == Capacity) {
+            __atomic_fetch_add(&full_, 1, __ATOMIC_RELAXED);
+            __atomic_store_n(&busy_, 0u, __ATOMIC_RELEASE);
+            return false;
+        }
+        slots_[empty].value = {status, address};
+        __atomic_store_n(&slots_[empty].ready, 1u, __ATOMIC_RELEASE);
+        __atomic_store_n(&busy_, 0u, __ATOMIC_RELEASE);
+        return true;
+    }
+    bool read(size_t index, FaultObservation &value) const {
+        if (index >= Capacity ||
+            !__atomic_load_n(&slots_[index].ready, __ATOMIC_ACQUIRE)) return false;
+        value = slots_[index].value;
+        return true;
+    }
+    uint64_t nonVmid1() const { return __atomic_load_n(&nonVmid1_, __ATOMIC_RELAXED); }
+    uint64_t duplicates() const { return __atomic_load_n(&duplicate_, __ATOMIC_RELAXED); }
+    uint64_t contention() const { return __atomic_load_n(&contention_, __ATOMIC_RELAXED); }
+    uint64_t full() const { return __atomic_load_n(&full_, __ATOMIC_RELAXED); }
+};
+
+class FaultRejectionSchedule {
+    uint64_t next_ {1};
+    unsigned reports_ {};
+public:
+    bool shouldPublish(uint64_t rejected) {
+        if (reports_ >= 8 || rejected < next_) return false;
+        ++reports_;
+        next_ = next_ > UINT64_MAX / 2 ? UINT64_MAX : next_ * 2;
+        return true;
+    }
+};
+
 enum class InvalidateRegisterKind : uint32_t { Unknown, Semaphore, Request, Acknowledge };
 struct InvalidateRegister {
     bool valid;

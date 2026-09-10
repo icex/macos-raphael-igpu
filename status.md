@@ -1,5 +1,62 @@
 # Raphael iGPU: current technical status
 
+## Current milestone — dedicated capture implemented and offline verified
+
+The COM2 transport and VMID1 fault diagnostic are implemented on `dev`. Agents
+wrote and tested the changes; independent review and coordinator audit found
+and resolved worker-deadline and standalone-classifier readiness gaps. Existing
+candidate worktrees and live VM harness files remain untouched.
+
+| Boundary | Verified result |
+|---|---|
+| Guest writer | Independent worker, bounded waits, unchanged CR2 format, no COM1 fallback |
+| Capture lifecycle | 10/10 real CPU-only Docker/systemd/QEMU qualification cases passed |
+| Host regressions | 594 Python tests run successfully, one explicit skip |
+| Driver fixtures | COM2 and VMID1 ASan/UBSan checks passed |
+| Driver build | Exact 24G830 preflight and production-configuration cross-build passed |
+| Metal execution/desktop | Still unverified; no new GPU run |
+
+The final tiny-guest fixture is 1,144,917 bytes (complete baseline plus maximum
+snapshot), SHA-256 `83be7814817571a62e58879602b051615940d4bf6b840ae38cdecfa88eedafa5`.
+It arrived byte-exact over COM2 while COM1 carried malformed marker noise. Tests
+covered swapped channels, stale readiness, three interrupted offsets, loss of
+either collector, missing-channel deadlines, exact-CID stop and cleanup. QEMU
+used TCG, no devices, `-nodefaults -vga none -display none`, and no macOS disk.
+This qualifies the repository supervisor/collectors with explicit tiny-guest
+topology; live macOS deployment remains pending.
+
+The production-shaped temporary build verified pinned SDK/Lilu trees, the firmware
+header hash, and embedded firmware (177,104 bytes; 3/3 probes). The 725,552-byte
+kext has SHA-256 `03293912e45393f53bbe89cf50bd589d669d41fdbb243fcdc7b5cf86d9cf6d89`.
+It is a build verification artifact with a temporary identity, not a staged
+candidate. Evidence and commands are in `findings/research/2026-09-10-com2-*`.
+All five recovery/parser helpers remain byte-identical. The historical GUI-183
+one-use runner still rejects changed source; tests use its exact archived fixture.
+
+Current host verification: same boot `73ad3355-80a7-48f1-a8dd-e6f770b41de8`,
+no VM running and sleep inhibition active. The recovered receipt below remains
+the latest cleanup evidence. No new GPU cycle has occurred; unresolved count 6.
+
+The next discriminating hardware observation remains the actual faulting VMID1
+context and page-table chain; candidate 183's corrected VMID2 child address does
+not explain VMID1's later faults. Before that run, prepare a new immutable
+candidate and schema-3 warm-launch authority, verify remaining budget/receipt,
+and implement and verify a launcher contract honoring the user's no-generic-GPU
+requirement. No capture test extends a GPU budget or proves desktop acceleration.
+
+## Current viewing requirement — no generic QEMU GPU
+
+The user requested another desktop launch with **no generic QEMU graphics
+adapter**. No launch was made. The earlier GTK window used VMware VGA; removing
+that adapter does not automatically expose Raphael scanout to GTK. QEMU 10.1.2
+`hw/vfio/display.c::vfio_display_probe` requires a VFIO display-plane interface
+(DMA-BUF or display region). No live capability ioctl was issued in this review,
+and this project has no implemented, verified Raphael-to-QEMU presentation path.
+Desktop Metal is also still unverified. Future viewing work must respect the
+no-generic-adapter requirement rather than silently restoring VMware VGA.
+The successful cleanup below remains valid on the current boot; no reboot is
+currently requested. See `findings/research/2026-09-10-vfio-display-capability.md`.
+
 ## Resume: GUI visibility and capture investigation — 2026-09-10
 
 **Same-boot cleanup succeeded.** The independently reviewed one-use runner
@@ -62,6 +119,18 @@ VMID2 walks do not inspect these faulting mappings. Proposed next driver test:
 bounded, observation-only capture of the fault-selected VMID1 context and exact
 address, comparing relative and absolute walk indices without modifying page
 tables. See `findings/research/2026-09-10-post183-fault-boundary.md`.
+
+The opt-in `rgpuvmdiag=1` diagnostic is now implemented in the working tree and
+independently reviewed. It preserves flag-off MMIO behavior, captures at most two
+distinct VMID1 fault pairs, reads/walks on the worker, and emits at most 30 added
+critical records. It reports `fault-va` separately from `entry-addr`, context
+range/stability, and non-atomic table timing. Focused VM and unchanged mode-4
+C++ fixtures passed with warnings treated as errors. **No KDK cross-build,
+staging or hardware validation of this diagnostic has occurred.** The dedicated
+COM2 capture design is in
+`findings/plans/2026-09-10-dedicated-critical-transport.md`; it is not implemented.
+Cleanup and GUI-observation work is committed locally on `dev` at `d109910`;
+the new driver diagnostic remains uncommitted. Nothing was pushed to main.
 
 Host boot remains `73ad3355-80a7-48f1-a8dd-e6f770b41de8`, iGPU on vfio-pci,
 reset methods empty, no macOS VM active, sleep inhibitor active. No additional

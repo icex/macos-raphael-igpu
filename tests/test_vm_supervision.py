@@ -66,8 +66,11 @@ elif command == "systemd-run":
     unit = next(a.split("=", 1)[1] for a in args if a.startswith("--unit="))
     state.setdefault("units", {})[unit] = args
     ready = next((a.split("=", 2)[2] for a in args if a.startswith("--setenv=VM_SERIAL_READY=")), None)
-    if ready and failure != "not-ready":
-        pathlib.Path(ready).write_text(state["cid"])
+    channel = next((a.split("=", 2)[2] for a in args
+                    if a.startswith("--setenv=VM_SERIAL_CHANNEL=")), None)
+    if ready and failure not in ("not-ready", "not-ready-" + str(channel)):
+        pathlib.Path(ready).write_text(
+            state["cid"] if channel is None else state["cid"] + " " + channel)
     (root / "fixture.json").write_text(json.dumps(state))
     if unit.startswith("rgpu-launch-"):
         out = (root / "managed-launch.log").open("w")
@@ -86,8 +89,8 @@ elif command == "systemctl":
         print("LoadState=loaded\nActiveState=active\nSubState=waiting")
         print("Unit=" + ("unrelated.service" if failure == "target" else base + ".service"))
         print("NextElapseUSecRealtime=" + ("0" if failure == "deadline" else state["next"]))
-    elif "serial" in base or "launch" in base:
-        active = "failed" if failure == "serial" else "active"
+    elif "serial" in base or "critical" in base or "launch" in base:
+        active = "failed" if failure in ("serial", "critical") and failure in base else "active"
         print("LoadState=loaded\nActiveState=" + active + "\nSubState=running\nMainPID=123")
     else:
         print("LoadState=loaded\nActiveState=inactive")
@@ -126,9 +129,12 @@ class SupervisionTests(unittest.TestCase):
         return subprocess.run([sys.executable, "-B", str(TOOL), *args], env=self.env,
                               text=True, capture_output=True, timeout=10)
 
-    def arm(self, seconds="180", cid=CID):
-        return self.run_tool("arm", "--vm-dir", str(self.vm), "--cid", cid,
-                             "--max-seconds", seconds)
+    def arm(self, seconds="180", cid=CID, critical=False):
+        args = ["arm", "--vm-dir", str(self.vm), "--cid", cid,
+                "--max-seconds", seconds]
+        if critical:
+            args.append("--critical-serial")
+        return self.run_tool(*args)
 
     def calls(self):
         path = self.vm / "calls.jsonl"
@@ -215,6 +221,28 @@ class SupervisionTests(unittest.TestCase):
                             for cmd, args in self.calls()))
         self.assertTrue(any(cmd == "systemctl" and state["serial_unit"] in args
                             for cmd, args in self.calls()))
+
+    def test_dedicated_transport_arms_two_channel_bound_collectors(self):
+        result = self.arm(critical=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        state = json.loads(result.stdout)
+        self.assertEqual(Path(state["serial_ready"]).read_text(), CID + " console")
+        self.assertEqual(Path(state["critical_ready"]).read_text(), CID + " critical")
+        collectors = [args for cmd, args in self.calls() if cmd == "systemd-run"
+                      and any(a.startswith(("--unit=rgpu-serial-", "--unit=rgpu-critical-"))
+                              for a in args)]
+        self.assertEqual(len(collectors), 2)
+        self.assertTrue(any("VM_SERIAL_SOCKET=" + str(self.vm / "run/critical.sock") in a
+                            for a in collectors[1]))
+        self.assertTrue(any("VM_SERIAL_OUTPUT=" + str(self.vm / "run/critical.log") in a
+                            for a in collectors[1]))
+
+    def test_dedicated_transport_failure_stops_exact_cid(self):
+        self.fixture["failure"] = "critical"
+        self.save()
+        result = self.arm(critical=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.stopped(), [CID])
 
     def shutdown(self, grace="1"):
         armed = self.arm()

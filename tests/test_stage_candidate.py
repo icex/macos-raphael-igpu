@@ -8,6 +8,11 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 TOOL = ROOT / "tools" / "stage-candidate.py"
+TRANSPORT = {
+    "kind": "isa-serial", "version": 1, "index": 1,
+    "io_base": 760, "baud": 115200,
+    "socket": "run/critical.sock", "capture": "critical.txt",
+}
 
 
 def load_tool():
@@ -40,6 +45,23 @@ class Candidate180StageTests(unittest.TestCase):
     def test_exact_candidate_and_protocol_card_is_accepted(self):
         raw, digest = self.encoded_card()
         self.assertEqual(self.tool.validate_card(raw, digest), self.card)
+
+    def test_dedicated_transport_requires_exact_object_and_boot_argument(self):
+        raw, digest = self.encoded_card({
+            "critical_replay_transport": TRANSPORT,
+        })
+        accepted = self.tool.validate_card(raw, digest)
+        self.assertEqual(accepted["critical_replay_transport"], TRANSPORT)
+        for mutation in (
+                {"baud": 9600}, {"index": 0}, {"socket": "run/serial.sock"},
+                {"capture": "serial.txt"}, {"extra": True}, {"version": True},
+                {"index": True}, {"baud": 115200.0}):
+            bad_transport = dict(TRANSPORT, **mutation)
+            bad, bad_digest = self.encoded_card({
+                "critical_replay_transport": bad_transport,
+            })
+            with self.assertRaisesRegex(RuntimeError, "critical replay transport"):
+                self.tool.validate_card(bad, bad_digest)
 
     def test_card_digest_and_exact_numeric_schemas_are_pinned(self):
         raw, digest = self.encoded_card()
