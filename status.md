@@ -1,5 +1,56 @@
 # Raphael iGPU: current technical status
 
+## Candidate 182 resumed after reboot — 2026-09-10
+
+Current boot is `d67da91d-94e6-42f0-8dd1-78b42f5496e1`. The user confirmed the
+reboot. The ordinary amdgpu-first handoff completed once; Raphael is now on
+vfio-pci, with reset methods disabled and runtime power held on. Watchdog and
+capture readiness were checked before handoff. The user sleep/idle inhibitor is
+active. No GPU experiment has run on this boot yet.
+
+Clean candidate-182 worktree at `e9e541175a028bd43a7df66870409a87a706902c`
+passed a fresh 513 Python tests and 14 C++ sanitizer fixtures. Evidence:
+`~/macos-vm/run/candidate-182-offline-verification.log`, SHA-256
+`298c3d9655ebcd9fcbb35ac1c1a1371966c9f92ff947315946b74186711ec416`.
+Independent driver audit matched exact KDK prologues and confirmed the early
+identity gate and cached address-conversion callbacks; no driver blocker found.
+
+Before hardware, two agents implemented review corrections. Automatic recovery
+now has its own card-pinned interrupted-replay tolerance, separate from functional
+classification. Its focused 96-test suite includes the actual archived 181 capture
+(snapshot 2: 164 records; open snapshot 3: 37 valid chunks), conflict/ABORT refusal,
+and bidirectional card/manifest binding. Log: `~/macos-vm/run/candidate-182-recovery-selector-tests.log`,
+SHA-256 `756beac220c29ba1e9040612ba6a755b5f55df197fcde8ed6efe53529f94e0c6`.
+
+Candidate-182 acceptance requires the early gate and a valid complete walk of the
+first correlated submitted IB, with raw child addresses already in the physical
+domain. The diagnostic walk can translate an incorrect MC child itself, so a
+readable diagnostic walk alone is insufficient. The walker also incorrectly
+rejected the observed zero-attribute native root; that diagnostic defect is fixed.
+Its context-relative indexing reconstructs the frozen directory layout (entry 0
+populated, context start `0x400000000`); it is an inference, not independently
+proved hardware semantics. Checked workload progress remains decisive. Actual
+walks occur at the first correlated dispatch, not the prepared phase previously
+claimed: that earlier call supplied no submission and never walked.
+
+The classifier safety correction is complete: early conversion observations do
+not trigger a circular wait for a probe that has not launched, while any observed
+bad mode/routes, inactive gate, or invalid aperture blocks admission. Focused
+classifier/metadata tests passed 65/65 and the VM diagnostic sanitizer fixture
+passed; an independent cross-audit also passed 65/65. Scientific verification log:
+`~/macos-vm/run/candidate-182-scientific-acceptance.log`, SHA-256
+`1fa1ae659233c5781aafb6fb0a906456674d32b0901777f48ccc83781b0f09ef`.
+Both implementation agents froze their changes and the coordinator audited them.
+Final combined verification passed **522 Python tests and all 14 C++ sanitizer
+fixtures**, route ownership, and diff checks. Log:
+`~/macos-vm/run/candidate-182-final-offline-verification.log`, SHA-256
+`682f1a3cb8fc93637ac73dabb80b4faf46f8df1b7f65c12ee2200217b8c303ef`.
+The next step is the single candidate-182 artifact build from this reviewed source.
+No candidate-182 artifact has been built or staged yet. Full desktop Metal
+remains unverified; the unresolved SDMA/VM fault streak remains **3 (179–181)**.
+An unchanged failure in 182 triggers the mandatory Astra review before another
+hardware cycle. Nothing has been pushed to main.
+
 ## Candidate 181 run and candidate 182 preparation — 2026-09-10 08:20 UTC
 
 Coordinator note by Claude Code (session `015gka3zkh6eBg2CtqZx8MSQ`), acting on the user's

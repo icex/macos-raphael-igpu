@@ -52,7 +52,15 @@ class Candidate180MetadataTests(unittest.TestCase):
         self.assertEqual(card['candidate_version'], '1.0.182')
         self.assertEqual(card['functional_boot_arguments'], previous['functional_boot_arguments'])
         self.assertEqual(card['critical_replay_tolerance'], 'terminal-prefix')
-        self.assertEqual(card['required_observations'], previous['required_observations'])
+        self.assertEqual(card['recovery_critical_replay_tolerance'],
+                         'terminal-prefix-open')
+        self.assertEqual(set(card['required_observations']) -
+                         set(previous['required_observations']),
+                         {'vmid2_entry_gate', 'vmid2_walk_hardware'})
+        self.assertFalse(any('candidate180' in item
+                             for item in card['prerequisites']))
+        self.assertIn('candidate182_source_and_artifact_identity_reviewed',
+                      card['prerequisites'])
         self.assertIn('AMDHWVMM::init', card['behavior_change'])
         self.assertEqual(card['regression_baselines']['immediate'], 'run/metal-014-181')
 

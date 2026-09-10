@@ -12,6 +12,8 @@ import threading
 from unittest.mock import patch
 from types import SimpleNamespace
 
+from tests.test_critical_replay import BUILD as CR2_BUILD, snapshot_lines
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -442,6 +444,39 @@ class ExperimentTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'explicit run_id'):
                 tool.prepare(root, spec, root/'manifest.json', gpu=True)
 
+    def test_prepare_copies_card_pinned_recovery_only_selector(self):
+        tool = self.module()
+        with tempfile.TemporaryDirectory() as temp:
+            vm = Path(temp)
+            (vm / 'run').mkdir()
+            card = {
+                'id':'metal-015', 'candidate_version':'1.0.182',
+                'requested_diagnostic':'rgpusubmit=1',
+                'critical_replay_schema':2, 'recovery_lease_schema':3,
+                'critical_replay_tolerance':'terminal-prefix',
+                'recovery_critical_replay_tolerance':'terminal-prefix-open',
+                'max_seconds':180,
+            }
+            spec = vm / 'card.json'
+            spec.write_text(json.dumps(card))
+            identity = {key:'fixture' for key in tool.IDENTITY_FIELDS}
+            identity.update(source_clean=True,
+                            boot_args='rgpusubmit=1',
+                            launch_options={'BOOTDISK_MODE':'custom', 'NVRAM':'stock'},
+                            recovery_helpers_sha256=self.recovery_helper_hashes(3))
+            output = vm / 'prepared.json'
+            with (patch.object(tool, 'host_snapshot', return_value={'active_vm':False}),
+                  patch.object(tool, 'current_identity', return_value=identity),
+                  patch.object(tool, 'verify_bootdisk'),
+                  patch.object(tool, 'command', return_value='QEMU fixture')):
+                prepared = tool.prepare(
+                    vm, spec, output, gpu=True, run_id='0' * 32)
+            self.assertEqual(prepared['critical_replay_tolerance'], 'terminal-prefix')
+            self.assertEqual(prepared['recovery_critical_replay_tolerance'],
+                             'terminal-prefix-open')
+            self.assertEqual(prepared['spec'], card)
+            self.assertEqual(json.loads(output.read_text()), prepared)
+
     def test_canonical_v2_records_are_extracted_before_recovery_without_tail_guessing(self):
         tool = self.module()
         serial = (
@@ -552,6 +587,141 @@ class ExperimentTests(unittest.TestCase):
             with self.subTest(value=value):
                 with self.assertRaisesRegex(ValueError, 'critical replay schema'):
                     tool.critical_replay_schema({'critical_replay_schema':value})
+
+    def test_recovery_replay_selector_is_separate_and_card_pinned(self):
+        tool = self.module()
+        manifest = {
+            'gpu':True, 'critical_replay_schema':2, 'recovery_lease_schema':3,
+            'critical_replay_tolerance':'terminal-prefix',
+            'recovery_critical_replay_tolerance':'terminal-prefix-open',
+            'spec':{'recovery_critical_replay_tolerance':'terminal-prefix-open'},
+        }
+        self.assertEqual(tool.critical_replay_tolerance(manifest), 'terminal-prefix')
+        self.assertEqual(tool.recovery_critical_replay_tolerance(manifest),
+                         'terminal-prefix-open')
+        self.assertIsNone(tool.validate_manifest_replay_contract(manifest))
+        for value in ('terminal-prefix', True, 'lenient'):
+            with self.subTest(value=value):
+                changed = copy.deepcopy(manifest)
+                changed['recovery_critical_replay_tolerance'] = value
+                with self.assertRaisesRegex(ValueError, 'recovery critical replay tolerance'):
+                    tool.validate_manifest_replay_contract(changed)
+        changed = copy.deepcopy(manifest)
+        changed['spec']['recovery_critical_replay_tolerance'] = 'different'
+        with self.assertRaisesRegex(ValueError, 'does not match experiment card'):
+            tool.validate_manifest_replay_contract(changed)
+        changed = copy.deepcopy(manifest)
+        changed.pop('recovery_critical_replay_tolerance')
+        with self.assertRaisesRegex(ValueError, 'does not match experiment card'):
+            tool.validate_manifest_replay_contract(changed)
+        changed = copy.deepcopy(manifest)
+        changed['spec'].pop('recovery_critical_replay_tolerance')
+        with self.assertRaisesRegex(ValueError, 'does not match experiment card'):
+            tool.validate_manifest_replay_contract(changed)
+
+    def test_recovery_only_open_attempt_accepts_cutoff_and_keeps_classifier_closed(self):
+        tool = self.module()
+        terminal = ['BUILD: identity=' + CR2_BUILD,
+                    'XH2 OWNED exact', 'XH2 POOL exact',
+                    'XH3 LIFETIME state=VALID exact']
+        later = terminal + ['VM: fault status=0x201b3b']
+        serial = ''.join(snapshot_lines(terminal, snapshot=2) +
+                         snapshot_lines(later, snapshot=3)[:-1])
+        calls = []
+        recovery = SimpleNamespace(
+            parse_v2_lease_records=lambda records, run_id:
+                calls.append(('parse', records, run_id)) or object(),
+            recover=lambda vm, run_id, **kwargs:
+                calls.append(('recover', vm, run_id, kwargs)) or {'status':'recovered'},
+        )
+        manifest = {
+            'run_id':'0' * 32, 'build_id':CR2_BUILD, 'gpu':True,
+            'critical_replay_schema':2, 'recovery_lease_schema':3,
+            'critical_replay_tolerance':'terminal-prefix',
+            'recovery_critical_replay_tolerance':'terminal-prefix-open',
+            'recovery_helpers_sha256':self.recovery_helper_hashes(3),
+            'spec':{'recovery_critical_replay_tolerance':'terminal-prefix-open'},
+        }
+        evidence = {}
+        self.assertEqual(tool.recover_v2(
+            recovery, Path('/not-opened'), manifest, serial, evidence),
+            {'status':'recovered'})
+        self.assertEqual(calls[0][1], ['XH2 OWNED exact', 'XH2 POOL exact'])
+        self.assertEqual(evidence['tolerance'], 'terminal-prefix-open')
+        self.assertEqual(evidence['open_attempt']['complete_records'],
+                         ['VM: fault status=0x201b3b'])
+
+        classifier_calls = []
+        classifier = SimpleNamespace(parse_serial=lambda serial, **kwargs:
+                                     classifier_calls.append(kwargs) or [])
+        tool.parse_manifest_serial(classifier, manifest, serial)
+        self.assertEqual(classifier_calls, [{
+            'critical_replay_schema':2, 'expected_build':CR2_BUILD,
+            'critical_replay_tolerance':'terminal-prefix'}])
+
+    def test_recovery_only_open_attempt_rejects_conflict_and_abort(self):
+        tool = self.module()
+        terminal = ['BUILD: identity=' + CR2_BUILD,
+                    'XH2 OWNED exact', 'XH2 POOL exact',
+                    'XH3 LIFETIME state=VALID exact']
+        manifest = {
+            'run_id':'0' * 32, 'build_id':CR2_BUILD, 'gpu':True,
+            'critical_replay_schema':2, 'recovery_lease_schema':3,
+            'critical_replay_tolerance':'terminal-prefix',
+            'recovery_critical_replay_tolerance':'terminal-prefix-open',
+            'recovery_helpers_sha256':self.recovery_helper_hashes(3),
+            'spec':{'recovery_critical_replay_tolerance':'terminal-prefix-open'},
+        }
+        recovery = SimpleNamespace(
+            parse_v2_lease_records=lambda records, run_id: object(),
+            recover=lambda *args, **kwargs: {'status':'recovered'},
+        )
+        conflict = list(terminal)
+        conflict[1] = 'XH2 OWNED changed'
+        serial = ''.join(snapshot_lines(terminal, snapshot=2) +
+                         snapshot_lines(conflict, snapshot=3)[:-1])
+        with self.assertRaisesRegex(Exception, 'conflicts with the terminal prefix'):
+            tool.recover_v2(recovery, Path('/not-opened'), manifest, serial)
+
+        aborted = terminal + ['XH2 ABORT reason=duplicate']
+        serial = ''.join(snapshot_lines(terminal, snapshot=2) +
+                         snapshot_lines(aborted, snapshot=3)[:-1])
+        with self.assertRaisesRegex(ValueError, 'records an abort'):
+            tool.recover_v2(recovery, Path('/not-opened'), manifest, serial)
+
+    def test_recovery_only_selector_decodes_frozen_candidate181_capture(self):
+        tool = self.module()
+        archive = ROOT / 'findings/experiments/metal-014-181'
+        manifest_raw = (archive / 'manifest.json').read_bytes()
+        serial_raw = (archive / 'serial.txt').read_bytes()
+        self.assertEqual(hashlib.sha256(manifest_raw).hexdigest(),
+                         '738d2a4ade018a3e3721820dbc3f8ec5d38f442c6841486cf2a80445c33e3495')
+        self.assertEqual(hashlib.sha256(serial_raw).hexdigest(),
+                         '65fdf3f72412c077b0e2b478b04bbb32ce77002c6bc3c1fb1fed201c52025d2c')
+        manifest = json.loads(manifest_raw)
+        manifest['recovery_critical_replay_tolerance'] = 'terminal-prefix-open'
+        manifest['spec'] = dict(
+            manifest['spec'],
+            recovery_critical_replay_tolerance='terminal-prefix-open')
+        calls = []
+        recovery = SimpleNamespace(
+            parse_v2_lease_records=lambda records, run_id:
+                calls.append((records, run_id)) or object(),
+            recover=lambda *args, **kwargs: {'status':'recovered'},
+        )
+        replay_evidence = {}
+        result = tool.recover_v2(
+            recovery, Path('/not-opened'), manifest,
+            serial_raw.decode('utf-8', errors='replace'), replay_evidence)
+        self.assertEqual(result, {'status':'recovered'})
+        self.assertEqual(replay_evidence['tolerance'], 'terminal-prefix-open')
+        self.assertEqual(replay_evidence['snapshot'], 2)
+        self.assertEqual(replay_evidence['count'], 164)
+        self.assertEqual(replay_evidence['open_attempt']['snapshot'], 3)
+        self.assertEqual(replay_evidence['open_attempt']['valid_chunks'], 37)
+        self.assertFalse(any('ABORT' in record for record in
+                             replay_evidence['open_attempt']['complete_records']))
+        self.assertEqual(calls[0][1], manifest['run_id'])
 
     def test_only_definitive_cr2_capture_errors_abort_exposure(self):
         tool = self.module()

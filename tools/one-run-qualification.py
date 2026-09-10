@@ -158,6 +158,7 @@ def _manifest_ok(manifest, card, policy, helper_hashes):
     diagnostic = str(card.get('requested_diagnostic', ''))
     lease = policy['recovery_lease_schema']
     tolerance = card.get('critical_replay_tolerance')
+    recovery_tolerance = card.get('recovery_critical_replay_tolerance')
     return (
         manifest.get('boot_id') == policy['boot_id'] and manifest.get('gpu') is True and
         manifest.get('candidate_directory') == policy['candidate_directory'] and
@@ -167,6 +168,8 @@ def _manifest_ok(manifest, card, policy, helper_hashes):
         manifest.get('recovery_lease_schema') == lease and
         (lease != 3 or manifest.get('critical_replay_schema') == 2) and
         manifest.get('critical_replay_tolerance') == tolerance and
+        manifest.get('recovery_critical_replay_tolerance') == recovery_tolerance and
+        recovery_tolerance in (None, 'terminal-prefix-open') and
         manifest.get('recovery_helpers_sha256') == helper_hashes and
         manifest.get('source_clean') is True and
         manifest.get('bootdisk_verified') is True and

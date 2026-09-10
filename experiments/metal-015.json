@@ -5,7 +5,7 @@
   "requested_diagnostic": "rgpusubmit=1",
   "critical_replay_schema": 2,
   "recovery_lease_schema": 3,
-  "behavior_change": "confirm the exact Raphael marker in AMDHWVMM::init before the native call and record the gate state; keep rgpuvmroot=3 conversion of child PDE and non-SYSTEM PTE addresses inside the published MC aperture; sample the first eight getPDEValue and getPTEValue calls per kind with their address domain; count calls that arrive before the gate; walk 0x400100000, 0x4000c0000, 0x400200000 and the first submitted IB through BAR0 at the prepared phase; retain candidate 181's terminal-prefix CR2 tolerance (open-attempt accepted for recovery only), native VMM arena, lease exclusion, submission and backing observers, functional boot arguments, normal shutdown path, 180-second exposure bound, and unchanged 45-second Metal probe",
+  "behavior_change": "confirm the exact Raphael marker in AMDHWVMM::init before the native call and record the gate state; keep rgpuvmroot=3 conversion of child PDE and non-SYSTEM PTE addresses inside the published MC aperture; sample the first eight getPDEValue and getPTEValue calls per kind with their address domain; count calls that arrive before the gate; reconstruct the first correlated submitted IB walk relative to the live VMID2 context start and require its raw child pointers to be hardware-facing physical addresses; retain candidate 181's terminal-prefix CR2 tolerance (open-attempt accepted for recovery only), native VMM arena, lease exclusion, submission and backing observers, functional boot arguments, normal shutdown path, 180-second exposure bound, and unchanged 45-second Metal probe",
   "required_observations": [
     "loaded_build",
     "route_guards",
@@ -23,12 +23,14 @@
     "submission_backing_allocation",
     "sdma_vm_program",
     "vmid2_root_repair",
-    "vmid2_entry_conversion"
+    "vmid2_entry_conversion",
+    "vmid2_entry_gate",
+    "vmid2_walk_hardware"
   ],
   "max_seconds": 180,
   "prerequisites": [
-    "candidate180_source_and_artifact_identity_reviewed",
-    "candidate180_exact_manifest_and_numeric_recovery_nonce_staged_before_reservation",
+    "candidate182_source_and_artifact_identity_reviewed",
+    "candidate182_exact_manifest_and_numeric_recovery_nonce_staged_before_reservation",
     "critical_replay_schema2_cross_language_transport_offline_validated",
     "persistent_recovery_lifetime_schema3_offline_validated",
     "schema3_recovery_helper_and_receipt_binding_offline_validated",
@@ -60,6 +62,12 @@
     "bar0_mapping_unavailable",
     "vmid2_entry_conversion_route_failure",
     "vmid2_entry_conversion_aperture",
+    "vmid2_entry_gate_missing",
+    "vmid2_entry_gate_state",
+    "vmid2_walk_hardware_missing",
+    "vmid2_walk_hardware_incomplete",
+    "vmid2_walk_hardware_child_translation",
+    "vmid2_mapping_fault",
     "root_repair_refused",
     "prepared_root_mismatch",
     "guest_panic",
@@ -76,6 +84,7 @@
   "outcome_table": "docs/ROADMAP.md M4-M7",
   "run_probe_only_after_native_start": true,
   "critical_replay_tolerance": "terminal-prefix",
+  "recovery_critical_replay_tolerance": "terminal-prefix-open",
   "functional_boot_arguments": {
     "rgpuvmroot": "3"
   }

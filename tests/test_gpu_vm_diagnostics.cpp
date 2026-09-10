@@ -225,6 +225,19 @@ int main() {
         value = pageTables[(physicalAddress - aperture.physicalBase) / 8];
         return true;
     };
+    store(0x840000000ULL, 0x840002001ULL);
+    auto candidate182View = RaphaelVm::walkPageTables(
+        0x840000000ULL, 0x3b, 0x400000000ULL, 0x400100000ULL, aperture, reader);
+    require(candidate182View.valid && candidate182View.complete &&
+                candidate182View.count == 2 &&
+                candidate182View.entries[0].index == 0 &&
+                !candidate182View.entries[0].childConverted &&
+                candidate182View.entries[1].index == 256,
+            "the candidate-182 zero-attribute root walks relative to the VM context start");
+    auto belowContextStart = RaphaelVm::walkPageTables(
+        0x840000000ULL, 0x3b, 0x400000000ULL, 0x3ffffffffULL, aperture, reader);
+    require(!belowContextStart.valid,
+            "a VA below the VM context start is rejected before unsigned subtraction");
     auto walkA = RaphaelVm::walkPageTables(
         0x840000001ULL, 0x3b, 0x400100000ULL, aperture, reader);
     require(walkA.valid && walkA.complete && walkA.count == 2 &&
