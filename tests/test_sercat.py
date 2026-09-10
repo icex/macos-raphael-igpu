@@ -1,8 +1,10 @@
 import os
+import builtins
 from pathlib import Path
 import runpy
 import socket
 import tempfile
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -65,6 +67,165 @@ class SercatTests(unittest.TestCase):
              self.assertRaises(SystemExit):
             runpy.run_path(str(TOOL), run_name="__main__")
         self.assertEqual(fake.connects, [])
+
+    def test_slow_fsync_does_not_stop_socket_drain(self):
+        """Durability I/O must not backpressure QEMU's UART socket."""
+        fsync_started = threading.Event()
+        second_recv = threading.Event()
+        fsync_calls = []
+
+        class BackpressureSocket(FakeSocket):
+            assert_fsync_started = False
+
+            def recv(self, size):
+                if len(self.payload) == 2:
+                    self.assert_fsync_started = fsync_started.wait(1)
+                    second_recv.set()
+                return super().recv(size)
+
+        def slow_fsync(_fd):
+            fsync_calls.append(True)
+            fsync_started.set()
+            if len(fsync_calls) == 1 and not second_recv.wait(1):
+                raise OSError("collector stopped draining while fsync was blocked")
+
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            output = base / "critical.log"
+            fake = BackpressureSocket([b"first", b"second", b""])
+            env = {
+                "VM_SERIAL_SOCKET": str(base / "critical.sock"),
+                "VM_SERIAL_OUTPUT": str(output),
+                "VM_SERIAL_CHANNEL": "critical",
+            }
+            with patch.dict(os.environ, env, clear=True), \
+                 patch.object(socket, "socket", return_value=fake), \
+                 patch("os.fsync", side_effect=slow_fsync):
+                runpy.run_path(str(TOOL), run_name="__main__")
+
+            self.assertTrue(fake.assert_fsync_started)
+            self.assertEqual(output.read_bytes(), b"firstsecond")
+            self.assertEqual(len(fsync_calls), 2)
+
+    def test_fsync_failure_is_reported_after_socket_drain(self):
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            output = base / "critical.log"
+            fake = FakeSocket([b"wire", b""])
+            env = {
+                "VM_SERIAL_SOCKET": str(base / "critical.sock"),
+                "VM_SERIAL_OUTPUT": str(output),
+                "VM_SERIAL_CHANNEL": "critical",
+            }
+            with patch.dict(os.environ, env, clear=True), \
+                 patch.object(socket, "socket", return_value=fake), \
+                 patch("os.fsync", side_effect=OSError("I/O error")), \
+                 self.assertRaisesRegex(SystemExit, "serial log fsync failed"):
+                runpy.run_path(str(TOOL), run_name="__main__")
+            self.assertEqual(output.read_bytes(), b"wire")
+
+    def test_fsync_failure_is_detected_while_socket_is_idle(self):
+        fsync_called = threading.Event()
+
+        class IdleSocket(FakeSocket):
+            calls = 0
+
+            def recv(self, _size):
+                self.calls += 1
+                if self.calls == 1:
+                    return b"wire"
+                fsync_called.wait(1)
+                raise socket.timeout()
+
+        def failed_fsync(_fd):
+            fsync_called.set()
+            raise OSError("I/O error")
+
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            fake = IdleSocket([])
+            env = {"VM_SERIAL_SOCKET": str(base / "critical.sock"),
+                   "VM_SERIAL_OUTPUT": str(base / "critical.log"),
+                   "VM_SERIAL_CHANNEL": "critical"}
+            with patch.dict(os.environ, env, clear=True), \
+                 patch.object(socket, "socket", return_value=fake), \
+                 patch("os.fsync", side_effect=failed_fsync), \
+                 self.assertRaisesRegex(SystemExit, "serial log fsync failed"):
+                runpy.run_path(str(TOOL), run_name="__main__")
+            self.assertEqual(fake.calls, 2)
+
+    def test_ready_file_failure_stops_sync_worker(self):
+        original_open = builtins.open
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            output = base / "critical.log"
+            ready = base / "critical.ready"
+            fake = FakeSocket([b""])
+            env = {"VM_SERIAL_SOCKET": str(base / "critical.sock"),
+                   "VM_SERIAL_OUTPUT": str(output), "VM_SERIAL_READY": str(ready),
+                   "VM_SERIAL_CID": CID, "VM_SERIAL_CHANNEL": "critical"}
+
+            def fail_ready(path, mode="r", *args, **kwargs):
+                if str(path) == str(ready):
+                    raise OSError("ready write failed")
+                return original_open(path, mode, *args, **kwargs)
+
+            with patch.dict(os.environ, env, clear=True), \
+                 patch.object(socket, "socket", return_value=fake), \
+                 patch("builtins.open", side_effect=fail_ready), \
+                 self.assertRaisesRegex(OSError, "ready write failed"):
+                runpy.run_path(str(TOOL), run_name="__main__")
+            self.assertFalse(any(thread.name == "serial-log-sync"
+                                 for thread in threading.enumerate()))
+
+    def test_short_file_writes_are_completed_before_sync(self):
+        original_open = builtins.open
+
+        class ShortWriter:
+            def __init__(self, wrapped):
+                self.wrapped = wrapped
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return self.wrapped.__exit__(*args)
+
+            def fileno(self):
+                return self.wrapped.fileno()
+
+            def write(self, data):
+                return self.wrapped.write(data[:2])
+
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            output = base / "critical.log"
+            fake = FakeSocket([b"abcdef", b""])
+            env = {"VM_SERIAL_SOCKET": str(base / "critical.sock"),
+                   "VM_SERIAL_OUTPUT": str(output), "VM_SERIAL_CHANNEL": "critical"}
+
+            def short_open(path, mode="r", *args, **kwargs):
+                opened = original_open(path, mode, *args, **kwargs)
+                return ShortWriter(opened) if str(path) == str(output) and mode == "ab" else opened
+
+            with patch.dict(os.environ, env, clear=True), \
+                 patch.object(socket, "socket", return_value=fake), \
+                 patch("builtins.open", side_effect=short_open):
+                runpy.run_path(str(TOOL), run_name="__main__")
+            self.assertEqual(output.read_bytes(), b"abcdef")
+
+    def test_socket_error_is_nonzero_capture_failure(self):
+        fake = FakeSocket([OSError("socket failed")])
+        fake.recv = lambda _size: (_ for _ in ()).throw(fake.payload[0])
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            env = {"VM_SERIAL_SOCKET": str(base / "critical.sock"),
+                   "VM_SERIAL_OUTPUT": str(base / "critical.log"),
+                   "VM_SERIAL_CHANNEL": "critical"}
+            with patch.dict(os.environ, env, clear=True), \
+                 patch.object(socket, "socket", return_value=fake), \
+                 self.assertRaisesRegex(SystemExit, "serial capture failed"):
+                runpy.run_path(str(TOOL), run_name="__main__")
 
 
 if __name__ == "__main__":

@@ -1,15 +1,102 @@
-# Candidate 190 pending identity — not deployed (2026-09-10)
+# Current status — candidate 190 recovered; candidate 191 pending (2026-09-10)
 
-Candidate 190 metadata preparation updates only both `kext/Info.plist` version
-fields to `1.0.190`; the checked-in `kext/bin/RaphaelGPU` and candidate 188
-artifacts remain unchanged. Candidate 189 output is frozen as a prelaunch
-observer failure and produced no GPU cycle; its staging remains present but no
-189 run was reserved or started. The current ledger has one of three entries
-consumed. No candidate 190 card, build, deployment, VM, or hardware run exists.
-The current source mapping correction is under offline audit; no acceleration
-claim is made.
+**Desktop Metal remains unproven. GPU cleanup succeeded without reboot.**
+Candidate 190's GPU experiment remains INVALID because critical capture was
+incomplete. Its later, separate hardware recovery completed successfully and
+has an independently validated schema-6 receipt. Do not repeat that recovery.
 
-# Offline mapping correction and source audit (2026-09-10)
+## Current plan and review accounting
+
+The latest user instruction requires reasoning/source review after every three
+actual GPU attempts, followed by a revised test batch. The Astra xhigh review
+is complete in `report-astra.md` (SHA-256
+`ded9fb9162731d48d90bbc3b3872d495e85b253a240f67b23da338681b1f27f1`).
+The coordinator accepts its conclusions after checking the exact VMID1 mapping
+arithmetic, probe implementation, capture/recovery evidence, and old boot logs.
+Implementation-agent assessment and final independent integration audit passed;
+see `findings/research/2026-09-10-astra-post190-assessment.md` and
+`findings/research/2026-09-10-candidate191-integration-audit.md`.
+
+- Unresolved GPU-execution streak: **11 actual cycles overall**.
+- Last reviewed batch: **187, 188, 190**; 189 never exposed the GPU.
+- Next batch: **0 attempts since this review**. A review does not erase the
+  unresolved issue, count recovery as an experiment, or increase a boot budget.
+- Current boot `3bca3e47-1f28-4f78-af00-5dbf76b00620`: **2 of 3 launches used**.
+
+The revised candidate 191 / metal-025 keeps the exact candidate-190 GPU source
+SHA-256 `7515f121230fbd26e32b198bd622e106155708e4108d9def96dcc7daa9d173f3`,
+the known-booting dynamic-slide configuration, headless Lilu, and `GDB=on`.
+The primary test is complete CR2 capture followed promptly by the unchanged
+45-second Metal probe: three randomized compute rounds (196,608 values), four
+command-buffer completions, and all 4,096 rendered/readback pixels. Identity,
+native-start, capture, time-fit, 180-second exposure, and cleanup gates remain.
+Passing the probe would prove compute/render execution, not yet desktop
+presentation or repeatable crash recovery.
+
+No new GPU behavior is bundled. The host collector now drains independently of
+its generation-tracked fsync worker; short writes, socket/disk failures and
+final-sync timeout remain failures. The debugger derives its live serial input
+from the exact supervised CID. These fixes have offline regression coverage;
+real Btrfs/QEMU capture reliability is not yet demonstrated. Synchronous file
+writes can still contend with fsync. Repeated transport failure must be
+investigated without consuming further GPU attempts.
+
+The proposed early-GDB `slide=0` implementation was rejected before build or
+hardware use and archived under `findings/research/blocked-early-gdb-2026-09-10/`.
+The old failure's Darwin lines were copied from a prior launch; the actual
+appended attempt failed boot-loader kernel allocation. Independently, the draft
+omitted the demonstrated `0xe8000` kernel-collection placement. Qualify a
+corrected nonzero-slide early rendezvous separately without GPU exposure; do
+not make that unfinished tool the next functional test's prerequisite.
+
+Candidate 191 metadata requires a new exact artifact identity under the existing
+staging contract. **Build, staging, and launch have not happened.** The revised
+offline Python suite reports 718 tests with 3 skipped; independent integration
+review passed. All 17 C++ sanitizer fixtures also passed, with no subsequent
+changes to those sources or fixtures. The earlier 726-test Python qualification
+included the subsequently archived early-debugger draft and is historical.
+
+## Candidate 190 execution and recovery evidence
+
+Frozen experiment: `/home/bogdan/macos-vm/run/metal-024-190`, run ID
+`3ffc5f3dbec53665214863ed91fee0e7`. Build commit
+`c2e22b813eb76cd0d84b75564f0294514adf96ec`; build ID
+`f504d465bddf4a0aa0edcc9b57d2b4ef`; executable/dSYM UUID
+`8a78c544be033f7a96de3de39639f423`; executable SHA-256
+`52d9984e59e9ad098e1f03028f651425493ac6f1775b2463ecf7b40f450e048f`.
+
+CR2 completed only snapshots 0–3, then transmission failed on later attempts.
+The original verdict and recovery.json remain INVALID/failed, respectively.
+GDB authenticated the kext but attached late and obtained no selected wrapper
+hit; bounded fallback detach succeeded. Serial reached `submit=660/660/0`
+versus 188's `249/249/0`, with mapping/prepare errors 6/2. These are CPU calls,
+not GPU completions; no retained VMID1 fault is not proof that no fault occurred.
+The native Metal probe did not run.
+
+A separately reviewed extractor recovered nine identical checksum-valid
+OWNED/ACTIVE/VALID record sets from incomplete snapshots. Those records seeded
+unchanged live BAR authentication, including exact ownership/pool/lifetime
+readbacks before scratch writes. One authorized recovery then dequeued two
+active queues with no timeout or forced-inactive fallback, retired graphics via
+host KIQ, passed final CP/graphics/SDMA gates and confirmed PSP ring destruction.
+No new kernel messages or implicit reset were reported. No VM remains; the
+same-boot VFIO, watchdog, capture, device-awake and sleep-inhibition checks pass.
+
+Canonical receipt:
+`/home/bogdan/macos-vm/run/vfio-recovery/3bca3e47-1f28-4f78-af00-5dbf76b00620/3ffc5f3dbec53665214863ed91fee0e7.json`
+SHA-256 `82560e48da2e6fb4300f5b0095e821d3da404d170108fd891ca7824aad49967a`.
+It reports `recovered`, `authorizes_launch=true`; both schema-6 and reuse
+validation with manifest context return no errors. The wrapper's immutable
+failed result retained that receipt: its second validator omitted the manifest.
+That call-wiring bug is fixed offline with a regression against the actual
+receipt. No cleanup retry occurred. Reviewed proof v2, original wrapper result,
+canonical attempt marker, and all frozen captures remain unchanged.
+
+References: `findings/research/2026-09-10-candidate190-capture-audit.md`,
+`findings/research/2026-09-10-candidate190-recovery-admission-audit.md`, and
+`findings/research/2026-09-10-candidate190-recovery-independent-review.md`.
+
+# Historical — pre190 offline mapping audit (superseded deployment/count text)
 
 The working source now repairs eligible hub-0 client roots for VMIDs **1–15**,
 instead of only VMID2. VMID0 remains on the separate legacy GART path. Existing
@@ -38,9 +125,9 @@ Its manifest correctly says `source_clean=false` and
 existing version field, not a replacement candidate 188 or an admitted release.
 Only explanatory comments changed after this compile; a future deployable build
 needs a distinct reviewed candidate identity and its own source/build manifest.
-No GPU cycle or staging was performed for this source correction. The deployed
-188 artifact remains unchanged. Cycle accounting stays **10 overall / 2 since
-post-186 review**; the pending 188 debugger-only card does not deploy this fix.
+No GPU cycle or staging was performed for this source correction. This historical
+audit predates candidate 190; its old deployment and cycle-count statements are
+superseded by the current candidate 190 runtime state above.
 
 Research and limitations:
 

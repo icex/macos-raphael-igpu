@@ -26,8 +26,10 @@
 
 User instruction recorded 2026-09-10:
 
-After **more than three consecutive GPU test cycles with the same unresolved
-issue** (the fourth cycle), pause routine hardware retries and dispatch a
+Updated user instruction: after **every three actual GPU test attempts**, review
+what went wrong in the reasoning, consult relevant source documentation, and
+revise the hypotheses and test batch before continuing toward full Metal. This
+is a recurring review checkpoint, not a request to end development. Dispatch a
 **gpt-6-astra agent with reasoning effort xhigh** using this exact prompt:
 
 > review whatever the current status.md of this project is, check its documentation, methodology, tests, experiments. figure out why this fails and report back in a report-astra.md file for other agents to review
@@ -40,6 +42,9 @@ issue** (the fourth cycle), pause routine hardware retries and dispatch a
   progress past the issue; document the evidence.
 - Track the issue and count in `status.md`. If inherited history is uncertain,
   reconstruct it from run evidence rather than claiming a zero count.
+- Track attempts since the last review separately from the unresolved-issue
+  streak. A completed review starts the next three-attempt batch but does not
+  erase the unresolved issue or extend host-boot exposure budgets.
 - Archive any existing `report-astra.md` under a unique dated research path before
   the reviewer writes the new report; preserve original report contents.
 - The review is offline/read-only except for its report: no VM launch, device

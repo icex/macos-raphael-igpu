@@ -439,6 +439,24 @@ class Candidate186StageTests(unittest.TestCase):
                       card["prerequisites"])
         self.assertEqual(card["launch_options"]["GDB"], "on")
 
+    def test_candidate191_dynamic_gdb_card_is_exact_and_preserves_gpu_source(self):
+        self.tool.configure("1.0.191", "metal-025")
+        raw = (ROOT / "experiments/metal-025.json").read_bytes()
+        card = self.tool.validate_card(raw, hashlib.sha256(raw).hexdigest())
+        self.assertEqual(card["raphael_source_sha256"],
+                         "7515f121230fbd26e32b198bd622e106155708e4108d9def96dcc7daa9d173f3")
+        self.assertEqual(card["launch_options"]["GDB"], "on")
+        self.assertNotIn("required_kernel_slide", card)
+        self.assertIn("strict unchanged 45-second native Metal probe",
+                      card["behavior_change"])
+        self.assertIn("primary functional test", card["question"])
+        gdb_observations = {item for item in
+                            card["conditional_diagnostic_observations"]
+                            if item.startswith("gdb_")}
+        self.assertEqual(len(gdb_observations), 4)
+        self.assertFalse(any(item.startswith("gdb_") for item in
+                             card["required_observations"]))
+
     def test_candidate188_debug_symbols_require_retained_files_and_matching_provenance(self):
         self.tool.configure("1.0.188", "metal-021")
         with tempfile.TemporaryDirectory() as directory:

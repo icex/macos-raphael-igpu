@@ -1,0 +1,817 @@
+diff --git a/tests/test_experiment.py b/tests/test_experiment.py
+index fe77559..2863c57 100644
+--- a/tests/test_experiment.py
++++ b/tests/test_experiment.py
+@@ -667,6 +667,12 @@ class ExperimentTests(unittest.TestCase):
+             with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, 'launch options'):
+                 tool.launch_options({'launch_options':bad})
+ 
++    def test_early_debugger_launch_options_require_exact_wait_no_graphics_contract(self):
++        tool = self.module()
++        expected = {'BOOTDISK_MODE':'custom', 'NVRAM':'stock',
++                    'GENERIC_GRAPHICS':'off', 'GDB':'wait'}
++        self.assertEqual(tool.launch_options({'launch_options':expected}), expected)
++
+     def test_critical_replay_manifest_selector_is_explicit_and_numeric(self):
+         tool = self.module()
+         self.assertIsNone(tool.critical_replay_schema({}))
+diff --git a/tests/test_gdb_kext_source.py b/tests/test_gdb_kext_source.py
+index 9475dda..1bc194c 100644
+--- a/tests/test_gdb_kext_source.py
++++ b/tests/test_gdb_kext_source.py
+@@ -1,4 +1,6 @@
+ import importlib.util
++import contextlib
++import io
+ import struct
+ import unittest
+ from pathlib import Path
+@@ -152,6 +154,123 @@ class GdbKextSourceTests(unittest.TestCase):
+         self.assertIn("$rdi==$entry_rdi && $rsi==$entry_rsi && $rcx==$entry_rcx", text)
+         self.assertNotIn("$rdx==$entry_rdx", text)
+ 
++    def test_early_rendezvous_authenticates_current_kext_before_wrapper(self):
++        text = tool.generate(0xffffff8000200000, "474ef697fc283ba283a4763d76c8e200",
++                             "/tmp/kernel.symbols", "/tmp/RaphaelGPU.dSYM",
++                             0x41000, "wrapVmmPrepare",
++                             bytes.fromhex("554889e541574156"), [0x41100],
++                             scenario="vmid1-root", early_rendezvous=True,
++                             kernel_uuid=tool.PINNED_KERNEL_UUID,
++                             kernel_start_prologue=bytes.fromhex(
++                                 "554889e54157415641554154534883ec18"))
++        self.assertIn("EARLY_RENDEZVOUS = True", text)
++        self.assertIn("OSKEXT_START = 0xffffff8000970230", text)
++        self.assertIn("MAX_KEXT_START_STOPS = 512", text)
++        self.assertIn("current_kmod=struct.unpack('<Q',early_read(current_oskext+0x50,8))[0]", text)
++        self.assertIn("current_name_raw=early_read(current_kmod+0x10,64)", text)
++        self.assertIn("current_address=struct.unpack('<Q',early_read(current_kmod+0x9c,8))[0]", text)
++        self.assertIn("current_size=struct.unpack('<Q',early_read(current_kmod+0xa4,8))[0]", text)
++        self.assertIn("current_name != 'as.rgpu.RaphaelGPU'", text)
++        self.assertNotIn("as.vit9696.RaphaelGPU", text)
++        self.assertIn("runtime kernel UUID mismatch", text)
++        self.assertIn("runtime OSKext::start prologue mismatch", text)
++        self.assertIn("current Raphael UUID mismatch", text)
++        self.assertIn("duplicate runtime UUID command", text)
++        self.assertIn("wrapper outside current kmod executable", text)
++        self.assertLess(text.index("gdb.Breakpoint('*%#x' % OSKEXT_START"),
++                        text.index("EARLY_RAPHAEL_AUTHENTICATED"))
++        self.assertLess(text.index("EARLY_RAPHAEL_AUTHENTICATED"),
++                        text.index("WRAPPER_BREAKPOINT_ARMED"))
++
++    def test_early_rendezvous_requires_fixed_slide_and_pinned_kernel_identity(self):
++        kwargs = dict(expected_uuid="4" * 32, kernel_symbols="/tmp/kernel",
++                      raphael_dsym="/tmp/dsym", function_offset=0x41000,
++                      wrapper_name="wrapVmmPrepare",
++                      expected_prologue=bytes.fromhex("554889e541574156"),
++                      native_offsets=[0x41100], scenario="vmid1-root",
++                      early_rendezvous=True,
++                      kernel_uuid=tool.PINNED_KERNEL_UUID,
++                      kernel_start_prologue=bytes.fromhex(
++                          "554889e54157415641554154534883ec18"))
++        with self.assertRaisesRegex(ValueError, "slide=0"):
++            tool.generate(0xffffff8010000000, **kwargs)
++        kwargs["kernel_uuid"] = None
++        with self.assertRaisesRegex(ValueError, "kernel UUID"):
++            tool.generate(0xffffff8000200000, **kwargs)
++
++    def test_generated_early_block_executes_other_then_observed_current_kmod(self):
++        raphael_uuid = "474ef697fc283ba283a4763d76c8e200"
++        text = tool.generate(tool.KERNEL_LINK_TEXT, raphael_uuid,
++                             "/tmp/kernel.symbols", "/tmp/RaphaelGPU.dSYM",
++                             0x41000, "wrapVmmPrepare",
++                             bytes.fromhex("554889e541574156"), [0x41100],
++                             scenario="vmid1-root", early_rendezvous=True,
++                             kernel_uuid=tool.PINNED_KERNEL_UUID,
++                             kernel_start_prologue=tool.OSKEXT_START_PROLOGUE)
++        block = text.split("python\nEARLY_RENDEZVOUS = True\n", 1)[1]
++        block = "EARLY_RENDEZVOUS = True\n" + block.split("\nend\npython\n", 1)[0]
++        def macho(uuid):
++            return (struct.pack("<IiiIIIII", 0xfeedfacf, 0x1000007, 3, 2,
++                                1, 24, 0, 0) +
++                    struct.pack("<II", 0x1b, 24) + bytes.fromhex(uuid))
++        kernel = tool.KERNEL_LINK_TEXT
++        image = 0xffffff8002000000
++        other_obj, target_obj = 0xffffff9000001000, 0xffffff9000002000
++        other_kmod, target_kmod = 0xffffff9000003000, 0xffffff9000004000
++        regions = [(kernel, macho(tool.PINNED_KERNEL_UUID)),
++                   (tool.OSKEXT_START, tool.OSKEXT_START_PROLOGUE),
++                   (image, macho(raphael_uuid)),
++                   (image + 0x41000, bytes.fromhex("554889e541574156"))]
++        for obj, kmod, name in ((other_obj, other_kmod, b"other.kext"),
++                                (target_obj, target_kmod, b"as.rgpu.RaphaelGPU")):
++            obj_raw = bytearray(0x58); struct.pack_into("<Q", obj_raw, 0x50, kmod)
++            kmod_raw = bytearray(0xac); kmod_raw[0x10:0x10+len(name)] = name
++            if kmod == target_kmod:
++                struct.pack_into("<Q", kmod_raw, 0x9c, image)
++                struct.pack_into("<Q", kmod_raw, 0xa4, 0x50000)
++            regions.extend(((obj, bytes(obj_raw)), (kmod, bytes(kmod_raw))))
++        class Inferior:
++            def read_memory(self, address, size):
++                for base, data in regions:
++                    if base <= address and address + size <= base + len(data):
++                        return data[address-base:address-base+size]
++                raise RuntimeError("unmapped")
++        class Breakpoint:
++            deleted = False
++            def delete(self): self.deleted = True
++        class Gdb:
++            BP_HARDWARE_BREAKPOINT = 1
++            GdbError = RuntimeError
++            def __init__(self): self.stop = -1; self.breakpoint = Breakpoint()
++            def selected_inferior(self): return Inferior()
++            def Breakpoint(self, *args, **kwargs): return self.breakpoint
++            def execute(self, command):
++                self.stop += 1
++                self.current = (other_obj, target_obj)[self.stop]
++            def parse_and_eval(self, expression):
++                return tool.OSKEXT_START if expression == '$pc' else self.current
++        fake = Gdb()
++        with contextlib.redirect_stdout(io.StringIO()):
++            exec(block, {'gdb': fake, 'struct': struct})
++        self.assertEqual(fake.stop, 1)
++        self.assertTrue(fake.breakpoint.deleted)
++        regions[2] = (image, macho("0" * 32))
++        wrong = Gdb()
++        with contextlib.redirect_stdout(io.StringIO()), \
++                self.assertRaisesRegex(RuntimeError, "current Raphael UUID mismatch"):
++            exec(block, {'gdb': wrong, 'struct': struct})
++        self.assertFalse(wrong.breakpoint.deleted)
++        regions[2] = (image, macho(raphael_uuid))
++        short_kmod = bytearray(regions[7][1])
++        struct.pack_into("<Q", short_kmod, 0xa4, 0x100)
++        regions[7] = (target_kmod, bytes(short_kmod))
++        outside = Gdb()
++        with contextlib.redirect_stdout(io.StringIO()), \
++                self.assertRaisesRegex(RuntimeError,
++                                       "wrapper outside current kmod executable"):
++            exec(block, {'gdb': outside, 'struct': struct})
++        self.assertFalse(outside.breakpoint.deleted)
++
+     def test_vmid1_root_rejects_artifact_without_frame_pointer_prologue(self):
+         with self.assertRaisesRegex(ValueError, "frame-pointer prologue"):
+             tool.generate(0xffffff801b6e8000, "474ef697fc283ba283a4763d76c8e200",
+diff --git a/tests/test_run_bounded_gdb.py b/tests/test_run_bounded_gdb.py
+index e64092e..78c3ee7 100644
+--- a/tests/test_run_bounded_gdb.py
++++ b/tests/test_run_bounded_gdb.py
+@@ -22,8 +22,10 @@ class RunnerTests(unittest.TestCase):
+         root = Path(tempfile.mkdtemp())
+         self.addCleanup(lambda: __import__('shutil').rmtree(root))
+         (root / 'supervision.json').write_text(json.dumps({
+-            'cid': self.CID, 'deadline_epoch': __import__('time').time() + 60}))
++            'cid': self.CID, 'deadline_epoch': __import__('time').time() + 60,
++            'serial_ready': str(root / ('serial-' + self.CID + '.ready'))}))
+         (root / 'serial.log').write_text(self.SERIAL)
++        (root / ('serial-' + self.CID + '.ready')).write_text(self.CID)
+         generator = root / 'generator.py'
+         generator.write_text("#!/usr/bin/env python3\nimport pathlib, sys\n"
+                              "pathlib.Path(sys.argv[sys.argv.index('--output') + 1]).write_text('set confirm off\\n')\n")
+@@ -36,7 +38,7 @@ class RunnerTests(unittest.TestCase):
+     def run_main(self, root, generator, gdb):
+         output = root / 'output'
+         argv = ['runner', '--supervision', str(root / 'supervision.json'),
+-                '--serial', str(root / 'serial.log'), '--output', str(output),
++                '--output', str(output),
+                 '--build-id', self.BUILD, '--gdb', str(gdb),
+                 '--generator', str(generator), '--kernel-symbols', '/tmp/kernel',
+                 '--raphael-binary', '/tmp/raphael', '--raphael-dsym', '/tmp/dsym',
+@@ -45,6 +47,29 @@ class RunnerTests(unittest.TestCase):
+             tool.main()
+         return output
+ 
++    def test_live_serial_is_derived_from_exact_supervised_cid(self):
++        root = Path(tempfile.mkdtemp())
++        self.addCleanup(lambda: __import__('shutil').rmtree(root))
++        ready = root / ('serial-' + self.CID + '.ready')
++        ready.write_text(self.CID + ' console')
++        state = {'cid': self.CID, 'critical_enabled': True,
++                 'serial_ready': str(ready)}
++        self.assertEqual(tool.live_serial_path(state), root / 'serial.log')
++        state['serial_ready'] = str(root / ('serial-' + ('d' * 64) + '.ready'))
++        with self.assertRaisesRegex(ValueError, 'serial readiness identity'):
++            tool.live_serial_path(state)
++        state['serial_ready'] = str(ready)
++        ready.write_text(self.CID + ' wrong')
++        with self.assertRaisesRegex(ValueError, 'serial readiness content'):
++            tool.live_serial_path(state)
++        ready.write_text(self.CID + ' console')
++        (root / 'serial.log').write_text('live')
++        (root / 'real-serial.log').write_text('foreign')
++        (root / 'serial.log').unlink()
++        (root / 'serial.log').symlink_to(root / 'real-serial.log')
++        with self.assertRaisesRegex(ValueError, 'live serial path.*symlink'):
++            tool.live_serial_path(state)
++
+     def test_requires_mapping_and_exact_build(self):
+         line='Kernel text 0xffffff801c8e8000-0xffffff801d2e8000 to be write-protected\n'
+         self.assertIsNone(tool.readiness(line,'a'*32))
+@@ -72,6 +97,17 @@ class RunnerTests(unittest.TestCase):
+             with self.assertRaisesRegex(ValueError,'not running'):
+                 tool.verify_port('a'*64)
+ 
++    def test_early_runtime_requires_wait_on_exact_container(self):
++        with mock.patch.object(tool.subprocess, 'check_output',
++                               return_value='["GDB=wait","IMAGE=x"]') as inspect:
++            tool.verify_early_runtime(self.CID)
++        self.assertEqual(inspect.call_args.args[0][-1], self.CID)
++        for env in ('["GDB=on"]', '["GDB=wait","GDB=on"]', '[]'):
++            with self.subTest(env=env), mock.patch.object(
++                    tool.subprocess, 'check_output', return_value=env), \
++                    self.assertRaisesRegex(ValueError, 'GDB=wait'):
++                tool.verify_early_runtime(self.CID)
++
+     def test_process_error_runs_detach_and_reports_failure(self):
+         root, generator, gdb = self.fixture("import sys\nsys.exit(7)\n")
+         with self.assertRaisesRegex(RuntimeError, 'status 7'):
+@@ -87,6 +123,7 @@ class RunnerTests(unittest.TestCase):
+         output = self.run_main(root, generator, gdb)
+         result = json.loads((output / "result.json").read_text())
+         self.assertEqual(result["scenario"], "vmid1-root")
++        self.assertFalse((output / "serial.txt").exists())
+         self.assertIsNone(result["target_gpu_address"])
+         self.assertFalse(result["gpu_completion_established"])
+ 
+@@ -126,4 +163,50 @@ class RunnerTests(unittest.TestCase):
+         self.assertEqual(run.call_args.kwargs['timeout'], 3)
+         self.assertFalse(run.call_args.kwargs['check'])
+ 
++    def test_early_manifest_contract_requires_wait_and_exact_slide_zero(self):
++        good = {'launch_options': {'BOOTDISK_MODE':'custom', 'NVRAM':'stock',
++                                   'GENERIC_GRAPHICS':'off', 'GDB':'wait'},
++                'boot_args':'-v keepsyms=1 slide=0 rgpu=1'}
++        tool.validate_early_manifest(good)
++        for bad in (
++                dict(good, launch_options=dict(good['launch_options'], GDB='on')),
++                dict(good, boot_args='-v keepsyms=1'),
++                dict(good, boot_args='-v keepsyms=1 slide=1')):
++            with self.subTest(bad=bad), self.assertRaisesRegex(ValueError,
++                                                               'early rendezvous'):
++                tool.validate_early_manifest(bad)
++
++    def test_early_runner_generates_before_post_resume_serial_identity(self):
++        markers = ("VMID1_WRAPPER_ENTRY_HIT\nVMID1_NATIVE_CALL_BOUNDARY\n"
++                   "VMID1_PREPARED_CPU_OUTPUT\nWRAPPER_CPU_RETURN_HIT")
++        root, generator, gdb = self.fixture("print(" + repr(markers) + ")\n")
++        (root / 'serial.log').write_text(
++            'Kernel text 0xffffff8000200000-0xffffff8000c00000 '
++            'to be write-protected\nBUILD: identity=' + self.BUILD + '\n')
++        kernel = root / 'kernel.symbols'
++        kernel.write_bytes(b'pinned-kernel')
++        manifest = root / 'manifest.json'
++        manifest.write_text(json.dumps({
++            'launch_options': {'BOOTDISK_MODE':'custom', 'NVRAM':'stock',
++                               'GENERIC_GRAPHICS':'off', 'GDB':'wait'},
++            'boot_args':'-v keepsyms=1 slide=0'}))
++        manifest_sha = __import__('hashlib').sha256(manifest.read_bytes()).hexdigest()
++        output = root / 'output'
++        argv = ['runner', '--supervision', str(root / 'supervision.json'),
++                '--output', str(output), '--build-id', self.BUILD,
++                '--gdb', str(gdb), '--generator', str(generator),
++                '--kernel-symbols', str(kernel), '--raphael-binary', '/tmp/raphael',
++                '--raphael-dsym', '/tmp/dsym', '--scenario', 'vmid1-root',
++                '--early-rendezvous', '--manifest', str(manifest)]
++        argv += ['--expected-manifest-sha256', manifest_sha]
++        kernel_sha = __import__('hashlib').sha256(kernel.read_bytes()).hexdigest()
++        with patch.object(tool, 'verify_port'), \
++                patch.object(tool, 'verify_early_runtime'), \
++                patch.object(tool, 'PINNED_KERNEL_SHA256', kernel_sha), \
++                patch.object(sys, 'argv', argv):
++            tool.main()
++        result = json.loads((output / 'result.json').read_text())
++        self.assertTrue(result['early_rendezvous'])
++        self.assertEqual(result['runtime_kernel_text'], '0xffffff8000200000')
++
+ if __name__ == '__main__': unittest.main()
+diff --git a/tests/test_stage_candidate.py b/tests/test_stage_candidate.py
+index cb6c115..6a1c37a 100644
+--- a/tests/test_stage_candidate.py
++++ b/tests/test_stage_candidate.py
+@@ -439,6 +439,39 @@ class Candidate186StageTests(unittest.TestCase):
+                       card["prerequisites"])
+         self.assertEqual(card["launch_options"]["GDB"], "on")
+ 
++    def test_candidate191_early_gdb_card_is_exact_and_preserves_gpu_source(self):
++        self.tool.configure("1.0.191", "metal-025")
++        raw = (ROOT / "experiments/metal-025.json").read_bytes()
++        card = self.tool.validate_card(raw, hashlib.sha256(raw).hexdigest())
++        self.assertEqual(card["raphael_source_sha256"],
++                         "7515f121230fbd26e32b198bd622e106155708e4108d9def96dcc7daa9d173f3")
++        self.assertEqual(card["launch_options"]["GDB"], "wait")
++        self.assertIs(type(card["required_kernel_slide"]), int)
++        self.assertEqual(card["required_kernel_slide"], 0)
++        for value in (False, True, "0", 1, None):
++            bad = dict(card, required_kernel_slide=value)
++            encoded = (json.dumps(bad) + "\n").encode()
++            with self.subTest(value=value), self.assertRaisesRegex(
++                    RuntimeError, "candidate card contract"):
++                self.tool.validate_card(encoded, hashlib.sha256(encoded).hexdigest())
++
++    def test_required_kernel_slide_is_narrow_and_rejects_conflicts(self):
++        card = {"candidate_version":"1.0.191", "id":"metal-025",
++                "required_kernel_slide":0}
++        self.assertEqual(self.tool.apply_required_kernel_slide(
++            ["-v", "keepsyms=1"], card), ["-v", "keepsyms=1", "slide=0"])
++        self.assertEqual(self.tool.apply_required_kernel_slide(
++            ["-v", "slide=0"], card), ["-v", "slide=0"])
++        for words in (["slide=1"], ["slide=0", "slide=0"],
++                      ["slide=0", "slide=1"]):
++            with self.subTest(words=words), self.assertRaisesRegex(
++                    RuntimeError, "kernel slide"):
++                self.tool.apply_required_kernel_slide(words, card)
++        with self.assertRaisesRegex(RuntimeError, "unsupported kernel slide"):
++            self.tool.apply_required_kernel_slide([], {
++                "candidate_version":"1.0.190", "id":"metal-024",
++                "required_kernel_slide":0})
++
+     def test_candidate188_debug_symbols_require_retained_files_and_matching_provenance(self):
+         self.tool.configure("1.0.188", "metal-021")
+         with tempfile.TemporaryDirectory() as directory:
+diff --git a/tools/experiment.py b/tools/experiment.py
+index a6c167e..124aa88 100644
+--- a/tools/experiment.py
++++ b/tools/experiment.py
+@@ -213,7 +213,9 @@ def launch_options(data):
+     value = data.get('launch_options')
+     headless = dict(historical, GENERIC_GRAPHICS='off')
+     debugger = dict(headless, GDB='on')
+-    if type(value) is not dict or value not in (historical, headless, debugger):
++    debugger_wait = dict(headless, GDB='wait')
++    if type(value) is not dict or value not in (historical, headless, debugger,
++                                                debugger_wait):
+         raise ValueError('launch options must select the exact historical, no-graphics, or debugger contract')
+     return dict(value)
+ 
+diff --git a/tools/gdb-kext-source.py b/tools/gdb-kext-source.py
+index 77f1902..52673e1 100644
+--- a/tools/gdb-kext-source.py
++++ b/tools/gdb-kext-source.py
+@@ -2,6 +2,7 @@
+ """Generate a bounded GDB script for a source breakpoint in RaphaelGPU."""
+ 
+ import argparse
++import hashlib
+ import re
+ import struct
+ import subprocess
+@@ -14,6 +15,12 @@ MAX_HEADER = 65536
+ MAX_KMODS = 256
+ KMOD_NAME = 0x10
+ KMOD_ADDRESS = 0x9C
++KERNEL_LINK_TEXT = 0xffffff8000200000
++OSKEXT_START = 0xffffff8000970230
++MAX_KEXT_START_STOPS = 512
++PINNED_KERNEL_SHA256 = "04a501246caf768356f4090a8fd662daf5bbc949993353526c66771f5ba1d8e4"
++PINNED_KERNEL_UUID = "f6a1b3d41ebb3628a1c589506c51ddec"
++OSKEXT_START_PROLOGUE = bytes.fromhex("554889e54157415641554154534883ec18")
+ 
+ 
+ def kernel_relocation(runtime_text, link_text):
+@@ -192,8 +199,9 @@ def dwarf_source_root(dsym):
+ def generate(runtime_text, expected_uuid, kernel_symbols, raphael_dsym,
+              function_offset, wrapper_name, expected_prologue=None,
+              native_offsets=(), original_source_root=None, target_gpu_address=None,
+-             scenario="entry-update"):
+-    relocation = kernel_relocation(runtime_text, 0xffffff8000200000)
++             scenario="entry-update", early_rendezvous=False, kernel_uuid=None,
++             kernel_start_prologue=None):
++    relocation = kernel_relocation(runtime_text, KERNEL_LINK_TEXT)
+     expected_uuid = expected_uuid.lower().replace("-", "")
+     if len(expected_uuid) != 32 or any(c not in "0123456789abcdef" for c in expected_uuid):
+         raise ValueError("expected UUID must be 16-byte hexadecimal")
+@@ -208,10 +216,75 @@ def generate(runtime_text, expected_uuid, kernel_symbols, raphael_dsym,
+         raise ValueError("vmid1-root requires push-rbp/mov-rsp-rbp frame-pointer prologue")
+     if scenario not in ("entry-update", "vmid1-root"):
+         raise ValueError("unknown capture scenario")
++    if early_rendezvous:
++        if scenario != "vmid1-root" or runtime_text != KERNEL_LINK_TEXT:
++            raise ValueError("early rendezvous requires vmid1-root and slide=0")
++        if kernel_uuid != PINNED_KERNEL_UUID:
++            raise ValueError("early rendezvous requires exact pinned kernel UUID")
++        if kernel_start_prologue != OSKEXT_START_PROLOGUE:
++            raise ValueError("early rendezvous requires exact OSKext::start prologue")
+     if len(native_offsets) != expected_calls or any(offset <= function_offset for offset in native_offsets):
+         raise ValueError(f"exactly {expected_calls} native call offsets must follow wrapper entry")
+     if target_gpu_address is not None and not 0 <= target_gpu_address < 1 << 64:
+         raise ValueError("target GPU address must be uint64")
++    early_block = ""
++    if early_rendezvous:
++        early_block = f'''python
++EARLY_RENDEZVOUS = True
++OSKEXT_START = 0x{OSKEXT_START:x}
++MAX_KEXT_START_STOPS = {MAX_KEXT_START_STOPS}
++EXPECTED_KERNEL_UUID = '{kernel_uuid.lower()}'
++EXPECTED_OSKEXT_START_PROLOGUE = bytes.fromhex('{kernel_start_prologue.hex()}')
++early_inf=gdb.selected_inferior()
++def early_read(addr,size):
++    if size < 0 or size > 65536: raise gdb.GdbError('bounded early read refused')
++    return bytes(early_inf.read_memory(addr,size))
++def early_uuid(address):
++    header=early_read(address,32)
++    if len(header) != 32: raise gdb.GdbError('short runtime Mach-O header')
++    magic,_,_,_,ncmds,sizeofcmds,_,_=struct.unpack_from('<IiiIIIII',header)
++    if magic != 0xfeedfacf or ncmds > 4096 or sizeofcmds > 65504: raise gdb.GdbError('invalid runtime Mach-O header')
++    data=header+early_read(address+32,sizeofcmds); cursor=32; end=len(data); found_uuid=None
++    for _ in range(ncmds):
++        if cursor+8 > end: raise gdb.GdbError('truncated runtime load command')
++        cmd,size=struct.unpack_from('<II',data,cursor)
++        if size < 8 or cursor+size > end: raise gdb.GdbError('invalid runtime load command')
++        if cmd == 0x1b:
++            if size != 24: raise gdb.GdbError('invalid runtime UUID command')
++            if found_uuid is not None: raise gdb.GdbError('duplicate runtime UUID command')
++            found_uuid=data[cursor+8:cursor+24].hex()
++        cursor += size
++    if found_uuid is None: raise gdb.GdbError('runtime UUID absent')
++    return found_uuid
++early_breakpoint=gdb.Breakpoint('*%#x' % OSKEXT_START,type=gdb.BP_HARDWARE_BREAKPOINT,internal=True)
++print('EARLY_RENDEZVOUS_ARMED address=%#x' % OSKEXT_START)
++for early_stop in range(MAX_KEXT_START_STOPS):
++    gdb.execute('continue')
++    if int(gdb.parse_and_eval('$pc')) != OSKEXT_START: raise gdb.GdbError('OSKext::start stop PC mismatch')
++    if early_uuid(0xffffff8000200000) != EXPECTED_KERNEL_UUID: raise gdb.GdbError('runtime kernel UUID mismatch')
++    if early_read(OSKEXT_START,len(EXPECTED_OSKEXT_START_PROLOGUE)) != EXPECTED_OSKEXT_START_PROLOGUE: raise gdb.GdbError('runtime OSKext::start prologue mismatch')
++    current_oskext=int(gdb.parse_and_eval('$rdi')) & ((1<<64)-1)
++    if current_oskext < 0xffffff8000000000 or current_oskext > ((1<<64)-1)-0x58: raise gdb.GdbError('noncanonical current OSKext pointer')
++    current_kmod=struct.unpack('<Q',early_read(current_oskext+0x50,8))[0]
++    if current_kmod < 0xffffff8000000000 or current_kmod > ((1<<64)-1)-0xac: raise gdb.GdbError('noncanonical current kmod pointer')
++    current_name_raw=early_read(current_kmod+0x10,64)
++    if b'\\0' not in current_name_raw: raise gdb.GdbError('unterminated current kmod name')
++    try: current_name=current_name_raw.split(b'\\0',1)[0].decode('ascii','strict')
++    except Exception as error: raise gdb.GdbError('invalid current kmod name: %s' % error)
++    if current_name != 'as.rgpu.RaphaelGPU': continue
++    current_address=struct.unpack('<Q',early_read(current_kmod+0x9c,8))[0]
++    current_size=struct.unpack('<Q',early_read(current_kmod+0xa4,8))[0]
++    if current_address < 0xffffff8000000000 or current_size == 0 or current_address+current_size >= 1<<64: raise gdb.GdbError('invalid current kmod executable range')
++    if early_uuid(current_address) != '{expected_uuid}': raise gdb.GdbError('current Raphael UUID mismatch')
++    wrapper_address=current_address+0x{function_offset:x}
++    if wrapper_address < current_address or wrapper_address+len(bytes.fromhex('{expected_prologue.hex()}')) > current_address+current_size: raise gdb.GdbError('wrapper outside current kmod executable')
++    if early_read(wrapper_address,len(bytes.fromhex('{expected_prologue.hex()}'))) != bytes.fromhex('{expected_prologue.hex()}'): raise gdb.GdbError('runtime wrapper bytes mismatch')
++    break
++else: raise gdb.GdbError('early kext rendezvous stop cap reached')
++early_breakpoint.delete()
++print('EARLY_RAPHAEL_AUTHENTICATED name=%s address=%#x uuid=%s' % (current_name,current_address,'{expected_uuid}'))
++end
++'''
+     # GDB's bundled Python performs all target-memory parsing. Read sizes and list
+     # traversal are capped and every identity mismatch raises before symbols load.
+     tool_path = Path(__file__).resolve()
+@@ -224,6 +297,8 @@ target remote 127.0.0.1:1234
+ symbol-file -o 0x{relocation:x} {kernel_symbols}
+ python
+ import gdb, struct, importlib.util
++end
++{early_block}python
+ MAX_HEADER = 65536
+ MAX_KMODS = 256
+ KMOD_NAME = 0x10
+@@ -283,12 +358,13 @@ def main():
+     parser.add_argument("--runtime-kernel-text", required=True, type=lambda x: int(x, 0))
+     parser.add_argument("--raphael-uuid")
+     parser.add_argument("--raphael-binary", type=Path)
+-    parser.add_argument("--kernel-symbols", required=True)
++    parser.add_argument("--kernel-symbols", required=True, type=Path)
+     parser.add_argument("--raphael-dsym", required=True)
+     parser.add_argument("--function-offset", type=lambda x: int(x, 0))
+     parser.add_argument("--scenario", choices=("entry-update", "vmid1-root"), default="entry-update")
+     parser.add_argument("--wrapper-name")
+     parser.add_argument("--target-gpu-address", type=lambda x: int(x, 0))
++    parser.add_argument("--early-rendezvous", action="store_true")
+     parser.add_argument("--output", required=True, type=Path)
+     args = parser.parse_args()
+     expected_uuid = artifact_uuid(args.raphael_binary) if args.raphael_binary else args.raphael_uuid
+@@ -308,11 +384,20 @@ def main():
+     native_offsets = native_call_offsets(args.raphael_binary, offset, symbol_end,
+                                          wrapper_name, native_symbol)
+     original_source_root = dwarf_source_root(args.raphael_dsym)
++    if (args.early_rendezvous and
++            hashlib.sha256(args.kernel_symbols.read_bytes()).hexdigest() !=
++            PINNED_KERNEL_SHA256):
++        parser.error("early rendezvous kernel symbols SHA-256 mismatch")
++    kernel_uuid = artifact_uuid(args.kernel_symbols) if args.early_rendezvous else None
++    kernel_start_prologue = (executable_bytes(args.kernel_symbols, OSKEXT_START, 17)
++                             if args.early_rendezvous else None)
+     args.output.write_text(generate(args.runtime_kernel_text, expected_uuid,
+                                     args.kernel_symbols, args.raphael_dsym,
+                                     offset, wrapper_name, prologue,
+                                     native_offsets, original_source_root,
+-                                    args.target_gpu_address, args.scenario))
++                                    args.target_gpu_address, args.scenario,
++                                    args.early_rendezvous, kernel_uuid,
++                                    kernel_start_prologue))
+ 
+ 
+ if __name__ == "__main__":
+diff --git a/tools/run-bounded-gdb.py b/tools/run-bounded-gdb.py
+index 28c1896..055cfaa 100644
+--- a/tools/run-bounded-gdb.py
++++ b/tools/run-bounded-gdb.py
+@@ -1,6 +1,7 @@
+ #!/usr/bin/env python3
+ """Run one identity-bound GDB capture inside an existing experiment deadline."""
+ import argparse
++import hashlib
+ import json
+ import re
+ import subprocess
+@@ -9,6 +10,7 @@ import time
+ from pathlib import Path
+ 
+ KERNEL_TEXT = re.compile(r"Kernel text (0x[0-9a-f]+)-(0x[0-9a-f]+) to be write-protected")
++PINNED_KERNEL_SHA256 = "04a501246caf768356f4090a8fd662daf5bbc949993353526c66771f5ba1d8e4"
+ 
+ 
+ def readiness(text, build_id):
+@@ -22,6 +24,17 @@ def readiness(text, build_id):
+     return start
+ 
+ 
++def validate_early_manifest(manifest):
++    expected = {"BOOTDISK_MODE":"custom", "NVRAM":"stock",
++                "GENERIC_GRAPHICS":"off", "GDB":"wait"}
++    if manifest.get("launch_options") != expected:
++        raise ValueError("early rendezvous requires exact GDB=wait launch options")
++    words = manifest.get("boot_args", "").split()
++    if words.count("slide=0") != 1 or any(
++            word.startswith("slide=") and word != "slide=0" for word in words):
++        raise ValueError("early rendezvous requires exact slide=0 boot argument")
++
++
+ def verify_port(cid, docker="docker"):
+     value = subprocess.check_output(
+         [docker, "inspect", "--format",
+@@ -37,6 +50,40 @@ def verify_port(cid, docker="docker"):
+         raise ValueError("exact supervised CID lacks loopback GDB mapping")
+ 
+ 
++def verify_early_runtime(cid, docker="docker"):
++    encoded = subprocess.check_output(
++        [docker, "inspect", "--format", '{{json .Config.Env}}', cid],
++        text=True, timeout=5)
++    env = json.loads(encoded)
++    if not isinstance(env, list) or env.count("GDB=wait") != 1 or any(
++            item.startswith("GDB=") and item != "GDB=wait" for item in env):
++        raise ValueError("early rendezvous exact supervised CID lacks GDB=wait")
++
++
++def live_serial_path(state):
++    cid = state.get("cid")
++    ready = state.get("serial_ready")
++    if (not isinstance(cid, str) or not re.fullmatch(r"[0-9a-f]{64}", cid) or
++            not isinstance(ready, str)):
++        raise ValueError("supervision lacks live serial identity")
++    ready_path = Path(ready)
++    if not ready_path.is_absolute() or ready_path.name != f"serial-{cid}.ready":
++        raise ValueError("supervision serial readiness identity mismatch")
++    if ready_path.is_symlink():
++        raise ValueError("supervision serial readiness path must not be a symlink")
++    expected = cid + (" console" if state.get("critical_enabled") is True else "")
++    try:
++        content = ready_path.read_text()
++    except OSError as error:
++        raise ValueError("supervision serial readiness content unavailable") from error
++    if content != expected:
++        raise ValueError("supervision serial readiness content mismatch")
++    serial = ready_path.parent / "serial.log"
++    if serial.is_symlink():
++        raise ValueError("live serial path must not be a symlink")
++    return serial
++
++
+ def detach(gdb):
+     result = subprocess.run([gdb, "-batch", "-ex", "set confirm off", "-ex",
+                     "target remote 127.0.0.1:1234", "-ex", "detach", "-ex", "quit"],
+@@ -49,7 +96,6 @@ def detach(gdb):
+ def main():
+     parser = argparse.ArgumentParser(description=__doc__)
+     parser.add_argument("--supervision", required=True, type=Path)
+-    parser.add_argument("--serial", required=True, type=Path)
+     parser.add_argument("--output", required=True, type=Path)
+     parser.add_argument("--build-id", required=True)
+     parser.add_argument("--gdb", required=True)
+@@ -59,6 +105,9 @@ def main():
+     parser.add_argument("--raphael-dsym", required=True, type=Path)
+     parser.add_argument("--scenario", choices=("entry-update", "vmid1-root"), default="entry-update")
+     parser.add_argument("--target-gpu-address")
++    parser.add_argument("--early-rendezvous", action="store_true")
++    parser.add_argument("--manifest", type=Path)
++    parser.add_argument("--expected-manifest-sha256")
+     parser.add_argument("--docker", default="docker")
+     args = parser.parse_args()
+     if not re.fullmatch(r"[0-9a-f]{32}", args.build_id):
+@@ -67,31 +116,53 @@ def main():
+         parser.error("--target-gpu-address is required for entry-update")
+     if args.scenario == "vmid1-root" and args.target_gpu_address is not None:
+         parser.error("--target-gpu-address is not used for vmid1-root")
++    if args.early_rendezvous:
++        if (args.scenario != "vmid1-root" or args.manifest is None or
++                not re.fullmatch(r"[0-9a-f]{64}", args.expected_manifest_sha256 or "")):
++            parser.error("--early-rendezvous requires vmid1-root, --manifest, and its SHA-256")
++        if (args.manifest.is_symlink() or args.supervision.is_symlink() or
++                args.manifest.resolve().parent != args.supervision.resolve().parent):
++            parser.error("early rendezvous manifest must share the supervised output directory")
++        manifest_bytes = args.manifest.read_bytes()
++        if hashlib.sha256(manifest_bytes).hexdigest() != args.expected_manifest_sha256:
++            parser.error("early rendezvous manifest SHA-256 mismatch")
++        validate_early_manifest(json.loads(manifest_bytes))
++        if hashlib.sha256(args.kernel_symbols.read_bytes()).hexdigest() != PINNED_KERNEL_SHA256:
++            parser.error("early rendezvous kernel symbols SHA-256 mismatch")
+     state = json.loads(args.supervision.read_text())
+     cid = state.get("cid")
+     if not isinstance(cid, str) or not re.fullmatch(r"[0-9a-f]{64}", cid):
+         raise ValueError("supervision lacks exact CID")
++    serial = live_serial_path(state)
+     deadline = min(float(state["deadline_epoch"]),
+                    float(state.get("launch_deadline_epoch", state["deadline_epoch"]))) - 25
+     if deadline - time.time() < 10:
+         raise ValueError("insufficient experiment time for bounded debugger capture")
+     args.output.mkdir(parents=False, exist_ok=False)
+     verify_port(cid, args.docker)
+-    runtime_text = None
+-    while time.time() < deadline - 8:
+-        verify_port(cid, args.docker)
+-        runtime_text = readiness(args.serial.read_text(errors="replace"), args.build_id)
+-        if runtime_text is not None:
+-            break
+-        time.sleep(.2)
+-    if runtime_text is None:
+-        raise TimeoutError("fresh kernel mapping and authenticated kmod were not observed")
++    if args.early_rendezvous:
++        verify_early_runtime(cid, args.docker)
++    runtime_text = 0xffffff8000200000 if args.early_rendezvous else None
++    if not args.early_rendezvous:
++        while time.time() < deadline - 8:
++            verify_port(cid, args.docker)
++            try:
++                serial_text = serial.read_text(errors="replace")
++            except FileNotFoundError:
++                serial_text = ""
++            runtime_text = readiness(serial_text, args.build_id)
++            if runtime_text is not None:
++                break
++            time.sleep(.2)
++        if runtime_text is None:
++            raise TimeoutError("fresh kernel mapping and authenticated kmod were not observed")
+     script = args.output / "capture.gdb"
+     subprocess.run([sys.executable, str(args.generator), "--runtime-kernel-text", hex(runtime_text),
+                     "--raphael-binary", str(args.raphael_binary),
+                     "--kernel-symbols", str(args.kernel_symbols),
+                     "--raphael-dsym", str(args.raphael_dsym),
+                     "--scenario", args.scenario,
++                    *(["--early-rendezvous"] if args.early_rendezvous else []),
+                     *(["--target-gpu-address", args.target_gpu_address] if args.target_gpu_address else []),
+                     "--output", str(script)],
+                    check=True, timeout=5)
+@@ -126,6 +197,20 @@ def main():
+             raise RuntimeError(f"capture failed ({capture_error}); detach/resume failed: {cleanup['output']}")
+         raise capture_error
+     transcript_text = transcript.read_text(errors="replace")
++    if args.early_rendezvous:
++        observed_runtime = None
++        while time.time() < deadline - 2:
++            verify_port(cid, args.docker)
++            try:
++                observed_runtime = readiness(serial.read_text(errors="replace"),
++                                             args.build_id)
++            except FileNotFoundError:
++                observed_runtime = None
++            if observed_runtime is not None:
++                break
++            time.sleep(.2)
++        if observed_runtime != runtime_text:
++            raise RuntimeError("early rendezvous lacks matching post-resume serial identity")
+     required = (("VMID1_WRAPPER_ENTRY_HIT", "VMID1_NATIVE_CALL_BOUNDARY", "VMID1_PREPARED_CPU_OUTPUT", "WRAPPER_CPU_RETURN_HIT")
+                 if args.scenario == "vmid1-root" else
+                 ("WRAPPER_ENTRY_HIT", "NATIVE_CALL_BOUNDARY", "WRAPPER_CPU_RETURN_HIT"))
+@@ -133,6 +218,10 @@ def main():
+         raise RuntimeError("GDB transcript lacks complete bounded capture")
+     (args.output / "result.json").write_text(json.dumps({
+         "cid": cid, "runtime_kernel_text": hex(runtime_text), "build_id": args.build_id,
++        "early_rendezvous": args.early_rendezvous,
++        "kernel_symbols_sha256": (hashlib.sha256(args.kernel_symbols.read_bytes()).hexdigest()
++                                  if args.early_rendezvous else None),
++        "manifest_sha256": args.expected_manifest_sha256,
+         "scenario": args.scenario, "target_gpu_address": args.target_gpu_address,
+         "complete": True, "gpu_completion_established": False,
+         "atomic_hardware_snapshot": False}, indent=2) + "\n")
+diff --git a/tools/stage-candidate.py b/tools/stage-candidate.py
+index d818cf5..2072368 100644
+--- a/tools/stage-candidate.py
++++ b/tools/stage-candidate.py
+@@ -46,6 +46,7 @@ SUPPORTED_CARD_DIAGNOSTICS = {
+     ("1.0.188", "metal-022"): "rgpuvmdiag=1",
+     ("1.0.189", "metal-023"): "rgpuvmdiag=1",
+     ("1.0.190", "metal-024"): "rgpuvmdiag=1",
++    ("1.0.191", "metal-025"): "rgpuvmdiag=1",
+ }
+ 
+ 
+@@ -114,7 +115,8 @@ def validate_card(raw, expected_sha256):
+     if pair in (("1.0.184", "metal-017"), ("1.0.185", "metal-018"),
+                 ("1.0.186", "metal-019"), ("1.0.187", "metal-020"),
+                 ("1.0.188", "metal-021"), ("1.0.188", "metal-022"),
+-                ("1.0.189", "metal-023"), ("1.0.190", "metal-024")):
++                ("1.0.189", "metal-023"), ("1.0.190", "metal-024"),
++                ("1.0.191", "metal-025")):
+         candidate_contract = {
+             "critical_replay_tolerance": "terminal-prefix",
+             "recovery_critical_replay_tolerance": "terminal-prefix-open",
+@@ -123,6 +125,9 @@ def validate_card(raw, expected_sha256):
+                 "vmid1_fault_walk_entry",
+             ],
+             "launch_options": ({
++                "BOOTDISK_MODE": "custom", "NVRAM": "stock",
++                "GENERIC_GRAPHICS": "off", "GDB": "wait",
++            } if pair == ("1.0.191", "metal-025") else {
+                 "BOOTDISK_MODE": "custom", "NVRAM": "stock",
+                 "GENERIC_GRAPHICS": "off", "GDB": "on",
+             } if pair in (("1.0.188", "metal-021"),
+@@ -140,21 +145,24 @@ def validate_card(raw, expected_sha256):
+         raise RuntimeError("candidate card contract mismatch")
+     if pair in (("1.0.186", "metal-019"), ("1.0.187", "metal-020"),
+                 ("1.0.188", "metal-021"), ("1.0.188", "metal-022"),
+-                ("1.0.189", "metal-023"), ("1.0.190", "metal-024")):
++                ("1.0.189", "metal-023"), ("1.0.190", "metal-024"),
++                ("1.0.191", "metal-025")):
+         candidate186_contract = {
+             "functional_boot_arguments": {"rgpuvmroot": "4", "rgpudump": "5000"},
+             "required_boot_flags": ["-liluheadless"],
+             "raphael_source_sha256": (
+                 "7515f121230fbd26e32b198bd622e106155708e4108d9def96dcc7daa9d173f3"
+                 if pair in (("1.0.189", "metal-023"),
+-                            ("1.0.190", "metal-024")) else
++                            ("1.0.190", "metal-024"),
++                            ("1.0.191", "metal-025")) else
+                 "db511634c6d292ef3a65285e56bd5cf5f9e03cf4c20680a27b96c46a18f2e9b0"),
+         }
+         if any(card.get(key) != value
+                for key, value in candidate186_contract.items()):
+             raise RuntimeError("candidate card contract mismatch")
+     if pair in (("1.0.188", "metal-021"), ("1.0.188", "metal-022"),
+-                ("1.0.189", "metal-023"), ("1.0.190", "metal-024")):
++                ("1.0.189", "metal-023"), ("1.0.190", "metal-024"),
++                ("1.0.191", "metal-025")):
+         required = card.get("required_observations", [])
+         prerequisites = card.get("prerequisites", [])
+         expected_gdb = ({"gdb_vmid1_wrap_vmm_update_entries_inputs",
+@@ -166,6 +174,10 @@ def validate_card(raw, expected_sha256):
+         if (not expected_gdb.issubset(required) or
+                 "gdb_debug_artifact_and_symbol_provenance_pinned" not in prerequisites):
+             raise RuntimeError("candidate card contract mismatch")
++    if pair == ("1.0.191", "metal-025") and (
++            type(card.get("required_kernel_slide")) is not int or
++            card.get("required_kernel_slide") != 0):
++        raise RuntimeError("candidate card contract mismatch")
+     transport_path = Path(__file__).with_name("critical-transport.py")
+     spec = importlib.util.spec_from_file_location("critical_transport", transport_path)
+     transport = importlib.util.module_from_spec(spec)
+@@ -401,7 +413,7 @@ def verify_build_inputs(experiment, builder, expected_commit,
+     builder.validate_macho(executable.read_bytes())
+     if (CANDIDATE_VERSION, CARD_ID) in (
+             ("1.0.188", "metal-021"), ("1.0.189", "metal-023"),
+-            ("1.0.190", "metal-024")):
++            ("1.0.190", "metal-024"), ("1.0.191", "metal-025")):
+         validate_debug_symbols(manifest, builder, executable,
+                                DIST / "debug-symbols",
+                                card_source_sha256)
+@@ -484,6 +496,25 @@ def candidate_boot_flags(card):
+     return flags
+ 
+ 
++def apply_required_kernel_slide(words, card):
++    pair = (card.get("candidate_version"), card.get("id"))
++    if "required_kernel_slide" not in card:
++        return list(words)
++    if (pair != ("1.0.191", "metal-025") or
++            type(card.get("required_kernel_slide")) is not int or
++            card["required_kernel_slide"] != 0):
++        raise RuntimeError("unsupported kernel slide requirement")
++    slides = [word for word in words if word.startswith("slide=")]
++    if len(slides) > 1 or (slides and slides[0] != "slide=0"):
++        raise RuntimeError("existing kernel slide conflicts with reviewed slide=0")
++    result = list(words)
++    if not slides:
++        result.append("slide=0")
++    if result.count("slide=0") != 1:
++        raise RuntimeError("staged kernel slide is not exact")
++    return result
++
++
+ def make_staged_config(experiment, card, run_id):
+     original = (VM / "config.plist").read_bytes()
+     xml = original.index(b"<?xml")
+@@ -504,6 +535,7 @@ def make_staged_config(experiment, card, run_id):
+              word.split("=", 1)[0] not in flags]
+     words.extend(flags)
+     words.extend(f"{key}={value}" for key, value in updates.items())
++    words = apply_required_kernel_slide(words, card)
+     boot_args = " ".join(words)
+     nvram["boot-args"] = boot_args
+     if not experiment.raphael_target_marked(config):
+@@ -851,7 +883,7 @@ def stage(expected_commit, expected_boot_id, expected_card_sha256,
+     candidate186 = (CANDIDATE_VERSION, CARD_ID) in (
+         ("1.0.186", "metal-019"), ("1.0.187", "metal-020"),
+         ("1.0.188", "metal-021"), ("1.0.189", "metal-023"),
+-        ("1.0.190", "metal-024"))
++        ("1.0.190", "metal-024"), ("1.0.191", "metal-025"))
+     if candidate186 and identities["source_sha256"] != card["raphael_source_sha256"]:
+         raise RuntimeError("candidate source differs from its experiment card")
+     lilu = (validate_lilu_inputs(
