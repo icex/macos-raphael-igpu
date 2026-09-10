@@ -1,0 +1,165 @@
+{
+  "additional_source_sha256": {
+    "tools/candidate183-recovery-repair.py": "5421088fd8302116d5ea413937572aa2687ac84acf46bbd6d437740b5999c956",
+    "tools/experiment.py": "f7ec043ea8456f60b1ff69c4595bcaeb76bd620aee9b696e69a8790d5b038503"
+  },
+  "boot_id": "d67da91d-94e6-42f0-8dd1-78b42f5496e1",
+  "build_id": "1d5f98d2e5b641eeab1869987f569e73",
+  "failed_recovery_sha256": "ddb66b00adb660c710cd8bc4db03fd37ab569908563630f4f1c5b99d3370055b",
+  "kind": "candidate183-cr2-erasure-recovery-proof",
+  "lease_records": {
+    "lifetime": "XH3 LIFETIME state=VALID nonce=acc528e1748b72f1_be12ff4b336156d3 checksum=0x4b926486b7507f27",
+    "owned": "XH2 OWNED nonce=acc528e1748b72f1_be12ff4b336156d3 gen=1 lease=0xfaf3000-0xfb08000 scratch=0xfaf4000-0xfb07004 checksum=0xbeb2e75829bec82d",
+    "pool": "XH2 POOL state=ACTIVE nonce=acc528e1748b72f1_be12ff4b336156d3 gen=1 lease=0xfaf3000-0xfb08000 pool0=0x10000000->0xffeb000 pool1=0x10000000->0xffeb000 reason=0 checksum=0xbeb3fe583bbbec27"
+  },
+  "manifest_sha256": "e809cee6b8dc3cb8749d56dcedeb4dcdb55ab98caf21ee3a5bdd7de59f660775",
+  "reconstruction": {
+    "canonical_terminal_sha256": "23a75932f7c762df70563f6444c19d87810670f7a272345ff7509edebaf526db",
+    "corrupt_line_numbers": [
+      7390,
+      7396,
+      7505,
+      7513,
+      7521,
+      7566,
+      7570,
+      7875,
+      7878,
+      7897,
+      7980,
+      8087,
+      8133,
+      8160,
+      8229,
+      8312,
+      8357,
+      8360,
+      8397,
+      8489,
+      8621,
+      8649,
+      8699,
+      8879,
+      10159,
+      19208,
+      19214
+    ],
+    "corrupt_lines": 27,
+    "derived_serial_sha256": "73aac21e747be5e14178b2bf2e38424dee03214d0a9beb89eff023ce1d47a364",
+    "donor_chunks": [
+      {
+        "checksum": 520857397,
+        "line": "RaphaelGPU      rgpu: @ RGPU_CR2 v=1 b=1d5f98d2e5b641eeab1869987f569e73 s=00000002 r=0086 p=00/04 n=28 c=1f0ba735 d=5355423a207472616365207365713d3234206b696e643d6d656d6f72792d6d61702070686173653d",
+        "line_number": 14825,
+        "part": 0,
+        "sha256": "b311057a558d38487069e1144802a321fd936273087823287828b0eb3cf6b7ba"
+      },
+      {
+        "checksum": 3698014802,
+        "line": "RaphaelGPU      rgpu: @ RGPU_CR2 v=1 b=1d5f98d2e5b641eeab1869987f569e73 s=00000002 r=0086 p=01/04 n=28 c=dc6b3a52 d=65786974207375626a6563743d307866666666666661373239353331303030206f626a6563743d30",
+        "line_number": 14826,
+        "part": 1,
+        "sha256": "1d3c626ee9dad1622081997fa85999f8249ac84ed420212cb56d779385310883"
+      },
+      {
+        "checksum": 3185786401,
+        "line": "RaphaelGPU      rgpu: @ RGPU_CR2 v=1 b=1d5f98d2e5b641eeab1869987f569e73 s=00000002 r=0086 p=02/04 n=28 c=bde33e21 d=7866666666666639336637623966313030207468726561643d307866666666666639643930656331",
+        "line_number": 14827,
+        "part": 2,
+        "sha256": "53245f09cb39836d0237cdfaec3cb638e5022bc704daee35a9428f61c9bad268"
+      },
+      {
+        "checksum": 2997487968,
+        "line": "RaphaelGPU      rgpu: @ RGPU_CR2 v=1 b=1d5f98d2e5b641eeab1869987f569e73 s=00000002 r=0086 p=03/04 n=21 c=b2aa0960 d=623330207265717565737465643d3020726573756c743d31206265666f72653d30",
+        "line_number": 14828,
+        "part": 3,
+        "sha256": "364706cc75328a266329d15bb22961d7428a17596a2aaaca6371745f0aea49c3"
+      }
+    ],
+    "donor_end": {
+      "bytes": 32715,
+      "chunks": 920,
+      "count": 267,
+      "crc32": 1181316728,
+      "dropped": 0,
+      "fnv1a64": 210857003797644065,
+      "truncated": 0
+    },
+    "donor_end_line": 15313,
+    "donor_end_raw": "RaphaelGPU      rgpu: @ RGPU_END2 v=1 b=1d5f98d2e5b641eeab1869987f569e73 s=00000002 first=0000 count=010b drop=0000000000000000 trunc=0000000000000000 bytes=00007fcb chunks=00000398 crc=46697678 fnv=02ed1d53e9c30321 state=complete",
+    "donor_record": "SUB: trace seq=24 kind=memory-map phase=exit subject=0xffffffa729531000 object=0xffffff93f7b9f100 thread=0xffffff9d90ec1b30 requested=0 result=1 before=0",
+    "donor_record_sha256": "30cd0ae9513f0ab73ebf8d0ddcaf704a034e5c6c0754e54f020ba3f9a10e1f32",
+    "donor_snapshot": 2,
+    "inserted_bytes": "RaphaelGPU      rgpu: @ RGPU_CR2 v=1 b=1d5f98d2e5b641eeab1869987f569e73 s=00000003 r=0086 p=00/04 n=28 c=90538826 d=5355423a207472616365207365713d3234206b696e643d6d656d6f72792d6d61702070686173653d\nRaphaelGPU      rgpu: @ RGPU_CR2 v=1 b=1d5f98d2e5b641eeab1869987f569e73 s=00000003 r=0086 p=01/04 n=28 c=53331541 d=65786974207375626a6563743d307866666666666661373239353331303030206f626a6563743d30\nRaphaelGPU      rgpu: @ RGPU_CR2 v=1 b=1d5f98d2e5b641eeab1869987f569e73 s=00000003 r=0086 p=02/04 n=28 c=32bb1132 d=7866666666666639336637623966313030207468726561643d307866666666666639643930656331\nRaphaelGPU      rgpu: @ RGPU_CR2 v=1 b=1d5f98d2e5b641eeab1869987f569e73 s=00000003 r=0086 p=03/04 n=21 c=13938d8e d=623330207265717565737465643d3020726573756c743d31206265666f72653d30\n",
+    "inserted_chunks": [
+      {
+        "line": "RaphaelGPU      rgpu: @ RGPU_CR2 v=1 b=1d5f98d2e5b641eeab1869987f569e73 s=00000003 r=0086 p=00/04 n=28 c=90538826 d=5355423a207472616365207365713d3234206b696e643d6d656d6f72792d6d61702070686173653d",
+        "part": 0,
+        "sha256": "ecb694c3866491340108933d39e07c8ed68297fac599b8bae731b2036f4645a7"
+      },
+      {
+        "line": "RaphaelGPU      rgpu: @ RGPU_CR2 v=1 b=1d5f98d2e5b641eeab1869987f569e73 s=00000003 r=0086 p=01/04 n=28 c=53331541 d=65786974207375626a6563743d307866666666666661373239353331303030206f626a6563743d30",
+        "part": 1,
+        "sha256": "c2eee0d9b019bbaf5e9d6f36bbcdea153de0bcb1ed9aac7c933387a3c34ae9c9"
+      },
+      {
+        "line": "RaphaelGPU      rgpu: @ RGPU_CR2 v=1 b=1d5f98d2e5b641eeab1869987f569e73 s=00000003 r=0086 p=02/04 n=28 c=32bb1132 d=7866666666666639336637623966313030207468726561643d307866666666666639643930656331",
+        "part": 2,
+        "sha256": "730e6f29ca65c76a0d173a49c6737b1f4ed694c719009f82b0eea76c05ca9de8"
+      },
+      {
+        "line": "RaphaelGPU      rgpu: @ RGPU_CR2 v=1 b=1d5f98d2e5b641eeab1869987f569e73 s=00000003 r=0086 p=03/04 n=21 c=13938d8e d=623330207265717565737465643d3020726573756c743d31206265666f72653d30",
+        "part": 3,
+        "sha256": "760124614b8de32f26bf49687ebc90b7b5b65ddb72b3e12b6d2164a751421713"
+      }
+    ],
+    "insertion_offset": 1511806,
+    "missing_parts": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "missing_record": 134,
+    "original_serial_sha256": "af132e635729bee36634c4bd4f5280bf63735183f88b465e8a3d34c1c0df0ce1",
+    "reconstructed_records_sha256": "6fccbb39a75c85850e51f09eac6ca901050d43133cba971de1eda06f76920650",
+    "record_count": 285,
+    "strict_original_error": "CR2 has a malformed transport line",
+    "terminal_count": 285,
+    "terminal_end": {
+      "bytes": 34431,
+      "chunks": 971,
+      "count": 285,
+      "crc32": 4051994867,
+      "dropped": 0,
+      "fnv1a64": 8277884763139796594,
+      "truncated": 0
+    },
+    "terminal_end_line": 20050,
+    "terminal_end_raw": "RaphaelGPU      rgpu: @ RGPU_END2 v=1 b=1d5f98d2e5b641eeab1869987f569e73 s=00000003 first=0000 count=011d drop=0000000000000000 trunc=0000000000000000 bytes=0000867f chunks=000003cb crc=f18488f3 fnv=72e0f4557e90ee72 state=complete",
+    "terminal_snapshot": 3,
+    "tolerant_original_error": "CR2 snapshot has a missing chunk"
+  },
+  "recovery_helpers_sha256": {
+    "tools/critical-replay.py": "8e0332d763be3fb6e31d5877ad78711c8673e8f5aeae56ba4989248947554b61",
+    "tools/kiq-recovery-proof.py": "16af9cd9b5e807a44e0e28d6b6005840b9d720c50df2ce757b820dd5d3de0398",
+    "tools/recovery_lease_v2.py": "445544dd52f30cf32838472d2d248d69ea1cd3e703c8f580ecef6491238aa7d2",
+    "tools/recovery_lifetime_v3.py": "61ab64bec086d0c358a05b57f893bc6267b94d9b6f431bed100de13a9d0fbcea",
+    "tools/vfio-recover.py": "3616a938db007c84ecae6048bfd83100902759a328dda92c1d5394801e2d288e"
+  },
+  "run_directory": "/home/bogdan/macos-vm/run/metal-016-183",
+  "run_id": "f1728b74e128c5acd35661334bff12be",
+  "schema": 1,
+  "serial_sha256": "af132e635729bee36634c4bd4f5280bf63735183f88b465e8a3d34c1c0df0ce1",
+  "terminal_end": {
+    "bytes": 34431,
+    "chunks": 971,
+    "count": 285,
+    "crc32": 4051994867,
+    "dropped": 0,
+    "fnv1a64": 8277884763139796594,
+    "truncated": 0
+  },
+  "verdict_sha256": "4d896e153fafbc59072eb82014e591dff8536c31d449f63f9a3e032b5052fc49",
+  "vm_directory": "/home/bogdan/macos-vm"
+}

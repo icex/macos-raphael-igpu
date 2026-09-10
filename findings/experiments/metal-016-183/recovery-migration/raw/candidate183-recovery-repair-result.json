@@ -1,0 +1,581 @@
+{
+  "proof_sha256": "5e2c287356cd3721d481aad6dd9a0422a218d7674c8b9e23624bda3f5db0ad14",
+  "recovery": {
+    "derived_serial_sha256": "73aac21e747be5e14178b2bf2e38424dee03214d0a9beb89eff023ce1d47a364",
+    "original_serial_sha256": "af132e635729bee36634c4bd4f5280bf63735183f88b465e8a3d34c1c0df0ce1",
+    "receipt": {
+      "authorizes_launch": false,
+      "bar5": {
+        "index": 5,
+        "mmap": true,
+        "offset": 5497558138880,
+        "read": true,
+        "regions": {
+          "0": {
+            "index": 0,
+            "mmap": true,
+            "offset": 0,
+            "read": true,
+            "size": 268435456,
+            "write": true
+          },
+          "2": {
+            "index": 2,
+            "mmap": true,
+            "offset": 2199023255552,
+            "read": true,
+            "size": 2097152,
+            "write": true
+          },
+          "5": {
+            "index": 5,
+            "mmap": true,
+            "offset": 5497558138880,
+            "read": true,
+            "size": 524288,
+            "write": true
+          }
+        },
+        "size": 524288,
+        "write": true
+      },
+      "boot_id": "d67da91d-94e6-42f0-8dd1-78b42f5496e1",
+      "commands": [
+        {
+          "before": 2147549184,
+          "command": 196608,
+          "confirmed": true,
+          "label": "destroy all rings",
+          "polls": 7,
+          "response": 2147680256
+        },
+        {
+          "before": 2147680256,
+          "command": 786432,
+          "confirmed": true,
+          "label": "destroy GPCOM ring",
+          "polls": 1,
+          "response": 2148270080
+        }
+      ],
+      "created_epoch": 1789033158.6630626,
+      "device": "0000:7b:00.0",
+      "driver": "vfio-pci",
+      "gc_quiesce": {
+        "active_after": 0,
+        "active_before": 9,
+        "cp_cpc_busy_after": 134742016,
+        "cp_me_after": 352321536,
+        "cp_me_before": 352321536,
+        "cp_mec_after": 1342177280,
+        "cp_mec_before": 0,
+        "cp_stat_after": 2214692352,
+        "dequeue_timeouts": 8,
+        "dequeued": 1,
+        "doorbell_range_lower_after": 0,
+        "doorbell_range_upper_after": 0,
+        "forced_inactive": 8,
+        "gfx_needs_unmap": true,
+        "gfx_rb_active_after": 0,
+        "gfx_rb_active_before": 1,
+        "gfx_rb_base_after": 0,
+        "gfx_rb_base_before": 4290764800,
+        "gfx_rb_base_hi_after": 0,
+        "gfx_rb_base_hi_before": 0,
+        "gfx_rb_cntl_after": 0,
+        "gfx_rb_cntl_before": 10489360,
+        "gfx_rb_doorbell_after": 2147483648,
+        "gfx_rb_doorbell_before": 3221226496,
+        "gfx_rb_wptr_after": 0,
+        "gfx_rb_wptr_before": 896,
+        "gfx_rb_wptr_hi_after": 0,
+        "gfx_rb_wptr_hi_before": 0,
+        "gfx_retirement_confirmed": false,
+        "gfx_ring_clean": false,
+        "gfx_was_stale": true,
+        "graphics_pipe_guard": {
+          "pipe1_supported_state": true,
+          "policy": "x6000-24G830-single-legacy-gfx-pipe-v1",
+          "reservation_after": {
+            "checksum": 13741299778904311853,
+            "immutable": true,
+            "lease_end": 263225344,
+            "lease_start": 263139328,
+            "lease_version": 2,
+            "lifetime_readbacks": {
+              "authenticated": "524750554b4c4d330300000056414c440030af0f000000000080b00f00000000f1728b74e128c5acd35661334bff12be01000000000000002dc8be2958e7b2be27ecbb3b58feb3be0000000000000000277f50b78664924b",
+              "pre_scratch": null
+            },
+            "lifetime_status": {
+              "checksum": 5445525429208252199,
+              "generation": 1,
+              "lease_end": 263225344,
+              "lease_offset": 263139328,
+              "magic": 3696694755578627922,
+              "nonce_hi": 13696290115236746963,
+              "nonce_lo": 12449401693723652849,
+              "ownership_checksum": 13741299778904311853,
+              "pool_checksum": 13741606542950263847,
+              "reason": 0,
+              "state": 1145848150,
+              "version": 3
+            },
+            "lifetime_version": 3,
+            "pool_readback": "committed",
+            "pool_status": {
+              "checksum": 13741606542950263847,
+              "pool0_after": 268349440,
+              "pool0_before": 268435456,
+              "pool1_after": 268349440,
+              "pool1_before": 268435456,
+              "reason": 0,
+              "state": 1448362817
+            },
+            "run_id": "f1728b74e128c5acd35661334bff12be",
+            "schema": 3,
+            "scratch_end": 263221252,
+            "scratch_start": 263143424,
+            "state": 1145984847
+          },
+          "reservation_before": {
+            "checksum": 13741299778904311853,
+            "immutable": true,
+            "lease_end": 263225344,
+            "lease_start": 263139328,
+            "lease_version": 2,
+            "lifetime_readbacks": {
+              "authenticated": "524750554b4c4d330300000056414c440030af0f000000000080b00f00000000f1728b74e128c5acd35661334bff12be01000000000000002dc8be2958e7b2be27ecbb3b58feb3be0000000000000000277f50b78664924b",
+              "pre_scratch": null
+            },
+            "lifetime_status": {
+              "checksum": 5445525429208252199,
+              "generation": 1,
+              "lease_end": 263225344,
+              "lease_offset": 263139328,
+              "magic": 3696694755578627922,
+              "nonce_hi": 13696290115236746963,
+              "nonce_lo": 12449401693723652849,
+              "ownership_checksum": 13741299778904311853,
+              "pool_checksum": 13741606542950263847,
+              "reason": 0,
+              "state": 1145848150,
+              "version": 3
+            },
+            "lifetime_version": 3,
+            "pool_readback": "committed",
+            "pool_status": {
+              "checksum": 13741606542950263847,
+              "pool0_after": 268349440,
+              "pool0_before": 268435456,
+              "pool1_after": 268349440,
+              "pool1_before": 268435456,
+              "reason": 0,
+              "state": 1448362817
+            },
+            "run_id": "f1728b74e128c5acd35661334bff12be",
+            "schema": 3,
+            "scratch_end": 263221252,
+            "scratch_start": 263143424,
+            "state": 1145984847
+          },
+          "reservation_unchanged": true,
+          "snapshot": {
+            "final_default": {
+              "completed": true,
+              "value": 0
+            },
+            "pipes": [
+              {
+                "active": 1,
+                "base": 4290764800,
+                "base_hi": 0,
+                "cntl": 10489360,
+                "doorbell_control": 3221226496,
+                "doorbell_offset": 1024,
+                "doorbell_status": 3221225472,
+                "intended_pipe": 0,
+                "rb0_active": 1,
+                "rb1_active": 0,
+                "selector": 0,
+                "wptr": 896,
+                "wptr_hi": 0
+              },
+              {
+                "active": 0,
+                "base": 4275878623,
+                "base_hi": 0,
+                "cntl": 10485760,
+                "doorbell_control": 0,
+                "doorbell_offset": 0,
+                "doorbell_status": 0,
+                "intended_pipe": 1,
+                "rb0_active": 1,
+                "rb1_active": 0,
+                "selector": 1,
+                "wptr": 0,
+                "wptr_hi": 0
+              }
+            ]
+          }
+        },
+        "graphics_pipe_proof_complete": true,
+        "graphics_pipes_after_retirement": {
+          "final_default": {
+            "completed": true,
+            "value": 0
+          },
+          "pipes": [
+            {
+              "active": 1,
+              "base": 4290764800,
+              "base_hi": 0,
+              "cntl": 10489360,
+              "doorbell_control": 3221226496,
+              "doorbell_offset": 1024,
+              "doorbell_status": 3221225472,
+              "intended_pipe": 0,
+              "rb0_active": 1,
+              "rb1_active": 0,
+              "selector": 0,
+              "wptr": 896,
+              "wptr_hi": 0
+            },
+            {
+              "active": 0,
+              "base": 4275878623,
+              "base_hi": 0,
+              "cntl": 10485760,
+              "doorbell_control": 0,
+              "doorbell_offset": 0,
+              "doorbell_status": 0,
+              "intended_pipe": 1,
+              "rb0_active": 1,
+              "rb1_active": 0,
+              "selector": 1,
+              "wptr": 0,
+              "wptr_hi": 0
+            }
+          ]
+        },
+        "graphics_pipes_before": {
+          "final_default": {
+            "completed": true,
+            "value": 0
+          },
+          "pipes": [
+            {
+              "active": 1,
+              "base": 4290764800,
+              "base_hi": 0,
+              "cntl": 10489360,
+              "doorbell_control": 3221226496,
+              "doorbell_offset": 1024,
+              "doorbell_status": 3221225472,
+              "intended_pipe": 0,
+              "rb0_active": 1,
+              "rb1_active": 0,
+              "selector": 0,
+              "wptr": 896,
+              "wptr_hi": 0
+            },
+            {
+              "active": 0,
+              "base": 4275878623,
+              "base_hi": 0,
+              "cntl": 10485760,
+              "doorbell_control": 0,
+              "doorbell_offset": 0,
+              "doorbell_status": 0,
+              "intended_pipe": 1,
+              "rb0_active": 1,
+              "rb1_active": 0,
+              "selector": 1,
+              "wptr": 0,
+              "wptr_hi": 0
+            }
+          ]
+        },
+        "graphics_pipes_final": {
+          "final_default": {
+            "completed": true,
+            "value": 0
+          },
+          "pipes": [
+            {
+              "active": 0,
+              "base": 0,
+              "base_hi": 0,
+              "cntl": 0,
+              "doorbell_control": 2147483648,
+              "doorbell_offset": 0,
+              "doorbell_status": 2147483648,
+              "intended_pipe": 0,
+              "rb0_active": 0,
+              "rb1_active": 0,
+              "selector": 0,
+              "wptr": 0,
+              "wptr_hi": 0
+            },
+            {
+              "active": 0,
+              "base": 4275878623,
+              "base_hi": 0,
+              "cntl": 10485760,
+              "doorbell_control": 0,
+              "doorbell_offset": 0,
+              "doorbell_status": 0,
+              "intended_pipe": 1,
+              "rb0_active": 0,
+              "rb1_active": 0,
+              "selector": 1,
+              "wptr": 0,
+              "wptr_hi": 0
+            }
+          ]
+        },
+        "host_kiq": {
+          "selectors": [
+            9,
+            11,
+            521,
+            523,
+            1033,
+            1035,
+            1545,
+            1547
+          ],
+          "status": "blocked-active-hqd"
+        },
+        "pq_status_after": 0,
+        "pq_wptr_poll_after": 0,
+        "queues": [
+          {
+            "me": 2,
+            "pipe": 0,
+            "polls": 1,
+            "queue": 0,
+            "selector": 8
+          },
+          {
+            "me": 2,
+            "pipe": 1,
+            "polls": 50,
+            "queue": 0,
+            "selector": 9
+          },
+          {
+            "me": 2,
+            "pipe": 1,
+            "polls": 50,
+            "queue": 2,
+            "selector": 521
+          },
+          {
+            "me": 2,
+            "pipe": 1,
+            "polls": 50,
+            "queue": 4,
+            "selector": 1033
+          },
+          {
+            "me": 2,
+            "pipe": 1,
+            "polls": 50,
+            "queue": 6,
+            "selector": 1545
+          },
+          {
+            "me": 2,
+            "pipe": 3,
+            "polls": 50,
+            "queue": 0,
+            "selector": 11
+          },
+          {
+            "me": 2,
+            "pipe": 3,
+            "polls": 50,
+            "queue": 2,
+            "selector": 523
+          },
+          {
+            "me": 2,
+            "pipe": 3,
+            "polls": 50,
+            "queue": 4,
+            "selector": 1035
+          },
+          {
+            "me": 2,
+            "pipe": 3,
+            "polls": 50,
+            "queue": 6,
+            "selector": 1547
+          }
+        ],
+        "reservation": {
+          "checksum": 13741299778904311853,
+          "immutable": true,
+          "lease_end": 263225344,
+          "lease_start": 263139328,
+          "lease_version": 2,
+          "lifetime_readbacks": {
+            "authenticated": "524750554b4c4d330300000056414c440030af0f000000000080b00f00000000f1728b74e128c5acd35661334bff12be01000000000000002dc8be2958e7b2be27ecbb3b58feb3be0000000000000000277f50b78664924b",
+            "pre_scratch": "524750554b4c4d330300000056414c440030af0f000000000080b00f00000000f1728b74e128c5acd35661334bff12be01000000000000002dc8be2958e7b2be27ecbb3b58feb3be0000000000000000277f50b78664924b"
+          },
+          "lifetime_status": {
+            "checksum": 5445525429208252199,
+            "generation": 1,
+            "lease_end": 263225344,
+            "lease_offset": 263139328,
+            "magic": 3696694755578627922,
+            "nonce_hi": 13696290115236746963,
+            "nonce_lo": 12449401693723652849,
+            "ownership_checksum": 13741299778904311853,
+            "pool_checksum": 13741606542950263847,
+            "reason": 0,
+            "state": 1145848150,
+            "version": 3
+          },
+          "lifetime_version": 3,
+          "pool_readback": "committed",
+          "pool_status": {
+            "checksum": 13741606542950263847,
+            "pool0_after": 268349440,
+            "pool0_before": 268435456,
+            "pool1_after": 268349440,
+            "pool1_before": 268435456,
+            "reason": 0,
+            "state": 1448362817
+          },
+          "run_id": "f1728b74e128c5acd35661334bff12be",
+          "schema": 3,
+          "scratch_end": 263221252,
+          "scratch_start": 263143424,
+          "state": 1145984847
+        },
+        "sdma0_after": 1,
+        "sdma0_before": 0,
+        "sdma0_cntl_after": 195,
+        "sdma0_cntl_before": 262339,
+        "sdma0_ib_after": 256,
+        "sdma0_ib_before": 257,
+        "sdma0_page_ib_after": 2147483904,
+        "sdma0_page_ib_before": 2147483905,
+        "sdma0_page_rb_after": 2156134432,
+        "sdma0_page_rb_before": 2156134433,
+        "sdma0_rb_after": 2156331040,
+        "sdma0_rb_before": 2156331041,
+        "sdma0_rlc_inputs": [
+          {
+            "ib_after": 256,
+            "ib_before": 256,
+            "index": 0,
+            "rb_after": 2147942400,
+            "rb_before": 2147942400
+          },
+          {
+            "ib_after": 256,
+            "ib_before": 256,
+            "index": 1,
+            "rb_after": 2147942400,
+            "rb_before": 2147942400
+          }
+        ],
+        "sdma0_shutdown_trace": [
+          {
+            "before": 2147483905,
+            "readback": 2147483904,
+            "register": 19720,
+            "step": "disable-page-ib",
+            "written": 2147483904
+          },
+          {
+            "before": 2156134433,
+            "readback": 2156134432,
+            "register": 19680,
+            "step": "disable-page-rb",
+            "written": 2156134432
+          }
+        ],
+        "sdma0_status_after": 1189014871,
+        "sdma0_status_before": 1189014871,
+        "status": "quiesced"
+      },
+      "iommu_group": "31",
+      "kernel_cursor_after": "s=98f6cb2295dc45898ee97031451ba7c8;i=43726;b=d67da91d94e642f08dd178b42f5496e1;m=16b3466ae;t=65b1d4e762f53;x=bc92e22199c8f26",
+      "kernel_cursor_before": "s=98f6cb2295dc45898ee97031451ba7c8;i=43726;b=d67da91d94e642f08dd178b42f5496e1;m=16b3466ae;t=65b1d4e762f53;x=bc92e22199c8f26",
+      "kernel_messages": [],
+      "pci_command_after": 3,
+      "pci_command_before": 3,
+      "prior_run_id": "f1728b74e128c5acd35661334bff12be",
+      "recovery_helpers_sha256": {
+        "tools/critical-replay.py": "8e0332d763be3fb6e31d5877ad78711c8673e8f5aeae56ba4989248947554b61",
+        "tools/kiq-recovery-proof.py": "16af9cd9b5e807a44e0e28d6b6005840b9d720c50df2ce757b820dd5d3de0398",
+        "tools/recovery_lease_v2.py": "445544dd52f30cf32838472d2d248d69ea1cd3e703c8f580ecef6491238aa7d2",
+        "tools/recovery_lifetime_v3.py": "61ab64bec086d0c358a05b57f893bc6267b94d9b6f431bed100de13a9d0fbcea",
+        "tools/vfio-recover.py": "3616a938db007c84ecae6048bfd83100902759a328dda92c1d5394801e2d288e"
+      },
+      "recovery_id": "3b9e76e85ad349d2a480b4f154d2609c",
+      "recovery_lease_schema": 3,
+      "reset_methods_after": [],
+      "reset_methods_before": [],
+      "schema": 6,
+      "status": "incomplete"
+    },
+    "receipt_path": "run/vfio-recovery/d67da91d-94e6-42f0-8dd1-78b42f5496e1/f1728b74e128c5acd35661334bff12be.json",
+    "receipt_sha256": "914c2ea652ea076e8168f362543200f69af0e7037f4011aba745018e71513c17",
+    "replay": {
+      "corrupt_line_numbers": [
+        7390,
+        7396,
+        7505,
+        7513,
+        7521,
+        7566,
+        7570,
+        7875,
+        7878,
+        7897,
+        7980,
+        8087,
+        8133,
+        8160,
+        8229,
+        8312,
+        8357,
+        8360,
+        8397,
+        8489,
+        8621,
+        8649,
+        8699,
+        8879,
+        10159,
+        19208,
+        19214
+      ],
+      "corrupt_lines": 27,
+      "corrupt_reasons": [
+        "malformed transport line",
+        "physical line bound exceeded"
+      ],
+      "count": 285,
+      "crc32": 4051994867,
+      "fnv1a64": 8277884763139796594,
+      "incomplete_snapshots": [
+        {
+          "has_end": true,
+          "snapshot": 1,
+          "valid_chunks": 371
+        }
+      ],
+      "open_attempt": null,
+      "serial_sha256": "73aac21e747be5e14178b2bf2e38424dee03214d0a9beb89eff023ce1d47a364",
+      "snapshot": 3,
+      "tolerance": "terminal-prefix-open"
+    }
+  },
+  "schema": 1,
+  "status": "complete"
+}
