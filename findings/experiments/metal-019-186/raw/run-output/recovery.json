@@ -1,0 +1,4 @@
+{
+  "status": "failed",
+  "error": "RecoveryError: invalid native recovery lease records: missing XH2 ownership record"
+}

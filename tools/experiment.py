@@ -23,6 +23,8 @@ import threading
 ROOT = Path(__file__).resolve().parents[1]
 BOOT_GUID = '7C436110-AB2A-4BBB-A880-FE41995C9F82'
 RAPHAEL_DEVICE_PATH = 'PciRoot(0x0)/Pci(0x6,0x0)'
+RAPHAEL_GUEST_BUS = 'pcie.0'
+RAPHAEL_GUEST_ADDR = '0x6'
 RAPHAEL_TARGET_KEY = 'rgpu,raphael-target'
 RAPHAEL_TARGET_MARKER = b'RGPU-RAPHAEL\x01'
 PRELAUNCH_CONTINUATION = {
@@ -204,6 +206,7 @@ def boot_argument_errors(args, requested_diagnostic, run_id=None):
 def raphael_target_marked(config):
     props = config.get('DeviceProperties', {}).get('Add', {}).get(RAPHAEL_DEVICE_PATH, {})
     return (isinstance(props.get('ATY,bin_image'), bytes) and
+            len(props.get('ATY,bin_image')) >= 512 and
             props.get(RAPHAEL_TARGET_KEY) == RAPHAEL_TARGET_MARKER)
 
 
@@ -271,6 +274,9 @@ def current_identity(vm, candidate, requested_diagnostic, run_id=None,
                 harness_sha256={name:sha((vm/name).read_bytes()) for name in harness_names},
                 rom_sha256=sha((vm/'run/gpu-patched.rom').read_bytes()),
                 launch_options=options,
+                vfio_guest_address={'bus':RAPHAEL_GUEST_BUS,
+                                    'addr':RAPHAEL_GUEST_ADDR,
+                                    'device_path':RAPHAEL_DEVICE_PATH},
                 image_id=image_id, guest_build=guest['guest_build'], probe_source_sha256=source_hash,
                 probe_binary_sha256=guest['probe_binary_sha256'], boot_id=host['boot_id'], kernel=host['kernel'],
                 bootdisk_sha256=sha((vm/'OpenCore.qcow2').read_bytes()),
@@ -2202,12 +2208,41 @@ def validate_running(manifest, observed):
         return errors
     if len(vfio) != 1 or 'host='+manifest['vfio_device'] not in vfio[0].split(','):
         errors.append('vfio_device')
+    topology = manifest.get('vfio_guest_address')
+    require_fixed = (topology is not None or
+                     manifest.get('launch_options', {}).get('GENERIC_GRAPHICS') == 'off')
+    if require_fixed:
+        expected = {'bus':RAPHAEL_GUEST_BUS, 'addr':RAPHAEL_GUEST_ADDR,
+                    'device_path':RAPHAEL_DEVICE_PATH}
+        if topology is not None and topology != expected:
+            errors.append('vfio_guest_address')
+        def options(value):
+            parts = value.split(',')
+            pairs = [part.split('=', 1) for part in parts[1:] if '=' in part]
+            return ({key: val for key, val in pairs}
+                    if len({key for key, _ in pairs}) == len(pairs) else {})
+        vfio_options = options(vfio[0]) if len(vfio) == 1 else {}
+        try:
+            vfio_slot, _, vfio_function = vfio_options.get('addr', '').partition('.')
+            vfio_address = (int(vfio_slot, 16), int(vfio_function or '0', 16))
+        except ValueError:
+            vfio_address = None
+        if (vfio_options.get('bus') != RAPHAEL_GUEST_BUS or
+                vfio_address != (6, 0)):
+            errors.append('vfio_guest_address')
+        occupants = [row for row in observed.get('pci_topology', [])
+                     if row.get('bus', RAPHAEL_GUEST_BUS) == RAPHAEL_GUEST_BUS and
+                     row.get('slot') == 6 and row.get('function', 0) == 0]
+        if occupants != [{'model':'vfio-pci', 'bus':RAPHAEL_GUEST_BUS,
+                          'slot':6, 'function':0}]:
+            errors.append('vfio_guest_address_collision')
     return errors
 
 
 def running_identity(cid):
     # Never print complete argv: Apple's SMC argument contains a key. Only PCI
-    # passthrough options and a digest of all argv are retained.
+    # device model/location summaries, passthrough options, and an argv digest
+    # are retained.
     script = '''import os,json,hashlib
 rows=[]
 for pid in os.listdir('/proc'):
@@ -2228,7 +2263,23 @@ for pid in os.listdir('/proc'):
    device=value.split(b',',1)[0]
    if arg in (b'-vga',b'-display') or (arg==b'-device' and (device in generic or device.startswith(b'qxl') or device.startswith(b'virtio-vga') or device.startswith(b'virtio-gpu'))):
     graphics.extend((arg.decode(),value.decode()))
-  rows.append({'vfio_args':[a.decode() for a in args if a.startswith(b'vfio-pci,')], 'serial_args':selected, 'graphics_args':graphics, 'argv_sha256':hashlib.sha256(raw).hexdigest()})
+  topology=[]
+  for index,arg in enumerate(args[:-1]):
+   if arg!=b'-device':continue
+   value=args[index+1].decode();parts=value.split(',');pairs={}
+   for part in parts[1:]:
+    if '=' in part:
+     key,val=part.split('=',1)
+     if key in ('bus','addr'):pairs[key]=val
+   item={'model':parts[0]}
+   if 'bus' in pairs:item['bus']=pairs['bus']
+   if 'addr' in pairs:
+    slot,_,function=pairs['addr'].partition('.')
+    try:
+     item.update(slot=int(slot,16),function=int(function or '0',16))
+    except ValueError:pass
+   topology.append(item)
+  rows.append({'vfio_args':[a.decode() for a in args if a.startswith(b'vfio-pci,')], 'pci_topology':topology, 'serial_args':selected, 'graphics_args':graphics, 'argv_sha256':hashlib.sha256(raw).hexdigest()})
 assert len(rows)==1
 print(json.dumps(rows[0]))
 '''

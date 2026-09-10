@@ -1,5 +1,173 @@
 # Raphael iGPU: current technical status
 
+## Astra assessment accepted; PCI-path correction verified offline
+
+The mandatory Astra review is complete and accepted. Frozen evidence
+demonstrates a guest slot-5 GPU while OpenCore properties remain bound to
+property slot 6; the absent specific marker is inferred from target rejection,
+not directly dumped from IORegistry. The revised hypothesis is that an explicit
+VFIO guest PCI placement `bus=pcie.0,addr=0x6` will restore target identity,
+lease acquisition, and native startup while leaving VMID1 behavior unchanged.
+
+The offline correction is implemented in `tools/macos-vm.sh`,
+`tools/experiment.py`, `tests/test_experiment.py`, and
+`tests/test_vm_entry.py`; `src/` is unchanged. The launcher fixes VFIO at
+`bus=pcie.0,addr=0x6`, matching the existing OpenCore property path. Runtime
+admission records and validates the guest bus/slot/function and collision-free
+topology. Its extractor retains only sanitized PCI model/location summaries; a
+fake `/proc` test containing `isa-applesmc,osk=SECRET-SENTINEL` proved the secret
+is absent from output. Marker admission now also matches the driver's minimum
+512-byte `ATY,bin_image` requirement. Tests reject frozen 186's missing address,
+wrong bus/slot/function/path, duplicate or implicit-root slot conflicts, and
+missing/short properties, while exercising generic and headless layouts. All
+103 tests in the two changed modules pass.
+
+The composition test uses the locally cached Docker-OSX launcher device order.
+It is offline argv evidence, not emulator topology or guest IORegistry proof.
+The live `/home/bogdan/macos-vm/macos-vm.sh` remains unchanged at SHA-256
+`6819d3b9b4d3857e56da66f3cefe9fd7e3a1a61b4d34951a59495fd3b9f791b5`.
+During this offline correction, no commit, build, staging, VM, device operation,
+or sudo occurred. Candidate 186 has no recovery receipt, so another GPU cycle
+remains blocked; spare ledger capacity is not authorization. Deployment is
+deferred until the next candidate is prepared; the receipt restriction applies
+to hardware reuse, not offline preparation.
+
+The next discriminating sequence, after coordinator review and a fresh safe-host
+deployment plan, is: verify explicit topology and properties, observe `marked=1`,
+confirm topology applied, OWNED with nonzero VMM base, paging channel, KIQ
+success, engine startup, ACTIVE pool and VALID lifetime, then run the existing
+Metal probe and cleanup. The 180-second exposure, 45-second probe, marker, lease,
+and recovery gates remain unchanged.
+The unresolved count remains 8 actual GPU cycles, including 4 since the
+post-182 Astra boundary. The historical handoff and failed-run sections below
+are retained for evidence.
+
+## Historical — Candidate 186 failed; Astra review completed
+
+Run `8ec4b0197975c1df32f408f188de64ce` completed once on boot
+`81e1e41f-f11b-40d0-b202-20850c245ead`. The headless Lilu correction works with
+the actual iGPU: patcher dispatch, all three loadKinfo calls, and driver route
+installation are observed. COM2 captures complete snapshots. **Native engines
+DID NOT successfully power up**; route installation is not engine success.
+
+```text
+XH: initVRAMInfo -> 1 ... fbPhysical=0x840000000 ... poolA/poolB nonnull
+XV: setMemoryAllocationsEnabled(0) exit: m_0x20=0 m_0x28=0 m_0x30=0
+XH: startKIQ refused before native call: no valid OWNED lease
+XJ: engine 0 PM4 ... powerUp -> 0
+LC: partial engine power-up cleaned before DMA teardown -> 1
+XJ: AMDHardware::powerUpHWEngines -> 0
+panic ... AMDHWVMM::endVMPTUpdate+0x13, CR2=0, RDI=0
+Panicked task: WindowServer
+```
+
+This is earlier than183's VMID1 execution faults. The NULL VMM dereference is
+observed, but its upstream cause requires investigation; do not bypass the missing
+ownership guard. The lack of a lease may be an initialization or delivery ordering
+problem rather than just a missing capture. The earlier operator summary saying
+engine initialization passed was incorrect and is superseded by these log lines.
+
+| Boundary | Verified result |
+|---|---|
+| No-generic headless startup | Patcher/loadKinfo/routes restored |
+| Critical capture | Complete COM2 snapshots; authenticated BUILD observed |
+| Recovery ownership / pool | Required XH2 ownership record absent |
+| Native engine startup | Refused before native KIQ; PM4 and HW power-up return 0 |
+| Desktop / Metal | WindowServer NULL panic; no valid probe result |
+| Shutdown | Exact CID exited after ACPI request |
+| Recovery / reuse | Refused; no authorizing receipt, no further launch |
+| Host | Same boot; no active VM; VFIO active, resets disabled, watchdogs/inhibitor on |
+
+Verdict is `INCONCLUSIVE`, earliest classification boundary
+`recovery_lease_pool_missing`; recovery says
+`invalid native recovery lease records: missing XH2 ownership record`.
+Classification precedence does not erase the separately observed guest panic.
+The current ledger contains one run of ceiling3; remaining capacity does not
+permit reuse without the latest-run receipt. No manual reset/rebind/cleanup or
+retry was attempted. Host capture configuration passed; pstore listing remains
+unavailable (`null`), not proven empty.
+
+Frozen output: `/home/bogdan/macos-vm/run/metal-019-186`.
+Serial SHA-256 `1bb600905f78139a8868a06c08838ea3f8964cb09503ab0bc19aa925bfccd2b7`;
+critical SHA-256 `210e1c2b573da997a541a0ca892b202251e668a5a02378585c3033dd9e084c`.
+Repository archive is preserved at `findings/experiments/metal-019-186/raw`.
+
+Conservative unresolved actual-GPU streak is now **8**:179,180,181,182,183,
+GUI-183,185,186. The four cycles since the post182 mandatory review are183,
+GUI-183,185,186. Headless startup/capture progress does not reset the broader
+unresolved execution streak. Routine hardware retries are paused while the
+required Astra xhigh review evaluates current evidence, methods and regressions.
+Baseline183 had the NULL-state diagnostic warning but proceeded past startup;
+186 explicitly refuses KIQ for missing OWNED lease and later panics. Compare
+lease setup/callback ordering and precise record production against183 before
+changing functional VMID1 behavior. No source or safety-gate changes are approved
+by this failure alone.
+
+## Historical — Candidate 186 handoff and single run authorization
+
+The user completed the handoff at 17:59:12 on 2026-09-10. Live checks confirm
+vfio-pci/group31 access, active/on runtime state, no reset methods, and enabled
+watchdogs/capture/sleep inhibition. The single normal first-boot run below has
+completed; no retry or extra exposure is authorized. The earlier authentication
+failure paragraph below is historical.
+
+User requested resuming after reboot and reducing token usage. Headless Lilu
+initialization was verified in an isolated no-GPU guest; the corrected source and
+staging work passed 40 focused tests. Local dev commit:
+`ab2ba0c83ae07af6171960b4ec73d4df1d262c98`. Nothing was merged/pushed to main;
+the unrelated `.gitignore` edit remains untouched. No new GPU cycle occurred;
+unresolved actual-GPU count remains7 (three since the post182 Astra review).
+
+Candidate186 is built, staged, and prepared for the normal first-launch path:
+
+- Clean worktree: `/home/bogdan/macos-vm/run/worktrees/candidate-186`.
+- Run: `8ec4b0197975c1df32f408f188de64ce`; build:
+  `5c0abfad59e04aae8c8a97528c7bda53`; card `metal-019`.
+- Manifest: `/home/bogdan/macos-vm/run/metal-019-186-manifest.json`, SHA-256
+  `f74dd63c7187ad06190df4d1dda9efe74980aeba454eccedaf92d7e845a20966`.
+- Staging record: `run/candidate-186/staging.json`, SHA-256
+  `971e3eb7d2edf29f0c39f31ae0c127eca8909510942306be6875371a47f44c21`.
+- Final bootdisk SHA-256:
+  `75b64824cd8ec78a9e973e2f4927e4ad6443358ed84fbd8456eb439a8a7af719`.
+- Raphael executable SHA-256:
+  `d511c8970c38d282824fc3453acea883f78be0f00ecce4b41356bd588942ebdb`.
+- Audited Lilu executable SHA-256:
+  `53b5a19812e66eeea3d3b874fe642f441cbfeccd171fb5ba05dc2e0ced3b8887`.
+- Durable Lilu bundle/manifest: `run/headless-lilu-verified-53b5a19812e6/`.
+
+The final private and published-image readbacks verified both Raphael files,
+both Lilu files and the config. Driver src hash is unchanged from185:
+`db511634c6d292ef3a65285e56bd5cf5f9e03cf4c20680a27b96c46a18f2e9b0`.
+The change is patched Lilu selected by `-liluheadless`, plus `rgpudump=5000`.
+A complete early BUILD-only snapshot was checked against the actual classifier:
+`INCONCLUSIVE`, so readiness polling continues. No generic GPU or ramfb;
+180-second exposure and 45-second probe remain unchanged. All recovery helpers
+are unchanged. The next test must first verify patcher callbacks/routes before
+interpreting VMID1 faults or Metal execution.
+
+Current host boot `81e1e41f-f11b-40d0-b202-20850c245ead` remains on initialized
+amdgpu, no active VM, watchdogs/capture and sleep inhibitor active. The authorized
+one-way handoff command was invoked once via `SUDO_ASKPASS=/tmp/askpass.sh sudo -A
+./gpu-bind.sh`; sudo authentication failed after its password retries. The script
+never ran. No bind, reset, rebind, cleanup, or additional privilege probe followed.
+Root verified `driver=amdgpu`, `device_accessible=false`, `active_vm=false`.
+The user must authenticate that existing handoff before GPU launch admission can
+pass. Do not retry sudo automatically or use `sudo -n`.
+
+After successful handoff, verify driver vfio-pci/group31 access, runtime active/on,
+empty reset_methods, same boot, no VM, and unused current-boot ledger. Recheck
+manifest/staging/source identities, then use the clean worktree's normal
+`experiment.py run` with this manifest and fresh output `run/metal-019-186`.
+No old-boot receipt or one-run policy is needed/valid for this fresh first launch.
+Do not reuse failed185 authorization. No GPU launch is authorized if host gates
+fail. Preserve the mandatory Astra review trigger if186 is another stalled cycle.
+
+Evidence limitations: candidate186 build.log is an operator summary, not a saved
+compiler transcript; artifact/preflight identities passed. The operator's first
+stage command used a truncated image digest and was refused before mutation;
+the corrected exact digest passed normal staging. Neither stage attempt was a
+GPU cycle. Full desktop Metal remains unverified.
+
 ## Latest CPU-only qualification — headless Lilu dispatch verified
 
 The audited Lilu 1.6.8 artifact was injected into isolated private media and

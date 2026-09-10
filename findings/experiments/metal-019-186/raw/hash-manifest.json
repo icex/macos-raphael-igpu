@@ -1,0 +1,94 @@
+{
+  "ledger.json": {
+    "bytes": 219,
+    "sha256": "432ae4274af23e3b5eb353033d1d50f55d23e48946c5bf77bacd2bf7fa548743"
+  },
+  "manifest.json": {
+    "bytes": 9727,
+    "sha256": "f74dd63c7187ad06190df4d1dda9efe74980aeba454eccedaf92d7e845a20966"
+  },
+  "notes.md": {
+    "bytes": 770,
+    "sha256": "d4fdf0e47ead5fb9a0d8d3daf0c0cd39b3b8e7659c983243c7089f3b64cdd65b"
+  },
+  "operator.log": {
+    "bytes": 2087,
+    "sha256": "4ffdc7ac2330fb1308cf97f9ed7eddbedd6eac69abda371fc7f7698b37c38707"
+  },
+  "run-output/agent-server-events.jsonl": {
+    "bytes": 2776,
+    "sha256": "0ebb134733ee56a822ae788fda48756e540b06bb14b58ec7c1e24565b08ddad9"
+  },
+  "run-output/capture-sha256.json": {
+    "bytes": 173,
+    "sha256": "4dce5968a27a7876b81461e6ddd44d04d9a43c12ffd1ee511cf9661fecc796f2"
+  },
+  "run-output/critical.txt": {
+    "bytes": 24325,
+    "sha256": "210e1c2b573da997a541a0ca892b202251e668a1a5a02378585c3033dd9e084c"
+  },
+  "run-output/events.jsonl": {
+    "bytes": 4594,
+    "sha256": "c81dad5d9f51bbe7129e6469544073eb888384f0b36a4b66cf5b1d8b261f4a19"
+  },
+  "run-output/host-after.json": {
+    "bytes": 501,
+    "sha256": "8e40d358c932101207ca661b1d3bf770b619125f64de4d8265edad8b91d386e4"
+  },
+  "run-output/host-before.json": {
+    "bytes": 501,
+    "sha256": "8e40d358c932101207ca661b1d3bf770b619125f64de4d8265edad8b91d386e4"
+  },
+  "run-output/host-kernel-messages.json": {
+    "bytes": 2344,
+    "sha256": "a77c5708d05250511fbfb7cc7c80883e426b0c102169f123d522ed02de9c8228"
+  },
+  "run-output/manifest.json": {
+    "bytes": 9727,
+    "sha256": "f74dd63c7187ad06190df4d1dda9efe74980aeba454eccedaf92d7e845a20966"
+  },
+  "run-output/recovery-replay.json": {
+    "bytes": 473,
+    "sha256": "f87f1b46398035ca4741302305ca7c49095f8cc1e9b2187791e8cdae3cb7dcd3"
+  },
+  "run-output/recovery.json": {
+    "bytes": 122,
+    "sha256": "7caf0bd9ee34dea541a9f2addf1a03e600085e8535eba9386a46847a620fa190"
+  },
+  "run-output/running-identity.json": {
+    "bytes": 659,
+    "sha256": "0b9ee95320fecc5c9e1457766b731fdc61dd14881a46946432dbfe2e21dd2d4f"
+  },
+  "run-output/serial.txt": {
+    "bytes": 179221,
+    "sha256": "1bb600905f78139a8868a06c08838ea3f8964cb09503ab0bc19aa925bfccd2b7"
+  },
+  "run-output/shutdown.json": {
+    "bytes": 309,
+    "sha256": "adac06e4db0457690676c558998d07c865e347e2ec57fd576ac78428d139762e"
+  },
+  "run-output/supervision.json": {
+    "bytes": 904,
+    "sha256": "8e49b58c4b707bfce59ab6b70486f218075f69aa55591d21c080a753e9f63483"
+  },
+  "run-output/verdict.json": {
+    "bytes": 2087,
+    "sha256": "4ffdc7ac2330fb1308cf97f9ed7eddbedd6eac69abda371fc7f7698b37c38707"
+  },
+  "snapshots/host-after.json": {
+    "bytes": 501,
+    "sha256": "8e40d358c932101207ca661b1d3bf770b619125f64de4d8265edad8b91d386e4"
+  },
+  "snapshots/host-before.json": {
+    "bytes": 501,
+    "sha256": "8e40d358c932101207ca661b1d3bf770b619125f64de4d8265edad8b91d386e4"
+  },
+  "staged-config.plist": {
+    "bytes": 109661,
+    "sha256": "fe2a95086fe651c83abbd442bdaa2fbef8f8ec192261a495bf42efe4d93f7725"
+  },
+  "staging.json": {
+    "bytes": 3484,
+    "sha256": "971e3eb7d2edf29f0c39f31ae0c127eca8909510942306be6875371a47f44c21"
+  }
+}

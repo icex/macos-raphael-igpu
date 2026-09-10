@@ -1,0 +1,24 @@
+{"build": "5c0abfad59e04aae8c8a97528c7bda53", "seq": 0, "kind": "build", "raw": "BUILD: identity=5c0abfad59e04aae8c8a97528c7bda53"}
+{"build": "5c0abfad59e04aae8c8a97528c7bda53", "seq": 1, "kind": "route", "raw": "HY: HWLibs hybrid trace route=ok entries-match=1 (max 8 calls)", "ok": true}
+{"build": "5c0abfad59e04aae8c8a97528c7bda53", "seq": 2, "kind": "sdma_route", "raw": "HY: SDMA selector trace route=ok entries-match=1 (max 8 hybrid calls)", "ok": true}
+{"build": "5c0abfad59e04aae8c8a97528c7bda53", "seq": 3, "kind": "vm_program_route", "raw": "VM: route AMDGFX10VMM::prepareVMInvalidateRequest -> ok (org=0xffffff802101edd1)", "ok": true}
+{"build": "5c0abfad59e04aae8c8a97528c7bda53", "seq": 4, "kind": "vm_entry_update_route", "raw": "VM: route AMDHWVMContext::updateContiguousPTEsWithDMAUsingAddr -> ok (entry=1 org=0xffffff802101ede5)", "ok": true, "entry": true, "original": 18446743524507512293}
+{"build": "5c0abfad59e04aae8c8a97528c7bda53", "seq": 5, "kind": "other", "raw": "SUB: route processCommandBuffer -> ok (org=0xffffff802101eeeb)"}
+{"build": "5c0abfad59e04aae8c8a97528c7bda53", "seq": 6, "kind": "other", "raw": "SUB: route BatchPrepareMappings -> ok (org=0xffffff802101eeff)"}
+{"build": "5c0abfad59e04aae8c8a97528c7bda53", "seq": 7, "kind": "other", "raw": "SUB: route BatchPrepare -> ok (org=0xffffff802101ef13)"}
+{"build": "5c0abfad59e04aae8c8a97528c7bda53", "seq": 8, "kind": "other", "raw": "SUB: route batchMemoryMapPrepare -> ok (org=0xffffff802101ef27)"}
+{"build": "5c0abfad59e04aae8c8a97528c7bda53", "seq": 9, "kind": "other", "raw": "SUB: route submitBuffer -> ok (org=0xffffff802101ef3b)"}
+{"build": "5c0abfad59e04aae8c8a97528c7bda53", "seq": 10, "kind": "other", "raw": "SUB: route AMDAccelVidMemory::allocPhysical -> ok (org=0xffffff802101ef4f)"}
+{"build": "5c0abfad59e04aae8c8a97528c7bda53", "seq": 11, "kind": "submission_trace_route", "raw": "SUB: routes=ok count=6 entries-match=1 capture=armed", "count": 6, "entries_match": true, "capture": "armed", "ok": true}
+{"build": "5c0abfad59e04aae8c8a97528c7bda53", "seq": 12, "kind": "other", "raw": "SD: route AMDHardware::initializeHWEngines -> ok (org=0xffffff802101ef77)"}
+{"build": "5c0abfad59e04aae8c8a97528c7bda53", "seq": 13, "kind": "submission_trace_summary", "raw": "SUB: summary process=0/0/0 mappings=0/0/0 prepare=0/0/0 map=0/0/0 submit=0/0/0 dropped=0/0", "ok": true, "counts": [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]], "dropped": [0, 0]}
+{"build": "5c0abfad59e04aae8c8a97528c7bda53", "seq": 14, "kind": "submission_map_phase_summary", "raw": "SUB: map-phase-summary total=0 capacity=0 va=0 backing-pte=0 unknown=0 dropped=0/0/0/0", "ok": true, "malformed": false, "total": 0, "counts": [0, 0, 0, 0], "dropped": [0, 0, 0, 0]}
+{"build": "5c0abfad59e04aae8c8a97528c7bda53", "seq": 15, "kind": "submission_backing_allocation_summary", "raw": "SUB: backing-summary completed=0 true=0 false=0 dropped=0 state=live", "ok": true, "malformed": false, "completed": 0, "successful": 0, "failed": 0, "dropped": 0, "state": "live"}
+{"build": "5c0abfad59e04aae8c8a97528c7bda53", "seq": 16, "kind": "other", "raw": "SD: route AMDHardware::stopHWEngines -> ok (org=0xffffff802101ef8b)"}
+{"build": "5c0abfad59e04aae8c8a97528c7bda53", "seq": 17, "kind": "other", "raw": "SD: route AMDHardware::powerOffHWEngines -> ok (org=0xffffff802101ef9f)"}
+{"build": "5c0abfad59e04aae8c8a97528c7bda53", "seq": 18, "kind": "other", "raw": "SD: route AMDHardware::powerOff -> ok (org=0xffffff802101efb3)"}
+{"build": "5c0abfad59e04aae8c8a97528c7bda53", "seq": 19, "kind": "other", "raw": "SD: route AMDHardware::getHWChannel -> ok (org=0xffffff802101efc7)"}
+{"build": "5c0abfad59e04aae8c8a97528c7bda53", "seq": 20, "kind": "other", "raw": "SD: route AMDGFX10SDMAChannel::commitIndirectCommandBuffer -> ok (org=0xffffff802101efdb)"}
+{"build": "5c0abfad59e04aae8c8a97528c7bda53", "seq": 21, "kind": "sdma_topology_route", "raw": "SD: topology routes=ok count=7 entries-match=1", "count": 7, "ok": true}
+{"kind": "capture_tolerance", "build": "5c0abfad59e04aae8c8a97528c7bda53", "seq": 22, "tolerance": "terminal-prefix", "corrupt_lines": 1, "corrupt_reasons": ["invalid chunk bounds"], "incomplete_snapshots": [{"snapshot": 1, "valid_chunks": 36, "has_end": false}], "terminal_snapshot": 3, "open_attempt": null}
+{"kind": "guest_panic", "build": "5c0abfad59e04aae8c8a97528c7bda53", "seq": 2065, "raw": "Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7fa9b7a9fd, CR2: 0x0", "trap": "0xe", "rip": 18446743522506156541, "cr2": 0, "symbol": "__ZN23AMDRadeonX6000_AMDHWVMM13endVMPTUpdateEv", "offset": 19}

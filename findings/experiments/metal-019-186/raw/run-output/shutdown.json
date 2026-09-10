@@ -1,0 +1,10 @@
+{
+  "cid": "bb35eb68da59a1539f7f7b34a0565da115d62357ab6b6a2a3a12d7cdb3b3e83f",
+  "outcome": "exited-after-acpi-request",
+  "request_sent": false,
+  "guest_boot_uuid": null,
+  "request_id": null,
+  "request_error": "guest identity transport failed",
+  "acpi_request_sent": true,
+  "acpi_request_error": null
+}

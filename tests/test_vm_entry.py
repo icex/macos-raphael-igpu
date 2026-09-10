@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 import unittest
@@ -81,6 +82,37 @@ class VmEntryTests(unittest.TestCase):
                 f'qemu-system-x86_64 -vga vmware -device {device} $EXTRA')
             self.assertNotEqual(result.returncode, 0, device)
             self.assertEqual(argv, [])
+
+    def test_actual_launcher_device_order_keeps_headless_vfio_at_property_slot(self):
+        launcher = ROOT / "tools/macos-vm.sh"
+        match = re.search(r'^\s*vf="-device ([^"]+)"$', launcher.read_text(), re.M)
+        self.assertIsNotNone(match)
+        vfio = match.group(1).replace("${GPU}", "0000:7b:00.0")
+        launch = """qemu-system-x86_64 -machine q35 \\
+-device qemu-xhci,id=xhci \\
+-device usb-kbd,bus=xhci.0 -device usb-tablet,bus=xhci.0 \\
+-device isa-applesmc,osk=fixture \\
+-device ich9-intel-hda -device hda-duplex,audiodev=hda \\
+-device ich9-ahci,id=sata \\
+-device ide-hd,bus=sata.2,drive=OpenCoreBoot \\
+-device ide-hd,bus=sata.4,drive=MacHDD \\
+-device vmxnet3,netdev=net0,id=net0 \\
+-vga vmware $EXTRA"""
+        for mode, extra in (("off", f"-device {vfio} -display none"),
+                            ("on", f"-device {vfio}")):
+            with self.subTest(mode=mode):
+                result, argv = self.run_entry(launch, mode=mode, extra=extra)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                devices = [argv[index + 1] for index, value in enumerate(argv[:-1])
+                           if value == "-device"]
+                slot6 = [device for device in devices
+                         if "bus=pcie.0" in device and "addr=0x6" in device]
+                self.assertEqual(slot6, [vfio])
+                if mode == "off":
+                    self.assertNotIn("vmware", argv)
+                    self.assertNotIn("ramfb", " ".join(argv))
+                else:
+                    self.assertEqual(argv[argv.index("-vga") + 1], "vmware")
 
 
 if __name__ == "__main__":

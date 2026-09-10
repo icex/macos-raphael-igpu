@@ -5,6 +5,7 @@ import tempfile
 import unittest
 import subprocess
 import plistlib
+import ast
 import copy
 import hashlib
 import struct
@@ -949,7 +950,7 @@ class ExperimentTests(unittest.TestCase):
         self.assertIsNotNone(check, 'per-device Raphael identity check missing')
         path = 'PciRoot(0x0)/Pci(0x6,0x0)'
         config = {'DeviceProperties': {'Add': {path: {
-            'ATY,bin_image': b'VBIOS',
+            'ATY,bin_image': b'V' * 512,
             'rgpu,raphael-target': b'RGPU-RAPHAEL\x01'}}}}
         self.assertTrue(check(config))
         for value in (None, b'RGPU-RAPHAEL', b'RGPU-RAPHAEL\x00', 'RGPU-RAPHAEL\x01'):
@@ -965,6 +966,10 @@ class ExperimentTests(unittest.TestCase):
         no_vbios = {'DeviceProperties': {'Add': {path: {
                     'rgpu,raphael-target': b'RGPU-RAPHAEL\x01'}}}}
         self.assertFalse(check(no_vbios))
+        short_vbios = {'DeviceProperties': {'Add': {path: {
+            'ATY,bin_image': b'V' * 511,
+            'rgpu,raphael-target': b'RGPU-RAPHAEL\x01'}}}}
+        self.assertFalse(check(short_vbios))
 
     def test_ocprop_couples_target_marker_to_vbios_injection(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -2612,6 +2617,87 @@ class ExperimentTests(unittest.TestCase):
         self.assertEqual(check(manifest, observed), [])
         self.assertIn('vfio_device', check(manifest, dict(observed, vfio_args=[])))
         self.assertIn('image_id', check(manifest, dict(observed, image_id='sha256:wrong')))
+
+    def test_headless_vfio_address_matches_opencore_path_without_collision(self):
+        tool = self.module()
+        topology = {'bus':'pcie.0', 'addr':'0x6',
+                    'device_path':'PciRoot(0x0)/Pci(0x6,0x0)'}
+        manifest = {'image_id':'sha256:expected', 'gpu':True,
+                    'vfio_device':'0000:7b:00.0',
+                    'launch_options':{'BOOTDISK_MODE':'custom', 'NVRAM':'stock',
+                                      'GENERIC_GRAPHICS':'off'},
+                    'vfio_guest_address':topology}
+        vfio = ('vfio-pci,host=0000:7b:00.0,bus=pcie.0,addr=0x6,'
+                'x-pci-device-id=0x73ff')
+        topology_rows = [
+            {'model':'qemu-xhci'}, {'model':'ich9-intel-hda'},
+            {'model':'ich9-ahci'}, {'model':'vmxnet3'},
+            {'model':'vfio-pci', 'bus':'pcie.0', 'slot':6, 'function':0}]
+        observed = {'image_id':'sha256:expected', 'vfio_args':[vfio],
+                    'pci_topology':topology_rows,
+                    'graphics_args':['-vga','none','-display','none']}
+        self.assertEqual(tool.validate_running(manifest, observed), [])
+
+        frozen186 = dict(observed,
+                         vfio_args=[vfio.replace(',addr=0x6', '')],
+                         pci_topology=topology_rows[:-1] + [{'model':'vfio-pci'}])
+        self.assertIn('vfio_guest_address',
+                      tool.validate_running(manifest, frozen186))
+        for replacement in ('bus=pcie.1,addr=0x6',
+                            'bus=pcie.0,addr=0x6.1',
+                            'bus=pcie.0,addr=0x5'):
+            changed = vfio.replace('bus=pcie.0,addr=0x6', replacement)
+            bad = dict(observed, vfio_args=[changed],
+                       pci_topology=topology_rows[:-1] + [{'model':'vfio-pci'}])
+            self.assertIn('vfio_guest_address', tool.validate_running(manifest, bad))
+
+        for conflicting in (
+                {'model':'virtio-net-pci', 'bus':'pcie.0', 'slot':6, 'function':0},
+                {'model':'virtio-net-pci', 'slot':6, 'function':0}):
+            conflict = dict(observed, pci_topology=topology_rows + [conflicting])
+            self.assertIn('vfio_guest_address_collision',
+                          tool.validate_running(manifest, conflict))
+        duplicate = dict(observed, vfio_args=[vfio, vfio],
+                         pci_topology=topology_rows + [topology_rows[-1]])
+        duplicate_errors = tool.validate_running(manifest, duplicate)
+        self.assertIn('vfio_device', duplicate_errors)
+        self.assertIn('vfio_guest_address_collision', duplicate_errors)
+        wrong_property_path = dict(manifest, vfio_guest_address=dict(
+            topology, device_path='PciRoot(0x0)/Pci(0x5,0x0)'))
+        self.assertIn('vfio_guest_address',
+                      tool.validate_running(wrong_property_path, observed))
+
+    def test_running_identity_sanitizes_device_topology_and_normalizes_addresses(self):
+        source = ast.parse((ROOT / 'tools/experiment.py').read_text())
+        function = next(node for node in source.body
+                        if isinstance(node, ast.FunctionDef) and
+                        node.name == 'running_identity')
+        script = next(node.value.value for node in function.body
+                      if isinstance(node, ast.Assign) and
+                      isinstance(node.value, ast.Constant) and
+                      isinstance(node.value.value, str))
+        with tempfile.TemporaryDirectory() as temporary:
+            proc = Path(temporary) / 'proc'
+            process = proc / '123'; process.mkdir(parents=True)
+            args = [
+                b'qemu-system-x86_64', b'-device',
+                b'isa-applesmc,osk=SECRET-SENTINEL', b'-device',
+                b'vfio-pci,host=0000:7b:00.0,bus=pcie.0,addr=6', b'-device',
+                b'virtio-net-pci,addr=0x6.0',
+            ]
+            (process / 'cmdline').write_bytes(b'\0'.join(args) + b'\0')
+            isolated = script.replace('/proc', str(proc))
+            result = subprocess.run(
+                ['python3', '-c', isolated], text=True, capture_output=True,
+                check=True, timeout=5)
+        self.assertNotIn('SECRET-SENTINEL', result.stdout)
+        observed = json.loads(result.stdout)
+        self.assertNotIn('device_args', observed)
+        self.assertEqual(observed['pci_topology'], [
+            {'model':'isa-applesmc'},
+            {'model':'vfio-pci', 'bus':'pcie.0', 'slot':6, 'function':0},
+            {'model':'virtio-net-pci', 'slot':6, 'function':0},
+        ])
 
     def test_immutable_json_never_overwrites_prepared_identity(self):
         write = self.module().write_once
