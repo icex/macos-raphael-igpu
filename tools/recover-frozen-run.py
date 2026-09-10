@@ -119,8 +119,13 @@ def main():
     manifest, serial, proof = build_proof(vm, run_dir, args.tolerance)
     proof_path = run_dir / 'recovery-replay-proof.json'
     if proof_path.exists():
-        raise SystemExit('a recovery proof already exists for this run; automatic retry refused')
-    write_once(proof_path, proof)
+        # A proof-only pass may precede execution, but only the identical proof.
+        if json.loads(proof_path.read_text()) != proof:
+            raise SystemExit('an older, different recovery proof exists for this run; refused')
+    else:
+        write_once(proof_path, proof)
+    if (run_dir / 'recovery-retry.json').exists():
+        raise SystemExit('a recovery retry record already exists for this run; automatic retry refused')
     print(json.dumps({key: proof[key] for key in (
         'run_id', 'terminal_snapshot', 'record_count', 'corrupt_lines',
         'incomplete_snapshots', 'strict_parse_error')}, indent=2))
