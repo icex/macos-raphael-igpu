@@ -432,5 +432,45 @@ int main() {
     require(!observations.read(2, copied),
             "an overflowed observation is never exposed as a slot");
 
+    {
+        uint64_t out = 0;
+        require(RaphaelVm::convertEntryAddress(0xf40b6f3000ULL, false, 0xf400, 0xf41f,
+                                               0x840, out) ==
+                    RaphaelVm::EntryDomain::Converted && out == 0x84b6f3000ULL,
+                "a framebuffer MC table address converts to the physical carve-out form");
+        require(RaphaelVm::convertEntryAddress(0xf41fffffffULL, false, 0xf400, 0xf41f,
+                                               0x840, out) ==
+                    RaphaelVm::EntryDomain::Converted && out == 0x85fffffffULL,
+                "the last MC aperture byte converts to the last carve-out byte");
+        require(RaphaelVm::convertEntryAddress(0x84b6f3000ULL, false, 0xf400, 0xf41f,
+                                               0x840, out) ==
+                    RaphaelVm::EntryDomain::AlreadyPhysical && out == 0x84b6f3000ULL,
+                "a physical carve-out address is never converted twice");
+        require(RaphaelVm::convertEntryAddress(0xf40b6f3000ULL, true, 0xf400, 0xf41f,
+                                               0x840, out) ==
+                    RaphaelVm::EntryDomain::System && out == 0xf40b6f3000ULL,
+                "a SYSTEM entry keeps its guest physical address");
+        require(RaphaelVm::convertEntryAddress(0x12345000ULL, false, 0xf400, 0xf41f,
+                                               0x840, out) ==
+                    RaphaelVm::EntryDomain::Outside && out == 0x12345000ULL,
+                "an address outside both apertures passes through");
+        require(RaphaelVm::convertEntryAddress(0xf420000000ULL, false, 0xf400, 0xf41f,
+                                               0x840, out) ==
+                    RaphaelVm::EntryDomain::Outside,
+                "the first byte above the MC aperture is outside");
+        require(RaphaelVm::convertEntryAddress(0xf40b6f3000ULL, false, 0, 0xf41f,
+                                               0x840, out) ==
+                    RaphaelVm::EntryDomain::InvalidAperture && out == 0xf40b6f3000ULL,
+                "an unpublished aperture never converts");
+        require(RaphaelVm::convertEntryAddress(0xf40b6f3000ULL, false, 0xf400, 0xf3ff,
+                                               0x840, out) ==
+                    RaphaelVm::EntryDomain::InvalidAperture,
+                "an inverted aperture never converts");
+        require(RaphaelVm::convertEntryAddress(0xf40b6f3000ULL, false, 0xf400, 0xf41f,
+                                               0x1840, out) ==
+                    RaphaelVm::EntryDomain::Converted && out == 0x184b6f3000ULL,
+                "conversion follows the published physical offset, not a constant");
+    }
+
     std::puts("GPU VM diagnostic fixtures passed");
 }

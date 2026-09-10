@@ -27,13 +27,30 @@ import uuid
 
 VM = Path.home() / "macos-vm"
 ROOT = Path(__file__).resolve().parents[1]
-WT = VM / "run/worktrees/candidate-180"
-CANDIDATE = VM / "run/candidate-180"
-DIST = VM / "run/candidate-180-dist"
-IDENTITIES = VM / "run/candidate-180-build-identities.json"
-RUN_ID_FILE = VM / "run/candidate180-qualification-run-id.txt"
-CARD = ROOT / "experiments/metal-013.json"
 CANDIDATE_VERSION = "1.0.180"
+CARD_ID = "metal-013"
+
+
+def configure(version, card_id):
+    """Select the exact candidate this transaction stages; defaults are 1.0.180."""
+    global CANDIDATE_VERSION, CARD_ID, NUMBER, WT, CANDIDATE, DIST, IDENTITIES
+    global RUN_ID_FILE, CARD
+    if not re.fullmatch(r"1\.0\.(1[0-9]{2})", version):
+        raise RuntimeError("candidate version must be 1.0.1NN")
+    if not re.fullmatch(r"metal-[0-9]{3}", card_id):
+        raise RuntimeError("card id must be metal-NNN")
+    CANDIDATE_VERSION = version
+    CARD_ID = card_id
+    NUMBER = version.rsplit(".", 1)[1]
+    WT = VM / f"run/worktrees/candidate-{NUMBER}"
+    CANDIDATE = VM / f"run/candidate-{NUMBER}"
+    DIST = VM / f"run/candidate-{NUMBER}-dist"
+    IDENTITIES = VM / f"run/candidate-{NUMBER}-build-identities.json"
+    RUN_ID_FILE = VM / f"run/candidate{NUMBER}-qualification-run-id.txt"
+    CARD = ROOT / f"experiments/{card_id}.json"
+
+
+configure(CANDIDATE_VERSION, CARD_ID)
 
 
 def sha_bytes(data):
@@ -60,7 +77,7 @@ def validate_card(raw, expected_sha256):
     except (TypeError, ValueError, json.JSONDecodeError) as error:
         raise RuntimeError("candidate card is not valid JSON") from error
     exact = {
-        "id": "metal-013",
+        "id": CARD_ID,
         "candidate_version": CANDIDATE_VERSION,
         "requested_diagnostic": "rgpusubmit=1",
         "max_seconds": 180,
@@ -137,9 +154,9 @@ def verify_build_inputs(experiment, builder, expected_commit,
     manifest = json.loads(manifest_path.read_text())
     executable = CANDIDATE / "RaphaelGPU.kext/Contents/MacOS/RaphaelGPU"
     info_path = CANDIDATE / "RaphaelGPU.kext/Contents/Info.plist"
-    archive = DIST / "RaphaelGPU-1.0.180-experimental.zip"
+    archive = DIST / f"RaphaelGPU-{CANDIDATE_VERSION}-experimental.zip"
     sums = DIST / "SHA256SUMS"
-    build_log = VM / "run/candidate-180-build.log"
+    build_log = VM / f"run/candidate-{NUMBER}-build.log"
 
     exact = {
         "schema": 1,
@@ -238,6 +255,13 @@ def make_staged_config(experiment, card, run_id):
         "rgpurnlo": f"0x{nonce_lo:x}",
         "rgpurnhi": f"0x{nonce_hi:x}",
     }
+    functional = card.get("functional_boot_arguments", {})
+    if not isinstance(functional, dict) or any(
+            not re.fullmatch(r"rgpu[a-z]+", key) or key in updates or
+            not isinstance(value, str) or not re.fullmatch(r"[0-9a-fx]+", value)
+            for key, value in functional.items()):
+        raise RuntimeError("candidate card functional boot arguments are invalid")
+    updates.update(functional)
     words = [word for word in old_words
              if word.split("=", 1)[0] not in updates]
     words.extend(f"{key}={value}" for key, value in updates.items())
@@ -303,23 +327,23 @@ def stage(expected_commit, expected_boot_id, expected_card_sha256,
         image_id)
 
     if RUN_ID_FILE.exists():
-        raise RuntimeError("candidate-180 run ID already selected; automatic retry refused")
+        raise RuntimeError(f"candidate-{NUMBER} run ID already selected; automatic retry refused")
     staged_config_path = CANDIDATE / "staged-config.plist"
     staging_path = CANDIDATE / "staging.json"
     if staged_config_path.exists() or staging_path.exists():
-        raise RuntimeError("candidate-180 was already staged")
+        raise RuntimeError(f"candidate-{NUMBER} was already staged")
 
     raw_image = VM / "run/oc-raw.img"
     bootdisk = VM / "OpenCore.qcow2"
     config_path = VM / "config.plist"
     token = uuid.uuid4().hex
-    private_raw = VM / f"run/.candidate180-private-{token}.img"
-    preimage_verify = VM / f"run/.candidate180-preimage-{token}.raw"
-    candidate_qcow = VM / f".OpenCore-candidate180-{token}.qcow2"
-    candidate_verify = VM / f"run/.candidate180-candidate-{token}.raw"
-    final_verify = VM / f"run/.candidate180-final-{token}.raw"
-    rollback_verify = VM / f"run/.candidate180-rollback-{token}.raw"
-    config_temp = VM / f".config-candidate180-{token}.plist"
+    private_raw = VM / f"run/.candidate{NUMBER}-private-{token}.img"
+    preimage_verify = VM / f"run/.candidate{NUMBER}-preimage-{token}.raw"
+    candidate_qcow = VM / f".OpenCore-candidate{NUMBER}-{token}.qcow2"
+    candidate_verify = VM / f"run/.candidate{NUMBER}-candidate-{token}.raw"
+    final_verify = VM / f"run/.candidate{NUMBER}-final-{token}.raw"
+    rollback_verify = VM / f"run/.candidate{NUMBER}-rollback-{token}.raw"
+    config_temp = VM / f".config-candidate{NUMBER}-{token}.plist"
     pending_record = CANDIDATE / f".staging-pending-{token}.json"
     raw_backup = raw_image.with_name(raw_image.name + ".backup-" + token)
     boot_backup = bootdisk.with_name(bootdisk.name + ".backup-" + token)
@@ -342,7 +366,7 @@ def stage(expected_commit, expected_boot_id, expected_card_sha256,
         with (VM / "run/redeploy.lock").open("a") as media_lock:
             fcntl.flock(media_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             if Path("/proc/sys/kernel/random/boot_id").read_text().strip() != expected_boot_id:
-                raise RuntimeError("candidate-180 boot authority no longer matches")
+                raise RuntimeError(f"candidate-{NUMBER} boot authority no longer matches")
             if active_or_pending_vm():
                 raise RuntimeError("active or pending VM prevents staging")
 
@@ -613,9 +637,12 @@ def main():
     parser.add_argument("--expected-card-sha256", required=True)
     parser.add_argument("--expected-identities-sha256", required=True)
     parser.add_argument("--image-id", required=True)
+    parser.add_argument("--candidate-version", default=CANDIDATE_VERSION)
+    parser.add_argument("--card-id", default=CARD_ID)
     args = parser.parse_args()
     if not args.execute:
         parser.error("refusing mutation without the reviewed --execute flag")
+    configure(args.candidate_version, args.card_id)
     stage(args.expected_commit, args.expected_boot_id,
           args.expected_card_sha256, args.expected_identities_sha256,
           args.image_id)

@@ -184,6 +184,20 @@ def _decode_payload(build, seq, payload):
                    alternate=bool(int(m[8])),
                    info_words=[int(value, 16) for value in m[9].split(',')],
                    words=[int(value, 16) for value in m[10].split(',')])
+    elif m := re.fullmatch(r'VM: entry-conv mode=(\d+) routes=([01])/([01]) pde=(\d+)/(\d+)/(\d+)/(\d+)/(\d+) pte=(\d+)/(\d+)/(\d+)/(\d+)/(\d+) dropped=(\d+)/(\d+)', payload):
+        row.update(kind='vm_entry_conversion', mode=int(m[1]),
+                   pde_route=bool(int(m[2])), pte_route=bool(int(m[3])),
+                   pde={'converted':int(m[4]), 'physical':int(m[5]), 'outside':int(m[6]),
+                        'system':int(m[7]), 'invalid':int(m[8])},
+                   pte={'converted':int(m[9]), 'physical':int(m[10]), 'outside':int(m[11]),
+                        'system':int(m[12]), 'invalid':int(m[13])},
+                   dropped_samples=(int(m[14]), int(m[15])))
+    elif m := re.fullmatch(r'VM: entry-sample kind=(pde|pte) level=(\d+) flags=(0x[0-9a-fA-F]+|0) original=(0x[0-9a-fA-F]+|0) result=(0x[0-9a-fA-F]+|0)', payload):
+        row.update(kind='vm_entry_sample', entry=m[1], level=int(m[2]),
+                   flags=int(m[3], 16), original=int(m[4], 16), result=int(m[5], 16))
+    elif m := re.fullmatch(r'VM: route AMDGFX10VMM::(getPDEValue|getPTEValue) -> (ok|FAILED) \(entry=([01]) org=(0x[0-9a-fA-F]+)\)', payload):
+        row.update(kind='vm_entry_route', method=m[1], ok=m[2] == 'ok',
+                   entry=bool(int(m[3])))
     elif m := re.fullmatch(r'VM: root-repair seq=(\d+) vmid=(\d+) original=(0x[0-9a-fA-F]+|0) native=(0x[0-9a-fA-F]+|0) repaired=([01]) reason=([a-z-]+) prepared-match=([01])', payload):
         row.update(kind='vm_root_repair', vm_sequence=int(m[1]), vmid=int(m[2]),
                    original_root=int(m[3], 16), native_root=int(m[4], 16),
@@ -413,19 +427,29 @@ def _parse_legacy_serial(serial):
     return rows + losses
 
 
-def parse_serial(serial, *, critical_replay_schema=None, expected_build=None):
+CRITICAL_REPLAY_TOLERANCES = (None, 'terminal-prefix')
+
+
+def parse_serial(serial, *, critical_replay_schema=None, expected_build=None,
+                 critical_replay_tolerance=None):
     if critical_replay_schema is None:
         return _parse_legacy_serial(serial)
     if critical_replay_schema != 2 or not isinstance(expected_build, str):
         return [dict(kind='capture_loss', build=expected_build,
                      reason='CR2 selection is invalid', definitive=True)]
+    if critical_replay_tolerance not in CRITICAL_REPLAY_TOLERANCES:
+        return [dict(kind='capture_loss', build=expected_build,
+                     reason='CR2 tolerance selection is invalid', definitive=True)]
     replay = _critical_replay()
     try:
-        snapshot = replay.parse(serial, expected_build)
+        snapshot = replay.parse(
+            serial, expected_build,
+            tolerate_corruption=critical_replay_tolerance == 'terminal-prefix')
     except replay.CriticalReplayError as error:
         message = str(error)
         pending = any(fragment in message for fragment in (
-            'missing CR2 transport', 'missing END', 'incomplete transport line'))
+            'missing CR2 transport', 'missing END', 'incomplete transport line',
+            'latest attempt is incomplete', 'after the terminal manifest'))
         return [dict(kind='capture_loss', build=expected_build,
                      reason='CR2: ' + message, definitive=not pending)]
     synthetic = (
@@ -434,6 +458,15 @@ def parse_serial(serial, *, critical_replay_schema=None, expected_build=None):
             f'RGPU_EVENT build={expected_build} seq={seq} {payload}\n'
             for seq, payload in enumerate(snapshot['records'])))
     rows = _parse_legacy_serial(synthetic)
+    if snapshot.get('tolerance'):
+        # Tolerated corruption is evidence, never a loss: the terminal snapshot's
+        # digests and every valid earlier chunk were checked against the prefix.
+        rows.append(dict(kind='capture_tolerance', build=expected_build,
+                         seq=snapshot['count'], tolerance=snapshot['tolerance'],
+                         corrupt_lines=snapshot['corrupt_lines'],
+                         corrupt_reasons=snapshot['corrupt_reasons'],
+                         incomplete_snapshots=snapshot['incomplete_snapshots'],
+                         terminal_snapshot=snapshot['snapshot']))
     terminal = []
     for row in _parse_legacy_serial(serial):
         if (row['kind'] == 'guest_panic' or
@@ -549,7 +582,7 @@ def _classify(manifest, events, probe, defer_absent_workload=False):
         'vm_state', 'vm_walk', 'vm_walk_entry', 'vm_context',
         'vm_invalidate', 'vm_invalidate_live',
         'vm_pre_clear_fault', 'vm_fault', 'sdma_runtime', 'sdma_xnack',
-        'sdma_page_state',
+        'sdma_page_state', 'vm_entry_conversion', 'vm_entry_sample',
     }
     require_workload_outcomes = (not defer_absent_workload or
                                  any(r['kind'] in post_workload_kinds for r in events))
@@ -574,6 +607,24 @@ def _classify(manifest, events, probe, defer_absent_workload=False):
             for program in programs)
         if not coherent:
             return verdict('INCONCLUSIVE', stage='sdma_vm_program_mismatch')
+    if 'vmid2_entry_conversion' in required:
+        entry_routes = {r.get('method'): r for r in events if r['kind'] == 'vm_entry_route'}
+        if (len(entry_routes) != 2 or
+                any(not r.get('ok') or not r.get('entry') for r in entry_routes.values())):
+            return verdict('INVALID', stage='vmid2_entry_conversion_route_guard')
+    if 'vmid2_entry_conversion' in required and require_workload_outcomes:
+        conversions = [r for r in events if r['kind'] == 'vm_entry_conversion']
+        if not conversions:
+            return verdict('INCONCLUSIVE', stage='vmid2_entry_conversion_missing')
+        final = conversions[-1]
+        if (final.get('mode') != 3 or not final.get('pde_route') or
+                not final.get('pte_route')):
+            return verdict('INVALID', stage='vmid2_entry_conversion_mode')
+        if final['pde']['converted'] == 0:
+            return verdict('INCONCLUSIVE', stage='vmid2_entry_conversion_no_pde',
+                           next_action='no child PDE crossed the aperture; inspect samples before retry')
+        if final['pde']['invalid'] or final['pte']['invalid']:
+            return verdict('INVALID', stage='vmid2_entry_conversion_aperture')
     if 'vmid2_root_repair' in required and require_workload_outcomes:
         repairs = [r for r in events if r['kind'] == 'vm_root_repair' and
                    r.get('vmid') == 2]

@@ -1136,6 +1136,121 @@ Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0
         self.assertEqual(rows[6]['write_xnack1'], 0xd)
         self.assertEqual(rows[7]['ib_base'], 0x1300000014)
 
+    def test_candidate181_entry_conversion_records_are_structured(self):
+        rows = self.classifier().parse_serial(
+            'RGPU_RECORDS build=abc count=4 dropped=0 truncated=0\n'
+            'RGPU_EVENT build=abc seq=0 VM: route AMDGFX10VMM::getPDEValue -> ok '
+            '(entry=1 org=0xffffff8001234567)\n'
+            'RGPU_EVENT build=abc seq=1 VM: route AMDGFX10VMM::getPTEValue -> FAILED '
+            '(entry=0 org=0x0)\n'
+            'RGPU_EVENT build=abc seq=2 VM: entry-conv mode=3 routes=1/1 '
+            'pde=5/0/0/0/0 pte=12/1/300/44/0 dropped=1/8\n'
+            'RGPU_EVENT build=abc seq=3 VM: entry-sample kind=pde level=1 flags=0 '
+            'original=0xf40b6f4000 result=0x84b6f4000\n')
+        self.assertEqual([row['kind'] for row in rows],
+                         ['vm_entry_route', 'vm_entry_route', 'vm_entry_conversion',
+                          'vm_entry_sample'])
+        self.assertEqual(rows[0]['method'], 'getPDEValue')
+        self.assertTrue(rows[0]['ok'] and rows[0]['entry'])
+        self.assertFalse(rows[1]['ok'] or rows[1]['entry'])
+        self.assertEqual(rows[2]['mode'], 3)
+        self.assertEqual(rows[2]['pde']['converted'], 5)
+        self.assertEqual(rows[2]['pte'], {'converted': 12, 'physical': 1, 'outside': 300,
+                                          'system': 44, 'invalid': 0})
+        self.assertEqual(rows[2]['dropped_samples'], (1, 8))
+        self.assertEqual(rows[3]['original'], 0xf40b6f4000)
+        self.assertEqual(rows[3]['result'], 0x84b6f4000)
+
+    def test_candidate181_required_entry_conversion_fails_closed(self):
+        classify = self.classifier().classify
+        manifest = {'build_id': 'abc', 'spec': {'required_observations': [
+                    'vmid2_entry_conversion']}}
+        base = [dict(kind='build', build='abc', seq=0),
+                dict(kind='route', build='abc', seq=1, ok=True)]
+        result = classify(manifest, list(base), None)
+        self.assertEqual(result['verdict'], 'INVALID')
+        self.assertEqual(result['earliest_failure'], 'vmid2_entry_conversion_route_guard')
+
+        routes = base + [
+            dict(kind='vm_entry_route', build='abc', seq=2, method='getPDEValue',
+                 ok=True, entry=True),
+            dict(kind='vm_entry_route', build='abc', seq=3, method='getPTEValue',
+                 ok=True, entry=True)]
+        counts = dict(pde={'converted': 3, 'physical': 0, 'outside': 0, 'system': 0,
+                           'invalid': 0},
+                      pte={'converted': 9, 'physical': 0, 'outside': 40, 'system': 12,
+                           'invalid': 0})
+        workload = [dict(kind='sdma_submit', build='abc', seq=4, vmid=2, valid=True,
+                         ib0=0x400100000, ib1=0)]
+        result = classify(manifest, routes + workload, None)
+        self.assertEqual(result['earliest_failure'], 'vmid2_entry_conversion_missing')
+
+        wrong_mode = routes + workload + [dict(
+            kind='vm_entry_conversion', build='abc', seq=5, mode=2,
+            pde_route=True, pte_route=False, **counts)]
+        result = classify(manifest, wrong_mode, None)
+        self.assertEqual(result['verdict'], 'INVALID')
+        self.assertEqual(result['earliest_failure'], 'vmid2_entry_conversion_mode')
+
+        no_pde = routes + workload + [dict(
+            kind='vm_entry_conversion', build='abc', seq=5, mode=3,
+            pde_route=True, pte_route=True,
+            pde={'converted': 0, 'physical': 0, 'outside': 2, 'system': 0, 'invalid': 0},
+            pte=counts['pte'])]
+        result = classify(manifest, no_pde, None)
+        self.assertEqual(result['earliest_failure'], 'vmid2_entry_conversion_no_pde')
+
+        bad_aperture = routes + workload + [dict(
+            kind='vm_entry_conversion', build='abc', seq=5, mode=3,
+            pde_route=True, pte_route=True,
+            pde={'converted': 3, 'physical': 0, 'outside': 0, 'system': 0, 'invalid': 1},
+            pte=counts['pte'])]
+        result = classify(manifest, bad_aperture, None)
+        self.assertEqual(result['verdict'], 'INVALID')
+        self.assertEqual(result['earliest_failure'], 'vmid2_entry_conversion_aperture')
+
+        good = routes + workload + [dict(
+            kind='vm_entry_conversion', build='abc', seq=5, mode=3,
+            pde_route=True, pte_route=True, **counts)]
+        result = classify(manifest, good, None)
+        self.assertNotIn('vmid2_entry_conversion', result.get('earliest_failure') or '')
+
+    def test_cr2_terminal_prefix_tolerance_reports_evidence_not_loss(self):
+        payloads = ['BUILD: identity=' + CR2_BUILD, 'XH3 LIFETIME state=VALID nonce=1_2']
+        complete_one = snapshot_lines(payloads[:1], snapshot=1)
+        broken_two = snapshot_lines(payloads, snapshot=2)
+        broken_two[0] = broken_two[0][:50] + 'GARBAGE' + broken_two[0][50:]
+        broken_two = broken_two[:-1]
+        complete_three = snapshot_lines(payloads, snapshot=3)
+        serial = ''.join(complete_one + broken_two + complete_three)
+        strict = self.classifier().parse_serial(
+            serial, critical_replay_schema=2, expected_build=CR2_BUILD)
+        self.assertEqual([row['kind'] for row in strict], ['capture_loss'])
+        self.assertTrue(strict[0]['definitive'])
+        tolerant = self.classifier().parse_serial(
+            serial, critical_replay_schema=2, expected_build=CR2_BUILD,
+            critical_replay_tolerance='terminal-prefix')
+        kinds = [row['kind'] for row in tolerant]
+        self.assertNotIn('capture_loss', kinds)
+        self.assertIn('capture_tolerance', kinds)
+        evidence = next(row for row in tolerant if row['kind'] == 'capture_tolerance')
+        self.assertEqual(evidence['corrupt_lines'], 1)
+        self.assertEqual(evidence['terminal_snapshot'], 3)
+        self.assertEqual(evidence['incomplete_snapshots'][0]['snapshot'], 2)
+        # An in-flight later attempt is pending, never a definitive loss.
+        in_flight = serial + snapshot_lines(payloads + ['VM: fault status=0x1'],
+                                            snapshot=4)[0]
+        rows = self.classifier().parse_serial(
+            in_flight, critical_replay_schema=2, expected_build=CR2_BUILD,
+            critical_replay_tolerance='terminal-prefix')
+        self.assertEqual([row['kind'] for row in rows], ['capture_loss'])
+        self.assertFalse(rows[0]['definitive'])
+        invalid = self.classifier().parse_serial(
+            serial, critical_replay_schema=2, expected_build=CR2_BUILD,
+            critical_replay_tolerance='lenient')
+        self.assertEqual(invalid[0]['kind'], 'capture_loss')
+        self.assertTrue(invalid[0]['definitive'])
+
     def test_candidate173_required_root_repair_fails_closed_and_correlates(self):
         classify = self.classifier().classify
         manifest = {'build_id': 'abc', 'spec': {'required_observations': [

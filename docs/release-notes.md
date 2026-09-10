@@ -1,4 +1,6 @@
-Experimental RaphaelGPU 1.0.180 candidate for macOS Sequoia 15.7.9 (24G830).
+Experimental RaphaelGPU 1.0.181 candidate for macOS Sequoia 15.7.9 (24G830).
+
+Candidate 1.0.181 extends `rgpuvmroot` to mode 3: after the proven VMID2 root repair, child page-directory entries (`AMDGFX10VMM::getPDEValue`) and video-memory page-table entries (`getPTEValue`) are converted from the framebuffer MC aperture to the physical carve-out form through the same guarded aperture arithmetic. Critical replay schema 2 gains the reviewed terminal-prefix corruption tolerance. Metal execution remains unverified until measured.
 
 - Accepts the zero low-attribute VMID2 root observed in candidate 1.0.179 only
   within the existing Raphael, hub-0, VMID2, reprogram, aperture, and exact

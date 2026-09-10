@@ -391,6 +391,64 @@ inline InvalidateRegisterSample sampleInvalidateRegister(
     return result;
 }
 
+// AMDGFX10VMM::getPDEValue and getPTEValue keep the address bits they receive and
+// only add attribute bits. Apple's video-memory objects carry framebuffer MC
+// addresses, while the GFXHUB walker consumes physical table and page addresses:
+// Linux applies amdgpu_gmc_vram_mc2pa to every non-SYSTEM PDE and VRAM PTE, and
+// candidate 180 proved the same rule for the VMID2 root (prepared 0x84b6f3000
+// matched the live register; the walker then faulted one level below). Convert
+// only an address inside the MC aperture. Physical, system, unrelated and
+// invalid-aperture inputs pass through unchanged.
+enum class EntryDomain : uint32_t {
+    Converted = 0,
+    AlreadyPhysical = 1,
+    Outside = 2,
+    System = 3,
+    InvalidAperture = 4,
+};
+static constexpr size_t kEntryDomainCount = 5;
+
+enum class EntryKind : uint32_t { Pde = 0, Pte = 1 };
+
+struct EntryConversionSample {
+    EntryKind kind;
+    uint32_t level;
+    uint32_t flags;
+    uint64_t original;
+    uint64_t result;
+};
+
+inline EntryDomain convertEntryAddress(uint64_t address, bool system,
+                                       uint32_t rawFbBase, uint32_t rawFbTop,
+                                       uint32_t rawFbOffset, uint64_t &result) {
+    result = address;
+    if (system) return EntryDomain::System;
+    if (rawFbBase == 0 || rawFbOffset == 0 || rawFbTop < rawFbBase ||
+        ((rawFbBase | rawFbTop | rawFbOffset) & 0xff000000u))
+        return EntryDomain::InvalidAperture;
+    const uint64_t mcBase = static_cast<uint64_t>(rawFbBase) << 24;
+    const uint64_t mcTop = (static_cast<uint64_t>(rawFbTop) << 24) | 0xffffffULL;
+    const uint64_t physicalBase = static_cast<uint64_t>(rawFbOffset) << 24;
+    if (address >= physicalBase && address <= physicalBase + (mcTop - mcBase))
+        return EntryDomain::AlreadyPhysical;
+    if (address < mcBase || address > mcTop) return EntryDomain::Outside;
+    const uint64_t offset = address - mcBase;
+    if (offset > 0x0000ffffffffffffULL - physicalBase) return EntryDomain::InvalidAperture;
+    result = physicalBase + offset;
+    return EntryDomain::Converted;
+}
+
+inline const char *entryDomainName(EntryDomain domain) {
+    switch (domain) {
+        case EntryDomain::Converted: return "converted";
+        case EntryDomain::AlreadyPhysical: return "physical";
+        case EntryDomain::Outside: return "outside";
+        case EntryDomain::System: return "system";
+        case EntryDomain::InvalidAperture: return "invalid-aperture";
+    }
+    return "unknown";
+}
+
 constexpr uint64_t join(uint32_t lo, uint32_t hi) {
     return (static_cast<uint64_t>(hi) << 32) | lo;
 }

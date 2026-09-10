@@ -168,5 +168,105 @@ class CriticalReplayTests(unittest.TestCase):
         with self.assertRaisesRegex(replay.CriticalReplayError, 'input byte bound'):
             replay.parse('x' * (8 * 1024 * 1024 + 1), BUILD)
 
+class TerminalPrefixToleranceTests(unittest.TestCase):
+    def setUp(self):
+        spec = importlib.util.spec_from_file_location(
+            'critical_replay_tolerant', ROOT / 'tools/critical-replay.py')
+        self.replay = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.replay)
+
+    def _capture(self):
+        first = ['BUILD: identity=' + BUILD, 'XH2 OWNED nonce=1_2']
+        later = first + ['VM: fault status=0x2009bb', 'XH3 LIFETIME state=VALID']
+        complete_one = snapshot_lines(first, snapshot=1)
+        attempt_two = snapshot_lines(later, snapshot=2)
+        # Apple's console dump interleaves character by character with one chunk
+        # line and swallows the manifest of attempt two.
+        garbled = attempt_two[1][:60] + 'AMDRadeonX6000_AMDNavi23GraphicsAccelerator' + \
+            attempt_two[1][60:] + ' [0:6:0] GPU Log Version: 2'
+        overlong = 'RGPU_CR2 v=1 ' + 'x' * 260 + '\n'
+        broken_two = [attempt_two[0], garbled + '\n', overlong] + attempt_two[2:-1]
+        complete_three = snapshot_lines(later, snapshot=3)
+        return first, later, complete_one, broken_two, complete_three
+
+    def test_strict_mode_still_refuses_corrupted_transport(self):
+        _, _, one, two, three = self._capture()
+        with self.assertRaisesRegex(self.replay.CriticalReplayError, 'malformed|bound'):
+            self.replay.parse(''.join(one + two + three), BUILD)
+
+    def test_terminal_prefix_accepts_clean_terminal_snapshot_after_corruption(self):
+        _, later, one, two, three = self._capture()
+        result = self.replay.parse(''.join(one + two + three), BUILD,
+                                   tolerate_corruption=True)
+        self.assertEqual(result['records'], later)
+        self.assertEqual(result['snapshot'], 3)
+        self.assertEqual(result['tolerance'], 'terminal-prefix')
+        self.assertEqual(result['corrupt_lines'], 2)
+        self.assertEqual(result['corrupt_reasons'],
+                         ['malformed transport line', 'physical line bound exceeded'])
+        self.assertEqual(result['incomplete_snapshots'],
+                         [{'snapshot': 2, 'valid_chunks': len(two) - 2, 'has_end': False}])
+        strict = self.replay.parse(''.join(one + three), BUILD)
+        self.assertEqual(strict['records'], later)
+        self.assertNotIn('tolerance', strict)
+
+    def test_clean_capture_is_identical_in_both_modes_with_zero_corruption(self):
+        _, later, one, _, three = self._capture()
+        serial = ''.join(one + three)
+        strict = self.replay.parse(serial, BUILD)
+        tolerant = self.replay.parse(serial, BUILD, tolerate_corruption=True)
+        self.assertEqual(tolerant['records'], strict['records'])
+        self.assertEqual(tolerant['crc32'], strict['crc32'])
+        self.assertEqual(tolerant['corrupt_lines'], 0)
+        self.assertEqual(tolerant['incomplete_snapshots'], [])
+
+    def test_terminal_prefix_refuses_incomplete_latest_attempt(self):
+        _, _, one, two, _ = self._capture()
+        with self.assertRaisesRegex(self.replay.CriticalReplayError, 'latest attempt is incomplete'):
+            self.replay.parse(''.join(one + two), BUILD, tolerate_corruption=True)
+
+    def test_terminal_prefix_refuses_transport_after_the_terminal_manifest(self):
+        _, _, one, two, three = self._capture()
+        trailing_valid = snapshot_lines(['BUILD: identity=' + BUILD], snapshot=4)[0]
+        with self.assertRaisesRegex(self.replay.CriticalReplayError, 'latest attempt is incomplete'):
+            self.replay.parse(''.join(one + two + three) + trailing_valid, BUILD,
+                              tolerate_corruption=True)
+        duplicate_terminal_chunk = three[0]
+        with self.assertRaisesRegex(self.replay.CriticalReplayError, 'after the terminal manifest'):
+            self.replay.parse(''.join(one + two + three) + duplicate_terminal_chunk, BUILD,
+                              tolerate_corruption=True)
+        trailing_garbage = 'RaphaelGPU      rgpu: @ RGPU_CR2 v=1 b=zz garbage\n'
+        with self.assertRaisesRegex(self.replay.CriticalReplayError, 'after the terminal manifest'):
+            self.replay.parse(''.join(one + two + three) + trailing_garbage, BUILD,
+                              tolerate_corruption=True)
+
+    def test_terminal_prefix_refuses_valid_chunks_that_conflict_with_the_prefix(self):
+        first, later, one, _, three = self._capture()
+        conflicting = later[:-1] + ['XH2 ABORT reason=vmm-range']
+        attempt_two = snapshot_lines(conflicting, snapshot=2)[:-1]
+        with self.assertRaisesRegex(self.replay.CriticalReplayError, 'conflicts with the terminal prefix'):
+            self.replay.parse(''.join(one + attempt_two + three), BUILD,
+                              tolerate_corruption=True)
+        longer = later + ['XH2 ABORT reason=late']
+        attempt_two = snapshot_lines(longer, snapshot=2)[:-1]
+        with self.assertRaisesRegex(self.replay.CriticalReplayError, 'exceeds the terminal prefix'):
+            self.replay.parse(''.join(one + attempt_two + three), BUILD,
+                              tolerate_corruption=True)
+
+    def test_terminal_prefix_keeps_conflicting_valid_duplicates_fatal(self):
+        _, later, one, _, three = self._capture()
+        other = snapshot_lines(later[:-1] + ['XH3 LIFETIME state=ABORT'], snapshot=3)
+        with self.assertRaisesRegex(self.replay.CriticalReplayError, 'conflicting'):
+            self.replay.parse(''.join(one + three + [other[-2], other[-1]]), BUILD,
+                              tolerate_corruption=True)
+
+    def test_terminal_prefix_still_requires_prefix_extension(self):
+        first, later, one, _, three = self._capture()
+        changed = snapshot_lines(['BUILD: identity=' + BUILD, 'XH2 OWNED nonce=9_9'],
+                                 snapshot=1)
+        with self.assertRaisesRegex(self.replay.CriticalReplayError, 'changed prefix'):
+            self.replay.parse(''.join(changed + three), BUILD, tolerate_corruption=True)
+
+
 if __name__ == '__main__':
     unittest.main()

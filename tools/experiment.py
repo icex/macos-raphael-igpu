@@ -282,6 +282,11 @@ def prepare(vm, spec, output, gpu=True, run_id=None):
                         candidate_directory=str(candidate.relative_to(vm)))
         if replay_schema is not None:
             identity['critical_replay_schema'] = replay_schema
+        tolerance = critical_replay_tolerance(card)
+        if tolerance is not None:
+            if replay_schema != 2:
+                raise ValueError('critical replay tolerance requires schema 2 transport')
+            identity['critical_replay_tolerance'] = tolerance
         identity['qemu_version'] = command(['docker', 'run', '--rm', '--entrypoint',
             'qemu-system-x86_64', identity['image_id'], '--version']).splitlines()[0]
         verify_bootdisk(vm, identity['image_id'], identity)
@@ -362,16 +367,32 @@ def canonical_v2_records(serial, expected_build):
     return wire
 
 
-def recover_v2(recovery_tool, vm, manifest, serial):
-    """Parse and recover through one module instance to preserve strict types."""
+def recover_v2(recovery_tool, vm, manifest, serial, replay_evidence=None):
+    """Parse and recover through one module instance to preserve strict types.
+
+    ``replay_evidence`` receives the terminal-prefix tolerance facts (corrupt
+    line count and numbers, incomplete attempts, terminal digests) whenever the
+    manifest selects that tolerance, so the caller can preserve them beside the
+    receipt. Strict transport leaves it untouched.
+    """
     lease_schema = manifest.get('recovery_lease_schema')
     if type(lease_schema) is not int or lease_schema not in (2, 3):
         raise ValueError('recovery lease schema must be numeric 2 or 3')
     if lease_schema == 3:
         if manifest.get('critical_replay_schema') != 2:
             raise ValueError('schema-3 recovery requires complete CR2 transport')
-        snapshot_records = helper('critical-replay').parse(
-            serial, manifest['build_id'])['records']
+        tolerance = critical_replay_tolerance(manifest)
+        replay = helper('critical-replay')
+        snapshot = (replay.parse(serial, manifest['build_id']) if tolerance is None else
+                    replay.parse(serial, manifest['build_id'], tolerate_corruption=True))
+        snapshot_records = snapshot['records']
+        if tolerance is not None and replay_evidence is not None:
+            replay_evidence.update({
+                key: snapshot[key] for key in (
+                    'tolerance', 'snapshot', 'count', 'corrupt_lines',
+                    'corrupt_line_numbers', 'corrupt_reasons',
+                    'incomplete_snapshots', 'crc32', 'fnv1a64')})
+            replay_evidence['serial_sha256'] = sha(serial.encode('utf-8'))
         if any(record == 'XH2' for record in snapshot_records):
             raise ValueError('schema-3 recovery has a malformed XH2 record')
         records = [record for record in snapshot_records
@@ -393,9 +414,15 @@ def parse_manifest_serial(classifier, manifest, serial):
     schema = manifest.get('critical_replay_schema')
     if schema is None:
         return classifier.parse_serial(serial)
+    tolerance = critical_replay_tolerance(manifest)
+    if tolerance is None:
+        return classifier.parse_serial(
+            serial, critical_replay_schema=schema,
+            expected_build=manifest.get('build_id'))
     return classifier.parse_serial(
         serial, critical_replay_schema=schema,
-        expected_build=manifest.get('build_id'))
+        expected_build=manifest.get('build_id'),
+        critical_replay_tolerance=tolerance)
 
 
 def definitive_capture_loss(events):
@@ -413,6 +440,19 @@ def critical_replay_schema(data):
     if type(schema) is not int or schema != 2:
         raise ValueError('critical replay schema must be numeric 2')
     return schema
+
+
+CRITICAL_REPLAY_TOLERANCES = ('terminal-prefix',)
+
+
+def critical_replay_tolerance(data):
+    """Return the reviewed CR2 corruption tolerance a card or manifest selects."""
+    if 'critical_replay_tolerance' not in data:
+        return None
+    tolerance = data['critical_replay_tolerance']
+    if tolerance not in CRITICAL_REPLAY_TOLERANCES:
+        raise ValueError('critical replay tolerance must be terminal-prefix')
+    return tolerance
 
 
 def verify_bootdisk(vm, image_id, expected):
@@ -2337,13 +2377,14 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
             if monitor.error: failure = monitor.error
         signal.signal(signal.SIGUSR1, previous_fault)
         signal.signal(signal.SIGTERM, previous)
+    replay_evidence = {}
     if (manifest.get('gpu') is not False and state and shutdown_result and
             shutdown_result.get('outcome') != 'STOP_UNCONFIRMED' and
             not (monitor and monitor.error)):
         try:
             recovery_serial = (vm/'run/serial.log').read_text(errors='replace')
             recovery_result = recover_v2(
-                recovery_tool, vm, manifest, recovery_serial)
+                recovery_tool, vm, manifest, recovery_serial, replay_evidence)
         except BaseException as error:
             recovery_result = {'status':'failed',
                                'error':type(error).__name__+': '+str(error)}
@@ -2360,6 +2401,7 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
     write_once(output/'host-after.json', host_snapshot())
     write_once(output/'host-kernel-messages.json', host_messages)
     if recovery_result is not None: write_once(output/'recovery.json', recovery_result)
+    if replay_evidence: write_once(output/'recovery-replay.json', replay_evidence)
     result = classifier.classify(manifest, events, probe)
     result['warm_reuse'] = (recovery_result or {'status':'not-attempted'})['status']
     if manifest.get('gpu') is False and not failure:

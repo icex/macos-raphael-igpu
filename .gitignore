@@ -2,3 +2,7 @@
 # Regenerate with tools/mkrlcfw.py; not worth versioning.
 rlc_fw.h
 src/rlc_fw.h
+
+# Terminal workspace state
+.termdesk.toml
+.termdesk-workspace.toml
