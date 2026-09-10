@@ -22,8 +22,10 @@ class RunnerTests(unittest.TestCase):
         root = Path(tempfile.mkdtemp())
         self.addCleanup(lambda: __import__('shutil').rmtree(root))
         (root / 'supervision.json').write_text(json.dumps({
-            'cid': self.CID, 'deadline_epoch': __import__('time').time() + 60}))
+            'cid': self.CID, 'deadline_epoch': __import__('time').time() + 60,
+            'serial_ready': str(root / ('serial-' + self.CID + '.ready'))}))
         (root / 'serial.log').write_text(self.SERIAL)
+        (root / ('serial-' + self.CID + '.ready')).write_text(self.CID)
         generator = root / 'generator.py'
         generator.write_text("#!/usr/bin/env python3\nimport pathlib, sys\n"
                              "pathlib.Path(sys.argv[sys.argv.index('--output') + 1]).write_text('set confirm off\\n')\n")
@@ -36,7 +38,7 @@ class RunnerTests(unittest.TestCase):
     def run_main(self, root, generator, gdb):
         output = root / 'output'
         argv = ['runner', '--supervision', str(root / 'supervision.json'),
-                '--serial', str(root / 'serial.log'), '--output', str(output),
+                '--output', str(output),
                 '--build-id', self.BUILD, '--gdb', str(gdb),
                 '--generator', str(generator), '--kernel-symbols', '/tmp/kernel',
                 '--raphael-binary', '/tmp/raphael', '--raphael-dsym', '/tmp/dsym',
@@ -44,6 +46,29 @@ class RunnerTests(unittest.TestCase):
         with patch.object(tool, 'verify_port'), patch.object(sys, 'argv', argv):
             tool.main()
         return output
+
+    def test_live_serial_is_derived_from_exact_supervised_cid(self):
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__('shutil').rmtree(root))
+        ready = root / ('serial-' + self.CID + '.ready')
+        ready.write_text(self.CID + ' console')
+        state = {'cid': self.CID, 'critical_enabled': True,
+                 'serial_ready': str(ready)}
+        self.assertEqual(tool.live_serial_path(state), root / 'serial.log')
+        state['serial_ready'] = str(root / ('serial-' + ('d' * 64) + '.ready'))
+        with self.assertRaisesRegex(ValueError, 'serial readiness identity'):
+            tool.live_serial_path(state)
+        state['serial_ready'] = str(ready)
+        ready.write_text(self.CID + ' wrong')
+        with self.assertRaisesRegex(ValueError, 'serial readiness content'):
+            tool.live_serial_path(state)
+        ready.write_text(self.CID + ' console')
+        (root / 'serial.log').write_text('live')
+        (root / 'real-serial.log').write_text('foreign')
+        (root / 'serial.log').unlink()
+        (root / 'serial.log').symlink_to(root / 'real-serial.log')
+        with self.assertRaisesRegex(ValueError, 'live serial path.*symlink'):
+            tool.live_serial_path(state)
 
     def test_requires_mapping_and_exact_build(self):
         line='Kernel text 0xffffff801c8e8000-0xffffff801d2e8000 to be write-protected\n'
@@ -87,6 +112,7 @@ class RunnerTests(unittest.TestCase):
         output = self.run_main(root, generator, gdb)
         result = json.loads((output / "result.json").read_text())
         self.assertEqual(result["scenario"], "vmid1-root")
+        self.assertFalse((output / "serial.txt").exists())
         self.assertIsNone(result["target_gpu_address"])
         self.assertFalse(result["gpu_completion_established"])
 

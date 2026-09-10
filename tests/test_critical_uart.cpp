@@ -15,13 +15,25 @@ struct FakeIo {
     uint64_t stallAt {UINT64_MAX};
     bool absent {};
     uint64_t wireUsPerByte {};
+    unsigned forcedBusyReads {};
+    uint64_t busyReadJumpUs {};
+    uint64_t readyReadJumpUs {};
     uint8_t lcr {};
     std::vector<std::pair<uint16_t, uint8_t>> writes;
     std::string bytes;
 
     uint8_t read(uint16_t port) {
         if (absent) return 0xff;
-        if (port == 0x2fd) return now < stallAt ? 0x60 : 0x40;
+        if (port == 0x2fd) {
+            if (forcedBusyReads) {
+                --forcedBusyReads;
+                now += busyReadJumpUs;
+                return 0x40;
+            }
+            now += readyReadJumpUs;
+            readyReadJumpUs = 0;
+            return now < stallAt ? 0x60 : 0x40;
+        }
         if (port == 0x2fb) return lcr;
         return 0;
     }
@@ -95,6 +107,41 @@ static void testByteTimeoutLatchesAndOmitsEnd() {
     assert(io.now == Uart::kByteTimeoutUs);
     uart("RGPU_END2 must-not-appear");
     assert(io.bytes.empty());
+}
+
+static void testSchedulingJumpRequiresThreStillBusyToFailByteTimeout() {
+    FakeIo readyAfterJump;
+    Uart readyUart(readyAfterJump);
+    assert(readyUart.initialize());
+    readyAfterJump.bytes.clear();
+    readyUart.beginSnapshot();
+    readyAfterJump.readyReadJumpUs = 3000;
+    readyUart("X");
+    assert(!readyUart.failed());
+    assert(readyAfterJump.bytes == "\r\nX\r\n");
+
+    FakeIo busyAfterJump;
+    Uart busyUart(busyAfterJump);
+    assert(busyUart.initialize());
+    busyAfterJump.bytes.clear();
+    busyUart.beginSnapshot();
+    busyAfterJump.forcedBusyReads = 1;
+    busyAfterJump.busyReadJumpUs = Uart::kByteTimeoutUs + 10;
+    busyUart("X");
+    assert(busyUart.failed());
+    assert(busyAfterJump.bytes == "\r\n");
+}
+
+static void testSnapshotDeadlineStillCapsImmediatelyReadyByte() {
+    FakeIo io;
+    Uart uart(io);
+    assert(uart.initialize());
+    io.bytes.clear();
+    uart.beginSnapshot(2500);
+    io.readyReadJumpUs = 3000;
+    uart("X");
+    assert(uart.failed());
+    assert(io.bytes == "\r\n");
 }
 
 static void testTotalDeadlineTruncatesAndNextAttemptRetries() {
@@ -239,6 +286,8 @@ int main() {
     testAbsentUartRefusesOutput();
     testReadinessHonorsRemainingWorkerBudget();
     testByteTimeoutLatchesAndOmitsEnd();
+    testSchedulingJumpRequiresThreStillBusyToFailByteTimeout();
+    testSnapshotDeadlineStillCapsImmediatelyReadyByte();
     testTotalDeadlineTruncatesAndNextAttemptRetries();
     testPartialLineIsDelimitedBeforeRetry();
     testMaximumFormatterSnapshotFitsDeadline();

@@ -117,3 +117,12 @@ path ready. The bounded runner invocation must pass the isolated executable as
 and `--scenario vmid1-root`. This scenario takes no `--target-gpu-address`.
 It records CPU request/native-copy/prepared values; it does not establish the
 eventual context-register value or GPU completion.
+
+The runner must start immediately after the coordinator publishes a valid
+`supervision.json`. It derives the live `run/serial.log` from the exact
+CID-bearing `serial_ready` record and waits for fresh kernel text plus the exact
+build identity inside the unchanged experiment deadline. Do not pass the
+post-run `output/serial.txt`; that file is frozen only when the coordinator
+finishes. This removes the candidate 190 path delay, but it does not guarantee
+that attachment precedes the first VMID1 prepare call. A deterministic pre-init
+rendezvous remains separate future work.

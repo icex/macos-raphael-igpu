@@ -37,6 +37,30 @@ def verify_port(cid, docker="docker"):
         raise ValueError("exact supervised CID lacks loopback GDB mapping")
 
 
+def live_serial_path(state):
+    cid = state.get("cid")
+    ready = state.get("serial_ready")
+    if (not isinstance(cid, str) or not re.fullmatch(r"[0-9a-f]{64}", cid) or
+            not isinstance(ready, str)):
+        raise ValueError("supervision lacks live serial identity")
+    ready_path = Path(ready)
+    if not ready_path.is_absolute() or ready_path.name != f"serial-{cid}.ready":
+        raise ValueError("supervision serial readiness identity mismatch")
+    if ready_path.is_symlink():
+        raise ValueError("supervision serial readiness path must not be a symlink")
+    expected = cid + (" console" if state.get("critical_enabled") is True else "")
+    try:
+        content = ready_path.read_text()
+    except OSError as error:
+        raise ValueError("supervision serial readiness content unavailable") from error
+    if content != expected:
+        raise ValueError("supervision serial readiness content mismatch")
+    serial = ready_path.parent / "serial.log"
+    if serial.is_symlink():
+        raise ValueError("live serial path must not be a symlink")
+    return serial
+
+
 def detach(gdb):
     result = subprocess.run([gdb, "-batch", "-ex", "set confirm off", "-ex",
                     "target remote 127.0.0.1:1234", "-ex", "detach", "-ex", "quit"],
@@ -49,7 +73,6 @@ def detach(gdb):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--supervision", required=True, type=Path)
-    parser.add_argument("--serial", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--build-id", required=True)
     parser.add_argument("--gdb", required=True)
@@ -71,6 +94,7 @@ def main():
     cid = state.get("cid")
     if not isinstance(cid, str) or not re.fullmatch(r"[0-9a-f]{64}", cid):
         raise ValueError("supervision lacks exact CID")
+    serial = live_serial_path(state)
     deadline = min(float(state["deadline_epoch"]),
                    float(state.get("launch_deadline_epoch", state["deadline_epoch"]))) - 25
     if deadline - time.time() < 10:
@@ -80,7 +104,11 @@ def main():
     runtime_text = None
     while time.time() < deadline - 8:
         verify_port(cid, args.docker)
-        runtime_text = readiness(args.serial.read_text(errors="replace"), args.build_id)
+        try:
+            serial_text = serial.read_text(errors="replace")
+        except FileNotFoundError:
+            serial_text = ""
+        runtime_text = readiness(serial_text, args.build_id)
         if runtime_text is not None:
             break
         time.sleep(.2)

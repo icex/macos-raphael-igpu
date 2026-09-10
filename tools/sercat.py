@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Drain the guest serial port into run/serial.log."""
-import socket, sys, time
+import socket, sys, threading, time
 import os, os.path
 VM = os.path.dirname(os.path.abspath(__file__))
 channel = os.environ.get("VM_SERIAL_CHANNEL")
@@ -16,27 +16,81 @@ for _ in range(60):
 else:
     sys.exit("no serial socket")
 s.settimeout(1)
-# fsync every chunk, not just buffering=0.
+# Make every received generation durable, not just visible through buffering=0.
 #
 # The host has hard-hung twice with the VM running, and both times this log was the only
 # place that could have said where the guest was -- and both times it was useless.
 # buffering=0 gets the bytes out of Python, but they then sit in the page cache until btrfs
 # commits, so the last tens of seconds before a hang are lost: after the second crash the
 # file ended at "BdsDxe: starting Boot0001" with 304 bytes, which says nothing about how far
-# the guest actually got. An fsync per chunk costs nothing at these volumes (a few hundred
-# kilobytes over a boot) and is the difference between having evidence and guessing.
+# the guest actually got. The sync worker coalesces overlapping requests but does not mark a
+# generation complete until fsync returns; this keeps filesystem latency out of socket drain.
 with open(output, "ab", buffering=0) as f:
-    # Optional launch-specific proof: published only after connect and log open.
-    ready = os.environ.get("VM_SERIAL_READY")
-    if ready:
-        with open(ready, "w") as marker:
-            token = os.environ["VM_SERIAL_CID"]
-            marker.write(token if channel is None else token + " " + channel)
-    while True:
-        try:
-            d = s.recv(65536)
-            if not d: break
-            f.write(d)
-            os.fsync(f.fileno())
-        except socket.timeout: pass
-        except Exception: break
+    condition = threading.Condition()
+    sync = {"requested": 0, "completed": 0, "error": None, "stopping": False}
+
+    def sync_log():
+        # Keep socket draining independent of filesystem writeback. A generation
+        # requested during fsync is deliberately synced again before exit.
+        while True:
+            with condition:
+                condition.wait_for(
+                    lambda: sync["requested"] > sync["completed"] or sync["stopping"])
+                if sync["requested"] == sync["completed"] and sync["stopping"]:
+                    return
+                target = sync["requested"]
+            try:
+                os.fsync(f.fileno())
+            except OSError as error:
+                with condition:
+                    sync["error"] = error
+                    condition.notify_all()
+                return
+            with condition:
+                sync["completed"] = target
+                condition.notify_all()
+
+    sync_thread = threading.Thread(target=sync_log, name="serial-log-sync", daemon=True)
+    sync_thread.start()
+    capture_error = None
+    try:
+        # Optional launch-specific proof: published only after connect, log open,
+        # and sync-worker start. The finally block also covers marker failures.
+        ready = os.environ.get("VM_SERIAL_READY")
+        if ready:
+            with open(ready, "w") as marker:
+                token = os.environ["VM_SERIAL_CID"]
+                marker.write(token if channel is None else token + " " + channel)
+        while True:
+            with condition:
+                if sync["error"] is not None:
+                    break
+            try:
+                d = s.recv(65536)
+                if not d:
+                    break
+                view = memoryview(d)
+                while view:
+                    written = f.write(view)
+                    if written is None or written <= 0:
+                        raise OSError("serial log write made no progress")
+                    view = view[written:]
+                with condition:
+                    sync["requested"] += 1
+                    condition.notify()
+            except socket.timeout:
+                continue
+            except Exception as error:
+                capture_error = error
+                break
+    finally:
+        with condition:
+            sync["stopping"] = True
+            condition.notify_all()
+        sync_thread.join(10)
+    if sync_thread.is_alive():
+        sys.exit("serial log fsync did not finish within 10 seconds")
+    if sync["error"] is not None:
+        sys.exit("serial log fsync failed")
+    if capture_error is not None:
+        sys.exit("serial capture failed")
