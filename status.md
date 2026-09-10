@@ -44,6 +44,23 @@ candidate and schema-3 warm-launch authority, verify remaining budget/receipt,
 and implement and verify a launcher contract honoring the user's no-generic-GPU
 requirement. No capture test extends a GPU budget or proves desktop acceleration.
 
+COM2/VMID1 milestone committed locally on `dev` as `d421120`; no main update.
+Candidate 184 / `metal-017` source preparation is independently reviewed: explicit no-generic/headless
+launch options, a pinned repository entrypoint, exact running graphics identity,
+and additive structured VMID1 diagnostic parsing. Final Python discovery ran
+615 tests successfully with one explicit skip; syntax/diff checks passed.
+Driver source is unchanged from `d421120`; both bundle versions are `1.0.184`.
+The new parser was checked with production C++ formatting and decoding for
+both known fault statuses, zero entries, `0x61` read/write entries and nonzero
+SYSTEM/PDE/TF fields. It retains invalid context state as diagnostic data and
+does not gate probe readiness on fault presence. Candidate build, deployment,
+staging and the fresh same-boot authority are still pending. Inert inspection of the pinned
+Docker image found exactly one `-vga vmware` and no `-display` in `Launch.sh`
+(SHA-256 `ae6050750f4ba26fbe85785da909b8f7d34fab064b6539d9a3f1903abf3fe302`).
+The inspected container was never started and was removed by exact ID. This
+corrected a fixture assumption before launch; display options currently originate
+in the host launcher. Plan: `findings/plans/2026-09-10-post-com2-candidate.md`.
+
 ## Current viewing requirement — no generic QEMU GPU
 
 The user requested another desktop launch with **no generic QEMU graphics

@@ -386,7 +386,8 @@ class ExperimentTests(unittest.TestCase):
             manifest = {key:'fixture' for key in tool.IDENTITY_FIELDS}
             manifest.update(
                 gpu=True, bootdisk_verified=True, recovery_lease_schema=2,
-                recovery_helpers_sha256=self.recovery_helper_hashes())
+                recovery_helpers_sha256=self.recovery_helper_hashes(),
+                launch_options={'BOOTDISK_MODE':'custom', 'NVRAM':'stock'})
             path = root/'manifest.json'
             path.write_text(json.dumps(manifest))
             output = root/'evidence'
@@ -628,6 +629,31 @@ class ExperimentTests(unittest.TestCase):
         bad = copy.deepcopy(good)
         bad['serial_args'][-1] = 'isa-serial,chardev=rgpu_critical,index=0'
         self.assertIn('critical_uart_topology', tool.validate_running(manifest, bad))
+
+    def test_no_generic_graphics_launch_options_and_running_argv_are_exact(self):
+        tool = self.module()
+        options = {'BOOTDISK_MODE':'custom', 'NVRAM':'stock',
+                   'GENERIC_GRAPHICS':'off'}
+        self.assertEqual(tool.launch_options({'launch_options':options}), options)
+        manifest = {'image_id':'img', 'gpu':False, 'launch_options':options}
+        observed = {'image_id':'img', 'vfio_args':[], 'serial_args':[],
+                    'graphics_args':['-vga', 'none', '-display', 'none']}
+        self.assertEqual(tool.validate_running(manifest, observed), [])
+        for graphics in (
+                ['-vga', 'vmware', '-display', 'none'],
+                ['-vga', 'none', '-display', 'gtk'],
+                ['-vga', 'none', '-display', 'none', '-device', 'virtio-vga'],
+                ['-vga', 'none', '-vga', 'none', '-display', 'none']):
+            with self.subTest(graphics=graphics):
+                bad = dict(observed, graphics_args=graphics)
+                self.assertIn('generic_graphics', tool.validate_running(manifest, bad))
+
+    def test_historical_launch_options_remain_compatible(self):
+        tool = self.module()
+        old = {'BOOTDISK_MODE':'custom', 'NVRAM':'stock'}
+        self.assertEqual(tool.launch_options({'launch_options':old}), old)
+        with self.assertRaisesRegex(ValueError, 'launch options'):
+            tool.launch_options({'launch_options':dict(old, GENERIC_GRAPHICS='on')})
 
     def test_critical_replay_manifest_selector_is_explicit_and_numeric(self):
         tool = self.module()
