@@ -1,0 +1,10 @@
+{
+  "cid": "5d2e5fc775e2b82dc1db29e83dd9b943a1ffc48d9087c636e307bddd6146bd3f",
+  "outcome": "forced",
+  "request_sent": true,
+  "guest_boot_uuid": "7E6F5169-CC30-46F0-958D-E6D85513F515",
+  "request_id": "21e0f521be6b41e2877fde1fb2418ada",
+  "request_error": null,
+  "acpi_request_sent": false,
+  "acpi_request_error": "no bounded grace remains for ACPI powerdown"
+}

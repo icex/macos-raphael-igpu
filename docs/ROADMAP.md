@@ -581,6 +581,15 @@ date for the unknown hardware defects until M2 has localized them.
   [VFIO](https://docs.kernel.org/driver-api/vfio.html),
   [AMDGPU hardware structure](https://docs.kernel.org/gpu/amdgpu/driver-core.html).
 
+## 7b. Candidates 181 and 182 (2026-09-10)
+
+Candidate 181 (`rgpuvmroot=3`) reached the probe commit and a GPU completion timeout after
+18 submissions; the stopped-device page directory shows `getPDEValue` output around an
+unconverted MC child address written before the conversion gate opened. Candidate 182 opens
+the gate at `AMDHWVMM::init`, samples every producer address, and walks VMID2's tables at the
+prepared phase. Run 181's recovery ended incomplete (host KIQ graphics retirement), so the
+next launch requires a fresh host boot. See `findings/experiments/metal-014-181/notes.md`.
+
 ## 8. Next controlled experiment
 
 1. Preserve the complete candidate-176 through candidate-178 evidence, both schema-6 receipt

@@ -1,4 +1,6 @@
-Experimental RaphaelGPU 1.0.181 candidate for macOS Sequoia 15.7.9 (24G830).
+Experimental RaphaelGPU 1.0.182 candidate for macOS Sequoia 15.7.9 (24G830).
+
+Candidate 1.0.182 keeps the mode-3 entry conversion and adds what candidate 181 showed was missing: the Raphael marker is confirmed at `AMDHWVMM::init`, before the VMM arena exists, so the conversion gate cannot open late; every `getPDEValue`/`getPTEValue` call is sampled with its address domain and calls made before the gate are counted; the VMID2 page tables are walked through BAR0 at the prepared phase. Candidate 181 reached the probe (GPU completion timeout, 18 submissions) and its stopped-device page directory held an unconverted MC child address.
 
 Candidate 1.0.181 extends `rgpuvmroot` to mode 3: after the proven VMID2 root repair, child page-directory entries (`AMDGFX10VMM::getPDEValue`) and video-memory page-table entries (`getPTEValue`) are converted from the framebuffer MC aperture to the physical carve-out form through the same guarded aperture arithmetic. Critical replay schema 2 gains the reviewed terminal-prefix corruption tolerance. Metal execution remains unverified until measured.
 

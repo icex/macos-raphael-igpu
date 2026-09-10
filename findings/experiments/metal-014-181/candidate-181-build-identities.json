@@ -1,0 +1,24 @@
+{
+  "archive": "/home/bogdan/macos-vm/run/candidate-181-dist/RaphaelGPU-1.0.181-experimental.zip",
+  "archive_sha256": "aebfd4bde72a3426f2fccb20758b52980be0c73b9541325bab72dc53f28c2212",
+  "build_id": "4c84407175774276a104c5737f098ddd",
+  "build_log": "/home/bogdan/macos-vm/run/candidate-181-build.log",
+  "build_log_sha256": "25a0e7071ec7702a6ffb8e86a875ed762379cba014a20e5404b12bf0854c89fb",
+  "build_manifest_sha256": "f2b852090dade797f85bd6e9b909f4ed4b8d5a57f66e864f3a6312d5e198b0e9",
+  "executable_sha256": "5378e0fa4799818dfedc5ec73156d5edfd0ccc7ba4479717ebff40f83c0e1aad",
+  "extracted_candidate": "/home/bogdan/macos-vm/run/candidate-181",
+  "info_sha256": "dbd02204b0ff9d19085284518cf930f0432dc0526204c3a42d8f639398acabd9",
+  "macho": {
+    "cpu": "0x01000007",
+    "filetype": 11,
+    "magic": "0xfeedfacf",
+    "subtype": "0x00000003"
+  },
+  "schema": 1,
+  "sha256sums_sha256": "fc80d8ad57ef2239b091c7d881344704fe49b5d15ada085d3119e8f14dfdab6c",
+  "source_clean": true,
+  "source_commit": "dbc4360c8040118d6058249e59bded6164cce395",
+  "source_sha256": "49062c1005ca5a8477e94334cf9e8a43122523a96c023c4f631f4216734f9e52",
+  "version": "1.0.181",
+  "worktree": "/home/bogdan/macos-vm/run/worktrees/candidate-181"
+}

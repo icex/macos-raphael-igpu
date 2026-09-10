@@ -1,0 +1,4 @@
+{
+  "status": "failed",
+  "error": "CriticalReplayError: CR2 has an incomplete transport line"
+}

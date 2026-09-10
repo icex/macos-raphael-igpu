@@ -1,0 +1,75 @@
+{
+  "schema": 1,
+  "kind": "frozen-run-terminal-prefix-recovery-proof",
+  "run_id": "7966fb1045ddeae71535030cd94deab1",
+  "boot_id": "5aa7641a-6dd5-4cb6-a482-5bd1b15fa946",
+  "build_id": "51f32e118fba4ec396ced9af51875499",
+  "run_directory": "/home/bogdan/macos-vm/run/metal-013-180",
+  "manifest_sha256": "dc32a52e8b12d8a3c91295423771971f3731d2d4435cea0b9be949dcdaea19b7",
+  "serial_sha256": "af976400493d4b4e5299caee89a9363966029cad0834aa3bace76ec45219c6c8",
+  "strict_parse_error": "CR2 physical line bound exceeded",
+  "tolerance": "terminal-prefix",
+  "terminal_snapshot": 3,
+  "record_count": 181,
+  "corrupt_lines": 27,
+  "corrupt_line_numbers": [
+    8463,
+    8582,
+    8700,
+    8758,
+    8894,
+    9049,
+    9313,
+    9657,
+    9774,
+    9949,
+    9965,
+    10062,
+    10078,
+    10192,
+    10208,
+    10233,
+    10280,
+    10318,
+    10342,
+    10370,
+    10406,
+    10436,
+    10448,
+    10469,
+    10496,
+    10505,
+    10515
+  ],
+  "corrupt_reasons": [
+    "malformed transport line",
+    "physical line bound exceeded"
+  ],
+  "incomplete_snapshots": [
+    {
+      "snapshot": 2,
+      "valid_chunks": 218,
+      "has_end": false
+    }
+  ],
+  "crc32": 223616798,
+  "fnv1a64": 4254265211407594400,
+  "lifetime_records": [
+    "XH3 LIFETIME state=VALID nonce=e7eadd4510fb6679_b1ea4dd90c033515 checksum=0xf4523b0ec420869"
+  ],
+  "helper_sha256": {
+    "tools/critical-replay.py": "0f6937f826174bef48812c8962effa6bede251a76ffca26c0d807ea1b6732970",
+    "tools/vfio-recover.py": "3616a938db007c84ecae6048bfd83100902759a328dda92c1d5394801e2d288e",
+    "tools/recovery_lease_v2.py": "445544dd52f30cf32838472d2d248d69ea1cd3e703c8f580ecef6491238aa7d2",
+    "tools/recovery_lifetime_v3.py": "61ab64bec086d0c358a05b57f893bc6267b94d9b6f431bed100de13a9d0fbcea",
+    "tools/experiment.py": "2264c6b80333f3a7c2373fff3a653528284ff69fdc58b4fd0cbfc5d950b8c394",
+    "tools/recover-frozen-run.py": "faf9c9028238fff455ce6b4b68e606986c1acf1a6df47417cca13703bf2b71d5"
+  },
+  "original_recovery_helpers_sha256": {
+    "tools/vfio-recover.py": "3616a938db007c84ecae6048bfd83100902759a328dda92c1d5394801e2d288e",
+    "tools/recovery_lease_v2.py": "445544dd52f30cf32838472d2d248d69ea1cd3e703c8f580ecef6491238aa7d2",
+    "tools/kiq-recovery-proof.py": "16af9cd9b5e807a44e0e28d6b6005840b9d720c50df2ce757b820dd5d3de0398",
+    "tools/critical-replay.py": "b2de5d7135470cdd146480a99215a4ec16cc2ce0adfdf1559d21bcfee3556d44",
+    "tools/recovery_lifetime_v3.py": "61ab64bec086d0c358a05b57f893bc6267b94d9b6f431bed100de13a9d0fbcea"
+  }
+}

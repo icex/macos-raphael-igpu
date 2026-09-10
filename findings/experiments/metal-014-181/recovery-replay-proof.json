@@ -1,0 +1,45 @@
+{
+  "schema": 1,
+  "kind": "frozen-run-terminal-prefix-recovery-proof",
+  "run_id": "8a6beaeb1b5f5800a7e01c1e1954c4b5",
+  "boot_id": "5aa7641a-6dd5-4cb6-a482-5bd1b15fa946",
+  "build_id": "4c84407175774276a104c5737f098ddd",
+  "run_directory": "/home/bogdan/macos-vm/run/metal-014-181",
+  "manifest_sha256": "738d2a4ade018a3e3721820dbc3f8ec5d38f442c6841486cf2a80445c33e3495",
+  "serial_sha256": "65fdf3f72412c077b0e2b478b04bbb32ce77002c6bc3c1fb1fed201c52025d2c",
+  "strict_parse_error": "CR2 has an incomplete transport line",
+  "tolerance": "terminal-prefix-open",
+  "terminal_snapshot": 2,
+  "record_count": 164,
+  "corrupt_lines": 0,
+  "corrupt_line_numbers": [],
+  "corrupt_reasons": [],
+  "incomplete_snapshots": [],
+  "open_attempt": {
+    "snapshot": 3,
+    "valid_chunks": 37,
+    "truncated_tail": true,
+    "complete_records": [],
+    "partial_records": 0
+  },
+  "crc32": 1823024617,
+  "fnv1a64": 18173926835544787364,
+  "lifetime_records": [
+    "XH3 LIFETIME state=VALID nonce=00585f1bebea6b8a_b5c454191e1ce0a7 checksum=0xecd9b82e054cd028"
+  ],
+  "helper_sha256": {
+    "tools/critical-replay.py": "8e0332d763be3fb6e31d5877ad78711c8673e8f5aeae56ba4989248947554b61",
+    "tools/vfio-recover.py": "3616a938db007c84ecae6048bfd83100902759a328dda92c1d5394801e2d288e",
+    "tools/recovery_lease_v2.py": "445544dd52f30cf32838472d2d248d69ea1cd3e703c8f580ecef6491238aa7d2",
+    "tools/recovery_lifetime_v3.py": "61ab64bec086d0c358a05b57f893bc6267b94d9b6f431bed100de13a9d0fbcea",
+    "tools/experiment.py": "f8cb0bd29da97f52057e980dc17a894d37c585f55e3f5fc7c0fabe1aa1448b23",
+    "tools/recover-frozen-run.py": "a176b1ad5025794cef1946b1f52465276ea3aa85bdf4c42575a77d97f57ac659"
+  },
+  "original_recovery_helpers_sha256": {
+    "tools/vfio-recover.py": "3616a938db007c84ecae6048bfd83100902759a328dda92c1d5394801e2d288e",
+    "tools/recovery_lease_v2.py": "445544dd52f30cf32838472d2d248d69ea1cd3e703c8f580ecef6491238aa7d2",
+    "tools/kiq-recovery-proof.py": "16af9cd9b5e807a44e0e28d6b6005840b9d720c50df2ce757b820dd5d3de0398",
+    "tools/critical-replay.py": "0f6937f826174bef48812c8962effa6bede251a76ffca26c0d807ea1b6732970",
+    "tools/recovery_lifetime_v3.py": "61ab64bec086d0c358a05b57f893bc6267b94d9b6f431bed100de13a9d0fbcea"
+  }
+}

@@ -416,6 +416,7 @@ struct EntryConversionSample {
     uint32_t flags;
     uint64_t original;
     uint64_t result;
+    EntryDomain domain;
 };
 
 inline EntryDomain convertEntryAddress(uint64_t address, bool system,
