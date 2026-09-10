@@ -125,20 +125,21 @@ struct FaultObservation {
 };
 
 // A callback may arrive under unknown driver locks. Serialize with a single
-// non-blocking claim, reject non-VMID1 and duplicates before occupying a slot,
+// non-blocking claim, reject non-client VMIDs and duplicates before occupying a slot,
 // and release-publish each complete fixed slot independently for the worker.
 template <size_t Capacity> class FaultObservationStore {
     static_assert(Capacity > 0, "nonempty fault observation store required");
     struct Slot { unsigned ready; FaultObservation value; } slots_[Capacity] {};
     unsigned busy_ {};
-    uint64_t nonVmid1_ {};
+    uint64_t nonClientVmid_ {};
     uint64_t duplicate_ {};
     uint64_t contention_ {};
     uint64_t full_ {};
 public:
     bool capture(uint32_t status, uint64_t address) {
-        if (decodeFaultStatus(status).vmid != 1) {
-            __atomic_fetch_add(&nonVmid1_, 1, __ATOMIC_RELAXED);
+        const uint32_t vmid = decodeFaultStatus(status).vmid;
+        if (vmid == 0 || vmid >= 16) {
+            __atomic_fetch_add(&nonClientVmid_, 1, __ATOMIC_RELAXED);
             return false;
         }
         unsigned expected = 0;
@@ -177,7 +178,9 @@ public:
         value = slots_[index].value;
         return true;
     }
-    uint64_t nonVmid1() const { return __atomic_load_n(&nonVmid1_, __ATOMIC_RELAXED); }
+    uint64_t nonClientVmid() const {
+        return __atomic_load_n(&nonClientVmid_, __ATOMIC_RELAXED);
+    }
     uint64_t duplicates() const { return __atomic_load_n(&duplicate_, __ATOMIC_RELAXED); }
     uint64_t contention() const { return __atomic_load_n(&contention_, __ATOMIC_RELAXED); }
     uint64_t full() const { return __atomic_load_n(&full_, __ATOMIC_RELAXED); }
@@ -475,6 +478,28 @@ constexpr ContextRegisters contextRegisters(uint32_t vmid) {
                             0x1688 + vmid * 2, 0x16a7 + vmid * 2,
                             0x16a8 + vmid * 2}
         : ContextRegisters {false, 0, 0, 0, 0, 0, 0, 0};
+}
+
+struct ContextSnapshot { bool valid; uint32_t words[7]; };
+
+inline bool contextSnapshotStable(const ContextSnapshot &before,
+                                  const ContextSnapshot &after) {
+    if (!before.valid || !after.valid) return false;
+    for (size_t i = 0; i < 7; ++i)
+        if (before.words[i] != after.words[i]) return false;
+    return true;
+}
+
+template <typename Read32>
+inline ContextSnapshot captureContextSnapshot(uint32_t vmid, Read32 read32) {
+    ContextSnapshot result {};
+    const auto ctx = contextRegisters(vmid);
+    if (!ctx.valid) return result;
+    result.valid = true;
+    const uint32_t registers[] {ctx.control, ctx.ptbLo, ctx.ptbHi, ctx.startLo,
+                                ctx.startHi, ctx.endLo, ctx.endHi};
+    for (size_t i = 0; i < 7; ++i) result.words[i] = read32(registers[i]);
+    return result;
 }
 
 constexpr InvalidateRegister decodeInvalidateRegister(

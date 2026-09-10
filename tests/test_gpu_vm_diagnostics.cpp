@@ -25,17 +25,24 @@ int main() {
             "candidate-183 CPF fault fields decode from the GC10 status word");
     require(RaphaelVm::decodeFaultStatus(0x2009bb).vmid == 2,
             "VMID2 remains distinct from the candidate-183 VMID1 faults");
+    auto candidate191Fault = RaphaelVm::decodeFaultStatus(0xb0093a);
+    require(candidate191Fault.vmid == 11 && candidate191Fault.cid == 4 &&
+                candidate191Fault.walkerError == 5 &&
+                candidate191Fault.permissionFaults == 3 &&
+                candidate191Fault.mappingError && !candidate191Fault.write &&
+                !candidate191Fault.atomic,
+            "candidate-191 VMID11 CPF fault fields decode exactly");
 
     RaphaelVm::FaultObservationStore<2> faultStore;
-    require(!faultStore.capture(0x2009bb, 0x400200000ULL),
-            "a non-VMID1 fault cannot occupy a diagnostic slot");
+    require(!faultStore.capture(0x00093a, 0x400200000ULL),
+            "VMID0 cannot occupy a client diagnostic slot");
     require(faultStore.capture(0x101b3a, 0x400900000ULL) &&
                 !faultStore.capture(0x101b3a, 0x400900000ULL) &&
-                faultStore.capture(0x1009ba, 0x401180000ULL),
-            "only distinct VMID1 status-address pairs occupy the two slots");
+                faultStore.capture(0xb0093a, 0x400300000ULL),
+            "distinct VMID1 and VMID11 pairs occupy the bounded slots");
     require(!faultStore.capture(0x101d3a, 0x402000000ULL),
             "a third distinct VMID1 fault is refused after the fixed capacity");
-    require(faultStore.nonVmid1() == 1 && faultStore.duplicates() == 1 &&
+    require(faultStore.nonClientVmid() == 1 && faultStore.duplicates() == 1 &&
                 faultStore.contention() == 0 && faultStore.full() == 1,
             "every refused fault category remains observable to the worker");
     RaphaelVm::FaultRejectionSchedule rejectionSchedule;
@@ -49,8 +56,8 @@ int main() {
                 capturedFault.status == 0x101b3a &&
                 capturedFault.address == 0x400900000ULL &&
                 faultStore.read(1, capturedFault) &&
-                capturedFault.status == 0x1009ba &&
-                capturedFault.address == 0x401180000ULL,
+                capturedFault.status == 0xb0093a &&
+                capturedFault.address == 0x400300000ULL,
             "fault observations publish complete fixed slots in capture order");
 
     alignas(uint64_t) unsigned char bytes[0x28] {};
@@ -453,6 +460,7 @@ int main() {
 
     constexpr auto vmid0 = RaphaelVm::contextRegisters(0);
     constexpr auto vmid2 = RaphaelVm::contextRegisters(2);
+    constexpr auto vmid11 = RaphaelVm::contextRegisters(11);
     constexpr auto invalid = RaphaelVm::contextRegisters(16);
     require(vmid0.valid && vmid0.control == 0x15fc && vmid0.ptbLo == 0x1667 &&
                 vmid0.startLo == 0x1687 && vmid0.endLo == 0x16a7,
@@ -463,6 +471,35 @@ int main() {
                 vmid2.endHi == 0x16ac,
             "VMID 2 applies the documented one/two-register strides");
     require(!invalid.valid, "VMIDs outside the 16 hardware contexts are rejected");
+    uint32_t reads[7] {}; size_t readCount = 0;
+    auto snapshot11 = RaphaelVm::captureContextSnapshot(11, [&](uint32_t reg) {
+        reads[readCount++] = reg; return reg ^ 0x55aa;
+    });
+    const uint32_t expected11[] {vmid11.control, vmid11.ptbLo, vmid11.ptbHi,
+                                 vmid11.startLo, vmid11.startHi,
+                                 vmid11.endLo, vmid11.endHi};
+    require(snapshot11.valid && readCount == 7 &&
+                std::memcmp(reads, expected11, sizeof(reads)) == 0 &&
+                reads[0] != RaphaelVm::contextRegisters(1).control,
+            "VMID11 fault snapshot reads its own context rather than VMID1");
+    size_t invalidReads = 0;
+    auto invalidSnapshot = RaphaelVm::captureContextSnapshot(
+        16, [&](uint32_t) { ++invalidReads; return 0u; });
+    require(!invalidSnapshot.valid && invalidReads == 0,
+            "invalid context selection performs no register reads");
+    auto snapshot1 = RaphaelVm::captureContextSnapshot(
+        1, [](uint32_t reg) { return reg == 0x1669 ? 0x11110000u : 0u; });
+    auto context11 = RaphaelVm::captureContextSnapshot(
+        11, [](uint32_t reg) { return reg == 0x167d ? 0x22220000u : 0u; });
+    require(RaphaelVm::join(snapshot1.words[1], snapshot1.words[2]) !=
+                RaphaelVm::join(context11.words[1], context11.words[2]),
+            "VMID1 and VMID11 snapshots preserve distinct live roots");
+    auto mutated11 = context11;
+    require(RaphaelVm::contextSnapshotStable(context11, context11),
+            "identical before/after context snapshots are stable");
+    mutated11.words[2] ^= 1;
+    require(!RaphaelVm::contextSnapshotStable(context11, mutated11),
+            "a root mutation makes the worker snapshot unstable");
     constexpr uint32_t gc = 0x1260;
     constexpr auto sem2 = RaphaelVm::decodeInvalidateRegister(
         gc + 0x160f, gc + 0x160d, gc + 0x161f, gc + 0x1631);

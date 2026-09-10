@@ -457,6 +457,31 @@ class Candidate186StageTests(unittest.TestCase):
         self.assertFalse(any(item.startswith("gdb_") for item in
                              card["required_observations"]))
 
+    def test_candidate192_reports_actual_client_vmid_conditionally(self):
+        self.tool.configure("1.0.192", "metal-026")
+        raw = (ROOT / "experiments/metal-026.json").read_bytes()
+        card = self.tool.validate_card(raw, hashlib.sha256(raw).hexdigest())
+        self.assertEqual(card["raphael_source_sha256"],
+                         "e2eb4769e41af10dcbb48f315446030fdd8af0632fa5f6de8ec8f9abba630526")
+        old = dict(card, raphael_source_sha256=
+                   "7515f121230fbd26e32b198bd622e106155708e4108d9def96dcc7daa9d173f3")
+        encoded = (json.dumps(old) + "\n").encode()
+        with self.assertRaisesRegex(RuntimeError, "candidate card contract"):
+            self.tool.validate_card(encoded, hashlib.sha256(encoded).hexdigest())
+        self.assertEqual(card["launch_options"], {
+            "BOOTDISK_MODE": "custom", "NVRAM": "stock",
+            "GENERIC_GRAPHICS": "off", "GDB": "on"})
+        self.assertEqual(card["conditional_diagnostic_observations"], [
+            "vmid1_fault_walk", "vmid1_fault_walk_view", "vmid1_fault_walk_entry",
+            "client_fault_walk", "client_fault_walk_view", "client_fault_walk_entry",
+            "gdb_vmid1_wrap_vmm_prepare_original_info",
+            "gdb_vmid1_wrap_vmm_prepare_native_info", "gdb_vmid1_prepared_root",
+            "gdb_hub0_vmid1_reprogram1"])
+        self.assertFalse(any(item.startswith("gdb_") for item in
+                             card["required_observations"]))
+        self.assertIn("worker-time state is not fault-time proof",
+                      card["behavior_change"])
+
     def test_candidate188_debug_symbols_require_retained_files_and_matching_provenance(self):
         self.tool.configure("1.0.188", "metal-021")
         with tempfile.TemporaryDirectory() as directory:

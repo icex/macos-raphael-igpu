@@ -255,7 +255,7 @@ static volatile uint32_t cachedFbOffset = 0;
 static volatile bool cachedFbPublished = false;
 static volatile uint32_t nextVmObservationSequence = 0;
 static volatile uint32_t latestVmid2ProgramSequence = 0;
-static RaphaelVm::FaultObservationStore<2> vmid1Faults {};
+static RaphaelVm::FaultObservationStore<2> clientFaults {};
 
 static void diagAppend(bool critical, const char *fmt, ...) {
     char text[512];
@@ -3648,7 +3648,7 @@ static uint32_t wrapKiqSubmit(void *self) {
                 const uint64_t address = RaphaelVm::decodeFaultAddress(
                     fbRead(asicInfo, kGcVmFaultLo), fbRead(asicInfo, kGcVmFaultHi));
                 if (vmFaultDiagEnabled && status != 0)
-                    vmid1Faults.capture(status, address);
+                    clientFaults.capture(status, address);
                 if (vmRootFixEnabled && sequence != 0 &&
                     preClearFaultRecordBudget.take(
                         status == 0, rgpu::kRoutinePreClearRecordLimit))
@@ -4865,17 +4865,17 @@ static void reportVmid2Walk(uint32_t sequence, const RaphaelVm::PreparedRequest 
     }
 }
 
-static void publishVmid1FaultWalks() {
+static void publishClientFaultWalks() {
     if (!vmFaultDiagEnabled || asicInfo == nullptr) return;
     static size_t cursor = 0;
     RaphaelVm::FaultObservation fault {};
-    while (cursor < 2 && vmid1Faults.read(cursor, fault)) {
+    while (cursor < 2 && clientFaults.read(cursor, fault)) {
         ++cursor;
-        constexpr auto ctx = RaphaelVm::contextRegisters(1);
+        const auto decoded = RaphaelVm::decodeFaultStatus(fault.status);
         auto rd = [](uint32_t relative) { return fbRead(asicInfo, kGcSeg0 + relative); };
-        const uint32_t before[] {rd(ctx.control), rd(ctx.ptbLo), rd(ctx.ptbHi),
-                                 rd(ctx.startLo), rd(ctx.startHi),
-                                 rd(ctx.endLo), rd(ctx.endHi)};
+        const auto beforeSnapshot = RaphaelVm::captureContextSnapshot(decoded.vmid, rd);
+        if (!beforeSnapshot.valid) continue;
+        const auto &before = beforeSnapshot.words;
         const uint64_t root = RaphaelVm::join(before[1], before[2]);
         const uint64_t start = RaphaelVm::join(before[3], before[4]) << 12;
         const uint64_t end = (RaphaelVm::join(before[5], before[6]) << 12) | 0xfffULL;
@@ -4894,12 +4894,9 @@ static void publishVmid1FaultWalks() {
             root, before[0], start, fault.address, aperture, reader);
         const auto absolute = RaphaelVm::walkPageTables(
             root, before[0], fault.address, aperture, reader);
-        const uint32_t after[] {rd(ctx.control), rd(ctx.ptbLo), rd(ctx.ptbHi),
-                                rd(ctx.startLo), rd(ctx.startHi),
-                                rd(ctx.endLo), rd(ctx.endHi)};
-        bool contextStable = true;
-        for (size_t i = 0; i < 7; ++i) contextStable &= before[i] == after[i];
-        const auto decoded = RaphaelVm::decodeFaultStatus(fault.status);
+        const auto afterSnapshot = RaphaelVm::captureContextSnapshot(decoded.vmid, rd);
+        const bool contextStable = RaphaelVm::contextSnapshotStable(
+            beforeSnapshot, afterSnapshot);
         const bool addressInContext = fault.address >= start && fault.address <= end;
         CRLOG("VM: fault-walk vmid=%u status=%#x fault-va=%#llx cid=%u walker=%u "
               "permission=%#x mapping=%u rw=%u atomic=%u ctl=%#x root=%#llx "
@@ -4932,13 +4929,13 @@ static void publishVmid1FaultWalks() {
         }
     }
     static RaphaelVm::FaultRejectionSchedule rejectionSchedule {};
-    const uint64_t rejected = vmid1Faults.nonVmid1() + vmid1Faults.duplicates() +
-        vmid1Faults.contention() + vmid1Faults.full();
+    const uint64_t rejected = clientFaults.nonClientVmid() + clientFaults.duplicates() +
+        clientFaults.contention() + clientFaults.full();
     if (rejectionSchedule.shouldPublish(rejected)) {
-        CRLOG("VM: fault-capture rejected non-vmid1=%llu duplicate=%llu "
+        CRLOG("VM: fault-capture rejected non-client-vmid=%llu duplicate=%llu "
               "contention=%llu capacity=%llu",
-              vmid1Faults.nonVmid1(), vmid1Faults.duplicates(),
-              vmid1Faults.contention(), vmid1Faults.full());
+              clientFaults.nonClientVmid(), clientFaults.duplicates(),
+              clientFaults.contention(), clientFaults.full());
     }
 }
 
@@ -5437,7 +5434,7 @@ static void publishPendingVmEntryUpdates() {
 }
 
 static void publishPendingVmObservations() {
-    publishVmid1FaultWalks();
+    publishClientFaultWalks();
     static size_t programCursor = 0;
     static size_t submitCursor = 0;
     static RaphaelVm::PreparedRequest programCache[8] {};
@@ -6366,7 +6363,7 @@ static void pluginStart() {
     uint32_t vmFaultDiag = 0;
     vmFaultDiagEnabled = PE_parse_boot_argn("rgpuvmdiag", &vmFaultDiag,
                                            sizeof(vmFaultDiag)) && vmFaultDiag == 1;
-    RLOG("rgpuvmdiag=%u: bounded VMID1 fault-selected page-table diagnostics %s",
+    RLOG("rgpuvmdiag=%u: bounded client-VMID fault-selected page-table diagnostics %s",
          vmFaultDiagEnabled, vmFaultDiagEnabled ? "enabled" : "disabled");
     uint32_t criticalUart = 0;
     criticalUartEnabled = PE_parse_boot_argn("rgpucr2uart", &criticalUart,
