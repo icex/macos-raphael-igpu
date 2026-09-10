@@ -87,8 +87,15 @@ def current_recovery_helpers_sha256(recovery_lease_schema=3):
     return {relative: sha((ROOT / relative).read_bytes()) for relative in paths}
 
 
-def policy_path(vm, boot_id):
-    return Path(vm) / 'run/one-run-qualification-authorities' / boot_id / 'policy.json'
+def policy_path(vm, boot_id, run_id=None):
+    name = 'policy.json' if run_id is None else run_id + '.policy.json'
+    return Path(vm) / 'run/one-run-qualification-authorities' / boot_id / name
+
+
+def selected_policy_path(vm, boot_id, run_id):
+    """Select a run-scoped authority when present, else the legacy authority."""
+    scoped = policy_path(vm, boot_id, run_id)
+    return scoped if scoped.exists() else policy_path(vm, boot_id)
 
 
 def activation_path(vm, boot_id, run_id):
@@ -221,7 +228,8 @@ def authorize(vm, manifest, manifest_path, output, expected_policy_sha256,
     if not _hex(run_id, 32) or not re.fullmatch(r'[A-Za-z0-9-]+', str(boot_id or '')):
         return None, [LABEL + '_manifest']
     try:
-        policy_raw, policy = _json_file(policy_path(vm, boot_id))
+        policy_file = selected_policy_path(vm, boot_id, run_id)
+        policy_raw, policy = _json_file(policy_file)
         if (sha(policy_raw) != expected_policy_sha256 or not isinstance(policy, dict) or
                 set(policy) != POLICY_FIELDS or policy.get('kind') != POLICY_KIND):
             return None, [LABEL + '_authority']
@@ -343,7 +351,7 @@ def authorize(vm, manifest, manifest_path, output, expected_policy_sha256,
         'vm':vm.resolve(), 'boot_id':boot_id,
         'manifest':pinned_manifest, 'manifest_path':Path(manifest_path).resolve(),
         'manifest_raw':manifest_raw, 'output':Path(output).resolve(),
-        'policy':policy, 'policy_path':policy_path(vm, boot_id),
+        'policy':policy, 'policy_path':policy_file,
         'policy_raw':policy_raw, 'policy_sha256':expected_policy_sha256,
         'activation':activation,
         'activation_path':activation_path(vm, boot_id, run_id),
@@ -375,7 +383,7 @@ def build_reservation(authorization, boot_id, run_id, recovery, gate,
         parsed_activation = json.loads(authorization['activation_raw'])
         parsed_manifest = json.loads(authorization['manifest_raw'])
         expected_paths = {
-            'policy_path':policy_path(vm, boot_id),
+            'policy_path':selected_policy_path(vm, boot_id, run_id).resolve(),
             'activation_path':activation_path(vm, boot_id, run_id),
             'manifest_path':_safe_vm_run_path(vm, policy['manifest_path']),
             'ledger_path':vm / 'run/used-gpu-boots' / (boot_id + '.json'),
@@ -537,7 +545,7 @@ def create(vm, boot_id, prior_run_id, run_receipt_path, run_receipt_member,
         'vm_max_seconds':180, 'probe_max_seconds':45,
         'automatic_extension':False, 'automatic_retry':False, 'purpose':purpose,
     }
-    policy_file = policy_path(vm, boot_id)
+    policy_file = policy_path(vm, boot_id, run_id)
     policy_file.parent.mkdir(parents=True, exist_ok=True)
     policy_bytes = (json.dumps(policy, sort_keys=True, indent=2) + '\n').encode()
     with policy_file.open('xb') as stream:

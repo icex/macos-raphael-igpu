@@ -1775,7 +1775,8 @@ class ExperimentTests(unittest.TestCase):
                     manifest.setdefault(key, 'fixture')
             manifest.update(
                 guest_build='24G830', vfio_device='0000:7b:00.0',
-                launch_options={'BOOTDISK_MODE':'custom', 'NVRAM':'stock'})
+                launch_options={'BOOTDISK_MODE':'custom', 'NVRAM':'stock',
+                                'GENERIC_GRAPHICS':'off'})
             fixture.manifest_path.write_text(
                 json.dumps(manifest, sort_keys=True)+'\n')
             policy = json.loads(fixture.policy_path.read_text())
@@ -1851,8 +1852,11 @@ class ExperimentTests(unittest.TestCase):
                                        'gpu', 'max_seconds', 'experiment',
                                        'candidate_directory', 'vfio_device')}
             identity_run_ids = []
+            identity_launch_options = []
             def current_identity(*args, **kwargs):
                 identity_run_ids.append(kwargs.get('run_id', args[3] if len(args) > 3 else None))
+                identity_launch_options.append(kwargs.get(
+                    'launch_options_expected', args[5] if len(args) > 5 else None))
                 return copy.deepcopy(observed)
             now = [100.0]
             class NoopMonitor:
@@ -1866,7 +1870,8 @@ class ExperimentTests(unittest.TestCase):
                  patch.object(tool, 'active_launch_units', return_value=[]), \
                  patch.object(tool, 'running_identity', return_value={
                      'image_id':manifest['image_id'],
-                     'vfio_args':['vfio-pci,host=0000:7b:00.0']}), \
+                     'vfio_args':['vfio-pci,host=0000:7b:00.0'],
+                     'graphics_args':['-vga','none','-display','none']}), \
                  patch.object(tool, 'HostMonitor', NoopMonitor), \
                  patch.object(tool.time, 'time', side_effect=lambda:now[0]), \
                  patch.object(tool.time, 'sleep',
@@ -1883,6 +1888,7 @@ class ExperimentTests(unittest.TestCase):
             self.assertEqual(len(ledger['launches']), 7)
             self.assertEqual(ledger['launches'][-1]['run_id'], RUN)
             self.assertEqual(identity_run_ids, [RUN, RUN])
+            self.assertEqual(identity_launch_options, [manifest['launch_options']] * 2)
             self.assertEqual(len(recovered_evidence), 1)
             self.assertIn('lease_evidence', recovered_evidence[0])
             self.assertEqual(recovered_evidence[0]['recovery_helpers_sha256'],
@@ -1921,13 +1927,15 @@ class ExperimentTests(unittest.TestCase):
                 'image_id':'image', 'build_id':'build', 'source_sha256':'source',
                 'bootdisk_sha256':'disk', 'source_clean':True,
                 'vfio_device':'0000:7b:00.0', 'max_seconds':180,
+                'launch_options':{'BOOTDISK_MODE':'custom', 'NVRAM':'stock',
+                                  'GENERIC_GRAPHICS':'off'},
             }
             manifest_path = vm/'run/a.json'; manifest_path.write_text('{}\n')
             output = vm/'run/out'
             receipt = {'kernel_cursor_after':'s=x;i=10;b=boot-A;m=1'}
             identity = {key:manifest[key] for key in (
                 'image_id', 'build_id', 'source_sha256', 'boot_id',
-                'bootdisk_sha256')}
+                'bootdisk_sha256', 'launch_options')}
             authorization = {
                 'policy_sha256':'a'*64, 'activation_sha256':'b'*64,
                 'receipt':receipt, 'policy_raw':b'p', 'activation_raw':b'a',
@@ -1964,6 +1972,18 @@ class ExperimentTests(unittest.TestCase):
                     manifest_path, output, authorization)
             self.assertEqual(cursor, full_host['journal_cursor'])
             replace.assert_called_once_with(used/'boot-A.json', {'schema':4})
+            mismatch = dict(identity, launch_options={
+                'BOOTDISK_MODE':'custom', 'NVRAM':'stock'})
+            with patch.object(tool, 'helper', side_effect=helpers), \
+                 patch.object(tool, 'host_snapshot', return_value=capture_host), \
+                 patch.object(tool, 'active_launch_units', return_value=[]), \
+                 patch.object(tool, 'current_identity', return_value=mismatch), \
+                 patch.object(tool, 'replace_json') as refused_replace:
+                with self.assertRaisesRegex(ValueError, 'launch_options'):
+                    tool.reserve_warm_qualification(
+                        used, 'boot-A', manifest['run_id'], receipt, manifest,
+                        manifest_path, output, authorization)
+            refused_replace.assert_not_called()
 
     def test_reuse_requires_latest_predecessor_and_stops_at_three_launches(self):
         tool = self.module()

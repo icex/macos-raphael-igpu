@@ -38,10 +38,10 @@ class Candidate180MetadataTests(unittest.TestCase):
         self.assertIn('no automatic retry', card['repeat_policy'])
         self.assertEqual(card['regression_baselines']['immediate'], 'run/metal-013-180')
 
-    def test_bundle_metadata_is_exact_candidate184_version(self):
+    def test_bundle_metadata_is_exact_candidate185_version(self):
         info = plistlib.loads((ROOT / 'kext/Info.plist').read_bytes())
-        self.assertEqual(info['CFBundleShortVersionString'], '1.0.184')
-        self.assertEqual(info['CFBundleVersion'], '1.0.184')
+        self.assertEqual(info['CFBundleShortVersionString'], '1.0.185')
+        self.assertEqual(info['CFBundleVersion'], '1.0.185')
         notes = (ROOT / 'docs/release-notes.md').read_text()
         self.assertTrue(notes.startswith('Experimental RaphaelGPU 1.0.183 '))
 

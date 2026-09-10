@@ -14,6 +14,7 @@ BOOT = '5aa7641a-6dd5-4cb6-a482-5bd1b15fa946'
 PRIOR = '7966fb1045ddeae71535030cd94deab1'
 RECOVERY = '74d7749f63c04cdaa0034df35c58d308'
 RUN = '0123456789abcdeffedcba9876543210'
+RUN2 = '1123456789abcdeffedcba9876543210'
 CURSOR = 's=98f6cb2295dc45898ee97031451ba7c8;i=41f4c;b=5aa7641a6dd54cb6a4825bd1b15fa946;m=e92e9098'
 
 
@@ -101,6 +102,24 @@ class OneRunQualificationTests(unittest.TestCase):
             self.vm, self.manifest, self.manifest_path, self.output,
             self.policy_sha, self.activation_sha, self.hooks())
 
+    def create_second_authority(self):
+        manifest = copy.deepcopy(self.manifest)
+        manifest['run_id'] = RUN2
+        nonce_lo, nonce_hi = struct.unpack('<QQ', bytes.fromhex(RUN2))
+        manifest['boot_args'] = ' '.join(
+            token for token in manifest['boot_args'].split()
+            if not token.startswith(('rgpurnlo=', 'rgpurnhi=')))
+        manifest['boot_args'] += f' rgpurnlo={nonce_lo} rgpurnhi=0x{nonce_hi:x}'
+        path = self.manifest_path.with_name('182.json')
+        path.write_text(json.dumps(manifest, indent=2) + '\n')
+        output = self.vm / 'run/metal-014-182'
+        created = self.helper.create(
+            self.vm, BOOT, PRIOR, 'run/metal-013-180/recovery-retry.json', 'recovery',
+            'experiments/metal-014.json',
+            'run/one-run-qualification-manifests/182.json',
+            'run/metal-014-182', 'candidate182-entry-conversion-one-run')
+        return manifest, path, output, created
+
     def reseal(self):
         self.manifest_path.write_text(json.dumps(self.manifest, indent=2) + '\n')
         for path in (self.policy_path, self.activation_path):
@@ -142,6 +161,70 @@ class OneRunQualificationTests(unittest.TestCase):
         self.assertEqual((policy['from_max_launches'], policy['to_max_launches'],
                           policy['additional_launches']), (3, 3, 0))
         self.assertEqual(policy['prior_recovery_id'], RECOVERY)
+
+    def test_distinct_run_scoped_policies_coexist_and_same_run_refuses(self):
+        first_raw = self.policy_path.read_bytes()
+        manifest2, path2, output2, created2 = self.create_second_authority()
+        second_path = Path(created2['policy_path'])
+        self.assertNotEqual(second_path, self.policy_path)
+        self.assertEqual(self.policy_path.name, f'{RUN}.policy.json')
+        self.assertEqual(second_path.name, f'{RUN2}.policy.json')
+        self.assertEqual(self.policy_path.read_bytes(), first_raw)
+        self.assertTrue(second_path.is_file())
+        with self.assertRaises(FileExistsError):
+            self.helper.create(
+                self.vm, BOOT, PRIOR, 'run/metal-013-180/recovery-retry.json', 'recovery',
+                'experiments/metal-014.json',
+                'run/one-run-qualification-manifests/182.json',
+                'run/metal-014-182', 'candidate182-entry-conversion-one-run')
+
+    def test_legacy_policy_is_read_only_compatible(self):
+        legacy = self.helper.policy_path(self.vm, BOOT)
+        legacy.write_bytes(self.policy_path.read_bytes())
+        self.policy_path.unlink()
+        authorization, errors = self.authorize()
+        self.assertEqual(errors, [])
+        self.assertEqual(authorization['policy_path'], legacy)
+
+    def test_existing_scoped_policy_blocks_legacy_fallback(self):
+        legacy = self.helper.policy_path(self.vm, BOOT)
+        legacy.write_bytes(self.policy_path.read_bytes())
+        self.policy_path.write_text('{}\n')
+        authorization, errors = self.authorize()
+        self.assertIsNone(authorization)
+        self.assertIn('one-run_authority', errors)
+
+    def test_wrong_run_policy_and_hash_are_rejected(self):
+        policy = json.loads(self.policy_path.read_text())
+        policy['run_id'] = RUN2
+        self.policy_path.write_text(json.dumps(policy, sort_keys=True, indent=2) + '\n')
+        wrong_hash = digest(self.policy_path)
+        authorization, errors = self.helper.authorize(
+            self.vm, self.manifest, self.manifest_path, self.output,
+            wrong_hash, self.activation_sha, self.hooks())
+        self.assertIsNone(authorization)
+        self.assertIn('one-run_authority', errors)
+
+    def test_two_authorizations_share_preimage_but_only_one_can_reserve(self):
+        manifest2, path2, output2, created2 = self.create_second_authority()
+        first, errors = self.authorize()
+        self.assertEqual(errors, [])
+        second, errors = self.helper.authorize(
+            self.vm, manifest2, path2, output2, created2['policy_sha256'],
+            created2['activation_sha256'], self.hooks())
+        self.assertEqual(errors, [])
+        self.create_owned_output()
+        output2.mkdir()
+        (output2 / 'manifest.json').write_bytes(path2.read_bytes())
+        (output2 / 'host-before.json').write_text(json.dumps({'boot_id':BOOT}) + '\n')
+        ledger_path, updated = self.helper.build_reservation(
+            first, BOOT, RUN, first['receipt'], self.gate(first), 123.5)
+        ledger_path.write_text(json.dumps(updated, indent=2) + '\n')
+        gate2 = self.gate(second)
+        gate2['identity_gate']['run_id'] = RUN2
+        with self.assertRaisesRegex(ValueError, 'concurrent_change'):
+            self.helper.build_reservation(
+                second, BOOT, RUN2, second['receipt'], gate2, 124.5)
 
     def test_authorizes_read_only_and_appends_exactly_one_row(self):
         ledger_path = self.vm / 'run/used-gpu-boots' / f'{BOOT}.json'
@@ -262,7 +345,9 @@ class CoordinatorIdentityGateTests(unittest.TestCase):
         end = source.index('def reserve_warm_qualification', start)
         body = source[start:end]
         gate = body[body.index('identity_gate = current_identity('):]
-        self.assertIn("recovery_lease_schema=manifest.get('recovery_lease_schema', 2))",
+        self.assertIn("recovery_lease_schema=manifest.get('recovery_lease_schema', 2),",
+                      gate[:gate.index('identity_gate.update(')])
+        self.assertIn('launch_options_expected=launch_options(manifest))',
                       gate[:gate.index('identity_gate.update(')])
         self.assertIn("helper_name = authorization.get('helper_name'", body)
 
