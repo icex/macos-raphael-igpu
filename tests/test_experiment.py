@@ -65,6 +65,14 @@ class ExperimentTests(unittest.TestCase):
         tool = self.module()
         self.assertIn('probe_spec=manifest', inspect.getsource(tool.run_one))
 
+    def test_current_identity_resolves_nested_manifest_source_provenance(self):
+        tool = self.module()
+        spec = {'raphael_source_sha256': 'a' * 64,
+                'raphael_source_commit': 'b' * 40}
+        self.assertEqual(tool.candidate_source_provenance({'spec': spec}),
+                         (spec['raphael_source_sha256'],
+                          spec['raphael_source_commit']))
+
     def test_candidate194_card_binds_small_probe_and_safety_contract(self):
         tool = self.module()
         card = json.loads((ROOT / 'experiments' / 'metal-028.json').read_text())
