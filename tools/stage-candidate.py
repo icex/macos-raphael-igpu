@@ -62,6 +62,7 @@ RESEAL_PROFILES = {
     },
     ("1.0.194", "metal-028"): {
         "candidate_version":"1.0.194", "card_id":"metal-028",
+        "allow_cross_boot_reseal":True,
         "prior_run_id":"b4a41ca47553618a58bab320b3b0c2fb",
         "record_kind":"candidate194-nonce-reseal",
         "staging_sha256":"640409b94b4613a62710705c431e44115c052d4e6bcb7fa81ae7d408a92b7c9d",
@@ -785,6 +786,18 @@ def validate_fresh_reseal_run_id(run_id, boot_id, record_path, prior_run_id=None
         raise RuntimeError("reseal requires a fresh run ID without ledger use") from None
 
 
+def validate_reseal_boot_identity(profile, expected_boot_id):
+    """Allow candidate 194's reviewed refusal to be resealed only after reboot."""
+    if not profile.get("allow_cross_boot_reseal"):
+        return
+    refusal = profile.get("prelaunch_refusal") or {}
+    historical_boot_id = refusal.get("boot_id")
+    if not historical_boot_id or expected_boot_id == historical_boot_id:
+        raise RuntimeError("reseal requires a fresh cross-boot identity")
+    if Path("/proc/sys/kernel/random/boot_id").read_text().strip() != expected_boot_id:
+        raise RuntimeError("reseal boot ID is not the current host boot")
+
+
 def reseal_candidate(expected_commit, expected_boot_id, expected_card_sha256,
                      run_id, image_id, expected_staging_sha256,
                      expected_raw_sha256, expected_bootdisk_sha256,
@@ -793,7 +806,9 @@ def reseal_candidate(expected_commit, expected_boot_id, expected_card_sha256,
     profile = reseal_profile()
     if (profile.get("prelaunch_refusal") is not None and
             expected_boot_id != profile["prelaunch_refusal"]["boot_id"]):
-        raise RuntimeError("reseal boot ID is not the reviewed prelaunch boot")
+        if not profile.get("allow_cross_boot_reseal"):
+            raise RuntimeError("reseal boot ID is not the reviewed prelaunch boot")
+        validate_reseal_boot_identity(profile, expected_boot_id)
     exact_hex(run_id, 32, "run ID")
     exact_hex(expected_commit, 40, "coordinator commit")
     for value, label in ((expected_staging_sha256, "staging digest"),
@@ -918,6 +933,8 @@ def reseal_candidate(expected_commit, expected_boot_id, expected_card_sha256,
                 "config_sha256":intended["config_sha256"],
                 "raw_sha256":sha_file(raw_image),"bootdisk_sha256":sha_file(bootdisk),
                 "backups":{name:str(path) for name,path in backups.items()}}
+            if profile.get("allow_cross_boot_reseal"):
+                record["cross_boot_reseal"] = True
             if prelaunch_proof is not None:
                 record["prelaunch_refusal"] = prelaunch_proof
                 record["authorizes_launch"] = False
