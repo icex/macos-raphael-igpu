@@ -26,6 +26,17 @@ public:
     }
 };
 
+inline bool criticalSnapshotCaughtUp(bool requestedBeforeSnapshot,
+                                     bool formatterComplete, bool uartFailed,
+                                     size_t sampledCount, uint64_t sampledDropped,
+                                     uint64_t sampledTruncated, size_t currentCount,
+                                     uint64_t currentDropped,
+                                     uint64_t currentTruncated) {
+    return requestedBeforeSnapshot && formatterComplete && !uartFailed &&
+           sampledCount == currentCount && sampledDropped == currentDropped &&
+           sampledTruncated == currentTruncated;
+}
+
 template <typename Io>
 class CriticalUart {
     static constexpr uint16_t kData = 0;
@@ -35,12 +46,15 @@ class CriticalUart {
     static constexpr uint16_t kMcr = 4;
     static constexpr uint16_t kLsr = 5;
     static constexpr uint8_t kThre = 0x20;
+    static constexpr uint8_t kDataReady = 0x01;
 
     Io &io_;
     bool initialized_ {};
     bool failed_ {};
     uint64_t snapshotStarted_ {};
     uint64_t snapshotTimeoutUs_ {kSnapshotTimeoutUs};
+    size_t quiesceMatch_ {};
+    bool quiesceRequested_ {};
 
     bool put(uint8_t byte) {
         if (!initialized_ || failed_) return false;
@@ -76,6 +90,13 @@ class CriticalUart {
         return true;
     }
 
+    bool writeHex(uint64_t value, unsigned width) {
+        static constexpr char digits[] = "0123456789abcdef";
+        for (unsigned i = width; i > 0; --i)
+            if (!put(digits[(value >> ((i - 1) * 4)) & 0xf])) return false;
+        return true;
+    }
+
 public:
     static constexpr uint16_t kBase = 0x2f8;
     static constexpr unsigned kIndex = 1;
@@ -102,6 +123,9 @@ public:
         io_.write(kBase + kIer, 0x00);  // Divisor high byte while DLAB is set.
         io_.write(kBase + kLcr, 0x03); // 8 data bits, no parity, one stop bit.
         io_.write(kBase + kFcr, 0x07); // Enable and clear both FIFOs.
+        // FCR also discards any partially received control token.  A latched
+        // complete request survives; the host retransmits an incomplete one.
+        if (!quiesceRequested_) quiesceMatch_ = 0;
         io_.write(kBase + kMcr, 0x03); // DTR and RTS.
         initialized_ = io_.read(kBase + kLcr) == 0x03 &&
                        io_.read(kBase + kLsr) != 0xff;
@@ -136,6 +160,41 @@ public:
             if (!put(build[i])) return false;
         }
         return writeText(suffix);
+    }
+
+    bool pollQuiesceRequest(size_t byteBudget = 16) {
+        if (!initialized_ || quiesceRequested_) return quiesceRequested_;
+        static constexpr char token[] = "RGPUQ2\n";
+        for (size_t consumed = 0; consumed < byteBudget; ++consumed) {
+            if ((io_.read(kBase + kLsr) & kDataReady) == 0) break;
+            const char value = static_cast<char>(io_.read(kBase + kData));
+            if (value == token[quiesceMatch_]) {
+                ++quiesceMatch_;
+                if (token[quiesceMatch_] == '\0') {
+                    quiesceRequested_ = true;
+                    quiesceMatch_ = 0;
+                    break;
+                }
+            } else {
+                quiesceMatch_ = value == token[0] ? 1 : 0;
+            }
+        }
+        return quiesceRequested_;
+    }
+
+    bool writeQuiesced(const char *build, uint32_t snapshot, uint16_t count) {
+        if (build == nullptr) return false;
+        for (size_t i = 0; i < 32; ++i) {
+            const char ch = build[i];
+            if (!((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f')))
+                return false;
+        }
+        if (build[32] != '\0') return false;
+        if (!writeFragment("RGPU_UART_QUIESCED v=1 b=")) return false;
+        for (size_t i = 0; i < 32; ++i)
+            if (!put(build[i])) return false;
+        return writeFragment(" s=") && writeHex(snapshot, 8) &&
+               writeFragment(" count=") && writeHex(count, 4) && put('\r') && put('\n');
     }
 
     void operator()(const char *line) { writeText(line); }

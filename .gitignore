@@ -6,3 +6,4 @@ src/rlc_fw.h
 # Terminal workspace state
 .termdesk.toml
 .termdesk-workspace.toml
+.aider*

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Drain the guest serial port into run/serial.log."""
-import socket, sys, threading, time
+import re, socket, stat, sys, threading, time
 import os, os.path
 VM = os.path.dirname(os.path.abspath(__file__))
 channel = os.environ.get("VM_SERIAL_CHANNEL")
@@ -9,6 +9,13 @@ if channel is not None and channel not in ("console", "critical"):
 p = os.environ.get("VM_SERIAL_SOCKET", os.environ.get(
     "VM_SERIAL", os.path.join(VM, "run", "serial.sock")))
 output = os.environ.get("VM_SERIAL_OUTPUT", os.path.join(VM, "run", "serial.log"))
+cid = os.environ.get("VM_SERIAL_CID")
+control = None
+if channel == "critical" and cid is not None:
+    if len(cid) != 64 or any(ch not in "0123456789abcdef" for ch in cid):
+        sys.exit("invalid serial collector CID")
+    control = os.path.join(os.path.dirname(output),
+                           "critical-quiesce-" + cid + ".request")
 for _ in range(60):
     try:
         s = socket.socket(socket.AF_UNIX); s.connect(p); break
@@ -53,6 +60,35 @@ with open(output, "ab", buffering=0) as f:
     sync_thread = threading.Thread(target=sync_log, name="serial-log-sync", daemon=True)
     sync_thread.start()
     capture_error = None
+    last_control_sent = None
+    def send_quiesce_if_requested():
+        if control is None or not os.path.exists(control):
+            return last_control_sent
+        descriptor = None
+        try:
+            descriptor = os.open(control, os.O_RDONLY | os.O_NONBLOCK |
+                                 getattr(os, "O_NOFOLLOW", 0))
+            metadata = os.fstat(descriptor)
+            if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > 180:
+                raise RuntimeError("invalid critical quiesce request")
+            value = os.read(descriptor, 181)
+        except FileNotFoundError:
+            return last_control_sent
+        except OSError as error:
+            raise RuntimeError("critical quiesce request unreadable") from error
+        finally:
+            if descriptor is not None:
+                os.close(descriptor)
+        match = re.fullmatch(
+            rb"RGPUQ2 v=1 cid=([0-9a-f]{64}) b=([0-9a-f]{32}) "
+            rb"run=([0-9a-f]{32})\n", value)
+        if match is None or match[1].decode() != cid:
+            raise RuntimeError("invalid critical quiesce request")
+        now = time.monotonic()
+        if last_control_sent is None or now - last_control_sent >= 1:
+            s.sendall(b"RGPUQ2\n")
+            return now
+        return last_control_sent
     try:
         # Optional launch-specific proof: published only after connect, log open,
         # and sync-worker start. The finally block also covers marker failures.
@@ -66,6 +102,7 @@ with open(output, "ab", buffering=0) as f:
                 if sync["error"] is not None:
                     break
             try:
+                last_control_sent = send_quiesce_if_requested()
                 d = s.recv(65536)
                 if not d:
                     break

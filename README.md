@@ -17,12 +17,18 @@ evidence required before adding another compatibility patch.
 
 ## Status
 
-**Experimental; full Metal acceleration is not working.** The authoritative living state,
+**Experimental; desktop Metal acceleration is not yet qualified.** Candidate 194 demonstrated
+three compute rounds (196,608 checked values) and one offscreen render/readback buffer (4,096
+checked pixels; four completed command buffers total), but its overall capture was inconclusive.
+The authoritative living state,
 including exact candidate identities, evidence, safety constraints, and the next reviewed step,
 is maintained in [status.md](status.md).
 
-Candidate 1.0.193 is the latest controlled attempt: it recovered safely but was inconclusive
-at the identity/route boundary. Further GPU attempts require the post-attempt Astra review and
+Candidate 1.0.194 is the latest controlled attempt: its native probe passed, but capture was
+incomplete and the run remains inconclusive at the identity/route boundary. Desktop presentation,
+repeatable crash/QEMU-close cleanup, performance, and game qualification remain unverified.
+See [status.md](status.md) for the frozen run and evidence. Further GPU attempts require the
+review at every three actual GPU attempts (the current post-review batch is 1/3), together with
 an explicitly pinned admission authority.
 
 Historical candidate 1.0.178 completed native accelerator startup, KIQ setup, and both separately authorized

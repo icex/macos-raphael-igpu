@@ -235,7 +235,7 @@ single clean run is not repeatability evidence. There is no defensible overall p
 | [x] | Hybrid diagnostic validated on hardware | 1.0.163: complete records; type10 fails after type10/type11 success |
 | [ ] | Repeatable clean initial state | Candidates 176, 177, 178-A and 178-B completed validated normal schema-6 cleanup, with three measured same-boot cleanup-to-restart transitions; clean state across independent host boots remains unproved |
 | [x] | Native hybrid queues / complete engine startup | Candidate 171 maps residual engine-2 channels to real SDMA0; hybrid status 0 and native start/power-up 1 on hardware |
-| [ ] | Correct Metal compute and offscreen rendering | First command buffer fails; zero results checked |
+| [x] | Correct Metal compute and offscreen rendering | Candidate 194 checked 196,608 compute values and 4,096 render/readback pixels across four completed command buffers; overall capture remains inconclusive |
 | [ ] | Per-process memory, synchronization and resource lifecycle | Must be exercised after first real completion |
 | [ ] | Accelerated desktop and presentation | WindowServer panic repair is not proof of accelerated composition |
 | [ ] | Physical iGPU display output | DCN 3.1.5 path remains a separate open milestone |
@@ -527,10 +527,10 @@ for it is a later separate qualification task.
 Game testing is deferred because it is outside the current desktop-rendering objective.
 `supported-games.md` remains an explicitly untested list until that scope changes.
 
-**Core acceleration achieved:** M3–M5 pass on the real iGPU. **Usable accelerated VM:**
-M6 desktop path and M7 lifecycle also pass. **Full roadmap complete:** physical display
-qualification, M8 application coverage and documented host-stability limits are included.
-These are different claims and must be reported separately.
+Candidate 194 passes the native core compute/render workload on the real iGPU, while its overall
+capture remains inconclusive; the remaining M3–M5 coverage criteria are still open. Desktop presentation (M6), repeatable lifecycle and
+host protection (M7), physical display output, performance, and application/game qualification
+remain unverified; no full-roadmap or usable accelerated-desktop claim is authorized.
 
 ## 6. Experiment discipline and speed targets
 

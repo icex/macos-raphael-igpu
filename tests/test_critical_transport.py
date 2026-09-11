@@ -44,6 +44,42 @@ class CriticalTransportTests(unittest.TestCase):
             with self.assertRaises(ValueError, msg=args):
                 tool.validate_boot_args(args, {"critical_replay_schema": 2})
 
+    def test_quiesce_requires_exact_opt_in_transport_and_boot_argument(self):
+        tool = module()
+        selected = {"critical_replay_schema": 2,
+                    "critical_replay_transport": TRANSPORT,
+                    "critical_replay_quiesce": {"version": 1}}
+        self.assertEqual(tool.quiesce(selected), {"version": 1})
+        tool.validate_boot_args(
+            "rgpucr2uart=2 rgpucr2quiesce=1", selected)
+        for args in ("rgpucr2uart=2", "rgpucr2uart=2 rgpucr2quiesce=0",
+                     "rgpucr2uart=2 rgpucr2quiesce=1 rgpucr2quiesce=1"):
+            with self.assertRaises(ValueError, msg=args):
+                tool.validate_boot_args(args, selected)
+        with self.assertRaises(ValueError):
+            tool.quiesce({"critical_replay_schema": 2,
+                          "critical_replay_quiesce": {"version": 1}})
+        with self.assertRaises(ValueError):
+            tool.quiesce(dict(selected,
+                              critical_replay_quiesce={"version": True}))
+        with self.assertRaises(ValueError):
+            tool.validate_boot_args("rgpucr2uart=2 rgpucr2quiesce=1", {
+                "critical_replay_schema": 2,
+                "critical_replay_transport": TRANSPORT})
+
+    def test_quiesce_ack_is_single_complete_and_exact(self):
+        tool = module(); build = "a" * 32
+        line = (f"RGPU_UART_QUIESCED v=1 b={build} "
+                "s=00000012 count=0034\r\n")
+        self.assertEqual(tool.quiesced_state(line, build), {
+            "state":"valid", "snapshot":0x12, "count":0x34})
+        for capture in (line[:-1], line + line, line + line[:-1],
+                        line + "RGPU_CR2 trailing\r\n",
+                        line.replace("b=" + build, "b=" + "b" * 32),
+                        line.replace("count=0034", "count=0201")):
+            self.assertEqual(tool.quiesced_state(capture, build)["state"],
+                             "pending" if capture == line[:-1] else "conflicting")
+
     def test_every_incomplete_ready_prefix_remains_pending(self):
         tool = module()
         build = "a" * 32

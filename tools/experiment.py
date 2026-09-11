@@ -347,6 +347,7 @@ def prepare(vm, spec, output, gpu=True, run_id=None):
     card = json.loads(spec.read_text())
     replay_schema = critical_replay_schema(card)
     transport = critical_replay_transport(card)
+    quiesce = critical_replay_quiesce(card)
     options = launch_options({'launch_options': card.get(
         'launch_options', {'BOOTDISK_MODE':'custom', 'NVRAM':'stock'})})
     lease_schema = card.get('recovery_lease_schema', 2)
@@ -383,6 +384,8 @@ def prepare(vm, spec, output, gpu=True, run_id=None):
             identity['critical_replay_transport'] = transport
             identity['critical_transport_validator_sha256'] = sha(
                 Path(__file__).with_name('critical-transport.py').read_bytes())
+        if quiesce is not None:
+            identity['critical_replay_quiesce'] = quiesce
         tolerance = critical_replay_tolerance(card)
         if tolerance is not None:
             if replay_schema != 2:
@@ -597,6 +600,10 @@ def critical_replay_transport(data):
     return transport_contract().validate(data)
 
 
+def critical_replay_quiesce(data):
+    return transport_contract().quiesce(data)
+
+
 def critical_uart_ready(capture, expected_build):
     return transport_contract().producer_ready_state(capture, expected_build) == 'valid'
 
@@ -632,11 +639,19 @@ def validate_manifest_replay_contract(manifest):
     critical_replay_schema(manifest)
     critical_replay_tolerance(manifest)
     transport = critical_replay_transport(manifest)
+    quiesce = critical_replay_quiesce(manifest)
     spec = manifest.get('spec')
     card_transport = (critical_replay_transport(spec)
                       if isinstance(spec, dict) else None)
     if transport != card_transport:
         raise ValueError('critical replay transport does not match experiment card')
+    card_quiesce = (critical_replay_quiesce(spec)
+                    if isinstance(spec, dict) else None)
+    if quiesce != card_quiesce:
+        raise ValueError('critical replay quiesce does not match experiment card')
+    if quiesce is not None and critical_replay_tolerance(manifest) == \
+            'terminal-prefix-open':
+        raise ValueError('critical replay quiesce requires functional capture strictness')
     key = 'recovery_critical_replay_tolerance'
     manifest_has_selector = key in manifest
     card_has_selector = isinstance(spec, dict) and key in spec
@@ -826,6 +841,80 @@ def persist_first_decision(output, manifest, state, readiness, serial_bytes,
                        record_count=replay_snapshot['count'])
     write_once(output/'first-decision.json', receipt)
     return receipt
+
+
+def quiesce_critical_producer(vm, output, manifest, state, supervisor,
+                              monitor, deadline):
+    """Request one caught-up CR2 snapshot and wait for its terminal ACK.
+
+    The absolute deadline is the run loop's existing cleanup boundary.  The
+    full capture is parsed without recovery's open-attempt tolerance; no prefix
+    is cut or substituted.
+    """
+    if critical_replay_quiesce(manifest) is None:
+        return None
+    cid = state.get('cid')
+    if not isinstance(cid, str) or not re.fullmatch(r'[0-9a-f]{64}', cid):
+        raise RuntimeError('critical producer quiesce has invalid container identity')
+    request = vm/'run'/f'critical-quiesce-{cid}.request'
+    request_bytes = (f'RGPUQ2 v=1 cid={cid} b={manifest["build_id"]} '
+                     f'run={manifest["run_id"]}\n').encode()
+    requested = time.time()
+    write_bytes_once(request, request_bytes)
+    try:
+        while time.time() < deadline:
+            supervisor.verify(state)
+            if monitor and monitor.error:
+                raise RuntimeError(monitor.error)
+            critical_bytes = (vm/'run/critical.log').read_bytes()
+            ack = transport_contract().quiesced_state(
+                critical_bytes.decode('utf-8', errors='replace'),
+                manifest['build_id'])
+            if ack['state'] == 'conflicting':
+                raise RuntimeError('critical producer quiesce ACK is conflicting')
+            if ack['state'] == 'valid':
+                tolerance = critical_replay_tolerance(manifest)
+                replay = helper('critical-replay').parse(
+                    critical_bytes.decode('utf-8', errors='replace'),
+                    manifest['build_id'],
+                    tolerate_corruption=tolerance == 'terminal-prefix')
+                if (replay['snapshot'] != ack['snapshot'] or
+                        replay['count'] != ack['count']):
+                    raise RuntimeError(
+                        'critical producer quiesce ACK does not match terminal snapshot')
+                receipt = {
+                    'schema':1,
+                    'meaning':('producer emitted a fresh caught-up snapshot after the '
+                               'host request, acknowledged it, and stopped replay'),
+                    'build_id':manifest['build_id'],
+                    'run_id':manifest['run_id'],
+                    'cid':cid,
+                    'requested_epoch':requested,
+                    'acknowledged_epoch':time.time(),
+                    'request_sha256':sha(request_bytes),
+                    'snapshot':ack['snapshot'],
+                    'record_count':ack['count'],
+                    'capture_acceptance':tolerance or 'strict',
+                    'critical_capture':{
+                        'byte_length':len(critical_bytes),
+                        'sha256':sha(critical_bytes),
+                    },
+                }
+                write_once(output/'critical-quiesce.json', receipt)
+                return receipt
+            time.sleep(0.1)
+        raise RuntimeError('critical producer quiesce missed cleanup boundary')
+    finally:
+        request.unlink(missing_ok=True)
+
+
+def verify_quiesced_capture(receipt, critical_bytes):
+    """Prove the producer wrote nothing after its acknowledged stop point."""
+    expected = receipt.get('critical_capture') if isinstance(receipt, dict) else None
+    if (not isinstance(critical_bytes, bytes) or not isinstance(expected, dict) or
+            expected.get('byte_length') != len(critical_bytes) or
+            expected.get('sha256') != sha(critical_bytes)):
+        raise RuntimeError('critical capture changed after producer quiesce ACK')
 
 
 def evidence_digest(directory):
@@ -2695,6 +2784,7 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
     recovery_tool = helper('vfio-recover') if manifest.get('gpu') is True else None
     state = None; probe = None; failure = None; shutdown_result = None; host_messages = []
     first_decision = None
+    critical_quiesce = None
     capture_pending = False
     recovery_result = None
     running_validated = False
@@ -2887,6 +2977,10 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                     if manifest['spec'].get('run_probe_only_after_native_start') is True and probe_fits(time.time(), state['launch_deadline_epoch'], state['deadline_epoch'],
                                   probe_seconds=50):
                         probe = run_probe(vm, manifest)
+                        if critical_replay_quiesce(manifest) is not None:
+                            critical_quiesce = quiesce_critical_producer(
+                                vm, output, manifest, state, supervisor,
+                                monitor, end)
                     break
                 if result['verdict'] not in ('INCONCLUSIVE',):
                     if decisive_since is None: decisive_since = time.time()
@@ -2962,6 +3056,12 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
         (output/'critical.txt').write_bytes(critical_bytes)
         write_once(output/'capture-sha256.json', {
             'serial.txt': sha(serial_bytes), 'critical.txt': sha(critical_bytes)})
+        if critical_quiesce is not None:
+            try:
+                verify_quiesced_capture(critical_quiesce, critical_bytes)
+            except RuntimeError as error:
+                if failure is None:
+                    failure = str(error)
     agent_events = vm/'run/agent-server-events.jsonl'
     if agent_events.is_file():
         (output/'agent-server-events.jsonl').write_bytes(agent_events.read_bytes())
@@ -2977,6 +3077,8 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
     result['warm_reuse'] = (recovery_result or {'status':'not-attempted'})['status']
     if first_decision is not None:
         result['first_decisive_readiness'] = first_decision
+    if critical_quiesce is not None:
+        result['critical_producer_quiesce'] = critical_quiesce
     result['functional_boundary'] = result.get('earliest_failure')
     result['termination_reason'] = failure
     if manifest.get('gpu') is False and not failure:

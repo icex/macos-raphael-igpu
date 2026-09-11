@@ -1,13 +1,21 @@
 #include <stdint.h>
 
+#include "src/CriticalUart.hpp"
+
+#ifndef QUIESCE_MODE
+#define QUIESCE_MODE 0
+#endif
+
 /* QEMU's x86 -kernel loader recognizes this Multiboot v1 header. */
 __attribute__((section(".multiboot"), used))
 static const uint32_t multiboot_header[] = {
     0x1badb002u, 0x00000000u, 0xe4524ffeu
 };
 
-extern const unsigned char _binary_payload_bin_start[];
-extern const unsigned char _binary_payload_bin_end[];
+extern "C" const unsigned char _binary_payload_bin_start[];
+extern "C" const unsigned char _binary_payload_bin_end[];
+extern "C" const unsigned char _binary_fresh_payload_bin_start[];
+extern "C" const unsigned char _binary_fresh_payload_bin_end[];
 
 static inline void out8(uint16_t port, uint8_t value) {
     __asm__ volatile("outb %0, %1" : : "a"(value), "Nd"(port));
@@ -38,7 +46,22 @@ static void uart_write(uint16_t base, const char *text) {
     while (*text) uart_putc(base, (uint8_t)*text++);
 }
 
-void guest_main(void) {
+struct GuestUartIo {
+    uint64_t clock;
+
+    uint8_t read(uint16_t port) {
+        ++clock;
+        return in8(port);
+    }
+    void write(uint16_t port, uint8_t value) {
+        ++clock;
+        out8(port, value);
+    }
+    uint64_t micros() { return ++clock; }
+    void delay(unsigned us) { clock += us; }
+};
+
+extern "C" void guest_main(void) {
     static const char ready[] =
         "RGPU_UART_READY v=1 b=0123456789abcdef0123456789abcdef port=2\n";
     static const char malformed_a[] =
@@ -48,11 +71,19 @@ void guest_main(void) {
     const unsigned char *cursor = _binary_payload_bin_start;
     const unsigned char *end = _binary_payload_bin_end;
     uint32_t interval = 0;
+    GuestUartIo io {};
+    rgpu::CriticalUart<GuestUartIo> critical(io);
 
     uart_init(0x3f8);
-    uart_init(0x2f8);
+    critical.initialize();
     uart_write(0x2f8, ready);
     uart_write(0x3f8, "COM1-BEGIN\n");
+#if QUIESCE_MODE != 0
+    const unsigned char *split = cursor + (end - cursor) / 2;
+    while (cursor != split) uart_putc(0x2f8, *cursor++);
+    uart_write(0x3f8, "COM1-REQUEST-WINDOW\n");
+    while ((in8(0x2f8 + 5) & 0x01) == 0) {}
+#endif
     while (cursor != end) {
         uart_putc(0x2f8, *cursor++);
         if (++interval == 97) {
@@ -62,11 +93,27 @@ void guest_main(void) {
         }
     }
     uart_write(0x3f8, "COM1-END\n");
+#if QUIESCE_MODE != 0
+    while (!critical.pollQuiesceRequest()) {}
+#if QUIESCE_MODE == 2
+    uart_write(0x3f8, "COM1-IGNORED-RGPUQ2\n");
+    for (;;) __asm__ volatile("hlt");
+#else
+    critical.beginSnapshot();
+    cursor = _binary_fresh_payload_bin_start;
+    end = _binary_fresh_payload_bin_end;
+    while (cursor != end) uart_putc(0x2f8, *cursor++);
+    critical.writeQuiesced("0123456789abcdef0123456789abcdef",
+                           0x01020305, 512);
+    for (;;) __asm__ volatile("hlt");
+#endif
+#else
     out8(0xf4, 0x2a);
     for (;;) __asm__ volatile("hlt");
+#endif
 }
 
-__attribute__((naked, section(".text.entry"), noreturn))
+extern "C" __attribute__((naked, section(".text.entry"), noreturn))
 void _start(void) {
     __asm__ volatile(
         "cli\n"

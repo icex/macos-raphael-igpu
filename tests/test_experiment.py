@@ -450,7 +450,7 @@ class ExperimentTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'explicit run_id'):
                 tool.prepare(root, spec, root/'manifest.json', gpu=True)
 
-    def test_prepare_copies_card_pinned_recovery_only_selector(self):
+    def test_prepare_copies_card_pinned_replay_contracts(self):
         tool = self.module()
         with tempfile.TemporaryDirectory() as temp:
             vm = Path(temp)
@@ -459,6 +459,8 @@ class ExperimentTests(unittest.TestCase):
                 'id':'metal-015', 'candidate_version':'1.0.182',
                 'requested_diagnostic':'rgpusubmit=1',
                 'critical_replay_schema':2, 'recovery_lease_schema':3,
+                'critical_replay_transport':TRANSPORT,
+                'critical_replay_quiesce':{'version':1},
                 'critical_replay_tolerance':'terminal-prefix',
                 'recovery_critical_replay_tolerance':'terminal-prefix-open',
                 'max_seconds':180,
@@ -467,7 +469,8 @@ class ExperimentTests(unittest.TestCase):
             spec.write_text(json.dumps(card))
             identity = {key:'fixture' for key in tool.IDENTITY_FIELDS}
             identity.update(source_clean=True,
-                            boot_args='rgpusubmit=1',
+                            boot_args=('rgpusubmit=1 rgpucr2uart=2 '
+                                       'rgpucr2quiesce=1'),
                             launch_options={'BOOTDISK_MODE':'custom', 'NVRAM':'stock'},
                             recovery_helpers_sha256=self.recovery_helper_hashes(3))
             output = vm / 'prepared.json'
@@ -478,6 +481,7 @@ class ExperimentTests(unittest.TestCase):
                 prepared = tool.prepare(
                     vm, spec, output, gpu=True, run_id='0' * 32)
             self.assertEqual(prepared['critical_replay_tolerance'], 'terminal-prefix')
+            self.assertEqual(prepared['critical_replay_quiesce'], {'version':1})
             self.assertEqual(prepared['recovery_critical_replay_tolerance'],
                              'terminal-prefix-open')
             self.assertEqual(prepared['spec'], card)
@@ -631,6 +635,92 @@ class ExperimentTests(unittest.TestCase):
         bad = copy.deepcopy(good)
         bad['serial_args'][-1] = 'isa-serial,chardev=rgpu_critical,index=0'
         self.assertIn('critical_uart_topology', tool.validate_running(manifest, bad))
+
+    def test_quiesce_producer_requires_matching_terminal_ack_and_removes_request(self):
+        tool = self.module()
+        with tempfile.TemporaryDirectory() as temp:
+            vm = Path(temp); (vm/'run').mkdir(); output = vm/'evidence'; output.mkdir()
+            contract = {'version':1}
+            manifest = {
+                'build_id':CR2_BUILD, 'run_id':'a'*32,
+                'critical_replay_schema':2,
+                'critical_replay_transport':TRANSPORT,
+                'critical_replay_quiesce':contract,
+                'critical_replay_tolerance':'terminal-prefix',
+                'spec':{'critical_replay_schema':2,
+                        'critical_replay_transport':TRANSPORT,
+                        'critical_replay_quiesce':contract},
+            }
+            state = {'cid':'c'*64}; now = [100.0]; verified = []
+            lines = snapshot_lines(['BUILD: identity='+CR2_BUILD], snapshot=7)
+            (vm/'run/critical.log').write_text(''.join(lines))
+            request = vm/'run'/('critical-quiesce-'+'c'*64+'.request')
+            ack = (f'RGPU_UART_QUIESCED v=1 b={CR2_BUILD} '
+                   's=00000007 count=0001\r\n')
+            def sleep(seconds):
+                self.assertEqual(request.read_text(),
+                    f'RGPUQ2 v=1 cid={"c"*64} b={CR2_BUILD} run={"a"*32}\n')
+                with (vm/'run/critical.log').open('a') as stream: stream.write(ack)
+                now[0] += seconds
+            supervisor = SimpleNamespace(verify=lambda saved:verified.append(saved))
+            monitor = SimpleNamespace(error=None)
+            with patch.object(tool.time, 'time', side_effect=lambda:now[0]), \
+                 patch.object(tool.time, 'sleep', side_effect=sleep):
+                receipt = tool.quiesce_critical_producer(
+                    vm, output, manifest, state, supervisor, monitor, 101)
+            self.assertEqual((receipt['snapshot'], receipt['record_count']), (7, 1))
+            self.assertEqual(receipt['critical_capture']['sha256'], hashlib.sha256(
+                (''.join(lines)+ack).encode()).hexdigest())
+            self.assertFalse(request.exists())
+            self.assertEqual(json.loads((output/'critical-quiesce.json').read_text()),
+                             receipt)
+            self.assertTrue(verified)
+
+    def test_quiesce_producer_fails_closed_on_ack_mismatch_or_deadline(self):
+        tool = self.module()
+        for mode in ('mismatch', 'deadline', 'monitor'):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as temp:
+                vm = Path(temp); (vm/'run').mkdir(); output = vm/'evidence'; output.mkdir()
+                contract = {'version':1}
+                manifest = {
+                    'build_id':CR2_BUILD, 'run_id':'a'*32,
+                    'critical_replay_schema':2,
+                    'critical_replay_transport':TRANSPORT,
+                    'critical_replay_quiesce':contract,
+                    'critical_replay_tolerance':'terminal-prefix',
+                    'spec':{'critical_replay_schema':2,
+                            'critical_replay_transport':TRANSPORT,
+                            'critical_replay_quiesce':contract},
+                }
+                state = {'cid':'c'*64}; now = [100.0]
+                capture = ''.join(snapshot_lines(
+                    ['BUILD: identity='+CR2_BUILD], snapshot=7))
+                if mode == 'mismatch':
+                    capture += (f'RGPU_UART_QUIESCED v=1 b={CR2_BUILD} '
+                                's=00000008 count=0001\r\n')
+                (vm/'run/critical.log').write_text(capture)
+                with patch.object(tool.time, 'time', side_effect=lambda:now[0]), \
+                     patch.object(tool.time, 'sleep', side_effect=lambda seconds:
+                         now.__setitem__(0, now[0]+seconds)):
+                    with self.assertRaisesRegex(RuntimeError,
+                            'does not match|missed cleanup boundary|host fault'):
+                        tool.quiesce_critical_producer(
+                            vm, output, manifest, state,
+                            SimpleNamespace(verify=lambda saved:None),
+                            SimpleNamespace(error=('host fault' if mode == 'monitor'
+                                                   else None)), 100.2)
+                self.assertFalse(any((vm/'run').glob('critical-quiesce-*.request')))
+                self.assertFalse((output/'critical-quiesce.json').exists())
+
+    def test_quiesced_capture_must_freeze_at_acknowledged_hash(self):
+        tool = self.module(); capture = b'complete\r\nACK\r\n'
+        receipt = {'critical_capture':{
+            'byte_length':len(capture),
+            'sha256':hashlib.sha256(capture).hexdigest()}}
+        self.assertIsNone(tool.verify_quiesced_capture(receipt, capture))
+        for changed in (capture+b'late', capture[:-1], b''):
+            with self.assertRaisesRegex(RuntimeError, 'changed after'):
+                tool.verify_quiesced_capture(receipt, changed)
 
     def test_no_generic_graphics_launch_options_and_running_argv_are_exact(self):
         tool = self.module()
@@ -2927,6 +3017,12 @@ class ExperimentTests(unittest.TestCase):
     def test_transient_inconclusive_before_ready_does_not_create_refusal_receipt(self):
         self.exercise_run('decision-receipt-ready')
 
+    def test_run_one_quiesces_producer_after_probe_before_shutdown(self):
+        self.exercise_run('producer-quiesce-ready')
+
+    def test_run_one_rejects_bytes_after_producer_ack(self):
+        self.exercise_run('producer-quiesce-post-ack-tail')
+
     def test_v2_receipt_does_not_create_generic_same_boot_authority(self):
         tool = self.module()
         with tempfile.TemporaryDirectory() as temp:
@@ -3069,8 +3165,10 @@ class ExperimentTests(unittest.TestCase):
                             launch_options={'BOOTDISK_MODE':'custom', 'NVRAM':'stock'},
                             source_clean=True, vfio_device='0000:7b:00.0',
                             candidate_directory='run/candidate-163', image_id='sha256:expected')
+            quiesce_modes = ('producer-quiesce-ready',
+                             'producer-quiesce-post-ack-tail')
             decision_modes = ('decision-receipt-capture-loss',
-                              'decision-receipt-ready')
+                              'decision-receipt-ready', *quiesce_modes)
             if mode in decision_modes:
                 manifest.update(
                     build_id=CR2_BUILD, boot_args='rgpucr2uart=2',
@@ -3084,6 +3182,10 @@ class ExperimentTests(unittest.TestCase):
                 manifest['spec']['critical_replay_schema'] = 2
                 manifest['spec']['recovery_critical_replay_tolerance'] = \
                     'terminal-prefix-open'
+                if mode in quiesce_modes:
+                    manifest['boot_args'] += ' rgpucr2quiesce=1'
+                    manifest['critical_replay_quiesce'] = {'version':1}
+                    manifest['spec']['critical_replay_quiesce'] = {'version':1}
                 if mode == 'decision-receipt-capture-loss':
                     manifest['critical_replay_tolerance'] = 'terminal-prefix'
                     manifest['spec']['critical_replay_tolerance'] = 'terminal-prefix'
@@ -3101,7 +3203,7 @@ class ExperimentTests(unittest.TestCase):
                      'HY: createHybridEngine exit: engine=1 valid=1 available-before=1 status=4',
                      'XJ: AMDHardware::startHWEngines -> 0']
             if mode in ('probe-ready', 'probe-no-budget',
-                        'decision-receipt-ready'):
+                        'decision-receipt-ready', *quiesce_modes):
                 lines = [
                     'BUILD: identity=abc',
                     'VM: route AMDGFX10VMM::prepareVMInvalidateRequest -> ok (org=0xffffff8000000000)',
@@ -3131,7 +3233,7 @@ class ExperimentTests(unittest.TestCase):
                     decision_prefix = (
                         f'RGPU_UART_READY v=1 b={CR2_BUILD} port=2\n' +
                         ''.join(corrupt) + ''.join(snapshot_lines(lines, snapshot=1)))
-                if mode == 'decision-receipt-ready':
+                if mode in ('decision-receipt-ready', *quiesce_modes):
                     initial = ['BUILD: identity=' + CR2_BUILD]
                     decision_prefix = (
                         f'RGPU_UART_READY v=1 b={CR2_BUILD} port=2\n' +
@@ -3157,6 +3259,13 @@ class ExperimentTests(unittest.TestCase):
                     tail = snapshot_lines(lines + ['shutdown-tail'], snapshot=2)[0]
                     with (vm/'run/critical.log').open('a') as stream:
                         stream.write(tail[:-17])
+                if mode in quiesce_modes:
+                    self.assertTrue((vm/'evidence/critical-quiesce.json').exists())
+                    self.assertFalse(any((vm/'run').glob(
+                        'critical-quiesce-*.request')))
+                if mode == 'producer-quiesce-post-ack-tail':
+                    with (vm/'run/critical.log').open('a') as stream:
+                        stream.write('late producer bytes\r\n')
                 calls.append(('guest-shutdown', state['cid'], expected_build))
                 return dict(cid=state['cid'], outcome='forced')
             def kernel(cursor=None):
@@ -3229,6 +3338,17 @@ class ExperimentTests(unittest.TestCase):
                 recover=recover, parse_v2_lease_records=parse_v2_lease_records)
             def probe(vm_path, prepared):
                 calls.append('probe')
+                if mode in quiesce_modes:
+                    metal = {
+                        'run_id':prepared['run_id'], 'passed':True, 'metal3':True,
+                        'device':'AMD Radeon Navi23', 'registry_id':1,
+                        'compute_rounds':3, 'compute_values_checked':196608,
+                        'render_pixels_checked':4096,
+                        'completed_command_buffers':4,
+                    }
+                    return {'run_id':prepared['run_id'],
+                            'output':('RGPU_METAL_RESULT '+json.dumps(metal)+'\n' +
+                                      'RGPU_EXIT '+prepared['run_id']+' 0\n')}
                 return {'run_id':prepared['run_id'],
                         'output':'RGPU_EXIT '+prepared['run_id']+' 1\n'}
             original_helper = tool.helper
@@ -3255,6 +3375,21 @@ class ExperimentTests(unittest.TestCase):
                              'reason':'CR2: CR2 snapshot has a missing chunk',
                              'definitive':False}]
                 return original_parse_manifest_serial(classifier, prepared, captured)
+            quiesce_written = [False]
+            def advance(seconds):
+                request = vm/'run'/('critical-quiesce-'+'c'*64+'.request')
+                if mode in quiesce_modes and request.exists():
+                    if not quiesce_written[0]:
+                        final = ''.join(snapshot_lines(lines, snapshot=3))
+                        ack = (f'RGPU_UART_QUIESCED v=1 b={CR2_BUILD} '
+                               f's=00000003 count={len(lines):04x}\r\n')
+                        with (vm/'run/critical.log').open('a') as stream:
+                            stream.write(final+ack)
+                        quiesce_written[0] = True
+                elif mode in ('decision-receipt-ready', *quiesce_modes) and \
+                        decision_ready_prefix is not None:
+                    (vm/'run/critical.log').write_text(decision_ready_prefix)
+                now[0] += seconds
             with patch.object(tool, 'current_identity', return_value=manifest), \
                  patch.object(tool, 'host_snapshot', return_value=host), \
                  patch.object(tool, 'helper', side_effect=helpers), \
@@ -3265,11 +3400,7 @@ class ExperimentTests(unittest.TestCase):
                  patch.object(tool, 'parse_manifest_serial',
                               side_effect=parse_manifest_serial), \
                  patch.object(tool.time, 'time', side_effect=lambda:now[0]), \
-                 patch.object(tool.time, 'sleep', side_effect=lambda n:(
-                     (vm/'run/critical.log').write_text(decision_ready_prefix)
-                     if mode == 'decision-receipt-ready' and
-                        decision_ready_prefix is not None else None,
-                     now.__setitem__(0,now[0]+n))[-1]):
+                 patch.object(tool.time, 'sleep', side_effect=advance):
                 out = vm/'evidence'
                 result = tool.run_one(vm, path, out)
                 self.assertEqual(calls.count('start'), 1)
@@ -3363,6 +3494,20 @@ class ExperimentTests(unittest.TestCase):
                     self.assertFalse((out/'first-decision.json').exists())
                     self.assertNotIn('first_decisive_readiness', result)
                     self.assertEqual(calls.count('probe'), 1, (result, calls))
+                elif mode == 'producer-quiesce-ready':
+                    self.assertEqual(result['verdict'], 'CORE_PROBE_PASS')
+                    self.assertTrue(result['valid'])
+                    receipt = result['critical_producer_quiesce']
+                    self.assertEqual((receipt['snapshot'], receipt['record_count']),
+                                     (3, len(lines)))
+                    self.assertEqual(calls.count('probe'), 1)
+                    raw = (out/'critical.txt').read_text()
+                    self.assertTrue(raw.endswith('count='+f'{len(lines):04x}'+'\n'))
+                    self.assertNotIn('capture_loss', result['evidence'])
+                elif mode == 'producer-quiesce-post-ack-tail':
+                    self.assertEqual(result['verdict'], 'INVALID')
+                    self.assertIn('changed after producer quiesce ACK', result['error'])
+                    self.assertEqual(calls.count('probe'), 1)
                 else:
                     self.assertEqual(result['verdict'], 'INVALID')
                     self.assertIn(('guest-shutdown','c'*64, 'fixture'), calls)

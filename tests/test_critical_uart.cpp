@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstring>
 #include <string>
+#include <deque>
 #include <utility>
 #include <vector>
 
@@ -21,6 +22,7 @@ struct FakeIo {
     uint8_t lcr {};
     std::vector<std::pair<uint16_t, uint8_t>> writes;
     std::string bytes;
+    std::deque<uint8_t> rx;
 
     uint8_t read(uint16_t port) {
         if (absent) return 0xff;
@@ -32,7 +34,13 @@ struct FakeIo {
             }
             now += readyReadJumpUs;
             readyReadJumpUs = 0;
-            return now < stallAt ? 0x60 : 0x40;
+            return static_cast<uint8_t>((now < stallAt ? 0x60 : 0x40) |
+                                        (rx.empty() ? 0 : 0x01));
+        }
+        if (port == 0x2f8 && (lcr & 0x80) == 0 && !rx.empty()) {
+            const uint8_t value = rx.front();
+            rx.pop_front();
+            return value;
         }
         if (port == 0x2fb) return lcr;
         return 0;
@@ -40,6 +48,7 @@ struct FakeIo {
     void write(uint16_t port, uint8_t value) {
         writes.emplace_back(port, value);
         if (port == 0x2fb) lcr = value;
+        if (port == 0x2fa && (value & 0x02)) rx.clear();
         if (port == 0x2f8 && (lcr & 0x80) == 0) {
             bytes.push_back(static_cast<char>(value));
             now += wireUsPerByte;
@@ -280,6 +289,58 @@ static void testHealthyAttemptsDoNotResetTheFifo() {
     assert(io.bytes.find("RGPU_UART_READY") < io.bytes.find("RGPU_CR2 healthy"));
 }
 
+static void testQuiesceTokenIsBoundedAndSurvivesRetransmitAfterFcrReset() {
+    FakeIo io;
+    Uart uart(io);
+    assert(uart.initialize());
+    for (char ch : std::string("noiseRGPU")) io.rx.push_back(ch);
+    assert(!uart.pollQuiesceRequest(8));
+    // Reinitialization clears a physical RX FIFO and must also clear a partial
+    // software match.  The collector retransmits the complete token.
+    assert(uart.initialize());
+    for (char ch : std::string("RGPUQ2\ntrailing-overflow")) io.rx.push_back(ch);
+    assert(uart.pollQuiesceRequest(8));
+    assert(io.rx.size() == std::string("trailing-overflow").size());
+    assert(uart.pollQuiesceRequest(1));
+}
+
+static void testQuiesceAckIsExactAndUsesNormalUartFailureLatch() {
+    FakeIo io;
+    Uart uart(io);
+    assert(uart.initialize());
+    io.bytes.clear();
+    uart.beginSnapshot();
+    assert(uart.writeQuiesced("00112233445566778899aabbccddeeff", 0x12, 0x34));
+    assert(io.bytes == "\r\nRGPU_UART_QUIESCED v=1 b=00112233445566778899aabbccddeeff s=00000012 count=0034\r\n");
+
+    FakeIo blocked;
+    Uart blockedUart(blocked);
+    assert(blockedUart.initialize());
+    blocked.bytes.clear();
+    blocked.stallAt = 0;
+    blockedUart.beginSnapshot();
+    assert(!blockedUart.writeQuiesced(
+        "00112233445566778899aabbccddeeff", 1, 1));
+    assert(blockedUart.failed());
+}
+
+static void testQuiesceOnlyAcknowledgesFreshStableCompleteSnapshot() {
+    assert(rgpu::criticalSnapshotCaughtUp(
+        true, true, false, 42, 0, 0, 42, 0, 0));
+    assert(!rgpu::criticalSnapshotCaughtUp(
+        false, true, false, 42, 0, 0, 42, 0, 0));
+    assert(!rgpu::criticalSnapshotCaughtUp(
+        true, false, false, 42, 0, 0, 42, 0, 0));
+    assert(!rgpu::criticalSnapshotCaughtUp(
+        true, true, true, 42, 0, 0, 42, 0, 0));
+    assert(!rgpu::criticalSnapshotCaughtUp(
+        true, true, false, 42, 0, 0, 43, 0, 0));
+    assert(!rgpu::criticalSnapshotCaughtUp(
+        true, true, false, 42, 0, 0, 42, 1, 0));
+    assert(!rgpu::criticalSnapshotCaughtUp(
+        true, true, false, 42, 0, 0, 42, 0, 1));
+}
+
 int main() {
     testWorkerBudgetCapsDelayAndReadiness();
     testInitializationOrderAndReadiness();
@@ -293,4 +354,7 @@ int main() {
     testMaximumFormatterSnapshotFitsDeadline();
     testFormatterOutputIsByteExactAndRetryIsLineDelimited();
     testHealthyAttemptsDoNotResetTheFifo();
+    testQuiesceTokenIsBoundedAndSurvivesRetransmitAfterFcrReset();
+    testQuiesceAckIsExactAndUsesNormalUartFailureLatch();
+    testQuiesceOnlyAcknowledgesFreshStableCompleteSnapshot();
 }
