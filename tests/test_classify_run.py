@@ -1618,7 +1618,7 @@ Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0
             '(entry=1 org=0xffffff800008edce)\n'
             'RGPU_EVENT build=abc seq=1 VM: map-process-root '
             'input=0xf40b709000 native=0xf40b709000 final=0x84b709000 '
-            'pasid=1 header=0xc00ea100 return-valid=1 repaired=1 reason=13\n')
+            'pasid=1 header=0xc00ea100 return-valid=1 repaired=1 reason=12\n')
         rows = classifier.parse_serial(serial)
         self.assertEqual([row['kind'] for row in rows],
                          ['vm_map_process_route', 'vm_map_process_root'])
@@ -1627,7 +1627,7 @@ Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0
         self.assertEqual(rows[1]['native_root'], 0xf40b709000)
         self.assertEqual(rows[1]['final_root'], 0x84b709000)
         self.assertEqual((rows[1]['pasid'], rows[1]['header'], rows[1]['reason']),
-                         (1, 0xc00ea100, 13))
+                         (1, 0xc00ea100, 12))
         self.assertTrue(rows[1]['return_valid'] and rows[1]['repaired'])
 
     def test_a1_map_process_malformed_prefix_fails_closed(self):
@@ -1645,10 +1645,10 @@ Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0
                 valid.replace('return-valid=1', 'return-valid=2'),
                 valid.replace('reason=0', 'reason=14'),
                 valid.replace('repaired=0', 'repaired=1').replace(
-                    'reason=0', 'reason=13').replace(
+                    'reason=0', 'reason=12').replace(
                     'final=0xf40b709000', 'final=0x84b709000'),
                 valid.replace('return-valid=1', 'return-valid=0').replace(
-                    'repaired=0', 'repaired=1').replace('reason=0', 'reason=13'),
+                    'repaired=0', 'repaired=1').replace('reason=0', 'reason=12'),
                 valid.replace('return-valid=1', 'return-valid=0').replace(
                     'header=0xc00ea100', 'header=0').replace('reason=0', 'reason=1'),
                 valid.replace('final=0xf40b709000', 'final=0xf40b709001'),
@@ -1714,7 +1714,7 @@ Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0
         route = dict(kind='vm_map_process_route', build='abc', seq=6, ok=True,
                      entry=True, original=0x8edce)
         repaired = dict(kind='vm_map_process_root', build='abc', seq=7, ok=True,
-                        guard_valid=True, repaired=True, reason=13,
+                        guard_valid=True, repaired=True, reason=12,
                         input_root=0xf40b709000, native_root=0xf40b709000,
                         final_root=0x84b709000, pasid=1)
         result = classify(manifest, base + [route, repaired], None)

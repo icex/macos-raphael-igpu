@@ -334,7 +334,7 @@ def _decode_payload(build, seq, payload):
                      (input_root, native_root, final_root)) and
                  pasid <= 0xffffffff and header <= 0xffffffff and reason <= 13 and
                  ((repaired and return_valid and header == 0xc00ea100 and
-                   reason == 13 and native_root != final_root) or
+                   reason == 12 and native_root != final_root) or
                   (not repaired and
                   ((return_valid and native_root == final_root) or
                     (not return_valid and native_root == 0 and final_root == 0 and
