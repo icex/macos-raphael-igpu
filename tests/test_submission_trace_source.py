@@ -44,14 +44,14 @@ class SubmissionTraceSourceTests(unittest.TestCase):
         self.assertIn('commitWindow.calls, commitWindow.failures', source)
         self.assertIn('commitWindow.firstSequence, commitWindow.lastSequence', source)
 
-    def test_allocator_diagnostic_reads_native_total_free_without_policy_change(self):
+    def test_allocator_diagnostic_avoids_unproven_native_calls(self):
         source = (ROOT / 'src/RaphaelGPU.cpp').read_text()
         start = source.index('static bool wrapBackingAllocPhysical')
         end = source.index('static void wrapSubmitBuffer', start)
         body = source[start:end]
-        self.assertIn('vtable + 0x1f8', body)
-        self.assertIn('snapshot.freeBytes = (*totalFree)', body)
-        self.assertIn('free=%#llx->%#llx', source)
+        self.assertNotIn('vtable + 0x1f8', body)
+        self.assertNotIn('totalFree', body)
+        self.assertIn('counters=%llu/%llu->%llu/%llu', source)
 
     def test_backing_summary_has_periodic_and_global_bounds(self):
         source = (ROOT / 'src/RaphaelGPU.cpp').read_text()

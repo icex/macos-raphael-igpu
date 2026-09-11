@@ -5288,21 +5288,7 @@ static bool wrapBackingAllocPhysical(void *backing) {
         [](void *object) {
             return FunctionCast(wrapBackingAllocPhysical, orgBackingAllocPhysical)(object);
         },
-        [](const void *object) {
-            auto snapshot = RaphaelBacking::captureSnapshot(object);
-            if (!snapshot.available) return snapshot;
-            auto bytes = static_cast<const uint8_t *>(object);
-            auto allocator = __atomic_load_n(
-                reinterpret_cast<const uintptr_t *>(bytes + 0x110), __ATOMIC_RELAXED);
-            if (allocator == 0) return snapshot;
-            auto vtable = __atomic_load_n(reinterpret_cast<uintptr_t *>(allocator),
-                                          __ATOMIC_RELAXED);
-            if (vtable == 0) return snapshot;
-            using TotalFree = uint64_t (*)(void *);
-            auto totalFree = reinterpret_cast<TotalFree *>(vtable + 0x1f8);
-            snapshot.freeBytes = (*totalFree)(reinterpret_cast<void *>(allocator));
-            return snapshot;
-        });
+        [](const void *object) { return RaphaelBacking::captureSnapshot(object); });
 }
 
 static void wrapSubmitBuffer(void *channel, void *descriptor) {
@@ -5479,8 +5465,7 @@ static void publishPendingSubmissionTrace() {
         const auto &after = backingObservation.after;
         CRLOG("SUB: backing seq=%u object=%#llx thread=%#llx pool=%u result=%u "
               "pre=%u/%#llx/%#llx/%#llx/%#llx/%#x "
-              "post=%u/%#llx/%#llx/%#llx/%#llx/%#x counters=%llu/%llu->%llu/%llu "
-              "free=%#llx->%#llx state=live",
+              "post=%u/%#llx/%#llx/%#llx/%#llx/%#x counters=%llu/%llu->%llu/%llu state=live",
               backingObservation.sequence,
               static_cast<uint64_t>(backingObservation.backing),
               static_cast<uint64_t>(backingObservation.threadToken),
@@ -5491,8 +5476,7 @@ static void publishPendingSubmissionTrace() {
               after.available, after.length, static_cast<uint64_t>(after.owner),
               after.element, after.raw120, after.flags,
               backingObservation.successfulBefore, backingObservation.failedBefore,
-              backingObservation.successfulAfter, backingObservation.failedAfter,
-              before.freeBytes, after.freeBytes);
+              backingObservation.successfulAfter, backingObservation.failedAfter);
     }
     // Load each result counter once. The sum describes this live snapshot; sample
     // publication and drops may legitimately lag while another callback is active.

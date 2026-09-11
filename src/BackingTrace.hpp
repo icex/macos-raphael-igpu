@@ -16,7 +16,6 @@ struct Snapshot {
     uint64_t raw120;
     uint32_t flags;
     bool available;
-    uint64_t freeBytes = 0;
 };
 
 inline Snapshot captureSnapshot(const void *backing) {
