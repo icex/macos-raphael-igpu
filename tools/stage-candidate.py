@@ -100,7 +100,7 @@ RESEAL_PROFILES = {
     ("1.0.194", "metal-029"): {
         "candidate_version":"1.0.194", "card_id":"metal-029",
         "prior_run_id":"b4a41ca47553618a58bab320b3b0c2fb",
-        "nonce_source_run_id":"1f0649a6a31fbf73162696891cf5b9bc",
+        "nonce_source_run_id":"4d9d8c0e6a7b4fcb9a1e2d3c4b5a6978",
         "record_kind":"candidate194-hybrid-reseal",
         "staging_sha256":"640409b94b4613a62710705c431e44115c052d4e6bcb7fa81ae7d408a92b7c9d",
         "card_sha256":None,
