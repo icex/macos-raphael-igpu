@@ -1106,6 +1106,22 @@ class ExperimentTests(unittest.TestCase):
                     tool.recover_v2(
                         recovery, Path('/not-opened'), bad_manifest, 'cr2 wire')
 
+    def test_preownership_no_lease_requires_exact_zero_submission_panic(self):
+        tool = self.module()
+        serial = (
+            'XV: AMDHWVMM::init(...) -> 1\n'
+            'SUB: summary process=0/0/0 mappings=0/0/0 prepare=0/0/0 '
+            'map=0/0/0 submit=0/0/0 dropped=0/0\n'
+            'panic symbol: __ZN27AMDRadeonX6000_AMDHWHandler13wireSysMemoryEPvyjP11IOAccelTaskj + 0x57\n')
+        self.assertTrue(tool.preownership_no_lease(serial))
+        for changed in (
+                serial.replace('submit=0/0/0', 'submit=1/0/0'),
+                serial + 'XH2 ABORT reason=early\n',
+                serial + 'XH3 LIFETIME state=VALID\n',
+                serial.replace('wireSysMemory', 'other')):
+            with self.subTest(changed=changed):
+                self.assertFalse(tool.preownership_no_lease(changed))
+
     def test_raphael_target_marker_is_exact_and_bound_to_the_vbios_device(self):
         tool = self.module()
         check = getattr(tool, 'raphael_target_marked', None)

@@ -130,6 +130,17 @@ class RecoveryLeaseProductionTests(unittest.TestCase):
         self.assertIn(
             'CRLOG("XV: setMemoryAllocationsEnabled(%u) entry:', wrapper)
 
+    def test_early_disable_is_suppressed_before_vmm_ownership(self):
+        wrapper = self._function(
+            "static void wrapVmmSetAlloc", "static void probeRlc")
+        guard = wrapper.index("early disable", 0)
+        native = wrapper.index(
+            "FunctionCast(wrapVmmSetAlloc, orgVmmSetAlloc)(self, enable);", guard)
+        self.assertLess(guard, native)
+        self.assertIn("slot(0x20) == nullptr", wrapper)
+        self.assertIn("slot(0x28) == nullptr", wrapper)
+        self.assertIn("recoveryLeaseConfigured", wrapper)
+
     def test_deploy_preflight_guards_the_v2_production_contract(self):
         for token in (
                 'static bool wrapHwMemEnable(void *self) {',
