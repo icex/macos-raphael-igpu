@@ -18,6 +18,7 @@ class FakeSocket:
     def __init__(self, payload):
         self.payload = list(payload)
         self.connects = []
+        self.sent = []
 
     def connect(self, path):
         self.connects.append(path)
@@ -27,6 +28,9 @@ class FakeSocket:
 
     def recv(self, _size):
         return self.payload.pop(0)
+
+    def sendall(self, value):
+        self.sent.append(value)
 
 
 class SercatTests(unittest.TestCase):
@@ -67,6 +71,81 @@ class SercatTests(unittest.TestCase):
              self.assertRaises(SystemExit):
             runpy.run_path(str(TOOL), run_name="__main__")
         self.assertEqual(fake.connects, [])
+
+    def test_critical_quiesce_request_is_cid_bound_and_retransmitted(self):
+        class IdleThenClose(FakeSocket):
+            def recv(self, _size):
+                value = self.payload.pop(0)
+                if isinstance(value, BaseException):
+                    raise value
+                return value
+
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            output = base / "critical.log"
+            control = base / ("critical-quiesce-" + CID + ".request")
+            control.write_text(
+                f"RGPUQ2 v=1 cid={CID} b={'c'*32} run={'d'*32}\n")
+            fake = IdleThenClose([socket.timeout(), socket.timeout(), b""])
+            env = {"VM_SERIAL_SOCKET": str(base / "critical.sock"),
+                   "VM_SERIAL_OUTPUT": str(output),
+                   "VM_SERIAL_CHANNEL": "critical", "VM_SERIAL_CID": CID}
+            with patch.dict(os.environ, env, clear=True), \
+                 patch.object(socket, "socket", return_value=fake), \
+                 patch("os.fsync"), \
+                 patch("time.monotonic", side_effect=[0, 1, 2]):
+                runpy.run_path(str(TOOL), run_name="__main__")
+            self.assertEqual(fake.sent, [b"RGPUQ2\n"] * 3)
+
+            control.write_text(
+                f"RGPUQ2 v=1 cid={'b'*64} b={'c'*32} run={'d'*32}\n")
+            rejected = FakeSocket([b""])
+            with patch.dict(os.environ, env, clear=True), \
+                 patch.object(socket, "socket", return_value=rejected), \
+                 patch("os.fsync"), \
+                 self.assertRaisesRegex(SystemExit, "serial capture failed"):
+                runpy.run_path(str(TOOL), run_name="__main__")
+            self.assertEqual(rejected.sent, [])
+
+    def test_console_collector_never_reads_or_sends_quiesce_control(self):
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            output = base / "console.log"
+            (base / ("critical-quiesce-" + CID + ".request")).write_text(CID + "\n")
+            fake = FakeSocket([b""])
+            env = {"VM_SERIAL_SOCKET": str(base / "console.sock"),
+                   "VM_SERIAL_OUTPUT": str(output),
+                   "VM_SERIAL_CHANNEL": "console", "VM_SERIAL_CID": CID}
+            with patch.dict(os.environ, env, clear=True), \
+                 patch.object(socket, "socket", return_value=fake), \
+                 patch("os.fsync"):
+                runpy.run_path(str(TOOL), run_name="__main__")
+            self.assertEqual(fake.sent, [])
+
+    def test_request_removal_between_exists_and_open_is_benign(self):
+        class IdleThenClose(FakeSocket):
+            def recv(self, _size):
+                value = self.payload.pop(0)
+                if isinstance(value, BaseException):
+                    raise value
+                return value
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td); output = base / "critical.log"
+            fake = IdleThenClose([socket.timeout(), b""])
+            env = {"VM_SERIAL_SOCKET": str(base / "critical.sock"),
+                   "VM_SERIAL_OUTPUT": str(output),
+                   "VM_SERIAL_CHANNEL": "critical", "VM_SERIAL_CID": CID}
+            control = base / ("critical-quiesce-" + CID + ".request")
+            real_exists = os.path.exists
+            def exists(path):
+                return True if str(path) == str(control) else real_exists(path)
+            with patch.dict(os.environ, env, clear=True), \
+                 patch.object(socket, "socket", return_value=fake), \
+                 patch("os.path.exists", side_effect=exists), \
+                 patch("os.open", side_effect=FileNotFoundError()), \
+                 patch("os.fsync"):
+                runpy.run_path(str(TOOL), run_name="__main__")
+            self.assertEqual(fake.sent, [])
 
     def test_slow_fsync_does_not_stop_socket_drain(self):
         """Durability I/O must not backpressure QEMU's UART socket."""

@@ -1,14 +1,136 @@
-# Current status — candidate 194 prelaunch refusal; no new GPU attempt (2026-09-11)
+# Current status — candidate 194 passed Metal compute/render; capture incomplete (2026-09-11)
 
-## Current authoritative state — candidate 194 prelaunch refusal (2026-09-11)
+## Admission control session 009 (2026-09-11)
 
-Candidate 193 consumed **1/3 launches** on fresh boot
-`f828eb26-9cb7-4fac-bff2-bc87515fa2ba` and classified
-`INCONCLUSIVE` at `identity_or_route_missing` with `capture_loss` evidence.
-Recovery completed successfully with `authorizes_launch=true`. The mandatory
-Astra review is complete; the review batch is reset to **0 attempts** while
-the unresolved GPU-execution streak remains **14 actual cycles**. The next
-attempt requires a newly reviewed admission policy. Astra report SHA-256 is
+This GPU-less session ran the same signed-v2 desktop helper under three
+execution contexts (root, direct `gui/501` LaunchAgent, and a shell wrapper).
+All three reached the helper's main path and then aborted while writing their
+receipt: Foundation rejects `NSDataWritingAtomic | NSDataWritingWithoutOverwriting`
+as an invalid option combination (signal `Abort trap: 6`). This is an
+application bug, not evidence of AMFI or GPU failure. The exact captured
+commands, launchd state, per-control serial offsets, and metadata are frozen
+under `/home/bogdan/macos-vm/run/desktop-session-009/admission`; no GPU
+attempt was consumed and the ledger remains **2/3**. The fix is staged in the
+desktop-195 worktree: use `NSDataWritingAtomic` alone, then rerun the same
+three controls with the rebuilt binary before any hybrid GPU launch.
+
+## Hybrid preparation session 010 (2026-09-11)
+
+A fresh GPU-less guest compiled the corrected existing-display helper
+successfully. Source SHA-256 is
+`ff150b488e7c978e9c7a6a729318913fe25cba2203d1baacd41a14bb73b1e652` and
+binary SHA-256 is
+`f4966b86f857558a4bf1a69af55b20f59a4ee7d4380d48f3f69247c2c07643f9`.
+Preparation exited 0; no GPU launch was consumed. The guest was stopped under
+the exact supervisor after preparation. The remaining launch needs a fresh
+authority binding this pair to the Raphael registry, QEMU scanout, and cleanup.
+
+The hybrid coordinator integration is now staged in development commit
+`eea37e5` with helper/source coverage in `9fe2fcf`. It accepts a separate
+`existing-display-production` profile, pins QEMU generic graphics only for that
+profile, launches QEMU monitor frame capture under the same deadline, and keeps
+compositor and physical-scanout provenance explicitly unproven. The combined
+offline coordinator/helper suite passes **139 tests**. No hardware launch has
+been performed with this profile yet; a fresh one-run card still needs to bind
+the candidate-194 recovery receipt and the new hybrid identities.
+
+## Desktop access sessions 006–008 (2026-09-11)
+
+Session 006 used the clean candidate-194 supervisor, pinned image
+`sha256:3a3c82c79bc4e73531f819ccdfa4053b3084efd7c1f645678dbf8b4b3a24369c`,
+generic VMware graphics, and no VFIO/GPU argument. The user logged into a real
+`bogdan:501` Aqua session. Through supported System Settings UI, automatic login
+was changed from Off to Bogdan Popa and Screen Sharing was changed from Off to
+On while Remote Management remained Off. The separate private autologin helper
+was never run. Read-only verification reported `autoLoginUser=bogdan`, enabled
+`com.apple.screensharing`, and a guest TCP 5900 listener. Exact-CID shutdown was
+forced after a successful guest request. UI and shutdown receipts are under
+`/home/bogdan/macos-vm/run/desktop-session-006-ui`.
+
+Session 007 used the same pinned, GPU-less generic-display topology. Persisted
+automatic login reached `bogdan:501` and `gui/501 session = Aqua` without input.
+Supported Screen Sharing UI enabled legacy VNC password authentication using a
+new, separate eight-character secret held in a user-owned mode-0600 file outside
+the repository; no secret value entered command arguments or evidence. Access
+remains `Only these users: Administrators`, which includes Bogdan but is broader
+than the intended single-user scope. Remote Management remained Off. Guest TCP
+5900 listened, but no host viewer/frame qualification was completed. Exact-CID
+shutdown exited normally after the request. Evidence is under
+`/home/bogdan/macos-vm/run/desktop-session-007`.
+
+Session 008 used the same supervisor and pinned image with the actual headless
+QEMU topology `-vga none -display none`, no generic graphics device, and no
+VFIO/GPU argument. Persisted automatic login again reached `bogdan:501` and an
+Aqua `gui/501` domain while the display count remained zero. Screen Sharing
+listened on guest TCP 5900, and the host loopback path returned the exact RFB
+banner `RFB 003.889\\n`; this proves the transport endpoint, not a desktop
+surface or Raphael composition.
+
+The pinned desktop helper source SHA-256 was
+`b43ad3df9435c1094649b875f6ee0e815a2cdfa1a74b974f8cf90aac3998146c`.
+The first guest compile succeeded, but the execution produced no desktop result.
+Its `region 0, not code signed` log line does not establish rejection because a
+known passing probe emitted the same warning. A reviewed v2 prepare then ad-hoc
+signed and strictly verified a new binary with SHA-256
+`78f2f596e86521137e21d80d78e030dec798b87da312053e235aa7ed60c5ca64`;
+execution still failed before emitting a desktop result. The frozen raw serial
+records `AMFI: ... is adhoc signed.` followed by
+`AMFI: code signature validation failed.` No virtual display was created or
+removed, so GPU-less display qualification remains incomplete. Exact-CID
+shutdown was forced after a successful request. Evidence is under
+`/home/bogdan/macos-vm/run/desktop-session-008`; the post-shutdown serial,
+agent events, QEMU launch log, final supervision snapshot, and SHA-256 manifest
+were frozen before any later launch. Sessions 006–008 were GPU-less and did not
+change the **2/3** GPU launch ledger or the actual-GPU review count.
+
+## Current authoritative state — first real Metal compute/render pass (2026-09-11)
+
+The launch ledger is **2/3** on fresh boot
+`f828eb26-9cb7-4fac-bff2-bc87515fa2ba`: candidate 193 and candidate 194 used
+one launch each. Candidate 194's authenticated native Metal probe
+is the first demonstrated real GPU compute and offscreen render/readback pass:
+three randomized compute command buffers checked **196,608 values**, and one
+render/blit/readback command buffer used a private 64x64 render target and
+checked all **4,096 pixels**, for four completed buffers total. The passed-through
+device was reported as `AMD Radeon Navi23`, Metal 3, registry ID `0x1000002ed`. The exact
+supervised CID was
+`71bdfae412a34c7b2dee7303ffa71e8ef210089d6a6829ecc8415d932077304d`;
+its recorded QEMU topology contains only VFIO `0000:7b:00.0` at PCI slot 6,
+`-vga none`, and `-display none`, with no generic graphics device. Serial binds
+the Navi23 driver to `[0:6:0]` / `S30@6`.
+
+The frozen overall verdict remains `INCONCLUSIVE` at
+`identity_or_route_missing` with `capture_loss`. Snapshot 6 ends mid-transport
+line and is not accepted as a complete functional capture. Read-only replay of
+the immutable prefix through checksum-complete snapshot 5 (`count=293`, 251,788
+bytes, SHA-256
+`7007c42cc05df47ed588a1e7b1790dce055b8b88aa9ad7f786dbf24b1bfbc880`)
+produces valid `PROBE_NOT_RUN`; pairing those strict-prefix events with the
+authenticated probe produces valid `CORE_PROBE_PASS`. This is forensic support
+for the independent functional result, not a rewrite of the frozen verdict or
+acceptance of the truncated tail. Snapshot 5 records the mode-5 gate, route,
+and consistent mode-5 bulk-update summaries, but contains no A1
+`map-process-root` sample. Do not claim that the A1 correction caused the pass.
+
+Recovery completed once as schema 6 `recovered`, `authorizes_launch=true`: two
+active MEC HQDs were dequeued with no timeout or forced-inactive fallback, final
+active state was zero, the persistent reservation remained unchanged, and no
+new host-kernel messages were recorded. This establishes cleanup after this
+successful workload once; it does not establish repeatable cleanup, guest-crash
+cleanup, or QEMU-close cleanup.
+
+Candidate 194 demonstrably crossed the first-command-completion issue. The
+historical **14-cycle unresolved execution streak is closed**; the interim
+15-cycle statement was superseded because it counted the successful attempt as
+another unresolved failure. The mandatory-review batch is **1 attempt** (`194`).
+The new desktop-presentation and lifecycle issue has GPU-less discriminator
+runs (inventory 003 and desktop sessions 004–005); they do not consume the GPU
+launch ledger. The launch
+ledger is **2/3**. No GPU retry is authorized; the remaining work is visible
+desktop presentation followed by repeatable normal, guest-crash, and QEMU-close
+cleanup qualification.
+
+The mandatory Astra review is complete. Astra report SHA-256 is
 `ecfb42b240ae15be0ddc68626191462919c86b1ea6732ad04ae58e089a42481b`.
 P0 is validated: the production formatter emits the active mode, with positive
 `PROBE_NOT_RUN` and negative unchanged-193 classifier coverage. P1 decision
@@ -27,11 +149,218 @@ invocation was refused before ledger reservation because the coordinator
 checkout was dirty (`source_clean`). The frozen output is
 `/home/bogdan/macos-vm/run/metal-028-194`; its verdict is
 `INVALID` at `identity_or_route_missing` with two `capture_loss` records and
-`warm_reuse=not-attempted`. The ledger remains **1/3 launches** and this does
-not count as a GPU attempt. Any reviewed retry must invoke the repository
+`warm_reuse=not-attempted`. At that refusal the ledger remained **1/3
+launches**, and it did not count as a GPU attempt. Any reviewed retry must invoke
+the repository
 `tools/experiment.py` from the clean candidate-194 worktree, with a fresh
 manifest/output/policy binding; the failed output and existing authority are
 immutable evidence.
+
+The resealed candidate-194 run is frozen under
+`/home/bogdan/macos-vm/run/metal-028-194-resealed` with run ID
+`1f0649a6a31fbf73162696891cf5b9bc`. Verdict SHA-256 is
+`01987196b14c47057672b690715ca7e01cf9dc9a5ffd00d5aaa32ad4b5bdaacc`, probe
+SHA-256 is `339c0e652308d9af57ba948045b86196b11d0da74fc7cc5e27d11eae25b4a8c9`,
+recovery SHA-256 is
+`389631b0041fa92e38e7f458bfeb813851540a798cd4a74934e2ab0dd6924f8a`, and
+serial SHA-256 is
+`4b7f3514a8bffa2848ca325794decc4bc6b250de0b43e71314dd92b1fc67502c`.
+Critical SHA-256 is
+`43a7dd59487fad6264c28d8f5b349d66709d08b08066ae3fb266122f8be50cb5`,
+manifest SHA-256 is
+`99e56a676c588fa44d6b5210ca899c9334e73a154f8c568fb96d92c8ef3b477b`,
+and the probe source SHA-256 is
+`f0fc0ced81fe70732c3491cff1557a83d85c9ccb8c18a6303f9070ae1f969d77`.
+The coordinator verified guest build `24G830` and probe binary SHA-256
+`1637e4b31bca0a1bdc400f96e34b344a823de1b408a8d1677d6bcca475c8c787`
+immediately before nonce-bound execution. The result contains exactly one
+matching `passed=true` record and `RGPU_EXIT 1f0649a6a31fbf73162696891cf5b9bc 0`.
+
+The authorized GPU-less virtual-display inventory is frozen under
+`/home/bogdan/macos-vm/run/desktop-inventory-001`. It used a clean candidate
+194 supervisor with `GENERIC_GRAPHICS=off`, `GDB=off`, custom boot disk, stock
+NVRAM, `-vga none`, `-display none`, and no VFIO/GPU arguments. The guest agent
+was ready and the inventory binary exited 0, but validation failed closed:
+WindowServer was running, all four `CGVirtualDisplay` classes and required
+selectors were present, while the online display list was empty and
+ScreenCaptureKit preflight was false. Exact-CID shutdown sent the guest request
+and then forced the container within the 20-second grace bound. Inventory
+runner SHA-256 is
+`be7c7da7589544e761bd58252757d71bbb364530fc2f5b64b17cfb4833e37d25`; source
+SHA-256 is
+`1cffd80d3ab1fa5a1011a868bcae9df7663a9c8a8a4f48ba9ff6237438d9f833`.
+This GPU-less run did not change the GPU ledger and does not establish guest
+desktop presentation.
+
+The inventory archive includes the supervisor state, launch CID, raw QEMU
+launch log, serial log, agent-server events, and inventory identity/output/error.
+No standalone shutdown-result JSON, running-identity snapshot, or host-after
+snapshot was emitted by this direct supervisor/inventory procedure; the
+shutdown outcome is preserved only in the exact-CID shutdown console result and
+the guest serial log. Post-cleanup inspection found no active VM/container.
+The GPU ledger remains 2/3; its existing JSON was not modified by this
+GPU-less run.
+
+### GPU-less virtual-display inventory 002 (2026-09-11)
+
+A second authorized GPU-less inventory used CID
+`324f9255da5f87c61d6f8fa3f00309608bfeede3985063dbc462536361d48114` with the
+same no-GPU topology (`-vga none -display none`, `GENERIC_GRAPHICS=off`,
+`GDB=off`, custom boot disk, stock NVRAM). The guest agent became ready and
+the corrected inventory binary completed its ABI inventory, but its one bounded
+create/remove lifecycle failed closed: `created=false`, `added=false`,
+`settings_applied=false`, and `removed=false`, despite `cleanup_complete=true`.
+The runtime inventory again reported no online displays, with capture blockers
+`console_session_unavailable` and `screen_capture_permission_absent`.
+
+Evidence is frozen under
+`/home/bogdan/macos-vm/run/desktop-inventory-002`, including the live running
+identity, exact QEMU argv, both raw command outputs, supervisor state, raw
+serial/launcher/agent logs, exact shutdown return, host-after snapshot, and
+ledger-after copy. Shutdown returned `forced` after a successful request with
+no error, and no container remains. The GPU ledger remains 2/3 and its
+SHA-256 is `4300754fb8ed2ad909b733381a28c09f15532b3067cbef75bfbe9d392bfcf7f4`.
+This GPU-less result does not establish virtual-display creation or desktop
+presentation.
+
+### GPU-less virtual-display inventory 003 (2026-09-11)
+
+The third authorized GPU-less inventory used CID
+`f7ec297176883e19a91d2d77a968efe1fe15f13ffa05227c2a5091c116a46fed` with the
+same reviewed no-GPU topology and clean candidate-194 supervisor. The ABI
+inventory passed (`display_list_error=0`, all reviewed classes/selectors
+present, WindowServer running), but the single bounded Chromium-compatible
+create/remove attempt failed closed. The raw result had `abi_valid=true` and
+`cleanup_complete=true`, while `created=false`, `settings_applied=false`,
+`added=false`, `active=false`, `removed=false`, and no display ID. The guest
+also reported no console user/session and no online displays; the runner
+rejected the lifecycle record as incomplete. The runner source SHA-256 is
+`8acdd6e93069aa3ba9221b22da80be1285c647dafef10998a09635068dc7357a`, and its
+Objective-C source SHA-256 is
+`48b406afff819bf2c4b2db454fa670ebbbc5b8f194cc7f134e7ddfe3dd187ff7`.
+
+Evidence is frozen under
+`/home/bogdan/macos-vm/run/desktop-inventory-003`, including the fresh
+identity, inventory/create outputs, raw serial and agent logs, running
+supervision state, exact shutdown receipt (`forced` after a successful request),
+host-after snapshot, and unchanged ledger-after copy. The ledger remains 2/3;
+this GPU-less run is not an actual GPU experiment and establishes neither
+virtual-display creation nor desktop presentation.
+
+### GPU-less desktop session inventory 004 (2026-09-11)
+
+An authorized software-only session used the clean candidate-194 supervisor
+with a 600-second bound, `GENERIC_GRAPHICS=off`, `GDB=off`, custom boot disk,
+stock NVRAM, and no GPU/VFIO arguments. CID
+`19880f6f12f9733a03a082e8b2fbe596f13dd5a5c7f01ccf57116dcdbf7f118a` was
+shut down once by the exact-CID procedure (`forced` after a successful request,
+no error). Frozen evidence is under
+`/home/bogdan/macos-vm/run/desktop-session-004`, including supervisor state,
+running state, QEMU launch log, serial logs, agent events, nonce-bound query
+outputs, parity inventory, shutdown receipt, host-after snapshot, and ledger
+copy.
+
+Read-only account discovery identified `bogdan` UID 501. The attempted
+`launchctl print gui/501` command returned exit 127; because the command's
+availability/path was not captured, this result is indeterminate and does not
+prove that the GUI domain is absent. `loginwindow` and `WindowServer` were
+observed. The parity inventory passed ABI discovery but reported
+`console_uid=0`, an empty console user, no online displays, and
+`screen_capture_preflight=false`. No login, credential, TCC, display
+configuration, or GPU operation was performed. The GPU ledger remains 2/3 and
+this run does not count as an actual GPU experiment.
+
+### GPU-less desktop session inventory 005 (2026-09-11)
+
+An authorized software-only prelogin session used the clean candidate-194
+supervisor with the same reviewed no-GPU topology and a 600-second bound. CID
+`9d45de0accd2dd7fc80a7dba250557926e248bc9545f22b2d1c57241230ca1b6` was shut
+down by the exact-CID procedure: the guest request was sent, then the
+container was forced after the request returned no error. No VM/container is
+currently active. Frozen evidence is under
+`/home/bogdan/macos-vm/run/desktop-session-005`, including the launch and
+supervision state, serial and agent logs, session/context queries, login
+prerequisites, virtual-display inventory/create outputs, shutdown receipt,
+and host-after snapshot. The live ledger remained unchanged at **2/3**; no
+ledger-after copy was emitted in this archive.
+
+The query captured the actual `/bin/launchctl` path (`which` exit 0). Account
+discovery identified `bogdan` UID 501; `user/501` exists in `session = Background`
+with exit 0, while `launchctl print gui/501` returned exit 125 (`Domain does
+not support specified action`). The context query observed the WindowServer
+daemon as a system launchd service (its actual process user is
+`_windowserver`, user ID 88), while the console remained UID 0 (`root`). The
+virtual-display inventory reported `window_server_running=true`,
+`console_user=""`, `console_uid=0`, and no online displays; the create result
+was ABI-valid but failed closed with `created=false`, `settings_applied=false`,
+`added=false`, `active=false`, `removed=false`, `display_id=0`, and
+`display_init=nil`/`serverDisplay=0`. The raw WindowServer log contains explicit
+prelogin access errors: “This user is not allowed access to the window system
+right now.” The corrected log completed with `status=0`, `truncated=0`, and
+`bytes=25672`.
+
+Prerequisite checks reported FileVault Off, no DEP or MDM enrollment, no
+`autoLoginUser`, and no `kcpassword` metadata. This run is GPU-less, does not
+consume the GPU launch ledger (still **2/3**), and provides no desktop proof.
+The next planned discriminator is a reversible guest login validation followed
+by the same session/display checks; it has not been implemented or run.
+
+### Offline CR2 producer-quiesce implementation (not deployed)
+
+The frozen candidate-194 result above is unchanged. Its 335,062-byte critical
+capture has six checksum-clean `RGPU_END2` lines through snapshot 5
+(`count=293`), followed by snapshot 6, which ends mid physical line at
+`r=00a3 p=03/06 `. Recovery-only replay records 502 checksum-valid chunks in
+that open attempt. The agent log places successful probe completion at
+05:49:43.682660Z, the native shutdown request afterward, and guest exit near
+05:49:53Z. The truncated bytes are observed evidence; expiry of the worker's
+10-second inter-snapshot sleep during shutdown is an inference from those times
+and the producer code, not a guest-timestamped causal observation.
+
+An offline, opt-in producer lifecycle handshake is now implemented and reviewed.
+It requires both the exact manifest/card selector
+`"critical_replay_quiesce":{"version":1}` and boot argument
+`rgpucr2quiesce=1`; historical manifests retain the prior path. After a probe,
+the coordinator writes a CID/build/run-bound request for the existing full-duplex
+COM2 collector. The collector sends a seven-byte RX token. The worker polls at
+snapshot boundaries and during its existing sleep, emits a fresh snapshot, and
+acknowledges only when formatter/UART completion succeeds and record count,
+drop count, and truncation count remain unchanged. A token received during an
+ordinary snapshot requires a newer sample. The single ACK binds build,
+snapshot, and count, then the replay worker terminates. The coordinator waits
+only to the existing deadline-minus-25 cleanup boundary, applies the unchanged
+functional parser, preserves the full raw stream, and later requires its exact
+length and SHA-256 to remain equal to the acknowledged capture. Missing,
+conflicting, nonconverging, or post-ACK output fails closed; host-fault,
+shutdown, recovery, and exposure limits are unchanged.
+
+Focused validation passed 123 Python experiment/transport/collector tests, the
+UART C++ fixture, and a final 23-test targeted rerun including request-unlink
+races and bytes after ACK. A scratch-only cross-build linked an x86_64 Mach-O
+kext bundle with SHA-256
+`e5264d3042d56e80670454597020a7d4bc7cb0d64ed1b300a04adb39e1ed222f`;
+only the existing warning classes appeared. No release build, staging, VM/GPU
+run, ledger use, or hardware validation was performed.
+
+The previously missing end-to-end transport lifecycle coverage now passes in a
+software-only QEMU guest with no VFIO, host device, or network. The source-built
+guest uses the production `CriticalUart.hpp` RX parser and ACK writer; the host
+uses production `sercat.py` and `quiesce_critical_producer`. A request delivered
+mid ordinary snapshot produced a newer checksum-complete snapshot
+`0x01020305` with 512 records, one matching ACK, and no later bytes. An
+independent ignore mode proved actual token receipt on COM1, withheld the ACK,
+hit the existing helper boundary, removed the request, and stopped the exact
+software QEMU instance. The source/maximum-payload and two lifecycle cases pass
+4/4 in 6.457 seconds; the affected Python set passes 23/23 and the UART
+ASAN/UBSAN fixture passes. All three freestanding guest modes compile with
+warnings as errors, and `_start` disassembly begins directly with `cli`, stack
+assignment, and `call guest_main`, with no compiler prologue. CI installs QEMU
+and multilib explicitly, requires both lifecycle tests instead of permitting a
+skip, and now runs the UART fixture explicitly. Candidate/card metadata and a
+coordinator final audit remain required before deployment. The current ledger
+stays **2/3**, the mandatory-review batch stays **1 attempt**, the closed
+historical execution streak stays closed, and desktop-presentation/lifecycle
+testing remains **0 failed attempts / not yet tried**.
 
 ### Candidate 194 debugger limitation and result decision tree
 

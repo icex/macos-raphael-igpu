@@ -212,6 +212,7 @@ static rgpu::DiagnosticRecords<256, 512> diagnostics {};
 // that bounded set alongside the existing VM/SDMA evidence budget.
 static rgpu::DiagnosticRecords<rgpu::kCriticalRecordCapacity, 512> criticalRecords {};
 static bool criticalUartEnabled = false;
+static bool criticalUartQuiesceEnabled = false;
 static rgpu::SuccessRecordBudget waitStampRecordBudget {};
 static rgpu::SuccessRecordBudget kiqSubmitRecordBudget {};
 static rgpu::SuccessRecordBudget preClearFaultRecordBudget {};
@@ -521,6 +522,7 @@ static void criticalDumpThread(void *, wait_result_t) {
 
     // Keep the complete worker within the existing 180-second observation window.
     // A blocked attempt consumes only the remaining window, and never emits END.
+    bool quiesceRequested = false;
     for (unsigned replay = 0; replay < 18; ++replay) {
         const uint64_t remaining = budget.remainingUs(io.micros());
         if (remaining == 0) break;
@@ -529,13 +531,22 @@ static void criticalDumpThread(void *, wait_result_t) {
         if (uart.failed() && !uart.initialize()) {
             SYSLOG("rgpu", "critical COM2 snapshot %u initialization failed", replay);
         } else {
+            if (criticalUartQuiesceEnabled && uart.pollQuiesceRequest())
+                quiesceRequested = true;
             const uint64_t snapshotRemaining = budget.remainingUs(io.micros());
             if (snapshotRemaining == 0) break;
+            // A quiesce request observed before this attempt makes it a fresh
+            // post-request sample.  A request received during an ordinary
+            // attempt always gets another snapshot, even if that attempt happened
+            // to finish after the request reached the UART.
+            const bool finalAttempt = quiesceRequested;
+            const size_t count = criticalRecords.size();
+            const uint64_t dropped = criticalRecords.dropped();
+            const uint64_t truncated = criticalRecords.truncated();
             uart.beginSnapshot(snapshotRemaining < decltype(uart)::kSnapshotTimeoutUs ?
                                snapshotRemaining : decltype(uart)::kSnapshotTimeoutUs);
             const bool complete = rgpu::CriticalReplayV2::emitSnapshot(
-                RGPU_BUILD_ID, replay, criticalRecords.size(), criticalRecords.dropped(),
-                criticalRecords.truncated(),
+                RGPU_BUILD_ID, replay, count, dropped, truncated,
                 [](size_t sequence,
                    char (&record)[rgpu::CriticalReplayV2::kRecordStorageBytes]) {
                     return criticalRecords.read(sequence, record);
@@ -545,10 +556,39 @@ static void criticalDumpThread(void *, wait_result_t) {
                 SYSLOG("rgpu", "critical replay snapshot %u deferred", replay);
             else if (uart.failed())
                 SYSLOG("rgpu", "critical COM2 snapshot %u transmission failed", replay);
+            if (criticalUartQuiesceEnabled && uart.pollQuiesceRequest())
+                quiesceRequested = true;
+            if (rgpu::criticalSnapshotCaughtUp(
+                    finalAttempt, complete, uart.failed(), count, dropped, truncated,
+                    criticalRecords.size(), criticalRecords.dropped(),
+                    criticalRecords.truncated()) &&
+                    uart.writeQuiesced(RGPU_BUILD_ID, replay,
+                                       static_cast<uint16_t>(count))) {
+                thread_terminate(current_thread());
+                return;
+            }
         }
         const uint64_t remainingUs = budget.remainingUs(io.micros());
         if (remainingUs == 0) break;
-        if (remainingUs >= UINT64_C(10000000))
+        if (criticalUartQuiesceEnabled && quiesceRequested)
+            continue;
+        if (criticalUartQuiesceEnabled) {
+            // Preserve the ten-second cadence while making the control path
+            // responsive.  RX polling has a fixed byte budget and never logs.
+            const uint64_t sleepUs = remainingUs < UINT64_C(10000000) ?
+                remainingUs : UINT64_C(10000000);
+            const uint64_t sleepEnd = io.micros() + sleepUs;
+            while (io.micros() < sleepEnd) {
+                if (uart.pollQuiesceRequest()) {
+                    quiesceRequested = true;
+                    break;
+                }
+                const uint64_t left = sleepEnd - io.micros();
+                if (left >= UINT64_C(10000)) IOSleep(10);
+                else if (left >= 1000) IOSleep(static_cast<unsigned>(left / 1000));
+                else IODelay(static_cast<unsigned>(left));
+            }
+        } else if (remainingUs >= UINT64_C(10000000))
             IOSleep(10000);
         else if (remainingUs >= 1000)
             IOSleep(static_cast<unsigned>(remainingUs / 1000));
@@ -6440,6 +6480,13 @@ static void pluginStart() {
                                              sizeof(criticalUart)) && criticalUart == 2;
     RLOG("rgpucr2uart=%u: dedicated polling-only COM2 critical replay %s",
          criticalUartEnabled ? 2 : 0, criticalUartEnabled ? "enabled" : "disabled");
+    uint32_t criticalQuiesce = 0;
+    criticalUartQuiesceEnabled = criticalUartEnabled &&
+        PE_parse_boot_argn("rgpucr2quiesce", &criticalQuiesce,
+                           sizeof(criticalQuiesce)) && criticalQuiesce == 1;
+    RLOG("rgpucr2quiesce=%u: bounded COM2 producer quiesce %s",
+         criticalUartQuiesceEnabled ? 1 : 0,
+         criticalUartQuiesceEnabled ? "enabled" : "disabled");
     uint32_t cps = 0;
     if (PE_parse_boot_argn("rgpucp", &cps, sizeof(cps)) && cps == 1) {
         cpSurgeryEnabled = true;

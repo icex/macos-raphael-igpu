@@ -5,6 +5,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import secrets
 import shutil
 import socket
 import subprocess
@@ -18,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 GUEST_SOURCE = ROOT / "tests/fixtures/com2-guest.c"
 GUEST_LINKER = ROOT / "tests/fixtures/com2-guest.ld"
 BUILD_ID = "0123456789abcdef0123456789abcdef"
+QEMU_IMAGE = "sha256:3a3c82c79bc4e73531f819ccdfa4053b3084efd7c1f645678dbf8b4b3a24369c"
 
 
 GENERATOR_SOURCE = r'''
@@ -27,7 +29,7 @@ GENERATOR_SOURCE = r'''
 #include <cstring>
 
 namespace CR = rgpu::CriticalReplayV2;
-int main() {
+int main(int argc, char **argv) {
     static std::array<std::array<char, CR::kRecordStorageBytes>,
                       CR::kMaximumRecords> records {};
     for (size_t record = 0; record < records.size(); ++record) {
@@ -40,6 +42,10 @@ int main() {
         return true;
     };
     const auto emit = [](const char *line) { std::printf("%s\n", line); };
+    if (argc == 2 && std::strcmp(argv[1], "fresh") == 0)
+        return CR::emitSnapshot("0123456789abcdef0123456789abcdef",
+                                0x01020305, CR::kMaximumRecords, 0, 0,
+                                read, emit) ? 0 : 1;
     if (!CR::emitSnapshot("0123456789abcdef0123456789abcdef",
                           0x01020303, 1, 0, 0, read, emit)) return 1;
     return CR::emitSnapshot("0123456789abcdef0123456789abcdef",
@@ -54,7 +60,10 @@ def run_checked(args, *, cwd=None, timeout=30, text=False):
                           timeout=timeout, text=text)
 
 
-def build_fixture(work):
+def build_fixture(work, mode="legacy"):
+    modes = {"legacy": 0, "quiesce": 1, "ignore": 2}
+    if mode not in modes:
+        raise ValueError("unknown COM2 guest mode")
     generator = work / "generator.cpp"
     generator.write_text(GENERATOR_SOURCE)
     generator_bin = work / "generator"
@@ -62,15 +71,24 @@ def build_fixture(work):
                  str(generator), "-o", str(generator_bin)])
     payload = work / "payload.bin"
     payload.write_bytes(run_checked([str(generator_bin)]).stdout)
+    fresh_payload = work / "fresh-payload.bin"
+    fresh_payload.write_bytes(run_checked([str(generator_bin), "fresh"]).stdout)
 
     run_checked(["objcopy", "-I", "binary", "-O", "elf32-i386",
                  "-B", "i386", "payload.bin", "payload.o"], cwd=work)
-    run_checked(["gcc", "-m32", "-Os", "-ffreestanding", "-fno-pic",
-                 "-fno-pie", "-fno-stack-protector", "-nostdlib", "-c",
-                 str(GUEST_SOURCE), "-o", "guest.o"], cwd=work)
+    run_checked(["objcopy", "-I", "binary", "-O", "elf32-i386",
+                 "-B", "i386", "fresh-payload.bin", "fresh-payload.o"], cwd=work)
+    run_checked(["g++", "-x", "c++", "-std=c++17", "-m32", "-Os",
+                 "-Wall", "-Wextra", "-Werror",
+                 "-ffreestanding", "-fno-exceptions", "-fno-rtti",
+                 "-fno-threadsafe-statics", "-fno-pic", "-fno-pie",
+                 "-fno-stack-protector", "-nostdlib", "-I", str(ROOT),
+                 f"-DQUIESCE_MODE={modes[mode]}", "-c", str(GUEST_SOURCE),
+                 "-o", "guest.o"], cwd=work)
     guest = work / "com2-guest.elf"
     run_checked(["ld", "-m", "elf_i386", "-T", str(GUEST_LINKER),
-                 "-o", str(guest), "guest.o", "payload.o"], cwd=work)
+                 "-o", str(guest), "guest.o", "payload.o", "fresh-payload.o"],
+                cwd=work)
     return payload, guest
 
 
@@ -80,6 +98,22 @@ def load_replay():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def load_experiment():
+    path = ROOT / "tools/experiment.py"
+    spec = importlib.util.spec_from_file_location("experiment_qualification", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def require_local_qemu(test):
+    if shutil.which("qemu-system-x86_64") or shutil.which("docker"):
+        return
+    if os.environ.get("RGPU_REQUIRE_QEMU_QUALIFICATION") == "1":
+        test.fail("required qemu-system-x86_64 qualification runtime is missing")
+    test.skipTest("qemu-system-x86_64 is unavailable")
 
 
 def wait_for(predicate, message, timeout=15):
@@ -114,8 +148,156 @@ def validate_captures(console, critical):
     return load_replay().parse(critical[len(ready):].decode("ascii"), BUILD_ID)
 
 
+class LocalSupervisor:
+    def __init__(self, vm):
+        self.vm = vm
+
+    def verify(self, state):
+        if state.get("cid") != self.vm.cid or not self.vm.running():
+            raise RuntimeError("local QEMU identity or lifetime changed")
+
+
+class LocalQemu:
+    """Minimal software-only QEMU harness around the production collector."""
+
+    def __init__(self, root, guest):
+        self.root = root
+        self.run_dir = root / "run"
+        self.output = root / "evidence"
+        self.run_dir.mkdir(parents=True)
+        self.output.mkdir()
+        self.guest = guest
+        self.cid = None
+        self.run_id = secrets.token_hex(16)
+        self.process = None
+        self.collectors = []
+        self.containerized = False
+
+    def start(self):
+        qemu = shutil.which("qemu-system-x86_64")
+        guest_path = str(self.guest)
+        qmp_path = str(self.run_dir / "qmp.sock")
+        serial_path = str(self.run_dir / "serial.sock")
+        critical_path = str(self.run_dir / "critical.sock")
+        prefix = []
+        if qemu:
+            self.cid = secrets.token_hex(32)
+            prefix = [qemu]
+        elif shutil.which("docker"):
+            self.containerized = True
+            shutil.copy2(self.guest, self.root / "com2-guest.elf")
+            cidfile = self.root / "container.cid"
+            prefix = [
+                "docker", "run", "--rm", "--cidfile", str(cidfile),
+                "--network", "none",
+                "--mount", f"type=bind,src={self.root},dst=/run/com2",
+                "--entrypoint", "/usr/sbin/qemu-system-x86_64", QEMU_IMAGE]
+            guest_path = "/run/com2/com2-guest.elf"
+            qmp_path = "/run/com2/run/qmp.sock"
+            serial_path = "/run/com2/run/serial.sock"
+            critical_path = "/run/com2/run/critical.sock"
+        else:
+            raise RuntimeError("QEMU qualification runtime is unavailable")
+        self.process = subprocess.Popen(prefix + [
+            "-accel", "tcg", "-machine", "pc", "-cpu", "max",
+            "-m", "16M", "-nodefaults", "-vga", "none", "-display", "none",
+            "-no-reboot", "-net", "none", "-S",
+            "-qmp", f"unix:{qmp_path},server=on,wait=off",
+            "-chardev", ("socket,id=rgpu_console,path=" +
+                         f"{serial_path},server=on,wait=off"),
+            "-device", "isa-serial,chardev=rgpu_console,index=0",
+            "-chardev", ("socket,id=rgpu_critical,path=" +
+                         f"{critical_path},server=on,wait=off"),
+            "-device", "isa-serial,chardev=rgpu_critical,index=1",
+            "-device", "isa-debug-exit,iobase=0xf4,iosize=0x04",
+            "-kernel", guest_path,
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if self.containerized:
+            cidfile = self.root / "container.cid"
+            wait_for(lambda: cidfile.is_file() and cidfile.stat().st_size >= 64,
+                     "Docker did not publish the QEMU CID")
+            self.cid = cidfile.read_text().strip()
+            if len(self.cid) != 64:
+                raise RuntimeError("Docker returned an invalid QEMU CID")
+        for name in ("qmp.sock", "serial.sock", "critical.sock"):
+            wait_for(lambda n=name: (self.run_dir / n).exists(),
+                     f"local QEMU did not create {name}")
+        for stem, channel in (("serial", "console"), ("critical", "critical")):
+            env = dict(os.environ,
+                       VM_SERIAL_SOCKET=str(self.run_dir / f"{stem}.sock"),
+                       VM_SERIAL_OUTPUT=str(self.run_dir / f"{stem}.log"),
+                       VM_SERIAL_READY=str(self.run_dir / f"{stem}.ready"),
+                       VM_SERIAL_CHANNEL=channel, VM_SERIAL_CID=self.cid)
+            self.collectors.append(subprocess.Popen(
+                ["python3", "-u", str(ROOT / "tools/sercat.py")], env=env,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+        for stem in ("serial", "critical"):
+            wait_for(lambda s=stem: (self.run_dir / f"{s}.ready").is_file(),
+                     f"production {stem} collector did not become ready")
+
+    def cont(self):
+        qmp_cont(self.run_dir / "qmp.sock")
+
+    def running(self):
+        return self.process is not None and self.process.poll() is None
+
+    def console_log(self):
+        return self.run_dir / "serial.log"
+
+    def critical_log(self):
+        return self.run_dir / "critical.log"
+
+    def request_path(self):
+        return self.run_dir / f"critical-quiesce-{self.cid}.request"
+
+    def wait_for_request_window(self):
+        wait_for(lambda: (self.console_log().is_file() and
+                          b"COM1-REQUEST-WINDOW" in self.console_log().read_bytes()),
+                 "guest did not enter its mid-snapshot request window")
+
+    def request_quiesce(self, deadline):
+        manifest = {
+            "build_id": BUILD_ID, "run_id": self.run_id,
+            "critical_replay_schema": 2,
+            "critical_replay_transport": {
+                "kind": "isa-serial", "version": 1, "index": 1,
+                "io_base": 760, "baud": 115200,
+                "socket": "run/critical.sock", "capture": "critical.txt"},
+            "critical_replay_quiesce": {"version": 1},
+        }
+        return load_experiment().quiesce_critical_producer(
+            self.root, self.output, manifest, {"cid": self.cid},
+            LocalSupervisor(self), None, deadline)
+
+    def stop_exact(self):
+        if self.running():
+            if self.containerized:
+                subprocess.run(["docker", "stop", "--time", "0", self.cid],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            else:
+                self.process.terminate()
+            try:
+                self.process.wait(5)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+                self.process.wait(5)
+
+    def cleanup(self):
+        self.stop_exact()
+        for collector in self.collectors:
+            try:
+                collector.wait(5)
+            except subprocess.TimeoutExpired:
+                collector.terminate()
+                try:
+                    collector.wait(2)
+                except subprocess.TimeoutExpired:
+                    collector.kill()
+                    collector.wait(2)
+
+
 class SupervisedQemu:
-    IMAGE = "sha256:3a3c82c79bc4e73531f819ccdfa4053b3084efd7c1f645678dbf8b4b3a24369c"
+    IMAGE = QEMU_IMAGE
 
     def __init__(self, root, guest, *, swap_indices=False, swap_sockets=False,
                  missing_channel=None):
@@ -232,6 +414,44 @@ class CriticalTransportQualification(unittest.TestCase):
             print("maximum CR2 fixture:", len(data), "bytes;",
                   f"{minimum_seconds:.3f}s nominal wire time; sha256",
                   hashlib.sha256(data).hexdigest())
+
+    def test_real_qemu_quiesce_is_newer_acknowledged_and_silent(self):
+        require_local_qemu(self)
+        with tempfile.TemporaryDirectory(prefix="rgpu-com2-quiesce-") as raw:
+            work = Path(raw)
+            _, guest = build_fixture(work, mode="quiesce")
+            vm = LocalQemu(work / "vm", guest)
+            self.addCleanup(vm.cleanup)
+            vm.start()
+            vm.cont()
+            vm.wait_for_request_window()
+            receipt = vm.request_quiesce(time.time() + 8)
+            self.assertEqual((receipt["snapshot"], receipt["record_count"]),
+                             (0x01020305, 512))
+            before = vm.critical_log().read_bytes()
+            time.sleep(0.5)
+            after = vm.critical_log().read_bytes()
+            self.assertEqual(after, before)
+            load_experiment().verify_quiesced_capture(receipt, after)
+
+    def test_real_qemu_ignored_token_hits_boundary_and_cleans_up(self):
+        require_local_qemu(self)
+        with tempfile.TemporaryDirectory(prefix="rgpu-com2-ignore-") as raw:
+            work = Path(raw)
+            _, guest = build_fixture(work, mode="ignore")
+            vm = LocalQemu(work / "vm", guest)
+            self.addCleanup(vm.cleanup)
+            vm.start()
+            vm.cont()
+            vm.wait_for_request_window()
+            with self.assertRaisesRegex(RuntimeError, "missed cleanup boundary"):
+                vm.request_quiesce(time.time() + 2)
+            wait_for(lambda: b"COM1-IGNORED-RGPUQ2" in vm.console_log().read_bytes(),
+                     "guest did not receive the ignored control token")
+            self.assertFalse(vm.request_path().exists())
+            self.assertNotIn(b"RGPU_UART_QUIESCED", vm.critical_log().read_bytes())
+            vm.stop_exact()
+            self.assertFalse(vm.running())
 
     @unittest.skipUnless(shutil.which("docker") and shutil.which("systemd-run"),
                          "Docker and user systemd are required for the offline gate")

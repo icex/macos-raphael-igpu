@@ -13,9 +13,16 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Install FAT image test utilities
-        run: sudo apt-get update && sudo apt-get install -y mtools
+      - name: Install test utilities
+        run: sudo apt-get update && sudo apt-get install -y g++-multilib mtools qemu-system-x86
       - run: python3 -B -m unittest discover -s tests -v
+      - name: Validate producer quiesce over a real software UART
+        env:
+          RGPU_REQUIRE_QEMU_QUALIFICATION: '1'
+        run: |
+          python3 -B tests/qualify_critical_transport.py \
+            CriticalTransportQualification.test_real_qemu_quiesce_is_newer_acknowledged_and_silent \
+            CriticalTransportQualification.test_real_qemu_ignored_token_hits_boundary_and_cleans_up -v
       - name: Validate address arithmetic
         run: |
           for source in tests/test_gart_addresses.cpp tests/test_kiq_addresses.cpp tests/test_kiq_queue_preparation.cpp tests/test_sdma_topology.cpp tests/test_sdma_addresses.cpp tests/test_gpu_vm_diagnostics.cpp tests/test_engine_lifecycle.cpp tests/test_recovery_reservation.cpp tests/test_submission_trace.cpp; do
@@ -32,6 +39,8 @@ jobs:
           /tmp/recovery-lease-test
           g++ -std=c++17 -Wall -Wextra -Werror -pthread -fsanitize=address,undefined tests/test_critical_replay.cpp -o /tmp/critical-replay-test
           /tmp/critical-replay-test
+          g++ -std=c++17 -Wall -Wextra -Werror -fsanitize=address,undefined tests/test_critical_uart.cpp -o /tmp/critical-uart-test
+          ASAN_OPTIONS=detect_leaks=1 /tmp/critical-uart-test
           g++ -std=c++17 -Wall -Wextra -Werror -pthread -fsanitize=address,undefined tests/test_recovery_lifetime.cpp -o /tmp/recovery-lifetime-test
           /tmp/recovery-lifetime-test
           g++ -std=c++17 -Wall -Wextra -Werror -fsanitize=address,undefined tests/test_vm_entry_update.cpp -o /tmp/vm-entry-update-test
