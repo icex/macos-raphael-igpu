@@ -3176,7 +3176,7 @@ class ExperimentTests(unittest.TestCase):
                 def stop(self): pass
 
             observed = iter([manifests[0][0], manifests[1][0]])
-            with patch.object(tool, 'current_identity', side_effect=lambda *args:next(observed)), \
+            with patch.object(tool, 'current_identity', side_effect=lambda *args, **kwargs:next(observed)), \
                  patch.object(tool, 'host_snapshot', return_value=host), \
                  patch.object(tool, 'helper', side_effect=helpers), \
                  patch.object(tool, 'running_identity', return_value={
