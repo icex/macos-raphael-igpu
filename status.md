@@ -2819,3 +2819,27 @@ that would refute the hypothesis. Prioritize backing preparation versus PTE inse
 later VM/SDMA/ISA/display concerns in the roadmap until work can reach those boundaries.
 Do not revive the superseded claims that a stale PSP ring is the entire problem, that KIQ cannot
 execute, or that Metal enumeration already demonstrates acceleration.
+
+## Hybrid desktop cycle 011 (2026-09-11)
+
+The third eligible GPU cycle on boot `f828eb26-9cb7-4fac-bff2-bc87515fa2ba` used candidate 194 with the hybrid existing-display profile. The immutable authority validated and the ledger reserved run `8e6f5d4c3b2a19087654321fedcba987`; the prior refusal was archived separately because it had left an output directory before authority validation. Native startup reached the hybrid VMM and submission tracing, but GPU engine startup failed at the KIQ dequeue: `XQ2: dequeue TIMEOUT after 50000 us; descriptor unchanged, startKIQ blocked`. The run ended `INCONCLUSIVE` with earliest boundary `recovery_lease_pool_missing`; recovery returned `schema-3 recovery requires an exact ACTIVE pool record`. No guest desktop receipt or QEMU frame-change evidence was produced. QEMU exited after the guest request, no container remains, the iGPU is still on vfio-pci, and the sleep inhibitor remains active. No new host-kernel fault was observed.
+
+Progress table: native Metal compute/render **demonstrated** (candidate 194) | hybrid desktop launch **attempted** (011) | changing desktop frame **not demonstrated** | repeatable recovery **regressed/blocked** by missing schema-3 ACTIVE lease pool | physical HDMI output **unverified**. GPU ledger is now **3/3** for this boot; no further GPU launch is allowed until a fresh boot and review.
+
+Review checkpoint: attempts since last Astra review = **2 actual cycles** (194 and 011; the intervening prelaunch refusal did not reserve GPU); unresolved desktop/engine boundary remains KIQ dequeue plus recovery-pool admission. The next action is the mandatory offline Astra review before any new experiment.
+
+### Recovery fix after cycle 011 (offline)
+
+The cycle exposed a lifecycle gap rather than a new GPU mapping result. The kext logs `XH2 OWNED` before `AMDHWMemory::enableAllocations`; because KIQ startup timed out, no `XH2 POOL` record or schema-3 lifetime binding existed. `tools/experiment.py` now downgrades only this exact schema-3/no-POOL capture to schema-2 cleanup, using the schema-2 helper hash set. An explicit `XH2 POOL state=INVALID`, unfinished pool, or any pool record still follows the strict schema-3 path and fails closed. Regression coverage was added for the absent-pool path. The focused recovery/coordinator tests pass (199), and the full discovered suite passes **780 tests with 3 skipped**; the unittest CLI also emits its existing `desktop_display` usage text while importing tests, but exits 0.
+
+The failed cycle produced no WindowServer IOFramebuffer or physical-link evidence: engine startup stopped before desktop submission (`SUB: summary ... submit=0`), so the external monitor's no-signal state is expected and cannot distinguish EDID, HPD, AUX, or DCN failure. QEMU used the reviewed hybrid topology with generic scanout enabled for capture plus the Raphael VFIO device; this is not a claim of full acceleration. Do not add EDID/HPD spoofing or `x-vga=on` based on this run alone.
+
+Development fix commit: `9827573` in the desktop-195 worktree. Main remains unmerged and unpushed. A fresh host boot and a newly reviewed authority are required before another GPU cycle; the next cycle must first verify the new fallback and should use a new candidate manifest rather than reuse the exhausted 3/3 boot.
+
+## Hybrid desktop cycle 012 (2026-09-12)
+
+Fresh boot `ce4337ec-30f0-46d0-ae52-2b8335517a45` used the staged candidate-194 binary and the normal guarded path. The GPU initialized farther than cycle 011: `XJ: AMDHardware::powerUpHWEngines -> 1`, both hybrid engines were created, `XH2 POOL state=ACTIVE` and `XH3 LIFETIME state=VALID` were published, and submission tracing recorded 752 submit calls plus VMID-2 root repair and map-process-root records. The experiment then aborted before the native probe because `tools/classify-run.py` incorrectly accepted only `reason=13` for a repaired map-process-root; the driver enum defines `RootRepairReason::Repaired = 12`. The frozen result was `INVALID/capture_loss`; recovery completed only as schema-6 `incomplete` because forced shutdown left stale graphics state. No host kernel fault was observed; the device remains vfio-pci and no VM is active.
+
+Offline correction: `tools/classify-run.py` now accepts repaired `reason=12`, with regression tests updated. Replaying the immutable cycle-012 capture after the fix produces `PROBE_NOT_RUN` and **zero capture-loss events**, confirming an observation bug rather than a GPU failure. The native probe and desktop helper still need a fresh hardware cycle. Focused parser tests pass (82); the full suite will be rerun before staging the next candidate. The parser fix is not yet built into the guest kext; it is host-side only.
+
+Progress table: Metal compute/render **demonstrated in candidate 194** | engine startup **demonstrated in cycle 012** | VMID-2/map-process repair **observed and parsed** | native probe in this cycle **not run due parser regression (fixed offline)** | desktop drawable/QEMU frame **not demonstrated** | physical HDMI **unverified**. Current boot must not be reused because recovery is incomplete; fresh reboot and candidate rebuild/authority are required.
