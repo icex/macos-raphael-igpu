@@ -846,6 +846,18 @@ class Candidate188ResealTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "reseal requires"):
             self.tool.reseal_profile()
 
+    def test_hybrid_reseal_accepts_recovered_baseline_from_prior_boot(self):
+        recovery = {
+            "schema": 6, "status": "recovered", "authorizes_launch": True,
+            "boot_id": "old-boot", "device": "0000:7b:00.0",
+            "driver": "vfio-pci",
+        }
+        self.tool.validate_recovery_baseline(
+            recovery, "new-boot", allow_cross_boot=True)
+        with self.assertRaisesRegex(RuntimeError, "boot"):
+            self.tool.validate_recovery_baseline(
+                recovery, "new-boot", allow_cross_boot=False)
+
     def test_candidate194_reseal_refuses_bad_proof_before_media_work(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -884,7 +896,7 @@ class Candidate188ResealTests(unittest.TestCase):
                                    side_effect=RuntimeError("bad prelaunch proof")), \
                  mock.patch.object(self.tool, "qconvert") as qconvert, \
                  self.assertRaisesRegex(RuntimeError, "bad prelaunch proof"):
-                self.tool.reseal_candidate(
+                        self.tool.reseal_candidate(
                     commit, "boot-A", "c"*64, "1"*32, image,
                     profile["staging_sha256"], "2"*64, "3"*64, "4"*64)
             qconvert.assert_not_called()
