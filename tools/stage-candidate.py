@@ -69,6 +69,17 @@ RESEAL_PROFILES = {
         "card_sha256":"f45200eff3442cac9862e9c2b59bd6e7b86f3bc78d1133038ba08d4f7cf239cf",
         "build_manifest_sha256":"e5e6014ba1151e1c28bad7f14c482115d5c4e48ef9282e53680bdecde94ad28d",
         "experiment_sha256":"4fa9a413b7334bbcd6ed310a2ac9963b635f5d8a5f524060c1204b9ce23916c6",
+        # Verified from the immutable backup set captured by reseal token
+        # 670e12c05ea14d5cb4936b2b5284d562.  The config preimage carries the
+        # nonce for prior_run_id below; raw and OpenCore are the corresponding
+        # byte-for-byte ESP pair before publication.
+        "preimage_backup_token":"670e12c05ea14d5cb4936b2b5284d562",
+        "raw_preimage_sha256":"e372943b5fdd780c7792b8c1915dcfdc655465528d19bbea00b0916e7361608f",
+        "bootdisk_preimage_sha256":"7191d77d2d72edc78269a804ecbbed12310c13c6565fe2436e15dbec5ec2720f",
+        "config_preimage_sha256":"6e1269eacd9277f3ac3a0e80cb35824046208371acf96bf8aabadf5b7702ca45",
+        "preimage_nonce":{"run_id":"b4a41ca47553618a58bab320b3b0c2fb",
+                          "nonce_lo":"0x8a615375a41ca4b4",
+                          "nonce_hi":"0xfbc2b0b320b3ba58"},
         "prelaunch_refusal":{
             "boot_id":"f828eb26-9cb7-4fac-bff2-bc87515fa2ba",
             "directory":"run/metal-028-194",
@@ -671,6 +682,17 @@ def reseal_profile():
     return copy.deepcopy(profile)
 
 
+def validate_reseal_profile_preimages(profile, raw_sha256, bootdisk_sha256,
+                                      config_sha256):
+    """Keep CLI preimage arguments bound to the reviewed backup set."""
+    for value, key, label in (
+            (raw_sha256, "raw_preimage_sha256", "raw preimage"),
+            (bootdisk_sha256, "bootdisk_preimage_sha256", "bootdisk preimage"),
+            (config_sha256, "config_preimage_sha256", "config preimage")):
+        if profile.get(key) is not None and value != profile[key]:
+            raise RuntimeError(f"reseal {label} is not the reviewed value")
+
+
 def validate_prelaunch_refusal(profile, staging):
     """Bind candidate 194's reseal to its immutable no-launch refusal evidence."""
     expected = profile.get("prelaunch_refusal")
@@ -829,6 +851,9 @@ def reseal_candidate(expected_commit, expected_boot_id, expected_card_sha256,
     if (profile.get("staging_sha256") is not None and
             expected_staging_sha256 != profile["staging_sha256"]):
         raise RuntimeError("reseal staging digest is not the reviewed value")
+    validate_reseal_profile_preimages(
+        profile, expected_raw_sha256, expected_bootdisk_sha256,
+        expected_config_sha256)
     card = validate_card(CARD.read_bytes(), expected_card_sha256)
     if command(["docker", "image", "inspect", "--format", "{{.Id}}", image_id]) != image_id:
         raise RuntimeError("Docker image identity changed")

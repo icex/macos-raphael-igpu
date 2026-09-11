@@ -857,6 +857,31 @@ class Candidate188ResealTests(unittest.TestCase):
             profile["experiment_sha256"],
             hashlib.sha256((ROOT / "tools/experiment.py").read_bytes()).hexdigest())
 
+    def test_candidate194_reseal_pins_verified_preimages_and_prior_nonce(self):
+        self.tool.configure("1.0.194", "metal-028")
+        profile = self.tool.reseal_profile()
+        self.assertEqual(profile["preimage_backup_token"],
+                         "670e12c05ea14d5cb4936b2b5284d562")
+        self.assertEqual(profile["raw_preimage_sha256"],
+                         "e372943b5fdd780c7792b8c1915dcfdc655465528d19bbea00b0916e7361608f")
+        self.assertEqual(profile["bootdisk_preimage_sha256"],
+                         "7191d77d2d72edc78269a804ecbbed12310c13c6565fe2436e15dbec5ec2720f")
+        self.assertEqual(profile["config_preimage_sha256"],
+                         "6e1269eacd9277f3ac3a0e80cb35824046208371acf96bf8aabadf5b7702ca45")
+        nonce = profile["preimage_nonce"]
+        self.assertEqual(nonce["run_id"], profile["prior_run_id"])
+        lo, hi = self.tool.struct.unpack("<QQ", bytes.fromhex(nonce["run_id"]))
+        self.assertEqual(nonce["nonce_lo"], f"0x{lo:x}")
+        self.assertEqual(nonce["nonce_hi"], f"0x{hi:x}")
+
+    def test_candidate194_reseal_rejects_unreviewed_preimage_hash(self):
+        self.tool.configure("1.0.194", "metal-028")
+        profile = self.tool.reseal_profile()
+        with self.assertRaisesRegex(RuntimeError, "raw preimage"):
+            self.tool.validate_reseal_profile_preimages(
+                profile, "0" * 64, profile["bootdisk_preimage_sha256"],
+                profile["config_preimage_sha256"])
+
     def test_candidate194_cross_boot_reseal_requires_current_boot_identity(self):
         self.tool.configure("1.0.194", "metal-028")
         profile = self.tool.reseal_profile()
