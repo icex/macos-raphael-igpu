@@ -2928,3 +2928,21 @@ Forced shutdown was required because guest identity transport failed (`request_s
 Progress table: native Metal compute/render **demonstrated historically** | engine startup and ACTIVE pool/lifetime **demonstrated (035)** | first KIQ stamps **passed**, later KIQ completion **blocked (035)** | native probe/desktop drawable/frame change **not demonstrated** | cleanup/recovery **incomplete (035)** | physical HDMI **unverified**. Blocking issue: KIQ completion/retirement failure followed by incomplete cleanup; this boot cannot be reused.
 
 Evidence hashes: `manifest.json` `efbea00f852e27d06787a3ea29891d08234dd6f63e9c7f0294206b1a9a36f328`; `verdict.json` `8b3d8ac9fd035d36b600c2a33ea37695a8d0b3dc481bfb69380a9e0fcfdca48f`; `recovery.json` `0f841d53350f1f7231e60529be52ee142cef33dcf8474080648bb76740be9e76`; `host-after.json` `e5f521bb9d0fb6879d8389d2b65604dfc9ee630841711b00b280ae65ac2e76b9`.
+
+### Metal-035 recovery disposition (2026-09-11)
+
+Read-only audit confirms there is no safe in-place completion path for run
+`302ff99b6dee4afb97a30f692fb3d275`. The immutable schema-6 recovery receipt is
+`incomplete` and `authorizes_launch=false`; graphics pipe 0 remains active with
+doorbell enabled, `wptr=1792`, and nonzero ring base/control, so
+`gfx_ring_clean=false` and `gfx_retirement_confirmed=false`. The bounded cleanup
+observed 9 active queues, dequeued 1, and timed out/forced inactive 8.
+
+`tools/vfio-recover.py` exposes only the full `recover()` operation, whose
+`perform_recovery` path writes VFIO BAR/MMIO/VRAM state. It has no resume or
+retirement-only operation, and it refuses to run again because the immutable
+receipt already exists for the latest ledger run. Host state remains
+`vfio-pci`, device accessible, and no VM active, but this does not authorize a
+new launch. No reboot is being performed and no further hardware launch is
+possible from this state; a fresh boot and newly reviewed authority are
+required.
