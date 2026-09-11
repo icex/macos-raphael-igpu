@@ -1,0 +1,75 @@
+# amdgpu reference for 0000:7b:00.0, captured 2026-09-11T20:39:40+03:00
+# kernel: 7.2.3-1-cachyos-bore
+
+## connectors
+card0-DP-3                   status=disconnected enabled=disabled dpms=Off  edid=0 bytes
+card0-DP-4                   status=disconnected enabled=disabled dpms=Off  edid=0 bytes
+card0-DP-5                   status=disconnected enabled=disabled dpms=Off  edid=0 bytes
+card0-HDMI-A-3               status=connected    enabled=enabled  dpms=On   edid=0 bytes
+card0-Writeback-2            status=unknown      enabled=disabled dpms=On   edid=0 bytes
+
+## amdgpu kernel log for this device
+Sep 11 20:19:35 cachyos kernel: amdgpu 0000:7b:00.0: enabling device (0006 -> 0007)
+Sep 11 20:19:35 cachyos kernel: amdgpu 0000:7b:00.0: initializing kernel modesetting (IP DISCOVERY 0x1002:0x13C0 0x1462:0x7E59 0xCB).
+Sep 11 20:19:35 cachyos kernel: amdgpu 0000:7b:00.0: register mmio base: 0xDD900000
+Sep 11 20:19:35 cachyos kernel: amdgpu 0000:7b:00.0: register mmio size: 524288
+Sep 11 20:19:35 cachyos kernel: amdgpu 0000:7b:00.0: detected ip block number 0 <common_v1_0_0> (nv_common)
+Sep 11 20:19:35 cachyos kernel: amdgpu 0000:7b:00.0: detected ip block number 1 <gmc_v10_0_0> (gmc_v10_0)
+Sep 11 20:19:35 cachyos kernel: amdgpu 0000:7b:00.0: detected ip block number 2 <ih_v5_0_0> (navi10_ih)
+Sep 11 20:19:35 cachyos kernel: amdgpu 0000:7b:00.0: detected ip block number 3 <psp_v13_0_0> (psp)
+Sep 11 20:19:35 cachyos kernel: amdgpu 0000:7b:00.0: detected ip block number 4 <smu_v13_0_0> (smu)
+Sep 11 20:19:35 cachyos kernel: amdgpu 0000:7b:00.0: detected ip block number 5 <dce_v1_0_0> (dm)
+Sep 11 20:19:35 cachyos kernel: amdgpu 0000:7b:00.0: detected ip block number 6 <gfx_v10_0_0> (gfx_v10_0)
+Sep 11 20:19:35 cachyos kernel: amdgpu 0000:7b:00.0: detected ip block number 7 <sdma_v5_2_0> (sdma_v5_2)
+Sep 11 20:19:35 cachyos kernel: amdgpu 0000:7b:00.0: detected ip block number 8 <vcn_v3_0_0> (vcn_v3_0)
+Sep 11 20:19:35 cachyos kernel: amdgpu 0000:7b:00.0: detected ip block number 9 <jpeg_v3_0_0> (jpeg_v3_0)
+Sep 11 20:19:35 cachyos kernel: amdgpu 0000:7b:00.0: Fetched VBIOS from VFCT
+Sep 11 20:19:35 cachyos kernel: amdgpu 0000:7b:00.0: [drm] ATOM BIOS: 102-RAPHAEL-008, build: 612127  , ver: 032.019.000.008.000000, 2022/09/26
+Sep 11 20:19:35 cachyos kernel: amdgpu 0000:7b:00.0: Trusted Memory Zone (TMZ) feature disabled as experimental (default)
+Sep 11 20:19:35 cachyos kernel: amdgpu 0000:7b:00.0: vm size is 262144 GB, 4 levels, block size is 9-bit, fragment size is 9-bit
+Sep 11 20:19:35 cachyos kernel: amdgpu 0000:7b:00.0: VRAM: 512M 0x000000F400000000 - 0x000000F41FFFFFFF (512M used)
+Sep 11 20:19:35 cachyos kernel: amdgpu 0000:7b:00.0: GART: 1024M 0x0000000000000000 - 0x000000003FFFFFFF
+Sep 11 20:19:35 cachyos kernel: amdgpu 0000:7b:00.0: [drm] Detected VRAM RAM=512M, BAR=512M
+Sep 11 20:19:35 cachyos kernel: amdgpu 0000:7b:00.0: [drm] RAM width 128bits DDR5
+Sep 11 20:19:35 cachyos kernel: amdgpu 0000:7b:00.0:  512M of VRAM memory ready
+Sep 11 20:19:35 cachyos kernel: amdgpu 0000:7b:00.0:  15474M of GTT memory ready.
+Sep 11 20:19:35 cachyos kernel: amdgpu 0000:7b:00.0: [drm] GART: num cpu pages 262144, num gpu pages 262144
+Sep 11 20:19:35 cachyos kernel: amdgpu 0000:7b:00.0: [drm] PCIE GART of 1024M enabled (table at 0x000000F41FC00000).
+Sep 11 20:19:35 cachyos kernel: amdgpu 0000:7b:00.0: [drm] Loading DMUB firmware via PSP: version=0x05003300
+Sep 11 20:19:35 cachyos kernel: amdgpu 0000:7b:00.0: [drm] use_doorbell being set to: [true]
+Sep 11 20:19:35 cachyos kernel: amdgpu 0000:7b:00.0: [VCN instance 0] Found VCN firmware Version ENC: 1.33 DEC: 4 VEP: 0 Revision: 15
+Sep 11 20:19:35 cachyos kernel: amdgpu 0000:7b:00.0: reserve 0xa00000 from 0xf41e000000 for PSP TMR
+Sep 11 20:19:36 cachyos kernel: amdgpu 0000:7b:00.0: RAS: optional ras ta ucode is not available
+Sep 11 20:19:36 cachyos kernel: amdgpu 0000:7b:00.0: RAP: optional rap ta ucode is not available
+Sep 11 20:19:36 cachyos kernel: amdgpu 0000:7b:00.0: SECUREDISPLAY: optional securedisplay ta ucode is not available
+Sep 11 20:19:36 cachyos kernel: amdgpu 0000:7b:00.0: SMU is initialized successfully!
+Sep 11 20:19:36 cachyos kernel: amdgpu 0000:7b:00.0: [drm] Display Core v3.2.384 initialized on DCN 3.1.5
+Sep 11 20:19:36 cachyos kernel: amdgpu 0000:7b:00.0: [drm] DP-HDMI FRL PCON supported
+Sep 11 20:19:36 cachyos kernel: amdgpu 0000:7b:00.0: [drm] DMUB hardware initialized: version=0x05003300
+Sep 11 20:19:36 cachyos kernel: amdgpu 0000:7b:00.0: [drm] HDMI-A-3: PSR support 0, DC PSR ver -1, sink PSR ver 0 DPCD caps 0x0 su_y_granularity 0
+Sep 11 20:19:36 cachyos kernel: amdgpu 0000:7b:00.0: [drm] DP-3: PSR support 0, DC PSR ver -1, sink PSR ver 0 DPCD caps 0x0 su_y_granularity 0
+Sep 11 20:19:36 cachyos kernel: amdgpu 0000:7b:00.0: [drm] DP-4: PSR support 0, DC PSR ver -1, sink PSR ver 0 DPCD caps 0x0 su_y_granularity 0
+Sep 11 20:19:36 cachyos kernel: amdgpu 0000:7b:00.0: [drm] DP-5: PSR support 0, DC PSR ver -1, sink PSR ver 0 DPCD caps 0x0 su_y_granularity 0
+Sep 11 20:19:36 cachyos kernel: amdgpu 0000:7b:00.0: kiq ring mec 2 pipe 1 q 0
+Sep 11 20:19:36 cachyos kernel: amdgpu 0000:7b:00.0: SE 1, SH per SE 1, CU per SH 2, active_cu_number 2
+Sep 11 20:19:36 cachyos kernel: amdgpu 0000:7b:00.0: ring gfx_0.0.0 uses VM inv eng 0 on hub 0
+Sep 11 20:19:36 cachyos kernel: amdgpu 0000:7b:00.0: ring gfx_0.1.0 uses VM inv eng 1 on hub 0
+Sep 11 20:19:36 cachyos kernel: amdgpu 0000:7b:00.0: ring comp_1.0.0 uses VM inv eng 4 on hub 0
+Sep 11 20:19:36 cachyos kernel: amdgpu 0000:7b:00.0: ring comp_1.1.0 uses VM inv eng 5 on hub 0
+Sep 11 20:19:36 cachyos kernel: amdgpu 0000:7b:00.0: ring comp_1.2.0 uses VM inv eng 6 on hub 0
+Sep 11 20:19:36 cachyos kernel: amdgpu 0000:7b:00.0: ring comp_1.3.0 uses VM inv eng 7 on hub 0
+Sep 11 20:19:36 cachyos kernel: amdgpu 0000:7b:00.0: ring comp_1.0.1 uses VM inv eng 8 on hub 0
+Sep 11 20:19:36 cachyos kernel: amdgpu 0000:7b:00.0: ring comp_1.1.1 uses VM inv eng 9 on hub 0
+Sep 11 20:19:36 cachyos kernel: amdgpu 0000:7b:00.0: ring comp_1.2.1 uses VM inv eng 10 on hub 0
+Sep 11 20:19:36 cachyos kernel: amdgpu 0000:7b:00.0: ring comp_1.3.1 uses VM inv eng 11 on hub 0
+Sep 11 20:19:36 cachyos kernel: amdgpu 0000:7b:00.0: ring kiq_0.2.1.0 uses VM inv eng 12 on hub 0
+Sep 11 20:19:36 cachyos kernel: amdgpu 0000:7b:00.0: ring sdma0 uses VM inv eng 13 on hub 0
+Sep 11 20:19:36 cachyos kernel: amdgpu 0000:7b:00.0: ring vcn_dec_0 uses VM inv eng 0 on hub 8
+Sep 11 20:19:36 cachyos kernel: amdgpu 0000:7b:00.0: ring vcn_enc_0.0 uses VM inv eng 1 on hub 8
+Sep 11 20:19:36 cachyos kernel: amdgpu 0000:7b:00.0: ring vcn_enc_0.1 uses VM inv eng 4 on hub 8
+Sep 11 20:19:36 cachyos kernel: amdgpu 0000:7b:00.0: ring jpeg_dec uses VM inv eng 5 on hub 8
+Sep 11 20:19:36 cachyos kernel: amdgpu 0000:7b:00.0: runtime pm is manually disabled
+Sep 11 20:19:36 cachyos kernel: amdgpu 0000:7b:00.0: Runtime PM not available
+Sep 11 20:19:36 cachyos kernel: amdgpu 0000:7b:00.0: [drm] Registered 4 planes with drm panic
+Sep 11 20:19:36 cachyos kernel: amdgpu 0000:7b:00.0: [drm] fb1: amdgpudrmfb frame buffer device
+Sep 11 20:19:38 cachyos-x8664 kernel: amdgpu 0000:7b:00.0: [drm] REG_WAIT timeout 1us * 100000 tries - optc31_disable_crtc line:146
