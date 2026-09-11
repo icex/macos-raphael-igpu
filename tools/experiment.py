@@ -333,7 +333,20 @@ def current_identity(vm, candidate, requested_diagnostic, run_id=None,
         raise ValueError('generic graphics launch option changed')
     builder = helper('build-release')
     source_digest = builder.tree_digest(ROOT/'src')
-    if source_digest != build['source_sha256']: raise ValueError('current source differs from built source')
+    # A reviewed candidate may intentionally keep its already-built driver
+    # source while coordinator-only tooling advances.  The card must pin both
+    # the candidate source preimage and commit; never accept a digest-only
+    # override.  The coordinator tree remains independently authenticated via
+    # source_commit/source_clean below.
+    candidate_source_digest = probe_spec.get('raphael_source_sha256') if isinstance(probe_spec, dict) else None
+    candidate_source_commit = probe_spec.get('raphael_source_commit') if isinstance(probe_spec, dict) else None
+    if candidate_source_digest is None:
+        if source_digest != build['source_sha256']:
+            raise ValueError('current source differs from built source')
+    else:
+        if (candidate_source_digest != build.get('source_sha256') or
+                candidate_source_commit != build.get('source_commit')):
+            raise ValueError('candidate source provenance differs from build')
     image = image_files(vm/'run/oc-raw.img')
     if validate_identity(expected, image): raise ValueError('ESP executable or Info.plist differs from candidate')
     config = (vm/'config.plist').read_bytes()
@@ -364,7 +377,8 @@ def current_identity(vm, candidate, requested_diagnostic, run_id=None,
                      'agent-server.py', 'gx', 'gpu-bind.sh']
     if options.get('GENERIC_GRAPHICS') == 'off':
         harness_names.append('vm-entry.sh')
-    return dict(image, build_id=build['build_id'], source_sha256=source_digest,
+    return dict(image, build_id=build['build_id'], source_sha256=build['source_sha256'],
+                coordinator_source_sha256=source_digest,
                 source_commit=command(['git', '-C', str(ROOT), 'rev-parse', 'HEAD']),
                 source_clean=not bool(command(['git', '-C', str(ROOT), 'status', '--porcelain'])),
                 built_from_commit=build['source_commit'], kdk_sha256=kdk,

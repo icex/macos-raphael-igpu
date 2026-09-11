@@ -69,6 +69,10 @@ class ExperimentTests(unittest.TestCase):
         self.assertTrue(card['run_probe_only_after_native_start'])
         self.assertEqual(card['recovery_lease_schema'], 3)
         self.assertEqual(card['critical_replay_schema'], 2)
+        self.assertEqual(card['raphael_source_sha256'],
+                         'c798dfd66c14c5d14160141586062ea5624f5314d14604f9d12abb40945e202d')
+        self.assertEqual(card['raphael_source_commit'],
+                         '52c751707c42ad037669872c081eb66bc4e2fd04')
         self.assertEqual(card['launch_options'], {
             'BOOTDISK_MODE': 'custom', 'NVRAM': 'stock',
             'GENERIC_GRAPHICS': 'off', 'GDB': 'on'})
