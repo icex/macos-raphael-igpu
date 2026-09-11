@@ -240,9 +240,9 @@ def validate_card(raw, expected_sha256):
             "raphael_source_sha256": (
                 "e9debe05adee92e88d0a8077bc25d13ef389d00187a02886bbbb27e5b5b6834c"
                 if pair == ("1.0.195", "metal-029") else
-                "8ce6c80b78288e38dfedd84aadc905ae9dcecfbe1ec783f1d311a61886bbb06b"
+                "21322441a50375280dad1bdffa319eca7a7bddebda004dbda23066f903e109ff"
                 if (pair == ("1.0.197", "metal-031") or pair == ("1.0.198", "metal-032")) else
-                "8ce6c80b78288e38dfedd84aadc905ae9dcecfbe1ec783f1d311a61886bbb06b"
+                "21322441a50375280dad1bdffa319eca7a7bddebda004dbda23066f903e109ff"
                 if (pair == ("1.0.197", "metal-031") or pair == ("1.0.198", "metal-032")) else
                 "c798dfd66c14c5d14160141586062ea5624f5314d14604f9d12abb40945e202d"
                 if pair == ("1.0.194", "metal-028") else
