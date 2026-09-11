@@ -1,0 +1,83 @@
+{
+  "id": "metal-029",
+  "question": "After candidate-194 Metal passes, can the logged-in Aqua user present changing Raphael drawables on the existing QEMU display and preserve bounded cleanup?",
+  "candidate_version": "1.0.194",
+  "requested_diagnostic": "rgpuvmdiag=1",
+  "critical_replay_schema": 2,
+  "recovery_lease_schema": 3,
+  "critical_replay_transport": {
+    "kind": "isa-serial", "version": 1, "index": 1,
+    "io_base": 760, "baud": 115200,
+    "socket": "run/critical.sock", "capture": "critical.txt"
+  },
+  "behavior_change": "reuse the exact candidate-194 driver and unchanged native Metal probe; after that probe passes, run one separately prepared and hash-pinned helper on the existing QEMU display in its gui launchd domain, present deterministic changing Navi23 Metal drawables, capture two changed QEMU frames, then use unchanged shutdown and recovery within the original exposure",
+  "required_observations": [
+    "loaded_build", "route_guards", "recovery_lease_owned",
+    "recovery_lease_pool", "vmm_readiness", "kiq_stamps",
+    "hybrid_enter", "hybrid_exit", "engine_start", "sdma_topology",
+    "sdma_channel_remap", "submission_trace", "submission_map_phase",
+    "submission_backing_allocation", "sdma_vm_program", "vmid2_root_repair",
+    "vmid2_entry_gate", "vmid2_entry_update", "map_process_root"
+  ],
+  "conditional_diagnostic_observations": [
+    "vmid1_fault_walk", "vmid1_fault_walk_view", "vmid1_fault_walk_entry",
+    "client_fault_walk", "client_fault_walk_view", "client_fault_walk_entry",
+    "map_process_summary"
+  ],
+  "max_seconds": 180,
+  "prerequisites": [
+    "candidate194_exact_binary_identity_preserved",
+    "candidate194_clean_schema6_recovery_receipt_bound",
+    "same_boot_remaining_one_of_three_launch_reviewed",
+    "desktop_helper_precompiled_in_gpuless_guest_and_hash_pinned",
+    "aqua_autologin_and_screen_sharing_configured_through_supported_ui",
+    "legacy_vnc_loopback_capture_offline_qualified",
+    "no_generic_graphics_or_ramfb_launcher_contract_reviewed",
+    "numeric_recovery_nonce_staged_before_reservation",
+    "persistent_recovery_lifetime_schema3_offline_validated",
+    "schema3_recovery_helper_and_receipt_binding_offline_validated",
+    "sleep_inhibitor_active", "watchdog_and_pstore_verified"
+  ],
+  "repeat_policy": "one explicitly authorized same-boot launch under the existing 3-launch ceiling; bind a fresh manifest and exact recovered candidate-194 receipt; no automatic retry, cap extension, driver rebuild, or generic graphics fallback",
+  "abort_on": [
+    "identity_mismatch", "capture_loss", "critical_replay_incomplete_at_deadline",
+    "recovery_lease_missing", "recovery_lease_invalid", "recovery_lifetime_missing",
+    "recovery_lifetime_invalid", "vmm_native_readiness_missing",
+    "submission_trace_route_failure", "vmid2_mapping_fault", "guest_panic",
+    "host_fault", "incomplete_gc_quiesce", "metal_probe_failure",
+    "aqua_session_missing", "desktop_helper_identity_mismatch",
+    "virtual_display_lifecycle_failure", "visible_metal_stimulus_failure",
+    "vnc_frame_change_missing"
+  ],
+  "regression_baselines": {
+    "immediate": "run/metal-028-194-resealed",
+    "previous": "run/metal-027-193",
+    "furthest_reached": "run/metal-028-194-resealed"
+  },
+  "outcome_table": "docs/ROADMAP.md M4-M7",
+  "run_probe_only_after_native_start": true,
+  "guest_picker_timeout_seconds": 5,
+  "critical_replay_tolerance": "terminal-prefix",
+  "recovery_critical_replay_tolerance": "terminal-prefix-open",
+  "functional_boot_arguments": {"rgpuvmroot": "5", "rgpudump": "5000"},
+  "launch_options": {
+    "BOOTDISK_MODE": "custom", "NVRAM": "stock", "GENERIC_GRAPHICS": "on"
+  },
+  "required_boot_flags": ["-liluheadless"],
+  "raphael_source_sha256": "c798dfd66c14c5d14160141586062ea5624f5314d14604f9d12abb40945e202d",
+  "desktop_helper_sha256": "64fd17e8b5c7ac5dae42c982447b8047486e859f5f076136cb42d4b9e1244715",
+  "qemu_capture_sha256": "9364d8b60a457d38eeca1df7426bb103bebb21d7c8942e635abe356aa6a5d4f4",
+  "desktop_phase": {
+    "schema": 1,
+    "mode": "existing-display-production",
+    "hold_seconds": 10,
+    "cleanup_reserve_seconds": 25,
+    "source_sha256": "ff150b488e7c978e9c7a6a729318913fe25cba2203d1baacd41a14bb73b1e652",
+    "binary_sha256": "f4966b86f857558a4bf1a69af55b20f59a4ee7d4380d48f3f69247c2c07643f9",
+    "guest_binary": "/var/tmp/rgpu-desktop-existing-v1-ff150b488e7c978e/desktop-display",
+    "expected_width": 1920,
+    "expected_height": 1080,
+    "expected_refresh": 60.0,
+    "require_qemu_frame_change": true
+  }
+}
