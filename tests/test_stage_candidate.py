@@ -846,6 +846,16 @@ class Candidate188ResealTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "reseal requires"):
             self.tool.reseal_profile()
 
+    def test_candidate194_reseal_pins_current_card_and_experiment_hashes(self):
+        self.tool.configure("1.0.194", "metal-028")
+        profile = self.tool.reseal_profile()
+        self.assertEqual(
+            profile["card_sha256"],
+            hashlib.sha256((ROOT / "experiments/metal-028.json").read_bytes()).hexdigest())
+        self.assertEqual(
+            profile["experiment_sha256"],
+            hashlib.sha256((ROOT / "tools/experiment.py").read_bytes()).hexdigest())
+
     def test_candidate194_reseal_refuses_bad_proof_before_media_work(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
