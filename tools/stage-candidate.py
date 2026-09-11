@@ -88,7 +88,7 @@ RESEAL_PROFILES = {
             "manifest_copy":"run/metal-028-194-manifest.json",
             "manifest_copy_sha256":"1bf833eb9a10ea9ec8ad05d154f4d5cf6ec0e33b13268fb9abe214b629145d6a",
             "ledger":"run/used-gpu-boots/f828eb26-9cb7-4fac-bff2-bc87515fa2ba.json",
-            "ledger_sha256":"54e9eb272093dc6b55e76812c132b71dcbd2ee0b7dc75517fc4ad70cee0d3c5d",
+            "ledger_sha256":"5677d5419592ccf3cead52f834de1f4c412934ea3eaa6c570ee1708f1a35fab2",
             "policy":"run/one-run-qualification-authorities/f828eb26-9cb7-4fac-bff2-bc87515fa2ba/b4a41ca47553618a58bab320b3b0c2fb.policy.json",
             "policy_sha256":"c85bd0c874ec677238dd0675983bc140e3979973a323e478655bf3ca54320829",
             "activation":"run/one-run-qualification-authorities/f828eb26-9cb7-4fac-bff2-bc87515fa2ba/b4a41ca47553618a58bab320b3b0c2fb.json",
