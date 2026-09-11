@@ -413,6 +413,7 @@ static bool prepareKiq(uint64_t &mqdAddr, uint64_t &eopAddr, const void *spec);
 static void reportKiqPreparation(const char *stage);
 static mach_vm_address_t orgVmmInit = 0;
 static mach_vm_address_t orgVmmSetAlloc = 0;
+static mach_vm_address_t orgHwWireSysMemory = 0;
 static mach_vm_address_t orgVmmSetVSReady = 0;
 static mach_vm_address_t orgVmmFillRegs = 0;
 static mach_vm_address_t orgVmmPrepare = 0;
@@ -677,6 +678,7 @@ static constexpr size_t kOffHwMemEnable = 0x52a1e;    // AMDHWMemory::enableAllo
 static constexpr size_t kOffHwMemReserve = 0x5343c;   // AMDHWMemory::reserve [x6] (called only)
 static constexpr size_t kOffVmmInit     = 0x56d3a;    // AMDHWVMM::init [x6]
 static constexpr size_t kOffVmmSetAlloc = 0x5791e;    // AMDHWVMM::setMemoryAllocationsEnabled [x6]
+static constexpr size_t kOffHwWireSysMemory = 0x4ad44; // AMDHWHandler::wireSysMemory(phys) [x6]
 static constexpr size_t kOffVmmSetVSReady = 0x578ce;  // AMDHWVMM::setVirtualSpaceReady [x6]
 static constexpr size_t kOffHwAppendReserved = 0x72afe; // AMDHardware::appendToReservedVRAMOffset [x6] (called only)
 static constexpr size_t kOffVmmFillRegs = 0x62400;    // AMDGFX10VMM::fillVMRegisters [x6]
@@ -4622,6 +4624,20 @@ static void wrapVmmSetAlloc(void *self, uint32_t enable) {
                                : "still NULL, endVMPTUpdate will panic");
 }
 
+static void *wrapHwWireSysMemory(void *self, uint64_t phys, uint32_t size,
+                                 void *task, uint32_t flags) {
+    if (recoveryLeaseConfigured && vmmProbeMode >= 3 && vmmObject != nullptr) {
+        auto f = reinterpret_cast<uint8_t *>(vmmObject);
+        if (*reinterpret_cast<void **>(f + 0x28) == nullptr) {
+            RLOG("XV: wireSysMemory deferred before VMM channel publication phys=%#llx size=%u",
+                 phys, size);
+            return nullptr;
+        }
+    }
+    using Wire = void *(*)(void *, uint64_t, uint32_t, void *, uint32_t);
+    return reinterpret_cast<Wire>(orgHwWireSysMemory)(self, phys, size, task, flags);
+}
+
 static void probeRlc() {
     if (asicInfo == nullptr) return;
 
@@ -6300,6 +6316,11 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
                                reinterpret_cast<mach_vm_address_t>(wrapVmmSetAlloc), true);
             RLOG("route AMDHWVMM::setMemoryAllocationsEnabled -> %s (org=0x%llx)",
                  orgVmmSetAlloc ? "ok" : "FAILED", orgVmmSetAlloc);
+            patcher.clearError();
+            orgHwWireSysMemory = patcher.routeFunction(addr + kOffHwWireSysMemory,
+                               reinterpret_cast<mach_vm_address_t>(wrapHwWireSysMemory), true);
+            RLOG("route AMDHWHandler::wireSysMemory -> %s (org=0x%llx)",
+                 orgHwWireSysMemory ? "ok" : "FAILED", orgHwWireSysMemory);
             patcher.clearError();
             orgVmmFillRegs = patcher.routeFunction(addr + kOffVmmFillRegs,
                              reinterpret_cast<mach_vm_address_t>(wrapVmmFillRegs), true);
