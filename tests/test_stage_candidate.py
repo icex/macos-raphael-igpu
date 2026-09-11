@@ -482,6 +482,20 @@ class Candidate186StageTests(unittest.TestCase):
         self.assertIn("worker-time state is not fault-time proof",
                       card["behavior_change"])
 
+    def test_candidate193_requires_mode5_a1_observations_and_source(self):
+        self.tool.configure("1.0.193", "metal-027")
+        raw = (ROOT / "experiments/metal-027.json").read_bytes()
+        card = self.tool.validate_card(raw, hashlib.sha256(raw).hexdigest())
+        self.assertEqual(card["functional_boot_arguments"],
+                         {"rgpuvmroot": "5", "rgpudump": "5000"})
+        self.assertEqual(card["raphael_source_sha256"],
+                         "73bbfdcefa406e38d4206e1870b6dcaf96a0f8555f0795e48d83055220157e5e")
+        self.assertIn("map_process_route", card["required_observations"])
+        self.assertIn("map_process_root", card["required_observations"])
+        self.assertIn("map_process_summary", card["conditional_diagnostic_observations"])
+        self.assertEqual(card["launch_options"]["GDB"], "on")
+        self.assertIn("not fault-time proof", card["behavior_change"])
+
     def test_candidate188_debug_symbols_require_retained_files_and_matching_provenance(self):
         self.tool.configure("1.0.188", "metal-021")
         with tempfile.TemporaryDirectory() as directory:

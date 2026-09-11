@@ -223,12 +223,36 @@ def main():
         all(position >= 0 for position in update_order) and
         update_order == sorted(update_order) and
         not any(token in update for token in update_forbidden) and
-        "vmRootFixMode == 4" in update and
+        "vmRootFixMode >= 4" in update and
         "__atomic_load_n(&raphaelTargetConfirmed, __ATOMIC_ACQUIRE)" in update and
         "__atomic_load_n(&cachedFbPublished, __ATOMIC_ACQUIRE)" in update and
         update_guard)
     print(f"VM entry callback    {'ok (source-only/native/sample/count; exact route guard)' if update_ok else 'INVALID ORDER, HOT-PATH OPERATION, OR ROUTE GUARD'}")
     if not update_ok:
+        bad += 1
+
+    map_start = source.find("static uint32_t *wrapFillMapProcess(")
+    map_end = source.find("static uint64_t convertVmEntryAddress", map_start)
+    map_callback = source[map_start:map_end] if map_end > map_start else ""
+    map_forbidden = ("fbRead(", "fbWrite(", "RLOG(", "CRLOG(", "IOSleep(",
+                     "fbAperture(", "IOLock", "new ", "alloc(")
+    map_order = [map_callback.find(token) for token in (
+        "FunctionCast(wrapFillMapProcess, orgFillMapProcess)(",
+        "end == packet + 0x10",
+        "RaphaelVm::repairMapProcessPacket(",
+        "vmMapProcessSamples.append(")]
+    map_entry = bytes((0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56,
+                       0x41, 0x54, 0x53, 0x49, 0x89, 0xcf, 0x49, 0x89, 0xd4))
+    map_ok = (map_start >= 0 and map_end > map_start and
+              all(position >= 0 for position in map_order) and
+              map_order == sorted(map_order) and
+              not any(token in map_callback for token in map_forbidden) and
+              "static const uint8_t mapProcessEntry[]" in source and
+              "kOffFillMapProcess" in source and
+              "orgFillMapProcess = patcher.routeFunction(" in source and
+              x6data[0x8edce:0x8edce + len(map_entry)] == map_entry)
+    print(f"MAP_PROCESS callback {'ok (native/validate/repair/append; exact route guard)' if map_ok else 'INVALID ORDER, HOT-PATH OPERATION, OR ROUTE GUARD'}")
+    if not map_ok:
         bad += 1
 
     correlation_ok = (

@@ -1,10 +1,46 @@
-# Current status — candidate 192 prepared offline; prior candidate 191 execution failed (2026-09-11)
+# Current status — candidate 192 execution failed; recovery incomplete (2026-09-11)
 
-## Candidate 192 offline preparation handoff (2026-09-11)
+## Current authoritative state — candidate 192 run failed (2026-09-11)
+
+Candidate 192 has now consumed **1/3 launches** on boot
+`ac38a04c-de54-43b3-8141-414d5ea8a459`. The launch reached the unchanged native
+Metal probe and failed at `first_submission`; recovery is incomplete and
+`authorizes_launch=false`. Handoff authentication and the launch gate are
+therefore complete for this run, while no retry is authorized. The unresolved
+GPU-execution streak is **13 actual cycles** and the post-Astra batch is **2
+attempts** (`191`, `192`).
+
+## Candidate 193 / metal-027 offline preparation (2026-09-11)
+
+The host is on fresh boot `f828eb26-9cb7-4fac-bff2-bc87515fa2ba`; the launch
+ledger has **0 launches consumed**. Candidate 193 / metal-027 is being prepared
+offline with mode 5, preserving the reviewed mode-4 conversion behavior and
+the candidate-192 headless, dynamic-GDB, `GENERIC_GRAPHICS=off`, 180-second,
+and unchanged 45-second probe settings. Handoff verification is pending; no
+launch is authorized.
+
+Offline source for the next candidate adds explicit `rgpuvmroot=5`: it retains
+all mode-4 contiguous-entry conversion and repairs the independent MES A1
+MAP_PROCESS page-table-base field from the published MC aperture to the physical
+aperture after native packet construction. Candidate 192's frozen VRAM fields
+and exact KDK code support the hypothesis that native can leave an MC-valued
+root unchanged, while Linux GFX10 supplies the matching hardware-PDE conversion
+rule. The actual A1 output remains unobserved; this is a source-qualified
+hypothesis, not demonstrated GPU progress. The full Python suite passed 725
+tests with 3 skipped; focused classifier tests pass (80), the VM diagnostic
+fixture passes under ASan/UBSan, exact-KDK
+preflight passes including the A1 constant/prologue/route/callback-order guard,
+and a scratch-only cross-build produced an x86_64 Mach-O kext bundle (SHA-256
+`ea722df7aa486ecc63a2526e26010c8a7e352c7a7d7c01bdde74f3bce740163f`).
+No release archive, staging write, VM launch, hardware access or GPU cycle was
+performed. Recovery remains incomplete and no launch is authorized.
+
+## Historical candidate 192 offline preparation handoff (2026-09-11)
 
 The host has rebooted into boot `ac38a04c-de54-43b3-8141-414d5ea8a459`.
-The same-boot launch ledger has **zero rows consumed**; no GPU experiment has
-run on this boot, and host handoff authentication remains pending. Historical
+At preparation time the same-boot launch ledger had **zero rows consumed**; no
+GPU experiment had run on this boot, and host handoff authentication was
+pending. Historical
 candidate 191 boot `3bca3e47-1f28-4f78-af00-5dbf76b00620` remains exhausted at
 3/3 launches. The unresolved GPU-execution streak remains **12 actual cycles**;
 the review batch remains **1 attempt since Astra**.
@@ -30,13 +66,76 @@ complete. The current source-tree digest pinned by the card is
 | GPU cycles on current boot | 0 |
 | Blocking issue | host handoff authentication pending |
 
+## Candidate 192 / metal-026 hardware run (2026-09-11)
+
+The single authorized first launch used run ID
+`575d67d557b07f98b186c0cfb024fcbd`, supervised CID
+`91a0836c3827fc755f040c1f1deacc8462f4951d6670e6292fe70ea2f323908e`, and
+completed bounded shutdown; recovery remained incomplete. The checked verdict is
+`EXECUTION_FAILED` at `first_submission`; verdict SHA-256 is
+`307a429cd7fc6719b6284f5197b52e27542aea212409ac57dde01335c3bb7cd9`.
+The unchanged native probe enumerated `AMD Radeon Navi23` / Metal 3, compiled
+and committed, then timed out after five seconds with zero completed command
+buffers, zero compute rounds, and zero readback pixels. Probe SHA-256 is
+`d3c686614989146fee69029a0a6e2901da0f0a79e9b05debdfe2c1bc6bc146ef`.
+
+CR2 capture completed as a valid terminal snapshot with 306 records and no
+corruption. The frozen diagnostic group observed the actual client VMID 11:
+status `0xb0093b`, fault VA `0x400300000`, worker-time root `0xf40b709000`,
+stable context, relative two-entry walk, and absolute one-entry walk. This is
+worker-time current-state evidence and does not prove fault-time root or child
+causality. Critical capture SHA-256 is
+`6cf7082b8f64ecdc0147eb9237f256dbade07843ebb72037a4098696c001cc66`;
+recovery replay SHA-256 is
+`175cac21a8c3a8f65d0bf81ab265ab99bf7b33d55123011f011c1d44355a918b`.
+
+Recovery is `incomplete` with `authorizes_launch=false`; recovery SHA-256 is
+`045f6daa72ca21d9c27161f6d908eb3a0d621f5122c961317e1748a5bfb0a4f6`. Host
+after-state reports no active VM, `vfio-pci`, accessible pinned-awake device,
+empty reset methods, verified watchdogs/capture/sleep inhibition; host-after
+SHA-256 is `2be691de8bcc95bf658d8e2997f4b839c567e33f68f7bea21d5fc6e06749a203`.
+The unresolved GPU-execution streak is now **13 actual cycles** and the
+current post-Astra batch is **2 attempts** (`191`, `192`). No retry, debugger,
+reset, rebind, or additional launch is authorized.
+
+Candidate 192 offline build and preparation are complete. The clean detached
+worktree is commit `4eaab5748f935fce785b286a0b9ab07194e59a86`; build ID is
+`29a8fe9f66034d26bef5adf9f8b9c643`; source digest is
+`e2eb4769e41af10dcbb48f315446030fdd8af0632fa5f6de8ec8f9abba630526`; archive
+digest is `c79cc2e1705c33ef18bfc901ea7c629c21d178ad81b5dd2428d58c8b581ccb89`;
+executable digest is `27fc7102fc57702d8966cc3d06fcf1f23c0e7c28f04dd3eaeab2e3518ca6f676`;
+and executable/dSYM UUID is `aea42840cf6a3e81b5a6ba3fd4c762a5`. The canonical
+build-identity record digest is
+`930b4997535a9c63b4d312797b34ef22deee4a65ce78b1ff1be08ec5e22da9cc`.
+
+The metadata-only staging record is
+`/home/bogdan/macos-vm/run/candidate-192/staging.json`, digest
+`4bcfd7d176b1fd5c445b40511faccfba86ddee5090c0722639c2c2d974f27671`, with
+fresh run ID `575d67d557b07f98b186c0cfb024fcbd` and fresh numeric recovery
+nonce words `10988695507096264023` / `13689857309117810353`. Preparation
+produced `/home/bogdan/macos-vm/run/metal-026-192-manifest.json`, digest
+`c9c2869b39f5982216c4ffa9e05a5db57f3c69ee59a3b429fccbef9579323c7c`, binding
+the staged source, build, KDK, harness, ROM, boot disk, current boot ID,
+`sercat.py` digest `3dd229f4ea4df1c0d3a9f3c5f50becd69b2664bf85ebe8c515893488ceaa4ad8`,
+and the `GENERIC_GRAPHICS=off`, headless-Lilu, dynamic-GDB configuration. The
+build manifest retains `physical_tested=false` as an artifact claim; candidate
+192 has since run once on this boot, as recorded above.
+
+The `MAP_PROCESS` address investigation has now identified the frozen serial
+values: actual memory plus-`0x60` is `0xebc0000000`, plus-`0x50` is
+`0xf400000000`, and plus-`0x58` is `0x840000000`. The native A1 packet root
+remains unobserved. A conditional mode-5 A1 post-fill root-repair
+implementation is under offline review only; it has not been staged, launched,
+or tested on hardware, and no conversion fix or Metal success claim is
+authorized.
+
 
 **Desktop Metal remains unproven. No further GPU launch is admitted.** Candidate
 191 demonstrated complete CR2 capture under real QEMU load, but the unchanged
 native Metal probe timed out at its first command-buffer completion. Cleanup
 left graphics retirement incomplete, and the prior candidate 191 boot ledger is exhausted.
 
-## Current plan and review accounting
+## Historical review accounting through candidate191
 
 The latest user instruction requires reasoning/source review after every three
 actual GPU attempts, followed by a revised test batch. The Astra xhigh review

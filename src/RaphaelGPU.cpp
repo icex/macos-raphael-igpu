@@ -229,11 +229,13 @@ static bool vmFaultDiagEnabled = false;
 // rgpuvmroot: enabled modes repair hub-0 client roots (VMIDs 1..15) while leaving
 // VMID0's legacy GART alone; 2/3 retain the historical template hooks; 4 converts
 // the separately supplied real entry source at the SDMA update boundary verified
-// in X6000 24G830.
+// in X6000 24G830. Mode 5 retains mode 4 and additionally repairs the independent
+// MES MAP_PROCESS page-table-base field after native packet construction.
 static uint32_t vmRootFixMode = 0;
 static mach_vm_address_t orgVmmGetPde {};
 static mach_vm_address_t orgVmmGetPte {};
 static mach_vm_address_t orgVmmUpdateEntries {};
+static mach_vm_address_t orgFillMapProcess {};
 // Page-table entry conversions: lifetime counters per kind and domain, plus a
 // bounded first-sample buffer per kind. Producers never log, allocate or wait.
 static volatile uint64_t vmEntryCounts[2][RaphaelVm::kEntryDomainCount] {};
@@ -242,6 +244,7 @@ static volatile uint64_t vmEntryCounts[2][RaphaelVm::kEntryDomainCount] {};
 // producer cannot hide behind the active-phase counters.
 static volatile uint64_t vmEntryInactive[2] {};
 static rgpu::ObservationBuffer<RaphaelVm::EntryConversionSample, 8> vmEntrySamples[2] {};
+static rgpu::ObservationBuffer<RaphaelVm::MapProcessObservation, 8> vmMapProcessSamples {};
 static volatile uint64_t vmUpdateCounts[RaphaelVm::kUpdateDomainCount] {};
 static rgpu::ObservationBuffer<RaphaelVm::EntryUpdateDecision, 8> vmUpdateChildSamples {};
 static rgpu::ObservationBuffer<RaphaelVm::EntryUpdateDecision, 8> vmUpdateEligibleSamples {};
@@ -647,6 +650,7 @@ static constexpr size_t kOffPm4Mqd       = 0x69362;  // AMDGFX10PM4Engine::initC
 static constexpr size_t kOffKiqStart     = 0x8e670;  // AMDGFX10KIQHWChannel::startKIQ [x6]
 static constexpr size_t kOffPm4GfxMqd    = 0x6952a;  // AMDGFX10PM4Engine::initGraphicsMQD [x6]
 static constexpr size_t kOffKiqMapQ      = 0x8e45e;  // AMDGFX10KIQHWChannel::submitMapQueuesPacket [x6]
+static constexpr size_t kOffFillMapProcess = 0x8edce; // AMDGFX10HIQHWChannel::fillMapProcessPacket [x6]
 static constexpr size_t kOffKiqSubmit    = 0x5c716;  // AMDKIQHWChannel::submitKIQFrame [x6]
 static constexpr size_t kOffWaitStamp    = 0x4c520;  // AMDHWChannel::waitForHwStamp [x6]
 // Observation-only submission boundaries in the exact 24G830 X6000 image. Keep
@@ -4152,6 +4156,38 @@ static void wrapVmmPrepare(void *self, void *prepared, const void *info, bool al
     }
 }
 
+static uint32_t *wrapFillMapProcess(void *self, uint32_t *packet, uint64_t root,
+                                    uint64_t trapBase, uint32_t queueCount,
+                                    uint32_t pasid, uint32_t flags) {
+    auto end = FunctionCast(wrapFillMapProcess, orgFillMapProcess)(
+        self, packet, root, trapBase, queueCount, pasid, flags);
+    const bool returnValid = packet != nullptr && end == packet + 0x10;
+    uint32_t header = 0;
+    uint64_t nativeRoot = 0;
+    RaphaelVm::MapProcessRepair repair {};
+    if (returnValid) {
+        __builtin_memcpy(&header, packet, sizeof(header));
+        __builtin_memcpy(&nativeRoot, reinterpret_cast<uint8_t *>(packet) + 8,
+                         sizeof(nativeRoot));
+        const bool marked = __atomic_load_n(&raphaelTargetConfirmed, __ATOMIC_ACQUIRE);
+        const bool published = __atomic_load_n(&cachedFbPublished, __ATOMIC_ACQUIRE);
+        repair = RaphaelVm::repairMapProcessPacket(
+            reinterpret_cast<uint8_t *>(packet), 0x40, vmRootFixMode == 5,
+            marked && published,
+            __atomic_load_n(&cachedFbBase, __ATOMIC_RELAXED),
+            __atomic_load_n(&cachedFbTop, __ATOMIC_RELAXED),
+            __atomic_load_n(&cachedFbOffset, __ATOMIC_RELAXED));
+    }
+    uint64_t finalRoot = nativeRoot;
+    if (returnValid)
+        __builtin_memcpy(&finalRoot, reinterpret_cast<uint8_t *>(packet) + 8,
+                         sizeof(finalRoot));
+    vmMapProcessSamples.append(RaphaelVm::MapProcessObservation {
+        root, nativeRoot, finalRoot, pasid, header,
+        static_cast<uint32_t>(repair.reason), returnValid, repair.repaired});
+    return end;
+}
+
 // AMDGFX10VMM::getPDEValue(level, tableAddress) and getPTEValue(level, pageAddress,
 // flags, fragment) keep the address bits they receive and add attributes only.
 // Apple's video-memory objects carry framebuffer MC addresses, while GFXHUB
@@ -4218,7 +4254,7 @@ static void wrapVmmUpdateEntries(void *self, uint64_t destination, uint64_t coun
         reinterpret_cast<uint64_t>(__builtin_return_address(0));
     const uint64_t callerOffset = x6Base != 0 && returnAddress >= x6Base
         ? returnAddress - x6Base : UINT64_MAX;
-    const bool active = vmRootFixMode == 4 &&
+    const bool active = vmRootFixMode >= 4 &&
         __atomic_load_n(&raphaelTargetConfirmed, __ATOMIC_ACQUIRE) &&
         __atomic_load_n(&cachedFbPublished, __ATOMIC_ACQUIRE);
     const auto decision = RaphaelVm::prepareEntryUpdate(
@@ -5386,7 +5422,7 @@ static void publishVmUpdateSample(const char *bucket,
 // conversion/safety-domain signals. They remain bounded without requiring a
 // continuously active callback stream to become quiet.
 static void publishPendingVmEntryUpdates() {
-    if (vmRootFixMode != 4) return;
+    if (vmRootFixMode < 4) return;
     static RaphaelVm::UpdateSummarySchedule summarySchedule {};
     static size_t childCursor = 0;
     static size_t eligibleCursor = 0;
@@ -5435,6 +5471,26 @@ static void publishPendingVmEntryUpdates() {
 
 static void publishPendingVmObservations() {
     publishClientFaultWalks();
+    static size_t mapProcessCursor = 0;
+    RaphaelVm::MapProcessObservation mapProcess {};
+    while (mapProcessCursor < vmMapProcessSamples.size() &&
+           vmMapProcessSamples.read(mapProcessCursor, mapProcess)) {
+        ++mapProcessCursor;
+        CRLOG("VM: map-process-root input=%#llx native=%#llx final=%#llx pasid=%u "
+              "header=%#08x return-valid=%u repaired=%u reason=%u",
+              mapProcess.inputRoot, mapProcess.nativeRoot, mapProcess.finalRoot,
+              mapProcess.pasid, mapProcess.header, mapProcess.returnValid,
+              mapProcess.repaired, mapProcess.reason);
+    }
+    static uint64_t lastMapProcessDropped = 0;
+    static unsigned mapProcessDropReports = 0;
+    const uint64_t mapProcessDropped = vmMapProcessSamples.dropped();
+    if (mapProcessDropped != lastMapProcessDropped && mapProcessDropReports < 8) {
+        lastMapProcessDropped = mapProcessDropped;
+        ++mapProcessDropReports;
+        CRLOG("VM: map-process-summary retained=%llu dropped=%llu",
+              static_cast<uint64_t>(vmMapProcessSamples.size()), mapProcessDropped);
+    }
     static size_t programCursor = 0;
     static size_t submitCursor = 0;
     static RaphaelVm::PreparedRequest programCache[8] {};
@@ -6134,7 +6190,7 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
                     patcher.clearError();
                 }
             }
-            if (vmRootFixMode == 4) {
+            if (vmRootFixMode >= 4) {
                 // Complete first 17 bytes: frame setup, callee-saved pushes and
                 // stack allocation. No branch or RIP-relative operand occurs in
                 // this guarded span in the pinned 24G830 X6000 image.
@@ -6152,6 +6208,23 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
                       "-> %s (entry=%u org=0x%llx)",
                       orgVmmUpdateEntries ? "ok" : "FAILED", updateMatches,
                       orgVmmUpdateEntries);
+                patcher.clearError();
+            }
+            if (vmRootFixMode == 5) {
+                static const uint8_t mapProcessEntry[] = {
+                    0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56,
+                    0x41, 0x54, 0x53, 0x49, 0x89, 0xcf, 0x49, 0x89, 0xd4};
+                const bool mapProcessMatches = entryMatches(
+                    addr, sz, kOffFillMapProcess, mapProcessEntry,
+                    sizeof(mapProcessEntry));
+                if (mapProcessMatches)
+                    orgFillMapProcess = patcher.routeFunction(
+                        addr + kOffFillMapProcess,
+                        reinterpret_cast<mach_vm_address_t>(wrapFillMapProcess), true);
+                CRLOG("VM: route AMDGFX10HIQHWChannel::fillMapProcessPacket -> %s "
+                      "(entry=%u org=0x%llx)",
+                      orgFillMapProcess ? "ok" : "FAILED", mapProcessMatches,
+                      orgFillMapProcess);
                 patcher.clearError();
             }
             if (ptbFixMode != 2) {
@@ -6394,15 +6467,16 @@ static void pluginStart() {
              : ptbm == 1 ? "legacy post-invalidation PTB experiment" : "reporting only");
     }
     uint32_t vmroot = 0;
-    if (PE_parse_boot_argn("rgpuvmroot", &vmroot, sizeof(vmroot)) && vmroot <= 4)
+    if (PE_parse_boot_argn("rgpuvmroot", &vmroot, sizeof(vmroot)) && vmroot <= 5)
         vmRootFixMode = vmroot;
     vmRootFixEnabled = vmRootFixMode >= 1;
     RLOG("rgpuvmroot=%u: client GFXHUB root MC-to-physical repair %s; child PDE "
          "template conversion %s; video-memory PTE template conversion %s; real entry "
-         "source conversion %s",
+         "source conversion %s; MAP_PROCESS root conversion %s",
          vmRootFixMode, vmRootFixEnabled ? "ARMED" : "off",
          vmRootFixMode == 2 || vmRootFixMode == 3 ? "ARMED" : "off",
-         vmRootFixMode == 3 ? "ARMED" : "off", vmRootFixMode == 4 ? "ARMED" : "off");
+         vmRootFixMode == 3 ? "ARMED" : "off", vmRootFixMode >= 4 ? "ARMED" : "off",
+         vmRootFixMode == 5 ? "ARMED" : "off");
     uint32_t mem = 0;
     if (PE_parse_boot_argn("rgpumem", &mem, sizeof(mem)) && mem <= 1) {
         memProbeMode = mem;

@@ -218,6 +218,85 @@ int main() {
     require(reasonFor(0, 2, true, 0xf00000000001ULL, 0x0001, 0xffffff, 0xffffff) ==
                 RaphaelVm::RootRepairReason::Overflow,
             "a root whose MC-to-physical result exceeds bit 47 is rejected as overflow");
+
+    alignas(uint64_t) uint8_t mapProcess[0x40];
+    std::memset(mapProcess, 0xa5, sizeof(mapProcess));
+    auto putMap32 = [&](size_t offset, uint32_t value) {
+        std::memcpy(mapProcess + offset, &value, sizeof(value));
+    };
+    auto putMap64 = [&](size_t offset, uint64_t value) {
+        std::memcpy(mapProcess + offset, &value, sizeof(value));
+    };
+    putMap32(0, 0xc00ea100u);
+    for (uint64_t flags : {0ULL, 1ULL, 5ULL}) {
+        putMap64(8, 0xf40b709000ULL | flags);
+        uint8_t before[0x40]; std::memcpy(before, mapProcess, sizeof(before));
+        auto repair = RaphaelVm::repairMapProcessPacket(
+            mapProcess, sizeof(mapProcess), true, true, 0xf400, 0xf41f, 0x840);
+        require(repair.valid && repair.repaired &&
+                    repair.nativeRoot == (0x84b709000ULL | flags),
+                "MAP_PROCESS converts the frozen MC root and preserves supported flags");
+        put64(0x18, 0xf40b709000ULL | flags);
+        auto invalidate = RaphaelVm::prepareInvalidateInfo(
+            bytes, sizeof(bytes), true, true, 0xf400, 0xf41f, 0x840);
+        require(invalidate.repaired && invalidate.nativeRoot == repair.nativeRoot,
+                "MAP_PROCESS and invalidate repairs agree for supported root forms");
+        require(std::memcmp(before, mapProcess, 8) == 0 &&
+                    std::memcmp(before + 16, mapProcess + 16, 0x30) == 0,
+                "MAP_PROCESS repair changes only the root qword");
+    }
+    for (uint64_t root : {0xf40b709003ULL, 0xf40b709009ULL,
+                          0x84b709001ULL, 0xb709000ULL, 0x400000000ULL}) {
+        putMap64(8, root);
+        uint8_t before[0x40]; std::memcpy(before, mapProcess, sizeof(before));
+        auto repair = RaphaelVm::repairMapProcessPacket(
+            mapProcess, sizeof(mapProcess), true, true, 0xf400, 0xf41f, 0x840);
+        require(repair.valid && !repair.repaired &&
+                    std::memcmp(before, mapProcess, sizeof(before)) == 0,
+                "MAP_PROCESS preserves SYSTEM, unknown, physical, offset and outside roots");
+    }
+    putMap64(8, 0xf40b709001ULL);
+    for (unsigned variant = 0; variant < 4; ++variant) {
+        uint8_t packet[0x40]; std::memcpy(packet, mapProcess, sizeof(packet));
+        if (variant == 3) { uint32_t bad = 0xc00ea101u; std::memcpy(packet, &bad, 4); }
+        uint8_t before[0x40]; std::memcpy(before, packet, sizeof(before));
+        auto repair = RaphaelVm::repairMapProcessPacket(
+            packet, variant == 2 ? 0x3f : sizeof(packet), variant != 0,
+            variant != 1, variant == 2 ? 0 : 0xf400, 0xf41f, 0x840);
+        require(!repair.repaired && std::memcmp(packet, before, sizeof(packet)) == 0,
+                "disabled, unmarked, truncated and malformed MAP_PROCESS packets pass through");
+    }
+    require(!RaphaelVm::repairMapProcessPacket(
+                 nullptr, 0x40, true, true, 0xf400, 0xf41f, 0x840).valid,
+            "a null MAP_PROCESS packet is invalid");
+    putMap32(0, 0xc00ea100u); putMap64(8, 0xf40b709001ULL);
+    uint8_t invalidApertureBefore[0x40];
+    std::memcpy(invalidApertureBefore, mapProcess, sizeof(mapProcess));
+    auto invalidAperture = RaphaelVm::repairMapProcessPacket(
+        mapProcess, sizeof(mapProcess), true, true, 0, 0xf41f, 0x840);
+    require(!invalidAperture.repaired &&
+                invalidAperture.reason == RaphaelVm::RootRepairReason::InvalidAperture &&
+                std::memcmp(invalidApertureBefore, mapProcess, sizeof(mapProcess)) == 0,
+            "an unpublished MAP_PROCESS aperture fails closed without mutation");
+    for (uint64_t root : {0xf400000001ULL, 0xf41fffffc5ULL}) {
+        putMap64(8, root);
+        auto edge = RaphaelVm::repairMapProcessPacket(
+            mapProcess, sizeof(mapProcess), true, true, 0xf400, 0xf41f, 0x840);
+        require(edge.repaired,
+                "aligned MAP_PROCESS roots at both MC aperture edges convert");
+    }
+    putMap64(8, 0xf00000000001ULL);
+    auto mapOverflow = RaphaelVm::repairMapProcessPacket(
+        mapProcess, sizeof(mapProcess), true, true, 0x0001, 0xffffff, 0xffffff);
+    require(!mapOverflow.repaired &&
+                mapOverflow.reason == RaphaelVm::RootRepairReason::Overflow,
+            "MAP_PROCESS physical-address overflow fails closed");
+    putMap64(8, 0x200000f40b709001ULL);
+    auto highFlags = RaphaelVm::repairMapProcessPacket(
+        mapProcess, sizeof(mapProcess), true, true, 0xf400, 0xf41f, 0x840);
+    require(!highFlags.repaired &&
+                highFlags.reason == RaphaelVm::RootRepairReason::UnsupportedFlags,
+            "MAP_PROCESS rejects unknown high root attributes");
     put32(0, 0); put32(4, 2); bytes[0x24] = 1; put64(0x18, 0xf401234001ULL);
 
     alignas(uint32_t) unsigned char prepared[0x54] {};

@@ -311,6 +311,59 @@ def _decode_payload(build, seq, payload):
         row.update(kind='capture_loss', reason='malformed client fault-walk entry record',
                    definitive=True)
     elif m := re.fullmatch(
+            r'VM: map-process-summary retained=(\d+) dropped=(\d+)', payload):
+        retained, dropped = int(m[1]), int(m[2])
+        if retained <= 8 and dropped <= 0xffffffffffffffff:
+            row.update(kind='vm_map_process_summary', retained=retained,
+                       dropped=dropped, ok=True)
+        else:
+            row.update(kind='capture_loss', reason='malformed map-process-summary record',
+                       definitive=True)
+    elif payload.startswith('VM: map-process-summary'):
+        row.update(kind='capture_loss', reason='malformed map-process-summary record',
+                   definitive=True)
+    elif m := re.fullmatch(
+            r'VM: map-process-root input=(0x[0-9a-fA-F]+|0) '
+            r'native=(0x[0-9a-fA-F]+|0) final=(0x[0-9a-fA-F]+|0) '
+            r'pasid=(\d+) header=(0x[0-9a-fA-F]+|0) return-valid=([01]) '
+            r'repaired=([01]) reason=(\d+)', payload):
+        input_root, native_root, final_root = (int(m[index], 16) for index in (1, 2, 3))
+        pasid, header, reason = int(m[4]), int(m[5], 16), int(m[8])
+        return_valid, repaired = bool(int(m[6])), bool(int(m[7]))
+        valid = (all(value <= 0xffffffffffffffff for value in
+                     (input_root, native_root, final_root)) and
+                 pasid <= 0xffffffff and header <= 0xffffffff and reason <= 13 and
+                 ((repaired and return_valid and header == 0xc00ea100 and
+                   reason == 13 and native_root != final_root) or
+                  (not repaired and
+                  ((return_valid and native_root == final_root) or
+                    (not return_valid and native_root == 0 and final_root == 0 and
+                     header == 0 and reason == 0)))))
+        if valid:
+            row.update(kind='vm_map_process_root', input_root=input_root,
+                       native_root=native_root, final_root=final_root, pasid=pasid,
+                       header=header, return_valid=return_valid,
+                       repaired=repaired, reason=reason, ok=True,
+                       guard_valid=return_valid and header == 0xc00ea100)
+        else:
+            row.update(kind='capture_loss', reason='malformed map-process-root record',
+                       definitive=True)
+    elif payload.startswith('VM: map-process-root'):
+        row.update(kind='capture_loss', reason='malformed map-process-root record',
+                   definitive=True)
+    elif m := re.fullmatch(
+            r'VM: route AMDGFX10HIQHWChannel::fillMapProcessPacket -> '
+            r'(ok|FAILED) \(entry=([01]) org=(0x[0-9a-fA-F]+)\)', payload):
+        original = int(m[3], 16)
+        if original <= 0xffffffffffffffff:
+            row.update(kind='vm_map_process_route', ok=m[1] == 'ok',
+                       entry=bool(int(m[2])), original=original)
+        else:
+            row.update(kind='vm_map_process_route', ok=False, malformed=True)
+    elif payload.startswith(
+            'VM: route AMDGFX10HIQHWChannel::fillMapProcessPacket'):
+        row.update(kind='vm_map_process_route', ok=False, malformed=True)
+    elif m := re.fullmatch(
             r'VM: route AMDHWVMContext::updateContiguousPTEsWithDMAUsingAddr '
             r'-> (ok|FAILED) \(entry=([01]) org=(0x[0-9a-fA-F]+)\)', payload):
         row.update(kind='vm_entry_update_route', ok=m[1] == 'ok',
@@ -888,7 +941,8 @@ def _classify(manifest, events, probe, defer_absent_workload=False):
                                  any(r['kind'] in post_workload_kinds for r in events))
     if 'vmid2_entry_gate' in required:
         gates = [r for r in events if r['kind'] == 'vm_entry_gate']
-        expected_mode = 4 if 'vmid2_entry_update' in required else 3
+        expected_mode = (5 if 'map_process_root' in required else
+                         4 if 'vmid2_entry_update' in required else 3)
         if not gates:
             return verdict('INCONCLUSIVE', stage='vmid2_entry_gate_missing')
         if (len(gates) != 1 or not gates[0].get('marked') or
@@ -930,13 +984,14 @@ def _classify(manifest, events, probe, defer_absent_workload=False):
                     any(value < old for value, old in zip(current, previous))):
                 return verdict('INVALID', stage='vmid2_entry_update_state')
             previous = current
-        if any(row.get('mode') != 4 or row.get('route') is not True
+        expected_update_mode = 5 if 'map_process_root' in required else 4
+        if any(row.get('mode') != expected_update_mode or row.get('route') is not True
                for row in summaries):
             return verdict('INVALID', stage='vmid2_entry_update_state')
         summary = summaries[-1]
         counts = summary.get('counts')
         omitted = summary.get('omitted')
-        if (summary.get('mode') != 4 or summary.get('route') is not True or
+        if (summary.get('mode') != expected_update_mode or summary.get('route') is not True or
                 summary.get('inactive') != 0 or
                 any(counts.get(key) for key in ('invalid_aperture', 'overflow', 'span'))):
             return verdict('INVALID', stage='vmid2_entry_update_state')
@@ -1018,6 +1073,30 @@ def _classify(manifest, events, probe, defer_absent_workload=False):
                for r in events):
             return verdict('EXECUTION_FAILED', True, 'vmid2_mapping_fault',
                            'the VMID2 mapping still faults; do not retry unchanged')
+    if 'map_process_root' in required:
+        routes = [r for r in events if r['kind'] == 'vm_map_process_route']
+        if (len(routes) != 1 or not routes[0].get('ok') or
+                not routes[0].get('entry') or not routes[0].get('original')):
+            return verdict('INVALID', stage='map_process_root_route_guard')
+        route_seq = routes[0].get('seq', -1)
+        roots = [r for r in events if r['kind'] == 'vm_map_process_root']
+        if len(roots) > 8:
+            return verdict('INVALID', stage='map_process_root_capacity')
+        if any(r.get('seq', -1) <= route_seq or not r.get('ok') or
+               not r.get('guard_valid') for r in roots):
+            return verdict('INVALID', stage='map_process_root_state')
+        summaries = [r for r in events if r['kind'] == 'vm_map_process_summary']
+        if any(not r.get('ok') for r in summaries):
+            return verdict('INVALID', stage='map_process_root_summary')
+        for row in roots:
+            if row.get('repaired'):
+                attributes = row['native_root'] & ~0x0000ffffffffffc0
+                source = row['native_root'] & 0x0000ffffffffffc0
+                expected = source - ENTRY_MC_BASE + ENTRY_PHYSICAL_BASE
+                if (attributes not in (0, 1, 5) or
+                        not ENTRY_MC_BASE <= source < ENTRY_MC_BASE + ENTRY_APERTURE_SIZE or
+                        row['final_root'] != (expected | attributes)):
+                    return verdict('INVALID', stage='map_process_root_conversion')
     if 'sdma_vm_program' in required:
         program_routes = [r for r in events if r['kind'] == 'vm_program_route']
         if len(program_routes) != 1 or not program_routes[0].get('ok'):
