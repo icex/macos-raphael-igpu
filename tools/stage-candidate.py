@@ -100,6 +100,7 @@ RESEAL_PROFILES = {
     ("1.0.194", "metal-029"): {
         "candidate_version":"1.0.194", "card_id":"metal-029",
         "prior_run_id":"b4a41ca47553618a58bab320b3b0c2fb",
+        "nonce_source_run_id":"1f0649a6a31fbf73162696891cf5b9bc",
         "record_kind":"candidate194-hybrid-reseal",
         "staging_sha256":"640409b94b4613a62710705c431e44115c052d4e6bcb7fa81ae7d408a92b7c9d",
         "card_sha256":None,
@@ -902,7 +903,7 @@ def reseal_candidate(expected_commit, expected_boot_id, expected_card_sha256,
             xml = original_bytes.index(b"<?xml"); staged_xml = staged_bytes.index(b"<?xml")
             validate_nonce_only_reseal(plistlib.loads(original_bytes[xml:]),
                                        plistlib.loads(staged_bytes[staged_xml:]),
-                                       staging["run_id"], run_id)
+                                       profile.get("nonce_source_run_id", staging["run_id"]), run_id)
             shutil.copyfile(raw_image, private_raw)
             experiment.stage_image(private_raw, bundle, staged_bytes)
             qconvert(image_id, private_raw, "raw", candidate_qcow, "qcow2")
