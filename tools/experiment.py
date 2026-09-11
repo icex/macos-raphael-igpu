@@ -16,8 +16,10 @@ import plistlib
 import time
 import shlex
 import signal
+import sys
 import gzip
 import struct
+import stat
 import threading
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -345,6 +347,7 @@ def current_identity(vm, candidate, requested_diagnostic, run_id=None,
 
 def prepare(vm, spec, output, gpu=True, run_id=None):
     card = json.loads(spec.read_text())
+    desktop_profile(card)
     replay_schema = critical_replay_schema(card)
     transport = critical_replay_transport(card)
     options = launch_options({'launch_options': card.get(
@@ -2624,6 +2627,280 @@ def run_probe(vm, manifest):
     return dict(run_id=nonce, output=result.stdout, transport_exit=result.returncode)
 
 
+DESKTOP_PROFILE_FIELDS = {
+    'schema', 'hold_seconds', 'cleanup_reserve_seconds', 'source_sha256',
+    'binary_sha256', 'guest_binary', 'require_remote_frame_change',
+}
+HYBRID_DESKTOP_PROFILE_FIELDS = {
+    'schema', 'mode', 'hold_seconds', 'cleanup_reserve_seconds', 'source_sha256',
+    'binary_sha256', 'guest_binary', 'expected_width', 'expected_height',
+    'expected_refresh', 'require_qemu_frame_change',
+}
+
+
+def desktop_profile(card):
+    """Return the one narrow desktop profile without relaxing launch limits."""
+    profile = card.get('desktop_phase') if isinstance(card, dict) else None
+    if profile is None:
+        return None
+    launch = card.get('launch_options')
+    if (card.get('max_seconds') != 180 or not isinstance(profile, dict) or
+            profile.get('mode') == 'existing-display-production'):
+        if (card.get('max_seconds') != 180 or not isinstance(profile, dict) or
+                set(profile) != HYBRID_DESKTOP_PROFILE_FIELDS or profile.get('schema') != 1 or
+                profile.get('mode') != 'existing-display-production' or
+                type(profile.get('hold_seconds')) is not int or not 1 <= profile['hold_seconds'] <= 30 or
+                profile.get('cleanup_reserve_seconds') != 25 or
+                not re.fullmatch(r'[0-9a-f]{64}', str(profile.get('source_sha256', ''))) or
+                not re.fullmatch(r'[0-9a-f]{64}', str(profile.get('binary_sha256', ''))) or
+                not re.fullmatch(r'/var/tmp/rgpu-desktop-existing-v1-[0-9a-f]{16}/desktop-display', str(profile.get('guest_binary', ''))) or
+                type(profile.get('expected_width')) is not int or profile['expected_width'] <= 0 or
+                type(profile.get('expected_height')) is not int or profile['expected_height'] <= 0 or
+                not isinstance(profile.get('expected_refresh'), (int, float)) or profile['expected_refresh'] <= 0 or
+                profile.get('require_qemu_frame_change') is not True or
+                card.get('desktop_helper_sha256') != sha(Path(__file__).with_name('desktop-display.py').read_bytes()) or
+                card.get('qemu_capture_sha256') != sha(Path(__file__).with_name('qemu-frame-capture.py').read_bytes()) or
+                card.get('launch_options') != {'BOOTDISK_MODE':'custom', 'NVRAM':'stock', 'GENERIC_GRAPHICS':'on'}):
+            raise ValueError('invalid hybrid desktop experiment profile')
+        return dict(profile)
+    if (card.get('max_seconds') != 180 or not isinstance(profile, dict) or
+            set(profile) != DESKTOP_PROFILE_FIELDS or profile.get('schema') != 1 or
+            type(profile.get('hold_seconds')) is not int or
+            not 1 <= profile['hold_seconds'] <= 30 or
+            profile.get('cleanup_reserve_seconds') != 25 or
+            not re.fullmatch(r'[0-9a-f]{64}', str(profile.get('source_sha256', ''))) or
+            not re.fullmatch(r'[0-9a-f]{64}', str(profile.get('binary_sha256', ''))) or
+            not re.fullmatch(r'/var/tmp/rgpu-desktop-display-v2-[0-9a-f]{16}/desktop-display',
+                             str(profile.get('guest_binary', ''))) or
+            card.get('desktop_helper_sha256') != sha(
+                Path(__file__).with_name('desktop-display.py').read_bytes()) or
+            card.get('vnc_capture_sha256') != sha(
+                Path(__file__).with_name('vnc-frame-capture.py').read_bytes()) or
+            card.get('vnc_requirements_sha256') != sha(
+                Path(__file__).with_name('vnc-frame-capture.requirements.txt').read_bytes()) or
+            profile.get('require_remote_frame_change') is not True or
+            launch != {'BOOTDISK_MODE':'custom', 'NVRAM':'stock',
+                       'GENERIC_GRAPHICS':'off'}):
+        raise ValueError('invalid bounded desktop experiment profile')
+    return dict(profile)
+
+
+def desktop_phase_fits(now, launch_deadline, container_deadline, profile):
+    # desktop-display's transport timeout is hold+23; reserve that whole bound.
+    return (now + profile['hold_seconds'] + 23 + profile['cleanup_reserve_seconds'] <
+            min(launch_deadline, container_deadline))
+
+
+def validated_metal_pass(probe, run_id, metal=None):
+    metal = metal or helper('metal-test')
+    if (not isinstance(probe, dict) or probe.get('run_id') != run_id or
+            probe.get('transport_exit') != 0):
+        raise ValueError('desktop phase requires successful authenticated Metal transport')
+    result = metal.validate_output(probe.get('output', ''), run_id)
+    if (result.get('passed') is not True or result.get('device') != 'AMD Radeon Navi23' or
+            type(result.get('registry_id')) is not int or
+            result.get('completed_command_buffers', 0) < 4):
+        raise ValueError('desktop phase requires the exact Navi23 Metal pass')
+    return result
+
+
+def validate_remote_frame_proof(path, vm, run_id, cid, display_id, registry_id,
+                                started, ended):
+    try:
+        row = json.loads(Path(path).read_text())
+    except (OSError, ValueError, TypeError):
+        raise ValueError('remote VNC frame proof is absent')
+    keys = {'schema','run_id','cid','source','display_id','registry_id',
+            'first_path','second_path','first_sha256','second_sha256',
+            'first_epoch','second_epoch'}
+    run = (Path(vm)/'run').resolve()
+    expected_paths = [run/f'desktop-vnc-frame-{run_id}-{index}.png' for index in (1,2)]
+    try:
+        actual_hashes = [sha(path.read_bytes()) for path in expected_paths]
+    except OSError:
+        raise ValueError('remote VNC frame bytes are absent')
+    if (not isinstance(row, dict) or set(row) != keys or row.get('schema') != 1 or
+            row.get('run_id') != run_id or row.get('cid') != cid or
+            row.get('source') != 'vnc-loopback-5900' or
+            row.get('display_id') != display_id or row.get('registry_id') != registry_id or
+            [row.get('first_path'),row.get('second_path')] !=
+                [str(path.relative_to(Path(vm).resolve())) for path in expected_paths] or
+            not re.fullmatch(r'[0-9a-f]{64}', str(row.get('first_sha256',''))) or
+            not re.fullmatch(r'[0-9a-f]{64}', str(row.get('second_sha256',''))) or
+            [row['first_sha256'],row['second_sha256']] != actual_hashes or
+            row['first_sha256'] == row['second_sha256'] or
+            type(row.get('first_epoch')) not in (int,float) or
+            type(row.get('second_epoch')) not in (int,float) or
+            not started <= row['first_epoch'] < row['second_epoch'] <= ended):
+        raise ValueError('remote VNC frames are stale, unchanged, or malformed')
+    return row
+
+
+def _read_private_vnc_password(path):
+    flags = os.O_RDONLY | os.O_CLOEXEC | getattr(os, 'O_NOFOLLOW', 0)
+    fd = os.open(path, flags)
+    try:
+        info = os.fstat(fd)
+        if (not stat.S_ISREG(info.st_mode) or
+                stat.S_IMODE(info.st_mode) != 0o600 or info.st_uid != os.getuid()):
+            raise ValueError(
+                'legacy VNC credential must be an owner-matched regular 0600 file')
+        value = os.read(fd, 9)
+        if value.endswith(b'\n'): value=value[:-1]
+        if not 1 <= len(value) <= 8 or b'\0' in value:
+            raise ValueError('legacy VNC credential must be 1..8 non-NUL bytes')
+        return bytearray(value)
+    finally:
+        os.close(fd)
+
+
+def _verify_vnc_mapping(cid):
+    raw = command(['docker','inspect',cid], timeout=5)
+    rows = json.loads(raw)
+    if len(rows) != 1 or rows[0].get('Id') != cid or rows[0].get('State',{}).get('Running') is not True:
+        raise ValueError('exact desktop container is not running')
+    mapping = rows[0].get('NetworkSettings',{}).get('Ports',{}).get('5900/tcp')
+    if mapping != [{'HostIp':'127.0.0.1','HostPort':'5900'}]:
+        raise ValueError('exact desktop VNC loopback mapping is absent')
+
+
+def start_vnc_capture(vm, run_id, cid, capture_deadline):
+    _verify_vnc_mapping(cid)
+    password = _read_private_vnc_password(Path(vm)/'.vncpass-raphael')
+    first=Path(vm)/'run'/f'desktop-vnc-frame-{run_id}-1.png'
+    second=Path(vm)/'run'/f'desktop-vnc-frame-{run_id}-2.png'
+    if first.exists() or second.exists():
+        raise ValueError('remote frame evidence paths already exist')
+    python=Path(vm)/'run/venv-vncdotool/bin/python'
+    if not python.is_file(): raise ValueError('pinned vncdotool venv is absent')
+    version=command([str(python),'-c','import vncdotool; print(vncdotool.__version__)'],timeout=3)
+    if version != '1.4.2': raise ValueError('vncdotool runtime version is not pinned')
+    worker=Path(__file__).with_name('vnc-frame-capture.py')
+    proc=subprocess.Popen([str(python),str(worker),'--child','--first',str(first),
+                           '--second',str(second),'--deadline',str(capture_deadline)],
+                          stdin=subprocess.PIPE,stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE,text=False)
+    try:
+        proc.stdin.write(password); proc.stdin.close(); proc.stdin=None
+    finally:
+        for index in range(len(password)): password[index]=0
+    return proc,first,second
+
+
+def finish_vnc_capture(proc, vm, run_id, cid, display_id, registry_id,
+                       first, second, stimulus, started, ended, capture_deadline):
+    try:
+        remaining=capture_deadline-time.time()
+        if remaining <= 0: raise subprocess.TimeoutExpired('vnc-capture',0)
+        stdout,stderr=proc.communicate(timeout=remaining)
+    except subprocess.TimeoutExpired:
+        proc.kill(); stdout,stderr=proc.communicate()
+        raise ValueError('bounded VNC capture timed out')
+    if proc.returncode:
+        raise ValueError('VNC capture worker failed without usable frames')
+    _verify_vnc_mapping(cid)
+    timing=json.loads(stdout)
+    from PIL import Image, ImageChops
+    images=[Image.open(path).convert('RGB') for path in (first,second)]
+    if (any(image.size != (1280,720) for image in images) or
+            ImageChops.difference(*images).getbbox() is None):
+        raise ValueError('VNC frames lack the sole 1280x720 virtual display')
+    tokens=[stimulus.get('first_color_token'),stimulus.get('last_color_token')]
+    if tokens != ['#ff0000','#00ffff']:
+        raise ValueError('visible stimulus color contract changed')
+    colors=[(255,0,0),(0,255,255)]
+    rois=[image.crop((320,180,960,540)) for image in images]
+    if any(sum(all(abs(pixel[index]-color[index]) <= 12 for index in range(3))
+               for pixel in roi.get_flattened_data()) < int(roi.width*roi.height*0.70)
+           for roi,color in zip(rois,colors)):
+        raise ValueError('VNC frames do not contain the expected changing stimulus')
+    row={'schema':1,'run_id':run_id,'cid':cid,'source':'vnc-loopback-5900',
+         'display_id':display_id,'registry_id':registry_id,
+         'first_path':str(first.relative_to(Path(vm))),
+         'second_path':str(second.relative_to(Path(vm))),
+         'first_sha256':sha(first.read_bytes()),'second_sha256':sha(second.read_bytes()),
+         'first_epoch':timing['first_epoch'],'second_epoch':timing['second_epoch']}
+    proof=Path(vm)/'run'/f'desktop-remote-proof-{run_id}.json'
+    write_once(proof,row)
+    return validate_remote_frame_proof(proof,vm,run_id,cid,display_id,registry_id,started,ended)
+
+
+def run_desktop_phase(vm, manifest, state, metal_result):
+    profile = desktop_profile(manifest.get('spec', {}))
+    if profile is None:
+        return None
+    now = time.time()
+    if not desktop_phase_fits(now, state['launch_deadline_epoch'],
+                              state['deadline_epoch'], profile):
+        raise RuntimeError('desktop phase cannot preserve 25-second cleanup reserve')
+    display = helper('desktop-display')
+    runtime_manifest = dict(manifest, desktop_phase=profile)
+    if profile.get('mode') == 'existing-display-production':
+        nonce = uuid.uuid4().hex
+        expiry = int(min(state['launch_deadline_epoch'], state['deadline_epoch']) - profile['cleanup_reserve_seconds'])
+        capture_script = Path(__file__).with_name('qemu-frame-capture.py')
+        capture_deadline = min(state['launch_deadline_epoch'], state['deadline_epoch']) - profile['cleanup_reserve_seconds']
+        capture = subprocess.Popen([sys.executable, str(capture_script), '--host-dir', '/run/vm',
+                                    '--nonce', nonce, '--deadline', str(capture_deadline),
+                                    '--width', str(profile['expected_width']), '--height', str(profile['expected_height'])],
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        receipt_command = display.existing_display_guest_command(
+            nonce, expiry, profile['hold_seconds'], guest_binary=profile['guest_binary'],
+            source_sha256=profile['source_sha256'], binary_sha256=profile['binary_sha256'],
+            registry_id=metal_result['registry_id'], expected_width=profile['expected_width'],
+            expected_height=profile['expected_height'], expected_refresh=profile['expected_refresh'])
+        metal = helper('metal-test')
+        try:
+            transport = metal.run_guest_command(vm, receipt_command, nonce,
+                                                dict(os.environ, GX_TIMEOUT=str(profile['hold_seconds'] + 23)),
+                                                timeout=profile['hold_seconds'] + 23, execution_grace=0)
+        except BaseException:
+            capture.kill(); capture.wait(timeout=3)
+            raise
+        try:
+            capture_out, capture_err = capture.communicate(timeout=max(1, int(capture_deadline - time.time())))
+            if capture.returncode != 0:
+                raise RuntimeError(capture_err.strip() or 'QEMU frame capture failed')
+            qemu_frames = json.loads(capture_out)
+        except BaseException:
+            if capture.poll() is None:
+                capture.kill(); capture.wait(timeout=3)
+            raise
+        receipt = display.validate_existing_display_output(transport.stdout, nonce, {
+            'source_sha256': profile['source_sha256'], 'binary_sha256': profile['binary_sha256'],
+            'guest_binary': profile['guest_binary'], 'expiry_epoch': expiry,
+            'hold_seconds': profile['hold_seconds'], 'registry_id': metal_result['registry_id'],
+            'expected_width': profile['expected_width'], 'expected_height': profile['expected_height'],
+            'expected_refresh': profile['expected_refresh']})
+        return {'schema': 1, 'run_id': manifest['run_id'], 'metal': metal_result,
+                'display': receipt, 'remote_frame_change': None,
+                'qemu_frame_change': qemu_frames,
+                'compositor_gpu_provenance': 'unproven',
+                'scanout_gpu_provenance': 'unproven',
+                'physical_connector_observation': 'reported by guest display inventory'}
+    capture_deadline=min(state['launch_deadline_epoch'],state['deadline_epoch'])-25
+    capture,first,second=start_vnc_capture(vm,manifest['run_id'],state['cid'],capture_deadline)
+    try:
+        receipt = display.run_prepared(vm, runtime_manifest,
+                                       min(state['launch_deadline_epoch'], state['deadline_epoch']),
+                                       metal_result['registry_id'])
+        ended = time.time()
+    except BaseException:
+        capture.kill(); capture.wait(timeout=3)
+        raise
+    result = {'schema':1, 'run_id':manifest['run_id'], 'metal':metal_result,
+              'display':receipt, 'remote_frame_change':None,
+              'compositor_gpu_provenance':'unproven'}
+    try:
+        result['remote_frame_change'] = finish_vnc_capture(
+            capture,vm,manifest['run_id'],state['cid'],receipt['display']['display_id'],
+            metal_result['registry_id'],first,second,receipt['stimulus'],now,ended,
+            capture_deadline)
+    except Exception as error:
+        result['remote_frame_error'] = str(error)
+    return result
+
+
 def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=None,
             cap_revision_authority_sha256=None,
             warm_qualification_policy_sha256=None,
@@ -2668,6 +2945,7 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
             cap_revision_authority_sha256 or warm_requested):
         raise ValueError('candidate179 qualification cannot use another launch mode')
     manifest = json.loads(manifest_path.read_text())
+    desktop_profile(manifest.get('spec', {}))
     validate_manifest_replay_contract(manifest)
     dedicated_critical = critical_replay_transport(manifest) is not None
     if dedicated_critical and manifest.get('critical_transport_validator_sha256') != sha(
@@ -2693,7 +2971,7 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
     supervisor = helper('vm-supervision'); classifier = helper('classify-run')
     guest_shutdown = helper('guest-shutdown')
     recovery_tool = helper('vfio-recover') if manifest.get('gpu') is True else None
-    state = None; probe = None; failure = None; shutdown_result = None; host_messages = []
+    state = None; probe = None; desktop = None; failure = None; shutdown_result = None; host_messages = []
     first_decision = None
     capture_pending = False
     recovery_result = None
@@ -2884,9 +3162,17 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                         capture_pending = True
                         time.sleep(0.5)
                         continue
+                    profile = desktop_profile(manifest.get('spec', {}))
+                    post_probe_reserve = 25 + ((profile['hold_seconds'] + 23) if profile else 0)
                     if manifest['spec'].get('run_probe_only_after_native_start') is True and probe_fits(time.time(), state['launch_deadline_epoch'], state['deadline_epoch'],
-                                  probe_seconds=50):
+                                  probe_seconds=50, cleanup_seconds=post_probe_reserve):
                         probe = run_probe(vm, manifest)
+                        if profile is not None:
+                            metal_result = validated_metal_pass(probe, manifest['run_id'])
+                            desktop = run_desktop_phase(vm, manifest, state, metal_result)
+                            if desktop.get('remote_frame_change') is None:
+                                raise RuntimeError('desktop remote-frame proof failed: '+
+                                                   desktop['remote_frame_error'])
                     break
                 if result['verdict'] not in ('INCONCLUSIVE',):
                     if decisive_since is None: decisive_since = time.time()
@@ -2968,6 +3254,7 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
     events = parse_manifest_captures(classifier, manifest, serial, critical)
     (output/'events.jsonl').write_text(''.join(json.dumps(e)+'\n' for e in events))
     if probe is not None: write_once(output/'probe.json', probe)
+    if desktop is not None: write_once(output/'desktop.json', desktop)
     write_once(output/'shutdown.json', shutdown_result)
     write_once(output/'host-after.json', host_snapshot())
     write_once(output/'host-kernel-messages.json', host_messages)
