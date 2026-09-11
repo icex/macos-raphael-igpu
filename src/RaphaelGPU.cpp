@@ -1113,6 +1113,7 @@ static constexpr uint32_t kKiqSelector = 1u | (2u << 2);
 static void dumpGfxHubVm(const char *when);
 static void reportCpState(const char *when);
 static void enableDoorbellMsg(uint64_t mqdAddr, uint64_t eopAddr);
+static bool programMode2Eop(uint64_t eopAddr);
 static void relocateRingToVram();
 static void startMecEngines();
 static void programL2LikeUpstream();
@@ -2660,6 +2661,11 @@ static uint32_t wrapKiqStart(void *self, uint64_t a, uint64_t b, void *spec, uin
     if (mqdFixMode == 2) {
         fbWrite(asicInfo, kGcGrbmGfxCntl, kKiqSelector);
         reportKiqPreparation("after native startKIQ");
+        if (r == 0 && cpSurgeryEnabled && !programMode2Eop(b)) {
+            CRLOG("XQ2: mode-2 EOP programming/readback failed; KIQ submission blocked");
+            fbWrite(asicInfo, kGcGrbmGfxCntl, 0);
+            return 0xe00002bc;
+        }
         fbWrite(asicInfo, kGcGrbmGfxCntl, 0);
     }
     // The old HQD experiment remains opt-in outside mode 2.
@@ -2965,6 +2971,32 @@ static void startMecEngines() {
          "MEC1 instr %#x->%#x  MEC2 instr %#x->%#x", before,
          fbRead(asicInfo, kGcCpMecCntl), fbRead(asicInfo, kGcCpcStatus),
          p1, fbRead(asicInfo, kGcMec1InstrPntr), p2, fbRead(asicInfo, kGcMec2InstrPntr));
+}
+
+// Fill the EOP registers after native startKIQ. Mode 2 deliberately keeps this
+// transaction separate from the exploratory doorbell-message surgery below.
+static bool programMode2Eop(uint64_t eopAddr) {
+    if (asicInfo == nullptr) return false;
+    auto read = [](RaphaelKiq::EopRegister reg) -> uint32_t {
+        switch (reg) {
+            case RaphaelKiq::EopRegister::BaseLo: return fbRead(asicInfo, kGcHqdEopBase);
+            case RaphaelKiq::EopRegister::BaseHi: return fbRead(asicInfo, kGcHqdEopBaseHi);
+            case RaphaelKiq::EopRegister::Control: return fbRead(asicInfo, kGcHqdEopControl);
+        }
+        return 0xffffffffU;
+    };
+    auto write = [](RaphaelKiq::EopRegister reg, uint32_t value) {
+        switch (reg) {
+            case RaphaelKiq::EopRegister::BaseLo: fbWrite(asicInfo, kGcHqdEopBase, value); break;
+            case RaphaelKiq::EopRegister::BaseHi: fbWrite(asicInfo, kGcHqdEopBaseHi, value); break;
+            case RaphaelKiq::EopRegister::Control: fbWrite(asicInfo, kGcHqdEopControl, value); break;
+        }
+    };
+    const bool ok = RaphaelKiq::programEopForNativeStart(read, write, eopAddr);
+    RLOG("XQ2: mode-2 EOP %#llx_%08x ctl=%#x readback=%s", eopAddr >> 32,
+         static_cast<uint32_t>(eopAddr), read(RaphaelKiq::EopRegister::Control),
+         ok ? "ok" : "failed");
+    return ok;
 }
 
 // Tell the MEC when the doorbell moves.
