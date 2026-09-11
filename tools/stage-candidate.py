@@ -820,6 +820,28 @@ def validate_reseal_boot_identity(profile, expected_boot_id):
         raise RuntimeError("reseal boot ID is not the current host boot")
 
 
+def reseal_authority(profile, boot_id, run_id, prelaunch_refusal,
+                     prior_run_id=None):
+    """Describe fresh launch authority separately from historical refusal evidence."""
+    if not profile.get("allow_cross_boot_reseal"):
+        raise RuntimeError("reseal authority is not a reviewed cross-boot reseal")
+    historical_boot_id = (profile.get("prelaunch_refusal") or {}).get("boot_id")
+    if not historical_boot_id or boot_id == historical_boot_id:
+        raise RuntimeError("reseal authority requires a fresh cross-boot identity")
+    exact_hex(run_id, 32, "run ID")
+    if prior_run_id is not None and run_id == prior_run_id:
+        raise RuntimeError("reseal authority requires a fresh run ID")
+    if not isinstance(prelaunch_refusal, dict):
+        raise RuntimeError("reseal authority requires historical refusal evidence")
+    return {
+        "cross_boot_reseal": True,
+        "authority_boot_id": boot_id,
+        "authority_run_id": run_id,
+        "authorizes_launch": True,
+        "historical_prelaunch_refusal": copy.deepcopy(prelaunch_refusal),
+    }
+
+
 def reseal_candidate(expected_commit, expected_boot_id, expected_card_sha256,
                      run_id, image_id, expected_staging_sha256,
                      expected_raw_sha256, expected_bootdisk_sha256,
@@ -958,11 +980,11 @@ def reseal_candidate(expected_commit, expected_boot_id, expected_card_sha256,
                 "config_sha256":intended["config_sha256"],
                 "raw_sha256":sha_file(raw_image),"bootdisk_sha256":sha_file(bootdisk),
                 "backups":{name:str(path) for name,path in backups.items()}}
-            if profile.get("allow_cross_boot_reseal"):
-                record["cross_boot_reseal"] = True
             if prelaunch_proof is not None:
                 record["prelaunch_refusal"] = prelaunch_proof
-                record["authorizes_launch"] = False
+                record.update(reseal_authority(
+                    profile, expected_boot_id, run_id, prelaunch_proof,
+                    prior_run_id=staging["run_id"]))
             write_synced_exclusive(record_path, json.dumps(record, indent=2)+"\n")
             sync_dir(record_dir)
             return record
