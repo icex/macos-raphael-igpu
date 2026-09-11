@@ -2847,3 +2847,46 @@ Progress table: Metal compute/render **demonstrated in candidate 194** | engine 
 ## Astra checkpoint after cycle 012
 
 The required Astra dispatch was attempted with the exact review prompt and read-only boundaries, after archiving the previous report to `findings/research/astra-archive-20260912/report-astra-pre-cycle012.md`. The Astra service rejected the run because the account usage limit is exhausted until 2026-09-16; no new `report-astra.md` was produced and no Astra conclusions are being claimed. The coordinator will perform the review locally from the immutable cycle-012 evidence. The unresolved boundary is now observation correctness followed by native probe/desktop presentation; the smallest discriminating next test is a fresh-boot candidate using the corrected parser, with schema-3 recovery retained because cycle 012 proved ACTIVE pool/lifetime publication.
+
+## Hybrid desktop cycle 013 (2026-09-12)
+
+Fresh boot `b0e572cc-6cef-4b98-bfd5-703c26f1b7e6` used candidate 194 with the
+hybrid existing-display profile. A prelaunch attempt was refused because the
+sleep inhibitor had disappeared; it was archived and did not reserve the GPU.
+The subsequent guarded launch reserved run
+`8e6f5d4c3b2a19087654321fedcba987` and reached
+`AMDHardware::powerUpHWEngines -> 1`, created both hybrid engines, published
+`XH2 POOL state=ACTIVE` and `XH3 LIFETIME state=VALID`, and recorded hundreds
+of submissions including VMID-2 root repair. The run aborted before the native
+probe because the desktop worktree classifier still required repaired
+`reason=13`; the driver enum and root parser use `reason=12`. Updating the
+worktree parser and replaying the immutable capture yields `PROBE_NOT_RUN`,
+`valid=true`, and zero capture-loss records. This is a host observation bug,
+not evidence of a new GPU execution failure.
+
+Forced shutdown produced schema-6 recovery `incomplete`: graphics retirement
+was not confirmed and the host KIQ remained blocked by active HQDs, although
+PSP ring destruction completed and no host-kernel fault was recorded. The
+iGPU remains on vfio-pci and no VM is active; this boot must not be reused.
+The next experiment therefore requires a fresh boot, a persistent sleep
+inhibitor, and a new authority binding. The corrected parser is host-side; no
+new guest kext build is required for candidate 194.
+
+Progress table: native Metal compute/render **demonstrated** (candidate 194) |
+engine startup and hybrid pool/lifetime **demonstrated** (013) | native probe
+in this run **not reached because parser regression (fixed offline)** | desktop
+drawable/QEMU frame **not demonstrated** | repeatable cleanup **not demonstrated
+and this recovery incomplete** | physical HDMI **unverified**. Mandatory review
+batch after the last Astra checkpoint is now **2 actual attempts** (012, 013);
+the next actual GPU attempt reaches the three-attempt review checkpoint.
+
+## Standing evidence rule (2026-09-12)
+
+Every hardware cycle must inspect and summarize the raw serial log before a
+verdict or next hypothesis. Repeated low-level errors must be correlated with
+the surrounding driver state and retained in the cycle notes; they cannot be
+dismissed as noise. In cycle 013 the serial log contains repeated allocator
+failures such as `size=8847360` with only `7589888` bytes free and
+`16711680` fixed-free. This is a genuine allocation rejection (the request is
+larger than the currently available free pool), while its underlying cause
+(capacity, fragmentation, or unreleased allocations) remains to be measured.
