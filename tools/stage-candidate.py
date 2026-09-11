@@ -52,6 +52,52 @@ SUPPORTED_CARD_DIAGNOSTICS = {
     ("1.0.194", "metal-028"): "rgpuvmdiag=1",
 }
 
+RESEAL_PROFILES = {
+    ("1.0.188", "metal-022"): {
+        "candidate_version":"1.0.188", "card_id":"metal-022",
+        "prior_run_id":"cb1d0aadd8186205d867a23fe175c336",
+        "record_kind":"candidate188-nonce-reseal",
+        "staging_sha256":None, "card_sha256":None,
+        "build_manifest_sha256":None, "prelaunch_refusal":None,
+    },
+    ("1.0.194", "metal-028"): {
+        "candidate_version":"1.0.194", "card_id":"metal-028",
+        "prior_run_id":"b4a41ca47553618a58bab320b3b0c2fb",
+        "record_kind":"candidate194-nonce-reseal",
+        "staging_sha256":"640409b94b4613a62710705c431e44115c052d4e6bcb7fa81ae7d408a92b7c9d",
+        "card_sha256":"db58e24a7d076748ae31534c8fabe8d2fdf675ee27c94b7df96f79cfd6910fea",
+        "build_manifest_sha256":"e5e6014ba1151e1c28bad7f14c482115d5c4e48ef9282e53680bdecde94ad28d",
+        "experiment_sha256":"25601074412d21c8538feeb2f128ce48eaba008d98c4acac1022d8ded318287b",
+        "prelaunch_refusal":{
+            "boot_id":"f828eb26-9cb7-4fac-bff2-bc87515fa2ba",
+            "directory":"run/metal-028-194",
+            "files":{
+                "agent-server-events.jsonl":"a77554adae652310415043f2a11139e35dbb7ef5886249a6a6c5d13146787824",
+                "capture-sha256.json":"cd32bca5d36ab1be79d57330434e1b2397a698126bc19a871e2cae7144a38c4b",
+                "critical.txt":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "events.jsonl":"1fe98291e65f1fd1343e4d553821a95494daa71ac9e46d1b2b9b87201c9046e0",
+                "host-after.json":"ed791c4c9324466410aabec95f320beaadedf049b2951450873f01682cee34ef",
+                "host-before.json":"ed791c4c9324466410aabec95f320beaadedf049b2951450873f01682cee34ef",
+                "host-kernel-messages.json":"37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+                "manifest.json":"1bf833eb9a10ea9ec8ad05d154f4d5cf6ec0e33b13268fb9abe214b629145d6a",
+                "serial.txt":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "shutdown.json":"38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed",
+                "verdict.json":"aded197bbba5254101c66d3f795909c66df2876821fdfe0747143e3bea24bf6d",
+            },
+            "manifest_copy":"run/metal-028-194-manifest.json",
+            "manifest_copy_sha256":"1bf833eb9a10ea9ec8ad05d154f4d5cf6ec0e33b13268fb9abe214b629145d6a",
+            "ledger":"run/used-gpu-boots/f828eb26-9cb7-4fac-bff2-bc87515fa2ba.json",
+            "ledger_sha256":"54e9eb272093dc6b55e76812c132b71dcbd2ee0b7dc75517fc4ad70cee0d3c5d",
+            "policy":"run/one-run-qualification-authorities/f828eb26-9cb7-4fac-bff2-bc87515fa2ba/b4a41ca47553618a58bab320b3b0c2fb.policy.json",
+            "policy_sha256":"c85bd0c874ec677238dd0675983bc140e3979973a323e478655bf3ca54320829",
+            "activation":"run/one-run-qualification-authorities/f828eb26-9cb7-4fac-bff2-bc87515fa2ba/b4a41ca47553618a58bab320b3b0c2fb.json",
+            "activation_sha256":"20f7c7d774bf2c35d5050fc1aef6fb496b3b0f2d260ee3ce4ad67f1dd51150d5",
+            "run_id_file":"run/candidate194-qualification-run-id.txt",
+            "run_id_file_sha256":"4fc3e52e17d3b7da95f23b59f2864c6ea2cfd9eaa873aba562396d4b5e2e644b",
+        },
+    },
+}
+
 
 def configure(version, card_id):
     """Select the exact reviewed candidate/card pair; defaults are 1.0.185."""
@@ -616,13 +662,138 @@ def rollback_reseal(rows, published):
         raise RuntimeError("candidate 188 reseal rollback incomplete: " + ";".join(errors))
 
 
-def reseal_candidate188(expected_commit, expected_boot_id, expected_card_sha256,
-                        run_id, image_id, expected_staging_sha256,
-                        expected_raw_sha256, expected_bootdisk_sha256,
-                        expected_config_sha256):
-    """Reseal candidate 188 media for one fresh nonce; never replace its staging."""
-    if (CANDIDATE_VERSION, CARD_ID) != ("1.0.188", "metal-022"):
-        raise RuntimeError("reseal requires exact candidate 188 / metal-022")
+def reseal_profile():
+    """Select one explicitly reviewed nonce-only reseal, never an arbitrary card."""
+    profile = RESEAL_PROFILES.get((CANDIDATE_VERSION, CARD_ID))
+    if profile is None:
+        raise RuntimeError("reseal requires an exact reviewed candidate/card pair")
+    return copy.deepcopy(profile)
+
+
+def validate_prelaunch_refusal(profile, staging):
+    """Bind candidate 194's reseal to its immutable no-launch refusal evidence."""
+    expected = profile.get("prelaunch_refusal")
+    if expected is None:
+        return None
+    try:
+        if (profile.get("experiment_sha256") is not None and
+                sha_file(ROOT/"tools/experiment.py") != profile["experiment_sha256"]):
+            raise RuntimeError
+        failed = VM / expected["directory"]
+        entries = list(failed.iterdir())
+        if any(not path.is_file() or path.is_symlink() for path in entries):
+            raise RuntimeError
+        files = {path.name:path for path in entries}
+        if (set(files) != set(expected["files"]) or
+                any(sha_file(files[name]) != digest
+                    for name,digest in expected["files"].items())):
+            raise RuntimeError
+        if "supervision.json" in files:
+            raise RuntimeError
+        manifest = json.loads(files["manifest.json"].read_text())
+        verdict = json.loads(files["verdict.json"].read_text())
+        if json.loads(files["shutdown.json"].read_text()) is not None:
+            raise RuntimeError
+        if (files["serial.txt"].read_bytes() != b"" or
+                files["critical.txt"].read_bytes() != b""):
+            raise RuntimeError
+        prior_run_id = profile["prior_run_id"]
+        identity = {
+            "run_id":prior_run_id,
+            "source_commit":staging["source_commit"],
+            "source_sha256":staging["source_sha256"],
+            "build_id":staging["build_id"],
+            "binary_sha256":staging["executable_sha256"],
+            "info_sha256":staging["info_manifest_sha256"],
+        }
+        if (staging.get("candidate_version") != profile["candidate_version"] or
+                manifest.get("spec", {}).get("candidate_version") !=
+                    profile["candidate_version"] or
+                staging.get("run_id") != prior_run_id or
+                any(manifest.get(key) != value for key,value in identity.items())):
+            raise RuntimeError
+        if (manifest.get("source_clean") is not True or
+                verdict.get("valid") is not False or
+                verdict.get("verdict") != "INVALID" or
+                verdict.get("termination_reason") !=
+                    "ValueError: admission refused: source_clean" or
+                verdict.get("error") != verdict.get("termination_reason") or
+                verdict.get("warm_reuse") != "not-attempted"):
+            raise RuntimeError
+        build_path = CANDIDATE / "build-manifest.json"
+        if sha_file(build_path) != profile["build_manifest_sha256"]:
+            raise RuntimeError
+        build = json.loads(build_path.read_text())
+        build_identity = {
+            "version":profile["candidate_version"],
+            "source_commit":staging["source_commit"],
+            "source_sha256":staging["source_sha256"],
+            "build_id":staging["build_id"],
+            "executable_sha256":staging["executable_sha256"],
+        }
+        if any(build.get(key) != value for key,value in build_identity.items()):
+            raise RuntimeError
+        for path_key, digest_key in (("manifest_copy", "manifest_copy_sha256"),
+                                     ("policy", "policy_sha256"),
+                                     ("activation", "activation_sha256"),
+                                     ("run_id_file", "run_id_file_sha256")):
+            if path_key in expected and sha_file(VM/expected[path_key]) != expected[digest_key]:
+                raise RuntimeError
+        ledger_path = VM / expected["ledger"]
+        if sha_file(ledger_path) != expected["ledger_sha256"]:
+            raise RuntimeError
+        ledger = json.loads(ledger_path.read_text())
+        if (ledger.get("schema") != 2 or
+                ledger.get("boot_id") != expected["boot_id"] or
+                any(row.get("run_id") == prior_run_id
+                    for row in ledger.get("launches", []))):
+            raise RuntimeError
+    except (KeyError, TypeError, ValueError, OSError, RuntimeError,
+            json.JSONDecodeError):
+        raise RuntimeError("candidate 194 prelaunch refusal proof changed") from None
+    return {
+        "reason":"source_clean", "prior_run_id":prior_run_id,
+        "qemu_started":False, "ledger_consumed":False,
+        "failed_output":expected["directory"],
+        "failed_manifest_sha256":expected["files"]["manifest.json"],
+        "failed_verdict_sha256":expected["files"]["verdict.json"],
+        "ledger_sha256":expected["ledger_sha256"],
+        "policy_sha256":expected["policy_sha256"],
+        "activation_sha256":expected["activation_sha256"],
+        "source_sha256":staging["source_sha256"],
+        "build_id":staging["build_id"],
+        "executable_sha256":staging["executable_sha256"],
+    }
+
+
+def validate_fresh_reseal_run_id(run_id, boot_id, record_path, prior_run_id=None):
+    """Refuse a nonce already consumed or carrying another authority/output."""
+    if run_id == prior_run_id:
+        raise RuntimeError("reseal requires a fresh run ID")
+    collisions = [Path(record_path), VM/f"run/launch-pending/{run_id}"]
+    authority = VM/f"run/one-run-qualification-authorities/{boot_id}"
+    collisions += [authority/(run_id+".policy.json"), authority/(run_id+".json")]
+    if any(path.exists() for path in collisions):
+        raise RuntimeError("reseal requires a fresh run ID without existing authority")
+    try:
+        for ledger_path in (VM/"run/used-gpu-boots").glob("*.json"):
+            ledger = json.loads(ledger_path.read_text())
+            if any(row.get("run_id") == run_id for row in ledger.get("launches", [])):
+                raise RuntimeError
+    except (AttributeError, TypeError, ValueError, OSError, json.JSONDecodeError,
+            RuntimeError):
+        raise RuntimeError("reseal requires a fresh run ID without ledger use") from None
+
+
+def reseal_candidate(expected_commit, expected_boot_id, expected_card_sha256,
+                     run_id, image_id, expected_staging_sha256,
+                     expected_raw_sha256, expected_bootdisk_sha256,
+                     expected_config_sha256):
+    """Reseal one reviewed candidate for a fresh nonce; preserve original staging."""
+    profile = reseal_profile()
+    if (profile.get("prelaunch_refusal") is not None and
+            expected_boot_id != profile["prelaunch_refusal"]["boot_id"]):
+        raise RuntimeError("reseal boot ID is not the reviewed prelaunch boot")
     exact_hex(run_id, 32, "run ID")
     exact_hex(expected_commit, 40, "coordinator commit")
     for value, label in ((expected_staging_sha256, "staging digest"),
@@ -637,44 +808,53 @@ def reseal_candidate188(expected_commit, expected_boot_id, expected_card_sha256,
     if (command(["git", "-C", str(ROOT), "rev-parse", "HEAD"]) != expected_commit or
             command(["git", "-C", str(ROOT), "status", "--porcelain"])):
         raise RuntimeError("reseal coordinator worktree is not the reviewed clean commit")
+    if (profile.get("card_sha256") is not None and
+            expected_card_sha256 != profile["card_sha256"]):
+        raise RuntimeError("reseal card digest is not the reviewed value")
+    if (profile.get("staging_sha256") is not None and
+            expected_staging_sha256 != profile["staging_sha256"]):
+        raise RuntimeError("reseal staging digest is not the reviewed value")
     card = validate_card(CARD.read_bytes(), expected_card_sha256)
     if command(["docker", "image", "inspect", "--format", "{{.Id}}", image_id]) != image_id:
         raise RuntimeError("Docker image identity changed")
-    experiment = load_module("candidate188_reseal_experiment", ROOT / "tools/experiment.py")
+    experiment = load_module(f"candidate{NUMBER}_reseal_experiment", ROOT / "tools/experiment.py")
     staging_path = CANDIDATE / "staging.json"
     if sha_file(staging_path) != expected_staging_sha256:
-        raise RuntimeError("candidate 188 staging record changed")
+        raise RuntimeError(f"candidate {NUMBER} staging record changed")
     staging = json.loads(staging_path.read_text())
+    prelaunch_proof = validate_prelaunch_refusal(profile, staging)
     bundle = CANDIDATE / "RaphaelGPU.kext"
-    if (staging.get("candidate_version") != "1.0.188" or
-            staging.get("run_id") != "cb1d0aadd8186205d867a23fe175c336" or
+    if (staging.get("candidate_version") != profile["candidate_version"] or
+            staging.get("run_id") != profile["prior_run_id"] or
+            (profile.get("prelaunch_refusal") is not None and
+             staging.get("image_id") != image_id) or
             sha_file(bundle/"Contents/MacOS/RaphaelGPU") != staging.get("executable_sha256") or
             sha_file(bundle/"Contents/Info.plist") != staging.get("info_manifest_sha256")):
-        raise RuntimeError("candidate 188 artifact differs from its staging record")
+        raise RuntimeError(f"candidate {NUMBER} artifact differs from its staging record")
     build_root = Path(staging.get("worktree", WT))
     if (command(["git", "-C", str(build_root), "rev-parse", "HEAD"]) !=
             staging.get("source_commit") or
             command(["git", "-C", str(build_root), "status", "--porcelain"])):
-        raise RuntimeError("candidate 188 build worktree provenance changed")
+        raise RuntimeError(f"candidate {NUMBER} build worktree provenance changed")
     build_manifest = json.loads((CANDIDATE / "build-manifest.json").read_text())
-    builder = load_module("candidate188_reseal_builder",
+    builder = load_module(f"candidate{NUMBER}_reseal_builder",
                           build_root / "tools/build-release.py")
     validate_debug_symbols(
         build_manifest, builder, bundle / "Contents/MacOS/RaphaelGPU",
         DIST / "debug-symbols", staging["source_sha256"], build_root)
-    record_dir = VM / "run/candidate-188-reseals"
+    record_dir = VM / f"run/candidate-{NUMBER}-reseals"
     record_path = record_dir / (run_id + ".json")
-    if record_path.exists():
-        raise RuntimeError("candidate 188 reseal run ID already exists")
+    validate_fresh_reseal_run_id(
+        run_id, expected_boot_id, record_path, profile["prior_run_id"])
     raw_image, bootdisk, config_path = (VM/"run/oc-raw.img", VM/"OpenCore.qcow2", VM/"config.plist")
     expected_preimages = {"raw":expected_raw_sha256, "boot":expected_bootdisk_sha256,
                           "config":expected_config_sha256}
     paths = {"raw":raw_image, "boot":bootdisk, "config":config_path}
     token = uuid.uuid4().hex
-    private_raw = VM/f"run/.candidate188-reseal-{token}.raw"
-    candidate_qcow = VM/f".OpenCore-candidate188-reseal-{token}.qcow2"
-    verify_raw = VM/f"run/.candidate188-reseal-verify-{token}.raw"
-    config_temp = VM/f".config-candidate188-reseal-{token}.plist"
+    private_raw = VM/f"run/.candidate{NUMBER}-reseal-{token}.raw"
+    candidate_qcow = VM/f".OpenCore-candidate{NUMBER}-reseal-{token}.qcow2"
+    verify_raw = VM/f"run/.candidate{NUMBER}-reseal-verify-{token}.raw"
+    config_temp = VM/f".config-candidate{NUMBER}-reseal-{token}.plist"
     backups = {name:path.with_name(path.name+f".backup-reseal-{token}")
                for name,path in paths.items()}
     published = {name:False for name in paths}
@@ -685,6 +865,9 @@ def reseal_candidate188(expected_commit, expected_boot_id, expected_card_sha256,
         if Path("/proc/sys/kernel/random/boot_id").read_text().strip() != expected_boot_id:
             raise RuntimeError("reseal boot authority changed")
         if active_or_pending_vm(): raise RuntimeError("active or pending VM prevents reseal")
+        prelaunch_proof = validate_prelaunch_refusal(profile, staging)
+        validate_fresh_reseal_run_id(
+            run_id, expected_boot_id, record_path, profile["prior_run_id"])
         validate_reseal_preimages(paths, expected_preimages)
         try:
             original_bytes, staged_bytes, boot_args, nonce_lo, nonce_hi = \
@@ -722,7 +905,7 @@ def reseal_candidate188(expected_commit, expected_boot_id, expected_card_sha256,
             if errors: raise RuntimeError("published reseal qcow readback failed: "+",".join(errors))
             sync_dir(VM); sync_dir(VM/"run")
             record_dir.mkdir(parents=True, exist_ok=True)
-            record = {"schema":1,"kind":"candidate188-nonce-reseal",
+            record = {"schema":1,"kind":profile["record_kind"],
                 "boot_id":expected_boot_id,"run_id":run_id,"prior_run_id":staging["run_id"],
                 "coordinator_commit":expected_commit,
                 "experiment_card_sha256":expected_card_sha256,
@@ -735,6 +918,9 @@ def reseal_candidate188(expected_commit, expected_boot_id, expected_card_sha256,
                 "config_sha256":intended["config_sha256"],
                 "raw_sha256":sha_file(raw_image),"bootdisk_sha256":sha_file(bootdisk),
                 "backups":{name:str(path) for name,path in backups.items()}}
+            if prelaunch_proof is not None:
+                record["prelaunch_refusal"] = prelaunch_proof
+                record["authorizes_launch"] = False
             write_synced_exclusive(record_path, json.dumps(record, indent=2)+"\n")
             sync_dir(record_dir)
             return record
@@ -744,6 +930,11 @@ def reseal_candidate188(expected_commit, expected_boot_id, expected_card_sha256,
             raise
         finally:
             for path in (private_raw,candidate_qcow,verify_raw,config_temp): path.unlink(missing_ok=True)
+
+
+def reseal_candidate188(*args, **kwargs):
+    """Compatibility entry point for the historical candidate-188 reseal."""
+    return reseal_candidate(*args, **kwargs)
 
 
 def armed_replace(source, target, published, name, replace=os.replace):
@@ -1245,7 +1436,7 @@ def main():
         parser.error("refusing mutation without the reviewed --execute flag")
     configure(args.candidate_version, args.card_id)
     if args.reseal_run_id:
-        result = reseal_candidate188(
+        result = reseal_candidate(
             args.expected_commit, args.expected_boot_id,
             args.expected_card_sha256, args.reseal_run_id, args.image_id,
             args.expected_staging_sha256, args.expected_raw_sha256,
