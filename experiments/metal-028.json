@@ -2,6 +2,13 @@
   "id": "metal-028",
   "question": "After candidate 193 recovered cleanly but failed its identity/route gate, does the audited mode-5 native-first A1 MAP_PROCESS root repair with the corrected formatter and decision receipt preserve mode-4 bulk conversion and reach the unchanged 45-second native Metal probe on one explicitly authorized same-boot warm launch?",
   "candidate_version": "1.0.194",
+  "probe_profile": {
+    "name": "small-metal",
+    "source": "tests/small_metal_probe.m",
+    "source_sha256": "8a529ce2c5813de90a726ff066ede138ac7e15ad88675b06e55818e2a55c73c5",
+    "binary_prefix": "/var/tmp/rgpu-small-metal-",
+    "validator": "small-metal-test"
+  },
   "requested_diagnostic": "rgpuvmdiag=1",
   "critical_replay_schema": 2,
   "recovery_lease_schema": 3,
