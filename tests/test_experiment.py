@@ -60,6 +60,20 @@ class ExperimentTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'binding changed'):
             tool.probe_profile({'probe_profile': profile})
 
+    def test_candidate194_card_binds_small_probe_and_safety_contract(self):
+        tool = self.module()
+        card = json.loads((ROOT / 'experiments' / 'metal-028.json').read_text())
+        self.assertEqual(tool.probe_profile(card), card['probe_profile'])
+        self.assertEqual(card['candidate_version'], '1.0.194')
+        self.assertEqual(card['max_seconds'], 180)
+        self.assertTrue(card['run_probe_only_after_native_start'])
+        self.assertEqual(card['recovery_lease_schema'], 3)
+        self.assertEqual(card['critical_replay_schema'], 2)
+        self.assertEqual(card['launch_options'], {
+            'BOOTDISK_MODE': 'custom', 'NVRAM': 'stock',
+            'GENERIC_GRAPHICS': 'off', 'GDB': 'on'})
+        self.assertEqual(card['required_boot_flags'], ['-liluheadless'])
+
     def recovery_helper_hashes(self, schema=2):
         paths = [
             'tools/vfio-recover.py',
