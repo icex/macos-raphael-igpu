@@ -8,6 +8,7 @@ import plistlib
 import ast
 import copy
 import hashlib
+import inspect
 import re
 import struct
 import threading
@@ -59,6 +60,10 @@ class ExperimentTests(unittest.TestCase):
         profile['source_sha256'] = '0' * 64
         with self.assertRaisesRegex(ValueError, 'binding changed'):
             tool.probe_profile({'probe_profile': profile})
+
+    def test_run_identity_check_uses_manifest_source_provenance(self):
+        tool = self.module()
+        self.assertIn('probe_spec=manifest', inspect.getsource(tool.run_one))
 
     def test_candidate194_card_binds_small_probe_and_safety_contract(self):
         tool = self.module()
@@ -2145,10 +2150,13 @@ class ExperimentTests(unittest.TestCase):
                                        'candidate_directory', 'vfio_device')}
             identity_run_ids = []
             identity_launch_options = []
+            identity_probe_specs = []
             def current_identity(*args, **kwargs):
                 identity_run_ids.append(kwargs.get('run_id', args[3] if len(args) > 3 else None))
                 identity_launch_options.append(kwargs.get(
                     'launch_options_expected', args[5] if len(args) > 5 else None))
+                identity_probe_specs.append(kwargs.get(
+                    'probe_spec', args[6] if len(args) > 6 else None))
                 return copy.deepcopy(observed)
             now = [100.0]
             class NoopMonitor:
@@ -2181,6 +2189,7 @@ class ExperimentTests(unittest.TestCase):
             self.assertEqual(ledger['launches'][-1]['run_id'], RUN)
             self.assertEqual(identity_run_ids, [RUN, RUN])
             self.assertEqual(identity_launch_options, [manifest['launch_options']] * 2)
+            self.assertEqual(identity_probe_specs, [manifest, manifest])
             self.assertEqual(len(recovered_evidence), 1)
             self.assertIn('lease_evidence', recovered_evidence[0])
             self.assertEqual(recovered_evidence[0]['recovery_helpers_sha256'],

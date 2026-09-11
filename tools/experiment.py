@@ -2903,7 +2903,7 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                     vm, vm/manifest['candidate_directory'], requested,
                     manifest['run_id'] if manifest.get('gpu') is True else None,
                     manifest.get('recovery_lease_schema', 2),
-                    launch_options(manifest), manifest)
+                    launch_options(manifest), manifest, probe_spec=manifest)
                 transport_contract().validate_boot_args(
                     observed['boot_args'], manifest)
                 host = host_snapshot(); write_once(output/'host-before.json', host)
