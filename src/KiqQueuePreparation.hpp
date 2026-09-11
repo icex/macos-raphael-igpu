@@ -58,13 +58,13 @@ inline bool accessible(const QueueState &state) {
         state.doorbell != 0xffffffffU;
 }
 
-// GFX10 encodes CP_HQD_EOP_BASE_ADDR as a 256-byte address and uses control=8
-// for the 2048-byte EOP buffer allocated immediately after the MQD.  This is
+// GFX10 encodes CP_HQD_EOP_BASE_ADDR as a 256-byte address and uses the native
+// control=6 value for the EOP buffer allocated immediately after the MQD. This is
 // deliberately a write/readback transaction with no doorbell or MEC changes.
 template <typename Read, typename Write>
 bool programEopForNativeStart(Read read, Write write, uint64_t eopAddr,
-                              uint32_t control = 8) {
-    if (eopAddr == 0 || (eopAddr & 0xffU) != 0 || control != 8) return false;
+                              uint32_t control = 6) {
+    if (eopAddr == 0 || (eopAddr & 0xffU) != 0 || control != 6) return false;
     const uint64_t encoded = eopAddr >> 8;
     write(EopRegister::BaseLo, static_cast<uint32_t>(encoded));
     write(EopRegister::BaseHi, static_cast<uint32_t>(encoded >> 32));
