@@ -858,6 +858,12 @@ class Candidate188ResealTests(unittest.TestCase):
             self.tool.validate_recovery_baseline(
                 recovery, "new-boot", allow_cross_boot=False)
 
+    def test_hybrid_reseal_uses_nonce_in_current_config_preimage(self):
+        self.tool.configure("1.0.194", "metal-029")
+        self.assertEqual(
+            self.tool.reseal_profile()["nonce_source_run_id"],
+            "8e6f5d4c3b2a19087654321fedcba987")
+
     def test_candidate194_reseal_refuses_bad_proof_before_media_work(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
