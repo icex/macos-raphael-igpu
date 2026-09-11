@@ -1,3 +1,4 @@
+import ast
 import copy
 import hashlib
 import importlib.util
@@ -344,11 +345,20 @@ class CoordinatorIdentityGateTests(unittest.TestCase):
         start = source.index('def reserve_candidate179_qualification')
         end = source.index('def reserve_warm_qualification', start)
         body = source[start:end]
-        gate = body[body.index('identity_gate = current_identity('):]
-        self.assertIn("recovery_lease_schema=manifest.get('recovery_lease_schema', 2),",
-                      gate[:gate.index('identity_gate.update(')])
-        self.assertIn('launch_options_expected=launch_options(manifest))',
-                      gate[:gate.index('identity_gate.update(')])
+        function = ast.parse(body).body[0]
+        calls = [node for node in ast.walk(function)
+                 if isinstance(node, ast.Call)
+                 and isinstance(node.func, ast.Name)
+                 and node.func.id == 'current_identity']
+        self.assertEqual(len(calls), 1)
+        keywords = {keyword.arg: ast.unparse(keyword.value)
+                    for keyword in calls[0].keywords}
+        self.assertEqual(
+            keywords['recovery_lease_schema'],
+            "manifest.get('recovery_lease_schema', 2)")
+        self.assertEqual(keywords['launch_options_expected'],
+                         'launch_options(manifest)')
+        self.assertEqual(keywords['probe_spec'], 'manifest')
         self.assertIn("helper_name = authorization.get('helper_name'", body)
 
 
