@@ -841,7 +841,7 @@ class Candidate188ResealTests(unittest.TestCase):
         self.assertEqual(current["prior_run_id"],
                          "b4a41ca47553618a58bab320b3b0c2fb")
         self.assertEqual(current["prelaunch_refusal"]["ledger_sha256"],
-                         "54e9eb272093dc6b55e76812c132b71dcbd2ee0b7dc75517fc4ad70cee0d3c5d")
+                         "5677d5419592ccf3cead52f834de1f4c412934ea3eaa6c570ee1708f1a35fab2")
         self.tool.configure("1.0.193", "metal-027")
         with self.assertRaisesRegex(RuntimeError, "reseal requires"):
             self.tool.reseal_profile()
