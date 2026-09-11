@@ -1405,7 +1405,10 @@ def _classify(manifest, events, probe, defer_absent_workload=False):
     if not manifest.get('run_id') or probe['run_id'] != manifest['run_id']:
         return verdict('INVALID', stage='probe_identity')
     if probe:
-        path = Path(__file__).with_name('metal-test.py')
+        profile = manifest.get('probe_profile', {})
+        profile_name = profile.get('name') if isinstance(profile, dict) else profile
+        path = Path(__file__).with_name(
+            'small-metal-test.py' if profile_name == 'small-metal' else 'metal-test.py')
         spec = importlib.util.spec_from_file_location('metal_test', path)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
