@@ -3007,3 +3007,43 @@ safety **ok**, all constants/routes/prologues **ok**, and overall preflight **sa
 The full Python suite remains green at 791 tests with 3 skipped; focused candidate
 and staging coverage is 59 tests. No VFIO bind, reset, QEMU launch, or GPU ledger
 consumption occurred.
+
+## Candidate 195 hardware cycle (2026-09-11, run 905a7667eb43ac78512e41703b962b56)
+
+The first fresh-boot candidate-195 launch used VFIO `0000:7b:00.0`, `-vga none`,
+`-display none`, and an active `sleep:idle` inhibitor. Host safety remained intact:
+post-run state is `vfio-pci`, no active VM, device accessible, reset methods empty,
+and no host kernel fault.
+
+The guest reached `TTL::initialize() Completed successfully` and VRAM/GART setup,
+but panicked before the native probe or any submission. The ordered serial boundary
+is:
+
+```
+XH: initVRAMInfo -> 1 ... size0=0x20000000 size1=0x10000000
+XV: AMDHWVMM::init(...) -> 1 ... m_0x20=0 m_0x28=0 m_0x30=0
+SD: AMDHardware::initializeHWEngines -> 1
+XV: setMemoryAllocationsEnabled(0) ... m_0x20=0 m_0x28=0 m_0x30=0
+Debugger: Unexpected kernel trap number: 0xe ... CR2=0xffffff8058600000
+... AMDHWHandler::wireSysMemory + 0x57
+```
+
+No `XH2 OWNED` record was emitted, no `setVirtualSpaceReady(1)` callback was
+observed, and submission counters stayed zero. Recovery consequently failed closed
+with `missing XH2 ownership record`; no in-place retry is allowed on this boot. This
+is a real guest-kernel regression/boundary, not allocator pressure or a GPU page
+fault. Candidate 194 had the same null fields transiently but later reached
+`setVirtualSpaceReady` and published `XH2 OWNED`, so the next offline hypothesis is
+that the native disable call at `setMemoryAllocationsEnabled(0)` can reach
+`wireSysMemory` before the VMM ownership callback and must be guarded or reordered.
+That hypothesis requires source/disassembly validation before another cycle.
+
+| Area | Result | Blocking issue |
+|---|---|---|
+| Metal compute/render | historically demonstrated | no new probe reached |
+| TTL/VRAM/GART init | passed | later VMM path panicked |
+| VMM ownership/recovery | failed | `XH2 OWNED` missing |
+| Submissions/desktop | zero | pre-submit guest panic |
+| Host safety | passed | no host fault; boot ledger now 1/3 |
+
+Attempts since the last review: **1**. No further launch is authorized on this boot.
