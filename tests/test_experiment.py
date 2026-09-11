@@ -877,6 +877,34 @@ class ExperimentTests(unittest.TestCase):
             'critical_replay_schema':2, 'expected_build':CR2_BUILD,
             'critical_replay_tolerance':'terminal-prefix'}])
 
+    def test_schema3_owned_without_pool_downgrades_cleanup_to_schema2(self):
+        tool = self.module()
+        serial = ''.join(snapshot_lines(
+            ['BUILD: identity=' + CR2_BUILD, 'XH2 OWNED exact'], snapshot=2))
+        calls = []
+        v2 = self.recovery_helper_hashes(2)
+        recovery = SimpleNamespace(
+            parse_v2_lease_records=lambda records, run_id:
+                calls.append(('parse', records, run_id)) or object(),
+            current_recovery_helpers_sha256=lambda schema: v2,
+            recover=lambda vm, run_id, **kwargs:
+                calls.append(('recover', kwargs)) or {'status':'recovered'},
+        )
+        manifest = {
+            'run_id':'0' * 32, 'build_id':CR2_BUILD, 'gpu':True,
+            'critical_replay_schema':2, 'recovery_lease_schema':3,
+            'critical_replay_tolerance':'terminal-prefix',
+            'recovery_critical_replay_tolerance':'terminal-prefix-open',
+            'recovery_helpers_sha256':self.recovery_helper_hashes(3),
+            'spec':{'recovery_critical_replay_tolerance':'terminal-prefix-open'},
+        }
+        self.assertEqual(tool.recover_v2(
+            recovery, Path('/not-opened'), manifest, serial),
+            {'status':'recovered'})
+        self.assertEqual(calls[0][1], ['XH2 OWNED exact'])
+        self.assertNotIn('recovery_lease_schema', calls[1][1])
+        self.assertEqual(calls[1][1]['recovery_helpers_sha256'], v2)
+
     def test_recovery_only_open_attempt_rejects_conflict_and_abort(self):
         tool = self.module()
         terminal = ['BUILD: identity=' + CR2_BUILD,
