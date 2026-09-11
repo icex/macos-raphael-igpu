@@ -82,8 +82,8 @@ int main() {
                 FakeEop::Register::Control} &&
                 eop.read(FakeEop::Register::BaseLo) == 0x84000008U &&
                 eop.read(FakeEop::Register::BaseHi) == 0U &&
-                eop.read(FakeEop::Register::Control) == 8U,
-            "EOP writes use encoded base low/high and the v10 2048-byte control");
+                eop.read(FakeEop::Register::Control) == 6U,
+            "EOP writes use encoded base low/high and the native v10 control");
     require(std::all_of(eop.writes.begin(), eop.writes.end(), [](FakeEop::Register reg) {
                 return reg == FakeEop::Register::BaseLo || reg == FakeEop::Register::BaseHi ||
                     reg == FakeEop::Register::Control;
