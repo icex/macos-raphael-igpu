@@ -307,6 +307,16 @@ def raphael_target_marked(config):
             props.get(RAPHAEL_TARGET_KEY) == RAPHAEL_TARGET_MARKER)
 
 
+def candidate_source_provenance(probe_spec):
+    if not isinstance(probe_spec, dict):
+        return None, None
+    source = probe_spec.get('spec', probe_spec)
+    if not isinstance(source, dict):
+        return None, None
+    return (source.get('raphael_source_sha256'),
+            source.get('raphael_source_commit'))
+
+
 def current_identity(vm, candidate, requested_diagnostic, run_id=None,
                      recovery_lease_schema=2, launch_options_expected=None,
                      probe_spec=None):
@@ -338,8 +348,8 @@ def current_identity(vm, candidate, requested_diagnostic, run_id=None,
     # the candidate source preimage and commit; never accept a digest-only
     # override.  The coordinator tree remains independently authenticated via
     # source_commit/source_clean below.
-    candidate_source_digest = probe_spec.get('raphael_source_sha256') if isinstance(probe_spec, dict) else None
-    candidate_source_commit = probe_spec.get('raphael_source_commit') if isinstance(probe_spec, dict) else None
+    candidate_source_digest, candidate_source_commit = \
+        candidate_source_provenance(probe_spec)
     if candidate_source_digest is None:
         if source_digest != build['source_sha256']:
             raise ValueError('current source differs from built source')
