@@ -849,12 +849,24 @@ class Candidate188ResealTests(unittest.TestCase):
     def test_candidate194_reseal_pins_current_card_and_experiment_hashes(self):
         self.tool.configure("1.0.194", "metal-028")
         profile = self.tool.reseal_profile()
+        self.assertTrue(profile["allow_cross_boot_reseal"])
         self.assertEqual(
             profile["card_sha256"],
             hashlib.sha256((ROOT / "experiments/metal-028.json").read_bytes()).hexdigest())
         self.assertEqual(
             profile["experiment_sha256"],
             hashlib.sha256((ROOT / "tools/experiment.py").read_bytes()).hexdigest())
+
+    def test_candidate194_cross_boot_reseal_requires_current_boot_identity(self):
+        self.tool.configure("1.0.194", "metal-028")
+        profile = self.tool.reseal_profile()
+        historical = profile["prelaunch_refusal"]["boot_id"]
+        with mock.patch.object(self.tool.Path, "read_text", return_value="fresh-boot\n"):
+            self.tool.validate_reseal_boot_identity(profile, "fresh-boot")
+            with self.assertRaisesRegex(RuntimeError, "current host boot"):
+                self.tool.validate_reseal_boot_identity(profile, "other-boot")
+        with self.assertRaisesRegex(RuntimeError, "fresh cross-boot"):
+            self.tool.validate_reseal_boot_identity(profile, historical)
 
     def test_candidate194_reseal_refuses_bad_proof_before_media_work(self):
         with tempfile.TemporaryDirectory() as temp:
