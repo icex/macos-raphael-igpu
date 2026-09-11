@@ -108,6 +108,7 @@ RESEAL_PROFILES = {
         "prelaunch_refusal":None,
         "recovery_receipt":"run/metal-028-194-resealed/recovery.json",
         "recovery_receipt_sha256":"389631b0041fa92e38e7f458bfeb813851540a798cd4a74934e2ab0dd6924f8a",
+        "allow_cross_boot_recovery":True,
     },
 }
 
@@ -683,6 +684,26 @@ def reseal_profile():
     return copy.deepcopy(profile)
 
 
+def validate_recovery_baseline(recovery, expected_boot_id,
+                               *, allow_cross_boot=False):
+    """Validate a recovered candidate baseline before nonce-only reseal.
+
+    A recovered receipt proves the prior guest cleanup.  A reviewed hybrid
+    reseal may carry that proof across a host reboot; the current boot is still
+    checked by the caller before publishing media.
+    """
+    if (not isinstance(recovery, dict) or recovery.get('schema') != 6 or
+            recovery.get('status') != 'recovered' or
+            recovery.get('authorizes_launch') is not True or
+            recovery.get('device') != '0000:7b:00.0' or
+            recovery.get('driver') != 'vfio-pci'):
+        raise RuntimeError("hybrid reseal recovery receipt is not authoritative")
+    if (not isinstance(expected_boot_id, str) or
+            (not allow_cross_boot and recovery.get('boot_id') != expected_boot_id)):
+        raise RuntimeError("hybrid reseal recovery receipt boot mismatch")
+    return True
+
+
 def validate_prelaunch_refusal(profile, staging):
     """Bind candidate 194's reseal to its immutable no-launch refusal evidence."""
     expected = profile.get("prelaunch_refusal")
@@ -811,12 +832,9 @@ def reseal_candidate(expected_commit, expected_boot_id, expected_card_sha256,
             if sha_file(recovery_file) != profile.get("recovery_receipt_sha256"):
                 raise RuntimeError("hybrid reseal recovery receipt changed")
             recovery = json.loads(recovery_file.read_text())
-            if (recovery.get("schema") != 6 or recovery.get("status") != "recovered" or
-                    recovery.get("authorizes_launch") is not True or
-                    recovery.get("boot_id") != expected_boot_id or
-                    recovery.get("device") != "0000:7b:00.0" or
-                    recovery.get("driver") != "vfio-pci"):
-                raise RuntimeError("hybrid reseal recovery receipt is not authoritative")
+            validate_recovery_baseline(
+                recovery, expected_boot_id,
+                allow_cross_boot=profile.get("allow_cross_boot_recovery", False))
         except (OSError, ValueError, TypeError, json.JSONDecodeError):
             raise RuntimeError("hybrid reseal recovery receipt is invalid") from None
     if (profile.get("prelaunch_refusal") is not None and
