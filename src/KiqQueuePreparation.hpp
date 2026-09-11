@@ -15,6 +15,15 @@ enum class QueueRegister : uint8_t {
     Doorbell,
 };
 
+// Registers that must be populated after Apple's native startKIQ has created
+// the HQD.  Keep this separate from QueueRegister so the mode-2 repair cannot
+// accidentally enable a speculative doorbell path.
+enum class EopRegister : uint8_t {
+    BaseLo,
+    BaseHi,
+    Control,
+};
+
 struct QueueState {
     uint32_t active;
     uint32_t dequeue;
@@ -47,6 +56,22 @@ inline bool accessible(const QueueState &state) {
         state.rptr != 0xffffffffU && state.wptrHi != 0xffffffffU &&
         state.wptrLo != 0xffffffffU && state.poll != 0xffffffffU &&
         state.doorbell != 0xffffffffU;
+}
+
+// GFX10 encodes CP_HQD_EOP_BASE_ADDR as a 256-byte address and uses control=8
+// for the 2048-byte EOP buffer allocated immediately after the MQD.  This is
+// deliberately a write/readback transaction with no doorbell or MEC changes.
+template <typename Read, typename Write>
+bool programEopForNativeStart(Read read, Write write, uint64_t eopAddr,
+                              uint32_t control = 8) {
+    if (eopAddr == 0 || (eopAddr & 0xffU) != 0 || control != 8) return false;
+    const uint64_t encoded = eopAddr >> 8;
+    write(EopRegister::BaseLo, static_cast<uint32_t>(encoded));
+    write(EopRegister::BaseHi, static_cast<uint32_t>(encoded >> 32));
+    write(EopRegister::Control, control);
+    return read(EopRegister::BaseLo) == static_cast<uint32_t>(encoded) &&
+        read(EopRegister::BaseHi) == static_cast<uint32_t>(encoded >> 32) &&
+        read(EopRegister::Control) == control;
 }
 
 // HWLibs 24G830 resets RPTR/WPTR only in its ACTIVE/dequeue branch. An already-inactive

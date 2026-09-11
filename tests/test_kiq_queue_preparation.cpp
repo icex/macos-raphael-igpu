@@ -1,4 +1,5 @@
 #include <array>
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <vector>
@@ -44,6 +45,19 @@ struct FakeQueue {
     }
 };
 
+struct FakeEop {
+    using Register = RaphaelKiq::EopRegister;
+    std::array<uint32_t, 3> value {};
+    std::vector<Register> writes;
+    bool ignoreWrites {false};
+
+    uint32_t read(Register reg) const { return value[static_cast<unsigned>(reg)]; }
+    void write(Register reg, uint32_t next) {
+        writes.push_back(reg);
+        if (!ignoreWrites) value[static_cast<unsigned>(reg)] = next;
+    }
+};
+
 static RaphaelKiq::QueuePreparation prepare(FakeQueue &queue, unsigned &nativeCalls) {
     auto result = RaphaelKiq::prepareQueueForNativeStart(
         [&](RaphaelKiq::QueueRegister reg) { return queue.read(reg); },
@@ -56,6 +70,32 @@ static RaphaelKiq::QueuePreparation prepare(FakeQueue &queue, unsigned &nativeCa
 int main() {
     using RaphaelKiq::QueuePreparationStatus;
     using Register = RaphaelKiq::QueueRegister;
+
+    FakeEop eop;
+    require(RaphaelKiq::programEopForNativeStart(
+                [&](RaphaelKiq::EopRegister reg) { return eop.read(reg); },
+                [&](RaphaelKiq::EopRegister reg, uint32_t value) { eop.write(reg, value); },
+                0x8400000800ULL),
+            "mode-2 EOP programming succeeds with readable registers");
+    require(eop.writes == std::vector<FakeEop::Register> {
+                FakeEop::Register::BaseLo, FakeEop::Register::BaseHi,
+                FakeEop::Register::Control} &&
+                eop.read(FakeEop::Register::BaseLo) == 0x84000008U &&
+                eop.read(FakeEop::Register::BaseHi) == 0U &&
+                eop.read(FakeEop::Register::Control) == 8U,
+            "EOP writes use encoded base low/high and the v10 2048-byte control");
+    require(std::all_of(eop.writes.begin(), eop.writes.end(), [](FakeEop::Register reg) {
+                return reg == FakeEop::Register::BaseLo || reg == FakeEop::Register::BaseHi ||
+                    reg == FakeEop::Register::Control;
+            }),
+            "mode-2 EOP programming never changes speculative doorbell bits");
+    FakeEop rejected;
+    rejected.ignoreWrites = true;
+    require(!RaphaelKiq::programEopForNativeStart(
+                 [&](RaphaelKiq::EopRegister reg) { return rejected.read(reg); },
+                 [&](RaphaelKiq::EopRegister reg, uint32_t value) { rejected.write(reg, value); },
+                 0x8400000800ULL),
+            "EOP readback failure blocks native submission");
 
     FakeQueue clean;
     unsigned nativeCalls = 0;
