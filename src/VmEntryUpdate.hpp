@@ -21,6 +21,14 @@ enum class UpdateDomain : uint32_t {
 
 static constexpr size_t kUpdateDomainCount = 11;
 
+// CRLOG/SYSLOG concatenates its format at preprocessing time. Sharing this
+// literal with the integration fixture prevents producer/parser schema drift.
+#define RGPU_VM_ENTRY_UPDATE_SUMMARY_FORMAT \
+    "VM: entry-update mode=%u route=%u inactive=%llu converted=%llu physical=%llu " \
+    "outside=%llu system=%llu invalid-template=%llu invalid-aperture=%llu " \
+    "empty=%llu overflow=%llu span=%llu zero=%llu omitted-child=%llu " \
+    "omitted-eligible=%llu omitted-control=%llu"
+
 enum class UpdateProducer : uint32_t { Leaf, Child, Unmap, Other };
 
 struct EntryUpdateDecision {

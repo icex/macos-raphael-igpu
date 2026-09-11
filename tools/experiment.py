@@ -62,6 +62,7 @@ PRELAUNCH188_CONTINUATION = {
 }
 
 V2_CRITICAL_CAPTURE_MAX_BYTES = 8 * 1024 * 1024
+DECISION_CAPTURE_PREFIX_MAX_BYTES = V2_CRITICAL_CAPTURE_MAX_BYTES
 
 # This is a single reviewed revision of one historical boot's initial
 # validation ceiling. It is deliberately fixed to candidate 176's immutable
@@ -762,6 +763,69 @@ def write_bytes_once(path, value):
     fd = os.open(Path(path).parent, os.O_DIRECTORY)
     try: os.fsync(fd)
     finally: os.close(fd)
+
+
+def persist_first_decision(output, manifest, state, readiness, serial_bytes,
+                           critical_bytes, decision_time):
+    """Seal the first readiness refusal actually selected for shutdown.
+
+    This records the raw prefixes consumed by the existing strict parse after
+    its stability dwell.  It does not certify later capture bytes or any
+    workload result.
+    """
+    prefixes = {}
+    captures = [('serial', serial_bytes)]
+    if critical_bytes is not None:
+        captures.append(('critical', critical_bytes))
+    for name, value in captures:
+        if not isinstance(value, bytes):
+            raise TypeError('decision capture prefix must be bytes')
+        prefixes[name] = {
+            'byte_length':len(value), 'sha256':sha(value)}
+        if len(value) <= DECISION_CAPTURE_PREFIX_MAX_BYTES:
+            prefixes[name]['file'] = f'first-decision-{name}.txt'
+
+    replay_snapshot = None
+    capture_acceptance = 'legacy'
+    if critical_bytes is not None and manifest.get('critical_replay_schema') == 2:
+        tolerance = critical_replay_tolerance(manifest)
+        capture_acceptance = tolerance or 'strict'
+        # Mirror the functional parser's existing authenticated terminal-prefix
+        # policy.  Recovery-only terminal-prefix-open is never used to support a
+        # diagnostic decision receipt.
+        if tolerance != 'terminal-prefix-open':
+            replay_snapshot = helper('critical-replay').parse(
+                critical_bytes.decode('utf-8', errors='replace'),
+                manifest['build_id'],
+                tolerate_corruption=tolerance == 'terminal-prefix')
+
+    for name, value in captures:
+        if 'file' in prefixes[name]:
+            write_bytes_once(output/prefixes[name]['file'], value)
+    receipt = {
+        'schema':1,
+        'meaning':('first readiness refusal selected for shutdown after the '
+                   'existing stability dwell; not evidence of later workload success'),
+        'build_id':manifest['build_id'],
+        'run_id':manifest['run_id'],
+        'cid':state['cid'],
+        'decision_time_epoch':decision_time,
+        'readiness':{
+            'verdict':readiness['verdict'],
+            'stage':readiness.get('earliest_failure'),
+        },
+        'shutdown':{
+            'action':'guest_shutdown',
+            'reason':'decisive_readiness_refusal',
+        },
+        'capture_acceptance':capture_acceptance,
+        'capture_prefixes':prefixes,
+    }
+    if replay_snapshot is not None:
+        receipt.update(snapshot=replay_snapshot['snapshot'],
+                       record_count=replay_snapshot['count'])
+    write_once(output/'first-decision.json', receipt)
+    return receipt
 
 
 def evidence_digest(directory):
@@ -2630,6 +2694,7 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
     guest_shutdown = helper('guest-shutdown')
     recovery_tool = helper('vfio-recover') if manifest.get('gpu') is True else None
     state = None; probe = None; failure = None; shutdown_result = None; host_messages = []
+    first_decision = None
     capture_pending = False
     recovery_result = None
     running_validated = False
@@ -2792,9 +2857,12 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
             while time.time() < end:
                 supervisor.verify(state)
                 if monitor.error: raise RuntimeError(monitor.error)
-                serial = (vm/'run/serial.log').read_text(errors='replace')
-                critical = ((vm/'run/critical.log').read_text(errors='replace')
-                            if dedicated_critical else None)
+                serial_bytes = (vm/'run/serial.log').read_bytes()
+                serial = serial_bytes.decode('utf-8', errors='replace')
+                critical_bytes = ((vm/'run/critical.log').read_bytes()
+                                  if dedicated_critical else None)
+                critical = (critical_bytes.decode('utf-8', errors='replace')
+                            if critical_bytes is not None else None)
                 events = parse_manifest_captures(
                     classifier, manifest, serial, critical)
                 capture_state = live_capture_state(events)
@@ -2822,7 +2890,11 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                     break
                 if result['verdict'] not in ('INCONCLUSIVE',):
                     if decisive_since is None: decisive_since = time.time()
-                    if time.time()-decisive_since >= 2: break
+                    if time.time()-decisive_since >= 2:
+                        first_decision = persist_first_decision(
+                            output, manifest, state, result, serial_bytes,
+                            critical_bytes, time.time())
+                        break
                 time.sleep(0.5)
             if capture_pending:
                 raise RuntimeError(
@@ -2903,6 +2975,8 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
     if replay_evidence: write_once(output/'recovery-replay.json', replay_evidence)
     result = classifier.classify(manifest, events, probe)
     result['warm_reuse'] = (recovery_result or {'status':'not-attempted'})['status']
+    if first_decision is not None:
+        result['first_decisive_readiness'] = first_decision
     result['functional_boundary'] = result.get('earliest_failure')
     result['termination_reason'] = failure
     if manifest.get('gpu') is False and not failure:

@@ -21,7 +21,11 @@ evidence required before adding another compatibility patch.
 including exact candidate identities, evidence, safety constraints, and the next reviewed step,
 is maintained in [status.md](status.md).
 
-Candidate 1.0.178 completed native accelerator startup, KIQ setup, and both separately authorized
+Candidate 1.0.193 is the latest controlled attempt: it recovered safely but was inconclusive
+at the identity/route boundary. Further GPU attempts require the post-attempt Astra review and
+an explicitly pinned admission authority.
+
+Historical candidate 1.0.178 completed native accelerator startup, KIQ setup, and both separately authorized
 same-build diagnostic runs. Three consecutive cleanup-to-reinitialization transitions were also
 validated. Metal enumerates the device and compiles the probe pipeline, but the first command is
 rejected with `kIOReturnNoMemory` during resource preparation: every captured outer map failure

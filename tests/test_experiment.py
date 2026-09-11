@@ -8,6 +8,7 @@ import plistlib
 import ast
 import copy
 import hashlib
+import re
 import struct
 import threading
 from unittest.mock import patch
@@ -2920,6 +2921,12 @@ class ExperimentTests(unittest.TestCase):
     def test_probe_is_not_started_without_cleanup_budget(self):
         self.exercise_run('probe-no-budget')
 
+    def test_selected_readiness_refusal_survives_truncated_shutdown_capture(self):
+        self.exercise_run('decision-receipt-capture-loss')
+
+    def test_transient_inconclusive_before_ready_does_not_create_refusal_receipt(self):
+        self.exercise_run('decision-receipt-ready')
+
     def test_v2_receipt_does_not_create_generic_same_boot_authority(self):
         tool = self.module()
         with tempfile.TemporaryDirectory() as temp:
@@ -3062,6 +3069,24 @@ class ExperimentTests(unittest.TestCase):
                             launch_options={'BOOTDISK_MODE':'custom', 'NVRAM':'stock'},
                             source_clean=True, vfio_device='0000:7b:00.0',
                             candidate_directory='run/candidate-163', image_id='sha256:expected')
+            decision_modes = ('decision-receipt-capture-loss',
+                              'decision-receipt-ready')
+            if mode in decision_modes:
+                manifest.update(
+                    build_id=CR2_BUILD, boot_args='rgpucr2uart=2',
+                    critical_replay_schema=2, recovery_lease_schema=3,
+                    recovery_critical_replay_tolerance='terminal-prefix-open',
+                    recovery_helpers_sha256=self.recovery_helper_hashes(3),
+                    critical_replay_transport=TRANSPORT,
+                    critical_transport_validator_sha256=hashlib.sha256(
+                        (ROOT/'tools/critical-transport.py').read_bytes()).hexdigest())
+                manifest['spec']['critical_replay_transport'] = TRANSPORT
+                manifest['spec']['critical_replay_schema'] = 2
+                manifest['spec']['recovery_critical_replay_tolerance'] = \
+                    'terminal-prefix-open'
+                if mode == 'decision-receipt-capture-loss':
+                    manifest['critical_replay_tolerance'] = 'terminal-prefix'
+                    manifest['spec']['critical_replay_tolerance'] = 'terminal-prefix'
             if mode in ('probe-ready', 'probe-no-budget'):
                 manifest['spec']['required_observations'] = [
                     'sdma_vm_program', 'vmid2_root_repair']
@@ -3075,7 +3100,8 @@ class ExperimentTests(unittest.TestCase):
                      'HY: createHybridEngine enter: engine=1 available=1',
                      'HY: createHybridEngine exit: engine=1 valid=1 available-before=1 status=4',
                      'XJ: AMDHardware::startHWEngines -> 0']
-            if mode in ('probe-ready', 'probe-no-budget'):
+            if mode in ('probe-ready', 'probe-no-budget',
+                        'decision-receipt-ready'):
                 lines = [
                     'BUILD: identity=abc',
                     'VM: route AMDGFX10VMM::prepareVMInvalidateRequest -> ok (org=0xffffff8000000000)',
@@ -3089,8 +3115,33 @@ class ExperimentTests(unittest.TestCase):
             lines.extend(self.v2_critical_payloads(manifest['run_id']))
             serial = f'RGPU_RECORDS build=abc count={len(lines)} dropped=0 truncated=0\n'+''.join(
                 f'RGPU_EVENT build=abc seq={i} {line}\n' for i,line in enumerate(lines))
+            decision_prefix = None
+            decision_ready_prefix = None
+            if mode in decision_modes:
+                lines[0] = 'BUILD: identity=' + CR2_BUILD
+                lines.append('XH3 LIFETIME state=VALID exact')
+                decision_prefix = (
+                    f'RGPU_UART_READY v=1 b={CR2_BUILD} port=2\n' +
+                    ''.join(snapshot_lines(lines, snapshot=1)))
+                serial = ''
+                if mode == 'decision-receipt-capture-loss':
+                    corrupt = snapshot_lines(
+                        ['BUILD: identity=' + CR2_BUILD], snapshot=0)
+                    corrupt[0] = re.sub(r'c=[0-9a-f]{8}', 'c=deadbeef', corrupt[0])
+                    decision_prefix = (
+                        f'RGPU_UART_READY v=1 b={CR2_BUILD} port=2\n' +
+                        ''.join(corrupt) + ''.join(snapshot_lines(lines, snapshot=1)))
+                if mode == 'decision-receipt-ready':
+                    initial = ['BUILD: identity=' + CR2_BUILD]
+                    decision_prefix = (
+                        f'RGPU_UART_READY v=1 b={CR2_BUILD} port=2\n' +
+                        ''.join(snapshot_lines(initial, snapshot=1)))
+                    decision_ready_prefix = decision_prefix + ''.join(
+                        snapshot_lines(lines, snapshot=2))
             def start(*args):
                 calls.append('start'); (vm/'run/serial.log').write_text(serial)
+                if mode in decision_modes:
+                    (vm/'run/critical.log').write_text(decision_prefix)
                 if mode == 'gpu-less': self.assertEqual(args[2], [])
                 if mode == 'unconfirmed': raise StopUnconfirmed('pending service stop unknown')
                 deadline = 160 if mode == 'probe-no-budget' else 280
@@ -3102,6 +3153,10 @@ class ExperimentTests(unittest.TestCase):
                 if mode == 'runtime-abort': raise RuntimeError('runtime observation failed')
             def shutdown(vm_path, state, expected_build, grace):
                 if mode == 'shutdown-fault': calls.append('host-fault')
+                if mode == 'decision-receipt-capture-loss':
+                    tail = snapshot_lines(lines + ['shutdown-tail'], snapshot=2)[0]
+                    with (vm/'run/critical.log').open('a') as stream:
+                        stream.write(tail[:-17])
                 calls.append(('guest-shutdown', state['cid'], expected_build))
                 return dict(cid=state['cid'], outcome='forced')
             def kernel(cursor=None):
@@ -3125,7 +3180,7 @@ class ExperimentTests(unittest.TestCase):
                 calls.append(('parse-v2', prior, tuple(records)))
                 return lease_evidence
             def recover(vm_path, prior, *, lease_evidence=None,
-                        recovery_helpers_sha256=None):
+                        recovery_helpers_sha256=None, recovery_lease_schema=None):
                 self.assertIs(lease_evidence, globals_lease_evidence)
                 self.assertEqual(recovery_helpers_sha256,
                                  manifest['recovery_helpers_sha256'])
@@ -3184,6 +3239,12 @@ class ExperimentTests(unittest.TestCase):
                 return original_helper(name)
             actual = dict(image_id='wrong' if mode == 'wrong-image' else 'sha256:expected',
                           vfio_args=['vfio-pci,host=0000:7b:00.0'])
+            if mode in decision_modes:
+                actual['serial_args'] = [
+                    'socket,id=rgpu_console,path=/run/vm/serial.sock,server=on,wait=off',
+                    'isa-serial,chardev=rgpu_console,index=0',
+                    'socket,id=rgpu_critical,path=/run/vm/critical.sock,server=on,wait=off',
+                    'isa-serial,chardev=rgpu_critical,index=1']
             if mode == 'gpu-less': actual['vfio_args'] = []
             monitor_type = ImmediateMonitor if mode in ('monitor-capture', 'monitor-fault') \
                 else tool.HostMonitor
@@ -3204,7 +3265,11 @@ class ExperimentTests(unittest.TestCase):
                  patch.object(tool, 'parse_manifest_serial',
                               side_effect=parse_manifest_serial), \
                  patch.object(tool.time, 'time', side_effect=lambda:now[0]), \
-                 patch.object(tool.time, 'sleep', side_effect=lambda n:now.__setitem__(0,now[0]+n)):
+                 patch.object(tool.time, 'sleep', side_effect=lambda n:(
+                     (vm/'run/critical.log').write_text(decision_ready_prefix)
+                     if mode == 'decision-receipt-ready' and
+                        decision_ready_prefix is not None else None,
+                     now.__setitem__(0,now[0]+n))[-1]):
                 out = vm/'evidence'
                 result = tool.run_one(vm, path, out)
                 self.assertEqual(calls.count('start'), 1)
@@ -3254,6 +3319,50 @@ class ExperimentTests(unittest.TestCase):
                                      1 if mode == 'probe-ready' else 0)
                     self.assertEqual((out/'probe.json').exists(),
                                      mode == 'probe-ready')
+                elif mode == 'decision-receipt-capture-loss':
+                    receipt = json.loads((out/'first-decision.json').read_text())
+                    self.assertEqual(receipt['schema'], 1)
+                    self.assertEqual(receipt['build_id'], CR2_BUILD)
+                    self.assertEqual(receipt['run_id'], 'a'*32)
+                    self.assertEqual(receipt['cid'], 'c'*64)
+                    self.assertEqual(receipt['decision_time_epoch'], 102.0)
+                    self.assertEqual(receipt['readiness'], {
+                        'verdict':'HYBRID_QUEUE_SUSPECTED', 'stage':'hybrid'})
+                    self.assertEqual(receipt['shutdown'], {
+                        'action':'guest_shutdown',
+                        'reason':'decisive_readiness_refusal'})
+                    self.assertEqual(receipt['capture_acceptance'],
+                                     'terminal-prefix')
+                    self.assertEqual(receipt['snapshot'], 1)
+                    self.assertEqual(receipt['record_count'], len(lines))
+                    self.assertEqual(receipt['capture_prefixes']['serial'], {
+                        'file':'first-decision-serial.txt', 'byte_length':0,
+                        'sha256':hashlib.sha256(b'').hexdigest()})
+                    critical_bytes = decision_prefix.encode()
+                    self.assertEqual(receipt['capture_prefixes']['critical'], {
+                        'file':'first-decision-critical.txt',
+                        'byte_length':len(critical_bytes),
+                        'sha256':hashlib.sha256(critical_bytes).hexdigest()})
+                    self.assertEqual((out/'first-decision-critical.txt').read_bytes(),
+                                     critical_bytes)
+                    self.assertEqual((out/'first-decision-serial.txt').read_bytes(),
+                                     b'')
+                    self.assertEqual(result['first_decisive_readiness'], receipt)
+                    final_events = [json.loads(row) for row in
+                                    (out/'events.jsonl').read_text().splitlines()]
+                    self.assertTrue(any(row['kind'] == 'capture_loss'
+                                        for row in final_events))
+                    self.assertEqual(result['verdict'], 'INCONCLUSIVE')
+                    self.assertEqual(result['earliest_failure'],
+                                     'identity_or_route_missing')
+                    self.assertIn('capture_loss', result['evidence'])
+                    self.assertEqual(calls.count('probe'), 0)
+                    self.assertNotIn(result['verdict'],
+                                     ('CORE_PROBE_PASS', 'FULL_FUNCTION_PASS'))
+                elif mode == 'decision-receipt-ready':
+                    self.assertFalse((out/'first-decision.json').exists())
+                    self.assertNotIn('first_decisive_readiness', result)
+                    self.assertEqual(calls.count('probe'), 1, (result, calls))
                 else:
                     self.assertEqual(result['verdict'], 'INVALID')
                     self.assertIn(('guest-shutdown','c'*64, 'fixture'), calls)
@@ -3261,7 +3370,7 @@ class ExperimentTests(unittest.TestCase):
                 if mode == 'unconfirmed':
                     self.assertNotIn(('recover', 'a'*32), calls)
                 elif mode not in ('shutdown-fault', 'monitor-capture', 'monitor-fault',
-                                  'capture-loss'):
+                                  'capture-loss', 'decision-receipt-capture-loss'):
                     self.assertIn(('recover', 'a'*32), calls)
                 if mode == 'capture-loss': self.assertLess(now[0], 110)
                 if mode == 'capture-loss':

@@ -1,16 +1,25 @@
-# Current status — candidate 192 execution failed; recovery incomplete (2026-09-11)
+# Current status — candidate 193 inconclusive; recovery complete (2026-09-11)
 
-## Current authoritative state — candidate 192 run failed (2026-09-11)
+## Current authoritative state — candidate 193 inconclusive (2026-09-11)
 
-Candidate 192 has now consumed **1/3 launches** on boot
-`ac38a04c-de54-43b3-8141-414d5ea8a459`. The launch reached the unchanged native
-Metal probe and failed at `first_submission`; recovery is incomplete and
-`authorizes_launch=false`. Handoff authentication and the launch gate are
-therefore complete for this run, while no retry is authorized. The unresolved
-GPU-execution streak is **13 actual cycles** and the post-Astra batch is **2
-attempts** (`191`, `192`).
+Candidate 193 consumed **1/3 launches** on fresh boot
+`f828eb26-9cb7-4fac-bff2-bc87515fa2ba` and classified
+`INCONCLUSIVE` at `identity_or_route_missing` with `capture_loss` evidence.
+Recovery completed successfully with `authorizes_launch=true`. The mandatory
+Astra review is complete; the review batch is reset to **0 attempts** while
+the unresolved GPU-execution streak remains **14 actual cycles**. The next
+attempt requires a newly reviewed admission policy. Astra report SHA-256 is
+`ecfb42b240ae15be0ddc68626191462919c86b1ea6732ad04ae58e089a42481b`.
+P0 is validated: the production formatter emits the active mode, with positive
+`PROBE_NOT_RUN` and negative unchanged-193 classifier coverage. P1 decision
+receipt preservation is also validated. The final full Python suite ran **735
+tests with 3 skipped**; the focused classifier/integration coverage is **86
+tests**, the affected C++ sanitizer fixture passed, and exact-KDK preflight
+passed. Candidate 194 is metadata-prepared with source digest
+`c798dfd66c14c5d14160141586062ea5624f5314d14604f9d12abb40945e202d`; no build,
+staging, or launch is authorized yet.
 
-## Candidate 193 / metal-027 offline preparation (2026-09-11)
+## Historical candidate 193 / metal-027 offline preparation (2026-09-11)
 
 The host is on fresh boot `f828eb26-9cb7-4fac-bff2-bc87515fa2ba`; the launch
 ledger has **0 launches consumed**. Candidate 193 / metal-027 is being prepared
@@ -26,14 +35,47 @@ aperture after native packet construction. Candidate 192's frozen VRAM fields
 and exact KDK code support the hypothesis that native can leave an MC-valued
 root unchanged, while Linux GFX10 supplies the matching hardware-PDE conversion
 rule. The actual A1 output remains unobserved; this is a source-qualified
-hypothesis, not demonstrated GPU progress. The full Python suite passed 725
-tests with 3 skipped; focused classifier tests pass (80), the VM diagnostic
-fixture passes under ASan/UBSan, exact-KDK
+hypothesis, not demonstrated GPU progress. The full Python suite passed 728
+tests with 3 skipped; focused classifier tests pass (82), all 17 VM diagnostic
+sanitizer fixtures pass under ASan/UBSan, exact-KDK
 preflight passes including the A1 constant/prologue/route/callback-order guard,
 and a scratch-only cross-build produced an x86_64 Mach-O kext bundle (SHA-256
 `ea722df7aa486ecc63a2526e26010c8a7e352c7a7d7c01bdde74f3bce740163f`).
-No release archive, staging write, VM launch, hardware access or GPU cycle was
-performed. Recovery remains incomplete and no launch is authorized.
+The reviewed staging transaction completed with run ID
+`a02f2b4e09e1a0319615d410c6965afb`, nonce words
+`3576105534214582176` / `18111954628853896598`, and staging SHA-256
+`d4e840c1a2ab0287d4eef5582fd5dd286c1cbee47eac61c65e2c4036816efd89`.
+The prepared manifest is
+`/home/bogdan/macos-vm/run/metal-027-193-manifest.json`, SHA-256
+`8b006e227052915c6c92f0202f963fe683363547cccfde3293e1384f9f32d882`.
+Its source, archive, KDK, harness, boot, headless-Lilu, and mode-5 pins match
+the reviewed candidate. No VM launch or GPU cycle has occurred; no launch is
+authorized pending handoff verification.
+
+## Candidate 193 / metal-027 hardware run (2026-09-11)
+
+The single authorized first launch on boot
+`f828eb26-9cb7-4fac-bff2-bc87515fa2ba` completed the bounded procedure. The
+classifier verdict is `INCONCLUSIVE` at `identity_or_route_missing`, with
+`capture_loss` evidence; no Metal probe result is valid. The run consumed
+**1/3 launches** and advances the unresolved GPU-execution streak to **14
+actual cycles** and the post-Astra batch to **3 attempts** (`191`, `192`,
+`193`). No retry or debugger attachment is authorized; mandatory Astra review
+is now due before another GPU attempt.
+
+Run output is frozen under `/home/bogdan/macos-vm/run/metal-027-193`:
+
+- verdict SHA-256: `01987196b14c47057672b690715ca7e01cf9dc9a5ffd00d5aaa32ad4b5bdaacc`
+- serial SHA-256: `27514348eb803178ab0b4c7c282de7d59ab643e24e794443686a1f64b4e304d8`
+- critical capture SHA-256: `d8b7f2eb5ca1d1a0d1a5b9130aad440200068f6629169854b2d5526d4aa49130`
+- recovery SHA-256: `b4d05ccc18f9305dcf42b5b3f9819821333e84851d9b80b4dd4c83c37cda06ba`
+- host-after SHA-256: `ed791c4c9324466410aabec95f320beaadedf049b2951450873f01682cee34ef`
+
+Recovery completed as `recovered` with `authorizes_launch=true`, no active VM,
+VFIO retained, and no reset methods. The observed entry gate reported mode 5,
+while the emitted entry-update summaries remained mode 4; the resulting
+identity/route classification is an integration failure requiring offline
+repair before any further run.
 
 ## Historical candidate 192 offline preparation handoff (2026-09-11)
 

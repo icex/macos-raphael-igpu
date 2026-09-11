@@ -5432,10 +5432,7 @@ static void publishPendingVmEntryUpdates() {
         counts[n] = __atomic_load_n(&vmUpdateCounts[n], __ATOMIC_ACQUIRE);
     if (summarySchedule.shouldPublish(counts)) {
         using D = RaphaelVm::UpdateDomain;
-        CRLOG("VM: entry-update mode=4 route=%u inactive=%llu converted=%llu physical=%llu "
-              "outside=%llu system=%llu invalid-template=%llu invalid-aperture=%llu "
-              "empty=%llu overflow=%llu span=%llu zero=%llu omitted-child=%llu "
-              "omitted-eligible=%llu omitted-control=%llu",
+        CRLOG(RGPU_VM_ENTRY_UPDATE_SUMMARY_FORMAT, vmRootFixMode,
               orgVmmUpdateEntries != 0,
               counts[static_cast<size_t>(D::Inactive)],
               counts[static_cast<size_t>(D::Converted)],

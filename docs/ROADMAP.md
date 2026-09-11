@@ -1,11 +1,13 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-09-09. Last successful hardware startup and latest controlled guest attempt:
-candidate 1.0.178-B. The bounded 178-A/B sequence completed the third measured
+Updated 2026-09-09. Historical hardware snapshot: candidate 1.0.178-B. The bounded 178-A/B sequence completed the third measured
 cleanup-to-restart transition on this host boot; its terminal ledger is 6/6 and admits no
 seventh launch;
 published research snapshot: `v1.0.159-preview.1`. This document is the authoritative current roadmap.
-Historical hypotheses in `findings/GPU-RE.md` remain evidence, not instructions.
+Historical hypotheses in `findings/GPU-RE.md` remain evidence, not instructions. After every
+three actual GPU attempts, refresh `status.md`, complete the required Astra review, and revise
+the hypothesis and discriminating test before another attempt; builds and parser runs do not
+count as attempts.
 
 **Objective:** real, correct GPU compute and rendering in the Sequoia VM on the existing
 Raphael iGPU, followed by usable desktop rendering through the VM display and a repeatable
@@ -257,8 +259,8 @@ Authoritative recordings:
 | Write an independent macOS GPU/Metal driver | Contingency, not current implementation | Would also require the userspace/kernel interface, compiler/ISA integration, scheduling, VM, synchronization and presentation; a register driver alone is insufficient |
 
 Keep the current stack until evidence identifies a subsystem boundary it cannot serve.
-A failed experiment is not evidence that an entire backend must be rewritten. Conversely,
-three valid experiments that leave the same unexplained failure trigger an architecture
+ A failed experiment is not evidence that an entire backend must be rewritten. Conversely,
+three actual GPU attempts that leave the same unexplained failure trigger an architecture
 review, not another unrelated patch. No alternative requires buying hardware.
 
 ## 3. Critical path and parallel work
