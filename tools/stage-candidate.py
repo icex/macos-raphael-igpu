@@ -65,9 +65,9 @@ RESEAL_PROFILES = {
         "prior_run_id":"b4a41ca47553618a58bab320b3b0c2fb",
         "record_kind":"candidate194-nonce-reseal",
         "staging_sha256":"640409b94b4613a62710705c431e44115c052d4e6bcb7fa81ae7d408a92b7c9d",
-        "card_sha256":"db58e24a7d076748ae31534c8fabe8d2fdf675ee27c94b7df96f79cfd6910fea",
+        "card_sha256":"f45200eff3442cac9862e9c2b59bd6e7b86f3bc78d1133038ba08d4f7cf239cf",
         "build_manifest_sha256":"e5e6014ba1151e1c28bad7f14c482115d5c4e48ef9282e53680bdecde94ad28d",
-        "experiment_sha256":"25601074412d21c8538feeb2f128ce48eaba008d98c4acac1022d8ded318287b",
+        "experiment_sha256":"4fa9a413b7334bbcd6ed310a2ac9963b635f5d8a5f524060c1204b9ce23916c6",
         "prelaunch_refusal":{
             "boot_id":"f828eb26-9cb7-4fac-bff2-bc87515fa2ba",
             "directory":"run/metal-028-194",
