@@ -2890,3 +2890,17 @@ failures such as `size=8847360` with only `7589888` bytes free and
 `16711680` fixed-free. This is a genuine allocation rejection (the request is
 larger than the currently available free pool), while its underlying cause
 (capacity, fragmentation, or unreleased allocations) remains to be measured.
+
+## Hybrid desktop cycle 014 (2026-09-12)
+
+Fresh boot `2ac68c8a-c6f5-4b0e-a7b7-1fde8390680a` ran candidate 194 through the reviewed hybrid existing-display profile. The guarded launch reached `XJ: AMDHardware::powerUpHWEngines -> 1`, published `XH2 POOL state=ACTIVE` and `XH3 LIFETIME state=VALID`, and WindowServer submitted through Metal (`Proc 162 WindowServer`, `FirstPendingCB ... SubmitContext=Metal`). KIQ completions 1–3 succeeded, then `waitForHwStamp(4..9)->0` repeatedly timed out. The run ended at the coordinator's `capture_tolerance` boundary before the native probe or desktop helper ran; there is no desktop receipt or QEMU frame-change evidence.
+
+The raw serial log is authoritative for this cycle: `SUB: backing-summary completed=7268 true=233 false=7035 dropped=7031`, 198 allocation-error lines (including requests larger than the currently free pool), and CP observations with `CP_CPC_STALLED_STAT2=0x230000`. The submitted ring pointers advanced and `VM_FAULT_STATUS=0`, so this is a completion/retirement failure after initial Metal submissions, not a demonstrated page fault. The additional VM walk lines show valid VMID-2 root/table entries followed by invalid leaves (`V=0`) and repeated allocation failures; this supports allocator/PTE population pressure as a live hypothesis, but does not by itself prove the completion timeout's cause.
+
+Recovery is schema 6 `incomplete`: eight dequeue timeouts/forced-inactive records, `gfx_ring_clean=false`, `gfx_retirement_confirmed=false`, and host KIQ `blocked-active-hqd`; PSP ring destruction completed and no host-kernel fault was recorded. No further launch is permitted on this boot.
+
+The black screen with no “No Signal” is explained only by the configured generic VMware scanout (`-vga vmware -display gtk,gl=on`) receiving a signal. Raphael physical HDMI/EDID/HPD/link-training output remains unverified, and this run does not establish a desktop surface.
+
+Progress table: native Metal compute/render **demonstrated** (candidate 194) | engine startup and WindowServer Metal submission path **demonstrated** (014) | stamp completion after the third submission **failed** (014) | native probe, desktop drawable, and changing QEMU frame **not demonstrated** | repeatable cleanup **not demonstrated; recovery incomplete** | physical HDMI output **unverified**.
+
+The mandatory Astra batch after the prior checkpoint is now **3 actual attempts** (012, 013, 014). Before any new hardware cycle, archive any existing `report-astra.md`, refresh this status, and dispatch the exact read-only Astra review prompt required by `AGENTS.md`. If the service is unavailable, record that fact and perform no hardware retry until the review checkpoint is closed.
