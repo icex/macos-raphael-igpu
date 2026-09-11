@@ -41,9 +41,10 @@ submission:
 
 Thus the first observed divergence is **after** the host programs selector 9,
 reads `CP_HQD_ACTIVE=1`, enables the global doorbell gate, releases MEC2 from
-halt, and writes doorbell WPTR 256, but **before** MEC2 fetches the first KIQ
-packet. Candidate 191 does not reach `UNMAP_QUEUES`; its graphics ring therefore
-cannot be said to have consumed or rejected that packet.
+halt, and writes doorbell WPTR 256, but **before any demonstrated KIQ
+consumption**. Candidate 191 does not demonstrate consumption of
+`UNMAP_QUEUES`; its graphics ring therefore cannot be said to have consumed or
+rejected that packet.
 
 The candidate 191 cleanup evidence reinforces that boundary. Its final selected
 HQD has `ACTIVE=0`, `RPTR=0`, and `WPTR_LO=256`. The nonzero WPTR proves the
@@ -186,3 +187,26 @@ Do not expand this list with broad register dumps. Snapshot 1 answers whether
 the queue was initialized as intended; snapshot 2 answers whether MEC2 ran;
 snapshot 3 answers whether its VMID0 fetch faulted. Together they partition the
 observed zero-RPTR boundary without weakening the fence or cleanup gates.
+
+## Candidate 192 comparison addendum (2026-09-11)
+
+Candidate 192 repeats the candidate 191 recovery boundary with the same pinned
+`tools/vfio-recover.py` helper (`3616a938db007c84ecae6048bfd83100902759a328dda92c1d5394801e2d288e`),
+the same KIQ packet contract, and the same three discovered selectors (4, 8,
+and 9) dequeued during graphics quiesce. Its host KIQ terminal poll again
+recorded `rptr=0`, report `0`, fence `0`, and `wptr=256`, with HQD activation
+readback `1`; the graphics `UNMAP_QUEUES` was not consumed. Candidate 191 has
+the identical terminal tuple. Candidate 190, using that same helper, reached
+matching RPTR/report/fence progress and clean retirement, so the recorded
+difference is a repeated device-state boundary rather than an identified
+helper-code regression.
+
+The only measured queue-state difference in the retained summaries is the
+stale graphics ring write pointer before retirement: candidate 192 reports
+`19840`, candidate 191 `23040`, while candidate 190's successful receipt had a
+different workload state. The evidence does not establish that this pointer
+difference causes MEC2's zero progress. Candidate 192 therefore adds no safe
+fix or authorization. The missing prerequisite remains the offline-reviewed
+pre-release/post-MEC2 snapshot of the selected HQD/MQD/PQ fields and CP/MEC
+liveness state proposed above; without those reads, MEC2 dispatch/fetch failure
+and an unobserved queue-field mismatch cannot be separated.

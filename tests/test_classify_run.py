@@ -1609,6 +1609,153 @@ Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0
             'hint=7 result=7 reason=matched retained=3 same-thread=0 earlier=2 in-range=1\n')
         self.assertFalse(malformed[0]['ok'])
 
+    def test_a1_map_process_root_and_route_records_are_strictly_decoded(self):
+        classifier = self.classifier()
+        serial = (
+            'RGPU_RECORDS build=abc count=2 dropped=0 truncated=0\n'
+            'RGPU_EVENT build=abc seq=0 VM: route '
+            'AMDGFX10HIQHWChannel::fillMapProcessPacket -> ok '
+            '(entry=1 org=0xffffff800008edce)\n'
+            'RGPU_EVENT build=abc seq=1 VM: map-process-root '
+            'input=0xf40b709000 native=0xf40b709000 final=0x84b709000 '
+            'pasid=1 header=0xc00ea100 return-valid=1 repaired=1 reason=13\n')
+        rows = classifier.parse_serial(serial)
+        self.assertEqual([row['kind'] for row in rows],
+                         ['vm_map_process_route', 'vm_map_process_root'])
+        self.assertTrue(rows[0]['ok'] and rows[0]['entry'])
+        self.assertEqual(rows[1]['input_root'], 0xf40b709000)
+        self.assertEqual(rows[1]['native_root'], 0xf40b709000)
+        self.assertEqual(rows[1]['final_root'], 0x84b709000)
+        self.assertEqual((rows[1]['pasid'], rows[1]['header'], rows[1]['reason']),
+                         (1, 0xc00ea100, 13))
+        self.assertTrue(rows[1]['return_valid'] and rows[1]['repaired'])
+
+    def test_a1_map_process_malformed_prefix_fails_closed(self):
+        classifier = self.classifier()
+        valid = ('VM: map-process-root input=0xf40b709000 native=0xf40b709000 '
+                 'final=0xf40b709000 pasid=1 header=0xc00ea100 '
+                 'return-valid=1 repaired=0 reason=0')
+        for mutation in (
+                valid.replace('header=0xc00ea100', 'header=0xc00ea101'),
+                valid.replace('pasid=1', 'pasid=4294967296'),
+                valid.replace('input=0xf40b709000', 'input=0x10000000000000000'),
+                valid.replace('native=0xf40b709000', 'native=0x10000000000000000'),
+                valid.replace('final=0xf40b709000', 'final=0x10000000000000000'),
+                valid.replace('header=0xc00ea100', 'header=0x100000000'),
+                valid.replace('return-valid=1', 'return-valid=2'),
+                valid.replace('reason=0', 'reason=14'),
+                valid.replace('repaired=0', 'repaired=1').replace(
+                    'reason=0', 'reason=13').replace(
+                    'final=0xf40b709000', 'final=0x84b709000'),
+                valid.replace('return-valid=1', 'return-valid=0').replace(
+                    'repaired=0', 'repaired=1').replace('reason=0', 'reason=13'),
+                valid.replace('return-valid=1', 'return-valid=0').replace(
+                    'header=0xc00ea100', 'header=0').replace('reason=0', 'reason=1'),
+                valid.replace('final=0xf40b709000', 'final=0xf40b709001'),
+                valid.replace('return-valid=1', 'return-valid=0').replace(
+                    'native=0xf40b709000', 'native=0x1')):
+            rows = classifier.parse_serial('RGPU_EVENT build=abc seq=1 ' + mutation + '\n')
+            if 'header=0xc00ea101' in mutation:
+                self.assertEqual(rows[0]['kind'], 'vm_map_process_root')
+                self.assertFalse(rows[0]['guard_valid'])
+            elif 'return-valid=1 repaired=1' in mutation:
+                self.assertEqual(rows[0]['kind'], 'vm_map_process_root')
+                self.assertTrue(rows[0]['repaired'])
+            else:
+                self.assertEqual(rows[0]['kind'], 'capture_loss')
+                self.assertTrue(rows[0]['definitive'])
+        for payload in (
+                'VM: route AMDGFX10HIQHWChannel::fillMapProcessPacket -> FAILED '
+                '(entry=2 org=0x10000000000000000)',
+                'VM: route AMDGFX10HIQHWChannel::fillMapProcessPacket broken'):
+            rows = classifier.parse_serial('RGPU_EVENT build=abc seq=1 ' + payload + '\n')
+            self.assertEqual(rows[0]['kind'], 'vm_map_process_route')
+            self.assertTrue(rows[0]['malformed'])
+
+    def test_a1_map_process_summary_is_bounded_and_observational(self):
+        classifier = self.classifier()
+        rows = classifier.parse_serial(
+            'RGPU_EVENT build=abc seq=1 VM: map-process-summary '
+            'retained=8 dropped=18446744073709551615\n')
+        self.assertEqual(rows[0]['kind'], 'vm_map_process_summary')
+        self.assertTrue(rows[0]['ok'])
+        self.assertEqual(rows[0]['retained'], 8)
+        self.assertEqual(rows[0]['dropped'], 0xffffffffffffffff)
+        for payload in (
+                'VM: map-process-summary retained=9 dropped=0',
+                'VM: map-process-summary retained=0 dropped=18446744073709551616',
+                'VM: map-process-summary retained=x dropped=0'):
+            row = classifier.parse_serial('RGPU_EVENT build=abc seq=1 ' + payload + '\n')[0]
+            self.assertEqual(row['kind'], 'capture_loss')
+            self.assertTrue(row['definitive'])
+
+    def test_candidate193_map_process_contract_and_mode5_gate(self):
+        classify = self.classifier().classify
+        manifest = {'build_id':'abc', 'spec':{'required_observations':[
+            'vmid2_entry_gate', 'vmid2_entry_update', 'map_process_root']}}
+        base = [dict(kind='build', build='abc', seq=0),
+                dict(kind='route', build='abc', seq=1, ok=True),
+                dict(kind='vm_entry_gate', build='abc', seq=2, mode=5,
+                     marked=True, aperture=True),
+                dict(kind='vm_entry_update_route', build='abc', seq=3,
+                     ok=True, entry=True, original=0x55cda),
+                dict(kind='vm_entry_update', build='abc', seq=4, ok=True,
+                     mode=5, route=True, inactive=0,
+                     counts={key:(1 if key == 'converted' else 0)
+                             for key in self.classifier().ENTRY_UPDATE_COUNT_KEYS},
+                     omitted={key:0 for key in
+                              self.classifier().ENTRY_UPDATE_OMISSION_KEYS}),
+                dict(kind='vm_entry_update_sample', build='abc', seq=5, ok=True,
+                     bucket='child', caller=0x55a72, producer='child',
+                     domain='converted', destination=0x84b709000, count=1,
+                     source=0xf40b763000, result=0x84b763000,
+                     template=0x2000000000000001, increment=0,
+                     constructed=0x200000084b763001, state='returned')]
+        route = dict(kind='vm_map_process_route', build='abc', seq=6, ok=True,
+                     entry=True, original=0x8edce)
+        repaired = dict(kind='vm_map_process_root', build='abc', seq=7, ok=True,
+                        guard_valid=True, repaired=True, reason=13,
+                        input_root=0xf40b709000, native_root=0xf40b709000,
+                        final_root=0x84b709000, pasid=1)
+        result = classify(manifest, base + [route, repaired], None)
+        self.assertNotIn('map_process_root', result.get('earliest_failure') or '')
+
+        for changed, stage in (
+                (base + [dict(route, ok=False)], 'map_process_root_route_guard'),
+                (base + [route, dict(repaired, guard_valid=False)],
+                 'map_process_root_state'),
+                (base + [route, dict(repaired, final_root=0x84b708000)],
+                 'map_process_root_conversion'),
+                (base + [route] + [dict(repaired, seq=7+i) for i in range(9)],
+                 'map_process_root_capacity')):
+            verdict = classify(manifest, changed, None)
+            self.assertEqual(verdict['verdict'], 'INVALID')
+            self.assertEqual(verdict['earliest_failure'], stage)
+
+        noop = dict(repaired, repaired=False, reason=9,
+                    native_root=0x84b709000, final_root=0x84b709000)
+        result = classify(manifest, base + [route, noop], None)
+        self.assertNotIn('map_process_root', result.get('earliest_failure') or '')
+
+    def test_candidate193_map_process_missing_and_dropped_remain_conditional(self):
+        classify = self.classifier().classify
+        manifest = {'build_id':'abc', 'spec':{'required_observations':['map_process_root']}}
+        base = [dict(kind='build', build='abc', seq=0),
+                dict(kind='route', build='abc', seq=1, ok=True),
+                dict(kind='vm_map_process_route', build='abc', seq=2, ok=True,
+                     entry=True, original=0x8edce),
+                dict(kind='vm_fault', build='abc', seq=3, fault_status=1)]
+        missing = classify(manifest, base, None)
+        self.assertNotIn('map_process_root', missing.get('earliest_failure') or '')
+        root = dict(kind='vm_map_process_root', build='abc', seq=3, ok=True,
+                    guard_valid=True, repaired=False, reason=9,
+                    input_root=0x84b709000, native_root=0x84b709000,
+                    final_root=0x84b709000, pasid=1)
+        dropped = classify(manifest, base[:3] + [root, dict(
+            kind='vm_map_process_summary', build='abc', seq=4, ok=True,
+            retained=1, dropped=1)], None)
+        self.assertNotIn('map_process_root', dropped.get('earliest_failure') or '')
+
     def test_candidate183_requires_real_child_entry_construction_without_walk(self):
         classifier = self.classifier()
         manifest = {'build_id':'abc', 'spec':{'required_observations':[

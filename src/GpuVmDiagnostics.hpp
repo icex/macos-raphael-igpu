@@ -59,6 +59,25 @@ struct LocalInvalidateInfo {
     alignas(uint64_t) uint8_t bytes[0x28];
 };
 
+struct MapProcessRepair {
+    bool valid;
+    bool repaired;
+    uint64_t originalRoot;
+    uint64_t nativeRoot;
+    RootRepairReason reason;
+};
+
+struct MapProcessObservation {
+    uint64_t inputRoot;
+    uint64_t nativeRoot;
+    uint64_t finalRoot;
+    uint32_t pasid;
+    uint32_t header;
+    uint32_t reason;
+    bool returnValid;
+    bool repaired;
+};
+
 struct FramebufferAperture {
     uint64_t mcBase;
     uint64_t mcTop;
@@ -229,6 +248,49 @@ inline uint64_t readU64(const uint8_t *bytes) {
 inline void writeU64(uint8_t *bytes, uint64_t value) {
     for (size_t i = 0; i < sizeof(value); ++i)
         bytes[i] = static_cast<uint8_t>(value >> (i * 8));
+}
+
+inline MapProcessRepair repairMapProcessPacket(
+    uint8_t *packet, size_t size, bool enabled, bool markedRaphael,
+    uint32_t rawFbBase, uint32_t rawFbTop, uint32_t rawFbOffset) {
+    MapProcessRepair result {false, false, 0, 0, RootRepairReason::InvalidInput};
+    if (packet == nullptr || size < 0x40 || readU32(packet) != 0xc00ea100u)
+        return result;
+    result.valid = true;
+    result.originalRoot = readU64(packet + 8);
+    result.nativeRoot = result.originalRoot;
+    if (!enabled) { result.reason = RootRepairReason::Disabled; return result; }
+    if (!markedRaphael) { result.reason = RootRepairReason::TargetUnmarked; return result; }
+    if (rawFbBase == 0 || rawFbOffset == 0 || rawFbTop < rawFbBase ||
+        ((rawFbBase | rawFbTop | rawFbOffset) & 0xff000000u)) {
+        result.reason = RootRepairReason::InvalidAperture; return result;
+    }
+    constexpr uint64_t mask = 0x0000ffffffffffc0ULL;
+    const uint64_t attributes = result.originalRoot & ~mask;
+    if (attributes & 2) { result.reason = RootRepairReason::SystemRoot; return result; }
+    if (attributes != 0 && attributes != 1 && attributes != 5) {
+        result.reason = RootRepairReason::UnsupportedFlags; return result;
+    }
+    const uint64_t address = result.originalRoot & mask;
+    const uint64_t mcBase = static_cast<uint64_t>(rawFbBase) << 24;
+    const uint64_t mcTop = (static_cast<uint64_t>(rawFbTop) << 24) | 0xffffffULL;
+    const uint64_t physicalBase = static_cast<uint64_t>(rawFbOffset) << 24;
+    if (address >= physicalBase && address <= physicalBase + (mcTop - mcBase)) {
+        result.reason = RootRepairReason::AlreadyPhysical; return result;
+    }
+    if (address < mcBase || address > mcTop) {
+        result.reason = RootRepairReason::OutsideFramebuffer; return result;
+    }
+    if (address - mcBase > 0x0000ffffffffffffULL - physicalBase) {
+        result.reason = RootRepairReason::Overflow; return result;
+    }
+    const uint64_t physical = physicalBase + address - mcBase;
+    if (physical > mask) { result.reason = RootRepairReason::Overflow; return result; }
+    result.nativeRoot = physical | attributes;
+    writeU64(packet + 8, result.nativeRoot);
+    result.repaired = true;
+    result.reason = RootRepairReason::Repaired;
+    return result;
 }
 
 inline InvalidateRequest observeInvalidateRequest(const uint8_t *bytes, size_t size);
