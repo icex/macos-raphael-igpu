@@ -4593,6 +4593,18 @@ static void wrapVmmSetAlloc(void *self, uint32_t enable) {
           "nest(0x3c)=%u  [caller x6+%#llx]", enable, slot(0x20), slot(0x28),
           slot(0x30), *reinterpret_cast<uint32_t *>(f + 0x3c),
           reinterpret_cast<uint64_t>(__builtin_return_address(0)) - x6Base);
+    // On a cold hybrid path Apple may call disable before VMM ownership/readiness.
+    // Its native wireSysMemory path dereferences an uninitialised handler here; defer
+    // this no-op disable until setVirtualSpaceReady drives the owned enable path.
+    const bool earlyDisable = enable == 0 && recoveryLeaseConfigured &&
+                              vmmProbeMode >= 3 && slot(0x20) == nullptr &&
+                              slot(0x28) == nullptr;
+    if (earlyDisable) {
+        RLOG("XV: early disable deferred: VMM channels uninitialised; awaiting setVirtualSpaceReady");
+        CRLOG("XV2 VMM phase=deferred-disable enable=0 base=%#llx arena=%p pool0=%p pool1=%p",
+              *reinterpret_cast<uint64_t *>(f + 0x50), slot(0x58), slot(0x78), slot(0x80));
+        return;
+    }
     if (enable != 0 && vmmProbeMode >= 2 && slot(0x20) != nullptr && slot(0x28) == nullptr) {
         RLOG("XV: clearing m_0x20 so the guard at 0x5793d falls through and the channel is "
              "built; setMemoryAllocationsEnabled reassigns m_0x20 itself at 0x5795c");

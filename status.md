@@ -3047,3 +3047,46 @@ That hypothesis requires source/disassembly validation before another cycle.
 | Host safety | passed | no host fault; boot ledger now 1/3 |
 
 Attempts since the last review: **1**. No further launch is authorized on this boot.
+
+## Offline flow repair after candidate 195 (2026-09-11)
+
+The candidate-195 boundary was reproduced from the frozen evidence: the guest
+panicked in `AMDHWHandler::wireSysMemory` during the first native allocation
+disable, before `setVirtualSpaceReady(1)`, with no `XH2`/`XH3` lease record and
+all submission counters at zero. The VMM wrapper now defers only that cold-path
+no-op disable when recovery mode is configured and both channel pointers are
+null; the native call remains unchanged for every owned or already-initialised
+path. Source coverage checks the guard ordering and ABI-sensitive wrapper.
+
+Recovery handling now records `not-required` only for the exact pre-ownership
+panic signature (wireSysMemory, no lease/readiness records, and an all-zero
+submission summary). It never reports cleanup confirmation or authorizes a
+same-boot launch. Any lease-shaped record, readiness callback, nonzero
+submission, or different error still follows the existing fail-closed recovery
+path. This prevents the coordinator from attempting unauthenticated BAR writes
+while preserving the evidence that no native lease was published.
+
+Offline validation after the repair: focused recovery/VMM tests **124 passed**;
+full discovered suite **793 passed, 3 skipped**; repository diff check passed;
+the live device was not rebound and no VM or reset was started. The historical
+candidate-194 reseal profile was updated to the current coordinator hash so
+its integrity check remains explicit. A fresh candidate and authority are
+required after this source change; candidate-195 staging artifacts must not be
+reused.
+
+| Area | Result | Blocking issue |
+|---|---|---|
+| VMM pre-submit panic | guard implemented offline | needs a fresh-boot discriminating run |
+| Recovery safety | strict no-lease classification | no cleanup proof for a crashed guest |
+| Metal compute/render | candidate 194 demonstrated | desktop presentation still unproven |
+| Host safety | no new exposure | next GPU attempt requires reboot and fresh authority |
+
+Attempts since the last review remain **1**; this offline repair does not reset
+the unresolved hardware issue or consume another GPU cycle.
+
+The repaired kext also builds successfully as version `1.0.196` from the clean
+source tree finalized in the current clean commit; executable SHA-256 is
+`f346643bc6849103f054a106ba9ec1f888189039c03989c24f107081c72d54b2`.
+The host is currently idle with the iGPU still on `vfio-pci`, no active VM, and
+no new hardware exposure. Staging and reboot remain intentionally pending until
+a fresh candidate-196 card is generated from this clean commit.

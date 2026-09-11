@@ -604,6 +604,30 @@ def recover_v2(recovery_tool, vm, manifest, serial, replay_evidence=None):
     return recovery_tool.recover(vm, manifest['run_id'], **arguments)
 
 
+def preownership_no_lease(serial):
+    """Recognize only the proven pre-ownership panic for a no-op recovery.
+
+    This is evidence classification, not a cleanup authorization.  A run is
+    eligible only when the native VMM crashes in ``wireSysMemory`` before it
+    publishes any XH2/XH3 lease record and submission counters are all zero.
+    Any lease-shaped record, readiness callback, or nonzero submission keeps
+    recovery fail-closed.
+    """
+    if not isinstance(serial, str):
+        return False
+    if 'wireSysMemory' not in serial:
+        return False
+    if re.search(r'\bXH[23](?:\s|$)', serial):
+        return False
+    if 'setVirtualSpaceReady(1)' in serial:
+        return False
+    summary = re.search(
+        r'SUB: summary process=(\d+)/(\d+)/(\d+) mappings=(\d+)/(\d+)/(\d+) '
+        r'prepare=(\d+)/(\d+)/(\d+) map=(\d+)/(\d+)/(\d+) '
+        r'submit=(\d+)/(\d+)/(\d+) dropped=(\d+)/(\d+)', serial)
+    return summary is not None and all(int(value) == 0 for value in summary.groups())
+
+
 def parse_manifest_serial(classifier, manifest, serial):
     schema = manifest.get('critical_replay_schema')
     if schema is None:
@@ -3119,8 +3143,22 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
             recovery_result = recover_v2(
                 recovery_tool, vm, manifest, recovery_serial, replay_evidence)
         except BaseException as error:
-            recovery_result = {'status':'failed',
-                               'error':type(error).__name__+': '+str(error)}
+            # A cold-start panic can precede native lease publication entirely.
+            # Do not run generic BAR recovery without an authenticated lease;
+            # record this exact read-only boundary instead. Any XH2/XH3 record,
+            # readiness callback, or submission keeps the strict failure path.
+            if (isinstance(error, getattr(recovery_tool, 'RecoveryError', type(error))) and
+                    'missing XH2 ownership record' in str(error) and
+                    preownership_no_lease(serial)):
+                recovery_result = {
+                    'status':'not-required',
+                    'reason':'preownership panic before native lease publication',
+                    'cleanup_confirmed':False,
+                    'authorizes_launch':False,
+                }
+            else:
+                recovery_result = {'status':'failed',
+                                   'error':type(error).__name__+': '+str(error)}
     initialize_output()
     serial_bytes = (vm/'run/serial.log').read_bytes() if state else b''
     serial = serial_bytes.decode(errors='replace')
