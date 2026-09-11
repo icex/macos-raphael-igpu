@@ -347,8 +347,8 @@ class CoordinatorIdentityGateTests(unittest.TestCase):
         gate = body[body.index('identity_gate = current_identity('):]
         self.assertIn("recovery_lease_schema=manifest.get('recovery_lease_schema', 2),",
                       gate[:gate.index('identity_gate.update(')])
-        self.assertIn('launch_options_expected=launch_options(manifest))',
-                      gate[:gate.index('identity_gate.update(')])
+        self.assertIn('launch_options_expected=launch_options(manifest, allow_generic=',
+                  gate[:gate.index('identity_gate.update(')])
         self.assertIn("helper_name = authorization.get('helper_name'", body)
 
 

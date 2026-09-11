@@ -533,7 +533,19 @@ def recover_v2(recovery_tool, vm, manifest, serial, replay_evidence=None):
         'recovery_helpers_sha256':manifest['recovery_helpers_sha256'],
     }
     if lease_schema == 3:
-        arguments['recovery_lease_schema'] = 3
+        # A failed engine start can publish the immutable OWNED descriptor
+        # before AMDHWMemory::enableAllocations gets a chance to publish the
+        # ACTIVE pool.  That state has no schema-3 lifetime binding to trust,
+        # but the schema-2 ownership proof is still sufficient for bounded
+        # queue retirement.  Downgrade only for an absent pool; an explicit
+        # INVALID or unfinished pool remains a hard refusal in vfio-recover.
+        has_pool_record = any(record.startswith('XH2 POOL ')
+                              for record in records)
+        if has_pool_record:
+            arguments['recovery_lease_schema'] = 3
+        else:
+            arguments['recovery_helpers_sha256'] = (
+                recovery_tool.current_recovery_helpers_sha256(2))
     return recovery_tool.recover(vm, manifest['run_id'], **arguments)
 
 
