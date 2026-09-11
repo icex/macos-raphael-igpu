@@ -893,6 +893,37 @@ class Candidate188ResealTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "fresh cross-boot"):
             self.tool.validate_reseal_boot_identity(profile, historical)
 
+    def test_candidate194_fresh_reseal_authority_separates_historical_refusal(self):
+        profile = {
+            "allow_cross_boot_reseal": True,
+            "prelaunch_refusal": {"boot_id": "historical-boot"},
+        }
+        refusal = {"reason": "source_clean", "qemu_started": False,
+                   "ledger_consumed": False}
+        authority = self.tool.reseal_authority(
+            profile, "fresh-boot", "a" * 32, refusal)
+        self.assertTrue(authority["authorizes_launch"])
+        self.assertEqual(authority["authority_boot_id"], "fresh-boot")
+        self.assertEqual(authority["authority_run_id"], "a" * 32)
+        self.assertEqual(authority["historical_prelaunch_refusal"], refusal)
+        self.assertNotEqual(authority["historical_prelaunch_refusal"],
+                            authority.get("authority"))
+
+    def test_candidate194_reseal_authority_rejects_historical_boot_or_stale_run(self):
+        profile = {
+            "allow_cross_boot_reseal": True,
+            "prelaunch_refusal": {"boot_id": "historical-boot"},
+        }
+        refusal = {"reason": "source_clean"}
+        for boot_id, run_id, expected in (
+                ("historical-boot", "a" * 32, "cross-boot"),
+                ("fresh-boot", "b" * 32, "fresh run ID")):
+            with self.subTest(boot_id=boot_id, run_id=run_id):
+                with self.assertRaisesRegex(RuntimeError, expected):
+                    self.tool.reseal_authority(
+                        profile, boot_id, run_id, refusal,
+                        prior_run_id="b" * 32)
+
     def test_candidate194_reseal_refuses_bad_proof_before_media_work(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
