@@ -2151,12 +2151,12 @@ class ExperimentTests(unittest.TestCase):
             identity_run_ids = []
             identity_launch_options = []
             identity_probe_specs = []
-            def current_identity(*args, **kwargs):
-                identity_run_ids.append(kwargs.get('run_id', args[3] if len(args) > 3 else None))
-                identity_launch_options.append(kwargs.get(
-                    'launch_options_expected', args[5] if len(args) > 5 else None))
-                identity_probe_specs.append(kwargs.get(
-                    'probe_spec', args[6] if len(args) > 6 else None))
+            def current_identity(vm, candidate, requested_diagnostic, run_id=None,
+                                 recovery_lease_schema=2,
+                                 launch_options_expected=None, probe_spec=None):
+                identity_run_ids.append(run_id)
+                identity_launch_options.append(launch_options_expected)
+                identity_probe_specs.append(probe_spec)
                 return copy.deepcopy(observed)
             now = [100.0]
             class NoopMonitor:
@@ -3176,7 +3176,11 @@ class ExperimentTests(unittest.TestCase):
                 def stop(self): pass
 
             observed = iter([manifests[0][0], manifests[1][0]])
-            with patch.object(tool, 'current_identity', side_effect=lambda *args, **kwargs:next(observed)), \
+            def current_identity(vm_path, candidate, requested_diagnostic,
+                                 run_id=None, recovery_lease_schema=2,
+                                 launch_options_expected=None, probe_spec=None):
+                return next(observed)
+            with patch.object(tool, 'current_identity', side_effect=current_identity), \
                  patch.object(tool, 'host_snapshot', return_value=host), \
                  patch.object(tool, 'helper', side_effect=helpers), \
                  patch.object(tool, 'running_identity', return_value={
