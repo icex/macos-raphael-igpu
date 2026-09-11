@@ -31,6 +31,134 @@ class ExperimentTests(unittest.TestCase):
         spec.loader.exec_module(module)
         return module
 
+    def test_desktop_phase_contract_preserves_caps_and_requires_exact_profile(self):
+        tool = self.module()
+        profile = {
+            'schema': 1, 'hold_seconds': 15, 'cleanup_reserve_seconds': 25,
+            'source_sha256': 'a'*64, 'binary_sha256': 'b'*64,
+            'guest_binary': '/var/tmp/rgpu-desktop-display-v2-'+'c'*16+'/desktop-display',
+            'require_remote_frame_change': True,
+        }
+        card = {'max_seconds': 180, 'desktop_phase': profile,
+                'desktop_helper_sha256':tool.sha((ROOT/'tools/desktop-display.py').read_bytes()),
+                'vnc_capture_sha256':tool.sha((ROOT/'tools/vnc-frame-capture.py').read_bytes()),
+                'vnc_requirements_sha256':tool.sha((ROOT/'tools/vnc-frame-capture.requirements.txt').read_bytes()),
+                'launch_options': {'BOOTDISK_MODE':'custom', 'NVRAM':'stock',
+                                   'GENERIC_GRAPHICS':'off'}}
+        self.assertEqual(tool.desktop_profile(card), profile)
+        self.assertTrue(tool.desktop_phase_fits(100, 180, 180, profile))
+        self.assertFalse(tool.desktop_phase_fits(131, 170, 170, profile))
+        for mutation in (
+                {'max_seconds': 181},
+                {'desktop_phase': dict(profile, hold_seconds=31)},
+                {'desktop_phase': dict(profile, cleanup_reserve_seconds=24)},
+                {'launch_options': {'BOOTDISK_MODE':'custom','NVRAM':'stock'}}):
+            changed = dict(card, **mutation)
+            with self.assertRaises(ValueError):
+                tool.desktop_profile(changed)
+
+    def test_desktop_phase_requires_authenticated_metal_pass(self):
+        tool = self.module()
+        run_id = 'a'*32
+        valid = {'run_id':run_id, 'output':'probe-output', 'transport_exit':0}
+        class Metal:
+            @staticmethod
+            def validate_output(output, nonce):
+                if output != 'probe-output' or nonce != run_id:
+                    raise ValueError('bad')
+                return {'passed':True, 'device':'AMD Radeon Navi23',
+                        'registry_id':0x1000002ed, 'completed_command_buffers':4}
+        evidence = tool.validated_metal_pass(valid, run_id, Metal)
+        self.assertEqual(evidence['registry_id'], 0x1000002ed)
+        with self.assertRaises(ValueError):
+            tool.validated_metal_pass(dict(valid, transport_exit=1), run_id, Metal)
+
+    def test_remote_frame_proof_requires_two_changed_vnc_frames_in_window(self):
+        tool = self.module(); nonce = 'd'*32
+        row = {'schema':1, 'run_id':nonce, 'cid':'c'*64,
+               'source':'vnc-loopback-5900','display_id':33,'registry_id':77,
+               'first_path':'run/desktop-vnc-frame-'+nonce+'-1.png',
+               'second_path':'run/desktop-vnc-frame-'+nonce+'-2.png',
+               'first_sha256':'a'*64, 'second_sha256':'b'*64,
+               'first_epoch':101, 'second_epoch':109}
+        with tempfile.TemporaryDirectory() as temporary:
+            vm=Path(temporary); (vm/'run').mkdir(); path=vm/'proof.json'
+            first=vm/'run'/f'desktop-vnc-frame-{nonce}-1.png'; first.write_bytes(b'one')
+            second=vm/'run'/f'desktop-vnc-frame-{nonce}-2.png'; second.write_bytes(b'two')
+            row['first_sha256']=tool.sha(b'one'); row['second_sha256']=tool.sha(b'two')
+            path.write_text(json.dumps(row))
+            self.assertEqual(tool.validate_remote_frame_proof(
+                path,vm,nonce,'c'*64,33,77,100,110),row)
+            path.write_text(json.dumps(dict(row, second_sha256='a'*64)))
+            with self.assertRaises(ValueError):
+                tool.validate_remote_frame_proof(path,vm,nonce,'c'*64,33,77,100,110)
+
+    def test_run_desktop_phase_passes_registry_and_requires_remote_proof(self):
+        tool = self.module(); nonce = 'e'*32
+        profile = {'schema':1, 'hold_seconds':15, 'cleanup_reserve_seconds':25,
+                   'source_sha256':'a'*64, 'binary_sha256':'b'*64,
+                   'guest_binary':'/var/tmp/rgpu-desktop-display-v2-'+'a'*16+'/desktop-display',
+                   'require_remote_frame_change':True}
+        manifest = {'run_id':nonce, 'spec':{'max_seconds':180,
+                    'desktop_helper_sha256':tool.sha((ROOT/'tools/desktop-display.py').read_bytes()),
+                    'vnc_capture_sha256':tool.sha((ROOT/'tools/vnc-frame-capture.py').read_bytes()),
+                    'vnc_requirements_sha256':tool.sha((ROOT/'tools/vnc-frame-capture.requirements.txt').read_bytes()),
+                    'launch_options':{'BOOTDISK_MODE':'custom','NVRAM':'stock',
+                                      'GENERIC_GRAPHICS':'off'},
+                    'desktop_phase':profile}}
+        state = {'launch_deadline_epoch':200, 'deadline_epoch':200, 'cid':'c'*64}
+        class Display:
+            @staticmethod
+            def run_prepared(vm, actual, deadline, registry):
+                self.assertEqual(registry, 77)
+                return {'display':{'display_id':33}, 'lifecycle_complete':True,
+                        'stimulus':{'first_color_token':'#ff0000',
+                                    'last_color_token':'#00ffff'}}
+        with tempfile.TemporaryDirectory() as temporary, \
+                patch.object(tool, 'helper', return_value=Display), \
+                patch.object(tool, 'start_vnc_capture', return_value=(object(),Path('one'),Path('two'))), \
+                patch.object(tool, 'finish_vnc_capture', return_value={'changed':True}), \
+                patch.object(tool.time, 'time', side_effect=[100, 120]):
+            vm = Path(temporary); (vm/'run').mkdir()
+            result = tool.run_desktop_phase(vm,manifest,state,{'registry_id':77})
+            self.assertEqual(result['compositor_gpu_provenance'],'unproven')
+
+    def test_capture_consumer_requires_expected_colors_in_real_png_bytes(self):
+        tool=self.module(); nonce='f'*32
+        from PIL import Image
+        class Proc:
+            returncode=0
+            def communicate(self, timeout):
+                return (json.dumps({'first_epoch':101,'second_epoch':109}).encode(),b'')
+        with tempfile.TemporaryDirectory() as temporary, \
+                patch.object(tool,'_verify_vnc_mapping'), \
+                patch.object(tool.time,'time',return_value=102):
+            vm=Path(temporary); (vm/'run').mkdir()
+            first=vm/'run'/f'desktop-vnc-frame-{nonce}-1.png'
+            second=vm/'run'/f'desktop-vnc-frame-{nonce}-2.png'
+            Image.new('RGB',(1280,720),(255,0,0)).save(first)
+            Image.new('RGB',(1280,720),(0,255,255)).save(second)
+            result=tool.finish_vnc_capture(
+                Proc(),vm,nonce,'c'*64,33,77,first,second,
+                {'first_color_token':'#ff0000','last_color_token':'#00ffff'},
+                100,110,107)
+            self.assertNotEqual(result['first_sha256'],result['second_sha256'])
+
+    def test_vnc_password_open_is_single_fd_nofollow_and_private(self):
+        tool=self.module()
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary); secret=root/'secret'; secret.write_bytes(b'12345678')
+            secret.chmod(0o600)
+            self.assertEqual(tool._read_private_vnc_password(secret),bytearray(b'12345678'))
+            link=root/'link'; link.symlink_to(secret)
+            with self.assertRaises(OSError): tool._read_private_vnc_password(link)
+            secret.chmod(0o640)
+            with self.assertRaises(ValueError): tool._read_private_vnc_password(secret)
+            secret.chmod(0o600)
+            owner=tool.os.getuid()
+            with patch.object(tool.os,'getuid',return_value=owner+1):
+                with self.assertRaises(ValueError): tool._read_private_vnc_password(secret)
+
     def recovery_helper_hashes(self, schema=2):
         paths = [
             'tools/vfio-recover.py',
