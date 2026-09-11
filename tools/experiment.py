@@ -21,6 +21,46 @@ import struct
 import threading
 
 ROOT = Path(__file__).resolve().parents[1]
+
+# Probe source and transport are part of the experiment identity.  Keep this
+# table deliberately closed: selecting a probe must never turn into executing
+# arbitrary source supplied by an experiment card.
+PROBE_PROFILES = {
+    'native-metal': {
+        'source': 'tests/metal_probe.m',
+        'binary_prefix': '/var/tmp/rgpu-metal-',
+        'validator': 'metal-test',
+    },
+    'small-metal': {
+        'source': 'tests/small_metal_probe.m',
+        'binary_prefix': '/var/tmp/rgpu-small-metal-',
+        'validator': 'small-metal-test',
+    },
+}
+
+
+def probe_profile(spec):
+    """Return the reviewed probe binding embedded in a card/manifest."""
+    if not isinstance(spec, dict):
+        raise ValueError('probe profile requires an experiment card object')
+    declared = spec.get('probe_profile', 'native-metal')
+    name = declared.get('name') if isinstance(declared, dict) else declared
+    if name not in PROBE_PROFILES:
+        raise ValueError('unsupported probe profile')
+    expected = PROBE_PROFILES[name]
+    source = spec.get('probe_source')
+    if source is not None and source != expected['source']:
+        raise ValueError('probe source path is not allowlisted')
+    path = ROOT / expected['source']
+    if not path.is_file():
+        raise ValueError('probe source path is missing')
+    profile = dict(name=name, source=expected['source'],
+                source_sha256=sha(path.read_bytes()),
+                binary_prefix=expected['binary_prefix'],
+                validator=expected['validator'])
+    if isinstance(declared, dict) and declared != profile:
+        raise ValueError('probe profile binding changed')
+    return profile
 BOOT_GUID = '7C436110-AB2A-4BBB-A880-FE41995C9F82'
 RAPHAEL_DEVICE_PATH = 'PciRoot(0x0)/Pci(0x6,0x0)'
 RAPHAEL_GUEST_BUS = 'pcie.0'
@@ -268,7 +308,8 @@ def raphael_target_marked(config):
 
 
 def current_identity(vm, candidate, requested_diagnostic, run_id=None,
-                     recovery_lease_schema=2, launch_options_expected=None):
+                     recovery_lease_schema=2, launch_options_expected=None,
+                     probe_spec=None):
     build = json.loads((candidate / 'build-manifest.json').read_text())
     bundle = candidate / 'RaphaelGPU.kext/Contents'
     expected = dict(binary_sha256=sha((bundle/'MacOS/RaphaelGPU').read_bytes()),
@@ -312,7 +353,8 @@ def current_identity(vm, candidate, requested_diagnostic, run_id=None,
     pinned = json.loads((ROOT/'findings/baseline-identities.json').read_text())
     if kdk != {k:v['sha256'] for k,v in pinned['binaries'].items()}: raise ValueError('KDK identity changed')
     guest = json.loads((vm/'run/guest-identity.json').read_text())
-    source_hash = sha((ROOT/'tests/metal_probe.m').read_bytes())
+    selected_probe = probe_profile(probe_spec or {})
+    source_hash = selected_probe['source_sha256']
     if guest['probe_source_sha256'] != source_hash or guest['guest_build'] != '24G830':
         raise ValueError('guest probe preparation or OS build mismatch')
     image_name = os.environ.get('IMAGE', 'sickcodes/docker-osx:latest')
@@ -335,6 +377,7 @@ def current_identity(vm, candidate, requested_diagnostic, run_id=None,
                                     'addr':RAPHAEL_GUEST_ADDR,
                                     'device_path':RAPHAEL_DEVICE_PATH},
                 image_id=image_id, guest_build=guest['guest_build'], probe_source_sha256=source_hash,
+                probe_profile=selected_probe,
                 probe_binary_sha256=guest['probe_binary_sha256'], boot_id=host['boot_id'], kernel=host['kernel'],
                 bootdisk_sha256=sha((vm/'OpenCore.qcow2').read_bytes()),
                 recovery_helpers_sha256=(
@@ -345,6 +388,7 @@ def current_identity(vm, candidate, requested_diagnostic, run_id=None,
 
 def prepare(vm, spec, output, gpu=True, run_id=None):
     card = json.loads(spec.read_text())
+    selected_probe = probe_profile(card)
     replay_schema = critical_replay_schema(card)
     transport = critical_replay_transport(card)
     quiesce = critical_replay_quiesce(card)
@@ -368,7 +412,7 @@ def prepare(vm, spec, output, gpu=True, run_id=None):
             raise ValueError('active or pending VM prevents preparation')
         identity = current_identity(
             vm, candidate, card['requested_diagnostic'], run_id if gpu else None,
-            lease_schema, options)
+            lease_schema, options, card)
         if not identity['source_clean']: raise ValueError('commit source and tooling before preparation')
         if card['requested_diagnostic'] not in identity['boot_args'].split():
             raise ValueError('required diagnostic boot argument is absent')
@@ -378,6 +422,9 @@ def prepare(vm, spec, output, gpu=True, run_id=None):
                         recovery_lease_schema=lease_schema if gpu else None,
                         vfio_device='0000:7b:00.0', experiment=card['id'], spec=card,
                         candidate_directory=str(candidate.relative_to(vm)))
+        # Preserve the complete reviewed profile in the manifest so execution
+        # can select the matching validator and deterministic guest path.
+        identity['probe_profile'] = selected_probe
         if replay_schema is not None:
             identity['critical_replay_schema'] = replay_schema
         if transport is not None:
@@ -2301,7 +2348,8 @@ def reserve_candidate179_qualification(directory, boot_id, experiment, recovery,
             vm, vm/manifest['candidate_directory'], requested,
             run_id=manifest['run_id'],
             recovery_lease_schema=manifest.get('recovery_lease_schema', 2),
-            launch_options_expected=launch_options(manifest))
+            launch_options_expected=launch_options(manifest),
+            probe_spec=manifest)
         identity_gate.update(run_id=manifest['run_id'],
                              recovery_lease_schema=manifest.get('recovery_lease_schema', 2))
         gate_errors.extend(validate_identity(
@@ -2405,7 +2453,8 @@ def reserve_warm_qualification(directory, boot_id, experiment, recovery,
             vm, vm/manifest['candidate_directory'], requested,
             run_id=manifest.get('run_id'),
             recovery_lease_schema=manifest.get('recovery_lease_schema', 2),
-            launch_options_expected=launch_options(manifest))
+            launch_options_expected=launch_options(manifest),
+            probe_spec=manifest)
         gate_errors.extend(validate_identity(
             {key:manifest[key] for key in identity_gate if key in manifest},
             identity_gate))
@@ -2698,9 +2747,10 @@ class HostMonitor:
 
 
 def run_probe(vm, manifest):
-    metal = helper('metal-test')
+    selected = probe_profile(manifest)
+    metal = helper(selected['validator'])
     nonce = manifest['run_id']
-    binary = '/var/tmp/rgpu-metal-'+manifest['probe_source_sha256'][:16]+'/probe'
+    binary = selected['binary_prefix'] + manifest['probe_source_sha256'][:16] + '/probe'
     action = (f'permit=$(/usr/bin/curl -fsS --max-time 3 http://10.0.2.2:8889/metal-permit-{nonce}) && '
               f'test "$permit" = {shlex.quote(nonce)} && '
               f'test "$(/usr/bin/sw_vers -buildVersion)" = {shlex.quote(manifest["guest_build"])} && '
@@ -2708,7 +2758,9 @@ def run_probe(vm, manifest):
               f'{shlex.quote(manifest["probe_binary_sha256"])} && '
               f'{shlex.quote(binary)} {shlex.quote(nonce)} {int(time.time())+60}')
     shell = f'( {action}; result=$?; printf "\\nRGPU_EXIT {nonce} %s\\n" "$result" )'
-    result = metal.run_guest_command(vm, shell, nonce, dict(os.environ, GX_TIMEOUT='48'),
+    transport = (metal.run_guest_command if selected['name'] == 'native-metal'
+                 else metal._transport())
+    result = transport(vm, shell, nonce, dict(os.environ, GX_TIMEOUT='48'),
                                     timeout=50, execution_grace=0)
     return dict(run_id=nonce, output=result.stdout, transport_exit=result.returncode)
 
@@ -2757,6 +2809,7 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
             cap_revision_authority_sha256 or warm_requested):
         raise ValueError('candidate179 qualification cannot use another launch mode')
     manifest = json.loads(manifest_path.read_text())
+    probe_profile(manifest)
     validate_manifest_replay_contract(manifest)
     dedicated_critical = critical_replay_transport(manifest) is not None
     if dedicated_critical and manifest.get('critical_transport_validator_sha256') != sha(
@@ -2836,7 +2889,7 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                     vm, vm/manifest['candidate_directory'], requested,
                     manifest['run_id'] if manifest.get('gpu') is True else None,
                     manifest.get('recovery_lease_schema', 2),
-                    launch_options(manifest))
+                    launch_options(manifest), manifest)
                 transport_contract().validate_boot_args(
                     observed['boot_args'], manifest)
                 host = host_snapshot(); write_once(output/'host-before.json', host)

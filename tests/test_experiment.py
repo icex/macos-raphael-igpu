@@ -31,6 +31,35 @@ class ExperimentTests(unittest.TestCase):
         spec.loader.exec_module(module)
         return module
 
+    def test_probe_profile_binds_allowlisted_source_digest(self):
+        tool = self.module()
+        profile = tool.probe_profile({'probe_profile': 'small-metal'})
+        source = ROOT / 'tests' / 'small_metal_probe.m'
+        self.assertEqual(profile['name'], 'small-metal')
+        self.assertEqual(profile['source'], 'tests/small_metal_probe.m')
+        self.assertEqual(profile['source_sha256'], hashlib.sha256(source.read_bytes()).hexdigest())
+
+    def test_probe_profile_defaults_to_full_native_probe(self):
+        tool = self.module()
+        profile = tool.probe_profile({})
+        self.assertEqual(profile['name'], 'native-metal')
+        self.assertEqual(profile['source'], 'tests/metal_probe.m')
+
+    def test_probe_profile_rejects_unknown_profile_and_source_override(self):
+        tool = self.module()
+        with self.assertRaisesRegex(ValueError, 'unsupported probe profile'):
+            tool.probe_profile({'probe_profile': 'unreviewed'})
+        with self.assertRaisesRegex(ValueError, 'source path'):
+            tool.probe_profile({'probe_profile': 'small-metal',
+                                'probe_source': 'tests/metal_probe.m'})
+
+    def test_probe_profile_rejects_manifest_digest_tampering(self):
+        tool = self.module()
+        profile = tool.probe_profile({'probe_profile': 'small-metal'})
+        profile['source_sha256'] = '0' * 64
+        with self.assertRaisesRegex(ValueError, 'binding changed'):
+            tool.probe_profile({'probe_profile': profile})
+
     def recovery_helper_hashes(self, schema=2):
         paths = [
             'tools/vfio-recover.py',
