@@ -2946,3 +2946,40 @@ receipt already exists for the latest ledger run. Host state remains
 new launch. No reboot is being performed and no further hardware launch is
 possible from this state; a fresh boot and newly reviewed authority are
 required.
+
+## Offline continuation after reboot (2026-09-11)
+
+Live host verification after the user's reboot is clean and read-only:
+`boot_id=1c707768-e0e1-4d85-8640-50706e724c08`, kernel `7.2.3-1-cachyos-bore`,
+iGPU `1002:13c0` on `amdgpu`, IOMMU group 31, `amdgpu_initialized=true`,
+watchdog/NMI/hardlockup capture all 1, device pinned awake, no active VM, and no
+VFIO bind. No reset, bind, or launch was performed.
+
+The live Linux reference capture is now recorded in
+[findings/research/2026-09-11-amdgpu-host-reference.md](findings/research/2026-09-11-amdgpu-host-reference.md)
+and [findings/hw/amdgpu-connectors.txt](findings/hw/amdgpu-connectors.txt): Linux
+reports GC 10.3.6, MMHUB 2.4.1, DCN 3.1.5, a connected/enabled HDMI-A-3 with
+zero-byte EDID, and the expected 512 MiB VRAM/GART layout. This confirms the
+Raphael display topology is usable under Linux, but does not prove macOS
+link-training or physical HDMI output.
+
+Candidate-195 offline scaffolding is intentionally incomplete. The new card
+`experiments/metal-029.json` and observation-only diagnostic declaration pass the
+focused two-test contract. A clean candidate-195 build, exact source digest,
+preflight repair, candidate-specific staging identities, and fresh one-run
+authority still must be produced. Candidate-194 authority and exhausted/incomplete
+receipts are not reused. No GPU cycle has been consumed on this boot.
+
+| Area | State | Blocking issue |
+|---|---|---|
+| Metal device/compute/offscreen render | demonstrated in candidate 194 | desktop drawable/frame change still unproven |
+| Engine startup + WindowServer submissions | demonstrated in cycle 014 | later KIQ stamps timed out |
+| Allocator/map diagnosis | instrumentation staged offline | candidate 195 not built or launched |
+| Physical HDMI | Linux HDMI-A-3 active | macOS DCN/EDID/HPD path unverified |
+| Cleanup after failed launch | PSP teardown works; graphics retirement incomplete in prior runs | fresh repeatable receipt required |
+| Current host safety | clean post-reboot amdgpu state | no launch authority yet |
+
+Overall desktop Metal completion remains approximately **70%**: the accelerator
+and real offscreen Metal work are proven, while reliable queue retirement,
+visible desktop presentation, physical scanout, and repeatable recovery remain
+open. This percentage is a progress estimate, not a success claim.
