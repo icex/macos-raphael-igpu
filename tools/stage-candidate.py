@@ -50,6 +50,7 @@ SUPPORTED_CARD_DIAGNOSTICS = {
     ("1.0.192", "metal-026"): "rgpuvmdiag=1",
     ("1.0.193", "metal-027"): "rgpuvmdiag=1",
     ("1.0.194", "metal-028"): "rgpuvmdiag=1",
+    ("1.0.194", "metal-029"): "rgpuvmdiag=1",
 }
 
 RESEAL_PROFILES = {
@@ -95,6 +96,17 @@ RESEAL_PROFILES = {
             "run_id_file":"run/candidate194-qualification-run-id.txt",
             "run_id_file_sha256":"4fc3e52e17d3b7da95f23b59f2864c6ea2cfd9eaa873aba562396d4b5e2e644b",
         },
+    },
+    ("1.0.194", "metal-029"): {
+        "candidate_version":"1.0.194", "card_id":"metal-029",
+        "prior_run_id":"b4a41ca47553618a58bab320b3b0c2fb",
+        "record_kind":"candidate194-hybrid-reseal",
+        "staging_sha256":"640409b94b4613a62710705c431e44115c052d4e6bcb7fa81ae7d408a92b7c9d",
+        "card_sha256":None,
+        "build_manifest_sha256":"e5e6014ba1151e1c28bad7f14c482115d5c4e48ef9282e53680bdecde94ad28d",
+        "prelaunch_refusal":None,
+        "recovery_receipt":"run/metal-028-194-resealed/recovery.json",
+        "recovery_receipt_sha256":"389631b0041fa92e38e7f458bfeb813851540a798cd4a74934e2ab0dd6924f8a",
     },
 }
 
@@ -791,6 +803,21 @@ def reseal_candidate(expected_commit, expected_boot_id, expected_card_sha256,
                      expected_config_sha256):
     """Reseal one reviewed candidate for a fresh nonce; preserve original staging."""
     profile = reseal_profile()
+    recovery_path = profile.get("recovery_receipt")
+    if recovery_path:
+        try:
+            recovery_file = VM / recovery_path
+            if sha_file(recovery_file) != profile.get("recovery_receipt_sha256"):
+                raise RuntimeError("hybrid reseal recovery receipt changed")
+            recovery = json.loads(recovery_file.read_text())
+            if (recovery.get("schema") != 6 or recovery.get("status") != "recovered" or
+                    recovery.get("authorizes_launch") is not True or
+                    recovery.get("boot_id") != expected_boot_id or
+                    recovery.get("device") != "0000:7b:00.0" or
+                    recovery.get("driver") != "vfio-pci"):
+                raise RuntimeError("hybrid reseal recovery receipt is not authoritative")
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            raise RuntimeError("hybrid reseal recovery receipt is invalid") from None
     if (profile.get("prelaunch_refusal") is not None and
             expected_boot_id != profile["prelaunch_refusal"]["boot_id"]):
         raise RuntimeError("reseal boot ID is not the reviewed prelaunch boot")
