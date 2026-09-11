@@ -496,6 +496,19 @@ class Candidate186StageTests(unittest.TestCase):
         self.assertEqual(card["launch_options"]["GDB"], "on")
         self.assertIn("not fault-time proof", card["behavior_change"])
 
+    def test_candidate194_uses_same_mode5_observation_contract(self):
+        self.tool.configure("1.0.194", "metal-028")
+        raw = (ROOT / "experiments/metal-028.json").read_bytes()
+        card = self.tool.validate_card(raw, hashlib.sha256(raw).hexdigest())
+        self.assertEqual(card["candidate_version"], "1.0.194")
+        self.assertEqual(card["raphael_source_sha256"],
+                         "c798dfd66c14c5d14160141586062ea5624f5314d14604f9d12abb40945e202d")
+        self.assertEqual(card["functional_boot_arguments"]["rgpuvmroot"], "5")
+        self.assertNotIn("map_process_route", card["required_observations"])
+        self.assertIn("map_process_root", card["required_observations"])
+        self.assertIn("map_process_summary", card["conditional_diagnostic_observations"])
+        self.assertIn("additional_launches=0", card["repeat_policy"])
+
     def test_candidate188_debug_symbols_require_retained_files_and_matching_provenance(self):
         self.tool.configure("1.0.188", "metal-021")
         with tempfile.TemporaryDirectory() as directory:
