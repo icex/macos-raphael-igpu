@@ -56,6 +56,7 @@ SUPPORTED_CARD_DIAGNOSTICS = {
     ("1.0.195", "metal-029"): "rgpuvmdiag=1",
     ("1.0.196", "metal-030"): "rgpuvmdiag=1",
     ("1.0.197", "metal-031"): "rgpuvmdiag=1",
+    ("1.0.198", "metal-032"): "rgpuvmdiag=1",
 }
 
 RESEAL_PROFILES = {
