@@ -66,9 +66,9 @@ RESEAL_PROFILES = {
         "prior_run_id":"b4a41ca47553618a58bab320b3b0c2fb",
         "record_kind":"candidate194-nonce-reseal",
         "staging_sha256":"640409b94b4613a62710705c431e44115c052d4e6bcb7fa81ae7d408a92b7c9d",
-        "card_sha256":"f45200eff3442cac9862e9c2b59bd6e7b86f3bc78d1133038ba08d4f7cf239cf",
+        "card_sha256":"e634925aff338ddc5d6d21279b02414c4801b4ee56937eb05787b61c42c47090",
         "build_manifest_sha256":"e5e6014ba1151e1c28bad7f14c482115d5c4e48ef9282e53680bdecde94ad28d",
-        "experiment_sha256":"4fa9a413b7334bbcd6ed310a2ac9963b635f5d8a5f524060c1204b9ce23916c6",
+        "experiment_sha256":"49ed16207b6f3457020dda7743e8995ae464741f8c87e67e5aee344c7092759b",
         # Verified from the immutable backup set captured by reseal token
         # 670e12c05ea14d5cb4936b2b5284d562.  The config preimage carries the
         # nonce for prior_run_id below; raw and OpenCore are the corresponding
