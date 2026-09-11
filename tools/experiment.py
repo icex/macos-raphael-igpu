@@ -209,14 +209,16 @@ def required_identity(data):
     return missing
 
 
-def launch_options(data):
+def launch_options(data, allow_generic=False):
     historical = {'BOOTDISK_MODE':'custom', 'NVRAM':'stock'}
     if 'launch_options' not in data:
         return historical
     value = data.get('launch_options')
     headless = dict(historical, GENERIC_GRAPHICS='off')
     debugger = dict(headless, GDB='on')
-    if type(value) is not dict or value not in (historical, headless, debugger):
+    hybrid = dict(historical, GENERIC_GRAPHICS='on')
+    allowed = (historical, headless, debugger, hybrid) if allow_generic else (historical, headless, debugger)
+    if type(value) is not dict or value not in allowed:
         raise ValueError('launch options must select the exact historical, no-graphics, or debugger contract')
     return dict(value)
 
@@ -284,7 +286,8 @@ def current_identity(vm, candidate, requested_diagnostic, run_id=None,
     if sha(gzip.decompress((ROOT/'build-support/rlc_fw.h.gz').read_bytes())) != inputs['firmware_header_sha256']:
         raise ValueError('firmware payload differs from the compiled input')
     options = launch_options({'launch_options': launch_options_expected or
-                              {'BOOTDISK_MODE':'custom', 'NVRAM':'stock'}})
+                              {'BOOTDISK_MODE':'custom', 'NVRAM':'stock'}},
+                             allow_generic=bool((launch_options_expected or {}).get('GENERIC_GRAPHICS') == 'on'))
     if os.environ.get('BOOTDISK_MODE', 'custom') != options['BOOTDISK_MODE']:
         raise ValueError('only the prepared custom bootdisk is admitted')
     if os.environ.get('NVRAM', 'stock') != options['NVRAM']:
@@ -351,7 +354,8 @@ def prepare(vm, spec, output, gpu=True, run_id=None):
     replay_schema = critical_replay_schema(card)
     transport = critical_replay_transport(card)
     options = launch_options({'launch_options': card.get(
-        'launch_options', {'BOOTDISK_MODE':'custom', 'NVRAM':'stock'})})
+        'launch_options', {'BOOTDISK_MODE':'custom', 'NVRAM':'stock'})},
+        allow_generic=bool(card.get('desktop_phase', {}).get('mode') == 'existing-display-production'))
     lease_schema = card.get('recovery_lease_schema', 2)
     if type(lease_schema) is not int or lease_schema not in (2, 3):
         raise ValueError('recovery lease schema must be numeric 2 or 3')
@@ -2215,7 +2219,7 @@ def reserve_candidate179_qualification(directory, boot_id, experiment, recovery,
             vm, vm/manifest['candidate_directory'], requested,
             run_id=manifest['run_id'],
             recovery_lease_schema=manifest.get('recovery_lease_schema', 2),
-            launch_options_expected=launch_options(manifest))
+                          launch_options_expected=launch_options(manifest, allow_generic=bool(manifest.get('spec', {}).get('desktop_phase', {}).get('mode') == 'existing-display-production')))
         identity_gate.update(run_id=manifest['run_id'],
                              recovery_lease_schema=manifest.get('recovery_lease_schema', 2))
         gate_errors.extend(validate_identity(
@@ -2319,7 +2323,7 @@ def reserve_warm_qualification(directory, boot_id, experiment, recovery,
             vm, vm/manifest['candidate_directory'], requested,
             run_id=manifest.get('run_id'),
             recovery_lease_schema=manifest.get('recovery_lease_schema', 2),
-            launch_options_expected=launch_options(manifest))
+                          launch_options_expected=launch_options(manifest, allow_generic=bool(manifest.get('spec', {}).get('desktop_phase', {}).get('mode') == 'existing-display-production')))
         gate_errors.extend(validate_identity(
             {key:manifest[key] for key in identity_gate if key in manifest},
             identity_gate))
@@ -2954,7 +2958,7 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
     if (manifest.get('gpu') is True and
             manifest.get('recovery_lease_schema') not in (2, 3)):
         raise ValueError('GPU run requires a supported recovery lease manifest')
-    launch_options(manifest)
+    launch_options(manifest, allow_generic=bool(manifest.get('spec', {}).get('desktop_phase', {}).get('mode') == 'existing-display-production'))
     missing = required_identity(manifest)
     if missing: raise ValueError('incomplete prepared identity: '+','.join(missing))
     if manifest.get('bootdisk_verified') is not True:
@@ -3024,7 +3028,7 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                     vm, vm/manifest['candidate_directory'], requested,
                     manifest['run_id'] if manifest.get('gpu') is True else None,
                     manifest.get('recovery_lease_schema', 2),
-                    launch_options(manifest))
+                    launch_options(manifest, allow_generic=bool(manifest.get('spec', {}).get('desktop_phase', {}).get('mode') == 'existing-display-production')))
                 transport_contract().validate_boot_args(
                     observed['boot_args'], manifest)
                 host = host_snapshot(); write_once(output/'host-before.json', host)
