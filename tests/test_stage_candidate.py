@@ -696,6 +696,200 @@ class Candidate188ResealTests(unittest.TestCase):
                 self.assertEqual(target.read_bytes(), ("old-"+name).encode())
                 self.assertFalse(backup.exists())
 
+    def prelaunch_fixture(self, root):
+        old_run = "b4a41ca47553618a58bab320b3b0c2fb"
+        boot_id = "f828eb26-9cb7-4fac-bff2-bc87515fa2ba"
+        candidate = root/"run/candidate-194"
+        failed = root/"run/metal-028-194"
+        authorities = root/f"run/one-run-qualification-authorities/{boot_id}"
+        ledger_path = root/f"run/used-gpu-boots/{boot_id}.json"
+        for path in (candidate, failed, authorities, ledger_path.parent):
+            path.mkdir(parents=True, exist_ok=True)
+        staging = {
+            "candidate_version":"1.0.194", "run_id":old_run,
+            "source_commit":"5"*40, "source_sha256":"6"*64,
+            "build_id":"7"*32, "executable_sha256":"8"*64,
+            "info_manifest_sha256":"9"*64,
+        }
+        build_manifest = {
+            "version":"1.0.194", "source_commit":"5"*40,
+            "source_sha256":"6"*64, "build_id":"7"*32,
+            "executable_sha256":"8"*64,
+        }
+        manifest = dict(staging, binary_sha256="8"*64, info_sha256="9"*64,
+                        source_clean=True,
+                        spec={"candidate_version":"1.0.194"})
+        verdict = {
+            "valid":False, "verdict":"INVALID",
+            "termination_reason":"ValueError: admission refused: source_clean",
+            "error":"ValueError: admission refused: source_clean",
+            "warm_reuse":"not-attempted",
+        }
+        files = {
+            "manifest.json":json.dumps(manifest).encode(),
+            "verdict.json":json.dumps(verdict).encode(),
+            "serial.txt":b"", "critical.txt":b"",
+            "shutdown.json":b"null\n",
+        }
+        for name, raw in files.items():
+            (failed/name).write_bytes(raw)
+        build_raw = json.dumps(build_manifest).encode()
+        (candidate/"build-manifest.json").write_bytes(build_raw)
+        ledger = {"schema":2, "boot_id":boot_id, "max_launches":3,
+                  "launches":[{"run_id":"a"*32}]}
+        ledger_raw = json.dumps(ledger).encode()
+        ledger_path.write_bytes(ledger_raw)
+        policy = authorities/(old_run+".policy.json")
+        activation = authorities/(old_run+".json")
+        policy.write_bytes(b"policy")
+        activation.write_bytes(b"activation")
+        run_id_file = root/"run/candidate194-qualification-run-id.txt"
+        run_id_file.write_text(old_run+"\n")
+        profile = {
+            "candidate_version":"1.0.194", "card_id":"metal-028",
+            "prior_run_id":old_run,
+            "build_manifest_sha256":hashlib.sha256(build_raw).hexdigest(),
+            "prelaunch_refusal":{
+                "boot_id":boot_id, "directory":"run/metal-028-194",
+                "files":{name:hashlib.sha256(raw).hexdigest()
+                         for name,raw in files.items()},
+                "ledger":"run/used-gpu-boots/"+boot_id+".json",
+                "ledger_sha256":hashlib.sha256(ledger_raw).hexdigest(),
+                "policy":"run/one-run-qualification-authorities/"+boot_id+"/"+
+                         old_run+".policy.json",
+                "policy_sha256":hashlib.sha256(b"policy").hexdigest(),
+                "activation":"run/one-run-qualification-authorities/"+boot_id+"/"+
+                             old_run+".json",
+                "activation_sha256":hashlib.sha256(b"activation").hexdigest(),
+                "run_id_file":"run/candidate194-qualification-run-id.txt",
+                "run_id_file_sha256":hashlib.sha256(
+                    (old_run+"\n").encode()).hexdigest(),
+            },
+        }
+        return staging, profile
+
+    def test_candidate194_prelaunch_refusal_proves_no_launch_and_same_artifact(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            staging, profile = self.prelaunch_fixture(root)
+            with mock.patch.object(self.tool, "VM", root), \
+                 mock.patch.object(self.tool, "CANDIDATE", root/"run/candidate-194"):
+                proof = self.tool.validate_prelaunch_refusal(profile, staging)
+            self.assertEqual(proof["reason"], "source_clean")
+            self.assertEqual(proof["prior_run_id"], staging["run_id"])
+            self.assertFalse(proof["qemu_started"])
+            self.assertFalse(proof["ledger_consumed"])
+            self.assertEqual(proof["source_sha256"], staging["source_sha256"])
+            self.assertEqual(proof["executable_sha256"],
+                             staging["executable_sha256"])
+
+    def test_candidate194_prelaunch_refusal_rejects_supervision_or_ledger_use(self):
+        for mutation in ("supervision", "ledger"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                staging, profile = self.prelaunch_fixture(root)
+                if mutation == "supervision":
+                    (root/"run/metal-028-194/supervision.json").write_text("{}")
+                else:
+                    proof = profile["prelaunch_refusal"]
+                    ledger_path = root/proof["ledger"]
+                    ledger = json.loads(ledger_path.read_text())
+                    ledger["launches"].append({"run_id":staging["run_id"]})
+                    raw = json.dumps(ledger).encode()
+                    ledger_path.write_bytes(raw)
+                    proof["ledger_sha256"] = hashlib.sha256(raw).hexdigest()
+                with mock.patch.object(self.tool, "VM", root), \
+                     mock.patch.object(self.tool, "CANDIDATE", root/"run/candidate-194"), \
+                     self.assertRaisesRegex(RuntimeError, "prelaunch refusal proof"):
+                    self.tool.validate_prelaunch_refusal(profile, staging)
+
+    def test_fresh_reseal_run_id_rejects_ledger_authority_or_record_collision(self):
+        new_run = "c04e68a9874ba382fd61facb1ad73b61"
+        prior_run = "b4a41ca47553618a58bab320b3b0c2fb"
+        for collision in ("prior", "ledger", "policy", "activation", "record"):
+            with self.subTest(collision=collision), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                boot = "f828eb26-9cb7-4fac-bff2-bc87515fa2ba"
+                record = root/f"run/candidate-194-reseals/{new_run}.json"
+                ledger_dir = root/"run/used-gpu-boots"
+                authority = root/f"run/one-run-qualification-authorities/{boot}"
+                ledger_dir.mkdir(parents=True)
+                authority.mkdir(parents=True)
+                candidate_run = prior_run if collision == "prior" else new_run
+                launches = [{"run_id":candidate_run}] if collision == "ledger" else []
+                (ledger_dir/"one.json").write_text(json.dumps({"launches":launches}))
+                if collision == "policy":
+                    (authority/(new_run+".policy.json")).write_text("{}")
+                elif collision == "activation":
+                    (authority/(new_run+".json")).write_text("{}")
+                elif collision == "record":
+                    record.parent.mkdir(parents=True)
+                    record.write_text("{}")
+                with mock.patch.object(self.tool, "VM", root), \
+                     self.assertRaisesRegex(RuntimeError, "fresh run ID"):
+                    self.tool.validate_fresh_reseal_run_id(
+                        candidate_run, boot, record, prior_run)
+
+    def test_reseal_profiles_preserve_188_and_select_exact_194_refusal(self):
+        self.tool.configure("1.0.188", "metal-022")
+        historical = self.tool.reseal_profile()
+        self.assertEqual(historical["prior_run_id"],
+                         "cb1d0aadd8186205d867a23fe175c336")
+        self.assertIsNone(historical["prelaunch_refusal"])
+        self.tool.configure("1.0.194", "metal-028")
+        current = self.tool.reseal_profile()
+        self.assertEqual(current["prior_run_id"],
+                         "b4a41ca47553618a58bab320b3b0c2fb")
+        self.assertEqual(current["prelaunch_refusal"]["ledger_sha256"],
+                         "54e9eb272093dc6b55e76812c132b71dcbd2ee0b7dc75517fc4ad70cee0d3c5d")
+        self.tool.configure("1.0.193", "metal-027")
+        with self.assertRaisesRegex(RuntimeError, "reseal requires"):
+            self.tool.reseal_profile()
+
+    def test_candidate194_reseal_refuses_bad_proof_before_media_work(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            candidate = root/"run/candidate-194"
+            candidate.mkdir(parents=True)
+            staging = {"candidate_version":"1.0.194", "run_id":"b"*32}
+            staging_raw = json.dumps(staging).encode()
+            (candidate/"staging.json").write_bytes(staging_raw)
+            profile = {
+                "candidate_version":"1.0.194", "card_id":"metal-028",
+                "prior_run_id":"b"*32, "record_kind":"candidate194-nonce-reseal",
+                "staging_sha256":hashlib.sha256(staging_raw).hexdigest(),
+                "card_sha256":"c"*64, "build_manifest_sha256":"d"*64,
+                "prelaunch_refusal":{"boot_id":"boot-A"},
+            }
+            image = "sha256:"+"e"*64
+            commit = "f"*40
+            def command(argv, timeout=30):
+                if argv[:2] == ["git", "-C"] and argv[-2:] == ["rev-parse", "--show-toplevel"]:
+                    return str(ROOT)
+                if argv[:2] == ["git", "-C"] and argv[-2:] == ["rev-parse", "HEAD"]:
+                    return commit
+                if argv[:2] == ["git", "-C"] and argv[-2:] == ["status", "--porcelain"]:
+                    return ""
+                if argv[:3] == ["docker", "image", "inspect"]:
+                    return image
+                self.fail("unexpected command: "+repr(argv))
+            experiment = mock.Mock()
+            with mock.patch.object(self.tool, "VM", root), \
+                 mock.patch.object(self.tool, "CANDIDATE", candidate), \
+                 mock.patch.object(self.tool, "reseal_profile", return_value=profile), \
+                 mock.patch.object(self.tool, "command", side_effect=command), \
+                 mock.patch.object(self.tool, "validate_card", return_value={}), \
+                 mock.patch.object(self.tool, "load_module", return_value=experiment), \
+                 mock.patch.object(self.tool, "validate_prelaunch_refusal",
+                                   side_effect=RuntimeError("bad prelaunch proof")), \
+                 mock.patch.object(self.tool, "qconvert") as qconvert, \
+                 self.assertRaisesRegex(RuntimeError, "bad prelaunch proof"):
+                self.tool.reseal_candidate(
+                    commit, "boot-A", "c"*64, "1"*32, image,
+                    profile["staging_sha256"], "2"*64, "3"*64, "4"*64)
+            qconvert.assert_not_called()
+            experiment.stage_image.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

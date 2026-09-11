@@ -1,6 +1,6 @@
-# Current status — candidate 193 inconclusive; recovery complete (2026-09-11)
+# Current status — candidate 194 prelaunch refusal; no new GPU attempt (2026-09-11)
 
-## Current authoritative state — candidate 193 inconclusive (2026-09-11)
+## Current authoritative state — candidate 194 prelaunch refusal (2026-09-11)
 
 Candidate 193 consumed **1/3 launches** on fresh boot
 `f828eb26-9cb7-4fac-bff2-bc87515fa2ba` and classified
@@ -16,8 +16,56 @@ receipt preservation is also validated. The final full Python suite ran **735
 tests with 3 skipped**; the focused classifier/integration coverage is **86
 tests**, the affected C++ sanitizer fixture passed, and exact-KDK preflight
 passed. Candidate 194 is metadata-prepared with source digest
-`c798dfd66c14c5d14160141586062ea5624f5314d14604f9d12abb40945e202d`; no build,
-staging, or launch is authorized yet.
+`c798dfd66c14c5d14160141586062ea5624f5314d14604f9d12abb40945e202d`. The
+candidate-194 debug-symbol build completed once from clean commit `52c7517`;
+archive SHA-256 is `98ce668b16af1cfc7d2f4374bd037749c243572633169ca90b1018e03d74db80`,
+executable SHA-256 is `7623059a5ea035f929f9e10d6aad35cda698d643bbe2a2801a649eeed19fd24e`,
+and the canonical identity record SHA-256 is
+`0cd4a829e37cee90c29b82a85f36e24fa2b60ea94c0ea10488bff3d83926ed93`.
+Candidate 194 was staged and its one-run policy was sealed, but the first
+invocation was refused before ledger reservation because the coordinator
+checkout was dirty (`source_clean`). The frozen output is
+`/home/bogdan/macos-vm/run/metal-028-194`; its verdict is
+`INVALID` at `identity_or_route_missing` with two `capture_loss` records and
+`warm_reuse=not-attempted`. The ledger remains **1/3 launches** and this does
+not count as a GPU attempt. Any reviewed retry must invoke the repository
+`tools/experiment.py` from the clean candidate-194 worktree, with a fresh
+manifest/output/policy binding; the failed output and existing authority are
+immutable evidence.
+
+### Candidate 194 debugger limitation and result decision tree
+
+`GDB=on` keeps the authenticated loopback debugger endpoint available; it does
+not mean candidate 194 includes breakpoint capture. The existing coordinator
+blocks in the Metal probe and begins shutdown immediately afterward, while
+`probe.json` is written only after shutdown and capture collection. The bounded
+GDB runner also reserves 25 seconds for cleanup, requires at least 10 seconds
+for capture, offers only `entry-update` and VMID1-specific root scenarios, and
+has no A1 or arbitrary-client scenario. There is therefore no qualified, safe
+post-probe debugger window in this run. Do not attach manually after a probe
+failure or describe candidate 194 as breakpoint-debugged; a future post-probe
+lifecycle requires separate implementation and GPU-less qualification.
+
+After a frozen run, use `python3 tools/classify-run.py <run-194-output>` and
+interpret only checksum-valid complete CR2 evidence. The bounded driver records
+provide the current discriminator:
+
+- A complete probe pass is the functional result; preserve its completion,
+  compute, render, readback, and cleanup evidence independently of A1 samples.
+- A failed probe with a valid `map-process-root` record showing native MC root,
+  physical final root, header `0xc00ea100`, `return-valid=1`, `repaired=1`, and
+  reason 13 demonstrates that the A1 conversion ran. If a coherent fault-walk
+  group also selects a physical-root client, investigate table, invalidate, and
+  completion ordering next.
+- If A1 was repaired but the fault-selected client still reports an MC root,
+  investigate another writer or a later overwrite. The selected client comes
+  from the coherent `fault-walk` status/VA group and may be any VMID 1 through
+  15; the worker-time walk is not fault-time causality.
+- An already-physical A1 root is a valid no-op and does not require repair. An
+  absent sample or a bounded drop summary does not prove that A1 did not run.
+- Identity, route, mode, malformed guard, or capture refusal leaves the A1 GPU
+  hypothesis untested. Preserve that observation failure without inferring a
+  Metal or root result.
 
 ## Historical candidate 193 / metal-027 offline preparation (2026-09-11)
 
