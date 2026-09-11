@@ -32,8 +32,26 @@ class SubmissionTraceSourceTests(unittest.TestCase):
             '0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53, 0x48, 0x83, '
             '0xec, 0x18};',
             source)
-        self.assertIn('orgSubmitBuffer && orgBackingAllocPhysical;', source)
-        self.assertIn('SUB: routes=%s count=6', source)
+        self.assertIn('orgSubmitBuffer && orgBackingAllocPhysical && orgCommitIntoGPUPageTable;', source)
+        self.assertIn('orgCommitIntoGPUPageTable;', source)
+        self.assertIn('SUB: routes=%s count=7', source)
+
+    def test_commit_route_and_map_window_are_bounded_and_correlated(self):
+        source = (ROOT / 'src/RaphaelGPU.cpp').read_text()
+        self.assertIn('kOffCommitIntoGPUPageTable = 0x3b4d2;', source)
+        self.assertIn('static bool wrapCommitIntoGPUPageTable(void *memoryMap)', source)
+        self.assertIn('submissionCommits.append({', source)
+        self.assertIn('commitWindow.calls, commitWindow.failures', source)
+        self.assertIn('commitWindow.firstSequence, commitWindow.lastSequence', source)
+
+    def test_allocator_diagnostic_reads_native_total_free_without_policy_change(self):
+        source = (ROOT / 'src/RaphaelGPU.cpp').read_text()
+        start = source.index('static bool wrapBackingAllocPhysical')
+        end = source.index('static void wrapSubmitBuffer', start)
+        body = source[start:end]
+        self.assertIn('vtable + 0x1f8', body)
+        self.assertIn('snapshot.freeBytes = (*totalFree)', body)
+        self.assertIn('free=%#llx->%#llx', source)
 
     def test_backing_summary_has_periodic_and_global_bounds(self):
         source = (ROOT / 'src/RaphaelGPU.cpp').read_text()

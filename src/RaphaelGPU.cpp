@@ -221,10 +221,20 @@ static rgpu::ObservationBuffer<RaphaelSdma::SubmitInfoObservation, 8> vmid2Submi
 static RaphaelSubmit::Store<64, 32> submissionTrace {};
 static RaphaelSubmit::MapPhaseStore<RaphaelSubmit::MapSamplesPerPhase>
     submissionMapPhases {};
+static RaphaelSubmit::CommitStore<32> submissionCommits {};
 static RaphaelBacking::Store<4> submissionBackingAllocations {};
 static volatile uint32_t nextSubmissionTraceSequence = 0;
 static bool submissionTraceEnabled = false;
 static volatile bool submissionTraceRoutesReady = false;
+struct ActiveMapCommitWindow {
+    void *memoryMap = nullptr;
+    uintptr_t threadToken = 0;
+    uint32_t calls = 0;
+    uint32_t failures = 0;
+    uint32_t firstSequence = 0;
+    uint32_t lastSequence = 0;
+};
+static thread_local ActiveMapCommitWindow activeMapCommitWindow {};
 static bool vmRootFixEnabled = false;
 static bool vmFaultDiagEnabled = false;
 // rgpuvmroot: enabled modes repair hub-0 client roots (VMIDs 1..15) while leaving
@@ -413,6 +423,7 @@ static mach_vm_address_t orgBatchPrepare = 0;
 static mach_vm_address_t orgBatchMemoryMapPrepare = 0;
 static mach_vm_address_t orgSubmitBuffer = 0;
 static mach_vm_address_t orgBackingAllocPhysical = 0;
+static mach_vm_address_t orgCommitIntoGPUPageTable = 0;
 // Slide of AMDRadeonX6000, so a captured return address can be reported as a file offset
 // that llvm-nm can name. Static analysis could not identify the caller of
 // setMemoryAllocationsEnabled: it is a virtual call, and vtable slot 0x148 is used by
@@ -701,6 +712,7 @@ static constexpr size_t kOffBatchPrepare = 0x184d8; // __ZN31AMDRadeonX6000_AMDA
 static constexpr size_t kOffBatchMemoryMapPrepare = 0x6550; // __ZN37AMDRadeonX6000_AMDGraphicsAccelerator21batchMemoryMapPrepareEP16IOAccelMemoryMap [x6]
 static constexpr size_t kOffSubmitBuffer = 0xb83e; // __ZN30AMDRadeonX6000_AMDAccelChannel12submitBufferEP24IOAccelCommandDescriptor [x6]
 static constexpr size_t kOffBackingAllocPhysical = 0x3aa76; // __ZN32AMDRadeonX6000_AMDAccelVidMemory13allocPhysicalEv [x6]
+static constexpr size_t kOffCommitIntoGPUPageTable = 0x3b4d2; // __ZN32AMDRadeonX6000_AMDAccelMemoryMap22commitIntoGPUPageTableEv [x6]
 // GFX_CTRL command encodings, from upstream psp_gfx_if.h.
 static constexpr uint32_t kC2PMsg64        = 0x80;       // MP0 C2PMSG_64, IP-relative
 static constexpr uint32_t kHwIpMp0         = 0x4b;
@@ -5221,11 +5233,16 @@ static bool wrapBatchMemoryMapPrepare(void *accelerator, void *memoryMap) {
         return FunctionCast(wrapBatchMemoryMapPrepare, orgBatchMemoryMapPrepare)(
             accelerator, memoryMap);
     auto before = captureMapSnapshot(accelerator, memoryMap);
+    const auto previousWindow = activeMapCommitWindow;
+    activeMapCommitWindow = ActiveMapCommitWindow {
+        memoryMap, reinterpret_cast<uintptr_t>(current_thread()), 0, 0, 0, 0};
     captureSubmissionTrace(RaphaelSubmit::Kind::MemoryMapPrepare,
                            RaphaelSubmit::Phase::Entry, accelerator, memoryMap,
                            0, 0, 0);
     bool result = FunctionCast(wrapBatchMemoryMapPrepare, orgBatchMemoryMapPrepare)(
         accelerator, memoryMap);
+    const auto commitWindow = activeMapCommitWindow;
+    activeMapCommitWindow = previousWindow;
     auto after = captureMapSnapshot(accelerator, memoryMap);
     captureSubmissionTrace(RaphaelSubmit::Kind::MemoryMapPrepare,
                            RaphaelSubmit::Phase::Exit, accelerator, memoryMap,
@@ -5234,8 +5251,30 @@ static bool wrapBatchMemoryMapPrepare(void *accelerator, void *memoryMap) {
         reinterpret_cast<uintptr_t>(accelerator),
         reinterpret_cast<uintptr_t>(memoryMap),
         reinterpret_cast<uintptr_t>(current_thread()), result, before, after,
-        __sync_add_and_fetch(&nextSubmissionTraceSequence, 1u)
+        __sync_add_and_fetch(&nextSubmissionTraceSequence, 1u),
+        commitWindow.calls, commitWindow.failures,
+        commitWindow.firstSequence, commitWindow.lastSequence
     });
+    return result;
+}
+
+static bool wrapCommitIntoGPUPageTable(void *memoryMap) {
+    if (!submissionTraceCaptureActive())
+        return FunctionCast(wrapCommitIntoGPUPageTable,
+                            orgCommitIntoGPUPageTable)(memoryMap);
+    const bool result = FunctionCast(wrapCommitIntoGPUPageTable,
+                                     orgCommitIntoGPUPageTable)(memoryMap);
+    const uint32_t sequence = __sync_add_and_fetch(&nextSubmissionTraceSequence, 1u);
+    const uintptr_t threadToken = reinterpret_cast<uintptr_t>(current_thread());
+    submissionCommits.append({reinterpret_cast<uintptr_t>(memoryMap), threadToken,
+                              result, sequence});
+    if (activeMapCommitWindow.memoryMap == memoryMap &&
+        activeMapCommitWindow.threadToken == threadToken) {
+        if (activeMapCommitWindow.calls++ == 0)
+            activeMapCommitWindow.firstSequence = sequence;
+        activeMapCommitWindow.lastSequence = sequence;
+        if (!result) ++activeMapCommitWindow.failures;
+    }
     return result;
 }
 
@@ -5249,7 +5288,21 @@ static bool wrapBackingAllocPhysical(void *backing) {
         [](void *object) {
             return FunctionCast(wrapBackingAllocPhysical, orgBackingAllocPhysical)(object);
         },
-        [](const void *object) { return RaphaelBacking::captureSnapshot(object); });
+        [](const void *object) {
+            auto snapshot = RaphaelBacking::captureSnapshot(object);
+            if (!snapshot.available) return snapshot;
+            auto bytes = static_cast<const uint8_t *>(object);
+            auto allocator = __atomic_load_n(
+                reinterpret_cast<const uintptr_t *>(bytes + 0x110), __ATOMIC_RELAXED);
+            if (allocator == 0) return snapshot;
+            auto vtable = __atomic_load_n(reinterpret_cast<uintptr_t *>(allocator),
+                                          __ATOMIC_RELAXED);
+            if (vtable == 0) return snapshot;
+            using TotalFree = uint64_t (*)(void *);
+            auto totalFree = reinterpret_cast<TotalFree *>(vtable + 0x1f8);
+            snapshot.freeBytes = (*totalFree)(reinterpret_cast<void *>(allocator));
+            return snapshot;
+        });
 }
 
 static void wrapSubmitBuffer(void *channel, void *descriptor) {
@@ -5280,6 +5333,9 @@ static void publishPendingSubmissionTrace() {
     static unsigned backingDirtyPolls = 0;
     static unsigned backingSummaryRecords = 0;
     static bool backingDirty = false;
+    static size_t commitCursor = 0;
+    static uint64_t lastCommitCalls = 0;
+    static unsigned commitSummaryRecords = 0;
     bool publishedNotable = false;
     RaphaelSubmit::Record record {};
     while (recordCursor < submissionTrace.records().size() &&
@@ -5312,7 +5368,8 @@ static void publishPendingSubmissionTrace() {
                samples.read(phaseCursors[index], mapObservation)) {
             ++phaseCursors[index];
             CRLOG("SUB: map-phase seq=%u class=%s accel=%#llx map=%#llx thread=%#llx "
-                  "pre=%u/%u/%#x/%#llx post=%u/%u/%#x/%#llx",
+                  "pre=%u/%u/%#x/%#llx post=%u/%u/%#x/%#llx "
+                  "commit=%u/%u seq=%u-%u",
                   mapObservation.sequence, RaphaelSubmit::mapPhaseName(mapPhase),
                   static_cast<uint64_t>(mapObservation.accelerator),
                   static_cast<uint64_t>(mapObservation.memoryMap),
@@ -5322,8 +5379,28 @@ static void publishPendingSubmissionTrace() {
                   mapObservation.before.gpuVirtualAddress,
                   mapObservation.after.batchCount, mapObservation.after.prepareCount,
                   mapObservation.after.flags,
-                  mapObservation.after.gpuVirtualAddress);
+                  mapObservation.after.gpuVirtualAddress,
+                  mapObservation.commitCalls, mapObservation.commitFailures,
+                  mapObservation.commitFirstSequence, mapObservation.commitLastSequence);
         }
+    }
+    RaphaelSubmit::CommitObservation commitObservation {};
+    while (commitCursor < submissionCommits.samples().size() &&
+           submissionCommits.samples().read(commitCursor, commitObservation)) {
+        ++commitCursor;
+        CRLOG("SUB: commit seq=%u map=%#llx thread=%#llx result=%u",
+              commitObservation.sequence,
+              static_cast<uint64_t>(commitObservation.memoryMap),
+              static_cast<uint64_t>(commitObservation.threadToken),
+              commitObservation.result);
+    }
+    const uint64_t commitCalls = submissionCommits.calls();
+    if (commitCalls != lastCommitCalls && commitSummaryRecords < 32) {
+        CRLOG("SUB: commit-summary calls=%llu failures=%llu dropped=%llu state=live",
+              commitCalls, submissionCommits.failures(),
+              submissionCommits.samples().dropped());
+        lastCommitCalls = commitCalls;
+        ++commitSummaryRecords;
     }
 
     uint64_t entries[RaphaelSubmit::KindCount] {};
@@ -5400,17 +5477,22 @@ static void publishPendingSubmissionTrace() {
         ++backingCursor;
         const auto &before = backingObservation.before;
         const auto &after = backingObservation.after;
-        CRLOG("SUB: backing seq=%u object=%#llx thread=%#llx result=%u "
+        CRLOG("SUB: backing seq=%u object=%#llx thread=%#llx pool=%u result=%u "
               "pre=%u/%#llx/%#llx/%#llx/%#llx/%#x "
-              "post=%u/%#llx/%#llx/%#llx/%#llx/%#x state=live",
+              "post=%u/%#llx/%#llx/%#llx/%#llx/%#x counters=%llu/%llu->%llu/%llu "
+              "free=%#llx->%#llx state=live",
               backingObservation.sequence,
               static_cast<uint64_t>(backingObservation.backing),
               static_cast<uint64_t>(backingObservation.threadToken),
+              RaphaelBacking::poolIndex(before),
               backingObservation.result,
               before.available, before.length, static_cast<uint64_t>(before.owner),
               before.element, before.raw120, before.flags,
               after.available, after.length, static_cast<uint64_t>(after.owner),
-              after.element, after.raw120, after.flags);
+              after.element, after.raw120, after.flags,
+              backingObservation.successfulBefore, backingObservation.failedBefore,
+              backingObservation.successfulAfter, backingObservation.failedAfter,
+              before.freeBytes, after.freeBytes);
     }
     // Load each result counter once. The sum describes this live snapshot; sample
     // publication and drops may legitimately lag while another callback is active.
@@ -6356,6 +6438,9 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
                 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53, 0x48, 0x81, 0xec,
                 0x08, 0x01, 0x00, 0x00};
             static const uint8_t backingAllocEntry[] = {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53, 0x48, 0x83, 0xec, 0x18};
+            static const uint8_t commitEntry[] = {0x55, 0x48, 0x89, 0xe5, 0x41,
+                0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53, 0x50, 0x48,
+                0x89, 0xfb};
             bool entriesMatch =
                 entryMatches(addr, sz, kOffProcessCommandBuffer,
                              processEntry, sizeof(processEntry)) &&
@@ -6368,7 +6453,9 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
                 entryMatches(addr, sz, kOffSubmitBuffer,
                              submitEntry, sizeof(submitEntry)) &&
                 entryMatches(addr, sz, kOffBackingAllocPhysical,
-                             backingAllocEntry, sizeof(backingAllocEntry));
+                             backingAllocEntry, sizeof(backingAllocEntry)) &&
+                entryMatches(addr, sz, kOffCommitIntoGPUPageTable,
+                             commitEntry, sizeof(commitEntry));
             if (entriesMatch) {
                 struct { size_t off; mach_vm_address_t *org; void *fn; const char *name; } t[] {
                     {kOffProcessCommandBuffer, &orgProcessCommandBuffer,
@@ -6384,6 +6471,9 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
                     {kOffBackingAllocPhysical, &orgBackingAllocPhysical,
                      reinterpret_cast<void *>(wrapBackingAllocPhysical),
                      "AMDAccelVidMemory::allocPhysical"},
+                    {kOffCommitIntoGPUPageTable, &orgCommitIntoGPUPageTable,
+                     reinterpret_cast<void *>(wrapCommitIntoGPUPageTable),
+                     "AMDAccelMemoryMap::commitIntoGPUPageTable"},
                 };
                 for (auto &e : t) {
                     *e.org = patcher.routeFunction(addr + e.off,
@@ -6395,9 +6485,9 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
             }
             bool ready = entriesMatch && orgProcessCommandBuffer &&
                 orgBatchPrepareMappings && orgBatchPrepare && orgBatchMemoryMapPrepare &&
-                orgSubmitBuffer && orgBackingAllocPhysical;
+                orgSubmitBuffer && orgBackingAllocPhysical && orgCommitIntoGPUPageTable;
             __atomic_store_n(&submissionTraceRoutesReady, ready, __ATOMIC_RELEASE);
-            CRLOG("SUB: routes=%s count=6 entries-match=%u capture=%s",
+            CRLOG("SUB: routes=%s count=7 entries-match=%u capture=%s",
                   ready ? "ok" : "FAILED", entriesMatch, ready ? "armed" : "disabled");
         }
         // Exact complete instructions displaced by the five new X6000 routes.

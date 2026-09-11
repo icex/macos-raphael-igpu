@@ -80,6 +80,13 @@ int main() {
                 retained.after.element == 0x12345000ull &&
                 retained.before.flags == 0x81u && retained.after.flags == 0x91u,
             "the first failure sample retains immutable live pre/post scalar snapshots");
+    require(retained.successfulBefore == 0 && retained.failedBefore == 0 &&
+                retained.successfulAfter == 0 && retained.failedAfter == 1 &&
+                RaphaelBacking::poolIndex(retained.before) == 0,
+            "failure sample retains bounded result counters and pool domain");
+    retained.before.flags |= 1u << 19;
+    require(RaphaelBacking::poolIndex(retained.before) == 1,
+            "pool domain extraction follows the exact native selector bit");
 
     const bool successfulResult = RaphaelBacking::observe(
         true, backing, 0x9999, 10, activeStore,
