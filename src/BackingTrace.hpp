@@ -16,6 +16,7 @@ struct Snapshot {
     uint64_t raw120;
     uint32_t flags;
     bool available;
+    uint64_t freeBytes = 0;
 };
 
 inline Snapshot captureSnapshot(const void *backing) {
@@ -43,7 +44,15 @@ struct Observation {
     Snapshot before;
     Snapshot after;
     uint32_t sequence;
+    uint64_t successfulBefore = 0;
+    uint64_t failedBefore = 0;
+    uint64_t successfulAfter = 0;
+    uint64_t failedAfter = 0;
 };
+
+inline uint32_t poolIndex(const Snapshot &snapshot) {
+    return (snapshot.flags >> 19) & 1u;
+}
 
 template <size_t FailureSamples> class Store {
     rgpu::ObservationBuffer<Observation, FailureSamples> failures_ {};
@@ -78,11 +87,15 @@ bool observe(bool active, void *backing, uintptr_t threadToken, uint32_t sequenc
              Store<FailureSamples> &store, Native native, Capture capture) {
     if (!active) return native(backing);
     const auto before = capture(backing);
+    const auto successfulBefore = store.successful();
+    const auto failedBefore = store.failed();
     const bool result = native(backing);
     const auto after = capture(backing);
     store.append(Observation {
         reinterpret_cast<uintptr_t>(backing), threadToken, result,
-        before, after, sequence
+        before, after, sequence, successfulBefore, failedBefore,
+        store.successful() + (result ? 1u : 0u),
+        store.failed() + (result ? 0u : 1u)
     });
     return result;
 }

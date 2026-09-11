@@ -68,6 +68,42 @@ struct MapPrepareObservation {
     MapSnapshot before;
     MapSnapshot after;
     uint32_t sequence;
+    // Commits are observed on the same worker and map object while the native
+    // prepare call is active. A zero window means commit was not reached.
+    uint32_t commitCalls = 0;
+    uint32_t commitFailures = 0;
+    uint32_t commitFirstSequence = 0;
+    uint32_t commitLastSequence = 0;
+};
+
+struct CommitObservation {
+    uintptr_t memoryMap;
+    uintptr_t threadToken;
+    bool result;
+    uint32_t sequence;
+};
+
+inline bool commitMatches(const CommitObservation &observation,
+                          uintptr_t memoryMap, uintptr_t threadToken) {
+    return observation.memoryMap == memoryMap &&
+        observation.threadToken == threadToken;
+}
+
+template <size_t SampleCapacity> class CommitStore {
+    rgpu::ObservationBuffer<CommitObservation, SampleCapacity> samples_ {};
+    volatile uint64_t calls_ {};
+    volatile uint64_t failures_ {};
+public:
+    void append(const CommitObservation &observation) {
+        __atomic_fetch_add(&calls_, 1u, __ATOMIC_RELAXED);
+        if (!observation.result) __atomic_fetch_add(&failures_, 1u, __ATOMIC_RELAXED);
+        samples_.append(observation);
+    }
+    uint64_t calls() const { return __atomic_load_n(&calls_, __ATOMIC_RELAXED); }
+    uint64_t failures() const { return __atomic_load_n(&failures_, __ATOMIC_RELAXED); }
+    const rgpu::ObservationBuffer<CommitObservation, SampleCapacity> &samples() const {
+        return samples_;
+    }
 };
 
 inline MapPhase classifyMapPrepare(const MapPrepareObservation &observation) {

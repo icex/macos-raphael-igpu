@@ -70,6 +70,20 @@ int main() {
                 RaphaelSubmit::phaseName(Phase::Exit)[0] == 'e',
             "records have stable human-readable kind and phase names");
 
+    RaphaelSubmit::CommitStore<2> commits;
+    commits.append({0x2222, 0x3333, true, 41});
+    commits.append({0x2222, 0x3333, false, 42});
+    commits.append({0x9999, 0x3333, false, 43});
+    require(commits.calls() == 3 && commits.failures() == 2 &&
+                commits.samples().size() == 2 && commits.samples().dropped() == 1,
+            "commit diagnostics count results and retain a bounded sample set");
+    require(RaphaelSubmit::commitMatches({0x2222, 0x3333, false, 42},
+                                         0x2222, 0x3333),
+            "commit correlation matches the exact map and worker");
+    require(!RaphaelSubmit::commitMatches({0x9999, 0x3333, false, 43},
+                                          0x2222, 0x3333),
+            "commit correlation rejects a different map object");
+
     const MapSnapshot empty {0, 0, 0, 0, true};
     MapPrepareObservation capacity {0, 0, 0, false,
                                     {0x400, 0, 0, 0, true},
@@ -126,6 +140,16 @@ int main() {
                                    {0, 0, 0x21, 0, true}, 0};
     require(RaphaelSubmit::classifyMapPrepare(success) == MapPhase::None,
             "successful preparation with a legal zero GPUVA is not a failure phase");
+
+    MapPrepareObservation correlated {0, 0, 0, false, empty,
+                                      {0, 0, 0x21, 0, true}, 0};
+    correlated.commitCalls = 2;
+    correlated.commitFailures = 1;
+    correlated.commitFirstSequence = 41;
+    correlated.commitLastSequence = 42;
+    require(correlated.commitCalls == 2 && correlated.commitFailures == 1 &&
+                correlated.commitFirstSequence < correlated.commitLastSequence,
+            "map observations carry exact bounded commit window metadata");
 
     RaphaelSubmit::MapPhaseStore<1> phases;
     virtualAddress.sequence = 11;
