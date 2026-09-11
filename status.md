@@ -2983,3 +2983,27 @@ Overall desktop Metal completion remains approximately **70%**: the accelerator
 and real offscreen Metal work are proven, while reliable queue retirement,
 visible desktop presentation, physical scanout, and repeatable recovery remain
 open. This percentage is a progress estimate, not a success claim.
+
+## Candidate 195 offline build and preflight (2026-09-11)
+
+Candidate 195 now has a clean build worktree at
+`/home/bogdan/macos-vm/run/worktrees/candidate-195`, checked out at
+`a4d9586e8f77b96a87508ab2b5163aa5e0426ece`. The worktree uses the candidate-only
+Info.plist version `1.0.195` while preserving the coordinator source tree. The
+release build completed with debug symbols and verified Mach-O UUIDs.
+
+| Artifact | SHA-256 / result |
+|---|---|
+| Release archive | `896641e14fbbea99c16d44f1948b969d014cc449dbaf709c3406de277be2c3ab` |
+| Build identities | `aaf8fbc67341a7f363f19063e8ae1ed9efc81ffac27db81da767895d63a35e2a` |
+| Executable | `51779e5c488426193a30f0e6bd615d658a1a3e2f6842d85c0d3331b3711e63dc` |
+| Source tree | `e9debe05adee92e88d0a8077bc25d13ef389d00187a02886bbbb27e5b5b6834c` |
+| Debug UUID | `89e1297e48af3114baaa897e23bf106a` |
+
+The machine preflight was corrected to match the current implementation rather
+than the obsolete V1 token names. It now reports recovery reservation **ok**
+(V2 pool establishment, native reserve ordering, and BAR visibility), VM callback
+safety **ok**, all constants/routes/prologues **ok**, and overall preflight **safe**.
+The full Python suite remains green at 791 tests with 3 skipped; focused candidate
+and staging coverage is 59 tests. No VFIO bind, reset, QEMU launch, or GPU ledger
+consumption occurred.
