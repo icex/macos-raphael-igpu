@@ -2904,3 +2904,7 @@ The black screen with no “No Signal” is explained only by the configured gen
 Progress table: native Metal compute/render **demonstrated** (candidate 194) | engine startup and WindowServer Metal submission path **demonstrated** (014) | stamp completion after the third submission **failed** (014) | native probe, desktop drawable, and changing QEMU frame **not demonstrated** | repeatable cleanup **not demonstrated; recovery incomplete** | physical HDMI output **unverified**.
 
 The mandatory Astra batch after the prior checkpoint is now **3 actual attempts** (012, 013, 014). Before any new hardware cycle, archive any existing `report-astra.md`, refresh this status, and dispatch the exact read-only Astra review prompt required by `AGENTS.md`. If the service is unavailable, record that fact and perform no hardware retry until the review checkpoint is closed.
+
+### Astra checkpoint after cycle 014
+
+The mandatory Astra dispatch was attempted with the exact prompt and offline-only boundaries. The service rejected it because the account usage limit remains exhausted until 2026-09-16; no new `report-astra.md` was produced and no conclusions are claimed. The mangled text reported after the run is confined to interleaved allocation/VM-walk lines on the serial stream; checksum-clean snapshots and surrounding ordered markers remain the evidence used for cycle 014. No hardware retry is authorized until this review checkpoint is closed by an available Astra review or an explicitly documented equivalent offline audit.
