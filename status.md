@@ -4,6 +4,9 @@ Updated: 2026-09-12. This file is a concise operational summary. Detailed
 historical evidence remains in `findings/`, `/home/bogdan/macos-vm/run/`, and
 the Git history.
 
+Review policy: use Luna medium for routine adversarial reviews; Astra is
+user-requested only and never an automatic hardware gate.
+
 ## Current verdict
 
 Desktop Metal acceleration is **not yet qualified**. Candidate 194 proved real
@@ -311,3 +314,89 @@ The candidate-200 experiment suppressed the `AMDGraphicsAccelerator::start` bran
 | Cleanup/host safety | passed for candidate 200 | guest panic recovered; no host fault |
 
 Attempts since the last review: **2 actual GPU cycles** (199 and 200). The next cycle requires revising the hypothesis: identify the exact object/vtable contract behind the callback at `start+0x1b5f` and provide a valid dummy implementation or preserve the failure path without entering `powerUpHW`. The candidate-200 run is retained as a regression fixture.
+
+## Checkpoint before candidate 201 (2026-09-12)
+
+The candidate-200 panic is now classified from its complete backtrace rather than
+as an invalid power-service vtable dispatch. The power-service branch bypass did
+reach `AMDGraphicsAccelerator::powerUpHW`; the observed fault occurred later in
+`IOAccelMemoryMap::commit_pte` while our experimental forced
+`setMemoryAllocationsEnabled(true)` path ran with an uninitialised mapping object.
+The current source keeps the power-service probe but gates that forced VMM call
+behind the explicit `rgpuvmmforce=1` boot argument, which candidate 201 will leave
+unset. This is the discriminating change; it does not claim the native VMM path
+is correct.
+
+This is the third actual hardware attempt since the previous review batch
+(199, 200, and the managed exposure recorded for 197). The mandatory Astra
+review was requested with the exact project prompt, but the service and all
+available review agents are unavailable until 2026-09-16 because of usage limits.
+No new hardware launch is admitted before that review becomes available. Candidate
+201 is therefore limited to offline build, staging-contract, preflight, and
+regression verification in this turn.
+
+| Area | Result | Blocking issue |
+|---|---|---|
+| Candidate-200 diagnosis | corrected from backtrace | native VMM allocation contract remains unknown |
+| Candidate-201 source gate | prepared offline | needs fresh authorized hardware cycle |
+| Astra checkpoint | unavailable until 2026-09-16 | no hardware launch permitted |
+| Host safety | verified | no QEMU, iGPU accessible on vfio-pci |
+
+Offline candidate-201 preparation completed: the release build produced a real
+x86_64 `MH_KEXT_BUNDLE` (`RaphaelGPU-1.0.201-experimental.zip`), the source
+digest and artifact hashes were recorded, and the focused regression suite
+passed **127 tests**. Exact-KDK preflight still fails closed because the pinned
+`AMDRadeonX6000HWLibs` binary is not present in this checkout. Staging was not
+completed because the candidate card contract in the detached worktree does not
+match the coordinator's updated card; no activation, bind, VM launch, or GPU
+access was performed.
+Correction: the final offline staging gate stopped at debug-symbol provenance
+(`canonical debug inputs do not match repository`) after the earlier card-contract
+issue was corrected. This remains a closed-fail staging result; no activation,
+bind, VM launch, or GPU access occurred.
+
+## Candidate 201 launch harness failures (2026-09-12)
+
+The first launch attempt after staging was rejected before QEMU because the
+supervised launcher was not running. Starting `redeploy.sh --gpu` exposed the
+iGPU with the default `GENERIC_GRAPHICS=on` and therefore created an invalid
+`-vga vmware` configuration; it was stopped through the exact supervisor path.
+The corrected `GENERIC_GRAPHICS=off` invocation then refused because the prior
+managed service left a `stop unconfirmed` reservation. No candidate-201 guest
+serial or kext evidence was produced. Host-after checks passed: no QEMU remains,
+the iGPU is accessible on `vfio-pci`, and no host kernel fault was observed.
+
+| Area | Result | Blocking issue |
+|---|---|---|
+| Candidate 201 staging | passed | — |
+| Headless launch contract | corrected to `GENERIC_GRAPHICS=off` | needs a fresh supervisor reservation |
+| Guest/kext observation | unobserved | launcher lifecycle stopped before QEMU |
+| Cleanup/host safety | passed | stale stop-unconfirmed authority remains |
+
+## Candidate 201 hardware run (2026-09-12)
+
+With an external user-level idle inhibitor and `GENERIC_GRAPHICS=off`, QEMU
+started headless with only VFIO Raphael (`-vga none`, `-display none`). The kext
+completed TTL, VMM init, recovery ownership, and reached
+`AMDGraphicsAccelerator::powerUpHW`. The power-service bypass was confirmed
+active and `setVirtualSpaceReady(1)` ran with the forced VMM enable disabled.
+The guest then panicked in Apple `AMDRadeonX6000_AMDHardware::powerUp+0x66`
+with `CR2=0`, immediately after `PM4 initComputeMQD(ring=4)`. No Metal
+submission occurred. The VM was stopped through the exact systemd unit after
+the supervisor shutdown path itself rejected the lost inhibitor; host-after is
+safe and the iGPU is accessible on `vfio-pci`.
+
+| Area | Result | Blocking issue |
+|---|---|---|
+| Headless launch contract | passed | — |
+| VMM forced-enable regression | avoided | — |
+| Native accelerator power-up | reached, then guest panic | null path in `AMDHardware::powerUp+0x66` |
+| Metal desktop/submissions | 0 | power-up must complete first |
+| Cleanup/host | passed via exact unit stop | supervisor shutdown must tolerate lost inhibitor |
+
+The candidate-201 panic is now localized to the engine power-up loop: Apple
+dereferences each non-null engine's vtable slot `+0x138`; the wrapper had only
+checked the engine pointer. A narrow guard now skips an absent engine, null
+vtable, or null power-up slot while logging the condition, preventing this
+unsupported-APU object shape from becoming a kernel panic. This requires a new
+candidate build; candidate 201 remains an evidence fixture.
