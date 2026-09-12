@@ -1,59 +1,12 @@
-# Standing project instructions
+# Project instructions
 
-## Objective and execution
-
-- Deliver functional macOS desktop Metal acceleration on the Raphael iGPU, with
-  repeatable cleanup after guest crashes or QEMU closure and without host crashes.
-  Metal enumeration alone is not success.
-- Read `status.md` before continuing; verify live host and repository state before
-  hardware work. Older reports may contain superseded conclusions.
-- Use agents to write and test code; the primary agent coordinates and audits.
-- Select lower-cost agents by task: prefer `gpt-5.6-luna` for routine edits,
-  packaging, and execution of reviewed test/staging procedures; use
-  `gpt-5.6-sol` for driver/recovery implementation and difficult debugging.
-  The coordinator audits results. Do not interrupt an active hardware operation
-  or build merely to switch models. Preserve the mandatory Astra review below.
-- Check for regressions on every change and hardware cycle. Keep frozen evidence
-  intact and distinguish unobserved behavior from a demonstrated regression.
-- Update `status.md` with technical evidence and show a brief progress table and
-  blocking issue after each hardware run.
-- Do not merge or push to main until full acceleration works. Prefer meaningful
-  milestones over frequent development commits and release builds.
-- Preserve existing host safety and experiment gates. Never bypass exhausted run
-  budgets, cycle vfio-pci through amdgpu and back, or use `sudo -n` probes.
-
-## Mandatory adversarial review after stalled testing
-
-User instruction recorded 2026-09-10:
-
-Updated user instruction: after **every three actual GPU test attempts**, review
-what went wrong in the reasoning, consult relevant source documentation, and
-revise the hypotheses and test batch before continuing toward full Metal. This
-is a recurring review checkpoint, not a request to end development. Dispatch a
-**gpt-6-astra agent with reasoning effort xhigh** using this exact prompt:
-
-> review whatever the current status.md of this project is, check its documentation, methodology, tests, experiments. figure out why this fails and report back in a report-astra.md file for other agents to review
-
-- Refresh `status.md` before dispatch. Include the failing boundary, consecutive
-  cycle count, run identifiers, hypotheses, regression comparisons, and evidence.
-- Count actual GPU experiment cycles, not builds, unit-test invocations, or repeated
-  parsing of the same capture. Renaming a candidate or changing an unproductive
-  hypothesis does not reset the count. Reset only on demonstrated meaningful
-  progress past the issue; document the evidence.
-- Track the issue and count in `status.md`. If inherited history is uncertain,
-  reconstruct it from run evidence rather than claiming a zero count.
-- Track attempts since the last review separately from the unresolved-issue
-  streak. A completed review starts the next three-attempt batch but does not
-  erase the unresolved issue or extend host-boot exposure budgets.
-- Archive any existing `report-astra.md` under a unique dated research path before
-  the reviewer writes the new report; preserve original report contents.
-- The review is offline/read-only except for its report: no VM launch, device
-  access, sudo, resets, or implementation edits. Provide these boundaries alongside
-  the exact prompt.
-- Have the coordinator and implementation agents assess the report, verify its
-  claims against evidence, and record a revised hypothesis and discriminating test
-  before resuming hardware cycles. A report is not permission to bypass safety gates.
-- The user also authorizes an optional Claude Code review using the same prompt.
-  If available, adapt only the output filename to `status-claude.md`, preserving
-  the coordinator's authoritative `status.md`. Do not claim a Claude review ran
-  unless it actually did. The mandatory trigger remains the Astra review.
+- Goal: functional macOS desktop Metal acceleration on the Raphael iGPU, with repeatable cleanup after guest crashes or QEMU closure.
+- Read `status.md` and verify live host/repository state before hardware work.
+- Keep host safety, identity checks, recovery, and regression checks intact.
+- Update `status.md` after every hardware run with evidence, a brief progress table, and the blocking issue.
+- Use `gpt-5.6-luna` with medium reasoning for routine implementation, testing,
+  and reviews when available; the coordinator audits their work. Use Astra only
+  when the user explicitly requests it.
+- Do not merge or push to `main` until full desktop acceleration is demonstrated.
+- The normal test path must require no sudo: sleep inhibition runs externally as a user-level `systemd-inhibit --what=idle` process.
+- Do not consume a GPU ledger entry when a launch fails before QEMU/VFIO opens; record launches once exposure begins.

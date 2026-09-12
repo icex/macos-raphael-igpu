@@ -5757,8 +5757,23 @@ static uint32_t wrapHwEngPowerUp(void *self) {
     bool ok = RaphaelLifecycle::powerUpAll(
         engines, 11,
         [&](void *eng, size_t i) {
+            if (eng == nullptr) {
+                RLOG("XJ:   engine %u %-5s absent -> skipped", static_cast<unsigned>(i),
+                     kEngineNames[i]);
+                return true;
+            }
             auto vt = *reinterpret_cast<uint64_t **>(eng);
+            if (vt == nullptr) {
+                RLOG("XJ:   engine %u %-5s has NULL vtable -> skipped", static_cast<unsigned>(i),
+                     kEngineNames[i]);
+                return true;
+            }
             auto up = reinterpret_cast<uint32_t (*)(void *)>(vt[0x138 / 8]);
+            if (up == nullptr) {
+                RLOG("XJ:   engine %u %-5s has NULL powerUp slot -> skipped",
+                     static_cast<unsigned>(i), kEngineNames[i]);
+                return true;
+            }
             uint32_t result = up(eng) & 0xff;
             RLOG("XJ:   engine %u %-5s at %p vtable=%p powerUp -> %u",
                  static_cast<unsigned>(i), kEngineNames[i], eng,
