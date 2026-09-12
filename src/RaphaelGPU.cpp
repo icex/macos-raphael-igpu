@@ -6292,6 +6292,20 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
         if (mask & P1) reprobeGpu();
     } else if (kexts[KextX6000].loadIndex == index) {
         RLOG("X6000 loaded, mask=0x%x", mask);
+        if (mask & XJ) {
+            // 24G830's AMDGraphicsAccelerator::start failure cleanup branches
+            // from 0x1eca to 0x1f50, where the uninitialised +0x1ea0 trace
+            // object is dereferenced. Redirect that branch to the common
+            // return path (0x1fd2) so power-up failure is reported cleanly.
+            static const uint8_t find[] = {0x0f, 0x84, 0x80, 0x00, 0x00, 0x00};
+            static const uint8_t replace[] = {0x0f, 0x84, 0x02, 0x01, 0x00, 0x00};
+            KernelPatcher::LookupPatch lp {&kexts[KextX6000], find, replace,
+                                           sizeof(find), 1};
+            patcher.applyLookupPatch(&lp);
+            RLOG("XJ: AMDGraphicsAccelerator::start failure cleanup patch -> %s",
+                 patcher.getError() == KernelPatcher::Error::NoError ? "ok" : "FAILED");
+            patcher.clearError();
+        }
         if ((mask & XH) || recoveryLeaseConfigured) {
             orgHwMemVram = patcher.routeFunction(addr + kOffHwMemVram,
                              reinterpret_cast<mach_vm_address_t>(wrapHwMemVram), true);
