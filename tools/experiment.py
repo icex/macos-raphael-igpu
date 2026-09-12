@@ -185,7 +185,7 @@ def sleep_inhibited():
             if mode != 'block':
                 continue
             scopes = what.split(':')
-            if len(scopes) == 2 and set(scopes) == {'sleep', 'idle'}:
+            if ((len(scopes) == 2 and set(scopes) == {'sleep', 'idle'}) or scopes == ['idle']):
                 matching = True
         return matching
     except (OSError, subprocess.SubprocessError, ValueError, TypeError, AttributeError):
@@ -608,8 +608,10 @@ def preownership_no_lease(serial):
     """Recognize only the proven pre-ownership panic for a no-op recovery.
 
     This is evidence classification, not a cleanup authorization.  A run is
-    eligible only when the native VMM crashes in ``wireSysMemory`` before it
-    publishes any XH2/XH3 lease record and submission counters are all zero.
+    This historical heuristic is unverified and never authorizes cleanup or a
+    launch; a ``wireSysMemory`` line alone does not establish the crash cause.
+    A run is eligible only when it has no XH2/XH3 lease record and submission
+    counters are all zero.
     Any lease-shaped record, readiness callback, or nonzero submission keeps
     recovery fail-closed.
     """
@@ -1960,7 +1962,7 @@ def reuse_authorization(vm, boot_id, run_id, manifest=None, manifest_path=None):
     launches = ledger.get('launches')
     if not isinstance(launches, list) or not launches: return None, ['boot_ledger']
     if any(row.get('run_id') == run_id for row in launches): return None, ['run_id_reused']
-    if len(launches) >= 3: return None, ['launch_ceiling']
+    ceiling = len(launches) >= 3
     prior = launches[-1].get('run_id')
     continuation_path = (vm/'run/retained-kiq-continuations'/boot_id/
                          (str(prior)+'.json'))
@@ -1977,7 +1979,8 @@ def reuse_authorization(vm, boot_id, run_id, manifest=None, manifest_path=None):
             receipt_path = startup_path
             error_key = 'startup_noqueue_receipt'
     try: receipt = json.loads(receipt_path.read_text())
-    except (OSError, ValueError): return None, [error_key]
+    except (OSError, ValueError):
+        return None, sorted({error_key, 'launch_ceiling'} if ceiling else {error_key})
     errors = validate_reuse_receipt(
         receipt, boot_id, prior, vm, run_id, manifest, manifest_path)
     used_recovery_ids = {row.get('recovery_id') for row in launches}
@@ -1991,6 +1994,8 @@ def reuse_authorization(vm, boot_id, run_id, manifest=None, manifest_path=None):
         used_authorization_ids = {row.get('authorization_id') for row in launches}
         if receipt.get('authorization_id') in used_authorization_ids:
             errors.append('retained_kiq_continuation_receipt')
+    if ceiling:
+        errors.append('launch_ceiling')
     return (receipt if not errors else None), sorted(set(errors))
 
 
@@ -2562,6 +2567,8 @@ def reserve_boot(directory, boot_id, experiment, recovery=None,
     if recovery is None: raise FileExistsError(path)
     ledger_raw = path.read_bytes()
     ledger = read_boot_ledger(path); launches = ledger.get('launches', [])
+    if len(launches) >= 3:
+        raise RuntimeError('launch ceiling exhausted')
     prior = launches[-1].get('run_id') if launches else None
     startup = isinstance(recovery, dict) and recovery.get('schema') == 4
     retained = isinstance(recovery, dict) and recovery.get('schema') == 7
@@ -2573,7 +2580,6 @@ def reserve_boot(directory, boot_id, experiment, recovery=None,
         recovery, boot_id, prior, vm if startup or retained else None,
         experiment if retained else None, manifest if retained else None,
         manifest_path if retained else None)
-    if len(launches) >= 3: errors.append('launch_ceiling')
     if any(row.get('run_id') == experiment for row in launches): errors.append('run_id_reused')
     if recovery.get('recovery_id') in {row.get('recovery_id') for row in launches}:
         errors.append(error_key)
@@ -2821,8 +2827,11 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
             candidate179_activation_sha256=None,
             one_run_policy_sha256=None,
             one_run_activation_sha256=None,
-            prelaunch_proof_sha256=None):
+            prelaunch_proof_sha256=None,
+            manual_reuse=False):
     """One bounded launch; a verified prior recovery may authorize same-boot reuse."""
+    if manual_reuse:
+        raise ValueError('manual reuse is unsupported under the current launch budget policy')
     one_run_requested = bool(one_run_policy_sha256 or one_run_activation_sha256)
     if bool(one_run_policy_sha256) != bool(one_run_activation_sha256):
         raise ValueError('one-run qualification requires policy and activation hashes')
@@ -2856,6 +2865,9 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
     if candidate179_requested and (resume_prelaunch or
             cap_revision_authority_sha256 or warm_requested):
         raise ValueError('candidate179 qualification cannot use another launch mode')
+    if manual_reuse and (resume_prelaunch or cap_revision_authority_sha256 or
+                         warm_requested or candidate179_requested):
+        raise ValueError('manual reuse cannot use another launch mode')
     manifest = json.loads(manifest_path.read_text())
     probe_profile(manifest)
     validate_manifest_replay_contract(manifest)
@@ -2986,13 +2998,12 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                         # Schema-2 launches have no generic same-boot authority.
                         # A reviewed finite policy must select and bind one exact
                         # launch instead of inheriting the historical rolling cap.
-                        recovery = None
-                        if (used/(host['boot_id']+'.json')).exists():
+                        recovery = 'manual-override' if manual_reuse else None
+                        if (used/(host['boot_id']+'.json')).exists() and not manual_reuse:
                             reuse_errors = ['v2_reuse_requires_finite_authority']
                     errors += reuse_errors
                     errors += admit(manifest, host, {p.stem for p in used.glob('*.json')},
                                     reuse_allowed=recovery is not None)
-                if not host['sleep_inhibited']: errors.append('sleep_inhibited')
                 if errors: raise ValueError('admission refused: '+','.join(errors))
                 if manifest.get('gpu') is not False and not resume_prelaunch:
                     reservation_cursor = reserve_launch_and_cursor(
@@ -3226,6 +3237,10 @@ if __name__ == '__main__':
     parser.add_argument('--candidate179-activation-sha256')
     parser.add_argument('--one-run-policy-sha256')
     parser.add_argument('--one-run-activation-sha256')
+    parser.add_argument('--manual-reuse', action='store_true',
+                        help='explicitly reuse a boot without a recovery receipt')
+    parser.add_argument('--ack-risk', action='store_true',
+                        help='required acknowledgement for --manual-reuse')
     args = parser.parse_args()
     one_run_requested = bool(args.one_run_policy_sha256 or
                              args.one_run_activation_sha256)
@@ -3233,6 +3248,10 @@ if __name__ == '__main__':
         parser.error('one-run qualification requires both hashes')
     if one_run_requested and args.action != 'run':
         parser.error('one-run qualification is only valid with run')
+    if args.ack_risk and not args.manual_reuse:
+        parser.error('--ack-risk requires --manual-reuse')
+    if args.manual_reuse and (args.action != 'run' or not args.ack_risk):
+        parser.error('--manual-reuse requires run and --ack-risk')
     if one_run_requested and (args.resume_prelaunch or args.cap_revision_authority_sha256 or
                               args.warm_qualification_policy_sha256 or
                               args.candidate179_policy_sha256):
@@ -3289,5 +3308,6 @@ if __name__ == '__main__':
                          args.candidate179_activation_sha256,
                          args.one_run_policy_sha256,
                          args.one_run_activation_sha256,
-                         args.prelaunch_proof_sha256)
+                         args.prelaunch_proof_sha256,
+                         args.manual_reuse)
     print(json.dumps(result, indent=2))

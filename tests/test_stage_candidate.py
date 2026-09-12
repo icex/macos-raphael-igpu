@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 import tempfile
 import shutil
+import subprocess
 import unittest
 from unittest import mock
 
@@ -130,6 +131,32 @@ class Candidate180StageTests(unittest.TestCase):
             stage,
             re.compile(r"recovery_lease_schema=card\["
                        r"['\"]recovery_lease_schema['\"]\]"))
+
+    def test_source_pin_requires_real_commit_and_identical_source_tree(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            subprocess.run(["git", "-C", str(root), "config", "user.email", "test@example.invalid"], check=True)
+            subprocess.run(["git", "-C", str(root), "config", "user.name", "test"], check=True)
+            (root / "src").mkdir()
+            (root / "src" / "driver").write_text("restored\n")
+            subprocess.run(["git", "-C", str(root), "add", "src"], check=True)
+            subprocess.run(["git", "-C", str(root), "commit", "-q", "-m", "source"], check=True)
+            source = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
+            (root / "card.json").write_text("card\n")
+            subprocess.run(["git", "-C", str(root), "add", "card.json"], check=True)
+            subprocess.run(["git", "-C", str(root), "commit", "-q", "-m", "coordinator"], check=True)
+            self.tool.WT = root
+            self.tool.verify_source_commit(source)
+            with self.assertRaisesRegex(RuntimeError, "source differs"):
+                (root / "src" / "driver").write_text("changed\n")
+                self.tool.verify_source_commit(source)
+            subprocess.run(["git", "-C", str(root), "add", "src"], check=True)
+            subprocess.run(["git", "-C", str(root), "commit", "-q", "-m", "source drift"], check=True)
+            with self.assertRaisesRegex(RuntimeError, "source differs"):
+                self.tool.verify_source_commit(source)
+            with self.assertRaisesRegex(RuntimeError, "does not exist"):
+                self.tool.verify_source_commit("0" * 40)
 
     def test_optional_picker_timeout_changes_only_open_core_boot_timeout(self):
         config = {
@@ -855,7 +882,9 @@ class Candidate188ResealTests(unittest.TestCase):
             hashlib.sha256((ROOT / "experiments/metal-028.json").read_bytes()).hexdigest())
         self.assertEqual(
             profile["experiment_sha256"],
-            hashlib.sha256((ROOT / "tools/experiment.py").read_bytes()).hexdigest())
+            hashlib.sha256(subprocess.check_output([
+                "git", "-C", str(ROOT), "show",
+                "3f47ab7eca52265a9f294200022213d354651e45:tools/experiment.py"])).hexdigest())
 
     def test_candidate194_reseal_pins_verified_preimages_and_prior_nonce(self):
         self.tool.configure("1.0.194", "metal-028")
@@ -967,6 +996,53 @@ class Candidate188ResealTests(unittest.TestCase):
                     profile["staging_sha256"], "2"*64, "3"*64, "4"*64)
             qconvert.assert_not_called()
             experiment.stage_image.assert_not_called()
+
+
+class WorktreeCleanCheckTests(unittest.TestCase):
+    def setUp(self):
+        self.tool = load_tool()
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.worktree = Path(self.temp.name) / "candidate"
+        self.worktree.mkdir()
+        subprocess.run(["git", "init", "-q", str(self.worktree)], check=True)
+        subprocess.run(["git", "-C", str(self.worktree), "config", "user.email", "test@example.invalid"], check=True)
+        subprocess.run(["git", "-C", str(self.worktree), "config", "user.name", "Test"], check=True)
+        (self.worktree / "tracked.txt").write_text("original\n")
+        subprocess.run(["git", "-C", str(self.worktree), "add", "tracked.txt"], check=True)
+        subprocess.run(["git", "-C", str(self.worktree), "commit", "-q", "-m", "initial"], check=True)
+        self.commit = subprocess.check_output(["git", "-C", str(self.worktree), "rev-parse", "HEAD"], text=True).strip()
+        self.tool.ROOT = self.worktree
+        self.tool.WT = self.worktree
+
+    def check_rejected(self, mode):
+        path = self.worktree / "tracked.txt"
+        path.write_text("changed\n")
+        subprocess.run(["git", "-C", str(self.worktree), "update-index", f"--{mode}", "tracked.txt"], check=True)
+        with self.assertRaisesRegex(RuntimeError, "dirty|index flag"):
+            self.tool.verify_worktree_before_import(self.commit)
+
+    def test_rejects_assume_unchanged_modified_tracked_file(self):
+        self.check_rejected("assume-unchanged")
+
+    def test_rejects_skip_worktree_modified_tracked_file(self):
+        self.check_rejected("skip-worktree")
+
+    def test_rejects_modified_file_with_both_hidden_index_flags(self):
+        path = self.worktree / "tracked.txt"
+        path.write_text("changed\n")
+        subprocess.run(["git", "-C", str(self.worktree), "update-index", "--assume-unchanged", "tracked.txt"], check=True)
+        subprocess.run(["git", "-C", str(self.worktree), "update-index", "--skip-worktree", "tracked.txt"], check=True)
+        with self.assertRaisesRegex(RuntimeError, "dirty|index flag"):
+            self.tool.verify_worktree_before_import(self.commit)
+
+    def test_rejects_ordinarily_modified_tracked_file(self):
+        (self.worktree / "tracked.txt").write_text("changed\n")
+        with self.assertRaisesRegex(RuntimeError, "dirty"):
+            self.tool.verify_worktree_before_import(self.commit)
+
+    def test_accepts_clean_tracked_worktree(self):
+        self.tool.verify_worktree_before_import(self.commit)
 
 
 if __name__ == "__main__":

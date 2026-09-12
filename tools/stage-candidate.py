@@ -60,6 +60,7 @@ SUPPORTED_CARD_DIAGNOSTICS = {
     ("1.0.199", "metal-033"): "rgpuvmdiag=1",
     ("1.0.200", "metal-034"): "rgpuvmdiag=1",
     ("1.0.201", "metal-035"): "rgpuvmdiag=1",
+    ("1.0.203", "metal-037"): "rgpuvmdiag=1",
 }
 
 RESEAL_PROFILES = {
@@ -266,6 +267,18 @@ def validate_card(raw, expected_sha256):
         if any(card.get(key) != value
                for key, value in candidate186_contract.items()):
             raise RuntimeError("candidate card contract mismatch")
+    if pair == ("1.0.203", "metal-037"):
+        if (card.get("critical_replay_tolerance") != "terminal-prefix" or
+                card.get("recovery_critical_replay_tolerance") != "terminal-prefix-open" or
+                card.get("functional_boot_arguments") !=
+                    {"rgpuvmroot": "5", "rgpudump": "5000"} or
+                card.get("required_boot_flags") != ["-liluheadless"] or
+                card.get("launch_options") != {
+                    "BOOTDISK_MODE": "custom", "NVRAM": "stock",
+                    "GENERIC_GRAPHICS": "off", "GDB": "on"} or
+                not re.fullmatch(r"[0-9a-f]{64}", str(card.get("raphael_source_sha256", ""))) or
+                not re.fullmatch(r"[0-9a-f]{40}", str(card.get("raphael_source_commit", "")))):
+            raise RuntimeError("candidate card contract mismatch")
     if pair in (("1.0.188", "metal-021"), ("1.0.188", "metal-022"),
                 ("1.0.189", "metal-023"), ("1.0.190", "metal-024"),
                 ("1.0.191", "metal-025"), ("1.0.192", "metal-026"), ("1.0.193", "metal-027"), ("1.0.194", "metal-028"), ("1.0.195", "metal-029"), ("1.0.196", "metal-030"), ("1.0.197", "metal-031"), ("1.0.198", "metal-032"), ("1.0.199", "metal-033"), ("1.0.200", "metal-034"), ("1.0.201", "metal-035")):
@@ -364,8 +377,27 @@ def verify_worktree_before_import(expected_commit):
         raise RuntimeError("staging tool must run from the candidate worktree")
     if command(["git", "-C", str(WT), "rev-parse", "HEAD"]) != expected_commit:
         raise RuntimeError("candidate worktree commit changed")
+    flags = command(["git", "-C", str(WT), "ls-files", "-v"]).splitlines()
+    if any(line[:1].islower() or line[:1] == "S" for line in flags):
+        raise RuntimeError("candidate worktree has hidden index flag")
     if command(["git", "-C", str(WT), "status", "--porcelain"]):
         raise RuntimeError("candidate worktree is dirty")
+
+
+def verify_source_commit(source_commit):
+    """Bind a card's source pin to a real commit and the current source bytes."""
+    exact_hex(source_commit, 40, "card source commit")
+    resolved = subprocess.run(
+        ["git", "-C", str(WT), "rev-parse", "--verify",
+         source_commit + "^{commit}"], capture_output=True, text=True,
+        check=False)
+    if resolved.returncode != 0 or resolved.stdout.strip() != source_commit:
+        raise RuntimeError("card source commit does not exist")
+    result = subprocess.run(
+        ["git", "-C", str(WT), "diff", "--quiet", source_commit, "--", "src"],
+        check=False)
+    if result.returncode != 0:
+        raise RuntimeError("candidate source differs from card source commit")
 
 
 def validate_debug_symbols(manifest, builder, executable, debug_dir,
@@ -464,7 +496,7 @@ def validate_debug_symbols(manifest, builder, executable, debug_dir,
 
 def verify_build_inputs(experiment, builder, expected_commit,
                         expected_identities_sha256, image_id,
-                        card_source_sha256):
+                        card_source_sha256, card_source_commit=None):
     if sha_file(IDENTITIES) != expected_identities_sha256:
         raise RuntimeError("candidate build-identity record changed")
     identities = json.loads(IDENTITIES.read_text())
@@ -476,10 +508,15 @@ def verify_build_inputs(experiment, builder, expected_commit,
     sums = DIST / "SHA256SUMS"
     build_log = VM / f"run/candidate-{NUMBER}-build.log"
 
+    source_commit = card_source_commit or expected_commit
+    if card_source_sha256 is not None and not re.fullmatch(
+            r"[0-9a-f]{64}", str(card_source_sha256)):
+        raise RuntimeError("card source digest is not an exact source identity")
+    verify_source_commit(source_commit)
     exact = {
         "schema": 1,
         "version": CANDIDATE_VERSION,
-        "source_commit": expected_commit,
+        "source_commit": source_commit,
         "source_clean": True,
         "worktree": str(WT),
         "extracted_candidate": str(CANDIDATE),
@@ -502,6 +539,8 @@ def verify_build_inputs(experiment, builder, expected_commit,
         if identities.get(key) != value:
             raise RuntimeError(f"artifact hash mismatch: {key}")
 
+    if card_source_sha256 is not None and observed["source_sha256"] != card_source_sha256:
+        raise RuntimeError("candidate source differs from its experiment card")
     for key in ("version", "source_commit", "source_clean", "build_id",
                 "source_sha256", "executable_sha256", "info_sha256"):
         if manifest.get(key) != identities.get(key):
@@ -519,7 +558,7 @@ def verify_build_inputs(experiment, builder, expected_commit,
     if (CANDIDATE_VERSION, CARD_ID) in (
             ("1.0.188", "metal-021"), ("1.0.189", "metal-023"),
             ("1.0.190", "metal-024"), ("1.0.191", "metal-025"),
-            ("1.0.192", "metal-026"), ("1.0.193", "metal-027"), ("1.0.194", "metal-028"), ("1.0.195", "metal-029"), ("1.0.196", "metal-030"), ("1.0.197", "metal-031"), ("1.0.198", "metal-032"), ("1.0.199", "metal-033"), ("1.0.200", "metal-034"), ("1.0.201", "metal-035")):
+            ("1.0.192", "metal-026"), ("1.0.193", "metal-027"), ("1.0.194", "metal-028"), ("1.0.195", "metal-029"), ("1.0.196", "metal-030"), ("1.0.197", "metal-031"), ("1.0.198", "metal-032"), ("1.0.199", "metal-033"), ("1.0.200", "metal-034"), ("1.0.201", "metal-035"), ("1.0.203", "metal-037")):
         validate_debug_symbols(manifest, builder, executable,
                                DIST / "debug-symbols",
                                card_source_sha256)
@@ -1162,12 +1201,13 @@ def stage(expected_commit, expected_boot_id, expected_card_sha256,
     builder = load_module("candidate180_build", WT / "tools/build-release.py")
     identities, manifest, archive = verify_build_inputs(
         experiment, builder, expected_commit, expected_identities_sha256,
-        image_id, card.get("raphael_source_sha256"))
+        image_id, card.get("raphael_source_sha256"),
+        card.get("raphael_source_commit"))
     candidate186 = (CANDIDATE_VERSION, CARD_ID) in (
         ("1.0.186", "metal-019"), ("1.0.187", "metal-020"),
         ("1.0.188", "metal-021"), ("1.0.189", "metal-023"),
         ("1.0.190", "metal-024"), ("1.0.191", "metal-025"),
-        ("1.0.192", "metal-026"), ("1.0.193", "metal-027"), ("1.0.194", "metal-028"), ("1.0.195", "metal-029"), ("1.0.196", "metal-030"), ("1.0.197", "metal-031"), ("1.0.198", "metal-032"), ("1.0.199", "metal-033"), ("1.0.200", "metal-034"), ("1.0.201", "metal-035"))
+        ("1.0.192", "metal-026"), ("1.0.193", "metal-027"), ("1.0.194", "metal-028"), ("1.0.195", "metal-029"), ("1.0.196", "metal-030"), ("1.0.197", "metal-031"), ("1.0.198", "metal-032"), ("1.0.199", "metal-033"), ("1.0.200", "metal-034"), ("1.0.201", "metal-035"), ("1.0.203", "metal-037"))
     if candidate186 and identities["source_sha256"] != card["raphael_source_sha256"]:
         raise RuntimeError("candidate source differs from its experiment card")
     lilu = (validate_lilu_inputs(

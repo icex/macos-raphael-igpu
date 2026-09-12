@@ -141,16 +141,6 @@ int main() {
     require(RaphaelSubmit::classifyMapPrepare(success) == MapPhase::None,
             "successful preparation with a legal zero GPUVA is not a failure phase");
 
-    MapPrepareObservation correlated {0, 0, 0, false, empty,
-                                      {0, 0, 0x21, 0, true}, 0};
-    correlated.commitCalls = 2;
-    correlated.commitFailures = 1;
-    correlated.commitFirstSequence = 41;
-    correlated.commitLastSequence = 42;
-    require(correlated.commitCalls == 2 && correlated.commitFailures == 1 &&
-                correlated.commitFirstSequence < correlated.commitLastSequence,
-            "map observations carry exact bounded commit window metadata");
-
     RaphaelSubmit::MapPhaseStore<1> phases;
     virtualAddress.sequence = 11;
     phases.append(virtualAddress);

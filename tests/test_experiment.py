@@ -1659,6 +1659,7 @@ class ExperimentTests(unittest.TestCase):
                 vm, 'boot-A', 'd'*32, manifest, manifest_path)
             self.assertIsNone(replay)
             self.assertIn('launch_ceiling', replay_errors)
+            self.assertIn('recovery_receipt', replay_errors)
 
     def test_candidate176_receipt_requires_helper_manifest_and_raw_ledger(self):
         tool = self.module()
@@ -2361,6 +2362,7 @@ class ExperimentTests(unittest.TestCase):
             authorization, errors = tool.reuse_authorization(vm, 'boot-A', 'd'*32)
             self.assertIsNone(authorization)
             self.assertIn('launch_ceiling', errors)
+            self.assertIn('recovery_receipt', errors)
 
     def test_recovery_receipt_validation_fails_closed(self):
         tool = self.module()

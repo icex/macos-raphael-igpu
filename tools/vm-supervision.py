@@ -242,7 +242,11 @@ def shutdown(state, grace=20):
         raise ValueError("shutdown grace must be 1..30 seconds")
     if not same_start_running(state):
         return {"cid": cid, "outcome": "already-stopped"}
-    verify(state)
+    # Shutdown is an authenticated cleanup path, not a readiness assertion.
+    # The exact CID plus its persisted StartedAt is the authorization boundary;
+    # collector readiness, inhibitor state, and the exposure deadline may all
+    # be absent or expired by the time cleanup runs. Never re-arm or extend the
+    # existing deadline here.
     budget = min(grace, max(0, state["deadline_epoch"] - time.time() - 2)) if state["deadline_epoch"] else grace
     until = time.monotonic() + budget
     requested = False
@@ -535,6 +539,9 @@ def start_locked(vm, maximum, gpu_args, critical_enabled=False):
         try:
             run([binary("systemctl"), "--user", "stop", name + ".service"], timeout=40)
         except Exception:
+            if properties(name + ".service").get("LoadState") == "not-found":
+                cleanup(vm, name)
+                raise
             # Absence of a container does not cancel an accepted but delayed
             # service launch. Its own cap/cleanup remain responsible; keep the
             # reservation until that lifetime is known to have ended.

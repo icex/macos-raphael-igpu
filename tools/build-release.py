@@ -31,6 +31,31 @@ def validate_macho(data):
     magic, cpu, subtype, kind = struct.unpack_from('<4I', data)
     if (magic, cpu, kind) != (0xfeedfacf, 0x1000007, 11):
         raise ValueError('release executable must be an x86_64 MH_KEXT_BUNDLE')
+    if b'__tlv_bootstrap' in data:
+        raise ValueError('unsupported TLV bootstrap reference')
+    ncmds, sizeofcmds = struct.unpack_from('<2I', data, 16)
+    commands_end = 32 + sizeofcmds
+    if commands_end > len(data):
+        raise ValueError('truncated Mach-O load commands')
+    cursor = 32
+    for _ in range(ncmds):
+        if cursor + 8 > commands_end:
+            raise ValueError('truncated Mach-O load command')
+        command, command_size = struct.unpack_from('<2I', data, cursor)
+        if command_size < 8 or cursor + command_size > commands_end:
+            raise ValueError('invalid Mach-O load command size')
+        if command == 0x19:  # LC_SEGMENT_64
+            if command_size < 72:
+                raise ValueError('truncated Mach-O segment command')
+            nsects = struct.unpack_from('<I', data, cursor + 64)[0]
+            sections_end = cursor + 72 + nsects * 80
+            if sections_end > cursor + command_size:
+                raise ValueError('truncated Mach-O section table')
+            for section_offset in range(cursor + 72, sections_end, 80):
+                section = data[section_offset:section_offset + 16].split(b'\0', 1)[0]
+                if section in (b'__thread_vars', b'__thread_bss', b'__thread_data'):
+                    raise ValueError('unsupported thread-local section')
+        cursor += command_size
 
 
 def tree_digest(root):
