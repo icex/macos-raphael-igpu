@@ -143,6 +143,6 @@
     "-liluheadless"
   ],
   "raphael_source_sha256": "3b10220e4181c161ed4f4ad99ecd95b50f5c9f5210d074c24a20f21e36781878",
-  "raphael_source_commit": "93c62a5",
+  "raphael_source_commit": "45b0240759d883826112cde00f1eec02f16c7702",
   "source_commit": "c21b36f"
 }
