@@ -6305,6 +6305,23 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
             RLOG("XJ: AMDGraphicsAccelerator::start failure cleanup patch -> %s",
                  patcher.getError() == KernelPatcher::Error::NoError ? "ok" : "FAILED");
             patcher.clearError();
+            // The accelerator start path treats the platform power-service
+            // callback as a hard gate even after TTL has completed. On this
+            // APU the callback returns false because the dummy SMU backend
+            // has no Navi power-service implementation. Preserve the test
+            // instruction but suppress only its failure branch so the real
+            // hardware bring-up path can report its own result.
+            static const uint8_t powerGateFind[] = {0x84, 0xc0, 0x0f, 0x84,
+                                                    0x16, 0x01, 0x00, 0x00};
+            static const uint8_t powerGateReplace[] = {0x84, 0xc0, 0x90, 0x90,
+                                                       0x90, 0x90, 0x90, 0x90};
+            KernelPatcher::LookupPatch powerGate {&kexts[KextX6000],
+                                                   powerGateFind, powerGateReplace,
+                                                   sizeof(powerGateFind), 1};
+            patcher.applyLookupPatch(&powerGate);
+            RLOG("XJ: accelerator power-service failure gate -> %s",
+                 patcher.getError() == KernelPatcher::Error::NoError ? "ok" : "FAILED");
+            patcher.clearError();
         }
         if ((mask & XH) || recoveryLeaseConfigured) {
             orgHwMemVram = patcher.routeFunction(addr + kOffHwMemVram,
