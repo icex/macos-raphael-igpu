@@ -298,3 +298,16 @@ A separate harness defect caused the first candidate-199 invocation to fail befo
 | Supervisor lifecycle | stale-name race fixed | needs regression test and commit |
 
 Attempts since the last review: **1 actual GPU cycle** (candidate 199); the prelaunch rename failure was not counted. Next discriminator: suppress only the `power-service` false branch in `AMDGraphicsAccelerator::start`, then verify whether `powerUpHW` and KIQ initialization are reached. Astra review service remains unavailable until 2026-09-16; no claim of an Astra review is made.
+
+## Candidate 200 power-service bypass (2026-09-12)
+
+The candidate-200 experiment suppressed the `AMDGraphicsAccelerator::start` branch that rejected the platform power-service callback. This was unsafe: the run reached `AMDGraphicsAccelerator::powerUpHW` and immediately panicked on an invalid virtual call (`RIP=CR2=0xffffff8047000000`, backtrace `powerUpHW+0x1cb`). The host remained safe and the iGPU returned to accessible `vfio-pci`; no host kernel fault was recorded. The bypass is removed in commit `8d7835e`; candidate 200 is invalidated and must not be reused.
+
+| Area | Result | Blocking issue |
+|---|---|---|
+| XJ NULL-cleanup patch | still valid | — |
+| Power-service branch bypass | rejected by evidence | invalid virtual dispatch/panic |
+| Native accelerator readiness | unproven | need a real power-service/dummy-backend contract |
+| Cleanup/host safety | passed for candidate 200 | guest panic recovered; no host fault |
+
+Attempts since the last review: **2 actual GPU cycles** (199 and 200). The next cycle requires revising the hypothesis: identify the exact object/vtable contract behind the callback at `start+0x1b5f` and provide a valid dummy implementation or preserve the failure path without entering `powerUpHW`. The candidate-200 run is retained as a regression fixture.
