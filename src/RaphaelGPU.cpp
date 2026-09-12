@@ -346,6 +346,7 @@ static bool rlcProbeEnabled2 = false;
 //
 // So: observe first (which of the two is happening), and only then decide.
 static uint32_t vmmProbeMode = 0;
+static bool vmmForceEnable = false;
 
 // rgpumem reports AMDHWMemory's pool state. The old mode-2 early enable graft was
 // removed: Apple's one native enable is now the only pool initialization epoch.
@@ -4569,7 +4570,7 @@ static void wrapVmmSetVSReady(void *self, uint32_t ready) {
          "lease-owned=%u [caller x6+%#llx]",
          ready, q(0x20), q(0x28), vmmBase, owned,
          reinterpret_cast<uint64_t>(__builtin_return_address(0)) - x6Base);
-    if (owned && ready != 0 && vmmProbeMode >= 3 && q(0x28) == nullptr &&
+    if (owned && ready != 0 && vmmForceEnable && vmmProbeMode >= 3 && q(0x28) == nullptr &&
         orgVmmSetAlloc != 0) {
         RLOG("XV: driving setMemoryAllocationsEnabled(true) from here, because nothing else "
              "does and m_0x28 is the DMA paging channel endVMPTUpdate dereferences");
@@ -6305,6 +6306,16 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
             RLOG("XJ: AMDGraphicsAccelerator::start failure cleanup patch -> %s",
                  patcher.getError() == KernelPatcher::Error::NoError ? "ok" : "FAILED");
             patcher.clearError();
+            static const uint8_t powerGateFind[] = {0x84, 0xc0, 0x0f, 0x84,
+                                                    0x16, 0x01, 0x00, 0x00};
+            static const uint8_t powerGateReplace[] = {0x84, 0xc0, 0x90, 0x90,
+                                                       0x90, 0x90, 0x90, 0x90};
+            KernelPatcher::LookupPatch powerGate {&kexts[KextX6000], powerGateFind,
+                                                   powerGateReplace, sizeof(powerGateFind), 1};
+            patcher.applyLookupPatch(&powerGate);
+            RLOG("XJ: accelerator power-service gate bypass -> %s",
+                 patcher.getError() == KernelPatcher::Error::NoError ? "ok" : "FAILED");
+            patcher.clearError();
         }
         if ((mask & XH) || recoveryLeaseConfigured) {
             orgHwMemVram = patcher.routeFunction(addr + kOffHwMemVram,
@@ -6698,8 +6709,12 @@ static void pluginStart() {
                  "through -- UNNECESSARY, m_0x20 was measured as 0 after init, the guard is "
                  "already open and the real problem is that nobody passes true");
         else if (vmp == 3)
-            RLOG("rgpuvmm=3: as 1, and setMemoryAllocationsEnabled(true) is driven from "
-                 "setVirtualSpaceReady(true) so the DMA paging channel gets built");
+            RLOG("rgpuvmm=3: VMM channel diagnostics enabled; forced enable is separately gated");
+    }
+    uint32_t vforce = 0;
+    if (PE_parse_boot_argn("rgpuvmmforce", &vforce, sizeof(vforce)) && vforce == 1) {
+        vmmForceEnable = true;
+        RLOG("rgpuvmmforce=1: forcing setMemoryAllocationsEnabled(true) at VS-ready");
     }
     uint32_t rlp = 0;
     if (PE_parse_boot_argn("rgpurlc", &rlp, sizeof(rlp)) && (rlp == 1 || rlp == 2)) {
