@@ -319,6 +319,39 @@ class SupervisionTests(unittest.TestCase):
         self.assertEqual(json.loads(result.stdout)["outcome"], "forced")
         self.assertEqual(self.stopped(), [CID])
 
+    def test_shutdown_stops_exact_cid_when_inhibitor_and_collector_are_missing(self):
+        self.env["GENERIC_GRAPHICS"] = "off"
+        self.fixture["logind_inhibited"] = True; self.save()
+        armed = self.arm()
+        self.assertEqual(armed.returncode, 0, armed.stderr)
+        state = json.loads(armed.stdout)
+        state["external_inhibitor"] = True
+        (self.vm / "run" / "supervision.json").write_text(json.dumps(state))
+        self.fixture["logind_inhibited"] = False; self.save()
+        Path(state["serial_ready"]).unlink()
+        result = self.run_tool("shutdown", "--state", str(self.vm / "run" / "supervision.json"),
+                               "--grace-seconds", "1")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["outcome"], "forced")
+        self.assertEqual(self.stopped(), [CID])
+
+    def test_shutdown_stops_after_deadline_without_rearming_or_extending_cap(self):
+        armed = self.arm()
+        self.assertEqual(armed.returncode, 0, armed.stderr)
+        state = json.loads(armed.stdout)
+        state["deadline_epoch"] = int(time.time()) - 1
+        (self.vm / "run" / "supervision.json").write_text(json.dumps(state))
+        result = self.run_tool("shutdown", "--state", str(self.vm / "run" / "supervision.json"),
+                               "--grace-seconds", "1")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["outcome"], "forced")
+        self.assertEqual(self.stopped(), [CID])
+        timers = [args for cmd, args in self.calls() if cmd == "systemd-run"
+                  and any(a.startswith("--on-calendar=") for a in args)]
+        self.assertEqual(len(timers), 1)
+        self.assertEqual(json.loads((self.vm / "run" / "supervision.json").read_text())[
+            "deadline_epoch"], state["deadline_epoch"])
+
     def test_shutdown_refuses_restarted_container_without_request_or_stop(self):
         armed = self.arm()
         state_file = self.vm / "run/supervision.json"

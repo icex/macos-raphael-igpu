@@ -28,6 +28,20 @@ class ReleaseBuildTests(unittest.TestCase):
                     good[:4]+struct.pack('<I',0x100000c)+good[8:]):
             with self.assertRaises(ValueError): module.validate_macho(bad)
 
+    def test_rejects_unsupported_thread_local_sections_and_tlv_bootstrap(self):
+        spec = importlib.util.spec_from_file_location('release_build', TOOL)
+        module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+        header = struct.pack('<8I', 0xfeedfacf, 0x1000007, 3, 11, 1, 152, 0, 0)
+        segment = struct.pack('<II16sQQQQiiII', 0x19, 152, b'__DATA', 0, 0, 0, 0,
+                              7, 3, 1, 0)
+        section = struct.pack('<16s16sQQIIIIIIII', b'__thread_vars', b'__DATA', 0, 0,
+                              0, 0, 0, 0, 0, 0, 0, 0)
+        with self.assertRaisesRegex(ValueError, 'unsupported thread-local'):
+            module.validate_macho(header + segment + section)
+        with self.assertRaisesRegex(ValueError, 'unsupported TLV bootstrap'):
+            module.validate_macho(header.replace(struct.pack('<I', 152), struct.pack('<I', 18)) +
+                                  struct.pack('<18s', b'__tlv_bootstrap'))
+
     def test_refuses_changed_sdk_or_lilu_inputs(self):
         spec = importlib.util.spec_from_file_location('release_build', TOOL)
         module = importlib.util.module_from_spec(spec)

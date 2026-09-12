@@ -226,15 +226,6 @@ static RaphaelBacking::Store<4> submissionBackingAllocations {};
 static volatile uint32_t nextSubmissionTraceSequence = 0;
 static bool submissionTraceEnabled = false;
 static volatile bool submissionTraceRoutesReady = false;
-struct ActiveMapCommitWindow {
-    void *memoryMap = nullptr;
-    uintptr_t threadToken = 0;
-    uint32_t calls = 0;
-    uint32_t failures = 0;
-    uint32_t firstSequence = 0;
-    uint32_t lastSequence = 0;
-};
-static thread_local ActiveMapCommitWindow activeMapCommitWindow {};
 static bool vmRootFixEnabled = false;
 static bool vmFaultDiagEnabled = false;
 // rgpuvmroot: enabled modes repair hub-0 client roots (VMIDs 1..15) while leaving
@@ -346,7 +337,6 @@ static bool rlcProbeEnabled2 = false;
 //
 // So: observe first (which of the two is happening), and only then decide.
 static uint32_t vmmProbeMode = 0;
-static bool vmmForceEnable = false;
 
 // rgpumem reports AMDHWMemory's pool state. The old mode-2 early enable graft was
 // removed: Apple's one native enable is now the only pool initialization epoch.
@@ -414,7 +404,6 @@ static bool prepareKiq(uint64_t &mqdAddr, uint64_t &eopAddr, const void *spec);
 static void reportKiqPreparation(const char *stage);
 static mach_vm_address_t orgVmmInit = 0;
 static mach_vm_address_t orgVmmSetAlloc = 0;
-static mach_vm_address_t orgHwWireSysMemory = 0;
 static mach_vm_address_t orgVmmSetVSReady = 0;
 static mach_vm_address_t orgVmmFillRegs = 0;
 static mach_vm_address_t orgVmmPrepare = 0;
@@ -679,7 +668,6 @@ static constexpr size_t kOffHwMemEnable = 0x52a1e;    // AMDHWMemory::enableAllo
 static constexpr size_t kOffHwMemReserve = 0x5343c;   // AMDHWMemory::reserve [x6] (called only)
 static constexpr size_t kOffVmmInit     = 0x56d3a;    // AMDHWVMM::init [x6]
 static constexpr size_t kOffVmmSetAlloc = 0x5791e;    // AMDHWVMM::setMemoryAllocationsEnabled [x6]
-static constexpr size_t kOffHwWireSysMemory = 0x4ad44; // AMDHWHandler::wireSysMemory(phys) [x6]
 static constexpr size_t kOffVmmSetVSReady = 0x578ce;  // AMDHWVMM::setVirtualSpaceReady [x6]
 static constexpr size_t kOffHwAppendReserved = 0x72afe; // AMDHardware::appendToReservedVRAMOffset [x6] (called only)
 static constexpr size_t kOffVmmFillRegs = 0x62400;    // AMDGFX10VMM::fillVMRegisters [x6]
@@ -4570,7 +4558,7 @@ static void wrapVmmSetVSReady(void *self, uint32_t ready) {
          "lease-owned=%u [caller x6+%#llx]",
          ready, q(0x20), q(0x28), vmmBase, owned,
          reinterpret_cast<uint64_t>(__builtin_return_address(0)) - x6Base);
-    if (owned && ready != 0 && vmmForceEnable && vmmProbeMode >= 3 && q(0x28) == nullptr &&
+    if (owned && ready != 0 && vmmProbeMode >= 3 && q(0x28) == nullptr &&
         orgVmmSetAlloc != 0) {
         RLOG("XV: driving setMemoryAllocationsEnabled(true) from here, because nothing else "
              "does and m_0x28 is the DMA paging channel endVMPTUpdate dereferences");
@@ -4596,18 +4584,6 @@ static void wrapVmmSetAlloc(void *self, uint32_t enable) {
           "nest(0x3c)=%u  [caller x6+%#llx]", enable, slot(0x20), slot(0x28),
           slot(0x30), *reinterpret_cast<uint32_t *>(f + 0x3c),
           reinterpret_cast<uint64_t>(__builtin_return_address(0)) - x6Base);
-    // On a cold hybrid path Apple may call disable before VMM ownership/readiness.
-    // Its native wireSysMemory path dereferences an uninitialised handler here; defer
-    // this no-op disable until setVirtualSpaceReady drives the owned enable path.
-    const bool earlyDisable = enable == 0 && recoveryLeaseConfigured &&
-                              vmmProbeMode >= 3 && slot(0x20) == nullptr &&
-                              slot(0x28) == nullptr;
-    if (earlyDisable) {
-        RLOG("XV: early disable deferred: VMM channels uninitialised; awaiting setVirtualSpaceReady");
-        CRLOG("XV2 VMM phase=deferred-disable enable=0 base=%#llx arena=%p pool0=%p pool1=%p",
-              *reinterpret_cast<uint64_t *>(f + 0x50), slot(0x58), slot(0x78), slot(0x80));
-        return;
-    }
     if (enable != 0 && vmmProbeMode >= 2 && slot(0x20) != nullptr && slot(0x28) == nullptr) {
         RLOG("XV: clearing m_0x20 so the guard at 0x5793d falls through and the channel is "
              "built; setMemoryAllocationsEnabled reassigns m_0x20 itself at 0x5795c");
@@ -4623,20 +4599,6 @@ static void wrapVmmSetAlloc(void *self, uint32_t enable) {
          enable, slot(0x20), slot(0x28), slot(0x30),
          slot(0x28) != nullptr ? "DMA PAGING CHANNEL PRESENT"
                                : "still NULL, endVMPTUpdate will panic");
-}
-
-static void *wrapHwWireSysMemory(void *self, uint64_t phys, uint32_t size,
-                                 void *task, uint32_t flags) {
-    if (recoveryLeaseConfigured && vmmProbeMode >= 3 && vmmObject != nullptr) {
-        auto f = reinterpret_cast<uint8_t *>(vmmObject);
-        if (*reinterpret_cast<void **>(f + 0x28) == nullptr) {
-            RLOG("XV: wireSysMemory deferred before VMM channel publication phys=%#llx size=%u",
-                 phys, size);
-            return nullptr;
-        }
-    }
-    using Wire = void *(*)(void *, uint64_t, uint32_t, void *, uint32_t);
-    return reinterpret_cast<Wire>(orgHwWireSysMemory)(self, phys, size, task, flags);
 }
 
 static void probeRlc() {
@@ -5262,16 +5224,11 @@ static bool wrapBatchMemoryMapPrepare(void *accelerator, void *memoryMap) {
         return FunctionCast(wrapBatchMemoryMapPrepare, orgBatchMemoryMapPrepare)(
             accelerator, memoryMap);
     auto before = captureMapSnapshot(accelerator, memoryMap);
-    const auto previousWindow = activeMapCommitWindow;
-    activeMapCommitWindow = ActiveMapCommitWindow {
-        memoryMap, reinterpret_cast<uintptr_t>(current_thread()), 0, 0, 0, 0};
     captureSubmissionTrace(RaphaelSubmit::Kind::MemoryMapPrepare,
                            RaphaelSubmit::Phase::Entry, accelerator, memoryMap,
                            0, 0, 0);
     bool result = FunctionCast(wrapBatchMemoryMapPrepare, orgBatchMemoryMapPrepare)(
         accelerator, memoryMap);
-    const auto commitWindow = activeMapCommitWindow;
-    activeMapCommitWindow = previousWindow;
     auto after = captureMapSnapshot(accelerator, memoryMap);
     captureSubmissionTrace(RaphaelSubmit::Kind::MemoryMapPrepare,
                            RaphaelSubmit::Phase::Exit, accelerator, memoryMap,
@@ -5280,9 +5237,7 @@ static bool wrapBatchMemoryMapPrepare(void *accelerator, void *memoryMap) {
         reinterpret_cast<uintptr_t>(accelerator),
         reinterpret_cast<uintptr_t>(memoryMap),
         reinterpret_cast<uintptr_t>(current_thread()), result, before, after,
-        __sync_add_and_fetch(&nextSubmissionTraceSequence, 1u),
-        commitWindow.calls, commitWindow.failures,
-        commitWindow.firstSequence, commitWindow.lastSequence
+        __sync_add_and_fetch(&nextSubmissionTraceSequence, 1u)
     });
     return result;
 }
@@ -5297,13 +5252,6 @@ static bool wrapCommitIntoGPUPageTable(void *memoryMap) {
     const uintptr_t threadToken = reinterpret_cast<uintptr_t>(current_thread());
     submissionCommits.append({reinterpret_cast<uintptr_t>(memoryMap), threadToken,
                               result, sequence});
-    if (activeMapCommitWindow.memoryMap == memoryMap &&
-        activeMapCommitWindow.threadToken == threadToken) {
-        if (activeMapCommitWindow.calls++ == 0)
-            activeMapCommitWindow.firstSequence = sequence;
-        activeMapCommitWindow.lastSequence = sequence;
-        if (!result) ++activeMapCommitWindow.failures;
-    }
     return result;
 }
 
@@ -5383,8 +5331,7 @@ static void publishPendingSubmissionTrace() {
                samples.read(phaseCursors[index], mapObservation)) {
             ++phaseCursors[index];
             CRLOG("SUB: map-phase seq=%u class=%s accel=%#llx map=%#llx thread=%#llx "
-                  "pre=%u/%u/%#x/%#llx post=%u/%u/%#x/%#llx "
-                  "commit=%u/%u seq=%u-%u",
+                  "pre=%u/%u/%#x/%#llx post=%u/%u/%#x/%#llx",
                   mapObservation.sequence, RaphaelSubmit::mapPhaseName(mapPhase),
                   static_cast<uint64_t>(mapObservation.accelerator),
                   static_cast<uint64_t>(mapObservation.memoryMap),
@@ -5394,9 +5341,7 @@ static void publishPendingSubmissionTrace() {
                   mapObservation.before.gpuVirtualAddress,
                   mapObservation.after.batchCount, mapObservation.after.prepareCount,
                   mapObservation.after.flags,
-                  mapObservation.after.gpuVirtualAddress,
-                  mapObservation.commitCalls, mapObservation.commitFailures,
-                  mapObservation.commitFirstSequence, mapObservation.commitLastSequence);
+                  mapObservation.after.gpuVirtualAddress);
         }
     }
     RaphaelSubmit::CommitObservation commitObservation {};
@@ -5757,23 +5702,8 @@ static uint32_t wrapHwEngPowerUp(void *self) {
     bool ok = RaphaelLifecycle::powerUpAll(
         engines, 11,
         [&](void *eng, size_t i) {
-            if (eng == nullptr) {
-                RLOG("XJ:   engine %u %-5s absent -> skipped", static_cast<unsigned>(i),
-                     kEngineNames[i]);
-                return true;
-            }
             auto vt = *reinterpret_cast<uint64_t **>(eng);
-            if (vt == nullptr) {
-                RLOG("XJ:   engine %u %-5s has NULL vtable -> skipped", static_cast<unsigned>(i),
-                     kEngineNames[i]);
-                return true;
-            }
             auto up = reinterpret_cast<uint32_t (*)(void *)>(vt[0x138 / 8]);
-            if (up == nullptr) {
-                RLOG("XJ:   engine %u %-5s has NULL powerUp slot -> skipped",
-                     static_cast<unsigned>(i), kEngineNames[i]);
-                return true;
-            }
             uint32_t result = up(eng) & 0xff;
             RLOG("XJ:   engine %u %-5s at %p vtable=%p powerUp -> %u",
                  static_cast<unsigned>(i), kEngineNames[i], eng,
@@ -6321,16 +6251,6 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
             RLOG("XJ: AMDGraphicsAccelerator::start failure cleanup patch -> %s",
                  patcher.getError() == KernelPatcher::Error::NoError ? "ok" : "FAILED");
             patcher.clearError();
-            static const uint8_t powerGateFind[] = {0x84, 0xc0, 0x0f, 0x84,
-                                                    0x16, 0x01, 0x00, 0x00};
-            static const uint8_t powerGateReplace[] = {0x84, 0xc0, 0x90, 0x90,
-                                                       0x90, 0x90, 0x90, 0x90};
-            KernelPatcher::LookupPatch powerGate {&kexts[KextX6000], powerGateFind,
-                                                   powerGateReplace, sizeof(powerGateFind), 1};
-            patcher.applyLookupPatch(&powerGate);
-            RLOG("XJ: accelerator power-service gate bypass -> %s",
-                 patcher.getError() == KernelPatcher::Error::NoError ? "ok" : "FAILED");
-            patcher.clearError();
         }
         if ((mask & XH) || recoveryLeaseConfigured) {
             orgHwMemVram = patcher.routeFunction(addr + kOffHwMemVram,
@@ -6356,11 +6276,6 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
                                reinterpret_cast<mach_vm_address_t>(wrapVmmSetAlloc), true);
             RLOG("route AMDHWVMM::setMemoryAllocationsEnabled -> %s (org=0x%llx)",
                  orgVmmSetAlloc ? "ok" : "FAILED", orgVmmSetAlloc);
-            patcher.clearError();
-            orgHwWireSysMemory = patcher.routeFunction(addr + kOffHwWireSysMemory,
-                               reinterpret_cast<mach_vm_address_t>(wrapHwWireSysMemory), true);
-            RLOG("route AMDHWHandler::wireSysMemory -> %s (org=0x%llx)",
-                 orgHwWireSysMemory ? "ok" : "FAILED", orgHwWireSysMemory);
             patcher.clearError();
             orgVmmFillRegs = patcher.routeFunction(addr + kOffVmmFillRegs,
                              reinterpret_cast<mach_vm_address_t>(wrapVmmFillRegs), true);
@@ -6724,12 +6639,7 @@ static void pluginStart() {
                  "through -- UNNECESSARY, m_0x20 was measured as 0 after init, the guard is "
                  "already open and the real problem is that nobody passes true");
         else if (vmp == 3)
-            RLOG("rgpuvmm=3: VMM channel diagnostics enabled; forced enable is separately gated");
-    }
-    uint32_t vforce = 0;
-    if (PE_parse_boot_argn("rgpuvmmforce", &vforce, sizeof(vforce)) && vforce == 1) {
-        vmmForceEnable = true;
-        RLOG("rgpuvmmforce=1: forcing setMemoryAllocationsEnabled(true) at VS-ready");
+            RLOG("rgpuvmm=3: VMM channel diagnostics enabled; native channel follows owned VS-ready state");
     }
     uint32_t rlp = 0;
     if (PE_parse_boot_argn("rgpurlc", &rlp, sizeof(rlp)) && (rlp == 1 || rlp == 2)) {

@@ -68,12 +68,6 @@ struct MapPrepareObservation {
     MapSnapshot before;
     MapSnapshot after;
     uint32_t sequence;
-    // Commits are observed on the same worker and map object while the native
-    // prepare call is active. A zero window means commit was not reached.
-    uint32_t commitCalls = 0;
-    uint32_t commitFailures = 0;
-    uint32_t commitFirstSequence = 0;
-    uint32_t commitLastSequence = 0;
 };
 
 struct CommitObservation {

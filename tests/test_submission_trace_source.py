@@ -36,13 +36,12 @@ class SubmissionTraceSourceTests(unittest.TestCase):
         self.assertIn('orgCommitIntoGPUPageTable;', source)
         self.assertIn('SUB: routes=%s count=7', source)
 
-    def test_commit_route_and_map_window_are_bounded_and_correlated(self):
+    def test_commit_route_and_map_observations_are_bounded(self):
         source = (ROOT / 'src/RaphaelGPU.cpp').read_text()
         self.assertIn('kOffCommitIntoGPUPageTable = 0x3b4d2;', source)
         self.assertIn('static bool wrapCommitIntoGPUPageTable(void *memoryMap)', source)
         self.assertIn('submissionCommits.append({', source)
-        self.assertIn('commitWindow.calls, commitWindow.failures', source)
-        self.assertIn('commitWindow.firstSequence, commitWindow.lastSequence', source)
+        self.assertNotIn('thread_local ActiveMapCommitWindow', source)
 
     def test_allocator_diagnostic_avoids_unproven_native_calls(self):
         source = (ROOT / 'src/RaphaelGPU.cpp').read_text()
