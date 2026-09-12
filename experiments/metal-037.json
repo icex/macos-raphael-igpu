@@ -119,9 +119,9 @@
     "incomplete_gc_quiesce"
   ],
   "regression_baselines": {
-    "immediate": "run/metal-027-193",
-    "previous": "run/metal-026-192",
-    "furthest_reached": "findings/experiments/metal-005-171"
+    "immediate": "run/metal-029-195f-output",
+    "previous": "run/metal-028-194-resealed",
+    "furthest_reached": "run/metal-028-194-resealed"
   },
   "outcome_table": "docs/ROADMAP.md M4-M7",
   "run_probe_only_after_native_start": true,
