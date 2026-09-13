@@ -1180,3 +1180,12 @@ All three shader libraries compiled.
 Next: probe v6 reads the same rendered texture back through a Shared buffer, a Managed
 buffer, a Managed texture and a texture-to-texture blit, and repeats the native probe's
 exact render.
+
+## Boot-launch ledger extension for the probe v6 attempt (2026-09-14)
+
+GPU-less session (no VFIO device, no ledger entry) compiled desktop probe v6 (source
+sha256 `28c7b7cc...`, binary sha256 `74e92988...`). The 1.0.218 binary with card
+`metal-063` runs from `run/candidate-218-attempt-v6` as launch 22 on boot `c369c74e`,
+through `--manual-reuse --ack-risk` under the user's standing instruction, after
+`run/mode2-reset-21.json`. This note covers this one launch.
+

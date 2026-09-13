@@ -86,6 +86,7 @@ SUPPORTED_CARD_DIAGNOSTICS = {
     ("1.0.218", "metal-060"): "rgpuvmdiag=1",
     ("1.0.218", "metal-061"): "rgpuvmdiag=1",
     ("1.0.218", "metal-062"): "rgpuvmdiag=1",
+    ("1.0.218", "metal-063"): "rgpuvmdiag=1",
 }
 
 RESEAL_PROFILES = {
@@ -369,6 +370,8 @@ def validate_card(raw, expected_sha256):
         ("1.0.218", "metal-061"): {"rgpuvmroot": "5", "rgpudump": "5000", "rgpugolden": "1",
                                    "rgpuhangdump": "1", "rgpunobin": "1"},
         ("1.0.218", "metal-062"): {"rgpuvmroot": "5", "rgpudump": "5000", "rgpugolden": "1",
+                                   "rgpuhangdump": "1", "rgpunobin": "1"},
+        ("1.0.218", "metal-063"): {"rgpuvmroot": "5", "rgpudump": "5000", "rgpugolden": "1",
                                    "rgpuhangdump": "1", "rgpunobin": "1"},
     }
     if pair in CANDIDATE203_FUNCTIONAL:
@@ -1338,7 +1341,8 @@ def stage(expected_commit, expected_boot_id, expected_card_sha256,
         ("1.0.190", "metal-024"), ("1.0.191", "metal-025"),
         ("1.0.192", "metal-026"), ("1.0.193", "metal-027"), ("1.0.194", "metal-028"), ("1.0.195", "metal-029"), ("1.0.196", "metal-030"), ("1.0.197", "metal-031"), ("1.0.198", "metal-032"), ("1.0.199", "metal-033"), ("1.0.200", "metal-034"), ("1.0.201", "metal-035"), ("1.0.203", "metal-037"), ("1.0.204", "metal-038"), ("1.0.205", "metal-039"), ("1.0.206", "metal-040"), ("1.0.207", "metal-041"), ("1.0.208", "metal-042"), ("1.0.209", "metal-043"), ("1.0.210", "metal-044"), ("1.0.211", "metal-045"), ("1.0.212", "metal-046"), ("1.0.213", "metal-047"), ("1.0.214", "metal-048"), ("1.0.215", "metal-049"), ("1.0.215", "metal-050"), ("1.0.216", "metal-051"), ("1.0.216", "metal-052"), ("1.0.217", "metal-053"), ("1.0.218", "metal-054"), ("1.0.218", "metal-055"), ("1.0.218", "metal-056"), ("1.0.218", "metal-057"), ("1.0.218", "metal-058"),
                                ("1.0.218", "metal-059"), ("1.0.218", "metal-060"),
-                               ("1.0.218", "metal-061"), ("1.0.218", "metal-062"))
+                               ("1.0.218", "metal-061"), ("1.0.218", "metal-062"),
+                               ("1.0.218", "metal-063"))
     if candidate186 and identities["source_sha256"] != card["raphael_source_sha256"]:
         raise RuntimeError("candidate source differs from its experiment card")
     lilu = (validate_lilu_inputs(
