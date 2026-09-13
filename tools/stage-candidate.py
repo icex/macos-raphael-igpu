@@ -676,6 +676,20 @@ def candidate_boot_argument_updates(card, nonce_lo, nonce_hi):
     return updates
 
 
+def card_managed_boot_argument_keys(cards_dir=None):
+    """Keys any experiment card sets through functional_boot_arguments."""
+    keys = set()
+    for path in sorted((cards_dir or ROOT / "experiments").glob("metal-*.json")):
+        try:
+            other = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+        functional = other.get("functional_boot_arguments") if isinstance(other, dict) else None
+        if isinstance(functional, dict):
+            keys.update(key for key in functional if isinstance(key, str))
+    return keys
+
+
 def candidate_boot_flags(card):
     flags = card.get("required_boot_flags", [])
     if (not isinstance(flags, list) or
@@ -701,9 +715,14 @@ def make_staged_config(experiment, card, run_id):
     nonce_lo, nonce_hi = experiment.recovery_nonce_words(run_id)
     updates = candidate_boot_argument_updates(card, nonce_lo, nonce_hi)
     flags = candidate_boot_flags(card)
+    # A previous card's functional argument (candidate 209 left rgpumqdrestore=3
+    # in the live config) must not leak into a card that does not set it: drop
+    # every key any experiment card manages unless this card re-adds it.
+    stale = card_managed_boot_argument_keys() - set(updates)
     words = [word for word in old_words
              if word.split("=", 1)[0] not in updates and
-             word.split("=", 1)[0] not in flags]
+             word.split("=", 1)[0] not in flags and
+             word.split("=", 1)[0] not in stale]
     words.extend(flags)
     words.extend(f"{key}={value}" for key, value in updates.items())
     boot_args = " ".join(words)

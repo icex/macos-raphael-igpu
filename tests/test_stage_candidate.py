@@ -29,6 +29,29 @@ def load_tool():
     return module
 
 
+
+class CardManagedBootArgumentKeysTest(unittest.TestCase):
+    def test_collects_functional_keys_from_every_card(self):
+        import importlib.util, json, tempfile
+        spec = importlib.util.spec_from_file_location(
+            "stage_candidate_keys", ROOT / "tools/stage-candidate.py")
+        tool = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(tool)
+        with tempfile.TemporaryDirectory() as directory:
+            cards = Path(directory)
+            (cards / "metal-001.json").write_text(json.dumps(
+                {"functional_boot_arguments": {"rgpuvmroot": "5", "rgpumqdrestore": "3"}}))
+            (cards / "metal-002.json").write_text(json.dumps(
+                {"functional_boot_arguments": {"rgpuvmroot": "5", "rgpudump": "5000"}}))
+            (cards / "metal-003.json").write_text("not json")
+            (cards / "other.json").write_text(json.dumps(
+                {"functional_boot_arguments": {"rgpuignored": "1"}}))
+            self.assertEqual(tool.card_managed_boot_argument_keys(cards),
+                             {"rgpuvmroot", "rgpumqdrestore", "rgpudump"})
+        # The repository cards include the candidate-209 probe key, so a card
+        # without it must not inherit it from the live configuration.
+        self.assertIn("rgpumqdrestore", tool.card_managed_boot_argument_keys())
+
 class Candidate180StageTests(unittest.TestCase):
     def setUp(self):
         self.tool = load_tool()
