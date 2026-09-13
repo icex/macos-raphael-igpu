@@ -485,3 +485,18 @@ awake, no active VM, no kernel fault, and the external inhibitor remains active.
 | Native VMM | passed; actual range matched prediction | — |
 | Metal probe | device `AMD Radeon Navi23`, Metal 3; timeout | KIQ baseline block; 0 completed buffers |
 | Recovery / cleanup | host safe; SDMA quiesced | graphics retirement unconfirmed |
+
+## Candidate 208 hardware probe (2026-09-13)
+
+Candidate 208 run `5577d1bc03ccc5505eaf234cd32f2077`, CID
+`c05e4541f6c7d868f2f84e757ce90b940ec38ee404bc5c4ee36c41049aefb4d3`, boot
+`2f77212f-34f5-4905-ba66-d8c68a860d78`, build
+`c7a87c58b9bd4175964a95ff8c8de00c` reached the contained mode-3 native probe.
+GDB authenticated entry, native boundary, and first return; native returned
+`0xe00002bc` and `native_reached=true`. Serial showed the native call cleared
+MEC halt (`MEC=0`) while leaving `ACTIVE=1`, `RPTR=0`, `WPTR=0x20`, and `EOP=0`;
+the wrapper recontained MEC at `0x50000000` and returned failure. This falsifies
+the assumption that Apple leaves MEC halted through native start. Shutdown
+completed after the manual coordinator stop; host-after remained VFIO-bound,
+accessible, and sleep-inhibited. Recovery failed closed because no exact ACTIVE
+pool record was available. No Metal submission occurred.
