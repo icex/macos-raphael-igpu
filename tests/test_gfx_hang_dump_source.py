@@ -108,6 +108,25 @@ class GfxHangDumpSourceTests(unittest.TestCase):
                             'static void wrapPendingCommandReport')
         self.assertIn('RLOG("XB: pending CB %u wait %u at=', capture)
 
+    def test_cp_microcode_swap_is_gated_and_type_matched(self):
+        self.assertIn('static uint32_t cpFwMode = 0;', self.source)
+        init = self.body('static uint32_t wrapPspNpFwInit', 'static uint32_t pspReadCount')
+        self.assertLess(init.index('if (cpFwMode == 1 && arr != nullptr)'),
+                        init.index('FunctionCast(wrapPspNpFwInit, orgPspNpFwInit)'))
+        swap = self.body('static void substituteCpFirmware', 'static mach_vm_address_t orgPspBufPrep')
+        self.assertIn('if (p.fwType != fwType) continue;', swap)
+        self.assertIn('if (len != p.size) {', swap)
+        for fw_type in ('0x81012001u', '0x81012002u', '0x81012003u'):
+            self.assertIn(fw_type, self.source)
+        self.assertNotIn('0x81012004u', self.source)
+
+    def test_no_binning_override_is_gated(self):
+        self.assertIn('static uint32_t noBinMode = 0;', self.source)
+        body = self.body('static void applyNoBinning', 'static void startRlc()')
+        self.assertLess(body.index('if (noBinMode != 1 || asicInfo == nullptr) return;'),
+                        body.index('fbWrite(asicInfo, kGcPaScEnhance1, before | 0x8u);'))
+        self.assertIn('kGcPaScEnhance1 = kGcSeg0 + 0x109d;', self.source)
+
     @unittest.skipUnless(shutil.which('g++'), 'g++ unavailable')
     def test_arithmetic_unit(self):
         with tempfile.TemporaryDirectory() as temporary:

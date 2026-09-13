@@ -1332,6 +1332,58 @@ static void substituteRlcFirmware(uint8_t *arr, uint32_t count) {
 }
 #endif
 
+// rgpucpfw=1 (candidate 215). Apple's restart report shows the gfx CP running Apple's
+// Navi 23 microcode (ME 0x40, PFP 0x58, CE 0x24) under this chip's RLC (0x1f). Candidates
+// 212-214 put the hang in the ME/3D-pipeline end-of-packet handshake
+// (QU_STALLED_ON_EOP_DONE_PULSE) on the first large draw. GC 10.3.6 has its own CP
+// microcode family (ME 0x0e, PFP 0x12, CE 0x03), signed with the same key and the same
+// payload sizes. Swap the three descriptors, matched by the fw type each signed payload
+// carries at +0x58, before psp_np_fw_init copies the array. MEC stays Apple's.
+static uint32_t cpFwMode = 0;
+#ifdef RGPU_HAVE_CP_FW
+struct CpPayload { uint32_t fwType; const uint8_t *data; uint32_t size; const char *name; };
+static const CpPayload kCpPayloads[] {
+    {0x81012001u, kCpMeFw, kCpMeFwSize, "CP_ME"},
+    {0x81012002u, kCpPfpFw, kCpPfpFwSize, "CP_PFP"},
+    {0x81012003u, kCpCeFw, kCpCeFwSize, "CP_CE"},
+};
+
+static void substituteCpFirmware(uint8_t *arr, uint32_t count) {
+    for (const auto &p : kCpPayloads) {
+        if (p.size < 0x5c || *reinterpret_cast<const uint32_t *>(p.data + 0x58) != p.fwType ||
+            p.data[0x10] != '$' || p.data[0x11] != 'P' || p.data[0x12] != 'S' ||
+            p.data[0x13] != '1') {
+            RLOG("X9C: embedded %s is not a $PS1 payload of type %#x -- not substituting",
+                 p.name, p.fwType);
+            return;
+        }
+    }
+    unsigned replaced = 0;
+    for (uint32_t i = 0; i < count; i++) {
+        auto e = arr + static_cast<size_t>(i) * 40;
+        const auto data = *reinterpret_cast<const uint8_t *const *>(e + 0x10);
+        const uint32_t len = *reinterpret_cast<const uint32_t *>(e + 0x18);
+        if (data == nullptr || len < 0x5c) continue;
+        const uint32_t fwType = *reinterpret_cast<const uint32_t *>(data + 0x58);
+        for (const auto &p : kCpPayloads) {
+            if (p.fwType != fwType) continue;
+            if (len != p.size) {
+                RLOG("X9C: %s descriptor %u length %#x != gc_10_3_6 %#x -- left alone",
+                     p.name, i, len, p.size);
+                break;
+            }
+            *reinterpret_cast<const uint8_t **>(e + 0x10) = p.data;
+            RLOG("X9C: descriptor %u type %#x %s Apple %p/%#x -> gc_10_3_6 %p/%#x", i,
+                 *reinterpret_cast<const uint32_t *>(e + 0x04), p.name, data, len, p.data,
+                 p.size);
+            replaced++;
+            break;
+        }
+    }
+    RLOG("X9C: %u of 3 graphics CP microcode descriptors replaced", replaced);
+}
+#endif
+
 static mach_vm_address_t orgPspBufPrep {};
 static uint32_t bufPrepCount = 0;
 // psp_gfx_resp sits at command-buffer +864: status +0, fw_addr_lo +8, fw_addr_hi +12,
@@ -1706,6 +1758,10 @@ static uint32_t wrapPspNpFwInit(void *psp, void *arr, uint32_t count) {
     // gets copied and every later consumer sees it.
     if ((mask & X9) != 0 && arr != nullptr)
         substituteRlcFirmware(static_cast<uint8_t *>(arr), count);
+#endif
+#ifdef RGPU_HAVE_CP_FW
+    if (cpFwMode == 1 && arr != nullptr)
+        substituteCpFirmware(static_cast<uint8_t *>(arr), count);
 #endif
     if (mask & X6) {
         RLOG("np_fw_init: descriptors after substitution --");
@@ -3773,6 +3829,12 @@ static void observeGfxRingHang(const char *when) {
          fbRead(asicInfo, kGcSeg1 + 0x207e), fbRead(asicInfo, kGcSeg1 + 0x207d),
          fbRead(asicInfo, kGcSeg1 + 0x20fe), fbRead(asicInfo, kGcSeg1 + 0x2103),
          fbRead(asicInfo, kGcSeg1 + 0x2074), fbRead(asicInfo, kGcSeg1 + 0x20ec));
+    RLOG("XD: PA_SC_ENHANCE=%#x ENHANCE_1=%#x ENHANCE_2=%#x ENHANCE_3=%#x "
+         "PA_PH_INTERFACE_FIFO_SIZE=%#x PA_PH_ENHANCE=%#x BINNER_TIMEOUT=%#x",
+         fbRead(asicInfo, kGcSeg0 + 0x109c), fbRead(asicInfo, kGcSeg0 + 0x109d),
+         fbRead(asicInfo, kGcSeg0 + 0x107c), fbRead(asicInfo, kGcSeg0 + 0x1085),
+         fbRead(asicInfo, kGcSeg0 + 0x1080), fbRead(asicInfo, kGcSeg0 + 0x1081),
+         fbRead(asicInfo, kGcSeg0 + 0x1070));
     __atomic_store_n(&hangSnapshotCount, index + 1, __ATOMIC_RELEASE);
     __atomic_store_n(&hangSnapshotBusy, 0u, __ATOMIC_RELEASE);
 }
@@ -5365,10 +5427,26 @@ static void primeIcacheOnly() {
          (ch1 || ch2) ? "THE CP EXECUTES" : "still not executing");
 }
 
+// rgpunobin=1: PA_SC_ENHANCE_1.DISABLE_SC_BINNING (bit 3) turns deferred pixel binning
+// off globally, whatever PA_SC_BINNER_CNTL_0 a command buffer programs. The stuck draw
+// enables DPBB (PA_SC_BINNER_CNTL_0=0x19ffe00c) after a depth clear with binning off.
+static uint32_t noBinMode = 0;
+static constexpr uint32_t kGcPaScEnhance1 = kGcSeg0 + 0x109d;
+
+static void applyNoBinning(const char *when) {
+    if (noBinMode != 1 || asicInfo == nullptr) return;
+    const uint32_t before = fbRead(asicInfo, kGcPaScEnhance1);
+    if (before == 0xdeadbeef) return;
+    fbWrite(asicInfo, kGcPaScEnhance1, before | 0x8u);
+    RLOG("XD: rgpunobin at %s: PA_SC_ENHANCE_1 %#x -> %#x (readback %#x)", when, before,
+         before | 0x8u, fbRead(asicInfo, kGcPaScEnhance1));
+}
+
 static void startRlc() {
     if (asicInfo == nullptr) { RLOG("XK: no register accessor yet"); return; }
     dumpGfxState("before RLC start");
     applyGoldenRegisters("before RLC start");
+    applyNoBinning("before RLC start");
     fbWrite(asicInfo, kGcRlcCgcg, 0);
     fbWrite(asicInfo, kGcRlcPgCntl, 0);
     uint32_t cntl = fbRead(asicInfo, kGcRlcCntl);
@@ -7588,6 +7666,18 @@ static void pluginStart() {
         ? golden : 0;
     RLOG("XG: rgpugolden=%u (%s)", goldenMode,
          goldenMode == 1 ? "program Linux GC 10.3.6 golden registers before RLC start" : "off");
+    uint32_t cpFw = 0, noBin = 0;
+    cpFwMode = PE_parse_boot_argn("rgpucpfw", &cpFw, sizeof(cpFw)) && cpFw <= 1 ? cpFw : 0;
+    noBinMode = PE_parse_boot_argn("rgpunobin", &noBin, sizeof(noBin)) && noBin <= 1 ? noBin : 0;
+#ifdef RGPU_HAVE_CP_FW
+    RLOG("X9C: rgpucpfw=%u (%s)", cpFwMode, cpFwMode == 1
+         ? "load gc_10_3_6 CP ME/PFP/CE microcode instead of Apple's Navi 23 blobs" : "off");
+#else
+    RLOG("X9C: rgpucpfw=%u but no embedded CP microcode; off", cpFwMode);
+    cpFwMode = 0;
+#endif
+    RLOG("XD: rgpunobin=%u (%s)", noBinMode,
+         noBinMode == 1 ? "PA_SC_ENHANCE_1.DISABLE_SC_BINNING before RLC start" : "off");
     uint32_t hangDump = 0;
     hangDumpMode = PE_parse_boot_argn("rgpuhangdump", &hangDump, sizeof(hangDump)) &&
         hangDump <= 1 ? hangDump : 0;
