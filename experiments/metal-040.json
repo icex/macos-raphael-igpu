@@ -1,6 +1,6 @@
 {
   "id": "metal-040",
-  "question": "Can the opt-in inactive-MEC KIQ restore path halt MEC setup safely and establish native KIQ progress while preserving shutdown and recovery evidence?",
+  "question": "Can the opt-in mode-2 KIQ restore path halt MEC and pre-clear HQD before native setup on candidate 206 while preserving shutdown and recovery evidence?",
   "candidate_version": "1.0.206",
   "probe_profile": {
     "name": "small-metal",
@@ -21,7 +21,7 @@
     "socket": "run/critical.sock",
     "capture": "critical.txt"
   },
-  "behavior_change": "add opt-in rgpumqdrestore=2 mode-1 inactive-MEC continuation for the exact reviewed native setup boundary; preserve default mode-0 behavior, never force queue ownership or recovery authority",
+  "behavior_change": "add opt-in rgpumqdrestore=2 mode-2 continuation that halts MEC and pre-clears HQD before the native setup path; restore=0 remains off and restore=1 preserves the existing continuation; never force queue ownership or recovery authority",
   "required_observations": [
     "loaded_build",
     "route_guards",
