@@ -6,6 +6,7 @@
 #import <Metal/Metal.h>
 #import <CoreGraphics/CoreGraphics.h>
 #import <IOKit/IOKitLib.h>
+#include <dlfcn.h>
 #include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -90,6 +91,49 @@ static NSArray *acceleratorEvidence(uint64_t metalRegistryId, BOOL *windowServer
     return out;
 }
 
+static NSDictionary *captureDisplay(CGDirectDisplayID display) {
+    // Unavailable in the macOS 15 SDK headers but still exported at runtime.
+    CGImageRef (*create)(CGDirectDisplayID) =
+        (CGImageRef (*)(CGDirectDisplayID))dlsym(RTLD_DEFAULT, "CGDisplayCreateImage");
+    if (!create) return @{ @"captured": @NO, @"reason": @"symbol-missing" };
+    CGImageRef image = create(display);
+    if (!image) return @{ @"captured": @NO };
+    size_t width = CGImageGetWidth(image), height = CGImageGetHeight(image);
+    CFDataRef data = CGDataProviderCopyData(CGImageGetDataProvider(image));
+    uint64_t hash = 1469598103934665603ULL;
+    uint64_t nonzero = 0;
+    if (data) {
+        const UInt8 *bytes = CFDataGetBytePtr(data);
+        CFIndex length = CFDataGetLength(data);
+        for (CFIndex i = 0; i < length; ++i) {
+            hash = (hash ^ bytes[i]) * 1099511628211ULL;
+            nonzero += bytes[i] != 0;
+        }
+        CFRelease(data);
+    }
+    CGImageRelease(image);
+    return @{ @"captured": @YES, @"width": @(width), @"height": @(height),
+              @"fnv": [NSString stringWithFormat:@"%016llx", hash], @"nonzero_bytes": @(nonzero) };
+}
+
+static NSDictionary *userSessionCapture(void) {
+    // screencapture in the console user's bootstrap session; the PNG size and
+    // hash are enough to tell a real composited frame from a refusal.
+    NSString *path = [NSString stringWithFormat:@"/var/tmp/rgpu-desktop-capture-%d.png", getpid()];
+    NSTask *task = [[NSTask alloc] init];
+    task.launchPath = @"/bin/launchctl";
+    task.arguments = @[ @"asuser", @"501", @"/usr/sbin/screencapture", @"-x", @"-t", @"png", path ];
+    @try { [task launch]; [task waitUntilExit]; }
+    @catch (NSException *exception) { return @{ @"status": @"launch-failed" }; }
+    NSData *png = [NSData dataWithContentsOfFile:path];
+    [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
+    uint64_t hash = 1469598103934665603ULL;
+    const UInt8 *bytes = png.bytes;
+    for (NSUInteger i = 0; i < png.length; ++i) hash = (hash ^ bytes[i]) * 1099511628211ULL;
+    return @{ @"status": @(task.terminationStatus), @"png_bytes": @(png.length),
+              @"fnv": [NSString stringWithFormat:@"%016llx", hash] };
+}
+
 int main(int argc, const char *argv[]) {
     @autoreleasepool {
         signal(SIGALRM, deadline);
@@ -158,6 +202,19 @@ int main(int argc, const char *argv[]) {
         BOOL windowServerClient = NO;
         report[@"accelerators"] = acceleratorEvidence(device.registryID, &windowServerClient);
         report[@"windowserver_accelerator_client"] = @(windowServerClient);
+        report[@"screen_capture_preflight"] = @(CGPreflightScreenCaptureAccess());
+        if (displayCount > 0) {
+            NSDictionary *first = captureDisplay(CGMainDisplayID());
+            usleep(1000000);
+            NSDictionary *second = captureDisplay(CGMainDisplayID());
+            report[@"display_captures"] = @[ first, second ];
+            report[@"display_frames_changed"] = @([first[@"captured"] boolValue] &&
+                [second[@"captured"] boolValue] && ![first[@"fnv"] isEqual:second[@"fnv"]]);
+        }
+        NSDictionary *userFirst = userSessionCapture();
+        usleep(1000000);
+        NSDictionary *userSecond = userSessionCapture();
+        report[@"user_session_captures"] = @[ userFirst, userSecond ];
         report[@"passed"] = @YES;
         emit();
     }

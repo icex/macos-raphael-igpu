@@ -963,3 +963,14 @@ executing on the passed-through Raphael iGPU with `rgpunobin=1`.
 | Binning clamp instead of global disable | not yet | open (performance) |
 | Guest sleep path (`AMDHardware::powerOff` KIQ timeout) | 217/218 | open |
 
+## Boot-launch ledger extension for the frame-capture attempt (2026-09-14)
+
+Two more GPU-less sessions (containers `dafa56c7...`, `0442291c...`; no VFIO device,
+no ledger entry) recompiled the desktop probe with frame capture (source sha256
+`6180ef81...`, binary sha256 `e8a7d058...`; the first compile failed because
+`CGDisplayCreateImage` is unavailable in the macOS 15 SDK and is now resolved with
+`dlsym`). The 1.0.218 binary with card `metal-057` runs from
+`run/candidate-218-attempt-capture` as launch 16 on boot `c369c74e`, through
+`--manual-reuse --ack-risk` under the user's standing instruction, after
+`run/mode2-reset-15.json`. This note covers this one launch.
+
