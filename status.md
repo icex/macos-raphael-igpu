@@ -999,3 +999,26 @@ launch 17 on boot `c369c74e`, through `--manual-reuse --ack-risk` under the user
 standing instruction, after `run/mode2-reset-16.json`. This note covers this one
 launch.
 
+
+## Window animation changes the composited frame; thumbnails are JPEG-limited (2026-09-14)
+
+Run `26ca4438c9e954643fb8edb7c80db2b3`, card `metal-058` (commit `1d5ce50`), 1.0.218 build
+`10cce4d8...`, launch 17 after `run/mode2-reset-16.json`. Verdict `CORE_PROBE_PASS`,
+recovery `recovered`, shutdown `exited-after-guest-request`, quiesce ACK (snapshot 5,
+340 records), no stall lines.
+
+- Root `CGDisplayCreateImage` frames changed when Calculator opened (hash `3de4dfba...`
+  before, `30cb745e...` after); `animation_frames_changed=1`.
+- The two console-user `screencapture` thumbnails (320 px, JPEG quality 40) show the
+  Sequoia wallpaper only. Their blockiness peaks exactly on the 8 and 16 pixel JPEG grid,
+  so it is compression, not rendering corruption. They differ only in the top 32 rows
+  (the menu bar switching to Calculator); the Calculator window itself is absent because
+  `screencapture` in the user session has no Screen Recording grant.
+- Serial log: the AMD framebuffer logs `No EDID read.` and an AGDP port 1 Insert event.
+  The 1280x1024 display is therefore not identified as the Samsung panel on the iGPU
+  HDMI port; physical scan-out is unverified.
+
+Next: probe v4 renders a known color pattern in a user-session `CAMetalLayer` window and
+checks it pixel by pixel in the root display capture, measures presentation rate and
+offscreen render throughput with readback, and records display identity and framebuffer
+registry details.
