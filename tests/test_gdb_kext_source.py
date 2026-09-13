@@ -31,6 +31,10 @@ class GdbKextSourceTests(unittest.TestCase):
             self.assertIn("entry_" + register, text)
         self.assertIn("& 0xffffffff", text)
         self.assertEqual(text.count("gdb.BP_HARDWARE_BREAKPOINT"), 3)
+        self.assertIn("KIQ_MEC_CNTL_WRITE path=%s", text)
+        self.assertIn("native_interval=1", text)
+        self.assertIn("KIQ_START_NATIVE_COMMAND_TARGET", text)
+        self.assertIn("zip((0xb519,0xb4de,0xb4a0), ('ext2','register','ext'))", text)
 
     def test_kiq_start_generated_loop_stops_after_success_or_failure_return(self):
         text = tool.generate_kiq_start(
@@ -45,6 +49,26 @@ class GdbKextSourceTests(unittest.TestCase):
         self.assertIn("native_reached=True", text)
         self.assertIn("native_reached=False", text)
         self.assertLess(text.index("gdb.execute('detach')"), text.index("gdb.execute('quit')"))
+
+    def test_kiq_start_mec_writer_breakpoint_reports_only_native_interval_register(self):
+        text = tool.generate_kiq_start(
+            0xffffff801b6e8000, "474ef697fc283ba283a4763d76c8e200",
+            "/tmp/kernel.symbols", "/tmp/RaphaelGPU.dSYM", 0x19120,
+            bytes.fromhex("554889e541574156"), 0x1920c, "/tmp/source")
+        block = text.split("class MecWriteBP", 1)[1].split("entry_bp=", 1)[0]
+        state = {'pc': 0xdead, 'rsp': 0x8000, 'rsi': 0x21b5, 'rdx': 0x50000000}
+        class BP:
+            def __init__(self, spec, **kwargs): pass
+        class Fake:
+            Breakpoint = BP
+            def parse_and_eval(self, reg): return state[reg[1:]]
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            ns = {'gdb': Fake(), 'struct': struct, 'read': lambda a, n: (0x15073).to_bytes(8, 'little'),
+                  'native_active': True, 'found': 0x100000}
+            exec("class MecWriteBP" + block, ns)
+            self.assertFalse(ns['MecWriteBP'](0, 'ext2').stop())
+        self.assertIn("KIQ_MEC_CNTL_WRITE path=ext2", output.getvalue())
 
     def test_kiq_start_reports_unavailable_entry_stack_without_claiming_native_or_return(self):
         text = tool.generate_kiq_start(
@@ -119,7 +143,7 @@ class GdbKextSourceTests(unittest.TestCase):
                 return b'\0' * size
             ns = {'gdb': fake, 'struct': struct, 'read': read, 'start': 0x100000,
                   'native': 0x1000ec, 'entry_rsp': None, 'entry_return': None,
-                  'entry_rdi': None, 'entry_out': None}
+                  'entry_rdi': None, 'entry_out': None, 'found': 0x100000}
             exec(body, ns)
             self.assertTrue(state['detached'])
             self.assertEqual(events, [])

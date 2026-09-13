@@ -15,6 +15,13 @@ MAX_KMODS = 256
 KMOD_NAME = 0x10
 KMOD_ADDRESS = 0x9C
 
+# HWLibs GC register wrappers routed by the kext.  These are deliberately observed
+# as ordinary software breakpoints: the three hardware slots remain reserved for
+# startKIQ entry, its native call, and the dynamic return.  The register number is
+# the GC segment-0 CP_MEC_CNTL index (0x1260 + 0xf55), not an MMIO address.
+KIQ_MEC_REGISTER = 0x21B5
+KIQ_MEC_WRITE_OFFSETS = (0xB519, 0xB4DE, 0xB4A0)
+
 
 def kernel_relocation(runtime_text, link_text):
     if runtime_text < link_text:
@@ -447,6 +454,8 @@ MAX_HEADER=65536; KERNEL_RUNTIME_TEXT=0x{runtime_text:x}; EXPECTED_UUID='{uuid}'
 START_OFFSET=0x{start_offset:x}; NATIVE_OFFSET=0x{native_offset:x}
 START_PROLOGUE=bytes.fromhex('{start_prologue.hex()}')
 NATIVE_PROLOGUE=bytes.fromhex('{native_prologue.hex() if native_prologue is not None else ""}')
+MEC_REGISTER=0x{KIQ_MEC_REGISTER:x}
+MEC_WRITE_OFFSETS={list(KIQ_MEC_WRITE_OFFSETS)!r}
 inf=gdb.selected_inferior()
 def read(a,n):
     if n < 0 or n > MAX_HEADER: raise gdb.GdbError('bounded read refused')
@@ -485,11 +494,30 @@ class NativeBP(gdb.Breakpoint):
                 int(gdb.parse_and_eval('$rbp')) + 8 == entry_rsp and
                 struct.unpack('<Q',read(int(gdb.parse_and_eval('$rbp'))+8,8))[0] == entry_return and
                 (int(gdb.parse_and_eval('$rdi')) & ((1<<64)-1)) == entry_rdi)
+class MecWriteBP(gdb.Breakpoint):
+    def __init__(self, address, path):
+        super().__init__('*%#x' % address, internal=True)
+        self.path=path
+    def stop(self):
+        if not native_active:
+            return False
+        reg=int(gdb.parse_and_eval('$rsi')) & 0xffffffff
+        if reg != 0x21b5:
+            return False
+        value=int(gdb.parse_and_eval('$rdx')) & 0xffffffff
+        pc=int(gdb.parse_and_eval('$pc'))
+        try: caller=struct.unpack('<Q',read(int(gdb.parse_and_eval('$rsp')),8))[0]
+        except Exception: caller=0
+        print('KIQ_MEC_CNTL_WRITE path=%s pc=%#x caller=%#x reg=%#x value=%#x native_interval=1' %
+              (self.path,pc,caller,reg,value))
+        return False
 entry_bp=gdb.Breakpoint('*%#x' % start, gdb.BP_HARDWARE_BREAKPOINT, internal=True)
 native_bp=NativeBP('*%#x' % native, gdb.BP_HARDWARE_BREAKPOINT, internal=True)
 native_bp.enabled=False
+write_bps=[MecWriteBP(found+offset, path) for offset,path in
+           zip((0xb519,0xb4de,0xb4a0), ('ext2','register','ext'))]
 print('KIQ_START_BREAKPOINTS_ARMED entry=%#x native=%#x' % (start,native))
-native_reached=False; entry_seen=False; return_bp=None
+native_reached=False; native_active=False; entry_seen=False; return_bp=None
 gdb.execute('continue')
 if int(gdb.parse_and_eval('$pc')) != start: raise gdb.GdbError('KIQ start entry stop PC mismatch')
 entry_rsp=int(gdb.parse_and_eval('$rsp')); entry_return=None
@@ -521,6 +549,17 @@ return_bp=ReturnBP(entry_return,entry_rsp+8)
 gdb.execute('continue')
 if int(gdb.parse_and_eval('$pc')) == native:
     native_reached=True
+    native_active=True
+    native_insn=read(native,6)
+    if native_insn[:2] == bytes.fromhex('ff15'):
+        disp=struct.unpack('<i',native_insn[2:])[0]
+        slot=native+6+disp
+        try: target=struct.unpack('<Q',read(slot,8))[0]
+        except Exception: target=0
+        print('KIQ_START_NATIVE_COMMAND_TARGET pc=%#x bytes=%s slot=%#x target=%#x' %
+              (native,native_insn.hex(),slot,target))
+    else:
+        print('KIQ_START_NATIVE_COMMAND_TARGET unavailable bytes=%s' % native_insn.hex())
     print('KIQ_START_NATIVE_CALL_BOUNDARY pc=%#x self=%#x a=%#x b=%#x' %
           (native, int(gdb.parse_and_eval('$rdi')), int(gdb.parse_and_eval('$rsi')), int(gdb.parse_and_eval('$rdx'))))
     native_bp.enabled=False
@@ -528,6 +567,7 @@ else:
     native_reached=False
 if int(gdb.parse_and_eval('$pc')) != entry_return:
     gdb.execute('continue')
+native_active=False
 if int(gdb.parse_and_eval('$pc')) != entry_return or int(gdb.parse_and_eval('$rsp')) != entry_rsp+8:
     raise gdb.GdbError('KIQ start return stop identity mismatch')
 result=int(gdb.parse_and_eval('$rax')) & 0xffffffff
