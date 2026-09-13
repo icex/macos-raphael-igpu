@@ -663,3 +663,12 @@ cut mid-record at shutdown), not from the kext. New readings at the stall:
 Candidate 216 matches on the low 16 bits of fw_type plus the $PS1 magic and
 payload length, and logs every CP-sized descriptor.
 
+## Boot-launch ledger extension for candidate 216 cpfw (2026-09-14)
+
+Candidate 216 with card `metal-051` (`rgpucpfw=1`, fixed matcher) is launch 7
+on boot `c369c74e-96ff-4c21-ae85-80ccb269f7d2`, through `--manual-reuse
+--ack-risk` under the user's standing instruction to keep testing. Candidate 215
+recovered cleanly. Precondition: MODE2 reset receipt `run/mode2-reset-6.json`
+with `RLC_CNTL=0` and `CP_STAT=0` immediately before staging. This note covers
+this one launch.
+
