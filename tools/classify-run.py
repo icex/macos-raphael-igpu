@@ -557,6 +557,17 @@ def _decode_payload(build, seq, payload):
         row.update(kind='sdma_ib_repair', before=int(m[1], 16), after=int(m[2], 16),
                    valid=bool(int(m[3])), changed=bool(int(m[4])))
     elif m := re.fullmatch(
+            r'XQ2: dequeue INACTIVE-RETAINED after (\d+) us; descriptor unchanged; '
+            r'native-restore=(\d+) lease=(\d+) owners=(\d+) active=(0x[0-9a-fA-F]+|\d+) '
+            r'dequeue=(0x[0-9a-fA-F]+|\d+) poll=(0x[0-9a-fA-F]+|\d+) '
+            r'doorbell=(0x[0-9a-fA-F]+|\d+) image-exact=(\d+)', payload):
+        active, dequeue, poll, doorbell = (int(m[index], 0) for index in (5, 6, 7, 8))
+        row.update(kind='kiq', result=0, source='inactive-retained',
+                   elapsed_us=int(m[1]), restore_admitted=(m[2] == '1' and
+                   m[3] == '1' and m[4] == '1' and m[9] == '1' and
+                   active == 0 and dequeue == 0 and
+                   not (poll & (1 << 31)) and not (doorbell & (1 << 30))))
+    elif m := re.fullmatch(
             r'XQ2: dequeue TIMEOUT after (\d+) us; descriptor unchanged; '
             r'native-restore=(\d+) lease=(\d+) owners=(\d+) active=(0x[0-9a-fA-F]+|0) '
             r'dequeue=(0x[0-9a-fA-F]+|0) poll=(0x[0-9a-fA-F]+|0) '
@@ -1297,14 +1308,19 @@ def _classify(manifest, events, probe, defer_absent_workload=False):
     live_terminal_kiq = [r for r in kinds['kiq']
                          if r.get('source') == 'live-terminal' and
                          (not panics or r['seq'] < panics[0]['seq'])]
-    restore_enabled = manifest.get('spec', {}).get('functional_boot_arguments', {}).get('rgpumqdrestore') in ('1', '2', '3')
+    restore_mode = manifest.get('spec', {}).get('functional_boot_arguments', {}).get('rgpumqdrestore')
+    restore_enabled = restore_mode in ('1', '2', '3')
     diagnostic_dequeue = (lambda r: restore_enabled and
                           r.get('source') == 'dequeue-timeout' and
                           r.get('restore_admitted') is True)
+    diagnostic_inactive = (lambda r: restore_mode == '3' and
+                           r.get('source') == 'inactive-retained' and
+                           r.get('restore_admitted') is True)
     kiq_before_terminal = explicit_submit + live_terminal_kiq
     if not kiq_before_terminal:
         kiq_before_terminal = [
             r for r in kinds['kiq'] if not diagnostic_dequeue(r) and
+            not diagnostic_inactive(r) and
             (not panics or r['seq'] < panics[0]['seq'])]
     terminal_kiq = (max(kiq_before_terminal, key=lambda r:r['seq'])
                     if kiq_before_terminal else None)
