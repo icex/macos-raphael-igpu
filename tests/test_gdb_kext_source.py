@@ -1,4 +1,6 @@
 import importlib.util
+import contextlib
+import io
 import struct
 import re
 import types
@@ -50,9 +52,37 @@ class GdbKextSourceTests(unittest.TestCase):
             "/tmp/kernel.symbols", "/tmp/RaphaelGPU.dSYM", 0x19120,
             bytes.fromhex("554889e541574156"), 0x1920c, "/tmp/source")
         self.assertIn("KIQ_START_ENTRY_STACK_UNAVAILABLE", text)
-        self.assertIn("KIQ_START_CAPTURE_INCOMPLETE reason=entry-stack-unavailable", text)
+        self.assertIn("reason='entry-stack-unavailable'", text)
         self.assertIn("native_boundary=unavailable return=unavailable", text)
         self.assertIn("return=%s", text)
+
+    def test_kiq_start_stack_failure_executes_honest_incomplete_path(self):
+        text = tool.generate_kiq_start(
+            0xffffff801b6e8000, "474ef697fc283ba283a4763d76c8e200",
+            "/tmp/kernel.symbols", "/tmp/RaphaelGPU.dSYM", 0x19120,
+            bytes.fromhex("554889e541574156"), 0x1920c, "/tmp/source")
+        body = text.split("entry_rsp=int", 1)[1].split("entry_bp.enabled=False", 1)[0]
+        state = {'rsp': 0x8000, 'rdi': 0x1000, 'rsi': 1, 'rdx': 2,
+                 'rcx': 0x9000, 'r8': 0xa000, 'detached': False}
+        class Gdb:
+            def parse_and_eval(self, reg): return state[reg[1:]]
+            def selected_thread(self): return types.SimpleNamespace(ptid='fake')
+            def execute(self, command):
+                if command == 'detach': state['detached'] = True
+                elif command == 'quit': raise RuntimeError('quit')
+        def read(address, size):
+            if address == state['rsp']: raise RuntimeError('stack inaccessible')
+            return b'\\0' * size
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            with self.assertRaises(RuntimeError):
+                exec('entry_rsp=int' + body, {'gdb': Gdb(), 'struct': struct,
+                     'read': read, 'state': state})
+        captured = output.getvalue()
+        self.assertTrue(state['detached'])
+        self.assertIn('KIQ_START_ENTRY_STACK_UNAVAILABLE', captured)
+        self.assertIn('KIQ_START_CAPTURE_INCOMPLETE', captured)
+        self.assertIn('native_boundary=unavailable return=unavailable', captured)
 
     def test_kiq_start_exact_generated_loop_executes_success_and_refusal(self):
         text = tool.generate_kiq_start(
