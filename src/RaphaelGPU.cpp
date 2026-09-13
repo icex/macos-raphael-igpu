@@ -1051,6 +1051,64 @@ static void reportGoldenState(const char *when) {
          when, fbRead(asicInfo, kGcRlcCpSchedulers), fbRead(asicInfo, kGcRlcPgCntl),
          fbRead(asicInfo, kGcRlcGpmStat), fbRead(asicInfo, kGcRlcSrmCntl));
 }
+
+// rgpugolden=1: program Linux's golden_settings_gc_10_3_6[] once before the RLC
+// starts. Apple ships the Navi23 (10.3.4) table, which has no GB_ADDR_CONFIG or
+// pipe-steer entries at all, so on this part the tiling and pipe configuration
+// stays at whatever the SoC reset left. Masks and values are transcribed from
+// gfx_v10_0.c (v6.12) with the gc_10_1_0 offsets that file includes; the
+// GCR_GENERAL_CNTL entry uses the file-local Vangogh offset 0x1580.
+static uint32_t goldenMode = 0;
+struct GoldenRegister { uint32_t reg; uint32_t mask; uint32_t value; const char *name; };
+static constexpr GoldenRegister kGolden1036[] = {
+    {kGcSeg1 + 0x507c, 0xff7f0fff, 0x78000100, "CGTT_SPI_CS_CLK_CTRL"},
+    {kGcSeg1 + 0x2d90, 0x000000ff, 0x00000044, "CH_PIPE_STEER"},
+    {kGcSeg0 + 0x1f53, 0x0007ffff, 0x0000c200, "CPF_GCR_CNTL"},
+    {kGcSeg0 + 0x13ae, 0xffffffff, 0x00000280, "DB_DEBUG3"},
+    {kGcSeg0 + 0x13af, 0xffffffff, 0x00800000, "DB_DEBUG4"},
+    {kGcSeg0 + 0x13de, 0x0c1807ff, 0x00000042, "GB_ADDR_CONFIG"},
+    {kGcSeg0 + 0x1580, 0x1ff1ffff, 0x00000500, "GCR_GENERAL_CNTL"},
+    {kGcSeg1 + 0x2d10, 0x000000ff, 0x00000044, "GL1_PIPE_STEER"},
+    {kGcSeg1 + 0x2e25, 0x77777777, 0x32103210, "GL2_PIPE_STEER_0"},
+    {kGcSeg1 + 0x2e26, 0x77777777, 0x32103210, "GL2_PIPE_STEER_1"},
+    {kGcSeg1 + 0x2e21, 0xffffffff, 0xfffffff3, "GL2A_ADDR_MATCH_MASK"},
+    {kGcSeg1 + 0x2e03, 0xffffffff, 0xfffffff3, "GL2C_ADDR_MATCH_MASK"},
+    {kGcSeg1 + 0x2e08, 0xff8fff0f, 0x580f1008, "GL2C_CM_CTRL1"},
+    {kGcSeg1 + 0x2e0c, 0xf7ffffff, 0x00f80988, "GL2C_CTRL3"},
+    {kGcSeg0 + 0x10a2, 0x000001ff, 0x00000020, "LDS_CONFIG"},
+    {kGcSeg0 + 0x1025, 0xf17fffff, 0x01200007, "PA_CL_ENHANCE"},
+    {kGcSeg0 + 0x1070, 0xffffffff, 0x00000800, "PA_SC_BINNER_TIMEOUT_COUNTER"},
+    {kGcSeg0 + 0x107c, 0xffffffbf, 0x00000820, "PA_SC_ENHANCE_2"},
+    {kGcSeg0 + 0x10ba, 0x000017ff, 0x00001000, "SQG_CONFIG"},
+    {kGcSeg0 + 0x11b8, 0xffffff7f, 0x00010020, "SX_DEBUG_1"},
+    {kGcSeg0 + 0x12e2, 0xfff7ffff, 0x01030000, "TA_CNTL_AUX"},
+    {kGcSeg0 + 0x1588, 0xffffffff, 0x00100000, "UTCL1_CTRL"},
+};
+
+static void applyGoldenRegisters(const char *when) {
+    if (goldenMode != 1 || asicInfo == nullptr) return;
+    static bool applied = false;
+    if (applied) return;
+    applied = true;
+    unsigned changed = 0, mismatched = 0;
+    for (const auto &g : kGolden1036) {
+        const uint32_t before = fbRead(asicInfo, g.reg);
+        if (before == 0xdeadbeef || before == 0xffffffffU) {
+            RLOG("XG: golden %s at %s: unreadable (%#x); skipped", g.name, when, before);
+            continue;
+        }
+        const uint32_t target = (before & ~g.mask) | (g.value & g.mask);
+        if (target == before) continue;
+        fbWrite(asicInfo, g.reg, target);
+        const uint32_t after = fbRead(asicInfo, g.reg);
+        changed++;
+        if (after != target) mismatched++;
+        RLOG("XG: golden %s at %s: %#x -> %#x (readback %#x)%s", g.name, when, before,
+             target, after, after == target ? "" : " MISMATCH");
+    }
+    RLOG("XG: golden 10.3.6 applied at %s: %u written, %u readback mismatches", when,
+         changed, mismatched);
+}
 static constexpr uint32_t kGcRlcSrmStat    = kGcSeg1 + 0x4c9b;
 static constexpr uint32_t kGcRlcCsibLo     = kGcSeg1 + 0x4ca2;
 static constexpr uint32_t kGcRlcCsibLen    = kGcSeg1 + 0x4ca4;
@@ -5072,6 +5130,7 @@ static void primeIcacheOnly() {
 static void startRlc() {
     if (asicInfo == nullptr) { RLOG("XK: no register accessor yet"); return; }
     dumpGfxState("before RLC start");
+    applyGoldenRegisters("before RLC start");
     fbWrite(asicInfo, kGcRlcCgcg, 0);
     fbWrite(asicInfo, kGcRlcPgCntl, 0);
     uint32_t cntl = fbRead(asicInfo, kGcRlcCntl);
@@ -6935,6 +6994,11 @@ static void pluginStart() {
     uint32_t mqdr = 0;
     mqdNativeRestoreMode = PE_parse_boot_argn("rgpumqdrestore", &mqdr,
                                                sizeof(mqdr)) && mqdr <= 3 ? mqdr : 0;
+    uint32_t golden = 0;
+    goldenMode = PE_parse_boot_argn("rgpugolden", &golden, sizeof(golden)) && golden <= 1
+        ? golden : 0;
+    RLOG("XG: rgpugolden=%u (%s)", goldenMode,
+         goldenMode == 1 ? "program Linux GC 10.3.6 golden registers before RLC start" : "off");
     if (mqdNativeRestoreMode != 0 && mqdFixMode != 2) {
         RLOG("XQ2: rgpumqdrestore=%u requires rgpumqd=2; native restore disabled",
              mqdNativeRestoreMode);
