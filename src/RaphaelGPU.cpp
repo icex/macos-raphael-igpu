@@ -6063,11 +6063,32 @@ static void printHangCommandBuffer(uint32_t index, const HangCommandBuffer &cb) 
     }
 }
 
+// Candidate 217: with binning disabled the desktop no longer stalls, so record positive
+// evidence as well: every 5 s, sample the gfx ring pointers and CP/GRBM state. A ring
+// whose WPTR keeps advancing and whose RPTR catches up is WindowServer/WallpaperSequoia
+// work completing on this device.
+static void sampleGfxProgress(uint32_t sample, uint32_t &lastWptr, uint32_t &advances,
+                              uint32_t &drained) {
+    if (asicInfo == nullptr) return;
+    const uint32_t rptr = fbRead(asicInfo, kGcRb0Rptr), wptr = fbRead(asicInfo, kGcRb0Wptr);
+    const bool moved = sample != 0 && wptr != lastWptr;
+    advances += moved;
+    drained += rptr == wptr;
+    RLOG("XR: gfx progress %u: RPTR=%#x WPTR=%#x %s wptr-moved=%u CP_STAT=%#x GRBM_STATUS=%#x "
+         "STALLED_STAT2=%#x advances=%u drained=%u", sample, rptr, wptr,
+         rptr == wptr ? "drained" : "pending", moved, fbRead(asicInfo, kGcCpStat),
+         fbRead(asicInfo, kGcGrbmStatus), fbRead(asicInfo, kGcCpStalled2), advances, drained);
+    lastWptr = wptr;
+}
+
 static void hangDumpThread(void *, wait_result_t) {
     uint32_t served = 0, cbServed = 0;
+    uint32_t samples = 0, lastWptr = 0, advances = 0, drained = 0;
+    static constexpr uint32_t kProgressSamples = 40;
     // 120000 polls of 50 ms cover the longest authorized 6000-second run.
     for (unsigned poll = 0; poll < 120000 &&
-         (served < kHangDumpLimit || cbServed < kHangCbLimit); ++poll) {
+         (served < kHangDumpLimit || cbServed < kHangCbLimit || samples < kProgressSamples);
+         ++poll) {
         const uint32_t published = __atomic_load_n(&hangSnapshotCount, __ATOMIC_ACQUIRE);
         while (served < published && served < kHangDumpLimit) {
             dumpGfxHangMemory(served, hangSnapshots[served]);
@@ -6078,6 +6099,9 @@ static void hangDumpThread(void *, wait_result_t) {
             printHangCommandBuffer(cbServed, hangCbs[cbServed]);
             ++cbServed;
         }
+        // Start sampling 30 s after plugin start, once the accelerator is up.
+        if (poll >= 600 && poll % 100 == 0 && samples < kProgressSamples)
+            sampleGfxProgress(samples++, lastWptr, advances, drained);
         IOSleep(50);
     }
     thread_terminate(current_thread());

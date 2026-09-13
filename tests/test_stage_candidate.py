@@ -323,6 +323,14 @@ class Candidate184StageTests(unittest.TestCase):
         self.assertEqual(updates["rgpurnlo"], "0x12")
         self.assertEqual(updates["rgpurnhi"], "0x34")
 
+    def test_boot_updates_add_quiesce_only_when_card_selects_it(self):
+        updates = self.tool.candidate_boot_argument_updates(self.card, 0x12, 0x34)
+        self.assertNotIn("rgpucr2quiesce", updates)
+        quiesced = dict(self.card, critical_replay_quiesce={"version": 1})
+        updates = self.tool.candidate_boot_argument_updates(quiesced, 0x12, 0x34)
+        self.assertEqual(updates["rgpucr2quiesce"], "1")
+        self.assertEqual(updates["rgpucr2uart"], "2")
+
     def test_staging_metadata_preserves_new_launch_contract(self):
         source = TOOL.read_text()
         self.assertIn('staging["launch_options"] = card["launch_options"]', source)

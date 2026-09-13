@@ -38,6 +38,7 @@ class GfxHangDumpSourceTests(unittest.TestCase):
             self.assertNotIn(forbidden, observe)
         self.assertIn('RaphaelHang::ringStalled(rptr, wptr, after)', observe)
         worker = self.body('static void hangDumpThread', 'static void reportVmid2Runtime')
+        self.assertIn('sampleGfxProgress(samples++, lastWptr, advances, drained);', worker)
         self.assertIn('dumpGfxHangMemory(served, hangSnapshots[served]);', worker)
 
     def test_memory_reads_are_read_only_and_64_bit(self):
