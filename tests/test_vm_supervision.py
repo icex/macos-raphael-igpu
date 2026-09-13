@@ -546,6 +546,58 @@ class SupervisionTests(unittest.TestCase):
         self.assertLess(next(i for i,a in enumerate(calls) if a[:2] == ["docker", "rename"]),
                         next(i for i,a in enumerate(calls) if a and a[0] == "systemd-run"))
 
+    def test_start_archives_when_docker_reorders_mounts_after_rename(self):
+        spec = importlib.util.spec_from_file_location('supervisor', TOOL)
+        module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+        (self.vm / "mac_hdd_ng.img").write_bytes(b"")
+        (self.vm / "run/launch-pending").mkdir()
+        mounts = [{"Type": "bind", "Source": str((self.vm / "mac_hdd_ng.img").resolve()),
+                   "Destination": "/home/arch/OSX-KVM/mac_hdd_ng.img"},
+                  {"Type": "bind", "Source": str((self.vm / "OpenCore.qcow2").resolve()),
+                   "Destination": "/home/arch/OSX-KVM/OpenCore/OpenCore.qcow2"}]
+        calls = []; renamed = {"value": False, "name": None}
+        def fake_run(args, **_):
+            calls.append(args)
+            if args[:3] == ["docker", "ps", "-a"]: return "macos-sequoia\n"
+            if args[:2] == ["docker", "inspect"] and args[-1] == "macos-sequoia": return CID
+            if args[:2] == ["docker", "inspect"]:
+                current = list(reversed(mounts)) if renamed["value"] else mounts
+                return json.dumps({"Id": CID,
+                                   "Name": "/" + (renamed["name"] if renamed["value"] else "macos-sequoia"),
+                                   "Running": False, "Status": "exited", "Mounts": current})
+            if args[:2] == ["docker", "rename"]:
+                renamed["value"] = True; renamed["name"] = args[-1]; return ""
+            if args and args[0] == "systemd-run": raise RuntimeError("sentinel after archive")
+            raise AssertionError("unexpected command after archive")
+        with patch.object(module, 'binary', side_effect=lambda x: x), patch.object(module, 'run', side_effect=fake_run):
+            with self.assertRaisesRegex(RuntimeError, "sentinel after archive"):
+                module.start_locked(self.vm, 30, [])
+        self.assertTrue(renamed["value"])
+        self.assertTrue(any(a[:2] == ["docker", "rename"] for a in calls))
+
+    def test_start_refuses_changed_mount_metadata_after_rename(self):
+        spec = importlib.util.spec_from_file_location('supervisor', TOOL)
+        module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+        (self.vm / "mac_hdd_ng.img").write_bytes(b"")
+        (self.vm / "run/launch-pending").mkdir()
+        mounts = [{"Type": "bind", "Source": str((self.vm / "mac_hdd_ng.img").resolve()),
+                   "Destination": "/home/arch/OSX-KVM/mac_hdd_ng.img"}]
+        renamed = {"value": False, "name": None}
+        def fake_run(args, **_):
+            if args[:3] == ["docker", "ps", "-a"]: return "macos-sequoia\n"
+            if args[:2] == ["docker", "inspect"] and args[-1] == "macos-sequoia": return CID
+            if args[:2] == ["docker", "inspect"]:
+                current = [{**mounts[0], "Source": "/foreign/disk.img"}] if renamed["value"] else mounts
+                return json.dumps({"Id": CID,
+                                   "Name": "/" + (renamed["name"] if renamed["value"] else "macos-sequoia"),
+                                   "Running": False, "Status": "exited", "Mounts": current})
+            if args[:2] == ["docker", "rename"]:
+                renamed["value"] = True; renamed["name"] = args[-1]; return ""
+            raise AssertionError("systemd must not be reached")
+        with patch.object(module, 'binary', side_effect=lambda x: x), patch.object(module, 'run', side_effect=fake_run):
+            with self.assertRaisesRegex(RuntimeError, "identity changed while archiving"):
+                module.start_locked(self.vm, 30, [])
+
     def test_start_refuses_active_familiar_container_before_systemd(self):
         spec = importlib.util.spec_from_file_location('supervisor', TOOL)
         module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
