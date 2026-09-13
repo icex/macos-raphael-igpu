@@ -234,6 +234,25 @@ int main() {
                  true, 0x8400000000ULL, 0x8400000800ULL,
                  0x8400000000ULL, 0x8400000800ULL, inaccessibleState, true, true, true),
             "native restore rejects inaccessible timeout state");
+    const RaphaelKiq::QueueState retainedState {0, 0, 0, 0, 0x20, 0, 0};
+    require(RaphaelKiq::inactiveRetainedProbeEligible(
+                true, 0x8400000000ULL, 0x8400000800ULL,
+                0x8400000000ULL, 0x8400000800ULL, retainedState, true, true, true),
+            "mode-3 probe admits inactive retained-WPTR state");
+    require(!RaphaelKiq::inactiveRetainedProbeEligible(
+                 true, 0x8400000000ULL, 0x8400000800ULL,
+                 0x8400000000ULL, 0x8400000800ULL, retainedState, false, true, true),
+            "inactive retained probe rejects missing lease");
+    const RaphaelKiq::QueueState inaccessibleRetainedState {0, 0, 0, 0, 0xffffffffU, 0, 0};
+    require(!RaphaelKiq::inactiveRetainedProbeEligible(
+                 true, 0x8400000000ULL, 0x8400000800ULL,
+                 0x8400000000ULL, 0x8400000800ULL, inaccessibleRetainedState, true, true, true),
+            "inactive retained probe rejects inaccessible WPTR");
+    const RaphaelKiq::QueueState ingressRetainedState {0, 0, 0, 0, 0x20, 1U << 31, 0};
+    require(!RaphaelKiq::inactiveRetainedProbeEligible(
+                 true, 0x8400000000ULL, 0x8400000800ULL,
+                 0x8400000000ULL, 0x8400000800ULL, ingressRetainedState, true, true, true),
+            "inactive retained probe rejects active ingress");
 
     FakeHalted halted;
     halted.value[static_cast<unsigned>(FakeHalted::Register::MecControl)] = 0x1234;

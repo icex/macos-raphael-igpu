@@ -150,6 +150,16 @@ inline bool accessible(const QueueState &state) {
         state.doorbell != 0xffffffffU;
 }
 
+inline bool inactiveRetainedProbeEligible(bool enabled, uint64_t mqd, uint64_t eop,
+                                          uint64_t plannedMqd, uint64_t plannedEop,
+                                          const QueueState &state, bool leaseValid,
+                                          bool ownersMatch, bool imageExact) {
+    return enabled && leaseValid && ownersMatch && imageExact && accessible(state) &&
+        state.active == 0 && state.dequeue == 0 && state.rptr == 0 && state.wptrHi == 0 &&
+        state.wptrLo != 0 && state.wptrLo != 0xffffffffU && !(state.poll & (1U << 31)) &&
+        !(state.doorbell & (1U << 30)) && mqd == plannedMqd && eop == plannedEop;
+}
+
 // A dequeue timeout may be handed to Apple's own restore/reprogram sequence only
 // when every identity and ingress predicate is still true.  This predicate never
 // changes queue state; callers must use a fresh post-timeout snapshot.

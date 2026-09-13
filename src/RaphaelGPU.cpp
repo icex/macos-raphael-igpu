@@ -4184,7 +4184,8 @@ static bool prepareKiq(uint64_t &mqdAddr, uint64_t &eopAddr, const void *spec,
     reportKiqPreparation("after queue preparation");
     if (!prepared.ready()) {
         using Status = RaphaelKiq::QueuePreparationStatus;
-        if (prepared.status == Status::DequeueTimeout) {
+        if (prepared.status == Status::DequeueTimeout ||
+            (mqdNativeRestoreMode == 3 && prepared.status == Status::PointerResetFailed)) {
             RaphaelKiq::QueueState fresh {
                 fbRead(asicInfo, kGcHqdActive), fbRead(asicInfo, kGcHqdDequeue),
                 fbRead(asicInfo, kGcHqdPqRptr), fbRead(asicInfo, kGcHqdPqWptrHi),
@@ -4213,13 +4214,18 @@ static bool prepareKiq(uint64_t &mqdAddr, uint64_t &eopAddr, const void *spec,
             const bool imageStillExact = get(0) == 0xc0310800 && get(0x20c) == 0 &&
                 freshImageMqd == planned.mqdMc &&
                 freshImageEop == (planned.eopMc >> 8);
-            nativeRestoreAttempted = RaphaelKiq::timeoutNativeRestoreEligible(
-                mqdNativeRestoreMode != 0, mqdAddr, eopAddr, planned.mqdMc, planned.eopMc,
-                fresh, leaseValid, ownersMatch,
-                imageStillExact);
-            CRLOG("XQ2: dequeue TIMEOUT after %u us; descriptor unchanged; "
+            nativeRestoreAttempted = prepared.status == Status::DequeueTimeout
+                ? RaphaelKiq::timeoutNativeRestoreEligible(
+                    mqdNativeRestoreMode != 0, mqdAddr, eopAddr, planned.mqdMc, planned.eopMc,
+                    fresh, leaseValid, ownersMatch, imageStillExact)
+                : RaphaelKiq::inactiveRetainedProbeEligible(
+                    mqdNativeRestoreMode == 3, mqdAddr, eopAddr, planned.mqdMc, planned.eopMc,
+                    fresh, leaseValid, ownersMatch, imageStillExact);
+            CRLOG("XQ2: dequeue %s after %u us; descriptor unchanged; "
                   "native-restore=%u lease=%u owners=%u active=%#x dequeue=%#x "
-                  "poll=%#x doorbell=%#x image-exact=%u", prepared.elapsedUs,
+                  "poll=%#x doorbell=%#x image-exact=%u",
+                  prepared.status == Status::DequeueTimeout ? "TIMEOUT" : "INACTIVE-RETAINED",
+                  prepared.elapsedUs,
                   nativeRestoreAttempted,
                   leaseValid, ownersMatch, fresh.active, fresh.dequeue, fresh.poll,
                   fresh.doorbell, imageStillExact);
