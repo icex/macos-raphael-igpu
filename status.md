@@ -1127,3 +1127,15 @@ cleanly without a GPU, and removed `/private/etc/AmdMtlSettingsFile.txt` and
 `--manual-reuse --ack-risk` under the user's standing instruction, after
 `run/mode2-reset-19.json`. This note covers this one launch.
 
+
+## Probe v5 attempt: shader library failed to compile in the guest (2026-09-14)
+
+Run `9d05b1c1cbc5b8cb47d6f6d73897a131`, card `metal-061` (commit `d13b0c2`), 1.0.218 build
+`10cce4d8...`, launch 20 after `run/mode2-reset-19.json`. Verdict `EXECUTION_FAILED`
+(`first_submission`): the probe exited 1 with `compute pipeline or queue creation failed`
+before any GPU work, because v5 had added the identity shaders to the single shared
+Metal library and that library no longer compiled (the probe did not record the
+compiler message). Recovery `recovered`, shutdown `exited-after-guest-request`; the GPU
+and harness were healthy. Probe v5.1 compiles the compute check, the render shaders
+and the identity shaders as three separate libraries and records any compiler error
+text.

@@ -32,10 +32,29 @@ static NSMutableDictionary *report;
 // Window geometry in global display points, top-left origin (CoreGraphics space).
 static const CGFloat kWindowX = 120, kWindowY = 120, kWindowW = 400, kWindowH = 300;
 
+// Three separate libraries so a compile problem in one test cannot take down the others.
+static NSString *const kComputeSource =
+    @"#include <metal_stdlib>\nusing namespace metal;\n"
+     "kernel void mix(device uint &v [[buffer(0)]], constant uint &s [[buffer(1)]]) { v ^= s; }\n";
+
+static NSString *const kIdentitySource =
+    @"#include <metal_stdlib>\nusing namespace metal;\n"
+     "struct IV { float4 p [[position]]; };\n"
+     "vertex IV identity_triangle(uint id [[vertex_id]]) {\n"
+     "  const float2 q[3] = { float2(-1, -1), float2(3, -1), float2(-1, 3) };\n"
+     "  IV v; v.p = float4(q[id], 0, 1); return v; }\n"
+     "vertex IV identity_quad(uint id [[vertex_id]]) {\n"
+     "  const float2 q[6] = { float2(-1, -1), float2(1, -1), float2(-1, 1), float2(-1, 1), float2(1, -1), float2(1, 1) };\n"
+     "  IV v; v.p = float4(q[id], 0, 1); return v; }\n"
+     "fragment float4 identity_color(IV in [[stage_in]]) {\n"
+     "  uint px = uint(in.p.x);\n"
+     "  uint py = uint(in.p.y);\n"
+     "  uint hi = ((px >> 8) & 15u) | (((py >> 8) & 15u) << 4);\n"
+     "  return float4(float(px & 255u) / 255.0f, float(py & 255u) / 255.0f, float(hi) / 255.0f, 1.0f); }\n";
+
 static NSString *const kShaderSource =
     @"#include <metal_stdlib>\nusing namespace metal;\n"
      "struct V { float4 p [[position]]; };\n"
-     "kernel void mix(device uint &v [[buffer(0)]], constant uint &s [[buffer(1)]]) { v ^= s; }\n"
      "vertex V fullscreen(uint id [[vertex_id]]) {\n"
      "  const float2 q[3] = { float2(-1, -1), float2(3, -1), float2(-1, 3) };\n"
      "  V v; v.p = float4(q[id], 0, 1); return v; }\n"
@@ -43,13 +62,6 @@ static NSString *const kShaderSource =
      "fragment float4 solid(V in [[stage_in]]) { return float4(1, 1, 0, 1); }\n"
      "fragment float4 ramp(V in [[stage_in]], constant float4 &u [[buffer(0)]]) {\n"
      "  return float4(fract(in.p.x / 64.0), fract(in.p.y / 64.0), u.z, 1); }\n"
-     "vertex V quad(uint id [[vertex_id]]) {\n"
-     "  const float2 q[6] = { float2(-1, -1), float2(1, -1), float2(-1, 1), float2(-1, 1), float2(1, -1), float2(1, 1) };\n"
-     "  V v; v.p = float4(q[id], 0, 1); return v; }\n"
-     "fragment float4 ident(V in [[stage_in]]) {\n"
-     "  uint x = uint(in.p.x), y = uint(in.p.y);\n"
-     "  return float4(float(x & 255u) / 255.0, float(y & 255u) / 255.0,\n"
-     "                float(((x >> 8) & 15u) | (((y >> 8) & 15u) << 4)) / 255.0, 1); }\n"
      "fragment float4 pattern(V in [[stage_in]], constant float4 &u [[buffer(0)]]) {\n"
      "  float2 uv = in.p.xy / u.xy;\n"
      "  if (uv.y > 0.45 && uv.y < 0.55)\n"
@@ -87,6 +99,18 @@ static NSString *fnvHex(const UInt8 *bytes, size_t length) {
     uint64_t hash = 1469598103934665603ULL;
     for (size_t i = 0; i < length; ++i) hash = (hash ^ bytes[i]) * 1099511628211ULL;
     return [NSString stringWithFormat:@"%016llx", hash];
+}
+
+static id<MTLLibrary> compileLibrary(id<MTLDevice> device, NSString *source, NSString *name,
+                                    NSMutableDictionary *errors) {
+    NSError *error = nil;
+    id<MTLLibrary> library = [device newLibraryWithSource:source options:nil error:&error];
+    if (!library || error) {
+        NSString *text = error.localizedDescription ?: @"unknown";
+        if (text.length > 1500) text = [text substringToIndex:1500];
+        errors[name] = @{ @"library": @(library != nil), @"message": text };
+    }
+    return library;
 }
 
 static id<MTLRenderPipelineState> renderPipelineFormat(id<MTLDevice> device, id<MTLLibrary> library,
@@ -432,14 +456,17 @@ static NSDictionary *identityTest(id<MTLDevice> device, id<MTLLibrary> library, 
                                       @"format": rgba ? @"RGBA8" : @"BGRA8",
                                       @"geometry": quad ? @"quad" : @"fullscreen-triangle" } mutableCopy];
     id<MTLRenderPipelineState> pipeline =
-        renderPipelineFormat(device, library, quad ? @"quad" : @"fullscreen", @"ident", format);
+        renderPipelineFormat(device, library, quad ? @"identity_quad" : @"identity_triangle", @"identity_color", format);
     MTLTextureDescriptor *descriptor = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:format
                                                                                           width:width height:height mipmapped:NO];
     descriptor.usage = MTLTextureUsageRenderTarget;
     descriptor.storageMode = MTLStorageModePrivate;
     id<MTLTexture> target = [device newTextureWithDescriptor:descriptor];
     id<MTLBuffer> readback = [device newBufferWithLength:width * height * 4 options:MTLResourceStorageModeShared];
-    if (!pipeline || !target || !readback) { result[@"error"] = @"setup"; return result; }
+    if (!pipeline || !target || !readback) {
+        result[@"error"] = !library ? @"no identity library" : !pipeline ? @"identity pipeline" : @"allocation";
+        return result;
+    }
     MTLRenderPassDescriptor *pass = [MTLRenderPassDescriptor renderPassDescriptor];
     pass.colorAttachments[0].texture = target;
     pass.colorAttachments[0].loadAction = MTLLoadActionClear;
@@ -566,13 +593,16 @@ static int renderChild(NSString *outputPath, unsigned long long expiry) {
     alarm(8);
     if ((unsigned long long)time(NULL) <= expiry) {
         id<MTLDevice> device = MTLCreateSystemDefaultDevice();
-        id<MTLLibrary> library = device ? [device newLibraryWithSource:kShaderSource options:nil error:nil] : nil;
+        NSMutableDictionary *errors = [NSMutableDictionary dictionary];
+        id<MTLLibrary> library = device ? compileLibrary(device, kShaderSource, @"render", errors) : nil;
+        id<MTLLibrary> identity = device ? compileLibrary(device, kIdentitySource, @"identity", errors) : nil;
         id<MTLCommandQueue> queue = [device newCommandQueue];
-        if (library && queue) {
-            result[@"offscreen"] = offscreenThroughput(device, library, queue);
-            result[@"identity"] = identityMatrix(device, library, queue, NO);
+        result[@"shader_errors"] = errors;
+        if (queue) {
+            if (library) result[@"offscreen"] = offscreenThroughput(device, library, queue);
+            result[@"identity"] = identityMatrix(device, identity, queue, NO);
         } else {
-            result[@"error"] = @"device, library or queue";
+            result[@"error"] = @"device or queue";
         }
     } else {
         result[@"error"] = @"expired";
@@ -619,10 +649,11 @@ static int windowChild(NSString *outputPath, unsigned long long expiry) {
     id<MTLDevice> device = MTLCreateSystemDefaultDevice();
     if (!device) { result[@"error"] = @"no Metal device"; save(); return 1; }
     result[@"device"] = device.name;
-    NSError *error = nil;
-    id<MTLLibrary> library = [device newLibraryWithSource:kShaderSource options:nil error:&error];
+    NSMutableDictionary *errors = [NSMutableDictionary dictionary];
+    id<MTLLibrary> library = compileLibrary(device, kShaderSource, @"render", errors);
     id<MTLRenderPipelineState> pipeline = library ? renderPipeline(device, library, @"fullscreen", @"pattern") : nil;
     id<MTLCommandQueue> queue = [device newCommandQueue];
+    result[@"shader_errors"] = errors;
     if (!pipeline || !queue) { result[@"error"] = @"pipeline"; save(); return 1; }
 
     [NSApplication sharedApplication];
@@ -937,9 +968,11 @@ int main(int argc, const char *argv[]) {
         report[@"registry_id"] = @(device.registryID);
         report[@"metal3"] = @([device supportsFamily:MTLGPUFamilyMetal3]);
 
+        NSMutableDictionary *shaderErrors = [NSMutableDictionary dictionary];
+        report[@"shader_errors"] = shaderErrors;
         NSError *error = nil;
-        id<MTLLibrary> library = [device newLibraryWithSource:kShaderSource options:nil error:&error];
-        id<MTLFunction> function = [library newFunctionWithName:@"mix"];
+        id<MTLLibrary> computeLibrary = compileLibrary(device, kComputeSource, @"compute", shaderErrors);
+        id<MTLFunction> function = [computeLibrary newFunctionWithName:@"mix"];
         id<MTLComputePipelineState> pipeline = function ?
             [device newComputePipelineStateWithFunction:function error:&error] : nil;
         id<MTLCommandQueue> queue = [device newCommandQueue];
@@ -1006,8 +1039,10 @@ int main(int argc, const char *argv[]) {
         report[@"windowserver_accelerator_client"] = @(windowServerClient);
         report[@"screen_capture_preflight"] = @(CGPreflightScreenCaptureAccess());
 
-        report[@"offscreen"] = offscreenThroughput(device, library, queue);
-        report[@"identity"] = identityMatrix(device, library, queue, YES);
+        id<MTLLibrary> library = compileLibrary(device, kShaderSource, @"render", shaderErrors);
+        id<MTLLibrary> identityLibrary = compileLibrary(device, kIdentitySource, @"identity", shaderErrors);
+        if (library) report[@"offscreen"] = offscreenThroughput(device, library, queue);
+        report[@"identity"] = identityMatrix(device, identityLibrary, queue, YES);
         report[@"render_children"] = @[ renderChildRun(argv[0], expiry, @"0"),
                                         renderChildRun(argv[0], expiry, @"1") ];
 
