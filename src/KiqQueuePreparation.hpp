@@ -15,6 +15,87 @@ enum class QueueRegister : uint8_t {
     Doorbell,
 };
 
+enum class HaltedRegister : uint8_t { MecControl, Active, Dequeue, Rptr, WptrHi, WptrLo, Poll, Doorbell };
+constexpr uint32_t kMecHaltMask = (1U << 28) | (1U << 30);
+
+struct HaltedNativeTransaction {
+    uint32_t savedMecControl = 0;
+    uint64_t expectedPq = 0;
+    bool held = false;
+};
+
+inline bool haltedNativeResultVerified(bool nativeSuccess, uint32_t mec, uint32_t active,
+                                       uint32_t dequeue, uint32_t mqdLo, uint32_t mqdHi,
+                                       uint32_t pqLo, uint32_t pqHi, uint32_t eopLo,
+                                       uint32_t eopHi, uint32_t eopControl, uint32_t rptr,
+                                       uint32_t wptrHi, uint32_t wptrLo,
+                                       uint64_t expectedMqd, uint64_t expectedPq,
+                                       uint64_t expectedEop) {
+    const uint32_t values[] = {mec, active, dequeue, mqdLo, mqdHi, pqLo, pqHi, eopLo,
+                               eopHi, eopControl, rptr, wptrHi, wptrLo};
+    for (auto value : values)
+        if (value == 0xffffffffU) return false;
+    if (expectedMqd == 0 || expectedPq == 0 || expectedEop == 0) return false;
+    return nativeSuccess && (mec & kMecHaltMask) == kMecHaltMask && (active & 1) &&
+        dequeue == 0 && mqdLo == static_cast<uint32_t>(expectedMqd) &&
+        mqdHi == static_cast<uint32_t>(expectedMqd >> 32) &&
+        pqLo == static_cast<uint32_t>(expectedPq) && pqHi == static_cast<uint32_t>(expectedPq >> 32) &&
+        eopLo == static_cast<uint32_t>(expectedEop >> 8) &&
+        eopHi == static_cast<uint32_t>(expectedEop >> 40) && eopControl == 6 &&
+        rptr == 0 && wptrHi == 0 && wptrLo == 0;
+}
+
+template <typename Read, typename Write, typename Delay>
+bool beginHaltedNative(HaltedNativeTransaction &tx, Read read, Write write, Delay delay) {
+    tx = {};
+    tx.savedMecControl = read(HaltedRegister::MecControl);
+    if (tx.savedMecControl == 0xffffffffU) return false;
+    write(HaltedRegister::MecControl, tx.savedMecControl | kMecHaltMask);
+    delay(50);
+    const uint32_t halted = read(HaltedRegister::MecControl);
+    if (halted == 0xffffffffU || (halted & kMecHaltMask) != kMecHaltMask) return false;
+    tx.held = true;
+    write(HaltedRegister::Active, 0);
+    write(HaltedRegister::Dequeue, 0);
+    write(HaltedRegister::Rptr, 0);
+    write(HaltedRegister::WptrHi, 0);
+    write(HaltedRegister::WptrLo, 0);
+    const uint32_t active = read(HaltedRegister::Active);
+    const uint32_t dequeue = read(HaltedRegister::Dequeue);
+    const uint32_t rptr = read(HaltedRegister::Rptr);
+    const uint32_t whi = read(HaltedRegister::WptrHi);
+    const uint32_t wlo = read(HaltedRegister::WptrLo);
+    const uint32_t poll = read(HaltedRegister::Poll);
+    const uint32_t doorbell = read(HaltedRegister::Doorbell);
+    if (active == 0xffffffffU || dequeue == 0xffffffffU || rptr == 0xffffffffU ||
+        whi == 0xffffffffU || wlo == 0xffffffffU || poll == 0xffffffffU ||
+        doorbell == 0xffffffffU || (active & 1) || dequeue || rptr || whi || wlo ||
+        (poll & (1U << 31)) || (doorbell & (1U << 30))) return false;
+    return true;
+}
+
+template <typename Read, typename Write, typename Delay>
+bool releaseHaltedNative(HaltedNativeTransaction &tx, Read read, Write write,
+                         Delay delay, bool nativeSuccess, bool hqdVerified) {
+    if (!tx.held) return false;
+    if (!nativeSuccess || !hqdVerified) {
+        write(HaltedRegister::MecControl, tx.savedMecControl | kMecHaltMask);
+        delay(50);
+        return false;
+    }
+    write(HaltedRegister::MecControl, tx.savedMecControl);
+    delay(50);
+    if (read(HaltedRegister::MecControl) == tx.savedMecControl &&
+        (read(HaltedRegister::MecControl) & kMecHaltMask) ==
+            (tx.savedMecControl & kMecHaltMask)) {
+        tx.held = false;
+        return true;
+    }
+    write(HaltedRegister::MecControl, tx.savedMecControl | kMecHaltMask);
+    delay(50);
+    return false;
+}
+
 // Registers that must be populated after Apple's native startKIQ has created
 // the HQD.  Keep this separate from QueueRegister so the mode-2 repair cannot
 // accidentally enable a speculative doorbell path.

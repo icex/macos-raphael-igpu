@@ -58,6 +58,21 @@ struct FakeEop {
     }
 };
 
+struct FakeHalted {
+    using Register = RaphaelKiq::HaltedRegister;
+    std::array<uint32_t, 8> value {};
+    std::vector<Register> writes;
+    bool ignoreHalt {false};
+    bool ignoreQueue {false};
+    uint32_t read(Register reg) const { return value[static_cast<unsigned>(reg)]; }
+    void write(Register reg, uint32_t next) {
+        writes.push_back(reg);
+        if (reg == Register::MecControl && ignoreHalt) return;
+        if (reg != Register::MecControl && ignoreQueue) return;
+        value[static_cast<unsigned>(reg)] = next;
+    }
+};
+
 static RaphaelKiq::QueuePreparation prepare(FakeQueue &queue, unsigned &nativeCalls) {
     auto result = RaphaelKiq::prepareQueueForNativeStart(
         [&](RaphaelKiq::QueueRegister reg) { return queue.read(reg); },
@@ -219,6 +234,108 @@ int main() {
                  true, 0x8400000000ULL, 0x8400000800ULL,
                  0x8400000000ULL, 0x8400000800ULL, inaccessibleState, true, true, true),
             "native restore rejects inaccessible timeout state");
+
+    FakeHalted halted;
+    halted.value[static_cast<unsigned>(FakeHalted::Register::MecControl)] = 0x1234;
+    RaphaelKiq::HaltedNativeTransaction transaction;
+    unsigned delays = 0;
+    require(RaphaelKiq::beginHaltedNative(
+                transaction,
+                [&](FakeHalted::Register reg) { return halted.read(reg); },
+                [&](FakeHalted::Register reg, uint32_t value) { halted.write(reg, value); },
+                [&](unsigned us) { delays += us; }),
+            "halted-native setup succeeds with readable halt and queue state");
+    require(transaction.held && delays == 50 &&
+                halted.writes.size() == 6 &&
+                halted.writes[0] == FakeHalted::Register::MecControl &&
+                halted.writes[1] == FakeHalted::Register::Active &&
+                halted.writes[5] == FakeHalted::Register::WptrLo,
+            "native is armed only after MEC halt and pointer clearing");
+            require(!RaphaelKiq::releaseHaltedNative(
+                 transaction,
+                 [&](FakeHalted::Register reg) { return halted.read(reg); },
+                 [&](FakeHalted::Register reg, uint32_t value) { halted.write(reg, value); },
+                 [&](unsigned us) { delays += us; }, false, true) && transaction.held,
+            "native failure leaves MEC transaction held");
+    require(halted.read(FakeHalted::Register::MecControl) ==
+                (0x1234U | RaphaelKiq::kMecHaltMask),
+            "failed native verification reasserts the saved MEC halt bits");
+    require(RaphaelKiq::releaseHaltedNative(
+                transaction,
+                [&](FakeHalted::Register reg) { return halted.read(reg); },
+                [&](FakeHalted::Register reg, uint32_t value) { halted.write(reg, value); },
+                [&](unsigned us) { delays += us; }, true, true) && !transaction.held &&
+                halted.read(FakeHalted::Register::MecControl) == 0x1234,
+            "verified native success restores saved MEC control");
+
+    FakeHalted inaccessibleHalt;
+    inaccessibleHalt.value[static_cast<unsigned>(FakeHalted::Register::MecControl)] = 0xffffffffU;
+    transaction = {};
+    require(!RaphaelKiq::beginHaltedNative(
+                 transaction,
+                 [&](FakeHalted::Register reg) { return inaccessibleHalt.read(reg); },
+                 [&](FakeHalted::Register reg, uint32_t value) { inaccessibleHalt.write(reg, value); },
+                 [](unsigned) {}),
+            "inaccessible MEC control blocks setup before queue writes");
+    require(inaccessibleHalt.writes.empty(), "inaccessible halt has no speculative queue writes");
+
+    FakeHalted ignoredHalt;
+    ignoredHalt.value[static_cast<unsigned>(FakeHalted::Register::MecControl)] = 0x1234;
+    ignoredHalt.ignoreHalt = true;
+    transaction = {};
+    require(!RaphaelKiq::beginHaltedNative(
+                 transaction,
+                 [&](FakeHalted::Register reg) { return ignoredHalt.read(reg); },
+                 [&](FakeHalted::Register reg, uint32_t value) { ignoredHalt.write(reg, value); },
+                 [](unsigned) {}),
+            "ignored MEC halt readback blocks setup before queue writes");
+    require(ignoredHalt.writes.size() == 1, "ignored halt performs no queue writes");
+    FakeHalted ignoredQueue;
+    ignoredQueue.value[static_cast<unsigned>(FakeHalted::Register::MecControl)] = 0x1234;
+    ignoredQueue.value[static_cast<unsigned>(FakeHalted::Register::Active)] = 1;
+    ignoredQueue.ignoreQueue = true;
+    transaction = {};
+    require(!RaphaelKiq::beginHaltedNative(
+                 transaction,
+                 [&](FakeHalted::Register reg) { return ignoredQueue.read(reg); },
+                 [&](FakeHalted::Register reg, uint32_t value) { ignoredQueue.write(reg, value); },
+                 [](unsigned) {}) && transaction.held,
+            "ignored ACTIVE clear blocks setup while retaining the halt transaction");
+    require(RaphaelKiq::haltedNativeResultVerified(
+                true, 0x50000000, 1, 0, 0, 0x84, 0xffbfea00, 0,
+                0x84000008, 0, 6, 0, 0, 0, 0x8400000000ULL, 0xffbfea00ULL,
+                0x8400000800ULL),
+            "verified native result permits release");
+    require(!RaphaelKiq::haltedNativeResultVerified(
+                 true, 0xffffffffU, 1, 0, 0, 0x84, 0xffbfea00, 0,
+                 0x84000008, 0, 6, 0, 0, 0, 0x8400000000ULL, 0xffbfea00ULL,
+                 0x8400000800ULL),
+            "inaccessible MEC readback blocks release");
+    require(!RaphaelKiq::haltedNativeResultVerified(
+                 true, 0x50000000, 0xffffffffU, 0, 0, 0x84, 0xffbfea00, 0,
+                 0x84000008, 0, 6, 0, 0, 0, 0x8400000000ULL, 0xffbfea00ULL,
+                 0x8400000800ULL),
+            "inaccessible ACTIVE readback blocks release");
+    require(!RaphaelKiq::haltedNativeResultVerified(
+                 false, 0x50000000, 1, 0, 0, 0x84, 0xffbfea00, 0,
+                 0x84000008, 0, 6, 0, 0, 0, 0x8400000000ULL, 0xffbfea00ULL,
+                 0x8400000800ULL),
+            "native failure blocks release");
+    require(!RaphaelKiq::haltedNativeResultVerified(
+                 true, 0x50000000, 1, 0, 1, 0x84, 0xffbfea00, 0,
+                 0x84000008, 0, 6, 0, 0, 0, 0x8400000000ULL, 0xffbfea00ULL,
+                 0x8400000800ULL),
+            "MQD mismatch blocks release");
+    require(!RaphaelKiq::haltedNativeResultVerified(
+                 true, 0x50000000, 1, 0, 0, 0x84, 0xffbfea00, 0,
+                 0xffffffffU, 0, 6, 0, 0, 0, 0x8400000000ULL, 0xffbfea00ULL,
+                 0x8400000800ULL),
+            "inaccessible EOP readback blocks release");
+    require(!RaphaelKiq::haltedNativeResultVerified(
+                 true, 0x50000000, 1, 0, 0, 0x84, 0, 0,
+                 0x84000008, 0, 6, 0, 0, 0, 0x8400000000ULL, 0xffbfea00ULL,
+                 0x8400000800ULL),
+            "empty PQ readback blocks release");
 
     FakeQueue inaccessible;
     inaccessible.value[static_cast<unsigned>(Register::WptrHi)] = 0xffffffffU;
