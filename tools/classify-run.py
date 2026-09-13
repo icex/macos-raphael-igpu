@@ -1297,7 +1297,7 @@ def _classify(manifest, events, probe, defer_absent_workload=False):
     live_terminal_kiq = [r for r in kinds['kiq']
                          if r.get('source') == 'live-terminal' and
                          (not panics or r['seq'] < panics[0]['seq'])]
-    restore_enabled = manifest.get('spec', {}).get('functional_boot_arguments', {}).get('rgpumqdrestore') in ('1', '2')
+    restore_enabled = manifest.get('spec', {}).get('functional_boot_arguments', {}).get('rgpumqdrestore') in ('1', '2', '3')
     diagnostic_dequeue = (lambda r: restore_enabled and
                           r.get('source') == 'dequeue-timeout' and
                           r.get('restore_admitted') is True)
