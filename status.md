@@ -1189,3 +1189,45 @@ sha256 `28c7b7cc...`, binary sha256 `74e92988...`). The 1.0.218 binary with card
 through `--manual-reuse --ack-risk` under the user's standing instruction, after
 `run/mode2-reset-21.json`. This note covers this one launch.
 
+## Probe v6: rendering is correct; CPU-visible texture layouts are permuted (2026-09-14)
+
+Run in `run/candidate-218-attempt-v6-results`, card `metal-063` (commit `0c0a5ea`), 1.0.218
+build `10cce4d8...`, launch 22 after `run/mode2-reset-21.json`. Verdict `CORE_PROBE_PASS`,
+recovery `recovered`, shutdown `exited-after-guest-request`.
+
+| Size | Read back through | Wrong pixels |
+|---|---|---|
+| 64x64 | Private texture to Shared buffer | 3,840 of 4,096 |
+| 64x64 | Private texture to Managed buffer, synchronize | 0 |
+| 64x64 | Private texture to Managed texture, synchronize | 0 |
+| 64x64 | Render into Managed texture, synchronize | 0 |
+| 1280x1024 | Private texture to Shared buffer | 1,290,240 |
+| 1280x1024 | Private texture to Managed buffer, synchronize | 0 |
+| 1280x1024 | Private texture to Managed texture, synchronize | 1,310,720 |
+| 1280x1024 | Render into Managed texture, synchronize | 1,310,720 |
+
+The GPU renders the identity image exactly; only paths that expose texture memory
+layout to the CPU are permuted. AMD's GFX10 address library (Mesa
+`src/amd/addrlib/src/gfx10/gfx10addrlib.cpp`) selects swizzle patterns and the pipe-bank
+xor from `GB_ADDR_CONFIG.NUM_PIPES`. In Apple's kernel, `AMDHWAlignManager2::init`
+(`x6+0x6032a`) builds `ADDR_CREATE_INPUT` (size `0x70`) with `regValue.gbAddrConfig` from
+hardware-info offset `0xa0`, and `AMDAccelDevice::getHardwareInfo` copies the same
+`0x204`-byte block to user space. Discrete Navi2x boards report `GB_ADDR_CONFIG` 0x44
+(16 pipes); Raphael reads 0x42 (4 pipes). Swizzle environment switch found in the
+Metal driver: `AMD_MTL_ALLOW_VAR_SWIZZLE_MODES` (bit 59, only honored when a
+hardware-info capability bit allows it).
+
+## Candidate 219: correct the address library's gbAddrConfig (2026-09-14)
+
+Commit `54e0c63`, build `0556fc2275ad46d8bbd7a93e8992d7e3`. `rgpuaddrcfg=2` routes
+`AMDHWAlignManager2::init` (18-byte position-independent prologue guard), logs the
+hardware-info block (`XA:` lines) and the live `GB_ADDR_CONFIG`, and replaces
+hardware-info `gbAddrConfig` with the live value before the address library is created.
+Suite: 892 tests OK.
+
+## Boot-launch ledger extension for candidate 219 (2026-09-14)
+
+Candidate 219 (card `metal-064`, desktop probe v6) runs from `run/candidate-219` as
+launch 23 on boot `c369c74e`, through `--manual-reuse --ack-risk` under the user's
+standing instruction, after `run/mode2-reset-22.json`. This note covers this one launch.
+
