@@ -818,3 +818,39 @@ The same 1.0.218 binary and card `metal-054` run from
 `run/mode2-reset-10.json` with `RLC_CNTL=0` and `CP_STAT=0`. This note covers this
 one launch.
 
+## Candidate 218 attempt q2: first clean desktop run (2026-09-14)
+
+Run `192d54f3313678079546c75ef0b2bfbc`, card `metal-054`, 1.0.218 build
+`10cce4d85456402cb9bb469b3da3077d` from `run/candidate-218-attempt-q2`, launch 11
+after `run/mode2-reset-10.json`, with the quiesce forwarder deployed.
+
+- **Verdict `CORE_PROBE_PASS`** with no functional boundary (valid capture).
+- Desktop session active; graphics ring advanced and drained on every sample
+  (`RPTR=WPTR=0xb380` at the last sample before shutdown), **zero** hang dumps,
+  GPU restart reports or KIQ stamp timeouts.
+- Small Metal compute probe passed.
+- COM2 quiesce acknowledged 5.7 s after the request (snapshot 6, 336 records,
+  `run/candidate-218-attempt-q2-results/critical-quiesce.json`).
+- Shutdown `exited-after-guest-request`; recovery schema 6 **`recovered`**; host
+  after vfio-pci, accessible, no active VM.
+
+| Candidate | Change | GFX ring | Probe / verdict | Recovery |
+|---|---|---|---|---|
+| 217 | nobin + sampler + quiesce (no forwarder) | drained | passed / INVALID (cancelled) | incomplete |
+| 218 | late quiesce responder (no forwarder) | drained | passed / INVALID (cancelled) | incomplete |
+| **218-q2** | **collector forwards quiesce** | **drained, 0 stalls** | **passed / CORE_PROBE_PASS** | **recovered** |
+
+Next: repeat this exact binary and card twice (attempts q3, q4) for three
+consecutive clean bounded lifecycle cycles (M7), then the full compute+render
+probe (M5, needs a GPU-less guest compile of `tests/metal_probe.m`), WindowServer
+composition evidence and display output (M6), and a binning clamp in place of the
+global disable.
+
+## Boot-launch ledger extensions for candidate 218 attempts q3 and q4 (2026-09-14)
+
+Two repeats of the q2 configuration run as launches 12 and 13 on boot `c369c74e`,
+each from its own attempt namespace, through `--manual-reuse --ack-risk` under the
+user's standing instruction. Each is preceded by its own MODE2 reset receipt
+(`run/mode2-reset-11.json`, `run/mode2-reset-12.json`) showing `RLC_CNTL=0` and
+`CP_STAT=0`. A failure in q3 stops the series for diagnosis before q4.
+
