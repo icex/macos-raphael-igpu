@@ -672,3 +672,30 @@ recovered cleanly. Precondition: MODE2 reset receipt `run/mode2-reset-6.json`
 with `RLC_CNTL=0` and `CP_STAT=0` immediately before staging. This note covers
 this one launch.
 
+## Candidate 216 gc_10_3_6 CP microcode (2026-09-14)
+
+Run `07fddb4109a00e886baacb8ecfed2211`, card `metal-051` (commit `d145a75`),
+source `304d4ad`, build `14b0fa714e2f4feda48bef5e2851fa61`, launch 7 after
+`run/mode2-reset-6.json`. All three descriptors were replaced
+(`X9C: 3 of 3`: Apple ME/CE/PFP `0x0101200x` -> gc_10_3_6 `0x8101200x`), the PSP
+accepted every load (no FAILED responses) and TTL initialization completed. The
+new microcode ran (instruction pointers PFP `0xbf4`, ME `0x5ca->0x5f9`, CE
+`0x624`, all different from Apple's), yet the graphics ring stalled identically:
+`RPTR=0x1fb1`, `WPTR=0x2180`, same ME/PFP header history, same WAIT_REG_MEM at IB
+dword 0xbcf, `CP_STALLED_STAT2=0x230000`. The probe passed; recovery
+`recovered`; host after vfio-pci and accessible. Verdict `INCONCLUSIVE/
+identity_or_route_missing` again from COM2 capture loss at shutdown (215 and 216;
+214 was clean), to be investigated separately.
+
+Result: the CP microcode family is not the cause. The pipeline itself does not
+finish the draws.
+
+## Boot-launch ledger extension for candidate 216 nobin attempt (2026-09-14)
+
+The same 1.0.216 binary with card `metal-052` (`rgpunobin=1`,
+`PA_SC_ENHANCE_1.DISABLE_SC_BINNING`, Apple microcode) runs as launch 8 on boot
+`c369c74e` from attempt namespace `run/candidate-216-attempt-nobin`, through
+`--manual-reuse --ack-risk` under the user's standing instruction. Precondition:
+`run/mode2-reset-7.json` with `RLC_CNTL=0` and `CP_STAT=0` before staging. This
+note covers this one launch.
+
