@@ -92,6 +92,33 @@ int main() {
                                0x10000000ULL, offset), "beyond the visible BAR is refused");
     require(!framebufferOffset(0x840123004ULL, 0xf400000000ULL, 0x840000000ULL,
                                0x10000000ULL, offset), "an unaligned page is refused");
+    require(packetDwords(0xffff1000u) == 1u && packetDwords(0x80000000u) == 1u,
+            "fillers occupy one dword");
+    require(packetDwords(0xc0053c00u) == 7u && packetDwords(0xc0023f00u) == 4u,
+            "type-3 size is count plus two");
+    require(packetDwords(0x00001234u) == 0u, "type-0 headers are not parsed");
+
+    // Candidate 212 ring: WAIT_REG_MEM (CP_COHER_STATUS & 0x80000000) == 0.
+    const uint32_t ringWait[] {0xc0053c00u, 3u, 0xc07fu, 0, 0, 0x80000000u, 0xau};
+    const auto wait = parseWaitRegMem(ringWait, 7, 0);
+    require(wait.valid && wait.function == 3u && wait.memSpace == 0u && wait.address == 0xc07fu,
+            "register WAIT_REG_MEM decodes");
+    require(wait.reference == 0 && wait.mask == 0x80000000u && wait.interval == 0xau,
+            "reference, mask and interval decode");
+    require(waitSatisfied(wait.function, 0x7fffffffu, wait.reference, wait.mask),
+            "clear bit 31 satisfies the ring wait");
+    require(!waitSatisfied(wait.function, 0x80000000u, wait.reference, wait.mask),
+            "set bit 31 keeps the ring waiting");
+    const uint32_t memoryWait[] {0xc0053c00u, 0x13u, 0xbfde0013u, 0xffu, 0x40u, 0xffffffffu, 0xau};
+    const auto memory = parseWaitRegMem(memoryWait, 7, 0);
+    require(memory.valid && memory.memSpace == 1u && memory.address == 0xffbfde0010ULL,
+            "memory WAIT_REG_MEM joins and aligns the address");
+    require(!parseWaitRegMem(memoryWait, 6, 0).valid, "a truncated WAIT_REG_MEM is refused");
+    require(!parseWaitRegMem(words, 9, 1).valid, "an IB packet is not a WAIT_REG_MEM");
+    require(waitSatisfied(0, 1, 2, 3) && waitSatisfied(1, 1, 2, 3) && waitSatisfied(2, 2, 2, 3) &&
+            waitSatisfied(4, 1, 2, 3) && waitSatisfied(5, 2, 2, 3) && waitSatisfied(6, 3, 2, 3) &&
+            !waitSatisfied(7, 0, 0, 0), "every compare function");
+
     std::puts("gfx hang dump arithmetic: ok");
     return 0;
 }

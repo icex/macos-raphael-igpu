@@ -3765,8 +3765,118 @@ static void observeGfxRingHang(const char *when) {
          fbRead(asicInfo, kGcMeInstrPntr), ce, fbRead(asicInfo, kGcCeInstrPntr),
          fbRead(asicInfo, kGcVmFaultSts), fbRead(asicInfo, kGcVmFaultHi),
          fbRead(asicInfo, kGcVmFaultLo));
+    // Every ring frame waits on CP_COHER_STATUS bit 31 with CP_WAIT_REG_MEM_TIMEOUT 0.
+    RLOG("XD: CP_COHER CNTL=%#x START_DELAY=%#x STATUS=%#x BASE=%#x_%08x SIZE=%#x | "
+         "CP_ME_COHER CNTL=%#x STATUS=%#x | CP_WAIT_REG_MEM_TIMEOUT=%#x PFP_COMPLETION=%#x",
+         fbRead(asicInfo, kGcSeg1 + 0x207c), fbRead(asicInfo, kGcSeg1 + 0x207b),
+         fbRead(asicInfo, kGcSeg1 + 0x207f), fbRead(asicInfo, kGcSeg1 + 0x2079),
+         fbRead(asicInfo, kGcSeg1 + 0x207e), fbRead(asicInfo, kGcSeg1 + 0x207d),
+         fbRead(asicInfo, kGcSeg1 + 0x20fe), fbRead(asicInfo, kGcSeg1 + 0x2103),
+         fbRead(asicInfo, kGcSeg1 + 0x2074), fbRead(asicInfo, kGcSeg1 + 0x20ec));
     __atomic_store_n(&hangSnapshotCount, index + 1, __ATOMIC_RELEASE);
     __atomic_store_n(&hangSnapshotBusy, 0u, __ATOMIC_RELEASE);
+}
+
+// rgpuhangdump=1, candidate 213. Candidate 212 showed the ME parked in a WAIT_REG_MEM
+// past dword 0x100 of WallpaperSequoia's draw IB, which Apple's restart report prints
+// only up to 0x100 and which the BAR cannot reach (VMID 3 page tables sit above the
+// 256 MiB aperture). The report itself maps each pending command buffer with
+// IAMDHWChannel::mapCmdBuffers (IOAccelSysMemory::lockForCPUAccess), so wrap it: copy
+// the whole buffer, sample every register WAIT_REG_MEM target while the ME is still
+// parked, and leave formatting to hangDumpThread.
+static constexpr size_t kOffPendingCommandReport = 0xd950;
+    // __ZN30AMDRadeonX6000_AMDAccelChannel38writePendingCommandInfoDiagnosisReportERPcRjP18AMD_COMMAND_BUFFERP11IOAccelTask [x6]
+static constexpr size_t kOffMapCmdBuffers = 0x4d58e;
+    // __ZN28AMDRadeonX6000_IAMDHWChannel13mapCmdBuffersEP18AMD_COMMAND_BUFFERjP13AMD_MAPPED_CB [x6]
+static constexpr size_t kOffUnmapCmdBuffers = 0x4d608;
+    // __ZN28AMDRadeonX6000_IAMDHWChannel15unmapCmdBuffersEP18AMD_COMMAND_BUFFERjP13AMD_MAPPED_CB [x6]
+static mach_vm_address_t orgPendingCommandReport = 0;
+static mach_vm_address_t hangMapCmdBuffers = 0;
+static mach_vm_address_t hangUnmapCmdBuffers = 0;
+static constexpr unsigned kHangCbLimit = 2;
+static constexpr uint32_t kHangCbMaxDwords = 0x4000;
+static constexpr unsigned kHangWaitLimit = 16;
+static constexpr unsigned kHangWaitSamples = 3;
+struct HangWaitSample {
+    uint32_t at;
+    RaphaelHang::WaitRegMem wait;
+    bool sampled;
+    uint32_t values[kHangWaitSamples];
+};
+struct HangCommandBuffer {
+    uint64_t va;
+    uint32_t size;
+    uint32_t copied;
+    uint32_t waits;
+    HangWaitSample wait[kHangWaitLimit];
+    uint32_t words[kHangCbMaxDwords];
+};
+static HangCommandBuffer hangCbs[kHangCbLimit] {};
+static volatile uint32_t hangCbCount = 0;
+static volatile uint32_t hangCbBusy = 0;
+
+static void capturePendingCommandBuffer(void *cb) {
+    if (hangDumpMode != 1 || cb == nullptr || hangMapCmdBuffers == 0 ||
+        hangUnmapCmdBuffers == 0)
+        return;
+    uint32_t expected = 0;
+    if (!__atomic_compare_exchange_n(&hangCbBusy, &expected, 1u, false,
+                                     __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) return;
+    const uint32_t index = __atomic_load_n(&hangCbCount, __ATOMIC_ACQUIRE);
+    const auto fields = reinterpret_cast<const uint8_t *>(cb);
+    const uint32_t size = RaphaelVm::readU32(fields + 4);
+    const uint64_t va = RaphaelVm::readU64(fields + 0x10);
+    bool duplicate = false;
+    for (uint32_t i = 0; i < index && i < kHangCbLimit; ++i) duplicate |= hangCbs[i].va == va;
+    if (index >= kHangCbLimit || duplicate || size == 0) {
+        __atomic_store_n(&hangCbBusy, 0u, __ATOMIC_RELEASE);
+        return;
+    }
+    using CmdBufferMap = void (*)(void *, uint32_t, uint64_t *);
+    uint64_t mapped = 0;
+    reinterpret_cast<CmdBufferMap>(hangMapCmdBuffers)(cb, 1, &mapped);
+    if (mapped == 0) {
+        RLOG("XB: pending CB va=%#llx size=%#x not mappable", va, size);
+        __atomic_store_n(&hangCbBusy, 0u, __ATOMIC_RELEASE);
+        return;
+    }
+    auto &out = hangCbs[index];
+    out.va = va;
+    out.size = size;
+    out.copied = size < kHangCbMaxDwords ? size : kHangCbMaxDwords;
+    const auto source = reinterpret_cast<const uint32_t *>(mapped);
+    for (uint32_t i = 0; i < out.copied; ++i) out.words[i] = source[i];
+    reinterpret_cast<CmdBufferMap>(hangUnmapCmdBuffers)(cb, 1, &mapped);
+    out.waits = 0;
+    for (uint32_t at = 0; at < out.copied && out.waits < kHangWaitLimit;) {
+        const uint32_t dwords = RaphaelHang::packetDwords(out.words[at]);
+        if (dwords == 0) { ++at; continue; }
+        const auto wait = RaphaelHang::parseWaitRegMem(out.words, out.copied, at);
+        if (wait.valid) {
+            auto &sample = out.wait[out.waits++];
+            sample.at = at;
+            sample.wait = wait;
+            // Register targets only; an MMIO index past BAR5 is not read.
+            sample.sampled = wait.memSpace == 0 && wait.address < 0x20000 && asicInfo != nullptr;
+            for (unsigned k = 0; k < kHangWaitSamples; ++k) {
+                sample.values[k] = sample.sampled
+                    ? fbRead(asicInfo, static_cast<uint32_t>(wait.address)) : 0;
+                if (sample.sampled && k + 1 < kHangWaitSamples) IODelay(1000);
+            }
+        }
+        at += dwords;
+    }
+    __atomic_store_n(&hangCbCount, index + 1, __ATOMIC_RELEASE);
+    __atomic_store_n(&hangCbBusy, 0u, __ATOMIC_RELEASE);
+    RLOG("XB: pending CB %u va=%#llx size=%#x copied=%#x waits=%u", index, va, size, out.copied,
+         out.waits);
+}
+
+static void wrapPendingCommandReport(void *channel, char **cursor, uint32_t *remaining,
+                                     void *cb, void *task) {
+    FunctionCast(wrapPendingCommandReport, orgPendingCommandReport)(channel, cursor, remaining,
+                                                                    cb, task);
+    capturePendingCommandBuffer(cb);
 }
 
 // Observe the native frame without changing HQD contents or ringing a second doorbell.
@@ -5791,14 +5901,54 @@ static void dumpGfxHangMemory(uint32_t index, const GfxHangSnapshot &snap) {
     RLOG("XD: gfx hang dump %u memory complete", index);
 }
 
+static void printHangCommandBuffer(uint32_t index, const HangCommandBuffer &cb) {
+    RLOG("XB: cb%u va=%#llx size=%#x copied=%#x", index, cb.va, cb.size, cb.copied);
+    char line[160];
+    for (uint32_t first = 0; first < cb.copied; first += 8) {
+        int used = 0;
+        for (uint32_t i = first; i < first + 8 && i < cb.copied; ++i)
+            used += snprintf(line + used, sizeof(line) - used, " %08x", cb.words[i]);
+        RLOG("XB: cb%u [%#06x]%s", index, first, line);
+    }
+    for (uint32_t n = 0; n < cb.waits; ++n) {
+        const auto &sample = cb.wait[n];
+        const auto &w = sample.wait;
+        RLOG("XB: cb%u WAIT_REG_MEM[%#x] op=%#x fn=%u mem=%u oper=%u eng=%u addr=%#llx "
+             "second=%#x ref=%#x mask=%#x interval=%#x", index, sample.at, w.opcode, w.function,
+             w.memSpace, w.operation, w.engine, w.address, w.second, w.reference, w.mask,
+             w.interval);
+        if (sample.sampled) {
+            RLOG("XB: cb%u WAIT_REG_MEM[%#x] register %#llx at capture = %#x %#x %#x "
+                 "satisfied=%u", index, sample.at, w.address, sample.values[0], sample.values[1],
+                 sample.values[2], RaphaelHang::waitSatisfied(w.function, sample.values[2],
+                                                               w.reference, w.mask));
+        } else if (w.memSpace == 1) {
+            const auto source = hangGartPage(w.address & ~0xfffULL);
+            const bool read = readHangPage(source, hangPageWords);
+            const uint32_t value = read ? hangPageWords[(w.address & 0xfff) / 4] : 0;
+            RLOG("XB: cb%u WAIT_REG_MEM[%#x] memory %#llx via gart ok=%u read=%u value=%#x "
+                 "satisfied=%u (read after capture)", index, sample.at, w.address, source.ok,
+                 read, value, read && RaphaelHang::waitSatisfied(w.function, value, w.reference,
+                                                                 w.mask));
+        }
+    }
+    RLOG("XB: cb%u complete", index);
+}
+
 static void hangDumpThread(void *, wait_result_t) {
-    uint32_t served = 0;
+    uint32_t served = 0, cbServed = 0;
     // 120000 polls of 50 ms cover the longest authorized 6000-second run.
-    for (unsigned poll = 0; poll < 120000 && served < kHangDumpLimit; ++poll) {
+    for (unsigned poll = 0; poll < 120000 &&
+         (served < kHangDumpLimit || cbServed < kHangCbLimit); ++poll) {
         const uint32_t published = __atomic_load_n(&hangSnapshotCount, __ATOMIC_ACQUIRE);
         while (served < published && served < kHangDumpLimit) {
             dumpGfxHangMemory(served, hangSnapshots[served]);
             ++served;
+        }
+        const uint32_t cbs = __atomic_load_n(&hangCbCount, __ATOMIC_ACQUIRE);
+        while (cbServed < cbs && cbServed < kHangCbLimit) {
+            printHangCommandBuffer(cbServed, hangCbs[cbServed]);
+            ++cbServed;
         }
         IOSleep(50);
     }
@@ -7224,6 +7374,35 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
             __atomic_store_n(&submissionTraceRoutesReady, ready, __ATOMIC_RELEASE);
             CRLOG("SUB: routes=%s count=7 entries-match=%u capture=%s",
                   ready ? "ok" : "FAILED", entriesMatch, ready ? "armed" : "disabled");
+        }
+        if (hangDumpMode == 1) {
+            // Complete instructions: the report prologue through sub rsp,0x38, and the
+            // map/unmap entries through mov rbx,rdx (called, not routed).
+            static const uint8_t reportEntry[] = {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57,
+                0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53, 0x48, 0x83, 0xec, 0x38};
+            static const uint8_t mapCbEntry[] = {0x85, 0xf6, 0x74, 0x74, 0x55, 0x48, 0x89,
+                0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53, 0x50, 0x48, 0x89,
+                0xd3};
+            static const uint8_t unmapCbEntry[] = {0x85, 0xf6, 0x74, 0x64, 0x55, 0x48, 0x89,
+                0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53, 0x50, 0x48, 0x89,
+                0xd3};
+            const bool reportMatches =
+                entryMatches(addr, sz, kOffPendingCommandReport, reportEntry,
+                             sizeof(reportEntry)) &&
+                entryMatches(addr, sz, kOffMapCmdBuffers, mapCbEntry, sizeof(mapCbEntry)) &&
+                entryMatches(addr, sz, kOffUnmapCmdBuffers, unmapCbEntry,
+                             sizeof(unmapCbEntry));
+            if (reportMatches) {
+                hangMapCmdBuffers = addr + kOffMapCmdBuffers;
+                hangUnmapCmdBuffers = addr + kOffUnmapCmdBuffers;
+                orgPendingCommandReport = patcher.routeFunction(
+                    addr + kOffPendingCommandReport,
+                    reinterpret_cast<mach_vm_address_t>(wrapPendingCommandReport), true);
+                patcher.clearError();
+            }
+            RLOG("XB: pending command report route entries-match=%u route=%s (org=%#llx)",
+                 reportMatches, orgPendingCommandReport ? "ok" : "FAILED",
+                 orgPendingCommandReport);
         }
         // Exact complete instructions displaced by the five new X6000 routes.
         // The start/powerOff patterns extend to 21 bytes because byte 16 is in

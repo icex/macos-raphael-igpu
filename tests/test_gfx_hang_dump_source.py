@@ -23,7 +23,7 @@ class GfxHangDumpSourceTests(unittest.TestCase):
         start = self.body('static void pluginStart()', 'static const char *bootargOff[]')
         gate = start.index('if (hangDumpMode == 1) {')
         self.assertLess(gate, start.index('kernel_thread_start(hangDumpThread'))
-        observe = self.body('static void observeGfxRingHang', '// Observe the native frame')
+        observe = self.body('static void observeGfxRingHang', '// rgpuhangdump=1, candidate 213.')
         self.assertLess(observe.index('if (hangDumpMode != 1 || asicInfo == nullptr) return;'),
                         observe.index('fbRead('))
 
@@ -33,7 +33,7 @@ class GfxHangDumpSourceTests(unittest.TestCase):
         self.assertLess(restore, kick.index('observeGfxRingHang("KIQ observation");'))
 
     def test_hook_side_reads_registers_only(self):
-        observe = self.body('static void observeGfxRingHang', '// Observe the native frame')
+        observe = self.body('static void observeGfxRingHang', '// rgpuhangdump=1, candidate 213.')
         for forbidden in ('fbWrite(', 'IOMemoryDescriptor', 'readHangPage', 'fbAperture('):
             self.assertNotIn(forbidden, observe)
         self.assertIn('RaphaelHang::ringStalled(rptr, wptr, after)', observe)
@@ -61,6 +61,27 @@ class GfxHangDumpSourceTests(unittest.TestCase):
                      'kGcPaScFifoSize    = kGcSeg0 + 0x1093;',
                      '{kGcSeg1 + 0x20cc, kGcSeg1 + 0x20cd, kGcSeg1 + 0x20ce, kGcSeg1 + 0x2092},',
                      '{kGcSeg1 + 0x20cf, kGcSeg1 + 0x20d0, kGcSeg1 + 0x20d1, kGcSeg1 + 0x2093},'):
+            self.assertIn(text, self.source)
+
+    def test_pending_command_report_wrapper_is_guarded_and_bounded(self):
+        wrapper = self.body('static void wrapPendingCommandReport', '// Observe the native frame')
+        self.assertLess(wrapper.index('FunctionCast(wrapPendingCommandReport, orgPendingCommandReport)'),
+                        wrapper.index('capturePendingCommandBuffer(cb);'))
+        capture = self.body('static void capturePendingCommandBuffer',
+                            'static void wrapPendingCommandReport')
+        self.assertLess(capture.index('if (hangDumpMode != 1 || cb == nullptr'),
+                        capture.index('hangMapCmdBuffers)(cb, 1, &mapped)'))
+        self.assertLess(capture.index('hangMapCmdBuffers)(cb, 1, &mapped)'),
+                        capture.index('hangUnmapCmdBuffers)(cb, 1, &mapped)'))
+        self.assertIn('out.copied = size < kHangCbMaxDwords ? size : kHangCbMaxDwords;', capture)
+        self.assertNotIn('fbWrite(', capture)
+        self.assertNotIn('RLOG("XB: cb%u [', capture)
+        route = self.body('if (hangDumpMode == 1) {\n            // Complete instructions',
+                          'RLOG("XB: pending command report route')
+        self.assertLess(route.index('entryMatches(addr, sz, kOffPendingCommandReport'),
+                        route.index('patcher.routeFunction('))
+        for text in ('kOffPendingCommandReport = 0xd950;', 'kOffMapCmdBuffers = 0x4d58e;',
+                     'kOffUnmapCmdBuffers = 0x4d608;'):
             self.assertIn(text, self.source)
 
     @unittest.skipUnless(shutil.which('g++'), 'g++ unavailable')

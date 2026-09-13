@@ -160,4 +160,71 @@ inline bool framebufferOffset(uint64_t address, uint64_t mcBase, uint64_t physic
     return false;
 }
 
+// Dwords one packet occupies, header included; 0 for anything that is not a
+// PACKET2 filler or a type-3 header. PACKET3(NOP, 0x3fff) is a one-dword filler.
+inline uint32_t packetDwords(uint32_t header) {
+    if (header == 0x80000000u) return 1;
+    if ((header >> 30) != 3u) return 0;
+    const uint32_t count = (header >> 16) & 0x3fffu;
+    if (count == 0x3fffu && ((header >> 8) & 0xffu) == 0x10u) return 1;
+    return count + 2;
+}
+
+enum : uint32_t { kPacket3WaitRegMem = 0x3c, kPacket3WaitRegMem64 = 0x93 };
+
+struct WaitRegMem {
+    bool valid;
+    uint32_t opcode;
+    uint32_t function;   // 0 always, 1 <, 2 <=, 3 ==, 4 !=, 5 >=, 6 >
+    uint32_t memSpace;   // 0 register, 1 memory
+    uint32_t operation;  // 0 wait, 1 write then wait
+    uint32_t engine;
+    uint64_t address;    // register index, or GPU address for memory
+    uint32_t second;     // address high or second register
+    uint32_t reference;
+    uint32_t mask;
+    uint32_t interval;
+};
+
+// PACKET3(WAIT_REG_MEM, 5): control, addr0, addr1, reference, mask, interval
+// (gfx_v10_0_wait_reg_mem). Memory addresses are 4-byte aligned; addr1 is high.
+inline WaitRegMem parseWaitRegMem(const uint32_t *words, size_t count, size_t at) {
+    WaitRegMem result {false, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    if (words == nullptr || at >= count || count - at < 7) return result;
+    const uint32_t header = words[at];
+    const uint32_t opcode = (header >> 8) & 0xffu;
+    if ((header >> 30) != 3u || ((header >> 16) & 0x3fffu) != 5u ||
+        (opcode != kPacket3WaitRegMem && opcode != kPacket3WaitRegMem64))
+        return result;
+    const uint32_t control = words[at + 1];
+    result.opcode = opcode;
+    result.function = control & 7u;
+    result.memSpace = (control >> 4) & 3u;
+    result.operation = (control >> 6) & 3u;
+    result.engine = (control >> 8) & 3u;
+    result.second = words[at + 3];
+    result.address = result.memSpace == 1
+        ? (((static_cast<uint64_t>(words[at + 3]) << 32) | words[at + 2]) & ~3ULL)
+        : words[at + 2];
+    result.reference = words[at + 4];
+    result.mask = words[at + 5];
+    result.interval = words[at + 6];
+    result.valid = true;
+    return result;
+}
+
+inline bool waitSatisfied(uint32_t function, uint32_t value, uint32_t reference, uint32_t mask) {
+    const uint32_t v = value & mask;
+    switch (function) {
+        case 0: return true;
+        case 1: return v < reference;
+        case 2: return v <= reference;
+        case 3: return v == reference;
+        case 4: return v != reference;
+        case 5: return v >= reference;
+        case 6: return v > reference;
+    }
+    return false;
+}
+
 } // namespace RaphaelHang
