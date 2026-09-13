@@ -1115,3 +1115,15 @@ Next: desktop probe v5 re-runs the offscreen test and a new exact pixel-identity
 `AMD_ENABLE_PRIM_BATCH_BINNING=0` and `=1`, and runs the window child as uid 501 with its
 own drawable readback and window self-capture. The inert settings file and
 `/etc/synthetic.conf` are removed from the guest.
+
+## Boot-launch ledger extension for the probe v5 attempt (2026-09-14)
+
+GPU-less session `a21b96d7...` (no VFIO device, no ledger entry) compiled desktop probe
+v5 (source sha256 `92083f68...`, binary sha256 `857af140...`), confirmed its render child
+and its window child (now running as uid 501 through `sudo -n -u #501`) start and fail
+cleanly without a GPU, and removed `/private/etc/AmdMtlSettingsFile.txt` and
+`/private/etc/synthetic.conf`. The 1.0.218 binary with card `metal-061` runs from
+`run/candidate-218-attempt-v5` as launch 20 on boot `c369c74e`, through
+`--manual-reuse --ack-risk` under the user's standing instruction, after
+`run/mode2-reset-19.json`. This note covers this one launch.
+
