@@ -44,6 +44,16 @@ class GdbKextSourceTests(unittest.TestCase):
         self.assertIn("native_reached=False", text)
         self.assertLess(text.index("gdb.execute('detach')"), text.index("gdb.execute('quit')"))
 
+    def test_kiq_start_reports_unavailable_entry_stack_without_claiming_native_or_return(self):
+        text = tool.generate_kiq_start(
+            0xffffff801b6e8000, "474ef697fc283ba283a4763d76c8e200",
+            "/tmp/kernel.symbols", "/tmp/RaphaelGPU.dSYM", 0x19120,
+            bytes.fromhex("554889e541574156"), 0x1920c, "/tmp/source")
+        self.assertIn("KIQ_START_ENTRY_STACK_UNAVAILABLE", text)
+        self.assertIn("KIQ_START_CAPTURE_INCOMPLETE reason=entry-stack-unavailable", text)
+        self.assertIn("native_boundary=unavailable return=unavailable", text)
+        self.assertIn("return=%s", text)
+
     def test_kiq_start_exact_generated_loop_executes_success_and_refusal(self):
         text = tool.generate_kiq_start(
             0xffffff801b6e8000, "474ef697fc283ba283a4763d76c8e200",
