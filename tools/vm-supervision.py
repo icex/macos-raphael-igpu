@@ -51,7 +51,8 @@ def logind_block_inhibited():
                             for index in (4, 5))):
                 return False
             scopes = fields[0].split(":")
-            if fields[3] == "block" and len(scopes) == 2 and set(scopes) == {"sleep", "idle"}:
+            if fields[3] == "block" and (scopes == ["idle"] or
+                    (len(scopes) == 2 and set(scopes) == {"sleep", "idle"})):
                 matching = True
         return matching
     except (OSError, subprocess.SubprocessError, ValueError, TypeError, AttributeError):
