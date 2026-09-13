@@ -35,6 +35,8 @@ class GdbKextSourceTests(unittest.TestCase):
         self.assertIn("native_interval=1", text)
         self.assertIn("KIQ_START_NATIVE_ORG_TARGET", text)
         self.assertIn("MEC_WRITE_SPECS", text)
+        self.assertIn("for bp in write_bps: bp.enabled=False", text)
+        self.assertIn("for bp in write_bps: bp.enabled=True", text)
 
     def test_kiq_start_generated_loop_stops_after_success_or_failure_return(self):
         text = tool.generate_kiq_start(
@@ -83,6 +85,19 @@ class GdbKextSourceTests(unittest.TestCase):
         with self.assertRaises(Gdb.GdbError):
             exec(block, {'gdb': Gdb(), 'read': lambda address, size: b'\0' * size,
                          'found': 0x100000, 'MEC_WRITE_SPECS': [(0x23780, 'ff', 'ext2')]})
+
+    def test_kiq_start_writer_breakpoints_are_disabled_until_native_boundary(self):
+        text = tool.generate_kiq_start(
+            0xffffff801b6e8000, "474ef697fc283ba283a4763d76c8e200",
+            "/tmp/kernel.symbols", "/tmp/RaphaelGPU.dSYM", 0x19120,
+            bytes.fromhex("554889e541574156"), 0x1920c, "/tmp/source")
+        disabled = text.index("for bp in write_bps: bp.enabled=False")
+        enabled = text.index("for bp in write_bps: bp.enabled=True")
+        native = text.index("KIQ_START_NATIVE_CALL_BOUNDARY")
+        self.assertLess(disabled, native)
+        self.assertLess(native, enabled)
+        self.assertLess(text.index("native_active=False"),
+                        text.index("for bp in write_bps: bp.enabled=False", enabled))
 
     def test_kiq_start_reports_unavailable_entry_stack_without_claiming_native_or_return(self):
         text = tool.generate_kiq_start(

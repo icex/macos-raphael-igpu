@@ -520,8 +520,9 @@ for offset, prologue_hex, path in MEC_WRITE_SPECS:
     if read(writer,len(bytes.fromhex(prologue_hex))) != bytes.fromhex(prologue_hex):
         raise gdb.GdbError('KIQ MEC writer prologue mismatch path=%s offset=%#x' % (path,offset))
     writer_addresses.append((writer,path))
-for writer,path in writer_addresses:
-    MecWriteBP(writer, path)
+write_bps=[MecWriteBP(writer, path) for writer,path in writer_addresses]
+for bp in write_bps:
+    bp.enabled=False
 print('KIQ_START_BREAKPOINTS_ARMED entry=%#x native=%#x' % (start,native))
 native_reached=False; native_active=False; entry_seen=False; return_bp=None
 gdb.execute('continue')
@@ -556,6 +557,7 @@ gdb.execute('continue')
 if int(gdb.parse_and_eval('$pc')) == native:
     native_reached=True
     native_active=True
+    for bp in write_bps: bp.enabled=True
     native_insn=read(native,6)
     if native_insn[:2] == bytes.fromhex('ff15'):
         disp=struct.unpack('<i',native_insn[2:])[0]
@@ -574,6 +576,7 @@ else:
 if int(gdb.parse_and_eval('$pc')) != entry_return:
     gdb.execute('continue')
 native_active=False
+for bp in write_bps: bp.enabled=False
 if int(gdb.parse_and_eval('$pc')) != entry_return or int(gdb.parse_and_eval('$rsp')) != entry_rsp+8:
     raise gdb.GdbError('KIQ start return stop identity mismatch')
 result=int(gdb.parse_and_eval('$rax')) & 0xffffffff
