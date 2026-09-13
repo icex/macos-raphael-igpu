@@ -21,7 +21,7 @@
     "socket": "run/critical.sock",
     "capture": "critical.txt"
   },
-  "behavior_change": "add bounded mode-3 native MEC writer trace around startKIQ; preserve contained inactive retained-WPTR probe and restore=0/1/2 behavior; diagnose native MEC unhalt before EOP programming",
+  "behavior_change": "mode3/mqd2 scoped native MEC write guard for the authenticated startKIQ caller +0x15073: preserve CP_MEC_CNTL halt value 0x50000000 through that write and test whether native EOP programming is then accepted; retain bounded GDB writer trace and contained failure cleanup",
   "required_observations": [
     "loaded_build",
     "route_guards",
