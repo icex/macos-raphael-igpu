@@ -556,8 +556,19 @@ def _decode_payload(build, seq, payload):
     elif m := re.fullmatch(r'SD: IB template (0x[0-9a-fA-F]+) -> (0x[0-9a-fA-F]+) valid=([01]) changed=([01])', payload):
         row.update(kind='sdma_ib_repair', before=int(m[1], 16), after=int(m[2], 16),
                    valid=bool(int(m[3])), changed=bool(int(m[4])))
+    elif m := re.fullmatch(
+            r'XQ2: dequeue TIMEOUT after (\d+) us; descriptor unchanged; '
+            r'native-restore=(\d+) lease=(\d+) owners=(\d+) active=(0x[0-9a-fA-F]+|0) '
+            r'dequeue=(0x[0-9a-fA-F]+|0) poll=(0x[0-9a-fA-F]+|0) '
+            r'doorbell=(0x[0-9a-fA-F]+|0) image-exact=(\d+)', payload):
+        row.update(kind='kiq', result=0, source='dequeue-timeout',
+                   elapsed_us=int(m[1]), restore_admitted=(m[2] == '1' and
+                   m[3] == '1' and m[4] == '1' and m[9] == '1' and
+                   int(m[5], 0) & 1 and int(m[6], 0) == 1 and
+                   not (int(m[7], 0) & (1 << 31)) and
+                   not (int(m[8], 0) & (1 << 30))))
     elif payload.startswith('XQ2: dequeue') and ('refused' in payload or 'timeout' in payload.lower()):
-        row.update(kind='kiq', result=0, source='dequeue-timeout')
+        row.update(kind='kiq', result=0, source='dequeue-timeout', restore_admitted=False)
     return row
 
 
@@ -1287,7 +1298,9 @@ def _classify(manifest, events, probe, defer_absent_workload=False):
                          if r.get('source') == 'live-terminal' and
                          (not panics or r['seq'] < panics[0]['seq'])]
     restore_enabled = manifest.get('spec', {}).get('functional_boot_arguments', {}).get('rgpumqdrestore') == '1'
-    diagnostic_dequeue = (lambda r: restore_enabled and r.get('source') == 'dequeue-timeout')
+    diagnostic_dequeue = (lambda r: restore_enabled and
+                          r.get('source') == 'dequeue-timeout' and
+                          r.get('restore_admitted') is True)
     kiq_before_terminal = explicit_submit + live_terminal_kiq
     if not kiq_before_terminal:
         kiq_before_terminal = [

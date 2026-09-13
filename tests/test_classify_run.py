@@ -2415,8 +2415,11 @@ Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0
     def test_restore_diagnostic_dequeue_timeout_is_unresolved_until_later_failure(self):
         c = self.classifier()
         events = self.events(available=1, status=0, started=1)
-        events.insert(3, dict(kind='kiq', build='abc', seq=3, result=0,
-                              source='dequeue-timeout'))
+        timeout_line = ('RGPU_EVENT build=abc seq=3 XQ2: dequeue TIMEOUT after 50000 us; '
+                        'descriptor unchanged; native-restore=1 lease=1 owners=1 active=0x1 '
+                        'dequeue=0x1 poll=0 doorbell=0 image-exact=1\n')
+        timeout = next(row for row in c.parse_serial(timeout_line) if row['kind'] == 'kiq')
+        events.insert(3, timeout)
         manifest = {'build_id': 'abc', 'spec': {
             'functional_boot_arguments': {'rgpumqdrestore': '1'}}}
         self.assertNotEqual(c.classify(manifest, events, None)['verdict'],
@@ -2426,6 +2429,18 @@ Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0
         result = c.classify(manifest, events, None)
         self.assertEqual(result['verdict'], 'BASELINE_BLOCKED')
         self.assertEqual(result['earliest_failure'], 'kiq')
+
+    def test_restore_flag_without_runtime_admission_remains_terminal(self):
+        c = self.classifier()
+        events = self.events(available=1, status=0, started=1)
+        refused = next(row for row in c.parse_serial(
+            'RGPU_EVENT build=abc seq=3 XQ2: dequeue TIMEOUT after 50000 us; '
+            'descriptor unchanged; native-restore=0 lease=1 owners=1 active=0x1 '
+            'dequeue=0x1 poll=0 doorbell=0 image-exact=1\n') if row['kind'] == 'kiq')
+        events.insert(3, refused)
+        result = c.classify({'build_id': 'abc', 'spec': {
+            'functional_boot_arguments': {'rgpumqdrestore': '1'}}}, events, None)
+        self.assertEqual(result['verdict'], 'BASELINE_BLOCKED')
 
 
 if __name__ == '__main__':
