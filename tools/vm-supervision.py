@@ -30,6 +30,13 @@ class ManagedStopUnconfirmed(RuntimeError):
     pass
 
 
+class PreExposureFailure(RuntimeError):
+    """A failure proven to precede persistent reservation and systemd."""
+    def __init__(self, message, evidence):
+        super().__init__(message)
+        self.evidence = evidence
+
+
 def logind_block_inhibited():
     try:
         result = subprocess.run(
@@ -63,6 +70,33 @@ def full_cid(value):
     if not CID_PATTERN.fullmatch(value):
         raise ValueError("container identity must be a full 64-digit hexadecimal ID")
     return value
+
+
+def record_preexposure_failure(vm, name, context, phase, error):
+    evidence = {
+        'schema': 1, 'kind': 'supervised-pre-exposure-failure',
+        'launch': name, 'phase': phase, 'exposure_started': False,
+        'systemd_invoked': False, 'docker_create_observed': False,
+        'boot_id': context.get('boot_id'), 'run_id': context.get('run_id'),
+        'source_commit': context.get('source_commit'),
+        'manifest_sha256': context.get('manifest_sha256'),
+        'error_type': type(error).__name__, 'error': str(error)[:512],
+    }
+    directory = vm / 'run/pre-exposure-failures'
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / (name + '.json')
+    evidence['path'] = str(path.resolve())
+    temporary = path.with_suffix('.tmp')
+    temporary.write_text(json.dumps(evidence, sort_keys=True) + '\n')
+    with temporary.open('rb') as stream:
+        os.fsync(stream.fileno())
+    temporary.replace(path)
+    fd = os.open(directory, os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0))
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    return evidence
 
 
 def canonical_mounts(value):
@@ -512,45 +546,54 @@ def start(vm, maximum, gpu_args, critical_enabled=False):
         return start_locked(vm, maximum, gpu_args, critical_enabled)
 
 
-def start_locked(vm, maximum, gpu_args, critical_enabled=False):
+def start_locked(vm, maximum, gpu_args, critical_enabled=False, context=None):
     vm = vm.resolve()
     name = "rgpu-launch-" + uuid.uuid4().hex
+    context = context or {}
     if os.environ.get("GENERIC_GRAPHICS") == "off" and not logind_block_inhibited():
         raise RuntimeError("headless capture requires an existing idle block inhibitor")
-    familiar_name = run([binary("docker"), "ps", "-a", "--filter",
-                         "name=^/macos-sequoia$", "--format", "{{.Names}}"]).strip()
-    if familiar_name == "macos-sequoia":
-        cid = full_cid(run([binary("docker"), "inspect", "--format", "{{.Id}}",
-                             "macos-sequoia"]).strip())
-        selected = '{"Id":{{json .Id}},"Name":{{json .Name}},"Running":{{json .State.Running}},"Status":{{json .State.Status}},"Mounts":{{json .Mounts}}}'
-        info = json.loads(run([binary("docker"), "inspect", "--format", selected, cid]))
-        if (info["Id"] != cid or info["Name"] != "/macos-sequoia" or info["Running"] or
-                info["Status"] not in ("exited", "dead")):
-            raise RuntimeError("familiar macos-sequoia container is not stopped")
-        expected_disk = str((vm / "mac_hdd_ng.img").resolve())
-        if not any(m.get("Type") == "bind" and m.get("Source") == expected_disk
-                   for m in info.get("Mounts", [])):
-            raise RuntimeError("familiar macos-sequoia container is not associated with this VM")
-        archive_name = "macos-sequoia-archive-" + uuid.uuid4().hex
-        run([binary("docker"), "rename", cid, archive_name])
-        check = json.loads(run([binary("docker"), "inspect", "--format", selected, cid]))
-        if (check["Id"] != cid or check["Name"] != "/" + archive_name or
-                canonical_mounts(check.get("Mounts")) is None or
-                canonical_mounts(check.get("Mounts")) != canonical_mounts(info.get("Mounts")) or
-                check["Running"] or check["Status"] not in ("exited", "dead")):
-            raise RuntimeError("familiar container identity changed while archiving")
-        archive_record = vm / "run" / (archive_name + ".json")
-        archive_record.write_text(json.dumps({"old_name": "macos-sequoia",
-                                              "new_name": archive_name, "cid": cid,
-                                              "status": check["Status"]}) + "\n")
-        archive_record.chmod(0o600)
+    try:
+        familiar_name = run([binary("docker"), "ps", "-a", "--filter",
+                             "name=^/macos-sequoia$", "--format", "{{.Names}}"]).strip()
+        if familiar_name == "macos-sequoia":
+            cid = full_cid(run([binary("docker"), "inspect", "--format", "{{.Id}}",
+                                 "macos-sequoia"]).strip())
+            selected = '{"Id":{{json .Id}},"Name":{{json .Name}},"Running":{{json .State.Running}},"Status":{{json .State.Status}},"Mounts":{{json .Mounts}}}'
+            info = json.loads(run([binary("docker"), "inspect", "--format", selected, cid]))
+            if (info["Id"] != cid or info["Name"] != "/macos-sequoia" or info["Running"] or
+                    info["Status"] not in ("exited", "dead")):
+                raise RuntimeError("familiar macos-sequoia container is not stopped")
+            expected_disk = str((vm / "mac_hdd_ng.img").resolve())
+            if not any(m.get("Type") == "bind" and m.get("Source") == expected_disk
+                       for m in info.get("Mounts", [])):
+                raise RuntimeError("familiar macos-sequoia container is not associated with this VM")
+            archive_name = "macos-sequoia-archive-" + uuid.uuid4().hex
+            run([binary("docker"), "rename", cid, archive_name])
+            check = json.loads(run([binary("docker"), "inspect", "--format", selected, cid]))
+            if (check["Id"] != cid or check["Name"] != "/" + archive_name or
+                    canonical_mounts(check.get("Mounts")) is None or
+                    canonical_mounts(check.get("Mounts")) != canonical_mounts(info.get("Mounts")) or
+                    check["Running"] or check["Status"] not in ("exited", "dead")):
+                raise RuntimeError("familiar container identity changed while archiving")
+            archive_record = vm / "run" / (archive_name + ".json")
+            archive_record.write_text(json.dumps({"old_name": "macos-sequoia",
+                                                  "new_name": archive_name, "cid": cid,
+                                                  "status": check["Status"]}) + "\n")
+            archive_record.chmod(0o600)
+    except BaseException as error:
+        evidence = record_preexposure_failure(vm, name, context, 'archive', error)
+        raise PreExposureFailure(str(error), evidence) from error
     # Durable admission survives the short-lived caller dying before Docker has
     # created a visible container. Managed cleanup removes only this launch's file.
     reservation = vm / 'run/launch-pending' / name
-    with reservation.open('x') as stream:
-        stream.write(name+'\n')
-        stream.flush()
-        os.fsync(stream.fileno())
+    try:
+        with reservation.open('x') as stream:
+            stream.write(name+'\n')
+            stream.flush()
+            os.fsync(stream.fileno())
+    except BaseException as error:
+        evidence = record_preexposure_failure(vm, name, context, 'reservation', error)
+        raise PreExposureFailure(str(error), evidence) from error
     helper = str(Path(__file__).resolve())
     env_keys = DOCKER_ENV + ("PATH", "DISPLAY", "XAUTHORITY", "XDG_RUNTIME_DIR", "IMAGE",
                            "VCPUS", "RAM_GB", "DISK_BUS", "AUDIO", "NVRAM", "BOOTDISK_MODE",

@@ -1102,6 +1102,109 @@ Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0
         self.assertEqual(c({'build_id':'abc'}, events, None)['verdict'],
                          'BASELINE_BLOCKED')
 
+    def test_kiq_failure_retains_bound_probe_timeout_diagnostic(self):
+        c = self.classifier()
+        events = self.events(available=1, status=0, started=1)
+        events[2]['result'] = 0
+        probe = {
+            'run_id': 'nonce',
+            'output': (
+                'RGPU_SMALL_METAL_RESULT ' + json.dumps({
+                    'passed': False, 'device': 'AMD Radeon Navi23',
+                    'run_id': 'nonce', 'metal3': True,
+                    'completed_command_buffers': 0, 'values_checked': 0,
+                    'error': 'GPU completion timeout after 5 seconds',
+                    'registry_id': 4294968036}) + '\n'
+                'RGPU_EXIT nonce 1\n'),
+            'transport_exit': 0,
+        }
+        result = c.classify({'build_id': 'abc', 'run_id': 'nonce'}, events, probe)
+        self.assertEqual(result['verdict'], 'BASELINE_BLOCKED')
+        self.assertEqual(result['earliest_failure'], 'kiq')
+        self.assertEqual(result['probe_status']['verdict'], 'EXECUTION_FAILED')
+        self.assertEqual(result['probe_status']['completed_command_buffers'], 0)
+
+    def test_hybrid_recreation_does_not_erase_terminal_kiq_failure(self):
+        c = self.classifier()
+        events = self.events(available=1, status=0, started=1)
+        events.append(dict(kind='kiq_submit', build='abc', seq=6, result=0))
+        events.extend([
+            dict(kind='hybrid_enter', build='abc', seq=7, engine=12, available=1),
+            dict(kind='hybrid_exit', build='abc', seq=8, engine=12,
+                 result=0, available=1),
+        ])
+        result = c.classify({'build_id': 'abc'}, events, None)
+        self.assertEqual(result['verdict'], 'BASELINE_BLOCKED')
+        self.assertEqual(result['earliest_failure'], 'kiq')
+
+    def test_unrecovered_kiq_submit_terminal_still_blocks_probe(self):
+        c = self.classifier()
+        events = self.events(available=1, status=0, started=1)
+        events.append(dict(kind='kiq_submit', build='abc', seq=6, result=0))
+        probe = {'run_id': 'nonce', 'output': 'foreign'}
+        result = c.classify({'build_id': 'abc', 'run_id': 'nonce'}, events, probe)
+        self.assertEqual(result['verdict'], 'BASELINE_BLOCKED')
+        self.assertEqual(result['earliest_failure'], 'kiq')
+
+    def test_malformed_or_foreign_probe_cannot_override_phase_failure(self):
+        c = self.classifier()
+        events = self.events(available=1, status=0, started=1)
+        for probe in ({'run_id': 'nonce', 'output': 'foreign'},
+                      {'run_id': 'other', 'output': 'foreign'}):
+            result = c.classify({'build_id': 'abc', 'run_id': 'nonce'}, events, probe)
+            self.assertIn(result['verdict'], ('INCONCLUSIVE', 'INVALID'))
+            self.assertNotEqual(result['verdict'], 'CORE_PROBE_PASS')
+
+    def test_probe_status_is_failure_only_and_requires_run_identity(self):
+        classifier = self.classifier()
+        manifest = {'build_id': 'abc', 'run_id': 'nonce'}
+        events = self.events(available=1, status=0, started=1)
+        base = {
+            'passed': True, 'device': 'AMD Radeon Navi23', 'run_id': 'nonce',
+            'metal3': True, 'completed_command_buffers': 0,
+            'values_checked': 0, 'registry_id': 1,
+        }
+        def probe(result, *, exit_code=0, transport_exit=0, run_id='nonce'):
+            result = dict(result, run_id=run_id)
+            return {'run_id': run_id,
+                    'transport_exit': transport_exit,
+                    'output': 'RGPU_SMALL_METAL_RESULT ' + json.dumps(result) +
+                              f'\nRGPU_EXIT {run_id} {exit_code}\n'}
+
+        success = classifier.classify(manifest, events, probe(base))
+        self.assertNotIn('probe_status', success)
+        failed_transport = classifier.classify(
+            manifest, events, probe(dict(base, passed=False, error='timeout'),
+                                   exit_code=1, transport_exit=1))
+        self.assertNotIn('probe_status', failed_transport)
+        wrong_nonce = classifier.classify(
+            manifest, events, probe(dict(base, passed=False, error='timeout'),
+                                   exit_code=1, run_id='other'))
+        self.assertNotIn('probe_status', wrong_nonce)
+        wrong_build_events = [dict(row, build='other') for row in events]
+        wrong_build = classifier.classify(
+            manifest, wrong_build_events,
+            probe(dict(base, passed=False, error='timeout'), exit_code=1))
+        self.assertEqual(wrong_build['verdict'], 'INVALID')
+        self.assertNotIn('probe_status', wrong_build)
+
+        valid_failure = probe(dict(base, passed=False, error='timeout'), exit_code=1)
+        for output in (
+                valid_failure['output'].replace('RGPU_EXIT nonce 1\n', ''),
+                valid_failure['output'] + 'RGPU_EXIT nonce 1\n',
+                valid_failure['output'].replace(
+                    'RGPU_SMALL_METAL_RESULT ',
+                    'RGPU_SMALL_METAL_RESULT ', 1) +
+                valid_failure['output'].splitlines()[0] + '\n'):
+            malformed = dict(valid_failure, output=output)
+            result = classifier.classify(manifest, events, malformed)
+            self.assertNotIn('probe_status', result)
+
+        missing_build = [row for row in events if row['kind'] != 'build']
+        result = classifier.classify(manifest, missing_build, valid_failure)
+        self.assertEqual(result['earliest_failure'], 'identity_or_route_missing')
+        self.assertNotIn('probe_status', result)
+
     def test_explicit_kiq_submit_result_outranks_generic_stamp_wait(self):
         c = self.classifier()
         events = self.events()

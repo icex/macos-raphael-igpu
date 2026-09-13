@@ -451,3 +451,37 @@ no second launch is authorized.
 | Guest serial / critical | 0 / 0 bytes | capture producer readiness absent |
 | Capacity / VMM / Metal | unobserved | run stopped before guest evidence |
 | Cleanup / host | safe; no VM; VFIO accessible | no recovery receipt because no launch |
+
+## Candidate 204 retry hardware run (2026-09-13)
+
+After the prelaunch archival failure was corrected, the approved retry reached
+QEMU/VFIO with fresh supervision evidence. Supervisor CID
+`a6df8582e104f32b8fb0d97aa6bc7e7cda731e3ae94abea2d838ba97fefa8860` started at
+`2026-09-13T14:09:20.042410301Z` (`17:09:20` local); both serial and critical
+collectors became ready. Runtime capacity discovery succeeded with
+`rawTotal=0x20000000`, `BAR=0x10000000`, provider pools `512 MiB/256 MiB`.
+Native VMM selected `0x1b000000..0x1f400000`, matching the predicted range, and
+the recovery lease was `0xfaf3000..0xfb08000`, disjoint from it. Both pools were
+active after lease subtraction.
+
+The run reached native accelerator start and real Metal activity, but the small
+Metal probe timed out after 5 seconds with `completed_command_buffers=0` and
+`values_checked=0`. The bounded verdict is valid `BASELINE_BLOCKED` at the KIQ
+boundary. Recovery completed host cleanup but is schema-6 `incomplete` and
+`authorizes_launch=false`: graphics ring cleanup was not confirmed
+(`gfx_ring_clean=false`, `gfx_retirement_confirmed=false`), although the lease
+and lifetime records were unchanged and SDMA shutdown completed. No second run
+is authorized on this boot.
+
+Evidence is retained under
+`/home/bogdan/macos-vm/run/candidate-204-retry-results/`, including serial
+(523019 bytes), critical (1043298 bytes), probe, verdict, recovery, shutdown,
+and host-after records. Host-after is safe: `vfio-pci`, accessible and pinned
+awake, no active VM, no kernel fault, and the external inhibitor remains active.
+
+| Area | Result | Blocking issue |
+|---|---|---|
+| Capacity discovery | passed | — |
+| Native VMM | passed; actual range matched prediction | — |
+| Metal probe | device `AMD Radeon Navi23`, Metal 3; timeout | KIQ baseline block; 0 completed buffers |
+| Recovery / cleanup | host safe; SDMA quiesced | graphics retirement unconfirmed |

@@ -1,6 +1,6 @@
 {
   "id": "metal-038",
-  "question": "Does runtime VRAM capacity discovery from the Raphael GFXHUB registers and mapped BAR preserve the audited native lifecycle and reach the small Metal probe on a fresh boot?",
+  "question": "After the candidate-204 probe failure on this boot, can a single explicitly acknowledged same-boot diagnostic run capture an identity-bound read-only GDB snapshot while preserving bounded shutdown and recovery evidence?",
   "candidate_version": "1.0.204",
   "probe_profile": {
     "name": "small-metal",
@@ -48,7 +48,7 @@
     "actual_faulting_client_vmid_observation_contract_reviewed", "generic_client_observations_conditional",
     "no_root_correlation_claim"
   ],
-  "repeat_policy": "ordinary fresh-boot launch under the existing finite boot budget; perform all live host/VFIO/ledger/identity gates and allow no automatic retry or cap extension",
+  "repeat_policy": "one explicitly acknowledged same-boot experimental override after candidate-204 probe failure; preserve live host/VFIO/ledger/identity gates, bounded GDB capture, shutdown, and incomplete recovery evidence; no automatic retry or recovery claim",
   "abort_on": [
     "identity_mismatch", "capture_loss", "critical_replay_incomplete_at_deadline", "recovery_lease_missing",
     "recovery_lease_invalid", "recovery_lifetime_missing", "recovery_lifetime_invalid", "vmm_native_readiness_missing",
@@ -69,6 +69,19 @@
   },
   "outcome_table": "docs/ROADMAP.md M4-M7",
   "run_probe_only_after_native_start": true,
+  "post_probe_debug": {
+    "scenario": "post-probe",
+    "generator": "tools/gdb-kext-source.py",
+    "kernel_symbols": "run/gdb-source-kext-prep-20260910T204500Z/kernel.symbols",
+    "raphael_binary": "run/candidate-204/RaphaelGPU.kext/Contents/MacOS/RaphaelGPU",
+    "raphael_dsym": "run/capacity-auto-offline-204/debug-symbols/RaphaelGPU.dSYM",
+    "generator_sha256": "35bc4437a3928e2bb3392ecedcc4742b612708407d40b2b97616cc5e75c4c33c",
+    "kernel_symbols_sha256": "04a501246caf768356f4090a8fd662daf5bbc949993353526c66771f5ba1d8e4",
+    "raphael_binary_sha256": "1f1bd3b26e12bd13b6f55ad5f5bb4a196b3aacd82d4cde49e73ebf61940ddf05",
+    "raphael_dsym_sha256": "fcbd4406bad5c0eeafa8e84d2d5642b871b5731bb883478371540b54513c3818",
+    "budget_seconds": 30,
+    "cleanup_reserve_seconds": 25
+  },
   "guest_picker_timeout_seconds": 5,
   "critical_replay_tolerance": "terminal-prefix",
   "recovery_critical_replay_tolerance": "terminal-prefix-open",

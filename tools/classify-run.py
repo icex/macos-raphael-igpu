@@ -843,10 +843,56 @@ def parse_manifest_files(manifest, run):
     return events
 
 
+def _probe_status(manifest, probe):
+    """Extract only nonce-bound, structurally complete probe diagnostics.
+
+    A failed probe is useful evidence even though the strict validator rejects
+    it as a benchmark pass.  Never attach that evidence unless its result and
+    exit marker are both bound to the prepared run nonce and identify the
+    expected Metal device.
+    """
+    if (not isinstance(probe, dict) or not isinstance(probe.get('output'), str) or
+            not manifest.get('run_id') or probe.get('run_id') != manifest['run_id']):
+        return None
+    output = probe['output']
+    rows = [line.removeprefix('RGPU_SMALL_METAL_RESULT ')
+            for line in output.splitlines()
+            if line.startswith('RGPU_SMALL_METAL_RESULT ')]
+    exits = re.findall(r'^RGPU_EXIT ' + re.escape(manifest['run_id']) + r' (\d+)$',
+                       output, re.M)
+    if len(rows) != 1 or len(exits) != 1:
+        return None
+    try:
+        result = json.loads(rows[0])
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    if (not isinstance(result, dict) or result.get('run_id') != manifest['run_id'] or
+            result.get('device') != 'AMD Radeon Navi23' or
+            result.get('metal3') is not True or
+            type(result.get('completed_command_buffers')) is not int or
+            result['completed_command_buffers'] < 0 or
+            type(result.get('values_checked')) is not int or
+            result['values_checked'] < 0 or type(result.get('registry_id')) is not int or
+            result['registry_id'] < 1):
+        return None
+    if (result.get('passed') is not False or not isinstance(result.get('error'), str) or
+            not result['error'] or exits != ['1'] or probe.get('transport_exit') != 0):
+        return None
+    return dict(verdict='EXECUTION_FAILED',
+                completed_command_buffers=result['completed_command_buffers'],
+                  values_checked=result['values_checked'],
+                  registry_id=result['registry_id'], error=result.get('error'))
+
+
 def _classify(manifest, events, probe, defer_absent_workload=False):
+    probe_status = None
+
     def verdict(name, valid=False, stage=None, next_action='repair observation before another experiment'):
-        return dict(valid=valid, verdict=name, earliest_failure=stage,
-                    evidence=[r.get('raw', r['kind']) for r in events], next_action=next_action)
+        result = dict(valid=valid, verdict=name, earliest_failure=stage,
+                      evidence=[r.get('raw', r['kind']) for r in events], next_action=next_action)
+        if probe_status is not None:
+            result['probe_status'] = probe_status
+        return result
     expected = manifest.get('build_id')
     if not expected or any(r.get('build') not in (None, expected) for r in events):
         return verdict('INVALID', stage='loaded_build')
@@ -857,6 +903,7 @@ def _classify(manifest, events, probe, defer_absent_workload=False):
         return verdict('INVALID', stage='route_guards')
     if not kinds['build'] or not kinds['route']:
         return verdict('INCONCLUSIVE', stage='identity_or_route_missing')
+    probe_status = _probe_status(manifest, probe)
     required = manifest.get('spec', {}).get('required_observations', [])
     if manifest.get('recovery_lease_schema') in (2, 3):
         lease = _recovery_lease_v2()

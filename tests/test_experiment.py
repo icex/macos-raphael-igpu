@@ -12,6 +12,7 @@ import inspect
 import re
 import struct
 import threading
+import time
 from unittest.mock import patch
 from types import SimpleNamespace
 
@@ -61,9 +62,168 @@ class ExperimentTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'binding changed'):
             tool.probe_profile({'probe_profile': profile})
 
+    def test_post_probe_debug_contract_is_opt_in_and_pinned(self):
+        tool = self.module()
+        self.assertIsNone(tool.post_probe_debug_contract({}))
+        generator = 'tools/gdb-kext-source.py'
+        digest = hashlib.sha256((ROOT / generator).read_bytes()).hexdigest()
+        spec = {'post_probe_debug': {
+            'scenario': 'post-probe', 'generator': generator,
+            'generator_sha256': digest,
+            'kernel_symbols': 'run/kernel.symbols',
+            'raphael_binary': 'run/RaphaelGPU',
+            'raphael_dsym': 'run/RaphaelGPU.dSYM',
+            'kernel_symbols_sha256': 'a' * 64,
+            'raphael_binary_sha256': 'b' * 64,
+            'raphael_dsym_sha256': 'c' * 64,
+        }}
+        self.assertEqual(tool.post_probe_debug_contract(spec), dict(
+            spec['post_probe_debug'], budget_seconds=30,
+            cleanup_reserve_seconds=25))
+
+    def test_post_probe_debug_contract_rejects_unpinned_paths_or_scenario(self):
+        tool = self.module()
+        base = {'scenario': 'post-probe', 'generator': 'tools/gdb-kext-source.py',
+                'generator_sha256': hashlib.sha256(
+                    (ROOT / 'tools/gdb-kext-source.py').read_bytes()).hexdigest(),
+                'kernel_symbols': 'run/kernel.symbols',
+                'raphael_binary': 'run/RaphaelGPU',
+                'raphael_dsym': 'run/RaphaelGPU.dSYM',
+                'kernel_symbols_sha256': 'b' * 64,
+                'raphael_binary_sha256': 'c' * 64, 'raphael_dsym_sha256': 'd' * 64}
+        for mutation, message in (
+                ({'scenario': 'unknown'}, 'scenario'),
+                ({'kernel_symbols': '/tmp/kernel'}, 'kernel symbols path'),
+                ({'generator': '/tmp/generator.py'}, 'generator path'),
+                ({'generator_sha256': '0' * 64}, 'generator digest'),
+                ({'kernel_symbols_sha256': 'short'}, 'kernel symbols sha256'),
+                ({'extra': True}, 'fields')):
+            bad = dict(base, **mutation)
+            with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
+                tool.post_probe_debug_contract({'post_probe_debug': bad})
+
+    def test_post_probe_debug_budget_is_strictly_before_cleanup_and_nonce_bound(self):
+        tool = self.module()
+        contract = {'scenario': 'post-probe', 'generator': 'tools/gdb-kext-source.py',
+                    'generator_sha256': hashlib.sha256(
+                        (ROOT / 'tools/gdb-kext-source.py').read_bytes()).hexdigest(),
+                    'kernel_symbols': 'run/kernel.symbols',
+                    'raphael_binary': 'run/RaphaelGPU',
+                    'raphael_dsym': 'run/RaphaelGPU.dSYM',
+                    'kernel_symbols_sha256': 'a' * 64,
+                    'raphael_binary_sha256': 'b' * 64,
+                    'raphael_dsym_sha256': 'c' * 64,
+                    'budget_seconds': 30, 'cleanup_reserve_seconds': 25}
+        plan = tool.post_probe_capture_plan(
+            {'run_id': 'a' * 32, 'post_probe_debug': contract},
+            {'deadline_epoch': 220, 'launch_deadline_epoch': 220}, now=160)
+        self.assertEqual(plan['run_id'], 'a' * 32)
+        self.assertEqual(plan['capture_deadline_epoch'], 175)
+        self.assertEqual(plan['capture_window_end_epoch'], 190)
+        self.assertEqual(plan['cleanup_deadline_epoch'], 220)
+        for state in ({'deadline_epoch': 184, 'launch_deadline_epoch': 184},
+                      {'deadline_epoch': 200, 'launch_deadline_epoch': 150}):
+            with self.assertRaisesRegex(ValueError, 'budget'):
+                tool.post_probe_capture_plan(
+                    {'run_id': 'a' * 32, 'post_probe_debug': contract}, state, now=160)
+
+    def test_post_probe_capture_persists_trigger_before_runner_and_binds_command(self):
+        tool = self.module()
+        with tempfile.TemporaryDirectory() as temp:
+            vm = Path(temp); (vm / 'run').mkdir()
+            (vm / 'run/kernel.symbols').write_bytes(b'kernel')
+            (vm / 'run/RaphaelGPU').write_bytes(b'binary')
+            dwarf = vm / 'run/RaphaelGPU.dSYM/Contents/Resources/DWARF'
+            dwarf.mkdir(parents=True); (dwarf / 'RaphaelGPU').write_bytes(b'dwarf')
+            contract = {
+                'scenario': 'post-probe', 'generator': 'tools/gdb-kext-source.py',
+                'generator_sha256': hashlib.sha256(
+                    (ROOT / 'tools/gdb-kext-source.py').read_bytes()).hexdigest(),
+                'kernel_symbols': 'run/kernel.symbols',
+                'raphael_binary': 'run/RaphaelGPU',
+                'raphael_dsym': 'run/RaphaelGPU.dSYM',
+                'kernel_symbols_sha256': hashlib.sha256(b'kernel').hexdigest(),
+                'raphael_binary_sha256': hashlib.sha256(b'binary').hexdigest(),
+                'raphael_dsym_sha256': hashlib.sha256(b'dwarf').hexdigest(),
+            }
+            manifest = {'run_id': 'a' * 32, 'build_id': 'b' * 32,
+                        'boot_id': 'boot', 'spec': {
+                            'probe_profile': 'small-metal',
+                            'post_probe_debug': contract}}
+            output = vm / 'evidence'; output.mkdir()
+            (output / 'manifest.json').write_text(json.dumps(manifest))
+            probe = {'run_id': 'a' * 32, 'output': 'RGPU_EXIT ' + 'a' * 32 + ' 124\n',
+                     'transport_exit': 124}
+            deadline = int(__import__('time').time()) + 200
+            state = {'cid': 'c' * 64, 'deadline_epoch': deadline,
+                     'launch_deadline_epoch': deadline}
+            class Child:
+                pid = 12345
+                returncode = 0
+                def communicate(self, timeout=None):
+                    return '', ''
+            with patch.object(tool.subprocess, 'Popen', return_value=Child()) as run:
+                result = tool.run_post_probe_capture(vm, manifest, state, output, probe)
+            self.assertEqual(result['status'], 'complete')
+            self.assertTrue((output / 'probe-failure.json').is_file())
+            self.assertTrue((output / 'post-probe-phase.json').is_file())
+            args = run.call_args.args[0]
+            self.assertIn('--scenario', args)
+            self.assertEqual(args[args.index('--scenario') + 1], 'post-probe')
+            self.assertLess((output / 'probe-failure.json').stat().st_mtime_ns,
+                            (output / 'post-probe-phase.json').stat().st_mtime_ns)
+
+    def test_post_probe_timeout_kills_group_and_records_exact_cid_detach_fallback(self):
+        tool = self.module()
+        with tempfile.TemporaryDirectory() as temp:
+            vm = Path(temp); (vm / 'run').mkdir()
+            files = {'kernel.symbols': b'kernel', 'RaphaelGPU': b'binary'}
+            for name, data in files.items(): (vm / 'run' / name).write_bytes(data)
+            dwarf = vm / 'run/RaphaelGPU.dSYM/Contents/Resources/DWARF'; dwarf.mkdir(parents=True)
+            (dwarf / 'RaphaelGPU').write_bytes(b'dwarf')
+            gen = hashlib.sha256((ROOT / 'tools/gdb-kext-source.py').read_bytes()).hexdigest()
+            contract = {'scenario':'post-probe', 'generator':'tools/gdb-kext-source.py',
+                        'generator_sha256':gen, 'kernel_symbols':'run/kernel.symbols',
+                        'raphael_binary':'run/RaphaelGPU', 'raphael_dsym':'run/RaphaelGPU.dSYM',
+                        'kernel_symbols_sha256':hashlib.sha256(b'kernel').hexdigest(),
+                        'raphael_binary_sha256':hashlib.sha256(b'binary').hexdigest(),
+                        'raphael_dsym_sha256':hashlib.sha256(b'dwarf').hexdigest()}
+            manifest = {'run_id':'a'*32, 'build_id':'b'*32, 'boot_id':'boot',
+                        'spec':{'probe_profile':'small-metal','post_probe_debug':contract}}
+            output = vm/'evidence'; output.mkdir(); (output/'manifest.json').write_text(json.dumps(manifest))
+            probe = {'run_id':'a'*32, 'output':'RGPU_EXIT '+'a'*32+' 1\n', 'transport_exit':0}
+            state = {'cid':'c'*64, 'deadline_epoch':time.time()+200,
+                     'launch_deadline_epoch':time.time()+200}
+            class Child:
+                pid = 12345; returncode = -15; calls = 0
+                def communicate(self, timeout=None):
+                    self.calls += 1
+                    if self.calls == 1: raise subprocess.TimeoutExpired('runner', timeout)
+                    return '', ''
+            class Debugger:
+                def verify_port(self, cid): self.cid = cid
+                def detach(self, gdb): return {'detached': True, 'returncode': 0}
+            debugger = Debugger(); child = Child()
+            with patch.object(tool.subprocess, 'Popen', return_value=child), \
+                 patch.object(tool.os, 'killpg') as killpg, \
+                 patch.object(tool, 'helper', return_value=debugger):
+                result = tool.run_post_probe_capture(vm, manifest, state, output, probe)
+            self.assertEqual(result['status'], 'failed')
+            killpg.assert_called_once_with(child.pid, tool.signal.SIGTERM)
+            fallback = json.loads((output/'post-probe-detach-fallback.json').read_text())
+            self.assertTrue(fallback['detached']); self.assertEqual(fallback['cid'], state['cid'])
+
     def test_run_identity_check_uses_manifest_source_provenance(self):
         tool = self.module()
         self.assertIn('probe_spec=manifest', inspect.getsource(tool.run_one))
+
+    def test_run_one_orders_post_probe_before_quiesce_and_shutdown(self):
+        tool = self.module()
+        source = inspect.getsource(tool.run_one)
+        self.assertLess(source.index('run_post_probe_capture'),
+                        source.index('quiesce_critical_producer'))
+        self.assertLess(source.index('run_post_probe_capture'),
+                        source.index('guest_shutdown.shutdown'))
 
     def test_current_identity_resolves_nested_manifest_source_provenance(self):
         tool = self.module()
@@ -1248,6 +1408,93 @@ class ExperimentTests(unittest.TestCase):
             with self.assertRaises(FileExistsError): reserve(root, 'boot-A', 'second')
             self.assertEqual(json.loads((root / 'boot-A.json').read_text())['launches'][0]['run_id'],
                              'first')
+
+    def test_manual_override_reservation_is_explicit_and_not_a_receipt(self):
+        tool = self.module()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); manifest = root/'manifest.json'
+            manifest.write_text('{"run_id":"current"}\n')
+            reserve = root/'boot-A.json'
+            reserve.write_text(json.dumps({'schema':2, 'boot_id':'boot-A',
+                                           'max_launches':3,
+                                           'launches':[{'run_id':'prior'}]})+'\n')
+            tool.reserve_boot(root, 'boot-A', 'current', 'manual-override',
+                              {}, manifest)
+            row = json.loads(reserve.read_text())['launches'][-1]
+            self.assertTrue(row['manual_override'])
+            self.assertEqual(row['prior_run_id'], 'prior')
+            self.assertEqual(row['manifest_sha256'], tool.sha(manifest.read_bytes()))
+            self.assertNotIn('recovery_id', row)
+            reserve.write_text(json.dumps({'schema':2, 'boot_id':'boot-A',
+                                           'max_launches':3,
+                                           'launches':[{'run_id':'a'}, {'run_id':'b'},
+                                                       {'run_id':'c'}]})+'\n')
+            tool.reserve_boot(root, 'boot-A', 'current', 'manual-override',
+                              {}, manifest)
+            self.assertEqual(len(json.loads(reserve.read_text())['launches']), 4)
+            with self.assertRaises(ValueError):
+                tool.reserve_boot(root, 'boot-A', 'current', 'manual-override',
+                                  {}, manifest)
+
+    def test_preexposure_failure_reconciliation_removes_only_proven_reservation(self):
+        tool = self.module()
+        with tempfile.TemporaryDirectory() as temp:
+            vm = Path(temp); output = vm/'output'; output.mkdir()
+            manifest = {'boot_id':'boot-A', 'run_id':'r'*32, 'source_commit':'c'*40}
+            manifest_raw = json.dumps(manifest).encode(); (output/'manifest.json').write_bytes(manifest_raw)
+            ledger = vm/'run/used-gpu-boots'/'boot-A.json'; ledger.parent.mkdir(parents=True)
+            ledger.write_text(json.dumps({'schema':2, 'boot_id':'boot-A', 'max_launches':3,
+                                          'launches':[{'run_id':'r'*32, 'reserved_epoch':1.0}]}))
+            failure = SimpleNamespace(evidence={
+                'schema':1, 'kind':'supervised-pre-exposure-failure', 'phase':'archive',
+                'boot_id':'boot-A', 'run_id':'r'*32, 'source_commit':'c'*40,
+                'manifest_sha256':tool.sha(manifest_raw), 'exposure_started':False,
+                'systemd_invoked':False, 'docker_create_observed':False,
+                'path':str(vm/'failure.json')})
+            failure.evidence['error_type'] = 'RuntimeError'; failure.evidence['error'] = 'archive failed'
+            (vm/'failure.json').write_text(json.dumps(failure.evidence))
+            order = []
+            original_replace = tool.os.replace
+            def tracked_replace(source, destination):
+                order.append('replace')
+                return original_replace(source, destination)
+            def tracked_fsync(path):
+                order.append('fsync:'+Path(path).name)
+            with patch.object(tool, 'active_launch_units', return_value=[]), \
+                 patch.object(tool.subprocess, 'run', return_value=SimpleNamespace(stdout='', stderr='', returncode=0)), \
+                 patch.object(tool.os, 'replace', side_effect=tracked_replace), \
+                 patch.object(tool, 'fsync_directory', side_effect=tracked_fsync):
+                audit = tool.reconcile_preexposure_failure(vm, output, manifest, failure)
+            self.assertTrue(audit.is_file())
+            self.assertFalse(ledger.exists())
+            self.assertEqual(json.loads((output/'pre-exposure-ledger.json').read_text())['launches'],
+                             [{'run_id':'r'*32, 'reserved_epoch':1.0}])
+            self.assertTrue((output/'pre-exposure-ledger-original.json').is_file())
+            self.assertLess(order.index('fsync:output'), order.index('replace'))
+            self.assertGreaterEqual(order.count('fsync:used-gpu-boots'), 1)
+            self.assertGreaterEqual(order.count('fsync:output'), 2)
+
+    def test_preexposure_reconciliation_keeps_ambiguous_reservation(self):
+        tool = self.module()
+        with tempfile.TemporaryDirectory() as temp:
+            vm = Path(temp); output = vm/'output'; output.mkdir()
+            manifest = {'boot_id':'boot-A', 'run_id':'r'*32, 'source_commit':'c'*40}
+            manifest_raw = json.dumps(manifest).encode(); (output/'manifest.json').write_bytes(manifest_raw)
+            ledger = vm/'run/used-gpu-boots'/'boot-A.json'; ledger.parent.mkdir(parents=True)
+            original = {'schema':2, 'boot_id':'boot-A', 'max_launches':3,
+                        'launches':[{'run_id':'r'*32, 'reserved_epoch':1.0}]}
+            ledger.write_text(json.dumps(original))
+            failure = SimpleNamespace(evidence={
+                'schema':1, 'kind':'supervised-pre-exposure-failure', 'phase':'archive',
+                'boot_id':'boot-A', 'run_id':'r'*32, 'source_commit':'c'*40,
+                'manifest_sha256':tool.sha(manifest_raw), 'exposure_started':False,
+                'systemd_invoked':True, 'docker_create_observed':False,
+                'path':str(vm/'failure.json')})
+            failure.evidence['error_type'] = 'RuntimeError'; failure.evidence['error'] = 'ambiguous'
+            (vm/'failure.json').write_text(json.dumps(failure.evidence))
+            with self.assertRaisesRegex(ValueError, 'identity mismatch'):
+                tool.reconcile_preexposure_failure(vm, output, manifest, failure)
+            self.assertEqual(json.loads(ledger.read_text()), original)
 
     def test_prelaunch_continuation_is_exact_and_marker_is_single_use(self):
         tool = self.module()
