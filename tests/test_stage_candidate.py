@@ -1091,7 +1091,8 @@ class AttemptNamespaceTests(unittest.TestCase):
     def test_candidate207_probe_flag_is_three_and_older_restore_flags_remain(self):
         for name, version, expected in (("metal-039", "205", "1"),
                                         ("metal-040", "206", "2"),
-                                        ("metal-041", "207", "3")):
+                                        ("metal-041", "207", "3"),
+                                        ("metal-042", "208", "3")):
             self.tool.configure("1.0." + version, name)
             raw = (ROOT / ("experiments/" + name + ".json")).read_bytes()
             card = self.tool.validate_card(raw, hashlib.sha256(raw).hexdigest())
