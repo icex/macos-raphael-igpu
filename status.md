@@ -583,3 +583,12 @@ Blocking issue unchanged. Candidate 214 changes only the output: each wait and
 the 24 dwords before it are logged at capture time, and the worker prints the
 buffer after a 3 s settle, 20 ms per line, with per-line checksums, twice.
 
+## Boot-launch ledger extension for candidate 214 (2026-09-13)
+
+Candidate 214 is launch 5 on boot `c369c74e-96ff-4c21-ae85-80ccb269f7d2`, again
+through `--manual-reuse --ack-risk` under the user's authorization to extend the
+ledger with an explicit note. Candidates 212 and 213 each recovered cleanly
+(schema 6 `recovered`) and the host stayed vfio-pci and accessible. Precondition:
+MODE2 reset receipt `run/mode2-reset-4.json` with `RLC_CNTL=0` and `CP_STAT=0`
+immediately before staging. This note covers this one launch only.
+
