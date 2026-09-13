@@ -2414,21 +2414,22 @@ Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0
 
     def test_restore_diagnostic_dequeue_timeout_is_unresolved_until_later_failure(self):
         c = self.classifier()
-        events = self.events(available=1, status=0, started=1)
         timeout_line = ('RGPU_EVENT build=abc seq=3 XQ2: dequeue TIMEOUT after 50000 us; '
                         'descriptor unchanged; native-restore=1 lease=1 owners=1 active=0x1 '
                         'dequeue=0x1 poll=0 doorbell=0 image-exact=1\n')
-        timeout = next(row for row in c.parse_serial(timeout_line) if row['kind'] == 'kiq')
-        events.insert(3, timeout)
-        manifest = {'build_id': 'abc', 'spec': {
-            'functional_boot_arguments': {'rgpumqdrestore': '1'}}}
-        self.assertNotEqual(c.classify(manifest, events, None)['verdict'],
-                            'BASELINE_BLOCKED')
-        events.append(dict(kind='kiq', build='abc', seq=10, result=0,
-                           source='live-terminal'))
-        result = c.classify(manifest, events, None)
-        self.assertEqual(result['verdict'], 'BASELINE_BLOCKED')
-        self.assertEqual(result['earliest_failure'], 'kiq')
+        for mode in ('1', '2'):
+            events = self.events(available=1, status=0, started=1)
+            timeout = next(row for row in c.parse_serial(timeout_line) if row['kind'] == 'kiq')
+            events.insert(3, timeout)
+            manifest = {'build_id': 'abc', 'spec': {
+                'functional_boot_arguments': {'rgpumqdrestore': mode}}}
+            self.assertNotEqual(c.classify(manifest, events, None)['verdict'],
+                                'BASELINE_BLOCKED')
+            events.append(dict(kind='kiq', build='abc', seq=10, result=0,
+                               source='live-terminal'))
+            result = c.classify(manifest, events, None)
+            self.assertEqual(result['verdict'], 'BASELINE_BLOCKED')
+            self.assertEqual(result['earliest_failure'], 'kiq')
 
     def test_restore_flag_without_runtime_admission_remains_terminal(self):
         c = self.classifier()
@@ -2440,6 +2441,17 @@ Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0
         events.insert(3, refused)
         result = c.classify({'build_id': 'abc', 'spec': {
             'functional_boot_arguments': {'rgpumqdrestore': '1'}}}, events, None)
+        self.assertEqual(result['verdict'], 'BASELINE_BLOCKED')
+
+    def test_mode2_refused_dequeue_remains_terminal(self):
+        c = self.classifier()
+        events = self.events(available=1, status=0, started=1)
+        refused = next(row for row in c.parse_serial(
+            'RGPU_EVENT build=abc seq=3 XQ2: dequeue refused: halted native setup failed; '
+            'MEC remains halted\n') if row['kind'] == 'kiq')
+        events.insert(3, refused)
+        result = c.classify({'build_id': 'abc', 'spec': {
+            'functional_boot_arguments': {'rgpumqdrestore': '2'}}}, events, None)
         self.assertEqual(result['verdict'], 'BASELINE_BLOCKED')
 
 
