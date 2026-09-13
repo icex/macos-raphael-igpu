@@ -58,6 +58,21 @@ inline bool accessible(const QueueState &state) {
         state.doorbell != 0xffffffffU;
 }
 
+// A dequeue timeout may be handed to Apple's own restore/reprogram sequence only
+// when every identity and ingress predicate is still true.  This predicate never
+// changes queue state; callers must use a fresh post-timeout snapshot.
+inline bool timeoutNativeRestoreEligible(bool enabled, uint64_t mqd,
+                                         uint64_t eop, uint64_t plannedMqd,
+                                         uint64_t plannedEop,
+                                         const QueueState &state,
+                                         bool leaseValid, bool ownersMatch,
+                                         bool imageExact) {
+    return enabled && leaseValid && ownersMatch && imageExact && accessible(state) &&
+        (state.active & 1) && state.dequeue == 1 &&
+        !(state.poll & (1U << 31)) && !(state.doorbell & (1U << 30)) &&
+        mqd == plannedMqd && eop == plannedEop;
+}
+
 // GFX10 encodes CP_HQD_EOP_BASE_ADDR as a 256-byte address and uses the native
 // control=6 value for the EOP buffer allocated immediately after the MQD. This is
 // deliberately a write/readback transaction with no doorbell or MEC changes.
