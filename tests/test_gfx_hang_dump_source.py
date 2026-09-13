@@ -114,7 +114,8 @@ class GfxHangDumpSourceTests(unittest.TestCase):
         self.assertLess(init.index('if (cpFwMode == 1 && arr != nullptr)'),
                         init.index('FunctionCast(wrapPspNpFwInit, orgPspNpFwInit)'))
         swap = self.body('static void substituteCpFirmware', 'static mach_vm_address_t orgPspBufPrep')
-        self.assertIn('if (p.fwType != fwType) continue;', swap)
+        self.assertIn('if ((p.fwType & 0xffffu) != (fwType & 0xffffu)) continue;', swap)
+        self.assertIn('if (!signedPayload) continue;', swap)
         self.assertIn('if (len != p.size) {', swap)
         for fw_type in ('0x81012001u', '0x81012002u', '0x81012003u'):
             self.assertIn(fw_type, self.source)

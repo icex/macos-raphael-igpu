@@ -1365,17 +1365,26 @@ static void substituteCpFirmware(uint8_t *arr, uint32_t count) {
         const uint32_t len = *reinterpret_cast<const uint32_t *>(e + 0x18);
         if (data == nullptr || len < 0x5c) continue;
         const uint32_t fwType = *reinterpret_cast<const uint32_t *>(data + 0x58);
+        const bool signedPayload = data[0x10] == '$' && data[0x11] == 'P' &&
+                                   data[0x12] == 'S' && data[0x13] == '1';
+        // Candidate 215 matched nothing on the full 0x81012001 form: Apple's embedded blobs
+        // use a shorter fw_type the way its TOC does (0x200e vs this chip's 0x0101200e).
+        // Log every descriptor of a CP payload size and match the low 16 bits.
+        if (len == 0x40400 || len == 0x40380 || len == 0x414b0)
+            RLOG("X9C: descriptor %u type %#x len %#x magic=%u fw_type=%#x", i,
+                 *reinterpret_cast<const uint32_t *>(e + 0x04), len, signedPayload, fwType);
+        if (!signedPayload) continue;
         for (const auto &p : kCpPayloads) {
-            if (p.fwType != fwType) continue;
+            if ((p.fwType & 0xffffu) != (fwType & 0xffffu)) continue;
             if (len != p.size) {
                 RLOG("X9C: %s descriptor %u length %#x != gc_10_3_6 %#x -- left alone",
                      p.name, i, len, p.size);
                 break;
             }
             *reinterpret_cast<const uint8_t **>(e + 0x10) = p.data;
-            RLOG("X9C: descriptor %u type %#x %s Apple %p/%#x -> gc_10_3_6 %p/%#x", i,
-                 *reinterpret_cast<const uint32_t *>(e + 0x04), p.name, data, len, p.data,
-                 p.size);
+            RLOG("X9C: descriptor %u type %#x %s Apple %p/%#x fw_type %#x -> gc_10_3_6 %p/%#x "
+                 "fw_type %#x", i, *reinterpret_cast<const uint32_t *>(e + 0x04), p.name, data,
+                 len, fwType, p.data, p.size, p.fwType);
             replaced++;
             break;
         }
