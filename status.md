@@ -1,6 +1,6 @@
 # Current status — Raphael iGPU Metal acceleration
 
-Updated: 2026-09-12. This file is a concise operational summary. Detailed
+Updated: 2026-09-13. This file is a concise operational summary. Detailed
 historical evidence remains in `findings/`, `/home/bogdan/macos-vm/run/`, and
 the Git history.
 
@@ -24,23 +24,15 @@ Still unproven:
 
 ## Latest hardware boundary
 
-Candidate 195, run `905a7667eb43ac78512e41703b962b56`, reached VRAM/GART
-initialization but panicked in `AMDHWHandler::wireSysMemory` during the first
-native allocation-disable path. It emitted no `XH2 OWNED`, no virtual-space
-readiness callback, and no submission. Recovery correctly failed closed.
-
-The offline repair defers only the exact cold-path no-op disable when both
-channel pointers are null and recovery mode is configured. Owned or initialized
-paths still call the native function unchanged. Recovery classifies
-`not-required` only for the exact pre-ownership panic signature; all other
-failures remain non-authorizing.
-
-The prior hybrid cycle 014 reached WindowServer Metal submissions and passed
-KIQ stamps 1–3, then timed out on later stamps. Serial evidence showed real
-allocator rejection and `VM_FAULT_STATUS=0`; no host kernel fault was recorded.
-Recovery was `schema 6 incomplete` with `gfx_ring_clean=false` and
-`gfx_retirement_confirmed=false`. This is why the current boot has no eligible
-in-place launch authority.
+Updated 2026-09-13 after candidate 212. The former "KIQ blocker" is a graphics
+ring hang on the first WallpaperSequoia desktop draw; KIQ, HIQ, SDMA and the
+small Metal compute probe all work (full audit:
+`findings/research/gfx-ring-hang-misattributed-as-kiq-20260913.md`). Candidates
+210 (baseline), 211 (Linux GC 10.3.6 golden registers) and 212 (hang dump) all
+stall the same way: the PFP has consumed the whole 0xd10-dword IB of channel 35
+stamp 8 and waits on the ME; the ME is parked (instruction pointer static) with
+a WAIT_REG_MEM as its newest packet; `CP_STALLED_STAT2=0x230000`, no VM fault.
+Same-boot relaunch is now reboot-free through `tools/smu-mode2-reset.py`.
 
 ## Current live host state
 
@@ -500,3 +492,48 @@ the assumption that Apple leaves MEC halted through native start. Shutdown
 completed after the manual coordinator stop; host-after remained VFIO-bound,
 accessible, and sleep-inhibited. Recovery failed closed because no exact ACTIVE
 pool record was available. No Metal submission occurred.
+
+## Candidate 212 graphics-ring hang dump (2026-09-13)
+
+Run `c1dfbb3e252bdacb986e3fca140c6754`, card `metal-046` (commit `cc84356`),
+source `f9d083f`, build `d21d79e4731f42a3824ba96015b326d5`, boot
+`c369c74e-96ff-4c21-ae85-80ccb269f7d2`, launch 3 of 3 on the ledger with the
+manual-reuse override after SMU MODE2 reset receipt `run/mode2-reset-2.json`
+(reset OK; `RLC_CNTL 1 -> 0`, `RLC_BOOTLOAD_STATUS -> 0`). Boot arguments as
+candidate 211 plus `rgpuhangdump=1`. Evidence: `run/candidate-212-results/`,
+decoded in `findings/research/candidate212-gfx-hang-dump.md`.
+
+- Verdict `BASELINE_BLOCKED/kiq` (classifier label for the HIQ unmap timeout).
+  Small Metal probe **passed** (`completed_command_buffers=1`). Recovery schema 6
+  `recovered`; shutdown `exited-after-guest-request`; host after: vfio-pci,
+  device accessible, sleep inhibited, no active VM.
+- The hang dump fired once at the first stalled KIQ observation:
+  `RB0 RPTR=0x1fb1` static for 50 ms, `WPTR=0x2180`, `CP_STAT=0x94079200`,
+  `CP_STALLED_STAT2=0x230000`, `GRBM_STATUS_SE0=0xed400000`,
+  `PA_SC_FIFO_SIZE=0`, PFP instruction pointer looping (`0xb21->0xb20`), ME
+  (`0x619`) and CE (`0x61b`) static, VM fault 0.
+- Ring: per-frame `COND_EXEC`, `COPY_DATA`, `WRITE_DATA VGT_EVENT_INITIATOR=0x16`,
+  `SET_UCONFIG_REG CP_WAIT_REG_MEM_TIMEOUT=0`,
+  `WAIT_REG_MEM (CP_COHER_STATUS & 0x80000000) == 0`, then
+  `INDIRECT_BUFFER 0x4001d0000 len 0xd10 vmid 3` (the stuck IB, 7x larger than
+  the 0x1e0-dword frames before it). RPTR sits right after that IB packet.
+- `CP_IB1_BASE=0x4001d0000`; Apple's own restart report says the IB was
+  consumed to the end (`RemainSize=0`) and prints its first 0x100 dwords.
+  `CP_*_HEADER_DUMP` reads newest first: the five oldest ME entries match the IB
+  packets at dwords 0xe3..0xf4 exactly, so the ME's newest packet is a `WAIT_REG_MEM`
+  located after IB dword 0x100, preceded by `WRITE_DATA` and opcode 0x49.
+- The kext could not read the IB itself: VMID 3's page-table root
+  `0x85b01e000` lies beyond the 256 MiB CPU-visible BAR (`physical FB
+  0x840000000`). Ring pages (GART, SYSTEM) read correctly.
+
+| Candidate | Change | GFX ring | Compute probe | Recovery |
+|---|---|---|---|---|
+| 210 | baseline, first launch on fresh boot | stall ch35 stamp 8 | timeout | incomplete |
+| 211 | GC 10.3.6 golden registers | same stall | passed | incomplete |
+| 212 | read-only hang dump | same stall; ME in WAIT_REG_MEM inside IB | passed | recovered |
+
+Blocking issue: the ME never satisfies a `WAIT_REG_MEM` inside WallpaperSequoia's
+first 0xd10-dword draw IB. Next: candidate 213 prints the whole pending command
+buffer through Apple's `mapCmdBuffers` from the restart report path and
+evaluates every `WAIT_REG_MEM` target (register value or GART memory) plus the
+`CP_COHER_*`/`CP_ME_COHER_*` registers.
