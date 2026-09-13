@@ -16,6 +16,20 @@ class GfxHangDumpSourceTests(unittest.TestCase):
         first = self.source.index(start)
         return self.source[first:self.source.index(end, first)]
 
+    def test_address_config_route_is_gated_guarded_and_uses_live_register(self):
+        self.assertIn('static uint32_t addrConfigMode = 0;', self.source)
+        self.assertIn('PE_parse_boot_argn("rgpuaddrcfg", &addrCfg, sizeof(addrCfg)) && addrCfg <= 2', self.source)
+        self.assertIn('static constexpr size_t kOffAlignManager2Init = 0x6032a;', self.source)
+        self.assertIn('static constexpr size_t kHwInfoGbAddrConfig = 0xa0;', self.source)
+        install = self.body('if (addrConfigMode != 0) {', 'Exact complete instructions displaced')
+        self.assertIn('0x41, 0x56, 0x41, 0x54, 0x53, 0x48, 0x81, 0xec, 0x90, 0x00, 0x00, 0x00', install)
+        self.assertIn('entryMatches(addr, sz, kOffAlignManager2Init', install)
+        self.assertIn('if (alignMatches) {', install)
+        wrapper = self.body('static int wrapAlignManager2Init(', 'static constexpr size_t kOffPendingCommandReport')
+        self.assertIn('fbRead(asicInfo, kGcGbAddrConfig)', wrapper)
+        self.assertIn('addrConfigMode == 2 && live != 0xdeadbeef && live != 0 && reported != live', wrapper)
+        self.assertLess(wrapper.index('memcpy(info + kHwInfoGbAddrConfig'), wrapper.index('org(that, hwInterface)'))
+
     def test_boot_argument_defaults_off_and_gates_thread(self):
         self.assertIn('static uint32_t hangDumpMode = 0;', self.source)
         self.assertIn('PE_parse_boot_argn("rgpuhangdump", &hangDump, sizeof(hangDump))',

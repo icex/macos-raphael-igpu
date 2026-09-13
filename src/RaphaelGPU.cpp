@@ -3897,6 +3897,62 @@ static void observeGfxRingHang(const char *when) {
 // IAMDHWChannel::mapCmdBuffers (IOAccelSysMemory::lockForCPUAccess), so wrap it: copy
 // the whole buffer, sample every register WAIT_REG_MEM target while the ME is still
 // parked, and leave formatting to hangDumpThread.
+// rgpuaddrcfg: Apple's GFX10 address library (AMDHWAlignManager2::init builds its
+// ADDR_CREATE_INPUT from the shared hardware-info block) chooses swizzle patterns and
+// the pipe-bank xor from regValue.gbAddrConfig = hwinfo[0xa0]. The same block is copied
+// to user space by AMDAccelDevice::getHardwareInfo. If it carries Navi23's pipe count
+// while Raphael's GB_ADDR_CONFIG is 0x42 (4 pipes), GPU-only paths stay consistent but
+// every CPU-visible texture layout is a tile permutation. Mode 1 reports the block;
+// mode 2 also replaces hwinfo gbAddrConfig with the live register before the library is
+// created.
+static constexpr size_t kOffAlignManager2Init = 0x6032a;
+    // __ZN33AMDRadeonX6000_AMDHWAlignManager24initEP30AMDRadeonX6000_IAMDHWInterface [x6]
+static constexpr size_t kHwInfoGetterSlot = 0x1c0;    // IAMDHWInterface vtable: hwinfo block
+static constexpr size_t kHwInfoGbAddrConfig = 0xa0;   // ADDR_CREATE_INPUT +0x30 gbAddrConfig
+static constexpr size_t kHwInfoBackendDisables = 0xa8;
+static constexpr size_t kHwInfoNoOfBanks = 0xb0;
+static constexpr size_t kHwInfoNoOfRanks = 0xb8;
+static uint32_t addrConfigMode = 0;
+static mach_vm_address_t orgAlignManager2Init = 0;
+
+static uint64_t hwInfoField(const uint8_t *info, size_t offset) {
+    uint64_t value = 0;
+    memcpy(&value, info + offset, sizeof(value));
+    return value;
+}
+
+static int wrapAlignManager2Init(void *that, void *hwInterface) {
+    uint8_t *info = nullptr;
+    if (hwInterface != nullptr) {
+        void **vtable = *static_cast<void ***>(hwInterface);
+        if (vtable != nullptr && vtable[kHwInfoGetterSlot / sizeof(void *)] != nullptr) {
+            auto getter = reinterpret_cast<uint8_t *(*)(void *)>(vtable[kHwInfoGetterSlot / sizeof(void *)]);
+            info = getter(hwInterface);
+        }
+    }
+    const uint32_t live = asicInfo != nullptr ? fbRead(asicInfo, kGcGbAddrConfig) : 0xdeadbeef;
+    if (info != nullptr) {
+        RLOG("XA: hwinfo=%p numRasterPipe=%#llx numShaderPipes=%#llx gbAddrConfig=%#llx "
+             "backendDisables=%#llx noOfBanks=%#llx noOfRanks=%#llx live GB_ADDR_CONFIG=%#x",
+             info, hwInfoField(info, 0x18), hwInfoField(info, 0x20),
+             hwInfoField(info, kHwInfoGbAddrConfig), hwInfoField(info, kHwInfoBackendDisables),
+             hwInfoField(info, kHwInfoNoOfBanks), hwInfoField(info, kHwInfoNoOfRanks), live);
+        const uint64_t reported = hwInfoField(info, kHwInfoGbAddrConfig);
+        if (addrConfigMode == 2 && live != 0xdeadbeef && live != 0 && reported != live) {
+            const uint64_t replacement = live;
+            memcpy(info + kHwInfoGbAddrConfig, &replacement, sizeof(replacement));
+            RLOG("XA: rgpuaddrcfg=2 hwinfo gbAddrConfig %#llx -> %#llx", reported,
+                 hwInfoField(info, kHwInfoGbAddrConfig));
+        }
+    } else {
+        RLOG("XA: hwinfo getter unavailable (interface=%p)", hwInterface);
+    }
+    auto org = reinterpret_cast<int (*)(void *, void *)>(orgAlignManager2Init);
+    const int result = org(that, hwInterface);
+    RLOG("XA: AMDHWAlignManager2::init -> %#x", result);
+    return result;
+}
+
 static constexpr size_t kOffPendingCommandReport = 0xd950;
     // __ZN30AMDRadeonX6000_AMDAccelChannel38writePendingCommandInfoDiagnosisReportERPcRjP18AMD_COMMAND_BUFFERP11IOAccelTask [x6]
 static constexpr size_t kOffMapCmdBuffers = 0x4d58e;
@@ -7598,6 +7654,21 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
                  reportMatches, orgPendingCommandReport ? "ok" : "FAILED",
                  orgPendingCommandReport);
         }
+        if (addrConfigMode != 0) {
+            // push rbp; mov rbp,rsp; push r15; push r14; push r12; push rbx; sub rsp,0x90
+            static const uint8_t alignInitEntry[] = {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57,
+                0x41, 0x56, 0x41, 0x54, 0x53, 0x48, 0x81, 0xec, 0x90, 0x00, 0x00, 0x00};
+            const bool alignMatches = entryMatches(addr, sz, kOffAlignManager2Init,
+                                                   alignInitEntry, sizeof(alignInitEntry));
+            if (alignMatches) {
+                orgAlignManager2Init = patcher.routeFunction(
+                    addr + kOffAlignManager2Init,
+                    reinterpret_cast<mach_vm_address_t>(wrapAlignManager2Init), true);
+                patcher.clearError();
+            }
+            RLOG("XA: AMDHWAlignManager2::init route entries-match=%u route=%s (org=%#llx)",
+                 alignMatches, orgAlignManager2Init ? "ok" : "FAILED", orgAlignManager2Init);
+        }
         // Exact complete instructions displaced by the five new X6000 routes.
         // The start/powerOff patterns extend to 21 bytes because byte 16 is in
         // the middle of their first memory-operand instruction.
@@ -7754,6 +7825,12 @@ static void pluginStart() {
     RLOG("XD: rgpunobin=%u (%s)", noBinMode,
          noBinMode == 1 ? "PA_SC_ENHANCE_1.DISABLE_SC_BINNING before RLC start" : "off");
     uint32_t hangDump = 0;
+    uint32_t addrCfg = 0;
+    addrConfigMode = PE_parse_boot_argn("rgpuaddrcfg", &addrCfg, sizeof(addrCfg)) && addrCfg <= 2
+        ? addrCfg : 0;
+    RLOG("XA: rgpuaddrcfg=%u (%s)", addrConfigMode,
+         addrConfigMode == 2 ? "report hwinfo gbAddrConfig and replace it with live GB_ADDR_CONFIG"
+         : addrConfigMode == 1 ? "report hwinfo gbAddrConfig" : "off");
     hangDumpMode = PE_parse_boot_argn("rgpuhangdump", &hangDump, sizeof(hangDump)) &&
         hangDump <= 1 ? hangDump : 0;
     RLOG("XD: rgpuhangdump=%u (%s)", hangDumpMode, hangDumpMode == 1
