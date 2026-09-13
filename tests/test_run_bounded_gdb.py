@@ -23,12 +23,18 @@ class RunnerTests(unittest.TestCase):
         self.addCleanup(lambda: __import__('shutil').rmtree(root))
         (root / 'supervision.json').write_text(json.dumps({
             'cid': self.CID, 'deadline_epoch': __import__('time').time() + 60,
+            'boot_id': 'b' * 36,
             'serial_ready': str(root / ('serial-' + self.CID + '.ready'))}))
         (root / 'serial.log').write_text(self.SERIAL)
         (root / ('serial-' + self.CID + '.ready')).write_text(self.CID)
         generator = root / 'generator.py'
         generator.write_text("#!/usr/bin/env python3\nimport pathlib, sys\n"
-                             "pathlib.Path(sys.argv[sys.argv.index('--output') + 1]).write_text('set confirm off\\n')\n")
+                             "pathlib.Path(sys.argv[sys.argv.index('--output') + 1]).write_text("
+                             "'RAPHAEL_AUTHENTICATED\\ninterrupt\\nPOST_PROBE_INTERRUPT_HIT\\n"
+                             "POST_PROBE_VCPU_REGISTERS\\ninfo registers\\n"
+                             "POST_PROBE_VCPU_BACKTRACE\\nthread apply all bt 8\\n"
+                             "POST_PROBE_SELECTED_VCPU_BACKTRACE\\nbt full 8\\n"
+                             "x/32gx $rsp\\nPOST_PROBE_DETACHED\\n')\n")
         os.chmod(generator, 0o755)
         gdb = root / 'gdb.py'
         gdb.write_text('#!/usr/bin/env python3\n' + gdb_body)
@@ -43,6 +49,34 @@ class RunnerTests(unittest.TestCase):
                 '--generator', str(generator), '--kernel-symbols', '/tmp/kernel',
                 '--raphael-binary', '/tmp/raphael', '--raphael-dsym', '/tmp/dsym',
                 '--scenario', 'vmid1-root']
+        with patch.object(tool, 'verify_port'), patch.object(sys, 'argv', argv):
+            tool.main()
+        return output
+
+    def post_probe_record(self, root):
+        manifest = root / 'manifest.json'
+        manifest.write_text('{"run_id":"' + self.BUILD + '","build_id":"' +
+                            self.BUILD + '","boot_id":"' + 'b' * 36 + '"}\n')
+        manifest_hash = __import__('hashlib').sha256(manifest.read_bytes()).hexdigest()
+        record = root / 'probe-failure.json'
+        record.write_text(json.dumps({
+            'run_id': self.BUILD, 'build_id': self.BUILD, 'cid': self.CID,
+            'boot_id': 'b' * 36, 'manifest_sha256': manifest_hash,
+            'probe': {'transport_exit': 0, 'timed_out': True},
+            'deadline_epoch': __import__('time').time() + 60,
+        }))
+        return record
+
+    def run_post_probe(self, root, gdb, record=None):
+        output = root / 'post-output'
+        record = record or self.post_probe_record(root)
+        argv = ['runner', '--supervision', str(root / 'supervision.json'),
+                '--output', str(output), '--build-id', self.BUILD,
+                '--run-id', self.BUILD, '--failure-record', str(record),
+                '--gdb', str(gdb), '--scenario', 'post-probe',
+                '--manifest', str(root / 'manifest.json'),
+                '--kernel-symbols', '/tmp/kernel', '--raphael-binary', '/tmp/raphael',
+                '--raphael-dsym', '/tmp/dsym', '--generator', str(root / 'generator.py')]
         with patch.object(tool, 'verify_port'), patch.object(sys, 'argv', argv):
             tool.main()
         return output
@@ -151,5 +185,38 @@ class RunnerTests(unittest.TestCase):
                 'returncode': 9, 'detached': False, 'output': 'detach failed'})
         self.assertEqual(run.call_args.kwargs['timeout'], 3)
         self.assertFalse(run.call_args.kwargs['check'])
+
+    def test_post_probe_requires_authenticated_failure_record(self):
+        root, generator, gdb = self.fixture(
+            "print('RAPHAEL_AUTHENTICATED\\nPOST_PROBE_INTERRUPT_HIT\\nPOST_PROBE_VCPU_REGISTERS\\n"
+            "POST_PROBE_VCPU_BACKTRACE\\nPOST_PROBE_DETACHED')\n")
+        output = self.run_post_probe(root, gdb)
+        result = json.loads((output / 'result.json').read_text())
+        self.assertEqual(result['scenario'], 'post-probe')
+        self.assertEqual(result['run_id'], self.BUILD)
+        self.assertFalse(result['atomic_hardware_snapshot'])
+        self.assertFalse(result['darwin_all_threads'])
+
+    def test_post_probe_script_is_read_only_and_has_no_initialization_breakpoints(self):
+        root, generator, gdb = self.fixture(
+            "print('RAPHAEL_AUTHENTICATED\\nPOST_PROBE_INTERRUPT_HIT\\nPOST_PROBE_VCPU_REGISTERS\\n"
+            "POST_PROBE_VCPU_BACKTRACE\\nPOST_PROBE_DETACHED')\n")
+        self.run_post_probe(root, gdb)
+        script = (root / 'post-output' / 'capture.gdb').read_text()
+        self.assertIn('interrupt', script)
+        self.assertIn('info registers', script)
+        self.assertIn('thread apply all bt 8', script)
+        self.assertIn('x/32gx $rsp', script)
+        self.assertNotIn('hbreak', script)
+        self.assertNotIn('continue', script)
+        self.assertNotIn('M ', script)
+
+    def test_post_probe_rejects_wrong_failure_identity(self):
+        root, generator, gdb = self.fixture("raise SystemExit(0)\n")
+        record = self.post_probe_record(root)
+        value = json.loads(record.read_text()); value['cid'] = 'e' * 64
+        record.write_text(json.dumps(value))
+        with self.assertRaisesRegex(ValueError, 'failure record.*CID'):
+            self.run_post_probe(root, gdb, record)
 
 if __name__ == '__main__': unittest.main()

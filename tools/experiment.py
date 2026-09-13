@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import re
 import hashlib
+import math
 import shutil
 import subprocess
 import tempfile
@@ -12,10 +13,12 @@ import uuid
 import argparse
 import fcntl
 import importlib.util
+import inspect
 import plistlib
 import time
 import shlex
 import signal
+import sys
 import gzip
 import struct
 import threading
@@ -37,6 +40,106 @@ PROBE_PROFILES = {
         'validator': 'small-metal-test',
     },
 }
+
+POST_PROBE_DEBUG_SCENARIOS = ('post-probe',)
+POST_PROBE_DEBUG_REQUIRED = {
+    'scenario', 'generator', 'generator_sha256', 'kernel_symbols',
+    'raphael_binary', 'raphael_dsym', 'kernel_symbols_sha256',
+    'raphael_binary_sha256', 'raphael_dsym_sha256',
+}
+POST_PROBE_DEBUG_OPTIONAL = {'budget_seconds', 'cleanup_reserve_seconds'}
+
+
+def post_probe_debug_contract(spec, vm=None):
+    """Validate the opt-in, immutable debugger inputs for a failed probe.
+
+    Resource paths remain owned by the debugger runner; the card pins the
+    reviewed generator and the content identities it is allowed to open.
+    """
+    if not isinstance(spec, dict) or 'post_probe_debug' not in spec:
+        return None
+    value = spec['post_probe_debug']
+    if not isinstance(value, dict) or set(value) - (
+            POST_PROBE_DEBUG_REQUIRED | POST_PROBE_DEBUG_OPTIONAL) or \
+            not POST_PROBE_DEBUG_REQUIRED <= set(value):
+        raise ValueError('post-probe debugger fields are not pinned')
+    value = dict(value)
+    if value['scenario'] not in POST_PROBE_DEBUG_SCENARIOS:
+        raise ValueError('post-probe debugger scenario is unsupported')
+    generator = value['generator']
+    if (not isinstance(generator, str) or Path(generator).is_absolute() or
+            Path(generator).as_posix() != generator or
+            not generator.startswith('tools/') or
+            generator != 'tools/gdb-kext-source.py'):
+        raise ValueError('post-probe debugger generator path is not allowlisted')
+    if not re.fullmatch(r'[0-9a-f]{64}', value['generator_sha256']):
+        raise ValueError('post-probe debugger generator digest is malformed')
+    actual = sha((ROOT / generator).read_bytes())
+    if actual != value['generator_sha256']:
+        raise ValueError('post-probe debugger generator digest changed')
+    for path_field, field in (
+            ('kernel_symbols', 'kernel_symbols_sha256'),
+            ('raphael_binary', 'raphael_binary_sha256'),
+            ('raphael_dsym', 'raphael_dsym_sha256')):
+        path = value[path_field]
+        if (not isinstance(path, str) or Path(path).is_absolute() or
+                Path(path).as_posix() != path or path.startswith('../') or
+                '/..' in path.split('/') or not path.startswith('run/')):
+            raise ValueError(f'post-probe {path_field.replace("_", " ")} path is invalid')
+        if not isinstance(value[field], str) or not re.fullmatch(
+                r'[0-9a-f]{64}', value[field]):
+            raise ValueError(f'post-probe {field.replace("_", " ")} is malformed')
+        if vm is not None:
+            resolved = Path(vm) / path
+            if path_field == 'raphael_dsym':
+                resolved_file = resolved / 'Contents/Resources/DWARF/RaphaelGPU'
+                valid = (resolved.is_dir() and not resolved.is_symlink() and
+                         resolved_file.is_file() and not resolved_file.is_symlink())
+            else:
+                resolved_file = resolved
+                valid = resolved.is_file() and not resolved.is_symlink()
+            if not valid:
+                raise ValueError(f'post-probe {path_field.replace("_", " ")} is unavailable')
+            if sha(resolved_file.read_bytes()) != value[field]:
+                raise ValueError(f'post-probe {path_field.replace("_", " ")} digest changed')
+    for field, default, minimum in (('budget_seconds', 30, 30),
+                                    ('cleanup_reserve_seconds', 25, 25)):
+        if field not in value:
+            value[field] = default
+        if type(value[field]) is not int or value[field] < minimum:
+            raise ValueError(f'post-probe {field.replace("_", " ")} is invalid')
+    return value
+
+
+def post_probe_capture_plan(manifest, state, now=None):
+    """Return a bounded nonce-bound capture window before mandatory cleanup."""
+    contract = post_probe_debug_contract(manifest.get('spec', manifest))
+    if contract is None:
+        return None
+    run_id = manifest.get('run_id')
+    if not isinstance(run_id, str) or not re.fullmatch(r'[0-9a-f]{32}', run_id):
+        raise ValueError('post-probe capture requires a nonce-bound run identity')
+    try:
+        hard = min(float(state['deadline_epoch']),
+                   float(state.get('launch_deadline_epoch', state['deadline_epoch'])))
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError('post-probe capture budget is unavailable') from error
+    now = time.time() if now is None else float(now)
+    if not math.isfinite(hard) or not math.isfinite(now):
+        raise ValueError('post-probe capture budget is unavailable')
+    cleanup_deadline = hard
+    capture_window_end = min(now + contract['budget_seconds'],
+                             cleanup_deadline - contract['cleanup_reserve_seconds'])
+    capture_deadline = capture_window_end - 15
+    if capture_deadline <= now:
+        raise ValueError('post-probe capture budget is insufficient before cleanup')
+    return {'run_id': run_id, 'scenario': contract['scenario'],
+            'generator': contract['generator'],
+            'capture_deadline_epoch': capture_deadline,
+            'capture_window_end_epoch': capture_window_end,
+            'cleanup_deadline_epoch': cleanup_deadline,
+            'budget_seconds': contract['budget_seconds'],
+            'cleanup_reserve_seconds': contract['cleanup_reserve_seconds']}
 
 
 def probe_profile(spec):
@@ -413,6 +516,7 @@ def current_identity(vm, candidate, requested_diagnostic, run_id=None,
 def prepare(vm, spec, output, gpu=True, run_id=None, attempt=None):
     card = json.loads(spec.read_text())
     selected_probe = probe_profile(card)
+    post_probe_debug_contract(card, vm)
     replay_schema = critical_replay_schema(card)
     transport = critical_replay_transport(card)
     quiesce = critical_replay_quiesce(card)
@@ -2166,6 +2270,89 @@ def replace_json(path, value):
         temp.unlink(missing_ok=True)
 
 
+def fsync_directory(path):
+    fd = os.open(Path(path), os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0))
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def reconcile_preexposure_failure(vm, output, manifest, failure):
+    """Remove one reservation only after a structured pre exposure proof."""
+    evidence = getattr(failure, 'evidence', None)
+    if not isinstance(evidence, dict) or evidence.get('kind') != 'supervised-pre-exposure-failure':
+        raise ValueError('pre exposure reconciliation requires structured evidence')
+    evidence_path = evidence.get('path')
+    if not isinstance(evidence_path, str):
+        raise ValueError('pre exposure evidence path missing')
+    try:
+        persisted = json.loads(Path(evidence_path).read_text())
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        raise ValueError('pre exposure evidence file missing') from None
+    if persisted != evidence:
+        raise ValueError('pre exposure evidence file does not match failure')
+    required = {'boot_id':manifest.get('boot_id'), 'run_id':manifest.get('run_id'),
+                'source_commit':manifest.get('source_commit'),
+                'manifest_sha256':sha(Path(output/'manifest.json').read_bytes()),
+                'exposure_started':False, 'systemd_invoked':False,
+                'docker_create_observed':False}
+    if any(evidence.get(key) != value for key, value in required.items()):
+        raise ValueError('pre exposure evidence identity mismatch')
+    if evidence.get('phase') not in ('archive', 'reservation'):
+        raise ValueError('pre exposure evidence phase is not bounded')
+    pending = Path(vm)/'run/launch-pending'
+    if pending.exists() and any(pending.iterdir()):
+        raise ValueError('pre exposure reconciliation found pending launch')
+    units = active_launch_units()
+    if units:
+        raise ValueError('pre exposure reconciliation found active launch units')
+    active = subprocess.run(['docker','ps','-q','--filter','status=running',
+                            '--filter','status=created','--filter','status=restarting',
+                            '--filter','status=paused'], text=True,
+                           capture_output=True, timeout=10, check=True).stdout.strip()
+    if active:
+        raise ValueError('pre exposure reconciliation found active containers')
+    ledger_path = Path(vm)/'run/used-gpu-boots'/(manifest['boot_id']+'.json')
+    ledger_raw = ledger_path.read_bytes(); ledger = read_boot_ledger(ledger_path)
+    rows = ledger.get('launches')
+    if not isinstance(rows, list): raise ValueError('pre exposure ledger malformed')
+    matches = [row for row in rows if isinstance(row, dict) and
+               row.get('run_id') == manifest['run_id']]
+    if len(matches) != 1 or rows[-1] is not matches[0]:
+        raise ValueError('pre exposure reservation is not the unique latest row')
+    audit = {'schema':1, 'kind':'pre-exposure-reservation-reconciliation',
+             'boot_id':manifest['boot_id'], 'run_id':manifest['run_id'],
+             'source_commit':manifest.get('source_commit'),
+             'manifest_sha256':required['manifest_sha256'],
+             'failure_evidence':evidence, 'failure_evidence_sha256':sha(
+                 json.dumps(evidence, sort_keys=True).encode()),
+             'ledger_sha256_before':sha(ledger_raw), 'reservation':matches[0],
+             'ledger_original_raw_sha256':sha(ledger_raw),
+             'proof':{'no_active_containers':True, 'no_active_units':True,
+                      'no_pending_launch':True, 'systemd_invoked':False,
+                      'docker_create_observed':False, 'exposure_started':False},
+             'statement':'reservation removed only after machine checks proved failure preceded systemd and Docker creation'}
+    output = Path(output); output.mkdir(parents=True, exist_ok=True)
+    audit_path = output/'pre-exposure-reservation-audit.json'
+    original_path = output/'pre-exposure-ledger-original.json'
+    write_bytes_once(original_path, ledger_raw)
+    audit['ledger_original_raw_file'] = str(original_path.resolve())
+    write_once(audit_path, audit)
+    fsync_directory(output)
+    updated = dict(ledger); updated['launches'] = rows[:-1]
+    if updated['launches']:
+        replace_json(ledger_path, updated)
+    else:
+        archived_ledger = output/'pre-exposure-ledger.json'
+        if archived_ledger.exists():
+            raise ValueError('pre exposure ledger archive already exists')
+        os.replace(ledger_path, archived_ledger)
+        fsync_directory(ledger_path.parent)
+        fsync_directory(archived_ledger.parent)
+    return audit_path
+
+
 def _journal_cursor_position(cursor, boot_id):
     if not isinstance(cursor, str):
         return None
@@ -2570,9 +2757,27 @@ def reserve_boot(directory, boot_id, experiment, recovery=None,
     if recovery is None and noqueue_proof is None: raise FileExistsError(path)
     ledger_raw = path.read_bytes()
     ledger = read_boot_ledger(path); launches = ledger.get('launches', [])
+    prior = launches[-1].get('run_id') if launches else None
+    if recovery == 'manual-override':
+        # This sentinel is accepted only from the explicit CLI
+        # --manual-reuse --ack-risk path.  It is deliberately not passed to
+        # receipt validation and cannot create recovery authority.  The
+        # explicit experiment acknowledgement permits this one launch beyond
+        # the ordinary finite ledger ceiling.
+        if any(row.get('run_id') == experiment for row in launches):
+            raise ValueError('manual override reservation refused: run_id_reused')
+        reservation = {'run_id': experiment, 'reserved_epoch': time.time(),
+                       'manual_override': True, 'prior_run_id': prior,
+                       'manifest_sha256': (sha(Path(manifest_path).read_bytes())
+                                           if manifest_path is not None else None)}
+        launches.append(reservation)
+        ledger.update(schema=2, boot_id=boot_id,
+                      max_launches=ledger.get('max_launches'), launches=launches)
+        ledger.pop('experiment', None)
+        replace_json(path, ledger)
+        return
     if len(launches) >= 3:
         raise RuntimeError('launch ceiling exhausted')
-    prior = launches[-1].get('run_id') if launches else None
     if noqueue_proof is not None:
         current_raw = path.read_bytes()
         nq = helper('noqueue-qualification')
@@ -2881,6 +3086,110 @@ def run_probe(vm, manifest):
     return dict(run_id=nonce, output=result.stdout, transport_exit=result.returncode)
 
 
+def failed_small_probe(manifest, probe):
+    """Recognize only an identity-bound failed small probe as a trigger."""
+    if probe_profile(manifest.get('spec', manifest)).get('name') != 'small-metal':
+        return False
+    if not isinstance(probe, dict) or probe.get('run_id') != manifest.get('run_id'):
+        return False
+    exits = re.findall(r'^RGPU_EXIT ' + re.escape(manifest['run_id']) + r' (\d+)$',
+                       probe.get('output', ''), re.M)
+    return probe.get('transport_exit') != 0 or exits != ['0']
+
+
+def run_post_probe_capture(vm, manifest, state, output, probe):
+    """Run the optional read-only post-probe debugger inside its reserved window."""
+    if not failed_small_probe(manifest, probe):
+        return None
+    contract = post_probe_debug_contract(manifest.get('spec', manifest), vm)
+    try:
+        plan = post_probe_capture_plan(manifest, state)
+    except ValueError as error:
+        plan = {'run_id': manifest['run_id'], 'scenario': contract['scenario'],
+                'status': 'skipped', 'reason': str(error)}
+    failure_path = Path(output) / 'probe-failure.json'
+    failure = {
+        'schema': 1, 'phase': 'post-probe-trigger', 'run_id': manifest['run_id'],
+        'build_id': manifest['build_id'], 'boot_id': manifest['boot_id'],
+        'cid': state['cid'], 'manifest_sha256': sha(
+            (Path(output) / 'manifest.json').read_bytes()),
+        'deadline_epoch': plan.get('capture_deadline_epoch', state['deadline_epoch']),
+        'probe': dict(probe, failed=True,
+                      timed_out='timeout' in probe.get('output', '').lower()),
+    }
+    write_once(failure_path, failure)
+    phase_path = Path(output) / 'post-probe-phase.json'
+    write_once(phase_path, {'schema': 1, 'phase': 'post-probe',
+                            'status': plan.get('status', 'triggered'),
+                            'run_id': manifest['run_id'],
+                            'probe_failure_sha256': sha(
+                                failure_path.read_bytes()), 'plan': plan})
+    if plan.get('status') == 'skipped':
+        result = {'schema': 1, 'status': 'skipped', 'run_id': manifest['run_id'],
+                  'reason': plan['reason']}
+        write_once(Path(output) / 'post-probe-result.json', result)
+        return result
+    paths = {key: str((Path(vm) / contract[key]).resolve()) for key in
+             ('kernel_symbols', 'raphael_binary', 'raphael_dsym')}
+    command = [sys.executable, str(Path(__file__).with_name('run-bounded-gdb.py')),
+               '--supervision', str(Path(output) / 'supervision.json'),
+               '--output', str(Path(output) / 'post-probe-capture'),
+               '--build-id', manifest['build_id'], '--gdb', shutil.which('gdb') or 'gdb',
+               '--generator', str(ROOT / contract['generator']),
+               '--kernel-symbols', paths['kernel_symbols'],
+               '--raphael-binary', paths['raphael_binary'],
+               '--raphael-dsym', paths['raphael_dsym'], '--scenario', 'post-probe',
+               '--run-id', manifest['run_id'], '--failure-record', str(failure_path),
+               '--manifest', str(Path(output) / 'manifest.json')]
+    try:
+        remaining = max(1, plan['capture_deadline_epoch'] - time.time())
+        process = subprocess.Popen(command, text=True, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, start_new_session=True)
+        try:
+            stdout, stderr = process.communicate(timeout=remaining)
+        except subprocess.TimeoutExpired:
+            # Kill the runner and any GDB child as one bounded process group;
+            # never consume the mandatory post-capture cleanup reserve.
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            try:
+                stdout, stderr = process.communicate(timeout=2)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                try:
+                    stdout, stderr = process.communicate(timeout=2)
+                except subprocess.TimeoutExpired:
+                    stdout, stderr = '', ''
+            fallback = {'attempted': True, 'cid': state.get('cid'),
+                        'detached': False, 'error': None}
+            try:
+                debugger = helper('run-bounded-gdb')
+                debugger.verify_port(state['cid'])
+                fallback.update(debugger.detach(shutil.which('gdb') or 'gdb'))
+            except Exception as error:
+                fallback['error'] = type(error).__name__ + ': ' + str(error)
+            write_once(Path(output) / 'post-probe-detach-fallback.json', fallback)
+            result = {'schema': 1, 'status': 'failed', 'run_id': manifest['run_id'],
+                      'error': 'post-probe runner deadline expired',
+                      'returncode': process.returncode,
+                      'detach_fallback': fallback,
+                      'stdout': (stdout or '')[-2000:], 'stderr': (stderr or '')[-2000:]}
+        else:
+            result = {'schema': 1, 'status': 'complete' if process.returncode == 0 else 'failed',
+                      'run_id': manifest['run_id'], 'returncode': process.returncode,
+                      'stdout': (stdout or '')[-2000:], 'stderr': (stderr or '')[-2000:]}
+    except Exception as error:
+        result = {'schema': 1, 'status': 'failed', 'run_id': manifest['run_id'],
+                  'error': type(error).__name__ + ': ' + str(error)}
+    write_once(Path(output) / 'post-probe-result.json', result)
+    return result
+
+
 def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=None,
             cap_revision_authority_sha256=None,
             warm_qualification_policy_sha256=None,
@@ -2892,8 +3201,10 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
             prelaunch_proof_sha256=None,
             manual_reuse=False, noqueue_reuse=None):
     """One bounded launch; a verified prior recovery may authorize same-boot reuse."""
-    if manual_reuse:
-        raise ValueError('manual reuse is unsupported under the current launch budget policy')
+    # The explicit --manual-reuse/--ack-risk mode is reserved for a reviewed
+    # same-boot experiment when normal recovery authority is unavailable.  It
+    # remains opt-in at the CLI and is recorded as an experimental override;
+    # it must never be mistaken for a recovery receipt.
     noqueue_requested = bool(noqueue_reuse)
     one_run_requested = bool(one_run_policy_sha256 or one_run_activation_sha256)
     if bool(one_run_policy_sha256) != bool(one_run_activation_sha256):
@@ -2937,6 +3248,7 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
         raise ValueError('noqueue reuse cannot use another launch mode')
     manifest = json.loads(manifest_path.read_text())
     probe_profile(manifest)
+    post_probe_debug_contract(manifest.get('spec', manifest), vm)
     validate_manifest_replay_contract(manifest)
     dedicated_critical = critical_replay_transport(manifest) is not None
     if dedicated_critical and manifest.get('critical_transport_validator_sha256') != sha(
@@ -2960,6 +3272,10 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
             raise ValueError(qualification_label + ' qualification refused: '+','.join(
                 sorted(set(errors or [qualification_label + '_authority']))))
     supervisor = helper('vm-supervision'); classifier = helper('classify-run')
+    preexposure_type = getattr(supervisor, 'PreExposureFailure', None)
+    if (not isinstance(preexposure_type, type) or
+            not issubclass(preexposure_type, BaseException)):
+        preexposure_type = type('UnavailablePreExposureFailure', (RuntimeError,), {})
     guest_shutdown = helper('guest-shutdown')
     recovery_tool = helper('vfio-recover') if manifest.get('gpu') is True else None
     state = None; probe = None; failure = None; shutdown_result = None; host_messages = []
@@ -3119,8 +3435,18 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                 gpu_args = [] if manifest.get('gpu') is False else [
                     '--gpu', manifest['vfio_device'], '--gpu-id', '0x73ff', '--gpu-rom', 'run/gpu-patched.rom']
                 try:
-                    state = supervisor.start_locked(
-                        vm, manifest['max_seconds'], gpu_args, dedicated_critical)
+                    start_args = (vm, manifest['max_seconds'], gpu_args, dedicated_critical)
+                    start_context = {'boot_id':manifest['boot_id'],
+                                    'run_id':manifest['run_id'],
+                                    'source_commit':manifest.get('source_commit'),
+                                    'manifest_sha256':sha((output/'manifest.json').read_bytes())}
+                    if 'context' in inspect.signature(supervisor.start_locked).parameters:
+                        state = supervisor.start_locked(*start_args, context=start_context)
+                    else:
+                        state = supervisor.start_locked(*start_args)
+                except preexposure_type as error:
+                    reconcile_preexposure_failure(vm, output, manifest, error)
+                    raise
                 finally:
                     for key,value in old_env.items():
                         if value is None: os.environ.pop(key, None)
@@ -3163,9 +3489,22 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                         capture_pending = True
                         time.sleep(0.5)
                         continue
-                    if manifest['spec'].get('run_probe_only_after_native_start') is True and probe_fits(time.time(), state['launch_deadline_epoch'], state['deadline_epoch'],
-                                  probe_seconds=50):
+                    post_contract = post_probe_debug_contract(
+                        manifest.get('spec', manifest))
+                    post_seconds = (post_contract['budget_seconds']
+                                    if post_contract is not None else 0)
+                    post_cleanup = (post_contract['cleanup_reserve_seconds']
+                                    if post_contract is not None else 25)
+                    if manifest['spec'].get('run_probe_only_after_native_start') is True and probe_fits(
+                            time.time(), state['launch_deadline_epoch'], state['deadline_epoch'],
+                            probe_seconds=50 + post_seconds,
+                            cleanup_seconds=post_cleanup):
                         probe = run_probe(vm, manifest)
+                        # Persist the probe before any diagnostic or shutdown so
+                        # a crash cannot turn the trigger into an unbound retry.
+                        write_once(output/'probe.json', probe)
+                        if post_probe_debug_contract(manifest.get('spec', manifest)) is not None:
+                            run_post_probe_capture(vm, manifest, state, output, probe)
                         if critical_replay_quiesce(manifest) is not None:
                             critical_quiesce = quiesce_critical_producer(
                                 vm, output, manifest, state, supervisor,
@@ -3270,7 +3609,8 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
         (output/'agent-server-events.jsonl').write_bytes(agent_events.read_bytes())
     events = parse_manifest_captures(classifier, manifest, serial, critical)
     (output/'events.jsonl').write_text(''.join(json.dumps(e)+'\n' for e in events))
-    if probe is not None: write_once(output/'probe.json', probe)
+    if probe is not None and not (output/'probe.json').exists():
+        write_once(output/'probe.json', probe)
     write_once(output/'shutdown.json', shutdown_result)
     write_once(output/'host-after.json', host_snapshot())
     write_once(output/'host-kernel-messages.json', host_messages)

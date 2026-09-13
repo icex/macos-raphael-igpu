@@ -495,7 +495,34 @@ class SupervisionTests(unittest.TestCase):
         pid_file = self.vm / "managed.pid"
         if pid_file.exists():
             pid = int(pid_file.read_text())
-            self.addCleanup(lambda: os.kill(pid, signal.SIGTERM))
+            def stop_managed():
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    return
+                deadline = time.monotonic() + 5
+                while time.monotonic() < deadline:
+                    try:
+                        state = Path('/proc') / str(pid) / 'stat'
+                        if state.read_text().split()[2] == 'Z':
+                            return
+                    except (FileNotFoundError, ProcessLookupError):
+                        return
+                    time.sleep(0.02)
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    return
+                deadline = time.monotonic() + 5
+                while time.monotonic() < deadline:
+                    try:
+                        if (Path('/proc') / str(pid) / 'stat').read_text().split()[2] == 'Z':
+                            return
+                    except (FileNotFoundError, ProcessLookupError):
+                        return
+                    time.sleep(0.02)
+                raise AssertionError('managed launcher did not stop after SIGKILL')
+            self.addCleanup(stop_managed)
         self.assertEqual(result.returncode, 0, result.stderr +
                          (self.vm / "managed-launch.log").read_text())
         os.kill(pid, 0)  # Managed lifetime survives the start command exiting.
@@ -626,6 +653,27 @@ class SupervisionTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "not associated"):
                 module.start_locked(self.vm, 30, [])
         self.assertFalse(any(a and a[0] == "systemd-run" for a in calls))
+
+    def test_archive_failure_publishes_structured_preexposure_evidence(self):
+        spec = importlib.util.spec_from_file_location('supervisor', TOOL)
+        module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+        (self.vm / "run/launch-pending").mkdir()
+        def fake_run(args, **_):
+            if args[:3] == ["docker", "ps", "-a"]: return "macos-sequoia\n"
+            if args[:2] == ["docker", "inspect"] and args[-1] == "macos-sequoia": return CID
+            if args[:2] == ["docker", "inspect"]: raise RuntimeError("inspect failed")
+            raise AssertionError("systemd must not be reached")
+        context = {'boot_id':'boot-A', 'run_id':'r'*32, 'source_commit':'c'*40,
+                   'manifest_sha256':'d'*64}
+        with patch.object(module, 'binary', side_effect=lambda x: x), patch.object(module, 'run', side_effect=fake_run):
+            with self.assertRaises(module.PreExposureFailure) as raised:
+                module.start_locked(self.vm, 30, [], context=context)
+        evidence = raised.exception.evidence
+        self.assertEqual(evidence['kind'], 'supervised-pre-exposure-failure')
+        self.assertEqual(evidence['phase'], 'archive')
+        self.assertFalse(evidence['systemd_invoked'])
+        self.assertFalse(any((self.vm / 'run/launch-pending').iterdir()))
+        self.assertTrue(Path(evidence['path']).is_file())
 
     def test_cleanup_without_identity_targets_only_unique_launch_name(self):
         name = "rgpu-launch-" + "b" * 32

@@ -159,6 +159,20 @@ class GdbKextSourceTests(unittest.TestCase):
                           "wrapVmmPrepare", bytes.fromhex("4883ec2841574156"),
                           [0x41100], scenario="vmid1-root")
 
+    def test_post_probe_keeps_runtime_auth_before_readonly_snapshot(self):
+        text = tool.generate(0xffffff801b6e8000, "474ef697fc283ba283a4763d76c8e200",
+                             "/tmp/kernel.symbols", "/tmp/RaphaelGPU.dSYM",
+                             0x41000, "wrapVmmPrepare",
+                             bytes.fromhex("554889e541574156"), [],
+                             "/tmp/rgpu-release-old/src", scenario="post-probe")
+        self.assertLess(text.index("RAPHAEL_AUTHENTICATED"),
+                        text.index("POST_PROBE_INTERRUPT_HIT"))
+        self.assertLess(text.index("gdb.execute('interrupt')"),
+                        text.index("POST_PROBE_INTERRUPT_HIT"))
+        self.assertIn("gdb.execute('quit')\nend\nquit", text)
+        self.assertNotIn("hbreak", text[text.index("POST_PROBE_INTERRUPT_HIT"):])
+        self.assertNotIn("continue", text[text.index("POST_PROBE_INTERRUPT_HIT"):])
+
     def test_prepare_native_call_pair_allows_copied_info_pointer(self):
         self.assertTrue(tool.matching_native_call(
             0x8000, 0x9000, (1, 2, 3, 4), 0x7ff8, 0x9000,
