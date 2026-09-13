@@ -119,6 +119,10 @@ int main() {
             waitSatisfied(4, 1, 2, 3) && waitSatisfied(5, 2, 2, 3) && waitSatisfied(6, 3, 2, 3) &&
             !waitSatisfied(7, 0, 0, 0), "every compare function");
 
+    const uint32_t checksumWords[] {0xc0004600u, 0x16u, 0xc0065800u, 0x86287fc3u};
+    require(lineChecksum(0x10u, checksumWords, 4) == 0xa1b663aeu,
+            "line checksum vector shared with tools/decode-hang-dump.py");
+
     std::puts("gfx hang dump arithmetic: ok");
     return 0;
 }

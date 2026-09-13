@@ -84,6 +84,30 @@ class GfxHangDumpSourceTests(unittest.TestCase):
                      'kOffUnmapCmdBuffers = 0x4d608;'):
             self.assertIn(text, self.source)
 
+    def test_decoder_checksum_matches_kext_vector(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('decoder', ROOT / 'tools/decode-hang-dump.py')
+        decoder = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(decoder)
+        self.assertEqual(decoder.line_checksum(0x10, [0xc0004600, 0x16, 0xc0065800, 0x86287fc3]),
+                         0xa1b663ae)
+        with tempfile.TemporaryDirectory() as temporary:
+            serial = Path(temporary) / 'serial.txt'
+            serial.write_text(
+                'RaphaelGPU rgpu: @ XB: cb0 p1 [0x0010] c0004600 00000016 c0065800 86287fc3 x=a1b663ae\n'
+                'RaphaelGPU rgpu: @ XB: cb0 p2 [0x0010] c0004600 00000016 c0065800 86287fc4 x=a1b663ae\n')
+            buffers, rejected = decoder.parse_command_buffers(serial)
+        self.assertEqual(rejected, 1)
+        self.assertEqual(buffers[0][0x13], 0x86287fc3)
+
+    def test_printing_is_paced_after_capture(self):
+        printer = self.body('static void printHangCommandBuffer', 'static void hangDumpThread')
+        self.assertLess(printer.index('IOSleep(3000);'), printer.index('RLOG("XB: cb%u p%u'))
+        self.assertIn('RaphaelHang::lineChecksum(first, cb.words + first, count)', printer)
+        capture = self.body('static void capturePendingCommandBuffer',
+                            'static void wrapPendingCommandReport')
+        self.assertIn('RLOG("XB: pending CB %u wait %u at=', capture)
+
     @unittest.skipUnless(shutil.which('g++'), 'g++ unavailable')
     def test_arithmetic_unit(self):
         with tempfile.TemporaryDirectory() as temporary:

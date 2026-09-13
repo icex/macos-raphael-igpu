@@ -3870,6 +3870,27 @@ static void capturePendingCommandBuffer(void *cb) {
     __atomic_store_n(&hangCbBusy, 0u, __ATOMIC_RELEASE);
     RLOG("XB: pending CB %u va=%#llx size=%#x copied=%#x waits=%u", index, va, size, out.copied,
          out.waits);
+    // Candidate 213 lost the worker's wait lines to console drops; the short capture-time
+    // lines survived. Log each wait here as well.
+    for (uint32_t n = 0; n < out.waits; ++n) {
+        const auto &sample = out.wait[n];
+        const auto &w = sample.wait;
+        RLOG("XB: pending CB %u wait %u at=%#x fn=%u mem=%u oper=%u eng=%u addr=%#llx "
+             "second=%#x ref=%#x mask=%#x interval=%#x sampled=%u values=%#x,%#x,%#x", index, n,
+             sample.at, w.function, w.memSpace, w.operation, w.engine, w.address, w.second,
+             w.reference, w.mask, w.interval, sample.sampled, sample.values[0], sample.values[1],
+             sample.values[2]);
+        // The packets that led the ME here: 24 dwords before the wait and its own seven.
+        const uint32_t from = sample.at > 24 ? sample.at - 24 : 0;
+        const uint32_t to = sample.at + 7 < out.copied ? sample.at + 7 : out.copied;
+        char line[160];
+        for (uint32_t first = from; first < to; first += 8) {
+            int used = 0;
+            for (uint32_t i = first; i < first + 8 && i < to; ++i)
+                used += snprintf(line + used, sizeof(line) - used, " %08x", out.words[i]);
+            RLOG("XB: pending CB %u wait %u ctx [0x%04x]%s", index, n, first, line);
+        }
+    }
 }
 
 static void wrapPendingCommandReport(void *channel, char **cursor, uint32_t *remaining,
@@ -5901,24 +5922,21 @@ static void dumpGfxHangMemory(uint32_t index, const GfxHangSnapshot &snap) {
     RLOG("XD: gfx hang dump %u memory complete", index);
 }
 
-static void printHangCommandBuffer(uint32_t index, const HangCommandBuffer &cb) {
-    RLOG("XB: cb%u va=%#llx size=%#x copied=%#x", index, cb.va, cb.size, cb.copied);
-    char line[160];
-    for (uint32_t first = 0; first < cb.copied; first += 8) {
-        int used = 0;
-        for (uint32_t i = first; i < first + 8 && i < cb.copied; ++i)
-            used += snprintf(line + used, sizeof(line) - used, " %08x", cb.words[i]);
-        RLOG("XB: cb%u [%#06x]%s", index, first, line);
-    }
+// Candidate 213 printed 419 lines in one burst while Apple's report and HWLibs TTL
+// asserts were logging: most lines were dropped and some interleaved. Wait for the
+// report to finish, pace the output below the 115200-baud console rate, tag every
+// line with a checksum, and print the buffer twice.
+static void printHangWaits(uint32_t index, const HangCommandBuffer &cb) {
     for (uint32_t n = 0; n < cb.waits; ++n) {
         const auto &sample = cb.wait[n];
         const auto &w = sample.wait;
-        RLOG("XB: cb%u WAIT_REG_MEM[%#x] op=%#x fn=%u mem=%u oper=%u eng=%u addr=%#llx "
+        RLOG("XB: cb%u WAIT_REG_MEM[0x%04x] op=%#x fn=%u mem=%u oper=%u eng=%u addr=%#llx "
              "second=%#x ref=%#x mask=%#x interval=%#x", index, sample.at, w.opcode, w.function,
              w.memSpace, w.operation, w.engine, w.address, w.second, w.reference, w.mask,
              w.interval);
+        IOSleep(20);
         if (sample.sampled) {
-            RLOG("XB: cb%u WAIT_REG_MEM[%#x] register %#llx at capture = %#x %#x %#x "
+            RLOG("XB: cb%u WAIT_REG_MEM[0x%04x] register %#llx at capture = %#x %#x %#x "
                  "satisfied=%u", index, sample.at, w.address, sample.values[0], sample.values[1],
                  sample.values[2], RaphaelHang::waitSatisfied(w.function, sample.values[2],
                                                                w.reference, w.mask));
@@ -5926,13 +5944,36 @@ static void printHangCommandBuffer(uint32_t index, const HangCommandBuffer &cb) 
             const auto source = hangGartPage(w.address & ~0xfffULL);
             const bool read = readHangPage(source, hangPageWords);
             const uint32_t value = read ? hangPageWords[(w.address & 0xfff) / 4] : 0;
-            RLOG("XB: cb%u WAIT_REG_MEM[%#x] memory %#llx via gart ok=%u read=%u value=%#x "
+            RLOG("XB: cb%u WAIT_REG_MEM[0x%04x] memory %#llx via gart ok=%u read=%u value=%#x "
                  "satisfied=%u (read after capture)", index, sample.at, w.address, source.ok,
                  read, value, read && RaphaelHang::waitSatisfied(w.function, value, w.reference,
                                                                  w.mask));
         }
+        IOSleep(20);
     }
-    RLOG("XB: cb%u complete", index);
+}
+
+static void printHangCommandBuffer(uint32_t index, const HangCommandBuffer &cb) {
+    // Candidate 213's guest shut down about 30 s after the report: 3 s settle, 20 ms per
+    // line (about 5 KB/s against the 11.5 KB/s console), 2 s between passes.
+    IOSleep(3000);
+    for (uint32_t pass = 1; pass <= 2; ++pass) {
+        RLOG("XB: cb%u pass %u va=%#llx size=%#x copied=%#x waits=%u", index, pass, cb.va,
+             cb.size, cb.copied, cb.waits);
+        printHangWaits(index, cb);
+        char line[160];
+        for (uint32_t first = 0; first < cb.copied; first += 8) {
+            const uint32_t count = cb.copied - first < 8 ? cb.copied - first : 8;
+            int used = 0;
+            for (uint32_t i = first; i < first + count; ++i)
+                used += snprintf(line + used, sizeof(line) - used, " %08x", cb.words[i]);
+            RLOG("XB: cb%u p%u [0x%04x]%s x=%08x", index, pass, first, line,
+                 RaphaelHang::lineChecksum(first, cb.words + first, count));
+            IOSleep(20);
+        }
+        RLOG("XB: cb%u pass %u complete", index, pass);
+        if (pass == 1) IOSleep(2000);
+    }
 }
 
 static void hangDumpThread(void *, wait_result_t) {

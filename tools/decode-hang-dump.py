@@ -133,11 +133,72 @@ def decode(words, names, regs, wrap=None):
     return out
 
 
+CB_LINE = re.compile(r'XB: cb(?P<cb>\d+) (?:p(?P<pass>\d) )?\[(?P<index>0x[0-9a-f]+|0+)\]'
+                     r'(?P<words>(?: [0-9a-f]{8}){1,8})(?: x=(?P<sum>[0-9a-f]{8}))?\r?$')
+CTX_LINE = re.compile(r'XB: pending CB (?P<cb>\d+) wait \d+ ctx \[(?P<index>0x[0-9a-f]+)\]'
+                      r'(?P<words>(?: [0-9a-f]{8}){1,8})\r?$')
+
+
+def line_checksum(first, words):
+    value = 0x52475055 ^ first
+    for word in words:
+        value = (((value << 5) | (value >> 27)) & 0xffffffff) ^ word
+    return value
+
+
+def parse_command_buffers(path):
+    """Merge XB command-buffer lines; checksummed lines must verify."""
+    buffers, rejected = {}, 0
+    for raw in Path(path).read_text(errors='replace').splitlines():
+        match = CB_LINE.search(raw) or CTX_LINE.search(raw)
+        if not match:
+            continue
+        index = int(match.group('index'), 16)
+        words = [int(word, 16) for word in match.group('words').split()]
+        checksum = match.groupdict().get('sum')
+        if checksum is not None and line_checksum(index, words) != int(checksum, 16):
+            rejected += 1
+            continue
+        target = buffers.setdefault(int(match.group('cb')), {})
+        for offset, word in enumerate(words):
+            target.setdefault(index + offset, word)
+    return buffers, rejected
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('serial')
+    parser.add_argument('--command-buffers', action='store_true',
+                        help='decode XB: command-buffer lines instead of XD: dumps')
     args = parser.parse_args()
     names, regs = opcodes(), registers()
+    if args.command_buffers:
+        buffers, rejected = parse_command_buffers(args.serial)
+        print(f'checksum-rejected lines: {rejected}')
+        for number, words in sorted(buffers.items()):
+            print(f'== cb{number}: {len(words)} dwords recovered ==')
+            at, end = 0, max(words) + 1
+            while at < end:
+                if at not in words:
+                    gap = at
+                    while at < end and at not in words:
+                        at += 1
+                    print(f'  [{gap:#x}..{at:#x}) missing')
+                    continue
+                word = words[at]
+                size = valid_header(word, names)
+                if size == 0:
+                    print(f'  [{at:#x}] {word:08x} ??')
+                    at += 1
+                    continue
+                if size == 1:
+                    at += 1
+                    continue
+                for line in decode({i: words[i] for i in range(at, at + size) if i in words},
+                                   names, regs):
+                    print(line)
+                at += size
+        return
     for number, dump in sorted(parse(args.serial).items()):
         print(f'== dump {number} ==')
         for line in dump['lines']:

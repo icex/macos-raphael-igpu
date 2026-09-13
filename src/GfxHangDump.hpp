@@ -227,4 +227,11 @@ inline bool waitSatisfied(uint32_t function, uint32_t value, uint32_t reference,
     return false;
 }
 
+// Per-line tag for printed command-buffer dwords (tools/decode-hang-dump.py).
+inline uint32_t lineChecksum(uint32_t first, const uint32_t *words, uint32_t count) {
+    uint32_t sum = 0x52475055u ^ first;
+    for (uint32_t i = 0; i < count; ++i) sum = (sum << 5 | sum >> 27) ^ words[i];
+    return sum;
+}
+
 } // namespace RaphaelHang
