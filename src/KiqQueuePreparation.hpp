@@ -20,6 +20,7 @@ constexpr uint32_t kMecHaltMask = (1U << 28) | (1U << 30);
 
 struct HaltedNativeTransaction {
     uint32_t savedMecControl = 0;
+    uint32_t initialWptrLo = 0;
     uint64_t expectedPq = 0;
     bool held = false;
 };
@@ -30,7 +31,8 @@ inline bool haltedNativeResultVerified(bool nativeSuccess, uint32_t mec, uint32_
                                        uint32_t eopHi, uint32_t eopControl, uint32_t rptr,
                                        uint32_t wptrHi, uint32_t wptrLo,
                                        uint64_t expectedMqd, uint64_t expectedPq,
-                                       uint64_t expectedEop) {
+                                       uint64_t expectedEop, uint32_t expectedWptrLo = 0,
+                                       bool allowRetainedWptr = false) {
     const uint32_t values[] = {mec, active, dequeue, mqdLo, mqdHi, pqLo, pqHi, eopLo,
                                eopHi, eopControl, rptr, wptrHi, wptrLo};
     for (auto value : values)
@@ -42,11 +44,14 @@ inline bool haltedNativeResultVerified(bool nativeSuccess, uint32_t mec, uint32_
         pqLo == static_cast<uint32_t>(expectedPq) && pqHi == static_cast<uint32_t>(expectedPq >> 32) &&
         eopLo == static_cast<uint32_t>(expectedEop >> 8) &&
         eopHi == static_cast<uint32_t>(expectedEop >> 40) && eopControl == 6 &&
-        rptr == 0 && wptrHi == 0 && wptrLo == 0;
+        rptr == 0 && wptrHi == 0 &&
+        ((allowRetainedWptr && wptrLo == expectedWptrLo) ||
+         (!allowRetainedWptr && wptrLo == 0));
 }
 
 template <typename Read, typename Write, typename Delay>
-bool beginHaltedNative(HaltedNativeTransaction &tx, Read read, Write write, Delay delay) {
+bool beginHaltedNative(HaltedNativeTransaction &tx, Read read, Write write, Delay delay,
+                       bool allowRetainedWptr = false) {
     tx = {};
     tx.savedMecControl = read(HaltedRegister::MecControl);
     if (tx.savedMecControl == 0xffffffffU) return false;
@@ -55,11 +60,15 @@ bool beginHaltedNative(HaltedNativeTransaction &tx, Read read, Write write, Dela
     const uint32_t halted = read(HaltedRegister::MecControl);
     if (halted == 0xffffffffU || (halted & kMecHaltMask) != kMecHaltMask) return false;
     tx.held = true;
+    if (allowRetainedWptr) {
+        tx.initialWptrLo = read(HaltedRegister::WptrLo);
+        if (tx.initialWptrLo == 0xffffffffU) return false;
+    }
     write(HaltedRegister::Active, 0);
     write(HaltedRegister::Dequeue, 0);
     write(HaltedRegister::Rptr, 0);
     write(HaltedRegister::WptrHi, 0);
-    write(HaltedRegister::WptrLo, 0);
+    if (!allowRetainedWptr) write(HaltedRegister::WptrLo, 0);
     const uint32_t active = read(HaltedRegister::Active);
     const uint32_t dequeue = read(HaltedRegister::Dequeue);
     const uint32_t rptr = read(HaltedRegister::Rptr);
@@ -69,8 +78,10 @@ bool beginHaltedNative(HaltedNativeTransaction &tx, Read read, Write write, Dela
     const uint32_t doorbell = read(HaltedRegister::Doorbell);
     if (active == 0xffffffffU || dequeue == 0xffffffffU || rptr == 0xffffffffU ||
         whi == 0xffffffffU || wlo == 0xffffffffU || poll == 0xffffffffU ||
-        doorbell == 0xffffffffU || (active & 1) || dequeue || rptr || whi || wlo ||
-        (poll & (1U << 31)) || (doorbell & (1U << 30))) return false;
+        doorbell == 0xffffffffU || (active & 1) || dequeue || rptr || whi ||
+        (poll & (1U << 31)) || (doorbell & (1U << 30)) ||
+        (!allowRetainedWptr && wlo != 0) ||
+        (allowRetainedWptr && wlo != tx.initialWptrLo)) return false;
     return true;
 }
 

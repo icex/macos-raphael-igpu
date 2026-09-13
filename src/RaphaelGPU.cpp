@@ -2678,6 +2678,10 @@ static uint32_t wrapKiqStart(void *self, uint64_t a, uint64_t b, void *spec, uin
         RLOG("XQ2: startKIQ refused: preflight or genuine dequeue failed");
         return 0xe00002bc; // same failure used by Apple's startKIQ queue-spec check
     }
+    if (mqdNativeRestoreMode == 3 && !haltedTx.held) {
+        CRLOG("XQ2: halted native probe refused: no exact timeout admission");
+        return 0xe00002bc;
+    }
     if (nativeRestoreAttempted)
         CRLOG("XQ2: native restore entered after unresolved dequeue timeout; non-authorizing");
     auto r = FunctionCast(wrapKiqStart, orgKiqStart)(self, a, b, spec, out);
@@ -2701,7 +2705,21 @@ static uint32_t wrapKiqStart(void *self, uint64_t a, uint64_t b, void *spec, uin
             const uint32_t mec = fbRead(asicInfo, kGcCpMecCntl);
             const bool verified = RaphaelKiq::haltedNativeResultVerified(
                 r == 0, mec, active, dequeue, mqdLo, mqdHi, pqLo, pqHi, eopLo, eopHi,
-                eopCtl, rptr, wptrHi, wptrLo, a, haltedTx.expectedPq, b);
+                eopCtl, rptr, wptrHi, wptrLo, a, haltedTx.expectedPq, b,
+                haltedTx.initialWptrLo, mqdNativeRestoreMode == 3);
+            if (mqdNativeRestoreMode == 3) {
+                CRLOG("XQ2: halted native probe result=%#x verified=%u MEC=%#x ACTIVE=%#x "
+                      "DEQUEUE=%#x MQD=%#x_%08x PQ=%#x_%08x EOP=%#x_%08x ctl=%#x "
+                      "RPTR=%#x WPTR=%#x_%08x; keeping MEC halted", r, verified, mec, active,
+                      dequeue, mqdHi, mqdLo, pqHi, pqLo, eopHi, eopLo, eopCtl, rptr, wptrHi, wptrLo);
+                fbWrite(asicInfo, kGcCpPqWptrPoll, 0);
+                fbWrite(asicInfo, kGcHqdPqDbCtl, 0);
+                fbWrite(asicInfo, kGcCpMecCntl, haltedTx.savedMecControl | RaphaelKiq::kMecHaltMask);
+                IODelay(50);
+                CRLOG("XQ2: halted native probe recontain MEC=%#x", fbRead(asicInfo, kGcCpMecCntl));
+                fbWrite(asicInfo, kGcGrbmGfxCntl, 0);
+                return 0xe00002bc;
+            }
             const bool readable = mec != 0xffffffffU && active != 0xffffffffU &&
                 dequeue != 0xffffffffU && eopCtl != 0xffffffffU;
             if (!verified)
@@ -4206,7 +4224,7 @@ static bool prepareKiq(uint64_t &mqdAddr, uint64_t &eopAddr, const void *spec,
                   leaseValid, ownersMatch, fresh.active, fresh.dequeue, fresh.poll,
                   fresh.doorbell, imageStillExact);
             if (nativeRestoreAttempted) {
-                if (mqdNativeRestoreMode == 2 && haltedTx != nullptr) {
+                if (mqdNativeRestoreMode >= 2 && haltedTx != nullptr) {
                     const uint64_t expectedPqBefore =
                         (static_cast<uint64_t>(get(0x224)) << 32) | get(0x220);
                     if (expectedPqBefore == 0) {
@@ -4240,7 +4258,8 @@ static bool prepareKiq(uint64_t &mqdAddr, uint64_t &eopAddr, const void *spec,
                         }
                     };
                     if (!RaphaelKiq::beginHaltedNative(*haltedTx, read, write,
-                                                       [](unsigned us) { IODelay(us); })) {
+                                                       [](unsigned us) { IODelay(us); },
+                                                       mqdNativeRestoreMode == 3)) {
                         CRLOG("XQ2: dequeue refused: halted native setup failed savedMEC=%#x currentMEC=%#x held=%u",
                               haltedTx->savedMecControl, read(RaphaelKiq::HaltedRegister::MecControl),
                               haltedTx->held);
@@ -6838,7 +6857,7 @@ static void pluginStart() {
     }
     uint32_t mqdr = 0;
     mqdNativeRestoreMode = PE_parse_boot_argn("rgpumqdrestore", &mqdr,
-                                               sizeof(mqdr)) && mqdr <= 2 ? mqdr : 0;
+                                               sizeof(mqdr)) && mqdr <= 3 ? mqdr : 0;
     if (mqdNativeRestoreMode != 0 && mqdFixMode != 2) {
         RLOG("XQ2: rgpumqdrestore=%u requires rgpumqd=2; native restore disabled",
              mqdNativeRestoreMode);
@@ -6846,6 +6865,7 @@ static void pluginStart() {
     }
     RLOG("rgpumqdrestore=%u: native timeout restore experiment %s",
          mqdNativeRestoreMode,
+         mqdNativeRestoreMode == 3 ? "armed halted native probe (always contained)" :
          mqdNativeRestoreMode == 2 ? "armed with halted MEC transaction" :
          mqdNativeRestoreMode == 1 ? "armed only for exact owned timeout" : "off");
     uint32_t ptbm = 0;
