@@ -1234,3 +1234,27 @@ A first staging attempt consumed `run/mode2-reset-22.json` and stopped before la
 `candidate card contract mismatch` (the card lacked `rgpuaddrcfg=2` in its functional
 boot arguments); no VM started.
 
+
+## Candidate 219: Apple's hardware info already carries GB_ADDR_CONFIG 0x42 (2026-09-14)
+
+Run `211670e5721a59d3bdc879da56cd7ca2`, card `metal-064` (commit `46b350f`), build `0556fc2275ad46d8bbd7a93e8992d7e3`,
+launch 23 after `run/mode2-reset-23.json`. Verdict `CORE_PROBE_PASS`, recovery
+`recovered`, shutdown `exited-after-guest-request`.
+
+- The `AMDHWAlignManager2::init` route matched and ran once:
+  `hwinfo gbAddrConfig=0x42` equals the live register, `numRasterPipe=1`,
+  `numShaderPipes=2`, `backendDisables=0`, `noOfBanks=0`, `noOfRanks=0`. Nothing was
+  replaced.
+- The readback matrix is identical to launch 22: Shared-buffer copies and 1280x1024
+  Managed-texture synchronizes are still tile-permuted; the GPU copy into a Managed
+  buffer is exact.
+- Conclusion: the kernel address library is configured for Raphael's 4 pipes. The
+  kernel has one address-library instance (`AMDGFX10AlignManager` subclasses
+  `AMDHWAlignManager2`), and the Metal driver carries no address-library code of its
+  own. The permutation therefore comes from a hardware path that disagrees with the
+  4-pipe patterns, not from Apple's configuration.
+
+Next candidates, cheapest first: the sampler-side swizzle enable
+(`LDS_CONFIG.VGPR_SWIZZLE_EN`, bit 1, reads 0 on Raphael; Navi23 uses
+`SQ_CONFIG.VGPR_SWIZZLE_EN`, bit 12), and forcing linear layouts for CPU-visible
+textures through `AMDHWAlignManager2::getPreferredSwizzleMode2`.
