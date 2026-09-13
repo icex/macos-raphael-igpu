@@ -150,6 +150,16 @@ def main():
     parser.add_argument("--manifest", type=Path)
     parser.add_argument("--docker", default="docker")
     args = parser.parse_args()
+    try:
+        kernel_symbols = args.kernel_symbols.resolve()
+        raphael_dsym = args.raphael_dsym.resolve()
+        dwarf_name = raphael_dsym.name[:-5] if raphael_dsym.name.endswith(".dSYM") else None
+        wrong_dwarf = (dwarf_name is not None and
+                       kernel_symbols == raphael_dsym / "Contents" / "Resources" / "DWARF" / dwarf_name)
+        if kernel_symbols == raphael_dsym or wrong_dwarf:
+            parser.error("--kernel-symbols must be distinct from --raphael-dsym")
+    except OSError as error:
+        parser.error("unable to resolve symbol paths: %s" % error)
     if not re.fullmatch(r"[0-9a-f]{32}", args.build_id):
         parser.error("invalid build identity")
     if args.scenario == "entry-update" and args.target_gpu_address is None:
