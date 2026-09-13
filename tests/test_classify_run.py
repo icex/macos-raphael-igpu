@@ -374,6 +374,16 @@ class ClassifyTests(unittest.TestCase):
         self.assertTrue(rows[3]['malformed'])
         self.assertFalse(rows[3]['ok'])
 
+    def test_candidate203_submission_route_count_seven_is_current_contract(self):
+        rows = self.classifier().parse_serial(
+            'RGPU_RECORDS build=1075be638c024db79cf6ba022a73e631 count=2 '
+            'dropped=0 truncated=0\n'
+            'RGPU_EVENT build=1075be638c024db79cf6ba022a73e631 seq=1 '
+            'SUB: routes=ok count=7 entries-match=1 capture=armed\n')
+        route = next(row for row in rows if row['kind'] == 'submission_trace_route')
+        self.assertEqual(route['count'], 7)
+        self.assertTrue(route['ok'])
+
     def test_backing_allocation_records_parse_strict_live_snapshots_and_counts(self):
         rows = self.classifier().parse_serial(
             'RGPU_RECORDS build=abc count=6 dropped=0 truncated=0\n'
@@ -413,6 +423,22 @@ class ClassifyTests(unittest.TestCase):
         self.assertFalse(rows[5]['ok'])
         self.assertTrue(rows[5]['malformed'])
 
+    def test_candidate203_backing_sample_with_pool_and_counters_is_current_contract(self):
+        rows = self.classifier().parse_serial(
+            'RGPU_RECORDS build=abc count=2 dropped=0 truncated=0\n'
+            'RGPU_EVENT build=abc seq=1 SUB: backing seq=430 object=0x1234 '
+            'thread=0x5678 pool=0 result=0 '
+            'pre=1/0x40000/0x9000/0/0x1000/0x1010007 '
+            'post=1/0x40000/0x9000/0/0x1000/0x1010007 '
+            'counters=13/0->13/1 state=live\n')
+        sample = next(row for row in rows if row['kind'] == 'submission_backing_allocation')
+        self.assertTrue(sample['ok'])
+        self.assertEqual(sample['observation_sequence'], 430)
+        self.assertEqual(sample['pool'], 0)
+        self.assertEqual(sample['counters'], {
+            'successful_before': 13, 'failed_before': 0,
+            'successful_after': 13, 'failed_after': 1})
+
     def test_backing_allocation_readiness_requires_six_routes_and_worker_only(self):
         classifier = self.classifier()
         manifest = {'build_id':'abc', 'spec':{'required_observations':[
@@ -429,6 +455,14 @@ class ClassifyTests(unittest.TestCase):
         self.assertEqual(result['verdict'], 'INVALID')
         self.assertEqual(result['earliest_failure'],
                          'submission_backing_allocation_route_guard')
+
+        current_route = base + [
+            {'kind':'submission_trace_route', 'build':'abc', 'seq':7,
+             'ok':True, 'count':7}]
+        result = classifier.classify_probe_readiness(manifest, current_route)
+        self.assertEqual(result['verdict'], 'INCONCLUSIVE')
+        self.assertEqual(result['earliest_failure'],
+                         'submission_backing_allocation_worker_missing')
 
         route = {'kind':'submission_trace_route', 'build':'abc', 'seq':7,
                  'ok':True, 'count':6}
