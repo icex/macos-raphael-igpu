@@ -854,3 +854,32 @@ user's standing instruction. Each is preceded by its own MODE2 reset receipt
 (`run/mode2-reset-11.json`, `run/mode2-reset-12.json`) showing `RLC_CNTL=0` and
 `CP_STAT=0`. A failure in q3 stops the series for diagnosis before q4.
 
+## Candidate 218 attempts q3 and q4: three consecutive clean desktop cycles (2026-09-14)
+
+Same 1.0.218 binary (build `10cce4d85456402cb9bb469b3da3077d`) and card `metal-054`,
+launches 12 and 13 after `run/mode2-reset-11.json` and `run/mode2-reset-12.json`.
+
+| Attempt | Run | Verdict | Recovery | Shutdown | Quiesce | Stalls / KIQ timeouts |
+|---|---|---|---|---|---|---|
+| q2 | `192d54f3313678079546c75ef0b2bfbc` | CORE_PROBE_PASS | recovered | guest request | ACK | 0 |
+| q3 | `a3462068ca82c43c847f7bb86c348132` | CORE_PROBE_PASS | recovered | guest request | ACK | 0 |
+| q4 | `e638416a1e8d28f0eac219707b193d16` | CORE_PROBE_PASS | recovered | guest request | ACK | 0 |
+
+Every attempt ran the logged-in desktop with the gfx ring draining on every sample
+(last samples `0xb380`, `0xab00`, `0xc280`), passed the compute probe, and left
+the host on vfio-pci and accessible. These are three consecutive bounded lifecycle
+cycles on one host boot, each separated only by the reboot-free SMU MODE2 reset.
+
+Next: the full native probe (compute plus render readback) through card
+`metal-055` on the same binary, using the native guest binary recorded in
+`run/guest-identity.json.backup-20260911T153036Z`.
+
+## Boot-launch ledger extension for the native probe attempt (2026-09-14)
+
+The 1.0.218 binary with card `metal-055` runs from `run/candidate-218-attempt-native`
+as launch 14 on boot `c369c74e`, through `--manual-reuse --ack-risk` under the
+user's standing instruction, after `run/mode2-reset-13.json`. `run/guest-identity.json`
+is switched to the native probe identity for this run (the small-probe identity is
+kept as `run/guest-identity.json.small-metal-20260914`). This note covers this one
+launch.
+
