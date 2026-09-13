@@ -20,11 +20,6 @@ KMOD_ADDRESS = 0x9C
 # its native call, and the dynamic return.  The runtime prologues are authenticated
 # before arming them.  The register number is the GC segment-0 CP_MEC_CNTL index.
 KIQ_MEC_REGISTER = 0x21B5
-KIQ_MEC_WRITE_SPECS = (
-    (0x23780, bytes.fromhex("554889e54157415641554154534881ec"), "ext2"),
-    (0x24370, bytes.fromhex("554889e541574156535089d34189f749"), "register"),
-    (0x24440, bytes.fromhex("554889e54157415641545389d34189f7"), "ext"),
-)
 
 
 def kernel_relocation(runtime_text, link_text):
@@ -429,7 +424,7 @@ quit
 def generate_kiq_start(runtime_text, expected_uuid, kernel_symbols, raphael_dsym,
                        start_offset, start_prologue, native_offset,
                        original_source_root=None, native_prologue=None,
-                       mec_write_specs=KIQ_MEC_WRITE_SPECS):
+                       mec_write_specs=()):
     """Generate an authenticated, bounded wrapKiqStart ABI observation."""
     relocation = kernel_relocation(runtime_text, 0xffffff8000200000)
     uuid = expected_uuid.lower().replace('-', '')
@@ -519,10 +514,13 @@ class MecWriteBP(gdb.Breakpoint):
 entry_bp=gdb.Breakpoint('*%#x' % start, gdb.BP_HARDWARE_BREAKPOINT, internal=True)
 native_bp=NativeBP('*%#x' % native, gdb.BP_HARDWARE_BREAKPOINT, internal=True)
 native_bp.enabled=False
+writer_addresses=[]
 for offset, prologue_hex, path in MEC_WRITE_SPECS:
     writer=found+offset
     if read(writer,len(bytes.fromhex(prologue_hex))) != bytes.fromhex(prologue_hex):
         raise gdb.GdbError('KIQ MEC writer prologue mismatch path=%s offset=%#x' % (path,offset))
+    writer_addresses.append((writer,path))
+for writer,path in writer_addresses:
     MecWriteBP(writer, path)
 print('KIQ_START_BREAKPOINTS_ARMED entry=%#x native=%#x' % (start,native))
 native_reached=False; native_active=False; entry_seen=False; return_bp=None
@@ -564,10 +562,10 @@ if int(gdb.parse_and_eval('$pc')) == native:
         slot=native+6+disp
         try: target=struct.unpack('<Q',read(slot,8))[0]
         except Exception: target=0
-        print('KIQ_START_NATIVE_COMMAND_TARGET pc=%#x bytes=%s slot=%#x target=%#x' %
+        print('KIQ_START_NATIVE_ORG_TARGET pc=%#x bytes=%s slot=%#x target=%#x' %
               (native,native_insn.hex(),slot,target))
     else:
-        print('KIQ_START_NATIVE_COMMAND_TARGET unavailable bytes=%s' % native_insn.hex())
+        print('KIQ_START_NATIVE_ORG_TARGET unavailable bytes=%s' % native_insn.hex())
     print('KIQ_START_NATIVE_CALL_BOUNDARY pc=%#x self=%#x a=%#x b=%#x' %
           (native, int(gdb.parse_and_eval('$rdi')), int(gdb.parse_and_eval('$rsi')), int(gdb.parse_and_eval('$rdx'))))
     native_bp.enabled=False

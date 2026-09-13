@@ -33,7 +33,7 @@ class GdbKextSourceTests(unittest.TestCase):
         self.assertEqual(text.count("gdb.BP_HARDWARE_BREAKPOINT"), 3)
         self.assertIn("KIQ_MEC_CNTL_WRITE path=%s", text)
         self.assertIn("native_interval=1", text)
-        self.assertIn("KIQ_START_NATIVE_COMMAND_TARGET", text)
+        self.assertIn("KIQ_START_NATIVE_ORG_TARGET", text)
         self.assertIn("MEC_WRITE_SPECS", text)
 
     def test_kiq_start_generated_loop_stops_after_success_or_failure_return(self):
