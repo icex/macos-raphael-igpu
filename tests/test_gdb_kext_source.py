@@ -99,6 +99,16 @@ class GdbKextSourceTests(unittest.TestCase):
         self.assertLess(text.index("native_active=False"),
                         text.index("for bp in write_bps: bp.enabled=False", enabled))
 
+    def test_kiq_start_accepts_two_authenticated_native_call_branches(self):
+        text = tool.generate_kiq_start(
+            0xffffff801b6e8000, "474ef697fc283ba283a4763d76c8e200",
+            "/tmp/kernel.symbols", "/tmp/RaphaelGPU.dSYM", 0x188b0,
+            bytes.fromhex("554889e541574156"), (0x19135, 0x1ae5e), "/tmp/source",
+            (bytes.fromhex("ff151d620f00"), bytes.fromhex("ff15f4440f00")))
+        self.assertIn("NATIVE_OFFSETS=[102709, 110174]", text)
+        self.assertIn("NATIVE_PROLOGUES=['ff151d620f00', 'ff15f4440f00']", text)
+        self.assertIn("pc in [found+x for x in NATIVE_OFFSETS]", text)
+
     def test_kiq_start_reports_unavailable_entry_stack_without_claiming_native_or_return(self):
         text = tool.generate_kiq_start(
             0xffffff801b6e8000, "474ef697fc283ba283a4763d76c8e200",
@@ -173,7 +183,7 @@ class GdbKextSourceTests(unittest.TestCase):
             ns = {'gdb': fake, 'struct': struct, 'read': read, 'start': 0x100000,
                   'native': 0x1000ec, 'entry_rsp': None, 'entry_return': None,
                   'entry_rdi': None, 'entry_out': None, 'found': 0x100000,
-                  'MEC_WRITE_SPECS': []}
+                  'MEC_WRITE_SPECS': [], 'NATIVE_OFFSETS': [0xec]}
             exec(body, ns)
             self.assertTrue(state['detached'])
             self.assertEqual(events, [])
