@@ -1069,3 +1069,26 @@ scan converter never applies. Apple's own unbinned mode (`BINNING_MODE=3`, legac
 converter, `0x19fc0003`) is used for small passes, which render correctly.
 Next: find where Apple's user-space driver decides to bin, and force its legacy
 scan-converter mode instead of disabling binning underneath it.
+
+## Apple's Metal driver has a settings file that turns binning off (2026-09-14)
+
+GPU-less session `1b69a3a8...` (no VFIO device, no ledger entry) loaded
+`AMDRadeonX6000MTLDriver` from the dyld shared cache with a small segment dumper
+(`tools/guest-segdump.c`) and disassembled its `__TEXT` on the host. The driver reads
+`/AmdMtlSettingsFile.txt` (`key = value` lines, `;` comments) in every process that loads
+it, mapping names such as `allowPrimBatchBinning` (bit 41 of its feature word, also set
+by the environment variable `AMD_ENABLE_PRIM_BATCH_BINNING`), `allowGePcAllocOverSub`
+(bit 42), `allowNGGMode`, `allowDCC`, `allowHTile` and `allowRBPlus`.
+
+Guest change (persistent, reversible by deleting both files): `/private/etc/AmdMtlSettingsFile.txt`
+contains `allowPrimBatchBinning = 0`, and `/private/etc/synthetic.conf` links
+`/AmdMtlSettingsFile.txt` to it (stitched immediately with `apfs.util -t`; readable by
+`nobody`).
+
+## Boot-launch ledger extension for the settings-file attempt (2026-09-14)
+
+The 1.0.218 binary with card `metal-060` (desktop probe v4 unchanged, `rgpunobin=1` kept)
+runs from `run/candidate-218-attempt-nobatch` as launch 19 on boot `c369c74e`, through
+`--manual-reuse --ack-risk` under the user's standing instruction, after
+`run/mode2-reset-18.json`. This note covers this one launch.
+
