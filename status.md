@@ -1229,5 +1229,8 @@ Suite: 892 tests OK.
 
 Candidate 219 (card `metal-064`, desktop probe v6) runs from `run/candidate-219` as
 launch 23 on boot `c369c74e`, through `--manual-reuse --ack-risk` under the user's
-standing instruction, after `run/mode2-reset-22.json`. This note covers this one launch.
+standing instruction, after `run/mode2-reset-23.json`. This note covers this one launch.
+A first staging attempt consumed `run/mode2-reset-22.json` and stopped before launch with
+`candidate card contract mismatch` (the card lacked `rgpuaddrcfg=2` in its functional
+boot arguments); no VM started.
 

@@ -133,7 +133,8 @@
     "rgpudump": "5000",
     "rgpugolden": "1",
     "rgpuhangdump": "1",
-    "rgpunobin": "1"
+    "rgpunobin": "1",
+    "rgpuaddrcfg": "2"
   },
   "launch_options": {
     "BOOTDISK_MODE": "custom",
