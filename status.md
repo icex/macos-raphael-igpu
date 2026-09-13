@@ -485,3 +485,20 @@ awake, no active VM, no kernel fault, and the external inhibitor remains active.
 | Native VMM | passed; actual range matched prediction | — |
 | Metal probe | device `AMD Radeon Navi23`, Metal 3; timeout | KIQ baseline block; 0 completed buffers |
 | Recovery / cleanup | host safe; SDMA quiesced | graphics retirement unconfirmed |
+
+## Candidate 207 hardware probe (2026-09-13)
+
+Candidate 207 run `0d66bfe35f4ca52d0cfbdda89e61881f`, CID
+`ff8077e8c367a918de80d38f3f1ca8f6ee90bc318d8c40b8d0cd467610ac05bc`, boot
+`2f77212f-34f5-4905-ba66-d8c68a860d78`, build
+`8efa3a6436934ff1b6f7005d90d9b53a` reached the KIQ start wrapper. The bounded
+GDB capture authenticated the binary/dSYM and recorded the first return
+`0xe00002bc` with `native_reached=false`. Serial showed mode-3 preflight
+accepted the exact descriptor, but queue preparation refused with
+`ACTIVE=0`, `DEQUEUE=0`, `RPTR=0`, `WPTR=0_00000020`, `POLL=0`, `DB=0x80000000`;
+the native halted probe was therefore not entered. Shutdown completed after the
+manual coordinator stop; host-after remained VFIO-bound, accessible, and
+sleep-inhibited. Recovery failed closed with `schema-3 recovery requires an
+exact ACTIVE pool record`; no Metal submission or native EOP observation was
+obtained. Blocking issue: mode 3 currently admits only the timeout continuation,
+while this measured queue is already inactive with a retained WPTR.
