@@ -643,3 +643,23 @@ cleanly. Precondition: MODE2 reset receipt `run/mode2-reset-5.json` with
 substituted microcode, the run is recorded as a bring-up failure and the next
 launch reverts to Apple's microcode. This note covers this one launch.
 
+## Candidate 215 cpfw attempt (2026-09-14)
+
+Run `6c517734679ca1b5dd44d042f8e070f6`, card `metal-049` (commit `4dc4fc5`),
+source `2c735c3`, build `ed6e7160b03142709a0b566b8683da9a`, launch 6 under its
+ledger note, after `run/mode2-reset-5.json`. The microcode swap did **not**
+happen: `X9C: 0 of 3 graphics CP microcode descriptors replaced`. Apple's
+embedded CP payloads carry fw_type `0x01012001/2/3` (read from the KDK HWLibs
+binary), while linux-firmware's carry `0x81012001/2/3`; the matcher required the
+full value. The run is therefore a baseline repeat: same stall
+(`RPTR=0x1eb1`, same WAIT_REG_MEM at IB dword 0xbcf), probe passed, recovery
+`recovered`, host after vfio-pci and accessible. Verdict `INCONCLUSIVE/
+identity_or_route_missing` came from capture loss (the COM2 critical replay was
+cut mid-record at shutdown), not from the kext. New readings at the stall:
+`PA_SC_ENHANCE=0x8000009`, `PA_SC_ENHANCE_1=0x40c2000` (binning not disabled),
+`PA_SC_ENHANCE_2=0x820`, `PA_PH_INTERFACE_FIFO_SIZE=0x18`, `PA_PH_ENHANCE=0x1000`,
+`PA_SC_BINNER_TIMEOUT_COUNTER=0x800`.
+
+Candidate 216 matches on the low 16 bits of fw_type plus the $PS1 magic and
+payload length, and logs every CP-sized descriptor.
+
