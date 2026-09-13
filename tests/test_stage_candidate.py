@@ -1092,7 +1092,8 @@ class AttemptNamespaceTests(unittest.TestCase):
         for name, version, expected in (("metal-039", "205", "1"),
                                         ("metal-040", "206", "2"),
                                         ("metal-041", "207", "3"),
-                                        ("metal-042", "208", "3")):
+                                        ("metal-042", "208", "3"),
+                                        ("metal-043", "209", "3")):
             self.tool.configure("1.0." + version, name)
             raw = (ROOT / ("experiments/" + name + ".json")).read_bytes()
             card = self.tool.validate_card(raw, hashlib.sha256(raw).hexdigest())
