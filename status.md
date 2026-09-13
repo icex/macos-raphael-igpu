@@ -632,3 +632,14 @@ draw. Candidate 215 tests two single-variable hypotheses from one binary:
 `metal-049`), and `rgpunobin=1` sets `PA_SC_ENHANCE_1.DISABLE_SC_BINNING`
 (card `metal-050`).
 
+## Boot-launch ledger extension for candidate 215 cpfw (2026-09-14)
+
+Candidate 215 with card `metal-049` (`rgpucpfw=1`) is launch 6 on boot
+`c369c74e-96ff-4c21-ae85-80ccb269f7d2`, through `--manual-reuse --ack-risk`
+under the user's standing instruction to keep testing until desktop Metal works
+and to extend the ledger with explicit notes. Candidates 212-214 each recovered
+cleanly. Precondition: MODE2 reset receipt `run/mode2-reset-5.json` with
+`RLC_CNTL=0` and `CP_STAT=0` immediately before staging. If the PSP rejects the
+substituted microcode, the run is recorded as a bring-up failure and the next
+launch reverts to Apple's microcode. This note covers this one launch.
+
