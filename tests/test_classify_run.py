@@ -2412,5 +2412,21 @@ Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0
         self.assertFalse(any(row['kind'] == 'capture_loss' for row in rows))
 
 
+    def test_restore_diagnostic_dequeue_timeout_is_unresolved_until_later_failure(self):
+        c = self.classifier()
+        events = self.events(available=1, status=0, started=1)
+        events.insert(3, dict(kind='kiq', build='abc', seq=3, result=0,
+                              source='dequeue-timeout'))
+        manifest = {'build_id': 'abc', 'spec': {
+            'functional_boot_arguments': {'rgpumqdrestore': '1'}}}
+        self.assertNotEqual(c.classify(manifest, events, None)['verdict'],
+                            'BASELINE_BLOCKED')
+        events.append(dict(kind='kiq', build='abc', seq=10, result=0,
+                           source='live-terminal'))
+        result = c.classify(manifest, events, None)
+        self.assertEqual(result['verdict'], 'BASELINE_BLOCKED')
+        self.assertEqual(result['earliest_failure'], 'kiq')
+
+
 if __name__ == '__main__':
     unittest.main()

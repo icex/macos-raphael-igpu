@@ -557,7 +557,7 @@ def _decode_payload(build, seq, payload):
         row.update(kind='sdma_ib_repair', before=int(m[1], 16), after=int(m[2], 16),
                    valid=bool(int(m[3])), changed=bool(int(m[4])))
     elif payload.startswith('XQ2: dequeue') and ('refused' in payload or 'timeout' in payload.lower()):
-        row.update(kind='kiq', result=0)
+        row.update(kind='kiq', result=0, source='dequeue-timeout')
     return row
 
 
@@ -1286,10 +1286,13 @@ def _classify(manifest, events, probe, defer_absent_workload=False):
     live_terminal_kiq = [r for r in kinds['kiq']
                          if r.get('source') == 'live-terminal' and
                          (not panics or r['seq'] < panics[0]['seq'])]
+    restore_enabled = manifest.get('spec', {}).get('functional_boot_arguments', {}).get('rgpumqdrestore') == '1'
+    diagnostic_dequeue = (lambda r: restore_enabled and r.get('source') == 'dequeue-timeout')
     kiq_before_terminal = explicit_submit + live_terminal_kiq
     if not kiq_before_terminal:
         kiq_before_terminal = [
-            r for r in kinds['kiq'] if not panics or r['seq'] < panics[0]['seq']]
+            r for r in kinds['kiq'] if not diagnostic_dequeue(r) and
+            (not panics or r['seq'] < panics[0]['seq'])]
     terminal_kiq = (max(kiq_before_terminal, key=lambda r:r['seq'])
                     if kiq_before_terminal else None)
     if (terminal_kiq and terminal_kiq.get('result') == 0 and

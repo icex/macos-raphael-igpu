@@ -1088,5 +1088,18 @@ class AttemptNamespaceTests(unittest.TestCase):
             self.assertFalse(self.tool.CANDIDATE.exists())
 
 
+    def test_candidate205_restore_flag_is_required_by_card_contract(self):
+        self.tool.configure("1.0.205", "metal-039")
+        raw = (ROOT / "experiments/metal-039.json").read_bytes()
+        digest = hashlib.sha256(raw).hexdigest()
+        accepted = self.tool.validate_card(raw, digest)
+        self.assertEqual(accepted["functional_boot_arguments"]["rgpumqdrestore"], "1")
+        card = json.loads(raw)
+        card["functional_boot_arguments"].pop("rgpumqdrestore")
+        bad = (json.dumps(card, sort_keys=True) + "\n").encode()
+        with self.assertRaisesRegex(RuntimeError, "card contract"):
+            self.tool.validate_card(bad, hashlib.sha256(bad).hexdigest())
+
+
 if __name__ == "__main__":
     unittest.main()
