@@ -1088,9 +1088,11 @@ class AttemptNamespaceTests(unittest.TestCase):
             self.assertFalse(self.tool.CANDIDATE.exists())
 
 
-    def test_candidate206_restore_flag_is_two_and_candidate205_remains_one(self):
-        for name, expected in (("metal-039", "1"), ("metal-040", "2")):
-            self.tool.configure("1.0." + ("205" if expected == "1" else "206"), name)
+    def test_candidate207_probe_flag_is_three_and_older_restore_flags_remain(self):
+        for name, version, expected in (("metal-039", "205", "1"),
+                                        ("metal-040", "206", "2"),
+                                        ("metal-041", "207", "3")):
+            self.tool.configure("1.0." + version, name)
             raw = (ROOT / ("experiments/" + name + ".json")).read_bytes()
             card = self.tool.validate_card(raw, hashlib.sha256(raw).hexdigest())
             self.assertEqual(card["functional_boot_arguments"]["rgpumqdrestore"], expected)
