@@ -937,6 +937,21 @@ def _probe_summary(manifest, probe):
                 'windowserver_accelerator_client', 'displays'):
         if key in result:
             summary[key] = result[key]
+    # Desktop probe v4: compact rendering evidence (the full rows stay in probe.json).
+    offscreen = result.get('offscreen')
+    if isinstance(offscreen, dict):
+        for key in ('fps', 'frames', 'pixels_checked', 'pixel_mismatches', 'failed_command_buffers'):
+            if key in offscreen:
+                summary['offscreen_' + key] = offscreen[key]
+    window = result.get('window_test')
+    if isinstance(window, dict):
+        for key in ('pattern_ok', 'window_frames_changed', 'child_ready'):
+            if key in window:
+                summary['window_' + key.removeprefix('window_')] = window[key]
+        child = window.get('child') if isinstance(window.get('child'), dict) else {}
+        for key in ('present_fps', 'presented_frames', 'submitted_frames', 'error'):
+            if key in child:
+                summary['window_' + key] = child[key]
     return summary
 
 

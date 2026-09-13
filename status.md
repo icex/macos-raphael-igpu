@@ -1022,3 +1022,14 @@ Next: probe v4 renders a known color pattern in a user-session `CAMetalLayer` wi
 checks it pixel by pixel in the root display capture, measures presentation rate and
 offscreen render throughput with readback, and records display identity and framebuffer
 registry details.
+
+## Boot-launch ledger extension for the probe v4 attempt (2026-09-14)
+
+GPU-less session `dcb404fc...` (no VFIO device, no ledger entry) compiled desktop probe
+v4 (source sha256 `dad42cd4...`, binary sha256 `245eddf9...`) and smoke-ran it: without a
+GPU it reports `no Metal device`, and its window child starts in the console session
+through `launchctl asuser 501`. The 1.0.218 binary with card `metal-059` runs from
+`run/candidate-218-attempt-v4` as launch 18 on boot `c369c74e`, through
+`--manual-reuse --ack-risk` under the user's standing instruction, after
+`run/mode2-reset-17.json`. This note covers this one launch.
+

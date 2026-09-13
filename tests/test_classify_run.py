@@ -1102,6 +1102,32 @@ Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0
         self.assertEqual(c({'build_id':'abc'}, events, None)['verdict'],
                          'BASELINE_BLOCKED')
 
+    def test_probe_summary_keeps_compact_desktop_rendering_evidence(self):
+        c = self.classifier()
+        result = {'passed': True, 'run_id': 'nonce', 'completed_command_buffers': 1,
+                  'values_checked': 1, 'display_on_device': True,
+                  'offscreen': {'fps': 812.5, 'frames': 2437, 'pixels_checked': 868,
+                                'pixel_mismatches': 0, 'failed_command_buffers': 0,
+                                'first_mismatches': []},
+                  'window_test': {'pattern_ok': True, 'window_frames_changed': True,
+                                  'child_ready': True,
+                                  'captures': [{'samples': {}}],
+                                  'child': {'present_fps': 59.9, 'presented_frames': 238,
+                                            'submitted_frames': 240}},
+                  'jpegs': [{'label': 'desktop', 'jpeg_base64': 'AAAA'}]}
+        probe = {'run_id': 'nonce', 'transport_exit': 0,
+                 'output': 'RGPU_DESKTOP_METAL_RESULT ' + json.dumps(result) + '\nRGPU_EXIT nonce 0\n'}
+        summary = c._probe_summary({'run_id': 'nonce'}, probe)
+        self.assertEqual(summary['offscreen_fps'], 812.5)
+        self.assertEqual(summary['offscreen_pixel_mismatches'], 0)
+        self.assertTrue(summary['window_pattern_ok'])
+        self.assertTrue(summary['window_frames_changed'])
+        self.assertTrue(summary['window_child_ready'])
+        self.assertEqual(summary['window_present_fps'], 59.9)
+        self.assertEqual(summary['window_presented_frames'], 238)
+        self.assertNotIn('jpegs', summary)
+        self.assertNotIn('offscreen_first_mismatches', summary)
+
     def test_capture_loss_keeps_bound_positive_probe_summary(self):
         # A passing probe under capture loss stays INCONCLUSIVE (not promoted),
         # but the raw nonce-bound result must remain visible in the verdict.
