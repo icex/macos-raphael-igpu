@@ -940,12 +940,18 @@ def _probe_summary(manifest, probe):
 
 def _classify(manifest, events, probe, defer_absent_workload=False):
     probe_status = None
+    # Candidate 211 completed its compute probe while a later graphics-ring
+    # stall produced the KIQ stage; the raw nonce-bound result must survive on
+    # every verdict, not only under capture loss.
+    probe_summary = _probe_summary(manifest, probe)
 
     def verdict(name, valid=False, stage=None, next_action='repair observation before another experiment'):
         result = dict(valid=valid, verdict=name, earliest_failure=stage,
                       evidence=[r.get('raw', r['kind']) for r in events], next_action=next_action)
         if probe_status is not None:
             result['probe_status'] = probe_status
+        if probe_summary is not None:
+            result['probe_summary'] = probe_summary
         return result
     expected = manifest.get('build_id')
     if not expected or any(r.get('build') not in (None, expected) for r in events):
@@ -1384,13 +1390,7 @@ def _classify(manifest, events, probe, defer_absent_workload=False):
                                           'live-readiness'))
     if (any(r['kind'] == 'capture_loss' for r in events) or
             seqs != list(range(len(seqs)))):
-        result = verdict('INCONCLUSIVE', stage='capture_loss')
-        # Capture loss stops the run from being promoted, but a raw positive
-        # probe result must stay visible in the verdict rather than vanish.
-        summary = _probe_summary(manifest, probe)
-        if summary is not None:
-            result['probe_summary'] = summary
-        return result
+        return verdict('INCONCLUSIVE', stage='capture_loss')
     if 'sdma_topology' in manifest.get('spec', {}).get('required_observations', []):
         routes = [r for r in events if r['kind'] == 'sdma_topology_route']
         applied = [r for r in events if r['kind'] == 'sdma_topology']
