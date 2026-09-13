@@ -196,6 +196,19 @@ inline bool disjointFromRange(const OwnershipDescriptor &owned,
            (owned.leaseEnd <= rangeOffset || rangeEnd <= owned.leaseOffset);
 }
 
+// The lease record is CPU-written through the BAR, while a native VMM arena may
+// occupy the upper logical framebuffer outside that BAR. Keep ownership validation
+// on the visible bound and apply the logical bound only to the candidate range.
+inline bool logicalDisjointFromRange(const OwnershipDescriptor &owned,
+                                     uint64_t rangeOffset, uint64_t rangeBytes,
+                                     uint64_t logicalBytes, uint64_t visibleBytes) {
+    uint64_t rangeEnd = 0;
+    return validOwnership(owned, owned.nonceLo, owned.nonceHi, visibleBytes) &&
+           rangeBytes != 0 && logicalBytes >= visibleBytes &&
+           checkedAdd(rangeOffset, rangeBytes, rangeEnd) && rangeEnd <= logicalBytes &&
+           (owned.leaseEnd <= rangeOffset || rangeEnd <= owned.leaseOffset);
+}
+
 inline bool fullPoolAddress(uint64_t memoryBase, uint64_t leaseOffset, uint64_t &out) {
     return checkedAdd(memoryBase, leaseOffset, out);
 }
@@ -211,7 +224,45 @@ inline bool topDownReserve(uint64_t cursor, uint64_t size, uint32_t alignment,
     return true;
 }
 
+inline bool predictNativeVmmRange(uint64_t primaryCursor, uint64_t secondaryCursor,
+                                  uint64_t vmmBytes, uint32_t alignment,
+                                  uint64_t visibleBytes, uint64_t logicalBytes,
+                                  uint64_t nativeTotal, uint64_t nativeVisible,
+                                  uint64_t &offset,
+                                  uint64_t &nextCursor) {
+    const uint64_t cursor = nativeTotal > nativeVisible ? secondaryCursor : primaryCursor;
+    if (!topDownReserve(cursor, vmmBytes, alignment, offset, nextCursor) ||
+        logicalBytes == 0 || logicalBytes < visibleBytes ||
+        nativeVisible > nativeTotal || nativeVisible > logicalBytes ||
+        cursor > nativeTotal)
+        return false;
+    uint64_t end = 0;
+    if (!checkedAdd(offset, vmmBytes, end) || end > logicalBytes) return false;
+    if (nativeTotal > nativeVisible)
+        return offset >= nativeVisible;
+    return end <= nativeVisible;
+}
+
 struct NativePoolSizes { uint64_t total; uint64_t visible; };
+struct DiscoveredPoolCapacities {
+    uint64_t totalCapacity;
+    uint64_t visibleCapacity;
+    NativePoolSizes pools;
+};
+inline bool discoverPoolCapacities(uint32_t fbBase, uint32_t fbTop, uint64_t barBytes,
+                                   uint64_t providerTotal, uint64_t providerVisible,
+                                   DiscoveredPoolCapacities &out) {
+    if (fbBase == 0 || fbTop < fbBase || (fbBase | fbTop) > 0x00ffffffu ||
+        barBytes == 0 || providerTotal == 0 || providerVisible == 0 ||
+        providerVisible > providerTotal) return false;
+    const uint64_t units = static_cast<uint64_t>(fbTop - fbBase) + 1;
+    if (units > UINT64_MAX / 0x1000000ULL) return false;
+    const uint64_t totalCapacity = units * 0x1000000ULL;
+    const uint64_t visibleCapacity = barBytes < totalCapacity ? barBytes : totalCapacity;
+    if (providerTotal > totalCapacity || providerVisible > visibleCapacity) return false;
+    out = {totalCapacity, visibleCapacity, {providerTotal, providerVisible}};
+    return true;
+}
 struct ThreeArgumentPoolInit {
     uint64_t totalEnd;
     uint64_t reservedStart;

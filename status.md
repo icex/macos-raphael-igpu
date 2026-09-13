@@ -400,3 +400,26 @@ checked the engine pointer. A narrow guard now skips an absent engine, null
 vtable, or null power-up slot while logging the condition, preventing this
 unsupported-APU object shape from becoming a kernel panic. This requires a new
 candidate build; candidate 201 remains an evidence fixture.
+
+## Candidate 203 automatic VRAM discovery (offline, 2026-09-13)
+
+Candidate 203 implements runtime VRAM capacity discovery from the GFXHUB FB
+base/top registers and the mapped BAR length. The shared helper validates
+zero/reversed/high-bit bounds, arithmetic overflow, BAR visibility, and native
+provider pool totals/visible sizes. Native pool fields are preserved; recovery
+and diagnostics use the discovered visible bound, while native VMM validation
+uses the logical total and selects the primary or secondary cursor from the
+provider pool pair. Invalid discovery fails closed before allocation enable.
+
+Offline evidence:
+
+| Check | Result | Evidence |
+|---|---|---|
+| C++ recovery lease/helper fixtures | passed | `/tmp/test_recovery_lease` |
+| Recovery/lifetime Python tests | 32 passed | `python3 -m unittest discover -s tests -p 'test_recovery*.py'` |
+| Authentic preflight | passed | `/tmp/preflight-203d.out` |
+| Release build | passed | `/home/bogdan/macos-vm/run/capacity-auto-offline-203d/RaphaelGPU-1.0.203-experimental.zip` |
+
+Artifact SHA-256: `e4d79c67a5e289748244b3189e890102f3de22afeb322fe5d74229f8b67a3713`.
+No QEMU or hardware run was performed, so this remains offline implementation
+evidence and does not change the desktop acceleration qualification verdict.

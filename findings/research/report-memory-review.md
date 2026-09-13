@@ -462,3 +462,26 @@ fields or forcing a guessed upper interval is vetoed.
   `0x578ce`, `AMDRTHardware::getReservedVRAMForSwip` `0x5def6`,
   `AMDRTHardware::setVirtualSpaceReady` `0x5e0b2`, `AMDHardware::isDeviceValid` `0x70896`, and
   `AMDHardware::appendToReservedVRAMOffset` `0x72afe`, from the hash-pinned local 24G830 image.
+
+## Candidate 203 final implementation evidence
+
+The automatic VRAM path now derives raw framebuffer capacity from validated
+GFXHUB FB base/top registers and derives CPU-visible capacity from the confirmed
+`IOMemoryMap::getLength` result. It validates provider total/visible fields,
+preserves those fields for native allocator behavior, and fails closed before
+allocation enable when discovery or owner identity is invalid. BAR-backed GART,
+MQD, PTE, MEC, and VMID diagnostics use the discovered visible capacity.
+
+Native VMM checks use logical framebuffer bounds independently from the BAR. The
+provider total/visible pair selects the native primary or secondary cursor;
+primary ranges remain within provider-visible memory, and secondary ranges begin
+at provider-visible memory and end within provider-total memory. Prediction runs
+after lease allocation and is compared with the native post-allocation range.
+
+Offline verification passed with 32 recovery/lifetime Python tests, the shared
+C++ recovery lease fixture, authentic preflight against the pinned KDK, and the
+release build artifact
+`/home/bogdan/macos-vm/run/capacity-auto-offline-203d/RaphaelGPU-1.0.203-experimental.zip`
+(SHA-256 `e4d79c67a5e289748244b3189e890102f3de22afeb322fe5d74229f8b67a3713`).
+No hardware run was performed; the remaining uncertainty is runtime behavior on
+the Raphael guest and desktop qualification.

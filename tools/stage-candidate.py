@@ -61,6 +61,7 @@ SUPPORTED_CARD_DIAGNOSTICS = {
     ("1.0.200", "metal-034"): "rgpuvmdiag=1",
     ("1.0.201", "metal-035"): "rgpuvmdiag=1",
     ("1.0.203", "metal-037"): "rgpuvmdiag=1",
+    ("1.0.204", "metal-038"): "rgpuvmdiag=1",
 }
 
 RESEAL_PROFILES = {
@@ -299,7 +300,7 @@ def validate_card(raw, expected_sha256):
         if any(card.get(key) != value
                for key, value in candidate186_contract.items()):
             raise RuntimeError("candidate card contract mismatch")
-    if pair == ("1.0.203", "metal-037"):
+    if pair in (("1.0.203", "metal-037"), ("1.0.204", "metal-038")):
         if (card.get("critical_replay_tolerance") != "terminal-prefix" or
                 card.get("recovery_critical_replay_tolerance") != "terminal-prefix-open" or
                 card.get("functional_boot_arguments") !=
@@ -590,7 +591,7 @@ def verify_build_inputs(experiment, builder, expected_commit,
     if (CANDIDATE_VERSION, CARD_ID) in (
             ("1.0.188", "metal-021"), ("1.0.189", "metal-023"),
             ("1.0.190", "metal-024"), ("1.0.191", "metal-025"),
-            ("1.0.192", "metal-026"), ("1.0.193", "metal-027"), ("1.0.194", "metal-028"), ("1.0.195", "metal-029"), ("1.0.196", "metal-030"), ("1.0.197", "metal-031"), ("1.0.198", "metal-032"), ("1.0.199", "metal-033"), ("1.0.200", "metal-034"), ("1.0.201", "metal-035"), ("1.0.203", "metal-037")):
+            ("1.0.192", "metal-026"), ("1.0.193", "metal-027"), ("1.0.194", "metal-028"), ("1.0.195", "metal-029"), ("1.0.196", "metal-030"), ("1.0.197", "metal-031"), ("1.0.198", "metal-032"), ("1.0.199", "metal-033"), ("1.0.200", "metal-034"), ("1.0.201", "metal-035"), ("1.0.203", "metal-037"), ("1.0.204", "metal-038")):
         validate_debug_symbols(manifest, builder, executable,
                                DIST / "debug-symbols",
                                card_source_sha256)
@@ -1239,7 +1240,7 @@ def stage(expected_commit, expected_boot_id, expected_card_sha256,
         ("1.0.186", "metal-019"), ("1.0.187", "metal-020"),
         ("1.0.188", "metal-021"), ("1.0.189", "metal-023"),
         ("1.0.190", "metal-024"), ("1.0.191", "metal-025"),
-        ("1.0.192", "metal-026"), ("1.0.193", "metal-027"), ("1.0.194", "metal-028"), ("1.0.195", "metal-029"), ("1.0.196", "metal-030"), ("1.0.197", "metal-031"), ("1.0.198", "metal-032"), ("1.0.199", "metal-033"), ("1.0.200", "metal-034"), ("1.0.201", "metal-035"), ("1.0.203", "metal-037"))
+        ("1.0.192", "metal-026"), ("1.0.193", "metal-027"), ("1.0.194", "metal-028"), ("1.0.195", "metal-029"), ("1.0.196", "metal-030"), ("1.0.197", "metal-031"), ("1.0.198", "metal-032"), ("1.0.199", "metal-033"), ("1.0.200", "metal-034"), ("1.0.201", "metal-035"), ("1.0.203", "metal-037"), ("1.0.204", "metal-038"))
     if candidate186 and identities["source_sha256"] != card["raphael_source_sha256"]:
         raise RuntimeError("candidate source differs from its experiment card")
     lilu = (validate_lilu_inputs(
