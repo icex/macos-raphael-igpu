@@ -2679,11 +2679,11 @@ static uint32_t wrapKiqStart(void *self, uint64_t a, uint64_t b, void *spec, uin
         return 0xe00002bc; // same failure used by Apple's startKIQ queue-spec check
     }
     if (mqdNativeRestoreMode == 3 && !haltedTx.held) {
-        CRLOG("XQ2: halted native probe refused: no exact timeout admission");
+        CRLOG("XQ2: halted native probe refused: no exact probe admission");
         return 0xe00002bc;
     }
     if (nativeRestoreAttempted)
-        CRLOG("XQ2: native restore entered after unresolved dequeue timeout; non-authorizing");
+        CRLOG("XQ2: native restore entered after validated contained-probe admission; non-authorizing");
     auto r = FunctionCast(wrapKiqStart, orgKiqStart)(self, a, b, spec, out);
     RLOG("XJ:   PM4 startKIQ(%#llx, %#llx) -> %#x (0 is success)", a, b, r);
     if (mqdFixMode == 2) {

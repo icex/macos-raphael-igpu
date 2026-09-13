@@ -2483,5 +2483,38 @@ Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0
                 self.assertEqual(result['verdict'], 'BASELINE_BLOCKED')
 
 
+    def test_inactive_retained_record_is_admitted_only_in_mode3(self):
+        c = self.classifier()
+        line = ('RGPU_EVENT build=abc seq=3 XQ2: dequeue INACTIVE-RETAINED after 0 us; '
+                'descriptor unchanged; native-restore=1 lease=1 owners=1 active=0 '
+                'dequeue=0 poll=0 doorbell=0x80000000 image-exact=1\n')
+        row = next(row for row in c.parse_serial(line) if row['kind'] == 'kiq')
+        self.assertTrue(row['restore_admitted'])
+        events = self.events(available=1, status=0, started=1)
+        events.insert(3, row)
+        for mode, admitted in (('3', True), ('1', False), ('2', False), ('4', False), (None, False)):
+            arguments = {} if mode is None else {'rgpumqdrestore': mode}
+            result = c.classify({'build_id': 'abc', 'spec': {
+                'functional_boot_arguments': arguments}}, events, None)
+            self.assertEqual(result['verdict'] != 'BASELINE_BLOCKED', admitted,
+                             f'mode={mode!r}')
+
+    def test_inactive_retained_record_rejects_unsafe_predicates(self):
+        c = self.classifier()
+        base = ('RGPU_EVENT build=abc seq=3 XQ2: dequeue INACTIVE-RETAINED after 0 us; '
+                'descriptor unchanged; native-restore={native} lease={lease} owners={owners} '
+                'active={active} dequeue={dequeue} poll={poll} doorbell={doorbell} '
+                'image-exact={image}\n')
+        for field, value in (('native', 0), ('lease', 0), ('owners', 0),
+                             ('active', 1), ('dequeue', 1), ('poll', '0x80000000'),
+                             ('doorbell', '0x40000000'), ('image', 0)):
+            values = dict(native=1, lease=1, owners=1, active=0, dequeue=0,
+                          poll=0, doorbell='0x80000000', image=1)
+            values[field] = value
+            row = next(row for row in c.parse_serial(base.format(**values))
+                       if row['kind'] == 'kiq')
+            self.assertFalse(row['restore_admitted'], field)
+
+
 if __name__ == '__main__':
     unittest.main()

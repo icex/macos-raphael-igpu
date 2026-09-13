@@ -239,10 +239,31 @@ int main() {
                 true, 0x8400000000ULL, 0x8400000800ULL,
                 0x8400000000ULL, 0x8400000800ULL, retainedState, true, true, true),
             "mode-3 probe admits inactive retained-WPTR state");
+    const RaphaelKiq::QueueState exact207State {0, 0, 0, 0, 0x20, 0, 0x80000000};
+    require(RaphaelKiq::inactiveRetainedProbeEligible(
+                true, 0x8400000000ULL, 0x8400000800ULL,
+                0x8400000000ULL, 0x8400000800ULL, exact207State, true, true, true),
+            "mode-3 probe admits the exact candidate-207 doorbell readback");
     require(!RaphaelKiq::inactiveRetainedProbeEligible(
                  true, 0x8400000000ULL, 0x8400000800ULL,
                  0x8400000000ULL, 0x8400000800ULL, retainedState, false, true, true),
             "inactive retained probe rejects missing lease");
+    require(!RaphaelKiq::inactiveRetainedProbeEligible(
+                 false, 0x8400000000ULL, 0x8400000800ULL,
+                 0x8400000000ULL, 0x8400000800ULL, retainedState, true, true, true),
+            "inactive retained probe rejects disabled mode");
+    require(!RaphaelKiq::inactiveRetainedProbeEligible(
+                 true, 0x8400000000ULL, 0x8400000800ULL,
+                 0x8400000000ULL, 0x8400000800ULL, retainedState, true, false, true),
+            "inactive retained probe rejects wrong owner");
+    require(!RaphaelKiq::inactiveRetainedProbeEligible(
+                 true, 0x8400000001ULL, 0x8400000800ULL,
+                 0x8400000000ULL, 0x8400000800ULL, retainedState, true, true, true),
+            "inactive retained probe rejects mismatched MQD address");
+    require(!RaphaelKiq::inactiveRetainedProbeEligible(
+                 true, 0x8400000000ULL, 0x8400000800ULL,
+                 0x8400000000ULL, 0x8400000900ULL, retainedState, true, true, true),
+            "inactive retained probe rejects mismatched EOP address");
     const RaphaelKiq::QueueState inaccessibleRetainedState {0, 0, 0, 0, 0xffffffffU, 0, 0};
     require(!RaphaelKiq::inactiveRetainedProbeEligible(
                  true, 0x8400000000ULL, 0x8400000800ULL,
@@ -253,6 +274,16 @@ int main() {
                  true, 0x8400000000ULL, 0x8400000800ULL,
                  0x8400000000ULL, 0x8400000800ULL, ingressRetainedState, true, true, true),
             "inactive retained probe rejects active ingress");
+    for (const RaphaelKiq::QueueState bad : {
+             RaphaelKiq::QueueState {1, 0, 0, 0, 0x20, 0, 0},
+             RaphaelKiq::QueueState {0, 1, 0, 0, 0x20, 0, 0},
+             RaphaelKiq::QueueState {0, 0, 1, 0, 0x20, 0, 0},
+             RaphaelKiq::QueueState {0, 0, 0, 1, 0x20, 0, 0},
+             RaphaelKiq::QueueState {0, 0, 0, 0, 0x20, 0, 1U << 30}})
+        require(!RaphaelKiq::inactiveRetainedProbeEligible(
+                     true, 0x8400000000ULL, 0x8400000800ULL,
+                     0x8400000000ULL, 0x8400000800ULL, bad, true, true, true),
+                "inactive retained probe rejects unsafe queue state");
 
     FakeHalted halted;
     halted.value[static_cast<unsigned>(FakeHalted::Register::MecControl)] = 0x1234;
