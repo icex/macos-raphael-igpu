@@ -3969,6 +3969,7 @@ static int wrapAlignManager2Init(void *that, void *hwInterface) {
 // (input swizzle mode, resource type, format, size, flags and the returned mode);
 // mode 2 also returns ADDR_SW_LINEAR (0) so kernel-chosen layouts are linear.
 static constexpr size_t kOffPreferredSwizzleMode2 = 0x60566;
+    // __ZN33AMDRadeonX6000_AMDHWAlignManager224getPreferredSwizzleMode2EP33_ADDR2_COMPUTE_SURFACE_INFO_INPUT [x6]
 static uint32_t swizzleLogMode = 0;
 static mach_vm_address_t orgPreferredSwizzleMode2 = 0;
 static uint32_t swizzleLogCount = 0;
