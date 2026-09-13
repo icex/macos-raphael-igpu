@@ -1148,3 +1148,35 @@ sha256 `dcf3d5d4...`, binary sha256 `c688b235...`). The 1.0.218 binary with card
 through `--manual-reuse --ack-risk` under the user's standing instruction, after
 `run/mode2-reset-20.json`. This note covers this one launch.
 
+
+## Probe v5.1: every 8x8 tile is rendered correctly but placed wrongly; binning is not the cause (2026-09-14)
+
+Run `9d05b1c1...` directory `run/candidate-218-attempt-v51-results`, card `metal-062`
+(commit `bb1b294`), 1.0.218 build `10cce4d8...`, launch 21 after `run/mode2-reset-20.json`.
+Verdict `CORE_PROBE_PASS`, recovery `recovered`, shutdown `exited-after-guest-request`.
+All three shader libraries compiled.
+
+| Target | Format | Geometry | Wrong pixels | 8x8 tiles internally exact |
+|---|---|---|---|---|
+| 64x64 | BGRA8 | triangle | 3,840 of 4,096 | 64 of 64 |
+| 256x256 | BGRA8 | triangle | 64,512 of 65,536 | all |
+| 1280x1024 | BGRA8 / RGBA8 | triangle / quad | 1,290,240 of 1,310,720 | all 20,480 |
+
+- Identical results in-process and in child processes with
+  `AMD_ENABLE_PRIM_BATCH_BINNING=0` and `=1`: primitive batch binning is not involved.
+- Each pixel value is exact for some position; whole 8x8 tiles are moved. The tile map
+  (`findings/research/candidate218-v51-block16-displacement-map.json`) is linear over
+  GF(2) in the tile-coordinate bits. For example destination tile x bit 2 takes source
+  tile y bit 0, destination y bit 2 takes source x bit 0, and destination x bit 3 takes
+  source x bit 3 xor y bit 3.
+- The window child (uid 501) presented 311 frames; `presentedTime` is always 0 on the
+  virtual display. Its own drawable readback had 3,051 of 11,616 quadrant samples wrong,
+  and its window self-capture matched only at the quadrant centers.
+- The earlier native probe's 64x64 RGBA8 position test still differs from this one only
+  in its readback path (Managed buffer plus `synchronizeResource`, versus a Shared
+  buffer here) and clear color, so the permutation may be in the GPU-to-CPU copy rather
+  than in rendering.
+
+Next: probe v6 reads the same rendered texture back through a Shared buffer, a Managed
+buffer, a Managed texture and a texture-to-texture blit, and repeats the native probe's
+exact render.
