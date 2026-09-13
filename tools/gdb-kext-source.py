@@ -15,12 +15,16 @@ MAX_KMODS = 256
 KMOD_NAME = 0x10
 KMOD_ADDRESS = 0x9C
 
-# HWLibs GC register wrappers routed by the kext.  These are deliberately observed
-# as ordinary software breakpoints: the three hardware slots remain reserved for
-# startKIQ entry, its native call, and the dynamic return.  The register number is
-# the GC segment-0 CP_MEC_CNTL index (0x1260 + 0xf55), not an MMIO address.
+# Raphael GC wrapper offsets used for observation.  These are deliberately ordinary
+# software breakpoints: the three hardware slots remain reserved for startKIQ entry,
+# its native call, and the dynamic return.  The runtime prologues are authenticated
+# before arming them.  The register number is the GC segment-0 CP_MEC_CNTL index.
 KIQ_MEC_REGISTER = 0x21B5
-KIQ_MEC_WRITE_OFFSETS = (0xB519, 0xB4DE, 0xB4A0)
+KIQ_MEC_WRITE_SPECS = (
+    (0x23780, bytes.fromhex("554889e54157415641554154534881ec"), "ext2"),
+    (0x24370, bytes.fromhex("554889e541574156535089d34189f749"), "register"),
+    (0x24440, bytes.fromhex("554889e54157415641545389d34189f7"), "ext"),
+)
 
 
 def kernel_relocation(runtime_text, link_text):
@@ -424,7 +428,8 @@ quit
 
 def generate_kiq_start(runtime_text, expected_uuid, kernel_symbols, raphael_dsym,
                        start_offset, start_prologue, native_offset,
-                       original_source_root=None, native_prologue=None):
+                       original_source_root=None, native_prologue=None,
+                       mec_write_specs=KIQ_MEC_WRITE_SPECS):
     """Generate an authenticated, bounded wrapKiqStart ABI observation."""
     relocation = kernel_relocation(runtime_text, 0xffffff8000200000)
     uuid = expected_uuid.lower().replace('-', '')
@@ -455,7 +460,7 @@ START_OFFSET=0x{start_offset:x}; NATIVE_OFFSET=0x{native_offset:x}
 START_PROLOGUE=bytes.fromhex('{start_prologue.hex()}')
 NATIVE_PROLOGUE=bytes.fromhex('{native_prologue.hex() if native_prologue is not None else ""}')
 MEC_REGISTER=0x{KIQ_MEC_REGISTER:x}
-MEC_WRITE_OFFSETS={list(KIQ_MEC_WRITE_OFFSETS)!r}
+MEC_WRITE_SPECS={[(offset, prologue.hex(), path) for offset, prologue, path in mec_write_specs]!r}
 inf=gdb.selected_inferior()
 def read(a,n):
     if n < 0 or n > MAX_HEADER: raise gdb.GdbError('bounded read refused')
@@ -514,8 +519,11 @@ class MecWriteBP(gdb.Breakpoint):
 entry_bp=gdb.Breakpoint('*%#x' % start, gdb.BP_HARDWARE_BREAKPOINT, internal=True)
 native_bp=NativeBP('*%#x' % native, gdb.BP_HARDWARE_BREAKPOINT, internal=True)
 native_bp.enabled=False
-write_bps=[MecWriteBP(found+offset, path) for offset,path in
-           zip((0xb519,0xb4de,0xb4a0), ('ext2','register','ext'))]
+for offset, prologue_hex, path in MEC_WRITE_SPECS:
+    writer=found+offset
+    if read(writer,len(bytes.fromhex(prologue_hex))) != bytes.fromhex(prologue_hex):
+        raise gdb.GdbError('KIQ MEC writer prologue mismatch path=%s offset=%#x' % (path,offset))
+    MecWriteBP(writer, path)
 print('KIQ_START_BREAKPOINTS_ARMED entry=%#x native=%#x' % (start,native))
 native_reached=False; native_active=False; entry_seen=False; return_bp=None
 gdb.execute('continue')
@@ -611,11 +619,18 @@ def main():
         if len(native_offsets) != 1:
             parser.error("wrapKiqStart must contain exactly one orgKiqStart call")
         native_prologue = executable_bytes(args.raphael_binary, native_offsets[0], 6)
+        writer_specs = []
+        for symbol, path in (('__ZL15wrapGcCgsWrite2Pvjjjj', 'ext2'),
+                             ('__ZL14wrapGcCgsWritePvjj', 'register'),
+                             ('__ZL17wrapGcCgsWriteExtPvjjj', 'ext')):
+            writer_offset = symbol_offset(args.raphael_dsym, symbol)
+            writer_specs.append((writer_offset, executable_bytes(
+                args.raphael_binary, writer_offset, 16), path))
         original_source_root = dwarf_source_root(args.raphael_dsym)
         args.output.write_text(generate_kiq_start(
             args.runtime_kernel_text, expected_uuid, args.kernel_symbols,
             args.raphael_dsym, start_off, start_prologue, native_offsets[0],
-            original_source_root, native_prologue))
+            original_source_root, native_prologue, writer_specs))
         return
     if args.scenario == "kiq-stamp":
         if args.wrapper_name:

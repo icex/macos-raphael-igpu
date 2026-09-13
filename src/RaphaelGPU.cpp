@@ -399,6 +399,7 @@ static uint32_t mqdFixMode = 0;
 // Explicit experiment: allow Apple's native timeout restore/reprogram path only
 // after an exact-address, owned-lease, ingress-suppressed timeout proof.
 static uint32_t mqdNativeRestoreMode = 0;
+static volatile uint32_t nativeMecProbeArmed = 0;
 static void *hwMemObject = nullptr;
 static volatile uint32_t *fbAperture();
 static bool wrapHwMemEnable(void *self);
@@ -1910,6 +1911,15 @@ static uint32_t wrapGcCgsWrite2(void *ctx, uint32_t reg, uint32_t val, uint32_t 
         }
         return 0;
     }
+    const bool preserveMecHalt = RaphaelKiq::preserveNativeMecHalt(
+        mqdNativeRestoreMode, __atomic_load_n(&nativeMecProbeArmed, __ATOMIC_ACQUIRE) != 0,
+        true, true, caller, reg, client, flag, gcCtx != nullptr, gcCtx == ctx);
+    if (preserveMecHalt && reg == kGcCpMecCntl) {
+        const uint32_t requested = val;
+        val |= RaphaelKiq::kMecHaltMask;
+        RLOG("XQ4: native MEC halt guard caller=+%#llx requested=%#x effective=%#x client=%#x flag=%#x",
+             caller, requested, val, client, flag);
+    }
     auto r = FunctionCast(wrapGcCgsWrite2, orgGcCgsWrite2)(ctx, reg, val, client, flag);
     noteSelectorWrite(ctx, reg, val, true);
     if (trace >= 0) traceNativeKiqState(static_cast<unsigned>(trace), "after", ctx, client, flag);
@@ -2686,7 +2696,10 @@ static uint32_t wrapKiqStart(void *self, uint64_t a, uint64_t b, void *spec, uin
         CRLOG("XQ2: native restore entered after %s admission; non-authorizing",
               mqdNativeRestoreMode == 3 ? "validated contained-probe" :
               "unresolved dequeue timeout");
+    if (mqdNativeRestoreMode == 3 && nativeRestoreAttempted && haltedTx.held)
+        __atomic_store_n(&nativeMecProbeArmed, 1, __ATOMIC_RELEASE);
     auto r = FunctionCast(wrapKiqStart, orgKiqStart)(self, a, b, spec, out);
+    __atomic_store_n(&nativeMecProbeArmed, 0, __ATOMIC_RELEASE);
     RLOG("XJ:   PM4 startKIQ(%#llx, %#llx) -> %#x (0 is success)", a, b, r);
     if (mqdFixMode == 2) {
         fbWrite(asicInfo, kGcGrbmGfxCntl, kKiqSelector);

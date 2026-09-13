@@ -34,7 +34,7 @@ class GdbKextSourceTests(unittest.TestCase):
         self.assertIn("KIQ_MEC_CNTL_WRITE path=%s", text)
         self.assertIn("native_interval=1", text)
         self.assertIn("KIQ_START_NATIVE_COMMAND_TARGET", text)
-        self.assertIn("zip((0xb519,0xb4de,0xb4a0), ('ext2','register','ext'))", text)
+        self.assertIn("MEC_WRITE_SPECS", text)
 
     def test_kiq_start_generated_loop_stops_after_success_or_failure_return(self):
         text = tool.generate_kiq_start(
@@ -69,6 +69,20 @@ class GdbKextSourceTests(unittest.TestCase):
             exec("class MecWriteBP" + block, ns)
             self.assertFalse(ns['MecWriteBP'](0, 'ext2').stop())
         self.assertIn("KIQ_MEC_CNTL_WRITE path=ext2", output.getvalue())
+
+    def test_kiq_start_rejects_unauthenticated_writer_module_address(self):
+        text = tool.generate_kiq_start(
+            0xffffff801b6e8000, "474ef697fc283ba283a4763d76c8e200",
+            "/tmp/kernel.symbols", "/tmp/RaphaelGPU.dSYM", 0x19120,
+            bytes.fromhex("554889e541574156"), 0x1920c, "/tmp/source")
+        block = text.split("for offset, prologue_hex, path in MEC_WRITE_SPECS:", 1)[1]
+        block = "for offset, prologue_hex, path in MEC_WRITE_SPECS:" + block.split(
+            "print('KIQ_START_BREAKPOINTS", 1)[0]
+        class Gdb:
+            class GdbError(Exception): pass
+        with self.assertRaises(Gdb.GdbError):
+            exec(block, {'gdb': Gdb(), 'read': lambda address, size: b'\0' * size,
+                         'found': 0x100000, 'MEC_WRITE_SPECS': [(0x23780, 'ff', 'ext2')]})
 
     def test_kiq_start_reports_unavailable_entry_stack_without_claiming_native_or_return(self):
         text = tool.generate_kiq_start(
@@ -143,7 +157,8 @@ class GdbKextSourceTests(unittest.TestCase):
                 return b'\0' * size
             ns = {'gdb': fake, 'struct': struct, 'read': read, 'start': 0x100000,
                   'native': 0x1000ec, 'entry_rsp': None, 'entry_return': None,
-                  'entry_rdi': None, 'entry_out': None, 'found': 0x100000}
+                  'entry_rdi': None, 'entry_out': None, 'found': 0x100000,
+                  'MEC_WRITE_SPECS': []}
             exec(body, ns)
             self.assertTrue(state['detached'])
             self.assertEqual(events, [])
