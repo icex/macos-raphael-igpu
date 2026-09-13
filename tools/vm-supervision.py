@@ -454,6 +454,19 @@ def launch(vm, name, maximum, gpu_args, critical_enabled=False):
                     break
                 time.sleep(0.2)
         child.wait()
+    except BaseException as error:
+        # Preserve the underlying launcher failure before cleanup.  This record
+        # contains no command arguments or environment and is best-effort so a
+        # full run directory can never prevent the safety cleanup below.
+        try:
+            record = vm / "run" / (name + ".failure.json")
+            record.write_text(json.dumps({"launch": name,
+                                          "error_type": type(error).__name__,
+                                          "error": str(error)[:512]}) + "\n")
+            record.chmod(0o600)
+        except OSError:
+            pass
+        raise
     finally:
         # Prevent an in-flight docker run from creating an uncapped container after
         # cleanup. systemd also kills the complete service cgroup on forced stop.
@@ -488,6 +501,32 @@ def start_locked(vm, maximum, gpu_args, critical_enabled=False):
     name = "rgpu-launch-" + uuid.uuid4().hex
     if os.environ.get("GENERIC_GRAPHICS") == "off" and not logind_block_inhibited():
         raise RuntimeError("headless capture requires an existing idle block inhibitor")
+    familiar_name = run([binary("docker"), "ps", "-a", "--filter",
+                         "name=^/macos-sequoia$", "--format", "{{.Names}}"]).strip()
+    if familiar_name == "macos-sequoia":
+        cid = full_cid(run([binary("docker"), "inspect", "--format", "{{.Id}}",
+                             "macos-sequoia"]).strip())
+        selected = '{"Id":{{json .Id}},"Name":{{json .Name}},"Running":{{json .State.Running}},"Status":{{json .State.Status}},"Mounts":{{json .Mounts}}}'
+        info = json.loads(run([binary("docker"), "inspect", "--format", selected, cid]))
+        if (info["Id"] != cid or info["Name"] != "/macos-sequoia" or info["Running"] or
+                info["Status"] not in ("exited", "dead")):
+            raise RuntimeError("familiar macos-sequoia container is not stopped")
+        expected_disk = str((vm / "mac_hdd_ng.img").resolve())
+        if not any(m.get("Type") == "bind" and m.get("Source") == expected_disk
+                   for m in info.get("Mounts", [])):
+            raise RuntimeError("familiar macos-sequoia container is not associated with this VM")
+        archive_name = "macos-sequoia-archive-" + uuid.uuid4().hex
+        run([binary("docker"), "rename", cid, archive_name])
+        check = json.loads(run([binary("docker"), "inspect", "--format", selected, cid]))
+        if (check["Id"] != cid or check["Name"] != "/" + archive_name or
+                check.get("Mounts") != info.get("Mounts") or
+                check["Running"] or check["Status"] not in ("exited", "dead")):
+            raise RuntimeError("familiar container identity changed while archiving")
+        archive_record = vm / "run" / (archive_name + ".json")
+        archive_record.write_text(json.dumps({"old_name": "macos-sequoia",
+                                              "new_name": archive_name, "cid": cid,
+                                              "status": check["Status"]}) + "\n")
+        archive_record.chmod(0o600)
     # Durable admission survives the short-lived caller dying before Docker has
     # created a visible container. Managed cleanup removes only this launch's file.
     reservation = vm / 'run/launch-pending' / name
@@ -539,18 +578,39 @@ def start_locked(vm, maximum, gpu_args, critical_enabled=False):
         reservation.unlink()
         return state
     except BaseException:
+        launch_error = sys.exc_info()
+        failure_record = vm / "run" / (name + ".failure.json")
+        failure_summary = f'{type(launch_error[1]).__name__}: {str(launch_error[1])[:160]}'
+        try:
+            if failure_record.is_file():
+                prior = json.loads(failure_record.read_text())
+                if (prior.get("launch") == name and isinstance(prior.get("error"), str)):
+                    failure_summary = f'{prior.get("error_type", "Error")}: {prior["error"][:160]}'
+        except (OSError, ValueError, TypeError):
+            pass
         try:
             run([binary("systemctl"), "--user", "stop", name + ".service"], timeout=40)
-        except Exception:
-            if properties(name + ".service").get("LoadState") == "not-found":
+        except Exception as stop_error:
+            # A vanished transient unit must not replace the launch exception
+            # with a second systemctl/show failure.  Only an explicit bounded
+            # not-found result permits cleanup; unknown service state remains a
+            # failed stop and retains the reservation.
+            try:
+                service = properties(name + ".service")
+            except Exception:
+                raise ManagedStopUnconfirmed(
+                    f'managed service stop unconfirmed ({failure_summary}); launch reservation retained'
+                ) from stop_error
+            if service.get("LoadState") == "not-found":
                 cleanup(vm, name)
-                raise
+                raise launch_error[1].with_traceback(launch_error[2])
             # Absence of a container does not cancel an accepted but delayed
             # service launch. Its own cap/cleanup remain responsible; keep the
             # reservation until that lifetime is known to have ended.
-            raise ManagedStopUnconfirmed('managed service stop unconfirmed; launch reservation retained') from None
+            raise ManagedStopUnconfirmed(
+                f'managed service stop unconfirmed ({failure_summary}); launch reservation retained') from stop_error
         cleanup(vm, name)
-        raise
+        raise launch_error[1].with_traceback(launch_error[2])
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
