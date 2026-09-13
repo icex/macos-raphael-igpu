@@ -746,3 +746,45 @@ Candidate 217 (`metal-053`) is launch 9 on boot `c369c74e`, through
 `run/mode2-reset-8.json` with `RLC_CNTL=0` and `CP_STAT=0` before staging. This
 note covers this one launch.
 
+## Candidate 217: desktop graphics completes on the device (2026-09-14)
+
+Run `466d7235b807a40bdcaa38351d777e37`, card `metal-053` (commit `ac1c8de`),
+source `3903f29`, build `2216360d7f0e4e77931e8cceab6aaf72`, launch 9 after
+`run/mode2-reset-8.json`. Boot arguments: `rgpunobin=1 rgpugolden=1
+rgpuhangdump=1 rgpucr2quiesce=1`. Evidence: `run/candidate-217-results/`.
+
+- **Desktop graphics work completed on the Raphael GPU for the whole run.** The
+  40 progress samples (5 s apart, from 30 s after plugin start) show the gfx ring
+  advancing `0 -> 0x1000 -> 0x9600 -> 0xa780 -> 0xa880 -> 0xa980 -> 0xac00 ->
+  0xaf00 -> 0xb080` (8 advances) and **drained on every sample**
+  (`RPTR == WPTR`, `CP_STAT=0`, `GRBM_STATUS=0x3028`, `CP_STALLED_STAT2=0`),
+  well past the old stall at `WPTR=0x2180`. No hang dump, no GPU restart report.
+  The small compute probe passed.
+- The run did not end cleanly. The COM2 quiesce request was written after the
+  probe, but the kext's COM2 worker exits 180 s after start, so no ACK came and
+  the harness waited for its 6000-second cleanup boundary. After about 20 idle
+  minutes the guest entered ACPI sleep (`acpi_sleep_kernel`), one KIQ stamp timed
+  out during that transition (`waitForHwStamp(5) -> 0`, after all 40 samples),
+  and the coordinator stopped the run with SIGTERM (the supported manual stop).
+  Shutdown was `forced` (guest agent unreachable while asleep); recovery schema 6
+  `incomplete`; verdict `INVALID` (experiment cancelled). Host after: vfio-pci,
+  accessible, sleep inhibited, no active VM.
+
+| Candidate | Change | GFX ring | Probe / verdict | Recovery |
+|---|---|---|---|---|
+| 216-nobin | DISABLE_SC_BINNING | no stall | passed / INCONCLUSIVE (capture) | recovered |
+| 217 | + progress sampler, quiesce | 40/40 drained, 8 advances | passed / INVALID (cancelled) | incomplete (forced) |
+
+Blocking issue for a clean verdict: the quiesce contract outlives the COM2 worker.
+Candidate 218 keeps the COM2 control path polling after the replay window (up to
+6000 s, 10 ms polls, no replay traffic) and answers a late request with one fresh
+caught-up snapshot and the ACK.
+
+## Boot-launch ledger extension for candidate 218 (2026-09-14)
+
+Candidate 218 (`metal-054`) is launch 10 on boot `c369c74e`, through
+`--manual-reuse --ack-risk` under the user's standing instruction. Candidate 217's
+recovery was incomplete after a forced shutdown, so the precondition is a MODE2
+reset receipt `run/mode2-reset-9.json` showing `RLC_CNTL=0` and `CP_STAT=0`, and a
+probe receipt showing the mailbox still answers. This note covers this one launch.
+
