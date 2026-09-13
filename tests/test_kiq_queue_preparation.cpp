@@ -64,10 +64,13 @@ struct FakeHalted {
     std::vector<Register> writes;
     bool ignoreHalt {false};
     bool ignoreQueue {false};
+    bool ignoreRestore {false};
     uint32_t read(Register reg) const { return value[static_cast<unsigned>(reg)]; }
     void write(Register reg, uint32_t next) {
         writes.push_back(reg);
         if (reg == Register::MecControl && ignoreHalt) return;
+        if (reg == Register::MecControl && ignoreRestore &&
+            (next & RaphaelKiq::kMecHaltMask) != RaphaelKiq::kMecHaltMask) return;
         if (reg != Register::MecControl && ignoreQueue) return;
         value[static_cast<unsigned>(reg)] = next;
     }
@@ -426,8 +429,23 @@ int main() {
                  transaction,
                  [&](FakeHalted::Register reg) { return ignoredQueue.read(reg); },
                  [&](FakeHalted::Register reg, uint32_t value) { ignoredQueue.write(reg, value); },
-                 [](unsigned) {}) && transaction.held,
-            "ignored ACTIVE clear blocks setup while retaining the halt transaction");
+                 [](unsigned) {}) && !transaction.held &&
+                ignoredQueue.read(FakeHalted::Register::MecControl) == 0x1234,
+            "ignored ACTIVE clear blocks setup and restores the saved MEC control");
+    FakeHalted stuckRestore;
+    stuckRestore.value[static_cast<unsigned>(FakeHalted::Register::MecControl)] = 0x1234;
+    stuckRestore.value[static_cast<unsigned>(FakeHalted::Register::Active)] = 1;
+    stuckRestore.ignoreQueue = true;
+    stuckRestore.ignoreRestore = true;
+    transaction = {};
+    require(!RaphaelKiq::beginHaltedNative(
+                 transaction,
+                 [&](FakeHalted::Register reg) { return stuckRestore.read(reg); },
+                 [&](FakeHalted::Register reg, uint32_t value) { stuckRestore.write(reg, value); },
+                 [](unsigned) {}) && transaction.held &&
+                stuckRestore.read(FakeHalted::Register::MecControl) ==
+                    (0x1234U | RaphaelKiq::kMecHaltMask),
+            "a failed MEC restore after setup failure keeps the transaction held");
     require(RaphaelKiq::haltedNativeResultVerified(
                 true, 0x50000000, 1, 0, 0, 0x84, 0xffbfea00, 0,
                 0x84000008, 0, 6, 0, 0, 0, 0x8400000000ULL, 0xffbfea00ULL,

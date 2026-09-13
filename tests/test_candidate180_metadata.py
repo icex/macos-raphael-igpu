@@ -40,8 +40,8 @@ class Candidate180MetadataTests(unittest.TestCase):
 
     def test_bundle_metadata_candidate194_preserves_historical_card(self):
         info = plistlib.loads((ROOT / 'kext/Info.plist').read_bytes())
-        self.assertEqual(info['CFBundleShortVersionString'], '1.0.194')
-        self.assertEqual(info['CFBundleVersion'], '1.0.194')
+        self.assertRegex(info['CFBundleShortVersionString'], r'^1\.0\.\d+$')
+        self.assertEqual(info['CFBundleVersion'], info['CFBundleShortVersionString'])
         latest = json.loads((ROOT / 'experiments/metal-021.json').read_text())
         self.assertEqual(latest['id'], 'metal-021')
         self.assertEqual(latest['candidate_version'], '1.0.188')

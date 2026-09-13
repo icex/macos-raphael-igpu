@@ -1102,6 +1102,41 @@ Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0
         self.assertEqual(c({'build_id':'abc'}, events, None)['verdict'],
                          'BASELINE_BLOCKED')
 
+    def test_capture_loss_keeps_bound_positive_probe_summary(self):
+        # A passing probe under capture loss stays INCONCLUSIVE (not promoted),
+        # but the raw nonce-bound result must remain visible in the verdict.
+        c = self.classifier()
+        events = self.events(available=1, status=0, started=1)
+        events.append(dict(kind='capture_loss', build='abc', seq=len(events)))
+        probe = {
+            'run_id': 'nonce',
+            'output': (
+                'RGPU_SMALL_METAL_RESULT ' + json.dumps({
+                    'passed': True, 'device': 'AMD Radeon Navi23',
+                    'run_id': 'nonce', 'metal3': True,
+                    'completed_command_buffers': 4, 'values_checked': 196608,
+                    'render_pixels_checked': 4096, 'error': '',
+                    'registry_id': 4294968036}) + '\n'
+                'RGPU_EXIT nonce 0\n'),
+            'transport_exit': 0,
+        }
+        result = c.classify({'build_id': 'abc', 'run_id': 'nonce'}, events, probe)
+        self.assertEqual(result['verdict'], 'INCONCLUSIVE')
+        self.assertEqual(result['earliest_failure'], 'capture_loss')
+        self.assertFalse(result['valid'])
+        self.assertNotIn('probe_status', result)
+        summary = result['probe_summary']
+        self.assertTrue(summary['passed'])
+        self.assertEqual(summary['completed_command_buffers'], 4)
+        self.assertEqual(summary['values_checked'], 196608)
+        self.assertEqual(summary['render_pixels_checked'], 4096)
+        self.assertEqual(summary['exits'], ['0'])
+        # A probe bound to another nonce contributes nothing.
+        foreign = dict(probe, run_id='other')
+        result = c.classify({'build_id': 'abc', 'run_id': 'nonce'}, events, foreign)
+        self.assertEqual(result['earliest_failure'], 'capture_loss')
+        self.assertNotIn('probe_summary', result)
+
     def test_kiq_failure_retains_bound_probe_timeout_diagnostic(self):
         c = self.classifier()
         events = self.events(available=1, status=0, started=1)

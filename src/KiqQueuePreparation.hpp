@@ -71,9 +71,19 @@ bool beginHaltedNative(HaltedNativeTransaction &tx, Read read, Write write, Dela
     const uint32_t halted = read(HaltedRegister::MecControl);
     if (halted == 0xffffffffU || (halted & kMecHaltMask) != kMecHaltMask) return false;
     tx.held = true;
+    // A setup failure after the halt write must not leave the MEC halted for the
+    // rest of the boot (candidate 209 refused with held=1, currentMEC=0x50000000):
+    // put the pre-transaction control word back and only report the transaction as
+    // still held when that readback fails.
+    auto abandon = [&]() {
+        write(HaltedRegister::MecControl, tx.savedMecControl);
+        delay(50);
+        if (read(HaltedRegister::MecControl) == tx.savedMecControl) tx.held = false;
+        return false;
+    };
     if (allowRetainedWptr) {
         tx.initialWptrLo = read(HaltedRegister::WptrLo);
-        if (tx.initialWptrLo == 0xffffffffU) return false;
+        if (tx.initialWptrLo == 0xffffffffU) return abandon();
     }
     write(HaltedRegister::Active, 0);
     write(HaltedRegister::Dequeue, 0);
@@ -92,7 +102,7 @@ bool beginHaltedNative(HaltedNativeTransaction &tx, Read read, Write write, Dela
         doorbell == 0xffffffffU || (active & 1) || dequeue || rptr || whi ||
         (poll & (1U << 31)) || (doorbell & (1U << 30)) ||
         (!allowRetainedWptr && wlo != 0) ||
-        (allowRetainedWptr && wlo != tx.initialWptrLo)) return false;
+        (allowRetainedWptr && wlo != tx.initialWptrLo)) return abandon();
     return true;
 }
 
@@ -107,9 +117,8 @@ bool releaseHaltedNative(HaltedNativeTransaction &tx, Read read, Write write,
     }
     write(HaltedRegister::MecControl, tx.savedMecControl);
     delay(50);
-    if (read(HaltedRegister::MecControl) == tx.savedMecControl &&
-        (read(HaltedRegister::MecControl) & kMecHaltMask) ==
-            (tx.savedMecControl & kMecHaltMask)) {
+    const uint32_t restored = read(HaltedRegister::MecControl);
+    if (restored == tx.savedMecControl) {
         tx.held = false;
         return true;
     }

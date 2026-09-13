@@ -3628,6 +3628,15 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
     if manifest.get('gpu') is False and not failure:
         result.update(valid=False, verdict='GPULESS_CAPTURE_CHECK',
                       next_action='no GPU execution tested; inspect captured build and cleanup')
+    overriding = bool(failure) or (
+        shutdown_result is not None and shutdown_result['outcome'] == 'STOP_UNCONFIRMED')
+    if overriding:
+        # A harness failure must not erase what the classifier saw on the GPU.
+        result['classifier_verdict'] = {
+            key: result.get(key)
+            for key in ('valid', 'verdict', 'earliest_failure', 'probe_status',
+                        'probe_summary')
+            if key in result}
     if failure:
         result.update(valid=False, verdict='INVALID', error=failure)
     if shutdown_result and shutdown_result['outcome'] == 'STOP_UNCONFIRMED':

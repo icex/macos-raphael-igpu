@@ -906,6 +906,38 @@ def _probe_status(manifest, probe):
                   registry_id=result['registry_id'], error=result.get('error'))
 
 
+def _probe_summary(manifest, probe):
+    """Nonce-bound raw probe result (pass or fail) for verdicts that cannot promote it."""
+    if not isinstance(probe, dict) or not isinstance(probe.get('output'), str):
+        return None
+    run_id = manifest.get('run_id')
+    if not run_id or probe.get('run_id') != run_id:
+        return None
+    rows = []
+    for line in probe['output'].splitlines():
+        for prefix in ('RGPU_SMALL_METAL_RESULT ', 'RGPU_METAL_RESULT '):
+            if line.startswith(prefix):
+                rows.append(line[len(prefix):])
+    exits = re.findall(r'^RGPU_EXIT ' + re.escape(run_id) + r' (\d+)$',
+                       probe['output'], re.M)
+    if len(rows) != 1:
+        return None
+    try:
+        result = json.loads(rows[0])
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(result, dict) or result.get('run_id') != run_id:
+        return None
+    summary = dict(passed=result.get('passed') is True,
+                   completed_command_buffers=result.get('completed_command_buffers'),
+                   values_checked=result.get('values_checked'),
+                   exits=exits, transport_exit=probe.get('transport_exit'))
+    for key in ('render_pixels_checked', 'error'):
+        if key in result:
+            summary[key] = result[key]
+    return summary
+
+
 def _classify(manifest, events, probe, defer_absent_workload=False):
     probe_status = None
 
@@ -1352,7 +1384,13 @@ def _classify(manifest, events, probe, defer_absent_workload=False):
                                           'live-readiness'))
     if (any(r['kind'] == 'capture_loss' for r in events) or
             seqs != list(range(len(seqs)))):
-        return verdict('INCONCLUSIVE', stage='capture_loss')
+        result = verdict('INCONCLUSIVE', stage='capture_loss')
+        # Capture loss stops the run from being promoted, but a raw positive
+        # probe result must stay visible in the verdict rather than vanish.
+        summary = _probe_summary(manifest, probe)
+        if summary is not None:
+            result['probe_summary'] = summary
+        return result
     if 'sdma_topology' in manifest.get('spec', {}).get('required_observations', []):
         routes = [r for r in events if r['kind'] == 'sdma_topology_route']
         applied = [r for r in events if r['kind'] == 'sdma_topology']

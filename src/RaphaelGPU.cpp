@@ -2698,10 +2698,21 @@ static uint32_t wrapKiqStart(void *self, uint64_t a, uint64_t b, void *spec, uin
               mqdNativeRestoreMode == 3 ? "validated contained-probe" :
               "unresolved dequeue timeout");
     bool thisProbeArmed = false;
+    // The armed flag serialises the halted MEC + GRBM-selector critical section.
+    // It must stay armed until every post-call readback and recontain write on the
+    // paths below has finished, so release it at scope exit rather than right
+    // after the native call returns.
+    struct ProbeDisarm {
+        bool armed = false;
+        ~ProbeDisarm() {
+            if (armed) __atomic_store_n(&nativeMecProbeArmed, 0, __ATOMIC_RELEASE);
+        }
+    } probeDisarm;
     if (mqdNativeRestoreMode == 3 && mqdFixMode == 2 && nativeRestoreAttempted && haltedTx.held) {
         uint32_t expected = 0;
         thisProbeArmed = __atomic_compare_exchange_n(
             &nativeMecProbeArmed, &expected, 1, false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE);
+        probeDisarm.armed = thisProbeArmed;
         if (!thisProbeArmed) {
             CRLOG("XQ4: native MEC probe refused: another scoped native call is armed");
             fbWrite(asicInfo, kGcCpMecCntl, haltedTx.savedMecControl | RaphaelKiq::kMecHaltMask);
@@ -2710,8 +2721,6 @@ static uint32_t wrapKiqStart(void *self, uint64_t a, uint64_t b, void *spec, uin
         }
     }
     auto r = FunctionCast(wrapKiqStart, orgKiqStart)(self, a, b, spec, out);
-    if (thisProbeArmed)
-        __atomic_store_n(&nativeMecProbeArmed, 0, __ATOMIC_RELEASE);
     RLOG("XJ:   PM4 startKIQ(%#llx, %#llx) -> %#x (0 is success)", a, b, r);
     if (mqdFixMode == 2) {
         fbWrite(asicInfo, kGcGrbmGfxCntl, kKiqSelector);
@@ -6538,7 +6547,11 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
             static const uint8_t replace[] = {0x0f, 0x84, 0x02, 0x01, 0x00, 0x00};
             KernelPatcher::LookupPatch lp {&kexts[KextX6000], find, replace,
                                            sizeof(find), 1};
-            patcher.applyLookupPatch(&lp);
+            // The six-byte pattern occurs at a dozen sites in this X6000 build;
+            // only the branch at +0x1eca is the one described above, so bound
+            // the search to exactly that instruction instead of the first hit.
+            patcher.applyLookupPatch(&lp, reinterpret_cast<uint8_t *>(addr + 0x1eca),
+                                     sizeof(find));
             RLOG("XJ: AMDGraphicsAccelerator::start failure cleanup patch -> %s",
                  patcher.getError() == KernelPatcher::Error::NoError ? "ok" : "FAILED");
             patcher.clearError();

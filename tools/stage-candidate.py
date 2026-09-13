@@ -597,7 +597,9 @@ def verify_build_inputs(experiment, builder, expected_commit,
             CANDIDATE_VERSION, CANDIDATE_VERSION):
         raise RuntimeError("candidate Info.plist version mismatch")
     builder.validate_macho(executable.read_bytes())
-    if (CANDIDATE_VERSION, CARD_ID) in (
+    launch_options = experiment.get("launch_options")
+    if (isinstance(launch_options, dict) and launch_options.get("GDB") == "on") or (
+            CANDIDATE_VERSION, CARD_ID) in (
             ("1.0.188", "metal-021"), ("1.0.189", "metal-023"),
             ("1.0.190", "metal-024"), ("1.0.191", "metal-025"),
             ("1.0.192", "metal-026"), ("1.0.193", "metal-027"), ("1.0.194", "metal-028"), ("1.0.195", "metal-029"), ("1.0.196", "metal-030"), ("1.0.197", "metal-031"), ("1.0.198", "metal-032"), ("1.0.199", "metal-033"), ("1.0.200", "metal-034"), ("1.0.201", "metal-035"), ("1.0.203", "metal-037"), ("1.0.204", "metal-038"), ("1.0.205", "metal-039"), ("1.0.206", "metal-040")):
