@@ -961,6 +961,10 @@ def _probe_summary(manifest, probe):
                 for r in rows if isinstance(r, dict)] if isinstance(rows, list) else None
     if identity_rows(result.get('identity')) is not None:
         summary['identity_mismatches'] = identity_rows(result.get('identity'))
+    matrix = result.get('readback_matrix')
+    if isinstance(matrix, list):
+        summary['readback_mismatches'] = [[r.get('width'), r.get('height'), r.get('path'), r.get('mismatches')]
+                                          for r in matrix if isinstance(r, dict)]
     children = result.get('render_children')
     if isinstance(children, list):
         summary['binning_env_identity_mismatches'] = {

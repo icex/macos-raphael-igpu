@@ -444,48 +444,9 @@ static NSDictionary *offscreenThroughput(id<MTLDevice> device, id<MTLLibrary> li
 
 static NSDictionary *checkPatternRegion(CGImageRef image, CGRect region, NSString *label, NSMutableArray *jpegs);
 
-// Exact pixel identity: every pixel encodes its own coordinates, so a readback shows
-// for each pixel which position's value landed there. Records mismatches, unwritten
-// pixels, the most common displacements, how many 8x8 tiles move as a unit, and
-// optionally a per-16x16-block displacement map (int16 dx, dy of each block's first
-// pixel, little-endian, base64).
-static NSDictionary *identityTest(id<MTLDevice> device, id<MTLLibrary> library, id<MTLCommandQueue> queue,
-                                  NSUInteger width, NSUInteger height, BOOL rgba, BOOL quad, BOOL wantMap) {
-    MTLPixelFormat format = rgba ? MTLPixelFormatRGBA8Unorm : MTLPixelFormatBGRA8Unorm;
-    NSMutableDictionary *result = [@{ @"width": @(width), @"height": @(height),
-                                      @"format": rgba ? @"RGBA8" : @"BGRA8",
-                                      @"geometry": quad ? @"quad" : @"fullscreen-triangle" } mutableCopy];
-    id<MTLRenderPipelineState> pipeline =
-        renderPipelineFormat(device, library, quad ? @"identity_quad" : @"identity_triangle", @"identity_color", format);
-    MTLTextureDescriptor *descriptor = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:format
-                                                                                          width:width height:height mipmapped:NO];
-    descriptor.usage = MTLTextureUsageRenderTarget;
-    descriptor.storageMode = MTLStorageModePrivate;
-    id<MTLTexture> target = [device newTextureWithDescriptor:descriptor];
-    id<MTLBuffer> readback = [device newBufferWithLength:width * height * 4 options:MTLResourceStorageModeShared];
-    if (!pipeline || !target || !readback) {
-        result[@"error"] = !library ? @"no identity library" : !pipeline ? @"identity pipeline" : @"allocation";
-        return result;
-    }
-    MTLRenderPassDescriptor *pass = [MTLRenderPassDescriptor renderPassDescriptor];
-    pass.colorAttachments[0].texture = target;
-    pass.colorAttachments[0].loadAction = MTLLoadActionClear;
-    pass.colorAttachments[0].clearColor = MTLClearColorMake(0, 0, 0, 0);
-    pass.colorAttachments[0].storeAction = MTLStoreActionStore;
-    id<MTLCommandBuffer> command = [queue commandBuffer];
-    id<MTLRenderCommandEncoder> encoder = [command renderCommandEncoderWithDescriptor:pass];
-    [encoder setRenderPipelineState:pipeline];
-    [encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:quad ? 6 : 3];
-    [encoder endEncoding];
-    id<MTLBlitCommandEncoder> blit = [command blitCommandEncoder];
-    [blit copyFromTexture:target sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0, 0, 0)
-               sourceSize:MTLSizeMake(width, height, 1) toBuffer:readback destinationOffset:0
-   destinationBytesPerRow:width * 4 destinationBytesPerImage:width * height * 4];
-    [blit endEncoding];
-    [command commit];
-    [command waitUntilCompleted];
-    if (command.status != MTLCommandBufferStatusCompleted) { result[@"error"] = @"command"; return result; }
-    const UInt8 *bytes = readback.contents;
+// Decode an identity image (bytes in RGBA or BGRA order) into mismatch statistics.
+static void identityStats(const UInt8 *bytes, NSUInteger width, NSUInteger height, BOOL rgba, BOOL wantMap,
+                          NSMutableDictionary *result) {
     // Small open-addressing histogram of (dx, dy).
     enum { kSlots = 4096 };
     int32_t keyDx[kSlots], keyDy[kSlots];
@@ -564,7 +525,155 @@ static NSDictionary *identityTest(id<MTLDevice> device, id<MTLLibrary> library, 
         result[@"block16_map_h"] = @(blocksH);
         result[@"block16_map_base64"] = [map base64EncodedStringWithOptions:0];
     }
+}
+
+// Exact pixel identity: every pixel encodes its own coordinates, so a readback shows
+// for each pixel which position's value landed there. Records mismatches, unwritten
+// pixels, the most common displacements, how many 8x8 tiles move as a unit, and
+// optionally a per-16x16-block displacement map (int16 dx, dy of each block's first
+// pixel, little-endian, base64).
+static NSDictionary *identityTest(id<MTLDevice> device, id<MTLLibrary> library, id<MTLCommandQueue> queue,
+                                  NSUInteger width, NSUInteger height, BOOL rgba, BOOL quad, BOOL wantMap) {
+    MTLPixelFormat format = rgba ? MTLPixelFormatRGBA8Unorm : MTLPixelFormatBGRA8Unorm;
+    NSMutableDictionary *result = [@{ @"width": @(width), @"height": @(height),
+                                      @"format": rgba ? @"RGBA8" : @"BGRA8",
+                                      @"geometry": quad ? @"quad" : @"fullscreen-triangle" } mutableCopy];
+    id<MTLRenderPipelineState> pipeline =
+        renderPipelineFormat(device, library, quad ? @"identity_quad" : @"identity_triangle", @"identity_color", format);
+    MTLTextureDescriptor *descriptor = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:format
+                                                                                          width:width height:height mipmapped:NO];
+    descriptor.usage = MTLTextureUsageRenderTarget;
+    descriptor.storageMode = MTLStorageModePrivate;
+    id<MTLTexture> target = [device newTextureWithDescriptor:descriptor];
+    id<MTLBuffer> readback = [device newBufferWithLength:width * height * 4 options:MTLResourceStorageModeShared];
+    if (!pipeline || !target || !readback) {
+        result[@"error"] = !library ? @"no identity library" : !pipeline ? @"identity pipeline" : @"allocation";
+        return result;
+    }
+    MTLRenderPassDescriptor *pass = [MTLRenderPassDescriptor renderPassDescriptor];
+    pass.colorAttachments[0].texture = target;
+    pass.colorAttachments[0].loadAction = MTLLoadActionClear;
+    pass.colorAttachments[0].clearColor = MTLClearColorMake(0, 0, 0, 0);
+    pass.colorAttachments[0].storeAction = MTLStoreActionStore;
+    id<MTLCommandBuffer> command = [queue commandBuffer];
+    id<MTLRenderCommandEncoder> encoder = [command renderCommandEncoderWithDescriptor:pass];
+    [encoder setRenderPipelineState:pipeline];
+    [encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:quad ? 6 : 3];
+    [encoder endEncoding];
+    id<MTLBlitCommandEncoder> blit = [command blitCommandEncoder];
+    [blit copyFromTexture:target sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0, 0, 0)
+               sourceSize:MTLSizeMake(width, height, 1) toBuffer:readback destinationOffset:0
+   destinationBytesPerRow:width * 4 destinationBytesPerImage:width * height * 4];
+    [blit endEncoding];
+    [command commit];
+    [command waitUntilCompleted];
+    if (command.status != MTLCommandBufferStatusCompleted) { result[@"error"] = @"command"; return result; }
+    identityStats(readback.contents, width, height, rgba, wantMap, result);
     return result;
+}
+
+// Render the identity image once into a Private texture, then read it back several
+// ways; plus a render straight into a Managed texture. Separates rendering faults from
+// GPU-to-CPU copy faults.
+static NSArray *readbackMatrix(id<MTLDevice> device, id<MTLLibrary> library, id<MTLCommandQueue> queue,
+                               NSUInteger width, NSUInteger height, MTLClearColor clear) {
+    NSMutableArray *rows = [NSMutableArray array];
+    MTLPixelFormat format = MTLPixelFormatRGBA8Unorm;
+    id<MTLRenderPipelineState> pipeline = library ?
+        renderPipelineFormat(device, library, @"identity_triangle", @"identity_color", format) : nil;
+    if (!pipeline) return @[ @{ @"error": @"identity pipeline" } ];
+    MTLTextureDescriptor *privateDescriptor = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:format
+                                                                                                 width:width height:height mipmapped:NO];
+    privateDescriptor.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
+    privateDescriptor.storageMode = MTLStorageModePrivate;
+    MTLTextureDescriptor *managedDescriptor = [privateDescriptor copy];
+    managedDescriptor.storageMode = MTLStorageModeManaged;
+    id<MTLTexture> privateTexture = [device newTextureWithDescriptor:privateDescriptor];
+    id<MTLTexture> managedTarget = [device newTextureWithDescriptor:managedDescriptor];
+    id<MTLTexture> managedCopy = [device newTextureWithDescriptor:managedDescriptor];
+    id<MTLBuffer> shared = [device newBufferWithLength:width * height * 4 options:MTLResourceStorageModeShared];
+    id<MTLBuffer> managed = [device newBufferWithLength:width * height * 4 options:MTLResourceStorageModeManaged];
+    if (!privateTexture || !managedTarget || !managedCopy || !shared || !managed)
+        return @[ @{ @"error": @"allocation" } ];
+    memset(shared.contents, 0x5a, shared.length);
+    memset(managed.contents, 0x5a, managed.length);
+    [managed didModifyRange:NSMakeRange(0, managed.length)];
+    void (^draw)(id<MTLCommandBuffer>, id<MTLTexture>) = ^(id<MTLCommandBuffer> command, id<MTLTexture> target) {
+        MTLRenderPassDescriptor *pass = [MTLRenderPassDescriptor renderPassDescriptor];
+        pass.colorAttachments[0].texture = target;
+        pass.colorAttachments[0].loadAction = MTLLoadActionClear;
+        pass.colorAttachments[0].clearColor = clear;
+        pass.colorAttachments[0].storeAction = MTLStoreActionStore;
+        id<MTLRenderCommandEncoder> encoder = [command renderCommandEncoderWithDescriptor:pass];
+        [encoder setRenderPipelineState:pipeline];
+        [encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
+        [encoder endEncoding];
+    };
+    MTLOrigin zero = MTLOriginMake(0, 0, 0);
+    MTLSize size = MTLSizeMake(width, height, 1);
+    // Render into the Private texture, then copy into a Shared buffer, a Managed buffer and a
+    // Managed texture, each in its own command buffer.
+    id<MTLCommandBuffer> render = [queue commandBuffer];
+    draw(render, privateTexture);
+    [render commit];
+    [render waitUntilCompleted];
+    NSString *renderStatus = render.status == MTLCommandBufferStatusCompleted ? @"ok" : @"failed";
+    id<MTLCommandBuffer> copyShared = [queue commandBuffer];
+    id<MTLBlitCommandEncoder> blit = [copyShared blitCommandEncoder];
+    [blit copyFromTexture:privateTexture sourceSlice:0 sourceLevel:0 sourceOrigin:zero sourceSize:size
+                 toBuffer:shared destinationOffset:0 destinationBytesPerRow:width * 4
+  destinationBytesPerImage:width * height * 4];
+    [blit endEncoding];
+    [copyShared commit];
+    [copyShared waitUntilCompleted];
+    id<MTLCommandBuffer> copyManaged = [queue commandBuffer];
+    blit = [copyManaged blitCommandEncoder];
+    [blit copyFromTexture:privateTexture sourceSlice:0 sourceLevel:0 sourceOrigin:zero sourceSize:size
+                 toBuffer:managed destinationOffset:0 destinationBytesPerRow:width * 4
+  destinationBytesPerImage:width * height * 4];
+    [blit synchronizeResource:managed];
+    [blit endEncoding];
+    [copyManaged commit];
+    [copyManaged waitUntilCompleted];
+    id<MTLCommandBuffer> copyTexture = [queue commandBuffer];
+    blit = [copyTexture blitCommandEncoder];
+    [blit copyFromTexture:privateTexture sourceSlice:0 sourceLevel:0 sourceOrigin:zero sourceSize:size
+                toTexture:managedCopy destinationSlice:0 destinationLevel:0 destinationOrigin:zero];
+    [blit synchronizeResource:managedCopy];
+    [blit endEncoding];
+    [copyTexture commit];
+    [copyTexture waitUntilCompleted];
+    // Render straight into a Managed texture and synchronize it.
+    id<MTLCommandBuffer> direct = [queue commandBuffer];
+    draw(direct, managedTarget);
+    blit = [direct blitCommandEncoder];
+    [blit synchronizeResource:managedTarget];
+    [blit endEncoding];
+    [direct commit];
+    [direct waitUntilCompleted];
+
+    NSMutableData *textureBytes = [NSMutableData dataWithLength:width * height * 4];
+    NSMutableData *directBytes = [NSMutableData dataWithLength:width * height * 4];
+    [managedCopy getBytes:textureBytes.mutableBytes bytesPerRow:width * 4
+               fromRegion:MTLRegionMake2D(0, 0, width, height) mipmapLevel:0];
+    [managedTarget getBytes:directBytes.mutableBytes bytesPerRow:width * 4
+                 fromRegion:MTLRegionMake2D(0, 0, width, height) mipmapLevel:0];
+    struct { NSString *path; const UInt8 *bytes; id<MTLCommandBuffer> command; } paths[] = {
+        { @"private->shared-buffer", shared.contents, copyShared },
+        { @"private->managed-buffer+sync", managed.contents, copyManaged },
+        { @"private->managed-texture+sync", textureBytes.bytes, copyTexture },
+        { @"render-into-managed-texture+sync", directBytes.bytes, direct },
+    };
+    for (size_t i = 0; i < 4; ++i) {
+        NSMutableDictionary *row = [@{ @"width": @(width), @"height": @(height), @"format": @"RGBA8",
+                                       @"geometry": @"fullscreen-triangle", @"path": paths[i].path,
+                                       @"render": renderStatus,
+                                       @"command": paths[i].command.status == MTLCommandBufferStatusCompleted ?
+                                           @"ok" : @"failed" } mutableCopy];
+        identityStats(paths[i].bytes, width, height, YES, NO, row);
+        [rows addObject:row];
+    }
+    return rows;
 }
 
 static NSArray *identityMatrix(id<MTLDevice> device, id<MTLLibrary> library, id<MTLCommandQueue> queue,
@@ -610,28 +719,6 @@ static int renderChild(NSString *outputPath, unsigned long long expiry) {
     NSData *data = [NSJSONSerialization dataWithJSONObject:result options:0 error:nil];
     [data writeToFile:outputPath atomically:NO];
     return 0;
-}
-
-static NSDictionary *renderChildRun(const char *selfPath, unsigned long long expiry, NSString *binning) {
-    NSString *output = [NSString stringWithFormat:@"/var/tmp/rgpu-render-%d-%@.json", getpid(), binning];
-    [[NSFileManager defaultManager] removeItemAtPath:output error:nil];
-    NSTask *task = [[NSTask alloc] init];
-    task.launchPath = @(selfPath);
-    task.arguments = @[ @"--render-child", output, [NSString stringWithFormat:@"%llu", expiry] ];
-    NSMutableDictionary *environment = [[[NSProcessInfo processInfo] environment] mutableCopy];
-    environment[@"AMD_ENABLE_PRIM_BATCH_BINNING"] = binning;
-    task.environment = environment;
-    task.standardOutput = [NSFileHandle fileHandleWithNullDevice];
-    task.standardError = [NSFileHandle fileHandleWithNullDevice];
-    @try { [task launch]; }
-    @catch (NSException *exception) { return @{ @"error": @"launch-failed" }; }
-    double start = CACurrentMediaTime();
-    while (task.isRunning && CACurrentMediaTime() - start < 8.0) usleep(50000);
-    if (task.isRunning) { [task terminate]; return @{ @"error": @"timeout" }; }
-    NSData *data = [NSData dataWithContentsOfFile:output];
-    [[NSFileManager defaultManager] removeItemAtPath:output error:nil];
-    id parsed = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
-    return parsed ?: @{ @"error": @"no report", @"status": @(task.terminationStatus) };
 }
 
 // Child mode, run in the console user's session: a borderless window whose
@@ -956,7 +1043,7 @@ int main(int argc, const char *argv[]) {
         alarm(45);
         report = [@{ @"run_id": argc > 1 ? @(argv[1]) : @"manual", @"passed": @NO,
                      @"completed_command_buffers": @0, @"values_checked": @0,
-                     @"probe_version": @5 } mutableCopy];
+                     @"probe_version": @6 } mutableCopy];
         char *end = NULL;
         unsigned long long expiry = argc == 3 ? strtoull(argv[2], &end, 10) : 0;
         if (argc != 3 || end == NULL || *end != '\0' || (unsigned long long)time(NULL) > expiry)
@@ -1043,8 +1130,12 @@ int main(int argc, const char *argv[]) {
         id<MTLLibrary> identityLibrary = compileLibrary(device, kIdentitySource, @"identity", shaderErrors);
         if (library) report[@"offscreen"] = offscreenThroughput(device, library, queue);
         report[@"identity"] = identityMatrix(device, identityLibrary, queue, YES);
-        report[@"render_children"] = @[ renderChildRun(argv[0], expiry, @"0"),
-                                        renderChildRun(argv[0], expiry, @"1") ];
+        NSMutableArray *readback = [NSMutableArray array];
+        [readback addObjectsFromArray:readbackMatrix(device, identityLibrary, queue, 64, 64,
+                                                     MTLClearColorMake(0.25, 0.25, 0.25, 0.25))];
+        [readback addObjectsFromArray:readbackMatrix(device, identityLibrary, queue, 1280, 1024,
+                                                     MTLClearColorMake(0, 0, 0, 0))];
+        report[@"readback_matrix"] = readback;
 
         NSMutableArray *jpegs = [NSMutableArray array];
         if (displayCount > 0) {

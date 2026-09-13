@@ -1142,6 +1142,16 @@ Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0
         self.assertEqual(summary['binning_env_identity_mismatches'], {'0': [[1280, 1024, 'BGRA8', 'quad', 0]]})
         self.assertEqual(summary['window_drawable_wrong'], 0)
 
+    def test_probe_summary_keeps_readback_matrix(self):
+        c = self.classifier()
+        result = {'passed': True, 'run_id': 'nonce',
+                  'readback_matrix': [{'width': 64, 'height': 64, 'path': 'private->shared-buffer',
+                                       'mismatches': 3840, 'top_displacements': [[8, 8, 256]]}]}
+        probe = {'run_id': 'nonce', 'transport_exit': 0,
+                 'output': 'RGPU_DESKTOP_METAL_RESULT ' + json.dumps(result) + '\nRGPU_EXIT nonce 0\n'}
+        summary = c._probe_summary({'run_id': 'nonce'}, probe)
+        self.assertEqual(summary['readback_mismatches'], [[64, 64, 'private->shared-buffer', 3840]])
+
     def test_capture_loss_keeps_bound_positive_probe_summary(self):
         # A passing probe under capture loss stays INCONCLUSIVE (not promoted),
         # but the raw nonce-bound result must remain visible in the verdict.
