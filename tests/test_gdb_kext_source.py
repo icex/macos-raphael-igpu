@@ -94,6 +94,12 @@ class GdbKextSourceTests(unittest.TestCase):
         self.assertIn("gdb.BP_HARDWARE_BREAKPOINT", text)
         self.assertIn("a+0x84", text)
         self.assertIn("a+0x30", text)
+        self.assertIn("a+0xc0", text)
+        self.assertIn("a+0xe0", text)
+        self.assertIn("timestamp_memory32", text)
+        self.assertIn("safe_canonical(label+'-ring-descriptor',ring,0x100)", text)
+        self.assertIn("safe('kiq-channel-descriptor',selfp,0x100)", text)
+        self.assertIn("safe('kiq-channel-descriptor-return',selfp,0x100)", text)
         self.assertIn("result=int(gdb.parse_and_eval('$rax')) & 0xff", text)
         self.assertIn("return_bp.delete()", text)
         self.assertNotIn("delete 3", text)
@@ -132,11 +138,20 @@ class GdbKextSourceTests(unittest.TestCase):
         fake = FakeGdb(); gdbmod = fake
         def read(addr, size):
             state['reads'].append((addr, size))
-            returns = {0x8100: 0x9000, 0x8200: 0x9100}
+            returns = {0x8100: 0x9000, 0x8200: 0x9100,
+                       0x1000 + 0x30: 0x6000}
             if size == 8 and addr in returns:
                 return returns[addr].to_bytes(8, 'little')
             if addr in (0x1000 + 0x80, 0x1000 + 0x84, 0x1000 + 0x30):
                 return (1).to_bytes(4, 'little') * (size // 4)
+            if addr == 0x1000 + 0xc0 and size == 8:
+                return (0x7000).to_bytes(8, 'little')
+            if addr == 0x1000 + 0xe0 and size == 4:
+                return (0xffffffff).to_bytes(4, 'little')
+            if addr == 0x7000 and size == 4:
+                return bytes(range(1, 5))
+            if addr == 0x6000 and size == 0x100:
+                return bytes(range(0x100))
             return b'\0' * size
         wa, sa = 0x2000, 0x3000
         events.extend([
@@ -149,15 +164,22 @@ class GdbKextSourceTests(unittest.TestCase):
         ])
         channel_src = 'def channel_state' + text.split('def channel_state', 1)[1].split('kh=read', 1)[0]
         safe_src = 'def safe' + text.split('def safe', 1)[1].split('def channel_state', 1)[0]
+        canonical_src = 'def canonical' + text.split('def canonical', 1)[1].split('def channel_state', 1)[0]
         ns = {'gdb': gdbmod, 'struct': struct, 'read': read,
               'wa': wa, 'sa': sa, 'WAIT_OFFSET': 0, 'SUBMIT_OFFSET': 0,
               'time': types.SimpleNamespace(monotonic=lambda: 1.0)}
         exec(channel_src, ns)
         exec(safe_src, ns)
+        exec(canonical_src, ns)
         exec('class ReturnBP(gdb.Breakpoint):\n' + block, ns)
         self.assertTrue(state['detached'])
         self.assertTrue(any(addr == 0x1000 + 0x84 for addr, _ in state['reads']))
         self.assertTrue(any(addr == 0x1000 + 0x30 for addr, _ in state['reads']))
+        self.assertTrue(any(addr == 0x1000 + 0xc0 for addr, _ in state['reads']))
+        self.assertTrue(any(addr == 0x1000 + 0xe0 for addr, _ in state['reads']))
+        self.assertTrue(any(addr == 0x7000 and size == 4 for addr, size in state['reads']))
+        self.assertTrue(any(addr == 0x6000 and size == 0x100 for addr, size in state['reads']))
+        self.assertTrue(any(addr == 0x1000 and size == 0x100 for addr, size in state['reads']))
     def test_kernel_relocation_includes_fileset_offset(self):
         self.assertEqual(tool.kernel_relocation(0xffffff801b6e8000,
                                                 0xffffff8000200000), 0x1b4e8000)

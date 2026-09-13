@@ -332,15 +332,32 @@ inf=gdb.selected_inferior()
 def read(a,n):
     if n < 0 or n > MAX_HEADER: raise gdb.GdbError('bounded read refused')
     return bytes(inf.read_memory(a,n))
-def safe(label,a):
-    try: print('%s address=%#x bytes=%s' % (label,a,read(a,64).hex()))
+def safe(label,a,n=64):
+    n=max(0,min(int(n),256))
+    try: print('%s address=%#x bytes=%s' % (label,a,read(a,n).hex()))
     except Exception as e: print('%s unavailable=%s' % (label,e))
+def canonical(a):
+    return a != 0 and (a <= 0x00007fffffffffff or a >= 0xffff800000000000)
+def safe_canonical(label,a,n=0x100):
+    if not canonical(a): print('%s unavailable=noncanonical address=%#x' % (label,a)); return
+    safe(label,a,n)
 def channel_state(label,a):
     try:
         requested=struct.unpack('<I',read(a+0x80,4))[0]
         stamp=struct.unpack('<I',read(a+0x84,4))[0]
         ring=struct.unpack('<Q',read(a+0x30,8))[0]
-        print('%s self=%#x requested_stamp=%u current_stamp=%u ring=%#x' % (label,a,requested,stamp,ring))
+        timestamp=struct.unpack('<Q',read(a+0xc0,8))[0]
+        mode=struct.unpack('<I',read(a+0xe0,4))[0]
+        timestamp_ok = canonical(timestamp)
+        print('%s self=%#x requested_stamp=%u current_stamp=%u ring=%#x timestamp_cpu=%#x mode_raw=%#x timestamp_canonical=%u' %
+              (label,a,requested,stamp,ring,timestamp,mode,timestamp_ok))
+        if timestamp_ok and mode == 0xffffffff:
+            fence=read(timestamp,4)
+            print('%s timestamp_memory32=%s' % (label,fence.hex()))
+        else:
+            print('%s timestamp_memory32=not-read mode_raw=%#x' % (label,mode))
+        if canonical(ring): safe_canonical(label+'-ring-descriptor',ring,0x100)
+        else: print('%s-ring-descriptor unavailable=noncanonical address=%#x' % (label,ring))
     except Exception as e: print('%s unavailable=%s' % (label,e))
 kh=read(KERNEL_RUNTIME_TEXT,32); _,_,_,_,kn,kbytes,_,_=struct.unpack_from('<IiiIIIII',kh)
 if kbytes > MAX_HEADER-32: raise gdb.GdbError('kernel commands exceed cap')
@@ -381,11 +398,15 @@ while True:
         entry=pc; wait_bp.enabled=False; rsp=int(gdb.parse_and_eval('$rsp')); ret=struct.unpack('<Q',read(rsp,8))[0]
         selfp=int(gdb.parse_and_eval('$rdi')) & ((1<<64)-1); stamp=(int(gdb.parse_and_eval('$rsi')) & 0xffffffff) if pc==wa else None; started=time.monotonic()
         print('KIQ_ENTRY kind=%s self=%#x stamp=%s a=%#x b=%#x spec=%#x out=%#x rsp=%#x return=%#x thread=%s' % ('waitForHwStamp' if pc==wa else 'submitKIQFrame',selfp,stamp if stamp is not None else 'none',int(gdb.parse_and_eval('$rsi')),int(gdb.parse_and_eval('$rdx')),int(gdb.parse_and_eval('$rcx')),int(gdb.parse_and_eval('$r8')),rsp,ret,str(gdb.selected_thread().ptid)))
-        channel_state('kiq-channel-entry',selfp); safe('kiq-channel-self',selfp); return_bp=ReturnBP(ret,rsp+8); continue
+        channel_state('kiq-channel-entry',selfp); safe('kiq-channel-self',selfp)
+        safe('kiq-channel-descriptor',selfp,0x100)
+        return_bp=ReturnBP(ret,rsp+8); continue
     if ret is None or pc != ret or int(gdb.parse_and_eval('$rsp')) != rsp+8: raise gdb.GdbError('KIQ return stop identity mismatch')
     result=int(gdb.parse_and_eval('$rax')) & 0xff
     print('KIQ_RETURN kind=%s self=%#x stamp=%s result=%#x elapsed_ms=%.3f thread=%s' % ('waitForHwStamp' if entry==wa else 'submitKIQFrame',selfp,stamp if stamp is not None else 'none',result,(time.monotonic()-started)*1000,str(gdb.selected_thread().ptid)))
-    channel_state('kiq-channel-return',selfp); safe('kiq-channel-return',selfp); return_bp.delete(); return_bp=None; wait_bp.enabled=True
+    channel_state('kiq-channel-return',selfp); safe('kiq-channel-return',selfp)
+    safe('kiq-channel-descriptor-return',selfp,0x100)
+    return_bp.delete(); return_bp=None; wait_bp.enabled=True
     if entry==wa and result==0: print('KIQ_WAIT_FAILURE result=0 stamp=%u' % stamp); break
     ret=None
 print('KIQ_CAPTURE_COMPLETE'); gdb.execute('detach'); print('KIQ_DETACHED'); gdb.execute('quit')

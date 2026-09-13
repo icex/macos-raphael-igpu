@@ -5,6 +5,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import contextlib
+import io
 from unittest import mock
 from pathlib import Path
 from unittest.mock import patch
@@ -52,6 +54,37 @@ class RunnerTests(unittest.TestCase):
         with patch.object(tool, 'verify_port'), patch.object(sys, 'argv', argv):
             tool.main()
         return output
+
+    def test_rejects_kernel_symbols_identical_to_raphael_dsym(self):
+        root, generator, gdb = self.fixture('')
+        shared = str(root / 'RaphaelGPU.dSYM')
+        argv = ['runner', '--supervision', str(root / 'supervision.json'),
+                '--output', str(root / 'output'), '--build-id', self.BUILD,
+                '--gdb', str(gdb), '--generator', str(generator),
+                '--kernel-symbols', shared, '--raphael-binary', '/tmp/raphael',
+                '--raphael-dsym', shared, '--scenario', 'vmid1-root']
+        stderr = io.StringIO()
+        with patch.object(sys, 'argv', argv), contextlib.redirect_stderr(stderr):
+            with self.assertRaises(SystemExit) as raised:
+                tool.main()
+        self.assertEqual(raised.exception.code, 2)
+        self.assertIn('--kernel-symbols must be distinct', stderr.getvalue())
+
+    def test_rejects_kernel_dwarf_inside_raphael_dsym(self):
+        root, generator, gdb = self.fixture('')
+        dsym = root / 'RaphaelGPU.dSYM'
+        dwarf = dsym / 'Contents' / 'Resources' / 'DWARF' / 'RaphaelGPU'
+        argv = ['runner', '--supervision', str(root / 'supervision.json'),
+                '--output', str(root / 'output'), '--build-id', self.BUILD,
+                '--gdb', str(gdb), '--generator', str(generator),
+                '--kernel-symbols', str(dwarf), '--raphael-binary', '/tmp/raphael',
+                '--raphael-dsym', str(dsym), '--scenario', 'vmid1-root']
+        stderr = io.StringIO()
+        with patch.object(sys, 'argv', argv), contextlib.redirect_stderr(stderr):
+            with self.assertRaises(SystemExit) as raised:
+                tool.main()
+        self.assertEqual(raised.exception.code, 2)
+        self.assertIn('--kernel-symbols must be distinct', stderr.getvalue())
 
     def post_probe_record(self, root):
         manifest = root / 'manifest.json'
