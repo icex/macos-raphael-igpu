@@ -97,7 +97,8 @@ elif command == "systemctl":
         executable = saved[saved.index("--") + 1:]
         print("ExecStart={ argv[]=" + " ".join(executable) + " ; }")
 elif command == "busctl":
-    rows = [["sleep:idle", "fixture", "reason", "block", 1000, 123]] if state.get(
+    rows = [[state.get("inhibitor_what", "sleep:idle"), "fixture", "reason",
+             state.get("inhibitor_mode", "block"), 1000, 123]] if state.get(
         "logind_inhibited") else []
     if state.get("malformed_inhibitor"):
         rows.append(["broken"])
@@ -237,6 +238,22 @@ class SupervisionTests(unittest.TestCase):
                   and any(a.startswith('--unit=rgpu-serial-') for a in args)][0]
         self.assertNotIn(str(self.vm/'bin/systemd-inhibit'), serial)
         self.assertIn(str(self.vm/'sercat.py'), serial)
+
+    def test_headless_collector_accepts_idle_only_block_inhibitor(self):
+        self.env["GENERIC_GRAPHICS"] = "off"
+        self.fixture.update(logind_inhibited=True, inhibitor_what="idle"); self.save()
+        result = self.arm()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_headless_collector_rejects_sleep_only_or_delay_inhibitor(self):
+        self.env["GENERIC_GRAPHICS"] = "off"
+        for what, mode in (("sleep", "block"), ("idle", "delay")):
+            with self.subTest(what=what, mode=mode):
+                self.fixture.update(logind_inhibited=True, inhibitor_what=what,
+                                    inhibitor_mode=mode); self.save()
+                result = self.arm()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('block inhibitor', result.stderr)
 
     def test_headless_collector_refuses_without_logind_block_inhibitor(self):
         self.env["GENERIC_GRAPHICS"] = "off"
