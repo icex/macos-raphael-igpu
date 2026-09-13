@@ -537,3 +537,15 @@ first 0xd10-dword draw IB. Next: candidate 213 prints the whole pending command
 buffer through Apple's `mapCmdBuffers` from the restart report path and
 evaluates every `WAIT_REG_MEM` target (register value or GART memory) plus the
 `CP_COHER_*`/`CP_ME_COHER_*` registers.
+
+## Boot-launch ledger extension for candidate 213 (2026-09-13)
+
+The ledger for boot `c369c74e-96ff-4c21-ae85-80ccb269f7d2` is exhausted (three
+launches: candidates 210, 211, 212). The user authorized extending it with an
+explicit note. Candidate 213 is launch 4 on this boot, taken through the
+`--manual-reuse --ack-risk` override, which appends a `manual_override` row and
+leaves `max_launches` at 3. Precondition: a fresh SMU MODE2 reset receipt
+(`run/mode2-reset-3.json`) showing `RLC_CNTL=0` and `CP_STAT=0` immediately
+before staging; host must still be vfio-pci and accessible. No launch beyond
+this one is covered by this note.
+
