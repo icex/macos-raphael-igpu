@@ -1128,6 +1128,20 @@ Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0
         self.assertNotIn('jpegs', summary)
         self.assertNotIn('offscreen_first_mismatches', summary)
 
+    def test_probe_summary_keeps_identity_matrix_and_binning_children(self):
+        c = self.classifier()
+        row = {'width': 1280, 'height': 1024, 'format': 'BGRA8', 'geometry': 'quad',
+               'mismatches': 7, 'block16_map_base64': 'AAAA'}
+        result = {'passed': True, 'run_id': 'nonce', 'identity': [row],
+                  'render_children': [{'AMD_ENABLE_PRIM_BATCH_BINNING': '0', 'identity': [dict(row, mismatches=0)]}],
+                  'window_test': {'child': {'drawable_readback': {'wrong': 0, 'checked': 10}}}}
+        probe = {'run_id': 'nonce', 'transport_exit': 0,
+                 'output': 'RGPU_DESKTOP_METAL_RESULT ' + json.dumps(result) + '\nRGPU_EXIT nonce 0\n'}
+        summary = c._probe_summary({'run_id': 'nonce'}, probe)
+        self.assertEqual(summary['identity_mismatches'], [[1280, 1024, 'BGRA8', 'quad', 7]])
+        self.assertEqual(summary['binning_env_identity_mismatches'], {'0': [[1280, 1024, 'BGRA8', 'quad', 0]]})
+        self.assertEqual(summary['window_drawable_wrong'], 0)
+
     def test_capture_loss_keeps_bound_positive_probe_summary(self):
         # A passing probe under capture loss stays INCONCLUSIVE (not promoted),
         # but the raw nonce-bound result must remain visible in the verdict.

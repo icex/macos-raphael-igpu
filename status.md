@@ -1092,3 +1092,26 @@ runs from `run/candidate-218-attempt-nobatch` as launch 19 on boot `c369c74e`, t
 `--manual-reuse --ack-risk` under the user's standing instruction, after
 `run/mode2-reset-18.json`. This note covers this one launch.
 
+
+## Settings-file attempt: no effect; the parser is dead code (2026-09-14)
+
+Run `415effc60ef97b24c6bb3d4dc208f7cf`, card `metal-060` (commit `868d024`), 1.0.218 build
+`10cce4d8...`, launch 19 after `run/mode2-reset-18.json`. Verdict `CORE_PROBE_PASS`,
+recovery `recovered`, shutdown `exited-after-guest-request`.
+
+- The offscreen readback was bit-identical to launch 18 (frame hash `8b276dc2f0e4f99a`,
+  718 of 736 samples wrong) and the desktop JPEG unchanged, so the corruption is
+  deterministic and the file changed nothing.
+- Disassembly explains it: the `/AmdMtlSettingsFile.txt` parser at `x+0x10d400` in the
+  driver's `__TEXT` has no callers in this release build. The live path is the
+  environment reader called from device settings initialization, which maps
+  `AMD_ENABLE_PRIM_BATCH_BINNING` (atoi & 1) to bit 41; bit 41 is consumed when the
+  command writer emits binning flush events.
+- The window child this time submitted only 42 frames in 4.4 s (366 before) and again
+  reported no presented frames.
+
+Next: desktop probe v5 re-runs the offscreen test and a new exact pixel-identity matrix
+(64² to 1280x1024, BGRA8/RGBA8, triangle/quad) in child processes with
+`AMD_ENABLE_PRIM_BATCH_BINNING=0` and `=1`, and runs the window child as uid 501 with its
+own drawable readback and window self-capture. The inert settings file and
+`/etc/synthetic.conf` are removed from the guest.

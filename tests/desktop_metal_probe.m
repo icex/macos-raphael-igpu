@@ -3,10 +3,12 @@
 // - which Metal device drives each active display, with display identity and the
 //   framebuffer registry entries behind it;
 // - which processes (WindowServer in particular) hold IOAccelerator user clients;
-// - offscreen render throughput with a readback check of the rendered pixels;
-// - a borderless CAMetalLayer window in the console user's session drawing a known
-//   color pattern with a moving bar, checked pixel by pixel in the root display
-//   capture, with its presentation rate;
+// - offscreen render throughput with a readback check of the rendered pixels, plus an
+//   exact pixel-identity test (each pixel encodes its own coordinates) across target
+//   sizes, repeated in child processes with AMD_ENABLE_PRIM_BATCH_BINNING=0 and =1;
+// - a borderless CAMetalLayer window run as the console user drawing a known color
+//   pattern with a moving bar, checked in its own drawable readback, in its own window
+//   capture, and in the root display capture, with its presentation counts;
 // - small JPEGs (desktop thumbnail and full-resolution window crops) for the record.
 // Only the compute check gates "passed"; everything else is recorded evidence.
 #import <Foundation/Foundation.h>
@@ -41,6 +43,13 @@ static NSString *const kShaderSource =
      "fragment float4 solid(V in [[stage_in]]) { return float4(1, 1, 0, 1); }\n"
      "fragment float4 ramp(V in [[stage_in]], constant float4 &u [[buffer(0)]]) {\n"
      "  return float4(fract(in.p.x / 64.0), fract(in.p.y / 64.0), u.z, 1); }\n"
+     "vertex V quad(uint id [[vertex_id]]) {\n"
+     "  const float2 q[6] = { float2(-1, -1), float2(1, -1), float2(-1, 1), float2(-1, 1), float2(1, -1), float2(1, 1) };\n"
+     "  V v; v.p = float4(q[id], 0, 1); return v; }\n"
+     "fragment float4 ident(V in [[stage_in]]) {\n"
+     "  uint x = uint(in.p.x), y = uint(in.p.y);\n"
+     "  return float4(float(x & 255u) / 255.0, float(y & 255u) / 255.0,\n"
+     "                float(((x >> 8) & 15u) | (((y >> 8) & 15u) << 4)) / 255.0, 1); }\n"
      "fragment float4 pattern(V in [[stage_in]], constant float4 &u [[buffer(0)]]) {\n"
      "  float2 uv = in.p.xy / u.xy;\n"
      "  if (uv.y > 0.45 && uv.y < 0.55)\n"
@@ -80,14 +89,20 @@ static NSString *fnvHex(const UInt8 *bytes, size_t length) {
     return [NSString stringWithFormat:@"%016llx", hash];
 }
 
-static id<MTLRenderPipelineState> renderPipeline(id<MTLDevice> device, id<MTLLibrary> library,
-                                                NSString *vertex, NSString *fragment) {
+static id<MTLRenderPipelineState> renderPipelineFormat(id<MTLDevice> device, id<MTLLibrary> library,
+                                                      NSString *vertex, NSString *fragment,
+                                                      MTLPixelFormat format) {
     MTLRenderPipelineDescriptor *descriptor = [[MTLRenderPipelineDescriptor alloc] init];
     descriptor.vertexFunction = [library newFunctionWithName:vertex];
     descriptor.fragmentFunction = [library newFunctionWithName:fragment];
-    descriptor.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
+    descriptor.colorAttachments[0].pixelFormat = format;
     if (!descriptor.vertexFunction || !descriptor.fragmentFunction) return nil;
     return [device newRenderPipelineStateWithDescriptor:descriptor error:nil];
+}
+
+static id<MTLRenderPipelineState> renderPipeline(id<MTLDevice> device, id<MTLLibrary> library,
+                                                NSString *vertex, NSString *fragment) {
+    return renderPipelineFormat(device, library, vertex, fragment, MTLPixelFormatBGRA8Unorm);
 }
 
 static NSArray *acceleratorEvidence(uint64_t metalRegistryId, BOOL *windowServerClient) {
@@ -403,6 +418,192 @@ static NSDictionary *offscreenThroughput(id<MTLDevice> device, id<MTLLibrary> li
     return result;
 }
 
+static NSDictionary *checkPatternRegion(CGImageRef image, CGRect region, NSString *label, NSMutableArray *jpegs);
+
+// Exact pixel identity: every pixel encodes its own coordinates, so a readback shows
+// for each pixel which position's value landed there. Records mismatches, unwritten
+// pixels, the most common displacements, how many 8x8 tiles move as a unit, and
+// optionally a per-16x16-block displacement map (int16 dx, dy of each block's first
+// pixel, little-endian, base64).
+static NSDictionary *identityTest(id<MTLDevice> device, id<MTLLibrary> library, id<MTLCommandQueue> queue,
+                                  NSUInteger width, NSUInteger height, BOOL rgba, BOOL quad, BOOL wantMap) {
+    MTLPixelFormat format = rgba ? MTLPixelFormatRGBA8Unorm : MTLPixelFormatBGRA8Unorm;
+    NSMutableDictionary *result = [@{ @"width": @(width), @"height": @(height),
+                                      @"format": rgba ? @"RGBA8" : @"BGRA8",
+                                      @"geometry": quad ? @"quad" : @"fullscreen-triangle" } mutableCopy];
+    id<MTLRenderPipelineState> pipeline =
+        renderPipelineFormat(device, library, quad ? @"quad" : @"fullscreen", @"ident", format);
+    MTLTextureDescriptor *descriptor = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:format
+                                                                                          width:width height:height mipmapped:NO];
+    descriptor.usage = MTLTextureUsageRenderTarget;
+    descriptor.storageMode = MTLStorageModePrivate;
+    id<MTLTexture> target = [device newTextureWithDescriptor:descriptor];
+    id<MTLBuffer> readback = [device newBufferWithLength:width * height * 4 options:MTLResourceStorageModeShared];
+    if (!pipeline || !target || !readback) { result[@"error"] = @"setup"; return result; }
+    MTLRenderPassDescriptor *pass = [MTLRenderPassDescriptor renderPassDescriptor];
+    pass.colorAttachments[0].texture = target;
+    pass.colorAttachments[0].loadAction = MTLLoadActionClear;
+    pass.colorAttachments[0].clearColor = MTLClearColorMake(0, 0, 0, 0);
+    pass.colorAttachments[0].storeAction = MTLStoreActionStore;
+    id<MTLCommandBuffer> command = [queue commandBuffer];
+    id<MTLRenderCommandEncoder> encoder = [command renderCommandEncoderWithDescriptor:pass];
+    [encoder setRenderPipelineState:pipeline];
+    [encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:quad ? 6 : 3];
+    [encoder endEncoding];
+    id<MTLBlitCommandEncoder> blit = [command blitCommandEncoder];
+    [blit copyFromTexture:target sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0, 0, 0)
+               sourceSize:MTLSizeMake(width, height, 1) toBuffer:readback destinationOffset:0
+   destinationBytesPerRow:width * 4 destinationBytesPerImage:width * height * 4];
+    [blit endEncoding];
+    [command commit];
+    [command waitUntilCompleted];
+    if (command.status != MTLCommandBufferStatusCompleted) { result[@"error"] = @"command"; return result; }
+    const UInt8 *bytes = readback.contents;
+    // Small open-addressing histogram of (dx, dy).
+    enum { kSlots = 4096 };
+    int32_t keyDx[kSlots], keyDy[kSlots];
+    uint32_t counts[kSlots];
+    memset(counts, 0, sizeof(counts));
+    NSUInteger mismatches = 0, unwritten = 0, overflow = 0;
+    NSUInteger blocksW = (width + 15) / 16, blocksH = (height + 15) / 16;
+    NSMutableData *map = wantMap ? [NSMutableData dataWithLength:blocksW * blocksH * 4] : nil;
+    for (NSUInteger y = 0; y < height; ++y) {
+        for (NSUInteger x = 0; x < width; ++x) {
+            const UInt8 *p = bytes + (y * width + x) * 4;
+            int r = rgba ? p[0] : p[2], g = p[1], b = rgba ? p[2] : p[0], a = p[3];
+            int dx = 0, dy = 0;
+            if (a != 255) {
+                ++unwritten;
+                dx = 0x7fff; dy = 0x7fff;
+            } else {
+                int sx = r | ((b & 15) << 8), sy = g | ((b >> 4) << 8);
+                dx = sx - (int)x; dy = sy - (int)y;
+            }
+            if (dx || dy) {
+                ++mismatches;
+                uint32_t h = (((uint32_t)dx * 73856093u) ^ ((uint32_t)dy * 19349663u)) & (kSlots - 1);
+                unsigned probes = 0;
+                while (counts[h] && (keyDx[h] != dx || keyDy[h] != dy) && probes < kSlots) {
+                    h = (h + 1) & (kSlots - 1); ++probes;
+                }
+                if (probes >= kSlots) ++overflow;
+                else { keyDx[h] = dx; keyDy[h] = dy; ++counts[h]; }
+            }
+            if (map && x % 16 == 0 && y % 16 == 0) {
+                int16_t *m = (int16_t *)map.mutableBytes + ((y / 16) * blocksW + x / 16) * 2;
+                m[0] = (int16_t)dx; m[1] = (int16_t)dy;
+            }
+        }
+    }
+    // Top displacements.
+    NSMutableArray *top = [NSMutableArray array];
+    for (int pick = 0; pick < 8; ++pick) {
+        int best = -1;
+        for (int i = 0; i < kSlots; ++i)
+            if (counts[i] && (best < 0 || counts[i] > counts[best])) best = i;
+        if (best < 0) break;
+        [top addObject:@[ @(keyDx[best]), @(keyDy[best]), @(counts[best]) ]];
+        counts[best] = 0;
+    }
+    // Tiles (8x8) whose pixels all share one displacement.
+    NSUInteger tiles = 0, uniformTiles = 0, displacedUniformTiles = 0;
+    for (NSUInteger ty = 0; ty + 8 <= height; ty += 8) {
+        for (NSUInteger tx = 0; tx + 8 <= width; tx += 8) {
+            ++tiles;
+            int firstDx = 0, firstDy = 0;
+            BOOL uniform = YES;
+            for (NSUInteger y = ty; y < ty + 8 && uniform; ++y) {
+                for (NSUInteger x = tx; x < tx + 8; ++x) {
+                    const UInt8 *p = bytes + (y * width + x) * 4;
+                    int r = rgba ? p[0] : p[2], g = p[1], b = rgba ? p[2] : p[0];
+                    int dx = (r | ((b & 15) << 8)) - (int)x, dy = (g | ((b >> 4) << 8)) - (int)y;
+                    if (y == ty && x == tx) { firstDx = dx; firstDy = dy; }
+                    else if (dx != firstDx || dy != firstDy) { uniform = NO; break; }
+                }
+            }
+            if (uniform) { ++uniformTiles; if (firstDx || firstDy) ++displacedUniformTiles; }
+        }
+    }
+    result[@"pixels"] = @(width * height);
+    result[@"mismatches"] = @(mismatches);
+    result[@"unwritten"] = @(unwritten);
+    result[@"histogram_overflow"] = @(overflow);
+    result[@"top_displacements"] = top;
+    result[@"tiles8"] = @(tiles);
+    result[@"uniform_tiles8"] = @(uniformTiles);
+    result[@"displaced_uniform_tiles8"] = @(displacedUniformTiles);
+    if (map) {
+        result[@"block16_map_w"] = @(blocksW);
+        result[@"block16_map_h"] = @(blocksH);
+        result[@"block16_map_base64"] = [map base64EncodedStringWithOptions:0];
+    }
+    return result;
+}
+
+static NSArray *identityMatrix(id<MTLDevice> device, id<MTLLibrary> library, id<MTLCommandQueue> queue,
+                               BOOL wantMap) {
+    NSMutableArray *rows = [NSMutableArray array];
+    const NSUInteger sizes[][2] = { { 64, 64 }, { 256, 256 }, { 512, 512 }, { 1024, 1024 }, { 1280, 1024 } };
+    for (size_t i = 0; i < sizeof(sizes) / sizeof(sizes[0]); ++i) {
+        @autoreleasepool {
+            [rows addObject:identityTest(device, library, queue, sizes[i][0], sizes[i][1], NO, NO,
+                                         wantMap && sizes[i][0] == 1280)];
+        }
+    }
+    @autoreleasepool {
+        [rows addObject:identityTest(device, library, queue, 1280, 1024, YES, NO, NO)];
+        [rows addObject:identityTest(device, library, queue, 1280, 1024, NO, YES, NO)];
+    }
+    return rows;
+}
+
+// Child mode for render tests under a different driver environment.
+static int renderChild(NSString *outputPath, unsigned long long expiry) {
+    NSMutableDictionary *result = [NSMutableDictionary dictionary];
+    const char *env = getenv("AMD_ENABLE_PRIM_BATCH_BINNING");
+    result[@"AMD_ENABLE_PRIM_BATCH_BINNING"] = env ? @(env) : [NSNull null];
+    signal(SIGALRM, deadline);
+    alarm(8);
+    if ((unsigned long long)time(NULL) <= expiry) {
+        id<MTLDevice> device = MTLCreateSystemDefaultDevice();
+        id<MTLLibrary> library = device ? [device newLibraryWithSource:kShaderSource options:nil error:nil] : nil;
+        id<MTLCommandQueue> queue = [device newCommandQueue];
+        if (library && queue) {
+            result[@"offscreen"] = offscreenThroughput(device, library, queue);
+            result[@"identity"] = identityMatrix(device, library, queue, NO);
+        } else {
+            result[@"error"] = @"device, library or queue";
+        }
+    } else {
+        result[@"error"] = @"expired";
+    }
+    NSData *data = [NSJSONSerialization dataWithJSONObject:result options:0 error:nil];
+    [data writeToFile:outputPath atomically:NO];
+    return 0;
+}
+
+static NSDictionary *renderChildRun(const char *selfPath, unsigned long long expiry, NSString *binning) {
+    NSString *output = [NSString stringWithFormat:@"/var/tmp/rgpu-render-%d-%@.json", getpid(), binning];
+    [[NSFileManager defaultManager] removeItemAtPath:output error:nil];
+    NSTask *task = [[NSTask alloc] init];
+    task.launchPath = @(selfPath);
+    task.arguments = @[ @"--render-child", output, [NSString stringWithFormat:@"%llu", expiry] ];
+    NSMutableDictionary *environment = [[[NSProcessInfo processInfo] environment] mutableCopy];
+    environment[@"AMD_ENABLE_PRIM_BATCH_BINNING"] = binning;
+    task.environment = environment;
+    task.standardOutput = [NSFileHandle fileHandleWithNullDevice];
+    task.standardError = [NSFileHandle fileHandleWithNullDevice];
+    @try { [task launch]; }
+    @catch (NSException *exception) { return @{ @"error": @"launch-failed" }; }
+    double start = CACurrentMediaTime();
+    while (task.isRunning && CACurrentMediaTime() - start < 8.0) usleep(50000);
+    if (task.isRunning) { [task terminate]; return @{ @"error": @"timeout" }; }
+    NSData *data = [NSData dataWithContentsOfFile:output];
+    [[NSFileManager defaultManager] removeItemAtPath:output error:nil];
+    id parsed = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+    return parsed ?: @{ @"error": @"no report", @"status": @(task.terminationStatus) };
+}
+
 // Child mode, run in the console user's session: a borderless window whose
 // CAMetalLayer shows the test pattern for four seconds. Writes a JSON report.
 static int windowChild(NSString *outputPath, unsigned long long expiry) {
@@ -441,7 +642,7 @@ static int windowChild(NSString *outputPath, unsigned long long expiry) {
     CAMetalLayer *layer = [CAMetalLayer layer];
     layer.device = device;
     layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
-    layer.framebufferOnly = YES;
+    layer.framebufferOnly = NO;
     layer.contentsScale = scale;
     layer.drawableSize = CGSizeMake(kWindowW * scale, kWindowH * scale);
     CGColorSpaceRef srgb = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
@@ -458,7 +659,15 @@ static int windowChild(NSString *outputPath, unsigned long long expiry) {
     result[@"window_number"] = @(window.windowNumber);
 
     NSObject *lock = [[NSObject alloc] init];
-    __block NSUInteger presented = 0, completedErrors = 0;
+    __block NSUInteger presented = 0, completedErrors = 0, presentedCallbacks = 0;
+    NSMutableArray *selfCaptures = [NSMutableArray array];
+    NSMutableArray *selfJpegs = [NSMutableArray array];
+    CGImageRef (*windowImage)(CGRect, uint32_t, uint32_t, uint32_t) =
+        (CGImageRef (*)(CGRect, uint32_t, uint32_t, uint32_t))dlsym(RTLD_DEFAULT, "CGWindowListCreateImage");
+    id<MTLBuffer> drawableReadback = [device newBufferWithLength:(NSUInteger)(kWindowW * scale) *
+                                                                 (NSUInteger)(kWindowH * scale) * 4
+                                                         options:MTLResourceStorageModeShared];
+    NSDictionary *drawableCheck = nil;
     __block double firstPresent = 0, lastPresent = 0;
     NSUInteger submitted = 0, missingDrawables = 0;
     id<MTLCommandBuffer> last = nil;
@@ -487,6 +696,7 @@ static int windowChild(NSString *outputPath, unsigned long long expiry) {
             [encoder endEncoding];
             [drawable addPresentedHandler:^(id<MTLDrawable> shown) {
                 CFTimeInterval when = shown.presentedTime;
+                @synchronized (lock) { ++presentedCallbacks; }
                 if (when <= 0) return;
                 @synchronized (lock) {
                     ++presented;
@@ -499,9 +709,69 @@ static int windowChild(NSString *outputPath, unsigned long long expiry) {
                     @synchronized (lock) { ++completedErrors; }
                 }
             }];
+            BOOL readThis = submitted == 20 && drawableReadback;
+            if (readThis) {
+                id<MTLBlitCommandEncoder> blit = [command blitCommandEncoder];
+                NSUInteger tw = drawable.texture.width, th = drawable.texture.height;
+                [blit copyFromTexture:drawable.texture sourceSlice:0 sourceLevel:0
+                         sourceOrigin:MTLOriginMake(0, 0, 0) sourceSize:MTLSizeMake(tw, th, 1)
+                             toBuffer:drawableReadback destinationOffset:0
+               destinationBytesPerRow:tw * 4 destinationBytesPerImage:tw * th * 4];
+                [blit endEncoding];
+            }
             [command presentDrawable:drawable];
             [command commit];
             last = command;
+            if (readThis) {
+                [command waitUntilCompleted];
+                NSUInteger tw = drawable.texture.width, th = drawable.texture.height;
+                const UInt8 *px = drawableReadback.contents;
+                struct { const char *name; double u, v; int r, g, b; } spots[] = {
+                    { "top_left_red", 0.25, 0.22, 255, 0, 0 }, { "top_right_green", 0.75, 0.22, 0, 255, 0 },
+                    { "bottom_left_blue", 0.25, 0.78, 0, 0, 255 }, { "bottom_right_white", 0.75, 0.78, 255, 255, 255 },
+                };
+                NSMutableDictionary *rows = [NSMutableDictionary dictionary];
+                BOOL all = YES;
+                for (size_t i = 0; i < 4; ++i) {
+                    const UInt8 *q = px + ((NSUInteger)(th * spots[i].v) * tw + (NSUInteger)(tw * spots[i].u)) * 4;
+                    BOOL match = q[2] == spots[i].r && q[1] == spots[i].g && q[0] == spots[i].b;
+                    all &= match;
+                    rows[@(spots[i].name)] = @[ @(q[2]), @(q[1]), @(q[0]), @(match) ];
+                }
+                NSUInteger wrongQuadrant = 0, checkedQuadrant = 0;
+                for (NSUInteger y = 0; y < th; y += 3) {
+                    double v = (y + 0.5) / th;
+                    if (v > 0.44 && v < 0.56) continue;
+                    for (NSUInteger x = 0; x < tw; x += 3) {
+                        double u = (x + 0.5) / tw;
+                        if (u > 0.49 && u < 0.51) continue;
+                        const UInt8 *q = px + (y * tw + x) * 4;
+                        int er = 0, eg = 0, eb = 0;
+                        if (v <= 0.45) { if (u < 0.5) er = 255; else eg = 255; }
+                        else if (u < 0.5) eb = 255; else { er = eg = eb = 255; }
+                        ++checkedQuadrant;
+                        wrongQuadrant += q[2] != er || q[1] != eg || q[0] != eb;
+                    }
+                }
+                drawableCheck = @{ @"samples": rows, @"pattern_match": @(all),
+                                   @"checked": @(checkedQuadrant), @"wrong": @(wrongQuadrant),
+                                   @"width": @(tw), @"height": @(th) };
+            }
+            double elapsed = CACurrentMediaTime() - start;
+            if (windowImage && ((selfCaptures.count == 0 && elapsed > 1.5) ||
+                                (selfCaptures.count == 1 && elapsed > 2.5))) {
+                CGImageRef shot = windowImage(CGRectNull, 8 /* IncludingWindow */,
+                                              (uint32_t)window.windowNumber, 1 | 8 /* IgnoreFraming|Best */);
+                NSString *label = selfCaptures.count == 0 ? @"self_1" : @"self_2";
+                if (shot) {
+                    size_t sw = CGImageGetWidth(shot), sh = CGImageGetHeight(shot);
+                    NSDictionary *check = checkPatternRegion(shot, CGRectMake(0, 0, sw, sh), label, selfJpegs);
+                    [selfCaptures addObject:check];
+                    CGImageRelease(shot);
+                } else {
+                    [selfCaptures addObject:@{ @"label": label, @"captured": @NO }];
+                }
+            }
             if (++submitted == 10) {
                 NSUInteger shown;
                 @synchronized (lock) { shown = presented; }
@@ -517,22 +787,26 @@ static int windowChild(NSString *outputPath, unsigned long long expiry) {
     @synchronized (lock) {
         result[@"submitted_frames"] = @(submitted);
         result[@"presented_frames"] = @(presented);
+        result[@"presented_callbacks"] = @(presentedCallbacks);
         result[@"missing_drawables"] = @(missingDrawables);
         result[@"failed_command_buffers"] = @(completedErrors);
         result[@"present_fps"] = @(presented > 1 && lastPresent > firstPresent ?
                                    (presented - 1) / (lastPresent - firstPresent) : 0);
         result[@"submit_seconds"] = @(CACurrentMediaTime() - start);
     }
+    result[@"drawable_readback"] = drawableCheck ?: @{ @"error": @"not captured" };
+    result[@"self_captures"] = selfCaptures;
+    result[@"self_capture_symbol"] = @(windowImage != NULL);
+    result[@"self_jpegs"] = selfJpegs;
+    result[@"uid"] = @(getuid());
     [window orderOut:nil];
     [CATransaction flush];
     save();
     return 0;
 }
 
-static NSDictionary *checkPattern(CGImageRef image, CGFloat pixelScale, NSString *label, NSMutableArray *jpegs) {
+static NSDictionary *checkPatternRegion(CGImageRef image, CGRect region, NSString *label, NSMutableArray *jpegs) {
     if (!image) return @{ @"label": label, @"captured": @NO };
-    CGRect region = CGRectMake(floor(kWindowX * pixelScale), floor(kWindowY * pixelScale),
-                               floor(kWindowW * pixelScale), floor(kWindowH * pixelScale));
     size_t width = 0, height = 0;
     NSData *pixels = regionPixels(image, region, &width, &height);
     if (!pixels) return @{ @"label": label, @"captured": @NO, @"reason": @"region" };
@@ -573,6 +847,12 @@ static NSDictionary *checkPattern(CGImageRef image, CGFloat pixelScale, NSString
               @"region_fnv": fnvHex(bytes, pixels.length) };
 }
 
+static NSDictionary *checkPattern(CGImageRef image, CGFloat pixelScale, NSString *label, NSMutableArray *jpegs) {
+    CGRect region = CGRectMake(floor(kWindowX * pixelScale), floor(kWindowY * pixelScale),
+                               floor(kWindowW * pixelScale), floor(kWindowH * pixelScale));
+    return checkPatternRegion(image, region, label, jpegs);
+}
+
 static NSDictionary *windowTest(const char *selfPath, unsigned long long expiry, CGDirectDisplayID display,
                                 NSMutableArray *jpegs) {
     pid_t pid = getpid();
@@ -589,8 +869,8 @@ static NSDictionary *windowTest(const char *selfPath, unsigned long long expiry,
     chmod(child.fileSystemRepresentation, 0755);
     NSTask *task = [[NSTask alloc] init];
     task.launchPath = @"/bin/launchctl";
-    task.arguments = @[ @"asuser", @"501", child, @"--window-child", output,
-                        [NSString stringWithFormat:@"%llu", expiry] ];
+    task.arguments = @[ @"asuser", @"501", @"/usr/bin/sudo", @"-n", @"-u", @"#501", child,
+                        @"--window-child", output, [NSString stringWithFormat:@"%llu", expiry] ];
     task.standardOutput = [NSFileHandle fileHandleWithNullDevice];
     task.standardError = [NSFileHandle fileHandleWithNullDevice];
     @try { [task launch]; }
@@ -639,11 +919,13 @@ int main(int argc, const char *argv[]) {
     @autoreleasepool {
         if (argc == 4 && strcmp(argv[1], "--window-child") == 0)
             return windowChild(@(argv[2]), strtoull(argv[3], NULL, 10));
+        if (argc == 4 && strcmp(argv[1], "--render-child") == 0)
+            return renderChild(@(argv[2]), strtoull(argv[3], NULL, 10));
         signal(SIGALRM, deadline);
         alarm(45);
         report = [@{ @"run_id": argc > 1 ? @(argv[1]) : @"manual", @"passed": @NO,
                      @"completed_command_buffers": @0, @"values_checked": @0,
-                     @"probe_version": @4 } mutableCopy];
+                     @"probe_version": @5 } mutableCopy];
         char *end = NULL;
         unsigned long long expiry = argc == 3 ? strtoull(argv[2], &end, 10) : 0;
         if (argc != 3 || end == NULL || *end != '\0' || (unsigned long long)time(NULL) > expiry)
@@ -725,6 +1007,9 @@ int main(int argc, const char *argv[]) {
         report[@"screen_capture_preflight"] = @(CGPreflightScreenCaptureAccess());
 
         report[@"offscreen"] = offscreenThroughput(device, library, queue);
+        report[@"identity"] = identityMatrix(device, library, queue, YES);
+        report[@"render_children"] = @[ renderChildRun(argv[0], expiry, @"0"),
+                                        renderChildRun(argv[0], expiry, @"1") ];
 
         NSMutableArray *jpegs = [NSMutableArray array];
         if (displayCount > 0) {

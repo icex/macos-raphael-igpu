@@ -952,6 +952,20 @@ def _probe_summary(manifest, probe):
         for key in ('present_fps', 'presented_frames', 'submitted_frames', 'error'):
             if key in child:
                 summary['window_' + key] = child[key]
+        drawable = child.get('drawable_readback')
+        if isinstance(drawable, dict) and 'wrong' in drawable:
+            summary['window_drawable_wrong'] = drawable['wrong']
+
+    def identity_rows(rows):
+        return [[r.get('width'), r.get('height'), r.get('format'), r.get('geometry'), r.get('mismatches')]
+                for r in rows if isinstance(r, dict)] if isinstance(rows, list) else None
+    if identity_rows(result.get('identity')) is not None:
+        summary['identity_mismatches'] = identity_rows(result.get('identity'))
+    children = result.get('render_children')
+    if isinstance(children, list):
+        summary['binning_env_identity_mismatches'] = {
+            str(c.get('AMD_ENABLE_PRIM_BATCH_BINNING')): identity_rows(c.get('identity'))
+            for c in children if isinstance(c, dict)}
     return summary
 
 
