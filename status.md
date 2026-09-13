@@ -592,3 +592,43 @@ ledger with an explicit note. Candidates 212 and 213 each recovered cleanly
 MODE2 reset receipt `run/mode2-reset-4.json` with `RLC_CNTL=0` and `CP_STAT=0`
 immediately before staging. This note covers this one launch only.
 
+## Candidate 214 stuck-wait capture (2026-09-14)
+
+Run `8dd3e23ce282fc9856e68c2a91a6a1d8`, card `metal-048` (commit `54fd0b7`),
+source `8049d8a`, build `277b643dab5a4529b7a67710a54c468e`, boot `c369c74e`,
+launch 5 under its ledger note, after `run/mode2-reset-4.json`. Verdict
+`CORE_PROBE_PASS`; probe passed; recovery `recovered`; shutdown
+`exited-after-guest-request`; host after vfio-pci, accessible, no active VM.
+Evidence: `run/candidate-214-results/`; full IB decode in
+`findings/research/candidate214-stuck-ib-decoded.txt` (all 0xd10 dwords, every
+line checksum verified).
+
+- The ME is parked in the IB's only `WAIT_REG_MEM` at dword 0xbcf: memory
+  `0x400001000 == 0x11111115`, poll 10 ms. It follows `WRITE_DATA` of 4 to the
+  same address and opcode 0x49 (`0x514, 0x20000000, 0x400001000, 0x11111115`),
+  the same deferred fence packet the kernel emits after every ring IB. With
+  `QU_STALLED_ON_EOP_DONE_PULSE` and the whole 3D pipeline busy, this is a
+  pipeline-flush sync point: the fence is written only when the draws before it
+  finish, and they never do.
+- Draws before the wait: a depth-clear screen triangle (binning off), then DPBB
+  on (`PA_SC_BINNER_CNTL_0=0x19ffe00c`) for three instanced indexed draws
+  (`DRAW_INDEX_2` 0x3300, 0x22c8 and 0x96c0 indices, 111 instances) into a 4x MSAA
+  1280x1024 target with HTILE depth, then another screen triangle.
+- `GRBM_STATUS3` shows `PH_BUSY` with `GL1CC`, `GL2CC` and `UTCL1` idle, which
+  weakens a GL2 cache explanation.
+- Apple's restart report shows the gfx CP running Apple's Navi 23 microcode
+  (ME 0x40, PFP 0x58, CE 0x24, MEC 0x5c) under this chip's RLC (0x1f). GC 10.3.6
+  has its own CP microcode family (ME 0x0e, PFP 0x12, CE 0x03), same signing key,
+  same payload sizes.
+
+| Candidate | Change | GFX ring | Probe / verdict | Recovery |
+|---|---|---|---|---|
+| 213 | IB capture | stall; wait lost to console | passed / CORE_PROBE_PASS | recovered |
+| 214 | capture-time wait log, paced print | stall; wait decoded, full IB recovered | passed / CORE_PROBE_PASS | recovered |
+
+Blocking issue: the 3D pipeline never finishes WallpaperSequoia's first large
+draw. Candidate 215 tests two single-variable hypotheses from one binary:
+`rgpucpfw=1` loads gc_10_3_6 PFP/ME/CE microcode through the PSP (card
+`metal-049`), and `rgpunobin=1` sets `PA_SC_ENHANCE_1.DISABLE_SC_BINNING`
+(card `metal-050`).
+
