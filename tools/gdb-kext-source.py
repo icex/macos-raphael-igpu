@@ -499,15 +499,20 @@ entry_rdx=int(gdb.parse_and_eval('$rdx')) & ((1<<64)-1)
 entry_rcx=int(gdb.parse_and_eval('$rcx')) & ((1<<64)-1)
 entry_r8=int(gdb.parse_and_eval('$r8')) & ((1<<64)-1)
 entry_spec=entry_rcx; entry_out=entry_r8
-raw=read(entry_spec,12)
+raw=None
+try: raw=read(entry_spec,12)
+except Exception as error:
+    print('KIQ_START_ENTRY_SPEC_UNAVAILABLE spec=%#x error=%s' % (entry_spec,error))
 try: entry_return=struct.unpack('<Q',read(entry_rsp,8))[0]
 except Exception as error:
     print('KIQ_START_ENTRY_STACK_UNAVAILABLE rsp=%#x error=%s' % (entry_rsp,error))
 print('KIQ_START_ENTRY self=%#x a=%#x b=%#x spec=%#x out=%#x rsp=%#x return=%s spec_raw=%s thread=%s' %
       (entry_rdi,entry_rsi,entry_rdx,entry_spec,entry_out,entry_rsp,
-       ('%#x' % entry_return) if entry_return is not None else 'unavailable',raw.hex(),str(gdb.selected_thread().ptid)))
-if entry_return is None:
-    print('KIQ_START_CAPTURE_INCOMPLETE reason=entry-stack-unavailable native_boundary=unavailable return=unavailable')
+       ('%#x' % entry_return) if entry_return is not None else 'unavailable',
+       raw.hex() if raw is not None else 'unavailable',str(gdb.selected_thread().ptid)))
+if entry_return is None or raw is None:
+    reason='entry-stack-unavailable' if entry_return is None else 'entry-spec-unavailable'
+    print('KIQ_START_CAPTURE_INCOMPLETE reason=%s native_boundary=unavailable return=unavailable' % reason)
     gdb.execute('detach'); print('KIQ_START_DETACHED'); gdb.execute('quit')
 entry_bp.enabled=False
 entry_seen=True
