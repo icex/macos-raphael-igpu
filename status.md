@@ -1258,3 +1258,22 @@ Next candidates, cheapest first: the sampler-side swizzle enable
 (`LDS_CONFIG.VGPR_SWIZZLE_EN`, bit 1, reads 0 on Raphael; Navi23 uses
 `SQ_CONFIG.VGPR_SWIZZLE_EN`, bit 12), and forcing linear layouts for CPU-visible
 textures through `AMDHWAlignManager2::getPreferredSwizzleMode2`.
+
+## Candidate 220: swizzle diagnostics and gated layout knobs (2026-09-14)
+
+Commit `03bcb0a`, build `448a00cbbb2747709efa448483427fc3`. The decoded WindowServer stream
+from candidate 214 programs its 1280x1024 color target with `CB_COLOR0_ATTRIB3=0x4dc6c000`
+(`COLOR_SW_MODE` 27, variable-block rotated xor) and depth with `DB_Z_INFO` `SW_MODE` 24.
+New default-off knobs: `rgpuswlog=1/2` (log `getPreferredSwizzleMode2`, optionally return
+linear), `rgpuhwcapclr=<mask>` (clear hardware-info bits at `0xcc`), `rgpuvgpr=1/2/3` (set
+`LDS_CONFIG` or `SQ_CONFIG` `VGPR_SWIZZLE_EN` before RLC start, or log both). Two build
+attempts failed before this one: the route-ownership check needed an `[x6]` annotation, and
+two declarations were out of order (`run/candidate-220-build-failed-*.log`). Suite 893 OK.
+
+## Boot-launch ledger extension for candidate 220 logging run (2026-09-14)
+
+Candidate 220 with card `metal-065` (logging only: `rgpuswlog=1`, `rgpuvgpr=3`) runs from
+`run/candidate-220` as launch 24 on boot `c369c74e`, through `--manual-reuse --ack-risk`
+under the user's standing instruction, after `run/mode2-reset-24.json`. This note covers
+this one launch.
+
