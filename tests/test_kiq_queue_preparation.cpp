@@ -268,6 +268,51 @@ int main() {
                 halted.read(FakeHalted::Register::MecControl) == 0x1234,
             "verified native success restores saved MEC control");
 
+    FakeHalted retained;
+    retained.value[static_cast<unsigned>(FakeHalted::Register::MecControl)] = 0x1234;
+    retained.value[static_cast<unsigned>(FakeHalted::Register::WptrLo)] = 0x20;
+    transaction = {};
+    require(RaphaelKiq::beginHaltedNative(
+                transaction,
+                [&](FakeHalted::Register reg) { return retained.read(reg); },
+                [&](FakeHalted::Register reg, uint32_t value) { retained.write(reg, value); },
+                [](unsigned) {}, true) && transaction.initialWptrLo == 0x20 &&
+                retained.read(FakeHalted::Register::WptrLo) == 0x20,
+            "probe setup preserves a finite retained WPTR while MEC is halted");
+    FakeHalted zeroRetained;
+    zeroRetained.value[static_cast<unsigned>(FakeHalted::Register::MecControl)] = 0x1234;
+    transaction = {};
+    require(RaphaelKiq::beginHaltedNative(
+                transaction,
+                [&](FakeHalted::Register reg) { return zeroRetained.read(reg); },
+                [&](FakeHalted::Register reg, uint32_t value) { zeroRetained.write(reg, value); },
+                [](unsigned) {}, true) && transaction.initialWptrLo == 0,
+            "probe setup also accepts a valid zero WPTR snapshot");
+    require(!RaphaelKiq::haltedNativeResultVerified(
+                 true, 0x50000000, 1, 0, 0, 0x84, 0xffbfea00, 0,
+                 0x84000008, 0, 6, 0, 0, 0x20, 0x8400000000ULL, 0xffbfea00ULL,
+                 0x8400000800ULL),
+            "default result verification rejects retained WPTR");
+    require(RaphaelKiq::haltedNativeResultVerified(
+                true, 0x50000000, 1, 0, 0, 0x84, 0xffbfea00, 0,
+                0x84000008, 0, 6, 0, 0, 0x20, 0x8400000000ULL, 0xffbfea00ULL,
+                0x8400000800ULL, 0x20, true),
+            "probe result accepts only the retained WPTR snapshot");
+    require(!RaphaelKiq::haltedNativeResultVerified(
+                 false, 0x50000000, 1, 0, 0, 0x84, 0xffbfea00, 0,
+                 0x84000008, 0, 6, 0, 0, 0x20, 0x8400000000ULL, 0xffbfea00ULL,
+                 0x8400000800ULL, 0x20, true),
+            "native probe failure never authorizes release");
+    FakeHalted inaccessibleRetained;
+    inaccessibleRetained.value[static_cast<unsigned>(FakeHalted::Register::MecControl)] = 0x1234;
+    inaccessibleRetained.value[static_cast<unsigned>(FakeHalted::Register::WptrLo)] = 0xffffffffU;
+    require(!RaphaelKiq::beginHaltedNative(
+                 transaction,
+                 [&](FakeHalted::Register reg) { return inaccessibleRetained.read(reg); },
+                 [&](FakeHalted::Register reg, uint32_t value) { inaccessibleRetained.write(reg, value); },
+                 [](unsigned) {}, true),
+            "inaccessible retained WPTR blocks the probe before queue writes");
+
     FakeHalted inaccessibleHalt;
     inaccessibleHalt.value[static_cast<unsigned>(FakeHalted::Register::MecControl)] = 0xffffffffU;
     transaction = {};
