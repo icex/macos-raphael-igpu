@@ -164,6 +164,17 @@ class SupervisionTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(any(command == 'systemd-run' for command, _ in self.calls()))
 
+    def test_headless_start_refuses_before_reservation_or_launch_without_inhibitor(self):
+        self.env["GENERIC_GRAPHICS"] = "off"
+        self.fixture["logind_inhibited"] = False; self.save()
+        result = self.run_tool("start", "--vm-dir", str(self.vm), "--max-seconds", "180")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("block inhibitor", result.stderr)
+        self.assertEqual(list((self.vm / "run/launch-pending").iterdir()), [])
+        self.assertFalse(any(command == "systemd-run" or
+                             (command == "docker" and args and args[0] == "run")
+                             for command, args in self.calls()))
+
     def test_unconfirmed_service_stop_does_not_release_pending_launch(self):
         spec = importlib.util.spec_from_file_location('supervisor', TOOL)
         module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)

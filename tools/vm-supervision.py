@@ -296,7 +296,7 @@ def arm(vm, cid, maximum, critical_enabled=False):
     stop_command = shlex.join([docker, "stop", "--time", "0", cid])
     headless = os.environ.get("GENERIC_GRAPHICS") == "off"
     if headless and not logind_block_inhibited():
-        raise RuntimeError("headless capture requires an existing sleep:idle block inhibitor")
+        raise RuntimeError("headless capture requires an existing idle block inhibitor")
     channels = [("serial", "console")]
     if critical_enabled:
         channels.append(("critical", "critical"))
@@ -486,6 +486,8 @@ def start(vm, maximum, gpu_args, critical_enabled=False):
 def start_locked(vm, maximum, gpu_args, critical_enabled=False):
     vm = vm.resolve()
     name = "rgpu-launch-" + uuid.uuid4().hex
+    if os.environ.get("GENERIC_GRAPHICS") == "off" and not logind_block_inhibited():
+        raise RuntimeError("headless capture requires an existing idle block inhibitor")
     # Durable admission survives the short-lived caller dying before Docker has
     # created a visible container. Managed cleanup removes only this launch's file.
     reservation = vm / 'run/launch-pending' / name
