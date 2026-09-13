@@ -423,3 +423,31 @@ Offline evidence:
 Artifact SHA-256: `e4d79c67a5e289748244b3189e890102f3de22afeb322fe5d74229f8b67a3713`.
 No QEMU or hardware run was performed, so this remains offline implementation
 evidence and does not change the desktop acceleration qualification verdict.
+
+## Candidate 204 hardware run (2026-09-13)
+
+The single approved candidate-204 run used the prepared manifest, external
+user-level idle inhibition, headless `GENERIC_GRAPHICS=off`, and no override or
+retry. The launch reservation was recorded for run
+`195033a6ab780bae53d4a9fc05ff296e`, but the supervisor produced no serial or
+critical bytes. The bounded run returned `INVALID` with earliest failure
+`identity_or_route_missing` after `familiar container identity changed while
+archiving`; the two capture-loss events were `CR2: missing CR2 transport` and
+`dedicated critical producer readiness is absent or conflicting`. No capacity,
+native VMM range/pool, Metal, or probe observation was reached.
+
+Evidence is retained under
+`/home/bogdan/macos-vm/run/candidate-204-results/` including the manifest,
+verdict, capture hashes, events, host snapshots, and shutdown record. Host-after
+remains safe: boot `2f77212f-34f5-4905-ba66-d8c68a860d78`, `vfio-pci`, device
+accessible and pinned awake, no active VM, no kernel fault, and the inhibitor
+still active. No recovery ownership was established, so no recovery receipt was
+produced. The blocking issue is supervisor/container identity and capture
+archival lifecycle; no second launch is authorized.
+
+| Area | Result | Blocking issue |
+|---|---|---|
+| Candidate 204 launch | reservation consumed; bounded run terminated | container identity changed while archiving |
+| Guest serial / critical | 0 / 0 bytes | capture producer readiness absent |
+| Capacity / VMM / Metal | unobserved | run stopped before guest evidence |
+| Cleanup / host | safe; no VM; VFIO accessible | no recovery receipt because no ownership |
