@@ -1,5 +1,7 @@
 import importlib.util
 import struct
+import re
+import types
 import unittest
 from pathlib import Path
 
@@ -11,6 +13,80 @@ SPEC.loader.exec_module(tool)
 
 
 class GdbKextSourceTests(unittest.TestCase):
+    def test_kiq_stamp_scenario_uses_dynamic_return_and_bounded_channel_state(self):
+        text = tool.generate_kiq_stamp(
+            0xffffff801b6e8000, "474ef697fc283ba283a4763d76c8e200",
+            "/tmp/kernel.symbols", "/tmp/RaphaelGPU.dSYM",
+            0x1eeb0, bytes.fromhex("554889e541574156"),
+            0x1a620, bytes.fromhex("554889e541574156"), "/tmp/source")
+        self.assertIn("KIQ_WAIT_FAILURE result=0", text)
+        self.assertIn("gdb.BP_HARDWARE_BREAKPOINT", text)
+        self.assertIn("a+0x84", text)
+        self.assertIn("a+0x30", text)
+        self.assertIn("result=int(gdb.parse_and_eval('$rax')) & 0xff", text)
+        self.assertIn("return_bp.delete()", text)
+        self.assertNotIn("delete 3", text)
+        self.assertIn("entry=None; ret=None", text)
+
+    def test_kiq_stamp_generated_loop_handles_nested_and_clobbered_return(self):
+        text = tool.generate_kiq_stamp(
+            0xffffff801b6e8000, "474ef697fc283ba283a4763d76c8e200",
+            "/tmp/kernel.symbols", "/tmp/RaphaelGPU.dSYM", 0x1eeb0,
+            bytes.fromhex("554889e541574156"), 0x1a620,
+            bytes.fromhex("554889e541574156"), "/tmp/source")
+        block = text.split("class ReturnBP(gdb.Breakpoint):\n", 1)[1].split("end\nquit", 1)[0]
+        events = []
+        state = {'pc': 0, 'rsp': 0, 'rdi': 0, 'rsi': 0, 'rax': 0,
+                 'detached': False, 'reads': []}
+        class BP:
+            next_id = 1
+            all = []
+            def __init__(self, spec, kind=None, internal=False):
+                self.address = int(spec[1:], 16); self.enabled = True
+                self.deleted = False; self.number = BP.next_id; BP.next_id += 1
+                BP.all.append(self)
+            def delete(self): self.deleted = True; self.enabled = False
+        class FakeGdb:
+            BP_HARDWARE_BREAKPOINT = 1
+            Breakpoint = BP
+            def parse_and_eval(self, reg): return state[reg[1:]]
+            def selected_thread(self): return types.SimpleNamespace(ptid='fake-thread')
+            def execute(self, command):
+                if command == 'continue':
+                    while events:
+                        state.update(events.pop(0))
+                        active = [b for b in BP.all if b.enabled and not b.deleted and hasattr(b, 'stop')]
+                        if not active or all(b.stop() for b in active): break
+                elif command == 'detach': state['detached'] = True
+        fake = FakeGdb(); gdbmod = fake
+        def read(addr, size):
+            state['reads'].append((addr, size))
+            returns = {0x8100: 0x9000, 0x8200: 0x9100}
+            if size == 8 and addr in returns:
+                return returns[addr].to_bytes(8, 'little')
+            if addr in (0x1000 + 0x80, 0x1000 + 0x84, 0x1000 + 0x30):
+                return (1).to_bytes(4, 'little') * (size // 4)
+            return b'\0' * size
+        wa, sa = 0x2000, 0x3000
+        events.extend([
+            {'pc': sa, 'rsp': 0x8000, 'rdi': 0x1000, 'rsi': 0, 'rax': 0},
+            {'pc': wa, 'rsp': 0x8100, 'rdi': 0x1000, 'rsi': 7, 'rax': 0},
+            {'pc': 0x9000, 'rsp': 0x8108, 'rdi': 0xdead, 'rsi': 0, 'rax': 0x10001},
+            {'pc': wa, 'rsp': 0x8200, 'rdi': 0x1000, 'rsi': 8, 'rax': 0},
+            {'pc': 0x9100, 'rsp': 0x9999, 'rdi': 0xbeef, 'rsi': 0, 'rax': 0},
+            {'pc': 0x9100, 'rsp': 0x8208, 'rdi': 0xbeef, 'rsi': 0, 'rax': 0x10000},
+        ])
+        channel_src = 'def channel_state' + text.split('def channel_state', 1)[1].split('kh=read', 1)[0]
+        safe_src = 'def safe' + text.split('def safe', 1)[1].split('def channel_state', 1)[0]
+        ns = {'gdb': gdbmod, 'struct': struct, 'read': read,
+              'wa': wa, 'sa': sa, 'WAIT_OFFSET': 0, 'SUBMIT_OFFSET': 0,
+              'time': types.SimpleNamespace(monotonic=lambda: 1.0)}
+        exec(channel_src, ns)
+        exec(safe_src, ns)
+        exec('class ReturnBP(gdb.Breakpoint):\n' + block, ns)
+        self.assertTrue(state['detached'])
+        self.assertTrue(any(addr == 0x1000 + 0x84 for addr, _ in state['reads']))
+        self.assertTrue(any(addr == 0x1000 + 0x30 for addr, _ in state['reads']))
     def test_kernel_relocation_includes_fileset_offset(self):
         self.assertEqual(tool.kernel_relocation(0xffffff801b6e8000,
                                                 0xffffff8000200000), 0x1b4e8000)

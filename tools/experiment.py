@@ -954,7 +954,8 @@ def admit(manifest, host, used_boots, reuse_allowed=False):
     if host.get('iommu_group') != '31': errors.append('iommu_group')
     if manifest.get('source_clean') is not True: errors.append('source_clean')
     if manifest.get('vfio_device') != '0000:7b:00.0': errors.append('vfio_device')
-    if type(manifest.get('max_seconds')) is not int or manifest['max_seconds'] != 180:
+    if (type(manifest.get('max_seconds')) is not int or
+            not 1 <= manifest['max_seconds'] <= 6000):
         errors.append('max_seconds')
     return errors
 
