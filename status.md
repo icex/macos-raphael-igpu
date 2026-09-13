@@ -549,3 +549,37 @@ leaves `max_launches` at 3. Precondition: a fresh SMU MODE2 reset receipt
 before staging; host must still be vfio-pci and accessible. No launch beyond
 this one is covered by this note.
 
+## Candidate 213 pending command buffer capture (2026-09-13)
+
+Run `f9e798c8ecba24f88f3dd6551405bdfa`, card `metal-047` (commit `9ce67d2`),
+source `73448a0`, build `b93f5ae673b14cfc9aca7bd8f140345c`, boot `c369c74e`,
+launch 4 under the ledger extension above, after MODE2 reset receipt
+`run/mode2-reset-3.json` (`RLC_CNTL 1 -> 0`, `CP_STAT=0`). Evidence:
+`run/candidate-213-results/`.
+
+- Verdict `CORE_PROBE_PASS` (no functional boundary): the HIQ unmap waits
+  retired this time and the only KIQ stamp timeout came during shutdown. Probe
+  passed; recovery schema 6 `recovered`; shutdown `exited-after-guest-request`;
+  host after vfio-pci and accessible. This is not a graphics fix.
+- The graphics ring stalled identically (`RPTR=0x1fb1`, `WPTR=0x2180`, IB
+  `0x4001d0000` length 0xd10). New registers: `CP_COHER_STATUS=0`,
+  `CP_COHER_START_DELAY=0x20`, `CP_ME_COHER_CNTL=0x287fc3`,
+  `CP_WAIT_REG_MEM_TIMEOUT=0`; ME instruction pointer moved `0x5e8->0x619`
+  (a polling loop), PFP `0xb21` static.
+- The report route matched and captured the whole IB (`size=0xd10`, exactly one
+  WAIT_REG_MEM). The worker printed 419 lines in one burst while Apple's report
+  and HWLibs TTL asserts were logging; the console dropped most of them and the
+  wait lines never arrived. 70 lines survived intact (dwords 0x0-0x1f7 and
+  0x270-0x2a7): full context state, the depth target, VS/PS program addresses,
+  `VGT_PRIMITIVE_TYPE=0x11` and the first `DRAW_INDEX_AUTO` (3 vertices) at
+  0x1e8. The wait lies outside the recovered ranges.
+
+| Candidate | Change | GFX ring | Probe / verdict | Recovery |
+|---|---|---|---|---|
+| 212 | hang dump | stall; ME in WAIT_REG_MEM | passed / BASELINE_BLOCKED | recovered |
+| 213 | IB capture via mapCmdBuffers | same stall; wait not printed | passed / CORE_PROBE_PASS | recovered |
+
+Blocking issue unchanged. Candidate 214 changes only the output: each wait and
+the 24 dwords before it are logged at capture time, and the worker prints the
+buffer after a 3 s settle, 20 ms per line, with per-line checksums, twice.
+
