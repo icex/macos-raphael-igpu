@@ -699,3 +699,50 @@ The same 1.0.216 binary with card `metal-052` (`rgpunobin=1`,
 `run/mode2-reset-7.json` with `RLC_CNTL=0` and `CP_STAT=0` before staging. This
 note covers this one launch.
 
+## Candidate 216 nobin attempt: the desktop stall is gone (2026-09-14)
+
+Run `e8f281ed848e998a103f37d6d2be2c2a`, card `metal-052`, same 1.0.216 binary
+(build `14b0fa714e2f4feda48bef5e2851fa61`) from `run/candidate-216-attempt-nobin`,
+launch 8 after `run/mode2-reset-7.json`. `rgpunobin=1` wrote
+`PA_SC_ENHANCE_1 0x40c2000 -> 0x40c2008` (readback confirmed) before RLC start;
+Apple's CP microcode.
+
+- **No graphics stall.** No hang dump fired, no `HW Channel 0 GFX is occupied`,
+  no Apple GPU restart report, no pending command buffer capture, and **zero**
+  KIQ stamp timeouts for the whole run, shutdown included (every earlier desktop
+  run had them). Submission counters kept climbing through the run
+  (`SUB: summary process=107 submit=1518`, still increasing at shutdown) with the
+  console session active (`IOConsoleUsers ... sm 0xe0000255`).
+- The small compute probe passed; recovery `recovered`; shutdown
+  `exited-after-guest-request`; host after vfio-pci and accessible.
+- Verdict `INCONCLUSIVE/identity_or_route_missing` is capture loss: the COM2 replay
+  was cut mid-line at shutdown (`CR2 has an incomplete transport line`), the same
+  as 215 and 216. The reviewed producer quiesce (`critical_replay_quiesce` plus
+  `rgpucr2quiesce=1`) exists but no recent card selected it.
+
+Cause (independent adversarial review of the candidate 214 IB, confirmed by this
+run): WallpaperSequoia's draws enable deferred pixel binning with state sized for
+Navi 23: `PA_SC_BINNER_CNTL_1.MAX_ALLOC_COUNT=340` (Mesa uses 84 for Raphael's
+256-line parameter cache), `GE_PC_ALLOC` oversubscription of 511 lines, 16x16 bins
+and 32 persistent states per bin. A binning batch can then wait for cache space
+that is only freed when the batch ends, which matches the ME waiting on the
+pipeline-flush fence with the whole 3D pipeline busy and no fault.
+
+| Candidate | Change | GFX ring | Probe / verdict | Recovery |
+|---|---|---|---|---|
+| 215 | cpfw (matcher missed) | stall | passed / INCONCLUSIVE (capture) | recovered |
+| 216 | gc_10_3_6 CP microcode | stall | passed / INCONCLUSIVE (capture) | recovered |
+| 216-nobin | DISABLE_SC_BINNING | **no stall, 0 KIQ timeouts** | passed / INCONCLUSIVE (capture) | recovered |
+
+Next: candidate 217 keeps `rgpunobin=1`, adds a 5-second gfx ring progress sampler
+(`XR:` lines) as positive evidence that desktop work completes, and selects the
+COM2 quiesce so the verdict is not lost to capture timing. Performance refinement
+(clamping MAX_ALLOC_COUNT instead of disabling binning) comes after qualification.
+
+## Boot-launch ledger extension for candidate 217 (2026-09-14)
+
+Candidate 217 (`metal-053`) is launch 9 on boot `c369c74e`, through
+`--manual-reuse --ack-risk` under the user's standing instruction. Precondition:
+`run/mode2-reset-8.json` with `RLC_CNTL=0` and `CP_STAT=0` before staging. This
+note covers this one launch.
+
