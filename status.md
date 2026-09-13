@@ -1274,6 +1274,8 @@ two declarations were out of order (`run/candidate-220-build-failed-*.log`). Sui
 
 Candidate 220 with card `metal-065` (logging only: `rgpuswlog=1`, `rgpuvgpr=3`) runs from
 `run/candidate-220` as launch 24 on boot `c369c74e`, through `--manual-reuse --ack-risk`
-under the user's standing instruction, after `run/mode2-reset-24.json`. This note covers
-this one launch.
+under the user's standing instruction, after `run/mode2-reset-25.json`. This note covers
+this one launch. A first staging attempt consumed `run/mode2-reset-24.json` and stopped
+before launch because `stage-candidate.py` accepted versions only up to 1.0.21N; the
+pattern now allows 1.0.2[0-4]N. No VM started.
 
