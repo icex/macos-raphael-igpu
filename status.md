@@ -426,28 +426,28 @@ evidence and does not change the desktop acceleration qualification verdict.
 
 ## Candidate 204 hardware run (2026-09-13)
 
-The single approved candidate-204 run used the prepared manifest, external
-user-level idle inhibition, headless `GENERIC_GRAPHICS=off`, and no override or
-retry. The launch reservation was recorded for run
-`195033a6ab780bae53d4a9fc05ff296e`, but the supervisor produced no serial or
-critical bytes. The bounded run returned `INVALID` with earliest failure
-`identity_or_route_missing` after `familiar container identity changed while
-archiving`; the two capture-loss events were `CR2: missing CR2 transport` and
-`dedicated critical producer readiness is absent or conflicting`. No capacity,
-native VMM range/pool, Metal, or probe observation was reached.
+The single approved candidate-204 invocation used the prepared manifest,
+external user-level idle inhibition, headless `GENERIC_GRAPHICS=off`, and no
+override or retry. It returned `INVALID` before reservation or launch because
+the archival identity check failed with `familiar container identity changed
+while archiving`. The candidate output contains no serial or critical bytes, and
+no candidate-204 QEMU/VFIO exposure occurred. The QEMU log and CID file found
+under the shared run directory are stale artifacts from prior runs (their
+timestamps predate this invocation) and are not candidate-204 evidence. No
+capacity, native VMM range/pool, Metal, or probe observation was reached.
 
 Evidence is retained under
 `/home/bogdan/macos-vm/run/candidate-204-results/` including the manifest,
 verdict, capture hashes, events, host snapshots, and shutdown record. Host-after
 remains safe: boot `2f77212f-34f5-4905-ba66-d8c68a860d78`, `vfio-pci`, device
 accessible and pinned awake, no active VM, no kernel fault, and the inhibitor
-still active. No recovery ownership was established, so no recovery receipt was
-produced. The blocking issue is supervisor/container identity and capture
-archival lifecycle; no second launch is authorized.
+still active. No candidate-204 recovery ownership or receipt exists. The
+blocking issue is stale container identity during prelaunch archival validation;
+no second launch is authorized.
 
 | Area | Result | Blocking issue |
 |---|---|---|
-| Candidate 204 launch | reservation consumed; bounded run terminated | container identity changed while archiving |
+| Candidate 204 launch | refused before reservation or exposure | stale container identity during archival validation |
 | Guest serial / critical | 0 / 0 bytes | capture producer readiness absent |
 | Capacity / VMM / Metal | unobserved | run stopped before guest evidence |
-| Cleanup / host | safe; no VM; VFIO accessible | no recovery receipt because no ownership |
+| Cleanup / host | safe; no VM; VFIO accessible | no recovery receipt because no launch |

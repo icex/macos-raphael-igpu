@@ -65,6 +65,22 @@ def full_cid(value):
     return value
 
 
+def canonical_mounts(value):
+    """Return an order-independent representation of Docker mount metadata.
+
+    Docker's inspect response may reorder the Mounts list between equivalent
+    reads. Preserve and compare every field while removing only that ordering
+    artifact; malformed metadata remains non-comparable and is rejected.
+    """
+    if type(value) is not list or not all(type(mount) is dict for mount in value):
+        return None
+    try:
+        return tuple(sorted(json.dumps(mount, sort_keys=True, separators=(",", ":"))
+                           for mount in value))
+    except (TypeError, ValueError):
+        return None
+
+
 def seconds(value):
     # Zero means GPUless capture; redeploy rejects zero for an actual GPU launch.
     if not re.fullmatch(r"[0-9]+", str(value)) or not 0 <= int(value) <= 2147483647:
@@ -519,7 +535,8 @@ def start_locked(vm, maximum, gpu_args, critical_enabled=False):
         run([binary("docker"), "rename", cid, archive_name])
         check = json.loads(run([binary("docker"), "inspect", "--format", selected, cid]))
         if (check["Id"] != cid or check["Name"] != "/" + archive_name or
-                check.get("Mounts") != info.get("Mounts") or
+                canonical_mounts(check.get("Mounts")) is None or
+                canonical_mounts(check.get("Mounts")) != canonical_mounts(info.get("Mounts")) or
                 check["Running"] or check["Status"] not in ("exited", "dead")):
             raise RuntimeError("familiar container identity changed while archiving")
         archive_record = vm / "run" / (archive_name + ".json")
