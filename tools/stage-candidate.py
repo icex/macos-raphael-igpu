@@ -539,7 +539,7 @@ def validate_debug_symbols(manifest, builder, executable, debug_dir,
 
 def verify_build_inputs(experiment, builder, expected_commit,
                         expected_identities_sha256, image_id,
-                        card_source_sha256, card_source_commit=None):
+                        card_source_sha256, card_source_commit=None, card=None):
     if sha_file(IDENTITIES) != expected_identities_sha256:
         raise RuntimeError("candidate build-identity record changed")
     identities = json.loads(IDENTITIES.read_text())
@@ -598,7 +598,7 @@ def verify_build_inputs(experiment, builder, expected_commit,
             CANDIDATE_VERSION, CANDIDATE_VERSION):
         raise RuntimeError("candidate Info.plist version mismatch")
     builder.validate_macho(executable.read_bytes())
-    launch_options = experiment.get("launch_options")
+    launch_options = card.get("launch_options") if isinstance(card, dict) else None
     if (isinstance(launch_options, dict) and launch_options.get("GDB") == "on") or (
             CANDIDATE_VERSION, CARD_ID) in (
             ("1.0.188", "metal-021"), ("1.0.189", "metal-023"),
@@ -1247,7 +1247,7 @@ def stage(expected_commit, expected_boot_id, expected_card_sha256,
     identities, manifest, archive = verify_build_inputs(
         experiment, builder, expected_commit, expected_identities_sha256,
         image_id, card.get("raphael_source_sha256"),
-        card.get("raphael_source_commit"))
+        card.get("raphael_source_commit"), card=card)
     candidate186 = (CANDIDATE_VERSION, CARD_ID) in (
         ("1.0.186", "metal-019"), ("1.0.187", "metal-020"),
         ("1.0.188", "metal-021"), ("1.0.189", "metal-023"),
