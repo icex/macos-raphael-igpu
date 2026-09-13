@@ -396,6 +396,9 @@ static uint32_t ptbFixMode = 0;
 // restored has not been demonstrated. The first submission is a 32-dword SET_RESOURCES
 // frame, including its completion WRITE_DATA at dword 16.
 static uint32_t mqdFixMode = 0;
+// Explicit experiment: allow Apple's native timeout restore/reprogram path only
+// after an exact-address, owned-lease, ingress-suppressed timeout proof.
+static bool mqdNativeRestoreEnabled = false;
 static void *hwMemObject = nullptr;
 static volatile uint32_t *fbAperture();
 static bool wrapHwMemEnable(void *self);
@@ -405,7 +408,8 @@ static void reportCpState(const char *when);
 static void primeIcacheOnly();
 static void probeRlc();
 static void repairMqdPointers();
-static bool prepareKiq(uint64_t &mqdAddr, uint64_t &eopAddr, const void *spec);
+static bool prepareKiq(uint64_t &mqdAddr, uint64_t &eopAddr, const void *spec,
+                       bool &nativeRestoreAttempted);
 static void reportKiqPreparation(const char *stage);
 static mach_vm_address_t orgVmmInit = 0;
 static mach_vm_address_t orgVmmSetAlloc = 0;
@@ -2667,16 +2671,19 @@ static uint32_t wrapKiqStart(void *self, uint64_t a, uint64_t b, void *spec, uin
         RLOG("XH: startKIQ refused before native call: no valid OWNED lease");
         return 0xe00002bc;
     }
-    if (mqdFixMode == 2 && !prepareKiq(a, b, spec)) {
+    bool nativeRestoreAttempted = false;
+    if (mqdFixMode == 2 && !prepareKiq(a, b, spec, nativeRestoreAttempted)) {
         RLOG("XQ2: startKIQ refused: preflight or genuine dequeue failed");
         return 0xe00002bc; // same failure used by Apple's startKIQ queue-spec check
     }
+    if (nativeRestoreAttempted)
+        CRLOG("XQ2: native restore entered after unresolved dequeue timeout; non-authorizing");
     auto r = FunctionCast(wrapKiqStart, orgKiqStart)(self, a, b, spec, out);
     RLOG("XJ:   PM4 startKIQ(%#llx, %#llx) -> %#x (0 is success)", a, b, r);
     if (mqdFixMode == 2) {
         fbWrite(asicInfo, kGcGrbmGfxCntl, kKiqSelector);
         reportKiqPreparation("after native startKIQ");
-        if (r == 0 && cpSurgeryEnabled && !programMode2Eop(b)) {
+        if (r == 0 && cpSurgeryEnabled && !nativeRestoreAttempted && !programMode2Eop(b)) {
             CRLOG("XQ2: mode-2 EOP programming/readback failed; KIQ submission blocked");
             fbWrite(asicInfo, kGcGrbmGfxCntl, 0);
             return 0xe00002bc;
@@ -4026,7 +4033,9 @@ static void reportKiqPreparation(const char *stage) {
 // startKIQ compares spec[0..2] with its returned ME/pipe/queue at x6+0x8e711..0x8e728;
 // HWLibs create_kiq_queue_10_3 returns 2/1/0 on this part at +0x15114..0x1511c.
 // Restrict this experiment to that proven selector rather than guessing from a queue walk.
-static bool prepareKiq(uint64_t &mqdAddr, uint64_t &eopAddr, const void *spec) {
+static bool prepareKiq(uint64_t &mqdAddr, uint64_t &eopAddr, const void *spec,
+                       bool &nativeRestoreAttempted) {
+    nativeRestoreAttempted = false;
     if (asicInfo == nullptr || hwMemObject == nullptr || spec == nullptr) {
         RLOG("XQ2: preflight failed: missing ASIC, memory object, or queue spec");
         return false;
@@ -4100,8 +4109,50 @@ static bool prepareKiq(uint64_t &mqdAddr, uint64_t &eopAddr, const void *spec) {
     if (!prepared.ready()) {
         using Status = RaphaelKiq::QueuePreparationStatus;
         if (prepared.status == Status::DequeueTimeout) {
-            CRLOG("XQ2: dequeue TIMEOUT after %u us; descriptor unchanged, startKIQ blocked",
-                  prepared.elapsedUs);
+            RaphaelKiq::QueueState fresh {
+                fbRead(asicInfo, kGcHqdActive), fbRead(asicInfo, kGcHqdDequeue),
+                fbRead(asicInfo, kGcHqdPqRptr), fbRead(asicInfo, kGcHqdPqWptrHi),
+                fbRead(asicInfo, kGcHqdPqWptrLo), fbRead(asicInfo, kGcCpPqWptrPoll),
+                fbRead(asicInfo, kGcHqdPqDbCtl)};
+            auto memory = reinterpret_cast<uint8_t *>(hwMemObject);
+            void *hardware = memory == nullptr ? nullptr :
+                *reinterpret_cast<void **>(memory + 0x10);
+            const bool leaseValid = recoveryLeaseConfigured &&
+                recoveryLeaseState.kiqAllowed() &&
+                RaphaelRecoveryV2::validOwnership(
+                    recoveryLeaseState.ownership(), recoveryNonceLo, recoveryNonceHi,
+                    memory == nullptr ? 0 :
+                    RaphaelRecoveryV2::compatibilityPoolSize(
+                        RaphaelRecoveryV2::nativePoolSizes(
+                            *reinterpret_cast<uint64_t *>(memory + 0x40),
+                            *reinterpret_cast<uint64_t *>(memory + 0x48))));
+            const bool ownersMatch =
+                __atomic_load_n(&recoveryLeaseMemoryOwner, __ATOMIC_ACQUIRE) == hwMemObject &&
+                __atomic_load_n(&recoveryLeaseHardwareOwner, __ATOMIC_ACQUIRE) == hardware &&
+                hardware != nullptr;
+            const uint64_t freshImageMqd =
+                (static_cast<uint64_t>(get(0x204)) << 32) | get(0x200);
+            const uint64_t freshImageEop =
+                (static_cast<uint64_t>(get(0x298)) << 32) | get(0x294);
+            const bool imageStillExact = get(0) == 0xc0310800 && get(0x20c) == 0 &&
+                freshImageMqd == planned.mqdMc &&
+                freshImageEop == (planned.eopMc >> 8);
+            nativeRestoreAttempted = RaphaelKiq::timeoutNativeRestoreEligible(
+                mqdNativeRestoreEnabled, mqdAddr, eopAddr, planned.mqdMc, planned.eopMc,
+                fresh, leaseValid, ownersMatch,
+                imageStillExact);
+            CRLOG("XQ2: dequeue TIMEOUT after %u us; descriptor unchanged; "
+                  "native-restore=%u lease=%u owners=%u active=%#x dequeue=%#x "
+                  "poll=%#x doorbell=%#x image-exact=%u", prepared.elapsedUs,
+                  nativeRestoreAttempted,
+                  leaseValid, ownersMatch, fresh.active, fresh.dequeue, fresh.poll,
+                  fresh.doorbell, imageStillExact);
+            if (nativeRestoreAttempted) {
+                fbWrite(asicInfo, kGcGrbmGfxCntl, 0);
+                RLOG("XQ2: native restore admission restores selector zero; "
+                     "Apple owns timeout/reprogram sequence");
+                return true;
+            }
         } else if (prepared.status == Status::Inaccessible) {
             CRLOG("XQ2: preparation refused: inaccessible queue registers");
         } else {
@@ -6674,6 +6725,16 @@ static void pluginStart() {
              ? "validate KIQ before start; genuine dequeue and native MEC halt writes preserved"
              : mqdm == 1 ? "legacy post-timeout MQD/EOP repair" : "reporting only");
     }
+    uint32_t mqdr = 0;
+    mqdNativeRestoreEnabled = PE_parse_boot_argn("rgpumqdrestore", &mqdr,
+                                                  sizeof(mqdr)) && mqdr == 1;
+    if (mqdNativeRestoreEnabled && mqdFixMode != 2) {
+        RLOG("XQ2: rgpumqdrestore=1 requires rgpumqd=2; native restore disabled");
+        mqdNativeRestoreEnabled = false;
+    }
+    RLOG("rgpumqdrestore=%u: native timeout restore experiment %s",
+         mqdNativeRestoreEnabled ? 1 : 0,
+         mqdNativeRestoreEnabled ? "armed only for exact owned timeout" : "off");
     uint32_t ptbm = 0;
     if (PE_parse_boot_argn("rgpuptb", &ptbm, sizeof(ptbm)) && ptbm <= 2) {
         ptbFixMode = ptbm;

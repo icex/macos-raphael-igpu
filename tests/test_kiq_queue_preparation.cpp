@@ -169,6 +169,57 @@ int main() {
                 result.elapsedUs == 100 && timeout.pointerWrites() == 0 && nativeCalls == 0,
             "a genuine dequeue timeout blocks pointer writes and native activation");
 
+    const RaphaelKiq::QueueState timeoutState {1, 1, 0x86, 0, 0xa0, 0, 0};
+    require(RaphaelKiq::timeoutNativeRestoreEligible(
+                true, 0x8400000000ULL, 0x8400000800ULL,
+                0x8400000000ULL, 0x8400000800ULL, timeoutState, true, true, true),
+            "opt-in native restore admits exact active timeout with owned identity");
+    require(!RaphaelKiq::timeoutNativeRestoreEligible(
+                 false, 0x8400000000ULL, 0x8400000800ULL,
+                 0x8400000000ULL, 0x8400000800ULL, timeoutState, true, true, true),
+            "native restore flag is required");
+    require(!RaphaelKiq::timeoutNativeRestoreEligible(
+                 true, 0x8400001000ULL, 0x8400001800ULL,
+                 0x8400000000ULL, 0x8400000800ULL, timeoutState, true, true, true),
+            "native restore rejects wrong argument addresses");
+    require(!RaphaelKiq::timeoutNativeRestoreEligible(
+                 true, 0x8400000000ULL, 0x8400000800ULL,
+                 0x8400000000ULL, 0x8400000800ULL, timeoutState, false, true, true),
+            "native restore rejects an invalid lease");
+    require(!RaphaelKiq::timeoutNativeRestoreEligible(
+                 true, 0x8400000000ULL, 0x8400000800ULL,
+                 0x8400000000ULL, 0x8400000800ULL, timeoutState, true, false, true),
+            "native restore rejects changed owner identity");
+    require(!RaphaelKiq::timeoutNativeRestoreEligible(
+                 true, 0x8400000000ULL, 0x8400000800ULL,
+                 0x8400000000ULL, 0x8400000800ULL, timeoutState, true, true, false),
+            "native restore rejects a non-native embedded MQD/EOP image");
+    const RaphaelKiq::QueueState ingressState {1, 1, 0x86, 0, 0xa0, 1U << 31, 0};
+    require(!RaphaelKiq::timeoutNativeRestoreEligible(
+                 true, 0x8400000000ULL, 0x8400000800ULL,
+                 0x8400000000ULL, 0x8400000800ULL, ingressState, true, true, true),
+            "native restore rejects poll ingress still enabled");
+    const RaphaelKiq::QueueState doorbellState {1, 1, 0x86, 0, 0xa0, 0, 1U << 30};
+    require(!RaphaelKiq::timeoutNativeRestoreEligible(
+                 true, 0x8400000000ULL, 0x8400000800ULL,
+                 0x8400000000ULL, 0x8400000800ULL, doorbellState, true, true, true),
+            "native restore rejects doorbell ingress still enabled");
+    const RaphaelKiq::QueueState wrongDequeue {1, 0, 0x86, 0, 0xa0, 0, 0};
+    require(!RaphaelKiq::timeoutNativeRestoreEligible(
+                 true, 0x8400000000ULL, 0x8400000800ULL,
+                 0x8400000000ULL, 0x8400000800ULL, wrongDequeue, true, true, true),
+            "native restore rejects a non-pending dequeue state");
+    const RaphaelKiq::QueueState inactive {0, 1, 0x86, 0, 0xa0, 0, 0};
+    require(!RaphaelKiq::timeoutNativeRestoreEligible(
+                 true, 0x8400000000ULL, 0x8400000800ULL,
+                 0x8400000000ULL, 0x8400000800ULL, inactive, true, true, true),
+            "native restore rejects an inactive timeout state");
+    const RaphaelKiq::QueueState inaccessibleState {0xffffffffU, 1, 0, 0, 0, 0, 0};
+    require(!RaphaelKiq::timeoutNativeRestoreEligible(
+                 true, 0x8400000000ULL, 0x8400000800ULL,
+                 0x8400000000ULL, 0x8400000800ULL, inaccessibleState, true, true, true),
+            "native restore rejects inaccessible timeout state");
+
     FakeQueue inaccessible;
     inaccessible.value[static_cast<unsigned>(Register::WptrHi)] = 0xffffffffU;
     nativeCalls = 0;
