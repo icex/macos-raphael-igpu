@@ -883,3 +883,30 @@ is switched to the native probe identity for this run (the small-probe identity 
 kept as `run/guest-identity.json.small-metal-20260914`). This note covers this one
 launch.
 
+## Native Metal probe passes on the running desktop (2026-09-14)
+
+Run `89743ccaa7bb8abbcf310d35bdb12f22`, card `metal-055` (commit `4735c36`), 1.0.218
+build `10cce4d85456402cb9bb469b3da3077d` from `run/candidate-218-attempt-native`,
+launch 14 after `run/mode2-reset-13.json`, with the logged-in desktop session active
+and `rgpunobin=1`.
+
+- `RGPU_METAL_RESULT passed=true device="AMD Radeon Navi23" metal3=true
+  compute_rounds=3 compute_values_checked=196608 render_pixels_checked=4096
+  completed_command_buffers=4`, `RGPU_EXIT 0`.
+- Verdict `CORE_PROBE_PASS` (valid capture), recovery `recovered`, shutdown
+  `exited-after-guest-request`, COM2 quiesce ACK, zero stalls or KIQ timeouts, gfx
+  ring drained on every sample.
+
+This is the full M4/M5 acceptance probe that candidate 194 passed only on an idle
+graphics ring; it now passes while WindowServer and WallpaperSequoia render on the
+same device.
+
+| Run | Probe | Verdict | Recovery |
+|---|---|---|---|
+| 218-q2/q3/q4 | small compute | CORE_PROBE_PASS x3 | recovered x3 |
+| 218-native | compute x3 + render readback | CORE_PROBE_PASS | recovered |
+
+Remaining for full desktop acceleration: WindowServer composition evidence on this
+device and a display path (M6), binning clamp instead of the global disable
+(performance), and the guest sleep-path KIQ timeout in `AMDHardware::powerOff` (M7).
+
