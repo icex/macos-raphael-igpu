@@ -492,7 +492,7 @@ print('KIQ_START_BREAKPOINTS_ARMED entry=%#x native=%#x' % (start,native))
 native_reached=False; entry_seen=False; return_bp=None
 gdb.execute('continue')
 if int(gdb.parse_and_eval('$pc')) != start: raise gdb.GdbError('KIQ start entry stop PC mismatch')
-entry_rsp=int(gdb.parse_and_eval('$rsp')); entry_return=struct.unpack('<Q',read(entry_rsp,8))[0]
+entry_rsp=int(gdb.parse_and_eval('$rsp')); entry_return=None
 entry_rdi=int(gdb.parse_and_eval('$rdi')) & ((1<<64)-1)
 entry_rsi=int(gdb.parse_and_eval('$rsi')) & ((1<<64)-1)
 entry_rdx=int(gdb.parse_and_eval('$rdx')) & ((1<<64)-1)
@@ -500,8 +500,15 @@ entry_rcx=int(gdb.parse_and_eval('$rcx')) & ((1<<64)-1)
 entry_r8=int(gdb.parse_and_eval('$r8')) & ((1<<64)-1)
 entry_spec=entry_rcx; entry_out=entry_r8
 raw=read(entry_spec,12)
-print('KIQ_START_ENTRY self=%#x a=%#x b=%#x spec=%#x out=%#x rsp=%#x return=%#x spec_raw=%s thread=%s' %
-      (entry_rdi,entry_rsi,entry_rdx,entry_spec,entry_out,entry_rsp,entry_return,raw.hex(),str(gdb.selected_thread().ptid)))
+try: entry_return=struct.unpack('<Q',read(entry_rsp,8))[0]
+except Exception as error:
+    print('KIQ_START_ENTRY_STACK_UNAVAILABLE rsp=%#x error=%s' % (entry_rsp,error))
+print('KIQ_START_ENTRY self=%#x a=%#x b=%#x spec=%#x out=%#x rsp=%#x return=%s spec_raw=%s thread=%s' %
+      (entry_rdi,entry_rsi,entry_rdx,entry_spec,entry_out,entry_rsp,
+       ('%#x' % entry_return) if entry_return is not None else 'unavailable',raw.hex(),str(gdb.selected_thread().ptid)))
+if entry_return is None:
+    print('KIQ_START_CAPTURE_INCOMPLETE reason=entry-stack-unavailable native_boundary=unavailable return=unavailable')
+    gdb.execute('detach'); print('KIQ_START_DETACHED'); gdb.execute('quit')
 entry_bp.enabled=False
 entry_seen=True
 native_bp.enabled=True
