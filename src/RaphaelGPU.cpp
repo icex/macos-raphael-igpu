@@ -22,6 +22,7 @@
 #include <IOKit/IOService.h>
 #include <IOKit/IORegistryEntry.h>
 #include <IOKit/IOLib.h>
+#include <IOKit/IOMemoryDescriptor.h>
 #include <kern/clock.h>
 #include <kern/thread.h>
 #include <stdarg.h>
@@ -36,6 +37,7 @@
 #include "SdmaTopology.hpp"
 #include "SdmaAddresses.hpp"
 #include "GpuVmDiagnostics.hpp"
+#include "GfxHangDump.hpp"
 #include "VmEntryUpdate.hpp"
 #include "VmProgramCorrelation.hpp"
 #include "ObservationBuffer.hpp"
@@ -3663,6 +3665,110 @@ static void relocateRingToVram() {
          (static_cast<uint64_t>(fb[pteOff / 4 + 1]) << 32) | fb[pteOff / 4]);
 }
 
+// rgpuhangdump=1 (candidate 212). Candidates 210 and 211 stalled the graphics ring on
+// channel 35 stamp 8 (RPTR 0x1e31, WPTR 0x2000, CP_STALLED_STAT2 QU_STALLED_ON_EOP_DONE_PULSE)
+// with VM_FAULT_STATUS 0 while compute completed. At the first KIQ observation whose
+// ring read pointer stays put for 50 ms with data pending, record what PFP, ME and CE
+// last parsed and which indirect buffers they are inside. This path only reads
+// registers; the ring and IB pages are read later by hangDumpThread, outside the KIQ
+// submit call. Offsets: gc_10_3_0_offset.h (CP_IB1_OFFSET from gc_10_1_0, same block).
+static uint32_t hangDumpMode = 0;
+static constexpr uint32_t kGcCpMeHeaderDump  = kGcSeg0 + 0x0f41;
+static constexpr uint32_t kGcCpPfpHeaderDump = kGcSeg0 + 0x0f42;
+static constexpr uint32_t kGcCpCeHeaderDump  = kGcSeg0 + 0x0f44;
+static constexpr uint32_t kGcCeInstrPntr     = kGcSeg0 + 0x0f47;
+static constexpr uint32_t kGcRb0WptrHi       = kGcSeg0 + 0x1df5;
+static constexpr uint32_t kGcGrbmStatusSe0   = kGcSeg0 + 0x0da5;
+static constexpr uint32_t kGcGrbmStatus3     = kGcSeg0 + 0x0da7;
+static constexpr uint32_t kGcPaScFifoSize    = kGcSeg0 + 0x1093;
+static constexpr unsigned kHangDumpLimit = 3;
+enum : unsigned { kHangIb1, kHangIb2, kHangCeIb1, kHangCeIb2, kHangIbCount };
+enum : unsigned { kHangBaseLo, kHangBaseHi, kHangBufsz, kHangOffset };
+static constexpr const char *const kHangIbNames[kHangIbCount] {"IB1", "IB2", "CE_IB1", "CE_IB2"};
+static constexpr uint32_t kHangIbRegisters[kHangIbCount][4] {
+    {kGcSeg1 + 0x20cc, kGcSeg1 + 0x20cd, kGcSeg1 + 0x20ce, kGcSeg1 + 0x2092},
+    {kGcSeg1 + 0x20cf, kGcSeg1 + 0x20d0, kGcSeg1 + 0x20d1, kGcSeg1 + 0x2093},
+    {kGcSeg1 + 0x20c6, kGcSeg1 + 0x20c7, kGcSeg1 + 0x20c8, kGcSeg1 + 0x2098},
+    {kGcSeg1 + 0x20c9, kGcSeg1 + 0x20ca, kGcSeg1 + 0x20cb, kGcSeg1 + 0x2099},
+};
+struct GfxHangSnapshot {
+    uint32_t rptr, wptr, baseLo, baseHi, cntl;
+    uint32_t ib[kHangIbCount][4];
+};
+static GfxHangSnapshot hangSnapshots[kHangDumpLimit] {};
+static volatile uint32_t hangSnapshotCount = 0;
+static volatile uint32_t hangSnapshotBusy = 0;
+
+static void logHeaderDump(const char *name, uint32_t reg) {
+    uint32_t v[8];
+    for (auto &value : v) value = fbRead(asicInfo, reg);
+    RLOG("XD: %s x8: %08x %08x %08x %08x %08x %08x %08x %08x", name,
+         v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7]);
+}
+
+static void observeGfxRingHang(const char *when) {
+    if (hangDumpMode != 1 || asicInfo == nullptr) return;
+    if (__atomic_load_n(&hangSnapshotCount, __ATOMIC_ACQUIRE) >= kHangDumpLimit) return;
+    const uint32_t rptr = fbRead(asicInfo, kGcRb0Rptr);
+    const uint32_t wptr = fbRead(asicInfo, kGcRb0Wptr);
+    if (rptr == wptr || rptr == 0xdeadbeef) return;
+    uint32_t after = rptr;
+    for (unsigned i = 0; i < 5 && after == rptr; ++i) {
+        IODelay(10000);
+        after = fbRead(asicInfo, kGcRb0Rptr);
+    }
+    if (!RaphaelHang::ringStalled(rptr, wptr, after)) return;
+    uint32_t expected = 0;
+    if (!__atomic_compare_exchange_n(&hangSnapshotBusy, &expected, 1u, false,
+                                     __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) return;
+    const uint32_t index = __atomic_load_n(&hangSnapshotCount, __ATOMIC_ACQUIRE);
+    static uint32_t lastDumpedRptr = UINT32_MAX;
+    if (index >= kHangDumpLimit || rptr == lastDumpedRptr) {
+        __atomic_store_n(&hangSnapshotBusy, 0u, __ATOMIC_RELEASE);
+        return;
+    }
+    lastDumpedRptr = rptr;
+    auto &snap = hangSnapshots[index];
+    snap.rptr = rptr;
+    snap.wptr = wptr;
+    snap.baseLo = fbRead(asicInfo, kGcRb0Base);
+    snap.baseHi = fbRead(asicInfo, kGcRb0BaseHi);
+    snap.cntl = fbRead(asicInfo, kGcRb0Cntl);
+    const auto ring = RaphaelHang::ringGeometry(snap.baseLo, snap.baseHi, snap.cntl);
+    RLOG("XD: gfx hang dump %u at %s: RB0 RPTR=%#x static 50 ms, WPTR=%#x_%08x "
+         "BASE=%#x_%08x (ring va %#llx, %#x dwords, valid=%u) CNTL=%#x VMID=%#x GRBM_GFX_CNTL=%#x",
+         index, when, rptr, fbRead(asicInfo, kGcRb0WptrHi), wptr, snap.baseHi, snap.baseLo,
+         ring.va, ring.dwords, ring.valid, snap.cntl, fbRead(asicInfo, kGcRbVmid),
+         fbRead(asicInfo, kGcGrbmGfxCntl));
+    logHeaderDump("CP_PFP_HEADER_DUMP", kGcCpPfpHeaderDump);
+    logHeaderDump("CP_ME_HEADER_DUMP", kGcCpMeHeaderDump);
+    logHeaderDump("CP_CE_HEADER_DUMP", kGcCpCeHeaderDump);
+    for (unsigned n = 0; n < kHangIbCount; ++n) {
+        for (unsigned r = 0; r < 4; ++r) snap.ib[n][r] = fbRead(asicInfo, kHangIbRegisters[n][r]);
+        RLOG("XD: CP_%s BASE=%#x_%08x BUFSZ=%#x OFFSET=%#x", kHangIbNames[n],
+             snap.ib[n][kHangBaseHi], snap.ib[n][kHangBaseLo], snap.ib[n][kHangBufsz],
+             snap.ib[n][kHangOffset]);
+    }
+    RLOG("XD: GRBM_STATUS=%#x STATUS2=%#x STATUS3=%#x STATUS_SE0=%#x CP_STAT=%#x "
+         "STALLED_STAT1=%#x 2=%#x 3=%#x BUSY_STAT=%#x",
+         fbRead(asicInfo, kGcGrbmStatus), fbRead(asicInfo, kGcGrbmStatus2),
+         fbRead(asicInfo, kGcGrbmStatus3), fbRead(asicInfo, kGcGrbmStatusSe0),
+         fbRead(asicInfo, kGcCpStat), fbRead(asicInfo, kGcCpStalled1),
+         fbRead(asicInfo, kGcCpStalled2), fbRead(asicInfo, kGcCpStalled3),
+         fbRead(asicInfo, kGcCpBusyStat));
+    const uint32_t pfp = fbRead(asicInfo, kGcPfpInstrPntr), me = fbRead(asicInfo, kGcMeInstrPntr);
+    const uint32_t ce = fbRead(asicInfo, kGcCeInstrPntr);
+    IODelay(20);
+    RLOG("XD: PA_SC_FIFO_SIZE=%#x SPI_DEBUG_BUSY=unavailable (no GC 10.3 offset) "
+         "instr PFP %#x->%#x ME %#x->%#x CE %#x->%#x fault=%#x addr=%#x_%08x",
+         fbRead(asicInfo, kGcPaScFifoSize), pfp, fbRead(asicInfo, kGcPfpInstrPntr), me,
+         fbRead(asicInfo, kGcMeInstrPntr), ce, fbRead(asicInfo, kGcCeInstrPntr),
+         fbRead(asicInfo, kGcVmFaultSts), fbRead(asicInfo, kGcVmFaultHi),
+         fbRead(asicInfo, kGcVmFaultLo));
+    __atomic_store_n(&hangSnapshotCount, index + 1, __ATOMIC_RELEASE);
+    __atomic_store_n(&hangSnapshotBusy, 0u, __ATOMIC_RELEASE);
+}
+
 // Observe the native frame without changing HQD contents or ringing a second doorbell.
 static void kickKiq() {
     if (asicInfo == nullptr) return;
@@ -3728,6 +3834,7 @@ static void kickKiq() {
              fbRead(asicInfo, kGcVmFaultLo));
     }
     fbWrite(asicInfo, kGcGrbmGfxCntl, 0);
+    observeGfxRingHang("KIQ observation");
 }
 
 #if RGPU_HAVE_MEC_FW
@@ -5436,6 +5543,268 @@ static void publishClientFaultWalks() {
     }
 }
 
+// rgpuhangdump=1 memory half. GART (VMID 0) and client pages are resolved the way
+// walkGart and publishClientFaultWalks do; SYSTEM pages are guest RAM and are mapped
+// read-only as a physical IOMemoryDescriptor range, VRAM pages are read through
+// the BAR0 aperture. Runs only on hangDumpThread.
+struct HangPageSource {
+    bool ok;
+    bool system;
+    uint64_t address;
+    uint64_t fbOffset;
+    uint64_t raw;
+    const char *view;
+};
+
+static HangPageSource hangGartPage(uint64_t va) {
+    HangPageSource result {false, false, 0, 0, 0, "gart"};
+    if (asicInfo == nullptr) return result;
+    const uint64_t root = (static_cast<uint64_t>(fbRead(asicInfo, kGcVmCtx0PtbHi)) << 32) |
+                           fbRead(asicInfo, kGcVmCtx0PtbLo);
+    RaphaelGart::Aperture aperture {};
+    RaphaelGart::Range range {};
+    uint64_t off = 0, idx = 0;
+    auto fb = fbAperture();
+    if (fb == nullptr || !gartApertureInfo(aperture) || !gartRange(range) ||
+        !RaphaelGart::pteOffset(aperture, range, fbRead(asicInfo, kGcVmCtx0Cntl), root, va,
+                                off, idx) || !fitsDiscoveredBar(off, 8))
+        return result;
+    result.raw = (static_cast<uint64_t>(fb[off / 4 + 1]) << 32) | fb[off / 4];
+    if ((result.raw & 1) == 0) return result;
+    result.address = result.raw & 0x0000fffffffff000ULL;
+    result.system = (result.raw & 2) != 0;
+    result.ok = result.system || RaphaelHang::framebufferOffset(
+        result.address, aperture.mcBase, aperture.physicalBase, aperture.visibleBytes,
+        result.fbOffset);
+    return result;
+}
+
+static HangPageSource hangClientPage(uint32_t vmid, uint64_t va, bool quiet = false) {
+    HangPageSource result {false, false, 0, 0, 0, "client"};
+    if (asicInfo == nullptr) return result;
+    auto rd = [](uint32_t relative) { return fbRead(asicInfo, kGcSeg0 + relative); };
+    const auto context = RaphaelVm::captureContextSnapshot(vmid, rd);
+    RaphaelVm::FramebufferAperture aperture {};
+    auto fb = fbAperture();
+    if (vmid == 0 || !context.valid || fb == nullptr || !vmid2Aperture(aperture)) return result;
+    const uint32_t control = context.words[0];
+    const uint64_t root = RaphaelVm::join(context.words[1], context.words[2]);
+    const uint64_t start = RaphaelVm::join(context.words[3], context.words[4]) << 12;
+    auto reader = [&](uint64_t physical, uint64_t &value) {
+        if (physical < aperture.physicalBase ||
+            physical - aperture.physicalBase > aperture.visibleBytes - 8)
+            return false;
+        const uint64_t dword = (physical - aperture.physicalBase) / 4;
+        value = RaphaelVm::join(fb[dword], fb[dword + 1]);
+        return true;
+    };
+    const uint64_t starts[2] {start, 0};
+    const char *const views[2] {"client-relative", "client-absolute"};
+    for (unsigned v = 0; v < 2; ++v) {
+        if (v == 1 && start == 0) break;
+        if (va < starts[v]) continue;
+        const auto walk = RaphaelVm::walkPageTables(root, control, starts[v], va, aperture,
+                                                    reader);
+        if (walk.count != 0) result.raw = walk.entries[walk.count - 1].raw;
+        if (!walk.valid || !walk.complete || walk.count == 0) continue;
+        const auto &leaf = walk.entries[walk.count - 1];
+        uint64_t page = 0;
+        if (!RaphaelHang::leafPage(leaf.address, control, leaf.level, va - starts[v], page))
+            continue;
+        result.address = page;
+        result.system = leaf.system;
+        result.view = views[v];
+        result.ok = result.system || RaphaelHang::framebufferOffset(
+            page, aperture.mcBase, aperture.physicalBase, aperture.visibleBytes,
+            result.fbOffset);
+        if (result.ok) return result;
+    }
+    if (!quiet)
+        RLOG("XD: vmid %u va %#llx unresolved: ctl=%#x root=%#llx start=%#llx last-entry=%#llx",
+             vmid, va, control, root, start, result.raw);
+    return result;
+}
+
+static bool readHangPage(const HangPageSource &source, uint32_t *words) {
+    if (!source.ok) return false;
+    if (!source.system) {
+        auto fb = fbAperture();
+        if (fb == nullptr || !fitsDiscoveredBar(source.fbOffset, 0x1000)) return false;
+        for (unsigned i = 0; i < 1024; ++i) words[i] = fb[source.fbOffset / 4 + i];
+        return true;
+    }
+    // withPhysicalAddress is withAddressRange(address, length, direction, TASK_NULL) in
+    // xnu. This build does not define KERNEL, so the SDK declares IOPhysicalAddress and
+    // IOByteCount as 32-bit and the direct call would bind a symbol the kernel does not
+    // export (and truncate guest addresses above 4 GiB). mach_vm_address_t is 64-bit.
+    IOMemoryDescriptor *descriptor = IOMemoryDescriptor::withAddressRange(
+        source.address, 0x1000, kIODirectionIn, nullptr);
+    if (descriptor == nullptr) return false;
+    IOMemoryMap *map = descriptor->map(kIOMapReadOnly);
+    bool ok = false;
+    if (map != nullptr && map->getVirtualAddress() != 0) {
+        auto bytes = reinterpret_cast<const uint32_t *>(map->getVirtualAddress());
+        for (unsigned i = 0; i < 1024; ++i) words[i] = bytes[i];
+        ok = true;
+    }
+    if (map != nullptr) map->release();
+    descriptor->release();
+    return ok;
+}
+
+// Read `count` dwords at GPU VA base + 4 * (first + i) (ring positions wrap) in the
+// given address space, log them eight per line, and keep a copy for packet scanning.
+static constexpr uint32_t kHangMaxDwords = 128;
+static uint32_t hangPageWords[1024];
+static void dumpHangDwords(const char *label, uint32_t vmid, uint64_t base, uint32_t first,
+                           uint32_t count, uint32_t wrapDwords, uint32_t *copy, bool *valid) {
+    if (count > kHangMaxDwords) count = kHangMaxDwords;
+    uint64_t cachedPage = UINT64_MAX;
+    bool cachedOk = false;
+    char line[160];
+    int used = 0;
+    uint32_t lineFirst = first;
+    for (uint32_t i = 0; i < count; ++i) {
+        const uint32_t position = wrapDwords != 0
+            ? RaphaelHang::ringIndex(first, i, wrapDwords) : first + i;
+        const uint64_t va = base + static_cast<uint64_t>(position) * 4;
+        const uint64_t page = va & ~0xfffULL;
+        if (page != cachedPage) {
+            cachedPage = page;
+            const auto source = vmid == 0 ? hangGartPage(page) : hangClientPage(vmid, page);
+            cachedOk = readHangPage(source, hangPageWords);
+            RLOG("XD: %s page va=%#llx via %s -> %s %#llx (entry %#llx) read=%u", label, page,
+                 source.view, source.system ? "system" : "vram",
+                 source.system ? source.address : source.fbOffset, source.raw, cachedOk);
+        }
+        const bool ok = cachedOk;
+        const uint32_t word = ok ? hangPageWords[(va & 0xfff) / 4] : 0;
+        if (copy != nullptr) copy[i] = word;
+        if (valid != nullptr) valid[i] = ok;
+        if (i % 8 == 0) { lineFirst = position; used = 0; }
+        used += snprintf(line + used, sizeof(line) - used, ok ? " %08x" : " --------", word);
+        if (i % 8 == 7 || i + 1 == count)
+            RLOG("XD: %s vmid=%u [%#x]%s", label, vmid, lineFirst, line);
+    }
+}
+
+// Apple may leave the VMID field of the IB control word clear. Then use the
+// address space that maps the buffer's first page: GART first, then each client.
+static uint32_t hangIbVmid(const char *label, uint32_t vmid, uint64_t address) {
+    if (vmid != 0) return vmid;
+    const uint64_t page = address & ~0xfffULL;
+    if (hangGartPage(page).ok) return 0;
+    uint32_t chosen = 0;
+    for (uint32_t candidate = 1; candidate < 16; ++candidate) {
+        const auto source = hangClientPage(candidate, page, true);
+        if (!source.ok) continue;
+        RLOG("XD: %s va=%#llx with control VMID 0 resolves in vmid %u via %s -> %#llx", label,
+             address, candidate, source.view, source.system ? source.address : source.fbOffset);
+        if (chosen == 0) chosen = candidate;
+    }
+    return chosen;
+}
+
+static void dumpHangIb(const char *label, uint32_t packetVmid, uint64_t address,
+                       uint32_t length, uint32_t offsetRegister, uint32_t bufszRegister) {
+    const uint32_t vmid = hangIbVmid(label, packetVmid, address);
+    const auto cursor = RaphaelHang::ibCursor(offsetRegister, bufszRegister, length);
+    RLOG("XD: %s vmid=%u va=%#llx length=%#x OFFSET=%#x BUFSZ=%#x cursor offset=%u:%#x "
+         "remaining=%u:%#x", label, vmid, address, length, offsetRegister, bufszRegister,
+         cursor.offsetValid, cursor.offset, cursor.remainingValid, cursor.remaining);
+    uint32_t firstWindowStart = UINT32_MAX;
+    for (unsigned reading = 0; reading < 2; ++reading) {
+        const bool usable = reading == 0 ? cursor.offsetValid : cursor.remainingValid;
+        const uint32_t at = reading == 0 ? cursor.offset : cursor.remaining;
+        if (!usable) continue;
+        const auto window = RaphaelHang::windowAround(at, 48, 16, length);
+        if (!window.valid || window.first == firstWindowStart) continue;
+        if (firstWindowStart != UINT32_MAX && window.first + 48 > firstWindowStart &&
+            firstWindowStart + 48 > window.first) continue;
+        firstWindowStart = window.first;
+        dumpHangDwords(label, vmid, address, window.first, window.count, 0, nullptr, nullptr);
+    }
+}
+
+static void dumpGfxHangMemory(uint32_t index, const GfxHangSnapshot &snap) {
+    if (asicInfo == nullptr) return;
+    const auto ring = RaphaelHang::ringGeometry(snap.baseLo, snap.baseHi, snap.cntl);
+    if (!ring.valid) {
+        RLOG("XD: gfx hang dump %u memory: ring geometry invalid", index);
+        return;
+    }
+    static constexpr uint32_t kBefore = 64, kAfter = 32;
+    uint32_t words[kBefore + kAfter] {};
+    bool valid[kBefore + kAfter] {};
+    const uint32_t first = RaphaelHang::ringIndex(snap.rptr, -static_cast<int64_t>(kBefore),
+                                                  ring.dwords);
+    RLOG("XD: gfx hang dump %u memory: ring va=%#llx RPTR=%#x WPTR=%#x window [%#x..RPTR+%u)",
+         index, ring.va, snap.rptr, snap.wptr, first, kAfter);
+    dumpHangDwords("ring", 0, ring.va, first, kBefore + kAfter, ring.dwords, words, valid);
+    RaphaelHang::IbPacket gfxIb {}, ceIb {}, lastGfxIb {};
+    for (uint32_t i = 0; i + 3 < kBefore + kAfter; ++i) {
+        if (!valid[i] || !valid[i + 1] || !valid[i + 2] || !valid[i + 3]) continue;
+        const auto packet = RaphaelHang::parseIndirectBuffer(words, kBefore + kAfter, i);
+        if (!packet.valid) continue;
+        const bool gfx = packet.opcode == RaphaelHang::kPacket3IndirectBuffer;
+        const auto &regs = snap.ib[gfx ? kHangIb1 : kHangCeIb1];
+        const bool covers = RaphaelHang::packetCoversBase(packet, regs[kHangBaseLo],
+                                                          regs[kHangBaseHi]);
+        RLOG("XD: ring[%#x] %s va=%#llx length=%#x vmid=%u control=%#x %s RPTR covers-%s=%u",
+             RaphaelHang::ringIndex(first, i, ring.dwords),
+             gfx ? "INDIRECT_BUFFER" : "INDIRECT_BUFFER_CONST", packet.address,
+             packet.lengthDwords, packet.vmid, packet.control, i < kBefore ? "before" : "at/after",
+             gfx ? "IB1" : "CE_IB1", covers);
+        if (gfx && i < kBefore) lastGfxIb = packet;
+        if (covers && gfx) gfxIb = packet;
+        if (covers && !gfx) ceIb = packet;
+    }
+    const auto &ib1 = snap.ib[kHangIb1];
+    if (!gfxIb.valid && lastGfxIb.valid && (ib1[kHangBaseLo] | ib1[kHangBaseHi]) != 0) {
+        RLOG("XD: no ring IB covers CP_IB1_BASE; using the last IB before RPTR");
+        gfxIb = lastGfxIb;
+    }
+    if (gfxIb.valid) {
+        const uint64_t ib1Base = RaphaelVm::join(ib1[kHangBaseLo], ib1[kHangBaseHi]) & ~3ULL;
+        dumpHangIb("IB1", gfxIb.vmid, gfxIb.address, gfxIb.lengthDwords, ib1[kHangOffset],
+                   ib1[kHangBufsz]);
+        if (ib1Base != gfxIb.address && ib1Base > gfxIb.address &&
+            ib1Base - gfxIb.address < static_cast<uint64_t>(gfxIb.lengthDwords) * 4) {
+            const uint32_t at = static_cast<uint32_t>((ib1Base - gfxIb.address) / 4);
+            const auto window = RaphaelHang::windowAround(at, 48, 16, gfxIb.lengthDwords);
+            if (window.valid)
+                dumpHangDwords("IB1@BASE", hangIbVmid("IB1@BASE", gfxIb.vmid, gfxIb.address),
+                               gfxIb.address, window.first, window.count, 0, nullptr, nullptr);
+        }
+        const auto &ib2 = snap.ib[kHangIb2];
+        const uint64_t ib2Base = RaphaelVm::join(ib2[kHangBaseLo], ib2[kHangBaseHi]) & ~3ULL;
+        if (ib2Base != 0)
+            dumpHangIb("IB2", gfxIb.vmid, ib2Base, 0, ib2[kHangOffset], ib2[kHangBufsz]);
+    } else {
+        RLOG("XD: no INDIRECT_BUFFER packet in the ring window; IB contents not read");
+    }
+    if (ceIb.valid) {
+        const auto &ce = snap.ib[kHangCeIb1];
+        dumpHangIb("CE_IB1", ceIb.vmid, ceIb.address, ceIb.lengthDwords, ce[kHangOffset],
+                   ce[kHangBufsz]);
+    }
+    RLOG("XD: gfx hang dump %u memory complete", index);
+}
+
+static void hangDumpThread(void *, wait_result_t) {
+    uint32_t served = 0;
+    // 120000 polls of 50 ms cover the longest authorized 6000-second run.
+    for (unsigned poll = 0; poll < 120000 && served < kHangDumpLimit; ++poll) {
+        const uint32_t published = __atomic_load_n(&hangSnapshotCount, __ATOMIC_ACQUIRE);
+        while (served < published && served < kHangDumpLimit) {
+            dumpGfxHangMemory(served, hangSnapshots[served]);
+            ++served;
+        }
+        IOSleep(50);
+    }
+    thread_terminate(current_thread());
+}
+
 static void reportVmid2Runtime(const char *phase, uint32_t sequence,
                                const RaphaelVm::PreparedRequest &program,
                                const RaphaelSdma::SubmitInfoObservation *submit, bool walk) {
@@ -6999,6 +7368,12 @@ static void pluginStart() {
         ? golden : 0;
     RLOG("XG: rgpugolden=%u (%s)", goldenMode,
          goldenMode == 1 ? "program Linux GC 10.3.6 golden registers before RLC start" : "off");
+    uint32_t hangDump = 0;
+    hangDumpMode = PE_parse_boot_argn("rgpuhangdump", &hangDump, sizeof(hangDump)) &&
+        hangDump <= 1 ? hangDump : 0;
+    RLOG("XD: rgpuhangdump=%u (%s)", hangDumpMode, hangDumpMode == 1
+         ? "dump CP header/IB state, ring and IB memory at the first stalled gfx ring observation"
+         : "off");
     if (mqdNativeRestoreMode != 0 && mqdFixMode != 2) {
         RLOG("XQ2: rgpumqdrestore=%u requires rgpumqd=2; native restore disabled",
              mqdNativeRestoreMode);
@@ -7124,6 +7499,12 @@ static void pluginStart() {
         thread_deallocate(th);
     else
         RLOG("could not start the VM observation thread");
+    if (hangDumpMode == 1) {
+        if (kernel_thread_start(hangDumpThread, nullptr, &th) == KERN_SUCCESS)
+            thread_deallocate(th);
+        else
+            RLOG("XD: could not start the hang dump thread");
+    }
     lilu.onPatcherLoadForce(onPatcher);
     lilu.onKextLoadForce(kexts, arrsize(kexts), processKext, nullptr);
     RLOG("registered %lu kexts (Loaded flag set)", arrsize(kexts));
