@@ -990,3 +990,12 @@ shutdown `exited-after-guest-request`, quiesce ACK, zero stalls.
 Next: open a window between captures to show changing composited frames, and emit
 small JPEG thumbnails for visual confirmation.
 
+## Boot-launch ledger extension for the window-animation attempt (2026-09-14)
+
+GPU-less session `38522378...` (no VFIO device, no ledger entry) compiled the
+animation probe (source sha256 `d9e30715...`, binary sha256 `46f3f898...`). The
+1.0.218 binary with card `metal-058` runs from `run/candidate-218-attempt-anim` as
+launch 17 on boot `c369c74e`, through `--manual-reuse --ack-risk` under the user's
+standing instruction, after `run/mode2-reset-16.json`. This note covers this one
+launch.
+
