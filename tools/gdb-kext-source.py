@@ -179,20 +179,6 @@ def native_call_offsets(binary, function_offset, function_end, wrapper_name, nat
                 address=int(match.group(1),16)
                 if function_offset <= address < function_end:
                     matches.append(address)
-    # Optimized kext disassembly may omit the local org symbol annotation.  The
-    # routed original is the wrapper's single RIP-relative indirect call; retain
-    # the strict one-call bound and let the caller authenticate its six bytes.
-    if not matches:
-        indirect = []
-        for line in output.splitlines():
-            if "ff 15" in line:
-                match = re.match(r"\s*([0-9a-fA-F]+):", line)
-                if match:
-                    address = int(match.group(1), 16)
-                    if function_offset <= address < function_end:
-                        indirect.append(address)
-        if len(indirect) == 1:
-            matches = indirect
     if not matches or len(matches) > 4:
         raise ValueError(f"native call boundary count invalid for {wrapper_name}")
     return sorted(set(matches))
@@ -631,13 +617,8 @@ def main():
         start_prologue = executable_bytes(args.raphael_binary, start_off)
         native_offsets = native_call_offsets(args.raphael_binary, start_off, start_end,
                                              "wrapKiqStart", "orgKiqStart")
-        if len(native_offsets) == 2:
-            # Candidate209 has one indirect org call in the mode3 branch and one
-            # in the legacy branch.  The first call is the mode3 path (verified by
-            # the branch layout); this scenario is specifically mode3.
-            native_offsets = native_offsets[:1]
         if len(native_offsets) != 1:
-            parser.error("wrapKiqStart mode3 orgKiqStart call is ambiguous")
+            parser.error("wrapKiqStart must contain exactly one authenticated orgKiqStart call")
         native_prologue = executable_bytes(args.raphael_binary, native_offsets[0], 6)
         writer_specs = []
         for symbol, path in (('__ZL15wrapGcCgsWrite2Pvjjjj', 'ext2'),
