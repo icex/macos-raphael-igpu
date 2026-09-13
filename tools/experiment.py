@@ -160,7 +160,7 @@ def amdgpu_initialized(journal):
 
 
 def sleep_inhibited():
-    """Return whether logind has a block inhibitor covering sleep and idle."""
+    """Return whether logind has the permitted user-level idle inhibitor."""
     try:
         result = subprocess.run(
             ['busctl', '--system', '--json=short', 'call',
@@ -410,7 +410,7 @@ def current_identity(vm, candidate, requested_diagnostic, run_id=None,
                     if run_id is not None else None))
 
 
-def prepare(vm, spec, output, gpu=True, run_id=None):
+def prepare(vm, spec, output, gpu=True, run_id=None, attempt=None):
     card = json.loads(spec.read_text())
     selected_probe = probe_profile(card)
     replay_schema = critical_replay_schema(card)
@@ -427,7 +427,10 @@ def prepare(vm, spec, output, gpu=True, run_id=None):
         raise ValueError('GPU preparation requires an explicit run_id')
     if run_id is not None:
         recovery_nonce_words(run_id)
-    candidate = vm/'run'/('candidate-'+card['candidate_version'].split('.')[-1])
+    if attempt is not None and not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,31}', attempt):
+        raise ValueError('attempt must be a short identifier')
+    suffix = '' if attempt is None else '-attempt-' + attempt
+    candidate = vm/'run'/('candidate-'+card['candidate_version'].split('.')[-1] + suffix)
     with (vm/'run/redeploy.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         pending = vm/'run/launch-pending'
@@ -2555,7 +2558,7 @@ def reserve_warm_qualification(directory, boot_id, experiment, recovery,
 
 
 def reserve_boot(directory, boot_id, experiment, recovery=None,
-                 manifest=None, manifest_path=None):
+                 manifest=None, manifest_path=None, noqueue_proof=None):
     if not re.fullmatch(r'[A-Za-z0-9-]+', boot_id):
         raise ValueError('invalid host boot ID')
     directory.mkdir(parents=True, exist_ok=True)
@@ -2564,12 +2567,33 @@ def reserve_boot(directory, boot_id, experiment, recovery=None,
         write_once(path, {'schema':2, 'boot_id':boot_id, 'max_launches':3,
                           'launches':[{'run_id':experiment, 'reserved_epoch':time.time()}]})
         return
-    if recovery is None: raise FileExistsError(path)
+    if recovery is None and noqueue_proof is None: raise FileExistsError(path)
     ledger_raw = path.read_bytes()
     ledger = read_boot_ledger(path); launches = ledger.get('launches', [])
     if len(launches) >= 3:
         raise RuntimeError('launch ceiling exhausted')
     prior = launches[-1].get('run_id') if launches else None
+    if noqueue_proof is not None:
+        current_raw = path.read_bytes()
+        nq = helper('noqueue-qualification')
+        errors = nq.validate_proof(noqueue_proof, boot_id, experiment,
+                                       current_raw, sha(manifest_path.read_bytes()))
+        if (errors or noqueue_proof.get('run_id') != experiment or
+                noqueue_proof.get('prior_run_id') != prior or
+                noqueue_proof.get('ledger_preimage_sha256') != sha(ledger_raw) or
+                noqueue_proof.get('authorizes_launch') is not True):
+            raise ValueError('noqueue reuse reservation refused: ' +
+                             ','.join(sorted(set(errors or ['proof']))))
+        reservation = {'run_id': experiment, 'reserved_epoch': time.time(),
+                       'noqueue_qualification_sha256': sha(
+                           json.dumps(noqueue_proof, sort_keys=True).encode()),
+                       'prior_run_id': prior}
+        launches.append(reservation)
+        ledger.update(schema=2, boot_id=boot_id,
+                      max_launches=ledger.get('max_launches'), launches=launches)
+        ledger.pop('experiment', None)
+        replace_json(path, ledger)
+        return
     startup = isinstance(recovery, dict) and recovery.get('schema') == 4
     retained = isinstance(recovery, dict) and recovery.get('schema') == 7
     error_key = ('startup_noqueue_receipt' if startup else
@@ -2611,12 +2635,49 @@ def reserve_boot(directory, boot_id, experiment, recovery=None,
     replace_json(path, ledger)
 
 
+def noqueue_admission(vm, host, manifest, manifest_path, prior_output,
+                      identity_errors):
+    """Authorize noqueue reuse under the caller's experiment/media locks."""
+    vm = Path(vm)
+    if identity_errors:
+        return {'schema': 8, 'authorizes_launch': False,
+                'errors': ['preexisting_admission']}, list(identity_errors)
+    used = vm / 'run/used-gpu-boots'
+    ledger_path = used / (host['boot_id'] + '.json')
+    try:
+        ledger = read_boot_ledger(ledger_path)
+        rows = ledger.get('launches') or []
+        prior = rows[-1].get('run_id') if rows else None
+    except Exception:
+        return {'schema': 8, 'authorizes_launch': False,
+                'errors': ['boot_ledger']}, ['boot_ledger']
+    host_errors = admit(manifest, host, {p.stem for p in used.glob('*.json')},
+                        reuse_allowed=True)
+    if host_errors:
+        return {'schema': 8, 'authorizes_launch': False,
+                'errors': ['preexisting_admission']}, host_errors
+    nq = helper('noqueue-qualification')
+    proof = nq.authorize(vm, prior_output, manifest, manifest_path,
+                         {'run_id': prior}, helper('vfio-recover'),
+                         helper('inspect-noqueue'))
+    ledger_raw = ledger_path.read_bytes()
+    errors = nq.validate_proof(proof, host['boot_id'], manifest['run_id'],
+                               ledger_raw, sha(manifest_path.read_bytes()))
+    if proof.get('prior_run_id') != prior:
+        errors = sorted(set(errors + ['prior_run_latest']))
+    if proof.get('run_id') != manifest['run_id']:
+        errors = sorted(set(errors + ['run_id']))
+    if errors or proof.get('authorizes_launch') is not True:
+        errors = sorted(set(errors or ['noqueue_qualification']))
+    return proof, errors
+
+
 def reserve_launch_and_cursor(directory, boot_id, experiment, recovery,
                               manifest, manifest_path, cap_revision=None,
                               warm_qualification=None, output=None,
-                              candidate179=None):
+                              candidate179=None, noqueue_proof=None):
     modes = sum(value is not None for value in (
-        cap_revision, warm_qualification, candidate179))
+        cap_revision, warm_qualification, candidate179, noqueue_proof))
     if modes > 1:
         raise ValueError('mixed launch authority')
     if candidate179 is not None:
@@ -2631,7 +2692,8 @@ def reserve_launch_and_cursor(directory, boot_id, experiment, recovery,
         return reserve_cap_revision(
             directory, boot_id, experiment, recovery, manifest,
             manifest_path, cap_revision)
-    reserve_boot(directory, boot_id, experiment, recovery, manifest, manifest_path)
+    reserve_boot(directory, boot_id, experiment, recovery, manifest, manifest_path,
+                 noqueue_proof)
     return kernel_updates()[0]
 
 
@@ -2828,10 +2890,11 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
             one_run_policy_sha256=None,
             one_run_activation_sha256=None,
             prelaunch_proof_sha256=None,
-            manual_reuse=False):
+            manual_reuse=False, noqueue_reuse=None):
     """One bounded launch; a verified prior recovery may authorize same-boot reuse."""
     if manual_reuse:
         raise ValueError('manual reuse is unsupported under the current launch budget policy')
+    noqueue_requested = bool(noqueue_reuse)
     one_run_requested = bool(one_run_policy_sha256 or one_run_activation_sha256)
     if bool(one_run_policy_sha256) != bool(one_run_activation_sha256):
         raise ValueError('one-run qualification requires policy and activation hashes')
@@ -2868,6 +2931,10 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
     if manual_reuse and (resume_prelaunch or cap_revision_authority_sha256 or
                          warm_requested or candidate179_requested):
         raise ValueError('manual reuse cannot use another launch mode')
+    if noqueue_requested and (resume_prelaunch or cap_revision_authority_sha256 or
+                              warm_requested or candidate179_requested or
+                              one_run_requested or manual_reuse):
+        raise ValueError('noqueue reuse cannot use another launch mode')
     manifest = json.loads(manifest_path.read_text())
     probe_profile(manifest)
     validate_manifest_replay_contract(manifest)
@@ -2955,6 +3022,7 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                 host = host_snapshot(); write_once(output/'host-before.json', host)
                 used = vm/'run/used-gpu-boots'; used.mkdir(exist_ok=True)
                 recovery = None; reuse_errors = []
+                noqueue_proof = None
                 cap_revision = None; warm_qualification = None
                 reservation_cursor = None
                 continuation = None; continuation_ledger = None
@@ -3001,6 +3069,15 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                         recovery = 'manual-override' if manual_reuse else None
                         if (used/(host['boot_id']+'.json')).exists() and not manual_reuse:
                             reuse_errors = ['v2_reuse_requires_finite_authority']
+                    if noqueue_requested:
+                        noqueue_proof, reuse_errors = noqueue_admission(
+                            vm, host, manifest, manifest_path, noqueue_reuse, errors)
+                        write_once(output/'noqueue-qualification.json', noqueue_proof)
+                        if not reuse_errors:
+                            reuse_errors = []
+                            recovery = noqueue_proof
+                        else:
+                            recovery = None
                     errors += reuse_errors
                     errors += admit(manifest, host, {p.stem for p in used.glob('*.json')},
                                     reuse_allowed=recovery is not None)
@@ -3009,7 +3086,7 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                     reservation_cursor = reserve_launch_and_cursor(
                         used, host['boot_id'], manifest['run_id'], recovery,
                         manifest, manifest_path, cap_revision,
-                        warm_qualification, output, candidate179)
+                        warm_qualification, output, candidate179, noqueue_proof)
                 cursor = (cursor_result[0] if resume_prelaunch else
                           reservation_cursor or kernel_updates()[0])
                 monitor = HostMonitor(cursor, lambda:os.kill(os.getpid(), signal.SIGUSR1))
@@ -3226,6 +3303,7 @@ if __name__ == '__main__':
     parser.add_argument('--manifest', type=Path)
     parser.add_argument('--output', type=Path)
     parser.add_argument('--run-id', help='explicit 32-hex launch identity already staged in boot arguments')
+    parser.add_argument('--attempt', help='prepare an isolated retry artifact namespace')
     parser.add_argument('--gpu-less', action='store_true', help='prepare a no-passthrough coordinator validation')
     parser.add_argument('--resume-prelaunch', type=Path)
     parser.add_argument('--prelaunch-proof', type=Path)
@@ -3239,6 +3317,8 @@ if __name__ == '__main__':
     parser.add_argument('--one-run-activation-sha256')
     parser.add_argument('--manual-reuse', action='store_true',
                         help='explicitly reuse a boot without a recovery receipt')
+    parser.add_argument('--noqueue-reuse', type=Path,
+                        help='authorize one explicit same-boot no-queue reuse from prior output')
     parser.add_argument('--ack-risk', action='store_true',
                         help='required acknowledgement for --manual-reuse')
     args = parser.parse_args()
@@ -3290,13 +3370,15 @@ if __name__ == '__main__':
         parser.error('--gpu-less is only valid with prepare; run uses the explicit prepared mode')
     if args.run_id and args.action != 'prepare':
         parser.error('--run-id is only valid with prepare')
+    if args.attempt and args.action != 'prepare':
+        parser.error('--attempt is only valid with prepare')
     if args.action == 'prepare' and not args.gpu_less and not args.run_id:
         parser.error('GPU prepare requires --run-id')
     if args.action == 'host': result = host_snapshot()
     elif args.action == 'prepare':
         if not args.spec or not args.output: parser.error('prepare requires --spec and --output')
         result = prepare(args.vm_dir.resolve(), args.spec, args.output,
-                         gpu=not args.gpu_less, run_id=args.run_id)
+                         gpu=not args.gpu_less, run_id=args.run_id, attempt=args.attempt)
     else:
         if not args.manifest or not args.output: parser.error('run requires --manifest and --output')
         result = run_one(args.vm_dir.resolve(), args.manifest, args.output,
@@ -3309,5 +3391,5 @@ if __name__ == '__main__':
                          args.one_run_policy_sha256,
                          args.one_run_activation_sha256,
                          args.prelaunch_proof_sha256,
-                         args.manual_reuse)
+                         args.manual_reuse, args.noqueue_reuse)
     print(json.dumps(result, indent=2))
