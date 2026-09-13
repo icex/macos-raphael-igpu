@@ -116,6 +116,38 @@ static NSDictionary *captureDisplay(CGDirectDisplayID display) {
               @"fnv": [NSString stringWithFormat:@"%016llx", hash], @"nonzero_bytes": @(nonzero) };
 }
 
+static void userCommand(NSArray<NSString *> *arguments) {
+    NSTask *task = [[NSTask alloc] init];
+    task.launchPath = @"/bin/launchctl";
+    task.arguments = [@[ @"asuser", @"501" ] arrayByAddingObjectsFromArray:arguments];
+    @try { [task launch]; [task waitUntilExit]; } @catch (NSException *exception) {}
+}
+
+// A 320-pixel JPEG of the console user's screen, base64 in the report, so the host
+// can look at the composited desktop without moving megabytes through gx.
+static NSDictionary *userThumbnail(NSString *label) {
+    NSString *png = [NSString stringWithFormat:@"/var/tmp/rgpu-desktop-%@-%d.png", label, getpid()];
+    NSString *jpg = [png stringByAppendingString:@".jpg"];
+    userCommand(@[ @"/usr/sbin/screencapture", @"-x", @"-t", @"png", png ]);
+    NSTask *sips = [[NSTask alloc] init];
+    sips.launchPath = @"/usr/bin/sips";
+    sips.arguments = @[ @"-Z", @"320", @"-s", @"format", @"jpeg", @"-s", @"formatOptions", @"40",
+                        png, @"--out", jpg ];
+    sips.standardOutput = [NSFileHandle fileHandleWithNullDevice];
+    sips.standardError = [NSFileHandle fileHandleWithNullDevice];
+    @try { [sips launch]; [sips waitUntilExit]; } @catch (NSException *exception) {}
+    NSData *data = [NSData dataWithContentsOfFile:jpg];
+    [[NSFileManager defaultManager] removeItemAtPath:png error:nil];
+    [[NSFileManager defaultManager] removeItemAtPath:jpg error:nil];
+    uint64_t hash = 1469598103934665603ULL;
+    const UInt8 *bytes = data.bytes;
+    for (NSUInteger i = 0; i < data.length; ++i) hash = (hash ^ bytes[i]) * 1099511628211ULL;
+    return @{ @"label": label, @"jpeg_bytes": @(data.length),
+              @"fnv": [NSString stringWithFormat:@"%016llx", hash],
+              @"jpeg_base64": data.length && data.length < 60000 ?
+                  [data base64EncodedStringWithOptions:0] : @"" };
+}
+
 static NSDictionary *userSessionCapture(void) {
     // screencapture in the console user's bootstrap session; the PNG size and
     // hash are enough to tell a real composited frame from a refusal.
@@ -215,6 +247,18 @@ int main(int argc, const char *argv[]) {
         usleep(1000000);
         NSDictionary *userSecond = userSessionCapture();
         report[@"user_session_captures"] = @[ userFirst, userSecond ];
+        // Changing content: open a Calculator window between two captures, then close it.
+        NSDictionary *before = userThumbnail(@"before");
+        NSDictionary *displayBefore = displayCount > 0 ? captureDisplay(CGMainDisplayID()) : @{};
+        userCommand(@[ @"/usr/bin/open", @"-a", @"Calculator" ]);
+        usleep(3000000);
+        NSDictionary *after = userThumbnail(@"after");
+        NSDictionary *displayAfter = displayCount > 0 ? captureDisplay(CGMainDisplayID()) : @{};
+        userCommand(@[ @"/usr/bin/osascript", @"-e", @"quit app \"Calculator\"" ]);
+        report[@"animation_thumbnails"] = @[ before, after ];
+        report[@"animation_display_captures"] = @[ displayBefore, displayAfter ];
+        report[@"animation_frames_changed"] = @([displayBefore[@"captured"] boolValue] &&
+            [displayAfter[@"captured"] boolValue] && ![displayBefore[@"fnv"] isEqual:displayAfter[@"fnv"]]);
         report[@"passed"] = @YES;
         emit();
     }

@@ -974,3 +974,19 @@ no ledger entry) recompiled the desktop probe with frame capture (source sha256
 `--manual-reuse --ack-risk` under the user's standing instruction, after
 `run/mode2-reset-15.json`. This note covers this one launch.
 
+## Composited desktop frames captured from the Raphael-driven display (2026-09-14)
+
+Run `0f527b57f4296b64b653dcfde8a2d480`, card `metal-057` (commit `fef552b`), 1.0.218 build `10cce4d8...`, launch 16
+after `run/mode2-reset-15.json`. Verdict `CORE_PROBE_PASS`, recovery `recovered`,
+shutdown `exited-after-guest-request`, quiesce ACK, zero stalls.
+
+- Main display 1280x1024 again driven by the Raphael Metal device; WindowServer holds
+  accelerator clients.
+- `CGDisplayCreateImage` returned full frames (1280x1024, 5,084,047 of 5,242,880
+  bytes non-zero) despite `CGPreflightScreenCaptureAccess=false` for the root probe.
+- Console-user `screencapture` succeeded (exit 0, 1,768,443-byte PNG).
+- Both capture pairs were identical one second apart: the logged-in desktop was idle.
+
+Next: open a window between captures to show changing composited frames, and emit
+small JPEG thumbnails for visual confirmation.
+
