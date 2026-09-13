@@ -20,11 +20,11 @@ constexpr uint32_t kMecHaltMask = (1U << 28) | (1U << 30);
 constexpr uint64_t kNativeMecHaltCaller = 0x15073;
 constexpr uint32_t kNativeMecControlRegister = 0x21b5;
 
-inline bool preserveNativeMecHalt(uint32_t mode, bool armed, bool held,
-                                  bool admission, uint64_t caller, uint32_t reg,
+inline bool preserveNativeMecHalt(uint32_t mode, uint32_t mqdMode, bool armed,
+                                  uint64_t caller, uint32_t reg,
                                   uint32_t client, uint32_t flag, bool contextKnown,
                                   bool contextMatches) {
-    return mode == 3 && armed && held && admission &&
+    return mode == 3 && mqdMode == 2 && armed &&
         caller == kNativeMecHaltCaller && reg == kNativeMecControlRegister &&
         client == 0xb && flag == 1 && (!contextKnown || contextMatches);
 }

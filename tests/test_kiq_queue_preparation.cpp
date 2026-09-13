@@ -354,25 +354,37 @@ int main() {
                  0x8400000800ULL, 0x20, true),
             "native probe failure never authorizes release");
     require(RaphaelKiq::preserveNativeMecHalt(
-                3, true, true, true, RaphaelKiq::kNativeMecHaltCaller,
+                3, 2, true, RaphaelKiq::kNativeMecHaltCaller,
                 RaphaelKiq::kNativeMecControlRegister, 0xb, 1, true, true),
             "mode-3 native MEC guard preserves the exact audited write");
     require(!RaphaelKiq::preserveNativeMecHalt(
-                 2, true, true, true, RaphaelKiq::kNativeMecHaltCaller,
-                 RaphaelKiq::kNativeMecControlRegister, 0xb, 1, true, true),
+                 2, 2, true, RaphaelKiq::kNativeMecHaltCaller,
+                RaphaelKiq::kNativeMecControlRegister, 0xb, 1, true, true),
             "mode-2 native MEC guard remains disabled");
     require(!RaphaelKiq::preserveNativeMecHalt(
-                 3, false, true, true, RaphaelKiq::kNativeMecHaltCaller,
-                 RaphaelKiq::kNativeMecControlRegister, 0xb, 1, true, true),
+                 3, 2, false, RaphaelKiq::kNativeMecHaltCaller,
+                RaphaelKiq::kNativeMecControlRegister, 0xb, 1, true, true),
             "unarmed native MEC guard remains disabled");
     require(!RaphaelKiq::preserveNativeMecHalt(
-                 3, true, true, true, RaphaelKiq::kNativeMecHaltCaller,
-                 RaphaelKiq::kNativeMecControlRegister + 1, 0xb, 1, true, true),
+                 3, 2, true, RaphaelKiq::kNativeMecHaltCaller,
+                RaphaelKiq::kNativeMecControlRegister + 1, 0xb, 1, true, true),
             "wrong native register remains untouched");
     require(!RaphaelKiq::preserveNativeMecHalt(
-                 3, true, true, true, RaphaelKiq::kNativeMecHaltCaller + 1,
+                 3, 2, true, RaphaelKiq::kNativeMecHaltCaller + 1,
                  RaphaelKiq::kNativeMecControlRegister, 0xb, 1, true, true),
             "wrong native caller remains untouched");
+    require(!RaphaelKiq::preserveNativeMecHalt(
+                 3, 2, true, RaphaelKiq::kNativeMecHaltCaller,
+                 RaphaelKiq::kNativeMecControlRegister, 0xa, 1, true, true),
+            "wrong native client remains untouched");
+    require(!RaphaelKiq::preserveNativeMecHalt(
+                 3, 2, true, RaphaelKiq::kNativeMecHaltCaller,
+                 RaphaelKiq::kNativeMecControlRegister, 0xb, 2, true, true),
+            "wrong native flag remains untouched");
+    require(!RaphaelKiq::preserveNativeMecHalt(
+                 3, 2, true, RaphaelKiq::kNativeMecHaltCaller,
+                 RaphaelKiq::kNativeMecControlRegister, 0xb, 1, true, false),
+            "wrong native context remains untouched");
     FakeHalted inaccessibleRetained;
     inaccessibleRetained.value[static_cast<unsigned>(FakeHalted::Register::MecControl)] = 0x1234;
     inaccessibleRetained.value[static_cast<unsigned>(FakeHalted::Register::WptrLo)] = 0xffffffffU;

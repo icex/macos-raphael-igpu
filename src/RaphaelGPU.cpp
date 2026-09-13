@@ -1912,12 +1912,13 @@ static uint32_t wrapGcCgsWrite2(void *ctx, uint32_t reg, uint32_t val, uint32_t 
         return 0;
     }
     const bool preserveMecHalt = RaphaelKiq::preserveNativeMecHalt(
-        mqdNativeRestoreMode, __atomic_load_n(&nativeMecProbeArmed, __ATOMIC_ACQUIRE) != 0,
-        true, true, caller, reg, client, flag, gcCtx != nullptr, gcCtx == ctx);
+        mqdNativeRestoreMode, mqdFixMode,
+        __atomic_load_n(&nativeMecProbeArmed, __ATOMIC_ACQUIRE) != 0,
+        caller, reg, client, flag, gcCtx != nullptr, gcCtx == ctx);
     if (preserveMecHalt && reg == kGcCpMecCntl) {
         const uint32_t requested = val;
         val |= RaphaelKiq::kMecHaltMask;
-        RLOG("XQ4: native MEC halt guard caller=+%#llx requested=%#x effective=%#x client=%#x flag=%#x",
+        CRLOG("XQ4: native MEC halt guard caller=+%#llx requested=%#x effective=%#x client=%#x flag=%#x",
              caller, requested, val, client, flag);
     }
     auto r = FunctionCast(wrapGcCgsWrite2, orgGcCgsWrite2)(ctx, reg, val, client, flag);
@@ -2696,10 +2697,21 @@ static uint32_t wrapKiqStart(void *self, uint64_t a, uint64_t b, void *spec, uin
         CRLOG("XQ2: native restore entered after %s admission; non-authorizing",
               mqdNativeRestoreMode == 3 ? "validated contained-probe" :
               "unresolved dequeue timeout");
-    if (mqdNativeRestoreMode == 3 && nativeRestoreAttempted && haltedTx.held)
-        __atomic_store_n(&nativeMecProbeArmed, 1, __ATOMIC_RELEASE);
+    bool thisProbeArmed = false;
+    if (mqdNativeRestoreMode == 3 && mqdFixMode == 2 && nativeRestoreAttempted && haltedTx.held) {
+        uint32_t expected = 0;
+        thisProbeArmed = __atomic_compare_exchange_n(
+            &nativeMecProbeArmed, &expected, 1, false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE);
+        if (!thisProbeArmed) {
+            CRLOG("XQ4: native MEC probe refused: another scoped native call is armed");
+            fbWrite(asicInfo, kGcCpMecCntl, haltedTx.savedMecControl | RaphaelKiq::kMecHaltMask);
+            fbWrite(asicInfo, kGcGrbmGfxCntl, 0);
+            return 0xe00002bc;
+        }
+    }
     auto r = FunctionCast(wrapKiqStart, orgKiqStart)(self, a, b, spec, out);
-    __atomic_store_n(&nativeMecProbeArmed, 0, __ATOMIC_RELEASE);
+    if (thisProbeArmed)
+        __atomic_store_n(&nativeMecProbeArmed, 0, __ATOMIC_RELEASE);
     RLOG("XJ:   PM4 startKIQ(%#llx, %#llx) -> %#x (0 is success)", a, b, r);
     if (mqdFixMode == 2) {
         fbWrite(asicInfo, kGcGrbmGfxCntl, kKiqSelector);
