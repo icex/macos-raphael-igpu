@@ -366,6 +366,11 @@ static uint32_t vmmProbeMode = 0;
 // upstream. So mode 1 only reports, and mode 2 acts. Do not skip mode 1.
 static uint32_t memProbeMode = 0;
 static bool recoveryLeaseConfigured = false;
+static uint64_t discoveredVramTotal = 0;
+static uint64_t discoveredBarVisible = 0;
+static uint64_t nativeProviderTotal = 0;
+static uint64_t nativeProviderVisible = 0;
+static bool discoveredCapacityValid = false;
 static uint64_t recoveryNonceLo = 0;
 static uint64_t recoveryNonceHi = 0;
 static RaphaelRecoveryV2::LeaseState recoveryLeaseState {};
@@ -2566,37 +2571,44 @@ static constexpr uint32_t kGcFbOffset = 0x2947;   // GC 0x1260 + gc_10_3 0x16e7
 //     [this+0x48] = s[0x10]   pool 1 size measured 0x10000000  (256 MB, the PCI aperture)
 // Those two are per-pool: canAllocate indexes them as [this + 8*pool + 0x40].
 //
-// enableAllocations then branches on whether they are equal:
-//     equal   -> IOAccelMemoryAllocator::init_pool(base, size)          for both pools
-//     unequal -> IOAccelMemoryAllocator::init_pool(base + [0x40],
-//                                                  base + [0x48], 0)    for both pools
-// (names recovered from the external relocations at 0x52a58/0x52a6b/0x52a7e/0x52a9a).
-// The three-argument overload is (totalEnd, reservedStart, reservedLength), so the
-// native 512/256/0 call is valid. This first lease experiment still equalises to
-// 256 MiB because the secondary native reserved-VRAM cursor has not been measured;
-// restoring the full logical carveout is a separate change.
-//
-// For this first lease experiment, equalise on the smaller measured value. That is
-// the CPU-visible aperture on this host, so every address used by the recovery
-// protocol stays inside the mapped BAR. Restoring the 512/256 native size pair is a
-// separate experiment after the secondary reserved-VRAM cursor is measured.
+// Capacity discovery retains Apple's provider pool fields and separately records
+// the logical framebuffer and CPU-visible BAR bounds for recovery diagnostics.
+static bool discoverVramCapacities(RaphaelRecoveryV2::DiscoveredPoolCapacities &out);
+
 static uint32_t wrapHwMemVram(void *self) {
     auto r = FunctionCast(wrapHwMemVram, orgHwMemVram)(self);
     if (self == nullptr) return r;
+    discoveredCapacityValid = false;
+    discoveredVramTotal = 0;
+    discoveredBarVisible = 0;
+    nativeProviderTotal = 0;
+    nativeProviderVisible = 0;
+    if ((r & 0xffU) == 0) return 0;
     auto f = reinterpret_cast<uint8_t *>(self);
     auto q = [f](size_t o) -> uint64_t & { return *reinterpret_cast<uint64_t *>(f + o); };
     hwMemObject = self;
-    RLOG("XH: initVRAMInfo -> %u  base(+50)=%#llx fbPhysical(+58)=%#llx delta(+60)=%#llx "
-         "size0=%#llx size1=%#llx | poolA(0x68)=%#llx poolB(0x70)=%#llx",
-         r, q(0x50), q(0x58), q(0x60), q(0x40), q(0x48), q(0x68), q(0x70));
-    if ((mask & XH) != 0 && q(0x40) != q(0x48) && q(0x40) != 0 && q(0x48) != 0) {
-        uint64_t use = q(0x40) < q(0x48) ? q(0x40) : q(0x48);
-        RLOG("XH: pool sizes differ (%#llx total vs %#llx visible) -- retaining the "
-             "BAR-visible compatibility size %#llx (%llu MB) for both",
-             q(0x40), q(0x48), use, use >> 20);
-        q(0x40) = use;
-        q(0x48) = use;
+    RaphaelRecoveryV2::DiscoveredPoolCapacities discoveredPools {};
+    discoveredCapacityValid = discoverVramCapacities(discoveredPools);
+    if (!discoveredCapacityValid) {
+        RLOG("XH: native VRAM rejected: runtime GFXHUB/BAR capacity discovery failed");
+        return 0;
     }
+    discoveredVramTotal = discoveredPools.totalCapacity;
+    discoveredBarVisible = discoveredPools.visibleCapacity;
+    nativeProviderTotal = discoveredPools.pools.total;
+    nativeProviderVisible = discoveredPools.pools.visible;
+    if (discoveredPools.pools.total != q(0x40) || discoveredPools.pools.visible != q(0x48)) {
+        RLOG("XH: native VRAM rejected: provider sizes total=%#llx visible=%#llx "
+             "capacity total=%#llx BAR=%#llx", q(0x40), q(0x48),
+             discoveredVramTotal, discoveredBarVisible);
+        discoveredCapacityValid = false;
+        return 0;
+    }
+    RLOG("XH: initVRAMInfo -> %u  base(+50)=%#llx fbPhysical(+58)=%#llx delta(+60)=%#llx "
+         "size0=%#llx size1=%#llx | rawTotal=%#llx barVisible=%#llx "
+         "providerTotal=%#llx providerVisible=%#llx poolA(0x68)=%#llx poolB(0x70)=%#llx",
+         r, q(0x50), q(0x58), q(0x60), q(0x40), q(0x48), discoveredVramTotal,
+         discoveredBarVisible, nativeProviderTotal, nativeProviderVisible, q(0x68), q(0x70));
     return r;
 }
 
@@ -3130,18 +3142,37 @@ static void disableCtx0Retry() {
 
 // BAR0 maps the visible portion of VRAM. The GART walker below converts a
 // validated physical framebuffer root into an offset within this existing map.
+static uint64_t cachedBarMapLength = 0;
+static void *cachedBarHardware = nullptr;
+static void *cachedBarPci = nullptr;
 static volatile uint32_t *fbAperture() {
     static void *cached {};
+    void *hardware = hwMemObject != nullptr
+        ? *reinterpret_cast<void **>(reinterpret_cast<uint8_t *>(hwMemObject) + 0x10)
+        : nullptr;
+    if (hardware == nullptr) hardware = hwObj;
+    void *pci = hardware != nullptr
+        ? *reinterpret_cast<void **>(reinterpret_cast<uint8_t *>(hardware) + 0x10) : nullptr;
+    if (cached != nullptr && (hardware != cachedBarHardware || pci != cachedBarPci)) return nullptr;
     auto result = RaphaelRecovery::establishBarMapping(
-        cached, hwObj, hwMemObject, [](void *pci) -> void * {
+        cached, hardware, hwMemObject, [](void *pci) -> void * {
+            if (pci == nullptr) return nullptr;
             auto vt = *reinterpret_cast<uint64_t **>(pci);
+            if (vt == nullptr || vt[0x908 / 8] == 0) return nullptr;
             auto mapFn = reinterpret_cast<void *(*)(void *, uint32_t, uint32_t)>(
                 vt[0x908 / 8]);
             auto map = mapFn(pci, 0x10, 0);
             if (map == nullptr) return nullptr;
             auto mvt = *reinterpret_cast<uint64_t **>(map);
+            if (mvt == nullptr || mvt[0x128 / 8] == 0 || mvt[0x118 / 8] == 0) return nullptr;
+            auto getLength = reinterpret_cast<uint64_t (*)(void *)>(mvt[0x128 / 8]);
+            const uint64_t length = getLength(map);
+            if (length == 0) return nullptr;
             auto getVA = reinterpret_cast<uint64_t (*)(void *)>(mvt[0x118 / 8]);
-            return reinterpret_cast<void *>(getVA(map));
+            void *address = reinterpret_cast<void *>(getVA(map));
+            if (address == nullptr) return nullptr;
+            cachedBarMapLength = length;
+            return address;
         });
     switch (result.status) {
         case RaphaelRecovery::BarMappingStatus::OwnerUnavailable:
@@ -3154,12 +3185,33 @@ static volatile uint32_t *fbAperture() {
             RLOG("XN: BAR0 map failed");
             break;
         case RaphaelRecovery::BarMappingStatus::Mapped:
+            cachedBarHardware = hardware;
+            cachedBarPci = pci;
             RLOG("XN: BAR0 mapped at %p", result.address);
             break;
         case RaphaelRecovery::BarMappingStatus::Cached:
             break;
     }
     return reinterpret_cast<volatile uint32_t *>(result.address);
+}
+
+static bool discoverVramCapacities(RaphaelRecoveryV2::DiscoveredPoolCapacities &out) {
+    if (asicInfo == nullptr || hwMemObject == nullptr || fbAperture() == nullptr) return false;
+    if (*reinterpret_cast<void **>(reinterpret_cast<uint8_t *>(hwMemObject) + 0x10) == nullptr)
+        return false;
+    if (!RaphaelRecoveryV2::discoverPoolCapacities(
+            fbRead(asicInfo, kGcFbBase), fbRead(asicInfo, kGcFbTop),
+            cachedBarMapLength,
+            *reinterpret_cast<uint64_t *>(reinterpret_cast<uint8_t *>(hwMemObject) + 0x40),
+            *reinterpret_cast<uint64_t *>(reinterpret_cast<uint8_t *>(hwMemObject) + 0x48),
+            out)) return false;
+    return true;
+}
+
+static bool fitsDiscoveredBar(uint64_t offset, uint64_t length) {
+    uint64_t end = 0;
+    return discoveredCapacityValid && discoveredBarVisible != 0 &&
+           RaphaelRecoveryV2::checkedAdd(offset, length, end) && end <= discoveredBarVisible;
 }
 
 // The recorded memory sizes bound the existing 256MiB BAR0 mapping; never infer
@@ -3175,8 +3227,8 @@ static bool gartApertureInfo(RaphaelGart::Aperture &ap) {
     const uint64_t size0 = *reinterpret_cast<const uint64_t *>(memory + 0x40);
     const uint64_t size1 = *reinterpret_cast<const uint64_t *>(memory + 0x48);
     if (size0 == 0 || size1 == 0) return false;
-    uint64_t visible = RaphaelRecovery::barVisibleBytes(size0, size1);
-    if (visible > 0x10000000ULL) visible = 0x10000000ULL;
+    uint64_t visible = discoveredBarVisible;
+    if (!discoveredCapacityValid || visible == 0) return false;
     ap = {*reinterpret_cast<const uint64_t *>(memory + 0x50),
           *reinterpret_cast<const uint64_t *>(memory + 0x58),
           static_cast<uint64_t>(base) << 24,
@@ -3311,8 +3363,8 @@ static void dumpMqd(uint64_t mqdVa) {
                 mqdVa, fbBase, swBase, reserved); return; }
     RLOG("XN: mqd va=%#llx is %s, offset %#llx -> correct MC would be %#llx", mqdVa, form, off,
          fbBase + off);
-    if (off + 0x800 > 0x10000000ULL) {
-        RLOG("XN: mqd offset %#llx is outside the 256 MB BAR0 aperture", off); return;
+    if (!fitsDiscoveredBar(off, 0x800)) {
+        RLOG("XN: mqd offset %#llx is outside the discovered BAR0 aperture", off); return;
     }
     auto d = [fb, off](uint32_t f) { return fb[(off + f) / 4]; };
     RLOG("XN: MQD@fb+%#llx: header=%#x mqd_base=%#x active=%#x vmid=%#x persistent=%#x",
@@ -3365,7 +3417,7 @@ static void relocateRingToVram() {
     uint64_t ringVa = static_cast<uint64_t>(fbRead(asicInfo, kGcHqdPqBase)) << 8;
     if (ringVa < start) return;
     uint64_t pteOff = ptb + ((ringVa - start) >> 12) * 8;
-    if (pteOff + 8 > 0x10000000ULL) return;
+    if (!fitsDiscoveredBar(pteOff, 8)) return;
 
     uint64_t old = (static_cast<uint64_t>(fb[pteOff / 4 + 1]) << 32) | fb[pteOff / 4];
     if ((old & 1) == 0) { RLOG("XN: ring PTE not valid, not relocating"); return; }
@@ -3508,8 +3560,8 @@ static void loadMecMicrocode() {
 
     uint64_t fbBase = static_cast<uint64_t>(fbRead(asicInfo, kGcFbBase) & 0xffffff) << 24;
     uint64_t mcAddr = fbBase + kMecFwFbOffset;
-    if (kMecFwFbOffset + kMecFwSize > 0x10000000ULL) {
-        RLOG("XP: MEC ucode does not fit under the 256 MB BAR0 aperture"); return;
+    if (!fitsDiscoveredBar(kMecFwFbOffset, kMecFwSize)) {
+        RLOG("XP: MEC ucode does not fit under the discovered BAR0 aperture"); return;
     }
     auto src = reinterpret_cast<const uint32_t *>(kMecFw);
     for (uint32_t i = 0; i < kMecFwSize / 4; i++) fb[(kMecFwFbOffset / 4) + i] = src[i];
@@ -4124,7 +4176,7 @@ static void repairMqdPointers() {
                        fbRead(asicInfo, kGcMqdBase);
     uint64_t imgOff = (mqdEnc >= fbHW && mqdEnc <= fbTop) ? mqdEnc - fbHW
                     : (swBase != 0 && mqdEnc >= swBase) ? mqdEnc - swBase : ~0ULL;
-    if (imgOff == ~0ULL || imgOff + 0x800 > 0x10000000ULL) {
+    if (imgOff == ~0ULL || !fitsDiscoveredBar(imgOff, 0x800)) {
         RLOG("XQ: MQD image at %#llx is not reachable through BAR0, image left alone", mqdEnc);
     } else if (mqdFixMode >= 1) {
         auto put = [fb, imgOff](uint32_t f, uint32_t v) { fb[(imgOff + f) / 4] = v; };
@@ -4453,16 +4505,14 @@ static void wrapVmmSetVSReady(void *self, uint32_t ready) {
     bool owned = true;
     if (ready != 0 && recoveryLeaseConfigured) {
         const auto memory = reinterpret_cast<uint8_t *>(hwMemObject);
-        const uint64_t visible = memory != nullptr
-            ? RaphaelRecoveryV2::compatibilityPoolSize(
-                  RaphaelRecoveryV2::nativePoolSizes(
-                      *reinterpret_cast<uint64_t *>(memory + 0x40),
-                      *reinterpret_cast<uint64_t *>(memory + 0x48)))
-            : 0;
+        const uint64_t visible = discoveredBarVisible;
+        const uint64_t logical = discoveredVramTotal;
         void *hardware = q(0x10);
         using AppendReserved = uint64_t (*)(void *, uint32_t, uint64_t, uint32_t);
         AppendReserved appendReserved = nullptr;
         const bool acquisitionExpected = recoveryLeaseState.canAcquire();
+        uint64_t predictedOffset = 0, predictedNext = 0;
+        bool predictedValid = false;
         owned = RaphaelRecoveryV2::establishBeforeVmm(
             recoveryLeaseState, recoveryNonceLo, recoveryNonceHi, visible,
             [&]() {
@@ -4480,7 +4530,18 @@ static void wrapVmmSetVSReady(void *self, uint32_t ready) {
                 return appendReserved(hardware, 0, RaphaelRecoveryV2::LeaseSize, 0x1000);
             },
             [&](const RaphaelRecoveryV2::OwnershipDescriptor &descriptor) {
-                return recoveryLeaseDisjointFromLiveGart(descriptor);
+                if (memory == nullptr || hardware == nullptr) return false;
+                auto hardwareBytes = reinterpret_cast<uint8_t *>(hardware);
+                const uint64_t primary = *reinterpret_cast<uint64_t *>(hardwareBytes + 0x340);
+                const uint64_t secondary = *reinterpret_cast<uint64_t *>(hardwareBytes + 0x350);
+                predictedValid = RaphaelRecoveryV2::predictNativeVmmRange(
+                    primary, secondary, 0x04400000, 0x1000, visible, logical,
+                    nativeProviderTotal, nativeProviderVisible,
+                    predictedOffset, predictedNext);
+                return recoveryLeaseDisjointFromLiveGart(descriptor) &&
+                    predictedValid &&
+                    RaphaelRecoveryV2::logicalDisjointFromRange(
+                        descriptor, predictedOffset, 0x04400000, logical, visible);
             },
             [&](const RaphaelRecoveryV2::OwnershipDescriptor &descriptor) {
                 auto fb = fbAperture();
@@ -4535,16 +4596,26 @@ static void wrapVmmSetVSReady(void *self, uint32_t ready) {
             const uint64_t vmmBase = *reinterpret_cast<uint64_t *>(f + 0x50);
             const bool baseOk = vmmBase >= memoryBase;
             const uint64_t vmmOffset = baseOk ? vmmBase - memoryBase : UINT64_MAX;
-            const bool vmmOwned = baseOk && RaphaelRecoveryV2::disjointFromRange(
-                recoveryLeaseState.ownership(), vmmOffset, 0x04400000, visible);
+            const bool vmmOwned = baseOk && RaphaelRecoveryV2::logicalDisjointFromRange(
+                recoveryLeaseState.ownership(), vmmOffset, 0x04400000, logical, visible) &&
+                (!predictedValid || vmmOffset == predictedOffset);
             if (!vmmOwned) {
                 abortRecoveryLifetime(RaphaelRecoveryV3::LifetimeReasonVmmRange);
                 owned = false;
                 CRLOG("XH2 ABORT reason=vmm-range nonce=%016llx_%016llx",
                       recoveryNonceLo, recoveryNonceHi);
                 RLOG("XH: v2 native VMM reservation rejected base=%#llx offset=%#llx "
-                     "bytes=%#x visible=%#llx", vmmBase, vmmOffset, 0x04400000, visible);
+                     "bytes=%#x logical=%#llx visible=%#llx predicted=%#llx", vmmBase,
+                     vmmOffset, 0x04400000, logical, visible, predictedOffset);
             }
+            if (vmmOwned)
+                RLOG("XH: native VMM post primary=%#llx/%#llx secondary=%#llx/%#llx "
+                     "actual=%#llx-%#llx match=%u",
+                     *reinterpret_cast<uint64_t *>(reinterpret_cast<uint8_t *>(hardware) + 0x340),
+                     *reinterpret_cast<uint64_t *>(reinterpret_cast<uint8_t *>(hardware) + 0x348),
+                     *reinterpret_cast<uint64_t *>(reinterpret_cast<uint8_t *>(hardware) + 0x350),
+                     *reinterpret_cast<uint64_t *>(reinterpret_cast<uint8_t *>(hardware) + 0x358), vmmOffset,
+                     vmmOffset + 0x04400000, !predictedValid || vmmOffset == predictedOffset);
         }
         if (owned) {
             __atomic_store_n(&recoveryLeaseHardwareOwner, hardware, __ATOMIC_RELEASE);
@@ -4914,8 +4985,10 @@ static bool vmid2Aperture(RaphaelVm::FramebufferAperture &aperture) {
     auto memory = reinterpret_cast<const uint8_t *>(hwMemObject);
     uint64_t size0 = *reinterpret_cast<const uint64_t *>(memory + 0x40);
     uint64_t size1 = *reinterpret_cast<const uint64_t *>(memory + 0x48);
-    uint64_t visible = RaphaelRecovery::barVisibleBytes(size0, size1);
-    if (visible > 0x10000000ULL) visible = 0x10000000ULL;
+    (void)size0;
+    (void)size1;
+    uint64_t visible = discoveredBarVisible;
+    if (!discoveredCapacityValid || visible == 0) return false;
     aperture = {static_cast<uint64_t>(base) << 24,
                 (static_cast<uint64_t>(top) << 24) | 0xffffffULL,
                 static_cast<uint64_t>(offset) << 24, visible};
@@ -5864,6 +5937,10 @@ static bool wrapHwMemEnable(void *self) {
     auto q = [f](size_t o) -> uint64_t & {
         return *reinterpret_cast<uint64_t *>(f + o);
     };
+    if (!discoveredCapacityValid || self != hwMemObject) {
+        RLOG("XH: enableAllocations rejected: VRAM capacity discovery invalid");
+        return false;
+    }
     if (recoveryLeaseConfigured) {
         void *expectedMemory = __atomic_load_n(
             &recoveryLeaseMemoryOwner, __ATOMIC_ACQUIRE);

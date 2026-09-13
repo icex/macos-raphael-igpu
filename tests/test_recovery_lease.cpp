@@ -74,6 +74,29 @@ int main() {
             "init_pool(Eyyy) receives total end, reserved start, and zero length");
     require(compatibilityPoolSize(measured) == 0x10000000,
             "first delta retains the complete 256 MiB BAR-visible pool");
+    for (uint64_t capacity : {0x08000000ULL, 0x10000000ULL,
+                              0x20000000ULL, 0x40000000ULL}) {
+        DiscoveredPoolCapacities discovered {};
+        require(discoverPoolCapacities(0x100, static_cast<uint32_t>(0x100 +
+                    (capacity >> 24) - 1), capacity, capacity, capacity, discovered) &&
+                    discovered.totalCapacity == capacity && discovered.visibleCapacity == capacity,
+                "runtime capacity matrix accepts matching provider capacity");
+        require(discoverPoolCapacities(0x100, static_cast<uint32_t>(0x100 +
+                    (capacity >> 24) - 1), capacity * 2, capacity, capacity, discovered),
+                "BAR capacity above total is harmlessly capped");
+    }
+    DiscoveredPoolCapacities discovered {};
+    require(discoverPoolCapacities(0x100, 0x10f, 0x10000000, 0x10000000,
+                                   0x08000000, discovered) &&
+                discovered.pools.visible == 0x08000000,
+            "provider reservation deduction preserves usable visible size");
+    require(!discoverPoolCapacities(0x100, 0x10f, 0, 0x10000000, 0x10000000, discovered) &&
+            !discoverPoolCapacities(0x200, 0x10f, 0x10000000, 0x10000000, 0x10000000, discovered) &&
+            !discoverPoolCapacities(0x10000000, 0x10000001, 0x10000000, 0x10000000,
+                                    0x10000000, discovered) &&
+            !discoverPoolCapacities(0x100, 0x10f, 0x10000000, 0x08000000,
+                                    0x10000000, discovered),
+            "zero, reversed, invalid register, and total-below-visible capacities reject");
 
     constexpr uint64_t nonceLo = 0x0123456789abcdefULL;
     constexpr uint64_t nonceHi = 0xfedcba9876543210ULL;
@@ -129,6 +152,18 @@ int main() {
             !disjointFromRange(owned, 0x0ffff000, 0x2000, 0x10000000),
             "wrapped or BAR-escaping GART extents are rejected");
 
+    require(logicalDisjointFromRange(owned, 0x10000000, 0x04400000,
+                                     0x20000000, 0x10000000),
+            "upper logical VMM range is accepted with visible lease");
+    require(!logicalDisjointFromRange(owned, 0x0a000000, 0x04400000,
+                                      0x20000000, 0x10000000),
+            "logical VMM range overlapping lease is rejected");
+    require(!logicalDisjointFromRange(owned, 0x1f000000, 0x02000000,
+                                      0x20000000, 0x10000000) &&
+            !logicalDisjointFromRange(owned, UINT64_MAX - 0x1000, 0x2000,
+                                      0x20000000, 0x10000000),
+            "logical VMM range escaping total or wrapping is rejected");
+
     uint64_t fullAddress = 0;
     require(fullPoolAddress(0xf400000000ULL, owned.leaseOffset, fullAddress) &&
             fullAddress == 0xf40b6f0000ULL,
@@ -148,6 +183,32 @@ int main() {
             vmmOffset == 0x0b6f3000 && cursorAfterVmm == vmmOffset &&
             vmmOffset + 0x04400000 == leaseOffset,
             "following 68 MiB VMM allocation is disjoint below the lease");
+    uint64_t predicted = 0, predictedNext = 0;
+    require(predictNativeVmmRange(0x1faf3000, 0x1faf3000, 0x04400000, 0x1000,
+                                  0x10000000, 0x20000000, 0x20000000, 0x10000000,
+                                  predicted, predictedNext) &&
+            predicted == 0x1b6f3000 && predictedNext == predicted,
+            "native secondary cursor predicts the 68 MiB VMM interval");
+    for (uint64_t capacity : {0x08000000ULL, 0x10000000ULL}) {
+        const uint64_t cursor = capacity - LeaseSize;
+        require(predictNativeVmmRange(cursor, 0x1abcdef0, 0x04400000, 0x1000,
+                                      capacity, capacity, capacity, capacity,
+                                      predicted, predictedNext) &&
+                predicted == ((cursor - 0x04400000) & ~0xfffULL) &&
+                predicted + 0x04400000 <= capacity,
+                "equal provider pools select a primary range inside visible capacity");
+    }
+    require(!predictNativeVmmRange(0x10000000, 0x1abcdef0, 0x04400000, 0x1000,
+                                   0x10000000, 0x20000000, 0x08000000, 0x08000000,
+                                   predicted, predictedNext),
+            "primary cursor above provider capacity is rejected");
+    require(!predictNativeVmmRange(0x04400000, 0x04400000, 0x04400000, 0x1000,
+                                   0x10000000, 0x20000000, 0x20000000, 0x10000000,
+                                   predicted, predictedNext) &&
+            !predictNativeVmmRange(0x22000000, 0x22000000, 0x02000000, 0x1000,
+                                   0x10000000, 0x20000000, 0x20000000, 0x10000000,
+                                   predicted, predictedNext),
+            "zero-width or total-escaping native cursor prediction is rejected");
     require(0x0b708000ULL + 0x04400000ULL == 0x0fb08000ULL &&
             0x0fb08000ULL > 0x0f000000ULL &&
             0x0fb08000ULL <= 0x10000000ULL,
