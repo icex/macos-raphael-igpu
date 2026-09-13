@@ -788,3 +788,33 @@ recovery was incomplete after a forced shutdown, so the precondition is a MODE2
 reset receipt `run/mode2-reset-9.json` showing `RLC_CNTL=0` and `CP_STAT=0`, and a
 probe receipt showing the mailbox still answers. This note covers this one launch.
 
+## Candidate 218 and the missing quiesce forwarder (2026-09-14)
+
+Run `4307f1498444b5d1f7c9b37b52f04d28`, card `metal-054` (commit `d6ace9e`),
+build `10cce4d85456402cb9bb469b3da3077d`, launch 10 after `run/mode2-reset-9.json`.
+The desktop again completed all graphics work (40/40 progress samples drained,
+ring up to `0xc580`, no stall), the probe passed, and the run again idled until a
+SIGTERM stop (forced shutdown, recovery `incomplete`, verdict `INVALID`). The kext's
+late quiesce responder was never exercised: the deployed collector
+`~/macos-vm/sercat.py` (10 Sep) predates the quiesce forwarding that the branch's
+`tools/sercat.py` has, so `RGPUQ2` was never written to COM2. The deployed
+supervisor already passes `VM_SERIAL_CID`. `~/macos-vm/sercat.py` was replaced with
+the branch copy (old copy kept as `run/sercat.py.backup-pre-quiesce-20260914`; the
+diff only adds the request forwarder); the manifest's harness hashes pick this up
+at the next prepare.
+
+Sleep-path finding for M7: in both 217 and 218 the idle guest began system sleep
+about three minutes after the desktop settled; Apple's `AMDHardware::powerOff`
+issued KIQ frames and the second timed out (`waitForHwStamp(5) -> 0`, KIQ RPTR
+`0x80 -> 0x86` of `0xa0`), before `acpi_sleep_kernel`. Normal shutdown (216-nobin)
+had no KIQ timeout. Guest sleep is not part of the qualification path; a later
+lifecycle item is to disable guest sleep or fix the powerOff KIQ path.
+
+## Boot-launch ledger extension for candidate 218 attempt q2 (2026-09-14)
+
+The same 1.0.218 binary and card `metal-054` run from
+`run/candidate-218-attempt-q2` as launch 11 on boot `c369c74e`, through
+`--manual-reuse --ack-risk`, now with the quiesce forwarder deployed. Precondition:
+`run/mode2-reset-10.json` with `RLC_CNTL=0` and `CP_STAT=0`. This note covers this
+one launch.
+
