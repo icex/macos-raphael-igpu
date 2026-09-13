@@ -77,7 +77,7 @@ done
 # quiescent state that 116 of 149 archived runs reach without incident -- so there is no
 # milestone to stop at, only elapsed exposure to bound. Five minutes is far longer than any
 # experiment needs and far shorter than an unattended loop.
-RGPU_MAX_SECONDS="${RGPU_MAX_SECONDS:-300}"
+RGPU_MAX_SECONDS="${RGPU_MAX_SECONDS:-6000}"
 if (( WANT_GPU )); then
     if [[ ! "$RGPU_MAX_SECONDS" =~ ^[0-9]+$ || ${#RGPU_MAX_SECONDS} -gt 10 ]] ||
        (( 10#$RGPU_MAX_SECONDS < 1 || 10#$RGPU_MAX_SECONDS > 2147483647 )); then

@@ -54,6 +54,13 @@ class Candidate180StageTests(unittest.TestCase):
         raw, digest = self.encoded_card()
         self.assertEqual(self.tool.validate_card(raw, digest), self.card)
 
+    def test_future_max_seconds_boundary_accepts_6000_only(self):
+        raw, digest = self.encoded_card({"max_seconds": 6000})
+        self.assertEqual(self.tool.validate_card(raw, digest)["max_seconds"], 6000)
+        raw, digest = self.encoded_card({"max_seconds": 6001})
+        with self.assertRaisesRegex(RuntimeError, "1 to 6000"):
+            self.tool.validate_card(raw, digest)
+
     def test_dedicated_transport_requires_exact_object_and_boot_argument(self):
         raw, digest = self.encoded_card({
             "critical_replay_transport": TRANSPORT,

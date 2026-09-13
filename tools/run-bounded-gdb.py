@@ -143,7 +143,7 @@ def main():
     parser.add_argument("--kernel-symbols", required=True, type=Path)
     parser.add_argument("--raphael-binary", required=True, type=Path)
     parser.add_argument("--raphael-dsym", required=True, type=Path)
-    parser.add_argument("--scenario", choices=("entry-update", "vmid1-root", "post-probe"), default="entry-update")
+    parser.add_argument("--scenario", choices=("entry-update", "vmid1-root", "post-probe", "kiq-stamp"), default="entry-update")
     parser.add_argument("--target-gpu-address")
     parser.add_argument("--run-id")
     parser.add_argument("--failure-record", type=Path)
@@ -156,6 +156,8 @@ def main():
         parser.error("--target-gpu-address is required for entry-update")
     if args.scenario == "vmid1-root" and args.target_gpu_address is not None:
         parser.error("--target-gpu-address is not used for vmid1-root")
+    if args.scenario == "kiq-stamp" and args.target_gpu_address is not None:
+        parser.error("--target-gpu-address is not used for kiq-stamp")
     if args.scenario == "post-probe":
         if args.target_gpu_address is not None:
             parser.error("--target-gpu-address is not used for post-probe")
@@ -173,6 +175,8 @@ def main():
     serial = live_serial_path(state)
     deadline = min(float(state["deadline_epoch"]),
                    float(state.get("launch_deadline_epoch", state["deadline_epoch"]))) - 25
+    if args.scenario == "kiq-stamp":
+        deadline = min(deadline, time.time() + 150)
     if deadline - time.time() < 10:
         raise ValueError("insufficient experiment time for bounded debugger capture")
     record = None
@@ -281,7 +285,10 @@ def main():
                 raise TimeoutError("bounded GDB capture timed out")
             if process.returncode:
                 raise RuntimeError(f"GDB capture failed with status {process.returncode}")
-        normal_detach = "WRAPPER_CPU_RETURN_HIT" in transcript.read_text(errors="replace")
+        transcript_text = transcript.read_text(errors="replace")
+        normal_detach = ("KIQ_DETACHED" in transcript_text
+                         if args.scenario == "kiq-stamp"
+                         else "WRAPPER_CPU_RETURN_HIT" in transcript_text)
     except Exception as error:
         capture_error = error
     finally:
@@ -296,6 +303,8 @@ def main():
     transcript_text = transcript.read_text(errors="replace")
     required = (("VMID1_WRAPPER_ENTRY_HIT", "VMID1_NATIVE_CALL_BOUNDARY", "VMID1_PREPARED_CPU_OUTPUT", "WRAPPER_CPU_RETURN_HIT")
                 if args.scenario == "vmid1-root" else
+                ("KIQ_WAIT_FAILURE", "KIQ_CAPTURE_COMPLETE", "KIQ_DETACHED")
+                if args.scenario == "kiq-stamp" else
                 ("WRAPPER_ENTRY_HIT", "NATIVE_CALL_BOUNDARY", "WRAPPER_CPU_RETURN_HIT"))
     if not all(marker in transcript_text for marker in required):
         raise RuntimeError("GDB transcript lacks complete bounded capture")

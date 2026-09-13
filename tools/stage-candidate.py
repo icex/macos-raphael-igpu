@@ -208,11 +208,13 @@ def validate_card(raw, expected_sha256):
         "id": CARD_ID,
         "candidate_version": CANDIDATE_VERSION,
         "requested_diagnostic": requested_diagnostic,
-        "max_seconds": 180,
         "run_probe_only_after_native_start": True,
         "critical_replay_schema": 2,
         "recovery_lease_schema": 3,
     }
+    max_seconds = card.get("max_seconds")
+    if type(max_seconds) is not int or not 1 <= max_seconds <= 6000:
+        raise RuntimeError("candidate max_seconds must be an integer from 1 to 6000")
     if not isinstance(card, dict) or any(
             type(card.get(key)) is not type(value) or card.get(key) != value
             for key, value in exact.items()):
