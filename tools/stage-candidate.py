@@ -122,7 +122,7 @@ RESEAL_PROFILES = {
 }
 
 
-def configure(version, card_id):
+def configure(version, card_id, attempt=None):
     """Select the exact reviewed candidate/card pair; defaults are 1.0.185."""
     global CANDIDATE_VERSION, CARD_ID, NUMBER, WT, CANDIDATE, DIST, IDENTITIES
     global RUN_ID_FILE, CARD
@@ -130,18 +130,50 @@ def configure(version, card_id):
         raise RuntimeError("candidate version must be 1.0.1NN or 1.0.20N")
     if not re.fullmatch(r"metal-[0-9]{3}", card_id):
         raise RuntimeError("card id must be metal-NNN")
+    if attempt is not None and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,31}", attempt):
+        raise RuntimeError("attempt must be a short identifier")
     CANDIDATE_VERSION = version
     CARD_ID = card_id
     NUMBER = version.rsplit(".", 1)[1]
     WT = VM / f"run/worktrees/candidate-{NUMBER}"
-    CANDIDATE = VM / f"run/candidate-{NUMBER}"
+    suffix = "" if attempt is None else f"-attempt-{attempt}"
+    CANDIDATE = VM / f"run/candidate-{NUMBER}{suffix}"
     DIST = VM / f"run/candidate-{NUMBER}-dist"
-    IDENTITIES = VM / f"run/candidate-{NUMBER}-build-identities.json"
-    RUN_ID_FILE = VM / f"run/candidate{NUMBER}-qualification-run-id.txt"
+    IDENTITIES = VM / f"run/candidate-{NUMBER}{suffix}-build-identities.json"
+    RUN_ID_FILE = VM / f"run/candidate{NUMBER}{suffix}-qualification-run-id.txt"
     CARD = ROOT / f"experiments/{card_id}.json"
 
 
 configure(CANDIDATE_VERSION, CARD_ID)
+
+
+def prepare_attempt_copy(attempt):
+    """Prepare an isolated retry namespace from an existing build artifact."""
+    source = VM / f"run/candidate-{NUMBER}"
+    if CANDIDATE == source:
+        return
+    if CANDIDATE.exists() or IDENTITIES.exists():
+        raise RuntimeError("attempt output already exists")
+    if not source.is_dir():
+        raise RuntimeError("base candidate artifact is missing")
+    identity_path = VM / f"run/candidate-{NUMBER}-build-identities.json"
+    if not identity_path.is_file():
+        raise RuntimeError("base build identity record is missing")
+    CANDIDATE.mkdir(parents=True)
+    allowed = {"RaphaelGPU.kext", "build-manifest.json"}
+    for path in source.iterdir():
+        if path.name not in allowed:
+            continue
+        destination = CANDIDATE / path.name
+        if path.is_dir():
+            shutil.copytree(path, destination)
+        else:
+            shutil.copy2(path, destination)
+    identity = json.loads(identity_path.read_text())
+    identity["extracted_candidate"] = str(CANDIDATE)
+    IDENTITIES.write_text(json.dumps(identity, indent=2) + "\n")
+    sync_dir(IDENTITIES.parent)
+    return sha_file(IDENTITIES)
 
 
 def sha_bytes(data):
@@ -1547,6 +1579,7 @@ def main():
     parser.add_argument("--image-id", required=True)
     parser.add_argument("--candidate-version", default=CANDIDATE_VERSION)
     parser.add_argument("--card-id", default=CARD_ID)
+    parser.add_argument("--attempt", help="prepare an isolated retry artifact namespace")
     parser.add_argument("--lilu-bundle", type=Path)
     parser.add_argument("--expected-lilu-executable-sha256")
     parser.add_argument("--expected-lilu-info-sha256")
@@ -1559,7 +1592,7 @@ def main():
     args = parser.parse_args()
     if not args.execute:
         parser.error("refusing mutation without the reviewed --execute flag")
-    configure(args.candidate_version, args.card_id)
+    configure(args.candidate_version, args.card_id, args.attempt)
     if args.reseal_run_id:
         result = reseal_candidate(
             args.expected_commit, args.expected_boot_id,

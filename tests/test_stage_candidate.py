@@ -1045,5 +1045,41 @@ class WorktreeCleanCheckTests(unittest.TestCase):
         self.tool.verify_worktree_before_import(self.commit)
 
 
+class AttemptNamespaceTests(unittest.TestCase):
+    def setUp(self):
+        self.tool = load_tool()
+
+    def test_attempt_copy_preserves_build_and_excludes_staging_metadata(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            base = root / "run/candidate-203"
+            base.mkdir(parents=True)
+            (base / "build-manifest.json").write_text("manifest")
+            (base / "staging.json").write_text("old")
+            (base / "staged-config.plist").write_text("old")
+            identity = {"schema": 1, "extracted_candidate": str(base), "source_sha256": "a" * 64}
+            identity_path = root / "run/candidate-203-build-identities.json"
+            identity_path.write_text(json.dumps(identity))
+            old_identity = identity_path.read_bytes()
+            self.tool.VM = root
+            self.tool.configure("1.0.203", "metal-037", "retry1")
+            self.tool.prepare_attempt_copy("retry1")
+            self.assertEqual((self.tool.CANDIDATE / "build-manifest.json").read_text(), "manifest")
+            self.assertFalse((self.tool.CANDIDATE / "staging.json").exists())
+            copied = json.loads(self.tool.IDENTITIES.read_text())
+            self.assertEqual(copied["extracted_candidate"], str(self.tool.CANDIDATE))
+            self.assertEqual(copied["source_sha256"], identity["source_sha256"])
+            self.assertEqual(identity_path.read_bytes(), old_identity)
+
+    def test_attempt_copy_rejects_missing_identity_without_creating_namespace(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); base = root / "run/candidate-203"
+            base.mkdir(parents=True); (base / "build-manifest.json").write_text("{}")
+            self.tool.VM = root; self.tool.configure("1.0.203", "metal-037", "retry1")
+            with self.assertRaisesRegex(RuntimeError, "identity record"):
+                self.tool.prepare_attempt_copy("retry1")
+            self.assertFalse(self.tool.CANDIDATE.exists())
+
+
 if __name__ == "__main__":
     unittest.main()
