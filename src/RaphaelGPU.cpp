@@ -398,7 +398,7 @@ static uint32_t ptbFixMode = 0;
 static uint32_t mqdFixMode = 0;
 // Explicit experiment: allow Apple's native timeout restore/reprogram path only
 // after an exact-address, owned-lease, ingress-suppressed timeout proof.
-static bool mqdNativeRestoreEnabled = false;
+static uint32_t mqdNativeRestoreMode = 0;
 static void *hwMemObject = nullptr;
 static volatile uint32_t *fbAperture();
 static bool wrapHwMemEnable(void *self);
@@ -409,7 +409,8 @@ static void primeIcacheOnly();
 static void probeRlc();
 static void repairMqdPointers();
 static bool prepareKiq(uint64_t &mqdAddr, uint64_t &eopAddr, const void *spec,
-                       bool &nativeRestoreAttempted);
+                       bool &nativeRestoreAttempted,
+                       RaphaelKiq::HaltedNativeTransaction *haltedTx);
 static void reportKiqPreparation(const char *stage);
 static mach_vm_address_t orgVmmInit = 0;
 static mach_vm_address_t orgVmmSetAlloc = 0;
@@ -2672,7 +2673,8 @@ static uint32_t wrapKiqStart(void *self, uint64_t a, uint64_t b, void *spec, uin
         return 0xe00002bc;
     }
     bool nativeRestoreAttempted = false;
-    if (mqdFixMode == 2 && !prepareKiq(a, b, spec, nativeRestoreAttempted)) {
+    RaphaelKiq::HaltedNativeTransaction haltedTx {};
+    if (mqdFixMode == 2 && !prepareKiq(a, b, spec, nativeRestoreAttempted, &haltedTx)) {
         RLOG("XQ2: startKIQ refused: preflight or genuine dequeue failed");
         return 0xe00002bc; // same failure used by Apple's startKIQ queue-spec check
     }
@@ -2683,6 +2685,61 @@ static uint32_t wrapKiqStart(void *self, uint64_t a, uint64_t b, void *spec, uin
     if (mqdFixMode == 2) {
         fbWrite(asicInfo, kGcGrbmGfxCntl, kKiqSelector);
         reportKiqPreparation("after native startKIQ");
+        if (haltedTx.held) {
+            const uint32_t active = fbRead(asicInfo, kGcHqdActive);
+            const uint32_t dequeue = fbRead(asicInfo, kGcHqdDequeue);
+            const uint32_t eopCtl = fbRead(asicInfo, kGcHqdEopControl);
+            const uint32_t eopLo = fbRead(asicInfo, kGcHqdEopBase);
+            const uint32_t eopHi = fbRead(asicInfo, kGcHqdEopBaseHi);
+            const uint32_t mqdLo = fbRead(asicInfo, kGcMqdBase);
+            const uint32_t mqdHi = fbRead(asicInfo, kGcMqdBaseHi);
+            const uint32_t pqLo = fbRead(asicInfo, kGcHqdPqBase);
+            const uint32_t pqHi = fbRead(asicInfo, kGcHqdPqBaseHi);
+            const uint32_t rptr = fbRead(asicInfo, kGcHqdPqRptr);
+            const uint32_t wptrHi = fbRead(asicInfo, kGcHqdPqWptrHi);
+            const uint32_t wptrLo = fbRead(asicInfo, kGcHqdPqWptrLo);
+            const uint32_t mec = fbRead(asicInfo, kGcCpMecCntl);
+            const bool verified = RaphaelKiq::haltedNativeResultVerified(
+                r == 0, mec, active, dequeue, mqdLo, mqdHi, pqLo, pqHi, eopLo, eopHi,
+                eopCtl, rptr, wptrHi, wptrLo, a, haltedTx.expectedPq, b);
+            const bool readable = mec != 0xffffffffU && active != 0xffffffffU &&
+                dequeue != 0xffffffffU && eopCtl != 0xffffffffU;
+            if (!verified)
+                CRLOG("XQ2: halted native verify fields result=%#x readable=%u ACTIVE=%#x "
+                      "DEQUEUE=%#x MEC=%#x MQD=%#x_%08x PQ=%#x_%08x EOP=%#x_%08x ctl=%#x "
+                      "RPTR=%#x WPTR=%#x_%08x expectedPQ=%#llx", r, readable, active, dequeue,
+                      mec, mqdHi, mqdLo, pqHi, pqLo, eopHi, eopLo, eopCtl, rptr, wptrHi,
+                      wptrLo, haltedTx.expectedPq);
+            auto read = [](RaphaelKiq::HaltedRegister reg) -> uint32_t {
+                switch (reg) {
+                    case RaphaelKiq::HaltedRegister::MecControl: return fbRead(asicInfo, kGcCpMecCntl);
+                    case RaphaelKiq::HaltedRegister::Active: return fbRead(asicInfo, kGcHqdActive);
+                    case RaphaelKiq::HaltedRegister::Dequeue: return fbRead(asicInfo, kGcHqdDequeue);
+                    case RaphaelKiq::HaltedRegister::Rptr: return fbRead(asicInfo, kGcHqdPqRptr);
+                    case RaphaelKiq::HaltedRegister::WptrHi: return fbRead(asicInfo, kGcHqdPqWptrHi);
+                    case RaphaelKiq::HaltedRegister::WptrLo: return fbRead(asicInfo, kGcHqdPqWptrLo);
+                    case RaphaelKiq::HaltedRegister::Poll: return fbRead(asicInfo, kGcCpPqWptrPoll);
+                    case RaphaelKiq::HaltedRegister::Doorbell: return fbRead(asicInfo, kGcHqdPqDbCtl);
+                }
+                return 0xffffffffU;
+            };
+            auto write = [](RaphaelKiq::HaltedRegister reg, uint32_t value) {
+                if (reg == RaphaelKiq::HaltedRegister::MecControl) fbWrite(asicInfo, kGcCpMecCntl, value);
+            };
+            const bool released = RaphaelKiq::releaseHaltedNative(
+                haltedTx, read, write, [](unsigned us) { IODelay(us); }, r == 0, verified);
+            if (!released) {
+                const uint32_t mecAfterFailure = fbRead(asicInfo, kGcCpMecCntl);
+                CRLOG("XQ2: dequeue refused: halted native verification failed; savedMEC=%#x currentMEC=%#x recontain_attempted=1",
+                      haltedTx.savedMecControl, mecAfterFailure);
+                fbWrite(asicInfo, kGcCpPqWptrPoll, 0);
+                fbWrite(asicInfo, kGcHqdPqDbCtl, 0);
+                fbWrite(asicInfo, kGcGrbmGfxCntl, 0);
+                return 0xe00002bc;
+            }
+            CRLOG("XQ2: halted native release verified=1 savedMEC=%#x currentMEC=%#x released=1",
+                  haltedTx.savedMecControl, fbRead(asicInfo, kGcCpMecCntl));
+        }
         if (r == 0 && cpSurgeryEnabled && !nativeRestoreAttempted && !programMode2Eop(b)) {
             CRLOG("XQ2: mode-2 EOP programming/readback failed; KIQ submission blocked");
             fbWrite(asicInfo, kGcGrbmGfxCntl, 0);
@@ -4034,7 +4091,8 @@ static void reportKiqPreparation(const char *stage) {
 // HWLibs create_kiq_queue_10_3 returns 2/1/0 on this part at +0x15114..0x1511c.
 // Restrict this experiment to that proven selector rather than guessing from a queue walk.
 static bool prepareKiq(uint64_t &mqdAddr, uint64_t &eopAddr, const void *spec,
-                       bool &nativeRestoreAttempted) {
+                       bool &nativeRestoreAttempted,
+                       RaphaelKiq::HaltedNativeTransaction *haltedTx) {
     nativeRestoreAttempted = false;
     if (asicInfo == nullptr || hwMemObject == nullptr || spec == nullptr) {
         RLOG("XQ2: preflight failed: missing ASIC, memory object, or queue spec");
@@ -4138,7 +4196,7 @@ static bool prepareKiq(uint64_t &mqdAddr, uint64_t &eopAddr, const void *spec,
                 freshImageMqd == planned.mqdMc &&
                 freshImageEop == (planned.eopMc >> 8);
             nativeRestoreAttempted = RaphaelKiq::timeoutNativeRestoreEligible(
-                mqdNativeRestoreEnabled, mqdAddr, eopAddr, planned.mqdMc, planned.eopMc,
+                mqdNativeRestoreMode != 0, mqdAddr, eopAddr, planned.mqdMc, planned.eopMc,
                 fresh, leaseValid, ownersMatch,
                 imageStillExact);
             CRLOG("XQ2: dequeue TIMEOUT after %u us; descriptor unchanged; "
@@ -4148,9 +4206,62 @@ static bool prepareKiq(uint64_t &mqdAddr, uint64_t &eopAddr, const void *spec,
                   leaseValid, ownersMatch, fresh.active, fresh.dequeue, fresh.poll,
                   fresh.doorbell, imageStillExact);
             if (nativeRestoreAttempted) {
+                if (mqdNativeRestoreMode == 2 && haltedTx != nullptr) {
+                    const uint64_t expectedPqBefore =
+                        (static_cast<uint64_t>(get(0x224)) << 32) | get(0x220);
+                    if (expectedPqBefore == 0) {
+                        CRLOG("XQ2: dequeue refused: halted native setup has empty MQD PQ image");
+                        fbWrite(asicInfo, kGcGrbmGfxCntl, 0);
+                        return false;
+                    }
+                    fbWrite(asicInfo, kGcGrbmGfxCntl, kKiqSelector);
+                    auto read = [](RaphaelKiq::HaltedRegister reg) -> uint32_t {
+                        switch (reg) {
+                            case RaphaelKiq::HaltedRegister::MecControl: return fbRead(asicInfo, kGcCpMecCntl);
+                            case RaphaelKiq::HaltedRegister::Active: return fbRead(asicInfo, kGcHqdActive);
+                            case RaphaelKiq::HaltedRegister::Dequeue: return fbRead(asicInfo, kGcHqdDequeue);
+                            case RaphaelKiq::HaltedRegister::Rptr: return fbRead(asicInfo, kGcHqdPqRptr);
+                            case RaphaelKiq::HaltedRegister::WptrHi: return fbRead(asicInfo, kGcHqdPqWptrHi);
+                            case RaphaelKiq::HaltedRegister::WptrLo: return fbRead(asicInfo, kGcHqdPqWptrLo);
+                            case RaphaelKiq::HaltedRegister::Poll: return fbRead(asicInfo, kGcCpPqWptrPoll);
+                            case RaphaelKiq::HaltedRegister::Doorbell: return fbRead(asicInfo, kGcHqdPqDbCtl);
+                        }
+                        return 0xffffffffU;
+                    };
+                    auto write = [](RaphaelKiq::HaltedRegister reg, uint32_t value) {
+                        switch (reg) {
+                            case RaphaelKiq::HaltedRegister::MecControl: fbWrite(asicInfo, kGcCpMecCntl, value); break;
+                            case RaphaelKiq::HaltedRegister::Active: fbWrite(asicInfo, kGcHqdActive, value); break;
+                            case RaphaelKiq::HaltedRegister::Dequeue: fbWrite(asicInfo, kGcHqdDequeue, value); break;
+                            case RaphaelKiq::HaltedRegister::Rptr: fbWrite(asicInfo, kGcHqdPqRptr, value); break;
+                            case RaphaelKiq::HaltedRegister::WptrHi: fbWrite(asicInfo, kGcHqdPqWptrHi, value); break;
+                            case RaphaelKiq::HaltedRegister::WptrLo: fbWrite(asicInfo, kGcHqdPqWptrLo, value); break;
+                            default: break;
+                        }
+                    };
+                    if (!RaphaelKiq::beginHaltedNative(*haltedTx, read, write,
+                                                       [](unsigned us) { IODelay(us); })) {
+                        CRLOG("XQ2: dequeue refused: halted native setup failed savedMEC=%#x currentMEC=%#x held=%u",
+                              haltedTx->savedMecControl, read(RaphaelKiq::HaltedRegister::MecControl),
+                              haltedTx->held);
+                        reportKiqPreparation("halted setup refused");
+                        fbWrite(asicInfo, kGcGrbmGfxCntl, 0);
+                        return false;
+                    }
+                    haltedTx->expectedPq = expectedPqBefore;
+                    const uint64_t expectedPqAgain =
+                        (static_cast<uint64_t>(get(0x224)) << 32) | get(0x220);
+                    if (haltedTx->expectedPq == 0 || haltedTx->expectedPq != expectedPqAgain) {
+                        CRLOG("XQ2: dequeue refused: halted native setup has unstable MQD PQ image "
+                              "first=%#llx second=%#llx", haltedTx->expectedPq, expectedPqAgain);
+                        fbWrite(asicInfo, kGcGrbmGfxCntl, 0);
+                        return false;
+                    }
+                    RLOG("XQ2: halted-native setup complete; native owns HQD programming");
+                    return true;
+                }
                 fbWrite(asicInfo, kGcGrbmGfxCntl, 0);
-                RLOG("XQ2: native restore admission restores selector zero; "
-                     "Apple owns timeout/reprogram sequence");
+                RLOG("XQ2: native restore admission restores selector zero; Apple owns timeout/reprogram sequence");
                 return true;
             }
         } else if (prepared.status == Status::Inaccessible) {
@@ -6726,15 +6837,17 @@ static void pluginStart() {
              : mqdm == 1 ? "legacy post-timeout MQD/EOP repair" : "reporting only");
     }
     uint32_t mqdr = 0;
-    mqdNativeRestoreEnabled = PE_parse_boot_argn("rgpumqdrestore", &mqdr,
-                                                  sizeof(mqdr)) && mqdr == 1;
-    if (mqdNativeRestoreEnabled && mqdFixMode != 2) {
-        RLOG("XQ2: rgpumqdrestore=1 requires rgpumqd=2; native restore disabled");
-        mqdNativeRestoreEnabled = false;
+    mqdNativeRestoreMode = PE_parse_boot_argn("rgpumqdrestore", &mqdr,
+                                               sizeof(mqdr)) && mqdr <= 2 ? mqdr : 0;
+    if (mqdNativeRestoreMode != 0 && mqdFixMode != 2) {
+        RLOG("XQ2: rgpumqdrestore=%u requires rgpumqd=2; native restore disabled",
+             mqdNativeRestoreMode);
+        mqdNativeRestoreMode = 0;
     }
     RLOG("rgpumqdrestore=%u: native timeout restore experiment %s",
-         mqdNativeRestoreEnabled ? 1 : 0,
-         mqdNativeRestoreEnabled ? "armed only for exact owned timeout" : "off");
+         mqdNativeRestoreMode,
+         mqdNativeRestoreMode == 2 ? "armed with halted MEC transaction" :
+         mqdNativeRestoreMode == 1 ? "armed only for exact owned timeout" : "off");
     uint32_t ptbm = 0;
     if (PE_parse_boot_argn("rgpuptb", &ptbm, sizeof(ptbm)) && ptbm <= 2) {
         ptbFixMode = ptbm;
