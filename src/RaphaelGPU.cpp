@@ -1025,6 +1025,32 @@ static constexpr uint32_t kGcHqdEopControl = kGcSeg0 + 0x1fd0;
 static constexpr uint32_t kGcHqdIbControl  = kGcSeg0 + 0x1fbe;
 static constexpr uint32_t kGcHqdPqBaseHi2  = kGcSeg0 + 0x1fb2;   // same as kGcHqdPqBaseHi
 static constexpr uint32_t kGcRlcSrmCntl    = kGcSeg1 + 0x4c80;
+// GC 10.3.6 golden registers (Linux golden_settings_gc_10_3_6[]) that the Navi23
+// path never programs: read-only diagnostics so a run records what the graphics
+// pipe is actually configured with before the first desktop draw.
+static constexpr uint32_t kGcGbAddrConfig  = kGcSeg0 + 0x13de;   // GB_ADDR_CONFIG   (golden 0x42, mask 0x0c1807ff)
+static constexpr uint32_t kGcUtcl1Ctrl     = kGcSeg0 + 0x1588;   // UTCL1_CTRL       (golden 0x00100000)
+static constexpr uint32_t kGcSqgConfig     = kGcSeg0 + 0x10ba;   // SQG_CONFIG       (golden 0x1000, mask 0x17ff)
+static constexpr uint32_t kGcGcrGeneralCntl = kGcSeg0 + 0x1580;  // GCR_GENERAL_CNTL (golden 0x500)
+static constexpr uint32_t kGcChPipeSteer   = kGcSeg1 + 0x2d90;   // CH_PIPE_STEER    (golden 0x44)
+static constexpr uint32_t kGcGl1PipeSteer  = kGcSeg1 + 0x2d10;   // GL1_PIPE_STEER   (golden 0x44)
+static constexpr uint32_t kGcGl2PipeSteer0 = kGcSeg1 + 0x2e25;   // GL2_PIPE_STEER_0 (golden 0x32103210)
+static constexpr uint32_t kGcGl2PipeSteer1 = kGcSeg1 + 0x2e26;   // GL2_PIPE_STEER_1 (golden 0x32103210)
+static constexpr uint32_t kGcRlcCpSchedulers = kGcSeg1 + 0x4ca1; // RLC_CP_SCHEDULERS (Linux KIQ me2/pipe1/q0 -> 0xc8)
+
+static void reportGoldenState(const char *when) {
+    if (asicInfo == nullptr) return;
+    RLOG("XG: %s: GB_ADDR_CONFIG=%#x CH_PIPE_STEER=%#x GL1_PIPE_STEER=%#x "
+         "GL2_PIPE_STEER=%#x/%#x UTCL1_CTRL=%#x SQG_CONFIG=%#x GCR_GENERAL_CNTL=%#x "
+         "(Linux 10.3.6 golden 0x42 0x44 0x44 0x32103210/0x32103210 0x100000 0x1000 0x500)",
+         when, fbRead(asicInfo, kGcGbAddrConfig), fbRead(asicInfo, kGcChPipeSteer),
+         fbRead(asicInfo, kGcGl1PipeSteer), fbRead(asicInfo, kGcGl2PipeSteer0),
+         fbRead(asicInfo, kGcGl2PipeSteer1), fbRead(asicInfo, kGcUtcl1Ctrl),
+         fbRead(asicInfo, kGcSqgConfig), fbRead(asicInfo, kGcGcrGeneralCntl));
+    RLOG("XG: %s: RLC_CP_SCHEDULERS=%#x RLC_PG_CNTL=%#x RLC_GPM_STAT=%#x RLC_SRM_CNTL=%#x",
+         when, fbRead(asicInfo, kGcRlcCpSchedulers), fbRead(asicInfo, kGcRlcPgCntl),
+         fbRead(asicInfo, kGcRlcGpmStat), fbRead(asicInfo, kGcRlcSrmCntl));
+}
 static constexpr uint32_t kGcRlcSrmStat    = kGcSeg1 + 0x4c9b;
 static constexpr uint32_t kGcRlcCsibLo     = kGcSeg1 + 0x4ca2;
 static constexpr uint32_t kGcRlcCsibLen    = kGcSeg1 + 0x4ca4;
@@ -2871,6 +2897,7 @@ static void reportCpState(const char *when) {
          fbRead(asicInfo, kGcCpcStatus), fbRead(asicInfo, kGcCpcStalled1),
          fbRead(asicInfo, kGcCpfBusyStat), fbRead(asicInfo, kGcFbBase) & 0xffffff,
          fbRead(asicInfo, kGcFbTop) & 0xffffff, fbRead(asicInfo, kGcFbOffset) & 0xffffff);
+    reportGoldenState(when);
 }
 
 static void dumpGfxState(const char *when) {
@@ -2889,6 +2916,10 @@ static void dumpGfxState(const char *when) {
          fbRead(asicInfo, kGcCpcStatus), fbRead(asicInfo, kGcHqdActive),
          fbRead(asicInfo, kGcVmFaultSts), fbRead(asicInfo, kGcVmFaultHi),
          fbRead(asicInfo, kGcVmFaultLo));
+    // The golden registers are static; three samples (before/after RLC start
+    // and the first KIQ submit) bound the serial volume.
+    static unsigned goldenDumps = 0;
+    if (goldenDumps < 3) { goldenDumps++; reportGoldenState(when); }
 }
 
 // Which compute queue, if any, is live? Walk the MEC queues with GRBM_GFX_CNTL and
