@@ -1139,3 +1139,12 @@ compiler message). Recovery `recovered`, shutdown `exited-after-guest-request`; 
 and harness were healthy. Probe v5.1 compiles the compute check, the render shaders
 and the identity shaders as three separate libraries and records any compiler error
 text.
+
+## Boot-launch ledger extension for the probe v5.1 attempt (2026-09-14)
+
+GPU-less session (no VFIO device, no ledger entry) compiled desktop probe v5.1 (source
+sha256 `dcf3d5d4...`, binary sha256 `c688b235...`). The 1.0.218 binary with card
+`metal-062` runs from `run/candidate-218-attempt-v51` as launch 21 on boot `c369c74e`,
+through `--manual-reuse --ack-risk` under the user's standing instruction, after
+`run/mode2-reset-20.json`. This note covers this one launch.
+
