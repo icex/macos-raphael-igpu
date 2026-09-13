@@ -3912,6 +3912,11 @@ static constexpr size_t kHwInfoGbAddrConfig = 0xa0;   // ADDR_CREATE_INPUT +0x30
 static constexpr size_t kHwInfoBackendDisables = 0xa8;
 static constexpr size_t kHwInfoNoOfBanks = 0xb0;
 static constexpr size_t kHwInfoNoOfRanks = 0xb8;
+// rgpuhwcapclr=<mask>: clear bits of the 32-bit hardware-info field at 0xcc before the
+// address library is created (the Metal driver reads capability bits there, for
+// example 0x1000 before allowing variable-size swizzle modes).
+static constexpr size_t kHwInfoCapabilities = 0xcc;
+static uint32_t hwCapClearMask = 0;
 static uint32_t addrConfigMode = 0;
 static mach_vm_address_t orgAlignManager2Init = 0;
 
@@ -3989,11 +3994,6 @@ static uint32_t wrapPreferredSwizzleMode2(void *that, const uint8_t *input) {
     return result;
 }
 
-// rgpuhwcapclr=<mask>: clear bits of the 32-bit hardware-info field at 0xcc before the
-// address library is created (the Metal driver reads capability bits there, for
-// example 0x1000 before allowing variable-size swizzle modes).
-static constexpr size_t kHwInfoCapabilities = 0xcc;
-static uint32_t hwCapClearMask = 0;
 
 // rgpuvgpr: sampler-side swizzle enables before RLC start. 1 sets
 // LDS_CONFIG.VGPR_SWIZZLE_EN (bit 1), 2 sets SQ_CONFIG.VGPR_SWIZZLE_EN (bit 12),

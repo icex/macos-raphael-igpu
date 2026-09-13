@@ -39,7 +39,7 @@ class GfxHangDumpSourceTests(unittest.TestCase):
         install = self.body('if (swizzleLogMode != 0) {', 'Exact complete instructions displaced')
         self.assertIn('0x48, 0x83, 0xec, 0x70, 0x49, 0x89, 0xfe, 0x31, 0xdb', install)
         self.assertIn('if (preferredMatches) {', install)
-        wrapper = self.body('static uint32_t wrapPreferredSwizzleMode2(', 'static constexpr size_t kHwInfoCapabilities')
+        wrapper = self.body('static uint32_t wrapPreferredSwizzleMode2(', '// rgpuvgpr: sampler-side')
         self.assertIn('swizzleLogMode == 2 ? 0u : preferred', wrapper)
         vgpr = self.body('static void applyVgprSwizzle(', 'static constexpr size_t kOffPendingCommandReport')
         self.assertIn('vgprMode == 1 && lds != 0xdeadbeef', vgpr)
