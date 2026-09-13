@@ -930,3 +930,36 @@ as launch 15 on boot `c369c74e`, through `--manual-reuse --ack-risk` under the u
 standing instruction, after `run/mode2-reset-14.json`. `run/guest-identity.json` is
 switched to the desktop probe identity for this run. This note covers this one launch.
 
+## macOS desktop composition runs on the Raphael GPU (2026-09-14)
+
+Run `464d4d8e40988d6ca567d693b4317924`, card `metal-056` (commit `4e0e77f`), 1.0.218 build
+`10cce4d85456402cb9bb469b3da3077d` from `run/candidate-218-attempt-desktop`, launch 15
+after `run/mode2-reset-14.json`. Evidence: `run/candidate-218-attempt-desktop-results/probe.json`.
+
+- **Active display on this device.** `CGGetActiveDisplayList` returns one main display,
+  1280x1024, and `CGDirectDisplayCopyCurrentMetalDevice` for it returns the same
+  `AMD Radeon Navi23` device (registry id `4294968028`) that the probe's Metal
+  compute ran on.
+- **The desktop is a client of this GPU.** `AMDRadeonX6000_AMDNavi23GraphicsAccelerator`
+  (the probe's Metal device) holds IOAccelerator user clients created by WindowServer
+  (22), WallpaperSequoia, loginwindow, Finder, the Dock extra, ControlCenter,
+  NotificationCenter, Spotlight, System Settings, Terminal, Safari, TextInputMenuAgent,
+  avconferenced and the probe itself.
+- Compute command completed; verdict `CORE_PROBE_PASS`; recovery `recovered`; shutdown
+  `exited-after-guest-request`; COM2 quiesce ACK; zero stalls or KIQ timeouts.
+
+Together with the drained graphics ring on every sample and the native probe's
+render readback, this shows WindowServer composition and application Metal rendering
+executing on the passed-through Raphael iGPU with `rgpunobin=1`.
+
+| Milestone | Evidence | Status |
+|---|---|---|
+| Desktop graphics completes on the device | 218-q2/q3/q4/native/desktop gfx ring samples | done |
+| M4/M5 compute + render readback on live desktop | 218-native: 196,608 values, 4,096 pixels | done |
+| M6 WindowServer composition on this device | 218-desktop: main display's Metal device, WindowServer clients | done (driver evidence) |
+| M6 changing frames captured from the display | not yet | open |
+| Physical HDMI output under macOS | not verified | open |
+| Clean bounded lifecycle, 3 consecutive | 218-q2/q3/q4 (plus native, desktop) | done on one boot |
+| Binning clamp instead of global disable | not yet | open (performance) |
+| Guest sleep path (`AMDHardware::powerOff` KIQ timeout) | 217/218 | open |
+
