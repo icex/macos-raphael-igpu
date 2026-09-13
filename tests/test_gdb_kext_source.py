@@ -13,6 +13,77 @@ SPEC.loader.exec_module(tool)
 
 
 class GdbKextSourceTests(unittest.TestCase):
+    def test_kiq_start_generator_describes_five_arg_result_and_three_breakpoints(self):
+        text = tool.generate_kiq_start(
+            0xffffff801b6e8000, "474ef697fc283ba283a4763d76c8e200",
+            "/tmp/kernel.symbols", "/tmp/RaphaelGPU.dSYM", 0x19120,
+            bytes.fromhex("554889e541574156"), 0x1920c, "/tmp/source")
+        self.assertIn("KIQ_START_ENTRY", text)
+        self.assertIn("KIQ_START_NATIVE_CALL_BOUNDARY", text)
+        self.assertIn("KIQ_START_RETURN result=%#x", text)
+        self.assertIn("KIQ_START_CAPTURE_COMPLETE", text)
+        self.assertIn("KIQ_START_DETACHED", text)
+        self.assertIn("read(entry_spec,12)", text)
+        self.assertIn("read(entry_out,4)", text)
+        for register in ("rdi", "rsi", "rdx", "rcx", "r8"):
+            self.assertIn("entry_" + register, text)
+        self.assertIn("& 0xffffffff", text)
+        self.assertEqual(text.count("gdb.BP_HARDWARE_BREAKPOINT"), 3)
+
+    def test_kiq_start_generated_loop_stops_after_success_or_failure_return(self):
+        text = tool.generate_kiq_start(
+            0xffffff801b6e8000, "474ef697fc283ba283a4763d76c8e200",
+            "/tmp/kernel.symbols", "/tmp/RaphaelGPU.dSYM", 0x19120,
+            bytes.fromhex("554889e541574156"), 0x1920c, "/tmp/source")
+        self.assertIn("if result == 0: outcome='success'", text)
+        self.assertIn("if result == 0: outcome='success'", text)
+        self.assertIn("else: outcome='failure'", text)
+        self.assertIn("raw=read(entry_spec,12)", text)
+        self.assertIn("raw_out=read(entry_out,4)", text)
+        self.assertIn("native_reached=True", text)
+        self.assertIn("native_reached=False", text)
+        self.assertLess(text.index("gdb.execute('detach')"), text.index("gdb.execute('quit')"))
+
+    def test_kiq_start_exact_generated_loop_executes_success_and_refusal(self):
+        text = tool.generate_kiq_start(
+            0xffffff801b6e8000, "474ef697fc283ba283a4763d76c8e200",
+            "/tmp/kernel.symbols", "/tmp/RaphaelGPU.dSYM", 0x19120,
+            bytes.fromhex("554889e541574156"), 0x1920c, "/tmp/source")
+        body = text.split("class ReturnBP", 1)[1].split("\nend\nquit", 1)[0]
+        body = "class ReturnBP" + body
+        for result in (0, 0xe00002bc):
+            events = [
+                {'pc': 0x100000, 'rsp': 0x8000, 'rbp': 0x7ff8,
+                 'rdi': 0x1000, 'rsi': 1, 'rdx': 2, 'rcx': 0x9000, 'r8': 0xa000, 'rax': 0},
+                {'pc': 0xbeef, 'rsp': 0x8008, 'rbp': 0x7ff8,
+                 'rdi': 0xdead, 'rsi': 0, 'rdx': 0, 'rcx': 0, 'r8': 0, 'rax': result},
+            ]
+            if result == 0:
+                events.insert(1, {'pc': 0x1000ec, 'rsp': 0x7f00, 'rbp': 0x7ff8,
+                                   'rdi': 0x1000, 'rsi': 1, 'rdx': 2, 'rcx': 0, 'r8': 0, 'rax': 0})
+            state = dict(events[0]); state['detached'] = False
+            class BP:
+                def __init__(self, spec, kind=None, internal=False): self.enabled = True
+                def delete(self): self.enabled = False
+            class Fake:
+                BP_HARDWARE_BREAKPOINT = 1; Breakpoint = BP
+                def parse_and_eval(self, reg): return state[reg[1:]]
+                def selected_thread(self): return types.SimpleNamespace(ptid='fake')
+                def selected_inferior(self): return types.SimpleNamespace(read_memory=lambda a,n: b'\0'*n)
+                def execute(self, command):
+                    if command == 'continue': state.update(events.pop(0))
+                    elif command == 'detach': state['detached'] = True
+            fake = Fake()
+            def read(addr, size):
+                if addr == 0x8000 and size == 8: return (0xbeef).to_bytes(8, 'little')
+                return b'\0' * size
+            ns = {'gdb': fake, 'struct': struct, 'read': read, 'start': 0x100000,
+                  'native': 0x1000ec, 'entry_rsp': None, 'entry_return': None,
+                  'entry_rdi': None, 'entry_out': None}
+            exec(body, ns)
+            self.assertTrue(state['detached'])
+            self.assertEqual(events, [])
+
     def test_kiq_stamp_scenario_uses_dynamic_return_and_bounded_channel_state(self):
         text = tool.generate_kiq_stamp(
             0xffffff801b6e8000, "474ef697fc283ba283a4763d76c8e200",
@@ -36,7 +107,7 @@ class GdbKextSourceTests(unittest.TestCase):
             bytes.fromhex("554889e541574156"), "/tmp/source")
         block = text.split("class ReturnBP(gdb.Breakpoint):\n", 1)[1].split("end\nquit", 1)[0]
         events = []
-        state = {'pc': 0, 'rsp': 0, 'rdi': 0, 'rsi': 0, 'rax': 0,
+        state = {'pc': 0, 'rsp': 0, 'rdi': 0, 'rsi': 0, 'rdx': 0, 'rcx': 0, 'r8': 0, 'rax': 0,
                  'detached': False, 'reads': []}
         class BP:
             next_id = 1

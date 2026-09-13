@@ -380,7 +380,7 @@ while True:
     if pc == wa:
         entry=pc; wait_bp.enabled=False; rsp=int(gdb.parse_and_eval('$rsp')); ret=struct.unpack('<Q',read(rsp,8))[0]
         selfp=int(gdb.parse_and_eval('$rdi')) & ((1<<64)-1); stamp=(int(gdb.parse_and_eval('$rsi')) & 0xffffffff) if pc==wa else None; started=time.monotonic()
-        print('KIQ_ENTRY kind=%s self=%#x stamp=%s rsp=%#x return=%#x thread=%s' % ('waitForHwStamp' if pc==wa else 'submitKIQFrame',selfp,stamp if stamp is not None else 'none',rsp,ret,str(gdb.selected_thread().ptid)))
+        print('KIQ_ENTRY kind=%s self=%#x stamp=%s a=%#x b=%#x spec=%#x out=%#x rsp=%#x return=%#x thread=%s' % ('waitForHwStamp' if pc==wa else 'submitKIQFrame',selfp,stamp if stamp is not None else 'none',int(gdb.parse_and_eval('$rsi')),int(gdb.parse_and_eval('$rdx')),int(gdb.parse_and_eval('$rcx')),int(gdb.parse_and_eval('$r8')),rsp,ret,str(gdb.selected_thread().ptid)))
         channel_state('kiq-channel-entry',selfp); safe('kiq-channel-self',selfp); return_bp=ReturnBP(ret,rsp+8); continue
     if ret is None or pc != ret or int(gdb.parse_and_eval('$rsp')) != rsp+8: raise gdb.GdbError('KIQ return stop identity mismatch')
     result=int(gdb.parse_and_eval('$rax')) & 0xff
@@ -394,6 +394,121 @@ quit
 '''
 
 
+def generate_kiq_start(runtime_text, expected_uuid, kernel_symbols, raphael_dsym,
+                       start_offset, start_prologue, native_offset,
+                       original_source_root=None, native_prologue=None):
+    """Generate an authenticated, bounded wrapKiqStart ABI observation."""
+    relocation = kernel_relocation(runtime_text, 0xffffff8000200000)
+    uuid = expected_uuid.lower().replace('-', '')
+    if len(uuid) != 32 or any(c not in '0123456789abcdef' for c in uuid):
+        raise ValueError('expected UUID must be 16-byte hexadecimal')
+    if start_offset <= 0 or native_offset <= start_offset:
+        raise ValueError('KIQ start offsets must be positive and ordered')
+    if not (8 <= len(start_prologue) <= 32):
+        raise ValueError('KIQ start wrapper prologue must contain 8..32 bytes')
+    if not start_prologue.startswith(bytes.fromhex('554889e5')):
+        raise ValueError('KIQ start requires push-rbp/mov-rsp-rbp frame-pointer prologue')
+    if native_prologue is not None and len(native_prologue) != 6:
+        raise ValueError('KIQ native call instruction must contain exactly 6 bytes')
+    tool_path = Path(__file__).resolve()
+    substitute = ('set substitute-path ' + original_source_root + ' ' +
+                  str(Path(raphael_dsym).parent / 'source')) if original_source_root else ''
+    return f'''set pagination off
+set confirm off
+file {kernel_symbols}
+directory {Path(raphael_dsym).parent / 'source'}
+{substitute}
+target remote 127.0.0.1:1234
+symbol-file -o 0x{relocation:x} {kernel_symbols}
+python
+import gdb, struct, importlib.util
+MAX_HEADER=65536; KERNEL_RUNTIME_TEXT=0x{runtime_text:x}; EXPECTED_UUID='{uuid}'
+START_OFFSET=0x{start_offset:x}; NATIVE_OFFSET=0x{native_offset:x}
+START_PROLOGUE=bytes.fromhex('{start_prologue.hex()}')
+NATIVE_PROLOGUE=bytes.fromhex('{native_prologue.hex() if native_prologue is not None else ""}')
+inf=gdb.selected_inferior()
+def read(a,n):
+    if n < 0 or n > MAX_HEADER: raise gdb.GdbError('bounded read refused')
+    return bytes(inf.read_memory(a,n))
+def safe(label,a,n):
+    try: print('%s address=%#x bytes=%s' % (label,a,read(a,n).hex()))
+    except Exception as e: print('%s unavailable=%s' % (label,e))
+kh=read(KERNEL_RUNTIME_TEXT,32); _,_,_,_,kn,kbytes,_,_=struct.unpack_from('<IiiIIIII',kh)
+if kbytes > MAX_HEADER-32: raise gdb.GdbError('kernel commands exceed cap')
+kb=read(KERNEL_RUNTIME_TEXT,32+kbytes); off=32; data=None
+for _ in range(kn):
+    cmd,size=struct.unpack_from('<II',kb,off)
+    if size < 8 or off+size > len(kb): raise gdb.GdbError('bad kernel load command')
+    if cmd == 0x19 and kb[off+8:off+24].rstrip(b'\\0') == b'__DATA': data=struct.unpack_from('<QQ',kb,off+24)
+    off += size
+if data is None: raise gdb.GdbError('kernel __DATA mapping absent')
+spec=importlib.util.spec_from_file_location('rgpu_gdb_helper','{tool_path}'); h=importlib.util.module_from_spec(spec); spec.loader.exec_module(h)
+node=struct.unpack('<Q',read(data[0]+0x214938,8))[0]
+try: name,found,got=h.walk_kmods(read,node,EXPECTED_UUID)
+except ValueError as e: raise gdb.GdbError(str(e))
+print('RAPHAEL_AUTHENTICATED name=%s address=%#x uuid=%s' % (name,found,got))
+gdb.execute('add-symbol-file {raphael_dsym}/Contents/Resources/DWARF/RaphaelGPU -o %#x' % found)
+start=found+START_OFFSET; native=found+NATIVE_OFFSET
+if read(start,len(START_PROLOGUE)) != START_PROLOGUE: raise gdb.GdbError('KIQ start wrapper bytes mismatch')
+if NATIVE_PROLOGUE and read(native,len(NATIVE_PROLOGUE)) != NATIVE_PROLOGUE: raise gdb.GdbError('KIQ native call bytes mismatch')
+class ReturnBP(gdb.Breakpoint):
+    def __init__(self, address, wanted_rsp):
+        super().__init__('*%#x' % address, gdb.BP_HARDWARE_BREAKPOINT, internal=True)
+        self.target_pc=address; self.wanted_rsp=wanted_rsp
+    def stop(self):
+        return (int(gdb.parse_and_eval('$pc')) == self.target_pc and
+                int(gdb.parse_and_eval('$rsp')) == self.wanted_rsp)
+class NativeBP(gdb.Breakpoint):
+    def stop(self):
+        return (entry_seen and int(gdb.parse_and_eval('$pc')) == native and
+                int(gdb.parse_and_eval('$rbp')) + 8 == entry_rsp and
+                struct.unpack('<Q',read(int(gdb.parse_and_eval('$rbp'))+8,8))[0] == entry_return and
+                (int(gdb.parse_and_eval('$rdi')) & ((1<<64)-1)) == entry_rdi)
+entry_bp=gdb.Breakpoint('*%#x' % start, gdb.BP_HARDWARE_BREAKPOINT, internal=True)
+native_bp=NativeBP('*%#x' % native, gdb.BP_HARDWARE_BREAKPOINT, internal=True)
+native_bp.enabled=False
+print('KIQ_START_BREAKPOINTS_ARMED entry=%#x native=%#x' % (start,native))
+native_reached=False; entry_seen=False; return_bp=None
+gdb.execute('continue')
+if int(gdb.parse_and_eval('$pc')) != start: raise gdb.GdbError('KIQ start entry stop PC mismatch')
+entry_rsp=int(gdb.parse_and_eval('$rsp')); entry_return=struct.unpack('<Q',read(entry_rsp,8))[0]
+entry_rdi=int(gdb.parse_and_eval('$rdi')) & ((1<<64)-1)
+entry_rsi=int(gdb.parse_and_eval('$rsi')) & ((1<<64)-1)
+entry_rdx=int(gdb.parse_and_eval('$rdx')) & ((1<<64)-1)
+entry_rcx=int(gdb.parse_and_eval('$rcx')) & ((1<<64)-1)
+entry_r8=int(gdb.parse_and_eval('$r8')) & ((1<<64)-1)
+entry_spec=entry_rcx; entry_out=entry_r8
+raw=read(entry_spec,12)
+print('KIQ_START_ENTRY self=%#x a=%#x b=%#x spec=%#x out=%#x rsp=%#x return=%#x spec_raw=%s thread=%s' %
+      (entry_rdi,entry_rsi,entry_rdx,entry_spec,entry_out,entry_rsp,entry_return,raw.hex(),str(gdb.selected_thread().ptid)))
+entry_bp.enabled=False
+entry_seen=True
+native_bp.enabled=True
+return_bp=ReturnBP(entry_return,entry_rsp+8)
+gdb.execute('continue')
+if int(gdb.parse_and_eval('$pc')) == native:
+    native_reached=True
+    print('KIQ_START_NATIVE_CALL_BOUNDARY pc=%#x self=%#x a=%#x b=%#x' %
+          (native, int(gdb.parse_and_eval('$rdi')), int(gdb.parse_and_eval('$rsi')), int(gdb.parse_and_eval('$rdx'))))
+    native_bp.enabled=False
+else:
+    native_reached=False
+if int(gdb.parse_and_eval('$pc')) != entry_return:
+    gdb.execute('continue')
+if int(gdb.parse_and_eval('$pc')) != entry_return or int(gdb.parse_and_eval('$rsp')) != entry_rsp+8:
+    raise gdb.GdbError('KIQ start return stop identity mismatch')
+result=int(gdb.parse_and_eval('$rax')) & 0xffffffff
+raw_out=read(entry_out,4)
+if result == 0: outcome='success'
+else: outcome='failure'
+print('KIQ_START_RETURN result=%#x outcome=%s native_reached=%s out_raw=%s' % (result,outcome,native_reached,raw_out.hex()))
+print('KIQ_START_CAPTURE_COMPLETE')
+gdb.execute('detach'); print('KIQ_START_DETACHED'); gdb.execute('quit')
+end
+quit
+'''
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--runtime-kernel-text", required=True, type=lambda x: int(x, 0))
@@ -402,7 +517,7 @@ def main():
     parser.add_argument("--kernel-symbols", required=True)
     parser.add_argument("--raphael-dsym", required=True)
     parser.add_argument("--function-offset", type=lambda x: int(x, 0))
-    parser.add_argument("--scenario", choices=("entry-update", "vmid1-root", "post-probe", "kiq-stamp"), default="entry-update")
+    parser.add_argument("--scenario", choices=("entry-update", "vmid1-root", "post-probe", "kiq-stamp", "kiq-start"), default="entry-update")
     parser.add_argument("--wrapper-name")
     parser.add_argument("--target-gpu-address", type=lambda x: int(x, 0))
     parser.add_argument("--output", required=True, type=Path)
@@ -412,20 +527,39 @@ def main():
         parser.error("one of --raphael-binary or --raphael-uuid is required")
     if args.raphael_binary and artifact_uuid(args.raphael_dsym) != expected_uuid:
         parser.error("Raphael binary/dSYM UUID mismatch")
+    if args.scenario == "kiq-start":
+        if args.wrapper_name:
+            parser.error("--wrapper-name is not used for kiq-start")
+        start_name, start_end = symbol_bounds(args.raphael_dsym, "wrapKiqStart")
+        start_off = symbol_offset(args.raphael_dsym, "wrapKiqStart")
+        start_prologue = executable_bytes(args.raphael_binary, start_off)
+        native_offsets = native_call_offsets(args.raphael_binary, start_off, start_end,
+                                             "wrapKiqStart", "orgKiqStart")
+        if len(native_offsets) != 1:
+            parser.error("wrapKiqStart must contain exactly one orgKiqStart call")
+        native_prologue = executable_bytes(args.raphael_binary, native_offsets[0], 6)
+        original_source_root = dwarf_source_root(args.raphael_dsym)
+        args.output.write_text(generate_kiq_start(
+            args.runtime_kernel_text, expected_uuid, args.kernel_symbols,
+            args.raphael_dsym, start_off, start_prologue, native_offsets[0],
+            original_source_root, native_prologue))
+        return
     if args.scenario == "kiq-stamp":
         if args.wrapper_name:
             parser.error("--wrapper-name is not used for kiq-stamp")
-        wait_name, wait_end = symbol_bounds(args.raphael_dsym, "wrapWaitStamp")
+        wait_wrapper = "wrapWaitStamp"
+        wait_name, wait_end = symbol_bounds(args.raphael_dsym, wait_wrapper)
         submit_name, submit_end = symbol_bounds(args.raphael_dsym, "wrapKiqSubmit")
-        wait_off = symbol_offset(args.raphael_dsym, "wrapWaitStamp")
+        wait_off = symbol_offset(args.raphael_dsym, wait_wrapper)
         submit_off = symbol_offset(args.raphael_dsym, "wrapKiqSubmit")
         wait_prologue = executable_bytes(args.raphael_binary, wait_off)
         submit_prologue = executable_bytes(args.raphael_binary, submit_off)
         original_source_root = dwarf_source_root(args.raphael_dsym)
-        args.output.write_text(generate_kiq_stamp(
+        generated = generate_kiq_stamp(
             args.runtime_kernel_text, expected_uuid, args.kernel_symbols,
             args.raphael_dsym, wait_off, wait_prologue, submit_off,
-            submit_prologue, original_source_root))
+            submit_prologue, original_source_root)
+        args.output.write_text(generated)
         return
     wrapper_name = args.wrapper_name or ("wrapVmmPrepare" if args.scenario == "vmid1-root" else "wrapVmmUpdateEntries")
     symbol_start, symbol_end = symbol_bounds(args.raphael_dsym, wrapper_name)
