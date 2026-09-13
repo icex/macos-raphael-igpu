@@ -910,3 +910,23 @@ Remaining for full desktop acceleration: WindowServer composition evidence on th
 device and a display path (M6), binning clamp instead of the global disable
 (performance), and the guest sleep-path KIQ timeout in `AMDHardware::powerOff` (M7).
 
+## Desktop evidence probe prepared GPU-less (2026-09-14)
+
+A supervised GPU-less guest session (container `b7cf3623...`, only `/dev/kvm`, no
+VFIO device, no ledger entry) compiled `tests/desktop_metal_probe.m` with `-Werror`
+at `/var/tmp/rgpu-desktop-metal-731329b936529aba/probe` (source sha256 `731329b9...`,
+binary sha256 `1c48101a...`). Without a GPU it correctly reports `no Metal device`.
+The guest showed `WindowServer` running and user `bogdan` on the console, and
+`pmset` system sleep of 1 minute (display sleep 10), which explains the sleep entries
+in long idle GPU runs. The session was shut down through the supervisor. New profile
+`desktop-metal` (validator `tools/desktop-metal-test.py`) requires a completed compute
+command on the Navi23 device and records display-to-device mapping and IOAccelerator
+user clients without gating on them.
+
+## Boot-launch ledger extension for the desktop evidence attempt (2026-09-14)
+
+The 1.0.218 binary with card `metal-056` runs from `run/candidate-218-attempt-desktop`
+as launch 15 on boot `c369c74e`, through `--manual-reuse --ack-risk` under the user's
+standing instruction, after `run/mode2-reset-14.json`. `run/guest-identity.json` is
+switched to the desktop probe identity for this run. This note covers this one launch.
+

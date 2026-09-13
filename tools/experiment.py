@@ -39,6 +39,11 @@ PROBE_PROFILES = {
         'binary_prefix': '/var/tmp/rgpu-small-metal-',
         'validator': 'small-metal-test',
     },
+    'desktop-metal': {
+        'source': 'tests/desktop_metal_probe.m',
+        'binary_prefix': '/var/tmp/rgpu-desktop-metal-',
+        'validator': 'desktop-metal-test',
+    },
 }
 
 POST_PROBE_DEBUG_SCENARIOS = ('post-probe',)

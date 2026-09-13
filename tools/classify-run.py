@@ -915,7 +915,8 @@ def _probe_summary(manifest, probe):
         return None
     rows = []
     for line in probe['output'].splitlines():
-        for prefix in ('RGPU_SMALL_METAL_RESULT ', 'RGPU_METAL_RESULT '):
+        for prefix in ('RGPU_SMALL_METAL_RESULT ', 'RGPU_METAL_RESULT ',
+                       'RGPU_DESKTOP_METAL_RESULT '):
             if line.startswith(prefix):
                 rows.append(line[len(prefix):])
     exits = re.findall(r'^RGPU_EXIT ' + re.escape(run_id) + r' (\d+)$',
@@ -932,7 +933,8 @@ def _probe_summary(manifest, probe):
                    completed_command_buffers=result.get('completed_command_buffers'),
                    values_checked=result.get('values_checked'),
                    exits=exits, transport_exit=probe.get('transport_exit'))
-    for key in ('render_pixels_checked', 'error'):
+    for key in ('render_pixels_checked', 'error', 'display_on_device',
+                'windowserver_accelerator_client', 'displays'):
         if key in result:
             summary[key] = result[key]
     return summary
@@ -1536,7 +1538,8 @@ def _classify(manifest, events, probe, defer_absent_workload=False):
         profile = manifest.get('probe_profile', {})
         profile_name = profile.get('name') if isinstance(profile, dict) else profile
         path = Path(__file__).with_name(
-            'small-metal-test.py' if profile_name == 'small-metal' else 'metal-test.py')
+            {'small-metal': 'small-metal-test.py',
+             'desktop-metal': 'desktop-metal-test.py'}.get(profile_name, 'metal-test.py'))
         spec = importlib.util.spec_from_file_location('metal_test', path)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
