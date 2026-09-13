@@ -610,6 +610,48 @@ static void criticalDumpThread(void *, wait_result_t) {
         else
             IODelay(static_cast<unsigned>(remainingUs));
     }
+    if (criticalUartQuiesceEnabled) {
+        // Candidate 217: the harness requested quiesce after the probe, 22 minutes after
+        // this worker's 180-second replay window had closed, so no ACK ever came and the
+        // run idled until a manual stop. Keep only the RX control path alive (no replay
+        // traffic, 10 ms polls) for the longest authorized run, then answer the request
+        // with one fresh caught-up snapshot and the ACK.
+        static constexpr uint64_t kLateQuiesceUs = UINT64_C(6000000000);
+        const rgpu::CriticalWorkerBudget late(io.micros(), kLateQuiesceUs);
+        unsigned lateReplay = 18;
+        while (late.remainingUs(io.micros()) != 0 && lateReplay < 64) {
+            if (!quiesceRequested) {
+                if (!uart.pollQuiesceRequest()) {
+                    IOSleep(10);
+                    continue;
+                }
+                quiesceRequested = true;
+            }
+            if (uart.failed() && !uart.initialize()) {
+                IOSleep(1000);
+                continue;
+            }
+            const size_t count = criticalRecords.size();
+            const uint64_t dropped = criticalRecords.dropped();
+            const uint64_t truncated = criticalRecords.truncated();
+            uart.beginSnapshot(decltype(uart)::kSnapshotTimeoutUs);
+            const unsigned replay = lateReplay++;
+            const bool complete = rgpu::CriticalReplayV2::emitSnapshot(
+                RGPU_BUILD_ID, replay, count, dropped, truncated,
+                [](size_t sequence,
+                   char (&record)[rgpu::CriticalReplayV2::kRecordStorageBytes]) {
+                    return criticalRecords.read(sequence, record);
+                },
+                [&](const char *line) { uart(line); });
+            if (rgpu::criticalSnapshotCaughtUp(
+                    true, complete, uart.failed(), count, dropped, truncated,
+                    criticalRecords.size(), criticalRecords.dropped(),
+                    criticalRecords.truncated()) &&
+                    uart.writeQuiesced(RGPU_BUILD_ID, replay, static_cast<uint16_t>(count)))
+                break;
+            IOSleep(100);
+        }
+    }
     thread_terminate(current_thread());
 }
 

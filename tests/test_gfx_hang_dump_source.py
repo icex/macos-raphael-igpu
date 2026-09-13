@@ -129,6 +129,14 @@ class GfxHangDumpSourceTests(unittest.TestCase):
                         body.index('fbWrite(asicInfo, kGcPaScEnhance1, before | 0x8u);'))
         self.assertIn('kGcPaScEnhance1 = kGcSeg0 + 0x109d;', self.source)
 
+    def test_late_quiesce_responder_is_gated_and_bounded(self):
+        worker = self.body('static void criticalDumpThread', 'static uint32_t mask = 0;')
+        late = worker[worker.index('if (criticalUartQuiesceEnabled) {\n        // Candidate 217'):]
+        self.assertIn('kLateQuiesceUs = UINT64_C(6000000000);', late)
+        self.assertIn('while (late.remainingUs(io.micros()) != 0 && lateReplay < 64) {', late)
+        self.assertLess(late.index('uart.pollQuiesceRequest()'), late.index('emitSnapshot('))
+        self.assertLess(late.index('criticalSnapshotCaughtUp('), late.index('uart.writeQuiesced('))
+
     @unittest.skipUnless(shutil.which('g++'), 'g++ unavailable')
     def test_arithmetic_unit(self):
         with tempfile.TemporaryDirectory() as temporary:
