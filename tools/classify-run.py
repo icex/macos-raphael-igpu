@@ -53,7 +53,7 @@ def _decode_payload(build, seq, payload):
             r'capture=(armed|disabled)', payload):
         row.update(kind='submission_trace_route', count=int(m[2]),
                    entries_match=bool(int(m[3])), capture=m[4],
-                   ok=(m[1] == 'ok' and m[2] in ('5', '6') and m[3] == '1' and
+                   ok=(m[1] == 'ok' and m[2] in ('5', '6', '7') and m[3] == '1' and
                        m[4] == 'armed'))
     elif payload.startswith('SUB: routes='):
         row.update(kind='submission_trace_route', ok=False, malformed=True)
@@ -96,12 +96,12 @@ def _decode_payload(build, seq, payload):
         row.update(kind='submission_map_phase_summary', ok=False, malformed=True)
     elif m := re.fullmatch(
             r'SUB: backing seq=(\d+) object=(0x[0-9a-fA-F]+|0) '
-            r'thread=(0x[0-9a-fA-F]+|0) result=([01]) '
+            r'thread=(0x[0-9a-fA-F]+|0) (?:pool=\d+ )?result=([01]) '
             r'pre=([01])/(0x[0-9a-fA-F]+|0)/(0x[0-9a-fA-F]+|0)/'
             r'(0x[0-9a-fA-F]+|0)/(0x[0-9a-fA-F]+|0)/(0x[0-9a-fA-F]+|0) '
             r'post=([01])/(0x[0-9a-fA-F]+|0)/(0x[0-9a-fA-F]+|0)/'
             r'(0x[0-9a-fA-F]+|0)/(0x[0-9a-fA-F]+|0)/(0x[0-9a-fA-F]+|0) '
-            r'state=live', payload):
+            r'(?:counters=\d+/\d+->\d+/\d+ )?state=live', payload):
         def snapshot(start):
             return dict(available=bool(int(m[start])), length=int(m[start + 1], 16),
                         owner=int(m[start + 2], 16), element=int(m[start + 3], 16),
@@ -112,6 +112,17 @@ def _decode_payload(build, seq, payload):
                    observation_sequence=int(m[1]), backing=int(m[2], 16),
                    thread=int(m[3], 16), result=bool(int(m[4])),
                    before=snapshot(5), after=snapshot(11), state='live')
+        pool = re.search(r'\bpool=(\d+)\b', payload)
+        counters = re.search(r'\bcounters=(\d+)/(\d+)->(\d+)/(\d+)\b', payload)
+        if pool:
+            row['pool'] = int(pool[1])
+        if counters:
+            row['counters'] = {
+                'successful_before': int(counters[1]),
+                'failed_before': int(counters[2]),
+                'successful_after': int(counters[3]),
+                'failed_after': int(counters[4]),
+            }
     elif payload.startswith('SUB: backing seq='):
         row.update(kind='submission_backing_allocation', ok=False, malformed=True)
     elif m := re.fullmatch(
@@ -917,7 +928,7 @@ def _classify(manifest, events, probe, defer_absent_workload=False):
             return verdict('INCONCLUSIVE',
                            stage='submission_backing_allocation_route_missing')
         if (len(trace_routes) != 1 or not trace_routes[0].get('ok') or
-                trace_routes[0].get('count') != 6):
+                trace_routes[0].get('count') not in (6, 7)):
             return verdict('INVALID',
                            stage='submission_backing_allocation_route_guard')
         backing_summaries = [
