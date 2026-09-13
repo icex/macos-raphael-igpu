@@ -430,14 +430,16 @@ def generate_kiq_start(runtime_text, expected_uuid, kernel_symbols, raphael_dsym
     uuid = expected_uuid.lower().replace('-', '')
     if len(uuid) != 32 or any(c not in '0123456789abcdef' for c in uuid):
         raise ValueError('expected UUID must be 16-byte hexadecimal')
-    if start_offset <= 0 or native_offset <= start_offset:
+    native_offsets = (native_offset,) if isinstance(native_offset, int) else tuple(native_offset)
+    if start_offset <= 0 or not native_offsets or any(offset <= start_offset for offset in native_offsets):
         raise ValueError('KIQ start offsets must be positive and ordered')
     if not (8 <= len(start_prologue) <= 32):
         raise ValueError('KIQ start wrapper prologue must contain 8..32 bytes')
     if not start_prologue.startswith(bytes.fromhex('554889e5')):
         raise ValueError('KIQ start requires push-rbp/mov-rsp-rbp frame-pointer prologue')
-    if native_prologue is not None and len(native_prologue) != 6:
-        raise ValueError('KIQ native call instruction must contain exactly 6 bytes')
+    native_prologues = (native_prologue,) if isinstance(native_prologue, (bytes, bytearray)) else tuple(native_prologue or ())
+    if native_prologues and any(len(prologue) != 6 for prologue in native_prologues):
+        raise ValueError('KIQ native call instructions must contain exactly 6 bytes')
     tool_path = Path(__file__).resolve()
     substitute = ('set substitute-path ' + original_source_root + ' ' +
                   str(Path(raphael_dsym).parent / 'source')) if original_source_root else ''
@@ -451,9 +453,9 @@ symbol-file -o 0x{relocation:x} {kernel_symbols}
 python
 import gdb, struct, importlib.util
 MAX_HEADER=65536; KERNEL_RUNTIME_TEXT=0x{runtime_text:x}; EXPECTED_UUID='{uuid}'
-START_OFFSET=0x{start_offset:x}; NATIVE_OFFSET=0x{native_offset:x}
+START_OFFSET=0x{start_offset:x}; NATIVE_OFFSETS={list(native_offsets)!r}
 START_PROLOGUE=bytes.fromhex('{start_prologue.hex()}')
-NATIVE_PROLOGUE=bytes.fromhex('{native_prologue.hex() if native_prologue is not None else ""}')
+NATIVE_PROLOGUES={[prologue.hex() for prologue in native_prologues]!r}
 MEC_REGISTER=0x{KIQ_MEC_REGISTER:x}
 MEC_WRITE_SPECS={[(offset, prologue.hex(), path) for offset, prologue, path in mec_write_specs]!r}
 inf=gdb.selected_inferior()
@@ -478,9 +480,9 @@ try: name,found,got=h.walk_kmods(read,node,EXPECTED_UUID)
 except ValueError as e: raise gdb.GdbError(str(e))
 print('RAPHAEL_AUTHENTICATED name=%s address=%#x uuid=%s' % (name,found,got))
 gdb.execute('add-symbol-file {raphael_dsym}/Contents/Resources/DWARF/RaphaelGPU -o %#x' % found)
-start=found+START_OFFSET; native=found+NATIVE_OFFSET
+start=found+START_OFFSET
 if read(start,len(START_PROLOGUE)) != START_PROLOGUE: raise gdb.GdbError('KIQ start wrapper bytes mismatch')
-if NATIVE_PROLOGUE and read(native,len(NATIVE_PROLOGUE)) != NATIVE_PROLOGUE: raise gdb.GdbError('KIQ native call bytes mismatch')
+if NATIVE_PROLOGUES and any(read(found+x, 6) != bytes.fromhex(prologue) for x,prologue in zip(NATIVE_OFFSETS,NATIVE_PROLOGUES)): raise gdb.GdbError('KIQ native call bytes mismatch')
 class ReturnBP(gdb.Breakpoint):
     def __init__(self, address, wanted_rsp):
         super().__init__('*%#x' % address, gdb.BP_HARDWARE_BREAKPOINT, internal=True)
@@ -490,7 +492,7 @@ class ReturnBP(gdb.Breakpoint):
                 int(gdb.parse_and_eval('$rsp')) == self.wanted_rsp)
 class NativeBP(gdb.Breakpoint):
     def stop(self):
-        return (entry_seen and int(gdb.parse_and_eval('$pc')) == native and
+        return (entry_seen and int(gdb.parse_and_eval('$pc')) in [found+x for x in NATIVE_OFFSETS] and
                 int(gdb.parse_and_eval('$rbp')) + 8 == entry_rsp and
                 struct.unpack('<Q',read(int(gdb.parse_and_eval('$rbp'))+8,8))[0] == entry_return and
                 (int(gdb.parse_and_eval('$rdi')) & ((1<<64)-1)) == entry_rdi)
@@ -554,22 +556,23 @@ entry_seen=True
 native_bp.enabled=True
 return_bp=ReturnBP(entry_return,entry_rsp+8)
 gdb.execute('continue')
-if int(gdb.parse_and_eval('$pc')) == native:
+native_pc=int(gdb.parse_and_eval('$pc'))
+if native_pc in [found+x for x in NATIVE_OFFSETS]:
     native_reached=True
     native_active=True
     for bp in write_bps: bp.enabled=True
-    native_insn=read(native,6)
+    native_insn=read(native_pc,6)
     if native_insn[:2] == bytes.fromhex('ff15'):
         disp=struct.unpack('<i',native_insn[2:])[0]
         slot=native+6+disp
         try: target=struct.unpack('<Q',read(slot,8))[0]
         except Exception: target=0
         print('KIQ_START_NATIVE_ORG_TARGET pc=%#x bytes=%s slot=%#x target=%#x' %
-              (native,native_insn.hex(),slot,target))
+              (native_pc,native_insn.hex(),slot,target))
     else:
         print('KIQ_START_NATIVE_ORG_TARGET unavailable bytes=%s' % native_insn.hex())
     print('KIQ_START_NATIVE_CALL_BOUNDARY pc=%#x self=%#x a=%#x b=%#x' %
-          (native, int(gdb.parse_and_eval('$rdi')), int(gdb.parse_and_eval('$rsi')), int(gdb.parse_and_eval('$rdx'))))
+          (native_pc, int(gdb.parse_and_eval('$rdi')), int(gdb.parse_and_eval('$rsi')), int(gdb.parse_and_eval('$rdx'))))
     native_bp.enabled=False
 else:
     native_reached=False
@@ -617,9 +620,9 @@ def main():
         start_prologue = executable_bytes(args.raphael_binary, start_off)
         native_offsets = native_call_offsets(args.raphael_binary, start_off, start_end,
                                              "wrapKiqStart", "orgKiqStart")
-        if len(native_offsets) != 1:
-            parser.error("wrapKiqStart must contain exactly one authenticated orgKiqStart call")
-        native_prologue = executable_bytes(args.raphael_binary, native_offsets[0], 6)
+        if not native_offsets or len(native_offsets) > 4:
+            parser.error("wrapKiqStart orgKiqStart call count is invalid")
+        native_prologue = [executable_bytes(args.raphael_binary, offset, 6) for offset in native_offsets]
         writer_specs = []
         for symbol, path in (('__ZL15wrapGcCgsWrite2Pvjjjj', 'ext2'),
                              ('__ZL14wrapGcCgsWritePvjj', 'register'),
@@ -630,7 +633,7 @@ def main():
         original_source_root = dwarf_source_root(args.raphael_dsym)
         args.output.write_text(generate_kiq_start(
             args.runtime_kernel_text, expected_uuid, args.kernel_symbols,
-            args.raphael_dsym, start_off, start_prologue, native_offsets[0],
+            args.raphael_dsym, start_off, start_prologue, native_offsets,
             original_source_root, native_prologue, writer_specs))
         return
     if args.scenario == "kiq-stamp":
