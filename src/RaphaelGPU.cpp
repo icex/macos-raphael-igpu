@@ -3937,6 +3937,17 @@ static int wrapAlignManager2Init(void *that, void *hwInterface) {
              info, hwInfoField(info, 0x18), hwInfoField(info, 0x20),
              hwInfoField(info, kHwInfoGbAddrConfig), hwInfoField(info, kHwInfoBackendDisables),
              hwInfoField(info, kHwInfoNoOfBanks), hwInfoField(info, kHwInfoNoOfRanks), live);
+        uint32_t caps[6] = {};
+        memcpy(caps, info + 0xc0, sizeof(caps));
+        RLOG("XA: hwinfo[0xc0..0xd4]=%#x %#x %#x %#x %#x %#x", caps[0], caps[1], caps[2], caps[3],
+             caps[4], caps[5]);
+        if (hwCapClearMask != 0) {
+            uint32_t capabilities = 0;
+            memcpy(&capabilities, info + kHwInfoCapabilities, sizeof(capabilities));
+            const uint32_t cleared = capabilities & ~hwCapClearMask;
+            memcpy(info + kHwInfoCapabilities, &cleared, sizeof(cleared));
+            RLOG("XA: rgpuhwcapclr=%#x hwinfo[0xcc] %#x -> %#x", hwCapClearMask, capabilities, cleared);
+        }
         const uint64_t reported = hwInfoField(info, kHwInfoGbAddrConfig);
         if (addrConfigMode == 2 && live != 0xdeadbeef && live != 0 && reported != live) {
             const uint64_t replacement = live;
@@ -3951,6 +3962,52 @@ static int wrapAlignManager2Init(void *that, void *hwInterface) {
     const int result = org(that, hwInterface);
     RLOG("XA: AMDHWAlignManager2::init -> %#x", result);
     return result;
+}
+
+// rgpuswlog: AMDHWAlignManager2::getPreferredSwizzleMode2 (x6+0x60566) returns the
+// swizzle mode the address library prefers for a surface. Mode 1 logs the first calls
+// (input swizzle mode, resource type, format, size, flags and the returned mode);
+// mode 2 also returns ADDR_SW_LINEAR (0) so kernel-chosen layouts are linear.
+static constexpr size_t kOffPreferredSwizzleMode2 = 0x60566;
+static uint32_t swizzleLogMode = 0;
+static mach_vm_address_t orgPreferredSwizzleMode2 = 0;
+static uint32_t swizzleLogCount = 0;
+
+static uint32_t wrapPreferredSwizzleMode2(void *that, const uint8_t *input) {
+    auto org = reinterpret_cast<uint32_t (*)(void *, const uint8_t *)>(orgPreferredSwizzleMode2);
+    const uint32_t preferred = org(that, input);
+    const uint32_t result = swizzleLogMode == 2 ? 0u : preferred;
+    const uint32_t count = __atomic_fetch_add(&swizzleLogCount, 1u, __ATOMIC_RELAXED);
+    if (count < 48 && input != nullptr) {
+        uint32_t field[11] = {};
+        memcpy(field, input, sizeof(field));
+        RLOG("XS: preferred swizzle #%u flags=%#x mode=%u type=%u format=%u %ux%u slices=%u "
+             "mips=%u -> %u%s", count, field[1], field[2], field[3], field[4], field[5], field[6],
+             field[7], field[8], preferred, swizzleLogMode == 2 ? " (returned linear)" : "");
+    }
+    return result;
+}
+
+// rgpuhwcapclr=<mask>: clear bits of the 32-bit hardware-info field at 0xcc before the
+// address library is created (the Metal driver reads capability bits there, for
+// example 0x1000 before allowing variable-size swizzle modes).
+static constexpr size_t kHwInfoCapabilities = 0xcc;
+static uint32_t hwCapClearMask = 0;
+
+// rgpuvgpr: sampler-side swizzle enables before RLC start. 1 sets
+// LDS_CONFIG.VGPR_SWIZZLE_EN (bit 1), 2 sets SQ_CONFIG.VGPR_SWIZZLE_EN (bit 12),
+// 3 only logs both registers.
+static constexpr uint32_t kGcSqConfig  = kGcSeg0 + 0x10a0;
+static constexpr uint32_t kGcLdsConfig = kGcSeg0 + 0x10a2;
+static uint32_t vgprMode = 0;
+
+static void applyVgprSwizzle(const char *when) {
+    if (vgprMode == 0 || asicInfo == nullptr) return;
+    const uint32_t sq = fbRead(asicInfo, kGcSqConfig), lds = fbRead(asicInfo, kGcLdsConfig);
+    if (vgprMode == 1 && lds != 0xdeadbeef) fbWrite(asicInfo, kGcLdsConfig, lds | 0x2u);
+    if (vgprMode == 2 && sq != 0xdeadbeef) fbWrite(asicInfo, kGcSqConfig, sq | 0x1000u);
+    RLOG("XV: rgpuvgpr=%u at %s: SQ_CONFIG %#x -> %#x, LDS_CONFIG %#x -> %#x", vgprMode, when,
+         sq, fbRead(asicInfo, kGcSqConfig), lds, fbRead(asicInfo, kGcLdsConfig));
 }
 
 static constexpr size_t kOffPendingCommandReport = 0xd950;
@@ -5554,6 +5611,7 @@ static void startRlc() {
     dumpGfxState("before RLC start");
     applyGoldenRegisters("before RLC start");
     applyNoBinning("before RLC start");
+    applyVgprSwizzle("before RLC start");
     fbWrite(asicInfo, kGcRlcCgcg, 0);
     fbWrite(asicInfo, kGcRlcPgCntl, 0);
     uint32_t cntl = fbRead(asicInfo, kGcRlcCntl);
@@ -7654,7 +7712,7 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
                  reportMatches, orgPendingCommandReport ? "ok" : "FAILED",
                  orgPendingCommandReport);
         }
-        if (addrConfigMode != 0) {
+        if (addrConfigMode != 0 || hwCapClearMask != 0) {
             // push rbp; mov rbp,rsp; push r15; push r14; push r12; push rbx; sub rsp,0x90
             static const uint8_t alignInitEntry[] = {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57,
                 0x41, 0x56, 0x41, 0x54, 0x53, 0x48, 0x81, 0xec, 0x90, 0x00, 0x00, 0x00};
@@ -7668,6 +7726,22 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
             }
             RLOG("XA: AMDHWAlignManager2::init route entries-match=%u route=%s (org=%#llx)",
                  alignMatches, orgAlignManager2Init ? "ok" : "FAILED", orgAlignManager2Init);
+        }
+        if (swizzleLogMode != 0) {
+            // push rbp; mov rbp,rsp; push r14; push rbx; sub rsp,0x70; mov r14,rdi; xor ebx,ebx
+            static const uint8_t preferredEntry[] = {0x55, 0x48, 0x89, 0xe5, 0x41, 0x56, 0x53,
+                0x48, 0x83, 0xec, 0x70, 0x49, 0x89, 0xfe, 0x31, 0xdb};
+            const bool preferredMatches = entryMatches(addr, sz, kOffPreferredSwizzleMode2,
+                                                       preferredEntry, sizeof(preferredEntry));
+            if (preferredMatches) {
+                orgPreferredSwizzleMode2 = patcher.routeFunction(
+                    addr + kOffPreferredSwizzleMode2,
+                    reinterpret_cast<mach_vm_address_t>(wrapPreferredSwizzleMode2), true);
+                patcher.clearError();
+            }
+            RLOG("XS: getPreferredSwizzleMode2 route entries-match=%u route=%s (org=%#llx)",
+                 preferredMatches, orgPreferredSwizzleMode2 ? "ok" : "FAILED",
+                 orgPreferredSwizzleMode2);
         }
         // Exact complete instructions displaced by the five new X6000 routes.
         // The start/powerOff patterns extend to 21 bytes because byte 16 is in
@@ -7825,6 +7899,17 @@ static void pluginStart() {
     RLOG("XD: rgpunobin=%u (%s)", noBinMode,
          noBinMode == 1 ? "PA_SC_ENHANCE_1.DISABLE_SC_BINNING before RLC start" : "off");
     uint32_t hangDump = 0;
+    uint32_t swLog = 0;
+    swizzleLogMode = PE_parse_boot_argn("rgpuswlog", &swLog, sizeof(swLog)) && swLog <= 2 ? swLog : 0;
+    RLOG("XS: rgpuswlog=%u (%s)", swizzleLogMode,
+         swizzleLogMode == 2 ? "log preferred swizzle modes and return linear"
+         : swizzleLogMode == 1 ? "log preferred swizzle modes" : "off");
+    uint32_t capClear = 0;
+    hwCapClearMask = PE_parse_boot_argn("rgpuhwcapclr", &capClear, sizeof(capClear)) ? capClear : 0;
+    RLOG("XA: rgpuhwcapclr=%#x", hwCapClearMask);
+    uint32_t vgpr = 0;
+    vgprMode = PE_parse_boot_argn("rgpuvgpr", &vgpr, sizeof(vgpr)) && vgpr <= 3 ? vgpr : 0;
+    RLOG("XV: rgpuvgpr=%u", vgprMode);
     uint32_t addrCfg = 0;
     addrConfigMode = PE_parse_boot_argn("rgpuaddrcfg", &addrCfg, sizeof(addrCfg)) && addrCfg <= 2
         ? addrCfg : 0;
