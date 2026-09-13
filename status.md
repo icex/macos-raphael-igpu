@@ -1033,3 +1033,39 @@ through `launchctl asuser 501`. The 1.0.218 binary with card `metal-059` runs fr
 `--manual-reuse --ack-risk` under the user's standing instruction, after
 `run/mode2-reset-17.json`. This note covers this one launch.
 
+
+## Probe v4: the desktop renders, but tiles land in the wrong places (2026-09-14)
+
+Run `143790d68ea9d9d6e4242d2cf3dddf51`, card `metal-059` (commit `21de6cd`), 1.0.218 build
+`10cce4d8...`, launch 18 after `run/mode2-reset-17.json`. Verdict `CORE_PROBE_PASS`,
+recovery `recovered`, shutdown `exited-after-guest-request`, quiesce ACK.
+
+- **The display is macOS's virtual display.** Vendor `0x756e6b6e` ("unkn"), model
+  `0x76697274` ("virt"), built-in, 60 Hz, 8 modes. All four
+  `AMDRadeonX6000_AmdRadeonFramebuffer` instances report `display-type NONE`,
+  `connector-type 0`, `port-number -1` and no `IODisplay` child. WindowServer composites
+  on the Raphael GPU into this virtual display; nothing reaches a physical connector.
+- **Rendering is corrupted in a tile pattern.** The root display capture at JPEG quality
+  0.85 and full resolution still shows the wallpaper as roughly 64-pixel blocks with
+  stippled 8-pixel sub-blocks, so the earlier blockiness was not compression.
+- **Offscreen readback confirms it.** 1,000 frames of a 1280x1024 BGRA8 ramp plus 20,000
+  triangles completed (0.37 ms GPU per frame, no failed command buffers), but 718 of 736
+  checked pixels were wrong. The per-frame uniform (blue) was exact on every sample; red
+  and green, which encode fragment position, show the correct values of positions
+  displaced by whole multiples of 8 pixels (for example pixel (3,200) holds (19,56)).
+  The native probe's 64x64 RGBA8 position test still passes, so small targets render
+  correctly.
+- **Window test.** The console-session `CAMetalLayer` child submitted 366 frames with no
+  missing drawables and no failed command buffers, but reported 0 presented frames; the
+  root capture shows wallpaper at the window rectangle (other apps' windows are excluded
+  without a Screen Recording grant), so the window pattern check is inconclusive.
+- `GB_ADDR_CONFIG` already reads Raphael's `0x42` before the golden write, so the
+  tile-pipe configuration is not the difference.
+
+Working hypothesis: Apple's command stream enables binning for large passes
+(`PA_SC_BINNER_CNTL_0=0x19ffe00c`, 16x16 bins) while `rgpunobin=1` sets
+`PA_SC_ENHANCE_1.DISABLE_SC_BINNING`; primitives are then placed with bin offsets the
+scan converter never applies. Apple's own unbinned mode (`BINNING_MODE=3`, legacy scan
+converter, `0x19fc0003`) is used for small passes, which render correctly.
+Next: find where Apple's user-space driver decides to bin, and force its legacy
+scan-converter mode instead of disabling binning underneath it.
