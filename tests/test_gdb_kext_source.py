@@ -91,9 +91,9 @@ class GdbKextSourceTests(unittest.TestCase):
             0xffffff801b6e8000, "474ef697fc283ba283a4763d76c8e200",
             "/tmp/kernel.symbols", "/tmp/RaphaelGPU.dSYM", 0x19120,
             bytes.fromhex("554889e541574156"), 0x1920c, "/tmp/source")
-        disabled = text.index("for bp in write_bps: bp.enabled=False")
+        disabled = text.index("for bp in write_bps:\n    bp.enabled=False")
         enabled = text.index("for bp in write_bps: bp.enabled=True")
-        native = text.index("KIQ_START_NATIVE_CALL_BOUNDARY")
+        native = text.index("native_active=True")
         self.assertLess(disabled, native)
         self.assertLess(native, enabled)
         self.assertLess(text.index("native_active=False"),
