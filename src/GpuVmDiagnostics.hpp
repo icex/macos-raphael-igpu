@@ -313,7 +313,8 @@ inline bool validAperture(const FramebufferAperture &aperture) {
 // before any edit.
 inline LocalInvalidateInfo prepareInvalidateInfo(
     const uint8_t *source, size_t size, bool enabled, bool markedRaphael,
-    uint32_t rawFbBase, uint32_t rawFbTop, uint32_t rawFbOffset) {
+    uint32_t rawFbBase, uint32_t rawFbTop, uint32_t rawFbOffset,
+    bool allowMmhub = false) {
     LocalInvalidateInfo result {};
     result.reason = RootRepairReason::InvalidInput;
     if (source == nullptr || size < sizeof(result.bytes)) return result;
@@ -327,7 +328,9 @@ inline LocalInvalidateInfo prepareInvalidateInfo(
         result.reason = RootRepairReason::TargetUnmarked; return result;
     }
     if (!request.valid) return result;
-    if (request.hub != 0) { result.reason = RootRepairReason::WrongHub; return result; }
+    if (request.hub != 0 && !(allowMmhub && request.hub == 1)) {
+        result.reason = RootRepairReason::WrongHub; return result;
+    }
     // VMID0 owns the legacy GART. Hub-0 VMIDs 1..15 are client contexts eligible
     // for repair when the root is non-SYSTEM and lies in the published MC range.
     if (request.vmid == 0 || request.vmid >= 16) {

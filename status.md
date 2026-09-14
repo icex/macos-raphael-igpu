@@ -1,90 +1,39 @@
 # Status
 
-Updated 2026-09-14 after the reboot-free TigerVNC tests. Historical status is in
-`findings/research/status-archives/`; detailed evidence is in
-[the TigerVNC audit](findings/research/tigervnc-reset-audit-20260914.md).
+Updated after launch45, 2026-09-14. Host boot
+`c369c74e-96ff-4c21-ae85-80ccb269f7d2`, GPU vfio-pci, power/control=on.
+VM stopped; ledger45; final MODE2 reset71 CP_STAT=0/RLC_CNTL=0. No host reboot.
 
-## Current result
+## Observed result
 
-**The reset path works without a host reboot; the guest desktop is still blocked.**
-Candidate 1.0.230 previously passed the managed-texture copy matrix and desktop probes.
-The current revalidation did not complete: WindowServer and the Metal probe block, with
-pending SDMA/VMPT work. TigerVNC authenticates but receives no usable desktop.
-The same failure occurs with no VNC viewers connected, so concurrent viewers are not a
-necessary trigger. These runs do not establish the root cause or invalidate the historical
-successful readbacks. Configuration equality does not prove current functional success.
+Candidate230 desktop probe passes again after removing RustDesk from the guest's
+reopen-at-login list (backup retained). RustDesk --check-hwcodec-config was the
+HEVC requester that triggered startup stalls. This is only a workaround.
+TigerVNC now displays the desktop, but menus contain visible green/purple corruption.
+User explicitly requires fixing that and broken encoders; neither is complete.
+Software H264/HEVC roundtrips pass. Hardware H264 reproduces the VMPT/SDMA stall
+from a responsive guest; no encoded frames complete. HEVC-alpha untested.
 
-## Current candidate and host
+## Evidence and next work
 
-| Field | Value |
-|---|---|
-| Driver | 1.0.230, build `c115e782494e43f6850aedfb67010375` |
-| Executable SHA-256 | `c9e5a856a34ebbe4f3b1bf59de2c613d15edff37c7b2e677a8d476b324bfcf94` |
-| Driver source | unchanged from proven candidate230 |
-| Coordinator worktree | `/home/bogdan/macos-vm/run/worktrees/candidate-230` |
-| Host boot | `c369c74e-96ff-4c21-ae85-80ccb269f7d2` |
-| GPU | `0000:7b:00.0`, vfio-pci, power/control=on |
-| Ledger launches | 44; launches 41–43 were the TigerVNC tests |
-| Last reset | `run/mode2-reset-69.json` (before launch44): CP_STAT=0, RLC_CNTL=0 |
-| VM | stopped |
-| Guest shutdown | forced; harness recovery incomplete, followed by successful MODE2 reset |
+[Audit](findings/research/tigervnc-reset-audit-20260914.md) records exact runs,
+identity, screenshots, process/XPC attribution, backups, codec outcomes and packet
+contents. Launch45 results: `/home/bogdan/macos-vm/run/candidate-230-attempt-without-rustdesk-results/`.
+Its CORE_PROBE_PASS covers the earlier Metal probe only; the later encoder stalls
+and visible corruption prevent full qualification. Shutdown forced/recovery incomplete,
+followed by clean documented MODE2 reset71.
 
-MODE2 resets 65–68 all met the documented CP_STAT/RLC_CNTL checks. No host reboot or
-vfio-pci → amdgpu cycle occurred. No universal all-engine recovery claim follows from these
-register checks. Normal host checks and capture/shutdown abort paths remain enabled.
+The captured VMPT IB writes/polls the legacy MMHUB2.0 register layout at0x13200
+and leaves its hub1 framebuffer root unrepaired. Raphael MMHUB2.4.1 uses the2.3
+layout in segment1 at0x1a000. Audit the native214-dword table and implement a guarded
+correction in candidate233; verify the actual corrected IB and encoder frame output.
+Do not assume this independently explains visual corruption.
 
-## Changes made
+Working directories: candidate230 hardware coordinator; candidate233
+`/home/bogdan/macos-vm/run/worktrees/candidate-233` encoder/surface work.
+No new launch allowance yet. Each next launch requires an explicit same-boot note
+and fresh MODE2 through tools/cycle.py, max6000s with abort/cleanup checks intact.
+User forbids host reboots. No merge or push main.
 
-- The coordinator accepts a reviewed, hash-pinned prior initialization snapshot only for the
-  same live boot, kernel, device, IOMMU group and vfio-pci driver. Explicit initialization
-  failures in the current journal override it. Other live admission checks remain separate.
-  Pin: `experiments/amdgpu-initialization-evidence.json`. This fixes loss of historical
-  initialization evidence after journal rotation; it grants no launch authority.
-- Both WindowServer preference plists were restored from `/var/root/wsprefs-aside/` to the
-  global preferences and bogdan's ByHost preferences, with hashes and ownership verified.
-  Original backups remain. A WindowServer TERM did not release the blocked process; a fresh
-  guest boot with restored preferences also failed to complete the probe.
-- Screen Sharing authentication works with the current guest account. The earlier kickstart
-  settings have no verified pre-change backup and were not guessed at or reset arbitrarily.
-- The pre-existing uncommitted supervision edit remains preserved in the named git stash
-  `Preserve pre-existing supervision edit before TigerVNC test`; it was not used for these runs.
-
-## Blocking issue and next discriminating observation
-
-The first failed run's sampled WindowServer main thread waits in
-`IOAccelSharedCreateDeviceShmem`. Channel dumps contain pending SDMA/VMPT work while the
-hardware graphics-ring read/write pointers are equal. VTEncoderXPCService also blocks,
-including in the run with no VNC connections. It is not yet established which command or
-client initiates the failure. Identify that encoder's requester and the first stalled
-SDMA/VMPT operation, comparing guest state and startup against the successful candidate230
-repeat before selecting another GPU intervention. Restoring preferences alone was insufficient.
-
-Physical HDMI/DP scanout, remote-artifact diagnosis, games/performance, and full lifecycle
-qualification remain open. The current failure must not be described as proven transport
-corruption or an inherent absence of macOS virtual displays.
-
-## Running and authority
-
-Use [the experiment cycle](docs/running-an-experiment.md) and
-[host safety rules](docs/host-safety.md). Each authorized launch needs a fresh clean MODE2
-receipt, a note naming the host boot, and bounded supervision (up to 6000 seconds).
-The three TigerVNC allowances are consumed; a failed pre-QEMU launch does not consume one.
-No merge or push to main. User instruction: **no further host reboots**.
-
-Validation of the coordinator used for these runs: 925 host tests, 3 skipped, no failures;
-`/home/bogdan/macos-vm/run/tigervnc-host-tests-final.log`.
-
-## Diagnostic result and controlled retry
-
-Launch44 (`encoder-trace`) identified RustDesk --check-hwcodec-config as the encoder
-requester in both current and prior boot logs. RustDesk was in the ByHost loginwindow
-reopen list; backed up the original plist and removed only its entry. The guest still
-stalled in this already-exposed run. Forced shutdown, incomplete recovery; VM stopped.
-See audit for process, XPC, timestamp and backup evidence.
-
-One additional authorized fix-validation launch on boot
-`c369c74e-96ff-4c21-ae85-80ccb269f7d2`, attempt `without-rustdesk`, after fresh
-MODE2, unchanged candidate230, initially no viewers. Verify RustDesk and its encoder
-request are absent; require probe completion and a watchable TigerVNC desktop to
-support the workaround. Persistence of the stall falsifies removal as a sufficient fix.
-Bounded to6000s; normal abort/cleanup, no host reboot or binding cycle.
+Host suite925 tests,3 skipped,no failures: `run/encoder-surface-host-tests.log`.
+Original pre-existing supervision edit remains in candidate230's named stash.

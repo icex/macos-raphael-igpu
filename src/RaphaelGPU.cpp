@@ -40,6 +40,7 @@
 #include "SdmaTopology.hpp"
 #include "SdmaAddresses.hpp"
 #include "GpuVmDiagnostics.hpp"
+#include "MmhubRegisters.hpp"
 #include "GfxHangDump.hpp"
 #include "VmEntryUpdate.hpp"
 #include "VmProgramCorrelation.hpp"
@@ -240,6 +241,9 @@ static bool vmFaultDiagEnabled = false;
 // in X6000 24G830. Mode 5 retains mode 4 and additionally repairs the independent
 // MES MAP_PROCESS page-table-base field after native packet construction.
 static uint32_t vmRootFixMode = 0;
+static bool mmhubFixEnabled = false;
+static volatile bool mmhubTableCorrect = false;
+static rgpu::ObservationBuffer<RaphaelVm::PreparedRequest, 8> mmhubPrograms {};
 static mach_vm_address_t orgVmmGetPde {};
 static mach_vm_address_t orgVmmGetPte {};
 static mach_vm_address_t orgVmmUpdateEntries {};
@@ -5114,6 +5118,20 @@ static void repairMqdPointers() {
 
 static uint32_t wrapVmmFillRegs(void *self) {
     auto r = FunctionCast(wrapVmmFillRegs, orgVmmFillRegs)(self);
+    if (mmhubFixEnabled && self != nullptr && r != 0) {
+        auto table = reinterpret_cast<uint32_t *>(static_cast<uint8_t *>(self) +
+                                                   RaphaelMmhub::kHub1Offset);
+        const auto result = RaphaelMmhub::repair(table, RaphaelMmhub::kWords * 4,
+            true, __atomic_load_n(&raphaelTargetConfirmed, __ATOMIC_ACQUIRE));
+        const bool corrected = result == RaphaelMmhub::Result::Repaired ||
+                               result == RaphaelMmhub::Result::AlreadyCorrect;
+        __atomic_store_n(&mmhubTableCorrect, corrected, __ATOMIC_RELEASE);
+        RLOG("MH: hub1 table result=%u corrected=%u root2=%#x req6=%#x ack6=%#x",
+             static_cast<uint32_t>(result), corrected, table[12+2*7],
+             table[124+6*5+2], table[124+6*5+3]);
+        // Abort VMM initialization if the requested ABI correction was refused.
+        if (!corrected) return 0;
+    }
     // fillVMRegisters fills register-number arrays; it does not program PTB.
     if (ptbFixMode != 2) repairPageTableBase("fillVMRegisters (legacy)");
     return r;
@@ -5138,7 +5156,8 @@ static void wrapVmmPrepare(void *self, void *prepared, const void *info, bool al
     auto local = RaphaelVm::prepareInvalidateInfo(
         reinterpret_cast<const uint8_t *>(info), info != nullptr ? 0x28 : 0,
         vmRootFixEnabled, marked && aperturePublished, fbBaseSnapshot, fbTopSnapshot,
-        fbOffsetSnapshot);
+        fbOffsetSnapshot, mmhubFixEnabled &&
+            __atomic_load_n(&mmhubTableCorrect, __ATOMIC_ACQUIRE));
     const void *nativeInfo = local.valid ? static_cast<const void *>(local.bytes) : info;
     FunctionCast(wrapVmmPrepare, orgVmmPrepare)(self, prepared, nativeInfo, alternate);
     auto observation = RaphaelVm::observePreparedRequest(
@@ -5146,6 +5165,8 @@ static void wrapVmmPrepare(void *self, void *prepared, const void *info, bool al
         reinterpret_cast<const uint8_t *>(nativeInfo), nativeInfo != nullptr ? 0x28 : 0,
         reinterpret_cast<const uint8_t *>(prepared), prepared != nullptr ? 0x54 : 0,
         alternate, local.repaired, local.reason);
+    if (mmhubFixEnabled && observation.valid && observation.request.hub == 1)
+        mmhubPrograms.append(observation);
     if (observation.valid && observation.request.hub == 0 &&
             observation.request.vmid == 2) {
         observation.sequence = __sync_add_and_fetch(&nextVmObservationSequence, 1u);
@@ -6944,6 +6965,18 @@ static void publishPendingVmObservations() {
         CRLOG("VM: map-process-summary retained=%llu dropped=%llu",
               static_cast<uint64_t>(vmMapProcessSamples.size()), mapProcessDropped);
     }
+    static size_t mmhubCursor = 0;
+    RaphaelVm::PreparedRequest mmhubProgram {};
+    while (mmhubCursor < mmhubPrograms.size() && mmhubPrograms.read(mmhubCursor, mmhubProgram)) {
+        ++mmhubCursor;
+        const auto *w = mmhubProgram.words;
+        CRLOG("MH: prepared hub=%u vmid=%u reprogram=%u root=%#llx native=%#llx "
+              "repaired=%u root-reg=%#x/%#x req=%#x ack=%#x mask=%#x",
+              mmhubProgram.request.hub, mmhubProgram.request.vmid,
+              mmhubProgram.request.reprogram, mmhubProgram.request.root,
+              mmhubProgram.nativeRoot, mmhubProgram.rootRepaired,
+              w[0], w[2], w[16], w[18], w[20]);
+    }
     static size_t programCursor = 0;
     static size_t submitCursor = 0;
     static RaphaelVm::PreparedRequest programCache[8] {};
@@ -8221,6 +8254,10 @@ static void pluginStart() {
     RLOG("rgpusubmit=%u: bounded 24G830 pre-submission tracing %s",
          submissionTraceEnabled, submissionTraceEnabled ? "enabled" : "disabled");
     uint32_t vmFaultDiag = 0;
+    uint32_t mmhubFix = 0;
+    mmhubFixEnabled = PE_parse_boot_argn("rgpummhub", &mmhubFix, sizeof(mmhubFix)) && mmhubFix == 1;
+    RLOG("MH: rgpummhub=%u: guarded MMHUB2.4 register table and client-root correction",
+         mmhubFixEnabled);
     vmFaultDiagEnabled = PE_parse_boot_argn("rgpuvmdiag", &vmFaultDiag,
                                            sizeof(vmFaultDiag)) && vmFaultDiag == 1;
     RLOG("rgpuvmdiag=%u: bounded client-VMID fault-selected page-table diagnostics %s",

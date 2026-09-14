@@ -82,3 +82,49 @@ verified in `startup-change.txt`. App remains installed. This is a reversible
 controlled startup intervention, not yet a validated fix.
 Probe completion missing; exact identity captured; forced shutdown and incomplete
 harness recovery. VM stopped through stop-requested. Launch allowance consumed.
+
+## Launch45: desktop returns, corruption persists, hardware H264 stalls
+
+Run `c26817033620e52bd530b0129d19bbf6`, reset70, no initial VNC viewers.
+Results: `run/candidate-230-attempt-without-rustdesk-results/`. RustDesk absent.
+Desktop probe passed=true, both fresh-process copy matrices completed. TigerVNC
+authenticated and displayed the desktop; menu interaction visibly responds.
+User and captured `tigervnc-menu-corruption.jpg` show green/purple corrupt menu
+pixels. Thus CORE_PROBE_PASS does not establish desktop correctness. Raw RFB was
+selected; HEVC encoding is not required for that visual symptom. SSH screencapture
+omits application windows (screen_capture_preflight=false); it cannot adjudicate
+compositing vs capture here. RustDesk removal is only a startup-stall workaround.
+
+User explicitly requested fixing corruption and all broken encoders. The new bounded
+`tests/video_codec_probe.m` in candidate233 compiled in guest. Software H264/HEVC
+encoded and software-decoded3 frames each, max luma errors1/0, 2675475 checked per
+codec. Hardware H264 on registry4294968030 selected h264.gva and hardware=true.
+It accepted submissions0/1, blocked in submission2, emitted no encoded callback,
+and hit its90s deadline. See h264-hardware.jsonl and encoder-h264.sample.txt.
+Sample: VAUveEncoder::createSession -> IOAccelResourceFinishEvent, and a separate
+thread waits for a Metal command buffer. No independent HEVC test yet; earlier
+RustDesk HEVC creation already correlates with the same kind of VMPT/SDMA stall.
+HEVC-alpha remains untested.
+
+The first pending paging IB is already captured by the existing XB callback!
+cb1 VA0xffc0ce2940,50 dwords, two checksum-tagged passes. It writes MMHUB2.0
+registers based at0x13200: context2 root0x1392f/0x13930 =0xf41b09c000, range
+0x1394f/50 and0x1396f/70, invalidate engine6 range0x13913/14, request0x138e9
+value0x00980004, then POLL_REGMEM at byte0x4e3ec (register0x138fb) for bit2.
+The local Linux mmhub2.3 headers used for Raphael2.4.1 instead map segment1 at
+0x1a000, context2 root0x1a950/951, engine6 request0x1aa31 and ACK0x1aa32.
+Apple X6000 fillVMRegisters constructs the old214-dword hub table atVMM+0xef8;
+its HWLibs does have a separate mmhub2.3 initializer. Candidate230 root repair
+explicitly excludes hub1. The pending encoder fill is behind paging progress;
+do not label its memory-fill packet itself the first fault.
+
+Shutdown forced; harness recovery incomplete. VM stopped, final MODE2 reset71
+CP_STAT=0/RLC_CNTL=0, same host boot. No host reboot or vfio binding cycle.
+
+Candidate233 implementation: opt-in rgpummhub=1 validates all214 register-index
+words at native VMM+0xef8 before replacing the table. Every mapping was checked
+against identical register names in Linux mmhub2.0/2.3 headers. Default hub0-only
+root behavior is retained; explicit hub1 root repair requires the corrected table.
+No MMIO, allocation or logging added to prepareVMInvalidateRequest. Bounded
+observations are drained by the existing worker. Whole-table mismatch aborts VMM
+initialization. This is untested on hardware and does not claim to fix corruption.
