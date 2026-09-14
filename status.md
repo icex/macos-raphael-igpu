@@ -1583,3 +1583,14 @@ This awaits the user's decision.
 | Large Managed-texture synchronize and uploads | probe v9 | open (linearSwizzleTextures fix needs approval) |
 | Physical HDMI output | no DCN 3.1.5 support; virtual display only | open (structural port) |
 | Guest sleep path | 217/218 | open |
+
+## Boot-launch ledger extension for the user's interactive test session (2026-09-14)
+
+At the user's request, the currently staged candidate 225 boot disk (card `metal-073` boot
+arguments: `rgpunobin=1`, `rgpusdmacfg=2` watchdog, `rgpugolden=1`, `rgpuhangdump=1`, diagnostics)
+runs as launch 34 on boot `c369c74e` for manual testing: `vm-supervision.py start` with the
+harness launch options (`GENERIC_GRAPHICS=off`, `BOOTDISK_MODE=custom`, `NVRAM=stock`, `GDB=on`,
+pinned image) and the VFIO arguments, `--max-seconds 6000`, critical serial on, after a fresh
+`run/mode2-reset-35.json`. No probe or automated shutdown; the session ends by the user's
+instruction or the 6000-second deadline, followed by a MODE2 reset. This note covers this one
+launch.
