@@ -47,3 +47,11 @@ VM stopped; final MODE2reset85 CP_STAT0/RLC_CNTL0. vfio-pci retained, power/cont
 on, same host boot, inhibitor active. No host reboot. Host927 tests/3skipped passed,
 build succeeded. No merge/push to main. Prior state archived in
 findings/research/status-archives/status-before-launch52-result-20260915.md.
+
+## Candidate239 launch53 allowance
+
+One launch53 on boot c369c74e-96ff-4c21-ae85-80ccb269f7d2, fresh MODE2 via
+tools/cycle.py, max6000s, all abort/recovery paths preserved. Verify guarded native
+MMHUB2.3 call delivery, CTX0/GART range before any encoder, then actual H264 output.
+HEVC only if H264 succeeds and engines remain responsive; stop on first stall.
+Worktree /home/bogdan/macos-vm/run/worktrees/candidate-239. Host927 tests/3skipped pass.
