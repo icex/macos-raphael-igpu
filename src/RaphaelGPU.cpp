@@ -25,6 +25,9 @@
 #include <IOKit/IOMemoryDescriptor.h>
 #include <kern/clock.h>
 #include <kern/thread.h>
+#include <kern/task.h>
+#include <mach/task_info.h>
+#include <mach/mach_vm.h>
 #include <stdarg.h>
 #include <Headers/kern_api.hpp>
 #include <Headers/kern_patcher.hpp>
@@ -44,6 +47,7 @@
 #include "SubmissionTrace.hpp"
 #include "BackingTrace.hpp"
 #include "EngineLifecycle.hpp"
+#include "TextureDiagParser.hpp"
 #include "RecoveryReservation.hpp"
 #include "RecoveryLease.hpp"
 #include "RecoveryLifetime.hpp"
@@ -7484,6 +7488,37 @@ static bool entryMatches(mach_vm_address_t base, size_t imageSize, size_t offset
     return true;
 }
 
+// Read-only Metal image diagnostic state is declared before the kext callback
+// because the route is installed from processKext; its implementation lives
+// beside the existing texture-patch constants below.
+static uint32_t texDiagEnabled = 0;
+static mach_vm_address_t orgGetHardwareInfo = 0;
+using TextureDiagTaskInfo = kern_return_t (*)(task_t, task_flavor_t, task_info_t,
+                                               mach_msg_type_number_t *);
+using TextureDiagCurrentTask = task_t (*)();
+using TextureDiagGetTaskMap = vm_map_t (*)(task_t);
+using TextureDiagReadUser = kern_return_t (*)(vm_map_t, vm_map_address_t,
+                                               const void *, vm_map_size_t);
+using TextureDiagSelfPid = int (*)();
+using TextureDiagRegionRecurse = kern_return_t (*)(vm_map_t, mach_vm_address_t *,
+                                                   mach_vm_size_t *, natural_t *,
+                                                   vm_region_recurse_info_t,
+                                                   mach_msg_type_number_t *);
+struct TextureDiagReadContext { vm_map_t map; };
+static TextureDiagTaskInfo textureDiagTaskInfo = nullptr;
+static TextureDiagCurrentTask textureDiagCurrentTask = nullptr;
+static TextureDiagGetTaskMap textureDiagGetTaskMap = nullptr;
+static TextureDiagReadUser textureDiagReadUser = nullptr;
+static TextureDiagSelfPid textureDiagSelfPid = nullptr;
+static TextureDiagRegionRecurse textureDiagRegionRecurse = nullptr;
+static volatile uint32_t textureDiagLogCount = 0;
+static constexpr size_t kOffGetHardwareInfo = 0xeca4; // AMDAccelDevice::getHardwareInfo [x6]
+static constexpr uint8_t kGetHardwareInfoEntry[] = {
+    0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56,
+    0x41, 0x54, 0x53, 0x48, 0x85, 0xf6
+};
+static int wrapGetHardwareInfo(void *self, void *values);
+
 static void processKext(void *, KernelPatcher &patcher, size_t index,
                         mach_vm_address_t addr, size_t sz) {
     RLOG("kext callback: index=%lu hwlibs=%lu fb=%lu addr=%llx size=%lu",
@@ -7584,6 +7619,35 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
         if (mask & P1) reprobeGpu();
     } else if (kexts[KextX6000].loadIndex == index) {
         RLOG("X6000 loaded, mask=0x%x", mask);
+        if (texDiagEnabled != 0) {
+            textureDiagTaskInfo = reinterpret_cast<TextureDiagTaskInfo>(
+                patcher.solveSymbol(KernelPatcher::KernelID, "_task_info"));
+            textureDiagCurrentTask = reinterpret_cast<TextureDiagCurrentTask>(
+                patcher.solveSymbol(KernelPatcher::KernelID, "_current_task"));
+            textureDiagGetTaskMap = reinterpret_cast<TextureDiagGetTaskMap>(
+                patcher.solveSymbol(KernelPatcher::KernelID, "_get_task_map"));
+            textureDiagReadUser = reinterpret_cast<TextureDiagReadUser>(
+                patcher.solveSymbol(KernelPatcher::KernelID, "_vm_map_read_user"));
+            textureDiagSelfPid = reinterpret_cast<TextureDiagSelfPid>(
+                patcher.solveSymbol(KernelPatcher::KernelID, "_proc_selfpid"));
+            textureDiagRegionRecurse = reinterpret_cast<TextureDiagRegionRecurse>(
+                patcher.solveSymbol(KernelPatcher::KernelID, "_mach_vm_region_recurse"));
+            const bool symbols = textureDiagTaskInfo && textureDiagCurrentTask &&
+                                 textureDiagGetTaskMap && textureDiagReadUser;
+            const bool entry = entryMatches(addr, sz, kOffGetHardwareInfo,
+                                            kGetHardwareInfoEntry,
+                                            sizeof(kGetHardwareInfoEntry));
+            if (symbols && entry)
+                orgGetHardwareInfo = patcher.routeFunction(
+                    addr + kOffGetHardwareInfo,
+                    reinterpret_cast<mach_vm_address_t>(wrapGetHardwareInfo), true);
+            RLOG("XTDIAG: route=%s symbols=%u entry=%u taskinfo=%p current=%p map=%p read=%p pid=%p region=%p",
+                 orgGetHardwareInfo ? "ok" : "OFF", symbols, entry,
+                 textureDiagTaskInfo, textureDiagCurrentTask,
+                 textureDiagGetTaskMap, textureDiagReadUser, textureDiagSelfPid,
+                 textureDiagRegionRecurse);
+            patcher.clearError();
+        }
         if (mask & XJ) {
             // 24G830's AMDGraphicsAccelerator::start failure cleanup branches
             // from 0x1eca to 0x1f50, where the uninitialised +0x1ea0 trace
@@ -7961,6 +8025,71 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
 // process through Lilu's fileless shared-cache path (BinaryModInfo::filelessSegOffs); Lilu
 // re-reads the live bytes and requires them to equal the find pattern before writing.
 static uint32_t texPipeBankXorDisable = 0;
+
+static bool textureDiagRead(void *opaque, uint64_t address, void *out, size_t size) {
+    auto *context = static_cast<TextureDiagReadContext *>(opaque);
+    if (context == nullptr || context->map == nullptr || textureDiagReadUser == nullptr ||
+        out == nullptr || size == 0 || address == 0 || address > 0x800000000000ULL ||
+        size > 0x800000000000ULL - address)
+        return false;
+    return textureDiagReadUser(context->map, address, out, size) == KERN_SUCCESS;
+}
+
+static int wrapGetHardwareInfo(void *self, void *values) {
+    if (texDiagEnabled != 0 && __atomic_fetch_add(&textureDiagLogCount, 1u,
+                                                   __ATOMIC_RELAXED) < 64) {
+        task_t task = textureDiagCurrentTask ? textureDiagCurrentTask() : nullptr;
+        const int pid = textureDiagSelfPid ? textureDiagSelfPid() : -1;
+        vm_map_t map = (task && textureDiagGetTaskMap) ? textureDiagGetTaskMap(task) : nullptr;
+        TextureDiagReadContext readContext {map};
+        task_dyld_info_data_t dyld {};
+        mach_msg_type_number_t count = TASK_DYLD_INFO_COUNT;
+        kern_return_t taskRc = (task && textureDiagTaskInfo) ?
+            textureDiagTaskInfo(task, TASK_DYLD_INFO,
+                                reinterpret_cast<task_info_t>(&dyld), &count) : KERN_FAILURE;
+        RaphaelTextureDiag::Result result {};
+        if (taskRc == KERN_SUCCESS && count >= TASK_DYLD_INFO_COUNT &&
+            dyld.all_image_info_size >= 16 && map != nullptr)
+            result = RaphaelTextureDiag::inspect(textureDiagRead, &readContext,
+                                                  dyld.all_image_info_addr,
+                                                  dyld.all_image_info_format);
+        kern_return_t regionRc = KERN_FAILURE;
+        mach_vm_address_t regionStart = result.instructionAddress;
+        mach_vm_size_t regionSize = 0;
+        vm_prot_t regionProt = VM_PROT_NONE, regionMax = VM_PROT_NONE;
+        boolean_t regionSubmap = FALSE;
+        if (result.instructionAddress != 0 && map != nullptr && textureDiagRegionRecurse) {
+            natural_t depth = 0;
+            for (unsigned level = 0; level <= 8; ++level) {
+                vm_region_submap_info_data_64_t info {};
+                mach_msg_type_number_t infoCount = VM_REGION_SUBMAP_INFO_COUNT_64;
+                regionStart = result.instructionAddress;
+                regionSize = 0;
+                regionRc = textureDiagRegionRecurse(
+                    map, &regionStart, &regionSize, &depth,
+                    reinterpret_cast<vm_region_recurse_info_t>(&info), &infoCount);
+                if (regionRc != KERN_SUCCESS || !info.is_submap) {
+                    regionProt = info.protection;
+                    regionMax = info.max_protection;
+                    regionSubmap = info.is_submap;
+                    break;
+                }
+                ++depth;
+            }
+        }
+        RLOG("XTDIAG: pid=%d task=%p taskinfo=%d format=%d images=%u inspected=%u status=%u "
+             "uuid=%u path=%u text=%#llx instr=%#llx bytes=%u map=%p region=%d "
+             "start=%#llx size=%#llx prot=%#x max=%#x submap=%u",
+             pid, task, taskRc, dyld.all_image_info_format, result.imageCount, result.inspected,
+             result.status, result.uuidMatch, result.pathTerminated,
+             result.textBase, result.instructionAddress, result.instructionMatch, map,
+             regionRc, regionStart, regionSize, regionProt, regionMax, regionSubmap);
+    }
+    using GetHardwareInfo = int (*)(void *, void *);
+    return orgGetHardwareInfo ? reinterpret_cast<GetHardwareInfo>(orgGetHardwareInfo)(self, values)
+                               : KERN_FAILURE;
+}
+
 static const char kMtlDriverPath[] =
     "/System/Library/Extensions/AMDRadeonX6000MTLDriver.bundle/Contents/MacOS/AMDRadeonX6000MTLDriver";
 // movabs rax, 0x1ff700000  ->  movabs rax, 0x1f7700000  (clears bit 27); site is unique.
@@ -8071,6 +8200,11 @@ static void pluginStart() {
     RLOG("XS: rgpuswlog=%u (%s)", swizzleLogMode,
          swizzleLogMode == 2 ? "log preferred swizzle modes and return linear"
          : swizzleLogMode == 1 ? "log preferred swizzle modes" : "off");
+    uint32_t texDiag = 0;
+    texDiagEnabled = PE_parse_boot_argn("rgputexdiag", &texDiag, sizeof(texDiag)) &&
+                     texDiag == 1;
+    RLOG("rgputexdiag=%u: current-task Metal image diagnostic %s",
+         texDiagEnabled, texDiagEnabled ? "enabled" : "disabled");
     uint32_t texXor = 0;
     texPipeBankXorDisable = PE_parse_boot_argn("rgpunotexxor", &texXor, sizeof(texXor)) && texXor <= 1
         ? texXor : 0;

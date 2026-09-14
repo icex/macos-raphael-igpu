@@ -1738,3 +1738,32 @@ enableTexturePipeBankXor.
 Net: flipping bit27/bit36 requires a BINARY modification of the driver (constructor immediate/
 mask at 0x7ffb08d2d7e1/0x81b, or a call into the dead parser). Clean/safe delivery paths
 (Lilu user patcher; env var; device property; settings file) are ALL exhausted on Sequoia.
+
+
+## Managed texture delivery recheck — 2026-09-14 (current work)
+
+User authorizes all needed tests, prefers delivery in RaphaelGPU. Worktree branch
+`managed-delivery`, candidate 229 is a read-only current-task diagnostic, not a fix.
+No new GPU launch yet. Existing claim that Lilu necessarily missed the slide hook
+is an inference, not a live observation; the csflags fallback is unvalidated, not
+an observed corruption. Do not force the obsolete shared-region hooks on.
+
+| Test | Evidence | Result |
+|---|---|---|
+| GPU-free loader test | `run/managed-delivery-20260914/gpuless-identity.json`, full CID `9fb007cd3789c0e465ac92c2cd555c54a1427545d0a3d56cac1a648db18caed2`, guest boot `7F992106-C9A4-4CE8-A9A3-E7C94E309A69`, 24G830 | Original cached driver dlopen succeeds; ipsw 3.1.718 extracted unmodified and ad-hoc signed copies crash inside dyld before driver loads |
+| Private memory feasibility | `cow-isolation2.txt` in same artifact directory | Protect COPY/write/restore succeeds in loader process; separate process sees original ff. No GPU execution proof; basic region protection may describe submap |
+| Cleanup | `gpuless-shutdown.json`, request `3e3992178b96430584c6c232af980ffd` | Guest-requested exit; no VFIO exposed, no GPU ledger entry |
+| Offline diagnostic | parser ASAN/UBSAN synthetic invalid-input cases and archived exact __TEXT | Exact UUID/instruction and slid address parse correctly; offline evidence only |
+
+Blocking issue: prove `getHardwareInfo` executes in the Metal client while the
+expected userspace image is visible, then test opt-in private COW delivery. Pure
+kernel surface-metadata correction remains unresolved, not disproven. No system
+files/security settings modified; standalone extraction tested only on separate
+reflinked writable VM disks. OpenCore's built-in kernel/kext patches cannot target
+this userspace shared-cache image. Historical bit27 child proves readback; v7
+lacks managed-upload testing, so uploads still require new evidence.
+
+Authorized upcoming candidate229: one bounded launch (up to6000 seconds) after
+successful MODE2 reset on host boot c369c74e-96ff-4c21-ae85-80ccb269f7d2. Record
+launch38 only once QEMU/VFIO exposure begins, preserve all harness abort paths.
+External user-level `rgpu-managed-delivery-idle` inhibits idle without sudo.
