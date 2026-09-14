@@ -1,0 +1,21 @@
+# Candidate 203 nq2 recovery audit
+
+The nq2 run reached native submission but did not produce a valid Metal probe. Its recovery receipt is explicitly incomplete and must not authorize another launch or be treated as a clean recovery receipt.
+
+The recorded recovery sequence explains the apparent contradiction between inactive readbacks and the blocked host KIQ result. The recovery code first scans all 64 HQDs, then attempts firmware dequeue while the MECs are still running. In nq2, `active_before` was 9; one queue dequeued, while eight queues timed out after 50 polls and were marked `forced_inactive=8`. The later aggregate `active_after=0` is therefore a post-forced-inactive readback, not proof that firmware retired those queues or that their backing rings were clean.
+
+The recovery path gates host-KIQ retirement before the fallback halt/forced-inactive sequence. When the scan finds timed-out queues, it deliberately refuses to start temporary host-KIQ retirement: nq2 records `host_kiq.status=blocked-active-hqd` for selectors 8, 10, 520, 522, 1032, 1034, 1544, 1546. It then proceeds through the bounded fallback that halts processors and forces inactive register state. The graphics evidence independently records a stale ring (`gfx_was_stale=true`, `gfx_ring_clean=false`, `gfx_needs_unmap=true`, `gfx_retirement_confirmed=false`). Thus `active_after=0` describes post-fallback register state; it does not erase the eight timed-out queues or establish safe unmapping.
+
+The source ordering is safety-relevant (`vfio-recover.py:2415-2515`): firmware dequeue is attempted first; only when no queue remains stuck can host-KIQ retirement run. With stuck queues, the fallback halts MEC/ME and disables ingress before clearing stale state. The nq2 receipt shows `dequeue_timeouts=8`, `forced_inactive=8`, `gfx_ring_clean=false`, and `gfx_retirement_confirmed=false`. No host-KIQ WPTR-clear protocol was attempted in this blocked branch, so a WPTR verification failure would be unsupported.
+
+No further recovery action is safe from this recorded state without a separately reviewed, bounded recovery procedure. In particular, the receipt cannot be converted into a lease, and no manual selector, dequeue, ring, PSP, VRAM, or reset writes should be attempted based on the `active_after=0` field. The only supported conclusion is that the guest was stopped and host safety readbacks remained available, while queue retirement and graphics cleanup were incomplete.
+
+Evidence: `/home/bogdan/macos-vm/run/candidate-203-attempt-nq2-results/recovery.json`, `recovery-replay.json`, `first-decision.json`, and `serial.txt`.
+
+## Repair timing research
+
+The local recovery implementation follows the ordering used by the Linux AMDGPU test coverage: `quiesce_gc()` scans and requests HQD dequeue while MECs still run, then rescans for queues that remain active, and only afterward enters the bounded halt/ingress-disable fallback (`tools/vfio-recover.py:2415-2515`). SDMA input rings are disabled before SDMA halt (`:2530-2600`), and ME/MEC halt plus queue ingress shutdown precede stale graphics-ring clearing (`:2600-2680`). This ordering matters because an active guest submission can still reference DMA mappings while teardown is running.
+
+Nq2 stopped the guest after the first readiness refusal, but eight HQDs did not complete firmware dequeue. The later forced-inactive state therefore cannot prove that guest work drained before mappings disappeared. A safer future design should add a guest-side pre-stop drain at the existing shutdown boundary: stop issuing new probe/submission work, wait for the native submission and map workers to report quiescent, emit a final critical snapshot/ACK, then request guest ACPI shutdown. The host should wait for that ACK before closing collectors and invoking VFIO recovery. If the ACK times out, the run must be classified as incomplete and recovery must retain the existing strict refusal for timed-out HQDs.
+
+This is a timing repair proposal, not a recovery of nq2. The current halted device has no evidence that the eight queues retired or that the stale graphics ring was unmapped. No additional host-side dequeue, ring clear, PSP command, reset, or VRAM operation is justified from the recorded receipt.

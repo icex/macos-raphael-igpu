@@ -1,0 +1,12 @@
+[I 0.000000] OPENED
+[R +0.000014] outl 0xcf8 0x80002010
+[S +0.000023] OK
+[R +0.000063] outl 0xcfc 0x10000000
+[S +0.000067] OK
+[R +0.000089] outl 0xcf8 0x80002004
+[S +0.000090] OK
+[R +0.000095] outw 0xcfc 0x0002
+[S +0.000143] OK
+[I +0.000161] CLOSED
+qemu-system-x86_64: GLib: g_timer_elapsed: assertion 'timer != NULL' failed
+[I +0.000000] CLOSED
