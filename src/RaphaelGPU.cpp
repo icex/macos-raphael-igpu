@@ -5780,6 +5780,9 @@ static void *wrapHwGetChannel(void *self, uint32_t engineType, uint32_t ringType
 }
 
 static uint32_t wrapSdmaCommitIb(void *self, void *submitInfo) {
+    // Apple's SDMA bring-up programs SDMA0_GB_ADDR_CONFIG{,_READ} with Navi23's 0x444;
+    // make every SDMA submission decode textures with Raphael's layout (rgpusdmacfg=2).
+    applySdmaAddrConfig("SDMA commit", true);
     // X6000 copies its fixed channel template from self+0x138, then emits one
     // SDMA INDIRECT packet per AMD_SUBMIT_COMMAND_BUFFER_INFO entry. Static
     // disassembly shows the packet address comes from submitInfo+0x58+0x28*i;
@@ -7017,6 +7020,7 @@ static uint32_t wrapHwEngStart(void *self) {
         r = FunctionCast(wrapHwEngStart, orgHwEngStart)(self);
     }
     CRLOG("XJ: AMDHardware::startHWEngines -> %u", r & 0xff);
+    applySdmaAddrConfig("startHWEngines", false);
     return r;
 }
 
@@ -7094,6 +7098,7 @@ static uint32_t wrapAccPowerUpHW(void *self) {
     CRLOG("XJ: AMDGraphicsAccelerator::powerUpHW entry");
     auto r = FunctionCast(wrapAccPowerUpHW, orgAccPowerUpHW)(self);
     CRLOG("XJ: AMDGraphicsAccelerator::powerUpHW -> %u", r & 0xff);
+    applySdmaAddrConfig("powerUpHW", false);
     return r;
 }
 

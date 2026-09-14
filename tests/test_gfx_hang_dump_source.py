@@ -67,6 +67,10 @@ class GfxHangDumpSourceTests(unittest.TestCase):
         self.assertIn('(config & kGbAddrConfigFields)', body)
         self.assertIn('applySdmaAddrConfig("gfx progress", sample != 0);', self.source)
         self.assertIn('applySdmaAddrConfig("before RLC start", false);', self.source)
+        commit = self.body('static uint32_t wrapSdmaCommitIb(', 'if (sdmaTopologyEnabled')
+        self.assertIn('applySdmaAddrConfig("SDMA commit", true);', commit)
+        self.assertIn('applySdmaAddrConfig("startHWEngines", false);', self.source)
+        self.assertIn('applySdmaAddrConfig("powerUpHW", false);', self.source)
 
     def test_boot_argument_defaults_off_and_gates_thread(self):
         self.assertIn('static uint32_t hangDumpMode = 0;', self.source)
