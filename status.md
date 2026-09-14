@@ -1,50 +1,46 @@
 # Status
 
-Updated after launch48, 2026-09-14. Host boot
-c369c74e-96ff-4c21-ae85-80ccb269f7d2. VM stopped; ledger48; GPU vfio-pci,
-power/control=on. Final MODE2 reset77 CP_STAT0/RLC_CNTL0. No host reboot.
+Updated after launch49, 2026-09-15. Host boot
+c369c74e-96ff-4c21-ae85-80ccb269f7d2, GPU vfio-pci, power/control=on.
+VM stopped; ledger49; final MODE2 reset79 CP_STAT0/RLC_CNTL0. No host reboot.
 
-Candidate233 corrected shared MMHUB paging stall. Candidate234 supplies missing
-Raphael VCN firmware: native HW initialization0 and PSP LOAD_IP_FW wireType13
-status0, TMR0xf41f400000. VCN scratch now50/50 rather than deadbeef. Hardware
-H264 still stalls at first VCN0EncLLQ submission; no encoded frames. WPTR2=20,
-RPTR2=0, ringbase0xf40fb08000. SDMA/VMPT/graphics complete. Controlled stop after
-confirmed stall; do not claim codec deadline fired. HEVC/alpha untested on234.
+## Current blockers
 
-Desktop probe passes. New surface probe passes12 cases (BGRA8/RGBA8/RGBA16Float/
-RGB10A2, private/managed/IOSurface, alpha blending) with0 mismatched pixels.
-This does not qualify the desktop: visible menu corruption from launch45 remains
-unresolved. Need CPU IOSurface readback/capture and actual TigerVNC visual retest.
-Software H264/HEVC passed on230; RustDesk startup removal remains a workaround.
+Candidate233 corrected MMHUB paging addresses and client roots: graphics/SDMA/VMPT
+complete during H264 attempt. Candidate234 supplies missing Raphael VCN firmware,
+native HW initialization0 and PSP firmware load succeed. Hardware H264 still
+stalls on first VCN0EncLLQ submission. HEVC/alpha unqualified. Software H264/HEVC
+pass. RustDesk startup removal remains a workaround, not the encoder fix.
+Visible green/purple menu corruption from launch45 remains unresolved. Twelve
+format/blending/IOSurface cases and CPU readback comparisons pass; these do not
+qualify actual desktop composition/capture. No merge or push main.
 
-Run bbda0ca13aa5f9cfbc016a32534f909a, build6b82df99e281490e82cf720d72747b0a,
-candidate234/cardmetal-080, prelaunch MODE2 reset74.
-Results `/home/bogdan/macos-vm/run/candidate-234-results/` preserve surface probe
-source/results and H264 trace. Shutdown forced; harness recovery recovered;
-CORE_PROBE_PASS covers only earlier desktop probe. Host926 tests/3 skipped plus
-new firmware integrity test passed. No merge or push main. User forbids reboots.
+Candidate235 proposed adding SMU-interface2 required by Linux for Raphael VCN3.1.2.
+Launch49 never tested this: guarded allocation patch applied zero times; native
+VCN initialization correctly refused. Live51-byte readback matches original.
+Lilu applyLookupPatch uses currentAddress < endingAddress after subtracting patch
+size. maxSize=N allows zero matches; N+1 permits exactly the intended start.
+The existing X6000 start-failure cleanup patch has the same defect and logs FAILED.
+Candidate236 corrects both bounds and retains complete VCN readback guard.
 
-Next: read MMHUB fault/address configuration and VCN queue registers before and
-after first submission to distinguish address translation from firmware commands.
-Worktree `/home/bogdan/macos-vm/run/worktrees/candidate-234`.
+## Latest evidence
 
+Launch49 candidate235/cardmetal-081 run eabcad5b32ed73f9d16e556621e218dd,
+build7f169d2fc4744f199b0489858331d930, pre-reset78.
+Results `/home/bogdan/macos-vm/run/candidate-235-results/` include guard-live-bytes.txt.
+No Metal probe/encoder result. stop-requested is only consumed in interactive hold;
+used experiment.py's documented SIGTERM cancellation handler after inspecting it,
+preserving guest shutdown and recovery. Exited-after-guest-request; recovery failed
+because native XH2 lease ownership was never produced. INVALID; final MODE2 reset79.
+No host kernel fault observed. This does not falsify the SMU-interface hypothesis.
 
-Launch48 candidate234 attemptvmhub, run e73d5a3641b70484bd95dcfcf1f38732,
-pre-reset76. Same H264 first-queue stall. CPU IOSurface comparison also passes
-all12 cases. Read-only QEMU snapshot sees no latched MMHUB fault before/after;
-after snapshot overlaps driver recovery/power gating (VCN registers deadbeef),
-so does not establish the first fault. VRAM ring capture contains IB opcode2,
-VMID2, VA0x400010280,12 dwords; fence opcode3. This agrees with Linux ring ABI.
-Shutdown forced/recovered; final reset77 clean. No new launch allowance.
-Next audit: Linux VCN3.1.2 explicitly sets SMU-interface2 in shared firmware
-structure offset0x58; native Apple allocation is only0x58 bytes and omits it.
-Need guarded allocation extension and field setup before native engine start.
+Latest functional run48: candidate234 attemptvmhub, run
+e73d5a3641b70484bd95dcfcf1f38732. CPU/GPU surface comparisons pass; H264 stalls.
+MMHUB before/after read-only snapshots contain no latched fault, but after snapshot
+overlaps native reset/power gating; it cannot establish the first fault. Ring
+capture ABI matches Linux (IB opcode2, VMID2, VA0x400010280,12 dwords). Forced
+shutdown/recovered, MODE2 reset77 clean. See candidate234 results and research notes.
 
-## Candidate235 allowance
-
-One launch49 on boot c369c74e-96ff-4c21-ae85-80ccb269f7d2, candidate235/cardmetal-081,
-fresh MODE2 via tools/cycle.py, max6000s and normal abort/cleanup checks. Verify
-shared allocation0x60 and SMU-interface2 before hardware H264 output. Capture
-MMHUB/VCN registers within first seconds of encode submission. Continued stall
-with correct field setup rejects SMU-interface declaration alone as sufficient.
-Desktop corruption and HEVC/alpha remain required. Host927 tests/3 skipped pass.
+Work continues in `/home/bogdan/macos-vm/run/worktrees/candidate-236`.
+No new launch allowance yet. User forbids host reboots; use tools/cycle.py and
+explicit boot allowance, fresh MODE2, max6000s with existing abort/cleanup guards.

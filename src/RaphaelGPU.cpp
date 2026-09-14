@@ -2675,7 +2675,8 @@ static void installDiagnostics(KernelPatcher &patcher, mach_vm_address_t base) {
                 // above refuses execution unless the complete replacement reads back.
                 if (!memcmp(reinterpret_cast<const void *>(base + kOffVcnSharedSize), before, sizeof(before))) {
                     KernelPatcher::LookupPatch lp {&kexts[KextHWLibs], before, after, sizeof(before), 1};
-                    patcher.applyLookupPatch(&lp, reinterpret_cast<uint8_t *>(base + kOffVcnSharedSize), sizeof(before));
+                    patcher.applyLookupPatch(&lp, reinterpret_cast<uint8_t *>(base + kOffVcnSharedSize), sizeof(before) + 1);
+                    RLOG("VCNA: allocation patch error=%u", static_cast<unsigned>(patcher.getError()));
                     vcnSharedSizeReady = !memcmp(reinterpret_cast<const void *>(base + kOffVcnSharedSize), after, sizeof(after));
                     patcher.clearError();
                 }
@@ -7798,10 +7799,10 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
             KernelPatcher::LookupPatch lp {&kexts[KextX6000], find, replace,
                                            sizeof(find), 1};
             // The six-byte pattern occurs at a dozen sites in this X6000 build;
-            // only the branch at +0x1eca is the one described above, so bound
-            // the search to exactly that instruction instead of the first hit.
+            // Lilu searches strictly before (start + maxSize - patchSize).
+            // N+1 permits only the exact starting address; N permits no match.
             patcher.applyLookupPatch(&lp, reinterpret_cast<uint8_t *>(addr + 0x1eca),
-                                     sizeof(find));
+                                     sizeof(find) + 1);
             RLOG("XJ: AMDGraphicsAccelerator::start failure cleanup patch -> %s",
                  patcher.getError() == KernelPatcher::Error::NoError ? "ok" : "FAILED");
             patcher.clearError();
