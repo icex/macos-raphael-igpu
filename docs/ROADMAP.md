@@ -141,10 +141,36 @@ candidate-211 notes record it at 02:10, hours before NoMachine was installed. Wh
 
 **That is the crux of this item:** with the iGPU passed through, Apple's AMD framebuffer takes
 display duty and has none to give, and macOS will not fall back to the emulated framebuffer. The
-two candidate routes are (a) stop the AMD framebuffer from claiming the display role so the
-emulated framebuffer serves the desktop while the iGPU stays the Metal device — the usual
-headless-compute-GPU split, and much cheaper than (b) — or (b) supply real connectors by porting
-DCN 3.1.5. Route (a) should be tried first and is a boot-arg/device-property experiment.
+two candidate routes were (a) stop the AMD framebuffer from claiming the display role so the
+emulated framebuffer serves the desktop while the iGPU stays the Metal device, or (b) supply real
+connectors by porting DCN 3.1.5.
+
+### Route (a) is CLOSED — tested on hardware and refuted (candidate 1.0.231, card metal-079)
+
+`mkrom.py --no-display-paths` does exactly what it promises, and it is still not enough:
+
+| Observation | Connector ROM (baseline) | Zero-display-path ROM |
+|---|---|---|
+| `AmdRadeonFramebuffer` instances | 4, all "Driver is offline" | **0** (goal achieved) |
+| `getConnectorTable` | populated | `ASSERT(0 != connectorCount)`, logs and continues |
+| Console progress | freezes ~0.145 s | ~0.203 s, still never a login window |
+| `AMDRadeonX6000` IOService nodes | present | present (4, plus 1 `IOAccelerator`) |
+| `MTLCreateSystemDefaultDevice()` | device returned | **nil — "no Metal device"** |
+
+Reproduced twice. **Suppressing the framebuffer costs Metal**: the accelerator kext still loads and
+still registers IOService nodes, but macOS will not publish a GPU as a Metal device when it has no
+display, so `AppleGPUWrangler` leaves it unusable. Metal does *not* come from the accelerator
+alone, which refutes the assumption route (a) rested on. Reverting the ROM restored four
+framebuffers and Metal device creation immediately.
+
+**Only route (b) remains**: give Apple's framebuffer real, working connectors, which means porting
+DCN 3.1.5 — `dccg2_get_dccg_ref_freq`, `hubbub2_get_dchub_ref_freq` and the `generic_reg_wait`
+timeouts are where Apple's DCN 2.x/3.0 code gives up on this silicon. That is a large job.
+
+**Delivery trap worth remembering:** Apple reads the VBIOS from the **`ATY,bin_image` device
+property**, not from the file passed to QEMU with `--gpu-rom`. A rebuilt ROM does nothing until it
+is injected into `config.plist` *and* the ESP copy inside `OpenCore.qcow2` is resynced; staging
+refuses the mismatch with "raw ESP and config.plist preimage differ".
 
 Today GPU passthrough runs `-display none`; the AMD scanout is unwired and `screendump` returns
 only the EFI console. Give the guest a display surface that is actually presented, so the desktop
