@@ -1487,3 +1487,16 @@ Candidate 224 with card `metal-071` runs from `run/candidate-224` as launch 31 o
 `c369c74e`, through `--manual-reuse --ack-risk` under the user's standing instruction, after
 `run/mode2-reset-32.json`. This note covers this one launch.
 
+
+## Candidate 224 result: 0x444 appears after power-up, outside SDMA commits (2026-09-14)
+
+Run `83f22b0ddc2c1d231283d05c4a89cb0c`, card `metal-071`, launch 31 after `run/mode2-reset-32.json`. Verdict
+`CORE_PROBE_PASS`, recovery `recovered`, shutdown `exited-after-guest-request`. Results match
+launch 30: Shared-buffer copies, offscreen ramp (0 of 736) and window drawable exact; 1280x1024
+Managed-texture synchronize still permuted (fixed only by the `linearswizzle1` child).
+
+The SDMA pair read 0x42 before RLC start, at `AMDHWAlignManager2::init`, after
+`startHWEngines` and after `powerUpHW`, and the per-commit check never logged a change; the
+first gfx progress sample again found **0x444** and restored 0x42. The write therefore
+happens after accelerator power-up and not on the SDMA commit path (firmware or a power-state
+register restore are candidates).
