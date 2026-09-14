@@ -1647,3 +1647,46 @@ running and is not created by any tracked script; the `macos-sequoia` VM contain
 exited ~4 h ago. The cycle needs the inhibitor restarted before it will proceed. Staging
 was fully validated offline (card contract, Lilu bundle, identities, source digest) with
 no VM start and no ledger consumption.
+
+## Candidate 227 run: fix proven, Lilu delivery did not apply (2026-09-14)
+
+Run `84980614962f335350aba3bd60901cf6`, card `metal-075` (`rgpunotexxor=1`), launch 36 on
+boot `c369c74e` after `run/mode2-reset-41.json`. Verdict `CORE_PROBE_PASS`, recovered,
+`exited-after-guest-request`. (Earlier attempts this boot were pre-launch aborts: reset 38
+= missing sleep:idle block inhibitor; reset 39 = a transient `verify_worktree` fail; reset
+40 = stale `candidate-227-manifest.json`. Only reset 41 launched. Two extra launches were
+NOT consumed — all aborts were before VM start.)
+
+Main-process readback matrix (probe v9), 1280x1024:
+- `private->managed-texture+sync`  mism=**1310720** (unchanged)
+- `upload managed-texture->private` mism=**1310720** (unchanged)
+- everything else 0; offscreen 0/736; `render-into-managed-texture` 0.
+
+So the Lilu-delivered `enableTexturePipeBankXor=0` did NOT reach the probe process. BUT the
+probe's own `linearswizzle1` self-patch child fixed every path (nonzero_paths=[]), which
+re-confirms the userspace lever is correct and the hardware is fine — only the delivery
+failed.
+
+Kernel log evidence:
+- `XX: rgpunotexxor=1` parsed; `XX: rgpunotexxor onProcLoad -> 0 (registered ... patch)`.
+- Our Lilu `e9915a03` (UUID 874521D2…, with the fileless branch) and kext v1.0.227 are the
+  ACTIVE copies (loaded first at serial line 185/`Security policy loaded: Lilu`); the
+  refused copies at lines 1208-1209 are OLD Lilu + RaphaelGPU v1.0.3 from a persisted
+  collection (harmless, refused).
+- No Lilu user-patcher error SYSLOG ("fallback to slow", "failed to map") on serial — so the
+  patch silently did not land. Most likely Lilu 1.6.8's single-`.map` shared-cache mapping
+  does not locate/patch AMDRadeonX6000MTLDriver in Sequoia's SPLIT shared cache
+  (x86_64h + .01..06 subcaches), so `patchSharedCache` computes no/So wrong address and the
+  find pattern never matches. Needs SYSLOG instrumentation to confirm.
+
+Next: diagnostic Lilu build with SYSLOG in the fileless branch + after
+loadDyldSharedCacheMapping (mod startTEXT) + patchSharedCache hit/miss, to see exactly where
+it fails; then either populate the real page bytes for a slow-mode fallback or handle
+subcache addressing.
+
+## Boot-launch ledger extension for candidate 228 (2026-09-14)
+
+Candidate 228 (`metal-076`, kext 1.0.228 + Lilu 1df50f51: fileless MTL patch now given the
+driver's unslid __TEXT base so it patches the split shared cache without the .map) runs from
+`run/worktrees/candidate-228` as launch 37 on boot `c369c74e` after `run/mode2-reset-42.json`.
+This note authorises this one launch. Source commit `b008f9d`, expected `79637fd`.
