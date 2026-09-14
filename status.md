@@ -66,14 +66,15 @@ on-disk Apple binary is modified and no security setting is changed.
    corrupted ones. The confirming test is one artifacted frame grabbed simultaneously via
    forced-raw (lossless) VNC and in-guest capture; if raw-VNC is clean, transport is proven.
    Evidence: `findings/research/desktop-corruption-diagnosed-20260914/`.
-3. **The guest has NO display of its own — uninstalling NoMachine left it headless
-   (2026-09-14).** NoMachine was supplying the only virtual framebuffer. Without it,
-   `IOFramebuffer` node count is **0**, `screensharingd` reports `getactivedisplaylist error`
-   / `unable to get width and height of display`, and every VNC client (Apple Screen Sharing,
+3. **The guest has no usable display (2026-09-14).** macOS's own virtual display
+   (`VirtDisplay8`, vendor `unkn`, product `virt`) is unstable and eventually stops being
+   created; it was never NoMachine's, being recorded hours before NoMachine was installed. Then
+   `IOFramebuffer` node count is **0**, `screensharingd` reports `getactivedisplaylist error` /
+   `unable to get width and height of display`, and every VNC client (Apple Screen Sharing,
    TigerVNC, RealVNC, and a hand-written RAW client) connects then hangs with no frame. Apple's
-   framebuffer carries no DCN 3.1.5, so there is no native scanout to fall back on. A watchable
-   desktop currently requires either reinstalling a third-party virtual display or landing
-   ROADMAP item 3.
+   framebuffer carries no DCN 3.1.5, so there is no native scanout to fall back on, and
+   suppressing that framebuffer costs Metal outright (see the route (a) section below). A
+   watchable desktop now depends on ROADMAP item 3 route (b).
 4. **Display output is virtual only.** Apple's framebuffer carries no DCN 3.1.5 code, so there is
    no physical HDMI/DP scanout — ROADMAP item 3.
 5. **Root-display presentation mismatch.** The headless root-display capture still differs from
