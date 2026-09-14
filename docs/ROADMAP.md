@@ -118,6 +118,34 @@ so nothing else supplies a scanout. Until this item lands, a watchable desktop d
 third-party virtual display, which also puts a lossy codec back in the path and blocks the
 lossless artifact verification in item 1.
 
+**Correction and findings from the 2026-09-14 investigation.** The display was never NoMachine's:
+the saved config names `IODisplayLocation = VirtDisplay8`, `DisplayVendorID` 1970170734 (`unkn`)
+and `DisplayProductID` 1986622068 (`virt`) — macOS's *own* virtual display, and the
+candidate-211 notes record it at 02:10, hours before NoMachine was installed. What is established:
+
+- The virtual display is **unstable, not merely absent**. It served 1280x1024 at 15:01, a
+  1920x1080 desktop at 16:37 after the resolution was changed in the Displays pane, 1280x1024
+  again at 19:06, and then vanished entirely.
+- `screensharingd` then fails `getactivedisplaylist error 268435459` / `unable to get width and
+  height of display`, with `no agent on console` and `agent port for screen monitoring 0`, so
+  every VNC client completes the TCP connect and hangs. This is reproducible across six boots and
+  a MODE2 reset, and survives moving both `com.apple.windowserver.plist` display configs aside
+  (backed up in the guest at `/var/root/wsprefs-aside`).
+- Any display-subsystem query (`system_profiler SPDisplaysDataType`, `ioreg -c IODisplayConnect`)
+  **hard-hangs** on an otherwise healthy guest — the stack is blocked, not merely empty.
+- Setting `GENERIC_GRAPHICS=on` restores a real emulated framebuffer: `vm-entry.sh` shows the
+  headless mode is what rewrites `-vga vmware` to `-vga none`. The guest then has a genuine
+  1920x1080 framebuffer (QEMU `screendump` returns 1920x1080 verbose-boot text instead of the
+  640x384 EFI console), but it **freezes at ~0.145 s of boot**: WindowServer never composites to
+  it, because `AMDRadeonX6000Framebuffer` claims the display role while exposing no connectors.
+
+**That is the crux of this item:** with the iGPU passed through, Apple's AMD framebuffer takes
+display duty and has none to give, and macOS will not fall back to the emulated framebuffer. The
+two candidate routes are (a) stop the AMD framebuffer from claiming the display role so the
+emulated framebuffer serves the desktop while the iGPU stays the Metal device — the usual
+headless-compute-GPU split, and much cheaper than (b) — or (b) supply real connectors by porting
+DCN 3.1.5. Route (a) should be tried first and is a boot-arg/device-property experiment.
+
 Today GPU passthrough runs `-display none`; the AMD scanout is unwired and `screendump` returns
 only the EFI console. Give the guest a display surface that is actually presented, so the desktop
 can be watched and captured without a remote-desktop codec in the path. This also removes the
