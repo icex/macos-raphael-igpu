@@ -37,3 +37,14 @@ User forbids host reboots. No merge or push main.
 
 Host suite925 tests,3 skipped,no failures: `run/encoder-surface-host-tests.log`.
 Original pre-existing supervision edit remains in candidate230's named stash.
+
+## Candidate233 allowance
+
+One user-authorized fix-validation launch on boot
+`c369c74e-96ff-4c21-ae85-80ccb269f7d2`, candidate233/cardmetal-079, after fresh
+MODE2 through tools/cycle.py. Bound6000s. First verify214-word table correction,
+Metal regression output, then hardware H264/HEVC roundtrip while responsive.
+Stop and capture immediately on a stall; no other codec on dirty state.
+Hypothesis: the legacy MMHUB addresses cause the shared encoder stall. Corrected
+addresses with the same stalled ACK would falsify this as a sufficient fix.
+Visible corruption and HEVC-alpha remain independent required work.
