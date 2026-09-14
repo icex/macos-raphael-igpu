@@ -44,3 +44,12 @@ shutdown/recovered, MODE2 reset77 clean. See candidate234 results and research n
 Work continues in `/home/bogdan/macos-vm/run/worktrees/candidate-236`.
 No new launch allowance yet. User forbids host reboots; use tools/cycle.py and
 explicit boot allowance, fresh MODE2, max6000s with existing abort/cleanup guards.
+
+## Candidate236 allowance
+
+One launch50 on boot c369c74e-96ff-4c21-ae85-80ccb269f7d2, candidate236/cardmetal-082,
+fresh MODE2 via tools/cycle.py, max6000s and existing abort/cleanup. Validate both
+patch deliveries, shared allocation0x60/SMU-interface2, then Metal and actual
+H264/HEVC output. Capture registers promptly after first encode begin. Abort on
+first failure and do not run other encoders on dirty state. Same SMU hypothesis
+as235, which never delivered the intervention. Host927 tests/3 skipped passed.
