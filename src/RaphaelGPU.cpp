@@ -424,6 +424,7 @@ static void *hwMemObject = nullptr;
 static volatile uint32_t *fbAperture();
 static bool wrapHwMemEnable(void *self);
 static bool isRaphaelHardware(void *self);
+static bool hasUniqueRaphaelPciMarker();
 
 static void reportCpState(const char *when);
 static void primeIcacheOnly();
@@ -2381,6 +2382,26 @@ static void *wrapFwDirGet(void *dir, uint32_t devType, const char *name) {
 // PP_EnableVCNPG and EnableVCNSecureLoad. Mode3 (EnableSwVCNFWLoading)
 // remains untouched at0, retaining PSP authentication/loading. Clearing7
 // chooses the native static initializer instead of the secure DPG SRAM path.
+static mach_vm_address_t orgMmhub21 = 0, nativeMmhub23 = 0;
+static void wrapMmhub21(void *vm) {
+    const auto caller = reinterpret_cast<mach_vm_address_t>(__builtin_return_address(0));
+    const bool select = vm && caller == hwlibsBase + 0x33eca && nativeMmhub23 &&
+                        raphaelGcSeen && hasUniqueRaphaelPciMarker();
+    RLOG("MHG: native table select=%u gc=%u caller=+%llx", select,
+         raphaelGcSeen, caller - hwlibsBase);
+    if (select) reinterpret_cast<void (*)(void *)>(nativeMmhub23)(vm);
+    else FunctionCast(wrapMmhub21, orgMmhub21)(vm);
+    if (select) {
+        auto table = *reinterpret_cast<const uint8_t **>(static_cast<uint8_t *>(vm) + 0x510);
+        if (table) RLOG("MHG: native table ctx0=%x root0=%x start0=%x end0=%x tlb=%x",
+            *reinterpret_cast<const uint32_t *>(table + 0x380),
+            *reinterpret_cast<const uint32_t *>(table + 0x388),
+            *reinterpret_cast<const uint32_t *>(table + 0x398),
+            *reinterpret_cast<const uint32_t *>(table + 0x3a8),
+            *reinterpret_cast<const uint32_t *>(table + 0x7a0));
+    }
+}
+
 static uint32_t wrapVcnConfig(void *engine, uint32_t index) {
     uint32_t value = FunctionCast(wrapVcnConfig, orgVcnConfig)(engine, index);
     auto ctx = engine ? *reinterpret_cast<const uint8_t **>(
@@ -2710,24 +2731,17 @@ static void installDiagnostics(KernelPatcher &patcher, mach_vm_address_t base) {
         RLOG("route %s -> %s (org=0x%llx)", e.name, *e.org ? "ok" : "FAILED", *e.org);
         patcher.clearError();
     }
-    if (mmhubFixEnabled && __atomic_load_n(&raphaelTargetConfirmed, __ATOMIC_ACQUIRE)) {
-        // VM10.3 hardcodes MMHUB2.1 even though discovery reports Raphael2.3.
-        // The native2.3 table builder has the same void(vm*) ABI and fills only
-        // the MMHUB register/default slots. Select it at this one call site;
-        // leave all subsequent native allocation, GART setup and returns intact.
-        const uint8_t before[] = {0x4c,0x89,0xf7,0xe8,0x91,0x28,0x00,0x00};
-        const uint8_t after[]  = {0x4c,0x89,0xf7,0xe8,0x59,0x23,0x00,0x00};
-        const uint8_t targetGuard[] = {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,
-                                      0x41,0x55,0x41,0x54,0x53,0x50};
-        bool ready = false;
-        if (!memcmp(reinterpret_cast<const void *>(base + 0x33ec2), before, sizeof(before)) &&
-            !memcmp(reinterpret_cast<const void *>(base + 0x36223), targetGuard, sizeof(targetGuard))) {
-            KernelPatcher::LookupPatch lp {&kexts[KextHWLibs], before, after, sizeof(before), 1};
-            patcher.applyLookupPatch(&lp, reinterpret_cast<uint8_t *>(base + 0x33ec2), sizeof(before) + 1);
-            ready = !memcmp(reinterpret_cast<const void *>(base + 0x33ec2), after, sizeof(after));
+    if (mmhubFixEnabled) {
+        const uint8_t guard[] = {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,
+                                 0x41,0x55,0x41,0x54,0x53,0x50};
+        if (!memcmp(reinterpret_cast<const void *>(base + 0x3675b), guard, sizeof(guard)) &&
+            !memcmp(reinterpret_cast<const void *>(base + 0x36223), guard, sizeof(guard))) {
+            orgMmhub21 = patcher.routeFunction(base + 0x3675b,
+                reinterpret_cast<mach_vm_address_t>(wrapMmhub21), true);
             patcher.clearError();
+            if (orgMmhub21) nativeMmhub23 = base + 0x36223;
         }
-        RLOG("MHG: native MMHUB2.3 initializer call=%u", ready);
+        RLOG("MHG: guarded runtime route=%u", orgMmhub21 != 0);
     }
     if (vcnStaticEnabled) {
         // Complete instructions from audited HWLibs24G830+868d4, before any route.
@@ -5951,11 +5965,8 @@ static void startRlc() {
 // allocates channels or powers engines. The generic initialize/power/free loops all
 // tolerate null slots. startHWEngines does not, so its one-instance equivalent lives
 // below and preserves the first engine's real Boolean result.
-static bool isRaphaelHardware(void *self) {
-    if (!raphaelGcSeen || self == nullptr) return false;
-    auto rawPci = *reinterpret_cast<void **>(reinterpret_cast<uint8_t *>(self) + 0x10);
-    auto pci = OSDynamicCast(IOService, reinterpret_cast<OSObject *>(rawPci));
-    if (pci == nullptr) return false;
+static bool isRaphaelPciMarker(IOService *pci) {
+    if (!pci) return false;
     auto vendor = OSDynamicCast(OSData, pci->getProperty("vendor-id"));
     auto device = OSDynamicCast(OSData, pci->getProperty("device-id"));
     auto atom = OSDynamicCast(OSData, pci->getProperty("ATY,bin_image"));
@@ -5975,6 +5986,29 @@ static bool isRaphaelHardware(void *self) {
     const bool matches = markerMatches &&
         *static_cast<const uint16_t *>(vendor->getBytesNoCopy()) == 0x1002 &&
         *static_cast<const uint16_t *>(device->getBytesNoCopy()) == 0x73ff;
+    return matches;
+}
+
+// Called at native VM initialization, after IP discovery but before VMM init.
+// Do not publish the later framebuffer/target barrier from this early check.
+static bool hasUniqueRaphaelPciMarker() {
+    auto matching = IOService::serviceMatching("IOPCIDevice");
+    if (!matching) return false;
+    auto iterator = IOService::getMatchingServices(matching);
+    matching->release();
+    if (!iterator) return false;
+    unsigned matches = 0;
+    while (auto object = iterator->getNextObject())
+        if (isRaphaelPciMarker(OSDynamicCast(IOService, object))) ++matches;
+    iterator->release();
+    return matches == 1;
+}
+
+static bool isRaphaelHardware(void *self) {
+    if (!raphaelGcSeen || !self) return false;
+    auto rawPci = *reinterpret_cast<void **>(static_cast<uint8_t *>(self) + 0x10);
+    const bool matches = isRaphaelPciMarker(OSDynamicCast(IOService,
+                                           reinterpret_cast<OSObject *>(rawPci)));
     if (matches) {
         // The framebuffer snapshot is published earlier in startup. Make the
         // exact marker match the release barrier for later VM callbacks.

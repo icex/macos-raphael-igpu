@@ -21,3 +21,17 @@ This is not yet hardware validation. Falsifier: delivered call correction but
 MMHUB CTX0 remains disabled/wrong range or VCN remains unready despite correct GART.
 Inspect MMHUB state before starting codec; stop on first stall, preserve recovery.
 Visible corruption remains unresolved independently.
+
+## Delivery correction in240
+
+Launch53 did not apply239: targetConfirmed is set at later VMM initialization.
+Runtime wrapper on native2.1 builder now checks exact caller33eca, original
+Raphael GC discovery, and exactly one published PCI device with unchanged
+1002:73ff/ROM/exact Raphael marker checks. Both native prologues are guarded.
+No early publication of the later framebuffer/target barrier. Other callers or
+failed identity retain original builder. Native2.3 output table addresses logged.
+
+Launch53 earliest callback9460be53 minus observed HWLibs945d4000 =37e53,
+_vm_10_1_is_eng_ack, waiting for page-table invalidation acknowledgment. This
+strengthens wrong-native-MMHUB-table hypothesis; it does not prove a SMU reset
+failure. No extra host firmware power commands were issued.
