@@ -1720,3 +1720,21 @@ via the driver's own config if any live knob exists. The settings FILE parser (x
 dead code (confirmed candidate 218); re-checking the LIVE env-var reader
 (AMD_ENABLE_PRIM_BATCH_BINNING -> bit 41) for a bit-27/bit-36 knob before considering the
 heroic path (fix the two hook prototypes to XNU-11417 arity + validate csFlagsOffset).
+
+## Config-knob route definitively ruled out (2026-09-14)
+
+Full disassembly of AMDRadeonX6000MTLDriver's settings init (agent): the default AMD_DeviceSettings
+word is built from hardcoded immediates + ASIC-capability fields at a single constructor
+(0x7ffb08d2d700; `movabs 0x1ff700000` at 0x7ffb08d2d7e1 sets bit27/29; mask at 0x7ffb08d2d81b
+leaves bit36 off). Two live env-var readers (0x7ffb08d00042 always; 0x7ffb08d2dbf9 gated by a
+hardware/developer flag) honor ~34 env vars but touch only main bits {9,17,38,41,46-52,56,59,
+60-63} and side dwords — NEVER bits 27/29/36. No getProperty/IORegistry/plist read feeds the
+settings word, so an OpenCore DeviceProperties injection cannot flip them either. The only
+name-based setter is the /AmdMtlSettingsFile.txt parser (0x7ffb08d00400), which is dead code
+(0 refs in __TEXT, 0 pointer refs in __DATA/__DATA_CONST). Traps: AMD_MTL_ALLOW_VAR_SWIZZLE_MODES
+sets bit 59 (not 36); AMD_MTL_LOG_RES_NOALLOC shifts by 27 into a DIFFERENT dword (+0x40), not
+enableTexturePipeBankXor.
+
+Net: flipping bit27/bit36 requires a BINARY modification of the driver (constructor immediate/
+mask at 0x7ffb08d2d7e1/0x81b, or a call into the dead parser). Clean/safe delivery paths
+(Lilu user patcher; env var; device property; settings file) are ALL exhausted on Sequoia.
