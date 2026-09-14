@@ -41,6 +41,7 @@
 #include "SdmaAddresses.hpp"
 #include "GpuVmDiagnostics.hpp"
 #include "MmhubRegisters.hpp"
+#include "VcnPlatformPower.hpp"
 #include "GfxHangDump.hpp"
 #include "VmEntryUpdate.hpp"
 #include "VmProgramCorrelation.hpp"
@@ -245,6 +246,8 @@ static bool mmhubFixEnabled = false;
 static bool vcnFirmwareEnabled = false;
 static bool vcnApuEnabled = false;
 static bool vcnStaticEnabled = false;
+static bool vcnSmuEnabled = false;
+static IOLock *vcnSmuLock = nullptr;
 static mach_vm_address_t orgVcnConfig = 0;
 static mach_vm_address_t orgVcnInitialize = 0;
 static mach_vm_address_t orgVcnQueryFw = 0;
@@ -2393,7 +2396,7 @@ static void wrapMmhub21(void *vm) {
     else FunctionCast(wrapMmhub21, orgMmhub21)(vm);
     if (select) {
         auto table = *reinterpret_cast<const uint8_t **>(static_cast<uint8_t *>(vm) + 0x510);
-        if (table) RLOG("MHG: native table ctx0=%x root0=%x start0=%x end0=%x tlb=%x",
+        if (table) RLOG("MHG: native table ctx0=%x root0=%x start0=%x end0=%x fbbase=%x",
             *reinterpret_cast<const uint32_t *>(table + 0x380),
             *reinterpret_cast<const uint32_t *>(table + 0x388),
             *reinterpret_cast<const uint32_t *>(table + 0x398),
@@ -2435,6 +2438,34 @@ static uint32_t wrapVcnInitialize(void *engine) {
         *reinterpret_cast<const uint32_t *>(ctx),
         *reinterpret_cast<const uint32_t *>(ctx + 0x2e0),
         *reinterpret_cast<const uint64_t *>(ctx + 0x3f8) - hwlibsBase);
+    if (vcnSmuEnabled) {
+        auto cgs = engine ? *reinterpret_cast<const uint8_t **>(engine) : nullptr;
+        if (!vcnSmuLock || !vcnStaticEnabled || !ctx || !cgs ||
+            !__atomic_load_n(&raphaelTargetConfirmed, __ATOMIC_ACQUIRE) ||
+            *reinterpret_cast<const uint32_t *>(ctx + 0x268) != 0x30001 ||
+            *reinterpret_cast<const uint32_t *>(ctx + 0x298) != 0x04121015 ||
+            *reinterpret_cast<const uint64_t *>(cgs + 0xc0) != hwlibsBase + 0x9e5f1 ||
+            *reinterpret_cast<const uint64_t *>(cgs + 0xb8) != hwlibsBase + 0x9e619) {
+            RLOG("VCNM: identity/transport guard failed; native initialization refused");
+            return 1;
+        }
+        auto handle = *reinterpret_cast<void *const *>(cgs + 8);
+        if (!handle) return 1;
+        // Audited CGS wrappers take byte SMN addresses via native BGM. Their
+        // register accesses use the existing BGM transport. The dummy
+        // SMU backend sends no competing firmware commands; serialize our calls.
+        auto read = reinterpret_cast<uint32_t (*)(void *, uint32_t)>(hwlibsBase + 0x9e5f1);
+        auto write = reinterpret_cast<void (*)(void *, uint32_t, uint32_t)>(hwlibsBase + 0x9e619);
+        IOLockLock(vcnSmuLock);
+        auto power = RaphaelVcnPower::enable(
+            [&](uint32_t address) { return read(handle, address); },
+            [&](uint32_t address, uint32_t value) { write(handle, address, value); },
+            []() { IOSleep(1); });
+        IOLockUnlock(vcnSmuLock);
+        RLOG("VCNM: pre=%x version=%x power-response=%x error=%u",
+             power.pre, power.version, power.response, power.error);
+        if (power.error) return 1;
+    }
     const uint32_t result = FunctionCast(wrapVcnInitialize, orgVcnInitialize)(engine);
     RLOG("VCNS: native initialize returned%u", result);
     if (ctx) RLOG("VCNP: context fwID=%x placement=%llx bytes=%x regbase1=%x shared=%llx",
@@ -8481,6 +8512,9 @@ static void pluginStart() {
          submissionTraceEnabled, submissionTraceEnabled ? "enabled" : "disabled");
     uint32_t vmFaultDiag = 0;
     uint32_t mmhubFix = 0;
+    uint32_t vcnSmu = 0;
+    vcnSmuEnabled = PE_parse_boot_argn("rgpuvcnsmu", &vcnSmu, sizeof(vcnSmu)) && vcnSmu == 1;
+    if (vcnSmuEnabled) vcnSmuLock = IOLockAlloc();
     uint32_t vcnStatic = 0;
     vcnStaticEnabled = PE_parse_boot_argn("rgpuvcnstatic", &vcnStatic, sizeof(vcnStatic)) && vcnStatic == 1;
     uint32_t vcnApu = 0;
