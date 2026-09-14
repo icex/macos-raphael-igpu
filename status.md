@@ -1299,3 +1299,21 @@ linear) runs from `run/candidate-220-attempt-linear` as launch 25 on boot `c369c
 through `--manual-reuse --ack-risk` under the user's standing instruction, after
 `run/mode2-reset-26.json`. This note covers this one launch.
 
+
+## Linear preferred swizzle fixes drawables, not Metal textures (2026-09-14)
+
+Run `d0dff0852eba7ea550c16063b57e4be9`, card `metal-066`, launch 25 after `run/mode2-reset-26.json`. Verdict
+`CORE_PROBE_PASS`, recovery `recovered`, shutdown `exited-after-guest-request`.
+
+- With `getPreferredSwizzleMode2` returning linear, the window child's own
+  `CAMetalLayer` drawable readback became exact (0 of 11,616 wrong; 3,051 before).
+- Probe-created Metal textures were unchanged (identity matrix, readback matrix and
+  offscreen ramp all still permuted), so user space selects texture layouts itself.
+- Metal driver settings defaults (decoded from `x+0x13a700` in its `__TEXT`; bit order
+  from the `AMD_DeviceSettings` type encoding, confirmed by bits 41 and 59):
+  `enableTexturePipeBankXor` (bit 27), `enableBlitDMA` (29) and `enableDMAPaging` (31)
+  are hard-coded on; `linearSwizzleTextures` (36) is hard-coded off. None depends on
+  kernel hardware info.
+
+Next: desktop probe v7 patches one of those constants in child processes (clear 27,
+clear 29, set 36) before creating the Metal device and reruns the readback matrix.
