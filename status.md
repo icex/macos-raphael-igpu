@@ -1923,3 +1923,29 @@ Under the user's continuing instruction to test TigerVNC with in-place reset and
 reboots, authorize one more launch on the same boot named above, candidate230/card metal-078,
 attempt `tigervnc-restored`, after a fresh clean MODE2 receipt. Test the restored display
 preferences from a fresh guest boot with the same binary/configuration and bounded supervision.
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-230-attempt-tigervnc-restored-results`
+- Verdict: `INCONCLUSIVE`
+- Boundary: `probe_completion_missing`
+
+
+## Restored-preferences run 42 and isolated TigerVNC allowance
+
+Run `7557ae12fd712a5043d7c249b2503628`, reset #66 clean, same host boot and candidate230.
+Restored preference files present with expected ownership. TigerVNC authentication succeeded,
+but WindowServer and VTEncoderXPCService entered uninterruptible waits; probe did not complete.
+Two additional VNC sessions from 192.168.0.14 were present alongside the Linux viewer, so this
+was not an isolated raw-VNC test. No NoMachine launch services are installed in the guest.
+After user closed the other viewers, their sockets were CLOSE-WAIT. Stopped by the harness:
+shutdown forced, recovery incomplete, host accessible. Evidence in
+`run/candidate-230-attempt-tigervnc-restored-results/`.
+
+User closed the external viewers to isolate the test. Authorize one further launch on boot
+`c369c74e-96ff-4c21-ae85-80ccb269f7d2`, candidate230/card metal-078, attempt `tigervnc-only`,
+following a fresh clean MODE2 reset, same 6000-second supervision and cleanup paths.
+Keep all viewers disconnected through the baseline probe, then connect only Linux TigerVNC
+with raw encoding. This tests whether remote-session workload triggers the observed SDMA/VMPT
+stall; it does not assume that video encoding is the cause.
