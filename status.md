@@ -53,3 +53,11 @@ Host suite927 tests/3 skipped passed before launch51. No merge/push to main.
 
 Superseded state is archived in findings/research/status-archives/
 status-before-launch51-result-20260915.md.
+
+## Candidate238 launch52 allowance
+
+One launch52 on boot c369c74e-96ff-4c21-ae85-80ccb269f7d2, fresh MODE2 via
+tools/cycle.py, max6000s with all abort/cleanup guards. Same workload as51, native
+VCN query and post-init context read-only trace. A valid context address falsifies
+bad firmware query as cause of all-ones cache readback. Stop on first H264 stall.
+Work continues in /home/bogdan/macos-vm/run/worktrees/candidate-238.
