@@ -16,3 +16,9 @@ against mapped MachO bytes; missing route refuses native initialization.
 No reset after submissions or external host power/rebind/reboot action is added.
 Falsifier: reset readback takes but firmware still not ready/no H264 output.
 Do not infer firmware address wrong from protected cache register readback.
+
+Launch56: route delivered; requested0ff00200/written1ff00200/readback1ff00200
+and after10ms1ff00200. Native release follows. H264 still stalls without frames,
+firmware-ready timeout persists. This falsifies missing reset assertion as a
+sufficient explanation. Forced shutdown/recovered; finalMODE2reset93. Adjacent
+startup changes stopped pending deeper boot-path evidence. No desktop fix claimed.

@@ -1,54 +1,58 @@
 # Live status — 2026-09-15
 
-Desktop corruption and hardware encoding remain unresolved. Worktree241 branch
-vcn-platform-power at /home/bogdan/macos-vm/run/worktrees/candidate-241.
-Launch55/cardmetal-087 rund0555e6ac091ce72f6c72546f6456edc, sourcece21694,
-build16b9b1054a4449c4b90024a1a2dd28e3. Hostbootc369c74e-96ff-4c21-ae85-80ccb269f7d2,
-prelaunchMODE2reset90. Guestboot479DFF77-82E5-447C-ACD5-AEF9E871C362,
-registry4294968037. Results /home/bogdan/macos-vm/run/candidate-241-results/.
+NOT FIXED: visible desktop corruption and hardware encoding remain unresolved.
+Worktree /home/bogdan/macos-vm/run/worktrees/candidate-242 (vcn-vcpu-reset).
+Latest launch56/cardmetal-088 runc188e14450359a635305c44f13983599,
+source0ce1766, build4c5268c76b5f46918d6ee1b3d82d85c9. Results:
+/home/bogdan/macos-vm/run/candidate-242-results/.
+Hostbootc369c74e-96ff-4c21-ae85-80ccb269f7d2; prelaunchMODE2reset92.
+Guestboot4036BF8A-A1CF-46FB-9F72-A46D2EE57DED; registry4294968027.
 
-## Latest result
+## Latest functional evidence
 
-Native MMHUB2.3 table fix still delivered. Desktop Metal probe passes. Actual
-native CGS indirect transport reports SMU pre1, GetSmuVersion625300,
-PowerUpVcn6/arg0 response1,error0. This verifies transport/request, not readiness.
-VCN static initializer still hits firmware-ready timeout, returns0. Query/context
-firmware addressf41f400000 correct; code cache readsffffffff/ffffffff. H264 hardware
-selected; frame0/1 accepted, third blocks/no output. No further encoder on stalled
-state. PowerUpVcn alone is insufficient. No new MMHUB fault in capture.
+Desktop Metal probe passes. H264 hardware encoder selected; frames0/1 accepted,
+third submit hangs/no encoded output. Native VCN firmware-ready wait still times
+out despite static initializer returning0. No HEVC test on stalled engine.
+Native reset hook delivered: requested0ff00200 ->1ff00200; immediate and10ms
+readback1ff00200. Native code later releases reset. SMU PowerUpVcn response1 and
+correct version625300 still verified. Reset assertion is insufficient too.
+Post-submit snapshot: VCPU_CNTL0ff00200/status0; code-cache BAR bothffffffff;
+correct MMHUB GART retained, fault0. Firmware query/context addressf41f400000 was
+verified in52/54/55, so all-ones register readback does not prove bad placement.
 Artifacts serial.txt, h264-hardware.jsonl, mmhub-vcn-after-h264.jsonl, probe.json.
 
-## Verified repairs and visual limit
+## Verified repair versus unresolved scope
 
-Native HWLibs MMHUB GART corrected in240, separate from X6000 paging table fix233:
-CTX0 enabled1555481, physicalroot84fdfc001, rangeffbfa00..ffffe00. Original native
-2.1 table addressed wrong registers; native2.3 selected after runtime identity.
-Latest raw TigerVNC screenshot240 still shows diagonal green/purple Safari/menu
-corruption before encoding. Format/CPU/quad/sampling/derivative probes pass small
-12-case workloads; no actual desktop qualification/common cause proven.
-Software H264/HEVC small roundtrips pass; hardware HEVC unverified after fixes.
+Candidate240 runtime-selected native MMHUB2.3 initializer fixes a real native GART
+initialization error: Apple VM10.3 hardcoded2.1 offsets. Hardware now has enabled
+MMHUBCTX0 with correct physical root/range; native invalidation table is corrected.
+This is separate from X6000 paging-table/root-domain repair233. Neither fixes VCN
+firmware startup or visible corruption on its own.
+Latest raw Linux TigerVNC screenshot240 shows persistent diagonal green/purple
+Safari/menu corruption before encoding:
+/home/bogdan/macos-vm/run/candidate-240-results/tigervnc-corruption.jpg.
+Format/CPU/quad/sampling/derivative probes pass12 small cases each; these are not
+WindowServer/Safari qualification. Common cause with VCN remains unproven.
+Earlier software H264/HEVC three-frame luma roundtrips pass. Hardware HEVC/alpha
+remain unverified after fixes. CORE_PROBE_PASS is only the small desktop probe.
 
-## Cleanup
+## Cleanup and repository
 
-Stopped via interactive stop-requested. Shutdown forced, harness recovered. VM
-stopped, finalMODE2reset91 CP_STAT0/RLC_CNTL0; no host reboot. vfio-pci retained,
-power/control on, inhibitor active. SSH closed. Host928 tests/3skipped pass; build
-succeeds. No new launch allowance; no merge/push to main.
+Stopped through interactive stop-requested. Shutdown forced (not clean guest
+shutdown); harness recovered. VM stopped. FinalMODE2reset93 CP_STAT0/RLC_CNTL0.
+Same hostboot, vfio-pci retained, power/control on, inhibitor active; no host reboot.
+No host fault in kernel capture. SSH master closed; no agent-opened VNC remains.
+Host928 tests/3skipped pass and build succeeds. No further launch allowance.
+No merge/push to main; original ~/src checkout remains untouched, including its
+pre-existing status.md edit. Candidate worktree status is authoritative.
 
-## Next discriminating observation
+## Next work
 
-VCN VCPU_CNTL already0ff00200 (reset bit28 clear) before recent static startup.
-Native static initializer only ORs clock bit200 at931a1, programs caches, then
-clears reset bit28 at9350b. Thus it assumes reset was asserted, although MODE2
-receipts only prove graphics/RLC reset. Linux boot-failure retry explicitly asserts
-VCPU reset before release. Audit/reset that boot precondition in native sequence;
-do not assume a cold VCN or bypass firmware-ready failure. Source code and live
-state justify this narrower test, not a host reboot. Superseded status archived.
-
-## Candidate242 launch56 allowance
-
-One launch56 on boot c369c74e-96ff-4c21-ae85-80ccb269f7d2, fresh MODE2 via
-tools/cycle.py, max6000s, all abort/recovery guards. Test VCPU reset assertion at
-exact native static clock-enable before caches; actual bit28 readback required,
-then firmware-ready and H264 frames. Further encoders only if healthy; stop on
-first stall. Host928 tests/3skipped pass, build succeeds. Worktree242.
+Stop adjacent startup-patch experiments: correct GART, accepted platform power
+request and observed VCPU reset did not establish firmware readiness. Obtain a
+known-good VCN startup/register baseline or trace the firmware boot path before
+another hardware change. Keep attempted power/reset changes opt-in; they are not
+validated encoder fixes. Investigate actual desktop capture/compositing workload
+separately; current synthetic probes have failed to reproduce the visible artifact.
+See findings/research/mmhub-native-gart-20260915.md, vcn-platform-power-20260915.md,
+vcn-vcpu-reset-20260915.md. Superseded status is archived.
