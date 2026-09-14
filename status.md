@@ -45,3 +45,12 @@ before considering that intervention. No host SMU power command has been issued.
 Do not equate all-ones protected-register read with bad software address (52
 falsified that). Continue actual desktop corruption reproduction separately.
 No merge/push to main. Superseded state archived under findings/research/status-archives/.
+
+## Candidate241 launch55 allowance
+
+One launch55 on boot c369c74e-96ff-4c21-ae85-80ccb269f7d2, fresh MODE2 via
+tools/cycle.py, max6000s, existing abort/recovery paths. Test guarded native SMN
+GetSmuVersion2 then documented Raphael PowerUpVcn6/arg0 before static init.
+Exact current firmware version00625300 required; failures refuse initialization.
+Verify actual native transport/replies and H264 frames, then HEVC only if healthy.
+Stop on first stall. Host928 tests/3skipped pass, build succeeds. Worktree241.
