@@ -1513,3 +1513,24 @@ Candidate 225 with card `metal-072` runs from `run/candidate-225` as launch 32 o
 `c369c74e`, through `--manual-reuse --ack-risk` under the user's standing instruction, after
 `run/mode2-reset-33.json`. This note covers this one launch.
 
+
+## Candidate 225: Apple writes SDMA 0x444 once, during HWLibs init (2026-09-14)
+
+Run `46c8f81af2087ab005ad64362a4ecadd`, card `metal-072`, launch 32 after `run/mode2-reset-33.json`. Verdict
+`CORE_PROBE_PASS`, recovery `recovered`, shutdown `exited-after-guest-request`.
+
+- The watchdog corrected the SDMA pair exactly once, about 13 s after its thread started,
+  right after the `pre-TTL` register report and the HWLibs `GTrace synchronization point`
+  lines (before `TTL::initialize` and RLC start): `0x444 -> 0x42` with RLC off
+  (`RLC_CNTL=0`, `RLC_PG_CNTL=0`, `CP_STAT=0`). No further rewrite occurred in the rest of
+  the run, and every later check (before RLC start, align manager, engine start, power-up,
+  progress samples) read 0x42.
+- Readbacks match launch 31: Shared-buffer copies, offscreen ramp and window drawable exact.
+- 1280x1024 Managed-texture synchronize is still wrong on every pixel (1,310,720), with
+  different displacements from the SDMA permutation (launch 22 top displacements
+  (16,112), (-16,-112), (-16,16), each on 1/16 of pixels). Probe v7's
+  `enableTexturePipeBankXor=0` child fixed exactly these paths, so this is a separate
+  pipe-bank xor mismatch and likely also affects Managed-texture uploads.
+
+Next: desktop probe v9 adds Managed-texture upload checks and displacement maps for the
+Managed paths.
