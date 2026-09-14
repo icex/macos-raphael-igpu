@@ -1690,3 +1690,33 @@ Candidate 228 (`metal-076`, kext 1.0.228 + Lilu 1df50f51: fileless MTL patch now
 driver's unslid __TEXT base so it patches the split shared cache without the .map) runs from
 `run/worktrees/candidate-228` as launch 37 on boot `c369c74e` after `run/mode2-reset-42.json`.
 This note authorises this one launch. Source commit `b008f9d`, expected `79637fd`.
+
+## Candidate 228 run + red-team: Lilu user patcher is a dead end on Sequoia (2026-09-14)
+
+Run `ce05b2210b463fc9fdf99a140cc203f3`, card `metal-076`, launch 37 after `run/mode2-reset-42.json`.
+CORE_PROBE_PASS. Main-process 1280x1024 managed-texture paths STILL 1310720; the fileless
+"__TEXT base" SYSLOG never fired. Root cause: Lilu disables its whole user patcher on
+macOS >= Big Sur (`isUserDisabled = ... || getKernelVersion() >= BigSur;` in kern_start.cpp
+getBootArguments), so UserPatcher::init/registerPatches early-return; our onProcLoad mod is
+stored but never processed. (Both 227 and 228 failed for this reason.)
+
+All user-patcher kernel symbols exist in 24G830, but an adversarial red-team (disassembly of
+the 24G830 development kernel, XNU-11417) shows forcing isUserDisabled=false is UNSAFE and
+likely futile:
+- Lilu's shared-region hooks are ABI-broken on this kernel: `_vm_shared_region_slide` takes
+  >=9 args (Lilu hook 7) and `_vm_shared_region_map_file` >=12 (Lilu hook 9); forwarding
+  passes garbage trailing args -> system-wide corruption/panic vector.
+- The one-time shared-region slide is set up by launchd/early daemons BEFORE Lilu's patcher
+  init runs, so the slide hook never fires for the system region -> sharedCacheSlideStored
+  stays false -> patchBinary falls to injectRestrict() on matched procs, damaging
+  WindowServer/Metal apps while the patch never lands.
+- vmProtect's p_csflags heuristic uses a stale 2018 struct proc offset (0x308) -> risk of a
+  bad 4-byte write into a live struct proc -> panic.
+- (cs_validate_range ABI matches and is safe; the unslid-base/subcache assumption is correct
+  - one uniform slide for the whole x86_64 shared region.)
+
+Verdict: do NOT flip isUserDisabled. Safest route (agent rec #1): set enableTexturePipeBankXor
+via the driver's own config if any live knob exists. The settings FILE parser (x+0x10d400) is
+dead code (confirmed candidate 218); re-checking the LIVE env-var reader
+(AMD_ENABLE_PRIM_BATCH_BINNING -> bit 41) for a bit-27/bit-36 knob before considering the
+heroic path (fix the two hook prototypes to XNU-11417 arity + validate csFlagsOffset).
