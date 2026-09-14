@@ -33,3 +33,14 @@ observation is image accepted/native initialization followed by completed encode
 frames; a supplied image with the same queue stall rejects firmware supply alone
 as sufficient. Firmware command compatibility and actual engine startup are still
 untested. Visible corruption requires separate format/compositing coverage.
+
+
+Launch47 supplied574032 bytes, version04121015. Native HW init0; PSP type13
+LOAD_IP_FW succeeds status0 atTMR0xf41f400000. VCN7e04 changes901->906 and
+80e0/e1 become50/50. Nevertheless first H264 VCN0EncLLQ TS1 stalls, ring2
+7eaf/b0=f40fb08000, RPTR7eb2=0, WPTR7eb3=20. Other engines complete.
+Therefore missing firmware was real but supply alone is insufficient. The nearby
+PSP unsupported event has tag20, whereas actual VCN type13 load succeeds; do not
+attribute that event to VCN without tracing its firmware ID.12 surface/blend cases
+pass but visual desktop is still unqualified. Forced shutdown/recovered receipt,
+MODE2 reset75 clean, VM stopped. See status for exact run/build/results.

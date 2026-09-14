@@ -1,48 +1,40 @@
 # Status
 
-Updated after launch46, 2026-09-14. Host boot
-`c369c74e-96ff-4c21-ae85-80ccb269f7d2`, GPU vfio-pci, power/control=on.
-VM stopped; ledger46; final MODE2 reset73 CP_STAT=0/RLC_CNTL=0. No host reboot.
+Updated after launch47, 2026-09-14. Host boot
+c369c74e-96ff-4c21-ae85-80ccb269f7d2. VM stopped; ledger47; GPU vfio-pci,
+power/control=on. Final MODE2 reset75 CP_STAT0/RLC_CNTL0. No host reboot.
 
-## Observed result
+Candidate233 corrected shared MMHUB paging stall. Candidate234 supplies missing
+Raphael VCN firmware: native HW initialization0 and PSP LOAD_IP_FW wireType13
+status0, TMR0xf41f400000. VCN scratch now50/50 rather than deadbeef. Hardware
+H264 still stalls at first VCN0EncLLQ submission; no encoded frames. WPTR2=20,
+RPTR2=0, ringbase0xf40fb08000. SDMA/VMPT/graphics complete. Controlled stop after
+confirmed stall; do not claim codec deadline fired. HEVC/alpha untested on234.
 
-Candidate233 corrects the native MMHUB register table. Desktop Metal probe passes;
-hardware H264 now stalls only on VCN0EncLLQ while VMPT, SDMA and graphics complete.
-This removes the observed shared paging stall, but produces no encoded frames.
-Visible green/purple menu corruption from launch45 remains unresolved. Hardware
-HEVC and HEVC-alpha remain unqualified. Software H264/HEVC roundtrips passed on
-launch45. RustDesk removed from reopen-at-login only as a startup workaround.
+Desktop probe passes. New surface probe passes12 cases (BGRA8/RGBA8/RGBA16Float/
+RGB10A2, private/managed/IOSurface, alpha blending) with0 mismatched pixels.
+This does not qualify the desktop: visible menu corruption from launch45 remains
+unresolved. Need CPU IOSurface readback/capture and actual TigerVNC visual retest.
+Software H264/HEVC passed on230; RustDesk startup removal remains a workaround.
 
-## Evidence and next work
+Run bbda0ca13aa5f9cfbc016a32534f909a, build6b82df99e281490e82cf720d72747b0a,
+candidate234/cardmetal-080, prelaunch MODE2 reset74.
+Results `/home/bogdan/macos-vm/run/candidate-234-results/` preserve surface probe
+source/results and H264 trace. Shutdown forced; harness recovery recovered;
+CORE_PROBE_PASS covers only earlier desktop probe. Host926 tests/3 skipped plus
+new firmware integrity test passed. No merge or push main. User forbids reboots.
 
-Launch46 run `953a71a247c9dfea622129c4a598026c`, build
-`aeadd6aac6584078b7fd944c58d82459`, candidate233/card metal-079, reset72.
-Results: `/home/bogdan/macos-vm/run/candidate-233-results/`.
-Serial confirms corrected context2 root register0x1a950 and engine6 request/ACK
-0x1aa31/0x1aa32. Hardware H264 selects gva/hardware=true, accepts two submissions,
-blocks on third and reaches90s deadline without callbacks. First pending channel15
-is VCN0EncLLQ; SDMA12 completed/submitted234, VMPT16 completed/submitted80d.
-WindowServer remains responsive. Do not call CORE_PROBE_PASS encoder success.
-Shutdown forced; harness recovery reports recovered. Final MODE2 reset73 clean.
-Host regression suite926 tests,3 skipped, no failures.
+Next: read MMHUB fault/address configuration and VCN queue registers before and
+after first submission to distinguish address translation from firmware commands.
+Worktree `/home/bogdan/macos-vm/run/worktrees/candidate-234`.
 
-[Audit](findings/research/tigervnc-reset-audit-20260914.md) preserves identity,
-functional, visual and cleanup outcomes. Investigate VCN initialization/firmware
-and queue programming; independently extend format/IOSurface/compositing tests
-for visible corruption. Neither task is complete. No new launch allowance yet.
+## Launch48 allowance
 
-Active worktree: `/home/bogdan/macos-vm/run/worktrees/candidate-233`.
-User forbids host reboots. Use tools/cycle.py with fresh MODE2, explicit boot note,
-6000s maximum and existing abort/cleanup checks. No merge or push main.
-Original pre-existing supervision edit remains in candidate230's named stash.
-
-## Candidate234 allowance
-
-One fix-validation launch47 on boot c369c74e-96ff-4c21-ae85-80ccb269f7d2,
-candidate234/cardmetal-080, fresh MODE2 via tools/cycle.py, max6000s.
-Hypothesis: missing VCN firmware prevents engine startup. Verify supplied bytes,
-native initialization result and actual encoded output. A supplied/accepted image
-with continued queue stall rejects firmware supply alone as sufficient. First run
-Metal regression and supplemental surface-format probe while responsive. Stop on
-first stall; no further encoder on dirty state. Corruption remains required work.
-Host926 tests/3 skipped plus firmware payload integrity test passed. Build complete.
+One diagnostic repeat candidate234/cardmetal-080 attemptvmhub on boot
+c369c74e-96ff-4c21-ae85-80ccb269f7d2. Fresh MODE2 through tools/cycle.py,
+max6000s, existing abort/cleanup intact. Read only documented MMHUB fault/root/
+aperture and VCN ring registers via QEMU monitor using verified guest BAR5.
+Compare before/after first encoder command. Stop after stall, no further encoder
+on dirty state. Run additional surface CPU-readback before encoder. Hypothesis:
+VCN cannot fetch its ring through MMHUB; fault/address evidence discriminates this
+from command ABI/firmware scheduling. No speculative address writes.
