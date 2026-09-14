@@ -1500,3 +1500,16 @@ The SDMA pair read 0x42 before RLC start, at `AMDHWAlignManager2::init`, after
 first gfx progress sample again found **0x444** and restored 0x42. The write therefore
 happens after accelerator power-up and not on the SDMA commit path (firmware or a power-state
 register restore are candidates).
+
+## Candidate 225: SDMA address-config watchdog (2026-09-14)
+
+Commit `499c142`, build `2c53dd545c814b95a281d67998c79907`. With `rgpusdmacfg=2` a watchdog thread
+polls the SDMA pair every 50 ms for 600 s (then every second), restores 0x42 immediately and
+logs the first 16 corrections with elapsed time and RLC/CP/GRBM/SDMA state. Suite 895 OK.
+
+## Boot-launch ledger extension for candidate 225 (2026-09-14)
+
+Candidate 225 with card `metal-072` runs from `run/candidate-225` as launch 32 on boot
+`c369c74e`, through `--manual-reuse --ack-risk` under the user's standing instruction, after
+`run/mode2-reset-33.json`. This note covers this one launch.
+
