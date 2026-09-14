@@ -4011,6 +4011,24 @@ static void applyVgprSwizzle(const char *when) {
          sq, fbRead(asicInfo, kGcSqConfig), lds, fbRead(asicInfo, kGcLdsConfig));
 }
 
+// rgpugbread: GB_ADDR_CONFIG_READ (seg0 0x13e2) mirrors GB_ADDR_CONFIG for software
+// that derives texture swizzle layouts. Probe v7 reproduced every tile permutation as
+// hardware writing with the 0x42 (4 pipe) layout and Apple's readers decoding with a
+// 16-pipe/16-packer layout. NootedRed programs both registers with the same value.
+// Mode 1 logs both registers; mode 2 also copies GB_ADDR_CONFIG into the READ mirror.
+static constexpr uint32_t kGcGbAddrConfigRead = kGcSeg0 + 0x13e2;
+static uint32_t gbReadMode = 0;
+
+static void applyGbAddrConfigRead(const char *when) {
+    if (gbReadMode == 0 || asicInfo == nullptr) return;
+    const uint32_t config = fbRead(asicInfo, kGcGbAddrConfig);
+    const uint32_t mirror = fbRead(asicInfo, kGcGbAddrConfigRead);
+    if (gbReadMode == 2 && config != 0xdeadbeef && config != 0 && mirror != config)
+        fbWrite(asicInfo, kGcGbAddrConfigRead, config);
+    RLOG("XG: rgpugbread=%u at %s: GB_ADDR_CONFIG=%#x GB_ADDR_CONFIG_READ %#x -> %#x", gbReadMode,
+         when, config, mirror, fbRead(asicInfo, kGcGbAddrConfigRead));
+}
+
 static constexpr size_t kOffPendingCommandReport = 0xd950;
     // __ZN30AMDRadeonX6000_AMDAccelChannel38writePendingCommandInfoDiagnosisReportERPcRjP18AMD_COMMAND_BUFFERP11IOAccelTask [x6]
 static constexpr size_t kOffMapCmdBuffers = 0x4d58e;
@@ -5613,6 +5631,7 @@ static void startRlc() {
     applyGoldenRegisters("before RLC start");
     applyNoBinning("before RLC start");
     applyVgprSwizzle("before RLC start");
+    applyGbAddrConfigRead("before RLC start");
     fbWrite(asicInfo, kGcRlcCgcg, 0);
     fbWrite(asicInfo, kGcRlcPgCntl, 0);
     uint32_t cntl = fbRead(asicInfo, kGcRlcCntl);
@@ -7908,6 +7927,9 @@ static void pluginStart() {
     uint32_t capClear = 0;
     hwCapClearMask = PE_parse_boot_argn("rgpuhwcapclr", &capClear, sizeof(capClear)) ? capClear : 0;
     RLOG("XA: rgpuhwcapclr=%#x", hwCapClearMask);
+    uint32_t gbRead = 0;
+    gbReadMode = PE_parse_boot_argn("rgpugbread", &gbRead, sizeof(gbRead)) && gbRead <= 2 ? gbRead : 0;
+    RLOG("XG: rgpugbread=%u", gbReadMode);
     uint32_t vgpr = 0;
     vgprMode = PE_parse_boot_argn("rgpuvgpr", &vgpr, sizeof(vgpr)) && vgpr <= 3 ? vgpr : 0;
     RLOG("XV: rgpuvgpr=%u", vgprMode);

@@ -47,6 +47,15 @@ class GfxHangDumpSourceTests(unittest.TestCase):
         start = self.body('static void startRlc() {', 'fbWrite(asicInfo, kGcRlcCgcg, 0);')
         self.assertLess(start.index('applyNoBinning'), start.index('applyVgprSwizzle'))
 
+    def test_gb_addr_config_read_mirror_is_gated(self):
+        self.assertIn('static uint32_t gbReadMode = 0;', self.source)
+        self.assertIn('static constexpr uint32_t kGcGbAddrConfigRead = kGcSeg0 + 0x13e2;', self.source)
+        self.assertIn('PE_parse_boot_argn("rgpugbread", &gbRead, sizeof(gbRead)) && gbRead <= 2', self.source)
+        body = self.body('static void applyGbAddrConfigRead(', 'static constexpr size_t kOffPendingCommandReport')
+        self.assertIn('gbReadMode == 2 && config != 0xdeadbeef && config != 0 && mirror != config', body)
+        start = self.body('static void startRlc() {', 'fbWrite(asicInfo, kGcRlcCgcg, 0);')
+        self.assertLess(start.index('applyVgprSwizzle'), start.index('applyGbAddrConfigRead'))
+
     def test_boot_argument_defaults_off_and_gates_thread(self):
         self.assertIn('static uint32_t hangDumpMode = 0;', self.source)
         self.assertIn('PE_parse_boot_argn("rgpuhangdump", &hangDump, sizeof(hangDump))',
