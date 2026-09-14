@@ -247,6 +247,8 @@ static bool vcnFirmwareEnabled = false;
 static bool vcnApuEnabled = false;
 static bool vcnStaticEnabled = false;
 static bool vcnSmuEnabled = false;
+static bool vcnResetEnabled = false;
+static mach_vm_address_t orgVcnWriteRegister = 0;
 static IOLock *vcnSmuLock = nullptr;
 static mach_vm_address_t orgVcnConfig = 0;
 static mach_vm_address_t orgVcnInitialize = 0;
@@ -2385,6 +2387,28 @@ static void *wrapFwDirGet(void *dir, uint32_t devType, const char *name) {
 // PP_EnableVCNPG and EnableVCNSecureLoad. Mode3 (EnableSwVCNFWLoading)
 // remains untouched at0, retaining PSP authentication/loading. Clearing7
 // chooses the native static initializer instead of the secure DPG SRAM path.
+// Assert VCPU reset while the native static initializer enables its clock,
+// before native cache programming. The same native initializer releases reset.
+static void wrapVcnWriteRegister(void *engine, uint32_t segment, uint32_t reg, uint32_t value) {
+    const auto caller = reinterpret_cast<mach_vm_address_t>(__builtin_return_address(0));
+    auto ctx = engine ? *reinterpret_cast<const uint8_t **>(static_cast<uint8_t *>(engine) + 16) : nullptr;
+    const bool reset = vcnResetEnabled && vcnStaticEnabled && ctx &&
+        __atomic_load_n(&raphaelTargetConfirmed, __ATOMIC_ACQUIRE) &&
+        caller == hwlibsBase + 0x931ba && segment == 1 && reg == 0x156 &&
+        *reinterpret_cast<const uint32_t *>(ctx + 0x268) == 0x30001 &&
+        *reinterpret_cast<const uint32_t *>(ctx + 0x2e0) == 0 && (value & 0x200);
+    const uint32_t requested = value;
+    if (reset) value |= 0x10000000;
+    FunctionCast(wrapVcnWriteRegister, orgVcnWriteRegister)(engine, segment, reg, value);
+    if (reset) {
+        auto read = reinterpret_cast<uint32_t (*)(void *, uint32_t, uint32_t)>(hwlibsBase + 0x86834);
+        const uint32_t beforeDelay = read(engine, segment, reg);
+        IOSleep(10); // Linux VCN boot-failure retry reset hold time
+        RLOG("VCNR: native clock/reset requested=%x written=%x readback=%x after10ms=%x",
+             requested, value, beforeDelay, read(engine, segment, reg));
+    }
+}
+
 static mach_vm_address_t orgMmhub21 = 0, nativeMmhub23 = 0;
 static void wrapMmhub21(void *vm) {
     const auto caller = reinterpret_cast<mach_vm_address_t>(__builtin_return_address(0));
@@ -2432,6 +2456,10 @@ static uint32_t wrapVcnQueryFw(void *cgs, uint32_t id, void *output) {
     return result;
 }
 static uint32_t wrapVcnInitialize(void *engine) {
+    if (vcnResetEnabled && !orgVcnWriteRegister) {
+        RLOG("VCNR: route missing; native initialization refused");
+        return 1;
+    }
     auto ctx = engine ? *reinterpret_cast<const uint8_t **>(
         static_cast<uint8_t *>(engine) + 16) : nullptr;
     if (ctx) RLOG("VCNS: initialize flags=%x mode=%u initializer=+%llx",
@@ -2773,6 +2801,16 @@ static void installDiagnostics(KernelPatcher &patcher, mach_vm_address_t base) {
             if (orgMmhub21) nativeMmhub23 = base + 0x36223;
         }
         RLOG("MHG: guarded runtime route=%u", orgMmhub21 != 0);
+    }
+    if (vcnResetEnabled) {
+        const uint8_t guard[] = {0x55,0x48,0x89,0xe5,0x48,0x8b,0x07,0x48,
+                                 0x8b,0x7f,0x10,0x89,0xf6,0x03,0x54,0xb7,0x34};
+        if (!memcmp(reinterpret_cast<const void *>(base + 0x8680f), guard, sizeof(guard))) {
+            orgVcnWriteRegister = patcher.routeFunction(base + 0x8680f,
+                reinterpret_cast<mach_vm_address_t>(wrapVcnWriteRegister), true);
+            patcher.clearError();
+        }
+        RLOG("VCNR: guarded native write=%u", orgVcnWriteRegister != 0);
     }
     if (vcnStaticEnabled) {
         // Complete instructions from audited HWLibs24G830+868d4, before any route.
@@ -8512,6 +8550,8 @@ static void pluginStart() {
          submissionTraceEnabled, submissionTraceEnabled ? "enabled" : "disabled");
     uint32_t vmFaultDiag = 0;
     uint32_t mmhubFix = 0;
+    uint32_t vcnReset = 0;
+    vcnResetEnabled = PE_parse_boot_argn("rgpuvcnreset", &vcnReset, sizeof(vcnReset)) && vcnReset == 1;
     uint32_t vcnSmu = 0;
     vcnSmuEnabled = PE_parse_boot_argn("rgpuvcnsmu", &vcnSmu, sizeof(vcnSmu)) && vcnSmu == 1;
     if (vcnSmuEnabled) vcnSmuLock = IOLockAlloc();
