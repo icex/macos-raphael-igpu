@@ -244,6 +244,9 @@ static uint32_t vmRootFixMode = 0;
 static bool mmhubFixEnabled = false;
 static bool vcnFirmwareEnabled = false;
 static bool vcnApuEnabled = false;
+static bool vcnStaticEnabled = false;
+static mach_vm_address_t orgVcnConfig = 0;
+static mach_vm_address_t orgVcnInitialize = 0;
 static bool vcnSharedSizeReady = false;
 #include "VcnFirmware.hpp"
 static mach_vm_address_t orgVcnReadFw = 0;
@@ -699,6 +702,8 @@ static constexpr size_t kOffSdmaFindInstance = 0xa7312; // _IpiSdmaFindInstanceB
 static constexpr size_t kOffTtlSetDevCap = 0xaf02d;    // _ttlSetDeviceCapabilityEntry
 static constexpr size_t kOffVmPhysicalFb = 0x33370;   // _vm_10_1_get_uma_physical_fb_offset
 static constexpr size_t kOffGvmGetIpFn   = 0x19258;    // _gvm_get_ip_function
+static constexpr size_t kOffVcnConfig = 0x86bae; // HWLibs _internal_read_config_setting
+static constexpr size_t kOffVcnInitialize = 0x87c74; // HWLibs _engine_initialize
 static constexpr size_t kOffVcnSharedSize = 0x878f5; // HWLibs _engine_hw_init shared allocation sequence
 static constexpr size_t kOffVcnReadFw = 0x86648; // HWLibs _internal_cos_read_fw
 static constexpr size_t kOffVcnHwInit = 0x862ea; // HWLibs _vcn_hw_init
@@ -2371,6 +2376,33 @@ static void *wrapFwDirGet(void *dir, uint32_t devType, const char *name) {
 // capacity at +8 and filename at +16. Return is bytes copied, zero on failure.
 // The native consumer keeps the AMD signature header, extracts version at +0x60,
 // and owns all subsequent firmware allocation, authentication and initialization.
+// Native configuration table indices0/1/7 are EnableVCNDPG,
+// PP_EnableVCNPG and EnableVCNSecureLoad. Mode3 (EnableSwVCNFWLoading)
+// remains untouched at0, retaining PSP authentication/loading. Clearing7
+// chooses the native static initializer instead of the secure DPG SRAM path.
+static uint32_t wrapVcnConfig(void *engine, uint32_t index) {
+    uint32_t value = FunctionCast(wrapVcnConfig, orgVcnConfig)(engine, index);
+    auto ctx = engine ? *reinterpret_cast<const uint8_t **>(
+        static_cast<uint8_t *>(engine) + 16) : nullptr;
+    if (vcnStaticEnabled && ctx && (index == 0 || index == 1 || index == 7) &&
+        *reinterpret_cast<const uint32_t *>(ctx + 0x268) == 0x30001) {
+        RLOG("VCNS: native config%u %u -> 0", index, value);
+        return 0;
+    }
+    return value;
+}
+static uint32_t wrapVcnInitialize(void *engine) {
+    auto ctx = engine ? *reinterpret_cast<const uint8_t **>(
+        static_cast<uint8_t *>(engine) + 16) : nullptr;
+    if (ctx) RLOG("VCNS: initialize flags=%x mode=%u initializer=+%llx",
+        *reinterpret_cast<const uint32_t *>(ctx),
+        *reinterpret_cast<const uint32_t *>(ctx + 0x2e0),
+        *reinterpret_cast<const uint64_t *>(ctx + 0x3f8) - hwlibsBase);
+    const uint32_t result = FunctionCast(wrapVcnInitialize, orgVcnInitialize)(engine);
+    RLOG("VCNS: native initialize returned%u", result);
+    return result;
+}
+
 static uint32_t wrapVcnReadFw(void *engine, void *input) {
     if (vcnFirmwareEnabled && engine && input) {
         auto in = static_cast<uint8_t *>(input);
@@ -2655,6 +2687,20 @@ static void installDiagnostics(KernelPatcher &patcher, mach_vm_address_t base) {
                      reinterpret_cast<mach_vm_address_t>(e.fn), true);
         RLOG("route %s -> %s (org=0x%llx)", e.name, *e.org ? "ok" : "FAILED", *e.org);
         patcher.clearError();
+    }
+    if (vcnStaticEnabled) {
+        const uint8_t configGuard[] = {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x53,0x48,0x83,0xec,0x28,0x48,0x8d,0x5d,0xe4};
+        const uint8_t initializeGuard[] = {0x55,0x48,0x89,0xe5,0x41,0x56,0x53,0x48,0x83,0xec,0x20,0x48,0x89,0xfb};
+        if (!memcmp(reinterpret_cast<const void *>(base + kOffVcnConfig), configGuard, sizeof(configGuard)) &&
+            !memcmp(reinterpret_cast<const void *>(base + kOffVcnInitialize), initializeGuard, sizeof(initializeGuard))) {
+            orgVcnInitialize = patcher.routeFunction(base + kOffVcnInitialize,
+                reinterpret_cast<mach_vm_address_t>(wrapVcnInitialize), true);
+            patcher.clearError();
+            if (orgVcnInitialize) orgVcnConfig = patcher.routeFunction(base + kOffVcnConfig,
+                reinterpret_cast<mach_vm_address_t>(wrapVcnConfig), true);
+            patcher.clearError();
+            RLOG("VCNS: guarded config=%u initialize=%u", orgVcnConfig != 0, orgVcnInitialize != 0);
+        } else RLOG("VCNS: prologue mismatch; native config retained");
     }
     if (vcnFirmwareEnabled) {
         const uint8_t readGuard[] = {0x55,0x48,0x89,0xe5,0x48,0x83,0xec,0x20};
@@ -8352,6 +8398,8 @@ static void pluginStart() {
          submissionTraceEnabled, submissionTraceEnabled ? "enabled" : "disabled");
     uint32_t vmFaultDiag = 0;
     uint32_t mmhubFix = 0;
+    uint32_t vcnStatic = 0;
+    vcnStaticEnabled = PE_parse_boot_argn("rgpuvcnstatic", &vcnStatic, sizeof(vcnStatic)) && vcnStatic == 1;
     uint32_t vcnApu = 0;
     vcnApuEnabled = PE_parse_boot_argn("rgpuvcnapu", &vcnApu, sizeof(vcnApu)) && vcnApu == 1;
     uint32_t vcnFw = 0;
