@@ -73,3 +73,14 @@ No merge or push to main. User instruction: **no further host reboots**.
 
 Validation of the coordinator used for these runs: 925 host tests, 3 skipped, no failures;
 `/home/bogdan/macos-vm/run/tigervnc-host-tests-final.log`.
+
+## Current diagnostic allowance
+
+User's “ok do it” authorizes tracing the encoder requester and first SDMA stall. One
+additional launch on boot `c369c74e-96ff-4c21-ae85-80ccb269f7d2`, attempt
+`encoder-trace`, after fresh MODE2 reset, using unchanged candidate230 and no VNC viewer.
+Capture full guest process list and XPC/unified logs over SSH; stop through the harness
+within 6000 seconds. Hypothesis: a startup client initializes HEVC independently of VNC.
+Identify its executable and parent; an encoder launched solely by a viewer would falsify
+that hypothesis. Pending kernel work preceding encoder work prevents assuming causality.
+No host reboot or binding cycle. This allowance is unconsumed until QEMU/VFIO opens.
