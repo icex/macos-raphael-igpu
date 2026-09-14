@@ -1800,3 +1800,12 @@ Blocking issue: actual private-COW patch delivery and two-way managed-texture
 correctness remain untested. Next candidate230 may test this user-authorized route;
 no on-disk Apple driver edits or security changes. This is still a userspace binary
 patch delivered by our kext, not a demonstrated native metadata correction.
+
+
+Candidate230 prepared: opt-in rgputexdiag=2 current-task private COW delivery,
+exact UUID/instruction + full-page leaf protection validation, one-byte write,
+restoration attempted on every protect outcome, no proc flag changes. Probe v10
+adds1920x1080 and2048x2048 plus two fresh driver-only children with no selfpatch.
+User authorized needed tests; upcoming bounded launch39 after MODE2 reset,
+max6000 seconds with existing safety/identity/capture/cleanup gates. No success
+claim until live probe and restoration/recovery records are examined.

@@ -791,6 +791,8 @@ static int renderChild(NSString *outputPath, unsigned long long expiry) {
 // A child patches one immediate byte in its own copy of the driver before creating the
 // device, then reruns the readback matrix.
 static NSDictionary *patchDriverSettings(NSString *variant) {
+    if ([variant hasPrefix:@"driver-only-"])
+        return @{ @"variant": variant, @"patched": @NO, @"self_patch_attempted": @NO };
     static const char *const kDriver =
         "/System/Library/Extensions/AMDRadeonX6000MTLDriver.bundle/Contents/MacOS/AMDRadeonX6000MTLDriver";
     static const uint8_t kLowSettings[] = {0x48, 0xb8, 0x00, 0x00, 0x70, 0xff, 0x01, 0x00, 0x00, 0x00};
@@ -1221,7 +1223,7 @@ int main(int argc, const char *argv[]) {
         alarm(45);
         report = [@{ @"run_id": argc > 1 ? @(argv[1]) : @"manual", @"passed": @NO,
                      @"completed_command_buffers": @0, @"values_checked": @0,
-                     @"probe_version": @9 } mutableCopy];
+                     @"probe_version": @10 } mutableCopy];
         char *end = NULL;
         unsigned long long expiry = argc == 3 ? strtoull(argv[2], &end, 10) : 0;
         if (argc != 3 || end == NULL || *end != '\0' || (unsigned long long)time(NULL) > expiry)
@@ -1313,9 +1315,14 @@ int main(int argc, const char *argv[]) {
                                                      MTLClearColorMake(0.25, 0.25, 0.25, 0.25))];
         [readback addObjectsFromArray:readbackMatrix(device, identityLibrary, queue, 1280, 1024,
                                                      MTLClearColorMake(0, 0, 0, 0))];
+        [readback addObjectsFromArray:readbackMatrix(device, identityLibrary, queue, 1920, 1080,
+                                                     MTLClearColorMake(0, 0, 0, 0))];
+        [readback addObjectsFromArray:readbackMatrix(device, identityLibrary, queue, 2048, 2048,
+                                                     MTLClearColorMake(0, 0, 0, 0))];
         report[@"readback_matrix"] = readback;
-        report[@"patch_children"] = @[ patchChildRun(argv[0], expiry, @"gbaddr42"),
-                                       patchChildRun(argv[0], expiry, @"linearswizzle1") ];
+        // Fresh processes exercise kext delivery without a probe-side patch.
+        report[@"driver_only_children"] = @[ patchChildRun(argv[0], expiry, @"driver-only-1"),
+                                              patchChildRun(argv[0], expiry, @"driver-only-2") ];
 
         NSMutableArray *jpegs = [NSMutableArray array];
         if (displayCount > 0) {

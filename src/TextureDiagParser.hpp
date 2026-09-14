@@ -13,6 +13,7 @@ struct Result {
     bool uuidMatch {};
     bool pathTerminated {};
     bool instructionMatch {};
+    bool alreadyPatched {};
     uint64_t textBase {};
     uint64_t instructionAddress {};
     uint32_t imageCount {};
@@ -43,6 +44,9 @@ static constexpr uint64_t kInstructionOffset = 0x13a7e1;
 static constexpr uint8_t kUuid[16] = {
     0x90, 0x6f, 0x11, 0xa3, 0x9d, 0xaf, 0x35, 0xbd,
     0xb8, 0xea, 0xcf, 0xd2, 0x16, 0x0f, 0xae, 0x1a
+};
+static constexpr uint8_t kPatchedInstruction[10] = {
+    0x48, 0xb8, 0x00, 0x00, 0x70, 0xf7, 0x01, 0x00, 0x00, 0x00
 };
 static constexpr uint8_t kInstruction[10] = {
     0x48, 0xb8, 0x00, 0x00, 0x70, 0xff, 0x01, 0x00, 0x00, 0x00
@@ -155,11 +159,14 @@ inline Result inspect(ReadFn read, void *context, uint64_t allImageInfoAddress,
             return result;
         }
         uint8_t instruction[sizeof(kInstruction)] {};
-        result.instructionMatch = boundedRead(read, context, result.instructionAddress, instruction,
-                                       sizeof(instruction)) &&
+        const bool readOk = boundedRead(read, context, result.instructionAddress,
+                                        instruction, sizeof(instruction));
+        result.instructionMatch = readOk &&
                                   memcmp(instruction, kInstruction, sizeof(instruction)) == 0;
+        result.alreadyPatched = readOk &&
+                               memcmp(instruction, kPatchedInstruction, sizeof(instruction)) == 0;
         result.found = true;
-        result.status = result.instructionMatch ? Ok : BadInstruction;
+        result.status = (result.instructionMatch || result.alreadyPatched) ? Ok : BadInstruction;
         return result;
     }
     result.status = BadImage;

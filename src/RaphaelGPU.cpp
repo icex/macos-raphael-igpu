@@ -7492,18 +7492,23 @@ static bool entryMatches(mach_vm_address_t base, size_t imageSize, size_t offset
 // because the route is installed from processKext; its implementation lives
 // beside the existing texture-patch constants below.
 static uint32_t texDiagEnabled = 0;
+static IOLock *textureDiagCowLock = nullptr;
 static mach_vm_address_t orgGetHardwareInfo = 0;
 using TextureDiagTaskInfo = kern_return_t (*)(task_t, task_flavor_t, task_info_t,
                                                mach_msg_type_number_t *);
 using TextureDiagCurrentTask = task_t (*)();
 using TextureDiagGetTaskMap = vm_map_t (*)(task_t);
 using TextureDiagReadUser = kern_return_t (*)(vm_map_t, vm_map_address_t,
-                                               const void *, vm_map_size_t);
+                                               void *, vm_map_size_t);
 using TextureDiagSelfPid = int (*)();
 using TextureDiagRegionRecurse = kern_return_t (*)(vm_map_t, mach_vm_address_t *,
                                                    mach_vm_size_t *, natural_t *,
                                                    vm_region_recurse_info_t,
                                                    mach_msg_type_number_t *);
+using TextureDiagProtect = kern_return_t (*)(vm_map_t, mach_vm_address_t,
+                                             mach_vm_size_t, boolean_t, vm_prot_t);
+using TextureDiagWriteUser = kern_return_t (*)(vm_map_t, const void *,
+                                                vm_map_address_t, vm_map_size_t);
 struct TextureDiagReadContext { vm_map_t map; };
 static TextureDiagTaskInfo textureDiagTaskInfo = nullptr;
 static TextureDiagCurrentTask textureDiagCurrentTask = nullptr;
@@ -7511,6 +7516,8 @@ static TextureDiagGetTaskMap textureDiagGetTaskMap = nullptr;
 static TextureDiagReadUser textureDiagReadUser = nullptr;
 static TextureDiagSelfPid textureDiagSelfPid = nullptr;
 static TextureDiagRegionRecurse textureDiagRegionRecurse = nullptr;
+static TextureDiagProtect textureDiagProtect = nullptr;
+static TextureDiagWriteUser textureDiagWriteUser = nullptr;
 static volatile uint32_t textureDiagLogCount = 0;
 static constexpr size_t kOffGetHardwareInfo = 0xeca4; // AMDAccelDevice::getHardwareInfo [x6]
 static constexpr uint8_t kGetHardwareInfoEntry[] = {
@@ -7632,6 +7639,10 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
                 patcher.solveSymbol(KernelPatcher::KernelID, "_proc_selfpid"));
             textureDiagRegionRecurse = reinterpret_cast<TextureDiagRegionRecurse>(
                 patcher.solveSymbol(KernelPatcher::KernelID, "_mach_vm_region_recurse"));
+            textureDiagProtect = reinterpret_cast<TextureDiagProtect>(
+                patcher.solveSymbol(KernelPatcher::KernelID, "_mach_vm_protect"));
+            textureDiagWriteUser = reinterpret_cast<TextureDiagWriteUser>(
+                patcher.solveSymbol(KernelPatcher::KernelID, "_vm_map_write_user"));
             const bool symbols = textureDiagTaskInfo && textureDiagCurrentTask &&
                                  textureDiagGetTaskMap && textureDiagReadUser;
             const bool entry = entryMatches(addr, sz, kOffGetHardwareInfo,
@@ -7641,11 +7652,11 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
                 orgGetHardwareInfo = patcher.routeFunction(
                     addr + kOffGetHardwareInfo,
                     reinterpret_cast<mach_vm_address_t>(wrapGetHardwareInfo), true);
-            RLOG("XTDIAG: route=%s symbols=%u entry=%u taskinfo=%p current=%p map=%p read=%p pid=%p region=%p",
+            RLOG("XTDIAG: route=%s symbols=%u entry=%u taskinfo=%p current=%p map=%p read=%p pid=%p region=%p protect=%p write=%p",
                  orgGetHardwareInfo ? "ok" : "OFF", symbols, entry,
                  textureDiagTaskInfo, textureDiagCurrentTask,
                  textureDiagGetTaskMap, textureDiagReadUser, textureDiagSelfPid,
-                 textureDiagRegionRecurse);
+                 textureDiagRegionRecurse, textureDiagProtect, textureDiagWriteUser);
             patcher.clearError();
         }
         if (mask & XJ) {
@@ -8022,8 +8033,8 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
 // (metadataRetile) otherwise disagree by one pipe-bank-xor bit at 64-pixel granularity.
 // Both agents and probe v7 confirmed this is a userspace-only lever with no kernel input.
 // The driver ships only inside the dyld shared cache on Sequoia, so we patch it in every
-// process through Lilu's fileless shared-cache path (BinaryModInfo::filelessSegOffs); Lilu
-// re-reads the live bytes and requires them to equal the find pattern before writing.
+// Legacy Lilu fileless delivery is inactive on Sequoia; the opt-in current-task COW
+// diagnostic below is the experimental delivery path and revalidates live bytes.
 static uint32_t texPipeBankXorDisable = 0;
 
 static bool textureDiagRead(void *opaque, uint64_t address, void *out, size_t size) {
@@ -8035,9 +8046,71 @@ static bool textureDiagRead(void *opaque, uint64_t address, void *out, size_t si
     return textureDiagReadUser(context->map, address, out, size) == KERN_SUCCESS;
 }
 
+static void textureDiagCow(TextureDiagReadContext *context, int pid,
+                           const RaphaelTextureDiag::Result &result,
+                           mach_vm_address_t regionStart, mach_vm_size_t regionSize,
+                           vm_prot_t regionProt, vm_prot_t regionMax, bool emit) {
+    if (texDiagEnabled != 2 || context == nullptr || context->map == nullptr ||
+        textureDiagCowLock == nullptr || textureDiagProtect == nullptr ||
+        textureDiagWriteUser == nullptr || pid <= 0 || !result.found || result.alreadyPatched ||
+        result.status != RaphaelTextureDiag::Ok || !result.instructionMatch ||
+        !result.uuidMatch || !result.pathTerminated)
+        return;
+    const mach_vm_address_t page = result.instructionAddress & ~mach_vm_address_t(0xfff);
+    if (regionStart > page || regionSize < 0x1000 ||
+        page - regionStart > regionSize - 0x1000 ||
+        (regionProt & (VM_PROT_READ | VM_PROT_EXECUTE)) !=
+            (VM_PROT_READ | VM_PROT_EXECUTE) || (regionProt & VM_PROT_WRITE) != 0 ||
+        (regionMax & (VM_PROT_READ | VM_PROT_EXECUTE)) !=
+            (VM_PROT_READ | VM_PROT_EXECUTE))
+        return;
+    uint8_t before[sizeof(RaphaelTextureDiag::kInstruction)] {};
+    kern_return_t readBefore = textureDiagRead(context, result.instructionAddress,
+                                                before, sizeof(before)) ? KERN_SUCCESS : KERN_FAILURE;
+    if (readBefore != KERN_SUCCESS || memcmp(before, RaphaelTextureDiag::kInstruction,
+                                              sizeof(before)) != 0) {
+        return;
+    }
+    const uint8_t replacement = 0xf7;
+    kern_return_t protectRc = textureDiagProtect(context->map, page, 0x1000, FALSE,
+                                                   VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
+    kern_return_t writeRc = KERN_FAILURE;
+    kern_return_t restoreRc = KERN_FAILURE;
+    kern_return_t verifyRc = KERN_FAILURE;
+    if (protectRc == KERN_SUCCESS) {
+        uint8_t afterProtect[sizeof(before)] {};
+        const bool stillOriginal = textureDiagRead(context, result.instructionAddress,
+                                                    afterProtect, sizeof(afterProtect)) &&
+            memcmp(afterProtect, RaphaelTextureDiag::kInstruction, sizeof(afterProtect)) == 0;
+        if (stillOriginal)
+            writeRc = textureDiagWriteUser(context->map, &replacement,
+                                           result.instructionAddress + 5, 1);
+    }
+    // The protection API can fail after partial map work: always restore.
+    restoreRc = textureDiagProtect(context->map, page, 0x1000, FALSE, regionProt);
+    {
+        uint8_t after[sizeof(before)] {};
+        const bool readAfter = textureDiagRead(context, result.instructionAddress,
+                                                after, sizeof(after));
+        verifyRc = (readAfter && after[5] == replacement &&
+                    memcmp(after, RaphaelTextureDiag::kInstruction, 5) == 0 &&
+                    memcmp(after + 6, RaphaelTextureDiag::kInstruction + 6, 4) == 0) ?
+            KERN_SUCCESS : KERN_FAILURE;
+    }
+    if (restoreRc != KERN_SUCCESS)
+        CRLOG("XTCOW pid=%d p=%d w=%d r=%d v=%d unsafe", pid, protectRc, writeRc,
+              restoreRc, verifyRc);
+    else if (emit || protectRc != KERN_SUCCESS || writeRc != KERN_SUCCESS || verifyRc != KERN_SUCCESS)
+        RLOG("XTCOW pid=%d p=%d w=%d r=%d v=%d", pid, protectRc, writeRc,
+             restoreRc, verifyRc);
+}
+
 static int wrapGetHardwareInfo(void *self, void *values) {
-    if (texDiagEnabled != 0 && __atomic_fetch_add(&textureDiagLogCount, 1u,
-                                                   __ATOMIC_RELAXED) < 64) {
+    if (texDiagEnabled != 0) {
+        const bool emit = __atomic_fetch_add(&textureDiagLogCount, 1u,
+                                             __ATOMIC_RELAXED) < 64;
+        const bool cowLocked = texDiagEnabled == 2 && textureDiagCowLock != nullptr;
+        if (cowLocked) IOLockLock(textureDiagCowLock);
         task_t task = textureDiagCurrentTask ? textureDiagCurrentTask() : nullptr;
         const int pid = textureDiagSelfPid ? textureDiagSelfPid() : -1;
         vm_map_t map = (task && textureDiagGetTaskMap) ? textureDiagGetTaskMap(task) : nullptr;
@@ -8068,22 +8141,28 @@ static int wrapGetHardwareInfo(void *self, void *values) {
                 regionRc = textureDiagRegionRecurse(
                     map, &regionStart, &regionSize, &depth,
                     reinterpret_cast<vm_region_recurse_info_t>(&info), &infoCount);
-                if (regionRc != KERN_SUCCESS || !info.is_submap) {
-                    regionProt = info.protection;
-                    regionMax = info.max_protection;
-                    regionSubmap = info.is_submap;
-                    break;
-                }
+                if (regionRc == KERN_SUCCESS && infoCount < VM_REGION_SUBMAP_INFO_COUNT_64)
+                    regionRc = KERN_FAILURE;
+                regionProt = info.protection;
+                regionMax = info.max_protection;
+                regionSubmap = info.is_submap;
+                if (regionRc != KERN_SUCCESS || !info.is_submap) break;
                 ++depth;
             }
         }
-        RLOG("XTDIAG: pid=%d task=%p taskinfo=%d format=%d images=%u inspected=%u status=%u "
-             "uuid=%u path=%u text=%#llx instr=%#llx bytes=%u map=%p region=%d "
-             "start=%#llx size=%#llx prot=%#x max=%#x submap=%u",
+        if (emit) RLOG("XTDIAG pid=%d task=%p ti=%d fmt=%d images=%u n=%u st=%u uuid=%u path=%u "
+             "text=%#llx instr=%#llx bytes=%u patched=%u",
              pid, task, taskRc, dyld.all_image_info_format, result.imageCount, result.inspected,
              result.status, result.uuidMatch, result.pathTerminated,
-             result.textBase, result.instructionAddress, result.instructionMatch, map,
-             regionRc, regionStart, regionSize, regionProt, regionMax, regionSubmap);
+             result.textBase, result.instructionAddress, result.instructionMatch, result.alreadyPatched);
+        if (emit) RLOG("XTREG pid=%d rc=%d start=%#llx size=%#llx prot=%#x max=%#x sub=%u",
+                       pid, regionRc, regionStart, regionSize, regionProt, regionMax,
+                       regionSubmap);
+        if (regionRc == KERN_SUCCESS && !regionSubmap && result.status == RaphaelTextureDiag::Ok &&
+            result.instructionMatch && result.uuidMatch && result.pathTerminated)
+            textureDiagCow(&readContext, pid, result, regionStart, regionSize,
+                           regionProt, regionMax, emit);
+        if (cowLocked) IOLockUnlock(textureDiagCowLock);
     }
     using GetHardwareInfo = int (*)(void *, void *);
     return orgGetHardwareInfo ? reinterpret_cast<GetHardwareInfo>(orgGetHardwareInfo)(self, values)
@@ -8202,9 +8281,11 @@ static void pluginStart() {
          : swizzleLogMode == 1 ? "log preferred swizzle modes" : "off");
     uint32_t texDiag = 0;
     texDiagEnabled = PE_parse_boot_argn("rgputexdiag", &texDiag, sizeof(texDiag)) &&
-                     texDiag == 1;
+                     texDiag <= 2 ? texDiag : 0;
+    if (texDiagEnabled == 2) textureDiagCowLock = IOLockAlloc();
     RLOG("rgputexdiag=%u: current-task Metal image diagnostic %s",
-         texDiagEnabled, texDiagEnabled ? "enabled" : "disabled");
+         texDiagEnabled, texDiagEnabled == 2 ? "COW enabled" :
+         texDiagEnabled == 1 ? "read-only enabled" : "disabled");
     uint32_t texXor = 0;
     texPipeBankXorDisable = PE_parse_boot_argn("rgpunotexxor", &texXor, sizeof(texXor)) && texXor <= 1
         ? texXor : 0;

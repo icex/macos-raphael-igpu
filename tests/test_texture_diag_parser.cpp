@@ -106,7 +106,10 @@ int main() {
     assert(!inspect(f).found);
     makeValid(f);
     f.bytes[0x400 + RaphaelTextureDiag::kInstructionOffset + 5] = 0xf7;
-    assert(inspect(f).status == RaphaelTextureDiag::BadInstruction);
+    assert(inspect(f).status == RaphaelTextureDiag::Ok && inspect(f).alreadyPatched &&
+           !inspect(f).instructionMatch);
+    f.bytes[0x400 + RaphaelTextureDiag::kInstructionOffset + 6] ^= 1;
+    assert(inspect(f).status == RaphaelTextureDiag::BadInstruction && !inspect(f).alreadyPatched);
     makeValid(f);
     f.bytes[0x500 + sizeof(RaphaelTextureDiag::kDriverPath) - 1] = 'X';
     assert(!inspect(f).found && !inspect(f).pathTerminated);
