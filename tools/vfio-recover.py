@@ -8,6 +8,7 @@ import json
 import mmap
 import os
 from pathlib import Path
+import platform
 import re
 import struct
 import subprocess
@@ -111,9 +112,18 @@ CP_HQD_PQ_WPTR_HI_OFFSET = (GC_SEG0 + 0x1FE0) * 4
 # confirms the addressing in sdma_5_2_stop_engine: SDMA0 uses block 0x23,
 # base index 0, then the register offsets below.
 SDMA0_CNTL_OFFSET = (GC_SEG0 + 0x001C) * 4
+SDMA0_STATUS_REG_OFFSET = (GC_SEG0 + 0x0025) * 4
 SDMA0_F32_CNTL_OFFSET = (GC_SEG0 + 0x002A) * 4
 SDMA0_GFX_RB_CNTL_OFFSET = (GC_SEG0 + 0x0080) * 4
 SDMA0_GFX_IB_CNTL_OFFSET = (GC_SEG0 + 0x008A) * 4
+SDMA0_PAGE_RB_CNTL_OFFSET = (GC_SEG0 + 0x00D8) * 4
+SDMA0_PAGE_IB_CNTL_OFFSET = (GC_SEG0 + 0x00E2) * 4
+# The retained Navi23 scan establishes the two SDMA0 RLC input queues below.
+# Later generated headers expose more controls, but they are outside this proof.
+SDMA0_RLC_RB_CNTL_OFFSETS = tuple(
+    (GC_SEG0 + 0x0130 + 0x58 * index) * 4 for index in range(2))
+SDMA0_RLC_IB_CNTL_OFFSETS = tuple(
+    (GC_SEG0 + 0x013A + 0x58 * index) * 4 for index in range(2))
 CP_ME_HALT_MASK = 0x15000000  # CE_HALT | PFP_HALT | ME_HALT
 CP_MEC_HALT_MASK = 0x50000000 # MEC_ME1_HALT | MEC_ME2_HALT
 CP_MEC2_HALT_MASK = 0x10000000
@@ -130,6 +140,7 @@ SDMA_HALT_MASK = 0x1
 SDMA_AUTO_CTXSW_ENABLE_MASK = 0x00040000
 SDMA_RB_ENABLE_MASK = 0x1
 SDMA_IB_ENABLE_MASK = 0x1
+SDMA_STATUS_IDLE_MASK = 0x1
 
 # Crash recovery uses only GPU-local VRAM.  QEMU's IOMMU mappings are gone by
 # the time this process opens VFIO, so rebuilding the KIQ in system memory would
@@ -180,6 +191,13 @@ HDP_MEM_FLUSH_REMAP_OFFSET = 0x7f000
 HDP_MEM_FLUSH_TARGETS = (HDP_MEM_FLUSH_NATIVE_OFFSET, HDP_MEM_FLUSH_REMAP_OFFSET)
 EXPECTED_CONFIG_MEMSIZE = 0x200
 
+# The retained Raphael IP-discovery binary reports HDP 5.2.0 with segment-zero
+# base 0xf20. Linux routes HDP 5.2.0 through hdp_v5_0 and writes one to relative
+# dword 0xd1 before reading GPU-produced data through the PCI BAR aperture.
+HDP_SEG0 = 0x0f20
+HDP_READ_CACHE_INVALIDATE_OFFSET = (HDP_SEG0 + 0x00d1) * 4
+MEMORY_ORDER_SEQ_CST = 5
+
 
 class RecoveryError(RuntimeError):
     def __init__(self, message, *, evidence=None):
@@ -218,6 +236,50 @@ def _store_mmio_u64(buffer, offset, value):
         cell.value = value & 0xffffffffffffffff
     finally:
         del cell
+
+
+def _mmio_u32_cell(buffer, offset):
+    if offset < 0 or offset & 3 or offset + ctypes.sizeof(ctypes.c_uint32) > len(buffer):
+        raise RecoveryError('32-bit MMIO access is not aligned and bounded')
+    return ctypes.c_uint32.from_buffer(buffer, offset)
+
+
+def _store_mmio_u32(buffer, offset, value):
+    """Perform one naturally aligned native-width BAR store."""
+    cell = _mmio_u32_cell(buffer, offset)
+    try:
+        cell.value = value & 0xffffffff
+    finally:
+        del cell
+
+
+def _load_mmio_u32(buffer, offset):
+    """Perform one naturally aligned native-width BAR load."""
+    cell = _mmio_u32_cell(buffer, offset)
+    try:
+        return cell.value
+    finally:
+        del cell
+
+
+def _resolve_thread_fence():
+    """Resolve the ordinary-memory full fence used after the HDP posting read."""
+    if platform.machine().lower() not in ('x86_64', 'amd64'):
+        raise RecoveryError('HDP read coherency is supported only on x86_64')
+    try:
+        libatomic = ctypes.CDLL('libatomic.so.1')
+        fence = libatomic.atomic_thread_fence
+    except (OSError, AttributeError) as error:
+        raise RecoveryError('libatomic full fence unavailable') from error
+    fence.argtypes = [ctypes.c_int]
+    fence.restype = None
+
+    def full_fence():
+        # This C11 fence operates on ordinary memory. Never use an atomic RMW
+        # operation on a device mapping.
+        fence(MEMORY_ORDER_SEQ_CST)
+
+    return full_fence
 
 
 def write_once(path, value):
@@ -308,15 +370,20 @@ def kernel_updates(cursor=None):
 
 class LegacyVfio:
     """Own one VFIO group and map BAR0 VRAM, BAR2 doorbells, and BAR5 MMIO."""
-    def __init__(self, vfio_root=Path('/dev/vfio')):
+    def __init__(self, vfio_root=Path('/dev/vfio'), thread_fence=None):
         self.root = Path(vfio_root)
         self.container_fd = self.group_fd = self.device_fd = None
         self.bar = None
         self.bars = {}
         self._regions = {}
         self.container_set = False
+        self._thread_fence = thread_fence
 
     def __enter__(self):
+        # Resolve the native ordering primitive before opening or mutating the
+        # VFIO device. A missing dependency must fail at the host gate.
+        if self._thread_fence is None:
+            self._thread_fence = _resolve_thread_fence()
         try:
             self.container_fd = os.open(self.root/'vfio', os.O_RDWR | os.O_CLOEXEC)
             if ioctl(self.container_fd, VFIO_GET_API_VERSION) != VFIO_API_VERSION:
@@ -400,6 +467,19 @@ class LegacyVfio:
         struct.pack_into('<I', self.bar, remap, 0)
         posted = self.posted_barrier()
         return {'remap': remap, 'posted_read': posted}
+
+    def invalidate_hdp_read_cache(self):
+        if self.bar is None or HDP_READ_CACHE_INVALIDATE_OFFSET + 4 > len(self.bar):
+            raise RecoveryError('HDP read-invalidate register is outside BAR5')
+        if self._thread_fence is None:
+            self._thread_fence = _resolve_thread_fence()
+        _store_mmio_u32(self.bar, HDP_READ_CACHE_INVALIDATE_OFFSET, 1)
+        posted = _load_mmio_u32(self.bar, HDP_READ_CACHE_INVALIDATE_OFFSET)
+        if posted == 0xffffffff:
+            raise RecoveryError('HDP read-invalidate register is inaccessible/all-ones')
+        self._thread_fence()
+        return {'register': HDP_READ_CACHE_INVALIDATE_OFFSET,
+                'trigger': 1, 'posted_read': posted}
 
     def read_vram32(self, offset):
         if offset < 0 or offset + 4 > VRAM_BAR_SIZE:
@@ -867,6 +947,7 @@ def retire_legacy_gfx_with_host_kiq(mmio, prior_run_id, sleep=time.sleep, polls=
     polls_completed = 0
     terminal_poll = None
     hdp_flush = None
+    hdp_read_invalidate = {'count': 0, 'last': None}
     result = None
     failure = None
     failure_traceback = None
@@ -883,6 +964,7 @@ def retire_legacy_gfx_with_host_kiq(mmio, prior_run_id, sleep=time.sleep, polls=
         'gart': gart,
         'reservation': reservation,
         'hdp_flush': None,
+        'hdp_read_invalidate': hdp_read_invalidate,
         'terminal_poll': None,
         'cleanup': {'readbacks': {}, 'errors': []},
     }
@@ -963,6 +1045,9 @@ def retire_legacy_gfx_with_host_kiq(mmio, prior_run_id, sleep=time.sleep, polls=
         mmio.ring_doorbell64(0, HOST_KIQ_RING_USED_DWORDS)
         for attempt in range(polls):
             rptr_after = mmio.read32(CP_HQD_PQ_RPTR_OFFSET)
+            invalidate = mmio.invalidate_hdp_read_cache()
+            hdp_read_invalidate['count'] += 1
+            hdp_read_invalidate['last'] = invalidate
             report_after = mmio.read_vram32(HOST_KIQ_RPTR_OFFSET)
             fence_after = mmio.read_vram32(HOST_KIQ_FENCE_OFFSET)
             polls_completed = attempt + 1
@@ -1255,30 +1340,86 @@ def quiesce_gc(mmio, sleep=time.sleep, polls=50, kiq_polls=None, prior_run_id=No
         else:
             graphics_pipes_after_retirement = snapshot_graphics_pipes(mmio)
 
-        # Linux sdma_v5_2_hw_fini disables context switching and the GFX
-        # ring/IB before halting the engine.  Preserve that order so no SDMA
-        # fetch can race teardown of QEMU's DMA mappings.
-        sdma_cntl_before = mmio.read32(SDMA0_CNTL_OFFSET)
+        # Snapshot every proven SDMA0 input before mutation and reject an
+        # inaccessible register window. The retained Navi23 evidence establishes
+        # GFX, PAGE, RLC0, and RLC1 as the input queues that must be closed.
+        def require_sdma_accessible(value, label):
+            if value == 0xffffffff:
+                raise RecoveryError(f'SDMA0 {label} is inaccessible/all-ones')
+            return value
+
+        def read_sdma(offset, label):
+            return require_sdma_accessible(mmio.read32(offset), label)
+
+        sdma_cntl_before = read_sdma(SDMA0_CNTL_OFFSET, 'control')
+        sdma_rb_before = read_sdma(SDMA0_GFX_RB_CNTL_OFFSET, 'GFX RB control')
+        sdma_ib_before = read_sdma(SDMA0_GFX_IB_CNTL_OFFSET, 'GFX IB control')
+        sdma_page_ib_before = read_sdma(SDMA0_PAGE_IB_CNTL_OFFSET,
+                                        'PAGE IB control')
+        sdma_page_rb_before = read_sdma(SDMA0_PAGE_RB_CNTL_OFFSET,
+                                        'PAGE RB control')
+        sdma_before = read_sdma(SDMA0_F32_CNTL_OFFSET, 'F32 control')
+        sdma_status_before = read_sdma(SDMA0_STATUS_REG_OFFSET, 'status')
+        sdma_rlc_inputs = []
+        for index, (rb_offset, ib_offset) in enumerate(zip(
+                SDMA0_RLC_RB_CNTL_OFFSETS, SDMA0_RLC_IB_CNTL_OFFSETS)):
+            sdma_rlc_inputs.append({
+                'index': index,
+                'rb_before': read_sdma(rb_offset, f'RLC{index} RB control'),
+                'ib_before': read_sdma(ib_offset, f'RLC{index} IB control'),
+            })
+
+        # Close each programmable input before halting the engine. PAGE teardown
+        # is deliberately IB then RB, with an immediate posting/readback proof
+        # for each store, matching the bounded live preparation.
+        sdma_shutdown_trace = []
         mmio.write32(SDMA0_CNTL_OFFSET,
                      sdma_cntl_before & ~SDMA_AUTO_CTXSW_ENABLE_MASK)
-        sdma_rb_before = mmio.read32(SDMA0_GFX_RB_CNTL_OFFSET)
         mmio.write32(SDMA0_GFX_RB_CNTL_OFFSET,
                      sdma_rb_before & ~SDMA_RB_ENABLE_MASK)
-        sdma_ib_before = mmio.read32(SDMA0_GFX_IB_CNTL_OFFSET)
         mmio.write32(SDMA0_GFX_IB_CNTL_OFFSET,
                      sdma_ib_before & ~SDMA_IB_ENABLE_MASK)
-        sdma_before = mmio.read32(SDMA0_F32_CNTL_OFFSET)
+        sdma_page_ib_written = sdma_page_ib_before & ~SDMA_IB_ENABLE_MASK
+        mmio.write32(SDMA0_PAGE_IB_CNTL_OFFSET, sdma_page_ib_written)
+        sdma_page_ib_after = mmio.read32(SDMA0_PAGE_IB_CNTL_OFFSET)
+        sdma_shutdown_trace.append({
+            'step': 'disable-page-ib', 'register': SDMA0_PAGE_IB_CNTL_OFFSET,
+            'before': sdma_page_ib_before, 'written': sdma_page_ib_written,
+            'readback': sdma_page_ib_after,
+        })
+        sdma_page_rb_written = sdma_page_rb_before & ~SDMA_RB_ENABLE_MASK
+        mmio.write32(SDMA0_PAGE_RB_CNTL_OFFSET, sdma_page_rb_written)
+        sdma_page_rb_after = mmio.read32(SDMA0_PAGE_RB_CNTL_OFFSET)
+        sdma_shutdown_trace.append({
+            'step': 'disable-page-rb', 'register': SDMA0_PAGE_RB_CNTL_OFFSET,
+            'before': sdma_page_rb_before, 'written': sdma_page_rb_written,
+            'readback': sdma_page_rb_after,
+        })
         mmio.write32(SDMA0_F32_CNTL_OFFSET, sdma_before | SDMA_HALT_MASK)
-        sdma_cntl_after = mmio.read32(SDMA0_CNTL_OFFSET)
-        sdma_rb_after = mmio.read32(SDMA0_GFX_RB_CNTL_OFFSET)
-        sdma_ib_after = mmio.read32(SDMA0_GFX_IB_CNTL_OFFSET)
-        sdma_after = mmio.read32(SDMA0_F32_CNTL_OFFSET)
+
+        sdma_cntl_after = read_sdma(SDMA0_CNTL_OFFSET, 'control')
+        sdma_rb_after = read_sdma(SDMA0_GFX_RB_CNTL_OFFSET, 'GFX RB control')
+        sdma_ib_after = read_sdma(SDMA0_GFX_IB_CNTL_OFFSET, 'GFX IB control')
+        sdma_after = read_sdma(SDMA0_F32_CNTL_OFFSET, 'F32 control')
+        sdma_status_after = read_sdma(SDMA0_STATUS_REG_OFFSET, 'status')
+        for row, rb_offset, ib_offset in zip(
+                sdma_rlc_inputs, SDMA0_RLC_RB_CNTL_OFFSETS,
+                SDMA0_RLC_IB_CNTL_OFFSETS):
+            index = row['index']
+            row['rb_after'] = read_sdma(rb_offset, f'RLC{index} RB control')
+            row['ib_after'] = read_sdma(ib_offset, f'RLC{index} IB control')
+        require_sdma_accessible(sdma_page_ib_after, 'PAGE IB control')
+        require_sdma_accessible(sdma_page_rb_after, 'PAGE RB control')
         if sdma_cntl_after & SDMA_AUTO_CTXSW_ENABLE_MASK:
             raise RecoveryError('SDMA0 context switching would not stop')
         if sdma_rb_after & SDMA_RB_ENABLE_MASK:
-            raise RecoveryError('SDMA0 ring buffer would not stop')
+            raise RecoveryError('SDMA0 GFX ring buffer would not stop')
         if sdma_ib_after & SDMA_IB_ENABLE_MASK:
-            raise RecoveryError('SDMA0 indirect buffer would not stop')
+            raise RecoveryError('SDMA0 GFX indirect buffer would not stop')
+        if sdma_page_ib_after & SDMA_IB_ENABLE_MASK:
+            raise RecoveryError('SDMA0 PAGE indirect buffer would not stop')
+        if sdma_page_rb_after & SDMA_RB_ENABLE_MASK:
+            raise RecoveryError('SDMA0 PAGE ring buffer would not stop')
         if sdma_after & SDMA_HALT_MASK != SDMA_HALT_MASK:
             raise RecoveryError('SDMA0 would not halt')
 
@@ -1427,6 +1568,14 @@ def quiesce_gc(mmio, sleep=time.sleep, polls=50, kiq_polls=None, prior_run_id=No
             'sdma0_rb_after': sdma_rb_after,
             'sdma0_ib_before': sdma_ib_before,
             'sdma0_ib_after': sdma_ib_after,
+            'sdma0_page_ib_before': sdma_page_ib_before,
+            'sdma0_page_ib_after': sdma_page_ib_after,
+            'sdma0_page_rb_before': sdma_page_rb_before,
+            'sdma0_page_rb_after': sdma_page_rb_after,
+            'sdma0_rlc_inputs': sdma_rlc_inputs,
+            'sdma0_status_before': sdma_status_before,
+            'sdma0_status_after': sdma_status_after,
+            'sdma0_shutdown_trace': sdma_shutdown_trace,
             'sdma0_before': sdma_before, 'sdma0_after': sdma_after,
             'active_after': active_after,
         }
@@ -1484,14 +1633,27 @@ def perform_recovery(expected_boot, prior_run_id, state_reader, transport_factor
                       gc_quiesce['doorbell_range_lower_after'] == 0 and
                       gc_quiesce['doorbell_range_upper_after'] == 0 and
                       gc_quiesce['sdma0_after'] & SDMA_HALT_MASK == SDMA_HALT_MASK and
+                      gc_quiesce['sdma0_status_after'] & SDMA_STATUS_IDLE_MASK ==
+                          SDMA_STATUS_IDLE_MASK and
                       not (gc_quiesce['sdma0_cntl_after'] & SDMA_AUTO_CTXSW_ENABLE_MASK) and
                       not (gc_quiesce['sdma0_rb_after'] & SDMA_RB_ENABLE_MASK) and
                       not (gc_quiesce['sdma0_ib_after'] & SDMA_IB_ENABLE_MASK) and
+                      gc_quiesce['sdma0_page_rb_after'] ==
+                          gc_quiesce['sdma0_page_rb_before'] & ~SDMA_RB_ENABLE_MASK and
+                      not (gc_quiesce['sdma0_page_rb_after'] & SDMA_RB_ENABLE_MASK) and
+                      gc_quiesce['sdma0_page_ib_after'] ==
+                          gc_quiesce['sdma0_page_ib_before'] & ~SDMA_IB_ENABLE_MASK and
+                      not (gc_quiesce['sdma0_page_ib_after'] & SDMA_IB_ENABLE_MASK) and
+                      all(row['rb_after'] == row['rb_before'] and
+                          row['ib_after'] == row['ib_before'] and
+                          not (row['rb_after'] & SDMA_RB_ENABLE_MASK) and
+                          not (row['ib_after'] & SDMA_IB_ENABLE_MASK)
+                          for row in gc_quiesce['sdma0_rlc_inputs']) and
                       gc_quiesce['gfx_ring_clean'] and
                       gc_quiesce['gfx_retirement_confirmed'] and
                       gc_quiesce['graphics_pipe_proof_complete'])
     return {
-        'schema': 5, 'status': 'recovered' if safe_for_reuse else 'incomplete',
+        'schema': 6, 'status': 'recovered' if safe_for_reuse else 'incomplete',
         'authorizes_launch': safe_for_reuse, 'boot_id': expected_boot,
         'prior_run_id': prior_run_id, 'device': DEVICE, 'iommu_group': GROUP,
         'driver': 'vfio-pci', 'pci_command_before': before['pci_command'],

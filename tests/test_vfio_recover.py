@@ -27,7 +27,10 @@ class FakeTransport:
         self.gfx_selector = 0
         self.pipe1_doorbell = 0
         self.pipe1_rb0_active = 0
-        self.registers = {tool.NBIO_CONFIG_MEMSIZE_OFFSET: tool.EXPECTED_CONFIG_MEMSIZE}
+        self.registers = {
+            tool.NBIO_CONFIG_MEMSIZE_OFFSET: tool.EXPECTED_CONFIG_MEMSIZE,
+            tool.SDMA0_STATUS_REG_OFFSET: tool.SDMA_STATUS_IDLE_MASK,
+        }
         self.vram = {}
         regions = {
             '0': {'index':0, 'size':0x10000000, 'offset':0 << 40,
@@ -81,6 +84,11 @@ class FakeTransport:
                 'posted_read':self.registers.get(
                     self.tool.NBIO_CONFIG_MEMSIZE_OFFSET, 0)}
 
+    def invalidate_hdp_read_cache(self):
+        self.events.append('hdp-read-invalidate')
+        return {'register': self.tool.HDP_READ_CACHE_INVALIDATE_OFFSET,
+                'trigger': 1, 'posted_read': 1}
+
     def metadata(self):
         return dict(self.region)
 
@@ -115,6 +123,18 @@ class VfioRecoveryTests(unittest.TestCase):
                          (tool.GC_SEG0 + 0x80) * 4)
         self.assertEqual(tool.SDMA0_GFX_IB_CNTL_OFFSET,
                          (tool.GC_SEG0 + 0x8A) * 4)
+        self.assertEqual(tool.SDMA0_STATUS_REG_OFFSET,
+                         (tool.GC_SEG0 + 0x25) * 4)
+        self.assertEqual(tool.SDMA0_PAGE_RB_CNTL_OFFSET,
+                         (tool.GC_SEG0 + 0xD8) * 4)
+        self.assertEqual(tool.SDMA0_PAGE_IB_CNTL_OFFSET,
+                         (tool.GC_SEG0 + 0xE2) * 4)
+        self.assertEqual(tool.SDMA0_RLC_RB_CNTL_OFFSETS,
+                         tuple((tool.GC_SEG0 + 0x130 + 0x58 * index) * 4
+                               for index in range(2)))
+        self.assertEqual(tool.SDMA0_RLC_IB_CNTL_OFFSETS,
+                         tuple((tool.GC_SEG0 + 0x13A + 0x58 * index) * 4
+                               for index in range(2)))
 
     def state(self, **changes):
         state = dict(boot_id='boot-A', active_vm=False, driver='vfio-pci',
@@ -191,6 +211,69 @@ class VfioRecoveryTests(unittest.TestCase):
         struct.pack_into('<I', transport.bar, tool.NBIO_CONFIG_MEMSIZE_OFFSET, 0x201)
         with self.assertRaisesRegex(tool.RecoveryError, 'CONFIG_MEMSIZE'):
             transport.flush_hdp()
+
+    def test_hdp_read_invalidate_uses_discovery_base_and_native_u32_access(self):
+        tool = self.tool
+        self.assertEqual(tool.HDP_SEG0, 0xf20)
+        self.assertEqual(tool.HDP_READ_CACHE_INVALIDATE_OFFSET,
+                         (0xf20 + 0xd1) * 4)
+        self.assertEqual(tool.HDP_READ_CACHE_INVALIDATE_OFFSET, 0x3fc4)
+
+        storage = bytearray(0x4000)
+        tool._store_mmio_u32(storage, tool.HDP_READ_CACHE_INVALIDATE_OFFSET, 1)
+        self.assertEqual(tool._load_mmio_u32(
+            storage, tool.HDP_READ_CACHE_INVALIDATE_OFFSET), 1)
+        with self.assertRaisesRegex(tool.RecoveryError, 'aligned'):
+            tool._store_mmio_u32(storage, 2, 1)
+        with self.assertRaisesRegex(tool.RecoveryError, 'aligned'):
+            tool._load_mmio_u32(storage, len(storage) - 2)
+
+    def test_hdp_read_invalidate_orders_native_store_posting_read_and_full_fence(self):
+        tool = self.tool
+        events = []
+        transport = tool.LegacyVfio(thread_fence=lambda:events.append('fence'))
+        transport.bar = bytearray(0x80000)
+
+        def store(buffer, offset, value):
+            events.append(('store', offset, value))
+            struct.pack_into('=I', buffer, offset, value)
+
+        def load(buffer, offset):
+            events.append(('load', offset))
+            return struct.unpack_from('=I', buffer, offset)[0]
+
+        with patch.object(tool, '_store_mmio_u32', side_effect=store), \
+             patch.object(tool, '_load_mmio_u32', side_effect=load):
+            proof = transport.invalidate_hdp_read_cache()
+        self.assertEqual(events, [
+            ('store', tool.HDP_READ_CACHE_INVALIDATE_OFFSET, 1),
+            ('load', tool.HDP_READ_CACHE_INVALIDATE_OFFSET),
+            'fence',
+        ])
+        self.assertEqual(proof, {
+            'register': tool.HDP_READ_CACHE_INVALIDATE_OFFSET,
+            'trigger': 1,
+            'posted_read': 1,
+        })
+
+    def test_hdp_read_invalidate_fails_closed_on_inaccessible_posting_read(self):
+        tool = self.tool
+        fenced = []
+        transport = tool.LegacyVfio(thread_fence=lambda:fenced.append(True))
+        transport.bar = bytearray(0x80000)
+        with patch.object(tool, '_load_mmio_u32', return_value=0xffffffff), \
+             self.assertRaisesRegex(tool.RecoveryError, 'inaccessible/all-ones'):
+            transport.invalidate_hdp_read_cache()
+        self.assertEqual(fenced, [])
+
+    def test_hdp_fence_dependency_is_resolved_before_vfio_device_open(self):
+        tool = self.tool
+        with patch.object(tool, '_resolve_thread_fence',
+                          side_effect=tool.RecoveryError('full fence unavailable')), \
+             patch.object(tool.os, 'open') as opened, \
+             self.assertRaisesRegex(tool.RecoveryError, 'full fence unavailable'):
+            tool.LegacyVfio().__enter__()
+        opened.assert_not_called()
 
     def test_vram_publication_uses_hdp_instead_of_msync(self):
         tool = self.tool
@@ -578,6 +661,14 @@ class VfioRecoveryTests(unittest.TestCase):
             'report': 0,
             'fence': 0,
         })
+        self.assertEqual(evidence['hdp_read_invalidate'], {
+            'count': 2,
+            'last': {
+                'register': tool.HDP_READ_CACHE_INVALIDATE_OFFSET,
+                'trigger': 1,
+                'posted_read': 1,
+            },
+        })
         self.assertIsInstance(evidence['fence_sequence'], int)
         self.assertNotEqual(evidence['fence_sequence'], 0)
         self.assertEqual(evidence['cleanup']['errors'], [])
@@ -831,6 +922,78 @@ class VfioRecoveryTests(unittest.TestCase):
         self.assertEqual(fake.registers[tool.CP_PQ_WPTR_POLL_CNTL_OFFSET] &
                          tool.CP_PQ_WPTR_POLL_ENABLE_MASK, 0)
 
+    def test_host_kiq_invalidates_stale_hdp_reads_before_completion_values(self):
+        tool = self.tool
+
+        class StaleHdpTransport(FakeTransport):
+            def __init__(self):
+                super().__init__(tool)
+                self.selector = 0
+                self.hqd_active = 0
+                self.gpu_values = {}
+                self.hdp_invalidated = False
+
+            def read32(self, offset):
+                if offset == tool.CP_HQD_ACTIVE_OFFSET:
+                    return self.hqd_active if self.selector == tool.HOST_KIQ_SELECTOR else 0
+                return super().read32(offset)
+
+            def write32(self, offset, value):
+                if offset == tool.GRBM_GFX_CNTL_OFFSET:
+                    self.selector = value
+                if (offset == tool.CP_HQD_ACTIVE_OFFSET and
+                        self.selector == tool.HOST_KIQ_SELECTOR):
+                    self.hqd_active = value & 1
+                if (offset == tool.CP_HQD_DEQUEUE_OFFSET and value == 1 and
+                        self.selector == tool.HOST_KIQ_SELECTOR):
+                    self.hqd_active = 0
+                super().write32(offset, value)
+
+            def ring_doorbell64(self, index, value):
+                self.events.append(('doorbell64', index, value))
+                sequence = self.read_vram32(
+                    tool.HOST_KIQ_RING_OFFSET +
+                    tool.HOST_KIQ_FENCE_SEQUENCE_DWORD * 4)
+                self.gpu_values[tool.HOST_KIQ_RPTR_OFFSET] = value
+                self.gpu_values[tool.HOST_KIQ_FENCE_OFFSET] = sequence
+                self.registers[tool.CP_HQD_PQ_RPTR_OFFSET] = value
+                self.registers[tool.CP_RB_ACTIVE_OFFSET] = 0
+
+            def invalidate_hdp_read_cache(self):
+                self.events.append('hdp-read-invalidate')
+                self.hdp_invalidated = True
+                return {'register': tool.HDP_READ_CACHE_INVALIDATE_OFFSET,
+                        'trigger': 1, 'posted_read': 1}
+
+            def read_vram32(self, offset):
+                if offset in (tool.HOST_KIQ_RPTR_OFFSET,
+                              tool.HOST_KIQ_FENCE_OFFSET):
+                    self.events.append(('read-gpu-vram', offset,
+                                        self.hdp_invalidated))
+                    if self.hdp_invalidated:
+                        return self.gpu_values.get(offset, 0)
+                return super().read_vram32(offset)
+
+        fake = StaleHdpTransport()
+        fake.registers.update({
+            tool.GCMC_VM_FB_LOCATION_BASE_OFFSET: 0xf400,
+            tool.GCMC_VM_FB_LOCATION_TOP_OFFSET: 0xf41f,
+            tool.CP_RB_DOORBELL_CONTROL_OFFSET: 0xc0000400,
+            tool.CP_MEC_CNTL_OFFSET: tool.CP_MEC_HALT_MASK,
+        })
+        result = tool.retire_legacy_gfx_with_host_kiq(
+            fake, RUN_ID, sleep=lambda _:None, polls=2)
+
+        self.assertEqual(result['status'], 'retired')
+        self.assertEqual(fake.events.count('hdp-read-invalidate'), 1)
+        invalidate = fake.events.index('hdp-read-invalidate')
+        report = fake.events.index(
+            ('read-gpu-vram', tool.HOST_KIQ_RPTR_OFFSET, True))
+        fence = fake.events.index(
+            ('read-gpu-vram', tool.HOST_KIQ_FENCE_OFFSET, True))
+        self.assertLess(invalidate, report)
+        self.assertLess(report, fence)
+
     def test_host_kiq_timeout_fails_closed_and_rehalts_mec(self):
         tool = self.tool
 
@@ -992,7 +1155,7 @@ class VfioRecoveryTests(unittest.TestCase):
             'experiment_host_kiq_integration', experiment_path)
         experiment = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(experiment)
-        self.assertEqual(experiment.validate_recovery_receipt(
+        self.assertEqual(experiment.validate_reuse_receipt(
             evidence, 'boot-A', RUN_ID), [])
 
     def test_clean_graphics_ring_does_not_build_or_ring_host_kiq(self):
@@ -1276,7 +1439,7 @@ class VfioRecoveryTests(unittest.TestCase):
         self.assertEqual(evidence['gc_quiesce']['status'], 'quiesced')
         self.assertEqual(evidence['gc_quiesce']['host_kiq'], {'status':'not-needed'})
         self.assertTrue(evidence['authorizes_launch'])
-        self.assertEqual(evidence['schema'], 5)
+        self.assertEqual(evidence['schema'], 6)
         self.assertEqual(evidence['reset_methods_before'], [])
         self.assertEqual(evidence['reset_methods_after'], [])
 
@@ -1335,6 +1498,184 @@ class VfioRecoveryTests(unittest.TestCase):
         self.assertEqual(result['gfx_rb_cntl_after'], 0)
         self.assertTrue(result['gfx_ring_clean'])
 
+    def test_sdma_page_inputs_stop_ib_then_rb_before_halt_and_rlc_is_observed(self):
+        tool = self.tool
+        fake = FakeTransport(tool)
+        fake.registers.update({
+            tool.SDMA0_CNTL_OFFSET: tool.SDMA_AUTO_CTXSW_ENABLE_MASK | 0x21,
+            tool.SDMA0_GFX_RB_CNTL_OFFSET: 0x80840021,
+            tool.SDMA0_GFX_IB_CNTL_OFFSET: 0x101,
+            tool.SDMA0_PAGE_RB_CNTL_OFFSET: 0x80840021,
+            tool.SDMA0_PAGE_IB_CNTL_OFFSET: 0x101,
+            tool.SDMA0_F32_CNTL_OFFSET: 0x20,
+        })
+        for index, (rb, ib) in enumerate(zip(
+                tool.SDMA0_RLC_RB_CNTL_OFFSETS,
+                tool.SDMA0_RLC_IB_CNTL_OFFSETS)):
+            fake.registers[rb] = 0x200 + index * 4
+            fake.registers[ib] = 0x100 + index * 4
+
+        result = tool.quiesce_gc(fake, sleep=lambda _:None, polls=2)
+
+        page_ib_write = ('write', tool.SDMA0_PAGE_IB_CNTL_OFFSET, 0x100)
+        page_rb_write = ('write', tool.SDMA0_PAGE_RB_CNTL_OFFSET, 0x80840020)
+        halt_write = ('write', tool.SDMA0_F32_CNTL_OFFSET, 0x21)
+        page_ib_store = fake.events.index(page_ib_write)
+        page_ib_readback = fake.events.index(
+            ('read', tool.SDMA0_PAGE_IB_CNTL_OFFSET), page_ib_store + 1)
+        page_rb_store = fake.events.index(page_rb_write)
+        page_rb_readback = fake.events.index(
+            ('read', tool.SDMA0_PAGE_RB_CNTL_OFFSET), page_rb_store + 1)
+        sdma_halt = fake.events.index(halt_write)
+        self.assertLess(page_ib_store, page_ib_readback)
+        self.assertLess(page_ib_readback, page_rb_store)
+        self.assertLess(page_rb_store, page_rb_readback)
+        self.assertLess(page_rb_readback, sdma_halt)
+        self.assertEqual(result['sdma0_shutdown_trace'], [
+            {'step': 'disable-page-ib',
+             'register': tool.SDMA0_PAGE_IB_CNTL_OFFSET,
+             'before': 0x101, 'written': 0x100, 'readback': 0x100},
+            {'step': 'disable-page-rb',
+             'register': tool.SDMA0_PAGE_RB_CNTL_OFFSET,
+             'before': 0x80840021, 'written': 0x80840020,
+             'readback': 0x80840020},
+        ])
+        self.assertEqual(result['sdma0_page_ib_before'], 0x101)
+        self.assertEqual(result['sdma0_page_ib_after'], 0x100)
+        self.assertEqual(result['sdma0_page_rb_before'], 0x80840021)
+        self.assertEqual(result['sdma0_page_rb_after'], 0x80840020)
+        self.assertEqual(result['sdma0_status_after'], tool.SDMA_STATUS_IDLE_MASK)
+        self.assertEqual(result['sdma0_rlc_inputs'], [
+            {'index': index,
+             'rb_before': 0x200 + index * 4,
+             'rb_after': 0x200 + index * 4,
+             'ib_before': 0x100 + index * 4,
+             'ib_after': 0x100 + index * 4}
+            for index in range(2)
+        ])
+        for offset in (*tool.SDMA0_RLC_RB_CNTL_OFFSETS,
+                       *tool.SDMA0_RLC_IB_CNTL_OFFSETS):
+            self.assertFalse(any(event[0] == 'write' and event[1] == offset
+                                 for event in fake.events if isinstance(event, tuple)))
+
+    def test_sdma_enabled_rlc_or_nonidle_status_cannot_authorize_schema6(self):
+        tool = self.tool
+        for label, offset, value in (
+                ('rlc-rb', tool.SDMA0_RLC_RB_CNTL_OFFSETS[0], 1),
+                ('rlc-ib', tool.SDMA0_RLC_IB_CNTL_OFFSETS[1], 1),
+                ('not-idle', tool.SDMA0_STATUS_REG_OFFSET, 0)):
+            with self.subTest(label=label):
+                fake = FakeTransport(tool)
+                fake.registers[offset] = value
+                states = iter([self.state(), self.state()])
+                evidence = tool.perform_recovery(
+                    'boot-A', RUN_ID, lambda:next(states), lambda:fake,
+                    lambda cursor=None:('cursor-2', [], []),
+                    sleep=lambda _:None, polls=2)
+                self.assertEqual(evidence['schema'], 6)
+                self.assertEqual(evidence['status'], 'incomplete')
+                self.assertFalse(evidence['authorizes_launch'])
+
+    def test_sdma_changed_page_or_rlc_bits_cannot_authorize_schema6(self):
+        tool = self.tool
+
+        class ChangedPageReadback(FakeTransport):
+            def write32(self, offset, value):
+                super().write32(offset, value)
+                if offset == tool.SDMA0_PAGE_IB_CNTL_OFFSET:
+                    self.registers[offset] = value ^ 0x4
+
+        class ChangedRlcObservation(FakeTransport):
+            def write32(self, offset, value):
+                super().write32(offset, value)
+                if offset == tool.SDMA0_F32_CNTL_OFFSET:
+                    self.registers[tool.SDMA0_RLC_RB_CNTL_OFFSETS[0]] = 0x4
+
+        for label, fake in (
+                ('page-preserved-bit', ChangedPageReadback(tool)),
+                ('rlc-observation', ChangedRlcObservation(tool))):
+            with self.subTest(label=label):
+                if label == 'page-preserved-bit':
+                    fake.registers[tool.SDMA0_PAGE_IB_CNTL_OFFSET] = 0x101
+                states = iter([self.state(), self.state()])
+                evidence = tool.perform_recovery(
+                    'boot-A', RUN_ID, lambda:next(states), lambda:fake,
+                    lambda cursor=None:('cursor-2', [], []),
+                    sleep=lambda _:None, polls=2)
+                self.assertEqual(evidence['schema'], 6)
+                self.assertEqual(evidence['status'], 'incomplete')
+                self.assertFalse(evidence['authorizes_launch'])
+
+    def test_sdma_all_ones_input_observation_fails_closed_before_writes(self):
+        tool = self.tool
+        for label, offset in (
+                ('control', tool.SDMA0_CNTL_OFFSET),
+                ('gfx-rb', tool.SDMA0_GFX_RB_CNTL_OFFSET),
+                ('gfx-ib', tool.SDMA0_GFX_IB_CNTL_OFFSET),
+                ('page-ib', tool.SDMA0_PAGE_IB_CNTL_OFFSET),
+                ('page-rb', tool.SDMA0_PAGE_RB_CNTL_OFFSET),
+                ('rlc-rb', tool.SDMA0_RLC_RB_CNTL_OFFSETS[0]),
+                ('rlc-ib', tool.SDMA0_RLC_IB_CNTL_OFFSETS[1]),
+                ('f32', tool.SDMA0_F32_CNTL_OFFSET),
+                ('status', tool.SDMA0_STATUS_REG_OFFSET)):
+            with self.subTest(label=label):
+                fake = FakeTransport(tool)
+                fake.registers[offset] = 0xffffffff
+                with self.assertRaisesRegex(tool.RecoveryError,
+                                            'SDMA0 .* inaccessible/all-ones'):
+                    tool.quiesce_gc(fake, sleep=lambda _:None, polls=2)
+                sdma_offsets = {
+                    tool.SDMA0_CNTL_OFFSET, tool.SDMA0_GFX_RB_CNTL_OFFSET,
+                    tool.SDMA0_GFX_IB_CNTL_OFFSET, tool.SDMA0_PAGE_IB_CNTL_OFFSET,
+                    tool.SDMA0_PAGE_RB_CNTL_OFFSET, tool.SDMA0_F32_CNTL_OFFSET,
+                }
+                self.assertFalse(any(event[0] == 'write' and event[1] in sdma_offsets
+                                     for event in fake.events
+                                     if isinstance(event, tuple)))
+
+    def test_sdma_ignored_page_input_disable_fails_after_halt(self):
+        tool = self.tool
+
+        class StickyPageTransport(FakeTransport):
+            def write32(self, offset, value):
+                if offset == tool.SDMA0_PAGE_IB_CNTL_OFFSET:
+                    self.events.append(('ignored-write', offset, value))
+                    return
+                super().write32(offset, value)
+
+        fake = StickyPageTransport(tool)
+        fake.registers[tool.SDMA0_PAGE_IB_CNTL_OFFSET] = 0x101
+        with self.assertRaisesRegex(tool.RecoveryError,
+                                    'PAGE indirect buffer would not stop'):
+            tool.quiesce_gc(fake, sleep=lambda _:None, polls=2)
+        self.assertIn(('ignored-write', tool.SDMA0_PAGE_IB_CNTL_OFFSET, 0x100),
+                      fake.events)
+        self.assertIn(('write', tool.SDMA0_F32_CNTL_OFFSET,
+                       tool.SDMA_HALT_MASK), fake.events)
+
+    def test_sdma_late_all_ones_readback_fails_after_halt(self):
+        tool = self.tool
+
+        class LateAllOnesTransport(FakeTransport):
+            def __init__(self):
+                super().__init__(tool)
+                self.page_reads = 0
+
+            def read32(self, offset):
+                if offset == tool.SDMA0_PAGE_RB_CNTL_OFFSET:
+                    self.page_reads += 1
+                    if self.page_reads == 2:
+                        self.events.append(('read', offset))
+                        return 0xffffffff
+                return super().read32(offset)
+
+        fake = LateAllOnesTransport()
+        with self.assertRaisesRegex(tool.RecoveryError,
+                                    'PAGE RB control is inaccessible/all-ones'):
+            tool.quiesce_gc(fake, sleep=lambda _:None, polls=2)
+        self.assertIn(('write', tool.SDMA0_F32_CNTL_OFFSET,
+                       tool.SDMA_HALT_MASK), fake.events)
+
     def test_nonzero_legacy_graphics_ring_cannot_authorize_reuse(self):
         tool = self.tool
 
@@ -1356,7 +1697,7 @@ class VfioRecoveryTests(unittest.TestCase):
         self.assertFalse(result['gc_quiesce']['gfx_ring_clean'])
         self.assertTrue(all(row['confirmed'] for row in result['commands']))
 
-    def test_pipe1_appearance_after_guard_makes_schema5_receipt_incomplete(self):
+    def test_pipe1_appearance_after_guard_makes_schema6_receipt_incomplete(self):
         tool = self.tool
 
         class AppearingPipe1(FakeTransport):
@@ -1377,7 +1718,7 @@ class VfioRecoveryTests(unittest.TestCase):
         result = tool.perform_recovery(
             'boot-A', RUN_ID, lambda:next(states), lambda:fake,
             lambda cursor=None:('cursor-2', [], []), sleep=lambda _:None, polls=2)
-        self.assertEqual(result['schema'], 5)
+        self.assertEqual(result['schema'], 6)
         self.assertEqual(result['status'], 'incomplete')
         self.assertFalse(result['authorizes_launch'])
         gc = result['gc_quiesce']
@@ -1508,7 +1849,7 @@ class VfioRecoveryTests(unittest.TestCase):
                 'experiment_receipt_integration', experiment_path)
             experiment = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(experiment)
-            self.assertEqual(experiment.validate_recovery_receipt(
+            self.assertEqual(experiment.validate_reuse_receipt(
                 receipt, 'boot-A', 'd'*32), [])
             with self.assertRaises(FileExistsError):
                 self.tool.write_once(path, receipt)

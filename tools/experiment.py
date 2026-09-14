@@ -720,7 +720,7 @@ def _graphics_final_clean(snapshot):
         'active','doorbell_control','wptr','wptr_hi','base','base_hi','cntl'))
 
 
-def _valid_host_kiq(value, reservation, gc):
+def _valid_host_kiq(value, reservation, gc, hqd_doorbell_values):
     if not isinstance(value, dict):
         return False
     expected_keys = {'status','selector','packet_dwords','rptr_after',
@@ -775,7 +775,8 @@ def _valid_host_kiq(value, reservation, gc):
             any(type(cleanup.get(key)) is not int for key in cleanup_keys)):
         return False
     if (cleanup['mec_cntl'] & 0x50000000 != 0x50000000 or
-            cleanup.get('hqd_active') != 0 or cleanup.get('hqd_doorbell') != 0 or
+            cleanup.get('hqd_active') != 0 or
+            cleanup.get('hqd_doorbell') not in hqd_doorbell_values or
             cleanup.get('hqd_rptr') != 0 or cleanup.get('hqd_wptr_lo') != 0 or
             cleanup.get('hqd_wptr_hi') != 0 or
             type(cleanup.get('pq_status')) is not int or cleanup['pq_status'] & 2 or
@@ -793,7 +794,8 @@ def _valid_host_kiq(value, reservation, gc):
                 for key, expected in expected_gate.items()))
 
 
-def validate_recovery_receipt(receipt, boot_id, prior_run_id):
+def _validate_recovery_receipt(receipt, boot_id, prior_run_id,
+                               hqd_doorbell_values):
     errors = []
     exact = {'schema':5, 'status':'recovered', 'authorizes_launch':True,
              'boot_id':boot_id,
@@ -866,7 +868,8 @@ def validate_recovery_receipt(receipt, boot_id, prior_run_id):
                 errors.append('recovery_receipt')
         host_kiq = gc.get('host_kiq')
         if gc.get('gfx_needs_unmap') is True:
-            if not _valid_host_kiq(host_kiq, reservation, gc):
+            if not _valid_host_kiq(host_kiq, reservation, gc,
+                                   hqd_doorbell_values):
                 errors.append('recovery_receipt')
         elif (gc.get('gfx_needs_unmap') is not False or
               host_kiq != {'status':'not-needed'}):
@@ -880,6 +883,91 @@ def validate_recovery_receipt(receipt, boot_id, prior_run_id):
                 ((row['response'] >> 16) & 0x7fff) != (row['command'] >> 16)
                 for row in commands)):
         errors.append('recovery_receipt')
+    return sorted(set(errors))
+
+
+def validate_recovery_receipt(receipt, boot_id, prior_run_id):
+    return _validate_recovery_receipt(
+        receipt, boot_id, prior_run_id, hqd_doorbell_values=(0,))
+
+
+def validate_recovery_receipt_v6(receipt, boot_id, prior_run_id):
+    """Validate the PAGE/RLC-complete normal-recovery receipt schema."""
+    if not isinstance(receipt, dict):
+        return ['recovery_receipt']
+    gc = receipt.get('gc_quiesce')
+    if not isinstance(gc, dict):
+        return ['recovery_receipt']
+
+    legacy = dict(receipt)
+    legacy['schema'] = 5
+    legacy_gc = dict(gc)
+    for key in ('sdma0_page_ib_before', 'sdma0_page_ib_after',
+                'sdma0_page_rb_before', 'sdma0_page_rb_after',
+                'sdma0_status_before', 'sdma0_status_after',
+                'sdma0_shutdown_trace', 'sdma0_rlc_inputs'):
+        legacy_gc.pop(key, None)
+    legacy['gc_quiesce'] = legacy_gc
+    errors = _validate_recovery_receipt(
+        legacy, boot_id, prior_run_id,
+        hqd_doorbell_values=(0, 0x80000000))
+    if receipt.get('schema') != 6:
+        errors.append('recovery_receipt')
+
+    # Every SDMA value used by the producer's shutdown decision must be a
+    # readable DWORD. In particular, all-ones must not satisfy HALT or IDLE.
+    def valid_sdma_dword(value):
+        return type(value) is int and 0 <= value < 0xffffffff
+
+    sdma_values = ('sdma0_before', 'sdma0_after',
+                   'sdma0_cntl_before', 'sdma0_cntl_after',
+                   'sdma0_rb_before', 'sdma0_rb_after',
+                   'sdma0_ib_before', 'sdma0_ib_after',
+                   'sdma0_page_ib_before', 'sdma0_page_ib_after',
+                   'sdma0_page_rb_before', 'sdma0_page_rb_after',
+                   'sdma0_status_before', 'sdma0_status_after')
+    if any(not valid_sdma_dword(gc.get(key)) for key in sdma_values):
+        errors.append('recovery_receipt')
+
+    page_registers = {'ib':0x4d08, 'rb':0x4ce0}
+    expected_trace = []
+    for kind in ('ib', 'rb'):
+        before = gc.get(f'sdma0_page_{kind}_before')
+        after = gc.get(f'sdma0_page_{kind}_after')
+        if (not valid_sdma_dword(before) or not valid_sdma_dword(after) or
+                after != before & ~1 or after & 1):
+            errors.append('recovery_receipt')
+        expected_trace.append({
+            'step':f'disable-page-{kind}',
+            'register':page_registers[kind],
+            'before':before,
+            'written':before & ~1 if type(before) is int else None,
+            'readback':after,
+        })
+    if gc.get('sdma0_shutdown_trace') != expected_trace:
+        errors.append('recovery_receipt')
+
+    status_after = gc.get('sdma0_status_after')
+    if not valid_sdma_dword(status_after) or status_after & 1 != 1:
+        errors.append('recovery_receipt')
+
+    rlc = gc.get('sdma0_rlc_inputs')
+    rlc_keys = {'index', 'rb_before', 'rb_after', 'ib_before', 'ib_after'}
+    if (not isinstance(rlc, list) or len(rlc) != 2 or
+            any(not isinstance(row, dict) or set(row) != rlc_keys
+                for row in rlc) or
+            [row.get('index') for row in rlc if isinstance(row, dict)] != [0, 1]):
+        errors.append('recovery_receipt')
+    else:
+        for row in rlc:
+            values = [row.get(key) for key in
+                      ('rb_before', 'rb_after', 'ib_before', 'ib_after')]
+            if (any(not valid_sdma_dword(value) for value in values) or
+                    row['rb_after'] != row['rb_before'] or
+                    row['ib_after'] != row['ib_before'] or
+                    row['rb_after'] & 1 or row['ib_after'] & 1):
+                errors.append('recovery_receipt')
+
     return sorted(set(errors))
 
 
@@ -907,6 +995,8 @@ def validate_reuse_receipt(receipt, boot_id, prior_run_id, vm=None):
             except OSError:
                 errors.append('startup_noqueue_receipt')
         return sorted(set(errors))
+    if isinstance(receipt, dict) and receipt.get('schema') == 6:
+        return validate_recovery_receipt_v6(receipt, boot_id, prior_run_id)
     return validate_recovery_receipt(receipt, boot_id, prior_run_id)
 
 
