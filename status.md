@@ -1625,3 +1625,25 @@ value our kext feeds the driver. Per the user's decision to fix this register/ha
 there is no such fix, and it stands as a known limitation. Everything else is correct: the
 composited desktop, Metal rendering and presentation, offscreen readback, all buffer copies and
 uploads, and CPU render-into-Managed-texture.
+
+## Boot-launch ledger extension for candidate 227 (2026-09-14)
+
+Candidate 227 with card `metal-075` (`rgpunotexxor=1`: clear enableTexturePipeBankXor
+bit 27 in AMDRadeonX6000MTLDriver via our Lilu build's new fileless shared-cache patch)
+is staged from `run/worktrees/candidate-227` and will run as launch 36 on boot
+`c369c74e`, after an SMU MODE2 reset (`run/mode2-reset-38.json`). This note authorises
+this one launch (ledger default of 3/boot already used by launches 33-35). Source commit
+`718590d`, expected commit `0a2d528`, card sha `940f98e7…`, identities sha `ffd89e29…`,
+Lilu bundle `headless-lilu-verified-e9915a03b736` (executable `e9915a03…`). The kernel
+`fillUBMSurfaceInfoInternal` route was ruled out first (two adversarial agents +
+candidate 220 `rgpuswlog=2` data): Metal's blit and synchronize are userspace compute
+shaders, so the fix must be the userspace driver constant. Success signal: main-process
+readback matrix 1280x1024 `private->managed-texture+sync` and `upload managed-texture->
+private` go from 1,310,720 to 0. See
+[findings/research/kernel-surfinfo-fix-investigation-20260914.md].
+
+BLOCKED before launch: the `rgpu-inhibit` container (a cycle.sh precondition) is no longer
+running and is not created by any tracked script; the `macos-sequoia` VM container also
+exited ~4 h ago. The cycle needs the inhibitor restarted before it will proceed. Staging
+was fully validated offline (card contract, Lilu bundle, identities, source digest) with
+no VM start and no ledger consumption.
