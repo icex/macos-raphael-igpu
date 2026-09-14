@@ -2710,6 +2710,25 @@ static void installDiagnostics(KernelPatcher &patcher, mach_vm_address_t base) {
         RLOG("route %s -> %s (org=0x%llx)", e.name, *e.org ? "ok" : "FAILED", *e.org);
         patcher.clearError();
     }
+    if (mmhubFixEnabled && __atomic_load_n(&raphaelTargetConfirmed, __ATOMIC_ACQUIRE)) {
+        // VM10.3 hardcodes MMHUB2.1 even though discovery reports Raphael2.3.
+        // The native2.3 table builder has the same void(vm*) ABI and fills only
+        // the MMHUB register/default slots. Select it at this one call site;
+        // leave all subsequent native allocation, GART setup and returns intact.
+        const uint8_t before[] = {0x4c,0x89,0xf7,0xe8,0x91,0x28,0x00,0x00};
+        const uint8_t after[]  = {0x4c,0x89,0xf7,0xe8,0x59,0x23,0x00,0x00};
+        const uint8_t targetGuard[] = {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,
+                                      0x41,0x55,0x41,0x54,0x53,0x50};
+        bool ready = false;
+        if (!memcmp(reinterpret_cast<const void *>(base + 0x33ec2), before, sizeof(before)) &&
+            !memcmp(reinterpret_cast<const void *>(base + 0x36223), targetGuard, sizeof(targetGuard))) {
+            KernelPatcher::LookupPatch lp {&kexts[KextHWLibs], before, after, sizeof(before), 1};
+            patcher.applyLookupPatch(&lp, reinterpret_cast<uint8_t *>(base + 0x33ec2), sizeof(before) + 1);
+            ready = !memcmp(reinterpret_cast<const void *>(base + 0x33ec2), after, sizeof(after));
+            patcher.clearError();
+        }
+        RLOG("MHG: native MMHUB2.3 initializer call=%u", ready);
+    }
     if (vcnStaticEnabled) {
         // Complete instructions from audited HWLibs24G830+868d4, before any route.
         const uint8_t queryGuard[] = {0x55,0x48,0x89,0xe5,0x41,0x56,0x53,0x48,0x83,0xec,0x10,0x31,0xc9};
