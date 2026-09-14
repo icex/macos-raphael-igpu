@@ -44,3 +44,11 @@ receipts only prove graphics/RLC reset. Linux boot-failure retry explicitly asse
 VCPU reset before release. Audit/reset that boot precondition in native sequence;
 do not assume a cold VCN or bypass firmware-ready failure. Source code and live
 state justify this narrower test, not a host reboot. Superseded status archived.
+
+## Candidate242 launch56 allowance
+
+One launch56 on boot c369c74e-96ff-4c21-ae85-80ccb269f7d2, fresh MODE2 via
+tools/cycle.py, max6000s, all abort/recovery guards. Test VCPU reset assertion at
+exact native static clock-enable before caches; actual bit28 readback required,
+then firmware-ready and H264 frames. Further encoders only if healthy; stop on
+first stall. Host928 tests/3skipped pass, build succeeds. Worktree242.
