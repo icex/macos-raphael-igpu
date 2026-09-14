@@ -243,6 +243,8 @@ static bool vmFaultDiagEnabled = false;
 static uint32_t vmRootFixMode = 0;
 static bool mmhubFixEnabled = false;
 static bool vcnFirmwareEnabled = false;
+static bool vcnApuEnabled = false;
+static bool vcnSharedSizeReady = false;
 #include "VcnFirmware.hpp"
 static mach_vm_address_t orgVcnReadFw = 0;
 static mach_vm_address_t orgVcnHwInit = 0;
@@ -697,6 +699,7 @@ static constexpr size_t kOffSdmaFindInstance = 0xa7312; // _IpiSdmaFindInstanceB
 static constexpr size_t kOffTtlSetDevCap = 0xaf02d;    // _ttlSetDeviceCapabilityEntry
 static constexpr size_t kOffVmPhysicalFb = 0x33370;   // _vm_10_1_get_uma_physical_fb_offset
 static constexpr size_t kOffGvmGetIpFn   = 0x19258;    // _gvm_get_ip_function
+static constexpr size_t kOffVcnSharedSize = 0x878f5; // HWLibs _engine_hw_init shared allocation sequence
 static constexpr size_t kOffVcnReadFw = 0x86648; // HWLibs _internal_cos_read_fw
 static constexpr size_t kOffVcnHwInit = 0x862ea; // HWLibs _vcn_hw_init
 static constexpr size_t kOffFwDirGet     = 0xb0c10;    // AMDFirmwareDirectory::getFirmware
@@ -2391,6 +2394,10 @@ static uint32_t wrapVcnReadFw(void *engine, void *input) {
 }
 
 static uint32_t wrapVcnHwInit(void *engine, void *input, void *output) {
+    if (vcnApuEnabled && !vcnSharedSizeReady) {
+        RLOG("VCNA: allocation guard failed; refusing native VCN HW initialization");
+        return 1;
+    }
     auto ctx = engine ? *reinterpret_cast<const uint8_t **>(
         static_cast<uint8_t *>(engine) + 16) : nullptr;
     if (ctx) RLOG("VCNF: HW init ip=%x flags=%x mode=%u fwPresent=%u fwBytes=%u fwVersion=%x",
@@ -2400,6 +2407,22 @@ static uint32_t wrapVcnHwInit(void *engine, void *input, void *output) {
         *reinterpret_cast<const uint32_t *>(ctx + 0x288),
         *reinterpret_cast<const uint32_t *>(ctx + 0x298));
     auto result = FunctionCast(wrapVcnHwInit, orgVcnHwInit)(engine, input, output);
+    if (!result && vcnApuEnabled && ctx) {
+        auto shared = *reinterpret_cast<uint8_t * const *>(ctx + 0x388);
+        auto size = *reinterpret_cast<const uint64_t *>(ctx + 0x368);
+        if (size != 0x60 || !shared ||
+            *reinterpret_cast<const uint32_t *>(ctx + 0x268) != 0x30001 ||
+            *reinterpret_cast<const uint32_t *>(ctx + 0x298) != 0x04121015) {
+            RLOG("VCNA: shared state mismatch; refusing initialization completion");
+            return 1;
+        }
+        // Linux VCN3.1.2: bit11 advertises SMU interface type at byte0x58.
+        // The enlarged allocation is still owned and released by the native driver.
+        shared[0x58] = 2;
+        *reinterpret_cast<uint32_t *>(shared) |= 1u << 11;
+        RLOG("VCNA: shared bytes=%llu flags=%x SMU-interface=%u",
+             size, *reinterpret_cast<const uint32_t *>(shared), shared[0x58]);
+    }
     RLOG("VCNF: native HW init returned %u", result);
     return result;
 }
@@ -2645,6 +2668,19 @@ static void installDiagnostics(KernelPatcher &patcher, mach_vm_address_t base) {
                 reinterpret_cast<mach_vm_address_t>(wrapVcnReadFw), true);
             patcher.clearError();
             RLOG("VCNF: guarded routes read=%u init=%u", orgVcnReadFw != 0, orgVcnHwInit != 0);
+            if (vcnApuEnabled && orgVcnReadFw && orgVcnHwInit) {
+                const uint8_t before[] = {0x49,0xc7,0x81,0x68,0x03,0x00,0x00,0x58,0x00,0x00,0x00,0x41,0xc7,0x81,0x80,0x03,0x00,0x00,0x02,0x00,0x00,0x00,0x49,0x8b,0x3e,0x4d,0x8d,0x81,0x78,0x03,0x00,0x00,0x49,0x81,0xc1,0x90,0x03,0x00,0x00,0xc7,0x04,0x24,0x00,0x00,0x00,0x00,0xbe,0x58,0x00,0x00,0x00};
+                const uint8_t after[] = {0x49,0xc7,0x81,0x68,0x03,0x00,0x00,0x60,0x00,0x00,0x00,0x41,0xc7,0x81,0x80,0x03,0x00,0x00,0x02,0x00,0x00,0x00,0x49,0x8b,0x3e,0x4d,0x8d,0x81,0x78,0x03,0x00,0x00,0x49,0x81,0xc1,0x90,0x03,0x00,0x00,0xc7,0x04,0x24,0x00,0x00,0x00,0x00,0xbe,0x60,0x00,0x00,0x00};
+                // One guarded range includes both native size arguments. The wrapper
+                // above refuses execution unless the complete replacement reads back.
+                if (!memcmp(reinterpret_cast<const void *>(base + kOffVcnSharedSize), before, sizeof(before))) {
+                    KernelPatcher::LookupPatch lp {&kexts[KextHWLibs], before, after, sizeof(before), 1};
+                    patcher.applyLookupPatch(&lp, reinterpret_cast<uint8_t *>(base + kOffVcnSharedSize), sizeof(before));
+                    vcnSharedSizeReady = !memcmp(reinterpret_cast<const void *>(base + kOffVcnSharedSize), after, sizeof(after));
+                    patcher.clearError();
+                }
+                RLOG("VCNA: guarded shared allocation extension=%u", vcnSharedSizeReady);
+            }
         } else RLOG("VCNF: prologue mismatch; firmware intervention refused");
     }
     orgFwDirGet = patcher.routeFunction(base + kOffFwDirGet,
@@ -8315,6 +8351,8 @@ static void pluginStart() {
          submissionTraceEnabled, submissionTraceEnabled ? "enabled" : "disabled");
     uint32_t vmFaultDiag = 0;
     uint32_t mmhubFix = 0;
+    uint32_t vcnApu = 0;
+    vcnApuEnabled = PE_parse_boot_argn("rgpuvcnapu", &vcnApu, sizeof(vcnApu)) && vcnApu == 1;
     uint32_t vcnFw = 0;
     vcnFirmwareEnabled = PE_parse_boot_argn("rgpuvcnfw", &vcnFw, sizeof(vcnFw)) && vcnFw == 1;
     mmhubFixEnabled = PE_parse_boot_argn("rgpummhub", &mmhubFix, sizeof(mmhubFix)) && mmhubFix == 1;
