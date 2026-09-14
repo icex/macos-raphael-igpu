@@ -965,6 +965,13 @@ def _probe_summary(manifest, probe):
     if isinstance(matrix, list):
         summary['readback_mismatches'] = [[r.get('width'), r.get('height'), r.get('path'), r.get('mismatches')]
                                           for r in matrix if isinstance(r, dict)]
+    patches = result.get('patch_children')
+    if isinstance(patches, list):
+        summary['patch_readback_mismatches'] = {
+            str(p.get('variant')): ([[r.get('width'), r.get('height'), r.get('path'), r.get('mismatches')]
+                                     for r in p.get('readback_matrix', []) if isinstance(r, dict)]
+                                    if isinstance(p.get('readback_matrix'), list) else p.get('error'))
+            for p in patches if isinstance(p, dict)}
     children = result.get('render_children')
     if isinstance(children, list):
         summary['binning_env_identity_mismatches'] = {

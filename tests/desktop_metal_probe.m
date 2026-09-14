@@ -19,6 +19,9 @@
 #import <ImageIO/ImageIO.h>
 #import <IOKit/IOKitLib.h>
 #include <dlfcn.h>
+#include <mach/mach.h>
+#include <mach/mach_vm.h>
+#include <mach-o/dyld.h>
 #include <math.h>
 #include <signal.h>
 #include <stdint.h>
@@ -721,6 +724,102 @@ static int renderChild(NSString *outputPath, unsigned long long expiry) {
     return 0;
 }
 
+// Settings experiments: AMDRadeonX6000MTLDriver computes its AMD_DeviceSettings defaults
+// with two immediate constants (24G830 shared cache, offsets from the image header):
+//   0x13a7e1  movabs $0x1ff700000,%rax    bits 20-22 and 24-32 (27 enableTexturePipeBankXor,
+//                                         29 enableBlitDMA)
+//   0x13a82b  movabs $0x1ee000000000,%rax bits 37-39 and 41-44 (36 linearSwizzleTextures is 0)
+// A child patches one immediate byte in its own copy of the driver before creating the
+// device, then reruns the readback matrix.
+static NSDictionary *patchDriverSettings(NSString *variant) {
+    static const char *const kDriver =
+        "/System/Library/Extensions/AMDRadeonX6000MTLDriver.bundle/Contents/MacOS/AMDRadeonX6000MTLDriver";
+    static const uint8_t kLowSettings[] = {0x48, 0xb8, 0x00, 0x00, 0x70, 0xff, 0x01, 0x00, 0x00, 0x00};
+    static const uint8_t kHighSettings[] = {0x48, 0xb8, 0x00, 0x00, 0x00, 0x00, 0xe0, 0x1e, 0x00, 0x00};
+    if (!dlopen(kDriver, RTLD_NOW | RTLD_GLOBAL)) return @{ @"error": @"dlopen" };
+    const struct mach_header *header = NULL;
+    for (uint32_t i = 0; i < _dyld_image_count(); ++i)
+        if (strcmp(_dyld_get_image_name(i), kDriver) == 0) header = _dyld_get_image_header(i);
+    if (!header) return @{ @"error": @"image not found" };
+    size_t offset = 0, byteIndex = 0;
+    const uint8_t *expected = NULL;
+    uint8_t (^change)(uint8_t) = nil;
+    if ([variant isEqualToString:@"pipebankxor0"]) {
+        offset = 0x13a7e1; expected = kLowSettings; byteIndex = 5;
+        change = ^uint8_t(uint8_t v) { return (uint8_t)(v & ~0x08); };
+    } else if ([variant isEqualToString:@"blitdma0"]) {
+        offset = 0x13a7e1; expected = kLowSettings; byteIndex = 5;
+        change = ^uint8_t(uint8_t v) { return (uint8_t)(v & ~0x20); };
+    } else if ([variant isEqualToString:@"linearswizzle1"]) {
+        offset = 0x13a82b; expected = kHighSettings; byteIndex = 6;
+        change = ^uint8_t(uint8_t v) { return (uint8_t)(v | 0x10); };
+    } else {
+        return @{ @"variant": variant, @"patched": @NO };
+    }
+    uint8_t *site = (uint8_t *)header + offset;
+    if (memcmp(site, expected, 10) != 0) return @{ @"error": @"site bytes differ" };
+    const uint8_t before = site[byteIndex], after = change(before);
+    const mach_vm_size_t page = (mach_vm_size_t)getpagesize();
+    const mach_vm_address_t base = (mach_vm_address_t)(site + byteIndex) & ~(page - 1);
+    kern_return_t unlock = mach_vm_protect(mach_task_self(), base, page, FALSE,
+                                           VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
+    if (unlock != KERN_SUCCESS) return @{ @"error": @"protect", @"kr": @(unlock) };
+    site[byteIndex] = after;
+    kern_return_t relock = mach_vm_protect(mach_task_self(), base, page, FALSE,
+                                           VM_PROT_READ | VM_PROT_EXECUTE);
+    return @{ @"variant": variant, @"patched": @(site[byteIndex] == after), @"before": @(before),
+              @"after": @(after), @"relock_kr": @(relock) };
+}
+
+static int patchChild(NSString *variant, NSString *outputPath, unsigned long long expiry) {
+    NSMutableDictionary *result = [@{ @"variant": variant } mutableCopy];
+    signal(SIGALRM, deadline);
+    alarm(7);
+    if ((unsigned long long)time(NULL) <= expiry) {
+        result[@"patch"] = patchDriverSettings(variant);
+        id<MTLDevice> device = MTLCreateSystemDefaultDevice();
+        NSMutableDictionary *errors = [NSMutableDictionary dictionary];
+        id<MTLLibrary> identity = device ? compileLibrary(device, kIdentitySource, @"identity", errors) : nil;
+        id<MTLCommandQueue> queue = [device newCommandQueue];
+        result[@"shader_errors"] = errors;
+        if (queue && identity) {
+            NSMutableArray *rows = [NSMutableArray array];
+            [rows addObjectsFromArray:readbackMatrix(device, identity, queue, 64, 64,
+                                                     MTLClearColorMake(0.25, 0.25, 0.25, 0.25))];
+            [rows addObjectsFromArray:readbackMatrix(device, identity, queue, 1280, 1024,
+                                                     MTLClearColorMake(0, 0, 0, 0))];
+            result[@"readback_matrix"] = rows;
+        } else {
+            result[@"error"] = @"device, library or queue";
+        }
+    } else {
+        result[@"error"] = @"expired";
+    }
+    NSData *data = [NSJSONSerialization dataWithJSONObject:result options:0 error:nil];
+    [data writeToFile:outputPath atomically:NO];
+    return 0;
+}
+
+static NSDictionary *patchChildRun(const char *selfPath, unsigned long long expiry, NSString *variant) {
+    NSString *output = [NSString stringWithFormat:@"/var/tmp/rgpu-patch-%d-%@.json", getpid(), variant];
+    [[NSFileManager defaultManager] removeItemAtPath:output error:nil];
+    NSTask *task = [[NSTask alloc] init];
+    task.launchPath = @(selfPath);
+    task.arguments = @[ @"--patch-child", variant, output, [NSString stringWithFormat:@"%llu", expiry] ];
+    task.standardOutput = [NSFileHandle fileHandleWithNullDevice];
+    task.standardError = [NSFileHandle fileHandleWithNullDevice];
+    @try { [task launch]; }
+    @catch (NSException *exception) { return @{ @"variant": variant, @"error": @"launch-failed" }; }
+    double start = CACurrentMediaTime();
+    while (task.isRunning && CACurrentMediaTime() - start < 7.5) usleep(50000);
+    if (task.isRunning) { [task terminate]; return @{ @"variant": variant, @"error": @"timeout" }; }
+    NSData *data = [NSData dataWithContentsOfFile:output];
+    [[NSFileManager defaultManager] removeItemAtPath:output error:nil];
+    id parsed = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+    return parsed ?: @{ @"variant": variant, @"error": @"no report", @"status": @(task.terminationStatus),
+                        @"reason": @(task.terminationReason) };
+}
+
 // Child mode, run in the console user's session: a borderless window whose
 // CAMetalLayer shows the test pattern for four seconds. Writes a JSON report.
 static int windowChild(NSString *outputPath, unsigned long long expiry) {
@@ -1039,11 +1138,13 @@ int main(int argc, const char *argv[]) {
             return windowChild(@(argv[2]), strtoull(argv[3], NULL, 10));
         if (argc == 4 && strcmp(argv[1], "--render-child") == 0)
             return renderChild(@(argv[2]), strtoull(argv[3], NULL, 10));
+        if (argc == 5 && strcmp(argv[1], "--patch-child") == 0)
+            return patchChild(@(argv[2]), @(argv[3]), strtoull(argv[4], NULL, 10));
         signal(SIGALRM, deadline);
         alarm(45);
         report = [@{ @"run_id": argc > 1 ? @(argv[1]) : @"manual", @"passed": @NO,
                      @"completed_command_buffers": @0, @"values_checked": @0,
-                     @"probe_version": @6 } mutableCopy];
+                     @"probe_version": @7 } mutableCopy];
         char *end = NULL;
         unsigned long long expiry = argc == 3 ? strtoull(argv[2], &end, 10) : 0;
         if (argc != 3 || end == NULL || *end != '\0' || (unsigned long long)time(NULL) > expiry)
@@ -1129,13 +1230,16 @@ int main(int argc, const char *argv[]) {
         id<MTLLibrary> library = compileLibrary(device, kShaderSource, @"render", shaderErrors);
         id<MTLLibrary> identityLibrary = compileLibrary(device, kIdentitySource, @"identity", shaderErrors);
         if (library) report[@"offscreen"] = offscreenThroughput(device, library, queue);
-        report[@"identity"] = identityMatrix(device, identityLibrary, queue, YES);
+
         NSMutableArray *readback = [NSMutableArray array];
         [readback addObjectsFromArray:readbackMatrix(device, identityLibrary, queue, 64, 64,
                                                      MTLClearColorMake(0.25, 0.25, 0.25, 0.25))];
         [readback addObjectsFromArray:readbackMatrix(device, identityLibrary, queue, 1280, 1024,
                                                      MTLClearColorMake(0, 0, 0, 0))];
         report[@"readback_matrix"] = readback;
+        report[@"patch_children"] = @[ patchChildRun(argv[0], expiry, @"pipebankxor0"),
+                                       patchChildRun(argv[0], expiry, @"blitdma0"),
+                                       patchChildRun(argv[0], expiry, @"linearswizzle1") ];
 
         NSMutableArray *jpegs = [NSMutableArray array];
         if (displayCount > 0) {
