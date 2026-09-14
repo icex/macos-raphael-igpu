@@ -57,11 +57,15 @@ on-disk Apple binary is modified and no security setting is changed.
    and instruction bytes. After an OS update it safely **skips**, and the managed-texture defect
    silently returns. Making the locator structural is ROADMAP item 2; a validated read-only
    prototype exists in `findings/research/update-resilience-20260914/`.
-2. **8×8-pixel block artifacts over translucent regions, seen through a remote-desktop session,
-   are not diagnosed.** A GPU defect (256-byte micro-tile) and a codec artifact (JPEG DCT block)
-   are not yet distinguished, because every image so far is a host screenshot of a VNC client.
-   A pipeBankXor displacement is ruled out. The discriminating test is a lossless in-guest
-   capture — ROADMAP item 1.
+2. **8×8 shards over translucent regions — strong evidence it is a lossy remote-desktop
+   transport, not a GPU defect (2026-09-14).** The lossless in-guest `screencapture` of the
+   desktop is clean where the remote view shows shards (translucent Safari start page, Privacy
+   card, menu bar); the shards sit at a 2/5 sub-tile offset over gradients only — a codec
+   signature. Seen over both NoMachine and VNC, which are both lossy by default, so both are
+   expected. **Not fully closed:** the clean capture is a different frame/resolution than the
+   corrupted ones. The confirming test is one artifacted frame grabbed simultaneously via
+   forced-raw (lossless) VNC and in-guest capture; if raw-VNC is clean, transport is proven.
+   Evidence: `findings/research/desktop-corruption-diagnosed-20260914/`.
 3. **Display output is virtual only.** Apple's framebuffer carries no DCN 3.1.5 code, so there is
    no physical HDMI/DP scanout — ROADMAP item 3.
 4. **Root-display presentation mismatch.** The headless root-display capture still differs from

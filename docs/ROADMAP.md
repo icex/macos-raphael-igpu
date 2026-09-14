@@ -20,38 +20,47 @@ path that can be watched and a repeatable lifecycle, while never endangering the
 | Visible display output | **virtual only** — no DCN 3.1.5 in Apple's framebuffer |
 | Remote-session rendering artifacts | **undiagnosed** |
 | Game / performance qualification | not started |
+| Remote-session "corruption" | **strong evidence: a lossy remote-transport artifact, not a GPU defect — one confirming test left** |
 
-## 1. Diagnose the 8×8 block artifacts seen over remote desktop
+## 1. Diagnose the 8×8 block artifacts seen over remote desktop — near-closed (2026-09-14)
 
-Sparse 8×8-pixel blocks appear over translucent/vibrancy regions (Finder sidebar, Safari start
-page, menu bar); opaque window interiors and bare wallpaper are clean.
+**Strong evidence that the artifacts are a lossy remote-desktop transport artifact, not a GPU or
+compositor defect.** The discriminating test in the plan below ran and came back negative for a
+GPU cause; one confound remains before it is fully closed.
 
-The mechanism is **not** settled, and two candidates are still live:
+Sparse thin green shards appeared over translucent/vibrancy regions (Finder sidebar, Safari start
+page, menu bar) in a screenshot of the remote client window on the Linux host; opaque interiors
+and bare wallpaper were clean. A **lossless in-guest `screencapture`** of the same desktop — same
+Safari start page, same Favorites row, same translucent Privacy Report card and menu bar — is
+**clean**: the only green regions are legitimate UI (Dock icons, the TripAdvisor tile, a menu-bar
+icon), and every translucent region is smooth. The shards also sit at a 2/5 sub-tile offset (not
+the origin-aligned GFX10 micro-tile grid) and only over dithered translucency — a lossy codec
+signature, never a GPU tiling one. pipeBankXor and DCC/fast-clear are excluded for the desktop.
 
-- **A GPU/compositor defect** — 8×8 at 32 bpp is exactly one 256-byte GFX10 micro-tile, which
-  would point at DCC/fast-clear metadata or a producer/consumer tiling disagreement on a
-  screen-sized surface.
-- **A remote-desktop codec artifact** — 8×8 is also the JPEG DCT block size, and every image we
-  have is a host screenshot of a VNC/NoMachine client.
+The user reports the same shards over **VNC** as well as NoMachine. That is consistent: Apple
+Screen Sharing and NoMachine are both lossy by default, so both smear these gradient regions. A
+lossy *transport*, not a specific product, is the cause.
 
-Ruled out already: a pipeBankXor displacement. With the kernel's chosen swizzle mode, pbx is
-XORed *inside* a 64 KB block (128×128 px at 32 bpp), so it can displace by at most 128 px and
-would permute *every* tile densely — the observed artifacts are sparse with content from far
-away. The kernel additionally never computes pbx at all (no call sites to
-`Addr2ComputePipeBankXor`), and `getIOSurfaceInfo` exports no pbx field.
+Evidence and quantified comparison: `findings/research/desktop-corruption-diagnosed-20260914/`
+(`in-guest-lossless-clean-1280x1024.png` vs `remote-nomachine-client-corrupted-1944x1121.png`,
+side-by-side in `remote-vs-inguest-comparison.png`).
 
-**Discriminating test, in order:**
+**Remaining to fully close it** — two confounds: (a) the clean capture is a different frame and
+resolution (1280×1024) than the corrupted ones (~1920 wide, a Displays pane was in use between
+them), and the shards are sparse/possibly intermittent, so a clean snapshot is not proof a
+*simultaneously* corrupted frame was clean in the framebuffer; (b) the user's VNC path is assumed
+lossy but unconfirmed. **The confirming test:** on the next GPU desktop session, grab one
+artifacted frame two ways at once — a **forced-lossless / raw-encoding VNC** capture (`vncviewer
+-PreferredEncoding=Raw -AutoSelect=0 -FullColour`, or `-QualityLevel 9 -CompressLevel 0`) and an
+**in-guest `screencapture`** of the same moment. Raw-VNC clean while the lossy view shows shards ⇒
+transport, proven. Raw-VNC still showing shards ⇒ framebuffer implicated, reopen as a GPU
+question. `tools/vnc-frame-capture.py` is the scripted path — force raw encoding on it first. The
+deeper poison-pattern DCC/tiling probe (`findings/research/desktop-corruption-diagnosed-20260914/
+dcc_wedge_probe.m`) is kept for that reopen case.
 
-1. A **lossless in-guest capture** (`screencapture -x` from a GUI session, which is the only way
-   to get the Screen Recording grant — SSH-launched processes never receive the prompt). If the
-   blocks are absent, it is the transport and this item closes.
-2. If present, a Metal probe that fills a screen-sized private render target with a poison
-   pattern, releases it, re-allocates, draws known content, and consumes it via blit / sample /
-   `optimizeContentsForCPUAccess` with `allowGPUOptimizedContents` YES vs NO. Blocks matching the
-   poison ⇒ DCC/fast-clear; blocks matching same-surface content at a bounded offset ⇒ tiling.
-
-`tools/vnc-frame-capture.py` and `tools/qemu-frame-capture.py` (restored from
-`archive/desktop-195`) give a scripted capture path.
+Consequence (pending the confirming test): **very likely no GPU fix is needed.** To watch the
+desktop without artifacts, use a lossless transport (raw-encoding VNC, or max NoMachine quality)
+or wire the AMD scanout to a presentable surface (item 3), which removes the codec from the path.
 
 ## 2. Make the Metal patch survive macOS updates
 
