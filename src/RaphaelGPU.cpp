@@ -3930,6 +3930,36 @@ static constexpr uint32_t kSdmaGbAddrConfigRead = kGcSeg0 + 0x001f;
 static constexpr uint32_t kGbAddrConfigFields   = 0x0c1807ff;
 static uint32_t sdmaAddrConfigMode = 0;
 
+// rgputilelog=1: read-only sweep of every tiling-configuration register, to confirm none
+// still holds a Navi23 value (like SDMA0_GB_ADDR_CONFIG's 0x444 did) once the copy path
+// mishandles a texture. The remaining defect is texture-to-texture copies into a Managed
+// texture: a per-surface pipe-bank-xor difference the copy does not apply. If every
+// register below reads Raphael's value at probe time, the mismatch is driver-internal.
+static constexpr uint32_t kGcGbBackendMap        = kGcSeg0 + 0x13df;  // GB_BACKEND_MAP
+static constexpr uint32_t kGcCcRbBackendDisable  = kGcSeg0 + 0x13dd;  // CC_RB_BACKEND_DISABLE
+static constexpr uint32_t kGcGbGpuId             = kGcSeg0 + 0x13e0;  // GB_GPU_ID
+static constexpr uint32_t kGcGbEdcMode           = kGcSeg0 + 0x1e1e;  // GB_EDC_MODE
+static constexpr uint32_t kGcRmiXbarConfig       = kGcSeg0 + 0x1527;  // RMI_XBAR_CONFIG
+static constexpr uint32_t kGcRmiUtcUnitConfig    = kGcSeg0 + 0x152d;  // RMI_UTC_UNIT_CONFIG
+static constexpr uint32_t kGcSpiConfigCntl       = kGcSeg0 + 0x11ec;  // SPI_CONFIG_CNTL
+static constexpr uint32_t kGcPaScTileSteering    = kGcSeg1 + 0x00d7;  // PA_SC_TILE_STEERING_OVERRIDE
+static uint32_t tileLogMode = 0;
+static uint32_t tileLogCount = 0;
+
+static void logTilingRegisters(const char *when) {
+    if (tileLogMode == 0 || asicInfo == nullptr) return;
+    if (__atomic_fetch_add(&tileLogCount, 1u, __ATOMIC_RELAXED) >= 40) return;
+    RLOG("XT: tiling at %s: GB_ADDR_CONFIG=%#x READ=%#x BACKEND_MAP=%#x RB_BACKEND_DISABLE=%#x "
+         "GB_GPU_ID=%#x EDC_MODE=%#x SDMA0=%#x/%#x RMI_XBAR=%#x RMI_UTC=%#x SPI_CFG=%#x "
+         "TILE_STEER=%#x", when, fbRead(asicInfo, kGcGbAddrConfig),
+         fbRead(asicInfo, kGcSeg0 + 0x13e2), fbRead(asicInfo, kGcGbBackendMap),
+         fbRead(asicInfo, kGcCcRbBackendDisable), fbRead(asicInfo, kGcGbGpuId),
+         fbRead(asicInfo, kGcGbEdcMode), fbRead(asicInfo, kSdmaGbAddrConfig),
+         fbRead(asicInfo, kSdmaGbAddrConfigRead), fbRead(asicInfo, kGcRmiXbarConfig),
+         fbRead(asicInfo, kGcRmiUtcUnitConfig), fbRead(asicInfo, kGcSpiConfigCntl),
+         fbRead(asicInfo, kGcPaScTileSteering));
+}
+
 static void applySdmaAddrConfig(const char *when, bool quiet) {
     if (sdmaAddrConfigMode == 0 || asicInfo == nullptr) return;
     const uint32_t config = fbRead(asicInfo, kGcGbAddrConfig);
@@ -6303,6 +6333,7 @@ static void sampleGfxProgress(uint32_t sample, uint32_t &lastWptr, uint32_t &adv
          fbRead(asicInfo, kGcGrbmStatus), fbRead(asicInfo, kGcCpStalled2), advances, drained);
     lastWptr = wptr;
     applySdmaAddrConfig("gfx progress", sample != 0);
+    logTilingRegisters("gfx progress");
 }
 
 // rgpusdmacfg=2 watchdog: something after accelerator power-up rewrites the SDMA pair to
@@ -6326,6 +6357,7 @@ static void sdmaWatchdogThread(void *, wait_result_t) {
                      fbRead(asicInfo, kGcRlcPgCntl), fbRead(asicInfo, kGcCpStat),
                      fbRead(asicInfo, kGcGrbmStatus), fbRead(asicInfo, kSdmaStatus0));
             applySdmaAddrConfig("SDMA watchdog", corrections > 16);
+            logTilingRegisters("SDMA watchdog");
         }
         if (polls < 12000) { IOSleep(50); ++polls; }
         else { IOSleep(1000); polls += 20; }
@@ -8008,6 +8040,9 @@ static void pluginStart() {
     sdmaAddrConfigMode = PE_parse_boot_argn("rgpusdmacfg", &sdmaCfg, sizeof(sdmaCfg)) && sdmaCfg <= 2
         ? sdmaCfg : 0;
     RLOG("XG: rgpusdmacfg=%u", sdmaAddrConfigMode);
+    uint32_t tileLog = 0;
+    tileLogMode = PE_parse_boot_argn("rgputilelog", &tileLog, sizeof(tileLog)) && tileLog <= 1 ? tileLog : 0;
+    RLOG("XT: rgputilelog=%u", tileLogMode);
     uint32_t gbRead = 0;
     gbReadMode = PE_parse_boot_argn("rgpugbread", &gbRead, sizeof(gbRead)) && gbRead <= 2 ? gbRead : 0;
     RLOG("XG: rgpugbread=%u", gbReadMode);

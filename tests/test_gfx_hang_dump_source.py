@@ -75,6 +75,15 @@ class GfxHangDumpSourceTests(unittest.TestCase):
         self.assertIn('applySdmaAddrConfig("SDMA watchdog", corrections > 16);', watchdog)
         self.assertIn('if (sdmaAddrConfigMode == 2) {\n        if (kernel_thread_start(sdmaWatchdogThread', self.source)
 
+    def test_tiling_register_sweep_is_read_only_and_gated(self):
+        self.assertIn('static uint32_t tileLogMode = 0;', self.source)
+        self.assertIn('PE_parse_boot_argn("rgputilelog", &tileLog, sizeof(tileLog)) && tileLog <= 1', self.source)
+        body = self.body('static void logTilingRegisters(', 'static void applySdmaAddrConfig(')
+        self.assertIn('if (tileLogMode == 0 || asicInfo == nullptr) return;', body)
+        self.assertNotIn('fbWrite', body)
+        self.assertIn('logTilingRegisters("gfx progress");', self.source)
+        self.assertIn('logTilingRegisters("SDMA watchdog");', self.source)
+
     def test_boot_argument_defaults_off_and_gates_thread(self):
         self.assertIn('static uint32_t hangDumpMode = 0;', self.source)
         self.assertIn('PE_parse_boot_argn("rgpuhangdump", &hangDump, sizeof(hangDump))',
