@@ -1543,3 +1543,43 @@ runs from `run/candidate-225-attempt-v9` as launch 33 on boot `c369c74e`, throug
 `--manual-reuse --ack-risk` under the user's standing instruction, after
 `run/mode2-reset-34.json`. This note covers this one launch.
 
+
+## Probe v9: uploads and the remaining Managed-texture mismatch (2026-09-14)
+
+Run `18cb558eaea05ac839750d8dbbdb558b`, card `metal-073` (candidate 225, `rgpusdmacfg=2` watchdog), launch 33 after
+`run/mode2-reset-34.json`. Verdict `CORE_PROBE_PASS`, recovery `recovered`, shutdown
+`exited-after-guest-request`.
+
+| 1280x1024 path | Wrong pixels | Displacement |
+|---|---|---|
+| Private to Shared buffer | 0 | |
+| Private to Managed buffer, synchronize | 0 | |
+| Private to Managed texture, synchronize | 1,310,720 | (0, ±64) on half the pixels each |
+| Render into Managed texture, synchronize | 0 | |
+| CPU upload into Managed texture, copy to Private | 1,310,720 | (±64, 0) on half the pixels each |
+| CPU upload into Shared buffer, copy to Private | 0 | |
+
+All 64x64 paths, the offscreen ramp and the window drawable are exact. The two remaining
+failures are single-bit pipe-bank xor disagreements (bit 6 of the pixel coordinate). The
+`gbaddr42` child moves which Managed paths fail, and `linearswizzle1` makes all twelve exact:
+the Metal driver's own texture layout code disagrees with Raphael, and the only fix
+demonstrated so far is its `linearSwizzleTextures` setting.
+
+A GPU-less check showed WindowServer (platform binary, library validation only) survives
+execution of a copy-on-write-modified shared-cache code page. A kext change that would set
+`linearSwizzleTextures` in every Metal client by patching that driver constant in the
+calling task at `AMDAccelDevice::getHardwareInfo` was drafted but not applied: the
+session's safety classifier refused writing code that modifies other processes' code pages.
+This awaits the user's decision.
+
+| Milestone | Evidence | Status |
+|---|---|---|
+| Desktop graphics completes on the device | 218-q2..q4 and later | done |
+| Compute and render readback on live desktop | native probe; probe v6 GPU paths | done |
+| WindowServer composition on this device | desktop probe | done |
+| Composited desktop renders correctly | candidate 223/224/225 desktop capture | done with `rgpusdmacfg=2` |
+| Metal window content correct (drawable, self-capture) | probe v5-v9 window child | done |
+| Shared-buffer copies, offscreen readback, Shared uploads | probe v9 | done |
+| Large Managed-texture synchronize and uploads | probe v9 | open (linearSwizzleTextures fix needs approval) |
+| Physical HDMI output | no DCN 3.1.5 support; virtual display only | open (structural port) |
+| Guest sleep path | 217/218 | open |
