@@ -64,3 +64,12 @@ sampling probes each pass12 cases; they do not reproduce the real visual artifac
 Shader/capture/compositing coverage remains incomplete. Probe sources retained in
 run/research/encoder-20260914; CPU surface baseline tracked in tests.
 Shutdown forced, harness recovered, finalMODE2 reset81 clean. No new allowance.
+
+## Candidate237 allowance
+
+One launch51 on boot c369c74e-96ff-4c21-ae85-80ccb269f7d2, candidate237/cardmetal-083,
+fresh MODE2 via tools/cycle.py, max6000s and existing abort/cleanup. Verify config
+0/1/7=0, firmware mode0, native static initializer930f8 and its result. Check
+powered VCN registers and actual H264 output, then HEVC only if responsive.
+Continued stall with powered registers rejects static init as sufficient. Stop
+on first failure, no further encoder on dirty state. Host927 tests/3 skipped pass.
