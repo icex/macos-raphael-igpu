@@ -131,6 +131,21 @@ synthesis. Expected friction: PCI passthrough support, OVMF equivalence, and the
 
 ## 5. Production build without diagnostics
 
+**Measured and confirmed on hardware (2026-09-14): the diagnostics make an interactive desktop
+unusable, not merely noisy.** On a live desktop the kext emitted **~500 serial lines/second**
+(3009 lines in 6 s). `debug=0x108` routes every `RLOG`/`SYSLOG` through `kprintf` to the emulated
+16550 UART synchronously, so the kernel blocks on serial writes; on top of that
+`wrapKiqSubmit` calls `kickKiq()` on every KIQ submit, which costs 8x`IODelay(500)` = 4 ms plus
+~18 log lines each. The guest wedged: its command agent stopped answering and WindowServer's
+display pipe stalled. Dropping `debug=0x108` and the dump flags (`rgpudump`, `rgpugolden`,
+`rgpuhangdump`, `rgpuvmdiag`, `rgpusubmit`) while keeping every functional flag took serial to
+**0 lines/6 s** and the guest booted responsive. The probe harness never saw this because it is a
+short bounded workload.
+
+Note a trap for the gating work: `kickKiq()` is gated on `mask & XK`, but `XK` is *functional*
+("start the RLC microcontroller before the engines power up"), so the diagnostic cannot be
+disabled by clearing that bit — it needs its own flag.
+
 The kext currently carries extensive tracing (`rgpudump`, `rgpuhangdump`, `rgputilelog`,
 `rgpuvmdiag`, submission tracing, replay). Gate all of it behind a build flag so a production
 build contains only the corrections, reducing size, risk and serial noise.
