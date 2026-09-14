@@ -1417,3 +1417,32 @@ The same 1.0.222 binary and card `metal-069` run again from
 `--manual-reuse --ack-risk` under the user's standing instruction, after a fresh
 `run/mode2-reset-30.json` whose probe and reset receipts must show `CP_STAT=0` and
 `RLC_CNTL=0`. This note covers this one launch.
+
+## Candidate 222 retry: hwinfo[0xa4] and the user-space address library are not the reader (2026-09-14)
+
+Run `2e652a24d3f26484d9e1b38fa0a861d1`, card `metal-069`, launch 29 after `run/mode2-reset-30.json`. Verdict
+`CORE_PROBE_PASS`, recovery `recovered`, shutdown `exited-after-guest-request`; the TTL hang of
+launch 28 did not recur. The route logged `hwinfo[0xa4] 0 -> 0x42`. The readback matrix,
+offscreen ramp and window drawable were unchanged, and the `gbaddr42` child (user-space
+address-library input forced to 0x42) was also unchanged, while `linearswizzle1` stayed
+exact. The 16-pipe decoder is therefore neither the kernel nor the Metal driver's own
+address-library instance.
+
+Lilu's user patcher cannot deliver `linearSwizzleTextures` as is: it reads patch targets
+from files on disk, and `AMDRadeonX6000MTLDriver` exists only in the dyld shared cache.
+
+## Candidate 223: SDMA address configuration (2026-09-14)
+
+Commit `c6fb3b1`, build `ff31430d502741908dee09587a212693`. The failing paths are exactly the
+ones probe v7 fixed by disabling Apple's blit DMA and its pipe-bank xor layouts, which
+points at the SDMA copy engine and its own register pair `SDMA0_GB_ADDR_CONFIG` /
+`SDMA0_GB_ADDR_CONFIG_READ` (GC seg0 `0x1e`/`0x1f`; NootedRed programs both for APUs).
+`rgpusdmacfg=2` logs the pair and copies `GB_ADDR_CONFIG`'s fields into both before RLC
+start, at `AMDHWAlignManager2::init` and on each gfx progress sample. Suite 895 OK.
+
+## Boot-launch ledger extension for candidate 223 (2026-09-14)
+
+Candidate 223 with card `metal-070` runs from `run/candidate-223` as launch 30 on boot
+`c369c74e`, through `--manual-reuse --ack-risk` under the user's standing instruction, after
+`run/mode2-reset-31.json`. This note covers this one launch.
+
