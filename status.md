@@ -1534,3 +1534,12 @@ Run `46c8f81af2087ab005ad64362a4ecadd`, card `metal-072`, launch 32 after `run/m
 
 Next: desktop probe v9 adds Managed-texture upload checks and displacement maps for the
 Managed paths.
+
+## Boot-launch ledger extension for the probe v9 attempt (2026-09-14)
+
+GPU-less session `0cfb37a5...` (no VFIO device, no ledger entry) compiled desktop probe v9
+(source sha256 `adc9d697...`, binary sha256 `e323f5ac...`). Candidate 225 with card `metal-073`
+runs from `run/candidate-225-attempt-v9` as launch 33 on boot `c369c74e`, through
+`--manual-reuse --ack-risk` under the user's standing instruction, after
+`run/mode2-reset-34.json`. This note covers this one launch.
+
