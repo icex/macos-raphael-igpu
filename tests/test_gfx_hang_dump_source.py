@@ -22,7 +22,7 @@ class GfxHangDumpSourceTests(unittest.TestCase):
         self.assertIn('memcpy(info + kHwInfoGbAddrConfig + 4, &live, sizeof(live));', self.source)
         self.assertIn('static constexpr size_t kOffAlignManager2Init = 0x6032a;', self.source)
         self.assertIn('static constexpr size_t kHwInfoGbAddrConfig = 0xa0;', self.source)
-        install = self.body('if (addrConfigMode != 0 || hwCapClearMask != 0) {', 'if (swizzleLogMode != 0) {')
+        install = self.body('if (addrConfigMode != 0 || hwCapClearMask != 0 || sdmaAddrConfigMode != 0) {', 'if (swizzleLogMode != 0) {')
         self.assertIn('0x41, 0x56, 0x41, 0x54, 0x53, 0x48, 0x81, 0xec, 0x90, 0x00, 0x00, 0x00', install)
         self.assertIn('entryMatches(addr, sz, kOffAlignManager2Init', install)
         self.assertIn('if (alignMatches) {', install)
@@ -56,6 +56,17 @@ class GfxHangDumpSourceTests(unittest.TestCase):
         self.assertIn('gbReadMode == 2 && config != 0xdeadbeef && config != 0 && mirror != config', body)
         start = self.body('static void startRlc() {', 'fbWrite(asicInfo, kGcRlcCgcg, 0);')
         self.assertLess(start.index('applyVgprSwizzle'), start.index('applyGbAddrConfigRead'))
+
+    def test_sdma_addr_config_knob_is_gated(self):
+        self.assertIn('static uint32_t sdmaAddrConfigMode = 0;', self.source)
+        self.assertIn('static constexpr uint32_t kSdmaGbAddrConfig     = kGcSeg0 + 0x001e;', self.source)
+        self.assertIn('static constexpr uint32_t kSdmaGbAddrConfigRead = kGcSeg0 + 0x001f;', self.source)
+        self.assertIn('PE_parse_boot_argn("rgpusdmacfg", &sdmaCfg, sizeof(sdmaCfg)) && sdmaCfg <= 2', self.source)
+        body = self.body('static void applySdmaAddrConfig(', '// rgpuswlog:')
+        self.assertIn('const bool change = sdmaAddrConfigMode == 2', body)
+        self.assertIn('(config & kGbAddrConfigFields)', body)
+        self.assertIn('applySdmaAddrConfig("gfx progress", sample != 0);', self.source)
+        self.assertIn('applySdmaAddrConfig("before RLC start", false);', self.source)
 
     def test_boot_argument_defaults_off_and_gates_thread(self):
         self.assertIn('static uint32_t hangDumpMode = 0;', self.source)

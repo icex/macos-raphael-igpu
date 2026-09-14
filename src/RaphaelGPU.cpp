@@ -3920,6 +3920,36 @@ static uint32_t hwCapClearMask = 0;
 static uint32_t addrConfigMode = 0;
 static mach_vm_address_t orgAlignManager2Init = 0;
 
+// rgpusdmacfg: the SDMA copy engine has its own GB_ADDR_CONFIG pair (GC seg0 0x1e/0x1f).
+// Probe v7 fixed Shared-buffer copies by disabling Apple's blit DMA and synchronized
+// textures by avoiding pipe-bank xor layouts: both are SDMA/DMA paths, and the tile
+// permutation matches a 16-pipe/16-packer decoder. NootedRed programs both registers for
+// APUs. Mode 1 logs them; mode 2 copies GB_ADDR_CONFIG's fields into both.
+static constexpr uint32_t kSdmaGbAddrConfig     = kGcSeg0 + 0x001e;
+static constexpr uint32_t kSdmaGbAddrConfigRead = kGcSeg0 + 0x001f;
+static constexpr uint32_t kGbAddrConfigFields   = 0x0c1807ff;
+static uint32_t sdmaAddrConfigMode = 0;
+
+static void applySdmaAddrConfig(const char *when, bool quiet) {
+    if (sdmaAddrConfigMode == 0 || asicInfo == nullptr) return;
+    const uint32_t config = fbRead(asicInfo, kGcGbAddrConfig);
+    const uint32_t sdma = fbRead(asicInfo, kSdmaGbAddrConfig);
+    const uint32_t sdmaRead = fbRead(asicInfo, kSdmaGbAddrConfigRead);
+    if (config == 0xdeadbeef || config == 0) return;
+    const uint32_t want = (sdma & ~kGbAddrConfigFields) | (config & kGbAddrConfigFields);
+    const uint32_t wantRead = (sdmaRead & ~kGbAddrConfigFields) | (config & kGbAddrConfigFields);
+    const bool change = sdmaAddrConfigMode == 2 && sdma != 0xdeadbeef && sdmaRead != 0xdeadbeef &&
+                        (sdma != want || sdmaRead != wantRead);
+    if (change) {
+        fbWrite(asicInfo, kSdmaGbAddrConfig, want);
+        fbWrite(asicInfo, kSdmaGbAddrConfigRead, wantRead);
+    }
+    if (!quiet || change)
+        RLOG("XG: rgpusdmacfg=%u at %s: GB_ADDR_CONFIG=%#x SDMA0_GB_ADDR_CONFIG %#x -> %#x "
+             "SDMA0_GB_ADDR_CONFIG_READ %#x -> %#x", sdmaAddrConfigMode, when, config, sdma,
+             fbRead(asicInfo, kSdmaGbAddrConfig), sdmaRead, fbRead(asicInfo, kSdmaGbAddrConfigRead));
+}
+
 static uint64_t hwInfoField(const uint8_t *info, size_t offset) {
     uint64_t value = 0;
     memcpy(&value, info + offset, sizeof(value));
@@ -3975,6 +4005,7 @@ static int wrapAlignManager2Init(void *that, void *hwInterface) {
     } else {
         RLOG("XA: hwinfo getter unavailable (interface=%p)", hwInterface);
     }
+    applySdmaAddrConfig("AMDHWAlignManager2::init", false);
     auto org = reinterpret_cast<int (*)(void *, void *)>(orgAlignManager2Init);
     const int result = org(that, hwInterface);
     RLOG("XA: AMDHWAlignManager2::init -> %#x", result);
@@ -5644,6 +5675,7 @@ static void startRlc() {
     applyNoBinning("before RLC start");
     applyVgprSwizzle("before RLC start");
     applyGbAddrConfigRead("before RLC start");
+    applySdmaAddrConfig("before RLC start", false);
     fbWrite(asicInfo, kGcRlcCgcg, 0);
     fbWrite(asicInfo, kGcRlcPgCntl, 0);
     uint32_t cntl = fbRead(asicInfo, kGcRlcCntl);
@@ -6267,6 +6299,7 @@ static void sampleGfxProgress(uint32_t sample, uint32_t &lastWptr, uint32_t &adv
          rptr == wptr ? "drained" : "pending", moved, fbRead(asicInfo, kGcCpStat),
          fbRead(asicInfo, kGcGrbmStatus), fbRead(asicInfo, kGcCpStalled2), advances, drained);
     lastWptr = wptr;
+    applySdmaAddrConfig("gfx progress", sample != 0);
 }
 
 static void hangDumpThread(void *, wait_result_t) {
@@ -7744,7 +7777,7 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
                  reportMatches, orgPendingCommandReport ? "ok" : "FAILED",
                  orgPendingCommandReport);
         }
-        if (addrConfigMode != 0 || hwCapClearMask != 0) {
+        if (addrConfigMode != 0 || hwCapClearMask != 0 || sdmaAddrConfigMode != 0) {
             // push rbp; mov rbp,rsp; push r15; push r14; push r12; push rbx; sub rsp,0x90
             static const uint8_t alignInitEntry[] = {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57,
                 0x41, 0x56, 0x41, 0x54, 0x53, 0x48, 0x81, 0xec, 0x90, 0x00, 0x00, 0x00};
@@ -7939,6 +7972,10 @@ static void pluginStart() {
     uint32_t capClear = 0;
     hwCapClearMask = PE_parse_boot_argn("rgpuhwcapclr", &capClear, sizeof(capClear)) ? capClear : 0;
     RLOG("XA: rgpuhwcapclr=%#x", hwCapClearMask);
+    uint32_t sdmaCfg = 0;
+    sdmaAddrConfigMode = PE_parse_boot_argn("rgpusdmacfg", &sdmaCfg, sizeof(sdmaCfg)) && sdmaCfg <= 2
+        ? sdmaCfg : 0;
+    RLOG("XG: rgpusdmacfg=%u", sdmaAddrConfigMode);
     uint32_t gbRead = 0;
     gbReadMode = PE_parse_boot_argn("rgpugbread", &gbRead, sizeof(gbRead)) && gbRead <= 2 ? gbRead : 0;
     RLOG("XG: rgpugbread=%u", gbReadMode);
