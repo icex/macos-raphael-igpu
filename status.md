@@ -35,3 +35,14 @@ Active worktree: `/home/bogdan/macos-vm/run/worktrees/candidate-233`.
 User forbids host reboots. Use tools/cycle.py with fresh MODE2, explicit boot note,
 6000s maximum and existing abort/cleanup checks. No merge or push main.
 Original pre-existing supervision edit remains in candidate230's named stash.
+
+## Candidate234 allowance
+
+One fix-validation launch47 on boot c369c74e-96ff-4c21-ae85-80ccb269f7d2,
+candidate234/cardmetal-080, fresh MODE2 via tools/cycle.py, max6000s.
+Hypothesis: missing VCN firmware prevents engine startup. Verify supplied bytes,
+native initialization result and actual encoded output. A supplied/accepted image
+with continued queue stall rejects firmware supply alone as sufficient. First run
+Metal regression and supplemental surface-format probe while responsive. Stop on
+first stall; no further encoder on dirty state. Corruption remains required work.
+Host926 tests/3 skipped plus firmware payload integrity test passed. Build complete.
