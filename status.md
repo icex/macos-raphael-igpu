@@ -1364,3 +1364,36 @@ runs from `run/candidate-221` as launch 27 on boot `c369c74e`, through
 `--manual-reuse --ack-risk` under the user's standing instruction, after
 `run/mode2-reset-28.json`. This note covers this one launch.
 
+## Candidate 221: GB_ADDR_CONFIG_READ already mirrors 0x42 (2026-09-14)
+
+Run `aa4fb1f5eb4d5301a60aee551a9fa534`, card `metal-068`, launch 27 after `run/mode2-reset-28.json`. Verdict
+`CORE_PROBE_PASS`, recovery `recovered`, shutdown `exited-after-guest-request`. The log shows
+`GB_ADDR_CONFIG=0x42 GB_ADDR_CONFIG_READ 0x42 -> 0x42`; nothing changed and the readback
+matrix and patch-child results repeat launch 26.
+
+A second adversarial review (Python port of Mesa's GFX10 swizzle address model, 10,816
+writer/reader pairs) found one exact match on all 5,120 sampled blocks: bytes laid out
+with the 4-pipe (0x42) `64KB_R_X` pattern and decoded with the 16-pipe/16-packer pattern
+(0x444). It also corrects the mode names used above: 27 is `ADDR_SW_64KB_R_X` (a VAR
+mode would be 31), and pipe-independent modes (linear, `S`/`D` without `_X`) cannot
+mismatch.
+
+Disassembly of the Metal driver's own address-library creation (`x+0xae4d`) shows it
+takes `gbAddrConfig` as a 32-bit value from hardware-info offset `0xa4`, while the kernel
+stores the value as a 64-bit field at `0xa0` whose upper half is 0. User space therefore
+passes 0 ("use the chip default"), which is the Navi 16-pipe layout.
+
+## Candidate 222: gbAddrConfig at hardware-info offset 0xa4 (2026-09-14)
+
+Commit `973a9fc`, build `52a7042d8dfd4cee8d01adeada7f81c0`. `rgpuaddrcfg=3` writes the live
+`GB_ADDR_CONFIG` into `hwinfo[0xa4]` at `AMDHWAlignManager2::init`, before any user-space
+copy. Desktop probe v8 (source `0d796050...`, binary `224b9341...`, compiled GPU-less; its
+new `gbaddr42` child patched the user-space load to `mov $0x42,%eax` and survived) keeps
+`gbaddr42` and `linearswizzle1` children as controls. Suite 894 OK.
+
+## Boot-launch ledger extension for candidate 222 (2026-09-14)
+
+Candidate 222 with card `metal-069` runs from `run/candidate-222` as launch 28 on boot
+`c369c74e`, through `--manual-reuse --ack-risk` under the user's standing instruction,
+after `run/mode2-reset-29.json`. This note covers this one launch.
+
