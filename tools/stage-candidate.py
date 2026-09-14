@@ -89,6 +89,7 @@ SUPPORTED_CARD_DIAGNOSTICS = {
     ("1.0.218", "metal-063"): "rgpuvmdiag=1",
     ("1.0.219", "metal-064"): "rgpuvmdiag=1",
     ("1.0.220", "metal-065"): "rgpuvmdiag=1",
+    ("1.0.220", "metal-066"): "rgpuvmdiag=1",
 }
 
 RESEAL_PROFILES = {
@@ -379,6 +380,9 @@ def validate_card(raw, expected_sha256):
                                    "rgpuhangdump": "1", "rgpunobin": "1", "rgpuaddrcfg": "2"},
         ("1.0.220", "metal-065"): {"rgpuvmroot": "5", "rgpudump": "5000", "rgpugolden": "1",
                                    "rgpuhangdump": "1", "rgpunobin": "1", "rgpuswlog": "1",
+                                   "rgpuvgpr": "3"},
+        ("1.0.220", "metal-066"): {"rgpuvmroot": "5", "rgpudump": "5000", "rgpugolden": "1",
+                                   "rgpuhangdump": "1", "rgpunobin": "1", "rgpuswlog": "2",
                                    "rgpuvgpr": "3"},
     }
     if pair in CANDIDATE203_FUNCTIONAL:
@@ -1350,7 +1354,7 @@ def stage(expected_commit, expected_boot_id, expected_card_sha256,
                                ("1.0.218", "metal-059"), ("1.0.218", "metal-060"),
                                ("1.0.218", "metal-061"), ("1.0.218", "metal-062"),
                                ("1.0.218", "metal-063"), ("1.0.219", "metal-064"),
-                               ("1.0.220", "metal-065"))
+                               ("1.0.220", "metal-065"), ("1.0.220", "metal-066"))
     if candidate186 and identities["source_sha256"] != card["raphael_source_sha256"]:
         raise RuntimeError("candidate source differs from its experiment card")
     lilu = (validate_lilu_inputs(

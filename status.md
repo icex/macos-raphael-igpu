@@ -1279,3 +1279,23 @@ this one launch. A first staging attempt consumed `run/mode2-reset-24.json` and 
 before launch because `stage-candidate.py` accepted versions only up to 1.0.21N; the
 pattern now allows 1.0.2[0-4]N. No VM started.
 
+## Candidate 220 logging run: preferred swizzle modes 22 and 27 (2026-09-14)
+
+Run `6ddc61ca1a9a9d92a9ba7c611838f50e`, card `metal-065`, build of commit `03bcb0a`, launch 24 after
+`run/mode2-reset-25.json`. Verdict `CORE_PROBE_PASS`, recovery `recovered`, shutdown
+`exited-after-guest-request`. Readback matrix unchanged from launch 22.
+
+- `getPreferredSwizzleMode2` route matched. Apple's input layout is size, flags, mode,
+  resource type, format, bits per pixel, width, height. RGBA8 surfaces of 64x64 and
+  1280x24 get mode 22; 1280x1024, 400x300, 715x625, 249x249 and 161x161 get mode 27
+  (Mesa numbering: 22 `64KB_D_X`, 27 `VAR_R_X`). WindowServer's decoded target also used 27.
+- `SQ_CONFIG` reads `0x180070` (Linux's Navi23 golden value) and `LDS_CONFIG` `0x20`; both
+  `VGPR_SWIZZLE_EN` bits are clear.
+
+## Boot-launch ledger extension for the linear-swizzle run (2026-09-14)
+
+Candidate 220 with card `metal-066` (`rgpuswlog=2`: every preferred swizzle request returns
+linear) runs from `run/candidate-220-attempt-linear` as launch 25 on boot `c369c74e`,
+through `--manual-reuse --ack-risk` under the user's standing instruction, after
+`run/mode2-reset-26.json`. This note covers this one launch.
+
