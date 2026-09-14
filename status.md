@@ -1,63 +1,49 @@
 # Live status — 2026-09-15
 
-Full desktop acceleration is not qualified. Visible TigerVNC corruption persists
-before encoder use; hardware H264 stalls without output. HEVC hardware is not yet
-retested after these changes. Small software H264/HEVC round trips pass.
+Full desktop acceleration remains unqualified: visible TigerVNC corruption persists,
+and hardware H264 stalls. HEVC hardware has not been retested after current fixes.
+Small software H264/HEVC round trips and limited Metal surface probes pass.
 
-Worktree: /home/bogdan/macos-vm/run/worktrees/candidate-237 (vcn-static-init).
-Source build commit0409db2; build e217de9d579b48668b6c3a9c70eea623.
-Launch51/cardmetal-083 run aaffa25897eb5cf086b488a8b64e399a on host boot
-c369c74e-96ff-4c21-ae85-80ccb269f7d2, prelaunch MODE2 reset82.
-Results: /home/bogdan/macos-vm/run/candidate-237-results/.
+Worktree /home/bogdan/macos-vm/run/worktrees/candidate-238 (vcn-placement-trace).
+Source5f186c0, builde14914203b324295b0843c41dc1088e1. Launch52/cardmetal-084,
+run97685209eea2813158f9ad29a0fa0d4c, hostbootc369c74e-96ff-4c21-ae85-80ccb269f7d2,
+prelaunch MODE2reset84. Guestboot85CE5BB4-4018-4DCB-B7B7-7D5CFBE7518A,
+registry4294968035. Results /home/bogdan/macos-vm/run/candidate-238-results/.
 
-## Function and identity
+## Latest functional result
 
-Native static VCN initializer930f8 actually executes with flags144 and mode0
-(PSP firmware authentication retained). Shared allocation96/SMU-interface2.
-Desktop Metal probe passes. H264 third submission stalls, no output callbacks;
-other graphics, SDMA and VMPT timestamps complete. No further codec tested on
-stalled engine. Native initializer returns0 despite an internal50ms wait timeout.
-First-submit and +2s MMIO show VCN awake (POWER_STATUS804), ring WPTR20/RPTR0,
-firmware cache BAR823c/d bothffffffff. PSP transcript previously records successful
-wireType13 load to TMRf41f400000. Native static code writes engine context+2c0 to
-those registers; actual context/query values have not yet been captured. Therefore
-an invalid firmware placement is a hypothesis, not yet a proven query bug.
-Artifacts: serial.txt, h264-hardware.jsonl, mmhub-vcn-at-first-submit.jsonl,
-mmhub-vcn-two-seconds.jsonl, running-identity.json, probe.json.
+Guarded query trace actually executes. FirmwareID14 native result0 loaded1 valid1
+addressf41f400000 before and during native static initialization. Post-init context
+retainsf41f400000, size8c150, registerbase7e00, shared GART addressffbfe52000.
+This FALSIFIES bad PSP-query/context address as the explanation for all-ones code
+cache readback in51. Register visibility/write permission remains unproven.
+Static initializer returns0 despite50ms firmware-ready timeout. H264 hardware
+encoder selected; third frame submit blocks and no encoded output. No further
+codec on stalled state. Metal desktop probe passed but is not desktop qualification.
 
-## Visible corruption
+MMIO after-submit still shows code cache BARffffffff/ffffffff, VCNawake804, status0,
+MMHUBfault0. Capture was late enough for native channel reset; its zero ring WPTR
+cannot describe first submission. Native context trace is the discriminating result.
+Artifacts: serial.txt, h264-hardware.jsonl, mmhub-vcn-after-submit.jsonl,
+running-identity.json, probe.json.
 
-Launch50 raw Linux TigerVNC screenshot still shows diagonal green/purple Safari
-and menu corruption BEFORE encoder use:
-/run/candidate-236-results/tigervnc-corruption.jpg under /home/bogdan/macos-vm.
-Format/IOSurface CPU comparisons, two-triangle and interpolated sampling probes
-pass their12 small cases each; these do not qualify WindowServer/Safari rendering.
-A common cause with VCN is not established.
+## Corruption and next investigation
 
-## Cleanup and host
+Launch50 raw Linux TigerVNC screenshot shows diagonal green/purple Safari/menu
+corruption before any encoder: /home/bogdan/macos-vm/run/candidate-236-results/
+tigervnc-corruption.jpg.12-case format/IOSurface CPU comparisons, quad and sampled
+texture probes pass but do not reproduce the artifact. No common cause proven.
 
-Launch51 stopped through interactive stop-requested. Shutdown forced (not clean
-guest shutdown); harness recovery recovered. VM container is stopped. Final MODE2
-reset83 receipt confirms CP_STAT0/RLC_CNTL0. Host boot unchanged, vfio-pci retained,
-power/control on; no host kernel fault in run capture. Inhibitor remains active.
-No new launch allowance. No host reboot; no vfio-to-amdgpu cycling.
+New memory-access lead: GFXHUB GARTCTX0 enabled1555401, rangeffbfa00..ffffe00,
+root84fdfc001; MMHUBCTX0 disabled0, range0..3ffff, root85fc00001. VCN shared
+bufferffbfe52000 requires GART. X6000 paging table fix does not cover HWLibs native
+GVM register table (vm+510). Trace vm_10_1_get_register_offset32fbf and its table
+initialization before proposing a mapping correction; no new hardware allowance.
 
-## Next discriminating work
+## Cleanup
 
-Trace native PSP firmware-status response through CGS into context+2c0 and cache
-register writes. Do not substitute a cached diagnostic address or assume that an
-all-ones register read proves the context itself is all ones. Then validate actual
-encoded frames before testing further codecs. Separately reproduce desktop
-corruption with a workload matching the visible Safari/WindowServer artifact.
-Host suite927 tests/3 skipped passed before launch51. No merge/push to main.
-
-Superseded state is archived in findings/research/status-archives/
-status-before-launch51-result-20260915.md.
-
-## Candidate238 launch52 allowance
-
-One launch52 on boot c369c74e-96ff-4c21-ae85-80ccb269f7d2, fresh MODE2 via
-tools/cycle.py, max6000s with all abort/cleanup guards. Same workload as51, native
-VCN query and post-init context read-only trace. A valid context address falsifies
-bad firmware query as cause of all-ones cache readback. Stop on first H264 stall.
-Work continues in /home/bogdan/macos-vm/run/worktrees/candidate-238.
+Stopped through interactive stop-requested. Shutdown forced, harness recovered.
+VM stopped; final MODE2reset85 CP_STAT0/RLC_CNTL0. vfio-pci retained, power/control
+on, same host boot, inhibitor active. No host reboot. Host927 tests/3skipped passed,
+build succeeded. No merge/push to main. Prior state archived in
+findings/research/status-archives/status-before-launch52-result-20260915.md.
