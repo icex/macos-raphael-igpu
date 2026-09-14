@@ -71,6 +71,9 @@ class GfxHangDumpSourceTests(unittest.TestCase):
         self.assertIn('applySdmaAddrConfig("SDMA commit", true);', commit)
         self.assertIn('applySdmaAddrConfig("startHWEngines", false);', self.source)
         self.assertIn('applySdmaAddrConfig("powerUpHW", false);', self.source)
+        watchdog = self.body('static void sdmaWatchdogThread(', 'static void hangDumpThread(')
+        self.assertIn('applySdmaAddrConfig("SDMA watchdog", corrections > 16);', watchdog)
+        self.assertIn('if (sdmaAddrConfigMode == 2) {\n        if (kernel_thread_start(sdmaWatchdogThread', self.source)
 
     def test_boot_argument_defaults_off_and_gates_thread(self):
         self.assertIn('static uint32_t hangDumpMode = 0;', self.source)

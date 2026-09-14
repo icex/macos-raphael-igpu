@@ -6305,6 +6305,33 @@ static void sampleGfxProgress(uint32_t sample, uint32_t &lastWptr, uint32_t &adv
     applySdmaAddrConfig("gfx progress", sample != 0);
 }
 
+// rgpusdmacfg=2 watchdog: something after accelerator power-up rewrites the SDMA pair to
+// Navi23's 0x444. Poll every 50 ms for the first 600 s, then once a second, restore
+// Raphael's layout immediately and record when it happened and the power state around it.
+static void sdmaWatchdogThread(void *, wait_result_t) {
+    uint64_t polls = 0;
+    uint32_t corrections = 0;
+    while (asicInfo == nullptr) { IOSleep(50); ++polls; }
+    for (;;) {
+        const uint32_t config = fbRead(asicInfo, kGcGbAddrConfig);
+        const uint32_t sdma = fbRead(asicInfo, kSdmaGbAddrConfig);
+        const uint32_t sdmaRead = fbRead(asicInfo, kSdmaGbAddrConfigRead);
+        if (config != 0 && config != 0xdeadbeef && sdma != 0xdeadbeef && sdmaRead != 0xdeadbeef &&
+            (((sdma ^ config) & kGbAddrConfigFields) != 0 || ((sdmaRead ^ config) & kGbAddrConfigFields) != 0)) {
+            ++corrections;
+            if (corrections <= 16)
+                RLOG("XG: SDMA watchdog #%u at ~%llu ms: SDMA0_GB_ADDR_CONFIG=%#x READ=%#x (want %#x) "
+                     "RLC_CNTL=%#x RLC_PG_CNTL=%#x CP_STAT=%#x GRBM_STATUS=%#x SDMA0_STATUS=%#x",
+                     corrections, polls * 50, sdma, sdmaRead, config, fbRead(asicInfo, kGcRlcCntl),
+                     fbRead(asicInfo, kGcRlcPgCntl), fbRead(asicInfo, kGcCpStat),
+                     fbRead(asicInfo, kGcGrbmStatus), fbRead(asicInfo, kSdmaStatus0));
+            applySdmaAddrConfig("SDMA watchdog", corrections > 16);
+        }
+        if (polls < 12000) { IOSleep(50); ++polls; }
+        else { IOSleep(1000); polls += 20; }
+    }
+}
+
 static void hangDumpThread(void *, wait_result_t) {
     uint32_t served = 0, cbServed = 0;
     uint32_t samples = 0, lastWptr = 0, advances = 0, drained = 0;
@@ -8124,6 +8151,12 @@ static void pluginStart() {
         thread_deallocate(th);
     else
         RLOG("could not start the VM observation thread");
+    if (sdmaAddrConfigMode == 2) {
+        if (kernel_thread_start(sdmaWatchdogThread, nullptr, &th) == KERN_SUCCESS)
+            thread_deallocate(th);
+        else
+            RLOG("could not start the SDMA address-config watchdog");
+    }
     if (hangDumpMode == 1) {
         if (kernel_thread_start(hangDumpThread, nullptr, &th) == KERN_SUCCESS)
             thread_deallocate(th);
