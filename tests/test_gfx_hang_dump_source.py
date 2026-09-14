@@ -18,7 +18,8 @@ class GfxHangDumpSourceTests(unittest.TestCase):
 
     def test_address_config_route_is_gated_guarded_and_uses_live_register(self):
         self.assertIn('static uint32_t addrConfigMode = 0;', self.source)
-        self.assertIn('PE_parse_boot_argn("rgpuaddrcfg", &addrCfg, sizeof(addrCfg)) && addrCfg <= 2', self.source)
+        self.assertIn('PE_parse_boot_argn("rgpuaddrcfg", &addrCfg, sizeof(addrCfg)) && addrCfg <= 3', self.source)
+        self.assertIn('memcpy(info + kHwInfoGbAddrConfig + 4, &live, sizeof(live));', self.source)
         self.assertIn('static constexpr size_t kOffAlignManager2Init = 0x6032a;', self.source)
         self.assertIn('static constexpr size_t kHwInfoGbAddrConfig = 0xa0;', self.source)
         install = self.body('if (addrConfigMode != 0 || hwCapClearMask != 0) {', 'if (swizzleLogMode != 0) {')

@@ -3954,6 +3954,18 @@ static int wrapAlignManager2Init(void *that, void *hwInterface) {
             RLOG("XA: rgpuhwcapclr=%#x hwinfo[0xcc] %#x -> %#x", hwCapClearMask, capabilities, cleared);
         }
         const uint64_t reported = hwInfoField(info, kHwInfoGbAddrConfig);
+        // Mode 3: the Metal driver creates its own address library with gbAddrConfig
+        // read as a 32-bit value at hwinfo[0xa4], the upper half of the kernel's 64-bit
+        // field, which is 0 ("use the chip default": Navi's 16 pipes / 16 packers).
+        if (addrConfigMode == 3 && live != 0xdeadbeef && live != 0) {
+            uint32_t upper = 0;
+            memcpy(&upper, info + kHwInfoGbAddrConfig + 4, sizeof(upper));
+            memcpy(info + kHwInfoGbAddrConfig + 4, &live, sizeof(live));
+            uint32_t check = 0;
+            memcpy(&check, info + kHwInfoGbAddrConfig + 4, sizeof(check));
+            RLOG("XA: rgpuaddrcfg=3 hwinfo[0xa4] %#x -> %#x (hwinfo[0xa0] qword now %#llx)", upper,
+                 check, hwInfoField(info, kHwInfoGbAddrConfig));
+        }
         if (addrConfigMode == 2 && live != 0xdeadbeef && live != 0 && reported != live) {
             const uint64_t replacement = live;
             memcpy(info + kHwInfoGbAddrConfig, &replacement, sizeof(replacement));
@@ -7934,10 +7946,11 @@ static void pluginStart() {
     vgprMode = PE_parse_boot_argn("rgpuvgpr", &vgpr, sizeof(vgpr)) && vgpr <= 3 ? vgpr : 0;
     RLOG("XV: rgpuvgpr=%u", vgprMode);
     uint32_t addrCfg = 0;
-    addrConfigMode = PE_parse_boot_argn("rgpuaddrcfg", &addrCfg, sizeof(addrCfg)) && addrCfg <= 2
+    addrConfigMode = PE_parse_boot_argn("rgpuaddrcfg", &addrCfg, sizeof(addrCfg)) && addrCfg <= 3
         ? addrCfg : 0;
     RLOG("XA: rgpuaddrcfg=%u (%s)", addrConfigMode,
-         addrConfigMode == 2 ? "report hwinfo gbAddrConfig and replace it with live GB_ADDR_CONFIG"
+         addrConfigMode == 3 ? "report hwinfo and give user space GB_ADDR_CONFIG at hwinfo[0xa4]"
+         : addrConfigMode == 2 ? "report hwinfo gbAddrConfig and replace it with live GB_ADDR_CONFIG"
          : addrConfigMode == 1 ? "report hwinfo gbAddrConfig" : "off");
     hangDumpMode = PE_parse_boot_argn("rgpuhangdump", &hangDump, sizeof(hangDump)) &&
         hangDump <= 1 ? hangDump : 0;

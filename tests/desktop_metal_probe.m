@@ -750,6 +750,24 @@ static NSDictionary *patchDriverSettings(NSString *variant) {
     } else if ([variant isEqualToString:@"blitdma0"]) {
         offset = 0x13a7e1; expected = kLowSettings; byteIndex = 5;
         change = ^uint8_t(uint8_t v) { return (uint8_t)(v & ~0x20); };
+    } else if ([variant isEqualToString:@"gbaddr42"]) {
+        // 0xae58: mov 0xa4(%rsi),%eax ; mov %eax,0x30(%rdi) in the user-space AddrCreate
+        // input fill. Replace the load with mov $0x42,%eax; nop.
+        static const uint8_t kLoad[] = {0x8b, 0x86, 0xa4, 0x00, 0x00, 0x00, 0x89, 0x47, 0x30};
+        static const uint8_t kConst[] = {0xb8, 0x42, 0x00, 0x00, 0x00, 0x90};
+        uint8_t *load = (uint8_t *)header + 0xae58;
+        if (memcmp(load, kLoad, sizeof(kLoad)) != 0) return @{ @"error": @"load bytes differ" };
+        const mach_vm_size_t pageSize = (mach_vm_size_t)getpagesize();
+        const mach_vm_address_t loadPage = (mach_vm_address_t)load & ~(pageSize - 1);
+        const mach_vm_size_t span = ((mach_vm_address_t)load + sizeof(kConst) + pageSize - 1 - loadPage) & ~(pageSize - 1);
+        kern_return_t open = mach_vm_protect(mach_task_self(), loadPage, span, FALSE,
+                                             VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
+        if (open != KERN_SUCCESS) return @{ @"error": @"protect", @"kr": @(open) };
+        memcpy(load, kConst, sizeof(kConst));
+        kern_return_t close = mach_vm_protect(mach_task_self(), loadPage, span, FALSE,
+                                              VM_PROT_READ | VM_PROT_EXECUTE);
+        return @{ @"variant": variant, @"patched": @(memcmp(load, kConst, sizeof(kConst)) == 0),
+                  @"relock_kr": @(close) };
     } else if ([variant isEqualToString:@"linearswizzle1"]) {
         offset = 0x13a82b; expected = kHighSettings; byteIndex = 6;
         change = ^uint8_t(uint8_t v) { return (uint8_t)(v | 0x10); };
@@ -1144,7 +1162,7 @@ int main(int argc, const char *argv[]) {
         alarm(45);
         report = [@{ @"run_id": argc > 1 ? @(argv[1]) : @"manual", @"passed": @NO,
                      @"completed_command_buffers": @0, @"values_checked": @0,
-                     @"probe_version": @7 } mutableCopy];
+                     @"probe_version": @8 } mutableCopy];
         char *end = NULL;
         unsigned long long expiry = argc == 3 ? strtoull(argv[2], &end, 10) : 0;
         if (argc != 3 || end == NULL || *end != '\0' || (unsigned long long)time(NULL) > expiry)
@@ -1237,8 +1255,7 @@ int main(int argc, const char *argv[]) {
         [readback addObjectsFromArray:readbackMatrix(device, identityLibrary, queue, 1280, 1024,
                                                      MTLClearColorMake(0, 0, 0, 0))];
         report[@"readback_matrix"] = readback;
-        report[@"patch_children"] = @[ patchChildRun(argv[0], expiry, @"pipebankxor0"),
-                                       patchChildRun(argv[0], expiry, @"blitdma0"),
+        report[@"patch_children"] = @[ patchChildRun(argv[0], expiry, @"gbaddr42"),
                                        patchChildRun(argv[0], expiry, @"linearswizzle1") ];
 
         NSMutableArray *jpegs = [NSMutableArray array];
