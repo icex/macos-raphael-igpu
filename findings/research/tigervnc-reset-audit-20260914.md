@@ -128,3 +128,24 @@ root behavior is retained; explicit hub1 root repair requires the corrected tabl
 No MMIO, allocation or logging added to prepareVMInvalidateRequest. Bounded
 observations are drained by the existing worker. Whole-table mismatch aborts VMM
 initialization. This is untested on hardware and does not claim to fix corruption.
+
+
+## Launch46: corrected MMHUB removes paging stall; VCN still blocks
+
+Candidate233 sourcef7e7ec49533e3444447a2ef62b101bb9562b973b, run
+953a71a247c9dfea622129c4a598026c, buildaeadd6aac6584078b7fd944c58d82459,
+executable963290beaa0e9726a6bd52b3bdd869f8669da8a6977b089b666b9c8396a79c75.
+Reset72; guest9748C797-DA5C-42CC-B96D-51635C16E2E7; registry4294968047.
+Results run/candidate-233-results. Serial MH table result4 corrected1, root2
+0x1a950 req6 0x1aa31 ack6 0x1aa32. Desktop probe passed. Hardware H264 gva
+hardware=true, prepare0, two submissions accepted, third blocks, deadline90,
+no encoded callbacks. First pending channel15 VCN0EncLLQ TS0->1; SDMA12
+234/234 and VMPT16 80d/80d completed/submitted. Other graphics/compute queues
+complete and WindowServer remains responsive. Thus shared paging correction is
+functionally supported, while VCN initialization/submission remains defective.
+No independent HEVC or alpha run on this state. SW VCN dump7e04=901,
+80e0/80e1=deadbeef; this alone does not distinguish firmware, registers or gating.
+No visual corruption retest; launch45 remains unresolved. CORE_PROBE_PASS applies
+only to earlier desktop probe. Shutdown forced; recovery status recovered.
+VM stopped; final MODE2 reset73 CP_STAT0/RLC_CNTL0, same boot, no host reboot.
+Allowance46 consumed. Regression suite926 tests/3 skipped passed before exposure.
