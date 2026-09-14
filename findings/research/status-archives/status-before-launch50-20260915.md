@@ -1,8 +1,8 @@
 # Status
 
-Updated after launch50, 2026-09-15. Host boot
+Updated after launch49, 2026-09-15. Host boot
 c369c74e-96ff-4c21-ae85-80ccb269f7d2, GPU vfio-pci, power/control=on.
-VM stopped; ledger50; final MODE2 reset81 CP_STAT0/RLC_CNTL0. No host reboot.
+VM stopped; ledger49; final MODE2 reset79 CP_STAT0/RLC_CNTL0. No host reboot.
 
 ## Current blockers
 
@@ -31,7 +31,7 @@ Results `/home/bogdan/macos-vm/run/candidate-235-results/` include guard-live-by
 No Metal probe/encoder result. stop-requested is only consumed in interactive hold;
 used experiment.py's documented SIGTERM cancellation handler after inspecting it,
 preserving guest shutdown and recovery. Exited-after-guest-request; recovery failed
-because native XH2 lease ownership was never produced. INVALID; final MODE2 reset81.
+because native XH2 lease ownership was never produced. INVALID; final MODE2 reset79.
 No host kernel fault observed. This does not falsify the SMU-interface hypothesis.
 
 Latest functional run48: candidate234 attemptvmhub, run
@@ -45,22 +45,18 @@ Work continues in `/home/bogdan/macos-vm/run/worktrees/candidate-236`.
 No new launch allowance yet. User forbids host reboots; use tools/cycle.py and
 explicit boot allowance, fresh MODE2, max6000s with existing abort/cleanup guards.
 
+## Candidate236 allowance
 
-## Launch50 result
+One launch50 on boot c369c74e-96ff-4c21-ae85-80ccb269f7d2, candidate236/cardmetal-082,
+fresh MODE2 via tools/cycle.py, max6000s and existing abort/cleanup. Validate both
+patch deliveries, shared allocation0x60/SMU-interface2, then Metal and actual
+H264/HEVC output. Capture registers promptly after first encode begin. Abort on
+first failure and do not run other encoders on dirty state. Same SMU hypothesis
+as235, which never delivered the intervention. Host927 tests/3 skipped passed.
 
-Candidate236/cardmetal-082 runb9e4f059c1cb51785b3cfc10c410b65d, build6ef41eab5ac1480cb7ea1cc047ee5b49. Results
-`/home/bogdan/macos-vm/run/candidate-236-results/`. Both bounded patches apply:
-VCNA allocation extension1,error0; X6000 failure cleanup patch ok. Shared bytes96,
-flagsf47,SMU-interface2. Desktop probe passes. Hardware H264 still stalls at third
-submit/no callbacks. Exact early before/first-submit/+2s MMIO captures show VCN
-POWER_STATUS905 and gated registersdeadbeef, already before codec request; MMHUB
-fault0. Field setup alone is insufficient. Native VCN defaults enable dynamic PG,
-static PG and secure-DPG load; investigate native static initialization instead.
-Firmware authentication via PSP must remain intact.
 
-Actual raw TigerVNC Safari screenshot confirms visible diagonal corruption before
-encoder: tigervnc-corruption.jpg. Additional two-triangle and interpolated texture
-sampling probes each pass12 cases; they do not reproduce the real visual artifact.
-Shader/capture/compositing coverage remains incomplete. Probe sources retained in
-run/research/encoder-20260914; CPU surface baseline tracked in tests.
-Shutdown forced, harness recovered, finalMODE2 reset81 clean. No new allowance.
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-236-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
