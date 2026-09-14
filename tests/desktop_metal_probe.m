@@ -673,8 +673,67 @@ static NSArray *readbackMatrix(id<MTLDevice> device, id<MTLLibrary> library, id<
                                        @"render": renderStatus,
                                        @"command": paths[i].command.status == MTLCommandBufferStatusCompleted ?
                                            @"ok" : @"failed" } mutableCopy];
-        identityStats(paths[i].bytes, width, height, YES, NO, row);
+        identityStats(paths[i].bytes, width, height, YES, i >= 2 && width >= 1024, row);
         [rows addObject:row];
+    }
+    // Uploads: CPU identity bytes into a Managed texture (replaceRegion) or a Shared buffer,
+    // copied on the GPU into a Private texture, then read back through the known-good
+    // Private -> Managed buffer + synchronize path.
+    NSMutableData *identity = [NSMutableData dataWithLength:width * height * 4];
+    UInt8 *id8 = identity.mutableBytes;
+    for (NSUInteger y = 0; y < height; ++y)
+        for (NSUInteger x = 0; x < width; ++x) {
+            UInt8 *q = id8 + (y * width + x) * 4;
+            q[0] = (UInt8)(x & 255); q[1] = (UInt8)(y & 255);
+            q[2] = (UInt8)(((x >> 8) & 15) | (((y >> 8) & 15) << 4)); q[3] = 255;
+        }
+    id<MTLTexture> uploadManaged = [device newTextureWithDescriptor:managedDescriptor];
+    id<MTLTexture> uploadTarget = [device newTextureWithDescriptor:privateDescriptor];
+    id<MTLTexture> uploadTarget2 = [device newTextureWithDescriptor:privateDescriptor];
+    id<MTLBuffer> uploadShared = [device newBufferWithBytes:identity.bytes length:identity.length
+                                                    options:MTLResourceStorageModeShared];
+    id<MTLBuffer> uploadRead = [device newBufferWithLength:width * height * 4 options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> uploadRead2 = [device newBufferWithLength:width * height * 4 options:MTLResourceStorageModeManaged];
+    if (uploadManaged && uploadTarget && uploadTarget2 && uploadShared && uploadRead && uploadRead2) {
+        [uploadManaged replaceRegion:MTLRegionMake2D(0, 0, width, height) mipmapLevel:0
+                           withBytes:identity.bytes bytesPerRow:width * 4];
+        id<MTLCommandBuffer> up = [queue commandBuffer];
+        id<MTLBlitCommandEncoder> ublit = [up blitCommandEncoder];
+        [ublit copyFromTexture:uploadManaged sourceSlice:0 sourceLevel:0 sourceOrigin:zero sourceSize:size
+                     toTexture:uploadTarget destinationSlice:0 destinationLevel:0 destinationOrigin:zero];
+        [ublit copyFromBuffer:uploadShared sourceOffset:0 sourceBytesPerRow:width * 4
+          sourceBytesPerImage:width * height * 4 sourceSize:size toTexture:uploadTarget2
+             destinationSlice:0 destinationLevel:0 destinationOrigin:zero];
+        [ublit endEncoding];
+        [up commit];
+        [up waitUntilCompleted];
+        id<MTLCommandBuffer> down = [queue commandBuffer];
+        id<MTLBlitCommandEncoder> dblit = [down blitCommandEncoder];
+        [dblit copyFromTexture:uploadTarget sourceSlice:0 sourceLevel:0 sourceOrigin:zero sourceSize:size
+                      toBuffer:uploadRead destinationOffset:0 destinationBytesPerRow:width * 4
+       destinationBytesPerImage:width * height * 4];
+        [dblit copyFromTexture:uploadTarget2 sourceSlice:0 sourceLevel:0 sourceOrigin:zero sourceSize:size
+                      toBuffer:uploadRead2 destinationOffset:0 destinationBytesPerRow:width * 4
+       destinationBytesPerImage:width * height * 4];
+        [dblit synchronizeResource:uploadRead];
+        [dblit synchronizeResource:uploadRead2];
+        [dblit endEncoding];
+        [down commit];
+        [down waitUntilCompleted];
+        const struct { NSString *path; id<MTLBuffer> buffer; } uploads[] = {
+            { @"upload managed-texture->private", uploadRead },
+            { @"upload shared-buffer->private", uploadRead2 },
+        };
+        for (size_t i = 0; i < 2; ++i) {
+            NSMutableDictionary *row = [@{ @"width": @(width), @"height": @(height), @"format": @"RGBA8",
+                                           @"geometry": @"cpu-upload", @"path": uploads[i].path,
+                                           @"render": up.status == MTLCommandBufferStatusCompleted ? @"ok" : @"failed",
+                                           @"command": down.status == MTLCommandBufferStatusCompleted ? @"ok" : @"failed" } mutableCopy];
+            identityStats(uploads[i].buffer.contents, width, height, YES, NO, row);
+            [rows addObject:row];
+        }
+    } else {
+        [rows addObject:@{ @"width": @(width), @"height": @(height), @"path": @"uploads", @"error": @"allocation" }];
     }
     return rows;
 }
@@ -1162,7 +1221,7 @@ int main(int argc, const char *argv[]) {
         alarm(45);
         report = [@{ @"run_id": argc > 1 ? @(argv[1]) : @"manual", @"passed": @NO,
                      @"completed_command_buffers": @0, @"values_checked": @0,
-                     @"probe_version": @8 } mutableCopy];
+                     @"probe_version": @9 } mutableCopy];
         char *end = NULL;
         unsigned long long expiry = argc == 3 ? strtoull(argv[2], &end, 10) : 0;
         if (argc != 3 || end == NULL || *end != '\0' || (unsigned long long)time(NULL) > expiry)
