@@ -1,0 +1,6 @@
+{
+  "schema": 1,
+  "reason": "The kernel journal has rotated past boot. Candidate 230 repeat captured successful amdgpu initialization on this exact boot before launch 40. This record proves initialization only, not recovery or launch authority.",
+  "snapshot": "/home/bogdan/macos-vm/run/candidate-230-attempt-repeat-results/host-before.json",
+  "snapshot_sha256": "65a797408ef6c06a2edcdb45d8422876009e5883437138c3ec2e4c50d9603af6"
+}

@@ -1878,3 +1878,19 @@ captures. No main merge or push; candidate remains experimental on managed-cow
 branch at `/home/bogdan/macos-vm/run/worktrees/candidate-230`. OpenCore media is
 staged with candidate230 and rgputexdiag=2; final guest is off. No more GPU runs
 planned for this defect. User-level test inhibitor is stopped after verification.
+
+
+## TigerVNC inspection allowance — 2026-09-14
+
+User requested testing through the Linux TigerVNC viewer and explicitly prohibited further
+host reboots. One additional launch is authorized on boot
+`c369c74e-96ff-4c21-ae85-80ccb269f7d2`, using candidate 1.0.230 / card metal-078,
+attempt `tigervnc`, unchanged executable
+`c9e5a856a34ebbe4f3b1bf59de2c613d15edff37c7b2e677a8d476b324bfcf94`.
+Use cycle.py with explicit manual reuse, a fresh MODE2 reset (CP_STAT=RLC_CNTL=0),
+6000-second total cap, and at most 1800 seconds of interactive inspection after the probe.
+Host-fault, identity, capture-fatal, shutdown and cleanup paths remain armed.
+Initialization evidence is the hash-pinned host-before snapshot from candidate230 repeat,
+matched against the live boot/kernel/device/group/driver; this is not reset proof or launch authority.
+The pre-existing uncommitted supervision edit is preserved in git stash named
+`Preserve pre-existing supervision edit before TigerVNC test`.

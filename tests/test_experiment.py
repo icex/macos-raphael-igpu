@@ -1377,6 +1377,49 @@ class ExperimentTests(unittest.TestCase):
         self.assertTrue(check('[drm] Initialized amdgpu 3.64.0 for 0000:7b:00.0 on minor 0'))
         self.assertFalse(check('[drm] Initialized amdgpu 3.64.0 for 0000:03:00.0 on minor 1'))
 
+    def test_retained_initialization_requires_exact_same_boot_evidence(self):
+        tool = self.module()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            host = dict(boot_id='boot-A', kernel='kernel-A', device='1002:13c0',
+                        driver='vfio-pci', iommu_group='31')
+            snapshot = root/'host.json'
+            snapshot.write_text(json.dumps(dict(host, amdgpu_initialized=True)))
+            pin = root/'pin.json'
+            pin.write_text(json.dumps({'snapshot':str(snapshot),
+                                       'snapshot_sha256':tool.sha(snapshot.read_bytes())}))
+            self.assertIsNotNone(tool.retained_amdgpu_initialization(host, '', pin))
+            for key in host:
+                changed = dict(host); changed[key] = 'different'
+                self.assertIsNone(tool.retained_amdgpu_initialization(changed, '', pin))
+            self.assertIsNone(tool.retained_amdgpu_initialization(
+                host, 'amdgpu 0000:7b:00.0: probe failed with error -22', pin))
+            snapshot.write_text('{}')
+            self.assertIsNone(tool.retained_amdgpu_initialization(host, '', pin))
+            pin.write_text('{}')
+            self.assertIsNone(tool.retained_amdgpu_initialization(host, '', pin))
+
+    def test_interactive_hold_preserves_capture_and_host_abort_paths(self):
+        tool = self.module()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); (root/'run').mkdir(); out = root/'out'; out.mkdir()
+            (root/'run/serial.log').write_text(''); (root/'run/critical.log').write_text('')
+            (out/'stop-requested').touch()
+            manifest = {'run_id':'test', 'spec':{'interactive_hold_seconds':1800}}
+            supervisor = type('S', (), {'verify':lambda self, state:None})()
+            monitor = type('M', (), {'error':None})()
+            with patch.object(tool, 'parse_manifest_captures', return_value=[]), \
+                 patch.object(tool, 'live_capture_state', return_value='fatal'), \
+                 patch.object(tool, 'write_once'), patch.object(tool.time, 'time', return_value=100):
+                with self.assertRaisesRegex(RuntimeError, 'critical capture loss'):
+                    tool.hold_interactive_session(root, manifest, {}, out, supervisor, monitor, None, 200)
+                monitor.error = 'new host kernel fault'
+                with self.assertRaisesRegex(RuntimeError, 'host kernel fault'):
+                    tool.hold_interactive_session(root, manifest, {}, out, supervisor, monitor, None, 200)
+                monitor.error = None
+                with patch.object(tool, 'live_capture_state', return_value='complete'):
+                    tool.hold_interactive_session(root, manifest, {}, out, supervisor, monitor, None, 200)
+
     def host(self):
         return dict(boot_id='boot-A', amdgpu_initialized=True, capture_ready=True,
                     watchdogs_verified=True, device_pinned_awake=True, active_vm=False,

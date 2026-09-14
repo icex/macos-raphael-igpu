@@ -267,6 +267,31 @@ def amdgpu_initialized(journal):
     return bool(completed) and not failed
 
 
+def retained_amdgpu_initialization(host, journal, evidence_path=None):
+    """Recover a historical fact from a reviewed, hash-pinned same-boot snapshot.
+
+    This does not assert reset readiness or authorize reuse. Current probe failures
+    take precedence, and every live admission check still runs independently.
+    """
+    if re.search(r'amdgpu 0000:7b:00\.0[^\n]*(?:probe.*failed|Fatal error|hw_init.*failed)', journal, re.I):
+        return None
+    path = evidence_path or ROOT/'experiments/amdgpu-initialization-evidence.json'
+    try:
+        pin = json.loads(Path(path).read_text())
+        raw = Path(pin['snapshot']).read_bytes()
+        if sha(raw) != pin['snapshot_sha256']:
+            return None
+        saved = json.loads(raw)
+        keys = ('boot_id', 'kernel', 'device', 'iommu_group', 'driver')
+        if (saved.get('amdgpu_initialized') is not True or
+                host.get('driver') != 'vfio-pci' or
+                any(not host.get(key) or saved.get(key) != host[key] for key in keys)):
+            return None
+        return {'snapshot': pin['snapshot'], 'sha256': pin['snapshot_sha256']}
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
 def sleep_inhibited():
     """Return whether logind has the permitted user-level idle inhibitor."""
     try:
@@ -318,7 +343,7 @@ def host_snapshot():
     watchdogs = {name: read('/proc/sys/kernel/'+name)
                  for name in ('watchdog', 'nmi_watchdog', 'hardlockup_panic')}
     reset_method_text = read(device/'reset_method')
-    return dict(boot_id=read('/proc/sys/kernel/random/boot_id'), kernel=os.uname().release,
+    host = dict(boot_id=read('/proc/sys/kernel/random/boot_id'), kernel=os.uname().release,
                 driver=driver, device=(read(device/'vendor') or '').removeprefix('0x')+':'+
                     (read(device/'device') or '').removeprefix('0x'), iommu_group=group,
                 amdgpu_initialized=amdgpu_initialized(journal.stdout) if journal.returncode == 0 else None,
@@ -332,6 +357,12 @@ def host_snapshot():
                                reset_method_text.split()),
                 active_vm=any(n == 'macos-sequoia' or n.startswith('rgpu-launch-') for n in active.splitlines()),
                 sleep_inhibited=sleep_inhibited())
+    if journal.returncode == 0 and not host['amdgpu_initialized']:
+        evidence = retained_amdgpu_initialization(host, journal.stdout)
+        if evidence is not None:
+            host['amdgpu_initialized'] = True
+            host['amdgpu_initialization_evidence'] = evidence
+    return host
 
 
 IDENTITY_FIELDS = ('source_commit', 'source_sha256', 'build_id', 'binary_sha256', 'info_sha256',
@@ -3196,6 +3227,28 @@ def run_post_probe_capture(vm, manifest, state, output, probe):
     return result
 
 
+def hold_interactive_session(vm, manifest, state, output, supervisor, monitor, classifier, end):
+    seconds = manifest.get('spec', {}).get('interactive_hold_seconds', 0)
+    if type(seconds) is not int or not 0 <= seconds <= 6000:
+        raise ValueError('interactive_hold_seconds must be an integer from 0 to 6000')
+    deadline = min(end, time.time() + seconds)
+    if seconds:
+        write_once(output/'interactive-ready.json', {'run_id':manifest['run_id'],
+            'deadline_epoch':deadline, 'stop_file':str(output/'stop-requested')})
+    while time.time() < deadline:
+        supervisor.verify(state)
+        if monitor.error:
+            raise RuntimeError(monitor.error)
+        serial = (vm/'run/serial.log').read_text(errors='replace')
+        critical = (vm/'run/critical.log').read_text(errors='replace')
+        events = parse_manifest_captures(classifier, manifest, serial, critical)
+        if live_capture_state(events) == 'fatal':
+            raise RuntimeError('definitive critical capture loss during interactive inspection')
+        if (output/'stop-requested').exists():
+            break
+        time.sleep(1)
+
+
 def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=None,
             cap_revision_authority_sha256=None,
             warm_qualification_policy_sha256=None,
@@ -3509,6 +3562,8 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                         # Persist the probe before any diagnostic or shutdown so
                         # a crash cannot turn the trigger into an unbound retry.
                         write_once(output/'probe.json', probe)
+                        hold_interactive_session(vm, manifest, state, output,
+                            supervisor, monitor, classifier, end)
                         if post_probe_debug_contract(manifest.get('spec', manifest)) is not None:
                             run_post_probe_capture(vm, manifest, state, output, probe)
                         if critical_replay_quiesce(manifest) is not None:
