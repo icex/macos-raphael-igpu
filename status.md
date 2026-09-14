@@ -1328,3 +1328,39 @@ and the process kept running. Candidate 220 with card `metal-067` runs from
 `--manual-reuse --ack-risk` under the user's standing instruction, after
 `run/mode2-reset-27.json`. This note covers this one launch.
 
+## Probe v7: linearSwizzleTextures makes every readback exact (2026-09-14)
+
+Run `a55387fabb5d03ad9966ddad7f011db3`, card `metal-067`, launch 26 after `run/mode2-reset-27.json`. Verdict
+`CORE_PROBE_PASS`, recovery `recovered`, shutdown `exited-after-guest-request`. Each child
+patched one byte of its own `AMDRadeonX6000MTLDriver` settings constant before creating
+the device.
+
+| Variant | 64 Shared | 64 Managed tex | 1280 Shared | 1280 Managed tex | 1280 render into Managed |
+|---|---|---|---|---|---|
+| none (in-process) | 3,840 | 0 | 1,290,240 | 1,310,720 | 1,310,720 |
+| clear `enableTexturePipeBankXor` (27) | 3,840 | 0 | 1,290,240 | 0 | 0 |
+| clear `enableBlitDMA` (29) | 0 | 0 | 0 | 1,310,720 | 1,310,720 |
+| set `linearSwizzleTextures` (36) | 0 | 0 | 0 | 0 | 0 |
+
+(Managed-buffer copies were exact in every variant.)
+
+An adversarial review (Mesa addrlib rebuilt with configuration overrides) reproduced the
+measured permutation exactly on all 20,480 tiles and the 256/512/1024 histograms as
+hardware writing with the `GB_ADDR_CONFIG` 0x42 layout (4 pipes, 1 packer) while the
+reader decodes with a 16-pipe, 16-packer layout, in modes 24/27. It also pointed out
+that NootedRed programs `GB_ADDR_CONFIG_READ` with the same value as `GB_ADDR_CONFIG`.
+
+## Candidate 221: mirror GB_ADDR_CONFIG into GB_ADDR_CONFIG_READ (2026-09-14)
+
+Commit `6427fbb`, build `e3b0881d653d4c95bee06a2e263b6f22`. `rgpugbread=1` logs both registers
+before RLC start; `rgpugbread=2` copies `GB_ADDR_CONFIG` into `GB_ADDR_CONFIG_READ`
+(seg0 `0x13e2`). Suite 894 OK. This is a layout-register test for rendering correctness,
+not the earlier golden-register ring-hang hypothesis.
+
+## Boot-launch ledger extension for candidate 221 (2026-09-14)
+
+Candidate 221 with card `metal-068` (`rgpugbread=2`, kernel swizzle override off, probe v7)
+runs from `run/candidate-221` as launch 27 on boot `c369c74e`, through
+`--manual-reuse --ack-risk` under the user's standing instruction, after
+`run/mode2-reset-28.json`. This note covers this one launch.
+
