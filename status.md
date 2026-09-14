@@ -39,3 +39,12 @@ Shutdown forced/recovered; final reset77 clean. No new launch allowance.
 Next audit: Linux VCN3.1.2 explicitly sets SMU-interface2 in shared firmware
 structure offset0x58; native Apple allocation is only0x58 bytes and omits it.
 Need guarded allocation extension and field setup before native engine start.
+
+## Candidate235 allowance
+
+One launch49 on boot c369c74e-96ff-4c21-ae85-80ccb269f7d2, candidate235/cardmetal-081,
+fresh MODE2 via tools/cycle.py, max6000s and normal abort/cleanup checks. Verify
+shared allocation0x60 and SMU-interface2 before hardware H264 output. Capture
+MMHUB/VCN registers within first seconds of encode submission. Continued stall
+with correct field setup rejects SMU-interface declaration alone as sufficient.
+Desktop corruption and HEVC/alpha remain required. Host927 tests/3 skipped pass.
