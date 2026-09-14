@@ -69,9 +69,32 @@ Make the locator structural instead, keeping fail-closed behaviour:
   refuse on ambiguity, missing metadata, or an already-clear bit.
 - Keep the UUID/path checks as provenance guards, not as the locator.
 
-A read-only prototype and 11 passing structural checks already exist in
-`findings/research/update-resilience-20260914/`. Scope: compatible updates within the same major
-version. A major redesign of the settings constructor still needs maintenance.
+**Status: the locator is built and validated offline.** `src/TextureSettingLocator.hpp` derives
+the bit index from `__objc_methtype` and finds the constructor by instruction *shape*:
+
+```
+48 b8 <imm64>    movabs r64, imm64      (the default-enabled mask)
+48 09 /r         or     r64, r64        (merge the computed bits)
+48 89 /r         mov    [rdi], r64      (store into the settings object)
+```
+
+restricted to immediates that actually have the target bit set. All three encodings are
+fixed-length, so **no disassembler is needed and it can run in the kernel**. Against the real
+24G830 `__TEXT` this matches exactly one site — `0x13a7e1`, the known address — with no UUID, no
+hard-coded offset and no hard-coded bit. `tests/test_texture_setting_locator.cpp` covers
+renumbering, moved code, changed defaults, ambiguity, changed shape and malformed metadata, and
+runs in CI.
+
+An earlier prototype under `findings/research/update-resilience-20260914/` took a different route
+(capstone, matching a ten-instruction sequence). It is superseded: it cannot run in a kext, its
+pattern is far more brittle, and capstone is not installed on this host, so its recorded
+"11 passing checks" cannot be reproduced here.
+
+**Remaining:** wire the locator into the live COW path — read `__objc_methtype` and `__text` from
+the target process, locate once, cache the offset per boot, then verify-and-apply per process.
+Land it behind a new opt-in boot arg so the proven `rgputexdiag=2` path is untouched until a
+hardware run validates the replacement. Scope: compatible updates within the same major version;
+a redesigned settings constructor is refused, not guessed at.
 
 ## 3. Virtual display attached to the iGPU
 
