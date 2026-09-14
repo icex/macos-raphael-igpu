@@ -247,6 +247,7 @@ static bool vcnApuEnabled = false;
 static bool vcnStaticEnabled = false;
 static mach_vm_address_t orgVcnConfig = 0;
 static mach_vm_address_t orgVcnInitialize = 0;
+static mach_vm_address_t orgVcnQueryFw = 0;
 static bool vcnSharedSizeReady = false;
 #include "VcnFirmware.hpp"
 static mach_vm_address_t orgVcnReadFw = 0;
@@ -2391,6 +2392,21 @@ static uint32_t wrapVcnConfig(void *engine, uint32_t index) {
     }
     return value;
 }
+// Native CGS interface query: (interface, firmware ID, 16-byte output).
+// Observe only the two VCN firmware IDs, preserving native return/output. No
+// extra firmware query or MMIO read; failed queries do not expose output bytes.
+static uint32_t wrapVcnQueryFw(void *cgs, uint32_t id, void *output) {
+    const uint32_t result = FunctionCast(wrapVcnQueryFw, orgVcnQueryFw)(cgs, id, output);
+    static unsigned reports = 0;
+    if ((id == 0x14 || id == 0x15) && output &&
+        __sync_fetch_and_add(&reports, 1u) < 8) {
+        auto out = static_cast<const uint8_t *>(output);
+        RLOG("VCNP: query id=%x result=%u loaded=%u valid=%u address=%llx", id, result,
+             result == 0 ? out[0] : 0, result == 0 ? out[1] : 0,
+             result == 0 ? *reinterpret_cast<const uint64_t *>(out + 8) : 0ULL);
+    }
+    return result;
+}
 static uint32_t wrapVcnInitialize(void *engine) {
     auto ctx = engine ? *reinterpret_cast<const uint8_t **>(
         static_cast<uint8_t *>(engine) + 16) : nullptr;
@@ -2400,6 +2416,12 @@ static uint32_t wrapVcnInitialize(void *engine) {
         *reinterpret_cast<const uint64_t *>(ctx + 0x3f8) - hwlibsBase);
     const uint32_t result = FunctionCast(wrapVcnInitialize, orgVcnInitialize)(engine);
     RLOG("VCNS: native initialize returned%u", result);
+    if (ctx) RLOG("VCNP: context fwID=%x placement=%llx bytes=%x regbase1=%x shared=%llx",
+        *reinterpret_cast<const uint32_t *>(ctx + 0x2a0),
+        *reinterpret_cast<const uint64_t *>(ctx + 0x2c0),
+        *reinterpret_cast<const uint32_t *>(ctx + 0x2b0),
+        *reinterpret_cast<const uint32_t *>(ctx + 0x38),
+        *reinterpret_cast<const uint64_t *>(ctx + 0x378));
     return result;
 }
 
@@ -2689,6 +2711,14 @@ static void installDiagnostics(KernelPatcher &patcher, mach_vm_address_t base) {
         patcher.clearError();
     }
     if (vcnStaticEnabled) {
+        // Complete instructions from audited HWLibs24G830+868d4, before any route.
+        const uint8_t queryGuard[] = {0x55,0x48,0x89,0xe5,0x41,0x56,0x53,0x48,0x83,0xec,0x10,0x31,0xc9};
+        if (!memcmp(reinterpret_cast<const void *>(base + 0x868d4), queryGuard, sizeof(queryGuard))) {
+            orgVcnQueryFw = patcher.routeFunction(base + 0x868d4,
+                reinterpret_cast<mach_vm_address_t>(wrapVcnQueryFw), true);
+            patcher.clearError();
+        }
+        RLOG("VCNP: guarded query=%u", orgVcnQueryFw != 0);
         const uint8_t configGuard[] = {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x53,0x48,0x83,0xec,0x28,0x48,0x8d,0x5d,0xe4};
         const uint8_t initializeGuard[] = {0x55,0x48,0x89,0xe5,0x41,0x56,0x53,0x48,0x83,0xec,0x20,0x48,0x89,0xfb};
         if (!memcmp(reinterpret_cast<const void *>(base + kOffVcnConfig), configGuard, sizeof(configGuard)) &&
