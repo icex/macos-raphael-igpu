@@ -1809,3 +1809,36 @@ adds1920x1080 and2048x2048 plus two fresh driver-only children with no selfpatch
 User authorized needed tests; upcoming bounded launch39 after MODE2 reset,
 max6000 seconds with existing safety/identity/capture/cleanup gates. No success
 claim until live probe and restoration/recovery records are examined.
+
+
+## Candidate230 COW live pass — 2026-09-14T12:01Z
+
+Host boot c369c74e-96ff-4c21-ae85-80ccb269f7d2, launch39, started
+2026-09-14T12:01:37.253002197Z. Run59acb61411e09a8f98ee5d044f974ddd,
+full CID3db3acbed1e86f1e3aad2857ef2b20d5ce8384f57deb0524ab127e6e5cfdda8f,
+guest boot F6ED6AB3-B044-4B39-91AF-7FB93567D127, buildc115e782494e43f6850aedfb67010375,
+executable SHAc9e5a856a34ebbe4f3b1bf59de2c613d15edff37c7b2e677a8d476b324bfcf94.
+Artifacts: `/home/bogdan/macos-vm/run/candidate-230-results`; independent detailed
+matrix audit `run/managed-delivery-20260914/candidate230-matrix-audit.json`.
+
+| Dimension | Result |
+|---|---|
+| Delivery | XTCOW p=0,w=0,r=0,v=0 in live clients; original leaf prot5,max5,submap0. One-byte private COW, restoredRX |
+| Managed copies | All24 main rows at64x64,1280x1024,1920x1080,2048x2048 zero mismatches; both12-row fresh children zero with self_patch_attempted=false. Total61,274,112 pixels across48 cases |
+| Render/composite |1000 offscreen frames,0 pixel mismatches/failed commands; drawable11616/11616 correct; two self-window captures match pattern and change hash; display and WindowServer use same accelerator |
+| Capture | Harness valid=True, verdict=CORE_PROBE_PASS |
+| Shutdown/recovery |exited-after-guest-request, request1d4c74d4c4f54c0e996beeeb453f80cb; warm_reuse=recovered; no running VM |
+
+Probe v10 was compiled in GPU-free preparation boot02569C9B-1B5D-4858-BBA0-AF054C2CE5AC
+(CID5869b984c66166fa7f08b5ec13420399ed129393d86b2904da07d38daa34928f,
+24G830) then cleanly shut down. Source SHA
+cc76ecd1167f441c45901c67e81eaf781f63fdcc287f6f107979017fd0075ef0;
+binary SHA71531ae024ae99741ac878be9a5da97177f8dfa78e633925beb8e123777e69fc.
+No GPU launch/count for compilation. Initial manifest preparation correctly
+refused stale v9 probe identity. No bypass or Apple on-disk binary edits.
+
+Remaining validation: repeat same built kext/probe in a fresh guest boot to check
+private delivery with fresh mapping/ASLR and another cleanup. User authorizes
+needed tests; launch40 only after actual exposure, bounded6000s and all gates.
+Root-display capture still differs from window's own capture in headless setup;
+do not infer physical monitor visibility or all application compatibility.

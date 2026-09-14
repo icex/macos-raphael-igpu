@@ -79,7 +79,7 @@
     "generic_client_observations_conditional",
     "no_root_correlation_claim"
   ],
-  "repeat_policy": "One user-authorized bounded launch39 after MODE2 reset on boot c369c74e, only count actual QEMU/VFIO exposure.",
+  "repeat_policy": "Two user-authorized bounded runs of exact candidate230 after MODE2 reset on boot c369c74e (launch39 and40); second validates fresh mapping and repeat cleanup. Count only QEMU/VFIO exposure.",
   "abort_on": [
     "identity_mismatch",
     "capture_loss",
