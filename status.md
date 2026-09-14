@@ -42,3 +42,13 @@ Visible corruption latest screenshot is launch50 before encoder use:
 Small12-case format/CPU/quad/sampling probes pass; no common cause established.
 Software H264/HEVC small roundtrips pass; hardware HEVC remains unverified after fixes.
 No merge/push to main. Prior detailed state archived under findings/research/status-archives/.
+
+## Candidate240 launch54 allowance
+
+One launch54 on boot c369c74e-96ff-4c21-ae85-80ccb269f7d2, fresh MODE2 via
+tools/cycle.py, max6000s with all abort/cleanup. Runtime target validation replaces
+too-early check, preserving marker and later barrier. Verify MHG select1 and
+correct MMHUB CTX0 before H264; actual frames required. Further encoders only
+if healthy; stop on first failure. Host927 tests/3skipped pass and build succeeds.
+Worktree /home/bogdan/macos-vm/run/worktrees/candidate-240. Launch53 first timeout
+callback identified as HWLibs37e53 vm_10_1_is_eng_ack, invalidation acknowledgment.
