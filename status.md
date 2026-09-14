@@ -1594,3 +1594,34 @@ pinned image) and the VFIO arguments, `--max-seconds 6000`, critical serial on, 
 `run/mode2-reset-35.json`. No probe or automated shutdown; the session ends by the user's
 instruction or the 6000-second deadline, followed by a MODE2 reset. This note covers this one
 launch.
+
+## Candidate 226: no tiling register is wrong; the copy defect is driver-internal (2026-09-14)
+
+Run `e707b49dd0a99d418863c1a9649b0baa`, card `metal-074`, launch 35 after `run/mode2-reset-36.json`. Verdict
+`CORE_PROBE_PASS`, recovery `recovered`, shutdown `exited-after-guest-request`. (A first cycle
+attempt stopped at the staging preflight with "unsupported candidate card pair" because the card
+was committed before its `stage-candidate.py` entries; it exited before the MODE2 reset, so no
+launch or reset was consumed. The entries were added and the launch retried.)
+
+The read-only tiling-register sweep, logged at the SDMA watchdog and every gfx progress sample:
+
+```
+GB_ADDR_CONFIG=0x42 READ=0x42 SDMA0=0x42/0x42
+GB_BACKEND_MAP=0 RB_BACKEND_DISABLE=0 GB_GPU_ID=0 EDC_MODE=0
+RMI_XBAR=0 RMI_UTC=0 SPI_CFG=0 TILE_STEER=0
+```
+
+Every register that governs tiling reads Raphael's value at probe time. Combined with earlier
+results (setting the kernel address library's `gbAddrConfig` to 0x42 via `rgpuaddrcfg=3`, and
+the probe's `gbaddr42` child forcing the Metal driver's own address-library input to 0x42, both
+left the Managed-texture-copy paths wrong), this rules out a register or hardware-info cause.
+
+**Conclusion (documented limitation).** The remaining defect is confined to tiled
+texture-to-texture copies where a `MTLStorageModeManaged` texture is the source or destination
+at large sizes (probe v9: `private->managed-texture+sync` and `upload managed-texture->private`,
+both 1,310,720 of 1,310,720, a single pipe-bank-xor bit at 64-pixel granularity). It is internal
+to Apple's Metal driver's handling of the tiled copy for Raphael's 4-pipe address config, not a
+value our kext feeds the driver. Per the user's decision to fix this register/hardware-info only,
+there is no such fix, and it stands as a known limitation. Everything else is correct: the
+composited desktop, Metal rendering and presentation, offscreen readback, all buffer copies and
+uploads, and CPU render-into-Managed-texture.
