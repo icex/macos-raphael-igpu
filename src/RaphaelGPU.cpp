@@ -242,6 +242,10 @@ static bool vmFaultDiagEnabled = false;
 // MES MAP_PROCESS page-table-base field after native packet construction.
 static uint32_t vmRootFixMode = 0;
 static bool mmhubFixEnabled = false;
+static bool vcnFirmwareEnabled = false;
+#include "VcnFirmware.hpp"
+static mach_vm_address_t orgVcnReadFw = 0;
+static mach_vm_address_t orgVcnHwInit = 0;
 static volatile bool mmhubTableCorrect = false;
 static rgpu::ObservationBuffer<RaphaelVm::PreparedRequest, 8> mmhubPrograms {};
 static mach_vm_address_t orgVmmGetPde {};
@@ -693,6 +697,8 @@ static constexpr size_t kOffSdmaFindInstance = 0xa7312; // _IpiSdmaFindInstanceB
 static constexpr size_t kOffTtlSetDevCap = 0xaf02d;    // _ttlSetDeviceCapabilityEntry
 static constexpr size_t kOffVmPhysicalFb = 0x33370;   // _vm_10_1_get_uma_physical_fb_offset
 static constexpr size_t kOffGvmGetIpFn   = 0x19258;    // _gvm_get_ip_function
+static constexpr size_t kOffVcnReadFw = 0x86648; // HWLibs _internal_cos_read_fw
+static constexpr size_t kOffVcnHwInit = 0x862ea; // HWLibs _vcn_hw_init
 static constexpr size_t kOffFwDirGet     = 0xb0c10;    // AMDFirmwareDirectory::getFirmware
 static constexpr size_t kOffSmuFwFile    = 0x70961;    // _smu_set_fw_entry_info_from_file
 static constexpr size_t kOffPspRegRead   = 0x516ce;    // _psp_cgs_read_register
@@ -2358,6 +2364,46 @@ static void *wrapFwDirGet(void *dir, uint32_t devType, const char *name) {
     return r;
 }
 
+// HWLibs 24G830 _internal_cos_read_fw receives a preallocated CPU buffer,
+// capacity at +8 and filename at +16. Return is bytes copied, zero on failure.
+// The native consumer keeps the AMD signature header, extracts version at +0x60,
+// and owns all subsequent firmware allocation, authentication and initialization.
+static uint32_t wrapVcnReadFw(void *engine, void *input) {
+    if (vcnFirmwareEnabled && engine && input) {
+        auto in = static_cast<uint8_t *>(input);
+        auto name = *reinterpret_cast<const char **>(in + 16);
+        auto dst = *reinterpret_cast<void **>(in);
+        auto capacity = *reinterpret_cast<const uint32_t *>(in + 8);
+        auto ctx = *reinterpret_cast<const uint8_t **>(static_cast<uint8_t *>(engine) + 16);
+        if (name && !strcmp(name, "ativvaxy_vcn3_1.dat") && ctx &&
+            *reinterpret_cast<const uint32_t *>(ctx + 0x268) == 0x30001) {
+            if (!dst || capacity < sizeof(raphaelVcnFirmware)) {
+                RLOG("VCNF: refused buffer capacity=%u", capacity);
+                return 0;
+            }
+            memcpy(dst, raphaelVcnFirmware, sizeof(raphaelVcnFirmware));
+            RLOG("VCNF: supplied Raphael3.1.2 signed payload bytes=%lu version=0x04121015",
+                 sizeof(raphaelVcnFirmware));
+            return sizeof(raphaelVcnFirmware);
+        }
+    }
+    return FunctionCast(wrapVcnReadFw, orgVcnReadFw)(engine, input);
+}
+
+static uint32_t wrapVcnHwInit(void *engine, void *input, void *output) {
+    auto ctx = engine ? *reinterpret_cast<const uint8_t **>(
+        static_cast<uint8_t *>(engine) + 16) : nullptr;
+    if (ctx) RLOG("VCNF: HW init ip=%x flags=%x mode=%u fwPresent=%u fwBytes=%u fwVersion=%x",
+        *reinterpret_cast<const uint32_t *>(ctx + 0x268),
+        *reinterpret_cast<const uint32_t *>(ctx),
+        *reinterpret_cast<const uint32_t *>(ctx + 0x2e0), ctx[0x278],
+        *reinterpret_cast<const uint32_t *>(ctx + 0x288),
+        *reinterpret_cast<const uint32_t *>(ctx + 0x298));
+    auto result = FunctionCast(wrapVcnHwInit, orgVcnHwInit)(engine, input, output);
+    RLOG("VCNF: native HW init returned %u", result);
+    return result;
+}
+
 // gvm_sw_init runs mc_sw_init -> vm_sw_init -> hdp_sw_init -> athub_sw_init and returns
 // the first nonzero, with no per-stage event id, so "SW_IP_CLIENT_ID__GVM
 // event_id=0xc00c0205" does not say which one failed. All four resolve their handlers
@@ -2586,6 +2632,20 @@ static void installDiagnostics(KernelPatcher &patcher, mach_vm_address_t base) {
                      reinterpret_cast<mach_vm_address_t>(e.fn), true);
         RLOG("route %s -> %s (org=0x%llx)", e.name, *e.org ? "ok" : "FAILED", *e.org);
         patcher.clearError();
+    }
+    if (vcnFirmwareEnabled) {
+        const uint8_t readGuard[] = {0x55,0x48,0x89,0xe5,0x48,0x83,0xec,0x20};
+        const uint8_t initGuard[] = {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56};
+        if (!memcmp(reinterpret_cast<const void *>(base + kOffVcnReadFw), readGuard, sizeof(readGuard)) &&
+            !memcmp(reinterpret_cast<const void *>(base + kOffVcnHwInit), initGuard, sizeof(initGuard))) {
+            orgVcnHwInit = patcher.routeFunction(base + kOffVcnHwInit,
+                reinterpret_cast<mach_vm_address_t>(wrapVcnHwInit), true);
+            patcher.clearError();
+            if (orgVcnHwInit) orgVcnReadFw = patcher.routeFunction(base + kOffVcnReadFw,
+                reinterpret_cast<mach_vm_address_t>(wrapVcnReadFw), true);
+            patcher.clearError();
+            RLOG("VCNF: guarded routes read=%u init=%u", orgVcnReadFw != 0, orgVcnHwInit != 0);
+        } else RLOG("VCNF: prologue mismatch; firmware intervention refused");
     }
     orgFwDirGet = patcher.routeFunction(base + kOffFwDirGet,
                       reinterpret_cast<mach_vm_address_t>(wrapFwDirGet), true);
@@ -8255,6 +8315,8 @@ static void pluginStart() {
          submissionTraceEnabled, submissionTraceEnabled ? "enabled" : "disabled");
     uint32_t vmFaultDiag = 0;
     uint32_t mmhubFix = 0;
+    uint32_t vcnFw = 0;
+    vcnFirmwareEnabled = PE_parse_boot_argn("rgpuvcnfw", &vcnFw, sizeof(vcnFw)) && vcnFw == 1;
     mmhubFixEnabled = PE_parse_boot_argn("rgpummhub", &mmhubFix, sizeof(mmhubFix)) && mmhubFix == 1;
     RLOG("MH: rgpummhub=%u: guarded MMHUB2.4 register table and client-root correction",
          mmhubFixEnabled);
