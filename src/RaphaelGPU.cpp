@@ -7967,6 +7967,12 @@ static const char kMtlDriverPath[] =
 static const uint8_t kMtlTexXorFind[10]    = { 0x48, 0xb8, 0x00, 0x00, 0x70, 0xff, 0x01, 0x00, 0x00, 0x00 };
 static const uint8_t kMtlTexXorReplace[10] = { 0x48, 0xb8, 0x00, 0x00, 0x70, 0xf7, 0x01, 0x00, 0x00, 0x00 };
 static const vm_address_t kMtlTexXorSegOff[1] = { 0x13a7e1 }; // offset within the driver __TEXT segment
+// Unslid __TEXT base/size of AMDRadeonX6000MTLDriver in the KDK 24G830 shared cache. Supplying
+// these lets Lilu patch the shared cache without the dyld .map (absent/split on Sequoia); the
+// per-process patcher re-verifies the live bytes against the find pattern, so a stale base is
+// a safe no-op.
+static const vm_address_t kMtlTexXorTextBase = 0x7ffb08bf3000ULL;
+static const vm_address_t kMtlTexXorTextSize = 0x5029aeULL;
 static UserPatcher::BinaryModPatch mtlTexXorPatch {
     CPU_TYPE_X86_64,
     0,                                        // flags
@@ -7979,7 +7985,8 @@ static UserPatcher::BinaryModPatch mtlTexXorPatch {
     1                                         // section: non-zero enables the patch
 };
 static UserPatcher::BinaryModInfo mtlTexXorMod {
-    kMtlDriverPath, &mtlTexXorPatch, 1, 0, 0, 0, 0, kMtlTexXorSegOff
+    kMtlDriverPath, &mtlTexXorPatch, 1, 0, 0, 0, 0, kMtlTexXorSegOff,
+    kMtlTexXorTextBase, kMtlTexXorTextSize
 };
 
 static void pluginStart() {

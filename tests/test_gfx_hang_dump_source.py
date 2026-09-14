@@ -44,7 +44,9 @@ class GfxHangDumpSourceTests(unittest.TestCase):
         self.assertIn('AMDRadeonX6000MTLDriver.bundle/Contents/MacOS/AMDRadeonX6000MTLDriver',
                       self.source)
         self.assertIn('UserPatcher::FileSegment::SegmentTextText', self.source)
-        self.assertIn('kMtlDriverPath, &mtlTexXorPatch, 1, 0, 0, 0, 0, kMtlTexXorSegOff', self.source)
+        self.assertIn('kMtlDriverPath, &mtlTexXorPatch, 1, 0, 0, 0, 0, kMtlTexXorSegOff,', self.source)
+        self.assertIn('static const vm_address_t kMtlTexXorTextBase = 0x7ffb08bf3000ULL;', self.source)
+        self.assertIn('kMtlTexXorTextBase, kMtlTexXorTextSize', self.source)
         gate = self.body('if (texPipeBankXorDisable == 1) {',
                          'static const char *bootargOff[]')
         # onProcLoad registration lives only inside the gate.
