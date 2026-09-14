@@ -35,3 +35,12 @@ Launch53 earliest callback9460be53 minus observed HWLibs945d4000 =37e53,
 _vm_10_1_is_eng_ack, waiting for page-table invalidation acknowledgment. This
 strengthens wrong-native-MMHUB-table hypothesis; it does not prove a SMU reset
 failure. No extra host firmware power commands were issued.
+
+## Launch54 result
+
+Runtime route1/select1 delivered native2.3 table. MMHUB GART before codec is
+enabled1555481/root84fdfc001/rangeffbfa00..ffffe00/L1TLB1d59. Native initialization
+correction verified. H264 firmware-ready timeout and third-submit stall persist,
+and raw TigerVNC corruption persists before encoder. Derivative probe12cases pass.
+Shutdown forced/recovered, finalMODE2reset89. No full desktop/encoder claim.
+The log's tlb field reads table7a0, actually framebuffer-base register1a8ec.

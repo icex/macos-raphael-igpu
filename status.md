@@ -1,54 +1,47 @@
 # Live status — 2026-09-15
 
-Desktop corruption and hardware encoding remain broken; no full desktop qualification.
-Worktree /home/bogdan/macos-vm/run/worktrees/candidate-239 (mmhub-native-initializer).
-Latest launch53/cardmetal-085 run7d1e7f059d7e66444ba73bff0c975059,
-build1796407bff064026af65b8df4080aa08, source4251420. Hostboot
-c369c74e-96ff-4c21-ae85-80ccb269f7d2; prelaunch MODE2reset86.
-Results /home/bogdan/macos-vm/run/candidate-239-results/.
+Visible desktop corruption and hardware encoding remain unresolved. Worktree
+/home/bogdan/macos-vm/run/worktrees/candidate-240 (mmhub-runtime-target).
+Launch54/cardmetal-086 run245f9a245b3d621e48595da8662fbdfc, sourceb0734f5,
+results /home/bogdan/macos-vm/run/candidate-240-results/; build identity in manifest.
+Hostbootc369c74e-96ff-4c21-ae85-80ccb269f7d2, prelaunchMODE2reset88.
+Guestboot53E7BD8C-D3D0-4EE5-AE06-AAB52B1F00A6, registry4294968025.
 
-## Latest run is not functional evidence
+## Verified fix and remaining failure
 
-No desktop probe or encoder test. Native MMHUB2.3 call patch was skipped:
-raphaelTargetConfirmed is not established at HWLibs load-time. No MHG log; source
-condition accounts for skip, while actual build identity matches. Correct delivery
-must validate target at native runtime without weakening existing identity checks.
-Do not describe this run as testing MMHUB2.3 initialization.
+Native MMHUB2.3 builder actually selected (MHG route1/select1, caller33eca, GC1,
+unique exact PCI marker). Table ctx0/root/start/end1a740/1a940/1a942/1a944.
+MMIO BEFORE encoder: CTX0 enabled1555481, root84fdfc001,
+rangeffbfa00..ffffe00, L1TLB1d59. This fixes the separate HWLibs native GART
+initialization defect; X6000 paging-table fix from233 remains necessary separately.
+The diagnostic label tlb=1a8ec actually names framebuffer base, not TLB (label typo).
 
-Startup also produced repeated1000ms callback waits before firmware submission,
-later PSP LOAD_ASD wire4 status7. TMR unload wire7, TOC32, SETUP_TMR5 and VCNwire13
-succeeded. Earliest callback needs symbol identity before diagnosing reset cause.
-No unsupported conclusion that MODE2 resets VCN or that host reboot is required.
+Desktop Metal probe passes. Additional derivative shader across two triangles
+passes12 format/storage cases (surface-derivative.jsonl). Actual raw Linux
+TigerVNC screenshot still shows same diagonal green/purple Safari/menu corruption
+BEFORE encoder: tigervnc-corruption.jpg. No desktop rendering qualification.
 
-Stopped using experiment.py verified SIGTERM handler (probe never reached hold).
-Guest shutdown exited-after-guest-request, recovery recovered, overall INVALID.
-VM stopped. Final MODE2reset87 confirms CP_STAT0/RLC_CNTL0, not VCN readiness.
-Inhibitor active; vfio-pci retained; power/control on; no host reboot/new allowance.
-Host927 tests/3skipped passed, build succeeds.
+H264 selected hardware encoder, submitted0/1, blocked on2/no frame callbacks.
+VCN native query and context both retain valid PSP TMRf41f400000. Static initializer
+returns0 despite firmware-ready timeout. Post-submit snapshot awake804/status0,
+code cache readbackffffffff/ffffffff, MMHUBfault0, correct GART retained. Snapshot
+is not guaranteed before native ring reset; zero ring pointers are not first-stall
+proof. Hardware HEVC not tested on stalled engine. Earlier small software H264/HEVC
+roundtrips pass. Common cause with visible corruption remains unproven.
 
-## Last functional evidence and next fix
+## Cleanup and scope
 
-Launch52 candidate238: Metal probe pass, H264 third submission hangs/no output;
-VCN query and context both retain correct TMRf41f400000. All-ones code cache reads
-therefore do not prove bad firmware placement. Native static FW-ready wait times out.
-GFXHUB GARTCTX0 enabled/rangeffbfa00..ffffe00; MMHUB CTX0disabled/range0..3ffff.
-VCN shared bufferffbfe52000 requires GART. HWLibs VM10.3 selects2.1 table builder
-3675b, separate from X6000 paging table corrected in233. Native2.3 builder36223
-has matching Raphael offsets and same void(vm*) ABI; guarded call correction
-prepared but not delivered in239. See findings/research/mmhub-native-gart-20260915.md.
+Stopped through interactive stop-requested. Shutdown forced, harness recovered.
+VM stopped, final MODE2reset89 CP_STAT0/RLC_CNTL0. Hostboot unchanged, vfio-pci
+retained, power/control on, inhibitor active. No host reboot. Our VNC viewer and
+SSH master closed. Host927 tests/3skipped pass; build succeeds. No new allowance.
 
-Visible corruption latest screenshot is launch50 before encoder use:
-/home/bogdan/macos-vm/run/candidate-236-results/tigervnc-corruption.jpg.
-Small12-case format/CPU/quad/sampling probes pass; no common cause established.
-Software H264/HEVC small roundtrips pass; hardware HEVC remains unverified after fixes.
-No merge/push to main. Prior detailed state archived under findings/research/status-archives/.
+## Next discriminating investigation
 
-## Candidate240 launch54 allowance
-
-One launch54 on boot c369c74e-96ff-4c21-ae85-80ccb269f7d2, fresh MODE2 via
-tools/cycle.py, max6000s with all abort/cleanup. Runtime target validation replaces
-too-early check, preserving marker and later barrier. Verify MHG select1 and
-correct MMHUB CTX0 before H264; actual frames required. Further encoders only
-if healthy; stop on first failure. Host927 tests/3skipped pass and build succeeds.
-Worktree /home/bogdan/macos-vm/run/worktrees/candidate-240. Launch53 first timeout
-callback identified as HWLibs37e53 vm_10_1_is_eng_ack, invalidation acknowledgment.
+MMHUB correction is insufficient for VCN firmware readiness. Linux VCN startup
+also sends platform PowerUpVcn through SMU13.0.5; Apple dummy SMU backend does not.
+Audit native CGS indirect register transport and exact Raphael message mapping
+before considering that intervention. No host SMU power command has been issued.
+Do not equate all-ones protected-register read with bad software address (52
+falsified that). Continue actual desktop corruption reproduction separately.
+No merge/push to main. Superseded state archived under findings/research/status-archives/.
