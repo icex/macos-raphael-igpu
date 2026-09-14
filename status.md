@@ -1767,3 +1767,36 @@ Authorized upcoming candidate229: one bounded launch (up to6000 seconds) after
 successful MODE2 reset on host boot c369c74e-96ff-4c21-ae85-80ccb269f7d2. Record
 launch38 only once QEMU/VFIO exposure begins, preserve all harness abort paths.
 External user-level `rgpu-managed-delivery-idle` inhibits idle without sudo.
+
+
+## Candidate229 live diagnostic — 2026-09-14T11:50Z
+
+Host boot `c369c74e-96ff-4c21-ae85-80ccb269f7d2`; launch38 exposed at
+2026-09-14T11:50:00.636588588Z, run `83f714b882d261e152c5a6218f861afb`,
+full CID `6257298b46029457c79012e9f16a2aae038b716343655a48299a2a72d357636c`,
+guest boot `CA6E143C-2D8C-4A76-8B8C-69BDB3C74146`, build
+`5a32bd32750741ef9f37cbf7577f1e6e`, executable SHA256
+`7296e48f52ecc8eeabd509d2418c30932d375e59f41194df8940d92dd75f0273`.
+Artifacts: `/home/bogdan/macos-vm/run/candidate-229-attempt-retry1-results`.
+
+| Dimension | Result |
+|---|---|
+| Delivery boundary | Live XTDIAG matches path, UUID, instruction in current clients; text0x7ffb119c1000, site0x7ffb11afb7e1. Long log truncates most leaf protection fields; shorten next build |
+| Functional | CORE_PROBE_PASS; large1280x1024 managed readback and managed upload each1310720 mismatches, other10 matrix rows zero; read-only baseline preserved |
+| Capture | valid harness verdict, fresh producer quiesce snapshot5,340 records |
+| Shutdown/cleanup | Guest-requested exit request2a3b93c8ea504c91a92ff3465170c40a; warm_reuse=recovered, no running VM afterward |
+
+Pre-exposure attempt `ee0c0738dae3f305a798fe9f70132267` failed because the
+exited GPU-free clone retained familiar container name. Reconciliation initially
+blocked on obsolete `rgpu-inhibit` container (sleep only, no devices, no active
+systemd inhibitor). Stopped obsolete container while external user idle inhibition
+remained active; renamed exited clone to rgpu-gpuless-delivery-done. Harness
+reconciliation proof removed the unused reservation; no GPU exposure/count for it.
+Read-only callback reviewed against native relocation calls IOLockLock, IOLog,
+IOSleep: native method is sleepable. Do not infer a mandatory worker from generic
+lock concerns. New hook runs before native driver locks.
+
+Blocking issue: actual private-COW patch delivery and two-way managed-texture
+correctness remain untested. Next candidate230 may test this user-authorized route;
+no on-disk Apple driver edits or security changes. This is still a userspace binary
+patch delivered by our kext, not a demonstrated native metadata correction.
