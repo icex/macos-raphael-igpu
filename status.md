@@ -1446,3 +1446,31 @@ Candidate 223 with card `metal-070` runs from `run/candidate-223` as launch 30 o
 `c369c74e`, through `--manual-reuse --ack-risk` under the user's standing instruction, after
 `run/mode2-reset-31.json`. This note covers this one launch.
 
+
+## Candidate 223: SDMA address configuration was 0x444; the desktop now renders correctly (2026-09-14)
+
+Run `3d505f831ad1dfd6a2bad9da231558f2`, card `metal-070` (build of commit `c6fb3b1`), launch 30 after
+`run/mode2-reset-31.json`. Verdict `CORE_PROBE_PASS`, recovery `recovered`, shutdown
+`exited-after-guest-request`.
+
+- Before RLC start and at `AMDHWAlignManager2::init` both SDMA registers read 0x42. By the
+  first gfx progress sample (about 30 s after start) Apple's SDMA bring-up had set
+  `SDMA0_GB_ADDR_CONFIG` and `SDMA0_GB_ADDR_CONFIG_READ` to **0x444** (16 pipes, 16
+  packers: the Navi23 value). The sampler rewrote both to 0x42.
+- Results after the correction:
+
+| Check | Before (launch 29) | Now |
+|---|---|---|
+| 64x64 Private to Shared buffer | 3,840 wrong | 0 |
+| 1280x1024 Private to Shared buffer | 1,290,240 wrong | 0 |
+| 1280x1024 Managed texture synchronize (both paths) | 1,310,720 wrong | 1,310,720 wrong |
+| Offscreen ramp readback | 718 of 736 wrong | 0 of 736 |
+| Window child drawable readback | 3,051 of 11,616 wrong | 0 |
+
+- The root display capture now shows the correct Sequoia wallpaper and menu bar
+  (`findings/research/candidate223-desktop.jpg`), and the window's self-capture shows the
+  exact quadrant pattern and moving bar (`findings/research/candidate223-metal-window.jpg`).
+
+Remaining: large Managed-texture synchronize is still permuted (the `linearswizzle1` child
+fixes it), and the correction must happen as soon as Apple writes 0x444 rather than from the
+30-second sampler.
