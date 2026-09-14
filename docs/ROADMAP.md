@@ -107,9 +107,9 @@ a redesigned settings constructor is refused, not guessed at.
 
 ## 3. Virtual display attached to the iGPU
 
-**Now a hard prerequisite, not a convenience (2026-09-14).** The guest had **no display of its
-own**: its only framebuffer was the virtual display **NoMachine** installed. When NoMachine was
-uninstalled, macOS was left genuinely headless and `screensharingd` began failing with
+**Now a hard prerequisite, not a convenience (2026-09-14).** The guest has **no usable display of
+its own**. macOS's own virtual display (`VirtDisplay8`, vendor `unkn`, product `virt`) is
+unstable and eventually stops being created, after which `screensharingd` fails with
 `getactivedisplaylist error 268435459` / `unable to get width and height of display`, with
 `IOFramebuffer` node count **0** on a clean boot. Every VNC client — Apple Screen Sharing,
 TigerVNC, RealVNC, and a hand-written RAW/VncAuth client — then completes the TCP connect and

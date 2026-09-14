@@ -85,6 +85,18 @@ on-disk Apple binary is modified and no security setting is changed.
    pipeBankXor (no `Addr2ComputePipeBankXor` call sites) and exports none through
    `getIOSurfaceInfo`, so the correction has to happen in userspace.
 
+## Route (a) for a virtual display is closed (2026-09-14)
+
+Candidate **1.0.231** / card **metal-079** tested whether a zero-display-path VBIOS
+(`mkrom.py --no-display-paths`) could free the display while keeping Metal. **It cannot.** Apple
+created zero `AmdRadeonFramebuffer` instances as intended, but `MTLCreateSystemDefaultDevice()`
+then returned nil — "no Metal device" — reproduced twice, even though four `AMDRadeonX6000`
+IOService nodes and an `IOAccelerator` were still registered. macOS will not publish a GPU as a
+Metal device with no display. The ROM was reverted, framebuffers returned, and Metal device
+creation worked again; the live config is back to the proven baseline (connector ROM
+`3c6977ee…`, `rgpunobin=1 rgpusdmacfg=2 rgputexdiag=2`). Only route (b), porting DCN 3.1.5,
+remains. Detail in [docs/ROADMAP.md](docs/ROADMAP.md) item 3.
+
 ## Ledger rules
 
 - A launch is recorded **once VFIO exposure begins**. An abort before QEMU starts is not a launch
