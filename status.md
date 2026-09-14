@@ -1474,3 +1474,16 @@ Run `3d505f831ad1dfd6a2bad9da231558f2`, card `metal-070` (build of commit `c6fb3
 Remaining: large Managed-texture synchronize is still permuted (the `linearswizzle1` child
 fixes it), and the correction must happen as soon as Apple writes 0x444 rather than from the
 30-second sampler.
+
+## Candidate 224: SDMA address configuration corrected at every commit (2026-09-14)
+
+Commit `dae6a16`, build `34ec10bcdb3142418dba640a54f20fff`. `rgpusdmacfg=2` now also restores the
+SDMA pair before every SDMA indirect-buffer commit (logged only when it changes), after
+`startHWEngines` and after `powerUpHW`. Suite 895 OK.
+
+## Boot-launch ledger extension for candidate 224 (2026-09-14)
+
+Candidate 224 with card `metal-071` runs from `run/candidate-224` as launch 31 on boot
+`c369c74e`, through `--manual-reuse --ack-risk` under the user's standing instruction, after
+`run/mode2-reset-32.json`. This note covers this one launch.
+
