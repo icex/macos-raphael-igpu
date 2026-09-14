@@ -1,8 +1,8 @@
 # Status
 
-Updated after launch47, 2026-09-14. Host boot
-c369c74e-96ff-4c21-ae85-80ccb269f7d2. VM stopped; ledger47; GPU vfio-pci,
-power/control=on. Final MODE2 reset75 CP_STAT0/RLC_CNTL0. No host reboot.
+Updated after launch48, 2026-09-14. Host boot
+c369c74e-96ff-4c21-ae85-80ccb269f7d2. VM stopped; ledger48; GPU vfio-pci,
+power/control=on. Final MODE2 reset77 CP_STAT0/RLC_CNTL0. No host reboot.
 
 Candidate233 corrected shared MMHUB paging stall. Candidate234 supplies missing
 Raphael VCN firmware: native HW initialization0 and PSP LOAD_IP_FW wireType13
@@ -28,13 +28,14 @@ Next: read MMHUB fault/address configuration and VCN queue registers before and
 after first submission to distinguish address translation from firmware commands.
 Worktree `/home/bogdan/macos-vm/run/worktrees/candidate-234`.
 
-## Launch48 allowance
 
-One diagnostic repeat candidate234/cardmetal-080 attemptvmhub on boot
-c369c74e-96ff-4c21-ae85-80ccb269f7d2. Fresh MODE2 through tools/cycle.py,
-max6000s, existing abort/cleanup intact. Read only documented MMHUB fault/root/
-aperture and VCN ring registers via QEMU monitor using verified guest BAR5.
-Compare before/after first encoder command. Stop after stall, no further encoder
-on dirty state. Run additional surface CPU-readback before encoder. Hypothesis:
-VCN cannot fetch its ring through MMHUB; fault/address evidence discriminates this
-from command ABI/firmware scheduling. No speculative address writes.
+Launch48 candidate234 attemptvmhub, run e73d5a3641b70484bd95dcfcf1f38732,
+pre-reset76. Same H264 first-queue stall. CPU IOSurface comparison also passes
+all12 cases. Read-only QEMU snapshot sees no latched MMHUB fault before/after;
+after snapshot overlaps driver recovery/power gating (VCN registers deadbeef),
+so does not establish the first fault. VRAM ring capture contains IB opcode2,
+VMID2, VA0x400010280,12 dwords; fence opcode3. This agrees with Linux ring ABI.
+Shutdown forced/recovered; final reset77 clean. No new launch allowance.
+Next audit: Linux VCN3.1.2 explicitly sets SMU-interface2 in shared firmware
+structure offset0x58; native Apple allocation is only0x58 bytes and omits it.
+Need guarded allocation extension and field setup before native engine start.
