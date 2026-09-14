@@ -24,8 +24,8 @@ successful readbacks. Configuration equality does not prove current functional s
 | Coordinator worktree | `/home/bogdan/macos-vm/run/worktrees/candidate-230` |
 | Host boot | `c369c74e-96ff-4c21-ae85-80ccb269f7d2` |
 | GPU | `0000:7b:00.0`, vfio-pci, power/control=on |
-| Ledger launches | 43; launches 41–43 were the TigerVNC tests |
-| Last reset | `run/mode2-reset-68.json`: CP_STAT=0, RLC_CNTL=0 |
+| Ledger launches | 44; launches 41–43 were the TigerVNC tests |
+| Last reset | `run/mode2-reset-69.json` (before launch44): CP_STAT=0, RLC_CNTL=0 |
 | VM | stopped |
 | Guest shutdown | forced; harness recovery incomplete, followed by successful MODE2 reset |
 
@@ -74,13 +74,17 @@ No merge or push to main. User instruction: **no further host reboots**.
 Validation of the coordinator used for these runs: 925 host tests, 3 skipped, no failures;
 `/home/bogdan/macos-vm/run/tigervnc-host-tests-final.log`.
 
-## Current diagnostic allowance
+## Diagnostic result and controlled retry
 
-User's “ok do it” authorizes tracing the encoder requester and first SDMA stall. One
-additional launch on boot `c369c74e-96ff-4c21-ae85-80ccb269f7d2`, attempt
-`encoder-trace`, after fresh MODE2 reset, using unchanged candidate230 and no VNC viewer.
-Capture full guest process list and XPC/unified logs over SSH; stop through the harness
-within 6000 seconds. Hypothesis: a startup client initializes HEVC independently of VNC.
-Identify its executable and parent; an encoder launched solely by a viewer would falsify
-that hypothesis. Pending kernel work preceding encoder work prevents assuming causality.
-No host reboot or binding cycle. This allowance is unconsumed until QEMU/VFIO opens.
+Launch44 (`encoder-trace`) identified RustDesk --check-hwcodec-config as the encoder
+requester in both current and prior boot logs. RustDesk was in the ByHost loginwindow
+reopen list; backed up the original plist and removed only its entry. The guest still
+stalled in this already-exposed run. Forced shutdown, incomplete recovery; VM stopped.
+See audit for process, XPC, timestamp and backup evidence.
+
+One additional authorized fix-validation launch on boot
+`c369c74e-96ff-4c21-ae85-80ccb269f7d2`, attempt `without-rustdesk`, after fresh
+MODE2, unchanged candidate230, initially no viewers. Verify RustDesk and its encoder
+request are absent; require probe completion and a watchable TigerVNC desktop to
+support the workaround. Persistence of the stall falsifies removal as a sufficient fix.
+Bounded to6000s; normal abort/cleanup, no host reboot or binding cycle.

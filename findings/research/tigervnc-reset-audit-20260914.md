@@ -57,3 +57,28 @@ Identify the initiator of VTEncoderXPCService in the no-viewer guest and reconst
 first SDMA/VMPT stall against the successful repeat, including guest persistent configuration
 and workload. Do not make another nearby GPU patch or infer that reboot is required from a
 missing journal record. The user explicitly prohibits host reboots.
+
+## Encoder requester identified: launch 44
+
+Attempt `encoder-trace`, run `c5305130649b36a7d6959e28db8bb914`, MODE2 69,
+guest boot `7A365A8E-4B80-45F5-9AB1-19AB5452615F`. Results at
+`run/candidate-230-attempt-encoder-trace-results/`. No VNC viewer.
+`prior-client-518.txt` identifies run42 client518 as RustDesk. `client-trace.txt`
+identifies current parent467 `/Applications/RustDesk.app/Contents/MacOS/RustDesk`,
+child548 `RustDesk --check-hwcodec-config`, and encoder562 with XPC peer548.
+This proves who requests HEVC initialization, not the first defective GPU operation.
+Run42's first dump has kernel_task SDMA26 TS6 sent55.923502, VMPT16 TSc4
+sent55.924113, encoder SDMA17 TS1 sent55.924637, and WindowServer paging12
+TS59 sent55.931510. Timestamp order alone does not prove a causal engine dependency.
+The successful repeat has no FirstPendingCB/hang dump; identical startup warnings
+are therefore not sufficient diagnoses.
+
+`startup-before.txt` contains the ByHost loginwindow `TALAppsToRelaunchAtLogin`
+array including RustDesk. Removed only that entry; Finder/Safari/Terminal remain.
+Guest backup: `/Users/bogdan/rgpu-startup-backup-encoder-trace/` (original plist
+SHA256 `9c40199c5769c130cbedfe9548f9dd9a74f86647d5a5969b6481ad8e6c08c2ae`).
+New plist SHA256 `d14c6abc355bcb4a68e8f1cae727e4f837696fd3f0af95878cd95a59d759b509`,
+verified in `startup-change.txt`. App remains installed. This is a reversible
+controlled startup intervention, not yet a validated fix.
+Probe completion missing; exact identity captured; forced shutdown and incomplete
+harness recovery. VM stopped through stop-requested. Launch allowance consumed.
