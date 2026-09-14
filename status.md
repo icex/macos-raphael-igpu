@@ -1894,3 +1894,32 @@ Initialization evidence is the hash-pinned host-before snapshot from candidate23
 matched against the live boot/kernel/device/group/driver; this is not reset proof or launch authority.
 The pre-existing uncommitted supervision edit is preserved in git stash named
 `Preserve pre-existing supervision edit before TigerVNC test`.
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-230-attempt-tigervnc-results`
+- Verdict: `INCONCLUSIVE`
+- Boundary: `probe_completion_missing`
+
+
+## TigerVNC run 41 result and restored-preferences retry allowance
+
+Run `4aff2d26b7fe53a1a91428c00e5d54c3`, MODE2 receipt `run/mode2-reset-65.json`,
+boot `c369c74e-96ff-4c21-ae85-80ccb269f7d2`: reset clean, exact candidate230 build and
+running QEMU identity matched the prior successful repeat. TigerVNC authenticated with the
+current guest account, but Screen Sharing reported no active display size. The guest agent
+blocked in the desktop probe (no completion); verdict INCONCLUSIVE/probe_completion_missing.
+WindowServer's sampled main thread waits in IOAccelSharedCreateDeviceShmem. The first
+pending hardware work includes VMPT/SDMA and VTEncoderXPCServ; graphics-ring pointers are equal.
+Do not label this the old graphics-ring hang or blame VNC encoding alone.
+Both saved WindowServer preference files were restored with hashes/owners verified;
+WindowServer remained uninterruptible after TERM. Evidence:
+`run/candidate-230-attempt-tigervnc-results/{display-restore.txt,windowserver.sample.txt,guest-diagnostics.txt}`.
+Stopped via the harness stop request: shutdown **forced**, recovery **incomplete**;
+host remains accessible, vfio-pci, power/control=on. No host reboot.
+
+Under the user's continuing instruction to test TigerVNC with in-place reset and no host
+reboots, authorize one more launch on the same boot named above, candidate230/card metal-078,
+attempt `tigervnc-restored`, after a fresh clean MODE2 receipt. Test the restored display
+preferences from a fresh guest boot with the same binary/configuration and bounded supervision.
