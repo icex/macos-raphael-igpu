@@ -1842,3 +1842,39 @@ private delivery with fresh mapping/ASLR and another cleanup. User authorizes
 needed tests; launch40 only after actual exposure, bounded6000s and all gates.
 Root-display capture still differs from window's own capture in headless setup;
 do not infer physical monitor visibility or all application compatibility.
+
+
+## Candidate230 repeat validated — 2026-09-14T12:05Z
+
+Launch40 on same host bootc369c74e-96ff-4c21-ae85-80ccb269f7d2;
+run`89c1e929ba208f245a2a796cdc268623`, full CID`434f074ce7ca7a4f9b013ddc3b46a7b61029be6950d4094e2363e39a9e3e8379`,
+started2026-09-14T12:05:03.435219856Z, guest boot`9998D6ED-C172-4CA2-BC98-FFBE933E63E2`.
+Same buildc115e782494e43f6850aedfb67010375 and executable
+c9e5a856a34ebbe4f3b1bf59de2c613d15edff37c7b2e677a8d476b324bfcf94.
+
+| Dimension | Repeat result |
+|---|---|
+| Private patch |25 XTCOW success records, every p/w/r/v zero; new driver text0x7ffb1f9a0000, site0x7ffb1fada7e1 |
+| Copy correctness |48/48 cases zero mismatches again,61,274,112 pixels; two fresh processes have no probe selfpatch |
+| Functional/capture |CORE_PROBE_PASS, valid capture;1000 offscreen frames and self-window pattern checks pass |
+| Shutdown/recovery |exited-after-guest-request, requestc4ff33080e0348edb7b0265ae3aa1a57; recovered; no active VM |
+
+Combined two COW boots:96 copy cases,122,548,224 pixels checked with no
+mismatches;2000 offscreen frames. Full evidence and provenance:
+`run/candidate-230-attempt-repeat-results`,
+`run/managed-delivery-20260914/candidate230-repeat-matrix-audit.json`,
+`run/managed-delivery-20260914/final-run-identities.json`.
+
+Residual managed-copy defect is fixed in these tests by a userspace byte patch
+delivered from RaphaelGPU's current-task kernel hook, with rgputexdiag=2.
+No obsolete Lilu UserPatcher enabling, Apple on-disk binary changes, or security
+setting changes. Guarded to the exact 24G830 cached driver UUID/instruction;
+an OS update needs revalidation and may cause a safe skip. Pure kernel metadata
+correction remains unresolved; this is not evidence of one.
+
+Blocking issue for broader desktop qualification: headless root-display window
+presentation test still does not match, despite correct animated window-own
+captures. No main merge or push; candidate remains experimental on managed-cow
+branch at `/home/bogdan/macos-vm/run/worktrees/candidate-230`. OpenCore media is
+staged with candidate230 and rgputexdiag=2; final guest is off. No more GPU runs
+planned for this defect. User-level test inhibitor is stopped after verification.
