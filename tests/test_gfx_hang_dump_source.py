@@ -31,6 +31,27 @@ class GfxHangDumpSourceTests(unittest.TestCase):
         self.assertIn('addrConfigMode == 2 && live != 0xdeadbeef && live != 0 && reported != live', wrapper)
         self.assertLess(wrapper.index('memcpy(info + kHwInfoGbAddrConfig'), wrapper.index('org(that, hwInterface)'))
 
+    def test_texture_pipe_bank_xor_patch_is_gated_and_exact(self):
+        # rgpunotexxor clears enableTexturePipeBankXor (bit 27) in Apple's Metal driver by
+        # flipping one byte (ff -> f7) of a unique movabs at __TEXT 0x13a7e1, delivered via
+        # Lilu's fileless shared-cache path. Default off; registration must be gated.
+        self.assertIn('static uint32_t texPipeBankXorDisable = 0;', self.source)
+        self.assertIn('PE_parse_boot_argn("rgpunotexxor", &texXor, sizeof(texXor)) && texXor <= 1',
+                      self.source)
+        self.assertIn('0x48, 0xb8, 0x00, 0x00, 0x70, 0xff, 0x01, 0x00, 0x00, 0x00', self.source)
+        self.assertIn('0x48, 0xb8, 0x00, 0x00, 0x70, 0xf7, 0x01, 0x00, 0x00, 0x00', self.source)
+        self.assertIn('static const vm_address_t kMtlTexXorSegOff[1] = { 0x13a7e1 };', self.source)
+        self.assertIn('AMDRadeonX6000MTLDriver.bundle/Contents/MacOS/AMDRadeonX6000MTLDriver',
+                      self.source)
+        self.assertIn('UserPatcher::FileSegment::SegmentTextText', self.source)
+        self.assertIn('kMtlDriverPath, &mtlTexXorPatch, 1, 0, 0, 0, 0, kMtlTexXorSegOff', self.source)
+        gate = self.body('if (texPipeBankXorDisable == 1) {',
+                         'static const char *bootargOff[]')
+        # onProcLoad registration lives only inside the gate.
+        self.assertNotIn('lilu.onProcLoad(nullptr, 0, nullptr, nullptr, &mtlTexXorMod, 1)',
+                         self.source[:self.source.index('if (texPipeBankXorDisable == 1) {')])
+        self.assertIn('lilu.onProcLoad(nullptr, 0, nullptr, nullptr, &mtlTexXorMod, 1)', gate)
+
     def test_swizzle_knobs_default_off_and_are_guarded(self):
         for decl in ('static uint32_t swizzleLogMode = 0;', 'static uint32_t hwCapClearMask = 0;',
                      'static uint32_t vgprMode = 0;'):

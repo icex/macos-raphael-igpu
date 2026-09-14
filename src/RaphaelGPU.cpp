@@ -7951,6 +7951,37 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
     }
 }
 
+// rgpunotexxor: clear enableTexturePipeBankXor (AMD_DeviceSettings bit 27) in Apple's
+// AMDRadeonX6000MTLDriver so Metal computes pipeBankXor = 0 for textures across the render,
+// sample and blit paths. This fixes MTLStorageModeManaged tiled<->linear texture copies on
+// Raphael (4 pipes / config 0x42): the userspace tiled blit and the userspace synchronize
+// (metadataRetile) otherwise disagree by one pipe-bank-xor bit at 64-pixel granularity.
+// Both agents and probe v7 confirmed this is a userspace-only lever with no kernel input.
+// The driver ships only inside the dyld shared cache on Sequoia, so we patch it in every
+// process through Lilu's fileless shared-cache path (BinaryModInfo::filelessSegOffs); Lilu
+// re-reads the live bytes and requires them to equal the find pattern before writing.
+static uint32_t texPipeBankXorDisable = 0;
+static const char kMtlDriverPath[] =
+    "/System/Library/Extensions/AMDRadeonX6000MTLDriver.bundle/Contents/MacOS/AMDRadeonX6000MTLDriver";
+// movabs rax, 0x1ff700000  ->  movabs rax, 0x1f7700000  (clears bit 27); site is unique.
+static const uint8_t kMtlTexXorFind[10]    = { 0x48, 0xb8, 0x00, 0x00, 0x70, 0xff, 0x01, 0x00, 0x00, 0x00 };
+static const uint8_t kMtlTexXorReplace[10] = { 0x48, 0xb8, 0x00, 0x00, 0x70, 0xf7, 0x01, 0x00, 0x00, 0x00 };
+static const vm_address_t kMtlTexXorSegOff[1] = { 0x13a7e1 }; // offset within the driver __TEXT segment
+static UserPatcher::BinaryModPatch mtlTexXorPatch {
+    CPU_TYPE_X86_64,
+    0,                                        // flags
+    kMtlTexXorFind,
+    kMtlTexXorReplace,
+    sizeof(kMtlTexXorFind),
+    0,                                        // skip
+    1,                                        // count (unique site)
+    UserPatcher::FileSegment::SegmentTextText,
+    1                                         // section: non-zero enables the patch
+};
+static UserPatcher::BinaryModInfo mtlTexXorMod {
+    kMtlDriverPath, &mtlTexXorPatch, 1, 0, 0, 0, 0, kMtlTexXorSegOff
+};
+
 static void pluginStart() {
     CRLOG("BUILD: identity=%s", RGPU_BUILD_ID);
     if (!PE_parse_boot_argn("rgpu", &mask, sizeof(mask))) mask = 0;
@@ -8033,6 +8064,11 @@ static void pluginStart() {
     RLOG("XS: rgpuswlog=%u (%s)", swizzleLogMode,
          swizzleLogMode == 2 ? "log preferred swizzle modes and return linear"
          : swizzleLogMode == 1 ? "log preferred swizzle modes" : "off");
+    uint32_t texXor = 0;
+    texPipeBankXorDisable = PE_parse_boot_argn("rgpunotexxor", &texXor, sizeof(texXor)) && texXor <= 1
+        ? texXor : 0;
+    RLOG("XX: rgpunotexxor=%u (%s)", texPipeBankXorDisable, texPipeBankXorDisable == 1
+         ? "clear enableTexturePipeBankXor(bit27) in AMDRadeonX6000MTLDriver" : "off");
     uint32_t capClear = 0;
     hwCapClearMask = PE_parse_boot_argn("rgpuhwcapclr", &capClear, sizeof(capClear)) ? capClear : 0;
     RLOG("XA: rgpuhwcapclr=%#x", hwCapClearMask);
@@ -8201,6 +8237,11 @@ static void pluginStart() {
     lilu.onPatcherLoadForce(onPatcher);
     lilu.onKextLoadForce(kexts, arrsize(kexts), processKext, nullptr);
     RLOG("registered %lu kexts (Loaded flag set)", arrsize(kexts));
+    if (texPipeBankXorDisable == 1) {
+        auto err = lilu.onProcLoad(nullptr, 0, nullptr, nullptr, &mtlTexXorMod, 1);
+        RLOG("XX: rgpunotexxor onProcLoad -> %d (%s)", static_cast<int>(err),
+             err == LiluAPI::Error::NoError ? "registered MTL driver texture-pipe-bank-xor patch" : "FAILED");
+    }
 }
 
 static const char *bootargOff[]   { "-rgpuoff" };
