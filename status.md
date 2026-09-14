@@ -66,14 +66,22 @@ on-disk Apple binary is modified and no security setting is changed.
    corrupted ones. The confirming test is one artifacted frame grabbed simultaneously via
    forced-raw (lossless) VNC and in-guest capture; if raw-VNC is clean, transport is proven.
    Evidence: `findings/research/desktop-corruption-diagnosed-20260914/`.
-3. **Display output is virtual only.** Apple's framebuffer carries no DCN 3.1.5 code, so there is
+3. **The guest has NO display of its own — uninstalling NoMachine left it headless
+   (2026-09-14).** NoMachine was supplying the only virtual framebuffer. Without it,
+   `IOFramebuffer` node count is **0**, `screensharingd` reports `getactivedisplaylist error`
+   / `unable to get width and height of display`, and every VNC client (Apple Screen Sharing,
+   TigerVNC, RealVNC, and a hand-written RAW client) connects then hangs with no frame. Apple's
+   framebuffer carries no DCN 3.1.5, so there is no native scanout to fall back on. A watchable
+   desktop currently requires either reinstalling a third-party virtual display or landing
+   ROADMAP item 3.
+4. **Display output is virtual only.** Apple's framebuffer carries no DCN 3.1.5 code, so there is
    no physical HDMI/DP scanout — ROADMAP item 3.
-4. **Root-display presentation mismatch.** The headless root-display capture still differs from
+5. **Root-display presentation mismatch.** The headless root-display capture still differs from
    the window's own capture, even though animated window captures are correct. Do not infer
    physical monitor visibility from the passing tests.
-5. **Host-driven clean shutdown is impossible.** macOS ignores ACPI powerdown, so teardown is
+6. **Host-driven clean shutdown is impossible.** macOS ignores ACPI powerdown, so teardown is
    always `{"outcome": "forced"}`. See [docs/host-safety.md](docs/host-safety.md).
-6. **Pure kernel-side metadata correction remains unresolved.** The kernel never computes a
+7. **Pure kernel-side metadata correction remains unresolved.** The kernel never computes a
    pipeBankXor (no `Addr2ComputePipeBankXor` call sites) and exports none through
    `getIOSurfaceInfo`, so the correction has to happen in userspace.
 
@@ -95,3 +103,15 @@ tools/cycle.py --candidate NNN --card metal-0NN             # preflight -> reset
 ```
 
 See [docs/running-an-experiment.md](docs/running-an-experiment.md).
+
+## Boot-launch ledger extension for the raw-VNC confirming test (2026-09-14)
+
+At the user's explicit request ("make sure the qemu is running... run also your own tests"),
+candidate 1.0.230 (card `metal-078`, `rgpunobin=1 rgpusdmacfg=2 rgputexdiag=2`) runs as the next
+launch on boot `c369c74e-96ff-4c21-ae85-80ccb269f7d2` to run the ROADMAP-item-1 confirming test:
+capture one artifacted desktop frame over a forced-raw (lossless) VNC path and over a lossy VNC
+path from the same live server, plus a RealVNC viewer for the user to watch. `vm-supervision.py
+start` with the harness launch options (`GENERIC_GRAPHICS=off`, `BOOTDISK_MODE=custom`,
+`NVRAM=stock`, pinned image, `--critical-serial`), `--max-seconds 6000`, after a fresh MODE2 reset
+with the host still on `vfio-pci`. Manual stop when the comparison is captured. This note covers
+this one launch.

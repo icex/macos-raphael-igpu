@@ -107,6 +107,17 @@ a redesigned settings constructor is refused, not guessed at.
 
 ## 3. Virtual display attached to the iGPU
 
+**Now a hard prerequisite, not a convenience (2026-09-14).** The guest had **no display of its
+own**: its only framebuffer was the virtual display **NoMachine** installed. When NoMachine was
+uninstalled, macOS was left genuinely headless and `screensharingd` began failing with
+`getactivedisplaylist error 268435459` / `unable to get width and height of display`, with
+`IOFramebuffer` node count **0** on a clean boot. Every VNC client — Apple Screen Sharing,
+TigerVNC, RealVNC, and a hand-written RAW/VncAuth client — then completes the TCP connect and
+hangs, because the server cannot report a screen size. Apple's framebuffer carries no DCN 3.1.5,
+so nothing else supplies a scanout. Until this item lands, a watchable desktop depends on a
+third-party virtual display, which also puts a lossy codec back in the path and blocks the
+lossless artifact verification in item 1.
+
 Today GPU passthrough runs `-display none`; the AMD scanout is unwired and `screendump` returns
 only the EFI console. Give the guest a display surface that is actually presented, so the desktop
 can be watched and captured without a remote-desktop codec in the path. This also removes the
@@ -134,6 +145,17 @@ existing header split style and the regression suite green throughout.
 
 Investigate exposing the iGPU's HDMI audio function to the guest, if the display path in item 3
 makes it meaningful.
+
+## 10. Raise the guest display resolution — up to 8K 60 Hz
+
+The default display tops out at 1080p (the current virtual display comes up at 1280×1024 /
+1920×1080). The target is **up to 7680×4320 at 60 Hz**, which the Raphael iGPU's display engine
+supports (the host already drives a Samsung panel at 3840×2160 and KDE has remembered 7680×2160 on
+its DisplayPort). This depends on the display path: the virtual display's advertised modes (item 3)
+must offer the high-resolution timings, and a physical scanout through DCN 3.1.5, if reached, must
+drive the panel at that timing. Track EDID/mode advertisement, `CGDisplayMode` availability in the
+guest, and the framebuffer's max stride/pixel-clock limits (8K60 is ~2 GHz pixel clock, ~127 MB per
+BGRA8 frame).
 
 ## Host boundaries (unchanged, non-negotiable)
 
