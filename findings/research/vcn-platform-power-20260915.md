@@ -20,3 +20,8 @@ Tests cover exact writes/IDs, unreadable/busy pre-state, wrong version and comma
 failure. They establish protocol behavior only; native transport and effect require
 hardware evidence. Falsifier: successful6 but VCN still fails firmware-ready/output.
 Visible corruption remains independently unqualified.
+
+Launch55: actual pre1/version625300/PowerUpVcn response1,error0. Native CGS
+transport works; VCN firmware-ready timeout and third H264 submit stall persist.
+This rejects the missing power request as sufficient. Forced shutdown/recovered,
+finalMODE2reset91. No host reboot or additional host SMU power action.

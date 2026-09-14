@@ -1,56 +1,46 @@
 # Live status — 2026-09-15
 
-Visible desktop corruption and hardware encoding remain unresolved. Worktree
-/home/bogdan/macos-vm/run/worktrees/candidate-240 (mmhub-runtime-target).
-Launch54/cardmetal-086 run245f9a245b3d621e48595da8662fbdfc, sourceb0734f5,
-results /home/bogdan/macos-vm/run/candidate-240-results/; build identity in manifest.
-Hostbootc369c74e-96ff-4c21-ae85-80ccb269f7d2, prelaunchMODE2reset88.
-Guestboot53E7BD8C-D3D0-4EE5-AE06-AAB52B1F00A6, registry4294968025.
+Desktop corruption and hardware encoding remain unresolved. Worktree241 branch
+vcn-platform-power at /home/bogdan/macos-vm/run/worktrees/candidate-241.
+Launch55/cardmetal-087 rund0555e6ac091ce72f6c72546f6456edc, sourcece21694,
+build16b9b1054a4449c4b90024a1a2dd28e3. Hostbootc369c74e-96ff-4c21-ae85-80ccb269f7d2,
+prelaunchMODE2reset90. Guestboot479DFF77-82E5-447C-ACD5-AEF9E871C362,
+registry4294968037. Results /home/bogdan/macos-vm/run/candidate-241-results/.
 
-## Verified fix and remaining failure
+## Latest result
 
-Native MMHUB2.3 builder actually selected (MHG route1/select1, caller33eca, GC1,
-unique exact PCI marker). Table ctx0/root/start/end1a740/1a940/1a942/1a944.
-MMIO BEFORE encoder: CTX0 enabled1555481, root84fdfc001,
-rangeffbfa00..ffffe00, L1TLB1d59. This fixes the separate HWLibs native GART
-initialization defect; X6000 paging-table fix from233 remains necessary separately.
-The diagnostic label tlb=1a8ec actually names framebuffer base, not TLB (label typo).
+Native MMHUB2.3 table fix still delivered. Desktop Metal probe passes. Actual
+native CGS indirect transport reports SMU pre1, GetSmuVersion625300,
+PowerUpVcn6/arg0 response1,error0. This verifies transport/request, not readiness.
+VCN static initializer still hits firmware-ready timeout, returns0. Query/context
+firmware addressf41f400000 correct; code cache readsffffffff/ffffffff. H264 hardware
+selected; frame0/1 accepted, third blocks/no output. No further encoder on stalled
+state. PowerUpVcn alone is insufficient. No new MMHUB fault in capture.
+Artifacts serial.txt, h264-hardware.jsonl, mmhub-vcn-after-h264.jsonl, probe.json.
 
-Desktop Metal probe passes. Additional derivative shader across two triangles
-passes12 format/storage cases (surface-derivative.jsonl). Actual raw Linux
-TigerVNC screenshot still shows same diagonal green/purple Safari/menu corruption
-BEFORE encoder: tigervnc-corruption.jpg. No desktop rendering qualification.
+## Verified repairs and visual limit
 
-H264 selected hardware encoder, submitted0/1, blocked on2/no frame callbacks.
-VCN native query and context both retain valid PSP TMRf41f400000. Static initializer
-returns0 despite firmware-ready timeout. Post-submit snapshot awake804/status0,
-code cache readbackffffffff/ffffffff, MMHUBfault0, correct GART retained. Snapshot
-is not guaranteed before native ring reset; zero ring pointers are not first-stall
-proof. Hardware HEVC not tested on stalled engine. Earlier small software H264/HEVC
-roundtrips pass. Common cause with visible corruption remains unproven.
+Native HWLibs MMHUB GART corrected in240, separate from X6000 paging table fix233:
+CTX0 enabled1555481, physicalroot84fdfc001, rangeffbfa00..ffffe00. Original native
+2.1 table addressed wrong registers; native2.3 selected after runtime identity.
+Latest raw TigerVNC screenshot240 still shows diagonal green/purple Safari/menu
+corruption before encoding. Format/CPU/quad/sampling/derivative probes pass small
+12-case workloads; no actual desktop qualification/common cause proven.
+Software H264/HEVC small roundtrips pass; hardware HEVC unverified after fixes.
 
-## Cleanup and scope
+## Cleanup
 
-Stopped through interactive stop-requested. Shutdown forced, harness recovered.
-VM stopped, final MODE2reset89 CP_STAT0/RLC_CNTL0. Hostboot unchanged, vfio-pci
-retained, power/control on, inhibitor active. No host reboot. Our VNC viewer and
-SSH master closed. Host927 tests/3skipped pass; build succeeds. No new allowance.
+Stopped via interactive stop-requested. Shutdown forced, harness recovered. VM
+stopped, finalMODE2reset91 CP_STAT0/RLC_CNTL0; no host reboot. vfio-pci retained,
+power/control on, inhibitor active. SSH closed. Host928 tests/3skipped pass; build
+succeeds. No new launch allowance; no merge/push to main.
 
-## Next discriminating investigation
+## Next discriminating observation
 
-MMHUB correction is insufficient for VCN firmware readiness. Linux VCN startup
-also sends platform PowerUpVcn through SMU13.0.5; Apple dummy SMU backend does not.
-Audit native CGS indirect register transport and exact Raphael message mapping
-before considering that intervention. No host SMU power command has been issued.
-Do not equate all-ones protected-register read with bad software address (52
-falsified that). Continue actual desktop corruption reproduction separately.
-No merge/push to main. Superseded state archived under findings/research/status-archives/.
-
-## Candidate241 launch55 allowance
-
-One launch55 on boot c369c74e-96ff-4c21-ae85-80ccb269f7d2, fresh MODE2 via
-tools/cycle.py, max6000s, existing abort/recovery paths. Test guarded native SMN
-GetSmuVersion2 then documented Raphael PowerUpVcn6/arg0 before static init.
-Exact current firmware version00625300 required; failures refuse initialization.
-Verify actual native transport/replies and H264 frames, then HEVC only if healthy.
-Stop on first stall. Host928 tests/3skipped pass, build succeeds. Worktree241.
+VCN VCPU_CNTL already0ff00200 (reset bit28 clear) before recent static startup.
+Native static initializer only ORs clock bit200 at931a1, programs caches, then
+clears reset bit28 at9350b. Thus it assumes reset was asserted, although MODE2
+receipts only prove graphics/RLC reset. Linux boot-failure retry explicitly asserts
+VCPU reset before release. Audit/reset that boot precondition in native sequence;
+do not assume a cold VCN or bypass firmware-ready failure. Source code and live
+state justify this narrower test, not a host reboot. Superseded status archived.
