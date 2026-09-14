@@ -1317,3 +1317,14 @@ Run `d0dff0852eba7ea550c16063b57e4be9`, card `metal-066`, launch 25 after `run/m
 
 Next: desktop probe v7 patches one of those constants in child processes (clear 27,
 clear 29, set 36) before creating the Metal device and reruns the readback matrix.
+
+## Boot-launch ledger extension for the probe v7 attempt (2026-09-14)
+
+GPU-less session (no VFIO device, no ledger entry) compiled desktop probe v7 (source sha256
+`efd5d209...`, binary sha256 `3e10527e...`) and smoke-ran a patch child: the driver site
+bytes matched, byte `0xff -> 0xf7` was written through a copy-on-write protection change,
+and the process kept running. Candidate 220 with card `metal-067` runs from
+`run/candidate-220-attempt-v7` as launch 26 on boot `c369c74e`, through
+`--manual-reuse --ack-risk` under the user's standing instruction, after
+`run/mode2-reset-27.json`. This note covers this one launch.
+
