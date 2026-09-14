@@ -1397,3 +1397,23 @@ Candidate 222 with card `metal-069` runs from `run/candidate-222` as launch 28 o
 `c369c74e`, through `--manual-reuse --ack-risk` under the user's standing instruction,
 after `run/mode2-reset-29.json`. This note covers this one launch.
 
+
+## Candidate 222 launch 28: guest hung inside TTL initialization (2026-09-14)
+
+Run `1c9bf40f1d03419269a1f9eb471feb90`, card `metal-069`, launch 28 after `run/mode2-reset-29.json` (reset receipt normal:
+`CP_STAT=0`, `RLC_CNTL=0`, `GB_ADDR_CONFIG=0x42`). Verdict `INVALID`
+(`recovery_lease_pool_missing`), recovery `failed` (missing XH2 ownership record), shutdown
+`forced` (guest identity transport failed), no probe. Serial stops after the RLC firmware
+table restore inside `TTL::initialize()`, followed by nine `cosWaitForFunc` timeouts; in
+launch 23 the same boot reached `TTL::initialize() Completed` about 300 lines later and only
+then ran `AMDHWAlignManager2::init`. The new `rgpuaddrcfg=3` route therefore never ran
+(no `XA: hwinfo` line), so this failure is not attributable to it. Host after: vfio-pci,
+accessible, no active VM.
+
+## Boot-launch ledger extension for the candidate 222 retry (2026-09-14)
+
+The same 1.0.222 binary and card `metal-069` run again from
+`run/candidate-222-attempt-retry1` as launch 29 on boot `c369c74e`, through
+`--manual-reuse --ack-risk` under the user's standing instruction, after a fresh
+`run/mode2-reset-30.json` whose probe and reset receipts must show `CP_STAT=0` and
+`RLC_CNTL=0`. This note covers this one launch.
