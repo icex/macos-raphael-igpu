@@ -79,3 +79,18 @@ POWER_STATUS, SOFT_RESET and VCPU_CNTL right after native `static_initialize` re
 No register writes, no reset. It decides whether the VCPU firmware-cache window is
 actually latched (VCPU boots from garbage) or the 0xffffffff snapshot readback is only
 a secure-register artifact, redirecting the encoder search accordingly.
+
+## Candidate 244 allowance (launch 58)
+
+One launch58 on boot `c369c74e-96ff-4c21-ae85-80ccb269f7d2`, candidate 1.0.244 /
+card `metal-090`, via `tools/cycle.py` after a fresh MODE2 reset (next #95), host on
+`vfio-pci` with `power/control=on`, `--manual-reuse --ack-risk`, all abort paths armed.
+Authorized by the user ("always launch and test... test it continuously until all are
+fixed"; iGPU teardown script available as host safety net).
+
+Purpose: settle the candidate-243 result. Candidate 243 read the VCN VCPU cache-window
+BAR (0x43c/0x43d) and soft-reset (0x84) as 0xffffffff after static_initialize while the
+sibling NC0 BAR read correctly and the VCPU never reached UVD_STATUS==2. Candidate 244
+reads those registers back immediately after each native write (before reset release),
+read-only, to decide a dropped write (block held inaccessible -> real root cause) from a
+register that only reads 0xffffffff once secured (benign -> firmware authentication).
