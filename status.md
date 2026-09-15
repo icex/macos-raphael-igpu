@@ -106,3 +106,15 @@ read 0xffffffff at write time while the sibling NC0 BAR is fine and the VCPU nev
 That is the signature of the VCN core power domain staying gated. Candidate 245 reads
 UVD_PGFSM_STATUS/POWER_STATUS and the dead core registers back at the PGFSM config write
 to decide a fixable power-domain fault from a firmware/PSP wall. Read-only.
+
+## Candidate 246 allowance (launch 60)
+
+One launch60 on boot `c369c74e-96ff-4c21-ae85-80ccb269f7d2`, candidate 1.0.246 / card
+`metal-092`, via `tools/cycle.py` after a fresh MODE2 reset, `--manual-reuse --ack-risk`,
+all abort paths armed. Authorized ("test continuously until all fixed").
+
+Purpose: decisive dual-path read. Apple's cgs read returns 0xffffffff for the VCN VCPU
+cache BAR (0x43c/0x43d) and soft-reset (0x84) while the VCPU never boots, power on, firmware
+loaded to the TMR. Read the same registers via the kext direct-MMIO accessor (fbRead, abs
+0x823c etc.) to tell a blind Apple readback (write landed, firmware reachable, fault
+downstream) from a genuinely unreachable register. Read-only.
