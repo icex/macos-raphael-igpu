@@ -36,7 +36,7 @@ user-authorized Linux→VFIO handoff. **No amdgpu rebind this boot.**
   All shutdowns forced, not clean guest shutdowns; all recovery receipts recovered.
 - 268 full host suite937tests OK, three skipped. Initial software-allocation fixture
   was updated to verify native ownership and refusal without context mutation.
-- Eight launches recorded this boot (including269 decode-first). Earlier staging/fixture prelaunch refusals did
+- Nine launches recorded this boot (including269 decode-first and270). Earlier staging/fixture prelaunch refusals did
   not consume launches. No merge or push.
 
 ## Display evidence and remaining scope
@@ -83,7 +83,7 @@ whereas our existing decoder-first hook only initializes the ring. That packet
 experiment is unimplemented and needs native ownership/commit/drain qualification.
 Do not equate either failure with proven dead silicon or exhausted driver options.
 
-Boot allowance8 has been used; a further launch needs a boot-named extension note
+Boot allowance9 has been used; a further launch needs a boot-named extension note
 and all ordinary gates. No amdgpu rebind this boot, merge or push.
 
 Linux reference: `/home/bogdan/macos-vm/run/worktrees/linux-vcn-baseline/findings/research/linux-vcn-baseline-20260915.md`.
@@ -91,13 +91,33 @@ Linux H264/HEVC encode/decode and600 validated H264 frames passed. Working Linux
 also reads cache/reset/LMA registers asffffffff and UVD_STATUS asdeadbeef; these
 values do not prove a dead VCPU. No claim that driver-level options are exhausted.
 
-## Next authorized run:270 context trace
+## Candidate270 result: context trace / metal-117
 
-Extend allowance8→9 on boot `c782d007-ca85-409b-9cf5-ff12c1a8c6d5` under the user's
-continued-testing instruction. Candidate270 adds four bounded native observation
-hooks; no functional VCN change. Trace CreateVcnContext21ba0, capability89508,
-startEngine49632 and context callers of sendPMCommand7056 against exact24G830
-ABIs/prologues. Host suite937 tests passed,3 skipped; build completed.
-Require all four route guards before unpinned hardware decode. Keep fresh MODE2,
-identity/capture/host-fault/shutdown/recovery guards, max6000s. No hardware encoder
-request before this independent decoder test; manual stop when result obtained.
+Run `e8fadcb4f04102cad6a99f3dfc5838d3`, build`b730ff90153b45a0ae2e3ebc10f16f97`,
+source571ddfb, MODE2 reset129. Ninth exposure this boot; no hardware encoder request.
+All four hooks routed (StartEngine serial line interleaved; raw bytes retained).
+Hardware H264 decoder creation still-12913; no create/capability/start hook entries.
+Software control passes3 frames,2675475 luma values,maxerror1. Temporary gvaDebug
+preference restored(sync1). Offscreen1000frames and24readback cases pass.
+Capture/identity valid=true, CORE_PROBE_PASS covers desktop only; guest-requested
+exit, recovery recovered,no recovery kernel messages. Results`run/candidate-270-results`.
+
+**Trace limitation:** the sendPMCommand caller filter omitted earlier video-context
+calls at28d1d/28e4f. AMDVA VAVcnDecoder::setupPowerState calls setClocks before
+CreateVcnContext; its0x102 userclient request can fail independently. No claim that
+all kernel decoder work is absent. Candidate271 extends this observational filter
+and records bounded request headers and real results; no functional VCN changes.
+
+AMDVA exact cache image independently extracted;2872 functions exported,zero export
+failures, under`run/research/decoder-context-20260916`. The error10 producer is not
+yet identified; absence of a literal10 in selected AMDVA paths does not prove
+kernel/firmware origin. AppleGVA copies an event9 error payload verbatim.
+
+## Next authorized run:271 early video PM trace
+
+Extend allowance9→10 on boot`c782d007-ca85-409b-9cf5-ff12c1a8c6d5` under the user's
+continued-testing instruction. Add earlier video-context PM callers to270 trace,
+request header and native result observations; no functional VCN change. Preserve
+all identity/capture/reset/host-fault/shutdown/recovery gates and max6000s. Require
+all four critical route guards, unpinned hardware decode before any encoder request,
+manual stop after observations.270 recovery verified; no amdgpu rebind or merge/push.
