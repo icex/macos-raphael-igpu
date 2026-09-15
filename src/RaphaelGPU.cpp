@@ -2661,6 +2661,26 @@ static uint32_t wrapVcnInitialize(void *engine) {
              power.pre, power.version, power.response, power.error);
         if (power.error) return 1;
     }
+    if (vcnStaticEnabled && !vcnDpgEnabled) {
+        if (!ctx || !orgVcnWriteRegister || !orgVcnConfig ||
+            !__atomic_load_n(&raphaelTargetConfirmed, __ATOMIC_ACQUIRE) ||
+            *reinterpret_cast<const uint32_t *>(ctx + 0x268) != 0x30001 ||
+            *reinterpret_cast<const uint64_t *>(ctx + 0x3f8) != hwlibsBase + 0x930f8 ||
+            (*reinterpret_cast<const uint32_t *>(ctx) & 2)) return 1;
+        auto read = reinterpret_cast<uint32_t (*)(void *, uint32_t, uint32_t)>(hwlibsBase + 0x86834);
+        const uint32_t before = read(engine, 1, 4);
+        if (before == 0xffffffff || before == 0xdeadbeef || (before & 0x80000000)) {
+            RLOG("VCNMODE: inaccessible/stalled power status=%x; initialization refused", before);
+            return 1;
+        }
+        // Linux stop_dpg_mode clears PG_MODE. Native static initialization only
+        // clears 0x103 and otherwise inherits this dynamic-mode bit across reset.
+        if (before & 4)
+            FunctionCast(wrapVcnWriteRegister, orgVcnWriteRegister)(engine, 1, 4, before & ~4u);
+        const uint32_t after = read(engine, 1, 4);
+        RLOG("VCNMODE: static power before=%08x after=%08x", before, after);
+        if (after == 0xffffffff || after == 0xdeadbeef || (after & 4)) return 1;
+    }
     const uint32_t result = FunctionCast(wrapVcnInitialize, orgVcnInitialize)(engine);
     RLOG("VCNS: native initialize returned%u", result);
     if (!result) inspectVcnSram(engine, "post-submit");
