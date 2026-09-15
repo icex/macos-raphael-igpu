@@ -2913,7 +2913,7 @@ static void installDiagnostics(KernelPatcher &patcher, mach_vm_address_t base) {
         }
         RLOG("VCNR: guarded native write=%u", orgVcnWriteRegister != 0);
     }
-    if (vcnStaticEnabled) {
+    if (vcnStaticEnabled || vcnDpgEnabled) {
         // Complete instructions from audited HWLibs24G830+868d4, before any route.
         const uint8_t queryGuard[] = {0x55,0x48,0x89,0xe5,0x41,0x56,0x53,0x48,0x83,0xec,0x10,0x31,0xc9};
         if (!memcmp(reinterpret_cast<const void *>(base + 0x868d4), queryGuard, sizeof(queryGuard))) {
