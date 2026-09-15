@@ -161,3 +161,13 @@ engaged dpg_secure but its secure DPG-SRAM firmware (VCN0_RAM type 49) loaded to
 firmware is not Apple-signed-secure). Candidate 250 forces mode=1 -> dpg_unsecure_initializer so
 the driver programs the DPG SRAM from the supplied firmware and DMA-commits (Linux indirect SRAM).
 Success = initializer=+93ec1, VCPU boots, H264 hw encode emits frames.
+
+## Candidate 251 allowance (launch 65) — hybrid DPG (decompilation-guided)
+
+One launch65 on boot c369c74e-96ff-4c21-ae85-80ccb269f7d2, candidate 1.0.251 / card metal-097,
+after fresh MODE2, --manual-reuse --ack-risk. Authorized ("test until fixed"). From KDK 24G830
+HWLibs decompilation: dpg_secure writes cache BAR=0 (needs Apple-signed secure fw), dpg_unsecure
+writes it from ctx+0x2c0 but only in mode=1 which skips the firmware-loaded wait that fills
+ctx+0x2c0. Fix: keep mode=0 and override ctx+0x3f8 to dpg_unsecure_initialize (0x93ec1) so the
+cache window is programmed from the real TMR address via the DPG LMA window. Success = VCPU boots,
+H264 hw encode emits frames.
