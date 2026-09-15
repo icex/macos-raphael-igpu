@@ -130,3 +130,16 @@ Purpose: locate the real VCN VCPU cache-BAR/soft-reset registers. Both access pa
 0xffffffff at Apple's seg1 base 0x7e00 while NC0/STATUS are fine. Bounded read-only probe:
 dump Apple's VCN segment-base table (ctx memory) and probe the cache/soft-reset offsets at
 each sane segment base, plus a small seg1 neighbor scan for the TMR address. No writes.
+
+## Candidate 248 allowance (launch 62) — DPG FIX ATTEMPT
+
+One launch62 on boot `c369c74e-96ff-4c21-ae85-80ccb269f7d2`, candidate 1.0.248 / card
+`metal-094`, via `tools/cycle.py` after fresh MODE2, `--manual-reuse --ack-risk`, all
+abort paths armed. Authorized ("test continuously until all fixed").
+
+Root cause (candidates 243-247 + web research): Raphael is an APU whose VCN needs DPG mode;
+Apple uses the Navi23 static path whose 0x43c cache-BAR write never lands, so the VCPU never
+boots. Candidate 248 adds rgpuvcndpg=1: forces EnableVCNDPG+EnableVCNSecureLoad so
+engine_init_pfn_ptr selects _engine_3_0_dpg_secure_initialize (0x943cf) instead of static
+(0x930f8); keeps PSP firmware load (mode 0); decouples SMU PowerUpVcn from the static flag.
+Success = VCPU boots (UVD_STATUS==2, no cosWaitForFunc timeout) and H264 hw encode emits frames.
