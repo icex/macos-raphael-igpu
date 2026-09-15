@@ -2473,14 +2473,28 @@ static void wrapMmhub21(void *vm) {
 // through unchanged. Guarded to the Raphael VCN3.1 context; no-op when the value is already set.
 static uint32_t *wrapAddToDpgSram(void *engine, uint32_t *sram, uint32_t bank,
                                   uint32_t reg, uint32_t value) {
-    if (vcnDpgEnabled && engine && bank == 1 && value == 0 && (reg == 0x43c || reg == 0x43d)) {
+    // Candidate 253: decode_sram_secure_initialize zeros the whole VCPU cache window and relies
+    // on Apple secure firmware to fill it. Mirror what decode_sram_initialize (unsecure) programs
+    // from ctx: firmware cache BAR (0x43c/0x43d <- ctx+0x2c0), cache SIZE0 (0x141 <- ctx+0x2b0),
+    // and the stack/cache1 BAR (0x468/0x469 <- ctx+0x2f8). Only rewrites entries the secure path
+    // left 0; anything already nonzero passes through.
+    if (vcnDpgEnabled && engine && bank == 1 && value == 0 &&
+        (reg == 0x43c || reg == 0x43d || reg == 0x141 || reg == 0x468 || reg == 0x469)) {
         auto ctx = *reinterpret_cast<const uint8_t **>(static_cast<uint8_t *>(engine) + 16);
         if (ctx && *reinterpret_cast<const uint32_t *>(ctx + 0x268) == 0x30001) {
-            const uint64_t tmr = *reinterpret_cast<const uint64_t *>(ctx + 0x2c0);
-            const uint32_t inject = (reg == 0x43c) ? static_cast<uint32_t>(tmr)
-                                                   : static_cast<uint32_t>(tmr >> 32);
+            const uint64_t tmr   = *reinterpret_cast<const uint64_t *>(ctx + 0x2c0); // firmware
+            const uint64_t stack = *reinterpret_cast<const uint64_t *>(ctx + 0x2f8); // cache1/stack
+            const uint32_t size0 = *reinterpret_cast<const uint32_t *>(ctx + 0x2b0); // cache size0
+            uint32_t inject = 0;
+            switch (reg) {
+                case 0x43c: inject = static_cast<uint32_t>(tmr); break;
+                case 0x43d: inject = static_cast<uint32_t>(tmr >> 32); break;
+                case 0x141: inject = size0; break;
+                case 0x468: inject = static_cast<uint32_t>(stack); break;
+                case 0x469: inject = static_cast<uint32_t>(stack >> 32); break;
+            }
             if (inject != 0) {
-                RLOG("VCNDPG: inject cacheBAR reg=%x 0 -> %08x (tmr=%llx)", reg, inject, tmr);
+                RLOG("VCNDPG: inject sram reg=%x 0 -> %08x", reg, inject);
                 value = inject;
             }
         }
