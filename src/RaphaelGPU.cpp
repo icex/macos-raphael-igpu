@@ -257,6 +257,7 @@ static mach_vm_address_t orgVcnInitialize = 0;
 static mach_vm_address_t orgVcnQueryFw = 0;
 static bool vcnSharedSizeReady = false;
 #include "VcnFirmware.hpp"
+#include "VcnDpgClock.hpp"
 static mach_vm_address_t orgVcnReadFw = 0;
 static mach_vm_address_t orgVcnHwInit = 0;
 static volatile bool mmhubTableCorrect = false;
@@ -2473,6 +2474,19 @@ static void wrapMmhub21(void *vm) {
 // through unchanged. Guarded to the Raphael VCN3.1 context; no-op when the value is already set.
 static uint32_t *wrapAddToDpgSram(void *engine, uint32_t *sram, uint32_t bank,
                                   uint32_t reg, uint32_t value) {
+    auto clockCtx = engine ? *reinterpret_cast<const uint8_t **>(
+        static_cast<uint8_t *>(engine) + 16) : nullptr;
+    const auto caller = reinterpret_cast<mach_vm_address_t>(__builtin_return_address(0));
+    const uint32_t corrected = RaphaelVcnDpg::clockGateValue(
+        vcnDpgEnabled && clockCtx &&
+            __atomic_load_n(&raphaelTargetConfirmed, __ATOMIC_ACQUIRE),
+        caller == hwlibsBase + 0x94043,
+        clockCtx ? *reinterpret_cast<const uint32_t *>(clockCtx + 0x268) : 0,
+        bank, reg, value);
+    if (corrected != value) {
+        RLOG("VCNDPG: secure CGC_GATE %08x -> %08x", value, corrected);
+        value = corrected;
+    }
     // Candidate 253: decode_sram_secure_initialize zeros the whole VCPU cache window and relies
     // on Apple secure firmware to fill it. Mirror what decode_sram_initialize (unsecure) programs
     // from ctx: firmware cache BAR (0x43c/0x43d <- ctx+0x2c0), cache SIZE0 (0x141 <- ctx+0x2b0),
@@ -2510,8 +2524,7 @@ static uint32_t wrapVcnConfig(void *engine, uint32_t index) {
         // Force EnableVCNDPG (0) and EnableVCNSecureLoad (7) -> bit1/bit9, so engine_init_pfn_ptr
         // picks a DPG initializer. Keep mode (ctx+0x2e0)=0 (do NOT force index 3) so
         // engine_initialize's firmware-loaded wait still runs and populates ctx+0x2c0 with the
-        // firmware TMR address. The initializer is then overridden to dpg_unsecure in
-        // wrapVcnInitialize (candidate 251).
+        // firmware TMR address. The native secure initializer builds and submits SRAM.
         RLOG("VCNDPG: native config%u %u -> 1 (DPG, mode stays 0)", index, value);
         return 1;
     }
