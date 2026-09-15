@@ -59,6 +59,18 @@ static void makeValid(Fixture &f, bool wrongUuid = false) {
     (void)all;
 }
 
+static void makeVcnValid(Fixture &f, bool wrongUuid = false) {
+    makeValid(f);
+    std::memset(f.bytes.data() + 0x500, 0, RaphaelTextureDiag::kVcnDpmTarget.pathSize);
+    std::memcpy(f.bytes.data() + 0x500, RaphaelTextureDiag::kVcnDpmDriverPath,
+                RaphaelTextureDiag::kVcnDpmTarget.pathSize);
+    std::memcpy(f.bytes.data() + 0x428, RaphaelTextureDiag::kVcnDpmUuid, 16);
+    if (wrongUuid) f.bytes[0x428] ^= 1;
+    std::memcpy(f.bytes.data() + 0x400 + RaphaelTextureDiag::kVcnDpmTarget.instructionOffset,
+                RaphaelTextureDiag::kVcnDpmInstruction,
+                RaphaelTextureDiag::kVcnDpmTarget.instructionSize);
+}
+
 int main() {
     Fixture valid;
     makeValid(valid);
@@ -113,5 +125,34 @@ int main() {
     makeValid(f);
     f.bytes[0x500 + sizeof(RaphaelTextureDiag::kDriverPath) - 1] = 'X';
     assert(!inspect(f).found && !inspect(f).pathTerminated);
+
+    Fixture vcn;
+    makeVcnValid(vcn);
+    result = RaphaelTextureDiag::inspect(readFixture, &vcn, vcn.base() + 0x100, 1,
+                                         RaphaelTextureDiag::kVcnDpmTarget);
+    assert(result.found && result.uuidMatch && result.instructionMatch &&
+           result.status == RaphaelTextureDiag::Ok);
+    Fixture vcnWrongUuid;
+    makeVcnValid(vcnWrongUuid, true);
+    result = RaphaelTextureDiag::inspect(readFixture, &vcnWrongUuid,
+                                         vcnWrongUuid.base() + 0x100, 1,
+                                         RaphaelTextureDiag::kVcnDpmTarget);
+    assert(!result.found && result.status == RaphaelTextureDiag::BadUuid);
+    makeVcnValid(vcn);
+    vcn.bytes[0x400 + RaphaelTextureDiag::kVcnDpmTarget.instructionOffset + 6] ^= 1;
+    result = RaphaelTextureDiag::inspect(readFixture, &vcn, vcn.base() + 0x100, 1,
+                                         RaphaelTextureDiag::kVcnDpmTarget);
+    assert(result.status == RaphaelTextureDiag::BadInstruction);
+    makeVcnValid(vcn);
+    std::memcpy(vcn.bytes.data() + 0x400 + RaphaelTextureDiag::kVcnDpmTarget.instructionOffset,
+                RaphaelTextureDiag::kVcnDpmPatchedInstruction,
+                RaphaelTextureDiag::kVcnDpmTarget.instructionSize);
+    result = RaphaelTextureDiag::inspect(readFixture, &vcn, vcn.base() + 0x100, 1,
+                                         RaphaelTextureDiag::kVcnDpmTarget);
+    assert(result.found && result.alreadyPatched && result.status == RaphaelTextureDiag::Ok);
+    auto crossed = RaphaelTextureDiag::kVcnDpmTarget;
+    crossed.instructionOffset = 0x5029ae;
+    result = RaphaelTextureDiag::inspect(readFixture, &vcn, vcn.base() + 0x100, 1, crossed);
+    assert(result.status == RaphaelTextureDiag::BadText);
 
 }

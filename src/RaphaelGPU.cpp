@@ -250,6 +250,8 @@ static bool vcnSmuEnabled = false;
 static bool vcnResetEnabled = false;
 static bool vcnDpgEnabled = false;
 static bool vcnDecodeFirstEnabled = false;
+static bool vcnNoDpmEnabled = false;
+static bool ppCompatibilityBypassed = false;
 static mach_vm_address_t orgVcnWriteRegister = 0;
 static mach_vm_address_t orgAddToDpgSram = 0;
 static IOLock *vcnSmuLock = nullptr;
@@ -3560,7 +3562,8 @@ static uint32_t wrapHwMemVram(void *self) {
 // The flag comes from controller->getFeatures()->supportsFeature(8) in
 // initWithController, whose prologue has a relative call inside the first 16 bytes and is
 // not safe to route. Clearing it here, before the original runs, has the same effect at
-// the only place it is read.
+// the startup decision point. Runtime video PM also reads this flag; AMDVA must
+// not claim support for the disabled PowerPlay backend.
 // Does enableAllocations even run, and which branch does it take? The pools report
 // zero free with the sizes equalised and with PowerPlay no longer powering the GPU
 // down, so the question is now whether IOAccelMemoryAllocator::init_pool is reached at
@@ -7923,6 +7926,8 @@ static uint32_t wrapGfx10PowerUp(void *self) {
 // input changes; counts are per operation and bounded. Pinned 24G830 ABIs.
 static mach_vm_address_t orgVcnCreateContext = 0, orgVcnRequestCap = 0;
 static mach_vm_address_t orgVcnStartEngine = 0, orgVcnSendPM = 0;
+static mach_vm_address_t orgVcnNewContext = 0;
+static uint32_t vcnNewContextCalls = 0;
 static uint32_t vcnContextCalls[4] = {};
 static uint32_t vcnContextSequence(unsigned operation) {
     return __atomic_add_fetch(&vcnContextCalls[operation], 1u, __ATOMIC_RELAXED);
@@ -7935,6 +7940,19 @@ static uint32_t wrapVcnCreateContext(void *self, const uint32_t *info, uint32_t 
     const uint32_t result = FunctionCast(wrapVcnCreateContext, orgVcnCreateContext)(self, info, output);
     if (n <= 16) RLOG("VCNCTX: create end n=%u result=%08x id=%u", n, result,
         !result && output ? *output : 0xffffffffu);
+    return result;
+}
+static uint32_t wrapVcnNewContext(void *self, const uint32_t *info, uint32_t *output,
+                                  uint64_t inputSize, uint64_t *outputSize) {
+    const uint32_t n = __atomic_add_fetch(&vcnNewContextCalls, 1u, __ATOMIC_RELAXED);
+    if (n <= 16) CRLOG("VCNCTX: video new begin n=%u codec=%u channel=%u width=%u height=%u scheduler=%u client=%u pm=%#llx",
+        n, info ? info[1] : 0, info ? info[2] : 0, info ? info[3] : 0,
+        info ? info[4] : 0, info ? info[6] : 0, info ? info[7] : 0,
+        info ? (uint64_t(info[9]) << 32 | info[8]) : 0);
+    const uint32_t result = FunctionCast(wrapVcnNewContext, orgVcnNewContext)(
+        self, info, output, inputSize, outputSize);
+    if (n <= 16) CRLOG("VCNCTX: video new end n=%u result=%08x id=%u", n, result,
+                      !result && output ? *output : 0xffffffffu);
     return result;
 }
 static bool wrapVcnRequestCap(void *self, const void *cap, uint32_t *output, uint32_t flags, bool encode) {
@@ -8143,6 +8161,7 @@ static uint32_t wrapPpPowerUp(void *self) {
     auto flag = reinterpret_cast<uint8_t *>(self) + 0x28f8;
     uint8_t was = *flag;
     *flag = 0;
+    __atomic_store_n(&ppCompatibilityBypassed, true, __ATOMIC_RELEASE);
     auto r = FunctionCast(wrapPpPowerUp, orgPpPowerUp)(self);
     RLOG("XI: PowerPlay supported flag was %u -- cleared, powerUp returned %#x, "
          "reporting success so the accelerator powers its engines up", was, r);
@@ -8318,6 +8337,7 @@ static bool entryMatches(mach_vm_address_t base, size_t imageSize, size_t offset
 static uint32_t texDiagEnabled = 0;
 static IOLock *textureDiagCowLock = nullptr;
 static mach_vm_address_t orgGetHardwareInfo = 0;
+static mach_vm_address_t orgVideoGetHWInfo = 0;
 using TextureDiagTaskInfo = kern_return_t (*)(task_t, task_flavor_t, task_info_t,
                                                mach_msg_type_number_t *);
 using TextureDiagCurrentTask = task_t (*)();
@@ -8349,6 +8369,7 @@ static constexpr uint8_t kGetHardwareInfoEntry[] = {
     0x41, 0x54, 0x53, 0x48, 0x85, 0xf6
 };
 static int wrapGetHardwareInfo(void *self, void *values);
+static int wrapVideoGetHWInfo(void *self, void *values);
 
 static void processKext(void *, KernelPatcher &patcher, size_t index,
                         mach_vm_address_t addr, size_t sz) {
@@ -8450,7 +8471,7 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
         if (mask & P1) reprobeGpu();
     } else if (kexts[KextX6000].loadIndex == index) {
         RLOG("X6000 loaded, mask=0x%x", mask);
-        if (texDiagEnabled != 0) {
+        if (texDiagEnabled != 0 || vcnNoDpmEnabled) {
             textureDiagTaskInfo = reinterpret_cast<TextureDiagTaskInfo>(
                 patcher.solveSymbol(KernelPatcher::KernelID, "_task_info"));
             textureDiagCurrentTask = reinterpret_cast<TextureDiagCurrentTask>(
@@ -8482,6 +8503,24 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
                  textureDiagGetTaskMap, textureDiagReadUser, textureDiagSelfPid,
                  textureDiagRegionRecurse, textureDiagProtect, textureDiagWriteUser);
             patcher.clearError();
+            if (vcnNoDpmEnabled) {
+                // Preserve TEST RSI / JZ null-output refusal. Route only the
+                // non-null entry at28935, before any stack modification. All
+                // 16 displaced bytes are whole non-PC-relative instructions.
+                static const uint8_t videoEntry[] = {
+                    0x48,0x85,0xf6,0x0f,0x84,0xbb,0x01,0x00,0x00,
+                    0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x53,0x50,
+                    0x48,0x89,0xf3,0x49,0x89,0xfe
+                };
+                const bool videoGuard = entryMatches(addr, sz, 0x2892c,
+                    videoEntry, sizeof(videoEntry));
+                if (symbols && videoGuard)
+                    orgVideoGetHWInfo = patcher.routeFunction(addr + 0x28935,
+                        reinterpret_cast<mach_vm_address_t>(wrapVideoGetHWInfo), true);
+                CRLOG("VCNDPM: video HWInfo route entry=%u routed=%u", videoGuard,
+                      orgVideoGetHWInfo != 0);
+                patcher.clearError();
+            }
         }
         if (mask & XJ) {
             // 24G830's AMDGraphicsAccelerator::start failure cleanup branches
@@ -8515,6 +8554,18 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
         }
         x6Base = addr;
         if (vcnDpgEnabled) {
+            if (vcnNoDpmEnabled) {
+                static const uint8_t newContextEntry[] = {
+                    0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x41,0x55,0x41,0x54,0x53,0x50
+                };
+                const bool newGuard = entryMatches(addr, sz, 0x49292,
+                    newContextEntry, sizeof(newContextEntry));
+                if (newGuard) orgVcnNewContext = patcher.routeFunction(addr + 0x49292,
+                    reinterpret_cast<mach_vm_address_t>(wrapVcnNewContext), true);
+                CRLOG("VCNCTX: route VideoNewContext entry=%u routed=%u", newGuard,
+                      orgVcnNewContext != 0);
+                patcher.clearError();
+            }
             // Every footprint ends at an instruction boundary and contains no
             // branch, call, or RIP-relative instruction. Preserve native ABI.
             static const uint8_t guardCreateContext[] = {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x41,0x55,0x41,0x54,0x53,0x50};
@@ -8899,11 +8950,16 @@ static bool textureDiagRead(void *opaque, uint64_t address, void *out, size_t si
     return textureDiagReadUser(context->map, address, out, size) == KERN_SUCCESS;
 }
 
+// Both exact targets change only byte5. Retain the complete instruction guard,
+// task-private copy-on-write mapping, post-write verification and RX restoration.
+// The VCN target advertises unavailable Apple DPM; native setupPowerState owns its
+// no-DPM cleanup, while wrapVcnInitialize retains actual Raphael SMU power-up.
 static void textureDiagCow(TextureDiagReadContext *context, int pid,
                            const RaphaelTextureDiag::Result &result,
                            mach_vm_address_t regionStart, mach_vm_size_t regionSize,
-                           vm_prot_t regionProt, vm_prot_t regionMax, bool emit) {
-    if (texDiagEnabled != 2 || context == nullptr || context->map == nullptr ||
+                           vm_prot_t regionProt, vm_prot_t regionMax, bool emit,
+                           const RaphaelTextureDiag::Target &target, bool vcnTarget) {
+    if ((vcnTarget ? !(vcnNoDpmEnabled && __atomic_load_n(&ppCompatibilityBypassed, __ATOMIC_ACQUIRE)) : texDiagEnabled != 2) || context == nullptr || context->map == nullptr ||
         textureDiagCowLock == nullptr || textureDiagProtect == nullptr ||
         textureDiagWriteUser == nullptr || pid <= 0 || !result.found || result.alreadyPatched ||
         result.status != RaphaelTextureDiag::Ok || !result.instructionMatch ||
@@ -8917,14 +8973,15 @@ static void textureDiagCow(TextureDiagReadContext *context, int pid,
         (regionMax & (VM_PROT_READ | VM_PROT_EXECUTE)) !=
             (VM_PROT_READ | VM_PROT_EXECUTE))
         return;
-    uint8_t before[sizeof(RaphaelTextureDiag::kInstruction)] {};
+    if (target.instructionSize < 6 || target.instructionSize > 16 ||
+        (result.instructionAddress & 0xfff) > 0x1000 - target.instructionSize) return;
+    uint8_t before[16] {};
     kern_return_t readBefore = textureDiagRead(context, result.instructionAddress,
-                                                before, sizeof(before)) ? KERN_SUCCESS : KERN_FAILURE;
-    if (readBefore != KERN_SUCCESS || memcmp(before, RaphaelTextureDiag::kInstruction,
-                                              sizeof(before)) != 0) {
+                                                before, target.instructionSize) ? KERN_SUCCESS : KERN_FAILURE;
+    if (readBefore != KERN_SUCCESS || memcmp(before, target.instruction, target.instructionSize) != 0) {
         return;
     }
-    const uint8_t replacement = 0xf7;
+    const uint8_t replacement = target.patchedInstruction[5];
     kern_return_t protectRc = textureDiagProtect(context->map, page, 0x1000, FALSE,
                                                    VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
     kern_return_t writeRc = KERN_FAILURE;
@@ -8933,8 +8990,8 @@ static void textureDiagCow(TextureDiagReadContext *context, int pid,
     if (protectRc == KERN_SUCCESS) {
         uint8_t afterProtect[sizeof(before)] {};
         const bool stillOriginal = textureDiagRead(context, result.instructionAddress,
-                                                    afterProtect, sizeof(afterProtect)) &&
-            memcmp(afterProtect, RaphaelTextureDiag::kInstruction, sizeof(afterProtect)) == 0;
+                                                    afterProtect, target.instructionSize) &&
+            memcmp(afterProtect, target.instruction, target.instructionSize) == 0;
         if (stillOriginal)
             writeRc = textureDiagWriteUser(context->map, &replacement,
                                            result.instructionAddress + 5, 1);
@@ -8944,12 +9001,14 @@ static void textureDiagCow(TextureDiagReadContext *context, int pid,
     {
         uint8_t after[sizeof(before)] {};
         const bool readAfter = textureDiagRead(context, result.instructionAddress,
-                                                after, sizeof(after));
-        verifyRc = (readAfter && after[5] == replacement &&
-                    memcmp(after, RaphaelTextureDiag::kInstruction, 5) == 0 &&
-                    memcmp(after + 6, RaphaelTextureDiag::kInstruction + 6, 4) == 0) ?
+                                                after, target.instructionSize);
+        verifyRc = (readAfter &&
+                    memcmp(after, target.patchedInstruction, target.instructionSize) == 0) ?
             KERN_SUCCESS : KERN_FAILURE;
     }
+    if (vcnTarget)
+        CRLOG("VCNDPM: COW pid=%d addr=%#llx p=%d w=%d r=%d v=%d", pid,
+              result.instructionAddress, protectRc, writeRc, restoreRc, verifyRc);
     if (restoreRc != KERN_SUCCESS)
         CRLOG("XTCOW pid=%d p=%d w=%d r=%d v=%d unsafe", pid, protectRc, writeRc,
               restoreRc, verifyRc);
@@ -8958,11 +9017,11 @@ static void textureDiagCow(TextureDiagReadContext *context, int pid,
              restoreRc, verifyRc);
 }
 
-static int wrapGetHardwareInfo(void *self, void *values) {
-    if (texDiagEnabled != 0) {
+static void applyCurrentTaskImagePatches(bool includeMetal) {
+    if (texDiagEnabled != 0 || vcnNoDpmEnabled) {
         const bool emit = __atomic_fetch_add(&textureDiagLogCount, 1u,
                                              __ATOMIC_RELAXED) < 64;
-        const bool cowLocked = texDiagEnabled == 2 && textureDiagCowLock != nullptr;
+        const bool cowLocked = (texDiagEnabled == 2 || vcnNoDpmEnabled) && textureDiagCowLock != nullptr;
         if (cowLocked) IOLockLock(textureDiagCowLock);
         task_t task = textureDiagCurrentTask ? textureDiagCurrentTask() : nullptr;
         const int pid = textureDiagSelfPid ? textureDiagSelfPid() : -1;
@@ -8973,50 +9032,72 @@ static int wrapGetHardwareInfo(void *self, void *values) {
         kern_return_t taskRc = (task && textureDiagTaskInfo) ?
             textureDiagTaskInfo(task, TASK_DYLD_INFO,
                                 reinterpret_cast<task_info_t>(&dyld), &count) : KERN_FAILURE;
-        RaphaelTextureDiag::Result result {};
-        if (taskRc == KERN_SUCCESS && count >= TASK_DYLD_INFO_COUNT &&
-            dyld.all_image_info_size >= 16 && map != nullptr)
-            result = RaphaelTextureDiag::inspect(textureDiagRead, &readContext,
-                                                  dyld.all_image_info_addr,
-                                                  dyld.all_image_info_format);
-        kern_return_t regionRc = KERN_FAILURE;
-        mach_vm_address_t regionStart = result.instructionAddress;
-        mach_vm_size_t regionSize = 0;
-        vm_prot_t regionProt = VM_PROT_NONE, regionMax = VM_PROT_NONE;
-        boolean_t regionSubmap = FALSE;
-        if (result.instructionAddress != 0 && map != nullptr && textureDiagRegionRecurse) {
-            natural_t depth = 0;
-            for (unsigned level = 0; level <= 8; ++level) {
-                vm_region_submap_info_data_64_t info {};
-                mach_msg_type_number_t infoCount = VM_REGION_SUBMAP_INFO_COUNT_64;
-                regionStart = result.instructionAddress;
-                regionSize = 0;
-                regionRc = textureDiagRegionRecurse(
-                    map, &regionStart, &regionSize, &depth,
-                    reinterpret_cast<vm_region_recurse_info_t>(&info), &infoCount);
-                if (regionRc == KERN_SUCCESS && infoCount < VM_REGION_SUBMAP_INFO_COUNT_64)
-                    regionRc = KERN_FAILURE;
-                regionProt = info.protection;
-                regionMax = info.max_protection;
-                regionSubmap = info.is_submap;
-                if (regionRc != KERN_SUCCESS || !info.is_submap) break;
-                ++depth;
+        for (unsigned targetIndex = 0; targetIndex < 2; ++targetIndex) {
+            const bool vcnTarget = targetIndex == 1;
+            if (vcnTarget ? !(vcnNoDpmEnabled && __atomic_load_n(&ppCompatibilityBypassed, __ATOMIC_ACQUIRE)) : (!includeMetal || texDiagEnabled == 0))
+                continue;
+            const auto &target = vcnTarget ? RaphaelTextureDiag::kVcnDpmTarget :
+                                            RaphaelTextureDiag::kTextureTarget;
+            RaphaelTextureDiag::Result result {};
+            if (taskRc == KERN_SUCCESS && count >= TASK_DYLD_INFO_COUNT &&
+                dyld.all_image_info_size >= 16 && map != nullptr)
+                result = RaphaelTextureDiag::inspect(textureDiagRead, &readContext,
+                                                      dyld.all_image_info_addr,
+                                                      dyld.all_image_info_format, target);
+            kern_return_t regionRc = KERN_FAILURE;
+            mach_vm_address_t regionStart = result.instructionAddress;
+            mach_vm_size_t regionSize = 0;
+            vm_prot_t regionProt = VM_PROT_NONE, regionMax = VM_PROT_NONE;
+            boolean_t regionSubmap = FALSE;
+            if (result.instructionAddress != 0 && map != nullptr && textureDiagRegionRecurse) {
+                natural_t depth = 0;
+                for (unsigned level = 0; level <= 8; ++level) {
+                    vm_region_submap_info_data_64_t info {};
+                    mach_msg_type_number_t infoCount = VM_REGION_SUBMAP_INFO_COUNT_64;
+                    regionStart = result.instructionAddress;
+                    regionSize = 0;
+                    regionRc = textureDiagRegionRecurse(
+                        map, &regionStart, &regionSize, &depth,
+                        reinterpret_cast<vm_region_recurse_info_t>(&info), &infoCount);
+                    if (regionRc == KERN_SUCCESS && infoCount < VM_REGION_SUBMAP_INFO_COUNT_64)
+                        regionRc = KERN_FAILURE;
+                    regionProt = info.protection;
+                    regionMax = info.max_protection;
+                    regionSubmap = info.is_submap;
+                    if (regionRc != KERN_SUCCESS || !info.is_submap) break;
+                    ++depth;
+                }
             }
+            if (vcnTarget && (emit || result.found))
+                CRLOG("VCNDPM: image pid=%d st=%u uuid=%u bytes=%u patched=%u addr=%#llx",
+                      pid, result.status, result.uuidMatch, result.instructionMatch,
+                      result.alreadyPatched, result.instructionAddress);
+            if (!vcnTarget && emit) RLOG("XTDIAG pid=%d task=%p ti=%d fmt=%d images=%u n=%u st=%u uuid=%u path=%u "
+                 "text=%#llx instr=%#llx bytes=%u patched=%u",
+                 pid, task, taskRc, dyld.all_image_info_format, result.imageCount, result.inspected,
+                 result.status, result.uuidMatch, result.pathTerminated,
+                 result.textBase, result.instructionAddress, result.instructionMatch, result.alreadyPatched);
+            if (emit) RLOG("XTREG pid=%d rc=%d start=%#llx size=%#llx prot=%#x max=%#x sub=%u",
+                           pid, regionRc, regionStart, regionSize, regionProt, regionMax,
+                           regionSubmap);
+            if (regionRc == KERN_SUCCESS && !regionSubmap && result.status == RaphaelTextureDiag::Ok &&
+                result.instructionMatch && result.uuidMatch && result.pathTerminated)
+                textureDiagCow(&readContext, pid, result, regionStart, regionSize,
+                               regionProt, regionMax, emit, target, vcnTarget);
         }
-        if (emit) RLOG("XTDIAG pid=%d task=%p ti=%d fmt=%d images=%u n=%u st=%u uuid=%u path=%u "
-             "text=%#llx instr=%#llx bytes=%u patched=%u",
-             pid, task, taskRc, dyld.all_image_info_format, result.imageCount, result.inspected,
-             result.status, result.uuidMatch, result.pathTerminated,
-             result.textBase, result.instructionAddress, result.instructionMatch, result.alreadyPatched);
-        if (emit) RLOG("XTREG pid=%d rc=%d start=%#llx size=%#llx prot=%#x max=%#x sub=%u",
-                       pid, regionRc, regionStart, regionSize, regionProt, regionMax,
-                       regionSubmap);
-        if (regionRc == KERN_SUCCESS && !regionSubmap && result.status == RaphaelTextureDiag::Ok &&
-            result.instructionMatch && result.uuidMatch && result.pathTerminated)
-            textureDiagCow(&readContext, pid, result, regionStart, regionSize,
-                           regionProt, regionMax, emit);
         if (cowLocked) IOLockUnlock(textureDiagCowLock);
     }
+}
+
+static int wrapVideoGetHWInfo(void *self, void *values) {
+    applyCurrentTaskImagePatches(false);
+    using GetHWInfo = int (*)(void *, void *);
+    return orgVideoGetHWInfo ? reinterpret_cast<GetHWInfo>(orgVideoGetHWInfo)(self, values)
+                            : KERN_FAILURE;
+}
+
+static int wrapGetHardwareInfo(void *self, void *values) {
+    applyCurrentTaskImagePatches(true);
     using GetHardwareInfo = int (*)(void *, void *);
     return orgGetHardwareInfo ? reinterpret_cast<GetHardwareInfo>(orgGetHardwareInfo)(self, values)
                                : KERN_FAILURE;
@@ -9154,7 +9235,12 @@ static void pluginStart() {
     uint32_t texDiag = 0;
     texDiagEnabled = PE_parse_boot_argn("rgputexdiag", &texDiag, sizeof(texDiag)) &&
                      texDiag <= 2 ? texDiag : 0;
-    if (texDiagEnabled == 2) textureDiagCowLock = IOLockAlloc();
+    uint32_t vcnNoDpm = 0;
+    vcnNoDpmEnabled = PE_parse_boot_argn("rgpuvcnnodpm", &vcnNoDpm, sizeof(vcnNoDpm)) &&
+        vcnNoDpm == 1 && (mask & XI) && vcnSmuEnabled && vcnDpgEnabled;
+    if (texDiagEnabled == 2 || vcnNoDpmEnabled) textureDiagCowLock = IOLockAlloc();
+    CRLOG("VCNDPM: capability alignment enabled=%u lock=%u", vcnNoDpmEnabled,
+          textureDiagCowLock != nullptr);
     RLOG("rgputexdiag=%u: current-task Metal image diagnostic %s",
          texDiagEnabled, texDiagEnabled == 2 ? "COW enabled" :
          texDiagEnabled == 1 ? "read-only enabled" : "disabled");

@@ -21,6 +21,16 @@ struct Result {
     uint32_t status {};
 };
 
+struct Target {
+    const char *driverPath;
+    size_t pathSize;
+    const uint8_t *uuid;
+    uint64_t instructionOffset;
+    const uint8_t *instruction;
+    const uint8_t *patchedInstruction;
+    size_t instructionSize;
+};
+
 enum : uint32_t {
     Ok = 0,
     BadReader = 1,
@@ -51,6 +61,22 @@ static constexpr uint8_t kPatchedInstruction[10] = {
 static constexpr uint8_t kInstruction[10] = {
     0x48, 0xb8, 0x00, 0x00, 0x70, 0xff, 0x01, 0x00, 0x00, 0x00
 };
+static constexpr Target kTextureTarget = {
+    kDriverPath, sizeof(kDriverPath), kUuid, kInstructionOffset,
+    kInstruction, kPatchedInstruction, sizeof(kInstruction)
+};
+static constexpr char kVcnDpmDriverPath[] =
+    "/System/Library/Extensions/AMDRadeonVADriver2.bundle/Contents/MacOS/AMDRadeonVADriver2";
+static constexpr uint8_t kVcnDpmUuid[16] = {
+    0x81, 0xdf, 0x72, 0x15, 0x43, 0xe2, 0x3b, 0xa1,
+    0xbe, 0x2d, 0xef, 0xb1, 0xc5, 0x08, 0xb8, 0x1a
+};
+static constexpr uint8_t kVcnDpmInstruction[8] = {0x55, 0x48, 0x89, 0xe5, 0xb0, 0x01, 0x5d, 0xc3};
+static constexpr uint8_t kVcnDpmPatchedInstruction[8] = {0x55, 0x48, 0x89, 0xe5, 0xb0, 0x00, 0x5d, 0xc3};
+static constexpr Target kVcnDpmTarget = {
+    kVcnDpmDriverPath, sizeof(kVcnDpmDriverPath), kVcnDpmUuid, 0x3d5f6,
+    kVcnDpmInstruction, kVcnDpmPatchedInstruction, sizeof(kVcnDpmInstruction)
+};
 
 inline uint32_t u32(const uint8_t *p) {
     return uint32_t(p[0]) | (uint32_t(p[1]) << 8) | (uint32_t(p[2]) << 16) |
@@ -73,10 +99,17 @@ inline bool boundedRead(ReadFn read, void *context, uint64_t address, void *out,
 }
 
 inline Result inspect(ReadFn read, void *context, uint64_t allImageInfoAddress,
-                      uint32_t allImageInfoFormat) {
+                      uint32_t allImageInfoFormat, const Target &target = kTextureTarget) {
     Result result {};
     if (read == nullptr || allImageInfoAddress == 0) {
         result.status = BadReader;
+        return result;
+    }
+    if (target.driverPath == nullptr || target.uuid == nullptr ||
+        target.instruction == nullptr || target.patchedInstruction == nullptr ||
+        target.pathSize == 0 || target.pathSize > 256 || target.instructionSize == 0 ||
+        target.instructionSize > 16) {
+        result.status = BadPath;
         return result;
     }
     // dyld_all_image_infos: version, count, infoArray (64-bit format).
@@ -101,10 +134,9 @@ inline Result inspect(ReadFn read, void *context, uint64_t allImageInfoAddress,
         const uint64_t loadAddress = u64(image);
         const uint64_t pathAddress = u64(image + 8);
         if (loadAddress == 0 || pathAddress == 0) continue;
-        constexpr size_t pathSize = sizeof(kDriverPath);
-        char path[pathSize] {};
-        if (!boundedRead(read, context, pathAddress, path, pathSize)) continue;
-        if (memcmp(path, kDriverPath, pathSize) != 0) continue;
+        char path[256] {};
+        if (!boundedRead(read, context, pathAddress, path, target.pathSize)) continue;
+        if (memcmp(path, target.driverPath, target.pathSize) != 0) continue;
         result.pathTerminated = true;
         uint8_t header[32] {};
         if (!boundedRead(read, context, loadAddress, header, sizeof(header)) ||
@@ -134,14 +166,15 @@ inline Result inspect(ReadFn read, void *context, uint64_t allImageInfoAddress,
             if (size < 8 || size > sizeofcmds - offset) { malformed = true; break; }
             if (type == 0x1b && size >= 24) {
                 ++uuidCount;
-                uuid = memcmp(cmd + 8, kUuid, sizeof(kUuid)) == 0;
+                    uuid = memcmp(cmd + 8, target.uuid, 16) == 0;
             } else if (type == 0x19 && size >= 72) {
                 char name[17] {};
                 memcpy(name, cmd + 8, 16);
                 if (strcmp(name, "__TEXT") == 0) {
                     ++textCount;
                     const uint64_t vmsize = u64(cmd + 32);
-                    if (kInstructionOffset + sizeof(kInstruction) <= vmsize) {
+                    if (target.instructionOffset <= vmsize &&
+                        target.instructionSize <= vmsize - target.instructionOffset) {
                         textBase = loadAddress;
                         text = true;
                     }
@@ -154,17 +187,17 @@ inline Result inspect(ReadFn read, void *context, uint64_t allImageInfoAddress,
         delete [] commands;
         if (malformed || offset != sizeofcmds || uuidCount > 1 || textCount > 1) { result.status = BadLoadCommands; return result; }
         if (!uuid) { result.status = BadUuid; return result; }
-        if (!text || !addOk(textBase, kInstructionOffset, &result.instructionAddress)) {
+        if (!text || !addOk(textBase, target.instructionOffset, &result.instructionAddress)) {
             result.status = BadText;
             return result;
         }
-        uint8_t instruction[sizeof(kInstruction)] {};
+        uint8_t instruction[16] {};
         const bool readOk = boundedRead(read, context, result.instructionAddress,
-                                        instruction, sizeof(instruction));
+                                        instruction, target.instructionSize);
         result.instructionMatch = readOk &&
-                                  memcmp(instruction, kInstruction, sizeof(instruction)) == 0;
+                                  memcmp(instruction, target.instruction, target.instructionSize) == 0;
         result.alreadyPatched = readOk &&
-                               memcmp(instruction, kPatchedInstruction, sizeof(instruction)) == 0;
+                               memcmp(instruction, target.patchedInstruction, target.instructionSize) == 0;
         result.found = true;
         result.status = (result.instructionMatch || result.alreadyPatched) ? Ok : BadInstruction;
         return result;
