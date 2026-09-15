@@ -2407,6 +2407,22 @@ static void wrapVcnWriteRegister(void *engine, uint32_t segment, uint32_t reg, u
         RLOG("VCNR: native clock/reset requested=%x written=%x readback=%x after10ms=%x",
              requested, value, beforeDelay, read(engine, segment, reg));
     }
+    // Candidate 245: probe the VCN power-gating FSM. The VCPU-core registers (cache
+    // BAR 0x43c, soft-reset 0x84) read 0xffffffff while always-on registers (STATUS,
+    // VCPU_CNTL, NC0 BAR) read fine -- the signature of the VCN core power domain never
+    // leaving power-gate. disable_power_gating writes mmUVD_PGFSM_CONFIG (reg 0x0) and
+    // waits on mmUVD_PGFSM_STATUS (0x1). Read those plus POWER_STATUS (0x4) and the two
+    // dead core registers back after the config write settles, to tell a power-domain
+    // fault (fixable) from a firmware/PSP issue. Read-only.
+    if (ctx && segment == 1 && reg == 0x0) {
+        auto rd = reinterpret_cast<uint32_t (*)(void *, uint32_t, uint32_t)>(hwlibsBase + 0x86834);
+        const uint32_t cfgrb = rd(engine, 1, 0x0), pgst0 = rd(engine, 1, 0x1);
+        IOSleep(5);
+        RLOG("VCNPG: wrote pgfsmcfg=%08x -> cfgrb=%08x pgstatus %08x->%08x power=%08x "
+             "cacheBARlo=%08x softreset=%08x",
+             value, cfgrb, pgst0, rd(engine, 1, 0x1), rd(engine, 1, 0x4),
+             rd(engine, 1, 0x43c), rd(engine, 1, 0x84));
+    }
     // Candidate 244: settle whether the VCN VCPU cache-window and soft-reset writes
     // land at all. Candidate 243 read them 0xffffffff AFTER static_initialize; that is
     // ambiguous between a dropped write (the block is held inaccessible, so the VCPU
