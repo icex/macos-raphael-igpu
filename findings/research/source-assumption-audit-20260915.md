@@ -124,3 +124,17 @@ X6000-full/functions/: 0x62400 fillVMRegisters, 0x980c0 MMHUB implementation.
 - [Linux VCN3 implementation](https://github.com/torvalds/linux/blob/master/drivers/gpu/drm/amd/amdgpu/vcn_v3_0.c)
 - [Linux PSP implementation (v6.12)](https://github.com/torvalds/linux/blob/v6.12/drivers/gpu/drm/amd/amdgpu/amdgpu_psp.c)
 - [AMD PM4 definitions, PM4_ME_WAIT_REG_MEM64](https://github.com/GPUOpen-Drivers/pal/blob/dev/src/core/hw/gfxip/gfx9/chip/gfx9_plus_merged_f32_me_pm4_packets.h)
+
+## Validation of candidate 255
+
+- Host suite: 931 tests run, OK, 3 skipped. Log:
+  /home/bogdan/macos-vm/run/candidate-255-host-tests.log.
+- All 21 standalone C++ test fixtures compiled with -Wall -Wextra -Werror and
+  executed successfully. This includes MEC partial-halt and wait-decoder cases.
+- Kext build succeeded (existing compiler/deprecation and linker warnings).
+  Log: /home/bogdan/macos-vm/run/candidate-255-build.log.
+- Built source commit: c190572e74b6e1a01181cbfa7ce53b07df61f951 (clean).
+  Build ID: c333c450275142d2b7ca0ec1f68d1c51.
+  Archive: /home/bogdan/macos-vm/run/candidate-255-dist/RaphaelGPU-1.0.255-experimental.zip.
+- No candidate-255 hardware execution. Final read-only host check: same boot,
+  vfio-pci, power/control=on, no QEMU. No runtime correctness claim for 255.
