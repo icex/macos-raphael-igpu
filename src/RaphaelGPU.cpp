@@ -250,6 +250,7 @@ static bool vcnSmuEnabled = false;
 static bool vcnResetEnabled = false;
 static bool vcnDpgEnabled = false;
 static mach_vm_address_t orgVcnWriteRegister = 0;
+static mach_vm_address_t orgAddToDpgSram = 0;
 static IOLock *vcnSmuLock = nullptr;
 static mach_vm_address_t orgVcnConfig = 0;
 static mach_vm_address_t orgVcnInitialize = 0;
@@ -715,6 +716,7 @@ static constexpr size_t kOffVcnInitialize = 0x87c74; // HWLibs _engine_initializ
 static constexpr size_t kOffVcnSharedSize = 0x878f5; // HWLibs _engine_hw_init shared allocation sequence
 static constexpr size_t kOffVcnReadFw = 0x86648; // HWLibs _internal_cos_read_fw
 static constexpr size_t kOffVcnHwInit = 0x862ea; // HWLibs _vcn_hw_init
+static constexpr size_t kOffAddToDpgSram = 0x93f5d; // HWLibs _engine_3_0_add_to_dpg_sram
 static constexpr size_t kOffFwDirGet     = 0xb0c10;    // AMDFirmwareDirectory::getFirmware
 static constexpr size_t kOffSmuFwFile    = 0x70961;    // _smu_set_fw_entry_info_from_file
 static constexpr size_t kOffPspRegRead   = 0x516ce;    // _psp_cgs_read_register
@@ -2463,6 +2465,28 @@ static void wrapMmhub21(void *vm) {
     }
 }
 
+// Candidate 252: the secure DPG path (decode_sram_secure_initialize) builds the DPG SRAM with
+// the VCPU cache BAR written as add_to_dpg_sram(,1,0x43c,0)/(,1,0x43d,0) -- zero -- relying on an
+// Apple-signed secure firmware image we do not have. Inject the real firmware TMR address from
+// ctx+0x2c0 (populated by engine_initialize's firmware-loaded wait) into just those two entries,
+// so the committed SRAM boots the VCPU from the loaded firmware. All other SRAM entries pass
+// through unchanged. Guarded to the Raphael VCN3.1 context; no-op when the value is already set.
+static uint32_t *wrapAddToDpgSram(void *engine, uint32_t *sram, uint32_t bank,
+                                  uint32_t reg, uint32_t value) {
+    if (vcnDpgEnabled && engine && bank == 1 && value == 0 && (reg == 0x43c || reg == 0x43d)) {
+        auto ctx = *reinterpret_cast<const uint8_t **>(static_cast<uint8_t *>(engine) + 16);
+        if (ctx && *reinterpret_cast<const uint32_t *>(ctx + 0x268) == 0x30001) {
+            const uint64_t tmr = *reinterpret_cast<const uint64_t *>(ctx + 0x2c0);
+            const uint32_t inject = (reg == 0x43c) ? static_cast<uint32_t>(tmr)
+                                                   : static_cast<uint32_t>(tmr >> 32);
+            if (inject != 0) {
+                RLOG("VCNDPG: inject cacheBAR reg=%x 0 -> %08x (tmr=%llx)", reg, inject, tmr);
+                value = inject;
+            }
+        }
+    }
+    return FunctionCast(wrapAddToDpgSram, orgAddToDpgSram)(engine, sram, bank, reg, value);
+}
 static uint32_t wrapVcnConfig(void *engine, uint32_t index) {
     uint32_t value = FunctionCast(wrapVcnConfig, orgVcnConfig)(engine, index);
     auto ctx = engine ? *reinterpret_cast<const uint8_t **>(
@@ -2510,23 +2534,6 @@ static uint32_t wrapVcnInitialize(void *engine) {
         *reinterpret_cast<const uint32_t *>(ctx),
         *reinterpret_cast<const uint32_t *>(ctx + 0x2e0),
         *reinterpret_cast<const uint64_t *>(ctx + 0x3f8) - hwlibsBase);
-    // Candidate 251 (decompilation-guided): keep mode=0 so engine_initialize's firmware-loaded
-    // wait populates ctx+0x2c0 with the firmware TMR address, but override the selected VCN
-    // initializer to _engine_3_0_dpg_unsecure_initialize (0x93ec1). Its decode_sram_initialize
-    // programs the VCPU cache BAR (0x43c/0x43d) FROM ctx+0x2c0 through the DPG LMA window --
-    // whereas dpg_secure_initialize (candidate 249) writes the cache BAR as 0 and relies on an
-    // Apple-signed secure firmware image we do not have. ctx+0x3f8 = initialize pfn,
-    // ctx+0x400 = uninitialize pfn (engine_init_pfn_ptr stores them there).
-    if (vcnDpgEnabled && ctx && hwlibsBase &&
-        *reinterpret_cast<const uint32_t *>(ctx + 0x268) == 0x30001 &&
-        *reinterpret_cast<const uint32_t *>(ctx + 0x2e0) == 0) {
-        auto ctxw = const_cast<uint8_t *>(ctx);
-        auto pfn = reinterpret_cast<uint64_t *>(ctxw + 0x3f8);
-        RLOG("VCNDPG: override initializer +%llx -> dpg_unsecure +93ec1 (mode=0)",
-             *pfn - hwlibsBase);
-        *pfn = hwlibsBase + 0x93ec1;                              // dpg_unsecure_initialize
-        *reinterpret_cast<uint64_t *>(ctxw + 0x400) = hwlibsBase + 0x94496; // dpg_uninitialize
-    }
     if (vcnSmuEnabled) {
         auto cgs = engine ? *reinterpret_cast<const uint8_t **>(engine) : nullptr;
         if (!vcnSmuLock || !(vcnStaticEnabled || vcnDpgEnabled) || !ctx || !cgs ||
@@ -2951,6 +2958,14 @@ static void installDiagnostics(KernelPatcher &patcher, mach_vm_address_t base) {
             patcher.clearError();
             RLOG("VCNS: guarded config=%u initialize=%u", orgVcnConfig != 0, orgVcnInitialize != 0);
         } else RLOG("VCNS: prologue mismatch; native config retained");
+        // Candidate 252: route add_to_dpg_sram to inject the VCPU cache BAR into the secure DPG SRAM.
+        const uint8_t dpgSramGuard[] = {0x55,0x48,0x89,0xe5,0x48,0x89,0xf0,0x48,0x8b,0x77,0x10,0x89,0xd2};
+        if (!memcmp(reinterpret_cast<const void *>(base + kOffAddToDpgSram), dpgSramGuard, sizeof(dpgSramGuard))) {
+            orgAddToDpgSram = patcher.routeFunction(base + kOffAddToDpgSram,
+                reinterpret_cast<mach_vm_address_t>(wrapAddToDpgSram), true);
+            patcher.clearError();
+        }
+        RLOG("VCNDPG: add_to_dpg_sram route=%u", orgAddToDpgSram != 0);
     }
     if (vcnFirmwareEnabled) {
         const uint8_t readGuard[] = {0x55,0x48,0x89,0xe5,0x48,0x83,0xec,0x20};
