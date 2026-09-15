@@ -143,3 +143,12 @@ boots. Candidate 248 adds rgpuvcndpg=1: forces EnableVCNDPG+EnableVCNSecureLoad 
 engine_init_pfn_ptr selects _engine_3_0_dpg_secure_initialize (0x943cf) instead of static
 (0x930f8); keeps PSP firmware load (mode 0); decouples SMU PowerUpVcn from the static flag.
 Success = VCPU boots (UVD_STATUS==2, no cosWaitForFunc timeout) and H264 hw encode emits frames.
+
+## Candidate 249 allowance (launch 63) — corrected DPG fix
+
+One launch63 on boot c369c74e-96ff-4c21-ae85-80ccb269f7d2, candidate 1.0.249 / card metal-095,
+via tools/cycle.py after fresh MODE2, --manual-reuse --ack-risk. Authorized ("test until fixed").
+Fixes candidate 248's routing gate (hooks were gated on vcnStaticEnabled and never installed under
+rgpuvcndpg). Now the DPG path gets the config forcing, SMU PowerUpVcn, and VCNS/VCNC diagnostics.
+Success = initializer=+943cf (dpg_secure), VCPU boots (UVD_STATUS==2, no cosWaitForFunc timeout),
+H264 hw encode emits frames.
