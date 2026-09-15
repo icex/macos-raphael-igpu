@@ -90,3 +90,14 @@ Linux reference: `/home/bogdan/macos-vm/run/worktrees/linux-vcn-baseline/finding
 Linux H264/HEVC encode/decode and600 validated H264 frames passed. Working Linux
 also reads cache/reset/LMA registers asffffffff and UVD_STATUS asdeadbeef; these
 values do not prove a dead VCPU. No claim that driver-level options are exhausted.
+
+## Next authorized run:270 context trace
+
+Extend allowance8→9 on boot `c782d007-ca85-409b-9cf5-ff12c1a8c6d5` under the user's
+continued-testing instruction. Candidate270 adds four bounded native observation
+hooks; no functional VCN change. Trace CreateVcnContext21ba0, capability89508,
+startEngine49632 and context callers of sendPMCommand7056 against exact24G830
+ABIs/prologues. Host suite937 tests passed,3 skipped; build completed.
+Require all four route guards before unpinned hardware decode. Keep fresh MODE2,
+identity/capture/host-fault/shutdown/recovery guards, max6000s. No hardware encoder
+request before this independent decoder test; manual stop when result obtained.
