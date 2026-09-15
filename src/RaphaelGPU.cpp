@@ -2764,7 +2764,9 @@ static uint32_t wrapVcnHwInit(void *engine, void *input, void *output) {
         auto mutableCtx = const_cast<uint8_t *>(ctx);
         const uint8_t allocGuard[] = {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,
                                      0x53,0x48,0x83,0xec,0x48,0x4c,0x89,0xcb};
-        if (!__atomic_load_n(&raphaelTargetConfirmed, __ATOMIC_ACQUIRE) ||
+        // HW init precedes the VMM target publication barrier. Use the same
+        // early PCI marker + original GC discovery check as wrapMmhub21.
+        if (!raphaelGcSeen || !hasUniqueRaphaelPciMarker() ||
             *reinterpret_cast<const uint32_t *>(ctx + 0x268) != 0x30001 ||
             *reinterpret_cast<const uint32_t *>(ctx + 0x2e0) != 1 ||
             *reinterpret_cast<const uint64_t *>(ctx + 0x3f8) != hwlibsBase + 0x93ec1 ||
@@ -2775,7 +2777,15 @@ static uint32_t wrapVcnHwInit(void *engine, void *input, void *output) {
             !*reinterpret_cast<void *const *>(ctx + 0x2d0) ||
             *reinterpret_cast<void *const *>(ctx + 0x340) ||
             memcmp(reinterpret_cast<const void *>(hwlibsBase + 0x8673a), allocGuard, sizeof(allocGuard))) {
-            RLOG("VCNSW: allocation/initializer guard refused");
+            RLOG("VCNSW: guard refused gc=%u mode=%u init=+%llx size=%llx align=%x type=%u fw=%llx cpu=%p sram=%p",
+                raphaelGcSeen, *reinterpret_cast<const uint32_t *>(ctx+0x2e0),
+                *reinterpret_cast<const uint64_t *>(ctx+0x3f8)-hwlibsBase,
+                *reinterpret_cast<const uint64_t *>(ctx+0x320),
+                *reinterpret_cast<const uint32_t *>(ctx+0x328),
+                *reinterpret_cast<const uint32_t *>(ctx+0x338),
+                *reinterpret_cast<const uint64_t *>(ctx+0x2c0),
+                *reinterpret_cast<void *const *>(ctx+0x2d0),
+                *reinterpret_cast<void *const *>(ctx+0x340));
             return 1;
         }
         // Exact native seven-argument allocator ABI (+8673a); the final stack
