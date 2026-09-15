@@ -2468,9 +2468,9 @@ static void wrapMmhub21(void *vm) {
 
 // Candidate 252: the secure DPG path (decode_sram_secure_initialize) builds the DPG SRAM with
 // the VCPU cache BAR written as add_to_dpg_sram(,1,0x43c,0)/(,1,0x43d,0) -- zero -- relying on an
-// Apple-signed secure firmware image we do not have. Inject the real firmware TMR address from
+// firmware handling not established by these zeros alone. Inject the firmware TMR address from
 // ctx+0x2c0 (populated by engine_initialize's firmware-loaded wait) into just those two entries,
-// so the committed SRAM boots the VCPU from the loaded firmware. All other SRAM entries pass
+// as a firmware-window experiment; this has not demonstrated VCPU execution. Other entries pass
 // through unchanged. Guarded to the Raphael VCN3.1 context; no-op when the value is already set.
 static uint32_t *wrapAddToDpgSram(void *engine, uint32_t *sram, uint32_t bank,
                                   uint32_t reg, uint32_t value) {
@@ -2487,8 +2487,25 @@ static uint32_t *wrapAddToDpgSram(void *engine, uint32_t *sram, uint32_t bank,
         RLOG("VCNDPG: secure CGC_GATE %08x -> %08x", value, corrected);
         value = corrected;
     }
+    if (vcnDpgEnabled && clockCtx &&
+        __atomic_load_n(&raphaelTargetConfirmed, __ATOMIC_ACQUIRE) &&
+        *reinterpret_cast<const uint32_t *>(clockCtx + 0x268) == 0x30001 && bank == 1) {
+        if (caller == hwlibsBase + 0x94351 && reg == 0x156 && value == 0x0ff00200) {
+            // Linux vcn_v3_0_start_dpg_mode: access masks, unstall memory,
+            // unblock VCPU register access, THEN release reset. Four extra
+            // pairs preserve the PSP's 16-byte SRAM size alignment (256 -> 288).
+            const uint32_t regs[] = {0x26c, 0x26b, 0x4a6, 0xc6};
+            const uint32_t values[] = {0x10, 3, 0, 0};
+            for (unsigned i = 0; i < 4; ++i)
+                sram = FunctionCast(wrapAddToDpgSram, orgAddToDpgSram)(
+                    engine, sram, 1, regs[i], values[i]);
+            RLOG("VCNREL: added XX masks, LMI_CTRL2=0 and RB_ARB_CTRL=0 before reset release");
+        }
+        if (caller == hwlibsBase + 0x9436c && reg == 0x4a6 && value == 0x3e0000)
+            value = 0; // retain the Linux memory-interface value after release
+    }
     // Candidate 253: decode_sram_secure_initialize zeros the whole VCPU cache window and relies
-    // on Apple secure firmware to fill it. Mirror what decode_sram_initialize (unsecure) programs
+    // on native secure handling. Mirror what decode_sram_initialize (unsecure) programs
     // from ctx: firmware cache BAR (0x43c/0x43d <- ctx+0x2c0), cache SIZE0 (0x141 <- ctx+0x2b0),
     // and the stack/cache1 BAR (0x468/0x469 <- ctx+0x2f8). Only rewrites entries the secure path
     // left 0; anything already nonzero passes through.
@@ -2585,6 +2602,13 @@ static uint32_t wrapVcnInitialize(void *engine) {
     }
     auto ctx = engine ? *reinterpret_cast<const uint8_t **>(
         static_cast<uint8_t *>(engine) + 16) : nullptr;
+    if (vcnDpgEnabled && (!ctx ||
+        *reinterpret_cast<const uint32_t *>(ctx + 0x268) != 0x30001 ||
+        *reinterpret_cast<const uint64_t *>(ctx + 0x320) < 288 ||
+        !*reinterpret_cast<void *const *>(ctx + 0x340))) {
+        RLOG("VCNREL: SRAM capacity/context guard failed; initialization refused");
+        return 1;
+    }
     if (ctx) RLOG("VCNS: initialize flags=%x mode=%u initializer=+%llx",
         *reinterpret_cast<const uint32_t *>(ctx),
         *reinterpret_cast<const uint32_t *>(ctx + 0x2e0),
