@@ -1,6 +1,12 @@
 # Live status — 2026-09-15
 
-NOT FIXED: visible desktop corruption and hardware encoding remain unresolved.
+**Not fixed:** visible desktop corruption and hardware encoding remain unresolved.
+
+Verified finding: the native multimedia memory-mapping initializer used the wrong
+register layout. Candidate 240 corrects it, but desktop corruption and the hardware
+H.264 hang persist. A common cause remains unproven; hardware HEVC is unverified
+after these fixes.
+
 Worktree /home/bogdan/macos-vm/run/worktrees/candidate-242 (vcn-vcpu-reset).
 Latest launch56/cardmetal-088 runc188e14450359a635305c44f13983599,
 source0ce1766, build4c5268c76b5f46918d6ee1b3d82d85c9. Results:
@@ -42,7 +48,8 @@ Stopped through interactive stop-requested. Shutdown forced (not clean guest
 shutdown); harness recovered. VM stopped. FinalMODE2reset93 CP_STAT0/RLC_CNTL0.
 Same hostboot, vfio-pci retained, power/control on, inhibitor active; no host reboot.
 No host fault in kernel capture. SSH master closed; no agent-opened VNC remains.
-Host928 tests/3skipped pass and build succeeds. No further launch allowance.
+Host regression suite: 928 tests ran, 3 skipped, no failures. Build succeeded.
+No further launch allowance.
 No merge/push to main; original ~/src checkout remains untouched, including its
 pre-existing status.md edit. Candidate worktree status is authoritative.
 
