@@ -180,3 +180,6 @@ decompilation: dpg_secure commits the DPG SRAM (submit_sram) but writes the VCPU
 candidate 252 hooks add_to_dpg_sram to inject the real firmware TMR address (ctx+0x2c0) into the
 0x43c/0x43d SRAM entries. Success = VCNDPG inject cacheBAR log, VCPU boots (no pause_dpg 5000ms
 timeout), H264 hw encode emits frames.
+
+## Candidate 253 allowance (launch 67)
+One launch67, candidate 1.0.253 / metal-099, full VCPU cache window injection into secure DPG SRAM.
