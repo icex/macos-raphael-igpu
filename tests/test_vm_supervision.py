@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import signal
+import select
 import shutil
 import time
 import unittest
@@ -200,8 +201,19 @@ class SupervisionTests(unittest.TestCase):
             parent.wait()
             pid_path = self.vm / 'managed.pid'
             if pid_path.exists():
-                try: os.kill(int(pid_path.read_text()), signal.SIGTERM)
-                except ProcessLookupError: pass
+                # The managed launcher is an orphan, so waitpid cannot reap it.
+                # Wait for exit before TemporaryDirectory removes its output files.
+                try:
+                    pid = int(pid_path.read_text())
+                    pidfd = os.pidfd_open(pid)
+                except ProcessLookupError:
+                    return
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                    self.assertTrue(select.select([pidfd], [], [], 5)[0],
+                                    "managed fixture did not finish cleanup")
+                finally:
+                    os.close(pidfd)
         self.addCleanup(cleanup_parent)
         until = time.monotonic()+3
         while not (self.vm / 'managed.pid').exists() and time.monotonic() < until:

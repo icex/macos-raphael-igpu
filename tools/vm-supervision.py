@@ -425,7 +425,8 @@ def launch(vm, name, maximum, gpu_args, critical_enabled=False):
     vm = vm.resolve()
     name = launch_name(name)
     def terminated(signum, frame):
-        raise RuntimeError("supervised launch was terminated")
+        # Retry loops catch Exception; termination must always reach finally.
+        raise SystemExit("supervised launch was terminated")
     signal.signal(signal.SIGTERM, terminated)
     child = None
     try:
