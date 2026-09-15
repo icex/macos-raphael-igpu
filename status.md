@@ -2,122 +2,66 @@
 
 ## Current result
 
-**Offscreen Metal passes; hardware H264 remains unresolved through candidate269.**
-All263–269 passed1000 offscreen frames with zero sampled pixel mismatches and the
-24-case readback matrix. All hardware encoders selected GVA hardware, accepted
-frames0/1, stalled on frame2, produced no callbacks and hit probe deadline124.
-CORE_PROBE_PASS covers the desktop probe, not the separate codec probe.
+Offscreen Metal passes; full desktop/display and hardware codecs remain unqualified.
+Candidate271 identifies an earlier decode blocker in our compatibility policy:
+`wrapPpPowerUp` clears PowerPlay support (+0x28f8), so its readiness check rejects
+AMDVA's pre-context clock request. This supersedes claims that all failures are
+below the driver or that driver options are exhausted. Encoder remains separate.
 
-| Candidate | Observed intervention | Result |
+| Area | Evidence | Remaining issue |
 |---|---|---|
-|263|Native inactive decoder ring initialized before pause|Pause ACK failed|
-|264|Shared allocation/window4096bytes|Same; inherited pause4 confounds freshness|
-|265|Preinit unpause4→0|New pause ACK still failed|
-|266|Shared buffer moved to VRAM|Same|
-|267|Shared flags f47→b40|Same|
-|268|PSP mode0, native SRAM ownership, zero firmware/stack placeholders|All guards and firmware-loaded query pass; same pause/frame2 stall|
-|269|PGFSM core-on config2a2a9aa5, real waitpassed and status2aaa8aa0|Same pause/frame2 stall; core-on condition alone insufficient|
+|Offscreen Metal|271:1000 frames, zero sampled mismatches,24 readback cases pass|Not full desktop qualification|
+|Hardware decode|271: PM00c00053 caller+28d1d returns e00002c7; create returns-12913|PowerPlay compatibility/readiness before VCN context|
+|Software control|271:3 decoded frames,2675475 lumas,maxerror1|Pass|
+|Hardware encode|263–269: hardware selected,frames0/1 accepted,frame2 hangs,no callbacks|Pause acknowledgment/packet execution unresolved|
+|Display|267:AMD drawable and own-window readback correct|External/physical output and compositor capture unqualified|
 
-268 follow-up hardware-decode probe never reached decoder creation: it stalled
-at software encoder creation after the hardware encoder hang. This is dirty-state
-behavior, not evidence that hardware decode fails. Fresh decode-first result is recorded below.
+## Latest run and cleanup
 
-## Identity and cleanup
+Candidate271/metal-118,run `39c0d61758f19ada2d7db6ee73c7570e`,
+build `0ed4110244f64edcb88db82eed60b285`,source `dc42b9082e18bef4f6303caad6f75a4b5659d00d`,
+HEAD07d4e74,MODE2 reset130. Four exact kernel route guards passed. No hardware
+encoder request. Results `/home/bogdan/macos-vm/run/candidate-271-results`:
+serial.txt,decode-control-hw-output.txt,decode-control-sw-output.txt,
+decoder-framebuffers-hw-output.txt,verdict.json,shutdown.json,recovery.json.
+Capture/identity valid, CORE_PROBE_PASS applies to desktop probe only.
+Shutdown exited-after-guest-request; recovery recovered, no kernel messages.
+Host suite937tests passed,3skipped. No merge/push.
 
-Boot `c782d007-ca85-409b-9cf5-ff12c1a8c6d5`, GPU0000:7b:00.0 on vfio-pci,
-power/control=on, PCI reset methods disabled. Native Linux baseline preceded the
-user-authorized Linux→VFIO handoff. **No amdgpu rebind this boot.**
+Boot `c782d007-ca85-409b-9cf5-ff12c1a8c6d5`; GPU0000:7b:00.0 vfio-pci,
+power/control=on, reset methods disabled, no QEMU after cleanup.
+Ten exposures recorded/allowance10 used. Pre-QEMU staging refusals consume none.
+Linux initialized GPU before the authorized handoff. No amdgpu rebind this boot.
+Further exposure requires a boot-named allowance extension and all normal gates.
 
-- 267: run1127597f31560ab35dbaf46baa05cdad, build589d40a85f0c4333be158bdba134dbb3, source1bf1578, MODE2 reset124.
-- 268: run7a6e65cd000f2d91b6635d7758194477, build4ff2486909654de18c323ccf5c115ccd, source094ee6f, MODE2 reset125.
-- 269: run00d58c289223e0a5f8ba31e8aef089aa, build99b9deda82244b30917ce489f98654df, sourceef0554a, MODE2 reset126.
-- Results `/home/bogdan/macos-vm/run/candidate-N-results`; source corresponding candidate worktrees.
-- All seven harness verdicts CORE_PROBE_PASS; critical capture and identity validated.
-  All shutdowns forced, not clean guest shutdowns; all recovery receipts recovered.
-- 268 full host suite937tests OK, three skipped. Initial software-allocation fixture
-  was updated to verify native ownership and refusal without context mutation.
-- Nine launches recorded this boot (including269 decode-first and270). Earlier staging/fixture prelaunch refusals did
-  not consume launches. No merge or push.
+## Source-supported next step
 
-## Display evidence and remaining scope
+Exact24G830 AMDVA VCNPowerManagement::isDpmSupported returns true unconditionally;
+VAVcnDecoder::setupPowerState has a native unsupported-DPM path that destroys the
+PM client and continues to context creation. Investigate matching that capability
+to the actual Raphael backend, preserving native resource ownership and real VCN
+power-up. Do not fake clock-response success or mark uninitialized PowerPlay ready.
+The kernel bypass was needed for graphics startup; restoring its flag alone does
+not initialize PPlib or completeInit. The existing comment claiming the support
+flag is read only during powerUp is wrong.
 
-267 has an AMD-backed1280x1024 display and WindowServer accelerator client.
-Window drawable readback11616 sampled pixels, wrong0; two own-window captures
-match quadrant patterns and show moving bar spans241..280→44..83. Whole-display
-window-region captures show wallpaper only, screen_capture_preflight=false;
-zero nonzero-time presentations. Capture privacy versus actual desktop composition
-remains unresolved. 268 also has a correct drawable readback. Screen Sharing
-responds on host127.0.0.1:5900 with RFB003.889; no external frame qualification yet.
-Watchable external desktop, physical scanout, codecs and long-run lifecycle remain
-unqualified; do not equate offscreen success with completion.
+AMDRadeonX6000Framebuffer-full and HWLibs-full contain full PowerPlay source.
+AMDVA exports: `run/research/decoder-context-20260916/export-all-20260916`.
+Native framebuffer instances are present; virtual-display mismatch is not shown.
+AppleGVA error10 callback producer mapping remains incomplete; the observed native
+PM failure already supplies a concrete earlier failure boundary.
 
-## Fresh decoder result: 269 attempt decode-first / metal-116
+## Linux reference and wider qualification
 
-Run `57a26a17253fc749f2d996dd4c51505b`, same binary/build as269, MODE2 reset128.
-No hardware encoder request in this attempt. Results:
-`/home/bogdan/macos-vm/run/candidate-269-attempt-decode-first-results`.
+Linux reference `run/worktrees/linux-vcn-baseline/findings/research/linux-vcn-baseline-20260915.md`:
+H264/HEVC encode/decode pass,600 H264 frames validated. Working Linux also reads
+cache/reset/LMA asffffffff and UVD_STATUS asdeadbeef; these do not prove dead VCPU.
+Linux boot ring test submits decoder packets before encoder; our hook currently
+only initializes the native decoder ring. Packet experiment remains unimplemented.
 
-- Offscreen Metal:1000 frames, zero sampled mismatches;24 readback cases passed.
-- Required decoder GPU registryID test returned-12906. **Retracted as a valid
-  built-in GPU test:** exact guest SDK restricts that selector to removable/eGPU.
-- Corrected unpinned required-hardware H264 and HEVC decoder creation returns-12913;
-  H264 also fails as console UID501 and with explicit Baseline profile.
-- AppleGVA logging: ATI plugin selected, then `ctx_info.error = a` during initial
-  SPS/PPS/context setup. No observed VCN initialization call during these tests.
-  The temporary enableSyslog preference was restored (sync=1).
-- Software H264 control passes3 decoded frames,2675475 luma values, maxerror1.
-  Initial control falsely counted unsupported hardware-status property(-12900) as
-  failure; corrected control allows that only for explicitly software decode.
-- Capture/identity: verdict valid=true, CORE_PROBE_PASS for desktop probe; terminal
-  critical capture accepted. **Overall acceleration remains unqualified.**
-- Shutdown `exited-after-guest-request` (unlike prior encoder-hung forced exits);
-  recovery `recovered`, no recovery kernel messages, same boot and vfio/on state.
-- Earlier reset127 staging refusal was before QEMU; no launch consumed. Isolated
-  attempt copy was prepared explicitly before the successful reset128 launch.
-
-Current blocker for decode is AMD plugin context creation. Analyze exact
-AMDRadeonVADriver2 from the already captured24G830 cache to locate error10 before
-another hardware candidate. Encoder's pause/packet-execution failure remains
-separate; Linux performs a decoder-ring command test before encoder startup,
-whereas our existing decoder-first hook only initializes the ring. That packet
-experiment is unimplemented and needs native ownership/commit/drain qualification.
-Do not equate either failure with proven dead silicon or exhausted driver options.
-
-Boot allowance9 has been used; a further launch needs a boot-named extension note
-and all ordinary gates. No amdgpu rebind this boot, merge or push.
-
-Linux reference: `/home/bogdan/macos-vm/run/worktrees/linux-vcn-baseline/findings/research/linux-vcn-baseline-20260915.md`.
-Linux H264/HEVC encode/decode and600 validated H264 frames passed. Working Linux
-also reads cache/reset/LMA registers asffffffff and UVD_STATUS asdeadbeef; these
-values do not prove a dead VCPU. No claim that driver-level options are exhausted.
-
-## Candidate270 result: context trace / metal-117
-
-Run `e8fadcb4f04102cad6a99f3dfc5838d3`, build`b730ff90153b45a0ae2e3ebc10f16f97`,
-source571ddfb, MODE2 reset129. Ninth exposure this boot; no hardware encoder request.
-All four hooks routed (StartEngine serial line interleaved; raw bytes retained).
-Hardware H264 decoder creation still-12913; no create/capability/start hook entries.
-Software control passes3 frames,2675475 luma values,maxerror1. Temporary gvaDebug
-preference restored(sync1). Offscreen1000frames and24readback cases pass.
-Capture/identity valid=true, CORE_PROBE_PASS covers desktop only; guest-requested
-exit, recovery recovered,no recovery kernel messages. Results`run/candidate-270-results`.
-
-**Trace limitation:** the sendPMCommand caller filter omitted earlier video-context
-calls at28d1d/28e4f. AMDVA VAVcnDecoder::setupPowerState calls setClocks before
-CreateVcnContext; its0x102 userclient request can fail independently. No claim that
-all kernel decoder work is absent. Candidate271 extends this observational filter
-and records bounded request headers and real results; no functional VCN changes.
-
-AMDVA exact cache image independently extracted;2872 functions exported,zero export
-failures, under`run/research/decoder-context-20260916`. The error10 producer is not
-yet identified; absence of a literal10 in selected AMDVA paths does not prove
-kernel/firmware origin. AppleGVA copies an event9 error payload verbatim.
-
-## Next authorized run:271 early video PM trace
-
-Extend allowance9→10 on boot`c782d007-ca85-409b-9cf5-ff12c1a8c6d5` under the user's
-continued-testing instruction. Add earlier video-context PM callers to270 trace,
-request header and native result observations; no functional VCN change. Preserve
-all identity/capture/reset/host-fault/shutdown/recovery gates and max6000s. Require
-all four critical route guards, unpinned hardware decode before any encoder request,
-manual stop after observations.270 recovery verified; no amdgpu rebind or merge/push.
+267 own-window capture matches moving test patterns. Whole-display ROI captured
+wallpaper with screen_capture_preflight=false; presentation timestamps allzero.
+Privacy versus composition unresolved. Screen Sharing answers RFB; no externally
+validated frames. Physical scanout, long-run lifecycle and hardware codecs remain
+unqualified. Prior encoder-hung guests required forced shutdown;269 decode-first,
+270 and271 exited after guest request. Superseded details are in status archives.
