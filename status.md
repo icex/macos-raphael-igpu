@@ -2,7 +2,7 @@
 
 ## Current result
 
-**macOS hardware H264 remains unresolved after candidates263 and264.** Both
+**macOS hardware H264 remains unresolved after candidates263–265.** All three
 passed the desktop probe, selected hardware encoding, accepted frames0/1,
 and stalled on frame2 with no encoded callbacks (probe deadline124).
 
@@ -10,6 +10,7 @@ and stalled on frame2 with no encoded callbacks (probe deadline124).
 |---|---|---|
 |263 / metal-109|Native-owned inactive decoder ring initialized before pause, returned0|PauseACK timeout +94db1; frame2 stall|
 |264 / metal-110|Shared allocation4096 and SRAM d3=1000, decoder setup retained|Same pause timeout and stall; inherited pause request4 observed|
+|265 / metal-111|Preinit pause4→0 verified, window4096 and decoder setup retained|New pauseACK still times out; frame2 stall|
 
 MODE2 cleared the graphics state but retained the VCN pause request. Therefore
 264 is not an independently fresh VCN startup, and its failure alone does not
@@ -24,23 +25,24 @@ demonstrates that decoder-first alone is not sufficient.
   Do not rebind to amdgpu this boot. Handoff artifacts: `run/handoff-c782d007`.
 - 263: run `0c2f9fbdbbd63473ceae1905d381412d`, build `8d6ca8d6f132475cb4d881241a15fbc3`, source `b124552`.
 - 264: run `4918fb503fd83d56cdb01010325cb7d3`, build `99a0f545f7534bb289c7525cb05517f2`, source `73ed1ec`.
+- 265: run `374d4003eda33393be37aee3b5cfc190`, build `fcf1256a578143dc917a9c44c2abf210`, source `14e7f18`.
 - Results under `/home/bogdan/macos-vm/run/candidate-263-results` and
-  `candidate-264-results`; source in corresponding candidate worktrees.
-- Both harness verdicts **CORE_PROBE_PASS**, independently failed encoder probes.
-  Critical capture survived both. Both shutdowns **forced**, both recovery
+  `candidate-264-results` and `candidate-265-results`; source in corresponding candidate worktrees.
+- All three harness verdicts **CORE_PROBE_PASS**, independently failed encoder probes.
+  Critical capture survived all three. All shutdowns **forced**, all recovery
   receipts **recovered**. Only `rgpu-inhibit` remains running.
 - Full host suites937tests OK, three skipped. No merge/push.
-- MODE2 reset120 preceded263, reset121 preceded264. Reset119 preceded a staging
-  version-gate refusal before QEMU: no launch entry consumed. Two launches now
+- MODE2 reset120 preceded263, reset121 preceded264. Reset122 preceded265. Reset119 preceded a staging
+  version-gate refusal before QEMU: no launch entry consumed. Three launches now
   recorded on this boot, allowance3.
 
 ## Next test
 
-Candidate265 will clear only retained NJ pause request/ACK bits before first
-initialization, with zero active queues and software pause0. Keep264's4096byte
-shared window and decoder-first setup. Record before/after register values,
-then pauseACK and encoded output. This tests stale-request cleanup, not a full
-VCN reset. Require264 recovery and fresh MODE2; preserve every safety/capture gate.
+Candidate266 will change only the native shared allocation class2→0, preserving
+4096bytes, flags, firmware mode, decoder setup and preinit unpause. Update both
+allocator argument and stored release metadata. Confirm actualGPUaddress before
+claiming VRAM backing; capture shared words. 265 cleanup is recovered. Clearing
+stale request bits was demonstrated but did not make encoding work.
 
 Linux is still the positive reference: H264/HEVC encode/decode and600 validated
 H264 frames. Working Linux also reads cache/reset/LMA registers asffffffff;
@@ -53,26 +55,9 @@ Physical scanout/full desktop remain unqualified. Use candidate worktrees and
 cycle.py with max6000seconds, pinned power, identity/capture/host-fault/cleanup
 checks, and boot-named launch allowances. No amdgpu cycling or merge/push.
 
-## Candidate265 run allowance
-User authorized testing these findings. Allow one further launch, the third on
-boot c782d007-ca85-409b-9cf5-ff12c1a8c6d5, for retained NJ request cleanup.
-264 recovery is verified recovered. Fresh MODE2 required. Max6000seconds with
-manual stop after encoder result/stall; all abort/cleanup checks retained.
-
-## Candidate265 observation and candidate266 allowance extension
-
-265 cleared hardware pause4→0 before initialization, retained decoder-first and
-shared4096; the subsequent fresh pause request still timed out. No encoder fix.
-Final output and cleanup receipts pending; require recovered cleanup before266.
-
-User authorized continued testing of the Linux findings. Extend this boot's
-allowance from3 to4 launches for one concrete memory-domain experiment, boot
-c782d007-ca85-409b-9cf5-ff12c1a8c6d5. Candidate266 changes shared native allocation
-class2→0, both stored teardown field and allocator argument, preserving size4096,
-flags, firmware mode, decoder setup and preinit unpause. The allocator class is
-used natively for firmware/encoder rings; require returned-address evidence to
-call it VRAM. Audited full80byte allocation range including call and pointer store.
-Capture shared words for comparison; no unrelated hardware changes. Use explicit
-manual-reuse/ack-risk cycle path after265 recovered and fresh MODE2. Max6000seconds
-with manual stop on result/stall; every capture/identity/host-fault/cleanup gate
-remains active. No vfio→amdgpu rebind, reboot, merge or push.
+## Candidate266 boot allowance extension
+User authorized continued testing of Linux findings. Extend allowance3→4 on boot
+c782d007-ca85-409b-9cf5-ff12c1a8c6d5 for this one allocation-domain experiment.
+Require265 recovered (verified), fresh MODE2 and every existing safety/capture/
+cleanup gate. Use cycle --manual-reuse --ack-risk, max6000seconds, manual stop
+after encoder result/stall. No amdgpu rebind, reboot, merge or push.
