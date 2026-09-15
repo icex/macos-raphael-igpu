@@ -1,17 +1,17 @@
 # Live status — 2026-09-15
 
-Candidate256: PGFSM and power-status waits pass; pause acknowledgment times out
-at +94db1. Hardware H264 has no output. Desktop probe passes. Forced shutdown,
-recovery recovered. Artifacts /home/bogdan/macos-vm/run/candidate-256-results/.
-Real PowerUpVcn response1/version625300 observed, not a dummy acknowledgment.
+Candidate257 executed Linux pre-release SRAM setup but still timed out at pause
+acknowledgment +94db1; PGFSM/power waits passed. Desktop probe passed. Artifacts:
+/home/bogdan/macos-vm/run/candidate-257-results/. Cleanup receipt checked before launch.
 
-Candidate257 tests Linux pre-reset-release register access setup omitted by
-Apple secure SRAM builder: XX_MASK, XX_CHECK, LMI_CTRL2 and RB_ARB_CTRL. Keep
-firmware path/cache values and exact wait trace. SRAM grows256->288 bytes with
-capacity guard. Hypothesis falsified as sufficient if pause ACK still times out.
+Candidate258 tests software firmware placement + committing SRAM, a combination
+not covered by250 (direct LMA). Native mode1 supplies firmware; allocate missing
+512-byte SRAM via audited native allocator, keep its ownership/cleanup fields,
+and select secure committing initializer. PSP still commits SRAM; it no longer
+places the firmware. Preserve257 pre-release setup and256 wait observer.
 
 ## One-run allowance
-One launch candidate1.0.257 / metal-103 on boot
+One launch candidate1.0.258 / metal-104 on boot
 c369c74e-96ff-4c21-ae85-80ccb269f7d2 under current user instruction to continue
 working/testing toward a solution. Fresh MODE2 through cycle.py, manual-reuse /
 ack-risk, max6000seconds, existing host/identity/capture/recovery aborts intact.

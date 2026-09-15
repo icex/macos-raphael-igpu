@@ -2536,13 +2536,12 @@ static uint32_t wrapVcnConfig(void *engine, uint32_t index) {
     uint32_t value = FunctionCast(wrapVcnConfig, orgVcnConfig)(engine, index);
     auto ctx = engine ? *reinterpret_cast<const uint8_t **>(
         static_cast<uint8_t *>(engine) + 16) : nullptr;
-    if (vcnDpgEnabled && orgAddToDpgSram && ctx && (index == 0 || index == 7) &&
+    if (vcnDpgEnabled && orgAddToDpgSram && ctx && (index == 0 || index == 3 || index == 7) &&
         *reinterpret_cast<const uint32_t *>(ctx + 0x268) == 0x30001) {
-        // Force EnableVCNDPG (0) and EnableVCNSecureLoad (7) -> bit1/bit9, so engine_init_pfn_ptr
-        // picks a DPG initializer. Keep mode (ctx+0x2e0)=0 (do NOT force index 3) so
-        // engine_initialize's firmware-loaded wait still runs and populates ctx+0x2c0 with the
-        // firmware TMR address. The native secure initializer builds and submits SRAM.
-        RLOG("VCNDPG: native config%u %u -> 1 (DPG, mode stays 0)", index, value);
+        // Mode1 makes native HW init allocate/copy software firmware and skip
+        // PSP firmware placement. wrapVcnHwInit supplies the otherwise missing
+        // SRAM allocation and switches the initializer to the committing path.
+        RLOG("VCNDPG: native config%u %u -> 1 (software firmware, committing SRAM)", index, value);
         return 1;
     }
     if (vcnStaticEnabled && ctx && (index == 0 || index == 1 || index == 7) &&
@@ -2760,6 +2759,44 @@ static uint32_t wrapVcnHwInit(void *engine, void *input, void *output) {
         *reinterpret_cast<uint32_t *>(shared) |= 1u << 11;
         RLOG("VCNA: shared bytes=%llu flags=%x SMU-interface=%u",
              size, *reinterpret_cast<const uint32_t *>(shared), shared[0x58]);
+    }
+    if (!result && vcnDpgEnabled && ctx) {
+        auto mutableCtx = const_cast<uint8_t *>(ctx);
+        const uint8_t allocGuard[] = {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,
+                                     0x53,0x48,0x83,0xec,0x48,0x4c,0x89,0xcb};
+        if (!__atomic_load_n(&raphaelTargetConfirmed, __ATOMIC_ACQUIRE) ||
+            *reinterpret_cast<const uint32_t *>(ctx + 0x268) != 0x30001 ||
+            *reinterpret_cast<const uint32_t *>(ctx + 0x2e0) != 1 ||
+            *reinterpret_cast<const uint64_t *>(ctx + 0x3f8) != hwlibsBase + 0x93ec1 ||
+            *reinterpret_cast<const uint64_t *>(ctx + 0x320) != 0x200 ||
+            *reinterpret_cast<const uint32_t *>(ctx + 0x328) != 0x100 ||
+            *reinterpret_cast<const uint32_t *>(ctx + 0x338) != 2 ||
+            !*reinterpret_cast<const uint64_t *>(ctx + 0x2c0) ||
+            !*reinterpret_cast<void *const *>(ctx + 0x2d0) ||
+            *reinterpret_cast<void *const *>(ctx + 0x340) ||
+            memcmp(reinterpret_cast<const void *>(hwlibsBase + 0x8673a), allocGuard, sizeof(allocGuard))) {
+            RLOG("VCNSW: allocation/initializer guard refused");
+            return 1;
+        }
+        // Exact native seven-argument allocator ABI (+8673a); the final stack
+        // argument requests CPU access. Match _engine_hw_init's mode0 SRAM call.
+        // _engine_hw_exit (+87adf) releases +340/+330/+348 independent of mode.
+        auto allocate = reinterpret_cast<void *(*)(void *, uint64_t, uint32_t, uint32_t,
+                                                   uint64_t *, uint64_t *, uint32_t)>(hwlibsBase + 0x8673a);
+        auto cpu = allocate(*reinterpret_cast<void **>(engine), 0x200, 0x100, 2,
+            reinterpret_cast<uint64_t *>(mutableCtx + 0x330),
+            reinterpret_cast<uint64_t *>(mutableCtx + 0x348), 1);
+        *reinterpret_cast<void **>(mutableCtx + 0x340) = cpu;
+        if (!cpu || !*reinterpret_cast<const uint64_t *>(ctx + 0x330)) {
+            RLOG("VCNSW: native SRAM allocation failed");
+            return 1;
+        }
+        *reinterpret_cast<uint64_t *>(mutableCtx + 0x3f8) = hwlibsBase + 0x943cf;
+        RLOG("VCNSW: software firmware=%llx bytes=%x first=%08x SRAM=%llx bytes=200 initializer=+943cf",
+            *reinterpret_cast<const uint64_t *>(ctx + 0x2c0),
+            *reinterpret_cast<const uint32_t *>(ctx + 0x2b0),
+            **reinterpret_cast<const uint32_t *const *>(ctx + 0x2d0),
+            *reinterpret_cast<const uint64_t *>(ctx + 0x330));
     }
     RLOG("VCNF: native HW init returned %u", result);
     return result;
