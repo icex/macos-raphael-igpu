@@ -3,15 +3,16 @@
 ## Current result
 
 Offscreen Metal passes; full desktop/display and hardware codecs remain unqualified.
-Candidate271 identifies an earlier decode blocker in our compatibility policy:
+Candidate271 identified an earlier decode blocker in our compatibility policy:
 `wrapPpPowerUp` clears PowerPlay support (+0x28f8), so its readiness check rejects
 AMDVA's pre-context clock request. This supersedes claims that all failures are
-below the driver or that driver options are exhausted. Encoder remains separate.
+below the driver or that driver options are exhausted. Candidate272 removes this early rejection; the first real decode submission now hangs.
+Encoder remains unresolved.
 
 | Area | Evidence | Remaining issue |
 |---|---|---|
 |Offscreen Metal|271:1000 frames, zero sampled mismatches,24 readback cases pass|Not full desktop qualification|
-|Hardware decode|271: PM00c00053 caller+28d1d returns e00002c7; create returns-12913|PowerPlay compatibility/readiness before VCN context|
+|Hardware decode|272: decoder created, hardware selected; first DecodeFrame stalls|VCN0Dec stamp1 never completes|
 |Software control|271:3 decoded frames,2675475 lumas,maxerror1|Pass|
 |Hardware encode|263–269: hardware selected,frames0/1 accepted,frame2 hangs,no callbacks|Pause acknowledgment/packet execution unresolved|
 |Display|267:AMD drawable and own-window readback correct|External/physical output and compositor capture unqualified|
@@ -30,7 +31,7 @@ Host suite937tests passed,3skipped. No merge/push.
 
 Boot `c782d007-ca85-409b-9cf5-ff12c1a8c6d5`; GPU0000:7b:00.0 vfio-pci,
 power/control=on, reset methods disabled, no QEMU after cleanup.
-Ten exposures recorded/allowance10 used. Pre-QEMU staging refusals consume none.
+Eleven exposures recorded/allowance11 used. Pre-QEMU staging refusals consume none.
 Linux initialized GPU before the authorized handoff. No amdgpu rebind this boot.
 Further exposure requires a boot-named allowance extension and all normal gates.
 
@@ -66,12 +67,34 @@ validated frames. Physical scanout, long-run lifecycle and hardware codecs remai
 unqualified. Prior encoder-hung guests required forced shutdown;269 decode-first,
 270 and271 exited after guest request. Superseded details are in status archives.
 
-## Next authorized run:272 DPM capability alignment
 
-Extend allowance10→11 for boot`c782d007-ca85-409b-9cf5-ff12c1a8c6d5` under the
-user's continued-testing instruction. Candidate272/metal-119 tests AMDVA's native
-no-DPM path, guarded by exact image UUID/instruction and actual XI bypass. Retain
-real Raphael SMU power-up and all identity/capture/host-fault/cleanup gates, fresh
-MODE2,max6000s. Require confirmed COW restoration/verification and video HWInfo
-route; test unpinned hardware decode before any encoder. Stop through normal
-harness after discriminating observations.271 cleanup recovered; no amdgpu rebind.
+## Candidate272 result: native no-DPM path reaches hardware decode
+
+Run`cc4abd9fd50b3183b84ba6dd82392cb6`,build`89f8e8c3be8449eb89935901cc5332ec`,
+source39a7a53,HEAD0765c12,MODE2 reset131. Results`run/candidate-272-results`.
+- Exact image guard and COW delivery pass for decoder helper pid737: UUID and8bytes
+  match; protect/write/restore/verify all0. All six kernel routes pass.
+- Native video newContext: codec3,channel8,1280x720,scheduler0,client0,pm0;
+  capability=true,creation0,id1,startEngine0. No early00c00053 rejection.
+- VideoToolbox decoder creation0, UsingHardwareAcceleratedVideoDecoder=true.
+  First DecodeFrame never returns; deadline90s,exit124,no decoded callbacks.
+  Native channel13 VCN0Dec stamp1 hangs and guest attempts repeated GPU restart.
+- VCN real SMU power response1,PGFSM wait0,PSP submit successful; these native
+  successes do not establish firmware/queue execution.
+- Offscreen1000frames and24readback cases pass before codec workload; valid
+  CORE_PROBE_PASS is scoped to that desktop probe. No HWencoder was requested.
+  Software encoding produced3samples; no separate decode control after dirty stall
+  (271's clean software control remains the reference).
+- Shutdown forced, recovery recovered,no recovery kernel messages. Same boot,
+  vfio/on, no QEMU after cleanup. Full937tests passed,3skipped. Not merged/pushed.
+
+**Dispatch correction:** prior shared CreateVcnContext21ba0 does not cover AMDVA's
+selector104. Exact table1607a0 and Navi10 vtable16c618 map100→2892c,104→49292,
+106→49632.272 adds guarded video HWInfo and newContext hooks. This corrects older
+claims of comprehensive context trace coverage.
+
+Next: inspect actual decoder-ring submit, pointers, address translation and packet
+format against Linux. A native decoder workload has now reached the hardware ring;
+initialization alone is no longer the only decoder evidence. Capability correction
+is validated through creation/start, not functional decoding. Do not revive dead-
+VCPU or exhausted-driver claims from register read sentinels.
