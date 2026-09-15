@@ -2391,7 +2391,7 @@ static void *wrapFwDirGet(void *dir, uint32_t devType, const char *name) {
 // and owns all subsequent firmware allocation, authentication and initialization.
 // Native configuration table indices0/1/7 are EnableVCNDPG,
 // PP_EnableVCNPG and EnableVCNSecureLoad. Mode3 (EnableSwVCNFWLoading)
-// remains untouched at0, retaining PSP authentication/loading. Clearing7
+// is forced to0 for the PSP-loading comparison. Clearing7
 // chooses the native static initializer instead of the secure DPG SRAM path.
 // Assert VCPU reset while the native static initializer enables its clock,
 // before native cache programming. The same native initializer releases reset.
@@ -2533,7 +2533,9 @@ static uint32_t *wrapAddToDpgSram(void *engine, uint32_t *sram, uint32_t bank,
     if (vcnDpgEnabled && engine && bank == 1 && value == 0 &&
         (reg == 0x43c || reg == 0x43d || reg == 0x141 || reg == 0x468 || reg == 0x469)) {
         auto ctx = *reinterpret_cast<const uint8_t **>(static_cast<uint8_t *>(engine) + 16);
-        if (ctx && *reinterpret_cast<const uint32_t *>(ctx + 0x268) == 0x30001) {
+        if (ctx && __atomic_load_n(&raphaelTargetConfirmed, __ATOMIC_ACQUIRE) &&
+            *reinterpret_cast<const uint32_t *>(ctx + 0x268) == 0x30001 &&
+            *reinterpret_cast<const uint32_t *>(ctx + 0x2e0) == 1) {
             const uint64_t tmr   = *reinterpret_cast<const uint64_t *>(ctx + 0x2c0); // firmware
             const uint64_t stack = *reinterpret_cast<const uint64_t *>(ctx + 0x2f8); // cache1/stack
             const uint32_t size0 = *reinterpret_cast<const uint32_t *>(ctx + 0x2b0); // cache size0
@@ -2559,11 +2561,9 @@ static uint32_t wrapVcnConfig(void *engine, uint32_t index) {
         static_cast<uint8_t *>(engine) + 16) : nullptr;
     if (vcnDpgEnabled && orgAddToDpgSram && ctx && (index == 0 || index == 3 || index == 7) &&
         *reinterpret_cast<const uint32_t *>(ctx + 0x268) == 0x30001) {
-        // Mode1 makes native HW init allocate/copy software firmware and skip
-        // PSP firmware placement. wrapVcnHwInit supplies the otherwise missing
-        // SRAM allocation and switches the initializer to the committing path.
-        RLOG("VCNDPG: native config%u %u -> 1 (software firmware, committing SRAM)", index, value);
-        return 1;
+        const uint32_t selected = index == 3 ? 0 : 1;
+        RLOG("VCNDPG: native config%u %u -> %u (PSP firmware, native SRAM)", index, value, selected);
+        return selected;
     }
     if (vcnStaticEnabled && ctx && (index == 0 || index == 1 || index == 7) &&
         *reinterpret_cast<const uint32_t *>(ctx + 0x268) == 0x30001) {
@@ -2896,53 +2896,30 @@ static uint32_t wrapVcnHwInit(void *engine, void *input, void *output) {
         }
     }
     if (!result && vcnDpgEnabled && ctx) {
-        auto mutableCtx = const_cast<uint8_t *>(ctx);
-        const uint8_t allocGuard[] = {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,
-                                     0x53,0x48,0x83,0xec,0x48,0x4c,0x89,0xcb};
-        // HW init precedes the VMM target publication barrier. Use the same
-        // early PCI marker + original GC discovery check as wrapMmhub21.
-        if (!raphaelGcSeen || !hasUniqueRaphaelPciMarker() ||
-            *reinterpret_cast<const uint32_t *>(ctx + 0x268) != 0x30001 ||
-            *reinterpret_cast<const uint32_t *>(ctx + 0x2e0) != 1 ||
-            *reinterpret_cast<const uint64_t *>(ctx + 0x3f8) != hwlibsBase + 0x93ec1 ||
-            *reinterpret_cast<const uint64_t *>(ctx + 0x320) != 0x200 ||
-            *reinterpret_cast<const uint32_t *>(ctx + 0x328) != 0x100 ||
-            *reinterpret_cast<const uint32_t *>(ctx + 0x338) != 2 ||
-            !*reinterpret_cast<const uint64_t *>(ctx + 0x2c0) ||
-            !*reinterpret_cast<void *const *>(ctx + 0x2d0) ||
-            *reinterpret_cast<void *const *>(ctx + 0x340) ||
-            memcmp(reinterpret_cast<const void *>(hwlibsBase + 0x8673a), allocGuard, sizeof(allocGuard))) {
-            RLOG("VCNSW: guard refused gc=%u mode=%u init=+%llx size=%llx align=%x type=%u fw=%llx cpu=%p sram=%p",
-                raphaelGcSeen, *reinterpret_cast<const uint32_t *>(ctx+0x2e0),
-                *reinterpret_cast<const uint64_t *>(ctx+0x3f8)-hwlibsBase,
-                *reinterpret_cast<const uint64_t *>(ctx+0x320),
-                *reinterpret_cast<const uint32_t *>(ctx+0x328),
-                *reinterpret_cast<const uint32_t *>(ctx+0x338),
-                *reinterpret_cast<const uint64_t *>(ctx+0x2c0),
-                *reinterpret_cast<void *const *>(ctx+0x2d0),
-                *reinterpret_cast<void *const *>(ctx+0x340));
-            return 1;
-        }
-        // Exact native seven-argument allocator ABI (+8673a); the final stack
-        // argument requests CPU access. Match _engine_hw_init's mode0 SRAM call.
-        // _engine_hw_exit (+87adf) releases +340/+330/+348 independent of mode.
-        auto allocate = reinterpret_cast<void *(*)(void *, uint64_t, uint32_t, uint32_t,
-                                                   uint64_t *, uint64_t *, uint32_t)>(hwlibsBase + 0x8673a);
-        auto cpu = allocate(*reinterpret_cast<void **>(engine), 0x200, 0x100, 2,
-            reinterpret_cast<uint64_t *>(mutableCtx + 0x330),
-            reinterpret_cast<uint64_t *>(mutableCtx + 0x348), 1);
-        *reinterpret_cast<void **>(mutableCtx + 0x340) = cpu;
-        if (!cpu || !*reinterpret_cast<const uint64_t *>(ctx + 0x330)) {
-            RLOG("VCNSW: native SRAM allocation failed");
-            return 1;
-        }
-        *reinterpret_cast<uint64_t *>(mutableCtx + 0x3f8) = hwlibsBase + 0x943cf;
-        RLOG("VCNSW: software firmware=%llx bytes=%x first=%08x SRAM=%llx bytes=200 initializer=+943cf",
-            *reinterpret_cast<const uint64_t *>(ctx + 0x2c0),
-            *reinterpret_cast<const uint32_t *>(ctx + 0x2b0),
-            **reinterpret_cast<const uint32_t *const *>(ctx + 0x2d0),
-            *reinterpret_cast<const uint64_t *>(ctx + 0x330));
+        // Mode0 allocates SRAM natively only after a successful PSP load-status
+        // query. Reject fallback/software ownership; initialize later obtains
+        // the actual trusted firmware address through the native loaded wait.
+        const bool nativePsp = raphaelGcSeen && hasUniqueRaphaelPciMarker() &&
+            *reinterpret_cast<const uint32_t *>(ctx + 0x268) == 0x30001 &&
+            *reinterpret_cast<const uint32_t *>(ctx + 0x2e0) == 0 &&
+            (*reinterpret_cast<const uint32_t *>(ctx) & 0x20) == 0 &&
+            *reinterpret_cast<const uint64_t *>(ctx + 0x3f8) == hwlibsBase + 0x943cf &&
+            *reinterpret_cast<const uint64_t *>(ctx + 0x320) == 0x200 &&
+            *reinterpret_cast<const uint32_t *>(ctx + 0x328) == 0x100 &&
+            *reinterpret_cast<const uint32_t *>(ctx + 0x338) == 2 &&
+            *reinterpret_cast<const uint64_t *>(ctx + 0x330) &&
+            *reinterpret_cast<void *const *>(ctx + 0x340) &&
+            !*reinterpret_cast<void *const *>(ctx + 0x2d0);
+        RLOG("VCNPSP: native=%u mode=%u flags=%x initializer=+%llx SRAM=%llx cpu=%p bytes=%llx placeholders=preserved",
+            nativePsp, *reinterpret_cast<const uint32_t *>(ctx + 0x2e0),
+            *reinterpret_cast<const uint32_t *>(ctx),
+            *reinterpret_cast<const uint64_t *>(ctx + 0x3f8) - hwlibsBase,
+            *reinterpret_cast<const uint64_t *>(ctx + 0x330),
+            *reinterpret_cast<void *const *>(ctx + 0x340),
+            *reinterpret_cast<const uint64_t *>(ctx + 0x320));
+        if (!nativePsp) return 1;
     }
+
     RLOG("VCNF: native HW init returned %u", result);
     return result;
 }
