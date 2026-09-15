@@ -2550,6 +2550,30 @@ static uint32_t wrapVcnQueryFw(void *cgs, uint32_t id, void *output) {
     }
     return result;
 }
+// 24G830 native wait ABI: EDI engine, ESI bank, EDX reg, ECX expected,
+// R8D mask, optional R9D timeout. Native caller tests EAX (zero = success).
+static mach_vm_address_t orgVcnWait = 0, orgVcnWaitMs = 0;
+static unsigned vcnWaitReports = 0;
+static uint32_t wrapVcnWait(void *engine, uint32_t bank, uint32_t reg,
+                            uint32_t expected, uint32_t bits) {
+    const auto caller = reinterpret_cast<uintptr_t>(__builtin_return_address(0)) - hwlibsBase;
+    const auto n = __sync_fetch_and_add(&vcnWaitReports, 1u);
+    if (n < 64) RLOG("VCNW: begin n=%u caller=+%llx bank=%x reg=%x expected=%x mask=%x ms=5000",
+        n, static_cast<uint64_t>(caller), bank, reg, expected, bits);
+    const uint32_t result = FunctionCast(wrapVcnWait, orgVcnWait)(engine, bank, reg, expected, bits);
+    if (n < 64) RLOG("VCNW: end n=%u result=%u", n, result);
+    return result;
+}
+static uint32_t wrapVcnWaitMs(void *engine, uint32_t bank, uint32_t reg,
+                              uint32_t expected, uint32_t bits, uint32_t ms) {
+    const auto caller = reinterpret_cast<uintptr_t>(__builtin_return_address(0)) - hwlibsBase;
+    const auto n = __sync_fetch_and_add(&vcnWaitReports, 1u);
+    if (n < 64) RLOG("VCNW: begin n=%u caller=+%llx bank=%x reg=%x expected=%x mask=%x ms=%u",
+        n, static_cast<uint64_t>(caller), bank, reg, expected, bits, ms);
+    const uint32_t result = FunctionCast(wrapVcnWaitMs, orgVcnWaitMs)(engine, bank, reg, expected, bits, ms);
+    if (n < 64) RLOG("VCNW: end n=%u result=%u", n, result);
+    return result;
+}
 static uint32_t wrapVcnInitialize(void *engine) {
     if (vcnDpgEnabled && (!orgVcnConfig || !orgAddToDpgSram)) {
         RLOG("VCNDPG: required route missing; native initialization refused");
@@ -2997,6 +3021,20 @@ static void installDiagnostics(KernelPatcher &patcher, mach_vm_address_t base) {
             patcher.clearError();
         }
         RLOG("VCNDPG: add_to_dpg_sram route=%u", orgAddToDpgSram != 0);
+        // First 15 bytes are complete position-independent instructions in both
+        // wait routines. The later RIP-relative callback LEA is not displaced.
+        const uint8_t waitGuard[] = {0x55,0x48,0x89,0xe5,0x48,0x83,0xec,0x20,
+                                    0x48,0x8d,0x45,0xe8,0x48,0x89,0x38};
+        if (!memcmp(reinterpret_cast<const void *>(base + 0x86a3d), waitGuard, sizeof(waitGuard)) &&
+            !memcmp(reinterpret_cast<const void *>(base + 0x86a9e), waitGuard, sizeof(waitGuard))) {
+            orgVcnWait = patcher.routeFunction(base + 0x86a3d,
+                reinterpret_cast<mach_vm_address_t>(wrapVcnWait), true);
+            patcher.clearError();
+            orgVcnWaitMs = patcher.routeFunction(base + 0x86a9e,
+                reinterpret_cast<mach_vm_address_t>(wrapVcnWaitMs), true);
+            patcher.clearError();
+        }
+        RLOG("VCNW: guarded wait=%u wait-ms=%u", orgVcnWait != 0, orgVcnWaitMs != 0);
     }
     if (vcnFirmwareEnabled) {
         const uint8_t readGuard[] = {0x55,0x48,0x89,0xe5,0x48,0x83,0xec,0x20};
