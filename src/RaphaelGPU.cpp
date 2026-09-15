@@ -2467,16 +2467,14 @@ static uint32_t wrapVcnConfig(void *engine, uint32_t index) {
     uint32_t value = FunctionCast(wrapVcnConfig, orgVcnConfig)(engine, index);
     auto ctx = engine ? *reinterpret_cast<const uint8_t **>(
         static_cast<uint8_t *>(engine) + 16) : nullptr;
-    if (vcnDpgEnabled && ctx && (index == 0 || index == 3 || index == 7) &&
+    if (vcnDpgEnabled && ctx && (index == 0 || index == 7) &&
         *reinterpret_cast<const uint32_t *>(ctx + 0x268) == 0x30001) {
-        // Force EnableVCNDPG (0), EnableSwVCNFWLoading (3) and EnableVCNSecureLoad (7) to 1.
-        // Setting index 3 makes mode (ctx+0x2e0)=1 so _engine_init_pfn_ptr selects
-        // _engine_3_0_dpg_UNSECURE_initialize (0x93ec1, mode==1 && flags bit1): the driver
-        // programs the DPG SRAM from our supplied firmware (rgpuvcnfw via _internal_cos_read_fw)
-        // and DMA-commits it, like Linux vcn_v3_0_start_dpg_mode(indirect) -- sidestepping the
-        // Apple-signed secure-SRAM load (VCN0_RAM PSP type 49 -> tmr=0x0) that blocked dpg_secure
-        // in candidate 249.
-        RLOG("VCNDPG: native config%u %u -> 1 (force DPG-unsecure, mode=1)", index, value);
+        // Force EnableVCNDPG (0) and EnableVCNSecureLoad (7) -> bit1/bit9, so engine_init_pfn_ptr
+        // picks a DPG initializer. Keep mode (ctx+0x2e0)=0 (do NOT force index 3) so
+        // engine_initialize's firmware-loaded wait still runs and populates ctx+0x2c0 with the
+        // firmware TMR address. The initializer is then overridden to dpg_unsecure in
+        // wrapVcnInitialize (candidate 251).
+        RLOG("VCNDPG: native config%u %u -> 1 (DPG, mode stays 0)", index, value);
         return 1;
     }
     if (vcnStaticEnabled && ctx && (index == 0 || index == 1 || index == 7) &&
@@ -2512,6 +2510,23 @@ static uint32_t wrapVcnInitialize(void *engine) {
         *reinterpret_cast<const uint32_t *>(ctx),
         *reinterpret_cast<const uint32_t *>(ctx + 0x2e0),
         *reinterpret_cast<const uint64_t *>(ctx + 0x3f8) - hwlibsBase);
+    // Candidate 251 (decompilation-guided): keep mode=0 so engine_initialize's firmware-loaded
+    // wait populates ctx+0x2c0 with the firmware TMR address, but override the selected VCN
+    // initializer to _engine_3_0_dpg_unsecure_initialize (0x93ec1). Its decode_sram_initialize
+    // programs the VCPU cache BAR (0x43c/0x43d) FROM ctx+0x2c0 through the DPG LMA window --
+    // whereas dpg_secure_initialize (candidate 249) writes the cache BAR as 0 and relies on an
+    // Apple-signed secure firmware image we do not have. ctx+0x3f8 = initialize pfn,
+    // ctx+0x400 = uninitialize pfn (engine_init_pfn_ptr stores them there).
+    if (vcnDpgEnabled && ctx && hwlibsBase &&
+        *reinterpret_cast<const uint32_t *>(ctx + 0x268) == 0x30001 &&
+        *reinterpret_cast<const uint32_t *>(ctx + 0x2e0) == 0) {
+        auto ctxw = const_cast<uint8_t *>(ctx);
+        auto pfn = reinterpret_cast<uint64_t *>(ctxw + 0x3f8);
+        RLOG("VCNDPG: override initializer +%llx -> dpg_unsecure +93ec1 (mode=0)",
+             *pfn - hwlibsBase);
+        *pfn = hwlibsBase + 0x93ec1;                              // dpg_unsecure_initialize
+        *reinterpret_cast<uint64_t *>(ctxw + 0x400) = hwlibsBase + 0x94496; // dpg_uninitialize
+    }
     if (vcnSmuEnabled) {
         auto cgs = engine ? *reinterpret_cast<const uint8_t **>(engine) : nullptr;
         if (!vcnSmuLock || !(vcnStaticEnabled || vcnDpgEnabled) || !ctx || !cgs ||
