@@ -34,7 +34,7 @@ and delivered only after actual bypass execution. Do not fabricate PM response
 success, set PPlib readiness, or change the SMU message protocol. Native kernel
 VCN power-up remains responsible for the real Raphael SMU request.
 
-Delivery uses current-task image inspection during native getHardwareInfo,
+Delivery uses current-task image inspection during native video getHWInfo (selector100),
 requiring the exact terminated image path, UUID, text bounds, complete original
 8-byte function, and executable read-only mapping. Copy-on-write changes one byte
 on a private page, restores original protection even after failure, and verifies
@@ -49,3 +49,15 @@ selection. Subsequent stalls must be analyzed separately, with normal cleanup.
 
 No runtime result for272 yet. Host fixture/parser tests do not prove COW delivery,
 VCN execution, display output or lifecycle reliability.
+
+## Dispatch correction verified from exact Mach-O
+
+Video contextStart assigns table1607a0 to+10e8. Table entries are48bytes;
+selector100 contains virtual member ba1,104 bc1,106 bd1 (lowbit denotesvirtual).
+Navi10VideoContext constructor installs vtable16c618: slotsba0→2892c getHWInfo,
+bc0→49292 newContext,bd0→49632 startEngine. Thus prior shared CreateVcnContext
+hook21ba0 does not cover the AMDVA decoder's selector104. Candidate272 additionally
+traces49292 with native ABI self/input/output/input-size/output-size-pointer.
+Its native requestCapability path remains covered by the existing engine hook.
+The safe video HWInfo route is28935 after TEST RSI/JZ null guard at2892c; the
+16-byte displaced prologue contains no branch/call/PC-relative instruction.

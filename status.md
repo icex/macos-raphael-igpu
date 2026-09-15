@@ -65,3 +65,13 @@ Privacy versus composition unresolved. Screen Sharing answers RFB; no externally
 validated frames. Physical scanout, long-run lifecycle and hardware codecs remain
 unqualified. Prior encoder-hung guests required forced shutdown;269 decode-first,
 270 and271 exited after guest request. Superseded details are in status archives.
+
+## Next authorized run:272 DPM capability alignment
+
+Extend allowance10→11 for boot`c782d007-ca85-409b-9cf5-ff12c1a8c6d5` under the
+user's continued-testing instruction. Candidate272/metal-119 tests AMDVA's native
+no-DPM path, guarded by exact image UUID/instruction and actual XI bypass. Retain
+real Raphael SMU power-up and all identity/capture/host-fault/cleanup gates, fresh
+MODE2,max6000s. Require confirmed COW restoration/verification and video HWInfo
+route; test unpinned hardware decode before any encoder. Stop through normal
+harness after discriminating observations.271 cleanup recovered; no amdgpu rebind.
