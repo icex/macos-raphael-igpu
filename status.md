@@ -58,3 +58,21 @@ User authorized testing these findings. Allow one further launch, the third on
 boot c782d007-ca85-409b-9cf5-ff12c1a8c6d5, for retained NJ request cleanup.
 264 recovery is verified recovered. Fresh MODE2 required. Max6000seconds with
 manual stop after encoder result/stall; all abort/cleanup checks retained.
+
+## Candidate265 observation and candidate266 allowance extension
+
+265 cleared hardware pause4→0 before initialization, retained decoder-first and
+shared4096; the subsequent fresh pause request still timed out. No encoder fix.
+Final output and cleanup receipts pending; require recovered cleanup before266.
+
+User authorized continued testing of the Linux findings. Extend this boot's
+allowance from3 to4 launches for one concrete memory-domain experiment, boot
+c782d007-ca85-409b-9cf5-ff12c1a8c6d5. Candidate266 changes shared native allocation
+class2→0, both stored teardown field and allocator argument, preserving size4096,
+flags, firmware mode, decoder setup and preinit unpause. The allocator class is
+used natively for firmware/encoder rings; require returned-address evidence to
+call it VRAM. Audited full80byte allocation range including call and pointer store.
+Capture shared words for comparison; no unrelated hardware changes. Use explicit
+manual-reuse/ack-risk cycle path after265 recovered and fresh MODE2. Max6000seconds
+with manual stop on result/stall; every capture/identity/host-fault/cleanup gate
+remains active. No vfio→amdgpu rebind, reboot, merge or push.
