@@ -2407,6 +2407,23 @@ static void wrapVcnWriteRegister(void *engine, uint32_t segment, uint32_t reg, u
         RLOG("VCNR: native clock/reset requested=%x written=%x readback=%x after10ms=%x",
              requested, value, beforeDelay, read(engine, segment, reg));
     }
+    // Candidate 244: settle whether the VCN VCPU cache-window and soft-reset writes
+    // land at all. Candidate 243 read them 0xffffffff AFTER static_initialize; that is
+    // ambiguous between a dropped write (the block is held inaccessible, so the VCPU
+    // never boots -- a real root cause) and a register that merely reads 0xffffffff once
+    // the VCPU/PSP secures it (benign, pointing at firmware authentication). Read the
+    // register back HERE, in the native context immediately after each write, before
+    // reset release and before any securing. Same _internal_cgs_read_register the native
+    // path uses; no extra writes. mmUVD_SOFT_RESET=0x84, mmUVD_LMI_VCPU_CACHE_64BIT_BAR
+    // low=0x43c (its high sibling 0x43d follows in the same mc_resume write pair).
+    if (ctx && segment == 1 && (reg == 0x84 || reg == 0x43c || reg == 0x43d)) {
+        auto rd = reinterpret_cast<uint32_t (*)(void *, uint32_t, uint32_t)>(hwlibsBase + 0x86834);
+        RLOG("VCNW: wrote seg1 reg=%03x val=%08x -> readback=%08x (softreset=%08x "
+             "cacheBARlo=%08x cacheBARhi=%08x nc0lo=%08x status=%08x)",
+             reg, value, rd(engine, 1, reg), rd(engine, 1, 0x84),
+             rd(engine, 1, 0x43c), rd(engine, 1, 0x43d),
+             rd(engine, 1, 0x438), rd(engine, 1, 0x80));
+    }
 }
 
 static mach_vm_address_t orgMmhub21 = 0, nativeMmhub23 = 0;
