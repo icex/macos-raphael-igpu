@@ -252,6 +252,8 @@ def prepare_and_run(args, facts: dict, worktree: Path, vm: Path, run_id: str) ->
 
 
 def main() -> int:
+    if len(sys.argv) > 1 and sys.argv[1] == "linux-vcn":
+        return subprocess.run([sys.executable, "-B", str(ROOT / "tools/linux_vcn_baseline.py"), *sys.argv[2:]]).returncode
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--candidate", required=True, help="candidate number, e.g. 231")
