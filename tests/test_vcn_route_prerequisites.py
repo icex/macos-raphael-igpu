@@ -14,17 +14,17 @@ class VcnRoutePrerequisiteTests(unittest.TestCase):
 #include <cstdint>
 #include <cassert>
 static bool vcnDpgEnabled, vcnResetEnabled;
-static uintptr_t orgVcnConfig, orgAddToDpgSram, orgVcnWriteRegister;
+static uintptr_t orgVcnConfig, orgAddToDpgSram, orgVcnWriteRegister, orgVcnWait;
 static unsigned nativeCalls;
 #define RLOG(...) ((void)0)
 ''' + source[start:end] + '++nativeCalls; return 0; }\n'
         program += r'''
 int main() {
     vcnDpgEnabled=true;
-    for (unsigned routes=0; routes<4; ++routes) {
-        orgVcnConfig=routes&1; orgAddToDpgSram=routes&2; nativeCalls=0;
-        assert(wrapVcnInitialize(nullptr) == (routes==3 ? 0u : 1u));
-        assert(nativeCalls == (routes==3 ? 1u : 0u));
+    for (unsigned routes=0; routes<16; ++routes) {
+        orgVcnConfig=routes&1; orgAddToDpgSram=routes&2; orgVcnWriteRegister=routes&4; orgVcnWait=routes&8; nativeCalls=0;
+        assert(wrapVcnInitialize(nullptr) == (routes==15 ? 0u : 1u));
+        assert(nativeCalls == (routes==15 ? 1u : 0u));
     }
     vcnResetEnabled=true; orgVcnWriteRegister=0; nativeCalls=0;
     assert(wrapVcnInitialize(nullptr)==1 && nativeCalls==0);

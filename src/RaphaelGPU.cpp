@@ -2395,6 +2395,20 @@ static void *wrapFwDirGet(void *dir, uint32_t devType, const char *name) {
 // chooses the native static initializer instead of the secure DPG SRAM path.
 // Assert VCPU reset while the native static initializer enables its clock,
 // before native cache programming. The same native initializer releases reset.
+// Match Linux's observed M/U/LMI-on PGFSM state instead of the native
+// all-off write after SMU PowerUp. Restricted to initial secure DPG startup.
+static bool vcnCorePowerWaitSucceeded = false;
+static bool vcnCorePowerSelected(void *engine) {
+    if (!vcnDpgEnabled || !engine ||
+        !__atomic_load_n(&raphaelTargetConfirmed, __ATOMIC_ACQUIRE)) return false;
+    const auto ctx = *reinterpret_cast<const uint8_t **>(static_cast<uint8_t *>(engine) + 0x10);
+    const auto manager = *reinterpret_cast<const uint32_t **>(static_cast<uint8_t *>(engine) + 0x18);
+    return ctx && manager && manager[0] == 0 &&
+        !(*reinterpret_cast<const uint32_t *>(ctx) & 1) &&
+        *reinterpret_cast<const uint32_t *>(ctx + 0x268) == 0x30001 &&
+        *reinterpret_cast<const uint32_t *>(ctx + 0x2e0) == 0 &&
+        *reinterpret_cast<const uint64_t *>(ctx + 0x3f8) == hwlibsBase + 0x943cf;
+}
 static void wrapVcnWriteRegister(void *engine, uint32_t segment, uint32_t reg, uint32_t value) {
     const auto caller = reinterpret_cast<mach_vm_address_t>(__builtin_return_address(0));
     auto ctx = engine ? *reinterpret_cast<const uint8_t **>(static_cast<uint8_t *>(engine) + 16) : nullptr;
@@ -2403,6 +2417,13 @@ static void wrapVcnWriteRegister(void *engine, uint32_t segment, uint32_t reg, u
         caller == hwlibsBase + 0x931ba && segment == 1 && reg == 0x156 &&
         *reinterpret_cast<const uint32_t *>(ctx + 0x268) == 0x30001 &&
         *reinterpret_cast<const uint32_t *>(ctx + 0x2e0) == 0 && (value & 0x200);
+    if (caller == hwlibsBase + 0x93a1e && segment == 1 && reg == 0 &&
+        value == 0x2a2aaaaa && vcnCorePowerSelected(engine)) {
+        // Exact native disable_power_gating (+93599) M/U/LMI-on config.
+        // The corresponding wait below uses its masked on-state, not a fake success.
+        RLOG("VCNCORE: PGFSM config %08x -> 2a2a9aa5", value);
+        value = 0x2a2a9aa5;
+    }
     const uint32_t requested = value;
     if (reset) value |= 0x10000000;
     FunctionCast(wrapVcnWriteRegister, orgVcnWriteRegister)(engine, segment, reg, value);
@@ -2594,10 +2615,18 @@ static unsigned vcnWaitReports = 0;
 static uint32_t wrapVcnWait(void *engine, uint32_t bank, uint32_t reg,
                             uint32_t expected, uint32_t bits) {
     const auto caller = reinterpret_cast<uintptr_t>(__builtin_return_address(0)) - hwlibsBase;
+    if (caller == 0x93a3b && bank == 1 && reg == 1 &&
+        expected == 0x2a2aaaaa && bits == 0x3f3fffff && vcnCorePowerSelected(engine)) {
+        RLOG("VCNCORE: native PGFSM wait %08x -> 2a2a8aa0 mask=%08x", expected, bits);
+        expected = 0x2a2a8aa0;
+    }
     const auto n = __sync_fetch_and_add(&vcnWaitReports, 1u);
     if (n < 64) RLOG("VCNW: begin n=%u caller=+%llx bank=%x reg=%x expected=%x mask=%x ms=5000",
         n, static_cast<uint64_t>(caller), bank, reg, expected, bits);
     const uint32_t result = FunctionCast(wrapVcnWait, orgVcnWait)(engine, bank, reg, expected, bits);
+    if (caller == 0x93a3b && bank == 1 && reg == 1 &&
+        expected == 0x2a2a8aa0 && bits == 0x3f3fffff && vcnCorePowerSelected(engine))
+        vcnCorePowerWaitSucceeded = result == 0;
     if (n < 64) RLOG("VCNW: end n=%u result=%u", n, result);
     if (n < 64 && result && bank == 1 && reg == 0x14) inspectVcnSram(engine, "pause-failed");
     return result;
@@ -2613,7 +2642,7 @@ static uint32_t wrapVcnWaitMs(void *engine, uint32_t bank, uint32_t reg,
     return result;
 }
 static uint32_t wrapVcnInitialize(void *engine) {
-    if (vcnDpgEnabled && (!orgVcnConfig || !orgAddToDpgSram)) {
+    if (vcnDpgEnabled && (!orgVcnConfig || !orgAddToDpgSram || !orgVcnWriteRegister || !orgVcnWait)) {
         RLOG("VCNDPG: required route missing; native initialization refused");
         return 1;
     }
@@ -2711,7 +2740,18 @@ static uint32_t wrapVcnInitialize(void *engine) {
                 selected, before, read(engine, 1, 0x14));
         }
     }
+    const bool corePowerTest = vcnCorePowerSelected(engine);
+    if (corePowerTest) vcnCorePowerWaitSucceeded = false;
     const uint32_t result = FunctionCast(wrapVcnInitialize, orgVcnInitialize)(engine);
+    if (corePowerTest) {
+        auto read = reinterpret_cast<uint32_t (*)(void *, uint32_t, uint32_t)>(hwlibsBase + 0x86834);
+        const uint32_t fsm = read(engine, 1, 1);
+        RLOG("VCNCORE: initialized result=%u PGFSM=%08x power=%08x pause=%08x",
+            result, fsm, read(engine, 1, 4), read(engine, 1, 0x14));
+        // DPG may change the state after SRAM submission; require the actual
+        // preceding on-state wait to have succeeded, not a permanently-on core.
+        if (!vcnCorePowerWaitSucceeded) return 1;
+    }
     RLOG("VCNS: native initialize returned%u", result);
     if (!result && vcnDecodeFirstEnabled && vcnDpgEnabled && ctx &&
         __atomic_load_n(&raphaelTargetConfirmed, __ATOMIC_ACQUIRE) &&
@@ -3165,7 +3205,7 @@ static void installDiagnostics(KernelPatcher &patcher, mach_vm_address_t base) {
         }
         RLOG("MHG: guarded runtime route=%u", orgMmhub21 != 0);
     }
-    if (vcnResetEnabled) {
+    if (vcnResetEnabled || vcnDpgEnabled) {
         const uint8_t guard[] = {0x55,0x48,0x89,0xe5,0x48,0x8b,0x07,0x48,
                                  0x8b,0x7f,0x10,0x89,0xf6,0x03,0x54,0xb7,0x34};
         if (!memcmp(reinterpret_cast<const void *>(base + 0x8680f), guard, sizeof(guard))) {
