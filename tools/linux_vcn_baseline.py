@@ -4,7 +4,7 @@ import argparse, hashlib, json, os, re, signal, subprocess, sys, time
 from pathlib import Path
 import numpy as np
 ROOT=Path(__file__).resolve().parents[1]
-SRAM_PROBE = "p:rgpu_vcn_capture/sram amdgpu:amdgpu_vcn_psp_update_sram did=+62(+8($arg1)):x16 inst=$arg2:u32 base=+204560($arg1):x64 end=+204576($arg1):x64 " + " ".join(f"w{i}=+{i*4}(+204560($arg1)):x32" for i in range(96))
+SRAM_PROBE = "p:rgpu_vcn_capture/sram amdgpu:amdgpu_vcn_psp_update_sram did=+62(+8($arg1)):x16 inst=$arg2:u32 base=+204560($arg1):x64 end=+204576($arg1):x64 " + " ".join(f"w{i}=+{i*4}(+204560($arg1)):x32" for i in range(96)) + " shared_gpu=+204600($arg1):x64 " + " ".join(f"s{i}=+{i*4}(+204592($arg1)):x32" for i in range(24))
 BDF='0000:7b:00.0'
 DEV=Path('/sys/bus/pci/devices')/BDF
 NODE='/dev/dri/renderD129'
@@ -92,6 +92,7 @@ def main():
         with (out/(label+'.stdout')).open('wb') as stdout,(out/(label+'.stderr')).open('wb') as stderr:
             active=subprocess.Popen(cmd,stdout=stdout,stderr=stderr)
             deadline=time.monotonic()+limit
+            sampled=False
             try:
                 while active.poll() is None:
                     if capture is not None and capture.poll() is not None: raise RuntimeError('trace capture exited')
@@ -102,6 +103,16 @@ def main():
                             raise RuntimeError('host fault reported; stopping workloads')
                     if time.monotonic()>deadline or time.time()-started>5800: raise RuntimeError('workload deadline')
                     if (out/'stop-requested').exists(): raise RuntimeError('manual stop')
+                    if label=='h264-sustained' and not sampled and time.time()-rec['start']>2:
+                        # Read through the driver's debugfs interface during an active
+                        # encode, preserving the power-state reads around protected registers.
+                        regs=[0x7e04,0x7e01,0x7e14,0x7e84,0x823c,0x823d,0x8238,0x7f56,0x7e11,0x7e12,0x7e04]
+                        script='set -eu\n'
+                        for reg in regs:
+                            script+=f"echo reg={reg:#x}; dd if=/debug/dri/0000:7b:00.0/amdgpu_regs bs=4 skip={reg} count=1 2>/dev/null | od -An -tx4\n"
+                        with (out/'active-registers.txt').open('wb') as capture_regs:
+                            subprocess.run(['docker','run','--rm','--privileged','-v','/sys/kernel/debug:/debug','alpine:latest','sh','-c',script],stdout=capture_regs,stderr=(out/'active-registers.stderr').open('wb'),timeout=10,check=True)
+                        sampled=True
                     time.sleep(.1)
                 rec.update(exit=active.returncode,end=time.time());save()
             finally:
@@ -153,7 +164,12 @@ def main():
                     entry['decode_'+decode]=validate(raw) if rc==0 else dict(passed=False,exit=rc)
                 (out/'result.json').write_text(json.dumps(summary,indent=2))
                 time.sleep(2)
-        summary['capture']='complete-to-workload-end'
+        if a.sram:
+            target=out/'h264-sustained.mkv'
+            run('h264-sustained',['ffmpeg','-hide_banner','-loglevel','verbose','-nostdin','-y','-vaapi_device',NODE,'-re','-stream_loop','199','-f','rawvideo','-pixel_format','nv12','-video_size','1280x720','-framerate','30','-i',str(out/'input.nv12'),'-frames:v','600','-vf','format=nv12,hwupload','-c:v','h264_vaapi','-qp','20','-bf','0',str(target)])
+            run('h264-sustained-stream',['ffprobe','-v','error','-count_frames','-show_streams','-of','json',str(target)])
+            run('h264-sustained-decode',['ffmpeg','-hide_banner','-nostdin','-i',str(target),'-f','null','-'])
+        summary['capture']='complete-to-workload-end' 
     except BaseException as error:
         summary['error']=str(error);summary['capture']='incomplete'
     finally:

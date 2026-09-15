@@ -31,3 +31,14 @@ SRAM CPU pointer offset3400 within inst: absolute204560; current pointer204576.
 Function BTF prototype is (adev, inst_idx, ucode_id), NOT the newer vinst ABI.
 Filter physical device13c0 and inst0; capture96words from512byte allocation.
 Same bounded harness/cleanup and codecs; no reset/rebind/reboot.
+
+## Supplemental SRAM result and active-state capture allowance
+SRAM capture succeeded: four matching valid280byte images (not352bytes; earlier
+MMIO command-word interpretation was incorrect). Key differences: shared NC0
+window4096bytes in Linux vs96bytes macOS, Linux shared buffer in VRAM in this run,
+Linux decode ring initialized before NJ pause. All codec/control checks passed,
+no trace overruns/drops; cleanup retained amdgpu.
+One further native session on boot c782d007-ca85-409b-9cf5-ff12c1a8c6d5 adds
+24 shared-memory words to the read-only kprobe and a bounded600frame H264 encode
+for supported debugfs register reads while active. Exact protected-register
+readability and shared ABI are the observations; preserve all prior guards.
