@@ -2467,14 +2467,16 @@ static uint32_t wrapVcnConfig(void *engine, uint32_t index) {
     uint32_t value = FunctionCast(wrapVcnConfig, orgVcnConfig)(engine, index);
     auto ctx = engine ? *reinterpret_cast<const uint8_t **>(
         static_cast<uint8_t *>(engine) + 16) : nullptr;
-    if (vcnDpgEnabled && ctx && (index == 0 || index == 7) &&
+    if (vcnDpgEnabled && ctx && (index == 0 || index == 3 || index == 7) &&
         *reinterpret_cast<const uint32_t *>(ctx + 0x268) == 0x30001) {
-        // Force EnableVCNDPG (index 0) and EnableVCNSecureLoad (index 7) so
-        // _engine_init_pfn_ptr selects _engine_3_0_dpg_secure_initialize (mode==0 &&
-        // flags bit9) -- the DPG path Raphael's APU VCN needs -- instead of the Navi23
-        // static path (_engine_3_0_static_initialize) whose 0x43c cache-BAR write never
-        // lands on this silicon. mode (ctx+0x2e0) stays 0 so PSP firmware loading is kept.
-        RLOG("VCNDPG: native config%u %u -> 1 (force DPG-secure)", index, value);
+        // Force EnableVCNDPG (0), EnableSwVCNFWLoading (3) and EnableVCNSecureLoad (7) to 1.
+        // Setting index 3 makes mode (ctx+0x2e0)=1 so _engine_init_pfn_ptr selects
+        // _engine_3_0_dpg_UNSECURE_initialize (0x93ec1, mode==1 && flags bit1): the driver
+        // programs the DPG SRAM from our supplied firmware (rgpuvcnfw via _internal_cos_read_fw)
+        // and DMA-commits it, like Linux vcn_v3_0_start_dpg_mode(indirect) -- sidestepping the
+        // Apple-signed secure-SRAM load (VCN0_RAM PSP type 49 -> tmr=0x0) that blocked dpg_secure
+        // in candidate 249.
+        RLOG("VCNDPG: native config%u %u -> 1 (force DPG-unsecure, mode=1)", index, value);
         return 1;
     }
     if (vcnStaticEnabled && ctx && (index == 0 || index == 1 || index == 7) &&
