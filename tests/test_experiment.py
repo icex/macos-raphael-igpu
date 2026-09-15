@@ -856,6 +856,24 @@ class ExperimentTests(unittest.TestCase):
         bad['serial_args'][-1] = 'isa-serial,chardev=rgpu_critical,index=0'
         self.assertIn('critical_uart_topology', tool.validate_running(manifest, bad))
 
+    def test_quiesce_request_is_complete_before_publication_and_never_overwritten(self):
+        tool = self.module()
+        with tempfile.TemporaryDirectory() as temp:
+            target = Path(temp) / 'request'
+            payload = b'complete authenticated request\n'
+            original_link = tool.os.link
+            def observed_link(source, destination):
+                self.assertFalse(target.exists())
+                self.assertEqual(Path(source).read_bytes(), payload)
+                original_link(source, destination)
+                self.assertEqual(target.read_bytes(), payload)
+            with patch.object(tool.os, 'link', side_effect=observed_link):
+                tool.publish_request_once(target, payload)
+            with self.assertRaises(FileExistsError):
+                tool.publish_request_once(target, b'replacement')
+            self.assertEqual(target.read_bytes(), payload)
+            self.assertEqual(list(Path(temp).iterdir()), [target])
+
     def test_quiesce_producer_requires_matching_terminal_ack_and_removes_request(self):
         tool = self.module()
         with tempfile.TemporaryDirectory() as temp:

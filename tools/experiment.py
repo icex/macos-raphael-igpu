@@ -1021,6 +1021,31 @@ def write_bytes_once(path, value):
     finally: os.close(fd)
 
 
+def publish_request_once(path, value):
+    """Expose complete durable request bytes atomically, without overwriting."""
+    if not isinstance(value, bytes):
+        raise TypeError('request must be bytes')
+    path = Path(path)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=path.parent, prefix='.quiesce-',
+                                         delete=False) as stream:
+            temporary = Path(stream.name)
+            stream.write(value)
+            stream.flush()
+            os.fsync(stream.fileno())
+        # Unlike replace(), link() retains exclusive/create-once semantics.
+        os.link(temporary, path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+    fd = os.open(path.parent, os.O_DIRECTORY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
 def persist_first_decision(output, manifest, state, readiness, serial_bytes,
                            critical_bytes, decision_time):
     """Seal the first readiness refusal actually selected for shutdown.
@@ -1101,7 +1126,7 @@ def quiesce_critical_producer(vm, output, manifest, state, supervisor,
     request_bytes = (f'RGPUQ2 v=1 cid={cid} b={manifest["build_id"]} '
                      f'run={manifest["run_id"]}\n').encode()
     requested = time.time()
-    write_bytes_once(request, request_bytes)
+    publish_request_once(request, request_bytes)
     try:
         while time.time() < deadline:
             supervisor.verify(state)

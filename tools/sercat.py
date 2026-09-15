@@ -130,4 +130,5 @@ with open(output, "ab", buffering=0) as f:
     if sync["error"] is not None:
         sys.exit("serial log fsync failed")
     if capture_error is not None:
-        sys.exit("serial capture failed")
+        sys.exit("serial capture failed: " + type(capture_error).__name__ +
+                 " errno=" + str(getattr(capture_error, "errno", None)))

@@ -303,7 +303,7 @@ class SercatTests(unittest.TestCase):
                    "VM_SERIAL_CHANNEL": "critical"}
             with patch.dict(os.environ, env, clear=True), \
                  patch.object(socket, "socket", return_value=fake), \
-                 self.assertRaisesRegex(SystemExit, "serial capture failed"):
+                 self.assertRaisesRegex(SystemExit, "serial capture failed: OSError errno=None"):
                 runpy.run_path(str(TOOL), run_name="__main__")
 
 
