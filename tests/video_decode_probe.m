@@ -87,11 +87,11 @@ int main(int argc, const char **argv) {
             return s ? 1 : 0;
         }
         if (argc != 4 || (strcmp(argv[1], "h264") && strcmp(argv[1], "hevc")) ||
-            (strcmp(argv[2], "hw") && strcmp(argv[2], "sw"))) {
+            (strcmp(argv[2], "hw") && strcmp(argv[2], "hw-auto") && strcmp(argv[2], "sw"))) {
             fprintf(stderr,"usage: probe h264|hevc hw|sw registryID (0 for sw), or --list\n");
             return 2;
         }
-        BOOL decodeHardware = !strcmp(argv[2], "hw");
+        BOOL decodeHardware = strcmp(argv[2], "sw") != 0;
         BOOL hardware = NO; // produce a valid bitstream without touching the VCN encoder
         uint64_t registry = strtoull(argv[3], NULL, 0);
         if (decodeHardware && !registry) return 2;
@@ -159,7 +159,8 @@ int main(int argc, const char **argv) {
             NSMutableDictionary *decodeSpec=[@{(__bridge id)kVTVideoDecoderSpecification_EnableHardwareAcceleratedVideoDecoder:@(decodeHardware)} mutableCopy];
             if (decodeHardware) {
                 decodeSpec[(__bridge id)kVTVideoDecoderSpecification_RequireHardwareAcceleratedVideoDecoder]=@YES;
-                decodeSpec[(__bridge id)kVTVideoDecoderSpecification_RequiredDecoderGPURegistryID]=@(registry);
+                if (!strcmp(argv[2], "hw"))
+                    decodeSpec[(__bridge id)kVTVideoDecoderSpecification_RequiredDecoderGPURegistryID]=@(registry);
             }
             emit(@"decoder-create-begin", @{@"hardware_requested":@(decodeHardware), @"registry_id":@(registry)});
             CMSampleBufferRef first=(__bridge CMSampleBufferRef)samples[0];
