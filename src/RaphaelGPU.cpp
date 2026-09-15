@@ -248,6 +248,7 @@ static bool vcnApuEnabled = false;
 static bool vcnStaticEnabled = false;
 static bool vcnSmuEnabled = false;
 static bool vcnResetEnabled = false;
+static bool vcnDpgEnabled = false;
 static mach_vm_address_t orgVcnWriteRegister = 0;
 static IOLock *vcnSmuLock = nullptr;
 static mach_vm_address_t orgVcnConfig = 0;
@@ -2466,6 +2467,16 @@ static uint32_t wrapVcnConfig(void *engine, uint32_t index) {
     uint32_t value = FunctionCast(wrapVcnConfig, orgVcnConfig)(engine, index);
     auto ctx = engine ? *reinterpret_cast<const uint8_t **>(
         static_cast<uint8_t *>(engine) + 16) : nullptr;
+    if (vcnDpgEnabled && ctx && (index == 0 || index == 7) &&
+        *reinterpret_cast<const uint32_t *>(ctx + 0x268) == 0x30001) {
+        // Force EnableVCNDPG (index 0) and EnableVCNSecureLoad (index 7) so
+        // _engine_init_pfn_ptr selects _engine_3_0_dpg_secure_initialize (mode==0 &&
+        // flags bit9) -- the DPG path Raphael's APU VCN needs -- instead of the Navi23
+        // static path (_engine_3_0_static_initialize) whose 0x43c cache-BAR write never
+        // lands on this silicon. mode (ctx+0x2e0) stays 0 so PSP firmware loading is kept.
+        RLOG("VCNDPG: native config%u %u -> 1 (force DPG-secure)", index, value);
+        return 1;
+    }
     if (vcnStaticEnabled && ctx && (index == 0 || index == 1 || index == 7) &&
         *reinterpret_cast<const uint32_t *>(ctx + 0x268) == 0x30001) {
         RLOG("VCNS: native config%u %u -> 0", index, value);
@@ -2501,7 +2512,7 @@ static uint32_t wrapVcnInitialize(void *engine) {
         *reinterpret_cast<const uint64_t *>(ctx + 0x3f8) - hwlibsBase);
     if (vcnSmuEnabled) {
         auto cgs = engine ? *reinterpret_cast<const uint8_t **>(engine) : nullptr;
-        if (!vcnSmuLock || !vcnStaticEnabled || !ctx || !cgs ||
+        if (!vcnSmuLock || !(vcnStaticEnabled || vcnDpgEnabled) || !ctx || !cgs ||
             !__atomic_load_n(&raphaelTargetConfirmed, __ATOMIC_ACQUIRE) ||
             *reinterpret_cast<const uint32_t *>(ctx + 0x268) != 0x30001 ||
             *reinterpret_cast<const uint32_t *>(ctx + 0x298) != 0x04121015 ||
@@ -8642,6 +8653,8 @@ static void pluginStart() {
     uint32_t mmhubFix = 0;
     uint32_t vcnReset = 0;
     vcnResetEnabled = PE_parse_boot_argn("rgpuvcnreset", &vcnReset, sizeof(vcnReset)) && vcnReset == 1;
+    uint32_t vcnDpg = 0;
+    vcnDpgEnabled = PE_parse_boot_argn("rgpuvcndpg", &vcnDpg, sizeof(vcnDpg)) && vcnDpg == 1;
     uint32_t vcnSmu = 0;
     vcnSmuEnabled = PE_parse_boot_argn("rgpuvcnsmu", &vcnSmu, sizeof(vcnSmu)) && vcnSmu == 1;
     if (vcnSmuEnabled) vcnSmuLock = IOLockAlloc();
