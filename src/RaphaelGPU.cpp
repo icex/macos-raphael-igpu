@@ -2873,6 +2873,18 @@ static uint32_t wrapVcnHwInit(void *engine, void *input, void *output) {
         // The enlarged allocation is still owned and released by the native driver.
         shared[0x58] = 2;
         *reinterpret_cast<uint32_t *>(shared) |= 1u << 11;
+        // Linux's matching 3.1.2 firmware advertises RB, MULTI_QUEUE, SW_RING
+        // and SMU_INTERFACE (0xb40). Native Apple adds legacy bits0..2 and
+        // FW_LOGGING even when the corresponding logging byte is disabled.
+        const uint32_t appleFlags = *reinterpret_cast<const uint32_t *>(shared);
+        if (appleFlags != 0xf47) {
+            RLOG("VCNABI: unexpected shared flags=%x; comparison refused", appleFlags);
+            return 1;
+        }
+        *reinterpret_cast<uint32_t *>(shared) = 0xb40;
+        RLOG("VCNABI: flags %x -> %x cgc-mode=%u sw-ring=%u logging=%u",
+            appleFlags, *reinterpret_cast<const uint32_t *>(shared),
+            *reinterpret_cast<const uint32_t *>(shared + 0x0c), shared[0x41], shared[0x48]);
         RLOG("VCNA: shared bytes=%llu flags=%x SMU-interface=%u domain=%u gpu=%llx",
              size, *reinterpret_cast<const uint32_t *>(shared), shared[0x58],
              *reinterpret_cast<const uint32_t *>(ctx + 0x380),

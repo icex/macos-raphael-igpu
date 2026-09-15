@@ -61,3 +61,16 @@ c782d007-ca85-409b-9cf5-ff12c1a8c6d5 for this one allocation-domain experiment.
 Require265 recovered (verified), fresh MODE2 and every existing safety/capture/
 cleanup gate. Use cycle --manual-reuse --ack-risk, max6000seconds, manual stop
 after encoder result/stall. No amdgpu rebind, reboot, merge or push.
+
+## Candidate266 observation and candidate267 extension
+266 shared buffer moved to VRAM f40fa97000, SRAM NC0low0fa97000/highf4/size1000
+verified, decoder init and pause cleanup selected; fresh pause ACK stilltimeout.
+Final output and cleanup pending; require recovered receipt before267.
+
+User authorized continued testing. Extend allowance4→5 on boot
+c782d007-ca85-409b-9cf5-ff12c1a8c6d5 for one isolated shared-flags experiment.
+Candidate267 changes only shared present flags f47→b40 matching capturedLinux,
+keeping field contents, memoryclass0/VRAM,4096size, decoder init, unpause and
+softwarefirmware/SRAM. Guard priorflags exactlyf47; lognewflags andlegacyCGCmode.
+Max6000seconds; manual-reuse/ack-risk after266 recovery andfreshMODE2, all guards
+retained. No amdgpu rebind/reboot/merge/push.
