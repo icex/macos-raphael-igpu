@@ -106,3 +106,17 @@ worktrees and `tools/cycle.py`; preserve all identity, host-fault, capture, shut
 cleanup and 6000-second limits. Read [host safety](docs/host-safety.md) before hardware
 work. No same-boot vfio→amdgpu cycling, no sudo on the normal path, no merge/push to
 main before full desktop acceleration. A status update grants no additional launch.
+
+## Candidate 263 allowance — current authorized macOS handoff
+
+User explicitly requested switching to macOS and testing the Linux findings.
+Allow one candidate263 launch on boot c782d007-ca85-409b-9cf5-ff12c1a8c6d5,
+max6000seconds with manual stop after encoder output or first stall. Native Linux
+initialization and codecs succeeded in this boot. Handoff amdgpu→vfio-pci once;
+retain pinned power, disable PCI reset methods, fresh MODE2 and every cycle gate.
+No subsequent amdgpu rebind this boot. Only record launch once QEMU/VFIO opens.
+Candidate263 adds opt-in native-owned inactive decoder ring setup before first
+encoder pause to the software-firmware+committed-DPG path tested in259/260.
+If no valid decoder exists, log selection refusal and retain native behavior;
+that outcome does not test the ordering hypothesis. Preserve queue ownership,
+active counts, capture, recovery and desktop regressions.

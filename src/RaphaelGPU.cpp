@@ -249,6 +249,7 @@ static bool vcnStaticEnabled = false;
 static bool vcnSmuEnabled = false;
 static bool vcnResetEnabled = false;
 static bool vcnDpgEnabled = false;
+static bool vcnDecodeFirstEnabled = false;
 static mach_vm_address_t orgVcnWriteRegister = 0;
 static mach_vm_address_t orgAddToDpgSram = 0;
 static IOLock *vcnSmuLock = nullptr;
@@ -2414,8 +2415,8 @@ static void wrapVcnWriteRegister(void *engine, uint32_t segment, uint32_t reg, u
     }
     // Candidate 245: probe the VCN power-gating FSM. The VCPU-core registers (cache
     // BAR 0x43c, soft-reset 0x84) read 0xffffffff while always-on registers (STATUS,
-    // VCPU_CNTL, NC0 BAR) read fine -- the signature of the VCN core power domain never
-    // leaving power-gate. disable_power_gating writes mmUVD_PGFSM_CONFIG (reg 0x0) and
+    // VCPU_CNTL, NC0 BAR) read fine. Working Linux encoding has the same signature;
+    // this does not establish a powered-off VCPU. disable_power_gating writes mmUVD_PGFSM_CONFIG (reg 0x0) and
     // waits on mmUVD_PGFSM_STATUS (0x1). Read those plus POWER_STATUS (0x4) and the two
     // dead core registers back after the config write settles, to tell a power-domain
     // fault (fixable) from a firmware/PSP issue. Read-only.
@@ -2691,6 +2692,49 @@ static uint32_t wrapVcnInitialize(void *engine) {
     }
     const uint32_t result = FunctionCast(wrapVcnInitialize, orgVcnInitialize)(engine);
     RLOG("VCNS: native initialize returned%u", result);
+    if (!result && vcnDecodeFirstEnabled && vcnDpgEnabled && ctx &&
+        __atomic_load_n(&raphaelTargetConfirmed, __ATOMIC_ACQUIRE) &&
+        *reinterpret_cast<const uint32_t *>(ctx + 0x268) == 0x30001 &&
+        reinterpret_cast<mach_vm_address_t>(__builtin_return_address(0)) == hwlibsBase + 0x88451) {
+        // Linux initializes the hardware RBC ring before its first NJ pause.
+        // Use only an existing native-owned inactive decoder queue. Do not start
+        // a queue or change the native queue-manager active count here.
+        auto manager = *reinterpret_cast<const uint8_t *const *>(
+            static_cast<const uint8_t *>(engine) + 0x18);
+        auto queue = manager ? *reinterpret_cast<uint8_t *const *>(manager + 0x20) : nullptr;
+        auto shared = *reinterpret_cast<const uint8_t *const *>(ctx + 0x388);
+        const uint32_t flags = queue ? *reinterpret_cast<const uint32_t *>(queue) : 0xffffffff;
+        const uint32_t type = queue ? *reinterpret_cast<const uint32_t *>(queue + 0x10) : 0;
+        const uint32_t width = queue ? *reinterpret_cast<const uint32_t *>(queue + 0x54) : 0;
+        const uint32_t count = queue ? *reinterpret_cast<const uint32_t *>(queue + 0x58) : 0;
+        const uint64_t bytes = static_cast<uint64_t>(width) * count;
+        const uint64_t gpu = queue ? *reinterpret_cast<const uint64_t *>(queue + 0x28) : 0;
+        const uint64_t callback = queue ? *reinterpret_cast<const uint64_t *>(queue + 0x78) : 0;
+        const uint8_t guard[] = {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,
+            0x41,0x54,0x53,0x48,0x8b,0x47,0x08,0x31,0xdb,0x80,0x78,0x2c,0x00};
+        const bool selected = manager && queue && shared && type == 1 && !(flags & 1) &&
+            !(*reinterpret_cast<const uint32_t *>(ctx) & 1) &&
+            *reinterpret_cast<const uint32_t *>(manager) == 0 &&
+            *reinterpret_cast<void *const *>(queue + 8) == engine &&
+            *reinterpret_cast<void *const *>(queue + 0x38) && gpu &&
+            bytes >= 256 && bytes <= 0x100000 && !(bytes & (bytes - 1)) &&
+            static_cast<const uint8_t *>(engine)[0x2c] == 0 &&
+            callback == hwlibsBase + 0x94fa3 &&
+            !memcmp(reinterpret_cast<const void *>(callback), guard, sizeof(guard));
+        RLOG("VCNDF: selected=%u queue=%p type=%u flags=%x active=%u bytes=%llu gpu=%llx callback=+%llx",
+            selected, queue, type, flags, manager ? *reinterpret_cast<const uint32_t *>(manager) : 0xffffffff,
+            bytes, gpu, callback ? callback - hwlibsBase : 0);
+        if (selected) {
+            auto read = reinterpret_cast<uint32_t (*)(void *, uint32_t, uint32_t)>(hwlibsBase + 0x86834);
+            RLOG("VCNDF: before RBC=%x BAR=%x_%x RPTR=%x WPTR=%x pause=%x power=%x shared39=%x",
+                read(engine,1,0x2de), read(engine,1,0x433), read(engine,1,0x432),
+                read(engine,1,0x2e0), read(engine,1,0x2e1), read(engine,1,0x14), read(engine,1,4), shared[0x39]);
+            const uint32_t initialized = reinterpret_cast<uint32_t (*)(void *)>(callback)(queue);
+            RLOG("VCNDF: after result=%u RBC=%x BAR=%x_%x RPTR=%x WPTR=%x pause=%x power=%x shared39=%x",
+                initialized, read(engine,1,0x2de), read(engine,1,0x433), read(engine,1,0x432),
+                read(engine,1,0x2e0), read(engine,1,0x2e1), read(engine,1,0x14), read(engine,1,4), shared[0x39]);
+        }
+    }
     if (!result) inspectVcnSram(engine, "post-submit");
     // Candidate 243: read-only VCN VCPU boot diagnostic. No register writes, no
     // reset -- only _internal_cgs_read_register, exactly as static_initialize does.
@@ -2717,8 +2761,8 @@ static uint32_t wrapVcnInitialize(void *engine) {
     // Apple's _internal_cgs_read_register callback entirely. If the cache BAR reads the
     // real TMR address here while Apple's cgs path read 0xffffffff, the write DID land and
     // only Apple's readback is blind -- firmware is reachable and the fault is downstream.
-    // If both read 0xffffffff, the cache-window register is genuinely unreachable and the
-    // write never lands. Read-only; fbRead covers this flat index range (GC seg0..seg1).
+    // Working Linux encoding also reads both as 0xffffffff; neither accessor proves
+    // that the write failed. Read-only; fbRead covers this flat index range.
     if (asicInfo) {
         RLOG("VCNMM: direct-MMIO cacheBAR=%08x_%08x softreset=%08x nc0lo=%08x status=%08x",
              fbRead(asicInfo, 0x823d), fbRead(asicInfo, 0x823c), fbRead(asicInfo, 0x7e84),
@@ -8885,6 +8929,8 @@ static void pluginStart() {
     vcnResetEnabled = PE_parse_boot_argn("rgpuvcnreset", &vcnReset, sizeof(vcnReset)) && vcnReset == 1;
     uint32_t vcnDpg = 0;
     vcnDpgEnabled = PE_parse_boot_argn("rgpuvcndpg", &vcnDpg, sizeof(vcnDpg)) && vcnDpg == 1;
+    uint32_t vcnDecodeFirst = 0;
+    vcnDecodeFirstEnabled = PE_parse_boot_argn("rgpuvcndecfirst", &vcnDecodeFirst, sizeof(vcnDecodeFirst)) && vcnDecodeFirst == 1;
     uint32_t vcnSmu = 0;
     vcnSmuEnabled = PE_parse_boot_argn("rgpuvcnsmu", &vcnSmu, sizeof(vcnSmu)) && vcnSmu == 1;
     if (vcnSmuEnabled) vcnSmuLock = IOLockAlloc();
