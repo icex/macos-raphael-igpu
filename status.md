@@ -63,3 +63,19 @@ validated encoder fixes. Investigate actual desktop capture/compositing workload
 separately; current synthetic probes have failed to reproduce the visible artifact.
 See findings/research/mmhub-native-gart-20260915.md, vcn-platform-power-20260915.md,
 vcn-vcpu-reset-20260915.md. Superseded status is archived.
+
+## Candidate 243 allowance (launch 57)
+
+One launch57 on boot `c369c74e-96ff-4c21-ae85-80ccb269f7d2`, candidate 1.0.243 /
+card `metal-089`, via `tools/cycle.py` after a fresh MODE2 reset (next #94), host on
+`vfio-pci` with `power/control=on`, `--manual-reuse --ack-risk`, max 6000 s, all abort
+paths armed. Authorized by the user ("always launch and test... test it continuously
+until all are fixed"; iGPU teardown script available as host safety net).
+
+Purpose: read-only VCN VCPU boot diagnostic. Candidate 243 keeps every candidate-242
+correction active and adds only a `_internal_cgs_read_register` readback of the
+firmware-cache BAR (0x43c/0x43d), the sibling NC0 BAR (0x438/0x439), UVD_STATUS,
+POWER_STATUS, SOFT_RESET and VCPU_CNTL right after native `static_initialize` returns.
+No register writes, no reset. It decides whether the VCPU firmware-cache window is
+actually latched (VCPU boots from garbage) or the 0xffffffff snapshot readback is only
+a secure-register artifact, redirecting the encoder search accordingly.
