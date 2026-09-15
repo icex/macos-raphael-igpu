@@ -118,3 +118,15 @@ cache BAR (0x43c/0x43d) and soft-reset (0x84) while the VCPU never boots, power 
 loaded to the TMR. Read the same registers via the kext direct-MMIO accessor (fbRead, abs
 0x823c etc.) to tell a blind Apple readback (write landed, firmware reachable, fault
 downstream) from a genuinely unreachable register. Read-only.
+
+## Candidate 247 allowance (launch 61)
+
+One launch61 on boot `c369c74e-96ff-4c21-ae85-80ccb269f7d2`, candidate 1.0.247 / card
+`metal-093`, via `tools/cycle.py` after a fresh MODE2 reset, `--manual-reuse --ack-risk`,
+all abort paths armed. Authorized by the user (chose the targeted bounded probe over a
+Linux reference capture).
+
+Purpose: locate the real VCN VCPU cache-BAR/soft-reset registers. Both access paths read
+0xffffffff at Apple's seg1 base 0x7e00 while NC0/STATUS are fine. Bounded read-only probe:
+dump Apple's VCN segment-base table (ctx memory) and probe the cache/soft-reset offsets at
+each sane segment base, plus a small seg1 neighbor scan for the TMR address. No writes.
