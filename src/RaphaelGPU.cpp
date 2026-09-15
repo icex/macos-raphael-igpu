@@ -2561,6 +2561,31 @@ static uint32_t wrapVcnInitialize(void *engine) {
              fbRead(asicInfo, 0x823d), fbRead(asicInfo, 0x823c), fbRead(asicInfo, 0x7e84),
              fbRead(asicInfo, 0x8238), fbRead(asicInfo, 0x7e80));
     }
+    // Candidate 247 (targeted, bounded locate). The cache BAR (0x43c) and soft-reset (0x84)
+    // are unreachable at Apple's seg1 base 0x7e00 while NC0 (0x438) and STATUS (0x80) are fine.
+    // (a) Dump Apple's whole VCN segment-base table (ctx+0x34 + 4*seg -- plain memory reads,
+    // fully safe) and probe the cache/soft-reset offsets at each segment base via fbRead,
+    // guarded to a sane index range, to find whether they live in a different VCN segment.
+    // (b) Scan seg1 offsets 0x430..0x44f around the known-good NC0 for a register holding the
+    // TMR address Apple tried to write (lo 0x1f400000 / hi 0x000000f4). Read-only, no writes.
+    if (ctx && asicInfo) {
+        for (uint32_t seg = 0; seg < 6; seg++) {
+            const uint32_t base = *reinterpret_cast<const uint32_t *>(ctx + 0x34 + 4 * seg);
+            const bool sane = base >= 0x1000 && base <= 0x40000;
+            RLOG("VCNSEG: seg=%u base=%08x sane=%d cache=%08x_%08x softreset=%08x nc0=%08x status=%08x",
+                 seg, base, sane,
+                 sane ? fbRead(asicInfo, base + 0x43d) : 0xffffffff,
+                 sane ? fbRead(asicInfo, base + 0x43c) : 0xffffffff,
+                 sane ? fbRead(asicInfo, base + 0x84) : 0xffffffff,
+                 sane ? fbRead(asicInfo, base + 0x438) : 0xffffffff,
+                 sane ? fbRead(asicInfo, base + 0x80) : 0xffffffff);
+        }
+        for (uint32_t off = 0x430; off < 0x450; off++) {
+            const uint32_t v = fbRead(asicInfo, 0x7e00 + off);
+            if (v == 0x1f400000 || v == 0x000000f4 || (v != 0xffffffff && v != 0))
+                RLOG("VCNSCAN: seg1 off=%03x abs=%04x val=%08x", off, 0x7e00 + off, v);
+        }
+    }
     if (ctx) RLOG("VCNP: context fwID=%x placement=%llx bytes=%x regbase1=%x shared=%llx",
         *reinterpret_cast<const uint32_t *>(ctx + 0x2a0),
         *reinterpret_cast<const uint64_t *>(ctx + 0x2c0),
