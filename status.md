@@ -152,3 +152,12 @@ Fixes candidate 248's routing gate (hooks were gated on vcnStaticEnabled and nev
 rgpuvcndpg). Now the DPG path gets the config forcing, SMU PowerUpVcn, and VCNS/VCNC diagnostics.
 Success = initializer=+943cf (dpg_secure), VCPU boots (UVD_STATUS==2, no cosWaitForFunc timeout),
 H264 hw encode emits frames.
+
+## Candidate 250 allowance (launch 64) — DPG-unsecure
+
+One launch64 on boot c369c74e-96ff-4c21-ae85-80ccb269f7d2, candidate 1.0.250 / card metal-096,
+after fresh MODE2, --manual-reuse --ack-risk. Authorized ("test until fixed"). Candidate 249
+engaged dpg_secure but its secure DPG-SRAM firmware (VCN0_RAM type 49) loaded to tmr=0x0 (our
+firmware is not Apple-signed-secure). Candidate 250 forces mode=1 -> dpg_unsecure_initializer so
+the driver programs the DPG SRAM from the supplied firmware and DMA-commits (Linux indirect SRAM).
+Success = initializer=+93ec1, VCPU boots, H264 hw encode emits frames.
