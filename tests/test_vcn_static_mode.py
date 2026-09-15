@@ -8,7 +8,15 @@ class VcnStaticModeTests(unittest.TestCase):
         root = pathlib.Path(__file__).resolve().parents[1]
         source = (root / 'src/RaphaelGPU.cpp').read_text()
         begin = source.index('    if (vcnStaticEnabled && !vcnDpgEnabled) {')
-        end = source.index('    const uint32_t result = FunctionCast(wrapVcnInitialize', begin)
+        # Extract this production block, not the unrelated code that follows it.
+        depth = 0
+        for end in range(source.index('{', begin), len(source)):
+            depth += (source[end] == '{') - (source[end] == '}')
+            if depth == 0:
+                end += 1
+                break
+        else:
+            self.fail('unterminated static-mode block')
         body = source[begin:end].replace('reinterpret_cast<uint32_t (*)(void *, uint32_t, uint32_t)>(hwlibsBase + 0x86834)', 'fakeRead')
         program = r'''
 #include <cstdint>
