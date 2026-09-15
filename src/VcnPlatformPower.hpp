@@ -5,9 +5,9 @@ namespace RaphaelVcnPower {
 // Raphael MP1 13.0.5 only. Source: smu_v13_0_5_ppt.c/ppsmc.h.
 constexpr uint32_t Message = 0x03b10508, Response = 0x03b10984, Argument = 0x03b10988;
 constexpr uint32_t ExpectedVersion = 0x00625300; // current host GetSmuVersion receipt89
-struct Result { uint32_t error = 0, pre = 0, version = 0, response = 0; };
+struct Result { uint32_t error = 0, pre = 0, version = 0, response = 0, downResponse = 0; };
 template<class Read, class Write, class Delay>
-Result enable(Read read, Write write, Delay delay) {
+Result enable(Read read, Write write, Delay delay, bool cycle = false) {
     Result result;
     auto poll = [&]() {
         uint32_t response = read(Response);
@@ -26,6 +26,10 @@ Result enable(Read read, Write write, Delay delay) {
     if (result.response != 1) { result.error = 2; return result; }
     result.version = read(Argument);
     if (result.version != ExpectedVersion) { result.error = 3; return result; }
+    if (cycle) {
+        result.downResponse = send(5); // Raphael PowerDownVcn, parameter0
+        if (result.downResponse != 1) { result.error = 5; return result; }
+    }
     result.response = send(6); // PowerUpVcn, parameter0, never Navi's message enum
     if (result.response != 1) result.error = 4;
     return result;

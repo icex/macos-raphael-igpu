@@ -2651,12 +2651,20 @@ static uint32_t wrapVcnInitialize(void *engine) {
         // SMU backend sends no competing firmware commands; serialize our calls.
         auto read = reinterpret_cast<uint32_t (*)(void *, uint32_t)>(hwlibsBase + 0x9e5f1);
         auto write = reinterpret_cast<void (*)(void *, uint32_t, uint32_t)>(hwlibsBase + 0x9e619);
+        auto queues = *reinterpret_cast<const uint32_t *const *>(
+            static_cast<const uint8_t *>(engine) + 0x18);
+        // Only cycle an unstarted engine with no active queues. Keep ordinary
+        // PowerUp behavior for any subsequent initialization/resume.
+        const bool cycleVcn = vcnStaticEnabled && !vcnDpgEnabled && queues &&
+            !(*reinterpret_cast<const uint32_t *>(ctx) & 1) && queues[0] == 0;
         IOLockLock(vcnSmuLock);
         auto power = RaphaelVcnPower::enable(
             [&](uint32_t address) { return read(handle, address); },
             [&](uint32_t address, uint32_t value) { write(handle, address, value); },
-            []() { IOSleep(1); });
+            []() { IOSleep(1); }, cycleVcn);
         IOLockUnlock(vcnSmuLock);
+        RLOG("VCNCYCLE: selected=%u down-response=%x active-queues=%u",
+             cycleVcn, power.downResponse, queues ? queues[0] : 0xffffffffu);
         RLOG("VCNM: pre=%x version=%x power-response=%x error=%u",
              power.pre, power.version, power.response, power.error);
         if (power.error) return 1;

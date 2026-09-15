@@ -11,9 +11,9 @@ struct Bus {
         if(address==RaphaelVcnPower::Response)response=value;
         if(address==RaphaelVcnPower::Message) {messages.push_back(value);response=value==fail?0xfd:1;}
     }
-    RaphaelVcnPower::Result run() {
+    RaphaelVcnPower::Result run(bool cycle=false) {
         return RaphaelVcnPower::enable([&](uint32_t a){return read(a);},
-            [&](uint32_t a,uint32_t v){write(a,v);},[&](){++delays;});
+            [&](uint32_t a,uint32_t v){write(a,v);},[&](){++delays;},cycle);
     }
 };
 int main() {
@@ -23,5 +23,11 @@ int main() {
     for(uint32_t pre:{0u,0xffffffffu,0xfcu}) {Bus bad;bad.response=pre;r=bad.run();assert(r.error==1);assert(bad.messages.empty());assert(bad.addresses.empty());assert(bad.delays==(pre==0?1000u:0u));}
     Bus wrong;wrong.version=0x123456;r=wrong.run();assert(r.error==3);assert((wrong.messages==std::vector<uint32_t>{2}));
     Bus query;query.fail=2;r=query.run();assert(r.error==2);assert((query.messages==std::vector<uint32_t>{2}));
+    Bus cycle; r=cycle.run(true); assert(!r.error && r.downResponse==1);
+    assert((cycle.messages==std::vector<uint32_t>{2,5,6}));
+    Bus down; down.fail=5; r=down.run(true); assert(r.error==5 && r.downResponse==0xfd);
+    assert((down.messages==std::vector<uint32_t>{2,5}));
+    Bus wrongCycle; wrongCycle.version=0; r=wrongCycle.run(true); assert(r.error==3);
+    assert((wrongCycle.messages==std::vector<uint32_t>{2}));
     Bus power;power.fail=6;r=power.run();assert(r.error==4);assert(r.response==0xfd);
 }
