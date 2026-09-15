@@ -94,3 +94,15 @@ sibling NC0 BAR read correctly and the VCPU never reached UVD_STATUS==2. Candida
 reads those registers back immediately after each native write (before reset release),
 read-only, to decide a dropped write (block held inaccessible -> real root cause) from a
 register that only reads 0xffffffff once secured (benign -> firmware authentication).
+
+## Candidate 245 allowance (launch 59)
+
+One launch59 on boot `c369c74e-96ff-4c21-ae85-80ccb269f7d2`, candidate 1.0.245 /
+card `metal-091`, via `tools/cycle.py` after a fresh MODE2 reset, `--manual-reuse
+--ack-risk`, all abort paths armed. Authorized ("test continuously until all fixed").
+
+Purpose: candidate 244 proved the VCPU-core registers (cache BAR 0x43c, soft-reset 0x84)
+read 0xffffffff at write time while the sibling NC0 BAR is fine and the VCPU never boots.
+That is the signature of the VCN core power domain staying gated. Candidate 245 reads
+UVD_PGFSM_STATUS/POWER_STATUS and the dead core registers back at the PGFSM config write
+to decide a fixable power-domain fault from a firmware/PSP wall. Read-only.
