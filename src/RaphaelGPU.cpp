@@ -7919,6 +7919,54 @@ static uint32_t wrapGfx10PowerUp(void *self) {
     return r;
 }
 
+// Candidate270: observe the real decoder context boundary. No return-value or
+// input changes; counts are per operation and bounded. Pinned 24G830 ABIs.
+static mach_vm_address_t orgVcnCreateContext = 0, orgVcnRequestCap = 0;
+static mach_vm_address_t orgVcnStartEngine = 0, orgVcnSendPM = 0;
+static uint32_t vcnContextCalls[4] = {};
+static uint32_t vcnContextSequence(unsigned operation) {
+    return __atomic_add_fetch(&vcnContextCalls[operation], 1u, __ATOMIC_RELAXED);
+}
+static uint32_t wrapVcnCreateContext(void *self, const uint32_t *info, uint32_t *output) {
+    const uint32_t n = vcnContextSequence(0);
+    if (n <= 16) RLOG("VCNCTX: create begin n=%u self=%p info=%p output=%p codec=%u channel=%u width=%u height=%u instance=%u",
+        n, self, info, output, info ? info[1] : 0, info ? info[2] : 0,
+        info ? info[3] : 0, info ? info[4] : 0, info ? info[12] : 0);
+    const uint32_t result = FunctionCast(wrapVcnCreateContext, orgVcnCreateContext)(self, info, output);
+    if (n <= 16) RLOG("VCNCTX: create end n=%u result=%08x id=%u", n, result,
+        !result && output ? *output : 0xffffffffu);
+    return result;
+}
+static bool wrapVcnRequestCap(void *self, const void *cap, uint32_t *output, uint32_t flags, bool encode) {
+    const uint32_t n = vcnContextSequence(1);
+    auto bytes = static_cast<const uint8_t *>(self);
+    if (n <= 16) RLOG("VCNCTX: capability begin n=%u engine=%p flags=%x encode=%u active=%u maximum=%u",
+        n, self, flags, encode, *reinterpret_cast<const uint32_t *>(bytes + 0x2ac),
+        *reinterpret_cast<const uint32_t *>(bytes + 0x2b4));
+    const bool result = FunctionCast(wrapVcnRequestCap, orgVcnRequestCap)(self, cap, output, flags, encode);
+    if (n <= 16) RLOG("VCNCTX: capability end n=%u result=%u", n, result);
+    return result;
+}
+static uint32_t wrapVcnStartEngine(void *self, const uint32_t *info, uint64_t size) {
+    const uint32_t n = vcnContextSequence(2);
+    if (n <= 16) RLOG("VCNCTX: start begin n=%u size=%llu id=%u instance=%u channel=%u",
+        n, size, info && size == 12 ? info[0] : 0, info && size == 12 ? info[1] : 0,
+        info && size == 12 ? info[2] : 0);
+    const uint32_t result = FunctionCast(wrapVcnStartEngine, orgVcnStartEngine)(self, info, size);
+    if (n <= 16) RLOG("VCNCTX: start end n=%u result=%08x", n, result);
+    return result;
+}
+static uint32_t wrapVcnSendPM(void *self, const void *request) {
+    const auto caller = reinterpret_cast<mach_vm_address_t>(__builtin_return_address(0));
+    const bool selected = (caller >= x6Base + 0x21ba0 && caller < x6Base + 0x21f18) ||
+        (caller >= x6Base + 0x21404 && caller < x6Base + 0x214d3);
+    const uint32_t n = selected ? vcnContextSequence(3) : 0;
+    if (selected && n <= 32) RLOG("VCNCTX: PM begin n=%u caller=+%llx request=%p", n, caller-x6Base, request);
+    const uint32_t result = FunctionCast(wrapVcnSendPM, orgVcnSendPM)(self, request);
+    if (selected && n <= 32) RLOG("VCNCTX: PM end n=%u caller=+%llx result=%08x", n, caller-x6Base, result);
+    return result;
+}
+
 static uint32_t wrapAccPowerUpHW(void *self) {
     CRLOG("XJ: AMDGraphicsAccelerator::powerUpHW entry");
     auto r = FunctionCast(wrapAccPowerUpHW, orgAccPowerUpHW)(self);
@@ -8452,6 +8500,35 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
             patcher.clearError();
         }
         x6Base = addr;
+        if (vcnDpgEnabled) {
+            // Every footprint ends at an instruction boundary and contains no
+            // branch, call, or RIP-relative instruction. Preserve native ABI.
+            static const uint8_t guardCreateContext[] = {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x41,0x55,0x41,0x54,0x53,0x50};
+            const bool matchCreateContext = entryMatches(addr, sz, 0x21ba0, guardCreateContext, sizeof(guardCreateContext));
+            if (matchCreateContext) orgVcnCreateContext = patcher.routeFunction(addr + 0x21ba0,
+                reinterpret_cast<mach_vm_address_t>(wrapVcnCreateContext), true);
+            RLOG("VCNCTX: route CreateContext entry=%u routed=%u", matchCreateContext, orgVcnCreateContext != 0);
+            patcher.clearError();
+            static const uint8_t guardRequestCap[] = {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x41,0x54,0x53,0x45,0x89,0xc7};
+            const bool matchRequestCap = entryMatches(addr, sz, 0x89508, guardRequestCap, sizeof(guardRequestCap));
+            if (matchRequestCap) orgVcnRequestCap = patcher.routeFunction(addr + 0x89508,
+                reinterpret_cast<mach_vm_address_t>(wrapVcnRequestCap), true);
+            RLOG("VCNCTX: route RequestCap entry=%u routed=%u", matchRequestCap, orgVcnRequestCap != 0);
+            patcher.clearError();
+            static const uint8_t guardStartEngine[] = {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x41,0x54,0x53,0x48,0x85,0xf6};
+            const bool matchStartEngine = entryMatches(addr, sz, 0x49632, guardStartEngine, sizeof(guardStartEngine));
+            if (matchStartEngine) orgVcnStartEngine = patcher.routeFunction(addr + 0x49632,
+                reinterpret_cast<mach_vm_address_t>(wrapVcnStartEngine), true);
+            RLOG("VCNCTX: route StartEngine entry=%u routed=%u", matchStartEngine, orgVcnStartEngine != 0);
+            patcher.clearError();
+            static const uint8_t guardSendPM[] = {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x53,0x50,0x41,0xbe,0xd7,0x02,0x00,0xe0};
+            const bool matchSendPM = entryMatches(addr, sz, 0x7056, guardSendPM, sizeof(guardSendPM));
+            if (matchSendPM) orgVcnSendPM = patcher.routeFunction(addr + 0x7056,
+                reinterpret_cast<mach_vm_address_t>(wrapVcnSendPM), true);
+            RLOG("VCNCTX: route SendPM entry=%u routed=%u", matchSendPM, orgVcnSendPM != 0);
+            patcher.clearError();
+        }
+
         if (vmmProbeMode != 0 || memProbeMode != 0 || ptbFixMode != 0 ||
             vmRootFixEnabled || recoveryLeaseConfigured) {
             orgVmmInit = patcher.routeFunction(addr + kOffVmmInit,
