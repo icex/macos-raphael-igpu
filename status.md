@@ -22,3 +22,8 @@ Candidate258 failed before testing software placement: its guard used the later
 VMM target-publication flag at early HW init. Candidate259 uses the audited early
 GC-discovery/unique-PCI-marker check. Fixture keeps the late flag false and checks
 missing-marker refusal. Candidate258 is not evidence of firmware execution failure.
+
+258 cleanup: forced via supervision; harness recovery failed because early VCN
+HW-init refusal prevented XH2 lease publication. VM stopped, vfio-pci/pinned.
+259 requires fresh MODE2 CP_STAT=0/RLC_CNTL=0 before staging; normal cycle gates
+remain intact. Prior invalid run is not a firmware-path result.
