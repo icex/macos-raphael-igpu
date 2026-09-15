@@ -258,6 +258,7 @@ static mach_vm_address_t orgVcnQueryFw = 0;
 static bool vcnSharedSizeReady = false;
 #include "VcnFirmware.hpp"
 #include "VcnDpgClock.hpp"
+#include "VcnDpgReadback.hpp"
 static mach_vm_address_t orgVcnReadFw = 0;
 static mach_vm_address_t orgVcnHwInit = 0;
 static volatile bool mmhubTableCorrect = false;
@@ -2466,6 +2467,25 @@ static void wrapMmhub21(void *vm) {
     }
 }
 
+// Read DPG SRAM through its AON LMA port after commit and after failed pause.
+// This selects SRAM read addresses; it is not a write to VCN configuration.
+static void inspectVcnSram(void *engine, const char *phase) {
+    if (!vcnDpgEnabled || !engine ||
+        !__atomic_load_n(&raphaelTargetConfirmed, __ATOMIC_ACQUIRE)) return;
+    auto ctx = *reinterpret_cast<const uint8_t **>(static_cast<uint8_t *>(engine) + 16);
+    if (!ctx || *reinterpret_cast<const uint32_t *>(ctx + 0x268) != 0x30001) return;
+    auto image = *reinterpret_cast<const uint32_t *const *>(ctx + 0x340);
+    const uint32_t bytes = *reinterpret_cast<const uint32_t *>(ctx + 0x358);
+    auto read = reinterpret_cast<uint32_t (*)(void *, uint32_t, uint32_t)>(hwlibsBase + 0x86834);
+    auto write = reinterpret_cast<void (*)(void *, uint32_t, uint32_t, uint32_t)>(hwlibsBase + 0x8680f);
+    const bool valid = RaphaelVcnDpg::readback(image, bytes,
+        [&](uint32_t control) { write(engine, 1, 0x11, control); },
+        [&]() { return read(engine, 1, 0x12); },
+        [&](uint32_t reg, uint32_t expected, uint32_t observed) {
+            RLOG("VCNSR: %s index=%x expected=%08x observed=%08x", phase, reg, expected, observed);
+        });
+    RLOG("VCNSR: %s bytes=%u valid-image=%u", phase, bytes, valid);
+}
 // Candidate 252: the secure DPG path (decode_sram_secure_initialize) builds the DPG SRAM with
 // the VCPU cache BAR written as add_to_dpg_sram(,1,0x43c,0)/(,1,0x43d,0) -- zero -- relying on an
 // firmware handling not established by these zeros alone. Inject the firmware TMR address from
@@ -2578,6 +2598,7 @@ static uint32_t wrapVcnWait(void *engine, uint32_t bank, uint32_t reg,
         n, static_cast<uint64_t>(caller), bank, reg, expected, bits);
     const uint32_t result = FunctionCast(wrapVcnWait, orgVcnWait)(engine, bank, reg, expected, bits);
     if (n < 64) RLOG("VCNW: end n=%u result=%u", n, result);
+    if (n < 64 && result && bank == 1 && reg == 0x14) inspectVcnSram(engine, "pause-failed");
     return result;
 }
 static uint32_t wrapVcnWaitMs(void *engine, uint32_t bank, uint32_t reg,
@@ -2642,6 +2663,7 @@ static uint32_t wrapVcnInitialize(void *engine) {
     }
     const uint32_t result = FunctionCast(wrapVcnInitialize, orgVcnInitialize)(engine);
     RLOG("VCNS: native initialize returned%u", result);
+    if (!result) inspectVcnSram(engine, "post-submit");
     // Candidate 243: read-only VCN VCPU boot diagnostic. No register writes, no
     // reset -- only _internal_cgs_read_register, exactly as static_initialize does.
     // The post-stall external snapshot reads the firmware-cache BAR (0x43c/0x43d)
