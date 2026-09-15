@@ -171,9 +171,11 @@ int main(int argc, const char **argv) {
                 OSStatus selection=VTSessionCopyProperty(decoder,kVTDecompressionPropertyKey_UsingHardwareAcceleratedVideoDecoder,NULL,&actualDecoder);
                 OSStatus registryStatus=VTSessionCopyProperty(decoder,kVTDecompressionPropertyKey_UsingGPURegistryID,NULL,&actualRegistry);
                 BOOL actualHardwareDecoder=actualDecoder && CFEqual(actualDecoder,kCFBooleanTrue);
-                emit(@"selected-decoder", @{@"hardware":@(actualHardwareDecoder), @"selection_status":@(selection),
+                emit(@"selected-decoder", @{@"hardware":selection ? (id)[NSNull null] : @(actualHardwareDecoder), @"selection_status":@(selection),
                     @"registry_status":@(registryStatus), @"registry_id":actualRegistry ? (__bridge id)actualRegistry : @0});
-                if(selection || actualHardwareDecoder!=decodeHardware ||
+                // Software decoder may not expose the hardware Boolean (-12900).
+                // Required hardware + matching actual registry remain mandatory for hw.
+                if((!selection && actualHardwareDecoder!=decodeHardware) ||
                    (decodeHardware && (registryStatus || !actualRegistry || [(__bridge NSNumber *)actualRegistry unsignedLongLongValue]!=registry))) errors++;
                 if(actualDecoder) CFRelease(actualDecoder);
                 if(actualRegistry) CFRelease(actualRegistry);
