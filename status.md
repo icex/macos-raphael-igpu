@@ -171,3 +171,12 @@ writes it from ctx+0x2c0 but only in mode=1 which skips the firmware-loaded wait
 ctx+0x2c0. Fix: keep mode=0 and override ctx+0x3f8 to dpg_unsecure_initialize (0x93ec1) so the
 cache window is programmed from the real TMR address via the DPG LMA window. Success = VCPU boots,
 H264 hw encode emits frames.
+
+## Candidate 252 allowance (launch 66) — DPG secure SRAM cache-BAR injection
+
+One launch66 on boot c369c74e-96ff-4c21-ae85-80ccb269f7d2, candidate 1.0.252 / card metal-098,
+after fresh MODE2, --manual-reuse --ack-risk. Authorized ("test until fixed"). From HWLibs
+decompilation: dpg_secure commits the DPG SRAM (submit_sram) but writes the VCPU cache BAR as 0;
+candidate 252 hooks add_to_dpg_sram to inject the real firmware TMR address (ctx+0x2c0) into the
+0x43c/0x43d SRAM entries. Success = VCNDPG inject cacheBAR log, VCPU boots (no pause_dpg 5000ms
+timeout), H264 hw encode emits frames.
