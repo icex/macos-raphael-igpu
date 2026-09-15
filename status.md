@@ -2,75 +2,59 @@
 
 ## Current result
 
-**Candidate263 tested decoder-first initialization on macOS; hardware H264 still
-stalls on frame2.** Native decoder initialization executed successfully before
-the first pause, so this intervention is not a sufficient encoder fix.
+**macOS hardware H264 remains unresolved after candidates263 and264.** Both
+passed the desktop probe, selected hardware encoding, accepted frames0/1,
+and stalled on frame2 with no encoded callbacks (probe deadline124).
 
-- Boot `c782d007-ca85-409b-9cf5-ff12c1a8c6d5`; Raphael `0000:7b:00.0` now on
-  `vfio-pci`, `power/control=on`, PCI reset methods disabled. Linux→VFIO handoff
-  was explicitly requested; do not rebind to amdgpu again this boot.
-- Candidate `1.0.263`, card `metal-109`, run `0c2f9fbdbbd63473ceae1905d381412d`,
-  build `8d6ca8d6f132475cb4d881241a15fbc3`, built source `b124552`.
-- Artifacts: `/home/bogdan/macos-vm/run/candidate-263-results`.
-  Worktree: `/home/bogdan/macos-vm/run/worktrees/candidate-263`.
-- Native decoder existed, inactive, owner/callback guards passed: ring65536bytes,
-  GPU address `ff_bfdc5000`, callback +94fa3. RBC control changed `1101010c→11010110`,
-  BAR `0_264000→ff_bfdc5000`; native initializer returned0. Ring pointers0.
-  The old BAR was a retained Linux value, not evidence of fresh macOS decoder setup.
-- Following pause wait +94db1 timed out, expected8/mask8 at register1:14.
-  Encoder selected hardware, accepted frames0/1, stalled at2; probe deadline124,
-  no encoded callbacks. Software control passed3frames with max luma error1.
+| Candidate | Change observed | Encoder result |
+|---|---|---|
+|263 / metal-109|Native-owned inactive decoder ring initialized before pause, returned0|PauseACK timeout +94db1; frame2 stall|
+|264 / metal-110|Shared allocation4096 and SRAM d3=1000, decoder setup retained|Same pause timeout and stall; inherited pause request4 observed|
 
-## Separate qualification and cleanup
+MODE2 cleared the graphics state but retained the VCN pause request. Therefore
+264 is not an independently fresh VCN startup, and its failure alone does not
+conclusively eliminate the shared-size hypothesis. 263 began with pause0 and
+demonstrates that decoder-first alone is not sufficient.
 
-Desktop probe passed; harness verdict **CORE_PROBE_PASS**. This verdict does not
-include the independently run encoder workload, which failed. Critical capture
-survived this run with the publication correction included. Shutdown was
-**forced**, not clean guest shutdown; recovery receipt **recovered**.
-Only `rgpu-inhibit` remains running. MODE2 reset120 preceded the real launch.
-Reset119 preceded a staging version-gate refusal; no QEMU/VFIO launch entry was
-consumed by that refusal. New boot ledger now contains one launch.
-Full host suite937tests OK, three skipped; staging gate tests also passed.
+## Identity, capture and cleanup
 
-## Next discriminating test
+- Live boot `c782d007-ca85-409b-9cf5-ff12c1a8c6d5`; GPU `0000:7b:00.0`,
+  `vfio-pci`, `power/control=on`, PCI reset methods disabled.
+- Native Linux baseline passed before the user-authorized Linux→VFIO handoff.
+  Do not rebind to amdgpu this boot. Handoff artifacts: `run/handoff-c782d007`.
+- 263: run `0c2f9fbdbbd63473ceae1905d381412d`, build `8d6ca8d6f132475cb4d881241a15fbc3`, source `b124552`.
+- 264: run `4918fb503fd83d56cdb01010325cb7d3`, build `99a0f545f7534bb289c7525cb05517f2`, source `73ed1ec`.
+- Results under `/home/bogdan/macos-vm/run/candidate-263-results` and
+  `candidate-264-results`; source in corresponding candidate worktrees.
+- Both harness verdicts **CORE_PROBE_PASS**, independently failed encoder probes.
+  Critical capture survived both. Both shutdowns **forced**, both recovery
+  receipts **recovered**. Only `rgpu-inhibit` remains running.
+- Full host suites937tests OK, three skipped. No merge/push.
+- MODE2 reset120 preceded263, reset121 preceded264. Reset119 preceded a staging
+  version-gate refusal before QEMU: no launch entry consumed. Two launches now
+  recorded on this boot, allowance3.
 
-Test the shared-memory window size separately: expand native-owned allocation
-and programmed size from96 to4096bytes, matching Linux. Preserve decoder-first
-setup, shared flags, allocation domain, firmware mode and all other behavior.
-Check the runtime size and SRAM content before interpreting the result.
+## Next test
 
-Linux baseline remains the working reference: H264/HEVC encode/decode and600
-validated H264 frames. Working Linux also reads cache BAR/reset/LMA asffffffff;
-these reads are not proof of a dead VCPU. Real SMU message6/address transport and
-input firmware bytes match our macOS path. Details:
+Candidate265 will clear only retained NJ pause request/ACK bits before first
+initialization, with zero active queues and software pause0. Keep264's4096byte
+shared window and decoder-first setup. Record before/after register values,
+then pauseACK and encoded output. This tests stale-request cleanup, not a full
+VCN reset. Require264 recovery and fresh MODE2; preserve every safety/capture gate.
+
+Linux is still the positive reference: H264/HEVC encode/decode and600 validated
+H264 frames. Working Linux also reads cache/reset/LMA registers asffffffff;
+those values do not establish a dead VCPU. Firmware payload and real SMU message6
+transport match macOS. Shared flags and memory placement remain separate
+untested differences; no claim that driver-level possibilities are exhausted.
+
 [Linux comparison](/home/bogdan/macos-vm/run/worktrees/linux-vcn-baseline/findings/research/linux-vcn-baseline-20260915.md).
+Physical scanout/full desktop remain unqualified. Use candidate worktrees and
+cycle.py with max6000seconds, pinned power, identity/capture/host-fault/cleanup
+checks, and boot-named launch allowances. No amdgpu cycling or merge/push.
 
-Physical scanout and full desktop presentation remain unqualified. No merge/push.
-Use candidate worktrees and cycle.py; preserve all safety, capture and cleanup gates,
-6000secondmaximum, and explicit boot-named allowances. Prior Linux status is archived
-in root `findings/research/status-archives/status-before-macos-linux-findings-20260915.md`.
-
-## Candidate264 allowance
-
-User authorized testing the Linux findings on macOS. Allow one further launch on
-boot c782d007-ca85-409b-9cf5-ff12c1a8c6d5 for the4096byte shared-window hypothesis.
-Candidate263 recovered; require fresh MODE2, pinned power, unchanged identity and
-all capture/abort/cleanup gates. Max6000seconds; stop after first encoder stall or
-verified output. This is the second launch in this boot, within ledger allowance3.
-No amdgpu rebinding, reboot, merge or push.
-
-## Candidate264 observation and candidate265 allowance
-
-264 confirmed shared allocation4096 and SRAM d3=1000; decoder init selected1
-returned0, then pauseACK stilltimedout. Hardware encoder frame2stalled and exited124.
-Desktopprobe passed. Cleanup is requested; require recovered receipt before265.
-VCNDF before showed pause4, retained from263 despite MODE2 graphics reset.
-Do not claim fully fresh VCN state or definitive falsification of the size hypothesis.
-
-User authorized testing the Linux findings. Allow candidate265, third launch on
-boot c782d007-ca85-409b-9cf5-ff12c1a8c6d5, after264 recovery and fresh MODE2.
-Clear only stale NJ pause request/ack bits before first initialization, guarded to
-zero active queues and software pause0; keep264 window4096 and all other behavior.
-Confirm before/after register and pausewait. Max6000seconds with normal manual
-stop at encoder result/stall; retain every identity/capture/cleanup abort.
-No vfio→amdgpu, reboot, merge or push.
+## Candidate265 run allowance
+User authorized testing these findings. Allow one further launch, the third on
+boot c782d007-ca85-409b-9cf5-ff12c1a8c6d5, for retained NJ request cleanup.
+264 recovery is verified recovered. Fresh MODE2 required. Max6000seconds with
+manual stop after encoder result/stall; all abort/cleanup checks retained.
