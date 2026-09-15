@@ -2519,7 +2519,7 @@ static uint32_t wrapVcnConfig(void *engine, uint32_t index) {
     uint32_t value = FunctionCast(wrapVcnConfig, orgVcnConfig)(engine, index);
     auto ctx = engine ? *reinterpret_cast<const uint8_t **>(
         static_cast<uint8_t *>(engine) + 16) : nullptr;
-    if (vcnDpgEnabled && ctx && (index == 0 || index == 7) &&
+    if (vcnDpgEnabled && orgAddToDpgSram && ctx && (index == 0 || index == 7) &&
         *reinterpret_cast<const uint32_t *>(ctx + 0x268) == 0x30001) {
         // Force EnableVCNDPG (0) and EnableVCNSecureLoad (7) -> bit1/bit9, so engine_init_pfn_ptr
         // picks a DPG initializer. Keep mode (ctx+0x2e0)=0 (do NOT force index 3) so
@@ -2551,6 +2551,10 @@ static uint32_t wrapVcnQueryFw(void *cgs, uint32_t id, void *output) {
     return result;
 }
 static uint32_t wrapVcnInitialize(void *engine) {
+    if (vcnDpgEnabled && (!orgVcnConfig || !orgAddToDpgSram)) {
+        RLOG("VCNDPG: required route missing; native initialization refused");
+        return 1;
+    }
     if (vcnResetEnabled && !orgVcnWriteRegister) {
         RLOG("VCNR: route missing; native initialization refused");
         return 1;
@@ -4408,7 +4412,12 @@ static void applySdmaAddrConfig(const char *when, bool quiet) {
     const uint32_t config = fbRead(asicInfo, kGcGbAddrConfig);
     const uint32_t sdma = fbRead(asicInfo, kSdmaGbAddrConfig);
     const uint32_t sdmaRead = fbRead(asicInfo, kSdmaGbAddrConfigRead);
-    if (config == 0xdeadbeef || config == 0) return;
+    // Never merge layout bits with an inaccessible source OR destination.
+    // In particular, preserving reserved bits from 0xffffffff would manufacture
+    // a register write from a failed read during power transitions.
+    if (config == 0 || config == 0xdeadbeef || config == 0xffffffffu ||
+        sdma == 0xdeadbeef || sdma == 0xffffffffu ||
+        sdmaRead == 0xdeadbeef || sdmaRead == 0xffffffffu) return;
     const uint32_t want = (sdma & ~kGbAddrConfigFields) | (config & kGbAddrConfigFields);
     const uint32_t wantRead = (sdmaRead & ~kGbAddrConfigFields) | (config & kGbAddrConfigFields);
     const bool change = sdmaAddrConfigMode == 2 && sdma != 0xdeadbeef && sdmaRead != 0xdeadbeef &&
@@ -5551,7 +5560,8 @@ static void repairMqdPointers() {
     fbWrite(asicInfo, kGcGrbmGfxCntl, sel);
 }
 
-static uint32_t wrapVmmFillRegs(void *self) {
+// Native +6246c tests AL and +6248f tail-calls the Boolean hub method.
+static bool wrapVmmFillRegs(void *self) {
     auto r = FunctionCast(wrapVmmFillRegs, orgVmmFillRegs)(self);
     if (mmhubFixEnabled && self != nullptr && r != 0) {
         auto table = reinterpret_cast<uint32_t *>(static_cast<uint8_t *>(self) +
@@ -6827,7 +6837,9 @@ static void sdmaWatchdogThread(void *, wait_result_t) {
         const uint32_t config = fbRead(asicInfo, kGcGbAddrConfig);
         const uint32_t sdma = fbRead(asicInfo, kSdmaGbAddrConfig);
         const uint32_t sdmaRead = fbRead(asicInfo, kSdmaGbAddrConfigRead);
-        if (config != 0 && config != 0xdeadbeef && sdma != 0xdeadbeef && sdmaRead != 0xdeadbeef &&
+        if (config != 0 && config != 0xdeadbeef && config != 0xffffffffu &&
+            sdma != 0xdeadbeef && sdma != 0xffffffffu &&
+            sdmaRead != 0xdeadbeef && sdmaRead != 0xffffffffu &&
             (((sdma ^ config) & kGbAddrConfigFields) != 0 || ((sdmaRead ^ config) & kGbAddrConfigFields) != 0)) {
             ++corrections;
             if (corrections <= 16)

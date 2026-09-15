@@ -69,7 +69,8 @@ bool beginHaltedNative(HaltedNativeTransaction &tx, Read read, Write write, Dela
     write(HaltedRegister::MecControl, tx.savedMecControl | kMecHaltMask);
     delay(50);
     const uint32_t halted = read(HaltedRegister::MecControl);
-    if (halted == 0xffffffffU || (halted & kMecHaltMask) != kMecHaltMask) return false;
+    // A rejected readback can mean that only one halt bit latched. The
+    // transaction owns a potentially changed control word from the first write.
     tx.held = true;
     // A setup failure after the halt write must not leave the MEC halted for the
     // rest of the boot (candidate 209 refused with held=1, currentMEC=0x50000000):
@@ -81,6 +82,13 @@ bool beginHaltedNative(HaltedNativeTransaction &tx, Read read, Write write, Dela
         if (read(HaltedRegister::MecControl) == tx.savedMecControl) tx.held = false;
         return false;
     };
+    if (halted == 0xffffffffU || (halted & kMecHaltMask) != kMecHaltMask) {
+        if (halted == tx.savedMecControl) {
+            tx.held = false; // positively observed an ignored write
+            return false;
+        }
+        return abandon();
+    }
     if (allowRetainedWptr) {
         tx.initialWptrLo = read(HaltedRegister::WptrLo);
         if (tx.initialWptrLo == 0xffffffffU) return abandon();

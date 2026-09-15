@@ -1,26 +1,22 @@
 # Live status — 2026-09-15
 
-Candidate 253 supplied the five cache-window SRAM values; its hardware H264 test
-still hung without encoded output. A zero initializer return does not establish
-firmware execution. The PSP/decryption root-cause claim is unproven.
+Candidate 254 run `20736d213cddcb1d180d59795e3bd3a0` confirmed the secure DPG
+CGC_GATE correction executed. The desktop probe passed; hardware H264 still
+stalled without encoded output. PSP/decryption is an unproven hypothesis.
 
-Candidate 254 is an isolated secure-DPG clock-gate correction under audit.
-Native secure builder +0x9403e passes CGC_CTRL value 0x104/0x105 to CGC_GATE;
-native unsecure builder and Linux write zero. Preserve all candidate-253
-firmware/loading and cache-window behavior for this comparison.
+Artifacts: `/home/bogdan/macos-vm/run/candidate-254-results/`.
+Build: `c781b5da6a7143dd98567f8ff107080c`.
+Shutdown was forced; recovery receipt reports recovered/GC quiesced.
+Host-after: VM stopped, vfio-pci, power pinned on, boot
+`c369c74e-96ff-4c21-ae85-80ccb269f7d2`. Prelaunch MODE2 receipt 107;
+no post-run MODE2. The one-run candidate-254 allowance has been consumed.
+Verify live host state again before any further hardware work.
 
-Host checked: boot c369c74e-96ff-4c21-ae85-80ccb269f7d2, vfio-pci,
-power/control=on; no QEMU running. No hardware result for 254 yet.
-Original ~/src and candidate-253 dirty status files remain untouched.
-No merge or push to main. Broad source/assumption audit is in progress.
+Candidate 255 is a source-audit build, not deployed or hardware-tested. It adds
+MEC partial-halt rollback, SDMA inaccessible-read rejection, DPG route
+prerequisite checks, Boolean VMM ABI correction and conservative wait decoding.
+See [audit](findings/research/source-assumption-audit-20260915.md) for evidence,
+coverage limits and remaining assumptions. Next encoder observation should
+identify the exact native register wait before another loading-mode change.
 
-## Candidate 254 allowance
-
-One additional launch on boot `c369c74e-96ff-4c21-ae85-80ccb269f7d2`,
-candidate 1.0.254 / metal-100, to test the source-supported CGC_GATE correction.
-Authorized by the current user's request to find and fix the encoder code.
-Use tools/cycle.py with fresh MODE2 reset, --manual-reuse --ack-risk,
-max 6000 seconds, existing identity/capture/host-fault/cleanup aborts intact.
-Stop manually after codec result or first stall. Count only after VFIO exposure.
-Success requires corrected gate log, completed hardware encode output, and
-separately recorded desktop probe/identity/cleanup outcomes.
+No main merge/push. Original source checkout and candidate-253 files untouched.

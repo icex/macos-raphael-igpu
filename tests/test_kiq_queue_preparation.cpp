@@ -65,6 +65,7 @@ struct FakeHalted {
     bool ignoreHalt {false};
     bool ignoreQueue {false};
     bool ignoreRestore {false};
+    bool partialHalt {false};
     uint32_t read(Register reg) const { return value[static_cast<unsigned>(reg)]; }
     void write(Register reg, uint32_t next) {
         writes.push_back(reg);
@@ -72,6 +73,9 @@ struct FakeHalted {
         if (reg == Register::MecControl && ignoreRestore &&
             (next & RaphaelKiq::kMecHaltMask) != RaphaelKiq::kMecHaltMask) return;
         if (reg != Register::MecControl && ignoreQueue) return;
+        if (reg == Register::MecControl && partialHalt &&
+            (next & RaphaelKiq::kMecHaltMask) == RaphaelKiq::kMecHaltMask)
+            next &= ~(1U << 30);
         value[static_cast<unsigned>(reg)] = next;
     }
 };
@@ -421,6 +425,26 @@ int main() {
             "ignored MEC halt readback blocks setup before queue writes");
     require(ignoredHalt.writes.size() == 1, "ignored halt performs no queue writes");
     FakeHalted ignoredQueue;
+    for (bool rejectRestore : {false, true}) {
+        FakeHalted partial;
+        partial.value[static_cast<unsigned>(FakeHalted::Register::MecControl)] = 0x1234;
+        partial.partialHalt = true;
+        partial.ignoreRestore = rejectRestore;
+        transaction = {};
+        require(!RaphaelKiq::beginHaltedNative(
+                    transaction,
+                    [&](FakeHalted::Register reg) { return partial.read(reg); },
+                    [&](FakeHalted::Register reg, uint32_t value) { partial.write(reg, value); },
+                    [](unsigned) {}), "partial halt must never admit native initialization");
+        require(partial.writes.size() == 2 &&
+                    partial.writes[1] == FakeHalted::Register::MecControl,
+                "partial halt attempts restoration before returning, without queue writes");
+        require(transaction.held == rejectRestore,
+                "unverified rollback keeps the transaction outstanding");
+        if (!rejectRestore)
+            require(partial.read(FakeHalted::Register::MecControl) == 0x1234,
+                    "partial halt restores exact prior MEC state");
+    }
     ignoredQueue.value[static_cast<unsigned>(FakeHalted::Register::MecControl)] = 0x1234;
     ignoredQueue.value[static_cast<unsigned>(FakeHalted::Register::Active)] = 1;
     ignoredQueue.ignoreQueue = true;

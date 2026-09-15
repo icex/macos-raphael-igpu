@@ -188,13 +188,15 @@ struct WaitRegMem {
 
 // PACKET3(WAIT_REG_MEM, 5): control, addr0, addr1, reference, mask, interval
 // (gfx_v10_0_wait_reg_mem). Memory addresses are 4-byte aligned; addr1 is high.
+// WAIT_REG_MEM64 has nine words and 64-bit reference/mask. Leave it to the raw
+// packet dump; this parser and its consumers only evaluate 32-bit waits.
 inline WaitRegMem parseWaitRegMem(const uint32_t *words, size_t count, size_t at) {
     WaitRegMem result {false, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     if (words == nullptr || at >= count || count - at < 7) return result;
     const uint32_t header = words[at];
     const uint32_t opcode = (header >> 8) & 0xffu;
     if ((header >> 30) != 3u || ((header >> 16) & 0x3fffu) != 5u ||
-        (opcode != kPacket3WaitRegMem && opcode != kPacket3WaitRegMem64))
+        opcode != kPacket3WaitRegMem)
         return result;
     const uint32_t control = words[at + 1];
     result.opcode = opcode;

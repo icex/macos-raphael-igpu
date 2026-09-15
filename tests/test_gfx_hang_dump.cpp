@@ -115,6 +115,12 @@ int main() {
             "memory WAIT_REG_MEM joins and aligns the address");
     require(!parseWaitRegMem(memoryWait, 6, 0).valid, "a truncated WAIT_REG_MEM is refused");
     require(!parseWaitRegMem(words, 9, 1).valid, "an IB packet is not a WAIT_REG_MEM");
+    const uint32_t shortWait64[] {0xc0059300u, 0x13u, 0x1000u, 0, 1, 2, 3};
+    require(!parseWaitRegMem(shortWait64, 7, 0).valid,
+            "WAIT_REG_MEM64 cannot use the seven-word 32-bit layout");
+    const uint32_t wait64[] {0xc0079300u, 0x13u, 0x1000u, 0, 1, 2, 3, 4, 10};
+    require(!parseWaitRegMem(wait64, 9, 0).valid,
+            "unsupported 64-bit comparison must not produce a 32-bit diagnosis");
     require(waitSatisfied(0, 1, 2, 3) && waitSatisfied(1, 1, 2, 3) && waitSatisfied(2, 2, 2, 3) &&
             waitSatisfied(4, 1, 2, 3) && waitSatisfied(5, 2, 2, 3) && waitSatisfied(6, 3, 2, 3) &&
             !waitSatisfied(7, 0, 0, 0), "every compare function");
