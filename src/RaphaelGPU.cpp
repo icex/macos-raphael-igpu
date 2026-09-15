@@ -2549,6 +2549,18 @@ static uint32_t wrapVcnInitialize(void *engine) {
              vcnRead(engine, 1, 0x80), vcnRead(engine, 1, 0x04),
              vcnRead(engine, 1, 0x84), vcnRead(engine, 1, 0x156));
     }
+    // Candidate 246: read the same VCN registers through the kext's own direct MMIO
+    // accessor (fbRead, absolute index = VCN regbase 0x7e00 + offset), which bypasses
+    // Apple's _internal_cgs_read_register callback entirely. If the cache BAR reads the
+    // real TMR address here while Apple's cgs path read 0xffffffff, the write DID land and
+    // only Apple's readback is blind -- firmware is reachable and the fault is downstream.
+    // If both read 0xffffffff, the cache-window register is genuinely unreachable and the
+    // write never lands. Read-only; fbRead covers this flat index range (GC seg0..seg1).
+    if (asicInfo) {
+        RLOG("VCNMM: direct-MMIO cacheBAR=%08x_%08x softreset=%08x nc0lo=%08x status=%08x",
+             fbRead(asicInfo, 0x823d), fbRead(asicInfo, 0x823c), fbRead(asicInfo, 0x7e84),
+             fbRead(asicInfo, 0x8238), fbRead(asicInfo, 0x7e80));
+    }
     if (ctx) RLOG("VCNP: context fwID=%x placement=%llx bytes=%x regbase1=%x shared=%llx",
         *reinterpret_cast<const uint32_t *>(ctx + 0x2a0),
         *reinterpret_cast<const uint64_t *>(ctx + 0x2c0),
