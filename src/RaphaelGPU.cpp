@@ -2690,6 +2690,27 @@ static uint32_t wrapVcnInitialize(void *engine) {
         RLOG("VCNMODE: static power before=%08x after=%08x", before, after);
         if (after == 0xffffffff || after == 0xdeadbeef || (after & 4)) return 1;
     }
+    if (vcnDpgEnabled && vcnDecodeFirstEnabled && ctx &&
+        __atomic_load_n(&raphaelTargetConfirmed, __ATOMIC_ACQUIRE) &&
+        *reinterpret_cast<const uint32_t *>(ctx + 0x268) == 0x30001 &&
+        !(*reinterpret_cast<const uint32_t *>(ctx) & 1) &&
+        *reinterpret_cast<const uint32_t *>(ctx + 0x35c) == 0 &&
+        reinterpret_cast<mach_vm_address_t>(__builtin_return_address(0)) == hwlibsBase + 0x88451) {
+        auto manager = *reinterpret_cast<const uint32_t *const *>(
+            static_cast<const uint8_t *>(engine) + 0x18);
+        if (manager && manager[0] == 0) {
+            // MODE2 can leave NJ_PAUSE_DPG_REQ asserted after a failed guest.
+            // Match the native/Linux unpause write before fresh DPG startup,
+            // only with no active queues and software pause state UNPAUSE.
+            auto read = reinterpret_cast<uint32_t (*)(void *, uint32_t, uint32_t)>(hwlibsBase + 0x86834);
+            auto write = reinterpret_cast<void (*)(void *, uint32_t, uint32_t, uint32_t)>(hwlibsBase + 0x8680f);
+            const uint32_t before = read(engine, 1, 0x14);
+            const bool selected = before != 0xffffffff && before != 0xdeadbeef && (before & 0xc);
+            if (selected) write(engine, 1, 0x14, before & ~0xcu);
+            RLOG("VCNUP: selected=%u before=%x after=%x software-pause=0 active=0",
+                selected, before, read(engine, 1, 0x14));
+        }
+    }
     const uint32_t result = FunctionCast(wrapVcnInitialize, orgVcnInitialize)(engine);
     RLOG("VCNS: native initialize returned%u", result);
     if (!result && vcnDecodeFirstEnabled && vcnDpgEnabled && ctx &&

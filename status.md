@@ -58,3 +58,19 @@ Candidate263 recovered; require fresh MODE2, pinned power, unchanged identity an
 all capture/abort/cleanup gates. Max6000seconds; stop after first encoder stall or
 verified output. This is the second launch in this boot, within ledger allowance3.
 No amdgpu rebinding, reboot, merge or push.
+
+## Candidate264 observation and candidate265 allowance
+
+264 confirmed shared allocation4096 and SRAM d3=1000; decoder init selected1
+returned0, then pauseACK stilltimedout. Hardware encoder frame2stalled and exited124.
+Desktopprobe passed. Cleanup is requested; require recovered receipt before265.
+VCNDF before showed pause4, retained from263 despite MODE2 graphics reset.
+Do not claim fully fresh VCN state or definitive falsification of the size hypothesis.
+
+User authorized testing the Linux findings. Allow candidate265, third launch on
+boot c782d007-ca85-409b-9cf5-ff12c1a8c6d5, after264 recovery and fresh MODE2.
+Clear only stale NJ pause request/ack bits before first initialization, guarded to
+zero active queues and software pause0; keep264 window4096 and all other behavior.
+Confirm before/after register and pausewait. Max6000seconds with normal manual
+stop at encoder result/stall; retain every identity/capture/cleanup abort.
+No vfio→amdgpu, reboot, merge or push.
