@@ -4,6 +4,7 @@ import argparse, hashlib, json, os, re, signal, subprocess, sys, time
 from pathlib import Path
 import numpy as np
 ROOT=Path(__file__).resolve().parents[1]
+SRAM_PROBE = "p:rgpu_vcn_capture/sram amdgpu:amdgpu_vcn_psp_update_sram did=+62(+8($arg1)):x16 inst=$arg2:u32 base=+204560($arg1):x64 end=+204576($arg1):x64 " + " ".join(f"w{i}=+{i*4}(+204560($arg1)):x32" for i in range(96))
 BDF='0000:7b:00.0'
 DEV=Path('/sys/bus/pci/devices')/BDF
 NODE='/dev/dri/renderD129'
@@ -39,6 +40,7 @@ cleanup() {
  if [ -n "${drain:-}" ]; then kill "$drain" 2>/dev/null || true; wait "$drain" 2>/dev/null || true; fi
  echo 0 > "$p/tracing_on"
  echo 0 > "$p/events/enable"
+ if [ -f /out/sram-probe ]; then echo "-:rgpu_vcn_capture/sram" >> /tracing/kprobe_events; fi
  for f in "$p"/per_cpu/cpu*/stats; do echo "$f"; cat "$f"; done > /out/trace-stats.txt
  rmdir "$p"
 }
@@ -50,6 +52,11 @@ trap 'exit 0' TERM INT
  echo 1 > "$p/events/amdgpu/$e/enable"
  done
  for e in amdgpu_cs_ioctl amdgpu_sched_run_job amdgpu_vm_flush; do echo 1 > "$p/events/amdgpu/$e/enable"; done
+ if [ -f /out/sram-probe ]; then
+ cat /out/sram-probe >> /tracing/kprobe_events
+ echo 'did == 0x13c0 && inst == 0' > "$p/events/rgpu_vcn_capture/sram/filter"
+ echo 1 > "$p/events/rgpu_vcn_capture/sram/enable"
+ fi
  echo 1 > "$p/tracing_on"
  touch /out/trace-ready
  timeout 5900 cat "$p/trace_pipe" &
@@ -58,7 +65,7 @@ trap 'exit 0' TERM INT
 '''
 
 def main():
-    ap=argparse.ArgumentParser(); ap.add_argument('--boot-id',required=True);ap.add_argument('--output',required=True);ap.add_argument('--worker',action='store_true');a=ap.parse_args()
+    ap=argparse.ArgumentParser(); ap.add_argument('--boot-id',required=True);ap.add_argument('--output',required=True);ap.add_argument('--worker',action='store_true');ap.add_argument('--sram',action='store_true');a=ap.parse_args()
     out=Path(a.output).resolve()
     if not a.worker:
         identity(a.boot_id)
@@ -67,8 +74,12 @@ def main():
         subprocess.run([sys.executable,'-B','-m','unittest','discover','-s','tests'],cwd=ROOT,check=True,stdout=open(str(out)+'-tests.log','w'),stderr=subprocess.STDOUT)
         name='rgpu-linux-'+a.boot_id[:8]
         cmd=['systemd-run','--user','--wait','--collect','--unit='+name,'--property=RuntimeMaxSec=6000s','--property=TimeoutStopSec=20s','--property=KillMode=control-group','--property=ExecStopPost=-/usr/bin/docker stop -t 5 '+name,'systemd-inhibit','--what=idle:sleep','--mode=block','--why=Raphael Linux VCN baseline',sys.executable,'-B',str(Path(__file__).resolve()),'--worker','--boot-id',a.boot_id,'--output',str(out)]
+        if a.sram: cmd+=['--sram']
         return subprocess.run(cmd).returncode
     out.mkdir()
+    if a.sram:
+        assert os.uname().release=='7.2.5-1-cachyos-bore', 'BTF offsets are kernel-specific'
+        (out/'sram-probe').write_text(SRAM_PROBE+'\n')
     facts=identity(a.boot_id); (out/'host-before.json').write_text(json.dumps(facts,indent=2))
     name='rgpu-linux-'+a.boot_id[:8]; started=time.time(); records=[]; capture=None; active=None; kernelmon=None
     def stop(sig,frame): raise SystemExit('termination requested')
