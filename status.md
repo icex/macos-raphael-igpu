@@ -41,3 +41,31 @@ metal-101. Hardware validation of gpt6's six source-audit fixes (MEC halt rollba
 inaccessible-read rejection, DPG route prerequisites, Boolean VMM ABI, WAIT_REG_MEM64 decoding).
 VCN DPG behavior identical to candidate 254; the VCN VCPU wall is expected to reproduce.
 Manual same-boot reuse with --manual-reuse --ack-risk. Stop after codec result or first stall.
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-255-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
+
+## Candidate 255 result (launch 70, run 4bcacc351afd320f82c4ac96373a2398)
+Verdict CORE_PROBE_PASS. gpt6's six source-audit fixes hardware-validated: driver loaded, all
+routes ok, desktop probe passed (Metal "AMD Radeon Navi23", 1000 offscreen frames 0 mismatches,
+all 24 readback tests 0 diff, managed-texture COW healthy), SUB/VM/SDMA/KIQ/MMHUB failures=0,
+no regressions from the MEC/SDMA/ABI/wait-decode changes. CGC_GATE 0x105->0 and all five DPG
+cache-window injections fired as designed.
+
+Encoder wall reproduced IDENTICALLY. H.264 hw encode (h264.gva, registry 0x1000002e4=4294968036,
+the Navi23 accelerator IORegistryEntryID -- NOT the framebuffer IOFBDependentID 4294968035, which
+returns VT error -12908): VCNM power-response=1, native initialize returned 0, then VCNC
+cacheBAR=ffffffff softreset=ffffffff power=0x905, cosWaitForFunc Timeout, encode accepts frames
+0+1 then frame 2 blocks (no encode-callback), VCN0EncLLQ ring hangs.
+
+CONCLUSION: every driver-reachable VCN VCPU bring-up permutation is now hardware-tested and fails
+identically -- static (237), secure DPG+PSP replay (253/254/255), unsecure DPG+direct LMA (251),
+software FW loading mode=1 with PSP out of the firmware path (250), CGC_GATE correction (254/255),
+full cache-window injection (253/255), PGFSM diagnostics (245). The wall is below the driver at
+VCN VCPU core power-up/execution under VFIO passthrough (dummy SMU acks PowerUpVcn without a real
+SMU physically powering the VCN core; type-49 VCN0_RAM firmware stays version 0.0.0.0). No
+driver-level lever remains. Host safe: vfio-pci, power on, recovery recovered, boot unchanged.
