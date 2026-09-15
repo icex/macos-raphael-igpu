@@ -7959,9 +7959,23 @@ static uint32_t wrapVcnStartEngine(void *self, const uint32_t *info, uint64_t si
 static uint32_t wrapVcnSendPM(void *self, const void *request) {
     const auto caller = reinterpret_cast<mach_vm_address_t>(__builtin_return_address(0));
     const bool selected = (caller >= x6Base + 0x21ba0 && caller < x6Base + 0x21f18) ||
-        (caller >= x6Base + 0x21404 && caller < x6Base + 0x214d3);
+        (caller >= x6Base + 0x21404 && caller < x6Base + 0x214d3) ||
+        (caller >= x6Base + 0x28c4e && caller < x6Base + 0x28e70) ||
+        (caller >= x6Base + 0x48758 && caller < x6Base + 0x48946);
     const uint32_t n = selected ? vcnContextSequence(3) : 0;
-    if (selected && n <= 32) RLOG("VCNCTX: PM begin n=%u caller=+%llx request=%p", n, caller-x6Base, request);
+    if (selected && n <= 32) {
+        // Native callers pass four kernel-owned words: input, input bytes,
+        // output, output-size pointer. Decode only their bounded input header.
+        auto words = static_cast<const uint64_t *>(request);
+        const uint64_t length = words ? words[1] : 0;
+        const auto input = words ? reinterpret_cast<const uint32_t *>(words[0]) : nullptr;
+        const bool header = input && length >= 8 && length <= 0x1000;
+        auto accelerator = static_cast<const uint8_t *>(self);
+        RLOG("VCNCTX: PM begin n=%u caller=+%llx request=%p bytes=%llu header=%u/%08x accel-flags=%x display-machine=%p",
+            n, caller-x6Base, request, length, header ? input[0] : 0,
+            header ? input[1] : 0, accelerator[0xc78],
+            *reinterpret_cast<void *const *>(accelerator + 0x378));
+    }
     const uint32_t result = FunctionCast(wrapVcnSendPM, orgVcnSendPM)(self, request);
     if (selected && n <= 32) RLOG("VCNCTX: PM end n=%u caller=+%llx result=%08x", n, caller-x6Base, result);
     return result;
@@ -8507,25 +8521,25 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
             const bool matchCreateContext = entryMatches(addr, sz, 0x21ba0, guardCreateContext, sizeof(guardCreateContext));
             if (matchCreateContext) orgVcnCreateContext = patcher.routeFunction(addr + 0x21ba0,
                 reinterpret_cast<mach_vm_address_t>(wrapVcnCreateContext), true);
-            RLOG("VCNCTX: route CreateContext entry=%u routed=%u", matchCreateContext, orgVcnCreateContext != 0);
+            CRLOG("VCNCTX: route CreateContext entry=%u routed=%u", matchCreateContext, orgVcnCreateContext != 0);
             patcher.clearError();
             static const uint8_t guardRequestCap[] = {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x41,0x54,0x53,0x45,0x89,0xc7};
             const bool matchRequestCap = entryMatches(addr, sz, 0x89508, guardRequestCap, sizeof(guardRequestCap));
             if (matchRequestCap) orgVcnRequestCap = patcher.routeFunction(addr + 0x89508,
                 reinterpret_cast<mach_vm_address_t>(wrapVcnRequestCap), true);
-            RLOG("VCNCTX: route RequestCap entry=%u routed=%u", matchRequestCap, orgVcnRequestCap != 0);
+            CRLOG("VCNCTX: route RequestCap entry=%u routed=%u", matchRequestCap, orgVcnRequestCap != 0);
             patcher.clearError();
             static const uint8_t guardStartEngine[] = {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x41,0x54,0x53,0x48,0x85,0xf6};
             const bool matchStartEngine = entryMatches(addr, sz, 0x49632, guardStartEngine, sizeof(guardStartEngine));
             if (matchStartEngine) orgVcnStartEngine = patcher.routeFunction(addr + 0x49632,
                 reinterpret_cast<mach_vm_address_t>(wrapVcnStartEngine), true);
-            RLOG("VCNCTX: route StartEngine entry=%u routed=%u", matchStartEngine, orgVcnStartEngine != 0);
+            CRLOG("VCNCTX: route StartEngine entry=%u routed=%u", matchStartEngine, orgVcnStartEngine != 0);
             patcher.clearError();
             static const uint8_t guardSendPM[] = {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x53,0x50,0x41,0xbe,0xd7,0x02,0x00,0xe0};
             const bool matchSendPM = entryMatches(addr, sz, 0x7056, guardSendPM, sizeof(guardSendPM));
             if (matchSendPM) orgVcnSendPM = patcher.routeFunction(addr + 0x7056,
                 reinterpret_cast<mach_vm_address_t>(wrapVcnSendPM), true);
-            RLOG("VCNCTX: route SendPM entry=%u routed=%u", matchSendPM, orgVcnSendPM != 0);
+            CRLOG("VCNCTX: route SendPM entry=%u routed=%u", matchSendPM, orgVcnSendPM != 0);
             patcher.clearError();
         }
 
