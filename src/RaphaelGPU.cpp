@@ -2496,6 +2496,26 @@ static uint32_t wrapVcnInitialize(void *engine) {
     }
     const uint32_t result = FunctionCast(wrapVcnInitialize, orgVcnInitialize)(engine);
     RLOG("VCNS: native initialize returned%u", result);
+    // Candidate 243: read-only VCN VCPU boot diagnostic. No register writes, no
+    // reset -- only _internal_cgs_read_register, exactly as static_initialize does.
+    // The post-stall external snapshot reads the firmware-cache BAR (0x43c/0x43d)
+    // as 0xffffffff while the sibling non-cache BAR (0x438/0x439) reads a real
+    // address. Re-read both here in the native HWLibs (secure) context, right after
+    // static_initialize returns, to tell an unlatched cache-window write (the VCPU
+    // would fetch firmware from garbage and never boot) from a mere non-secure
+    // readback artifact. Sample the boot gates too: UVD_STATUS (0x80) must reach 2,
+    // POWER_STATUS (0x04) must show the domain on, SOFT_RESET (0x84) clear, VCPU_CNTL
+    // (0x156) reset released. Offsets are from amdgpu vcn_3_0_0_offset.h; seg 1 = VCN.
+    if (engine && hwlibsBase) {
+        auto vcnRead = reinterpret_cast<uint32_t (*)(void *, uint32_t, uint32_t)>(
+            hwlibsBase + 0x86834);  // _internal_cgs_read_register(this, seg, offset)
+        RLOG("VCNC: cacheBAR=%08x_%08x nc0BAR=%08x_%08x status=%08x power=%08x "
+             "softreset=%08x vcpucntl=%08x",
+             vcnRead(engine, 1, 0x43d), vcnRead(engine, 1, 0x43c),
+             vcnRead(engine, 1, 0x439), vcnRead(engine, 1, 0x438),
+             vcnRead(engine, 1, 0x80), vcnRead(engine, 1, 0x04),
+             vcnRead(engine, 1, 0x84), vcnRead(engine, 1, 0x156));
+    }
     if (ctx) RLOG("VCNP: context fwID=%x placement=%llx bytes=%x regbase1=%x shared=%llx",
         *reinterpret_cast<const uint32_t *>(ctx + 0x2a0),
         *reinterpret_cast<const uint64_t *>(ctx + 0x2c0),
