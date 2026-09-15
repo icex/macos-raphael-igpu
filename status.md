@@ -1,4 +1,4 @@
-# Live status — 2026-09-15
+# Live status — 2026-09-16
 
 ## Current result
 
@@ -20,7 +20,7 @@ CORE_PROBE_PASS covers the desktop probe, not the separate codec probe.
 
 268 follow-up hardware-decode probe never reached decoder creation: it stalled
 at software encoder creation after the hardware encoder hang. This is dirty-state
-behavior, not evidence that hardware decode fails. Fresh decode-first test pending.
+behavior, not evidence that hardware decode fails. Fresh decode-first result is recorded below.
 
 ## Identity and cleanup
 
@@ -36,7 +36,7 @@ user-authorized Linux→VFIO handoff. **No amdgpu rebind this boot.**
   All shutdowns forced, not clean guest shutdowns; all recovery receipts recovered.
 - 268 full host suite937tests OK, three skipped. Initial software-allocation fixture
   was updated to verify native ownership and refusal without context mutation.
-- Seven launches recorded this boot. Earlier staging/fixture prelaunch refusals did
+- Eight launches recorded this boot (including269 decode-first). Earlier staging/fixture prelaunch refusals did
   not consume launches. No merge or push.
 
 ## Display evidence and remaining scope
@@ -51,21 +51,40 @@ responds on host127.0.0.1:5900 with RFB003.889; no external frame qualification 
 Watchable external desktop, physical scanout, codecs and long-run lifecycle remain
 unqualified; do not equate offscreen success with completion.
 
-## Next test: fresh hardware decode before encoding
+## Fresh decoder result: 269 attempt decode-first / metal-116
 
-269 proved the mixed PGFSM transition/wait reaches Linux's masked state, but that
-was not sufficient for encoding. Stop generating adjacent power-register changes.
-Use the same binary in attempt decode-first, cardmetal-116. Software-generate
-three H264 frames, require hardware decode on the current AMD registryID, validate
-luma against generated input. No hardware encoder request before this test.
-The previous268 follow-up never reached decoding due to the dirty-state service hang.
+Run `57a26a17253fc749f2d996dd4c51505b`, same binary/build as269, MODE2 reset128.
+No hardware encoder request in this attempt. Results:
+`/home/bogdan/macos-vm/run/candidate-269-attempt-decode-first-results`.
 
-Extend allowance7→8 on boot c782d007-ca85-409b-9cf5-ff12c1a8c6d5 for this independent
-decoder workload under the user's continued-testing instruction. Require269
-recovered (verified), fresh MODE2 and unchanged identity/capture/host-fault/
-shutdown/cleanup gates; max6000seconds, manual stop on result/deadline. No reboot,
-amdgpu rebind, merge or push. Prior allowances and power-state hypothesis details
-are retained in candidate268 status commit and root status archives.
+- Offscreen Metal:1000 frames, zero sampled mismatches;24 readback cases passed.
+- Required decoder GPU registryID test returned-12906. **Retracted as a valid
+  built-in GPU test:** exact guest SDK restricts that selector to removable/eGPU.
+- Corrected unpinned required-hardware H264 and HEVC decoder creation returns-12913;
+  H264 also fails as console UID501 and with explicit Baseline profile.
+- AppleGVA logging: ATI plugin selected, then `ctx_info.error = a` during initial
+  SPS/PPS/context setup. No observed VCN initialization call during these tests.
+  The temporary enableSyslog preference was restored (sync=1).
+- Software H264 control passes3 decoded frames,2675475 luma values, maxerror1.
+  Initial control falsely counted unsupported hardware-status property(-12900) as
+  failure; corrected control allows that only for explicitly software decode.
+- Capture/identity: verdict valid=true, CORE_PROBE_PASS for desktop probe; terminal
+  critical capture accepted. **Overall acceleration remains unqualified.**
+- Shutdown `exited-after-guest-request` (unlike prior encoder-hung forced exits);
+  recovery `recovered`, no recovery kernel messages, same boot and vfio/on state.
+- Earlier reset127 staging refusal was before QEMU; no launch consumed. Isolated
+  attempt copy was prepared explicitly before the successful reset128 launch.
+
+Current blocker for decode is AMD plugin context creation. Analyze exact
+AMDRadeonVADriver2 from the already captured24G830 cache to locate error10 before
+another hardware candidate. Encoder's pause/packet-execution failure remains
+separate; Linux performs a decoder-ring command test before encoder startup,
+whereas our existing decoder-first hook only initializes the ring. That packet
+experiment is unimplemented and needs native ownership/commit/drain qualification.
+Do not equate either failure with proven dead silicon or exhausted driver options.
+
+Boot allowance8 has been used; a further launch needs a boot-named extension note
+and all ordinary gates. No amdgpu rebind this boot, merge or push.
 
 Linux reference: `/home/bogdan/macos-vm/run/worktrees/linux-vcn-baseline/findings/research/linux-vcn-baseline-20260915.md`.
 Linux H264/HEVC encode/decode and600 validated H264 frames passed. Working Linux
