@@ -152,7 +152,7 @@
     "-liluheadless"
   ],
   "raphael_source_sha256": "9dc8646471d04e19ea2302eaff2f4de86888b9c93114e15bbfa0392deb235d6d",
-  "raphael_source_commit": "c190572e74b6e1a01181cbfa7ce53b07df61f951",
+  "raphael_source_commit": "076e7f21785680adec88c6700a699a6eb299c2ff",
   "critical_replay_quiesce": {
     "version": 1
   },

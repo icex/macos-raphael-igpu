@@ -34,3 +34,10 @@ No main merge/push. Original source checkout and candidate-253 files untouched.
   Archive: /home/bogdan/macos-vm/run/candidate-255-dist/RaphaelGPU-1.0.255-experimental.zip.
 - No candidate-255 hardware execution. Final read-only host check: same boot,
   vfio-pci, power/control=on, no QEMU. No runtime correctness claim for 255.
+
+## Candidate 255 allowance (launch 70)
+One launch on boot c369c74e-96ff-4c21-ae85-80ccb269f7d2 after fresh MODE2, candidate 1.0.255 /
+metal-101. Hardware validation of gpt6's six source-audit fixes (MEC halt rollback, SDMA
+inaccessible-read rejection, DPG route prerequisites, Boolean VMM ABI, WAIT_REG_MEM64 decoding).
+VCN DPG behavior identical to candidate 254; the VCN VCPU wall is expected to reproduce.
+Manual same-boot reuse with --manual-reuse --ack-risk. Stop after codec result or first stall.
