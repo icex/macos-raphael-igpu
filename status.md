@@ -83,3 +83,9 @@ Same-run bounded follow-up: after the address workload, test explicit GPU fences
 on untracked private buffers across blit/compute/blit encoders (128 rounds),
 and three minutes of moving/resizing native material windows with raw RFB captures.
 These remain inside the existing nineteenth-exposure deadline and stop gates.
+
+Additional same-run observation: native IOAccelerator `wire`/`fallback` DTrace
+return probes, bounded to 35 seconds around the existing 20-second panel workload.
+The routed AMD entry is not instrumented. No security settings are changed.
+Aggregate outcomes/stacks may identify the higher caller; observer effects and
+unmatched/zero-hit probes must be reported, not treated as runtime evidence.
