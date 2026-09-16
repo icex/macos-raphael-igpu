@@ -47,6 +47,6 @@ with explicit registry ID; no decoded frames. The post-log wrapper omitted its
 exit marker (shell exit before marker), so process status is not qualified by that
 artifact; the recorded create failures are explicit.
 Functional baseline CORE_PROBE_PASS; guest-requested shutdown, recovered receipt,
-and host-kernel-messages.json is an empty list.
+and no GPU/host fault was reported; host-kernel-messages.json includes network messages.
 Next: rename only the exact marked Raphael PCI node S30 to GFX0 in IOService plane,
 then repeat lookup and hardware-required decode. No topology redesign indicated.

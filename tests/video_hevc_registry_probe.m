@@ -4,6 +4,7 @@
 #import <IOKit/IOKitLib.h>
 #include <signal.h>
 #include <unistd.h>
+#include <dlfcn.h>
 @interface NSObject (RGPUService)
 - (io_service_t)ioService;
 @end
@@ -45,9 +46,15 @@ int main(void) {
         }
         IOObjectRelease(it);
         NSArray<id<MTLDevice>> *devices=MTLCopyAllDevices();
+        void *vt=dlopen("/System/Library/Frameworks/VideoToolbox.framework/VideoToolbox",RTLD_NOW);
+        typedef Boolean (*Classify)(uint64_t);
+        Classify slotted=(Classify)(vt ? dlsym(vt,"VTIsMetalDeviceSlotted") : NULL);
+        Classify external=(Classify)(vt ? dlsym(vt,"VTIsMetalDeviceExternal") : NULL);
         emit(@{@"phase":@"metal-count",@"count":@(devices.count)});
         for(id<MTLDevice> device in devices) {
             emit(@{@"phase":@"metal-device",@"name":device.name,@"registry_id":@(device.registryID)});
+            emit(@{@"phase":@"vt-device-classification",@"slotted":slotted ? @(slotted(device.registryID)) : (id)[NSNull null],
+                @"external":external ? @(external(device.registryID)) : (id)[NSNull null]});
             s=IOServiceGetMatchingService(kIOMainPortDefault,IORegistryEntryIDMatching(device.registryID));
             if(s){inspect(s,@"Metal-registryID-match");IOObjectRelease(s);}
             if([(id)device respondsToSelector:@selector(ioService)]) {
@@ -55,6 +62,14 @@ int main(void) {
                 if(s)inspect(s,@"Metal-ioService");
             }
         }
+        typedef int32_t (*CopyDecoders)(CFDictionaryRef,CFArrayRef *);
+        CopyDecoders copy=(CopyDecoders)(vt ? dlsym(vt,"VTCopyVideoDecoderList") : NULL);
+        if(copy) {
+            CFArrayRef list=NULL; int32_t status=copy(NULL,&list);
+            emit(@{@"phase":@"decoder-list",@"status":@(status),@"entries":list ? [(__bridge NSArray *)list description] : @""});
+            if(list)CFRelease(list);
+        }
+        if(vt)dlclose(vt);
         return 0;
     }
 }
