@@ -32,3 +32,21 @@ card registration with unchanged safety contract.
 - Output: `/home/bogdan/macos-vm/run/candidate-276-results`
 - Verdict: `CORE_PROBE_PASS`
 - Boundary: `None`
+
+## Candidate 276 observed result
+
+Run `84e8479030e7d41098a3751309dc2d26`, fifth exposure of boot
+`2508eb6d-ddf3-497d-9774-00a7ecebe3ed`, MODE2 #139 clean.
+`candidate-276-results/capability-lookup-output.txt`: only named display found is
+IOResources/IOKitRegistryCompatibility/display, all HEVC property searches null.
+Actual GPU service is PCI0/AppleACPIPCI/S30@6; Metal enumerates ONE device, and its
+accelerator has the complete HEVC capability dictionary. This directly refutes
+the claim that the actual PCI node is already named display.
+`hevc-baseline-output.txt`: hardware-required HEVC create fails -12913, and -12906
+with explicit registry ID; no decoded frames. The post-log wrapper omitted its
+exit marker (shell exit before marker), so process status is not qualified by that
+artifact; the recorded create failures are explicit.
+Functional baseline CORE_PROBE_PASS; guest-requested shutdown, recovered receipt,
+and host-kernel-messages.json is an empty list.
+Next: rename only the exact marked Raphael PCI node S30 to GFX0 in IOService plane,
+then repeat lookup and hardware-required decode. No topology redesign indicated.
