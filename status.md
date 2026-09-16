@@ -73,3 +73,9 @@ sequential/concurrent processes, and observational global accounting samples.
 Prior run has an authorizing recovery receipt. Require fresh MODE2 with CP_STAT=0
 and RLC_CNTL=0; preserve all capture, host-fault, identity and cleanup aborts. Maximum
 6000seconds, manual stop after bounded tests. No driver change or main push.
+
+
+Same eighteenth exposure: texture checks passed. Extend the bounded workload to
+32 GPU shared-event rounds on two queues (consumer submitted first, 12 MiB live
+buffers, 20-second GPU deadline) and read-only post-client-exit global statistics.
+This uses the same current280 binary, supervision and original run deadline.
