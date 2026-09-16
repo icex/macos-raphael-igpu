@@ -1,6 +1,7 @@
 # Native video-memory allocation failures: caller and retry analysis
 
-This is an offline audit of exact 24G830 code and retained candidate 280 artifacts.
+This began as an offline audit of exact 24G830 code and retained candidate 280 artifacts.
+The live follow-up below now demonstrates successful reclaim/retry under pressure.
 It identifies real failed internal requests and available recovery paths. It does
 not establish a memory leak, nor prove that every failure was recovered.
 
@@ -70,3 +71,38 @@ subsequent successful retry or system-memory fallback, preserving object/thread
 identity and nested-call semantics. Do not equate the last global commit event
 with an outer call's final result. No allocator-policy patch is justified by the
 current evidence alone.
+
+## Live follow-up: recovered requests, not a standalone correctness blocker
+
+Run `dd5c30a35fea14f9be511dee92ff85be`, candidate 280 / addressreuse, used native
+IOAccelerator DTrace probes; no routed AMD entry or guest security setting changed.
+The first 20-second panel window recorded 29 failed and 48 successful video-memory
+wire calls. Failed stacks included 24 calls from `freeWaitToPrepareVidMap`, three
+from AMD batch mapping, and two from generic resource prepare. No fallback return
+was observed in that window. A second warm panel window saw one successful reclaim
+with no nested failure; that alone did not resolve the first window's failures.
+
+A linked trace then surrounded a 192 MiB live-buffer workload (16 MiB buffers, four
+sets, one warmup and four measured rounds). It tracks native map prepare by thread
+and nesting depth, saves its failed-wire count, and links the same map/thread to
+subsequent reclaim entry/return. Observed: **81 reclaim calls, 41 true and 40 false,
+with 1,525 failed wire attempts inside them**. All 40 false reclaim returns were
+followed by a true return for the same thread/map; no failed pair remained at trace
+end. Some successful calls required hundreds of internal attempts.
+
+The independent CPU oracle checked 67,108,864 measured values with zero errors.
+Allocation returned from 201,969,664 bytes to exactly 544,768 bytes every measured
+round. The desktop remained responsive and the post-pressure raw RFB capture was
+clean. No DTrace error/drop warning occurred in the successful capture.
+
+The first linked script was rejected by DTrace for a forward self-reference before
+its child workload ran. It was corrected and the passing capture is specifically
+`reclaim-linked2-output.txt`, not the first attempt.
+
+**Conclusion:** these observed requests recover through native reclamation. The
+log message alone is no longer a reproduced correctness blocker for these workloads.
+Do not suppress it or change allocator policy merely because it says ERROR. The
+trace does not assign every map to a client PID, prove physical fragmentation,
+prove every historical error recovered, or measure production performance. DTrace
+and verbose serial logging affect timings; reclaim cost remains a performance
+question. [Run evidence](address-reclaim-desktop-evidence-20260916.json).

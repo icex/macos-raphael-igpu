@@ -69,7 +69,7 @@ after four index bytes, and returns 0xb8 past the last key. Native AppleSMC call
 verified all six keys and both tested out-of-range indices. On the fresh smcpmio
 guest, PerfPowerServices was 0.0% CPU; after a service restart it was 0.1% CPU with
 0.54 s cumulative CPU time, later 0.0% with the same cumulative time. No Apple service is disabled and no guest binary or
-security setting was patched. Candidate279 and280 supply second through fifth passing guest boots (all 0.0% CPU, latest 0.77s cumulative).
+security setting was patched. Candidate279 and280 supply second through sixth passing guest boots (all 0.0% CPU, latest 1.04s cumulative).
 Longer observation and independent-host-boot durability remain open. The first emulator patch incorrectly waited for a length
 byte and failed native testing; it is superseded.
 [Root cause and native results](../findings/research/perfpower-smc-enumeration-20260916.md),
@@ -83,8 +83,9 @@ byte and failed native testing; it is superseded.
   BGRA8/RGBA8, two sizes and three distinct-seed clients; zero pixel/padding errors.
 - [x] GPU-only cross-queue ordering: 32 shared-event rounds, consumer submitted first,
   33,554,432 correct values.
-- [ ] Broaden formats, compute/render hazards, fences and event sharing beyond these
-  exact tested paths.
+- [x] Explicit untracked-resource blit/compute/blit fences: 128 rounds,
+  134,217,728 correct values on one queue.
+- [ ] Broaden formats, render/depth hazards and interprocess event sharing.
 - [x] Exercise sequential independent processes, then concurrent clients with
   distinct data and bounded allocations:280, seeds3/7 sequential and11/29
   concurrent;48 BGRA8 feedback cases. Broader multi-queue coverage remains open.
@@ -93,8 +94,12 @@ byte and failed native testing; it is superseded.
   values verified. [Method and limits](../findings/research/resource-reclamation-20260916.md).
 - [x] Observe global backing counters respond to texture pressure and return near
   baseline after client exit; non-reusable orphan counters stay zero.
-- [ ] Measure GPU virtual-address reclamation and long-duration memory pressure;
-  account for global background activity and reusable caches.
+- [x] Observe GPU-buffer address recycling: 512 measured rounds, 6,144 recurring
+  address assignments, 2,147,483,648 correct values; exact allocation return.
+- [x] Larger 192 MiB buffer workload: four measured rounds, zero errors; native
+  trace shows failed map/reclaim attempts followed by success.
+- [ ] Prove page-table release beyond cached address recycling; broaden duration,
+  formats and concurrent pressure, accounting for global background activity.
 
 - [ ] Attribute a failure to its actual engine before making an SDMA/GFX diagnosis.
 
@@ -109,8 +114,11 @@ Passing isolated shaders does not establish correct desktop composition.
 - [x] Verify actual WindowServer use of this accelerator.
 - [x] Establish a native colored NSVisualEffectView reproducer and raw RFB capture.
 - [x] Isolate and fix compressed render-target feedback corruption (candidate279).
-- [ ] Verify clean transparent windows, animation and ordinary desktop interaction
-  through Screen Sharing, with repeatable captures and no new GPU faults.
+- [x] Bounded Screen Sharing composition checks: three minutes of native window
+  movement/resizing and two minutes of Safari transparency/scrolling; seven clean
+  raw captures plus a clean post-pressure capture.
+- [ ] Broaden ordinary application use and sustained desktop interaction beyond
+  these sampled workloads; keep independent-boot and physical-output gates open.
 - [x] Confirm the feedback repair on fresh279 and280 guest boots with working Metal
   and hardware H.264/HEVC encode/decode.
 - [ ] Map real connectors/HPD/AUX/PHY and DCN 3.1.5 differences; implement only
@@ -135,7 +143,8 @@ private/native-barrier cases. Controlled native panels clear with the patch and
 fail after restoration. The initial279 panel captures were obscured. Fresh280 foreground native panels
 are unobstructed and clean in raw RFB captures0/2, after different animation frames.
 Four distinct-seed280 processes pass48cases/5,280,000pixels, including two concurrent
-clients. Longer desktop use remains an acceptance gate. See [fix evidence](../findings/research/feedback-decompression-20260916.md).
+clients. The later addressreuse run adds native moving/resizing windows and Safari blur/scrolling;
+longer application use remains an acceptance gate. See [fix evidence](../findings/research/feedback-decompression-20260916.md).
 [Display evidence](../findings/research/transparency-live-composition-20260916.md)
 (probes are also retained in the candidate 278 research worktree).
 
@@ -176,18 +185,22 @@ from device enumeration or passing microbenchmarks.
 
 ## Next work, in order
 
-1. Trace the existing native allocation failures to callers/fallbacks; distinguish
-   capacity/fragmentation from failed API work. Measure GPU-VA reclamation and
-   longer pressure behavior beyond the passing texture/global-counter checks.
-2. Broaden normal desktop and synchronization coverage on280; keep observing the
-   SMC CPU fix without disabling the service.
-3. Complete M7 independent-host-boot and crash/closure lifecycle gates.
-4. Progress physical display and measured performance qualification after those gates.
+1. Qualify supervised QEMU closure and guest-crash/command-channel failure paths,
+   then representative workloads on independently initialized host boots.
+2. Broaden desktop applications, formats and interprocess synchronization; measure
+   reclamation cost and page-table release beyond observed address recycling.
+3. Progress physical display and measured performance qualification after those gates.
 
-Candidate280 closes the immediate capture-loss blocker:398,370 and387 critical records
-in three completed runs, no loss, guest-request shutdown and authorizing recovery. See
-[initial 280 evidence](../findings/research/candidate-280-qualification-20260916.json) and
-[latest texture/event evidence](../findings/research/texture-memory-and-events-evidence-20260916.json).
+Allocation failure messages have now been traced through native reclaim/retry:
+all 40 failed reclaim calls in the larger-buffer capture are followed by success
+for the same thread/map, while all CPU readbacks pass. The message alone is not a
+reproduced correctness blocker for these workloads; performance cost remains open.
+[Native analysis](../findings/research/allocation-retry-analysis-20260916.md).
+
+Candidate 280 closes the immediate capture-loss blocker: 398, 370, 387 and 372
+critical records in four completed runs, no loss, guest-request shutdown and
+authorizing recovery. [Latest address/desktop qualification](../findings/research/address-reclaim-desktop-20260916.md),
+[artifact hashes](../findings/research/address-reclaim-desktop-evidence-20260916.json).
 
 One owner controls hardware and the guest command channel. Review the hypothesis,
 baseline and evidence after three experiments on an unexplained failure; repeated
