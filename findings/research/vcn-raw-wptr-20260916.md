@@ -62,3 +62,15 @@ DPG_PAUSE and RBC_RB_CNTL (all AON/RBC registers 272 already read without incide
 plus the doorbell page offset. A raw write pointer with WPTR still0 after the
 doorbell isolates a routing problem; WPTR advanced with no decode callback
 isolates a firmware/packet problem. No LMI-domain, cache-BAR or LMA reads.
+
+## Candidate275 hardware result (run 5cb7876d841a17cec484c12398fdf135)
+
+Guard/patch/route 1/1/1. Doorbell range request logged: type 5, offset 0x310, size 8,
+result 0 (Apple assigns VCN doorbells at 0x310 on this configuration; the ring's
+doorbell page offset 0xc40 matches). Four decoder submissions: wptr 0x40/0x80/0xc0/0x100
+with SCRATCH2 and shared wptr identical and rptr advancing 0 → 0xc0, power 0x905/0x906,
+pause 0. H.264 hardware decode of a software stream, H.264 and HEVC hardware encode
+with hardware decode all pass 3/3 frames (max luma error 1/1/0). HEVC hardware decode
+of the software hevc.vcp stream fails at decoder creation (−12913) with no kernel
+context; that is a userspace/format issue to investigate separately. The raw write
+pointer hypothesis is confirmed sufficient on this baseline.
