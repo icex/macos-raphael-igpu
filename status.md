@@ -27,7 +27,11 @@ on48990. LAN relay is active on192.168.0.43:48989, with web UI on48990;
 serverinfo200 and authenticated UI401 verified through the LAN address.
 UFW rules now allow the guest TCP/UDP port family from192.168.0.0/24 onenp9s0;
 other-device connectivity remains to be checked.
-No Moonlight playback/FPS result yet. [Setup](docs/sunshine.md),
+Moonlight playback now works, but the user reports only3–4FPS at4K.
+Server timing independently sees43 completed encoder submissions in12s.
+Active samples reach AMD hardware encode, while native video-memory reclamation
+has calls up to464ms; allocation/encode throughput is the current blocker.
+The latest reconnect still logsHEVC, so H.264 A/B is not yet verified. [Setup](docs/sunshine.md),
 [artifact hashes](findings/research/sunshine-lan-20260916.json).
 Requested90/120FPS client settings are distinct from the observed60Hz desktop.
 
@@ -127,7 +131,7 @@ choices; prepare those on the current supervised guest, preserving existing host
 Sunshine and the original shutdown deadline. Desktop timings remain separately
 measured; do not label client FPS choices as proven panel refresh.
 
-Next: measure actual Sunshine streamed output/encoder behavior,
+Next: isolate and fix the measured4K encode/reclamation stalls,
 keeping the user-confirmed Retina60Hz desktop. Use native-source analysis and the
 optional4K readback probe if a rendering failure is reproduced.
 Broader configurations, lifecycle, rendering tests and physical output follow. The Reims CPU/GPU ownership task now passes its managed-texture scope.

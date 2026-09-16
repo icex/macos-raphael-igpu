@@ -3,8 +3,9 @@
 Sunshine is an optional alternative to macOS Screen Sharing. The current guest has
 [Sunshine v2026.914.233613](https://github.com/LizardByte/Sunshine/releases/tag/v2026.914.233613)
 installed from the official Intel DMG. Hardware-only VideoToolbox startup probes
-find H.264 and HEVC Main8. Actual Moonlight playback, latency and sustained frame
-rates remain to be measured. macOS support is experimental; gamepad support is
+find H.264 and HEVC Main8. Actual4K Moonlight playback works but currently delivers only3–4FPS.
+Native encode/reclamation stalls are under investigation; this is not yet a faster
+replacement for Screen Sharing. macOS support is experimental; gamepad support is
 unavailable in this build.
 
 ## Guest setup
@@ -83,8 +84,7 @@ check; actual streamed output and Moonlight statistics are the next verification
 
 Current development session: Moonlight `192.168.0.43:48989`, web UI
 `https://192.168.0.43:48990`. The API and authenticated web endpoint respond through
-that LAN address; another device's connection and actual UDP stream are not yet
-verified. This live relay expires at21:55:14 Europe/Bucharest on2026-09-16.
+that LAN address; another device has paired and streamed, but only3–4FPS was reported. This live relay expires at21:55:14 Europe/Bucharest on2026-09-16.
 [Evidence hashes](../findings/research/sunshine-lan-20260916.json).
 
 ## Host firewall
