@@ -69,6 +69,17 @@ empty published framebuffer properties do not prove an empty ATOM table. Boot pa
 reads EFI properties from the PCI service; trace boot-display selection before patches.
 Main10 decode is now qualified within the short synthetic scope above. Main10
 hardware encoding remains unavailable in the native advertised profile set.
-Next work: interprocess resource visibility and longer/more varied workloads,
-plus source-guided physical-display and lifecycle investigation. No next exposure
-allowance recorded yet.
+Next work: depth/stencil/MSAA, interprocess visibility and broader workloads,
+plus source-guided physical-display and lifecycle investigation.
+
+## Next exposure allowance — depth/stencil and resolve
+
+One additional exposure (twenty-third) on boot
+`2508eb6d-ddf3-497d-9774-00a7ecebe3ed`, unchanged candidate280/metal-127,
+attempt depthstencil. Hypothesis: depth/stencil state transitions and1×/4× color
+resolve preserve a CPU-predicted left/right image, including odd dimensions.
+128 cases;20s command waits and180s process alarm. Source setDepthStencilState
+also updates native primitive binning; existing global no-binning guard remains.
+Compile first; unsupported samples, shader/command failure or any mismatched pixel
+leaves this scope unqualified. Use cycle.py fresh MODE2 and all standard6000s
+supervision/capture/host-fault/shutdown/recovery guards. No vfio→amdgpu cycling.
