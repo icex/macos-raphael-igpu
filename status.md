@@ -6,17 +6,17 @@ independent-host-boot/crash recovery and physical display qualification remain o
 
 ## Current host / guest
 
-Guest is **stopped** after run `5a2f13feed4b7922fd6d109860befda0`, candidate 280 /
-card metal-127 / attempt textures, MODE2 #158, eighteenth exposure on host boot
-`2508eb6d-ddf3-497d-9774-00a7ecebe3ed`. GPU `0000:7b:00.0` remains vfio-pci with
-`power/control=on`. Results:
-`/home/bogdan/macos-vm/run/candidate-280-attempt-textures-results`.
+Guest is **running; cleanup pending**, run `dd5c30a35fea14f9be511dee92ff85be`,
+candidate 280 / metal-127 / attempt addressreuse, MODE2 #159, nineteenth exposure
+on host boot `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`. GPU `0000:7b:00.0` remains
+vfio-pci with `power/control=on`. Results:
+`/home/bogdan/macos-vm/run/candidate-280-attempt-addressreuse-results`.
 
-Functional checks pass; identity/capture valid, 387 critical records with zero loss.
-Shutdown: `exited-after-guest-request`. Schema 6 recovery is `recovered`,
-`authorizes_launch=true`, CP_STAT=0, active_after=0, forced_inactive=0.
-Overall **CORE_PROBE_PASS**. Three completed candidate 280 runs now have clean
-shutdown and authorizing recovery on this host boot.
+The core probe, 512-round buffer/address workload and 128-round untracked GPU-fence
+workload pass. Native desktop material captures are in progress, followed by Safari
+composition checks. Current completed critical snapshots have zero loss. Final
+capture, shutdown, recovery and overall verdict are **pending**.
+Three earlier candidate 280 runs completed with authorizing recovery on this boot.
 
 ## Verified changes and tested scope
 
