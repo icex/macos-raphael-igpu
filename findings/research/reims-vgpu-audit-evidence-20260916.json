@@ -1,0 +1,268 @@
+{
+  "schema_version": 1,
+  "date": "2026-09-16",
+  "kind": "source_audit_not_runtime_qualification",
+  "repository": "https://github.com/steelbrain/reims-vgpu",
+  "clone_path": "/home/bogdan/macos-vm/run/research/reims-vgpu-20260916",
+  "commit": "69a57dd69a6958e946c03b73e02db331f330f435",
+  "commit_date": "2026-09-03T23:29:26+03:00",
+  "qemu_submodule_commit": "bd88218da09b86ed9c78bf5f9354168812a7ba6b",
+  "translator_revision": "9e0e99a41dc3cb8bb7e288b531f1698a79fd4b1c",
+  "raphael_comparison_commit": "0f529d95e77ef094340256b2a77bf38bffb36a65",
+  "license_observations": {
+    "root": "LGPL-3.0-or-later",
+    "host_crate_manifests": "GPL-2.0-or-later",
+    "qemu_shims": "GPL-2.0-or-later",
+    "resolution": "not resolved; no source copied"
+  },
+  "execution": {
+    "external_builds": false,
+    "external_tests": false,
+    "vm_launches": 0,
+    "gpu_operations": 0,
+    "runtime_results": "none"
+  },
+  "coverage": "All major component families surveyed; selected implementation and conformance paths read deeply. Not every source line audited. Translator dependency not cloned or audited; QEMU review focused on product shims and AppleSMC, not whole upstream QEMU.",
+  "reviewed_artifacts": [
+    {
+      "path": "README.md",
+      "sha256": "b37fb3b2c96eada1a4eb47b6efbed665e0e5ca91cb85cc3c1428fb9026718d56",
+      "lines": 241
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "e3a994d82e644b03a792a930f574002658412f62407f5fee083f2555c5f23118",
+      "lines": 165
+    },
+    {
+      "path": "Cargo.toml",
+      "sha256": "96c94af47e98df9f2cacda03c6988bd369cfb03d59498407c05ce4b3a0251d66",
+      "lines": 37
+    },
+    {
+      "path": "crates/reims-vgpu/Cargo.toml",
+      "sha256": "0cd4fc83a8d5c58b81a45d31ed4d0204ec1bab1dd53384b345d8b5af567073bd",
+      "lines": 153
+    },
+    {
+      "path": "crates/reims-vgpu/src/device/mod.rs",
+      "sha256": "92bc97b65cf54e9bd73d45c153637160ca2a8bd28dfe2afc216e299aecbf5a1e",
+      "lines": 841
+    },
+    {
+      "path": "crates/reims-vgpu/src/qemu/host_ops.rs",
+      "sha256": "9847354bdd26ef07d4570d319f380cfa9ac7e15879c357dfffd3452c1d9fceab",
+      "lines": 1179
+    },
+    {
+      "path": "crates/reims-vgpu/src/runtime/surface_currency.rs",
+      "sha256": "b30e4a0ad9450015f401cde53602f88b22542643ed5deba39488d55c903426be",
+      "lines": 357
+    },
+    {
+      "path": "crates/reims-vgpu/src/runtime/resource_validity.rs",
+      "sha256": "8217d5deee579a00faab65d969542c92d565b2b83c2c71237c7b38a4db74533c",
+      "lines": 630
+    },
+    {
+      "path": "crates/reims-vgpu/src/runtime/writeback_debt.rs",
+      "sha256": "64b97e8b7fd284b112225e40f47ed52b60ff2af63d5c061c23de98da1e2638f1",
+      "lines": 2599
+    },
+    {
+      "path": "crates/reims-vgpu/src/runtime/released_pages.rs",
+      "sha256": "71165d56d87572d17a8f6683b048e68ef5da10e5315659ec6cbd7134b7d728e9",
+      "lines": 441
+    },
+    {
+      "path": "crates/reims-vgpu/src/runtime/mapper/mod.rs",
+      "sha256": "4fe990ae57cefe1322db412cd7b895921f976ffe72e10add6435ae4f5353e11b",
+      "lines": 2739
+    },
+    {
+      "path": "crates/reims-vgpu/src/runtime/parked.rs",
+      "sha256": "dc73ea2775916467462473044e73653939d01c5dd0c71b79a040361a1b989a65",
+      "lines": 694
+    },
+    {
+      "path": "crates/reims-vgpu/src/runtime/fence_exec.rs",
+      "sha256": "0a94fcd3991ae08cb1f743c4c20b3d70980ac9715ba5f003dec60b3e1a7a0046",
+      "lines": 395
+    },
+    {
+      "path": "crates/reims-vgpu/src/runtime/exec/mod.rs",
+      "sha256": "4aefa637341c7a27ec8303892617acd8aa8a4c14fe6349eb0a596d541c72eea5",
+      "lines": 6203
+    },
+    {
+      "path": "crates/reims-vgpu/src/runtime/scanout/mod.rs",
+      "sha256": "a1514d335b9989d82ffcc358f91a824be3be7696e5b719f1a5b294a8a7eccf93",
+      "lines": 1800
+    },
+    {
+      "path": "crates/reims-vgpu/src/backend/vulkan/engine/device_lost.rs",
+      "sha256": "b6f8b2ec1359359f589afc4a5e1ceeb921341a806e16c2bd28317426a0095cf4",
+      "lines": 249
+    },
+    {
+      "path": "crates/reims-vgpu/src/backend/vulkan/engine/resource_lease.rs",
+      "sha256": "f85502a9aef5d9cc09c352af38385df3927ae3a02ceacdc44ee2090a758710e1",
+      "lines": 225
+    },
+    {
+      "path": "crates/reims-vgpu/src/backend/vulkan/caps/device_features.rs",
+      "sha256": "381a3fb22bf01bcc7bc057660d185c8cdd254857c2677e96f6e371abafe55a7c",
+      "lines": 1720
+    },
+    {
+      "path": "crates/reims-vgpu/src/runtime/compute_exec/stall_watchdog.rs",
+      "sha256": "acbd31dbc152e5e7157947ea9dfdfe7cf51eaab2eb5ff1f78695d98b8291c9c9",
+      "lines": 320
+    },
+    {
+      "path": "crates/reims-vgpu/src/runtime/draw/metal/depth_stencil.rs",
+      "sha256": "1ccdc13ac92494f4980d53a1a609b7b2b3bda3146649f7d9d723ee2f9acea2d6",
+      "lines": 268
+    },
+    {
+      "path": "crates/reims-vgpu-core/tests/progress_is_always_possible.rs",
+      "sha256": "f6bbf8c5fd67dfee1bc6241af35a41b619fba3d83f9960196d3dcd399c8a4c0e",
+      "lines": 642
+    },
+    {
+      "path": "crates/reims-vgpu-wire/README.md",
+      "sha256": "ed782ac4c1fe7581ea197f4a0d6b48f13e46847fae3c9e4b399ef30b3aab5812",
+      "lines": 192
+    },
+    {
+      "path": "crates/reims-vgpu-wire/src/manifest.rs",
+      "sha256": "a9855efc68ebc5e061b916a93087aec15a8348c9ef190827e1abdf724f720456",
+      "lines": 3627
+    },
+    {
+      "path": "crates/reims-vgpu-wire/build.rs",
+      "sha256": "f08fe93412442e0ff59f6a4e781f83b73a98b018a68f6929049540962e8d51ff",
+      "lines": 10
+    },
+    {
+      "path": "crates/reims-vgpu-efi/README.md",
+      "sha256": "5a95d006e2a95ad3af7049033601b3b1347b33f20e835d2b5485cfb7fe795395",
+      "lines": 109
+    },
+    {
+      "path": "scripts/visual-gate/README.md",
+      "sha256": "0864dcb63784cd7f1b52f435ef181f1292d30953e726973454c3a1036d5e54fe",
+      "lines": 126
+    },
+    {
+      "path": "scripts/web-content-probe/web-content-probe.sh",
+      "sha256": "d7410c614ba9ec5d0e9edc14b038b617bebda3aa6989ae487ec23c8d2ff2b5c4",
+      "lines": 363
+    },
+    {
+      "path": "scripts/feature-matrix/feature-matrix.sh",
+      "sha256": "93b1f59ba63e8fa2ebb4e898dc503f89c717f970e3c2b5ea186a47017f28fec6",
+      "lines": 455
+    },
+    {
+      "path": "scripts/browser-probe/pacing-stats-test.mjs",
+      "sha256": "d84f9a8394d9497ed9788be6127f1a91c711c0f4d58ed891b088ff66fcb0a81b",
+      "lines": 121
+    },
+    {
+      "path": "conformance/README.md",
+      "sha256": "81976a4f91b37bd562a4822defb7ebe4a1a828f42de89658f0eefbf6eb040055",
+      "lines": 356
+    },
+    {
+      "path": "conformance/suite/cases/BiplanarSurface.swift",
+      "sha256": "74d28e64d2ca2f72d9b9476a03329d45e73218698932f87a81a08ffb971bfcac",
+      "lines": 144
+    },
+    {
+      "path": "conformance/suite/cases/SampledAlias.swift",
+      "sha256": "c9b5f105c451b1895f1631e0460a1bcc9871878fc761ff2e81caab55daf08fe6",
+      "lines": 421
+    },
+    {
+      "path": "conformance/suite/cases/HeapTextureAlias.swift",
+      "sha256": "cd0b0494a488157be943697ea69981ae091fa49c64b8fd5d23abc25ca5a63c10",
+      "lines": 279
+    },
+    {
+      "path": "conformance/suite/cases/DepthStencil.swift",
+      "sha256": "edcc3681551df84c6c38d6b25b15a352e143f881d01144b2fd6a3eff9a0dba7f",
+      "lines": 653
+    },
+    {
+      "path": "conformance/suite/cases/CommandBufferLifecycle.swift",
+      "sha256": "ec14f50157daa23a98bf8ffb5a569f6b876d43f08a1a34db9eb7c2623f5826a8",
+      "lines": 245
+    },
+    {
+      "path": "conformance/suite/cases/RenderBarrier.swift",
+      "sha256": "fcdf3ea95745aebbc4383eef1d9da146eff11ad2c1ded63f89e9f2520aebc1fe",
+      "lines": 67
+    },
+    {
+      "path": "conformance/expectations/macos-15/driver-errors.txt",
+      "sha256": "886e5fea07f5b72ead3b08524ac75edaaaa0bc96656e7416604928ee75c1e38c",
+      "lines": 56
+    },
+    {
+      "path": "vm/README.md",
+      "sha256": "e92ec94d5b3668d1847ef2ad2be66e7c2e00f774233f77d28303eabee6070256",
+      "lines": 107
+    },
+    {
+      "path": "vm/boot-x86.sh",
+      "sha256": "49757bdaa7b95704b29a53c02a96ac5850bef0e9e209553d28497f9a81843d9b",
+      "lines": 917
+    },
+    {
+      "path": "vendor/qemu/hw/misc/applesmc.c",
+      "sha256": "e1905d40edd60376ab855c4677ba7bb75a40309ed93a16a19e77420160de8318",
+      "lines": 407
+    },
+    {
+      "path": "vendor/qemu/hw/display/reims-vgpu-pci.c",
+      "sha256": "4f84795d6a37021f5ec5d6b0103032b2f408df4f9d183451194f2a4a9f17f764",
+      "lines": 1281
+    },
+    {
+      "path": "vendor/qemu-patches/README.md",
+      "sha256": "fc7ddc97b34408c26f53c6fb4059a035c47b4806d6dc328fd232b60a5503dfc9",
+      "lines": 46
+    },
+    {
+      "path": "conformance/verdict.py",
+      "sha256": "0a5c1c3f39120d258e8b9dc345b8080221ee1fa731b120a5b49b62660c27064d",
+      "lines": 206
+    },
+    {
+      "path": "conformance/ratchet.py",
+      "sha256": "f83af8b42532552a4c790269aefe9b2c2a804cf09c43558f1e86579865e4c386",
+      "lines": 266
+    },
+    {
+      "path": "crates/reims-vgpu/src/lib.rs",
+      "sha256": "62094610c9b96fe0cd907f69f2b681f5edcc29664cbcc13d6ad9447ec8c9a6f7",
+      "lines": 135
+    },
+    {
+      "path": "crates/reims-vgpu/src/runtime/gva_mem.rs",
+      "sha256": "7749b2f145eb8123cac2f02f617ea74af2903eead8876455f032022300c53b25",
+      "lines": 1307
+    },
+    {
+      "path": "conformance/suite/cases/TextureView.swift",
+      "sha256": "77a8a0f263a2851af24d9040443ba455269794dac90770c84d88ff27447dcc94",
+      "lines": 158
+    },
+    {
+      "path": "crates/reims-vgpu-protocol/src/closure.rs",
+      "sha256": "c0564db1c1c5db5adda8f7e6fba387acbb72964ba3b9b7cf6b9d0b23ac471d2d",
+      "lines": 2149
+    }
+  ]
+}

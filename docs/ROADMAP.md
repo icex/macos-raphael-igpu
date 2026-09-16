@@ -30,7 +30,7 @@ and “next experiment” instructions do not describe today's host.
 | Previously listed issue | Current classification | Revalidation |
 |---|---|---|
 | HEVC decode fails before kernel context creation | Resolved for automatic required-hardware selection | Fresh 120-frame hardware encode/decode pass; original 7-case/9,600-frame artifact hashes rechecked. |
-| PerfPowerServices continuously consumes a CPU core | Resolved in corrected QEMU, observed on ten measured guest boots | Native enumeration passes;0.0% after startup, graphics work and one service restart. Latest post-closure and Main10 guests are also0.0%; independent-host-boot durability remains open. |
+| PerfPowerServices continuously consumes a CPU core | Resolved in corrected QEMU, observed on eleven measured guest boots | Native enumeration passes;0.0% after startup, graphics work and one service restart. Latest post-closure and Main10 guests are also0.0%; independent-host-boot durability remains open. |
 | Green/purple transparency and smearing | Fixed for reproduced feedback defect in279 | Reversible native A/B intervention, fresh279/280 pixel passes, unobstructed280 native RFB panels and user reports clean Screen Sharing. Longer desktop qualification remains open. |
 | Critical-event record overflow | Resolved for tested280 workload; finite capacity retained | Earlier smcpmio/279 overflow preserved as failures. Candidate280 finishes with398/512records,0drops and authorizing recovery; strict loss checks unchanged. |
 | Explicit HEVC decoder GPU registry-ID selection | Confirmed remaining limitation | Fresh explicit-ID request returns -12906; automatic hardware request succeeds. Does not block automatic decoding. |
@@ -273,3 +273,38 @@ layer rather than requiring downstream users to rebuild their hypervisor.
 
 Current baseline: VirtualSMC disabled in OpenCore; QEMU AppleSMC enumeration patch
 fixes the reproduced CPU spin. Portability work is not yet qualified.
+
+## Reims source-audit follow-ups
+
+Research complete at Reims `69a57dd69a6958e946c03b73e02db331f330f435`, with
+its pinned QEMU submodule also reviewed. [Audit and source references](../findings/research/reims-vgpu-audit-20260916.md).
+These are independently implemented qualification tasks, not confirmed Raphael bugs.
+No external code was imported or runtime results reproduced; the translator dependency
+was not audited. Stock-QEMU/SMC remains the user-prioritized work above.
+
+- [ ] **M6: expected content versus remote pixels.** Add declared regions and visible
+  frame tokens to composition checks; compare raw RFB captures against independent
+  expected patterns. Reject stale frames and wrong geometry in host-only instrument
+  checks. Account for scale/color transfer and verify retained areas after updates.
+- [ ] **M5: mixed CPU/GPU ownership.** GPU paints one region, CPU updates another after
+  synchronization, then a LOAD render pass changes only the first. Verify both regions
+  and padding with independently seeded patterns and fresh-resource controls.
+- [ ] **M5: plane and subresource isolation.** Import biplanar IOSurfaces through public
+  APIs as R8/RG8 textures; check per-plane geometry, pitch and distinct content. Add
+  mip/slice views and prove changing one leaves other subresources unchanged.
+- [ ] **M5: retained depth/stencil.** Write in one pass, LOAD in another and verify a
+  CPU-known comparison mask. Keep depth resolve, aspect copies and independent-client
+  isolation as distinct cases; current color-resolve passes do not establish them.
+- [ ] **M5: bounded heap alias lifetime.** Complete work before making a resource
+  aliasable, prove reuse of its heap offset and verify new content. Keep actual
+  page-table release dependent on native unmap/invalidate and backing evidence.
+
+Use supported AMD storage modes and native synchronization contracts. Give cases
+stable semantic IDs, bounded waits and mandatory result accounting; retain capture,
+shutdown and recovery checks. Existing cross-process consumer-first GPU events already
+have stronger local evidence than importing Reims' basic event tests would add.
+
+Reims' virtual GOP, Vulkan/Metal translation and custom QEMU device do not establish
+Raphael DCN output, VCN support, VFIO recovery or VirtualBox passthrough. Its pinned
+AppleSMC still lacks key-index enumeration. Keep those roadmap gates open. Root and
+Cargo license metadata differ; resolve applicable terms before considering source reuse.

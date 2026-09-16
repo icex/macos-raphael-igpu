@@ -42,6 +42,11 @@ work, including removal of the patched-QEMU SMC dependency through OpenCore/gues
 and source-guided display initialization. Work is integrated on `dev`; candidate branches retain
 experiment history. No `main` merge or push before full desktop acceptance.
 
+The [Reims vGPU source audit](findings/research/reims-vgpu-audit-20260916.md)
+adds concrete rendering and memory-lifetime tests to the roadmap. Its custom
+AppleParavirtGPU/QEMU architecture does not replace our AMD passthrough driver
+or resolve stock-QEMU SMC compatibility. This was source review, not runtime testing.
+
 ## Quick QEMU setup
 
 Use the [general QEMU guide and example files](examples/qemu/README.md) for a normal

@@ -75,6 +75,12 @@ already active SMC device, so enabling the kext blindly is not a demonstrated fi
 The general QEMU setup guide/examples are prepared, with CPU-only paused-QEMU
 configuration validation. No new GPU allowance is recorded.
 
+Parallel Reims source audit completed at pinned commit `69a57dd69a6958e946c03b73e02db331f330f435`.
+Reviewed test designs now inform open visual, CPU/GPU ownership, plane/view/depth
+and heap-alias roadmap tasks. No external code imported, GPU run or new functional
+qualification. Reims still requires custom QEMU and does not fix SMC enumeration.
+[Audit and provenance](findings/research/reims-vgpu-audit-20260916.md).
+
 Physical output remains source-guided work: clock warnings fall back; later register
 polls exhaust, with caller details filtered from serial. Exact wait register/caller
 and startup link state remain unobserved. Broader applications, formats, performance,
