@@ -21,3 +21,10 @@ and card metal-124. Corrected emulator image51cbd7dcdbad2d6492ce83a263e9854c2862
 Fresh MODE2, maximum6000s, interactive hold5400s, all identity/capture-fatal/host-fault/
 shutdown/recovery aborts preserved. Verify native SMC enumeration and CPU without
 process modification, then continue transparency. No direct OpenGL workload.
+
+RUNNING a169e87a3b282ebb6552150a77a9c232/smcpmio, MODE2#152. Image51cbd7dc
+and binaryd52b825bd310a392f3d189948f58b3772833a26060b202e2d43a4175f20203f8
+verified. Native SMC user-client test passes indices0..5 and end-of-list0xb8 at6,7.
+PerfPowerServices PID152 CPU0.0%, cumulative0.67s, no debugger/process changes.
+Startup sample no longer contains getAllKeys/SMCGetKey loop. Sustained monitoring
+and service-restart repeat pending. Baseline completed; cleanup pending.

@@ -52,3 +52,13 @@ Corrected patch completes enumeration on byte4; revised test sends exactly four
 bytes and passes. Do not count the first isolated test as native qualification.
 Source: https://github.com/acidanthera/VirtualSMC/blob/master/VirtualSMC/kern_pmio.cpp .
 The service has not been disabled or patched in this guest. Native retest pending.
+
+## Corrected native verification
+
+Run a169e87a3b282ebb6552150a77a9c232/smcpmio, image51cbd7dc..., binaryd52b825b...
+verified in running container. PID152 is0.0% CPU, cumulative0.67s. Three-second
+sample contains no getAllKeys/SMCGetKey loop. No process debugger intervention.
+Native tests/smc_enumeration_probe.m calls selector2 with the observed168-byte ABI:
+indices0..5 succeed with all six expected key names;6 and7 return0xb8. Exit0.
+Evidence: smcpmio-results/perfpower-startup-sample.txt and smc-native-output.txt.
+This qualifies termination on this guest boot; sustained/restart repeat pending.
