@@ -1,0 +1,46 @@
+{
+  "run_id": "a169e87a3b282ebb6552150a77a9c232",
+  "date": "2026-09-16",
+  "artifacts": [
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-277-attempt-smcpmio-results/probe.json",
+      "sha256": "b107c11ed9ad2851c8c91123335b7f9da1ee7e37d0f9dc9c0688213103367e46"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-277-attempt-smcpmio-results/perfpower-startup-sample.txt",
+      "sha256": "090870bee21a531f0d631c509c60ef9bd0dd8ba792a0d221a9913d2157ca87dd"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-277-attempt-smcpmio-results/smc-native-output.txt",
+      "sha256": "1911453958e57482f13ab3d7e6ecbb8ca84518e4a3c77a41251c9d5d1edabaa2"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-277-attempt-smcpmio-results/perfpower-after-draw.txt",
+      "sha256": "013eca64d3406358cbb0c3e9d6c14eeb33d7e6328198843b6ae411c86d01a5fc"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-277-attempt-smcpmio-results/perfpower-restart1.txt",
+      "sha256": "9dba91fa035403e980a75b3fa002424711ba68118d90ceeefd7d5e965338bca3"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-277-attempt-smcpmio-results/perfpower-restart1-later.txt",
+      "sha256": "a5520c233b4a02c83844131cb83b9646226d16ccb89bf422ab5809a395aad933"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-277-attempt-smcpmio-results/native-trace.png",
+      "sha256": "b3955e4b01b8c28655a1e3120441f1e162f6a7cfebe621c4f9bede4644ab1606"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-277-attempt-smcpmio-results/audit-hevc-120-output.txt",
+      "sha256": "585b12e3a702bf65b21667bc6bb17caf5e9c7f12163e1c4bf6e339a812dbf0e3"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-277-attempt-smcpmio-results/audit-h264-120-output.txt",
+      "sha256": "25dff580cb42b5cd1b486abf5eaeda30c28a3f01a2dd56f01b0bd449cb3d7730"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-277-attempt-smcpmio-results/audit-hevc-explicit-id-output.txt",
+      "sha256": "9a2d2941cdb5202683d80b0da32fbb7bb950f8fca00ce81ff91e8afaaee0a6e6"
+    }
+  ]
+}
