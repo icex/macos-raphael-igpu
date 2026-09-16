@@ -31,7 +31,8 @@ def load_metal_test():
 
 def registry_id_from_probe(results):
     text = (results / "probe.json").read_text()
-    ids = sorted({int(x) for x in re.findall(r'"registry_id":\s*(\d+)', text)})
+    # probe.json embeds the guest result as an escaped JSON string.
+    ids = sorted({int(x) for x in re.findall(r'registry_id\\?"\s*:\s*(\d+)', text)})
     if len(ids) != 1:
         raise SystemExit(f"expected exactly one registry_id in probe.json, found {ids}")
     return ids[0]
@@ -44,6 +45,8 @@ def main():
     parser.add_argument("--codec", choices=("h264", "hevc"), default="h264")
     parser.add_argument("--mode", choices=("hw", "sw"), default="hw")
     parser.add_argument("--registry-id", type=int, help="override the accelerator registry id")
+    parser.add_argument("--source", default="tests/video_decode_control_probe.m",
+                        help="probe source relative to the repository (same CLI: codec hw|sw registryID)")
     args = parser.parse_args()
     vm = args.vm_dir.resolve()
     results = args.results.resolve()
@@ -53,7 +56,7 @@ def main():
     if (results / "stop-requested").exists():
         raise SystemExit("stop already requested for this run")
     registry = args.registry_id or registry_id_from_probe(results)
-    source = (ROOT / "tests/video_decode_control_probe.m").read_bytes()
+    source = (ROOT / args.source).read_bytes()
     nonce = uuid.uuid4().hex
     guest_dir = f"/var/tmp/rgpu-codec-{nonce}"
     payload = base64.b64encode(source).decode("ascii")
@@ -65,10 +68,11 @@ def main():
               f"-framework VideoToolbox -framework CoreMedia -framework CoreVideo "
               f"-o {guest_dir}/probe && {guest_dir}/probe {args.codec} {args.mode} {registry}")
     command = f"( {action}; result=$?; printf \"\\nRGPU_EXIT {nonce} %s\\n\" \"$result\" )"
-    tag = f"decode-control-{args.mode}"
+    tag = f"{Path(args.source).stem.replace('_', '-')}-{args.mode}-{args.codec}"
     (results / f"{tag}-command.json").write_text(json.dumps(
         {"nonce": nonce, "command": command, "registry_id": registry,
-         "experiment_run_id": ready["run_id"], "codec": args.codec}, indent=2) + "\n")
+         "experiment_run_id": ready["run_id"], "codec": args.codec,
+         "source": args.source}, indent=2) + "\n")
     metal = load_metal_test()
     env = dict(os.environ, GX_TIMEOUT="150")
     proc = metal.run_guest_command(vm, command, nonce, env, timeout=170, execution_grace=0)
