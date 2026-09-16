@@ -613,7 +613,7 @@ def validate_card(raw, expected_sha256):
     ("1.0.280", "metal-127"): {"rgpuvmroot": "5", "rgpudump": "5000", "rgpugolden": "1",
                                    "rgpuhangdump": "1", "rgpunobin": "1", "rgpusdmacfg": "2",
                                    "rgputexdiag": "2", "rgpummhub": "1", "rgpuvcnfw": "1", "rgpuvcnapu": "1", "rgpuvcnsmu": "1", "rgpuvcndpg": "1", "rgpuvcndecfirst": "1", "rgpuvcnnodpm": "1", "rgpuvcnwptr": "1"},
-        ("1.0.280", "metal-128"): {"rgpuvmroot": "5", "rgpudump": "5000", "rgpugolden": "1",
+    ("1.0.280", "metal-128"): {"rgpuvmroot": "5", "rgpudump": "5000", "rgpugolden": "1",
                                    "rgpuhangdump": "1", "rgpunobin": "1", "rgpusdmacfg": "2",
                                    "rgputexdiag": "2", "rgpummhub": "1", "rgpuvcnfw": "1", "rgpuvcnapu": "1", "rgpuvcnsmu": "1", "rgpuvcndpg": "1", "rgpuvcndecfirst": "1", "rgpuvcnnodpm": "1", "rgpuvcnwptr": "1"},
     ("1.0.281", "metal-129"): {"rgpuvmroot": "5", "rgpudump": "5000", "rgpugolden": "1",
