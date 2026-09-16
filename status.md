@@ -54,3 +54,13 @@ Historical candidate278 direct OpenGL hang and live-validation crash remain
 unresolved. No main merge/push before full desktop proof. Additional exposure
 requires a named-boot allowance and fresh successful MODE2 through tools/cycle.py.
 No vfio→amdgpu cycling. [Roadmap](docs/ROADMAP.md).
+
+## Next bounded run allowance
+
+Standing user instructions authorize the seventeenth exposure on host boot
+2508eb6d-ddf3-497d-9774-00a7ecebe3ed, same280/cardmetal-127, attempt reclamation.
+Purpose:32measured allocation/copy/release rounds after3warmups,48MiB live resources,
+CPU-check every output and sample process-local Metal allocation return, followed
+by clean shutdown/recovery. Prior280 has an authorizing recovery receipt. Fresh
+MODE2 must show CP_STAT=0/RLC_CNTL=0; all identity, capture, host-fault and cleanup
+aborts retained. Maximum6000seconds; stop manually after the bounded checks.
