@@ -16,7 +16,7 @@ fbt:com.apple.iokit.IOAcceleratorFamily2:_ZN16IOAccelVidMemory4wireEv:return
 fbt:com.apple.iokit.IOAcceleratorFamily2:_ZN16IOAccelMemoryMap7prepareEv:return
 /self->mapdepth > 0/
 {
-    pending[tid,mapstack[tid,self->mapdepth]] = (arg1 & 0xff) ? 0 : pending[tid,mapstack[tid,self->mapdepth]] + wirefail[tid,self->mapdepth];
+    pending[tid,mapstack[tid,self->mapdepth]] = (arg1 & 0xff) ? 0 : wirefail[tid,self->mapdepth];
     mapstack[tid,self->mapdepth]=0;
     wirefail[tid,self->mapdepth]=0;
     self->mapdepth--;
