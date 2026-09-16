@@ -198,3 +198,17 @@ Retina login job exited0 but backing reverted1080p; one manual60Hz-only configur
 restored1920x1080 logical/3840x2160 backing. Login durability remains open.
 Sunshine LAN relay restored; user reconfirms3–4FPS. Candidate282 will validate the
 import stub before installing the same bounded diagnostic sampling change.
+
+## Candidate282 bounded follow-up allowance
+
+After candidate281 clean shutdown/recovery, authorize exactly one prospective32nd
+GPU exposure on boot `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`, via tools/cycle.py
+and a fresh MODE2 reset. Candidate282/metal130 validates the observed native
+kprintf import thunk before redirecting the same five-byte CALL. No allocator
+behavior or global logging changes. Build `7a26b1a2f6694ae88ed889105de30bc7`,
+source `d1f336dc31e3116e3a337c76d6a331d3cf88ed59`, executable SHA256
+`9c7e5dffc64fef69e874ea3c8e7b940e9761caf53e31400d2dc68d1591724fc2`.
+This user-requested performance-fix continuation requires installed=1 before
+interpreting throughput. Preserve4K Retina60Hz and existing recovery/capture gates.
+The final281 encoder timing window was idle after client disconnect and yielded
+no samples; it is not performance evidence.
