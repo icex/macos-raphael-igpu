@@ -1155,3 +1155,26 @@ class Candidate280ContractTest(unittest.TestCase):
         self.assertEqual(card["candidate_version"], "1.0.280")
         with self.assertRaises(RuntimeError):
             tool.configure("1.0.281", "metal-128")
+
+    def test_closure_pair_preserves_exact_functional_guards(self):
+        tool = load_tool()
+        tool.configure("1.0.280", "metal-128")
+        raw = (ROOT / "experiments/metal-128.json").read_bytes()
+        card = tool.validate_card(raw, hashlib.sha256(raw).hexdigest())
+        self.assertEqual(card["lifecycle_test"], "supervised-qemu-quit")
+        baseline = json.loads((ROOT / "experiments/metal-127.json").read_bytes())
+        self.assertEqual(card["functional_boot_arguments"], baseline["functional_boot_arguments"])
+        for mutation in ("action", "boot_argument"):
+            altered = json.loads(raw)
+            if mutation == "action":
+                altered["lifecycle_test"] = "unreviewed-action"
+            else:
+                altered["functional_boot_arguments"]["rgputexdiag"] = "0"
+            encoded = json.dumps(altered).encode()
+            with self.assertRaises(RuntimeError):
+                tool.validate_card(encoded, hashlib.sha256(encoded).hexdigest())
+        tool.configure("1.0.280", "metal-129")
+        altered = json.loads(raw); altered["id"] = "metal-129"
+        encoded = json.dumps(altered).encode()
+        with self.assertRaisesRegex(RuntimeError, "unsupported candidate card pair"):
+            tool.validate_card(encoded, hashlib.sha256(encoded).hexdigest())
