@@ -176,3 +176,8 @@ After clean recovery, authorize exactly one candidate281 exposure on host boot
 `2508eb6d-ddf3-497d-9774-00a7ecebe3ed` (prospective31st exposure), via tools/cycle.py
 and a fresh MODE2 receipt. This is the user-requested fix/test continuation, not
 an extension of the current guest deadline. Retain4K Retina60Hz and Sunshine setup.
+
+Candidate281 first staging attempt (`alloclog`) stopped before QEMU/VFIO exposure:
+missing attempt-specific build identities. MODE2#173 was clean; no GPU ledger
+entry consumed. Retry uses the already verified base candidate281 namespace;
+the named-boot prospective31st exposure allowance above remains available.
