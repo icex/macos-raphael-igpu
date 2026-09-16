@@ -15,7 +15,7 @@ Baseline Metal passes; strict capture valid. Shutdown is `exited-after-guest-req
 schema6 recovery authorizes relaunch, CP_STAT0, no forced inactive queues or dequeue
 timeouts. User-visible Retina1080p/4K backing works, but Sunshine4K throughput fails
 at3–4FPS. These are separate results. The deadline and LAN relay ended normally.
-Candidate281/metal-129 is built and host-tested, awaiting its next supervised run.
+Candidate281/metal-129 is now live as described below; its logging patch did not install.
 
 Sunshine v2026.914.233613 official Intel DMG is installed. VideoToolbox is selected
 with software fallback disabled; startup detects H.264 and HEVC Main8. Its streaming
@@ -181,3 +181,20 @@ Candidate281 first staging attempt (`alloclog`) stopped before QEMU/VFIO exposur
 missing attempt-specific build identities. MODE2#173 was clean; no GPU ledger
 entry consumed. Retry uses the already verified base candidate281 namespace;
 the named-boot prospective31st exposure allowance above remains available.
+
+## Candidate281 live result — logging hypothesis not yet tested
+
+Run `b29d3de37f74516698178fda2301f9d9`, MODE2#174, exposure31 on the
+named boot above. Build `d7ff9eef7f5e46c5b5be269655c9af10`. Baseline Metal
+probe completes; live capture continues and shutdown/recovery remain pending.
+`ALLOCLOG: guarded=1 installed=0 original=0`: unchanged3–4FPS cannot assess
+the logging hypothesis. DTrace byte reads identify the CALL through `ff25`
+RIP-relative import stub to `kernel`kprintf`, so direct-symbol equality was wrong.
+Exact evidence: candidate-281-results/alloclog-bytes2-output.txt,
+alloclog-stub-output.txt and alloclog-stub-detail-output.txt. Earlier reads using
+unslid/wrong-image addresses are invalid diagnostics, not GPU faults; one unbounded
+DTrace BEGIN failure was explicitly interrupted via authenticated SSH. Relay works.
+Retina login job exited0 but backing reverted1080p; one manual60Hz-only configuration
+restored1920x1080 logical/3840x2160 backing. Login durability remains open.
+Sunshine LAN relay restored; user reconfirms3–4FPS. Candidate282 will validate the
+import stub before installing the same bounded diagnostic sampling change.
