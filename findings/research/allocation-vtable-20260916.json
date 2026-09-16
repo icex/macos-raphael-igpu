@@ -1,0 +1,60 @@
+{
+  "binary": "/home/bogdan/macos-vm/kdk/x/System/Library/Extensions/AMDRadeonX6000.kext/Contents/MacOS/AMDRadeonX6000",
+  "binary_sha256": "2e364270c3243c532a9428c670313d5afd20406e42d64edb4fa8f3572504104e",
+  "vtable_symbol": "__ZTV26AMDRadeonX6000_AMDHWMemory",
+  "vtable_address": "0x172080",
+  "address_point_delta": 16,
+  "slots": [
+    {
+      "slot": "0x170",
+      "target": "0x52e2e",
+      "symbol": "__ZN26AMDRadeonX6000_AMDHWMemory8allocateEP16AMDMemoryElementyyyyb15_eOP_ORIGINATOR9_eOP_TYPE"
+    },
+    {
+      "slot": "0x178",
+      "target": "0x53030",
+      "symbol": "__ZN26AMDRadeonX6000_AMDHWMemory8allocateEP16AMDMemoryElementyy28_eAMD_MEMORY_ALLOCATION_TYPEb15_eOP_ORIGINATOR9_eOP_TYPE"
+    },
+    {
+      "slot": "0x180",
+      "target": "0x531b6",
+      "symbol": "__ZN26AMDRadeonX6000_AMDHWMemory19allocateLargeBlocksEP16AMDMemoryElementyyy15_eOP_ORIGINATOR9_eOP_TYPEb"
+    },
+    {
+      "slot": "0x188",
+      "target": "0x53114",
+      "symbol": "__ZN26AMDRadeonX6000_AMDHWMemory18getPhysicalSegmentEP16AMDMemoryElementyPy"
+    },
+    {
+      "slot": "0x190",
+      "target": "0x530f6",
+      "symbol": "__ZN26AMDRadeonX6000_AMDHWMemory12isContiguousEP16AMDMemoryElement"
+    },
+    {
+      "slot": "0x198",
+      "target": "0x5343c",
+      "symbol": "__ZN26AMDRadeonX6000_AMDHWMemory7reserveEP16AMDMemoryElementyyb15_eOP_ORIGINATOR"
+    },
+    {
+      "slot": "0x1a0",
+      "target": "0x5351e",
+      "symbol": "__ZN26AMDRadeonX6000_AMDHWMemory8safeFreeEP16AMDMemoryElement"
+    },
+    {
+      "slot": "0x1c0",
+      "target": "0x53688",
+      "symbol": "__ZN26AMDRadeonX6000_AMDHWMemory15totalFreeMemoryEv"
+    },
+    {
+      "slot": "0x1c8",
+      "target": "0x5367a",
+      "symbol": "__ZN26AMDRadeonX6000_AMDHWMemory20totalFreeFixedMemoryEv"
+    },
+    {
+      "slot": "0x258",
+      "target": "0x53c34",
+      "symbol": null
+    }
+  ],
+  "method": "LC_SEGMENT_64 VA to file offsets; little-endian uint64 pointers; exact local nm symbols"
+}

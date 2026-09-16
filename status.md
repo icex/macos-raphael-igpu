@@ -78,3 +78,8 @@ and all existing identity, capture, host-fault and cleanup gates retained.
 Hypothesis: released buffer address ranges are recycled under repeated verified
 copies. Discriminator: logged address recurrence after object release, bounded
 allocation return and CPU-correct data; absence of recurrence alone is inconclusive.
+
+Same-run bounded follow-up: after the address workload, test explicit GPU fences
+on untracked private buffers across blit/compute/blit encoders (128 rounds),
+and three minutes of moving/resizing native material windows with raw RFB captures.
+These remain inside the existing nineteenth-exposure deadline and stop gates.
