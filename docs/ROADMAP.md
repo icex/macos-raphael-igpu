@@ -223,10 +223,11 @@ from device enumeration or passing microbenchmarks.
    nominal60Hz mode timing separately from measured remote frame delivery and
    latency. Sunshine is installed and detects hardware-only H.264/HEVC Main8 at
    startup. LAN relay and subnet-restricted UFW rules are configured; actual
-   4K streaming baseline is3–4FPS. Candidate282 installs guarded sampling of the
+   Pre-fix4K streaming baseline was3–4FPS. Candidate282 installs guarded sampling of the
    costly native allocation diagnostic;24+60-frame4K hardware HEVC checks pass.
    Failed allocation calls average41–60us in the generated-pattern test versus~1.9ms
-   in the prior live stream, but actual Moonlight improvement remains unverified.
+   in the prior live stream, and the user now reports1080p60 /4K20–30FPS.4K60 remains open; an exact
+   hardware FPS ceiling is not established.
    Login persistence also remains broken after startup despite the helper exiting0.
    [Evidence](../findings/research/allocation-log-thunk-20260916.md). Physical
    output is a separate gate.

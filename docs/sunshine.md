@@ -3,11 +3,10 @@
 Sunshine is an optional alternative to macOS Screen Sharing. The current guest has
 [Sunshine v2026.914.233613](https://github.com/LizardByte/Sunshine/releases/tag/v2026.914.233613)
 installed from the official Intel DMG. Hardware-only VideoToolbox startup probes
-find H.264 and HEVC Main8. Actual4K Moonlight playback works but currently delivers only3–4FPS.
+find H.264 and HEVC Main8. After candidate282, the user reports1080p60 and4K20–30FPS, improved from3–4FPS.
 Candidate282 now samples one costly allocation-failure diagnostic and passes
-two4K hardware codec checks; an active stream comparison is still pending.
-[Evidence](../findings/research/allocation-log-thunk-20260916.md). This is not yet a proven faster
-replacement for Screen Sharing. macOS support is experimental; gamepad support is
+two4K hardware codec checks; independent post-fix stream timing remains pending.
+[Evidence](../findings/research/allocation-log-thunk-20260916.md). 4K60 and a controlled comparison with Screen Sharing remain unqualified. macOS support is experimental; gamepad support is
 unavailable in this build.
 
 ## Experimental driver diagnostic budget
@@ -95,7 +94,7 @@ check; actual streamed output and Moonlight statistics are the next verification
 
 Current development session: Moonlight `192.168.0.43:48989`, web UI
 `https://192.168.0.43:48990`. The API and authenticated web endpoint respond through
-that LAN address; another device has paired and streamed, but only3–4FPS was reported. The relay is bounded by the active experiment’s deadline; consult `status.md` and its supervision receipt.
+that LAN address; another device has paired and streamed, with latest user observations of1080p60 and4K20–30FPS. The relay is bounded by the active experiment’s deadline; consult `status.md` and its supervision receipt.
 [Evidence hashes](../findings/research/sunshine-lan-20260916.json).
 
 ## Host firewall

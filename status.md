@@ -1,7 +1,8 @@
 # Live status — 2026-09-16
 
 Candidate282 is testing a targeted fix for4K Sunshine encoder stalls. Its guarded
-allocation-diagnostic sampling patch is installed; generated-pattern4K codec checks pass; Moonlight throughput is not yet measured.
+allocation-diagnostic sampling patch is installed; generated-pattern4K codec checks pass. User now reports1080p60 and4K20–30FPS;
+post-fix stream timing is not yet independently captured.
 The transparency fix and prior codec/Metal passes retain their documented scopes.
 Full desktop, physical output and release qualification remain open.
 
@@ -36,8 +37,10 @@ allocation primitives. Diagnostic logging is the testable hypothesis, not yet a
 proven root cause. Two4K HEVC checks pass24+60 frames,689,188,500 luma samples checked, maximum error2.
 Under the second workload, failed allocation calls average41–60us; the prior
 active stream averaged~1.9ms. Workload differences prevent a streaming speedup claim.
-Verify throughput with installed=1 under the same live4K HEVC
-stream, then repeat correctness and clean shutdown/recovery checks.
+User now observes1080p60 and4K20–30FPS after the installed patch, confirming
+a substantial practical improvement.4K60 remains open; no published exact CPU
+encoder FPS ceiling was found. Separate capture/conversion/encode timings next.
+[Hardware capability check](findings/research/9800x3d-streaming-capabilities-20260916.md).
 [Baseline evidence](findings/research/sunshine-performance-20260916.md).
 
 ## Verified progress

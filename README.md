@@ -49,9 +49,9 @@ readiness.
   proven modes.
 - **Evaluate remote streaming:** Sunshine 2026.914.233613 is installed in the
   current guest. Startup hardware-only VideoToolbox selection detects H.264/HEVC
-  Main8. Actual4K Moonlight playback works but is currently only3–4FPS;
+  Main8. After the allocation-log fix, the user reports1080p60 and4K20–30FPS;
   candidate282 now samples the costly allocation diagnostic and passes two4K
-  hardware codec checks. Actual streaming improvement remains unverified. [Setup, LAN access and firewall rules](docs/sunshine.md). Lowering Apple
+  hardware codec checks. 4K60 and sustained streaming remain unqualified. [Setup, LAN access and firewall rules](docs/sunshine.md). Lowering Apple
   Screen Sharing quality improved observed speed. A raw vncdotool black frame in
   the same working user session is a limited capture oracle, not a universal black
   desktop result.
