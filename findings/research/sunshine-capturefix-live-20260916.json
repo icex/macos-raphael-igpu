@@ -1,0 +1,58 @@
+{
+  "run_id": "526953460479934120e31312a466eccc",
+  "user_observation": "Picture remains clear; cursor-motion slowdown occurs across desktop, not only Safari.",
+  "patch_observation": "Screen Recording approved; patched app passes startup hardware H.264/HEVC discovery. Valid CoreVideo lock probe available and zero matching lock calls during active stream.",
+  "light_trace": {
+    "elapsed_us": 13000580,
+    "send_calls": 553,
+    "send_total_us": 12344959,
+    "mean_send_ms": 22.323614828209763,
+    "warp_calls": 522,
+    "warp_total_us": 132016
+  },
+  "sampled_trace": {
+    "elapsed_us": 13001137,
+    "send_calls": 489,
+    "send_total_us": 12212388
+  },
+  "encoder_stage_trace": {
+    "elapsed_us": 13000215,
+    "vcn_wait_calls": 421,
+    "vcn_wait_total_us": 8714246,
+    "metal_wait_calls": 420,
+    "metal_wait_total_us": 3289204,
+    "send_calls": 420,
+    "send_total_us": 9106176,
+    "limitations": "Worker waits overlap; do not sum. First send bucket is second3, so do not treat full elapsed average as uninterrupted streaming throughput."
+  },
+  "conclusion": "Capture-lock removal is active but insufficient to fix motion-triggered streaming slowdown. No matched unpatched/ patched throughput gain established.",
+  "next": "Temporary command-line max_bitrate=20000 control at unchanged4K60 HEVC; config file unchanged.",
+  "shutdown_recovery": "Pending; same supervised run active.",
+  "artifacts": {
+    "permissions-open-output.txt": {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-attempt-capturefix3-results/permissions-open-output.txt",
+      "sha256": "d7c2461769d91ac5f14e54ceebb4fd6405b4fb72d5351010d72adb116f8f2267"
+    },
+    "patched-pacing-1-output.txt": {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-attempt-capturefix3-results/patched-pacing-1-output.txt",
+      "sha256": "fd22a6030205fb19f6621697cb4cd08f5d943df118e1a51d74f0c950e38d2c70"
+    },
+    "patched-pacing-light-output.txt": {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-attempt-capturefix3-results/patched-pacing-light-output.txt",
+      "sha256": "f185faaf3c383dd2374fffa0d433a7f72a74f7b46bd8989cb907785ef3c1ddea"
+    },
+    "encoder-stage-timing-output.txt": {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-attempt-capturefix3-results/encoder-stage-timing-output.txt",
+      "sha256": "27b93df6442504774fefaa62b12da04157155ff0d31343562d19dadf30acede6"
+    },
+    "bitrate20-start-output.txt": {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-attempt-capturefix3-results/bitrate20-start-output.txt",
+      "sha256": "92d527c65648f75f5b6b3dc2c7cdc89cb55c215c6d2fb2369256f638627044ca"
+    },
+    "bitrate20-pacing-output.txt": {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-attempt-capturefix3-results/bitrate20-pacing-output.txt",
+      "sha256": "52f1e20037ec99e0bb34a7719d9b84a1cfde61b9f0dd3f78dcf550587bfea40b"
+    }
+  },
+  "bitrate_control_result": "NO_ACTIVE_STREAM; no performance measurement"
+}

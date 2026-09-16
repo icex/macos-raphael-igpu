@@ -25,7 +25,9 @@ remain open. Final capture, guest-request shutdown and recovery now pass.
 - Persisted Sunshine configuration keeps hardware-only H.264 and HEVC Main8
   (`hevc_mode=2`, `vt_software=disabled`), per user request. Pairing is preserved.
   Exact-instance LAN forwarding restored for capturefix3; web UI responds401
-  as expected without credentials. The original signed app remains active.
+  as expected without credentials. Patched Sunshine is active after user-approved
+  capture permission; hardware H.264 and HEVC detected. A temporary CLI-only
+  max_bitrate=20000 comparison is awaiting client reconnect; config file unchanged.
 - Retina was 1920×1080 logical /3840×2160 backing /2×/60Hz; login persistence
   still needs qualification. No 90/120Hz display claim.
 
@@ -68,11 +70,16 @@ each codec separately for remaining pacing and input latency. The final moving
 HEVC trace requested120FPS against a60Hz display:620 submissions/13.001s, with
 full-second counts30–63 and mean20.67ms submission. The client reconnected at
 60FPS at23:05:20, but the supervised deadline prevented a matching trace. Do not attribute the gain solely to the client or call 4K60 solved.
-The Sunshine capture-lock candidate **builds and starts** as a separate local app,
-but macOS denies its Screen Recording permission. Original signed Sunshine was
-restored and again detects hardware H.264/HEVC. User permission is required before
-a live motion comparison; no performance improvement is demonstrated.
-[Build and rollback evidence](findings/research/sunshine-capturefix-build-20260916.json).
+The capture-lock candidate is now live with user-approved Screen Recording access.
+The valid CoreVideo probe records zero locks during active hardware capture, but
+motion still slows everywhere on the desktop; the user confirms a clear picture.
+A lighter trace completes553 submissions/13.001s, mean22.32ms. Native encoder
+waits average20.70ms and Metal preprocessing waits7.83ms in a separate trace;
+workers overlap, so those durations cannot be summed. Lock removal alone is
+**not a sufficient fix**, and no matched throughput gain is established.
+A temporary20Mbps CLI override at unchanged4K60 HEVC awaits client reconnect;
+the first control trace had no active stream. Do not report a bitrate result.
+[Live evidence](findings/research/sunshine-capturefix-live-20260916.json).
 Foundation-sunshine replacement was cancelled by the user; the original app,
 pairing and LAN ports are preserved. No Foundation binary or build dependencies
 were installed. [Current evidence](findings/research/moonlight-qt-h264-20260916.md).

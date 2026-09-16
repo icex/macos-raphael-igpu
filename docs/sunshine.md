@@ -134,7 +134,9 @@ open; the final120FPS-request/60Hz-display trace requires a matching4K60 control
 [Final evidence](../findings/research/safari-motion-20260916.json).
 
 The follow-up capturefix3 run builds the original upstream Sunshine with the
-scoped GPU-buffer lock patch. Its separate “Sunshine Capture Fix” app needs its
-own macOS Screen Recording and input permissions. The original signed app was
-restored after that permission denial; HEVC remains enabled. No measured
-performance gain is claimed. [Build/rollback evidence](../findings/research/sunshine-capturefix-build-20260916.json).
+scoped GPU-buffer lock patch. The user approved its separate “Sunshine Capture
+Fix” app's capture permission. Live tracing shows zero capture locks; the user
+reports a clear picture but motion stalls across the desktop. Native encoder
+completion and Metal preprocessing waits remain. A temporary CLI20Mbps control
+at4K60 HEVC awaits client reconnect; the saved configuration is unchanged.
+[Live evidence](../findings/research/sunshine-capturefix-live-20260916.json).

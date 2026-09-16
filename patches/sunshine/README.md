@@ -27,8 +27,10 @@ exposing a null CPU pointer. Each wrapper records its own lock decision, while
 
 Native Release build passes with Apple clang17, CMake4.4.3 and the pinned
 FFmpeg release v2026.910.121303. A separate ad-hoc-signed local app starts, but
-macOS denies its Screen Recording access; the original app was restored.
-No live performance or capture-correctness result yet. Validate the original
+the user approved Screen Recording access. Live tracing confirms zero capture
+locks with valid probes, and the user reports a clear picture. Encoder stalls
+remain; this is not a sufficient fix for4K60 motion delivery.
+[Live evidence](../../findings/research/sunshine-capturefix-live-20260916.json). Validate the original
 file hashes before applying. [Build evidence](../../findings/research/sunshine-capturefix-build-20260916.json).
 
 References: [CVPixelBufferLockBaseAddress](https://developer.apple.com/documentation/corevideo/cvpixelbufferlockbaseaddress(_:_:)) and [managed Metal resource synchronization](https://developer.apple.com/documentation/metal/synchronizing-a-managed-resource-in-macos).

@@ -52,8 +52,8 @@ readiness.
   40 FPS over transparent Safari; a server trace averages about 55 submissions/s
   with occasional long calls. HEVC remains enabled at the user’s request. Client and
   codec changed together, so their individual effects remain unproven. Sustained
-  frame delivery and input latency remain open. A capture-buffer optimization builds,
-  but its live comparison awaits macOS capture permission; it is not a verified fix. [Measurements](findings/research/moonlight-qt-h264-20260916.md)
+  frame delivery and input latency remain open. A live capture-buffer optimization removes CPU locks and retains a clear picture,
+  but motion-triggered encoder stalls remain across the desktop; it is not a complete fix. [Measurements](findings/research/moonlight-qt-h264-20260916.md)
   · [Setup, LAN access and firewall rules](docs/sunshine.md).
 - **Broaden portability:** extend the working stock-QEMU/OpenCore setup across
   host boots and supported versions, and document requirements for other hypervisors,
