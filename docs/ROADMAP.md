@@ -208,7 +208,13 @@ from device enumeration or passing microbenchmarks.
 
 ## Next work, in order
 
-1. Qualify supervised QEMU closure and guest-crash/command-channel failure paths,
+1. **Full 4K remote desktop (user priority,2026-09-16).** Expose and validate a
+   native3840×2160 desktop through macOS Screen Sharing. Trace advertised display
+   modes, framebuffer allocation and capture geometry; confirm the active backing
+   pixels, correct composition under motion, and clean shutdown/recovery. Treat
+   nominal60Hz mode timing separately from measured remote frame delivery and
+   latency. Preserve lower-resolution fallback; physical output is a separate gate.
+2. Qualify supervised QEMU closure and guest-crash/command-channel failure paths,
    then representative workloads on independently initialized host boots.
    Supervised HMP quit now has positive cleanup evidence: five queues dequeued,
    graphics ring retired, CP_STAT=0, authorizing recovery. Strict overall verdict
@@ -216,9 +222,9 @@ from device enumeration or passing microbenchmarks.
    passes the desktop probe, clean shutdown and authorizing recovery.
    Panic/fallback/repetition/independent host boots remain open.
    [Closure evidence](../findings/research/supervised-qemu-closure-result-20260916.md).
-2. Broaden desktop applications, formats and interprocess synchronization; measure
+3. Broaden desktop applications, formats and interprocess synchronization; measure
    reclamation cost and page-table release beyond observed address recycling.
-3. Progress physical display and measured performance qualification after those gates.
+4. Progress physical display and measured performance qualification after those gates.
 
 Allocation failure messages have now been traced through native reclaim/retry:
 all 40 failed reclaim calls in the larger-buffer capture are followed by success
@@ -297,9 +303,13 @@ was not audited. The tested stock-QEMU/SMC path is now verified; broader portabi
   frame tokens to composition checks; compare raw RFB captures against independent
   expected patterns. Reject stale frames and wrong geometry in host-only instrument
   checks. Account for scale/color transfer and verify retained areas after updates.
-- [ ] **M5: mixed CPU/GPU ownership.** GPU paints one region, CPU updates another after
-  synchronization, then a LOAD render pass changes only the first. Verify both regions
-  and padding with independently seeded patterns and fresh-resource controls.
+- [x] **M5: mixed CPU/GPU ownership — managed textures.** 96 fresh-resource cases
+  across two seeded processes pass RGBA8/BGRA8 at64×64/1003×769: explicit GPU-to-CPU
+  sync, partial CPU update and LOAD-only/CPU-only/combined controls preserve changed
+  and untouched regions.111,658,032 pixel comparisons, zero pixel/padding mismatches;
+  valid strict capture and clean shutdown/recovery. Every control includes initial
+  texture synchronization/readback; this does not qualify IOSurface ownership or
+  retained depth. [Evidence](../findings/research/texture-ownership-20260916.md).
 - [ ] **M5: plane and subresource isolation.** Import biplanar IOSurfaces through public
   APIs as R8/RG8 textures; check per-plane geometry, pitch and distinct content. Add
   mip/slice views and prove changing one leaves other subresources unchanged.

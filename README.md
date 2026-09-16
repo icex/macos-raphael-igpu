@@ -23,7 +23,7 @@ and long-duration reliability are still being tested.
 |---|---|
 | Remote desktop | WindowServer uses the accelerator; tested transparency, blur, window movement and resizing render correctly. |
 | Metal rendering and compute | Verified output in targeted compute, texture, depth/stencil and MSAA tests. Full Metal conformance is not established. |
-| Memory and synchronization | Buffer/texture reuse, GPU fences, shared events and cross-process IOSurface transfers pass targeted checks. |
+| Memory and synchronization | Buffer/texture reuse, synchronized CPU/GPU texture updates, retained color contents, GPU fences, shared events and cross-process IOSurface transfers pass targeted checks. |
 | Hardware video | H.264 and HEVC Main8 encode/decode work. HEVC Main10 decoding passes short tests; Main10 hardware encoding is unavailable in the current native profile set. |
 | Shutdown and reuse | Repeated clean guest shutdowns and same-host-boot reuse work in the supervised workflow. Crash recovery and independent-host-boot coverage remain incomplete. |
 | Physical HDMI/DisplayPort | Not yet working as a qualified display path; use guest Screen Sharing. |
@@ -41,6 +41,8 @@ readiness.
 
 ## Goals and next steps
 
+- **Enable full 4K Screen Sharing:** expose and verify a native3840×2160 remote
+  desktop, then measure delivered frame rate and latency independently of mode timing.
 - **Broaden portability:** extend the working stock-QEMU/OpenCore setup across
   host boots and supported versions, and document requirements for other hypervisors,
   including actual PCIe passthrough support.

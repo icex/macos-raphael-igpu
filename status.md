@@ -7,18 +7,22 @@ reproduced correctness blocker. Full desktop and physical display acceptance rem
 
 ## Current host / guest
 
-Guest **stopped** after stock-QEMU run `81c11a768f28ad722971a4d85d70aac8`,
-candidate280/metal-127/smcreboot, MODE2#169, twenty-seventh exposure on boot
+Guest **stopped** after run `964787995e1a5e34fcc7b651ae6c716b`,
+candidate280/metal-127/ownership, MODE2#170, twenty-eighth exposure on boot
 `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`. GPU remains vfio-pci, power/control=on.
-Two fresh guest boots now pass with stock QEMU10.1.2 and the OpenCore/VirtualSMC1.3.7
-ownership fix. Each has one AppleSMC on VirtualSMC,69 keys and correct end-of-list.
-PerfPowerServices0.0%, latest0.86s cumulative. Both Metal baselines and hardware
-H.264/HEVC120-frame encode/decode checks pass; first boot also passes three-minute
-material workload, two clean raw RFB captures and service restart; second desktop
-capture clean. Captures valid:408/405 critical records, snapshot18 each.
-Both guest-request shutdowns and schema6 recoveries pass: CP_STAT=0, active_after=0,
-no forced clears/timeouts/host faults. Both **CORE_PROBE_PASS**.
-[SMC handoff evidence](findings/research/smc-opencore-handoff-20260916.md),
+Managed texture ownership/LOAD checks pass:96 cases across two seeded processes,
+111,658,032 pixel comparisons, no pixel or padding mismatches. RGBA8/BGRA8,
+64×64/1003×769, explicit synchronization, partial CPU updates and retained color
+contents; no IOSurface/depth extension implied. Raw1920×1080 desktop capture clean.
+Strict capture valid:384 records/snapshot11; **CORE_PROBE_PASS**. Guest-request
+shutdown and schema6 recovery pass, CP_STAT/active/forced clears/timeouts all0,
+no host kernel faults. [Ownership evidence](findings/research/texture-ownership-20260916.md).
+
+Stock QEMU10.1.2 with OpenCore/VirtualSMC1.3.7 remains the tested setup. Prior two
+fresh guest boots verified one AppleSMC on VirtualSMC,69 keys/end-of-list,0.0%
+PerfPowerServices CPU, hardware video and clean recovery. Ownership run adds a
+third guest boot on this host boot; no new SMC/codec measurement in this run.
+[SMC evidence](findings/research/smc-opencore-handoff-20260916.md),
 [stock-QEMU setup](docs/stock-qemu-smc.md). Independent-host-boot durability remains open.
 
 Prior Main10 decode:32 frames720p/1080p,71,884,800 luma/chroma values exactly
@@ -32,6 +36,7 @@ its scoped checks; closure run itself remains INVALID for truncated terminal cap
 
 | Area | Evidence and scope |
 |---|---|
+| Managed texture ownership | 96 cases;111,658,032 pixel comparisons; synchronized CPU writes and retained LOAD color contents, zero mismatches |
 | Cross-process GPU events | Typed XPC import;33 consumer-first transfers,25,453,131 correct pixels |
 | Two-process IOSurface | 32 bidirectional GPU-copy rounds;49,363,648 pixels, zero mismatches; host completion orders transfers |
 | Depth/stencil/MSAA | 128 cases at1×/4× and64×64/1003×769;49,625,792 correct pixels |
@@ -62,10 +67,12 @@ exact OpenCore DSDT ownership patch are required; prior media backups remain ava
 
 ## Next work / remaining gates
 
-1. Guest-crash/command-channel failure, repeated lifecycle and independent-host-boot qualification.
-2. Broader applications, formats, render hazards and interprocess synchronization;
+1. Full3840×2160 Screen Sharing: mode exposure, actual backing/capture pixels,
+   composition correctness and separately measured remote frame delivery. User priority2026-09-16.
+2. Guest-crash/command-channel failure, repeated lifecycle and independent-host-boot qualification.
+3. Broader applications, formats, render hazards and interprocess synchronization;
    page-table release beyond cached address reuse; reclamation performance cost.
-3. Physical DCN output and measured performance. Historical direct OpenGL hang and
+4. Physical DCN output and measured performance. Historical direct OpenGL hang and
    live-validation crash remain unresolved; do not repeat without diagnosis.
 
 The user requested publication of the current `dev` snapshot to `main` on2026-09-16.
@@ -79,20 +86,11 @@ No vfio→amdgpu cycling.
 The immediate patched-QEMU dependency is removed for the tested setup. Compatibility
 now lives in OpenCore/VirtualSMC, with no new RaphaelGPU driver patch. README, roadmap
 and the general QEMU guide describe the stock setup and scoped native results.
-One additional exposure is allowed on boot
-`2508eb6d-ddf3-497d-9774-00a7ecebe3ed` for candidate280/metal-127/ownership:
-managed-texture GPU-to-CPU synchronization, partial CPU replacement and retained
-LOAD rendering, with fresh-resource controls, two formats and distinct seeds.
-Hypothesis: correct explicit ownership transfers preserve both modified and
-untouched pixels. Any mismatched pixel or padding byte falsifies this scoped
-hypothesis. Driver and stock-QEMU setup remain unchanged. Fresh MODE2 must show
-CP_STAT=0/RLC_CNTL=0; identity, capture, deadline and cleanup gates remain mandatory.
-This is exposure28 if launch reaches VFIO; the allowance is not consumed by
-pre-launch failures. Previous allowances are consumed.
+The ownership allowance is consumed; no further GPU exposure allowance is active.
 
-Next: broaden supported configurations and independent-host-boot/lifecycle coverage,
-then remaining rendering tests and physical output. The Reims audit contributes
-open visual-oracle, CPU/GPU ownership, plane/view/depth and heap-alias tests.
+Next: enable and qualify full4K Screen Sharing, per the user’s priority request.
+Broader configurations, lifecycle, rendering tests and physical output follow. The Reims CPU/GPU ownership task now passes its managed-texture scope.
+Visual-oracle, plane/view/depth and heap-alias tests remain open.
 [Audit](findings/research/reims-vgpu-audit-20260916.md).
 
 Physical output remains source-guided work: clock warnings fall back; later register
@@ -110,3 +108,10 @@ exact matches in pinned AMD linux-firmware files; vendor-only generation is
 proposed, not implemented. SDK terms, executable notices and broader provenance
 remain open. [Audit](findings/research/licensing-audit-20260916.md). No hardware run
 or functional qualification change.
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-280-attempt-ownership-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`

@@ -1,0 +1,87 @@
+{
+  "schema": 1,
+  "run_id": "964787995e1a5e34fcc7b651ae6c716b",
+  "host_boot": "2508eb6d-ddf3-497d-9774-00a7ecebe3ed",
+  "mode2_reset": 170,
+  "exposure": 28,
+  "probe_commit": "b9aa3bf0b05af7695ff5ae10ee64267476da299b",
+  "driver_build_id": "51bfd732cf824249b70981f0c36fe314",
+  "qemu_image": "sha256:3a3c82c79bc4e73531f819ccdfa4053b3084efd7c1f645678dbf8b4b3a24369c",
+  "results": [
+    {
+      "passed": 1,
+      "phase": "done",
+      "readbacks_per_case": 3,
+      "cases": 48,
+      "pixel_comparisons": 55829016,
+      "case_pixels": 18609672,
+      "seed": 41,
+      "pid": 750
+    },
+    {
+      "passed": 1,
+      "phase": "done",
+      "readbacks_per_case": 3,
+      "cases": 48,
+      "pixel_comparisons": 55829016,
+      "case_pixels": 18609672,
+      "seed": 709,
+      "pid": 810
+    }
+  ],
+  "total_cases": 96,
+  "total_pixel_comparisons": 111658032,
+  "capture": {
+    "schema": 1,
+    "meaning": "producer emitted a fresh caught-up snapshot after the host request, acknowledged it, and stopped replay",
+    "build_id": "51bfd732cf824249b70981f0c36fe314",
+    "run_id": "964787995e1a5e34fcc7b651ae6c716b",
+    "cid": "8963e6a533ace63376602726075ab9ba77f9875717e388d3ef4e6b6bdc5bf179",
+    "requested_epoch": 1789578280.1583965,
+    "acknowledged_epoch": 1789578283.5663223,
+    "request_sha256": "f0b4afd511cddeb5e2411af8dd69a6d73a770e28ce03d86f790c78632aada9e8",
+    "snapshot": 11,
+    "record_count": 384,
+    "capture_acceptance": "terminal-prefix",
+    "critical_capture": {
+      "byte_length": 2034899,
+      "sha256": "2105413455dba2187abc3a71c34124c26a71f1e8633f709fb8b3ccf50b35f816"
+    }
+  },
+  "verdict": "CORE_PROBE_PASS",
+  "valid": true,
+  "shutdown": "exited-after-guest-request",
+  "recovery": {
+    "status": "recovered",
+    "authorizes_launch": true,
+    "kernel_messages": []
+  },
+  "gc_quiesce": {
+    "cp_stat_after": 0,
+    "active_after": 0,
+    "forced_inactive": 0,
+    "dequeue_timeouts": 0
+  },
+  "host_tests": {
+    "tests": 958,
+    "skipped": 3,
+    "passed": true
+  },
+  "sha256": {
+    "tests/texture_ownership_probe.m": "795a6252b19f210f5f39f8080f27a296e1b256e375c6ea62894e055254d4a390",
+    "/home/bogdan/macos-vm/run/ownership-host-tests-20260916.log": "ef152e73dd16a96b636ba1e8d96596897963c1c3372aa036e26e2b3e99c78d30",
+    "/home/bogdan/macos-vm/run/mode2-reset-170.json": "e5f801bc69f63f63e007eef058e5a04668fc3ca7ab5e0aeb453002ce2f056a5c",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-ownership-results/manifest.json": "5a97cc7dd8421e385b3811710ada86dcc1df117413ff3899cd269c752b447c18",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-ownership-results/running-identity.json": "c31c9062e0619cb872e84ff50183c6a75b3c2a7b0ea2fad0c396eb0bf9815b89",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-ownership-results/probe.json": "9c5ba341ddd85ebf02b200502dfa162a1dab9b33938045b18b5f133bae9394df",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-ownership-results/verdict.json": "722ee52b4af40a7694d397c83ea0e1a7d984cb3f6e99a13b43811df3346e7a37",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-ownership-results/recovery.json": "835ef68504f22fcf1c96310147834e3e3eb6a1c44a34f632ce59ac361d48cc77",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-ownership-results/shutdown.json": "1450fde54c5d404156358518e58d8c1352429fa8a23a40d16dc68648582ccc51",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-ownership-results/ownership-seed41-command.json": "ae66499334b672dd057de0251b0eec7d8d8f2e3793b4b5ae02f05260c6ce0c44",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-ownership-results/ownership-seed41-output.txt": "832677abd65fa803abc7a3dd73dbff7f081fe173fa9720804fed3223a7945891",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-ownership-results/ownership-seed709-command.json": "90dd807fd40abc5760ed3e3fd54fa96a08171e5969f755eae115fbcb5cc2d443",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-ownership-results/ownership-seed709-output.txt": "99a0adb4afa012675b718c940b842aeb45d17e395df3fe0832c4f2c2327c246c",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-ownership-results/desktop-after-ownership.png": "93a762b2e429c4845aa1e353bf37682b2cc549c408b8295ec5bbebf347c64e7b",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-ownership-results/desktop-after-ownership-capture.json": "5c337ae3f7e1f870509dc0b5d0343a378a16bb5d1a5b608ef3f0fed5d7ce74f7"
+  }
+}
