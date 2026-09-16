@@ -42,7 +42,7 @@ static bool render(id<MTLCommandBuffer> cb,id<MTLTexture> t,id<MTLRenderPipeline
 }
 static bool one(id<MTLDevice> dev,id<MTLCommandQueue> queue,id<MTLRenderPipelineState> ps,
                 bool bgra,unsigned shape,unsigned mode,uint32_t seed,uint64_t *pixels) { @autoreleasepool {
-    NSUInteger w=shape?1003:64,h=shape?769:64,row=(w*4+255)&~255UL,bytes=row*h;
+    NSUInteger w=shape==2?3840:(shape?1003:64),h=shape==2?2160:(shape?769:64),row=(w*4+255)&~255UL,bytes=row*h;
     NSString *caseID=[NSString stringWithFormat:@"%@-%lux%lu-%@-%u",bgra?@"bgra":@"rgba",w,h,
                       @[@"load-only",@"cpu-only",@"cpu-and-load"][mode],seed];
     emit(@{@"phase":@"case_begin",@"case_id":caseID});
@@ -108,7 +108,8 @@ static bool one(id<MTLDevice> dev,id<MTLCommandQueue> queue,id<MTLRenderPipeline
 }}
 int main(int argc,const char **argv) { @autoreleasepool {
     signal(SIGALRM,expired);alarm(180);
-    if(argc!=3)return 2;
+    if(argc!=3&&!(argc==4&&!strcmp(argv[3],"4k")))return 2;
+    bool only4k=argc==4;unsigned expectedCases=only4k?24:48;
     uint64_t wanted=strtoull(argv[1],NULL,0);uint32_t seed=(uint32_t)strtoul(argv[2],NULL,0);
     id<MTLDevice> dev=nil;for(id<MTLDevice> d in MTLCopyAllDevices())if(d.registryID==wanted)dev=d;
     if(!dev)return 2;
@@ -121,16 +122,16 @@ int main(int argc,const char **argv) { @autoreleasepool {
     if(!lib){emit(@{@"error":error.description?:@"library failed"});return 2;}
     id<MTLCommandQueue> queue=[dev newCommandQueue];if(!queue)return 2;
     uint64_t pixels=0;unsigned cases=0;
-    emit(@{@"phase":@"begin",@"registry_id":@(wanted),@"pid":@(getpid()),@"seed":@(seed),@"expected_cases":@48});
+    emit(@{@"phase":@"begin",@"registry_id":@(wanted),@"pid":@(getpid()),@"seed":@(seed),@"expected_cases":@(expectedCases)});
     for(unsigned format=0;format<2;format++) {
         MTLRenderPipelineDescriptor *pd=[MTLRenderPipelineDescriptor new];
         pd.vertexFunction=[lib newFunctionWithName:@"v"];pd.fragmentFunction=[lib newFunctionWithName:@"f"];
         pd.colorAttachments[0].pixelFormat=format?MTLPixelFormatBGRA8Unorm:MTLPixelFormatRGBA8Unorm;
         id<MTLRenderPipelineState> ps=[dev newRenderPipelineStateWithDescriptor:pd error:&error];
         if(!ps){emit(@{@"error":error.description?:@"pipeline failed"});return 2;}
-        for(unsigned shape=0;shape<2;shape++)for(unsigned round=0;round<4;round++)for(unsigned mode=0;mode<3;mode++) {
+        for(unsigned shape=only4k?2:0;shape<(only4k?3:2);shape++)for(unsigned round=0;round<4;round++)for(unsigned mode=0;mode<3;mode++) {
             if(!one(dev,queue,ps,format,shape,mode,seed+round*997,&pixels))return 3;cases++;
         }
     }
-    emit(@{@"phase":@"done",@"passed":@(cases==48),@"cases":@(cases),@"case_pixels":@(pixels),@"pixel_comparisons":@(pixels*3),@"readbacks_per_case":@3,@"seed":@(seed),@"pid":@(getpid())});return cases==48?0:4;
+    emit(@{@"phase":@"done",@"passed":@(cases==expectedCases),@"cases":@(cases),@"case_pixels":@(pixels),@"pixel_comparisons":@(pixels*3),@"readbacks_per_case":@3,@"seed":@(seed),@"pid":@(getpid())});return cases==expectedCases?0:4;
 }}
