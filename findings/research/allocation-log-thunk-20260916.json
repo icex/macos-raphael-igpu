@@ -1,0 +1,29 @@
+{
+  "run_id": "b29d3de37f74516698178fda2301f9d9",
+  "build_id": "d7ff9eef7f5e46c5b5be269655c9af10",
+  "mode2": 174,
+  "exposure": 31,
+  "patch_installed": false,
+  "artifacts": [
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-281-results/alloclog-bytes2-output.txt",
+      "sha256": "781f3b53a9c9f9b1a6aab62d3f4ea9bd664a5e96e591bc13d01e6801922dae1b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-281-results/alloclog-stub-output.txt",
+      "sha256": "1cf27945fab54e8e7b59d3e6b8399009021b2fe02705f0003e1ef4181ef41136"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-281-results/alloclog-stub-detail-output.txt",
+      "sha256": "86822c601bb4848bb1a9377ecbc42063a673b721dc70d43c50a16a2bb0f72aed"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-281-results/sunshine-configure-output.txt",
+      "sha256": "2898263888dcd1a4b848e13d0ceae52d4f19912426756ae83153e18c1ebd5cf5"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-281-results/sunshine-encode-baseline-output.txt",
+      "sha256": "cfb9f0202d4a30dc0447a744ed523e705fdba603e20c055bc4508e1a25b7aa1b"
+    }
+  ]
+}

@@ -212,3 +212,7 @@ This user-requested performance-fix continuation requires installed=1 before
 interpreting throughput. Preserve4K Retina60Hz and existing recovery/capture gates.
 The final281 encoder timing window was idle after client disconnect and yielded
 no samples; it is not performance evidence.
+
+Candidate281 has now stopped: CORE_PROBE_PASS, valid=true; guest-requested clean
+shutdown and schema6 recovery authorizes_launch=true. Candidate282 host suite:
+965 tests OK, three skipped. The prospective32nd allowance is ready for cycle.
