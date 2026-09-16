@@ -7,7 +7,7 @@ reproduced correctness blocker. Full desktop and physical display acceptance rem
 
 ## Current host / guest
 
-Guest is **stopped** after run `dd5c30a35fea14f9be511dee92ff85be`, candidate 280 /
+Previous guest stopped after run `dd5c30a35fea14f9be511dee92ff85be`, candidate 280 /
 metal-127 / attempt addressreuse, MODE2 #159, nineteenth exposure on host boot
 `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`. GPU `0000:7b:00.0` remains vfio-pci,
 `power/control=on`. Results:
@@ -88,3 +88,10 @@ the unsupported (1.0.280, metal-128) pair before QEMU/VFIO exposure. The twentie
 allowance remains unconsumed. Extend only that reviewed pairing and retain exact
 boot arguments/source/Lilu/capture checks before retrying. Remaining driver work
 will use the supplied decompiled sources and matching native disassembly.
+
+Current closure run `042d7770f42059319cda491e50396bd8` is **running** after
+947 passing host tests and MODE2 #161. This is the twentieth exposure; the
+allowance is consumed. Native desktop probe passed and interactive-ready exists.
+Closure/cleanup remain pending. Before action, the supervisor probe check is
+being corrected to validate the actual nonce-bound output envelope (the original
+fixture incorrectly supplied a top-level passed field).

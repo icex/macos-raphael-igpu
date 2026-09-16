@@ -411,7 +411,7 @@ class SupervisionTests(unittest.TestCase):
         self.assertFalse(self.stopped())
         self.assertFalse(any(cmd == "docker" and args[0] == "exec" for cmd, args in self.calls()))
 
-    def intentional_close(self, manifest_sha256=None, action_seconds="3", state_update=None):
+    def intentional_close(self, manifest_sha256=None, action_seconds="3", state_update=None, probe_update=None):
         armed = self.arm()
         self.assertEqual(armed.returncode, 0, armed.stderr)
         state_file = self.vm / "run/supervision.json"
@@ -423,7 +423,11 @@ class SupervisionTests(unittest.TestCase):
         manifest_raw = json.dumps(manifest, sort_keys=True).encode() + b"\n"
         (results / "manifest.json").write_bytes(manifest_raw)
         (results / "interactive-ready.json").write_text(json.dumps({"run_id": "run-1"}))
-        (results / "probe.json").write_text(json.dumps({"run_id": "run-1", "passed": True}))
+        probe = {"run_id": "run-1", "transport_exit": 0,
+                 "output": 'RGPU_DESKTOP_METAL_RESULT {"run_id":"run-1","passed":true,"device":"AMD Radeon Navi23"}\nRGPU_EXIT run-1 0\n'}
+        if probe_update:
+            probe.update(probe_update)
+        (results / "probe.json").write_text(json.dumps(probe))
         if state_update:
             state = json.loads(state_file.read_text()); state.update(state_update)
             state_file.write_text(json.dumps(state))
@@ -432,6 +436,15 @@ class SupervisionTests(unittest.TestCase):
                 "--manifest-sha256", manifest_sha256, "--results-dir", str(results),
                 "--action-seconds", str(action_seconds)]
         return self.run_tool(*args)
+
+    def test_intentional_close_rejects_unbound_or_failed_probe(self):
+        for update in ({"output": "", "passed": True},
+                       {"transport_exit": 1},
+                       {"output": 'RGPU_DESKTOP_METAL_RESULT {"run_id":"stale","passed":true,"device":"AMD Radeon Navi23"}\nRGPU_EXIT run-1 0\n'}):
+            result = self.intentional_close(probe_update=update)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse((self.vm / "results/intentional-closure-request.json").exists())
+        self.assertFalse(any(cmd == "docker" and args[0] == "exec" for cmd, args in self.calls()))
 
     def test_intentional_close_writes_wal_and_exact_stopped_receipt(self):
         self.fixture["closure_stops"] = True; self.fixture["closure_peer_error"] = True

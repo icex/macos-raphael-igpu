@@ -362,8 +362,21 @@ def _validate_close_artifacts(results, run_id, manifest_sha256):
     except (OSError, ValueError, TypeError) as error:
         raise RuntimeError("closure artifacts are not valid JSON") from error
     if (manifest.get("run_id") != run_id or ready.get("run_id") != run_id or
-            probe.get("run_id") != run_id or probe.get("passed") is not True):
+            probe.get("run_id") != run_id):
         raise RuntimeError("closure artifacts have mismatched run identity or probe did not pass")
+    output = probe.get("output", "")
+    rows = [line[len("RGPU_DESKTOP_METAL_RESULT "):]
+            for line in output.splitlines()
+            if line.startswith("RGPU_DESKTOP_METAL_RESULT ")]
+    exits = re.findall(r"^RGPU_EXIT " + re.escape(run_id) + r" (\d+)$", output, re.M)
+    try:
+        result = json.loads(rows[0]) if len(rows) == 1 else None
+    except (ValueError, TypeError):
+        result = None
+    if (probe.get("transport_exit") != 0 or exits != ["0"] or
+            not isinstance(result, dict) or result.get("run_id") != run_id or
+            result.get("passed") is not True or result.get("device") != "AMD Radeon Navi23"):
+        raise RuntimeError("closure requires one successful nonce-bound desktop probe and exit")
     if manifest.get("spec", {}).get("lifecycle_test") != "supervised-qemu-quit":
         raise RuntimeError("closure requires the predeclared supervised-qemu-quit lifecycle test")
 

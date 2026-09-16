@@ -22,7 +22,7 @@ and “next experiment” instructions do not describe today's host.
 | M4 — First correct Metal compute | Achieved | Candidate 194 checked 196,608 values and 4,096 rendered pixels; its overall capture remained inconclusive. Current280 desktop Metal baselines complete with verified device/build identity. |
 | M5 — Rendering, memory and synchronization | Partial | Managed-texture copy correction retained; private/managed/IOSurface and multiple-format readback probes pass. Candidate280 passes48 BGRA8 feedback cases across four distinct-seed processes, including two concurrent clients. 32 measured buffer-reclamation rounds return process-local allocation to baseline with134,217,728 correct values. 144 texture recreation cases and32 cross-queue GPU-event rounds pass. Global VRAM/GART counters return near baseline after exit; GPU VA and long-duration qualification remain open. |
 | M6 — Desktop and physical display | Visual fix verified; broader qualification open | Candidate279 fixes the reproduced feedback corruption. Fresh pixel checks, user observation and unobstructed native RFB captures on280 pass; longer desktop qualification remains. Physical DCN 3.1.5 output is a separate unqualified path. |
-| M7 — Lifecycle and host protection | Partial | Multiple guest-request shutdowns and authorizing recoveries observed on this boot, including three complete280 runs with the visual and logging fixes. Fresh-host-boot, crash-path and repeated lifecycle qualification remain open. |
+| M7 — Lifecycle and host protection | Partial | Multiple guest-request shutdowns and authorizing recoveries observed on this boot, including four complete 280 runs with the visual and logging fixes. Fresh-host-boot, crash-path and repeated lifecycle qualification remain open. |
 | M8 — Performance and release | Not qualified | Correctness first; no release, Metal3 conformance, game-support or full-desktop claim. No merge/push to main before demonstrated usable desktop acceleration. |
 
 ## Blocker revalidation — 2026-09-16
@@ -187,11 +187,10 @@ from device enumeration or passing microbenchmarks.
 
 1. Qualify supervised QEMU closure and guest-crash/command-channel failure paths,
    then representative workloads on independently initialized host boots.
-   The closure action is implemented and host-tested (946 tests pass). Two launch
-   attempts stopped before QEMU exposure: canonical-worktree selection, then the
-   missing exact staging-card pairing. The latter followed successful MODE2 #160;
-   neither consumed a GPU ledger entry. Hardware closure remains untested until
-   the exact card guard is extended and revalidated.
+   Current run `042d7770f42059319cda491e50396bd8` has passed the native desktop
+   probe after MODE2 #161 and 947 host tests. Actual closure/cleanup remain pending;
+   a supervisor envelope check is being corrected before action. Two earlier
+   staging/preflight failures consumed no exposure.
 2. Broaden desktop applications, formats and interprocess synchronization; measure
    reclamation cost and page-table release beyond observed address recycling.
 3. Progress physical display and measured performance qualification after those gates.
