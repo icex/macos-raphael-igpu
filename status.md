@@ -67,4 +67,12 @@ display initialization. Current injected ROM contains four nonzero display paths
 empty published framebuffer properties do not prove an empty ATOM table. Boot parser
 reads EFI properties from the PCI service; trace boot-display selection before patches.
 Next codec qualification is Main10 with actual 10-bit luma/chroma readback; untested.
-No further exposure allowance is recorded yet.
+One additional exposure (twenty-second) on boot
+`2508eb6d-ddf3-497d-9774-00a7ecebe3ed` is authorized for unchanged candidate280 /
+metal-127 / attempt main10. Hypothesis: advertised Main10 decode produces the same
+10-bit420 luma/chroma as software decoding of the identical stream. Test software
+encode first, then hardware encode if successful, up to16frames/case. Probe has a
+180s process alarm; standard6000s supervisor, fresh MODE2, capture/identity/host-fault
+and cleanup guards remain intact. First compile the probe before codec execution.
+Unsupported format, selection failure or any CPU mismatch falsifies this scoped
+case; do not infer failure of previously passing Main8. No vfio→amdgpu cycling.
