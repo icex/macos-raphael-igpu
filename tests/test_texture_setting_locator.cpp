@@ -10,7 +10,7 @@
 // If RGPU_MTL_TEXT is set to a raw __TEXT dump of a real AMDRadeonX6000MTLDriver, the
 // last check also validates against that image.
 
-#include "../src/TextureSettingLocator.hpp"
+#include "../findings/research/update-resilience-20260914/TextureSettingLocator.hpp"
 
 #include <cstdio>
 #include <cstdlib>
