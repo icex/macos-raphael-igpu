@@ -10,6 +10,15 @@ two4K hardware codec checks; an active stream comparison is still pending.
 replacement for Screen Sharing. macOS support is experimental; gamepad support is
 unavailable in this build.
 
+## Experimental driver diagnostic budget
+
+Candidate282 adds the opt-in OpenCore boot argument `rgpualloclog=1`. It samples
+one guarded native allocation-failure diagnostic (first8, then every1024 with a
+cumulative count), preserving allocation/retry behavior and other logging.
+The startup record must show `ALLOCLOG: guarded=1 installed=1`; `installed=0`
+means no change was applied. Omit the argument to retain the original logging.
+This is the active performance experiment, not a qualified streaming-speed claim.
+
 ## Guest setup
 
 Download the `Sunshine-macOS-x86_64.dmg` asset, open it and copy Sunshine.app to
