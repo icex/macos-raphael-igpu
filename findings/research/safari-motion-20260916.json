@@ -1,0 +1,48 @@
+{
+  "run_id": "560b1d7e8fea56b2c6f52fd7644d23f8",
+  "hypothesis": "Capture CPU lock contributes to GPU-buffer pipeline stalls; benefit unproven until same-workload A/B.",
+  "artifacts": [
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-results/safari-hevc-pacing-output.txt",
+      "sha256": "960ba06375f18b04c85b8c86bb08cf677bf273bfbe2f2b7bb7b1ace07e606dc7"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-results/stream-request-fps-output.txt",
+      "sha256": "77e16f5152835b8eaacc1277ae6ecd946bf33674a1c291b33b89a54ea8b69a40"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-results/final-stream-config-output.txt",
+      "sha256": "ed023848c4d0adb9e051b92aec5f92bca437637260e024ee74264d26d8c557d4"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-results/verdict.json",
+      "sha256": "b9c50712c78a6425a898e87fac074f12b87d35604581096977bfabf7530c4f35"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-results/shutdown.json",
+      "sha256": "c1d1d75aa64af89ed66f6d530d7c80db239710097959ec3111a341d798825597"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-results/recovery.json",
+      "sha256": "cf426f032b26bbfdbb109cfd26bf6fae99d881b0902f7ccc01e28360c917e6c0"
+    }
+  ],
+  "trace": {
+    "seconds": 13.000539,
+    "encoder_submissions": 620,
+    "submission_total_us": 12814955,
+    "capture_lock_calls": 1008,
+    "capture_lock_total_us": 3765747,
+    "cursor_warp_calls": 293,
+    "cursor_warp_total_us": 1612937,
+    "requested_fps_inferred_from_default_idle_target": 120,
+    "display_hz": 60
+  },
+  "qualification": {
+    "capture_valid": true,
+    "core_probe": "PASS",
+    "shutdown": "exited-after-guest-request",
+    "recovery_authorizes_launch": true,
+    "streaming_fixed": false
+  }
+}

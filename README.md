@@ -120,3 +120,8 @@ Original project code is [BSD-3-Clause](LICENSE). Firmware and third-party mater
 retain their own terms; see [third-party notices](THIRD_PARTY_NOTICES.md). The
 [provenance audit](findings/research/licensing-audit-20260916.md) identifies exact
 AMD sources for the TOC patterns and remaining SDK/distribution review items.
+
+Candidate282's streaming investigation ended with valid capture, a clean
+guest-request shutdown and authorizing recovery. Motion performance remains
+open; the final120FPS-request/60Hz-display trace requires a matching4K60 control.
+[Final evidence](findings/research/safari-motion-20260916.json).

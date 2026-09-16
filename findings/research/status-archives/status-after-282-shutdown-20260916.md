@@ -7,36 +7,26 @@ imperfect: mouse motion over a transparent Safari window falls to about 40 FPS.
 A 12-second server trace completes 663 submissions (~55/s), with a
 5.69 ms mean and occasional 32–131 ms calls. Client and codec changed together;
 neither alone is established as the cause of improvement. Sustained 4K60, latency,
-remain open. Final capture, guest-request shutdown and recovery now pass.
+and this run's final capture/cleanup qualification remain open.
 
 ## Current host / guest
 
-- Host boot `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`; GPU0000:7b:00.0 remains
-  vfio-pci with power/control=on. No running GPU guest after the supervised stop.
-- Completed run `560b1d7e8fea56b2c6f52fd7644d23f8`, candidate282/metal130,
-  MODE2#175, exposure32: valid CORE_PROBE_PASS; exited-after-guest-request;
-  schema6 recovery `5c955d69cbbe4f5699fcf3d8fafc46c8`, authorizes_launch=true.
-- Build `7a26b1a2f6694ae88ed889105de30bc7`, executable SHA256
+- Boot: `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`; GPU0000:7b:00.0 on vfio-pci,
+  power/control=on. No vfio→amdgpu cycling.
+- Run: `560b1d7e8fea56b2c6f52fd7644d23f8`, candidate282/metal130, MODE2#175,
+  exposure32. Its named-boot allowance is consumed; no further exposure authorized.
+- Build: `7a26b1a2f6694ae88ed889105de30bc7`; executable SHA256
   `9c7e5dffc64fef69e874ea3c8e7b940e9761caf53e31400d2dc68d1591724fc2`.
-  Guarded ALLOCLOG sampling installed. Final capture valid; clean recovery does
-  not close the streaming-performance blocker.
-- Persisted Sunshine configuration keeps hardware-only H.264 and HEVC Main8
-  (`hevc_mode=2`, `vt_software=disabled`), per user request. Pairing is preserved.
-  LAN relay expired with the guest; restore exact-instance forwarding on next run.
-- Retina was 1920×1080 logical /3840×2160 backing /2×/60Hz; login persistence
-  still needs qualification. No 90/120Hz display claim.
-
-### One-run continuation allowance
-
-The user's latest instruction to proceed and fix motion-triggered streaming
-latency authorizes the next bounded experiment. Extend this boot's allowance by
-**one exposure (33)** on boot `2508eb6d-ddf3-497d-9774-00a7ecebe3ed` for
-candidate282/metal131, attempt `capturefix`: build/test the scoped Sunshine
-GPU-buffer CPU-lock candidate and compare the same 4K60 workload. Prior run's
-schema6 recovery authorizes relaunch. Use tools/cycle.py, fresh MODE2, maximum
-6000 seconds, manual-reuse/ack-risk and all existing identity, host-fault,
-capture, shutdown and cleanup gates. No vfio→amdgpu cycling or clock writes.
-This allowance is unconsumed until QEMU/VFIO opens.
+- ALLOCLOG guarded=1 installed=1; native import stub resolves to expected kprintf.
+  Baseline Metal probe completed. Capture ongoing; final validity and cleanup pending.
+- Retina restored manually:1920x1080 logical/3840x2160 backing,2x,60Hz.
+  Login agent exited0 but backing reverted1080p after boot; persistence remains open.
+- Sunshine11302 uses hardware-only VideoToolbox. HEVC Main8 advertisement was
+  restored at the user’s request (`hevc_mode=2`); startup finds H.264 and HEVC.
+  Leave both codecs enabled. Original configuration is backed up in the guest.
+  LAN server192.168.0.43:48989,
+  webhttps://192.168.0.43:48990; existing LAN-only UFW rules retained.
+  Relay and guest share the existing supervised deadline; no unlimited session.
 
 Candidate281 stopped cleanly with CORE_PROBE_PASS, valid capture and schema6
 recovery authorizing relaunch. Its patch reported installed=0 because it compared
@@ -56,10 +46,7 @@ encoder bottleneck. Cursor positioning also has occasional 16–65 ms calls.
 
 After switching the server to H.264 and the user installing Moonlight-Qt, streaming
 is visibly better. HEVC has since been re-enabled at the user’s request; measure
-each codec separately for remaining pacing and input latency. The final moving
-HEVC trace requested120FPS against a60Hz display:620 submissions/13.001s, with
-full-second counts30–63 and mean20.67ms submission. The client reconnected at
-60FPS at23:05:20, but the supervised deadline prevented a matching trace. Do not attribute the gain solely to the client or call 4K60 solved.
+each codec separately for remaining pacing and input latency. Do not attribute the gain solely to the client or call 4K60 solved.
 The source-only Sunshine capture-lock candidate is **unbuilt and undeployed**.
 Foundation-sunshine replacement was cancelled by the user; the original app,
 pairing and LAN ports are preserved. No Foundation binary or build dependencies

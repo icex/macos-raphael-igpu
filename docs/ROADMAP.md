@@ -362,3 +362,8 @@ Cargo license metadata differ; resolve applicable terms before considering sourc
   review other native patterns/excerpts and historical release assets.
 - BSD-3-Clause and verified third-party licence documents are now included.
   Documentation work does not establish complete legal or hardware qualification.
+
+Candidate282's streaming investigation ended with valid capture, a clean
+guest-request shutdown and authorizing recovery. Motion performance remains
+open; the final120FPS-request/60Hz-display trace requires a matching4K60 control.
+[Final evidence](../findings/research/safari-motion-20260916.json).

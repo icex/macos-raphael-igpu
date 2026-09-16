@@ -86,3 +86,18 @@ The user asked to leave HEVC enabled. Set `hevc_mode=2`, retained
 `vt_software=disabled`, and restarted only Sunshine (new PID11302). Startup
 reports both H.264 and HEVC encoders available. This restores codec advertisement;
 it is not a new 4K streaming-performance result. Keep both codecs enabled.
+
+## Final moving HEVC trace and cleanup
+
+The renewed motion test completed620 submissions in13.001s; complete seconds
+varied30–63, mean submission20.67ms. It recorded1,008 capture-lock calls totaling
+3.766s and293 cursor warps totaling1.613s. The stream log shows idle target60
+with no minimum_fps_target override, implying a120FPS request by the tagged
+source's framerate/2 rule; display status remained60Hz. These timings therefore
+are not a controlled4K60 comparison. At23:05:20 the client reconnected with
+idle target30 (60FPS request). A matching trace was refused by the command
+deadline guard before the normal supervised shutdown.
+
+Final result: valid CORE_PROBE_PASS, exited-after-guest-request, schema6 recovery
+authorizes relaunch. The performance defect remains open.
+[Final artifact hashes and measurements](safari-motion-20260916.json).

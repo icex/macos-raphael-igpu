@@ -127,3 +127,8 @@ These require administrator privileges. On this development host they were appli
 through a short-lived privileged container, without host sudo. UFW confirms both
 rules active. They persist across boots; the streaming relay still expires with
 the VM session. Access from another LAN device remains the end-to-end check.
+
+Candidate282's streaming investigation ended with valid capture, a clean
+guest-request shutdown and authorizing recovery. Motion performance remains
+open; the final120FPS-request/60Hz-display trace requires a matching4K60 control.
+[Final evidence](../findings/research/safari-motion-20260916.json).
