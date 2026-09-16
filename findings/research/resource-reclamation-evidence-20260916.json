@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "run_id": "0795287602bef3497900423ebc89a178",
+  "results": "/home/bogdan/macos-vm/run/candidate-280-attempt-reclamation-results",
+  "build_id": "51bfd732cf824249b70981f0c36fe314",
+  "host_boot": "2508eb6d-ddf3-497d-9774-00a7ecebe3ed",
+  "source_sha256": "5040ae7a0ad6f1651be67755e5d7b248438bc112c7b18a549a479297534d654b",
+  "functional": {
+    "measured_rounds": 32,
+    "warmups": 3,
+    "measured_values_checked": 134217728,
+    "bad_values": 0,
+    "peak_allocated_bytes": 50974720,
+    "baseline_and_every_measured_released_bytes": 544768,
+    "scope": "process-local Metal accounting, managed/private buffer copies; not global reclamation"
+  },
+  "capture": {
+    "final_snapshot": 5,
+    "records": 370,
+    "loss": false
+  },
+  "cleanup": {
+    "outcome": "exited-after-guest-request",
+    "status": "recovered",
+    "authorizes_launch": true,
+    "cp_stat_after": 0,
+    "active_after": 0,
+    "forced_inactive": 0
+  },
+  "overall": "CORE_PROBE_PASS; broader roadmap not qualified",
+  "artifacts": {
+    "manifest.json": "5e79df7edc0a7c1d8329c09c6866ee95fad62740a18b95cc2c11cca2287582f5",
+    "running-identity.json": "47b3f26b68473863b1606098a4fa569902f31a41932f5d402021c09721c0c730",
+    "probe.json": "287e716a7ad6b992711bdf57033da37fd8f05699bc383887970d9f76897fcb0c",
+    "resource-reclamation-command.json": "885676c2da2e2e9f1626b33dea8c8ae22e4fef99d4925daaddac9e0497195d35",
+    "resource-reclamation-output.txt": "3b9f9f14b072f42948afda00c34625a8be920f867e08944ab938563ddc65e83c",
+    "critical-quiesce.json": "333287e5eb9f2d6365555be2e1df4ffd41316158892b022b99303e39b0a164ab",
+    "critical.txt": "6729ca2cd91149414f392122442e5db224a7b02500e55f09201b7b381a33dd82",
+    "shutdown.json": "b73bde592b790b6b0b7f5fe1a72137c0b51bd47169f3f5f5f1d50198156a9bc9",
+    "recovery.json": "65354d52de8baa4b0870c951b04dd2e25a4c62dd1f42a1890e412b5b70aaf483",
+    "verdict.json": "238d395a2b0a546cfcaa2cf26c55d5606b115a6d8b4e35d671493509c45e6708",
+    "host-kernel-messages.json": "58e1e3d359ba9630e9625113eae0c11fae67a9dacc5b522b413df113cc73073f"
+  }
+}

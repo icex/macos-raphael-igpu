@@ -20,9 +20,9 @@ and “next experiment” instructions do not describe today's host.
 | M2 — Native startup failure localization | Completed for original blocker | False second SDMA instance and subsequent channel routing were traced; historical evidence retained. |
 | M3 — Native engine startup repair | Demonstrated | Raphael topology/address adaptations reach native startup and completed Metal work. Preserve these fixes while diagnosing desktop rendering. |
 | M4 — First correct Metal compute | Achieved | Candidate 194 checked 196,608 values and 4,096 rendered pixels; its overall capture remained inconclusive. Current280 desktop Metal baselines complete with verified device/build identity. |
-| M5 — Rendering, memory and synchronization | Partial | Managed-texture copy correction retained; private/managed/IOSurface and multiple-format readback probes pass. Candidate280 passes48 BGRA8 feedback cases across four distinct-seed processes, including two concurrent clients. Resource reclamation and the broader synchronization matrix remain open. |
+| M5 — Rendering, memory and synchronization | Partial | Managed-texture copy correction retained; private/managed/IOSurface and multiple-format readback probes pass. Candidate280 passes48 BGRA8 feedback cases across four distinct-seed processes, including two concurrent clients. 32 measured buffer-reclamation rounds return process-local allocation to baseline with134,217,728 correct values. Global reclamation and the broader synchronization matrix remain open. |
 | M6 — Desktop and physical display | Visual fix verified; broader qualification open | Candidate279 fixes the reproduced feedback corruption. Fresh pixel checks, user observation and unobstructed native RFB captures on280 pass; longer desktop qualification remains. Physical DCN 3.1.5 output is a separate unqualified path. |
-| M7 — Lifecycle and host protection | Partial | Multiple guest-request shutdowns and authorizing recoveries observed on this boot, including280 with the visual and logging fixes. Fresh-host-boot, crash-path and repeated lifecycle qualification remain open. |
+| M7 — Lifecycle and host protection | Partial | Multiple guest-request shutdowns and authorizing recoveries observed on this boot, including two complete280 runs with the visual and logging fixes. Fresh-host-boot, crash-path and repeated lifecycle qualification remain open. |
 | M8 — Performance and release | Not qualified | Correctness first; no release, Metal3 conformance, game-support or full-desktop claim. No merge/push to main before demonstrated usable desktop acceleration. |
 
 ## Blocker revalidation — 2026-09-16
@@ -30,13 +30,13 @@ and “next experiment” instructions do not describe today's host.
 | Previously listed issue | Current classification | Revalidation |
 |---|---|---|
 | HEVC decode fails before kernel context creation | Resolved for automatic required-hardware selection | Fresh 120-frame hardware encode/decode pass; original 7-case/9,600-frame artifact hashes rechecked. |
-| PerfPowerServices continuously consumes a CPU core | Resolved in corrected QEMU, observed on three guest boots | Native enumeration passes;0.0% after startup, graphics work and one service restart. Guest boots279/280 are also0.0%; independent-host-boot durability remains open. |
+| PerfPowerServices continuously consumes a CPU core | Resolved in corrected QEMU, observed on four guest boots | Native enumeration passes;0.0% after startup, graphics work and one service restart. Guest boots279/280 (including280 reclamation) are also0.0%; independent-host-boot durability remains open. |
 | Green/purple transparency and smearing | Fixed for reproduced feedback defect in279 | Reversible native A/B intervention, fresh279/280 pixel passes, unobstructed280 native RFB panels and user reports clean Screen Sharing. Longer desktop qualification remains open. |
 | Critical-event record overflow | Resolved for tested280 workload; finite capacity retained | Earlier smcpmio/279 overflow preserved as failures. Candidate280 finishes with398/512records,0drops and authorizing recovery; strict loss checks unchanged. |
 | Explicit HEVC decoder GPU registry-ID selection | Confirmed remaining limitation | Fresh explicit-ID request returns -12906; automatic hardware request succeeds. Does not block automatic decoding. |
 | No Metal execution / initial SDMA startup failure / pre-submit allocation failure | Superseded as current-baseline blockers | Current280 probe passed, completed GPU work and has a WindowServer accelerator client. Broader memory coverage remains open. |
 | Same-boot restart impossible / reboot required after every run | Superseded as a blanket claim | Recorded guest-request shutdowns, authorizing recovery and subsequent starts. This is not universal crash or host stability qualification. |
-| Candidate 278 direct OpenGL hang | Historical reproduced failure, not revalidated on 277 | Workload intentionally excluded pending first-draw diagnosis; do not claim it is fixed or a current 277 reproduction. |
+| Candidate 278 direct OpenGL hang | Historical reproduced failure, not revalidated on current280 | Workload intentionally excluded pending first-draw diagnosis; do not claim it is fixed or a current280 reproduction. |
 | Live Metal validation crashes | Unresolved diagnostic limitation | Earlier CoreDisplay initialization crash; no successful validation verdict, no fresh repeat. |
 | Physical output, Main10/chroma, concurrent resources/codecs, independent-host-boot lifecycle | Qualification gaps, not newly reproduced failures | Remain open because no adequate passing evidence exists; not labeled fixed or tested-failing. |
 
@@ -68,7 +68,7 @@ after four index bytes, and returns 0xb8 past the last key. Native AppleSMC call
 verified all six keys and both tested out-of-range indices. On the fresh smcpmio
 guest, PerfPowerServices was 0.0% CPU; after a service restart it was 0.1% CPU with
 0.54 s cumulative CPU time, later 0.0% with the same cumulative time. No Apple service is disabled and no guest binary or
-security setting was patched. Candidate279 and280 supply second and third passing guest boots (0.0% CPU,0.76s/0.77s cumulative).
+security setting was patched. Candidate279 and280 supply second through fourth passing guest boots (0.0% CPU,0.76s/0.77s/0.74s cumulative).
 Longer observation and independent-host-boot durability remain open. The first emulator patch incorrectly waited for a length
 byte and failed native testing; it is superseded.
 [Root cause and native results](../findings/research/perfpower-smc-enumeration-20260916.md),
@@ -83,7 +83,11 @@ byte and failed native testing; it is superseded.
 - [x] Exercise sequential independent processes, then concurrent clients with
   distinct data and bounded allocations:280, seeds3/7 sequential and11/29
   concurrent;48 BGRA8 feedback cases. Broader multi-queue coverage remains open.
-- [ ] Measure resource reclamation and verify no stale mapping or cross-client corruption.
+- [x] Measure process-local managed/private buffer reclamation:32 measured rounds,
+  48 MiB live resources, allocation returns exactly to544,768bytes;134,217,728
+  values verified. [Method and limits](../findings/research/resource-reclamation-20260916.md).
+- [ ] Measure global backing/VA reclamation and broaden stale-mapping, texture,
+  IOSurface and cross-client coverage.
 - [ ] Attribute a failure to its actual engine before making an SDMA/GFX diagnosis.
 
 Pass requires completed command buffers, correct CPU-checked results, no native
@@ -162,15 +166,15 @@ from device enumeration or passing microbenchmarks.
 
 ## Next work, in order
 
-1. Measure resource reclamation under bounded allocate/execute/release cycles;
-   retain distinct-seed correctness checks while tracking allocation return.
+1. Extend the passing process-local buffer reclamation check to global backing/VA
+   measurements and texture/IOSurface resource recreation; preserve CPU oracles.
 2. Broaden normal desktop and synchronization coverage on280; keep observing the
    SMC CPU fix without disabling the service.
 3. Complete M7 independent-host-boot and crash/closure lifecycle gates.
 4. Progress physical display and measured performance qualification after those gates.
 
-Candidate280 already closes the immediate capture-loss blocker:398critical records,
-no loss, guest-request shutdown and authorizing recovery. See
+Candidate280 closes the immediate capture-loss blocker:398 and370 critical records
+in two completed runs, no loss, guest-request shutdown and authorizing recovery. See
 [280 evidence](../findings/research/candidate-280-qualification-20260916.json).
 
 One owner controls hardware and the guest command channel. Review the hypothesis,
