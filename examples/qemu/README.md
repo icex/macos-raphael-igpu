@@ -56,9 +56,11 @@ or modifying disks. Never open the same writable VM disk in two QEMU processes.
 
 The accelerated setup needs more than PCI spoofing:
 
-- Use the QEMU10.1.2 [AppleSMC key-enumeration patch](../../patches/qemu/10.1.2-applesmc-key-enumeration.patch),
-  or a build verified to implement the same protocol. Without it,
-  PerfPowerServices can spin at100% CPU. [Build and PMIO evidence](../../findings/research/qemu-smc-pmio-build-20260916.json).
+- Stock QEMU10.1.2 works with [VirtualSMC1.3.7 and the OpenCore SMC handoff](../../docs/stock-qemu-smc.md).
+  Keep QEMU's SMC device for boot-time access; the exact ACPI patch lets VirtualSMC
+  own the native service and prevents the reproduced PerfPowerServices CPU loop.
+  Prepare and verify this configuration using the linked guide. The older QEMU
+  enumeration patch remains an alternative with its original boot configuration.
 - Build RaphaelGPU with the pinned inputs in [release instructions](../../docs/releases.md).
   Use the matching Lilu build, including this project's headless-init integration.
   Put both bundles in the OpenCore ESP's `EFI/OC/Kexts` and enable Lilu before
@@ -108,5 +110,6 @@ GPU admission or claim independent-host validation. [Current results](../../stat
 
 Validation: the base config initializes under paused QEMU TCG with temporary dummy
 disks/SMC data and exits through QMP without errors. This checks config/device
-syntax, not a new macOS installation or GPU passthrough. A guest-side replacement
-for the currently required QEMU SMC fix is an explicit [roadmap item](../../docs/ROADMAP.md#portability-remove-the-patched-qemu-dependency).
+syntax, not a new macOS installation or GPU passthrough. The [stock-QEMU SMC handoff](../../docs/stock-qemu-smc.md) has separate native
+boot, provider, CPU, Metal, codec and lifecycle evidence; the base-config syntax
+check alone does not establish those results.

@@ -3,9 +3,9 @@
 Updated 2026-09-16. Current driver: **candidate 1.0.280**. Full desktop acceleration
 is **not qualified**. The reproduced Screen Sharing transparency defect is fixed
 in candidate279 and retained in280. Candidate280 also passes strict capture and
-clean recovery after visual, concurrent-client and codec workloads. The immediate
-user priority is removing the patched-QEMU SMC dependency. Broader desktop, memory,
-lifecycle, physical-display and performance qualification remain open.
+clean recovery after visual, concurrent-client and codec workloads. The patched-QEMU
+SMC dependency is now removed for the tested configuration via OpenCore/VirtualSMC. Broader desktop, memory, lifecycle, physical-display and
+performance qualification remain open.
 
 This is the current roadmap. [Live state and run authority](../status.md) are separate.
 The [previous roadmap](../findings/research/status-archives/roadmap-before-20260916-refresh.md)
@@ -16,7 +16,7 @@ and “next experiment” instructions do not describe today's host.
 
 | Milestone | State | Evidence and remaining work |
 |---|---|---|
-| M0 — Experiment identity and supervision | Implemented; maintained | Immutable manifests, loaded-build checks, capture, deadlines and cleanup. Fixed cycle image selection so preparation and admission use the same pinned emulator. Host suite: 953 tests, OK (3 skipped). |
+| M0 — Experiment identity and supervision | Implemented; maintained | Immutable manifests, loaded-build checks, capture, deadlines and cleanup. Fixed cycle image selection so preparation and admission use the same pinned emulator. Host suite: 958 tests, OK (3 skipped). |
 | M1 — Controlled starting state | Demonstrated for current workflow | One-way amdgpu→vfio-pci handoff, power/control=on, fresh MODE2 and clean-state receipts. Broad independent-host-boot qualification remains open. |
 | M2 — Native startup failure localization | Completed for original blocker | False second SDMA instance and subsequent channel routing were traced; historical evidence retained. |
 | M3 — Native engine startup repair | Demonstrated | Raphael topology/address adaptations reach native startup and completed Metal work. Preserve these fixes while diagnosing desktop rendering. |
@@ -31,7 +31,7 @@ and “next experiment” instructions do not describe today's host.
 | Previously listed issue | Current classification | Revalidation |
 |---|---|---|
 | HEVC decode fails before kernel context creation | Resolved for automatic required-hardware selection | Fresh 120-frame hardware encode/decode pass; original 7-case/9,600-frame artifact hashes rechecked. |
-| PerfPowerServices continuously consumes a CPU core | Resolved in corrected QEMU, observed on eleven measured guest boots | Native enumeration passes;0.0% after startup, graphics work and one service restart. Latest post-closure and Main10 guests are also0.0%; independent-host-boot durability remains open. |
+| PerfPowerServices continuously consumes a CPU core | Resolved on stock QEMU via OpenCore/VirtualSMC | Two fresh guest boots: one verified VirtualSMC provider,69 keys/end-of-list0xb8,0.0% CPU before/after work and after a service restart. Prior patched-QEMU passes retained; independent-host-boot durability remains open. |
 | Green/purple transparency and smearing | Fixed for reproduced feedback defect in279 | Reversible native A/B intervention, fresh279/280 pixel passes, unobstructed280 native RFB panels and user reports clean Screen Sharing. Longer desktop qualification remains open. |
 | Critical-event record overflow | Resolved for tested280 workload; finite capacity retained | Earlier smcpmio/279 overflow preserved as failures. Candidate280 finishes with398/512records,0drops and authorizing recovery; strict loss checks unchanged. |
 | Explicit HEVC decoder GPU registry-ID selection | Confirmed remaining limitation | Fresh explicit-ID request returns -12906; automatic hardware request succeeds. Does not block automatic decoding. |
@@ -69,7 +69,15 @@ encode/decode frames at 720p; these are additional checks, not part of the origi
 [Codec evidence](../findings/research/hevc-decode-qualification-20260916.json),
 [resolver analysis](../findings/research/hevc-decode-appleGVA-20260916.md).
 
-**PerfPowerServices:** the 100% CPU loop was caused by missing QEMU AppleSMC key
+**Current stock-QEMU solution:** VirtualSMC1.3.7/gen2 plus an exact OpenCore patch
+marking only QEMU SMC ACPI presence absent. Keep QEMU's device for boot-time access.
+Two fresh guest boots verify the sole AppleSMC belongs to VirtualSMC,69 keys with
+correct end-of-list,0.0% PerfPowerServices, Metal,480 total hardware codec frames,
+remote pixels and clean recovery. No additional GPU driver patch is required.
+[Setup and compatibility matrix](stock-qemu-smc.md),
+[evidence](../findings/research/smc-opencore-handoff-20260916.md).
+
+**Earlier emulator remedy:** the 100% CPU loop was caused by missing QEMU AppleSMC key
 index enumeration. The corrected emulator implements command 0x12, returns a key
 after four index bytes, and returns 0xb8 past the last key. Native AppleSMC calls
 verified all six keys and both tested out-of-range indices. On the fresh smcpmio
@@ -253,27 +261,29 @@ wait register/caller plus boot parser/link state, preserving native behavior.
 
 ## Portability: remove the patched-QEMU dependency
 
-User priority added2026-09-16. Keep the working patched-QEMU baseline until a
-replacement passes; implement the compatibility at the OpenCore/guest-driver
-layer rather than requiring downstream users to rebuild their hypervisor.
+The immediate QEMU source-patch dependency is removed for the tested setup.
+OpenCore hides QEMU SMC's ACPI presence while VirtualSMC supplies the native service;
+QEMU's device remains available for boot-time key access. No RaphaelGPU binary change.
 
-- [ ] Audit every host patch and distinguish SMC emulation from Raphael GPU changes.
-- [ ] Select and implement a guest-side SMC solution: first assess VirtualSMC with
-  OpenCore/ACPI ownership and boot requirements; otherwise a narrowly scoped native
-  AppleSMC compatibility fix. Do not disable PerfPowerServices or fake GPU capability.
-- [ ] On stock QEMU, verify bounded key enumeration including end-of-list, normal
-  boot/key services, sustained idle PerfPowerServices, desktop/codec regressions,
-  capture and clean recovery. Prove which SMC provider handled the requests.
+- [x] Audit the repository's host patch: its only QEMU modification implements SMC
+  enumeration; GPU topology uses standard VFIO options and guest adaptations.
+- [x] Implement guest-side ownership with VirtualSMC1.3.7/gen2 and a guarded
+  OpenCore DSDT patch, retaining PerfPowerServices and existing GPU capabilities.
+- [x] Verify on stock QEMU10.1.2/Sequoia24G830: two guest boots on one host boot,
+  sole VirtualSMC-backed AppleSMC, bounded enumeration/end-of-list, low CPU before
+  and after work/restart, Metal/codec/remote-desktop checks and clean recovery.
+- [x] Publish the [stock-QEMU setup and compatibility matrix](stock-qemu-smc.md);
+  preserve the older patched-QEMU/config pair for rollback.
+- [ ] Broaden duration, independent host boots and QEMU/macOS versions. Successful
+  login/desktop boot is observed; comprehensive secure-service testing remains open.
 - [ ] Record per-hypervisor prerequisites: physical PCIe exposure, BAR mappings,
   interrupts, DMA/IOMMU, ROM/OpenCore delivery and reset/cleanup support.
 - [ ] Investigate VirtualBox separately: virtual display adapters are not Raphael
   passthrough. Verify actual version/build support before promising acceleration.
-- [ ] Publish a working stock-QEMU/OpenCore setup and a tested compatibility matrix;
-  untested hypervisors stay unqualified. General configuration examples alone are
-  not hardware validation.
 
-Current baseline: VirtualSMC disabled in OpenCore; QEMU AppleSMC enumeration patch
-fixes the reproduced CPU spin. Portability work is not yet qualified.
+[Native evidence and exact source/binary identities](../findings/research/smc-opencore-handoff-20260916.md).
+General example files alone are not hardware validation. All other hypervisors stay
+unqualified. These passes do not establish physical sensor accuracy or power management.
 
 ## Reims source-audit follow-ups
 
@@ -281,7 +291,7 @@ Research complete at Reims `69a57dd69a6958e946c03b73e02db331f330f435`, with
 its pinned QEMU submodule also reviewed. [Audit and source references](../findings/research/reims-vgpu-audit-20260916.md).
 These are independently implemented qualification tasks, not confirmed Raphael bugs.
 No external code was imported or runtime results reproduced; the translator dependency
-was not audited. Stock-QEMU/SMC remains the user-prioritized work above.
+was not audited. The tested stock-QEMU/SMC path is now verified; broader portability remains open.
 
 - [ ] **M6: expected content versus remote pixels.** Add declared regions and visible
   frame tokens to composition checks; compare raw RFB captures against independent
@@ -307,5 +317,6 @@ have stronger local evidence than importing Reims' basic event tests would add.
 
 Reims' virtual GOP, Vulkan/Metal translation and custom QEMU device do not establish
 Raphael DCN output, VCN support, VFIO recovery or VirtualBox passthrough. Its pinned
-AppleSMC still lacks key-index enumeration. Keep those roadmap gates open. Root and
+AppleSMC still lacks key-index enumeration; our separately tested OpenCore/VirtualSMC
+solution closes that dependency for stock QEMU. Other roadmap gates remain open. Root and
 Cargo license metadata differ; resolve applicable terms before considering source reuse.

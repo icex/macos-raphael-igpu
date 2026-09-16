@@ -44,7 +44,8 @@ bounded enumeration, unique nonzero keys, repeated identical enumeration, and
 0xb8 for the first two out-of-range indices and UINT32_MAX. It reads no key values.
 A60s alarm bounds failure. Also require boot/key services, idle and post-workload
 PerfPowerServices CPU, unchanged Metal output, complete capture and clean recovery.
-Native results are pending; this is not yet a setup recommendation.
+Both native boots now pass the scoped checks below. Setup is documented in
+[the stock-QEMU guide](../../docs/stock-qemu-smc.md).
 
 Private preparation, original boot-media backups and qtest artifacts are under
 `/home/bogdan/macos-vm/run/research/smc-ownership-20260916/`. Live boot media was
@@ -69,5 +70,29 @@ use native account authentication and Raw encoding. No transport workaround appl
 
 Clean guest-request shutdown, schema6 recovered/authorizes_launch=true, CP_STAT0,
 active_after0, forced_inactive0, dequeue_timeouts0, no host kernel messages.
-Overall CORE_PROBE_PASS with valid capture. A fresh-guest-boot repeat is next;
+Overall CORE_PROBE_PASS with valid capture. The fresh-guest-boot repeat also passes;
 independent host boots, arbitrary macOS/QEMU builds and other hypervisors remain open.
+
+## Fresh-boot repeat and current baseline
+
+Run `81c11a768f28ad722971a4d85d70aac8`, MODE2#169, exposure27 on the same host boot.
+One VirtualSMC-backed AppleSMC again supplies69 keys and correct terminal responses.
+PerfPowerServices0.0%,0.85s initially and0.86s after workload. Metal baseline passes;
+both hardware codecs again pass120frames720p each with107,019,000 checked luma
+values per codec (maximum error H.264=1, HEVC=0). Raw desktop capture is clean.
+Both runs total480 hardware encode/decode frames,428,076,000 checked luma samples;
+the first run's separate3-frame software-encode/hardware-decode control also passes.
+
+Capture:408 records/snapshot18 on the first run,405/snapshot18 on the repeat;
+strict classifier valid/CORE_PROBE_PASS for both. Both exit after guest shutdown,
+recover with CP_STAT0, active_after0, no forced clears/timeouts or host fault logs.
+The stock image is now the default `experiments/pins.json` value. The legacy patched
+image and original boot-media backups are retained for rollback; no source/driver
+binary changed. No new exposure allowance follows from these results.
+
+[Hashes, native outcomes and scope](smc-opencore-handoff-evidence-20260916.json).
+The repository's only QEMU patch changes AppleSMC enumeration; the derived image
+replaces only QEMU. This stock-image test removes that project's emulator change,
+not the usual VFIO/OpenCore/ROM setup. Independent host boots, additional QEMU/macOS
+versions and other hypervisors remain untested. Successful login/desktop/DSMOS
+startup is observed; comprehensive keychain/secure-service functionality was not tested.

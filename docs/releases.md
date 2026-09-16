@@ -46,3 +46,7 @@ AuxKC deployment instructions as the primary delivery path.
 Host passthrough restrictions remain binding: amdgpu must initialize the iGPU this boot,
 no driver cycling, no virgin VFIO override, no forced HQD clear or platform reset.
 Release build success is not a Metal test result.
+
+For stock QEMU, also configure [VirtualSMC and the OpenCore SMC handoff](stock-qemu-smc.md).
+The RaphaelGPU build is unchanged by that solution; the matching boot configuration
+is what replaces the previous emulator enumeration patch.

@@ -7,19 +7,16 @@ reproduced correctness blocker. Full desktop and physical display acceptance rem
 
 ## Current host / guest
 
-Guest **stopped** after stock-QEMU run `81c11a768f28ad722971a4d85d70aac8`,
-candidate280/metal-127/smcreboot, MODE2#169, twenty-seventh exposure on boot
+Guest **stopped** after stock-QEMU run `711baaeda692ee9629548284c3c3a7ad`,
+candidate280/metal-127/smchandoff, MODE2#168, twenty-sixth exposure on boot
 `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`. GPU remains vfio-pci, power/control=on.
-Two fresh guest boots now pass with stock QEMU10.1.2 and the OpenCore/VirtualSMC1.3.7
-ownership fix. Each has one AppleSMC on VirtualSMC,69 keys and correct end-of-list.
-PerfPowerServices0.0%, latest0.86s cumulative. Both Metal baselines and hardware
-H.264/HEVC120-frame encode/decode checks pass; first boot also passes three-minute
-material workload, two clean raw RFB captures and service restart; second desktop
-capture clean. Captures valid:408/405 critical records, snapshot18 each.
-Both guest-request shutdowns and schema6 recoveries pass: CP_STAT=0, active_after=0,
-no forced clears/timeouts/host faults. Both **CORE_PROBE_PASS**.
-[SMC handoff evidence](findings/research/smc-opencore-handoff-20260916.md),
-[stock-QEMU setup](docs/stock-qemu-smc.md). Independent-host-boot durability remains open.
+VirtualSMC1.3.7 owns the sole AppleSMC:69 keys, bounded enumeration/end-of-list0xb8.
+PerfPowerServices0.0% before/after graphics and after service restart. Metal baseline,
+120-frame hardware H.264 and HEVC encode/decode, three-minute native material workload
+and two clean raw RFB captures pass their scoped checks. Guest-request shutdown;
+schema6 recovered/authorizes_launch=true, CP_STAT=0, no forced clears/timeouts/host
+faults. Overall **CORE_PROBE_PASS**. First stock-QEMU guest boot; durability pending.
+[SMC handoff investigation](findings/research/smc-opencore-handoff-20260916.md).
 
 Prior Main10 decode:32 frames720p/1080p,71,884,800 luma/chroma values exactly
 match software; hardware encoder advertises Main8 only and rejects Main10.
@@ -42,7 +39,7 @@ its scoped checks; closure run itself remains INVALID for truncated terminal cap
 | GPU fences | 128 untracked blit/compute/blit rounds, 134,217,728 correct values; prior cross-queue shared-event checks also pass |
 | Native desktop | Three minutes of moving/resizing native material windows; four clean raw RFB captures |
 | Safari | Two-minute transparency/blur/scrolling page; three clean captures plus clean desktop after larger-buffer pressure |
-| Stock QEMU / PerfPowerServices | OpenCore/VirtualSMC fix passes two guest boots,0.0% CPU, latest0.86s; prior patched-QEMU evidence retained separately |
+| PerfPowerServices | 0.0% CPU, latest 0.76 s cumulative; corrected QEMU on eleven measured guest boots, all on one host boot |
 | Host regression | 958 tests OK, three skipped |
 
 Earlier texture recreation (144 cases / 131,031,576 pixels), feedback rendering
@@ -53,8 +50,7 @@ a selection limitation on the built-in topology; automatic required-hardware sel
 Driver build `51bfd732cf824249b70981f0c36fe314`; executable SHA256
 `7d06082f35959f900b5c59cb5f6d9e2efc67df13e935d338d7783524df63259b`.
 Current stock QEMU image `sha256:3a3c82c79bc4e73531f819ccdfa4053b3084efd7c1f645678dbf8b4b3a24369c`.
-Default experiment pin now selects this stock image. VirtualSMC1.3.7/gen2 and the
-exact OpenCore DSDT ownership patch are required; prior media backups remain available.
+Patched-QEMU results above remain historical evidence; stock-QEMU repetition is in progress.
 [Address/desktop qualification](findings/research/address-reclaim-desktop-20260916.md),
 [artifact hashes](findings/research/address-reclaim-desktop-evidence-20260916.json),
 [native retry analysis](findings/research/allocation-retry-analysis-20260916.md),
@@ -76,20 +72,42 @@ No vfio→amdgpu cycling.
 
 ## Current work
 
-The immediate patched-QEMU dependency is removed for the tested setup. Compatibility
-now lives in OpenCore/VirtualSMC, with no new RaphaelGPU driver patch. README, roadmap
-and the general QEMU guide describe the stock setup and scoped native results.
-No further GPU exposure allowance is active; previous allowances are consumed.
+User priority: remove the patched-QEMU SMC dependency through an OpenCore/guest
+solution, then validate on stock QEMU and separately qualify other hypervisors.
+Current OpenCore enables VirtualSMC1.3.7/gen2 and hides only QEMU SMC ACPI presence.
+First native run proves ownership and correct enumeration; a fresh-boot repeat is next.
+The README now summarizes current capabilities, goals and setup; detailed evidence
+remains here and in the roadmap. General QEMU setup examples are published, with
+CPU-only paused-QEMU configuration validation. The stock-QEMU handoff iteration
+below now has a named-boot allowance for repeatability testing.
 
-Next: broaden supported configurations and independent-host-boot/lifecycle coverage,
-then remaining rendering tests and physical output. The Reims audit contributes
-open visual-oracle, CPU/GPU ownership, plane/view/depth and heap-alias tests.
-[Audit](findings/research/reims-vgpu-audit-20260916.md).
+Parallel Reims source audit completed at pinned commit `69a57dd69a6958e946c03b73e02db331f330f435`.
+Reviewed test designs now inform open visual, CPU/GPU ownership, plane/view/depth
+and heap-alias roadmap tasks. No external code imported, GPU run or new functional
+qualification. Reims still requires custom QEMU and does not fix SMC enumeration.
+[Audit and provenance](findings/research/reims-vgpu-audit-20260916.md).
 
 Physical output remains source-guided work: clock warnings fall back; later register
 polls exhaust, with caller details filtered from serial. Exact wait register/caller
-and startup link state remain unobserved. Broader applications, formats, performance
-and crash/fallback durability remain open. Other hypervisors are unqualified.
+and startup link state remain unobserved. Broader applications, formats, performance,
+independent boots and crash/fallback durability remain open.
 
-Milestones update README/status/roadmap, push dev and fast-forward the clean local dev
-checkout. Main remains the user-published experimental snapshot; development is on dev.
+Milestones must update README/status/roadmap, push dev and fast-forward the clean
+local dev checkout; preserve unrelated changes and stashes.
+
+## Authorized next iteration — repeat stock-QEMU boot
+
+One additional exposure on boot `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`,
+candidate280/metal-127/attempt `smcreboot`, to repeat the successful stock-QEMU
+SMC ownership configuration on a fresh guest boot. Same stock image, VirtualSMC1.3.7,
+gen2 and exact DSDT patch as smchandoff; unchanged GPU driver. Check provider,
+bounded enumeration, PerfPowerServices, Metal baseline, hardware codec and cleanup.
+Fresh MODE2 plus every cycle identity/capture/abort/recovery gate retained, up to6000s.
+No exposure has occurred for this repeat yet. Earlier allowance/results archived.
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-280-attempt-smcreboot-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`

@@ -29,9 +29,10 @@ and long-duration reliability are still being tested.
 | Physical HDMI/DisplayPort | Not yet working as a qualified display path; use guest Screen Sharing. |
 
 The tested baseline is **macOS Sequoia build 24G830** with a matching driver,
-Lilu, OpenCore configuration and grafted VBIOS. It currently uses a QEMU AppleSMC
-patch to keep PerfPowerServices CPU usage normal. Stock-QEMU compatibility is
-an active goal; other hypervisors and arbitrary macOS updates are not validated.
+Lilu, OpenCore configuration and grafted VBIOS. Stock QEMU 10.1.2 now works with
+[VirtualSMC and an OpenCore SMC ownership patch](docs/stock-qemu-smc.md), keeping
+PerfPowerServices CPU usage normal without modifying QEMU. Other hypervisors and
+arbitrary macOS updates are not validated.
 Performance, games and general application compatibility are not yet qualified.
 
 See [live status and evidence](status.md) for exact tested builds and the scope of
@@ -40,9 +41,9 @@ readiness.
 
 ## Goals and next steps
 
-- **Simplify deployment:** move the remaining QEMU-specific SMC compatibility into
-  OpenCore or guest code, validate stock QEMU, and document requirements for other
-  hypervisors, including actual PCIe passthrough support.
+- **Broaden portability:** extend the working stock-QEMU/OpenCore setup across
+  host boots and supported versions, and document requirements for other hypervisors,
+  including actual PCIe passthrough support.
 - **Broaden desktop correctness:** test ordinary applications, sustained composition,
   additional texture formats, resource ownership and concurrent GPU clients.
 - **Strengthen reliability:** qualify crash recovery, repeated shutdown/relaunch,
