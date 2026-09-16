@@ -15,14 +15,14 @@ and “next experiment” instructions do not describe today's host.
 
 | Milestone | State | Evidence and remaining work |
 |---|---|---|
-| M0 — Experiment identity and supervision | Implemented; maintained | Immutable manifests, loaded-build checks, capture, deadlines and cleanup. Fixed cycle image selection so preparation and admission use the same pinned emulator. Host suite: 938 tests, OK (3 skipped). |
+| M0 — Experiment identity and supervision | Implemented; maintained | Immutable manifests, loaded-build checks, capture, deadlines and cleanup. Fixed cycle image selection so preparation and admission use the same pinned emulator. Host suite: 948 tests, OK (3 skipped). |
 | M1 — Controlled starting state | Demonstrated for current workflow | One-way amdgpu→vfio-pci handoff, power/control=on, fresh MODE2 and clean-state receipts. Broad independent-host-boot qualification remains open. |
 | M2 — Native startup failure localization | Completed for original blocker | False second SDMA instance and subsequent channel routing were traced; historical evidence retained. |
 | M3 — Native engine startup repair | Demonstrated | Raphael topology/address adaptations reach native startup and completed Metal work. Preserve these fixes while diagnosing desktop rendering. |
 | M4 — First correct Metal compute | Achieved | Candidate 194 checked 196,608 values and 4,096 rendered pixels; its overall capture remained inconclusive. Current280 desktop Metal baselines complete with verified device/build identity. |
 | M5 — Rendering, memory and synchronization | Partial | Managed-texture copy correction retained; private/managed/IOSurface and multiple-format readback probes pass. Candidate280 passes48 BGRA8 feedback cases across four distinct-seed processes, including two concurrent clients. 32 measured buffer-reclamation rounds return process-local allocation to baseline with134,217,728 correct values. 144 texture recreation cases and32 cross-queue GPU-event rounds pass. Global VRAM/GART counters return near baseline after exit; GPU VA and long-duration qualification remain open. |
 | M6 — Desktop and physical display | Visual fix verified; broader qualification open | Candidate279 fixes the reproduced feedback corruption. Fresh pixel checks, user observation and unobstructed native RFB captures on280 pass; longer desktop qualification remains. Physical DCN 3.1.5 output is a separate unqualified path. |
-| M7 — Lifecycle and host protection | Partial | Multiple guest-request shutdowns and authorizing recoveries observed on this boot, including four complete 280 runs with the visual and logging fixes. One supervised QEMU closure/recovery/reset/relaunch/clean-shutdown sequence now passes its scoped checks; closure capture remains INVALID. Fresh-host-boot, guest-panic and repeated lifecycle qualification remain open. |
+| M7 — Lifecycle and host protection | Partial | Multiple guest-request shutdowns and authorizing recoveries observed on this boot, including six complete 280 runs with the visual and logging fixes. One supervised QEMU closure/recovery/reset/relaunch/clean-shutdown sequence now passes its scoped checks; closure capture remains INVALID. Fresh-host-boot, guest-panic and repeated lifecycle qualification remain open. |
 | M8 — Performance and release | Not qualified | Correctness first; no release, Metal3 conformance, game-support or full-desktop claim. No merge/push to main before demonstrated usable desktop acceleration. |
 
 ## Blocker revalidation — 2026-09-16
@@ -30,16 +30,17 @@ and “next experiment” instructions do not describe today's host.
 | Previously listed issue | Current classification | Revalidation |
 |---|---|---|
 | HEVC decode fails before kernel context creation | Resolved for automatic required-hardware selection | Fresh 120-frame hardware encode/decode pass; original 7-case/9,600-frame artifact hashes rechecked. |
-| PerfPowerServices continuously consumes a CPU core | Resolved in corrected QEMU, observed on five guest boots | Native enumeration passes;0.0% after startup, graphics work and one service restart. Guest boots279/280 (including both reclamation attempts) are also0.0%; independent-host-boot durability remains open. |
+| PerfPowerServices continuously consumes a CPU core | Resolved in corrected QEMU, observed on eight measured guest boots | Native enumeration passes;0.0% after startup, graphics work and one service restart. Latest post-closure and Main10 guests are also0.0%; independent-host-boot durability remains open. |
 | Green/purple transparency and smearing | Fixed for reproduced feedback defect in279 | Reversible native A/B intervention, fresh279/280 pixel passes, unobstructed280 native RFB panels and user reports clean Screen Sharing. Longer desktop qualification remains open. |
 | Critical-event record overflow | Resolved for tested280 workload; finite capacity retained | Earlier smcpmio/279 overflow preserved as failures. Candidate280 finishes with398/512records,0drops and authorizing recovery; strict loss checks unchanged. |
 | Explicit HEVC decoder GPU registry-ID selection | Confirmed remaining limitation | Fresh explicit-ID request returns -12906; automatic hardware request succeeds. Does not block automatic decoding. |
 | No Metal execution / initial SDMA startup failure / pre-submit allocation failure | Superseded as current-baseline blockers | Current280 probe passed, completed GPU work and has a WindowServer accelerator client. Broader memory coverage remains open. |
 | Same-boot restart impossible / reboot required after every run | Superseded as a blanket claim | Recorded guest-request shutdowns, authorizing recovery and subsequent starts. This is not universal crash or host stability qualification. |
 | Candidate 278 direct OpenGL hang | Historical reproduced failure, not revalidated on current280 | Workload intentionally excluded pending first-draw diagnosis; do not claim it is fixed or a current280 reproduction. |
-| Native large-block allocation diagnostics | Existing unresolved allocation path, not a new texture-test failure | Present before new probes and in earlier passing280 captures. Trace caller/fallback; successful readbacks do not explain internal allocation failures. |
+| Native large-block allocation diagnostics | Observed recoverable reclaim/retry for tested workloads | Native trace links all40 failed reclaim returns to subsequent same-thread/map success; CPU readbacks pass. Reclamation cost and broader failure cases remain open. |
 | Live Metal validation crashes | Unresolved diagnostic limitation | Earlier CoreDisplay initialization crash; no successful validation verdict, no fresh repeat. |
-| Physical output, Main10/chroma, concurrent resources/codecs, independent-host-boot lifecycle | Qualification gaps, not newly reproduced failures | Remain open because no adequate passing evidence exists; not labeled fixed or tested-failing. |
+| Main10/chroma | Short Main10 decode cases pass; hardware encoding limited to Main8 | 32 frames720p/1080p, full-plane luma/chroma exactly match software. Native GVA encoder advertises Main8 only and rejects Main10 before frames. Longer/arbitrary-content coverage remains open. |
+| Physical output, broader concurrent resources/codecs, independent-host-boot lifecycle | Qualification gaps | Existing scoped passes do not establish these broader criteria. |
 
 [Audit artifact hashes](../findings/research/blocker-revalidation-20260916.json).
 Historical failures remain in findings; the active blocker list reflects the tested
@@ -54,8 +55,12 @@ this required an Apple XPC interposer or a topology redesign was incorrect.
 
 Seven sustained cases completed **9,600 frames across two fresh guest boots on one
 host boot**, with hardware decoder selection verified and every frame accounted for.
-These cover Main, 8-bit 4:2:0 synthetic patterns at 720p/1080p. Main10, arbitrary media
-and chroma fidelity, concurrent codecs and crash recovery remain unqualified.
+Those sustained cases cover Main8 4:2:0 synthetic patterns at720p/1080p. Additional
+Main10 decode tests now pass32 frames at those sizes:71,884,800 full-plane luma/chroma
+samples exactly match software. Native hardware HEVC encoder advertises Main8 only
+and rejects Main10 before frames. Arbitrary media/HDR, long Main10 sequences,
+concurrent codecs and guest-crash workloads remain unqualified.
+[Main10 evidence](../findings/research/main10-qualification-20260916.md).
 Explicit RequiredDecoderGPURegistryID still fails; automatic selection with
 RequireHardwareAcceleratedVideoDecoder works.
 A fresh audit on the corrected QEMU also passed 120 HEVC and 120 H.264 hardware
@@ -69,7 +74,7 @@ after four index bytes, and returns 0xb8 past the last key. Native AppleSMC call
 verified all six keys and both tested out-of-range indices. On the fresh smcpmio
 guest, PerfPowerServices was 0.0% CPU; after a service restart it was 0.1% CPU with
 0.54 s cumulative CPU time, later 0.0% with the same cumulative time. No Apple service is disabled and no guest binary or
-security setting was patched. Candidate279 and280 supply second through sixth passing guest boots (all 0.0% CPU, latest 1.04s cumulative).
+security setting was patched. Candidate279 and280 supply second through eighth measured guest boots (all0.0% CPU, latest0.75s cumulative).
 Longer observation and independent-host-boot durability remain open. The first emulator patch incorrectly waited for a length
 byte and failed native testing; it is superseded.
 [Root cause and native results](../findings/research/perfpower-smc-enumeration-20260916.md),
@@ -229,11 +234,3 @@ No broad display patch is justified by the default properties alone.
 The matching native vtable/assembly audit now traces the boot parser and fixed-link
 selection. Current injected ROM has four paths; no empty-ROM conclusion is valid.
 [Display boot-path analysis](../findings/research/display-boot-path-20260916.md).
-
-## Additional codec qualification
-
-Main10 hardware decode now passes32 frames at720p/1080p:71,884,800 full-plane
-luma/chroma samples exactly match VCP software decoding of identical streams.
-Native hardware HEVC encoder advertises only Main8 and rejects Main10 before
-frame submission; keep that limitation separate from working Main10 decoding.
-[Main10 evidence](../findings/research/main10-qualification-20260916.md).

@@ -39,23 +39,22 @@ passes its scoped checks; the closure run itself remains INVALID for truncated c
 Earlier texture recreation (144 cases / 131,031,576 pixels), feedback rendering
 (48 cases / 5,280,000 pixels), and hardware H.264/HEVC encode/decode retain their
 separately documented passing scopes. Explicit decoder GPU-ID selection remains
-unresolved; automatic required-hardware selection works. No new codec claim this run.
+a selection limitation on the built-in topology; automatic required-hardware selection works.
 
 Driver build `51bfd732cf824249b70981f0c36fe314`; executable SHA256
 `7d06082f35959f900b5c59cb5f6d9e2efc67df13e935d338d7783524df63259b`.
 QEMU image `sha256:51cbd7dcdbad2d6492ce83a263e9854c28620d67a1ea12ebc0562c6fab2605ad`.
-[Latest qualification](findings/research/address-reclaim-desktop-20260916.md),
+[Address/desktop qualification](findings/research/address-reclaim-desktop-20260916.md),
 [artifact hashes](findings/research/address-reclaim-desktop-evidence-20260916.json),
 [native retry analysis](findings/research/allocation-retry-analysis-20260916.md),
 [visual fix](findings/research/feedback-decompression-20260916.md).
 
 ## Next work / remaining gates
 
-1. Continue guest-crash/fallback and repeated lifecycle qualification; one post-closure workload now passes.
-2. Guest-crash/command-channel failure and independent-host-boot qualification.
-3. Broader applications, formats, render hazards and interprocess synchronization;
+1. Guest-crash/command-channel failure, repeated lifecycle and independent-host-boot qualification.
+2. Broader applications, formats, render hazards and interprocess synchronization;
    page-table release beyond cached address reuse; reclamation performance cost.
-4. Physical DCN output and measured performance. Historical direct OpenGL hang and
+3. Physical DCN output and measured performance. Historical direct OpenGL hang and
    live-validation crash remain unresolved; do not repeat without diagnosis.
 
 No main merge/push before full desktop proof. Another exposure needs a named-boot
