@@ -76,7 +76,8 @@ Current OpenCore has VirtualSMC disabled; native source detects and avoids an
 already active SMC device, so enabling the kext blindly is not a demonstrated fix.
 The README now summarizes current capabilities, goals and setup; detailed evidence
 remains here and in the roadmap. General QEMU setup examples are published, with
-CPU-only paused-QEMU configuration validation. No new GPU allowance is recorded.
+CPU-only paused-QEMU configuration validation. The stock-QEMU handoff iteration
+below now has a named-boot allowance; native validation is pending.
 
 Parallel Reims source audit completed at pinned commit `69a57dd69a6958e946c03b73e02db331f330f435`.
 Reviewed test designs now inform open visual, CPU/GPU ownership, plane/view/depth
@@ -91,3 +92,21 @@ independent boots and crash/fallback durability remain open.
 
 Milestones must update README/status/roadmap, push dev and fast-forward the clean
 local dev checkout; preserve unrelated changes and stashes.
+
+## Authorized next iteration — stock QEMU SMC handoff
+
+One additional exposure on boot `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`,
+candidate280/metal-127/attempt `smchandoff`, to test the user-requested stock-QEMU
+portability solution. Use stock image `sha256:3a3c82c79bc4e73531f819ccdfa4053b3084efd7c1f645678dbf8b4b3a24369c`,
+VirtualSMC1.3.7/gen2 and an exact OpenCore DSDT patch setting only QEMU SMC `_STA`
+to zero; retain QEMU's device for boot-time key access. Driver/source identity and
+GPU baseline are unchanged. Private-media readback verified; prior boot media and
+config preserved under `run/research/smc-ownership-20260916/baseline-*`.
+
+Hypothesis: preventing native attachment to QEMU's incomplete SMC lets VirtualSMC
+own AppleSMC and provide bounded enumeration without a hypervisor patch. Require
+one AppleSMC with a VirtualSMC parent, native end-of-list0xb8, low PerfPowerServices
+CPU, graphics baseline/capture and clean shutdown/recovery. Boot failure, wrong
+provider or unbounded enumeration falsifies this configuration. Fresh MODE2 and
+all cycle admission/identity/capture/abort/cleanup gates remain required; up to6000s.
+No exposure has occurred for this iteration yet.
