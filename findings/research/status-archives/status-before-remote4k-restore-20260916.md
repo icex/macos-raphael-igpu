@@ -7,21 +7,16 @@ reproduced correctness blocker. Full desktop and physical display acceptance rem
 
 ## Current host / guest
 
-Guest **stopped** after run `aaa3f63204f17d12bcb4a8d855774cf1`,
-candidate280/metal-127/remote4k, MODE2#171, twenty-ninth exposure on boot
-`2508eb6d-ddf3-497d-9774-00a7ecebe3ed`. **Retina default qualification FAILED:**
-1920×1080 logical/3840×2160 backing/2× scale was observed, but the user and a fresh
-raw RFB capture later showed a black desktop after default setup. Public mode
-rollback failed. The login helper is booted out and its plist disabled; it must
-not be presented as a usable default.90/120Hz requests restored a60Hz fallback.
-Repeated33,423,360-byte allocation errors are correlated, not yet causal proof;
-WindowServer PID stayed unchanged and no new WindowServer crash was found.
-Initial baseline probe passed and strict capture is valid, but CORE_PROBE_PASS
-is not a passing Retina workload verdict. Guest-request shutdown and schema6
-recovery pass: CP_STAT/active/forced/timeouts all0, no host kernel faults.
-
-Prior managed ownership checks pass96 cases/111,658,032 pixel comparisons with
-no mismatches. [Evidence](findings/research/texture-ownership-20260916.md).
+Guest **stopped** after run `964787995e1a5e34fcc7b651ae6c716b`,
+candidate280/metal-127/ownership, MODE2#170, twenty-eighth exposure on boot
+`2508eb6d-ddf3-497d-9774-00a7ecebe3ed`. GPU remains vfio-pci, power/control=on.
+Managed texture ownership/LOAD checks pass:96 cases across two seeded processes,
+111,658,032 pixel comparisons, no pixel or padding mismatches. RGBA8/BGRA8,
+64×64/1003×769, explicit synchronization, partial CPU updates and retained color
+contents; no IOSurface/depth extension implied. Raw1920×1080 desktop capture clean.
+Strict capture valid:384 records/snapshot11; **CORE_PROBE_PASS**. Guest-request
+shutdown and schema6 recovery pass, CP_STAT/active/forced clears/timeouts all0,
+no host kernel faults. [Ownership evidence](findings/research/texture-ownership-20260916.md).
 
 Stock QEMU10.1.2 with OpenCore/VirtualSMC1.3.7 remains the tested setup. Prior two
 fresh guest boots verified one AppleSMC on VirtualSMC,69 keys/end-of-list,0.0%
@@ -91,12 +86,16 @@ No vfio→amdgpu cycling.
 The immediate patched-QEMU dependency is removed for the tested setup. Compatibility
 now lives in OpenCore/VirtualSMC, with no new RaphaelGPU driver patch. README, roadmap
 and the general QEMU guide describe the stock setup and scoped native results.
-The remote4k allowance is consumed. One additional exposure is allowed on boot
-`2508eb6d-ddf3-497d-9774-00a7ecebe3ed` for candidate280/metal-127/retinarestore,
-exposure30 if VFIO opens. Restore the established desktop with the Retina login
-helper disabled; verify public display inventory and a nonblack raw capture.
-No further virtual-display/mode experiments in this recovery run. Fresh MODE2
-CP_STAT=0/RLC_CNTL=0 and all identity/capture/shutdown/recovery gates remain mandatory.
+The ownership allowance is consumed. One additional exposure is allowed on boot
+`2508eb6d-ddf3-497d-9774-00a7ecebe3ed` for candidate280/metal-127/remote4k,
+exposure29 if VFIO opens. Test a reversible60-second CGVirtualDisplay at3840×2160
+and, if successful,1920×1080 HiDPI with3840×2160 backing. Hypothesis: the fallback
+virtual display mode list, rather than an accelerator limit, explains the1080p
+ceiling. Refused creation, incorrect backing dimensions, unusable capture or failed
+removal blocks this approach; no native driver patch is included. The user additionally requested1080p HiDPI
+as the default and60/90/120Hz choices; investigate those timings within this
+exposure and install only a verified, reversible user-session default. Preserve lower-resolution fallback. Use tools/cycle.py with fresh
+MODE2 CP_STAT=0/RLC_CNTL=0 and all identity/capture/shutdown/recovery gates intact.
 
 Next: bounded feasibility for full4K/Retina Screen Sharing, per the user’s request;
 if it needs a substantial detour, return to the remaining roadmap.
