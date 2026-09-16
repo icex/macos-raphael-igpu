@@ -1,0 +1,38 @@
+{
+  "results": "/home/bogdan/macos-vm/run/candidate-280-attempt-depthstencil-results",
+  "run_id": "ca1fd405218e175788a332ff0691a058",
+  "summary": {
+    "phase": "result",
+    "status": "pass",
+    "pixels": 49625792,
+    "cases": 128
+  },
+  "source_sha256": "671c2e9d3949e3ccffa8607db8cf78e16e91c958868461fd3c19a2c3d6a930cf",
+  "sha256": {
+    "manifest.json": "d4a3fd1999dac7592598a09f4d23acd00b93b4aa209eedc5f56d47382caad773",
+    "host-before.json": "bf976df498eb4019d8f8d46d1403bebb53906b5367553676dd5abbd254a77a18",
+    "supervision.json": "aa1aba344288dcb7db01e606cd8e5ed9b9abd43818f7fbdeaa365352627a6cc4",
+    "running-identity.json": "fa8885dadfe1ad59d05efe4a543cf6e42999c38a66101d1fd44dd0798e342e8a",
+    "probe.json": "2254b62477e825c3a71dd0e357336d5dc729725bf354e5a6a52a4b7cc0269308",
+    "interactive-ready.json": "b383d26c1396f938b886556214fa2232c859f9d06194a923d008047479bb67ff",
+    "compile-command.json": "c462f47e680eb7f1bce62fff8f5f6e5ee74da0758cb4d38099e1dfe019907cb1",
+    "compile-output.txt": "7e192a3f2f273e784a4ff8fc820877f0348dda9581c718b01d20ba43ce792f71",
+    "depth-command.json": "aee8ee4c02582b0ba62da965a8dc7a65ee60a6940ce4acd3fd480fb20d090d33",
+    "depth-output.txt": "d0bb04671ea5eb41fa75233f3b3c51a43a9537df836bdfb9046b4e84411b6382",
+    "depth-summary.json": "990289630192f4195c1db2daeb23a9c6dcff6dbce43aacaec62303561aa6f0bb",
+    "process-output.txt": "a5f041e53e73d7ea851e767c257a72bc23a07656f5f92e5d35a2dd4a2317fdab",
+    "critical-quiesce.json": "fe11ea70ccc86a8e905d3543057d10893f5d3e906a280314d47d9ac6230241b6",
+    "serial.txt": "b6f52a41ad83a63b5ed41caef64836c98256455d674221c436e0f5e4ec8bf34e",
+    "critical.txt": "8c11ee10093d5cc291f072bae16a0c4de3e6af3311f892f351723ecabac29ac0",
+    "capture-sha256.json": "afc2c5c1ba7b2eeca07ac66c3fbcf6db20a8a396b26fb284b6a4ade9eac08370",
+    "shutdown.json": "ca818caa363863ca0f338222975b175af82f49605c63fc5a0d5a8fbdb10cc6a2",
+    "host-after.json": "bf976df498eb4019d8f8d46d1403bebb53906b5367553676dd5abbd254a77a18",
+    "host-kernel-messages.json": "837adb40b540afecd90d3fce6716fb1402294e27f58c2f6ffe5c6aee34613020",
+    "recovery.json": "bc500e5ee8cc8f55eae2d37da1eb6a38e8d073d61dba0bc9eae4f8c6dafb6c53",
+    "recovery-replay.json": "497966c939e76a92d9e59e84e8b46262b5758e297aee0c2218a1bf40891ce1a6",
+    "verdict.json": "b9952d6df26331ae2c7b39e9b9e139adb1875789bea5bb94a45dd28e7b102f50",
+    "wrapper-stdout.txt": "b9952d6df26331ae2c7b39e9b9e139adb1875789bea5bb94a45dd28e7b102f50",
+    "wrapper-stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wrapper-result.json": "9533f4b7726009b09eea3524708bf6a73da7c4213e53e461bdedce0bc3c77703"
+  }
+}

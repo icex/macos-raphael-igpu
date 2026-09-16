@@ -7,27 +7,27 @@ reproduced correctness blocker. Full desktop and physical display acceptance rem
 
 ## Current host / guest
 
-Guest **stopped** after run `ca1fd405218e175788a332ff0691a058`,
-candidate280/metal-127/depthstencil, MODE2#164, twenty-third exposure on boot
+Depth/stencil run `ca1fd405218e175788a332ff0691a058` is **running** after
+MODE2#164 (twenty-third exposure); workload and cleanup are pending.
+Previous guest stopped after run `f846abef4a573a0059fbe0ecdd28ecfc`,
+candidate280/metal-127/main10, MODE2#163, twenty-second exposure on boot
 `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`. GPU remains vfio-pci, power/control=on.
-128 depth/stencil/color-resolve cases pass:49,625,792 pixels, zero mismatches.
-Baseline desktop probe/capture pass;375 critical records, no capture loss.
+Baseline desktop probe/capture pass;398 critical records, no capture loss.
 Guest-request shutdown; schema6 recovered/authorizes_launch=true, CP_STAT=0,
 no forced clears/timeouts or recovery host faults. Overall **CORE_PROBE_PASS**.
-[Depth/stencil evidence](findings/research/depth-stencil-20260916.md).
 
-Prior Main10 decode:32 frames720p/1080p,71,884,800 luma/chroma values exactly
-match software; hardware encoder advertises Main8 only and rejects Main10.
+Main10 hardware decode passes32 frames at720p/1080p,71,884,800 luma/chroma samples
+exactly matching software reference. Main10 hardware encode is rejected before frames;
+native hardware encoder advertises Main8 only. Prior Main8 encoding remains valid.
 [Main10 evidence](findings/research/main10-qualification-20260916.md).
-One abnormal-QEMU-closure/recovery/relaunch/workload/clean-shutdown sequence passes
-its scoped checks; closure run itself remains INVALID for truncated terminal capture.
+One abnormal-QEMU-closure/recovery/relaunch/workload/clean-shutdown sequence also
+passes its scoped checks; the closure run itself remains INVALID for truncated capture.
 [Lifecycle evidence](findings/research/supervised-qemu-closure-result-20260916.md).
 
 ## Verified progress
 
 | Area | Evidence and scope |
 |---|---|
-| Depth/stencil/MSAA | 128 cases at1×/4× and64×64/1003×769;49,625,792 correct pixels |
 | Main10 decode | 32 frames, 720p/1080p, 71,884,800 full-plane luma/chroma samples, exact software-reference match |
 | Buffer/address reuse | 512 measured rounds, 2,147,483,648 correct values; all 6,144 measured address assignments reused earlier ranges; allocation returns exactly to 544,768 bytes |
 | Larger allocations | 192 MiB live resources, four measured rounds, 67,108,864 correct values, exact allocation return |
@@ -35,7 +35,7 @@ its scoped checks; closure run itself remains INVALID for truncated terminal cap
 | GPU fences | 128 untracked blit/compute/blit rounds, 134,217,728 correct values; prior cross-queue shared-event checks also pass |
 | Native desktop | Three minutes of moving/resizing native material windows; four clean raw RFB captures |
 | Safari | Two-minute transparency/blur/scrolling page; three clean captures plus clean desktop after larger-buffer pressure |
-| PerfPowerServices | 0.0% CPU, latest 0.69 s cumulative; corrected QEMU on nine measured guest boots, all on one host boot |
+| PerfPowerServices | 0.0% CPU, latest 0.75 s cumulative; corrected QEMU on eight measured guest boots, all on one host boot |
 | Host regression | 948 tests OK, three skipped |
 
 Earlier texture recreation (144 cases / 131,031,576 pixels), feedback rendering
@@ -71,6 +71,28 @@ empty published framebuffer properties do not prove an empty ATOM table. Boot pa
 reads EFI properties from the PCI service; trace boot-display selection before patches.
 Main10 decode is now qualified within the short synthetic scope above. Main10
 hardware encoding remains unavailable in the native advertised profile set.
-Next work: interprocess resource visibility, broader formats/hazards and longer
-workloads, plus source-guided physical-display/lifecycle investigation. No next
-exposure allowance recorded yet.
+Next work: depth/stencil/MSAA, interprocess visibility and broader workloads,
+plus source-guided physical-display and lifecycle investigation.
+
+## Next exposure allowance — depth/stencil and resolve
+
+One additional exposure (twenty-third) on boot
+`2508eb6d-ddf3-497d-9774-00a7ecebe3ed`, unchanged candidate280/metal-127,
+attempt depthstencil. Hypothesis: depth/stencil state transitions and1×/4× color
+resolve preserve a CPU-predicted left/right image, including odd dimensions.
+128 cases;20s command waits and180s process alarm. Source setDepthStencilState
+also updates native primitive binning; existing global no-binning guard remains.
+Compile first; unsupported samples, shader/command failure or any mismatched pixel
+leaves this scope unqualified. Use cycle.py fresh MODE2 and all standard6000s
+supervision/capture/host-fault/shutdown/recovery guards. No vfio→amdgpu cycling.
+
+Current depth/stencil run `ca1fd405218e175788a332ff0691a058` is **running**
+after MODE2#164, twenty-third exposure. Allowance consumed; workload and cleanup
+outcomes pending.
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-280-attempt-depthstencil-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
