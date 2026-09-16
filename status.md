@@ -65,3 +65,17 @@ on working Linux as well.
 
 Previous state archived in
 `findings/research/status-archives/status-before-candidate275-result-20260916.md`.
+
+## Next authorized run: 275 attempt hevc1 (HEVC software-stream decode investigation)
+
+Extend allowance 2→3 on boot `2508eb6d-ddf3-497d-9774-00a7ecebe3ed` under the user's
+request to fix the HEVC software-stream hardware decode failure (−12913, 2026-09-16).
+Same 1.0.275 kext and card metal-122 as run 5cb7876d (exited after guest request,
+recovered receipt); isolated attempt namespace `hevc1`. Workload during the hold:
+`tests/video_hevc_format_probe.m` via `tools/guest-codec-control.py` — dumps the hvcC
+records of the hevc.vcp and hevc.gva streams, tries the software stream with
+require-hardware, enable-only, software, and a parameter-set-only rebuilt format
+description, then a fresh-process decode of the saved stream, and captures the guest
+unified log for GVA/VideoToolbox messages. Read-only observation; no kext change.
+Fresh MODE2, all identity/capture/host-fault/cleanup gates, max 6000 s. No amdgpu
+rebind, merge or push. Stop through the normal harness.

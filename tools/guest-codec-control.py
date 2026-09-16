@@ -47,6 +47,12 @@ def main():
     parser.add_argument("--registry-id", type=int, help="override the accelerator registry id")
     parser.add_argument("--source", default="tests/video_decode_control_probe.m",
                         help="probe source relative to the repository (same CLI: codec hw|sw registryID)")
+    parser.add_argument("--args", default="{codec} {mode} {registry}",
+                        help="probe argument template; {codec} {mode} {registry} {dir} are substituted")
+    parser.add_argument("--post-log", metavar="PREDICATE",
+                        help="after the probe, append the guest unified log of the last 3 minutes "
+                             "matching this predicate (bounded, read-only)")
+    parser.add_argument("--tag", help="results file prefix (default: source stem, mode, codec)")
     args = parser.parse_args()
     vm = args.vm_dir.resolve()
     results = args.results.resolve()
@@ -66,9 +72,15 @@ def main():
               f"printf %s {payload} | /usr/bin/base64 -D > {guest_dir}/probe.m && "
               f"/usr/bin/xcrun clang -fobjc-arc -O2 {guest_dir}/probe.m -framework Foundation "
               f"-framework VideoToolbox -framework CoreMedia -framework CoreVideo "
-              f"-o {guest_dir}/probe && {guest_dir}/probe {args.codec} {args.mode} {registry}")
+              f"-o {guest_dir}/probe && {guest_dir}/probe "
+              + shlex.join(args.args.format(codec=args.codec, mode=args.mode, registry=registry,
+                                            dir=guest_dir).split()))
+    if args.post_log:
+        action = (f"{action}; probe_result=$?; /usr/bin/log show --last 3m --style compact "
+                  f"--predicate {shlex.quote(args.post_log)} | /usr/bin/head -n 400; "
+                  f"exit $probe_result")
     command = f"( {action}; result=$?; printf \"\\nRGPU_EXIT {nonce} %s\\n\" \"$result\" )"
-    tag = f"{Path(args.source).stem.replace('_', '-')}-{args.mode}-{args.codec}"
+    tag = args.tag or f"{Path(args.source).stem.replace('_', '-')}-{args.mode}-{args.codec}"
     (results / f"{tag}-command.json").write_text(json.dumps(
         {"nonce": nonce, "command": command, "registry_id": registry,
          "experiment_run_id": ready["run_id"], "codec": args.codec,
