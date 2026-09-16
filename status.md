@@ -21,3 +21,7 @@ have positive three-frame evidence. Full desktop/display and sustained codecs
 remain unqualified. No main merge or push.
 
 Previous state: findings/research/status-archives/status-before-hevc-audit-fix-20260916.md.
+
+Prelaunch: MODE2 #138 clean; staging refused unregistered candidate/card pair.
+No QEMU/VFIO launch; no exposure ledger entry consumed. Added exact 276/metal-123
+card registration with unchanged safety contract.
