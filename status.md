@@ -23,6 +23,20 @@ user request; no running GPU guest and no new experiment planned tonight.
   the new exact container. Retina was1920×1080 logical /3840×2160 backing /60Hz;
   check/restore after login.90/120Hz remains unqualified.
 
+## One-run continuation allowance (exposure34)
+
+The user's instruction on 2026-09-17 to resume the Sunshine 4K60 slowness work and
+test it end to end authorizes the next bounded experiment. Extend this boot's
+allowance by **one exposure (34)** on boot `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`
+for candidate282/metal130, attempt `clock1`: unchanged driver build
+`7a26b1a2f6694ae88ed889105de30bc7`; measure effective GPU clock/bandwidth in the
+guest with `tests/gpu_clock_probe.m`, and measure delivered Moonlight-Qt FPS from
+the Linux host at 4K60 HEVC/H.264 with cursor motion. Prior run's schema6 recovery
+`2670fe978626419daa0b7bcb207d22e2` authorizes relaunch. Use tools/cycle.py, fresh
+MODE2, maximum 6000 seconds, manual-reuse/ack-risk and all existing identity,
+host-fault, capture, shutdown and cleanup gates. No vfio→amdgpu cycling; no clock
+writes in this attempt (measurement only).
+
 ## Tonight's streaming result
 
 The separate “Sunshine Capture Fix” app builds and runs with user-approved capture
