@@ -92,8 +92,9 @@ exposure29 if VFIO opens. Test a reversible60-second CGVirtualDisplay at3840×21
 and, if successful,1920×1080 HiDPI with3840×2160 backing. Hypothesis: the fallback
 virtual display mode list, rather than an accelerator limit, explains the1080p
 ceiling. Refused creation, incorrect backing dimensions, unusable capture or failed
-removal blocks this approach; no native driver patch or permanent guest installation
-is included. Preserve lower-resolution fallback. Use tools/cycle.py with fresh
+removal blocks this approach; no native driver patch is included. The user additionally requested1080p HiDPI
+as the default and60/90/120Hz choices; investigate those timings within this
+exposure and install only a verified, reversible user-session default. Preserve lower-resolution fallback. Use tools/cycle.py with fresh
 MODE2 CP_STAT=0/RLC_CNTL=0 and all identity/capture/shutdown/recovery gates intact.
 
 Next: bounded feasibility for full4K/Retina Screen Sharing, per the user’s request;

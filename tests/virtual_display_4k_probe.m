@@ -82,10 +82,11 @@ static bool abi(void) {
         signature(@"CGVirtualDisplaySettings",@"setModes:",@encode(void),@[@"@"]);
 }
 int main(int argc,const char **argv) { @autoreleasepool {
-    if(argc!=2||(strcmp(argv[1],"0")&&strcmp(argv[1],"1")))return 2;
+    if((argc!=2&&argc!=3)||(strcmp(argv[1],"0")&&strcmp(argv[1],"1")))return 2;
+    double hz=argc==3?atof(argv[2]):60;if(hz!=60&&hz!=90&&hz!=120)return 2;
     signal(SIGTERM,stop);signal(SIGINT,stop);signal(SIGALRM,expired);alarm(110);
     bool hidpi=atoi(argv[1]);NSArray *before=inventory();bool abiValid=abi();
-    emit(@{@"phase":@"before",@"displays":before?:@[],@"abi_valid":@(abiValid),@"hidpi":@(hidpi),@"pid":@(getpid())});
+    emit(@{@"phase":@"before",@"displays":before?:@[],@"abi_valid":@(abiValid),@"hidpi":@(hidpi),@"requested_hz":@(hz),@"pid":@(getpid())});
     // Do not change a physical monitor's topology. This targets the known headless fallback only.
     if(!abiValid||before.count!=1||![before[0][@"active"] boolValue]||![before[0][@"main"] boolValue]||[before[0][@"model"] unsignedIntValue]!=0x76697274)return 2;
     CGVirtualDisplayDescriptor *d=[CGVirtualDisplayDescriptor new];
@@ -98,7 +99,7 @@ int main(int argc,const char **argv) { @autoreleasepool {
     if(!display){emit(@{@"phase":@"error",@"error":@"display creation refused"});return 3;}
     CGDirectDisplayID target=display.displayID;
     CGVirtualDisplaySettings *settings=[CGVirtualDisplaySettings new];settings.hiDPI=hidpi;settings.rotation=0;
-    CGVirtualDisplayMode *mode=[[CGVirtualDisplayMode alloc] initWithWidth:hidpi?1920:3840 height:hidpi?1080:2160 refreshRate:60];
+    CGVirtualDisplayMode *mode=[[CGVirtualDisplayMode alloc] initWithWidth:hidpi?1920:3840 height:hidpi?1080:2160 refreshRate:hz];
     settings.modes=mode?@[mode]:@[];bool applied=mode&&[display applySettings:settings];
     bool matched=false;
     for(unsigned i=0;i<50&&!stopping&&!matched;i++) {
