@@ -194,7 +194,8 @@ class CommandRegressionTest(unittest.TestCase):
                 completed = subprocess.CompletedProcess([], 7, '{"verdict":"WRAPPER_FAILURE"}\n', '')
                 with patch.object(cycle, 'run_step', return_value=completed) as step:
                     result = cycle.prepare_and_run(
-                        make_args(manual_reuse=manual, ack_risk=manual), {}, vm, vm, 'run')
+                        make_args(manual_reuse=manual, ack_risk=manual), {'image_id': 'sha256:pinned'}, vm, vm, 'run')
+                self.assertEqual(step.call_args_list[0].kwargs['env'], {'IMAGE': 'sha256:pinned'})
                 command = step.call_args.args[1]
                 self.assertEqual('--manual-reuse' in command, manual)
                 self.assertEqual('--ack-risk' in command, manual)

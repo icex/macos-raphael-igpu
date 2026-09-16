@@ -89,9 +89,10 @@ def next_reset_index(vm: Path) -> int:
 
 
 def run_step(name: str, command: list[str], cwd: Path, log: Path | None = None,
-             allow_failure: bool = False) -> subprocess.CompletedProcess:
+             allow_failure: bool = False, env: dict | None = None) -> subprocess.CompletedProcess:
     print(f"  $ {' '.join(command)}", flush=True)
-    result = subprocess.run(command, cwd=cwd, capture_output=True, text=True, check=False)
+    result = subprocess.run(command, cwd=cwd, capture_output=True, text=True, check=False,
+                            env=None if env is None else {**os.environ, **env})
     if log is not None:
         log.parent.mkdir(parents=True, exist_ok=True)
         with log.open("w", encoding="utf-8") as stream:
@@ -108,7 +109,7 @@ def run_step(name: str, command: list[str], cwd: Path, log: Path | None = None,
 def preflight(args, pins: dict, worktree: Path, vm: Path) -> dict:
     """Every gate that must hold before the device is touched."""
     print("[1/5] preflight")
-    facts: dict[str, object] = {}
+    facts: dict[str, object] = {"image_id": pins["image_id"]}
 
     driver = gpu_driver(pins["gpu_bdf"])
     if driver != "vfio-pci":
@@ -230,7 +231,8 @@ def prepare_and_run(args, facts: dict, worktree: Path, vm: Path, run_id: str) ->
     if args.attempt:
         command += ["--attempt", args.attempt]
     run_step("experiment prepare", command, cwd=worktree,
-             log=vm / "run" / f"candidate-{args.candidate}{suffix}-prepare.log")
+             log=vm / "run" / f"candidate-{args.candidate}{suffix}-prepare.log",
+             env={"IMAGE": facts["image_id"]})
     print(f"      manifest {manifest.name}")
 
     print("[5/5] run  (this exposes the GPU)")
