@@ -2,23 +2,31 @@
 
 **Candidate 280 passes longer buffer/address, explicit GPU-fence and broader desktop checks.**
 The reproduced transparency corruption remains fixed. Native allocation errors were
-traced to successful reclaim/retry under pressure; the message alone is not a
-reproduced correctness blocker. Full desktop and physical display acceptance remain open.
+traced to successful reclaim/retry in earlier pressure tests. A new Retina-default
+attempt produced a black desktop with repeated4K-sized allocation errors; its cause
+is unresolved. Full desktop and physical display acceptance remain open.
 
 ## Current host / guest
 
-Guest **stopped** after run `aaa3f63204f17d12bcb4a8d855774cf1`,
-candidate280/metal-127/remote4k, MODE2#171, twenty-ninth exposure on boot
-`2508eb6d-ddf3-497d-9774-00a7ecebe3ed`. **Retina default qualification FAILED:**
-1920×1080 logical/3840×2160 backing/2× scale was observed, but the user and a fresh
-raw RFB capture later showed a black desktop after default setup. Public mode
-rollback failed. The login helper is booted out and its plist disabled; it must
-not be presented as a usable default.90/120Hz requests restored a60Hz fallback.
-Repeated33,423,360-byte allocation errors are correlated, not yet causal proof;
-WindowServer PID stayed unchanged and no new WindowServer crash was found.
-Initial baseline probe passed and strict capture is valid, but CORE_PROBE_PASS
-is not a passing Retina workload verdict. Guest-request shutdown and schema6
-recovery pass: CP_STAT/active/forced/timeouts all0, no host kernel faults.
+Guest **running** in baseline restoration run `2456747451ac073cf5fa0ea1657590cf`,
+candidate280/metal-127/retinarestore, MODE2#172, thirtieth exposure on boot
+`2508eb6d-ddf3-497d-9774-00a7ecebe3ed`. GPU remains vfio-pci, power/control=on.
+Baseline Metal probe passed; public inventory shows1280×1024 at60Hz/1× with ordinary
+1080p available. Fresh raw capture is visibly correct and the user confirmed
+"yes normal". The Retina agent is absent from launchd and its plist is disabled.
+Guest is left available for the user under supervision; interactive hold ends
+**21:55:14 Europe/Bucharest on2026-09-16**, then normal harness shutdown/recovery.
+Final capture and cleanup for this running restore session are pending.
+
+Prior run `aaa3f63204f17d12bcb4a8d855774cf1` (MODE2#171/exposure29) failed
+Retina-default qualification:1920×1080 logical/3840×2160 backing/2× was observed,
+but the user and a fresh raw capture later showed black. Public-mode rollback
+failed.90/120Hz requests restored a60Hz fallback. The failed helper is archived,
+not a supported setup tool. WindowServer stayed alive; repeated33,423,360-byte
+allocation failures are correlated, not causal proof. Initial CORE_PROBE_PASS
+and valid capture do not make the Retina workload pass. That run shut down and
+recovered cleanly, all CP/active/forced/timeout counters0 and no host faults.
+[Retina failure and restoration](findings/research/remote-retina-20260916.md).
 
 Prior managed ownership checks pass96 cases/111,658,032 pixel comparisons with
 no mismatches. [Evidence](findings/research/texture-ownership-20260916.md).
@@ -91,15 +99,12 @@ No vfio→amdgpu cycling.
 The immediate patched-QEMU dependency is removed for the tested setup. Compatibility
 now lives in OpenCore/VirtualSMC, with no new RaphaelGPU driver patch. README, roadmap
 and the general QEMU guide describe the stock setup and scoped native results.
-The remote4k allowance is consumed. One additional exposure is allowed on boot
-`2508eb6d-ddf3-497d-9774-00a7ecebe3ed` for candidate280/metal-127/retinarestore,
-exposure30 if VFIO opens. Restore the established desktop with the Retina login
-helper disabled; verify public display inventory and a nonblack raw capture.
-No further virtual-display/mode experiments in this recovery run. Fresh MODE2
-CP_STAT=0/RLC_CNTL=0 and all identity/capture/shutdown/recovery gates remain mandatory.
+The remote4k and retinarestore exposure allowances are consumed. No additional
+GPU exposure allowance is active. The current restore run remains supervised;
+no further mode/virtual-display mutations are planned in this session.
 
-Next: bounded feasibility for full4K/Retina Screen Sharing, per the user’s request;
-if it needs a substantial detour, return to the remaining roadmap.
+Next: isolate4K backing-allocation/render failures from display reconfiguration
+using the supplied native sources; retain normal remote desktop meanwhile.
 Broader configurations, lifecycle, rendering tests and physical output follow. The Reims CPU/GPU ownership task now passes its managed-texture scope.
 Visual-oracle, plane/view/depth and heap-alias tests remain open.
 [Audit](findings/research/reims-vgpu-audit-20260916.md).

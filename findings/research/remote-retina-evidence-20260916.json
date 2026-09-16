@@ -1,0 +1,101 @@
+{
+  "schema": 1,
+  "run_id": "aaa3f63204f17d12bcb4a8d855774cf1",
+  "host_boot": "2508eb6d-ddf3-497d-9774-00a7ecebe3ed",
+  "mode2": 171,
+  "exposure": 29,
+  "functional_result": "FAIL_BLACK_DESKTOP_AFTER_DEFAULT_SETUP",
+  "baseline_verdict": "CORE_PROBE_PASS",
+  "capture_valid": true,
+  "critical_capture": {
+    "schema": 1,
+    "meaning": "producer emitted a fresh caught-up snapshot after the host request, acknowledged it, and stopped replay",
+    "build_id": "51bfd732cf824249b70981f0c36fe314",
+    "run_id": "aaa3f63204f17d12bcb4a8d855774cf1",
+    "cid": "d2c4817fbda8bf08fc012832646452d05e78dc146d727ff06f58b5f9b9da11c7",
+    "requested_epoch": 1789579382.9207852,
+    "acknowledged_epoch": 1789579386.8992703,
+    "request_sha256": "8992385c1caa82c8c40768c28fadadc6510e4098de0454bc58cc90e1040b2b48",
+    "snapshot": 18,
+    "record_count": 444,
+    "capture_acceptance": "terminal-prefix",
+    "critical_capture": {
+      "byte_length": 2794261,
+      "sha256": "e6e7e9278ec5a91961c7fac4cac955d8bb95607d6f870d619da8f274bc9d1f62"
+    }
+  },
+  "recovery": {
+    "status": "recovered",
+    "authorizes_launch": true,
+    "kernel_messages": []
+  },
+  "gc_quiesce": {
+    "cp_stat_after": 0,
+    "active_after": 0,
+    "forced_inactive": 0,
+    "dequeue_timeouts": 0
+  },
+  "sha256": {
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results/remote4k-native-abi-guard-instrument-error-output.txt": "5151ae77d6e59d9584802c50ad9c80eb20ef94540a7522b45b04303f84baf304",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results/remote4k-native-abi-guard-instrument-error-command.json": "2ca9e9626b39ab01c8efd32ab400a75665e176076dab555ed826eff88e0270bf",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results/desktop-before-4k.png": "5d6e968b508929b04ad7b4cd186520ba2073d78e3388e6649b1d3aa81718f00a",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results/desktop-before-4k-capture.json": "a82204826a070999c78395b02e08b9c7fc4763848d3b25762a6dc1b3c490a585",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results/remote4k-native-command.json": "5f947929cd05598e1a991fbc58601df4f4609d09661307096471ffd115e3abaa",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results/remote4k-native-output.txt": "cb2c2b2f2e83c22e2e459947006d67aae8d469b8998191cbf7b98d221ba3b852",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results/desktop-native.png": "517b8946c54a3f92ba9e20ddad5ef7f8dc50369c82071b660c20c79328dcfa67",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results/desktop-native-capture.json": "af30c38f30d8692e87d543da442adf5abdf58e8f61c8f2603d9b40401d8e0722",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results/remote4k-hidpi-command.json": "2b35637b58feabc207540f2fc6756964536a1d5793bedee7eef170a639a3f88c",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results/remote4k-hidpi-output.txt": "6bd4511bebf446bbc3801e8fdef32b500baa90e3b49c5e36d692c5eab7dd571f",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results/desktop-hidpi.png": "08c23ce8de71b7eb2f85871974c51bd519515e519a65d4caf40d230670356c67",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results/desktop-hidpi-capture.json": "679c6a20eb57ccdf76e796c6c5e695f17bcab9a347caacd5f7ebcbad01e0083f",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results/windowserver-restart-inventory.txt": "9a2622fc3fecf5910a286b106fced02e0ac3fdcaca2fefb7fcddada53f4738e2",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results/display-mode-0-command.json": "86fc033777692edd675aa65c5f7b6417e02b239bb3851e9fb902bb947bf15d0b",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results/display-mode-0-output.txt": "b0a8950666fd79cb99bc083b30de975934532cdf32d370ceb62fa2f7df704ec1",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results/remote4k-hidpi-90-command.json": "b7697d7ac2b583f703d73f221fa93929eaae109e3bddeee0e2644b599eafdccd",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results/remote4k-hidpi-90-output.txt": "e936d9a6157732fe77c3a119459b47caf4c2968c8669939d8385f38768894b0d",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results/remote4k-hidpi-120-command.json": "313e60fa4684ea710e88645a00238f176393ed3481c79cd80213ebfc768caba6",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results/remote4k-hidpi-120-output.txt": "f1ce934525290f7f3cbe423bad2f26dd94cbb1f73bbd3e8add0b49a8d9e052c8",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results/remote4k-native-60-command.json": "50e746b35b18a170cc1233a8c7a9eb2bdaca54212f954428e2b09358bfd8ce8b",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results/remote4k-native-60-output.txt": "7ed867b50a2ba5d24dbf2213a1bf53e3e8dbd99a96544deae25c1b622352bef7",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results/retina-helper-existing-mode-output.txt": "935647a62e3600da94a4a5ae8f4d6816cf63b5b4ffd66d2da590421af1ba4029",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results/retina-helper-existing-mode-command.json": "0605355739d708f94c4ab500b7ffe93e5e467c1a2fc708383bef8af958e2fee8",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results/retina-helper--configure-command.json": "cd3309f2b668cfd727b2612741e4c440b10f4c975204a67dcb2f3d92465ce3ea",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results/retina-helper--configure-output.txt": "f20e4135653c86b798ddff713d1dbfa502ef70f85b439632002030395845e7ac",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results/retina-install-command.json": "39efe5c4cb192786c0b7622b4284f1cd01a200cfcbfcba647c72d7ea2a4ca956",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results/retina-install-output.txt": "10e245c1898f05e57c5fd339cb107f8c0a51ac2a7d5ae743a32060ca5b91ae68",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results/retina-black-screen-rollback.txt": "35b5332348d45e18b2d284c39dd6b30a748165007760716bc9fa16527fc2ece4",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results/desktop-restored.png": "f7386401a241a025d5598360dbe3165348cde2ed9db6b9baf4f4ae0d8e5a937c",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results/desktop-restored-capture.json": "bfc8d9b844f4c144461a5069da180f1f01fc1267d5cafdd21b2ff6f56738a430",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results/retina-black-screen-guest-state.txt": "d1c9f754630b1a65c59a9c1c8ee39242713aeffb06e763a259faffa88612f4ca",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results/retina-black-screen-serial-tail.txt": "c11573da25179f495b06dccf8359807a52af58c455324aa6afd7a2ed28d2cec0",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results/probe.json": "6a9f80ddd301beecde9cc4b3b382087e0fb4724aa626237e09bbd27b98572d41",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results/manifest.json": "0a4c2bf63ea484a4f7db52cdaaae43c0619bff8adfa487d742808d05871c8206",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results/verdict.json": "d50e09c3870f7d3cc1bf137a879eb42f6c1fc1ba72bc69b4735ddf4d9003b077",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results/recovery.json": "6b3c80a0b53d8b491866a7753606697e95099cafad9fd1cee669b8fac06dd793",
+    "/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results/shutdown.json": "d2652ec132e6dab42622d3bf3728cff3d6e83811364fe42b3b3b05e3a5993c78"
+  },
+  "restore": {
+    "run_id": "2456747451ac073cf5fa0ea1657590cf",
+    "mode2": 172,
+    "exposure": 30,
+    "guest_state": "running supervised",
+    "user_confirmation": "yes normal",
+    "final_cleanup": "pending",
+    "sha256": {
+      "/home/bogdan/macos-vm/run/candidate-280-attempt-retinarestore-results/probe.json": "76f7611b7bab154424855e82c2b2381567f02df85436d016fb158ab0e3e08586",
+      "/home/bogdan/macos-vm/run/candidate-280-attempt-retinarestore-results/display-mode-0-command.json": "a4eaa8465adb8f000ae5718f2610f5c81b0a4964267b171a147703af7d30eac0",
+      "/home/bogdan/macos-vm/run/candidate-280-attempt-retinarestore-results/display-mode-0-output.txt": "64dfd653146ab8986fcb8248c48c4829be80554fca4b249f465574dfcf7d6548",
+      "/home/bogdan/macos-vm/run/candidate-280-attempt-retinarestore-results/desktop-restored.png": "3c7f28702021d93520d772fe5062d927efd8fe298465da57ecbbf81c49ffdb4e",
+      "/home/bogdan/macos-vm/run/candidate-280-attempt-retinarestore-results/desktop-restored-capture.json": "8e23031badcc6a8ac4472c2ad6223993bc9f936a6f7050f136ad6830e1b8552f",
+      "/home/bogdan/macos-vm/run/candidate-280-attempt-retinarestore-results/retina-agent-disabled-check.txt": "9bad4d4e114b0715a292671a01b18dd17cb4cfc96c5752fe14eebb003ee60da2",
+      "/home/bogdan/macos-vm/run/candidate-280-attempt-retinarestore-results/interactive-ready.json": "8e62593bb7f0b4e4340d6e445edf186ee58f4234e1f3885d4c8fb331a1dd54c8"
+    }
+  },
+  "allocation_error_observation": {
+    "size": 33423360,
+    "log_occurrences": 9138,
+    "ordinary_free_min": 5017600,
+    "ordinary_free_max": 110247936,
+    "fixed_free": 272560128
+  }
+}

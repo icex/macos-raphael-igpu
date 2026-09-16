@@ -43,6 +43,8 @@ readiness.
 
 - **Enable full 4K Screen Sharing:** expose and verify a native3840×2160 remote
   desktop, then measure delivered frame rate and latency independently of mode timing.
+  The initial Retina-default experiment produced a black screen and was rolled back;
+  1080p HiDPI and90/120Hz are not supported defaults yet.
 - **Broaden portability:** extend the working stock-QEMU/OpenCore setup across
   host boots and supported versions, and document requirements for other hypervisors,
   including actual PCIe passthrough support.
