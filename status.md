@@ -2,19 +2,13 @@
 
 ## Host and task boundary
 
-Boot `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`: **candidate 277 is RUNNING** for
-the user's remote-desktop testing, eighth VM exposure. Run `d7190def5989c624ca02a9066edafeab`,
-attempt userdesktop, fresh clean MODE2 #143. Standard baseline probe complete;
-interactive-ready receipt present; Screen Sharing returned `RFB 003.889` at
-127.0.0.1:5900. LAN endpoint 192.168.0.43:5900.
-
-Supervised interactive hold ends **2026-09-16 13:48:04 EEST**.
-Coordinator runs independently as `rgpu-candidate277-userdesktop.service`; existing
-6000s hard cap, identity/capture/host-fault aborts and cleanup paths remain active.
-Stop through `candidate-277-attempt-userdesktop-results/stop-requested`.
-Cleanup for this active run is pending, not claimed. GPU remains vfio-pci,
-power/control=on. Prior seven exposures completed; the preceding candidate 277
-repeat shut down by guest request and recovered. No main merge/push.
+Boot `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`: candidate 277 userdesktop run
+`d7190def5989c624ca02a9066edafeab` ended by guest-request shutdown and recovered,
+per shutdown.json/recovery.json in candidate-277-attempt-userdesktop-results.
+The baseline and additional 12 filtered-blur cases passed; raw-desktop-before.png
+independently reproduces the user's green/purple menu corruption over raw RFB.
+This is NOT desktop qualification. Work continues in candidate-278 (linear-layout
+discriminator); consult its status for the current hardware run.
 
 ## Fix and evidence
 
@@ -54,8 +48,8 @@ it is separate from the fixed capability lookup failure.
 
 Tested Main 8-bit 4:2:0 synthetic luma patterns, sequential sessions, 720p/1080p.
 Main10, arbitrary media/chroma fidelity, concurrent sessions and crash recovery
-repeatability remain unqualified. Full desktop/display and managed-texture copy
-issues unchanged. Handoff client guard remains uninstalled/untested on hardware.
+repeatability remain unqualified. Full desktop/display remains unqualified; candidate230’s managed-texture
+copy fix remains in place. Handoff client guard remains uninstalled/untested on hardware.
 
 ## User remote-desktop run allowance
 
@@ -65,3 +59,10 @@ Extend allowance by one exposure (eighth total) on boot
 MODE2, manual-reuse/ack-risk, 6000s maximum and 5400s interactive hold, retaining
 all identity, capture-fatal, host-fault, shutdown and recovery paths.
 No automated codec workloads beyond the standard baseline probe during this hold.
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-277-attempt-userdesktop-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
