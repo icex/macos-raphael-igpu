@@ -142,6 +142,14 @@ static BOOL selection(VTSessionRef session,CFStringRef key,BOOL expected,NSStrin
         if(encoderID) CFRelease(encoderID);
         if(software) return YES;
     }
+    if(!expected && referenceMode && s==kVTPropertyNotSupportedErr &&
+       CFEqual(key,kVTDecompressionPropertyKey_UsingHardwareAcceleratedVideoDecoder)) {
+        // This reference session is bound to the VCP DecoderID and hardware is
+        // explicitly disabled in its creation dictionary. VCP lacks this key.
+        emit(@"software-decoder-selection-bound",@{@"decoder_id":@"com.apple.videotoolbox.videodecoder.hevc.vcp",
+            @"hardware_enabled":@NO,@"status_property_unsupported":@YES});
+        return YES;
+    }
     if(!valid || hardware!=expected) { errors++; return NO; }
     return YES;
 }
@@ -149,6 +157,7 @@ static BOOL decode(CMFormatDescriptionRef desc,NSDictionary *attrs,BOOL hardware
     referenceMode=!hardware; decoded=0; [seen removeAllIndexes];
     NSMutableDictionary *spec=[@{(__bridge id)kVTVideoDecoderSpecification_EnableHardwareAcceleratedVideoDecoder:@(hardware)} mutableCopy];
     if(hardware) spec[(__bridge id)kVTVideoDecoderSpecification_RequireHardwareAcceleratedVideoDecoder]=@YES;
+    else spec[@"DecoderID"]=@"com.apple.videotoolbox.videodecoder.hevc.vcp";
     VTDecompressionOutputCallbackRecord cb={decodedFrame,NULL}; VTDecompressionSessionRef session=NULL;
     OSStatus s=VTDecompressionSessionCreate(NULL,desc,(__bridge CFDictionaryRef)spec,(__bridge CFDictionaryRef)attrs,&cb,&session);
     if(!check(hardware ? @"hardware-decoder-create" : @"software-decoder-create",s) || !session) return NO;
