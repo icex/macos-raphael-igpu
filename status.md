@@ -9,10 +9,10 @@ artifacts. Full desktop acceleration and physical display remain unqualified.
 - Candidate 277, driver 1.0.277; candidate 278's linear-swizzle driver change is rejected.
 - Run `a169e87a3b282ebb6552150a77a9c232`, attempt `smcpmio`, card `metal-124`, MODE2#152.
 - Results: `/home/bogdan/macos-vm/run/candidate-277-attempt-smcpmio-results`.
-- Supervisor: `rgpu-candidate277-smcpmio.service`; interactive deadline `2026-09-16T13:43:38.829283+00:00`.
+- Supervisor `rgpu-candidate277-smcpmio.service` has finished; guest is stopped.
 - Host boot `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`; GPU `0000:7b:00.0` remains
   `vfio-pci`, `power/control=on`. Actual container image and QEMU hash verified.
-- Current baseline Metal probe completed; **shutdown/recovery pending while running**.
+- Current baseline Metal probe completed; **shutdown completed; recovery failed capture validation**.
   Previous smcfinal run exited after guest request and recovered with CP_STAT=0.
 
 ## Verified progress
@@ -78,3 +78,24 @@ shader feedback clears the reproducer; restoring original bytes brings corruptio
 back. See findings/research/feedback-decompression-20260916.md. Candidate279 retains
 277 topology/codecs and adds the guarded three-byte userspace repair; fresh guest
 validation pending. Current277 guest remains supervised until normal stop.
+
+## smcpmio closeout
+
+Guest exited after the identity-bound guest shutdown request. CR2 final snapshot
+contains512records and reports19drops; recovery refuses it with
+`CriticalReplayError: CR2 snapshot reports loss`. Overall verdict INVALID; no
+successful recovery receipt is claimed. Functional CPU/codec and controlled
+visual-intervention evidence remain valid in their stated scopes. Host-after
+reports no active VM, vfio-pci, initialized GPU and power pinned on.
+
+## One-run allowance: candidate279
+
+Standing user instruction to fix and continuously test the corruption authorizes
+the fifteenth exposure on host boot2508eb6d-ddf3-497d-9774-00a7ecebe3ed, candidate279/
+metal-126, corrected QEMU image51cbd7dc. Previous cleanup evidence is INVALID due
+to CR2 overflow; do not relabel it or weaken the strict parser. Use the documented
+manual-reuse/ack-risk cycle path and independent fresh MODE2 reset, requiring
+CP_STAT=0 and RLC_CNTL=0 before launch. This is not automatic receipt-based reuse.
+All identity, host-fault, capture-fatal, shutdown and recovery guards remain intact;
+max6000seconds, manual stop after bounded visual/Metal/codec qualification.
+Host suite937tests OK3skipped; build e9d918e94bc5d8e1f20d636ff65cf078d46ac0848650565f878bdec2f8fe5aee.
