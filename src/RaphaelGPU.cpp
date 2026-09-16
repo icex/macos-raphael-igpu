@@ -224,6 +224,8 @@ static bool criticalUartQuiesceEnabled = false;
 static rgpu::SuccessRecordBudget waitStampRecordBudget {};
 static rgpu::SuccessRecordBudget kiqSubmitRecordBudget {};
 static rgpu::SuccessRecordBudget preClearFaultRecordBudget {};
+static rgpu::SuccessRecordBudget feedbackCowRecordBudget {};
+static rgpu::SuccessRecordBudget vcnCowRecordBudget {};
 static rgpu::ObservationBuffer<RaphaelVm::PreparedRequest, 8> vmid2Programs {};
 static rgpu::ObservationBuffer<RaphaelSdma::SubmitInfoObservation, 8> vmid2Submits {};
 static RaphaelSubmit::Store<64, 32> submissionTrace {};
@@ -315,6 +317,13 @@ static void diagAppend(bool critical, const char *fmt, ...) {
 } while (0)
 #define CRLOG(fmt, ...) do { \
     diagAppend(true, fmt, ## __VA_ARGS__); \
+    SYSLOG("rgpu", fmt, ## __VA_ARGS__); \
+} while (0)
+
+// Every sample still reaches ordinary serial; only successful critical samples
+// are bounded. Failures retain their existing capture-fatal behavior.
+#define SAMPLED_CRLOG(budget, success, fmt, ...) do { \
+    diagAppend((budget).take((success), 4), fmt, ## __VA_ARGS__); \
     SYSLOG("rgpu", fmt, ## __VA_ARGS__); \
 } while (0)
 
@@ -2508,7 +2517,7 @@ static uint32_t wrapVcnDecodeSubmit(void *queue, const void *frame) {
         auto words = static_cast<const uint32_t *>(frame);
         const unsigned count = slotBytes / 4 < 64 ? slotBytes / 4 : 64;
         for (unsigned i = 0; i + 7 < count; i += 8)
-            CRLOG("VCNQ: packet n=%u dword=%u %08x %08x %08x %08x %08x %08x %08x %08x",
+            RLOG("VCNQ: packet n=%u dword=%u %08x %08x %08x %08x %08x %08x %08x %08x",
                   n, i, words[i], words[i+1], words[i+2], words[i+3],
                   words[i+4], words[i+5], words[i+6], words[i+7]);
     }
@@ -9012,11 +9021,13 @@ static void textureDiagCow(TextureDiagReadContext *context, int pid,
                     memcmp(after, target.patchedInstruction, target.instructionSize) == 0) ?
             KERN_SUCCESS : KERN_FAILURE;
     }
+    const bool cowSucceeded = protectRc == KERN_SUCCESS && writeRc == KERN_SUCCESS &&
+                              restoreRc == KERN_SUCCESS && verifyRc == KERN_SUCCESS;
     if (&target == &RaphaelTextureDiag::kFeedbackTarget)
-        CRLOG("FBEXPAND: COW pid=%d addr=%#llx p=%d w=%d r=%d v=%d", pid,
+        SAMPLED_CRLOG(feedbackCowRecordBudget, cowSucceeded, "FBEXPAND: COW pid=%d addr=%#llx p=%d w=%d r=%d v=%d", pid,
               result.instructionAddress, protectRc, writeRc, restoreRc, verifyRc);
     if (vcnTarget)
-        CRLOG("VCNDPM: COW pid=%d addr=%#llx p=%d w=%d r=%d v=%d", pid,
+        SAMPLED_CRLOG(vcnCowRecordBudget, cowSucceeded, "VCNDPM: COW pid=%d addr=%#llx p=%d w=%d r=%d v=%d", pid,
               result.instructionAddress, protectRc, writeRc, restoreRc, verifyRc);
     if (restoreRc != KERN_SUCCESS)
         CRLOG("XTCOW pid=%d p=%d w=%d r=%d v=%d unsafe", pid, protectRc, writeRc,
@@ -9078,10 +9089,18 @@ static void applyCurrentTaskImagePatches(bool includeMetal) {
                     ++depth;
                 }
             }
-            if (vcnTarget && (emit || result.found))
-                CRLOG("VCNDPM: image pid=%d st=%u uuid=%u bytes=%u patched=%u addr=%#llx",
-                      pid, result.status, result.uuidMatch, result.instructionMatch,
-                      result.alreadyPatched, result.instructionAddress);
+            if (vcnTarget && (emit || result.found)) {
+                // Absent images and already-patched processes are routine queries,
+                // not lifecycle evidence. A found but invalid target remains critical.
+                const bool invalidTarget = result.found && result.status != RaphaelTextureDiag::Ok;
+                diagAppend(invalidTarget,
+                           "VCNDPM: image pid=%d st=%u uuid=%u bytes=%u patched=%u addr=%#llx",
+                           pid, result.status, result.uuidMatch, result.instructionMatch,
+                           result.alreadyPatched, result.instructionAddress);
+                SYSLOG("rgpu", "VCNDPM: image pid=%d st=%u uuid=%u bytes=%u patched=%u addr=%#llx",
+                       pid, result.status, result.uuidMatch, result.instructionMatch,
+                       result.alreadyPatched, result.instructionAddress);
+            }
             if (!vcnTarget && emit) RLOG("XTDIAG pid=%d task=%p ti=%d fmt=%d images=%u n=%u st=%u uuid=%u path=%u "
                  "text=%#llx instr=%#llx bytes=%u patched=%u",
                  pid, task, taskRc, dyld.all_image_info_format, result.imageCount, result.inspected,

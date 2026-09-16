@@ -16,6 +16,22 @@ int main() {
     for (unsigned i = 0; i < 100; ++i)
         assert(budget.take(false, 4));
 
+    // Sustained process creation must leave critical space for failures/recovery.
+    // The two COW families each keep four successes; later errors stay visible.
+    static rgpu::DiagnosticRecords<rgpu::kCriticalRecordCapacity, 32> lifetime;
+    rgpu::SuccessRecordBudget metalCow, videoCow;
+    for (unsigned i=0;i<400;i++) lifetime.append("startup-and-required-evidence");
+    for (unsigned i=0;i<1000;i++) {
+        if (metalCow.take(true,4)) lifetime.append("metal-cow-ok");
+        if (videoCow.take(true,4)) lifetime.append("video-cow-ok");
+    }
+    assert(metalCow.take(false,4) && videoCow.take(false,4));
+    lifetime.append("metal-cow-failed"); lifetime.append("video-cow-failed");
+    lifetime.append("shutdown"); lifetime.append("owned"); lifetime.append("valid-lifetime");
+    assert(lifetime.size()==413 && lifetime.dropped()==0 && lifetime.truncated()==0);
+    char last[32]; assert(lifetime.read(412,last));
+    assert(std::strcmp(last,"valid-lifetime")==0);
+
     // A repaired VMID can progress through more than 128 clean KIQ submissions.
     // Retain a bounded clean prefix without ever suppressing the later fault.
     rgpu::SuccessRecordBudget preClearFaultBudget {};
