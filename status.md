@@ -93,3 +93,15 @@ match this state. `dev` history is reconciled with the candidate; 953 host tests
 pass (3 skipped), plus synthetic texture-setting locator checks. Existing `dev`
 archive/capture-tool changes are retained; current run-admission and QEMU pins
 remain unchanged. Future verified milestones must update docs and push `dev`.
+
+## Next-run allowance
+
+One additional, twenty-fifth exposure on boot
+`2508eb6d-ddf3-497d-9774-00a7ecebe3ed`, candidate280/metal-127/xpcevent.
+Unchanged hardware-tested driver/QEMU, fresh MODE2 through cycle.py required.
+Compile the bundled typed-XPC probe; first transfer/import one shared-event handle
+with zero GPU submissions. Only if transport and helper exit pass, submit one
+consumer-first event wait/read and producer upload/signal. Expand to32 rounds only
+if the one-round result and helper exit pass. A pixel mismatch or GPU timeout
+falsifies this workload; XPC/import failure remains test-infrastructure evidence.
+Existing capture, host-fault, identity, deadline, shutdown and recovery gates remain.
