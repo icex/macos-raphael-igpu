@@ -32,7 +32,7 @@ recovery recovered/authorizes_launch=true. Two prior staging failures did not
 reach QEMU/VFIO and consumed no exposures. Cycle now explicitly passes its pinned
 image to prepare; regression coverage checks that handoff.
 
-## Next exposure allowance
+## Active exposure allowance
 
 Standing user instruction to fix and continuously test authorizes thirteenth exposure
 on boot2508eb6d-ddf3-497d-9774-00a7ecebe3ed, candidate277/card metal-124, attempt
@@ -59,3 +59,7 @@ then resume native transparency diagnosis. No direct OpenGL workload.
 smcverified refused before launch: prepare used the pinned image but admission
 observed the default environment. No QEMU/VFIO exposure, no ledger consumption.
 Cycle now passes the same pin to both prepare and runner; identity gate retained.
+
+RUNNING: smcfinal/ec5d03f7433ad8f4151f35644c5e38c9, actual image2ada1bb2323f
+and QEMU binary SHA1d48acdf0f831e5fe7fc801c988113a9e9f8065c9edb9f826ba3589999ca441d
+verified in running container. Interactive-ready reached. Cleanup pending.
