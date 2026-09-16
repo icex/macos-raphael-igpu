@@ -2436,39 +2436,9 @@ static void wrapVcnWriteRegister(void *engine, uint32_t segment, uint32_t reg, u
         RLOG("VCNR: native clock/reset requested=%x written=%x readback=%x after10ms=%x",
              requested, value, beforeDelay, read(engine, segment, reg));
     }
-    // Candidate 245: probe the VCN power-gating FSM. The VCPU-core registers (cache
-    // BAR 0x43c, soft-reset 0x84) read 0xffffffff while always-on registers (STATUS,
-    // VCPU_CNTL, NC0 BAR) read fine. Working Linux encoding has the same signature;
-    // this does not establish a powered-off VCPU. disable_power_gating writes mmUVD_PGFSM_CONFIG (reg 0x0) and
-    // waits on mmUVD_PGFSM_STATUS (0x1). Read those plus POWER_STATUS (0x4) and the two
-    // dead core registers back after the config write settles, to tell a power-domain
-    // fault (fixable) from a firmware/PSP issue. Read-only.
-    if (ctx && segment == 1 && reg == 0x0) {
-        auto rd = reinterpret_cast<uint32_t (*)(void *, uint32_t, uint32_t)>(hwlibsBase + 0x86834);
-        const uint32_t cfgrb = rd(engine, 1, 0x0), pgst0 = rd(engine, 1, 0x1);
-        IOSleep(5);
-        RLOG("VCNPG: wrote pgfsmcfg=%08x -> cfgrb=%08x pgstatus %08x->%08x power=%08x "
-             "cacheBARlo=%08x softreset=%08x",
-             value, cfgrb, pgst0, rd(engine, 1, 0x1), rd(engine, 1, 0x4),
-             rd(engine, 1, 0x43c), rd(engine, 1, 0x84));
-    }
-    // Candidate 244: settle whether the VCN VCPU cache-window and soft-reset writes
-    // land at all. Candidate 243 read them 0xffffffff AFTER static_initialize; that is
-    // ambiguous between a dropped write (the block is held inaccessible, so the VCPU
-    // never boots -- a real root cause) and a register that merely reads 0xffffffff once
-    // the VCPU/PSP secures it (benign, pointing at firmware authentication). Read the
-    // register back HERE, in the native context immediately after each write, before
-    // reset release and before any securing. Same _internal_cgs_read_register the native
-    // path uses; no extra writes. mmUVD_SOFT_RESET=0x84, mmUVD_LMI_VCPU_CACHE_64BIT_BAR
-    // low=0x43c (its high sibling 0x43d follows in the same mc_resume write pair).
-    if (ctx && segment == 1 && (reg == 0x84 || reg == 0x43c || reg == 0x43d)) {
-        auto rd = reinterpret_cast<uint32_t (*)(void *, uint32_t, uint32_t)>(hwlibsBase + 0x86834);
-        RLOG("VCNW: wrote seg1 reg=%03x val=%08x -> readback=%08x (softreset=%08x "
-             "cacheBARlo=%08x cacheBARhi=%08x nc0lo=%08x status=%08x)",
-             reg, value, rd(engine, 1, reg), rd(engine, 1, 0x84),
-             rd(engine, 1, 0x43c), rd(engine, 1, 0x43d),
-             rd(engine, 1, 0x438), rd(engine, 1, 0x80));
-    }
+    // Do not read protected/power-gated cache/reset registers merely to log
+    // writes. Native initialization and its required waits own MMIO ordering.
+
 }
 
 static mach_vm_address_t orgMmhub21 = 0, nativeMmhub23 = 0;
@@ -2491,25 +2461,6 @@ static void wrapMmhub21(void *vm) {
     }
 }
 
-// Read DPG SRAM through its AON LMA port after commit and after failed pause.
-// This selects SRAM read addresses; it is not a write to VCN configuration.
-static void inspectVcnSram(void *engine, const char *phase) {
-    if (!vcnDpgEnabled || !engine ||
-        !__atomic_load_n(&raphaelTargetConfirmed, __ATOMIC_ACQUIRE)) return;
-    auto ctx = *reinterpret_cast<const uint8_t **>(static_cast<uint8_t *>(engine) + 16);
-    if (!ctx || *reinterpret_cast<const uint32_t *>(ctx + 0x268) != 0x30001) return;
-    auto image = *reinterpret_cast<const uint32_t *const *>(ctx + 0x340);
-    const uint32_t bytes = *reinterpret_cast<const uint32_t *>(ctx + 0x358);
-    auto read = reinterpret_cast<uint32_t (*)(void *, uint32_t, uint32_t)>(hwlibsBase + 0x86834);
-    auto write = reinterpret_cast<void (*)(void *, uint32_t, uint32_t, uint32_t)>(hwlibsBase + 0x8680f);
-    const bool valid = RaphaelVcnDpg::readback(image, bytes,
-        [&](uint32_t control) { write(engine, 1, 0x11, control); },
-        [&]() { return read(engine, 1, 0x12); },
-        [&](uint32_t reg, uint32_t expected, uint32_t observed) {
-            RLOG("VCNSR: %s index=%x expected=%08x observed=%08x", phase, reg, expected, observed);
-        });
-    RLOG("VCNSR: %s bytes=%u valid-image=%u", phase, bytes, valid);
-}
 // Candidate 252: the secure DPG path (decode_sram_secure_initialize) builds the DPG SRAM with
 // the VCPU cache BAR written as add_to_dpg_sram(,1,0x43c,0)/(,1,0x43d,0) -- zero -- relying on an
 // firmware handling not established by these zeros alone. Inject the firmware TMR address from
@@ -2630,7 +2581,6 @@ static uint32_t wrapVcnWait(void *engine, uint32_t bank, uint32_t reg,
         expected == 0x2a2a8aa0 && bits == 0x3f3fffff && vcnCorePowerSelected(engine))
         vcnCorePowerWaitSucceeded = result == 0;
     if (n < 64) RLOG("VCNW: end n=%u result=%u", n, result);
-    if (n < 64 && result && bank == 1 && reg == 0x14) inspectVcnSram(engine, "pause-failed");
     return result;
 }
 static uint32_t wrapVcnWaitMs(void *engine, uint32_t bank, uint32_t reg,
@@ -2798,64 +2748,10 @@ static uint32_t wrapVcnInitialize(void *engine) {
                 read(engine,1,0x2e0), read(engine,1,0x2e1), read(engine,1,0x14), read(engine,1,4), shared[0x39]);
         }
     }
-    if (!result) inspectVcnSram(engine, "post-submit");
-    // Candidate 243: read-only VCN VCPU boot diagnostic. No register writes, no
-    // reset -- only _internal_cgs_read_register, exactly as static_initialize does.
-    // The post-stall external snapshot reads the firmware-cache BAR (0x43c/0x43d)
-    // as 0xffffffff while the sibling non-cache BAR (0x438/0x439) reads a real
-    // address. Re-read both here in the native HWLibs (secure) context, right after
-    // static_initialize returns, to tell an unlatched cache-window write (the VCPU
-    // would fetch firmware from garbage and never boot) from a mere non-secure
-    // readback artifact. Sample the boot gates too: UVD_STATUS (0x80) must reach 2,
-    // POWER_STATUS (0x04) must show the domain on, SOFT_RESET (0x84) clear, VCPU_CNTL
-    // (0x156) reset released. Offsets are from amdgpu vcn_3_0_0_offset.h; seg 1 = VCN.
-    if (engine && hwlibsBase) {
-        auto vcnRead = reinterpret_cast<uint32_t (*)(void *, uint32_t, uint32_t)>(
-            hwlibsBase + 0x86834);  // _internal_cgs_read_register(this, seg, offset)
-        RLOG("VCNC: cacheBAR=%08x_%08x nc0BAR=%08x_%08x status=%08x power=%08x "
-             "softreset=%08x vcpucntl=%08x",
-             vcnRead(engine, 1, 0x43d), vcnRead(engine, 1, 0x43c),
-             vcnRead(engine, 1, 0x439), vcnRead(engine, 1, 0x438),
-             vcnRead(engine, 1, 0x80), vcnRead(engine, 1, 0x04),
-             vcnRead(engine, 1, 0x84), vcnRead(engine, 1, 0x156));
-    }
-    // Candidate 246: read the same VCN registers through the kext's own direct MMIO
-    // accessor (fbRead, absolute index = VCN regbase 0x7e00 + offset), which bypasses
-    // Apple's _internal_cgs_read_register callback entirely. If the cache BAR reads the
-    // real TMR address here while Apple's cgs path read 0xffffffff, the write DID land and
-    // only Apple's readback is blind -- firmware is reachable and the fault is downstream.
-    // Working Linux encoding also reads both as 0xffffffff; neither accessor proves
-    // that the write failed. Read-only; fbRead covers this flat index range.
-    if (asicInfo) {
-        RLOG("VCNMM: direct-MMIO cacheBAR=%08x_%08x softreset=%08x nc0lo=%08x status=%08x",
-             fbRead(asicInfo, 0x823d), fbRead(asicInfo, 0x823c), fbRead(asicInfo, 0x7e84),
-             fbRead(asicInfo, 0x8238), fbRead(asicInfo, 0x7e80));
-    }
-    // Candidate 247 (targeted, bounded locate). The cache BAR (0x43c) and soft-reset (0x84)
-    // are unreachable at Apple's seg1 base 0x7e00 while NC0 (0x438) and STATUS (0x80) are fine.
-    // (a) Dump Apple's whole VCN segment-base table (ctx+0x34 + 4*seg -- plain memory reads,
-    // fully safe) and probe the cache/soft-reset offsets at each segment base via fbRead,
-    // guarded to a sane index range, to find whether they live in a different VCN segment.
-    // (b) Scan seg1 offsets 0x430..0x44f around the known-good NC0 for a register holding the
-    // TMR address Apple tried to write (lo 0x1f400000 / hi 0x000000f4). Read-only, no writes.
-    if (ctx && asicInfo) {
-        for (uint32_t seg = 0; seg < 6; seg++) {
-            const uint32_t base = *reinterpret_cast<const uint32_t *>(ctx + 0x34 + 4 * seg);
-            const bool sane = base >= 0x1000 && base <= 0x40000;
-            RLOG("VCNSEG: seg=%u base=%08x sane=%d cache=%08x_%08x softreset=%08x nc0=%08x status=%08x",
-                 seg, base, sane,
-                 sane ? fbRead(asicInfo, base + 0x43d) : 0xffffffff,
-                 sane ? fbRead(asicInfo, base + 0x43c) : 0xffffffff,
-                 sane ? fbRead(asicInfo, base + 0x84) : 0xffffffff,
-                 sane ? fbRead(asicInfo, base + 0x438) : 0xffffffff,
-                 sane ? fbRead(asicInfo, base + 0x80) : 0xffffffff);
-        }
-        for (uint32_t off = 0x430; off < 0x450; off++) {
-            const uint32_t v = fbRead(asicInfo, 0x7e00 + off);
-            if (v == 0x1f400000 || v == 0x000000f4 || (v != 0xffffffff && v != 0))
-                RLOG("VCNSCAN: seg1 off=%03x abs=%04x val=%08x", off, 0x7e00 + off, v);
-        }
-    }
+    // Source/placement metadata is ordinary memory. Do not probe live DPG SRAM,
+    // cache BARs, soft-reset state, guessed segment bases or adjacent registers.
+    // Working Linux already established sentinel readbacks are inconclusive;
+    // candidate273 lost host capture across this former diagnostic boundary.
     if (ctx) RLOG("VCNP: context fwID=%x placement=%llx bytes=%x regbase1=%x shared=%llx",
         *reinterpret_cast<const uint32_t *>(ctx + 0x2a0),
         *reinterpret_cast<const uint64_t *>(ctx + 0x2c0),
