@@ -9,7 +9,7 @@ artifacts. Full desktop acceleration and physical display remain unqualified.
 - Candidate 277, driver 1.0.277; candidate 278's linear-swizzle driver change is rejected.
 - Run `a169e87a3b282ebb6552150a77a9c232`, attempt `smcpmio`, card `metal-124`, MODE2#152.
 - Results: `/home/bogdan/macos-vm/run/candidate-277-attempt-smcpmio-results`.
-- Supervisor: `rgpu-candidate 277-smcpmio.service`; interactive deadline `2026-09-16T13:43:38.829283+00:00`.
+- Supervisor: `rgpu-candidate277-smcpmio.service`; interactive deadline `2026-09-16T13:43:38.829283+00:00`.
 - Host boot `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`; GPU `0000:7b:00.0` remains
   `vfio-pci`, `power/control=on`. Actual container image and QEMU hash verified.
 - Current baseline Metal probe completed; **shutdown/recovery pending while running**.

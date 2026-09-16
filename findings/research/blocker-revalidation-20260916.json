@@ -41,6 +41,10 @@
     {
       "path": "/home/bogdan/macos-vm/run/candidate-277-attempt-smcpmio-results/audit-hevc-explicit-id-output.txt",
       "sha256": "9a2d2941cdb5202683d80b0da32fbb7bb950f8fca00ce81ff91e8afaaee0a6e6"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-277-attempt-smcpmio-results/render-target-feedback-output.txt",
+      "sha256": "92838c88f4b09fc7f9ab65591c1fefd1999f13549dc390f684e661f621070bf2"
     }
   ]
 }

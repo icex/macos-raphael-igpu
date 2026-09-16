@@ -200,3 +200,17 @@ window's960x640 surface; do not treat it as the affected panel trace. A focused
 300-draw follow-up includes117 draws to1280x1024 plus downsample intermediates.
 Artifacts native-draw-focused.{txt,json} include pipeline labels and vertex/state
 bytes. First corrupt draw is not established; shader replay selection remains open.
+
+The focused trace includes fragment-stage render-target barriers and draws that
+read the attached target. The earlier alias trace checked image slots, not all
+attachment inputs, so it cannot exclude render-target feedback. A bounded
+render_target_feedback_probe replay passed nine storage/barrier combinations
+(private, managed, IOSurface; native barrier, broader barrier, separate encoder),
+checking 110,000 pixels per case with zero mismatches above the stated tolerance.
+Maximum error was one byte. This is a negative reproducer result, not a fix: the
+probe uses simplified shaders and checks after twelve iterations, which can mask
+transient differences. Native shader/state replay remains needed. Output:
+`candidate-277-attempt-smcpmio-results/render-target-feedback-output.txt`; source
+is retained in the candidate-278 research worktree. Also, the native draw count
+is six indices referencing four vertices; trailing decoded vertex bytes are not
+evidence of an out-of-bounds native draw.
