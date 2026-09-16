@@ -8,22 +8,19 @@ quality improves responsiveness. Full desktop and physical display acceptance re
 
 ## Current host / guest
 
-Guest **running** in run `2456747451ac073cf5fa0ea1657590cf`,
+Guest **stopped cleanly** after run `2456747451ac073cf5fa0ea1657590cf`,
 candidate280/metal-127/retinarestore, MODE2#172, thirtieth exposure on boot
 `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`. GPU remains vfio-pci, power/control=on.
-Baseline Metal probe passed. An isolated60Hz-only setup restored1920×1080 logical /
-3840×2160 backing /2×. The user confirms visible, crisp output. The corrected,
-idempotent Retina login helper is installed; persistence across a fresh login is
-not yet qualified. Standard RAW RFB captures are black in this user-visible working
-session, so they cannot qualify Apple's client presentation at this mode.
-Guest remains supervised; interactive hold ends **21:55:14 Europe/Bucharest
-on2026-09-16**, then normal harness shutdown/recovery. Final capture and cleanup
-for this running session are pending.
+Baseline Metal passes; strict capture valid. Shutdown is `exited-after-guest-request`;
+schema6 recovery authorizes relaunch, CP_STAT0, no forced inactive queues or dequeue
+timeouts. User-visible Retina1080p/4K backing works, but Sunshine4K throughput fails
+at3–4FPS. These are separate results. The deadline and LAN relay ended normally.
+Candidate281/metal-129 is built and host-tested, awaiting its next supervised run.
 
 Sunshine v2026.914.233613 official Intel DMG is installed. VideoToolbox is selected
 with software fallback disabled; startup detects H.264 and HEVC Main8. Its streaming
 API responds as Raphael macOS on48989; the authenticated web interface responds
-on48990. LAN relay is active on192.168.0.43:48989, with web UI on48990;
+on48990. LAN relay previously served192.168.0.43:48989, with web UI on48990;
 serverinfo200 and authenticated UI401 verified through the LAN address.
 UFW rules now allow the guest TCP/UDP port family from192.168.0.0/24 onenp9s0;
 other-device connectivity remains to be checked.
@@ -174,7 +171,7 @@ Candidate281 / metal-129 is being prepared; it is not yet deployed. Source timin
 implicate the single native allocation-failure diagnostic in4K throughput stalls.
 Only that guarded call site is redirected to first8/every1024 cumulative sampling;
 no allocator outcome, reservation, timeout, global logger or recovery policy changes.
-The current280 session must first stop through its existing stop-file/cleanup path.
+The current280 session stopped through its existing stop-file/cleanup path.
 After clean recovery, authorize exactly one candidate281 exposure on host boot
 `2508eb6d-ddf3-497d-9774-00a7ecebe3ed` (prospective31st exposure), via tools/cycle.py
 and a fresh MODE2 receipt. This is the user-requested fix/test continuation, not
