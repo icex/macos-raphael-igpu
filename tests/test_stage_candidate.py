@@ -1153,8 +1153,10 @@ class Candidate280ContractTest(unittest.TestCase):
         raw = (ROOT / "experiments/metal-127.json").read_bytes()
         card = tool.validate_card(raw, hashlib.sha256(raw).hexdigest())
         self.assertEqual(card["candidate_version"], "1.0.280")
-        with self.assertRaises(RuntimeError):
-            tool.configure("1.0.281", "metal-128")
+        tool.configure("1.0.281", "metal-129")
+        card = tool.validate_card((ROOT / "experiments/metal-129.json").read_bytes(),
+                                  hashlib.sha256((ROOT / "experiments/metal-129.json").read_bytes()).hexdigest())
+        self.assertEqual(card["id"], "metal-129")
 
     def test_closure_pair_preserves_exact_functional_guards(self):
         tool = load_tool()
@@ -1178,3 +1180,12 @@ class Candidate280ContractTest(unittest.TestCase):
         encoded = json.dumps(altered).encode()
         with self.assertRaisesRegex(RuntimeError, "unsupported candidate card pair"):
             tool.validate_card(encoded, hashlib.sha256(encoded).hexdigest())
+
+    def test_candidate281_allows_only_the_new_allocation_log_pair(self):
+        tool = load_tool()
+        tool.configure("1.0.281", "metal-129")
+        raw = (ROOT / "experiments/metal-129.json").read_bytes()
+        card = tool.validate_card(raw, hashlib.sha256(raw).hexdigest())
+        self.assertEqual(card["candidate_version"], "1.0.281")
+        self.assertEqual(card["functional_boot_arguments"]["rgpualloclog"], "1")
+        self.assertEqual(card["functional_boot_arguments"]["rgputexdiag"], "2")

@@ -167,3 +167,15 @@ or functional qualification change.
 - Output: `/home/bogdan/macos-vm/run/candidate-280-attempt-remote4k-results`
 - Verdict: `CORE_PROBE_PASS`
 - Boundary: `None`
+
+## Prepared next experiment: allocation diagnostic budget
+
+Candidate281 / metal-129 is being prepared; it is not yet deployed. Source timings
+implicate the single native allocation-failure diagnostic in4K throughput stalls.
+Only that guarded call site is redirected to first8/every1024 cumulative sampling;
+no allocator outcome, reservation, timeout, global logger or recovery policy changes.
+The current280 session must first stop through its existing stop-file/cleanup path.
+After clean recovery, authorize exactly one candidate281 exposure on host boot
+`2508eb6d-ddf3-497d-9774-00a7ecebe3ed` (prospective31st exposure), via tools/cycle.py
+and a fresh MODE2 receipt. This is the user-requested fix/test continuation, not
+an extension of the current guest deadline. Retain4K Retina60Hz and Sunshine setup.

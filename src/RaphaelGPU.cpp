@@ -55,6 +55,7 @@
 #include "RecoveryLifetime.hpp"
 #include "CriticalReplay.hpp"
 #include "CriticalUart.hpp"
+#include "AllocationLogBudget.hpp"
 #if __has_include("BuildIdentity.hpp")
 #include "BuildIdentity.hpp"
 #else
@@ -326,6 +327,27 @@ static void diagAppend(bool critical, const char *fmt, ...) {
     diagAppend((budget).take((success), 4), fmt, ## __VA_ARGS__); \
     SYSLOG("rgpu", fmt, ## __VA_ARGS__); \
 } while (0)
+
+// One exact 24G830 allocation-failure call site, not a global kprintf hook.
+// Native allocation attempts, false returns and per-pool counters remain untouched.
+static bool allocationLogBudgetEnabled = false;
+static bool allocationLogInstalled = false;
+static mach_vm_address_t originalAllocationLogger = 0;
+static volatile uint64_t allocationLogFailures = 0;
+static void budgetAllocationFailure(const char *format, const char *name,
+                                   uint64_t requested, uint64_t freeBytes,
+                                   uint64_t fixedFreeBytes) {
+    const uint64_t count = __sync_add_and_fetch(&allocationLogFailures, 1);
+    if (!RaphaelAllocationLog::emit(count)) return;
+    using Logger = void (*)(const char *, ...);
+    auto logger = reinterpret_cast<Logger>(originalAllocationLogger);
+    // Preserve the first eight original diagnostics exactly. Subsequent samples
+    // explicitly expose the cumulative failure count; this is not allocation success.
+    if (count <= 8) logger(format, name, requested, freeBytes, fixedFreeBytes);
+    else logger("%s: AMD allocation failures=%llu (sampled after first 8); "
+                "latest size=%llu free=%llu fixed-free=%llu\n",
+                name, count, requested, freeBytes, fixedFreeBytes);
+}
 
 static uint32_t diagDumpDelayMs = 75000;
 
@@ -8567,6 +8589,45 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
             patcher.clearError();
         }
         x6Base = addr;
+        if (allocationLogBudgetEnabled && !allocationLogInstalled) {
+            // RIP-relative format + argument moves and native counter/false-return
+            // tail are exact build guards. The CALL displacement is loader-relocated.
+            static const uint8_t prefix[] = {
+                0x48,0x8b,0x73,0x18,0x48,0x8b,0x8b,0xf0,0x00,0x00,0x00,
+                0x48,0x83,0xc6,0x04,0x48,0x8d,0x3d,0x63,0x6e,0x0b,0x00,
+                0x45,0x31,0xff,0x4c,0x89,0xf2,0x49,0x89,0xc0,0x31,0xc0};
+            static const uint8_t tail[] = {
+                0x48,0xff,0x83,0xd0,0x00,0x00,0x00,
+                0x4c,0x89,0xbb,0xd8,0x00,0x00,0x00,
+                0x4c,0x89,0xbb,0xe0,0x00,0x00,0x00,0x44,0x89,0xf8};
+            const bool guard = entryMatches(addr, sz, 0x5334f, prefix, sizeof(prefix)) &&
+                entryMatches(addr, sz, 0x53375, tail, sizeof(tail));
+            uint8_t before[5] {}, after[5] {};
+            bool installed = false;
+            const mach_vm_address_t expectedLogger = patcher.solveSymbol(
+                KernelPatcher::KernelID, "_kprintf");
+            patcher.clearError();
+            if (guard && expectedLogger) {
+                memcpy(before, reinterpret_cast<const void *>(addr + 0x53370), sizeof(before));
+                int32_t originalDisplacement = 0;
+                memcpy(&originalDisplacement, before + 1, sizeof(originalDisplacement));
+                const auto target = static_cast<mach_vm_address_t>(
+                    static_cast<int64_t>(addr + 0x53375) + originalDisplacement);
+                if (before[0] == 0xe8 && target == expectedLogger &&
+                    RaphaelAllocationLog::makeCall(addr + 0x53370,
+                        reinterpret_cast<mach_vm_address_t>(budgetAllocationFailure), after)) {
+                    originalAllocationLogger = target;
+                    KernelPatcher::LookupPatch lp {&kexts[KextX6000], before, after, sizeof(before), 1};
+                    patcher.applyLookupPatch(&lp, reinterpret_cast<uint8_t *>(addr + 0x53370), sizeof(before) + 1);
+                    installed = patcher.getError() == KernelPatcher::Error::NoError &&
+                        entryMatches(addr, sz, 0x53370, after, sizeof(after));
+                }
+            }
+            allocationLogInstalled = installed;
+            CRLOG("ALLOCLOG: guarded=%u installed=%u first=8 every=1024 original=%#llx",
+                  guard, installed, originalAllocationLogger);
+            patcher.clearError();
+        }
         if (vcnDpgEnabled) {
             if (vcnNoDpmEnabled) {
                 static const uint8_t newContextEntry[] = {
@@ -9185,6 +9246,9 @@ static void pluginStart() {
          submissionTraceEnabled, submissionTraceEnabled ? "enabled" : "disabled");
     uint32_t vmFaultDiag = 0;
     uint32_t mmhubFix = 0;
+    uint32_t allocationLogBudget = 0;
+    allocationLogBudgetEnabled = PE_parse_boot_argn("rgpualloclog", &allocationLogBudget,
+        sizeof(allocationLogBudget)) && allocationLogBudget == 1;
     uint32_t vcnReset = 0;
     vcnResetEnabled = PE_parse_boot_argn("rgpuvcnreset", &vcnReset, sizeof(vcnReset)) && vcnReset == 1;
     uint32_t vcnDpg = 0;
