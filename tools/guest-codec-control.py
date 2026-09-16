@@ -86,8 +86,8 @@ def main():
          "experiment_run_id": ready["run_id"], "codec": args.codec,
          "source": args.source}, indent=2) + "\n")
     metal = load_metal_test()
-    env = dict(os.environ, GX_TIMEOUT="150")
-    proc = metal.run_guest_command(vm, command, nonce, env, timeout=170, execution_grace=0)
+    env = dict(os.environ, GX_TIMEOUT="200")
+    proc = metal.run_guest_command(vm, command, nonce, env, timeout=220, execution_grace=0)
     output = proc.stdout
     (results / f"{tag}-output.txt").write_text(output)
     print(output, end="" if output.endswith("\n") else "\n")

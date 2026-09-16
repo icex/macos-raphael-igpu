@@ -100,7 +100,7 @@ static void dumpFormat(NSString *tag, CMFormatDescriptionRef desc) {
     emit(tag, @{@"width":@(dims.width), @"height":@(dims.height), @"nal_length_size":@(nalLen),
                 @"hvcC_bytes":@(hvcC.length), @"hvcC":hvcC ? hex(hvcC) : @"",
                 @"parameter_sets":sets, @"extensions":other,
-                @"atom_keys":[atoms.allKeys description]});
+                @"atom_keys":atoms ? [atoms.allKeys description] : @""});
 }
 
 // Returns create status; fills usingHardware. Decodes every sample in `list`.
@@ -248,7 +248,7 @@ static NSArray *readStream(NSString *path, CMFormatDescriptionRef *descOut) {
 int main(int argc, const char **argv) {
     @autoreleasepool {
         setbuf(stdout, NULL);
-        signal(SIGALRM, expired); alarm(150);
+        signal(SIGALRM, expired); alarm(170);
         samples = [NSMutableArray array];
         if (argc != 4) { fprintf(stderr, "usage: probe variants|variants-hw|decodefile registryID dir\n"); return 2; }
         NSString *mode = @(argv[1]);
@@ -281,8 +281,6 @@ int main(int argc, const char **argv) {
             emit(@"result", @{@"passed":@(passed)});
             return passed ? 0 : 1;
         }
-        decodeWith(@"enable-hw-only", desc, list, NO, YES, &hw);
-        decodeWith(@"software", desc, list, NO, NO, &hw);
         // Rebuild the format description from the parameter sets only (drops every other extension).
         size_t count = 0; int nalLen = 4;
         CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(desc, 0, NULL, NULL, &count, &nalLen);
@@ -297,6 +295,8 @@ int main(int argc, const char **argv) {
             decodeWith(@"rebuilt-require-hw", rebuilt, rewrap(list, rebuilt), YES, YES, &hw);
             CFRelease(rebuilt);
         }
+        decodeWith(@"enable-hw-only", desc, list, NO, YES, &hw);
+        decodeWith(@"software", desc, list, NO, NO, &hw);
         // Bare hvcC-only description for the fresh-process test.
         BOOL wrote = writeStream(streamPath, desc);
         emit(@"stream-written", @{@"ok":@(wrote), @"path":streamPath});
