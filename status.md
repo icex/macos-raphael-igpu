@@ -53,3 +53,13 @@ Historical candidate278 OpenGL hang and live validation crash are not marked fix
 No main merge/push until full desktop proof. New exposure needs a named-boot
 allowance and fresh successful MODE2 through tools/cycle.py. No vfio→amdgpu cycling.
 [Roadmap](docs/ROADMAP.md).
+
+## Candidate280 one-run allowance
+
+Standing instructions authorize the sixteenth exposure on host boot
+2508eb6d-ddf3-497d-9774-00a7ecebe3ed, candidate280/cardmetal-127, to validate bounded
+routine diagnostics and the279 visual fix. Prior279 guest shut down normally but
+its lossy capture supplies no recovery receipt. Use documented manual-reuse/ack-risk
+with fresh MODE2 requiring CP_STAT=0 and RLC_CNTL=0. Preserve all identity, capture-
+fatal, host-fault, shutdown and recovery checks; max6000seconds with manual stop
+after bounded visual, codec and process-recreation checks. Host937tests pass3skipped.
