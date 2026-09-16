@@ -225,3 +225,7 @@ no usable link. This narrows the observed empty-framebuffer properties; it does
 not yet identify the upstream cause. Next trace topology production and DAL link
 creation, distinguishing ATOM connector parsing from DCN initialization failure.
 No broad display patch is justified by the default properties alone.
+
+The matching native vtable/assembly audit now traces the boot parser and fixed-link
+selection. Current injected ROM has four paths; no empty-ROM conclusion is valid.
+[Display boot-path analysis](../findings/research/display-boot-path-20260916.md).

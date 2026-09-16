@@ -1,0 +1,69 @@
+{
+  "binary": "/home/bogdan/macos-vm/kdk/x/System/Library/Extensions/AMDRadeonX6000Framebuffer.kext/Contents/MacOS/AMDRadeonX6000Framebuffer",
+  "sha256": "0f4b79b62fa66bbf5a907274d1f5442aeda4ba4ee4b67c216c01757dee7e4505",
+  "slots": [
+    {
+      "object": "framebuffer",
+      "vtable": "0x2909c0",
+      "slot": "0x988",
+      "target": "0x14fb0",
+      "symbol": "__ZN35AMDRadeonX6000_AmdRadeonFramebuffer15isConsoleDeviceEv"
+    },
+    {
+      "object": "framebuffer",
+      "vtable": "0x2909c0",
+      "slot": "0x9f8",
+      "target": "0x28dbe",
+      "symbol": "__ZN35AMDRadeonX6000_AmdRadeonFramebuffer14setDisplayModeEii"
+    },
+    {
+      "object": "controllerNavi23",
+      "vtable": "0x298080",
+      "slot": "0x880",
+      "target": "0x4e770",
+      "symbol": "__ZNK34AMDRadeonX6000_AmdRadeonController12getAttributeE22AmdControllerAttributePm"
+    },
+    {
+      "object": "controllerNavi23",
+      "vtable": "0x298080",
+      "slot": "0x8b8",
+      "target": "0x4f922",
+      "symbol": "__ZNK34AMDRadeonX6000_AmdRadeonController12getPciDeviceEv"
+    },
+    {
+      "object": "controllerNavi23",
+      "vtable": "0x298080",
+      "slot": "0x8e8",
+      "target": "0x4fa08",
+      "symbol": "__ZNK34AMDRadeonX6000_AmdRadeonController7getLinkEh"
+    },
+    {
+      "object": "controllerNavi23",
+      "vtable": "0x298080",
+      "slot": "0x900",
+      "target": "0x4fa90",
+      "symbol": "__ZN34AMDRadeonX6000_AmdRadeonController20getActiveDisplayPathEh"
+    },
+    {
+      "object": "controllerNavi23",
+      "vtable": "0x298080",
+      "slot": "0x908",
+      "target": "0x4fab4",
+      "symbol": "__ZN34AMDRadeonX6000_AmdRadeonController23getConnectedDisplayPathEh"
+    },
+    {
+      "object": "controllerNavi23",
+      "vtable": "0x298080",
+      "slot": "0x978",
+      "target": "0x4fbca",
+      "symbol": "__ZNK34AMDRadeonX6000_AmdRadeonController17getBootModeParserEv"
+    },
+    {
+      "object": "bootparser",
+      "vtable": "0x296368",
+      "slot": "0x120",
+      "target": "0x268a8",
+      "symbol": "__ZNK32AMDRadeonX6000_AmdBootModeParser14getStartUpModeEP16AmdFbDisplayPath"
+    }
+  ]
+}
