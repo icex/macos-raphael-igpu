@@ -104,6 +104,7 @@ static void dumpFormat(NSString *tag, CMFormatDescriptionRef desc) {
 }
 
 // Returns create status; fills usingHardware. Decodes every sample in `list`.
+static uint64_t gRegistry = 0;
 static OSStatus decodeWith(NSString *tag, CMFormatDescriptionRef desc, NSArray *list,
                            BOOL require, BOOL enable, BOOL *usingHardware) {
     decoded = 0; decodeErrors = 0; maxDifference = 0;
@@ -113,6 +114,7 @@ static OSStatus decodeWith(NSString *tag, CMFormatDescriptionRef desc, NSArray *
     NSMutableDictionary *spec = [NSMutableDictionary dictionary];
     spec[(__bridge id)kVTVideoDecoderSpecification_EnableHardwareAcceleratedVideoDecoder] = @(enable);
     if (require) spec[(__bridge id)kVTVideoDecoderSpecification_RequireHardwareAcceleratedVideoDecoder] = @YES;
+    if (gRegistry) spec[(__bridge id)kVTVideoDecoderSpecification_RequiredDecoderGPURegistryID] = @(gRegistry);
     VTDecompressionOutputCallbackRecord callback={decodedFrame,NULL};
     VTDecompressionSessionRef decoder=NULL;
     OSStatus status=VTDecompressionSessionCreate(NULL,desc,(__bridge CFDictionaryRef)spec,
@@ -276,7 +278,12 @@ int main(int argc, const char **argv) {
         NSArray *list = [samples copy];
         OSStatus v1 = decodeWith(@"require-hw", desc, list, YES, YES, &hw);
         BOOL v1hw = hw;
+        gRegistry = registry;
+        OSStatus v1r = decodeWith(@"require-hw+registry", desc, list, YES, YES, &hw);
+        BOOL v1rhw = hw;
+        gRegistry = 0;
         if (hardwareEncode) {
+            emit(@"variant-summary", @{@"require_hw":@(v1), @"require_hw_registry":@(v1r), @"registry_hw":@(v1rhw)});
             BOOL passed = !v1 && v1hw && decoded == frameCount && !decodeErrors && maxDifference <= 8;
             emit(@"result", @{@"passed":@(passed)});
             return passed ? 0 : 1;

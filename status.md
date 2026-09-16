@@ -79,3 +79,24 @@ description, then a fresh-process decode of the saved stream, and captures the g
 unified log for GVA/VideoToolbox messages. Read-only observation; no kext change.
 Fresh MODE2, all identity/capture/host-fault/cleanup gates, max 6000 s. No amdgpu
 rebind, merge or push. Stop through the normal harness.
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-275-attempt-hevc1-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
+
+## Next authorized run: 275 attempt hevc2 (clean HEVC decode ordering replication)
+
+Extend allowance 3→4 on boot `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`, continuing the
+HEVC decode investigation the user requested. Attempt hevc1 established that HEVC
+hardware decode fails in AppleGVA userspace ("IOGVACodec not set" / −12913; −12906
+with a registry id) even after a successful H.264 decode, while run 5cb7876d decoded
+HEVC in hardware after H.264 decodes ran first from a clean boot. hevc1's boot was
+contaminated by failed HEVC attempts, so it cannot test clean ordering. hevc2 runs
+`tests/video_hevc_sequence_probe.m` once: in a single process on a fresh boot it does
+H.264 sw→hw decode, H.264 hw→hw decode, then HEVC hw→hw decode (the 5cb7876d order),
+plus a registry-scoped HEVC variant. Read-only; no kext change; same 1.0.275 kext and
+card metal-122. Fresh MODE2, all safety gates, max 6000 s. No amdgpu rebind, merge or
+push. Stop through the normal harness.
