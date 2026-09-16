@@ -99,3 +99,7 @@ CP_STAT=0 and RLC_CNTL=0 before launch. This is not automatic receipt-based reus
 All identity, host-fault, capture-fatal, shutdown and recovery guards remain intact;
 max6000seconds, manual stop after bounded visual/Metal/codec qualification.
 Host suite937tests OK3skipped; build e9d918e94bc5d8e1f20d636ff65cf078d46ac0848650565f878bdec2f8fe5aee.
+
+First279 staging attempt failed before QEMU/VFIO exposure because the copied card
+retained the277 source commit; corrected to the279 build manifest commit and tree
+digest. MODE2#153 passed CP_STAT=0/RLC_CNTL=0. No launch/ledger entry consumed.
