@@ -1,0 +1,56 @@
+{
+  "schema": 1,
+  "run_id": "5a2f13feed4b7922fd6d109860befda0",
+  "build_id": "51bfd732cf824249b70981f0c36fe314",
+  "host_boot": "2508eb6d-ddf3-497d-9774-00a7ecebe3ed",
+  "results": "/home/bogdan/macos-vm/run/candidate-280-attempt-textures-results",
+  "functional": {
+    "texture_measured_cases": 144,
+    "texture_measured_pixels": 131031576,
+    "texture_bad_pixels": 0,
+    "texture_bad_padding_bytes": 0,
+    "per_process_baseline_and_max_released_bytes": 614400,
+    "per_process_max_peak_bytes": 13377536,
+    "event_rounds": 32,
+    "event_values_checked": 33554432,
+    "event_bad_values": 0,
+    "global_accounting": "Responsive VRAM/GART counters return near baseline after process exit; GPU VA and long-duration leak qualification remain open."
+  },
+  "capture": {
+    "records": 387,
+    "loss": false
+  },
+  "cleanup": {
+    "outcome": "exited-after-guest-request",
+    "status": "recovered",
+    "authorizes_launch": true,
+    "cp_stat_after": 0,
+    "active_after": 0,
+    "forced_inactive": 0
+  },
+  "overall": "CORE_PROBE_PASS; full desktop not qualified",
+  "artifacts": {
+    "manifest.json": "b539f2a961cbf40ebc17d633af33e30f78501ec01f87ceb1e3368db5fe0f7dce",
+    "running-identity.json": "47b3f26b68473863b1606098a4fa569902f31a41932f5d402021c09721c0c730",
+    "probe.json": "eb150801086fe1a564dc1152bce7a2b326c230fc7bfd1c1fe741eedd2a98339d",
+    "texture-reclamation-command.json": "940c969f64f88be8e8bb82ac6d019d8088b63de16ae984555ecbf03ae264e44b",
+    "texture-reclamation-output.txt": "08549d31db112fb1b8eec13cab74e6e2567958b7fba79657b60fd0cd0e70c268",
+    "texture-memory-summary.json": "9b35330213ada9713d43ceb3bceb0cb76487ca914fa300942149686830e12748",
+    "memory-global-command.json": "545938292b36bfed1f8412b62c7907184caaa6cf0bf14e26a9f4c81eb9325da9",
+    "memory-global-output.txt": "322cebcaa683ba55f0a3cdb79ef786b51c12d87271db9d64d6852ad24e078ce3",
+    "memory-event-command.json": "7123d63e4b99a9be478b5b44020190a9c0dd677648142cc6d33aec3320e10e08",
+    "memory-event-output.txt": "17bf90925cb86a1d7dbf9e94e73d5e51bd39f62f80096c6cf5cd8885713c5dea",
+    "final-processes.txt": "bb5f1b7a0911a8260529a252b100f601257b0dad764fcb24d9b2407e586539f7",
+    "critical-quiesce.json": "976f0ddac534aa81d59318fc6635c795fed08cb81352c90cd271dbfc4d5af1f9",
+    "critical.txt": "06085c7c326e37c8ef98c643626b4a002ffbd29a33fde44d048565622e8d33e8",
+    "shutdown.json": "3c06152ab2c1fea5cb144ede7ce9c8c62e52c9f99e5845b8450c4b77919ee0f6",
+    "recovery.json": "ee2d59bc881c7cfd55b9b852fb17f7b8b3b8d6c1536a60e47ae94b3a6a2b5555",
+    "verdict.json": "71ee73fc3e4c739f6fef1c4cb1756eb3bda519bbd333dc445cca37a47cf00de5",
+    "host-kernel-messages.json": "20c66846612c2888a2d6910c2cfc3a7fad6105cba28d93391a347a7f747d25cc"
+  },
+  "sources": {
+    "tests/texture_reclamation_probe.m": "c56f0fae6699b24a1852bf8b458e8c1fd81df8217efc6cfb2f77e299340b4127",
+    "tests/gpu_memory_statistics_probe.m": "b7196001620741f66836fcf0065d69c284d8696c514e76d678c2c0cba5d3d8cd",
+    "tests/queue_event_probe.m": "59ff0f16091beac636a30416f7a87688046b03bcbaaec7ab77f918dc87036491"
+  }
+}
