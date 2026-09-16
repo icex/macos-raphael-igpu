@@ -79,16 +79,7 @@ No vfio→amdgpu cycling.
 The immediate patched-QEMU dependency is removed for the tested setup. Compatibility
 now lives in OpenCore/VirtualSMC, with no new RaphaelGPU driver patch. README, roadmap
 and the general QEMU guide describe the stock setup and scoped native results.
-One additional exposure is allowed on boot
-`2508eb6d-ddf3-497d-9774-00a7ecebe3ed` for candidate280/metal-127/ownership:
-managed-texture GPU-to-CPU synchronization, partial CPU replacement and retained
-LOAD rendering, with fresh-resource controls, two formats and distinct seeds.
-Hypothesis: correct explicit ownership transfers preserve both modified and
-untouched pixels. Any mismatched pixel or padding byte falsifies this scoped
-hypothesis. Driver and stock-QEMU setup remain unchanged. Fresh MODE2 must show
-CP_STAT=0/RLC_CNTL=0; identity, capture, deadline and cleanup gates remain mandatory.
-This is exposure28 if launch reaches VFIO; the allowance is not consumed by
-pre-launch failures. Previous allowances are consumed.
+No further GPU exposure allowance is active; previous allowances are consumed.
 
 Next: broaden supported configurations and independent-host-boot/lifecycle coverage,
 then remaining rendering tests and physical output. The Reims audit contributes
