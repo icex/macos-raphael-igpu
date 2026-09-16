@@ -40,3 +40,34 @@ subsequent static byte intervention/restoration is the decisive controlled test.
 All artifacts above are in candidate-277-attempt-smcpmio-results. Candidate279
 implements the exact byte change through the existing UUID/path/byte-guarded,
 task-private COW mechanism. Fresh-run result pending.
+
+## Candidate279 fresh guest
+
+Run3f5d8049506b1164b29292988b0eacb5, MODE2#154, build
+eb7ebdfeb3d1440c99601da45ce83069, executable
+e9d918e94bc5d8e1f20d636ff65cf078d46ac0848650565f878bdec2f8fe5aee.
+Automatic COW logs report protection/write/restore/verification all0, including
+WindowServer. Desktop Metal baseline passed. Single-pass custom control passed
+all12cases (1,320,000pixels, zero mismatches above2.1bytes; maxerror1byte).
+120-frame HEVC and120-frame H.264 hardware encode/decode passed, maxlumaerror0/1.
+PerfPowerServices PID152 was0.0% CPU/0.76s cumulative on this second corrected-QEMU
+guest boot. User reported no longer seeing corruption in ordinary Screen Sharing.
+
+The first three fresh-guest panel captures are **not valid panel qualification**:
+Safari obscures the first, and the backdrop obscures/moved panels in the others.
+A floating-panel capture variant was prepared but the supervisor stopped the VM
+before it produced images. Controlled native A/B captures from the previous guest,
+fresh279 pixel checks, and the user's observation support the fix; additional
+unobstructed fresh-guest captures and longer desktop qualification remain open.
+
+Overall run INVALID/capture_loss: CR2 reached512records and reported8drops by
+snapshot0xd. Supervisor raised definitive critical capture loss during interactive
+inspection and requested guest shutdown. Guest exited-after-guest-request; recovery
+strictly refused the lossy capture. No successful recovery is claimed. This is a
+separate logging/lifecycle blocker, now the immediate next task.
+
+Mesa's RadeonSI implementation independently documents disabling DCC when a
+texture is both a sampler and color buffer (si_update_ps_colorbuf0_slot):
+https://chromium.googlesource.com/external/gitlab.freedesktop.org/mesa/mesa/+/418c4cfa6708a0e0b1175e72fb8fd27d3ca1615a/src/gallium/drivers/radeonsi/si_descriptors.c
+This corroborates the mechanism; the exact Apple byte change is grounded in the
+local decompilation and reversible hardware tests above.

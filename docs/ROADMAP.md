@@ -1,8 +1,9 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-09-16. Current driver: **candidate 1.0.277**. Full desktop acceleration
-is **not qualified**: Screen Sharing remains visibly corrupt around transparent
-content. The immediate priority is to fix that rendering defect, then complete the
+Updated 2026-09-16. Current driver: **candidate 1.0.279**. Full desktop acceleration
+is **not qualified**. The reproduced Screen Sharing transparency defect is fixed
+in candidate279; critical diagnostic overflow now interrupts longer sessions.
+The immediate priority is reliable capture and cleanup, then complete the
 memory, lifecycle, physical-display and performance gates below.
 
 This is the current roadmap. [Live state and run authority](../status.md) are separate.
@@ -20,7 +21,7 @@ and “next experiment” instructions do not describe today's host.
 | M3 — Native engine startup repair | Demonstrated | Raphael topology/address adaptations reach native startup and completed Metal work. Preserve these fixes while diagnosing desktop rendering. |
 | M4 — First correct Metal compute | Achieved | Candidate 194 checked 196,608 values and 4,096 rendered pixels; its overall capture remained inconclusive. Current277 desktop Metal baselines complete with verified device/build identity. |
 | M5 — Rendering, memory and synchronization | Partial | Managed-texture copy correction retained; private/managed/IOSurface and multiple-format readback probes pass. Full concurrent-client, resource-reclamation and synchronization matrix remains open. |
-| M6 — Desktop and physical display | Active blocker | WindowServer uses the real accelerator and Screen Sharing works, but green/purple diagonals and smearing remain. Physical DCN 3.1.5 output is a separate unqualified path. |
+| M6 — Desktop and physical display | Visual fix verified; broader qualification open | Candidate279 fixes the reproduced feedback corruption. Fresh pixel checks and user observation pass; unobstructed fresh native capture and longer desktop qualification remain. Physical DCN 3.1.5 output is a separate unqualified path. |
 | M7 — Lifecycle and host protection | Partial | Multiple guest-request shutdowns and authorizing recoveries observed on this boot. Fresh-host-boot, crash-path and repeated lifecycle qualification remain open. |
 | M8 — Performance and release | Not qualified | Correctness first; no release, Metal3 conformance, game-support or full-desktop claim. No merge/push to main before demonstrated usable desktop acceleration. |
 
@@ -29,8 +30,9 @@ and “next experiment” instructions do not describe today's host.
 | Previously listed issue | Current classification | Revalidation |
 |---|---|---|
 | HEVC decode fails before kernel context creation | Resolved for automatic required-hardware selection | Fresh 120-frame hardware encode/decode pass; original 7-case/9,600-frame artifact hashes rechecked. |
-| PerfPowerServices continuously consumes a CPU core | Resolved in corrected QEMU, observed on one guest boot | Native enumeration passes;0.0% after startup, graphics work and one service restart. Second-guest-boot durability remains untested. |
-| Green/purple transparency and smearing | Confirmed active blocker | Reproduced in current raw RFB native-panel capture after the CPU fix. |
+| PerfPowerServices continuously consumes a CPU core | Resolved in corrected QEMU, observed on two guest boots | Native enumeration passes;0.0% after startup, graphics work and one service restart. Second guest boot279 is also0.0%; independent-host-boot durability remains open. |
+| Green/purple transparency and smearing | Fixed for reproduced feedback defect in279 | Reversible native A/B intervention, fresh12-case pixel pass, user reports clean Screen Sharing. Longer desktop qualification remains open. |
+| Critical-event record overflow | Confirmed active capture/lifecycle blocker | Runs smcpmio and279 fill512records; loss detection stops the guest and recovery refuses lossy evidence. |
 | Explicit HEVC decoder GPU registry-ID selection | Confirmed remaining limitation | Fresh explicit-ID request returns -12906; automatic hardware request succeeds. Does not block automatic decoding. |
 | No Metal execution / initial SDMA startup failure / pre-submit allocation failure | Superseded as current-baseline blockers | Current277 probe passed, completed GPU work and has a WindowServer accelerator client. Broader memory coverage remains open. |
 | Same-boot restart impossible / reboot required after every run | Superseded as a blanket claim | Recorded guest-request shutdowns, authorizing recovery and subsequent starts. This is not universal crash or host stability qualification. |
@@ -66,8 +68,8 @@ after four index bytes, and returns 0xb8 past the last key. Native AppleSMC call
 verified all six keys and both tested out-of-range indices. On the fresh smcpmio
 guest, PerfPowerServices was 0.0% CPU; after a service restart it was 0.1% CPU with
 0.54 s cumulative CPU time, later 0.0% with the same cumulative time. No Apple service is disabled and no guest binary or
-security setting was patched. Longer observation and a second guest boot remain
-useful durability checks. The first emulator patch incorrectly waited for a length
+security setting was patched. Candidate279 supplies a second passing guest boot (0.0% CPU,0.76s cumulative).
+Longer observation and independent-host-boot durability remain open. The first emulator patch incorrectly waited for a length
 byte and failed native testing; it is superseded.
 [Root cause and native results](../findings/research/perfpower-smc-enumeration-20260916.md),
 [emulator build identity](../findings/research/qemu-smc-pmio-build-20260916.json).
@@ -91,7 +93,7 @@ Passing isolated shaders does not establish correct desktop composition.
 
 - [x] Verify actual WindowServer use of this accelerator.
 - [x] Establish a native colored NSVisualEffectView reproducer and raw RFB capture.
-- [ ] Identify and fix the first corrupt compositor intermediate or draw.
+- [x] Isolate and fix compressed render-target feedback corruption (candidate279).
 - [ ] Verify clean transparent windows, animation and ordinary desktop interaction
   through Screen Sharing, with repeatable captures and no new GPU faults.
 - [ ] Confirm the same driver on a fresh guest boot with working Metal and codecs.
@@ -111,8 +113,11 @@ Its direct OpenGL probe hung; do not repeat it without a diagnosis. Keep277 as t
 hardware baseline. Temporary precision, binning, filter-merging and dirty-region
 controls did not resolve the corruption; their coverage limits are recorded.
 The live validation attempt crashed during CoreDisplay initialization, so it gives
-no validation verdict on the original defect. Current work captures the native
-compositor draw state around affected surfaces.
+no validation verdict on the original defect. Candidate279 uses the native expansion path before render-target feedback.
+Its single-pass reproducer passes12cases/1,320,000pixels after previously failing
+private/native-barrier cases. Controlled native panels clear with the patch and
+fail after restoration. Fresh panel captures were obscured; repeat after capture
+overflow is corrected. See [fix evidence](../findings/research/feedback-decompression-20260916.md).
 [Display evidence](../findings/research/transparency-live-composition-20260916.md)
 (probes are also retained in the candidate 278 research worktree).
 
@@ -153,11 +158,12 @@ from device enumeration or passing microbenchmarks.
 
 ## Next work, in order
 
-1. Continue native compositor tracing using the colored transparency reproducer;
-   reproduce the first bad operation before selecting another driver change.
-2. Keep measuring the SMC CPU fix during normal use; repeat on another guest boot
-   when the next bounded run is justified, without disabling the service.
-3. Confirm a visual fix on repeated real desktop workloads and rerun Metal/codecs.
+1. Fix critical-record exhaustion without weakening capture/recovery validation;
+   retain required identity, faults and lifecycle events, bound routine diagnostics.
+2. Repeat native transparency captures and normal desktop use on279; keep
+   measuring the SMC CPU fix without disabling the service.
+3. Complete a clean lifecycle with the visual fix; Metal and120-frame checks for
+   each hardware codec already pass on279.
 4. Complete M5 concurrent-resource coverage and M7 independent-boot/lifecycle gates;
    then progress physical display and measured performance qualification.
 

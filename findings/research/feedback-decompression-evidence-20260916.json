@@ -1,0 +1,65 @@
+{
+  "run_id": "3f5d8049506b1164b29292988b0eacb5",
+  "artifacts": [
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-279-results/probe.json",
+      "sha256": "0bf1f9cec0ec07e8a7cb536078557d67243d1d0607a83cc3d4fb4762f6599f71"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-279-results/feedback-fixed-1-output.txt",
+      "sha256": "db1c19e1e0ef75269f39995bbdfc1ad3ae46a9f105e36bd481b382d9e66d8fd1"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-279-results/feedback-fixed-1-command.json",
+      "sha256": "31bd6bdfc721242ac52f0c2f93bc8b22d26da182d34ee43002a9334d0463fd41"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-279-results/fixed-hevc-120-output.txt",
+      "sha256": "03ab5ee088770a671ece241b19d240b2305e96a9bd7d4db4ed1a2840a2b71624"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-279-results/fixed-h264-120-output.txt",
+      "sha256": "cdaa3ffd39f3d411c18b75f53db6bfeb340fcb6a3478f08390073ad896e056b3"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-279-results/fixed-panels-launch.txt",
+      "sha256": "622ea212c5f060f12c6d00332a3ffaaf8db8922447957a34906928083b2c5201"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-279-results/shutdown.json",
+      "sha256": "950ba232c05a90fa84463beea2c91d8abb2c38835a85c3fbb7044747e56bd8e1"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-279-results/recovery.json",
+      "sha256": "69621e7932f52e1c60e398c65d3e5ab967e1ae00bafff39e574b3a928fa8eaec"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-279-results/verdict.json",
+      "sha256": "7e9bbee994f04f2783386d4cf90ceda3cda07ab159050e97230b23310ef1b2c8"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-277-attempt-smcpmio-results/native-lighten-expand-output.txt",
+      "sha256": "e9486896a0a9880b41e0e86cfb1a736eb3eacb94114ea7e69b0fbb763d3f3850"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-277-attempt-smcpmio-results/feedback-code-apply.txt",
+      "sha256": "3fb536dd27a91bc5398d8836999cf281642aaf95ffe1ba78692dafa994424a3a"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-277-attempt-smcpmio-results/feedback-code-active-0.png",
+      "sha256": "dc97b13dbf59dc3f27ee31b5879b9d076e9901104783cc56c6e87cce52373deb"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-277-attempt-smcpmio-results/feedback-code-active-1.png",
+      "sha256": "301f4e40c581e09142cbe7638ccf8c46a97f107674143611f603460ef780f17d"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-277-attempt-smcpmio-results/feedback-code-restore.txt",
+      "sha256": "a702240067fad5391e3f8984e147f2a24c395ff9b9c23b3a66fff97363b1a6a0"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-277-attempt-smcpmio-results/feedback-code-restored.png",
+      "sha256": "d177fe33b9077b922d826b1d22644be5eb01bd71986d4f35ee9df672a96727e4"
+    }
+  ]
+}
