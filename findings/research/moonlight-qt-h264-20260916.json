@@ -57,6 +57,10 @@
     {
       "path": "/home/bogdan/macos-vm/run/candidate-282-results/safari-pacing-armed-output.txt",
       "sha256": "053dc703b45e69eaa855e84578d4b1264e77181e25ad9a4816948a57e22d5cc4"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-results/sunshine-enable-hevc-output.txt",
+      "sha256": "5db086c9deb3c2cdfb2130c325f31cd58311cc2b5a3f3fc530c7b005a7e069ab"
     }
   ],
   "qualification": "User reports improved 4K60 with Moonlight-Qt plus H.264, still imperfect. Sustained delivery/input latency and current-run cleanup remain open.",
@@ -66,5 +70,12 @@
     "skipped": 3,
     "result": "OK",
     "log": "/home/bogdan/macos-vm/run/candidate-282-qt-host-tests.log"
+  },
+  "current_setting": {
+    "hevc_mode": 2,
+    "vt_software": "disabled",
+    "reason": "User requested HEVC remain enabled",
+    "startup": "H.264 and HEVC encoders found",
+    "sunshine_pid": 11302
   }
 }

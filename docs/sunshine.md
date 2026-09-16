@@ -3,8 +3,9 @@
 Sunshine is an optional alternative to macOS Screen Sharing. The current guest has
 [Sunshine v2026.914.233613](https://github.com/LizardByte/Sunshine/releases/tag/v2026.914.233613)
 installed from the official Intel DMG. Hardware-only VideoToolbox startup probes
-find H.264 and HEVC Main8. The current experiment advertises **H.264 only** and
-uses Moonlight-Qt. The user reports 4K60, but describes it as better rather than
+find H.264 and HEVC Main8. **Both codecs are enabled** (`hevc_mode=2`), as
+requested by the user. The earlier H.264-only comparison with Moonlight-Qt
+reached user-reported 4K60, described as better rather than
 perfect, with about 40 FPS when moving over a transparent Safari window. An
 active server trace averages ~55 submissions/s with occasional long calls. The client and codec changed together, so this does not prove a client-only
 fix. Sustained 4K60 and input latency remain unqualified.
@@ -44,15 +45,15 @@ port = 48989
 encoder = videotoolbox
 vt_software = disabled
 vt_realtime = enabled
-hevc_mode = 1
+hevc_mode = 2
 av1_mode = 1
 origin_web_ui_allowed = lan
 upnp = disabled
 ```
 
-`hevc_mode=1` disables HEVC advertisement for this H.264 performance experiment;
-`2` restores HEVC Main8 advertisement. The driver retains HEVC support. The guest
-keeps the prior configuration as `sunshine.conf.before-h264-ab-282`.
+Keep `hevc_mode=2` to advertise HEVC Main8 alongside H.264. Select the desired
+codec in Moonlight. The temporary `hevc_mode=1` comparison disabled advertisement;
+it did not mean the GPU lacked HEVC support.
 
 This separate port family avoids the default host Sunshine ports. The web UI is
 `https://GUEST_OR_FORWARDING_HOST:48990`; accept the local server certificate for

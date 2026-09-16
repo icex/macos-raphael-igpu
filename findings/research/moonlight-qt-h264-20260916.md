@@ -54,7 +54,7 @@ submissions, with stalls among reused pointers too. Pointer reuse does not prove
 underlying IOSurface reuse. One multi-second submission in that instrumented
 window may include observer effects; it is not assigned to a hardware mechanism.
 
-## Current configuration and remaining work
+## Measured configuration and remaining work
 
 Sunshine PID8638, hardware-only VideoToolbox, H.264 only, SDR 8-bit Rec.709,
 62.988 Mbps requested stream bitrate. Backup:
@@ -79,3 +79,10 @@ mailbox polling or power/clock changes were performed.
 Functional improvement is user-observed and H.264 submission timing is measured.
 The current run's final capture validity, guest shutdown and host recovery are
 still pending. These results do not close full desktop or release qualification.
+
+## HEVC restored at user request — 22:59 local
+
+The user asked to leave HEVC enabled. Set `hevc_mode=2`, retained
+`vt_software=disabled`, and restarted only Sunshine (new PID11302). Startup
+reports both H.264 and HEVC encoders available. This restores codec advertisement;
+it is not a new 4K streaming-performance result. Keep both codecs enabled.

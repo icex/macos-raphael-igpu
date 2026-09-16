@@ -229,7 +229,8 @@ from device enumeration or passing microbenchmarks.
    Safari. The active H.264 trace averages ~55 submissions/s and 5.69 ms
    submission time, with occasional 32–131 ms calls. Separate client delivery,
    encoding and input latency before closing this gate; no single-cause claim.
-   Preserve the current H.264 setup and LAN-only access. Foundation replacement
+   Keep H.264 and HEVC advertised (`hevc_mode=2`, user preference) and preserve
+   LAN-only access. Compare codecs separately. Foundation replacement
    was cancelled; a capture-lock source candidate remains unbuilt/undeployed.
    [Current measurements](../findings/research/moonlight-qt-h264-20260916.md).
    The isolated simple-frame HEVC result (64.75 FPS) is not desktop qualification.

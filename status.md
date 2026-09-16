@@ -1,7 +1,7 @@
 # Live status — 2026-09-16
 
 Candidate282's guarded allocation-diagnostic sampling patch is installed; generated
-4K codec checks pass. The current usable streaming combination is **Moonlight-Qt
+4K codec checks pass. The measured streaming comparison used **Moonlight-Qt
 with hardware H.264**: the user reports 4K60, then clarifies it is better but still
 imperfect: mouse motion over a transparent Safari window falls to about 40 FPS.
 A 12-second server trace completes 663 submissions (~55/s), with a
@@ -21,8 +21,9 @@ and this run's final capture/cleanup qualification remain open.
   Baseline Metal probe completed. Capture ongoing; final validity and cleanup pending.
 - Retina restored manually:1920x1080 logical/3840x2160 backing,2x,60Hz.
   Login agent exited0 but backing reverted1080p after boot; persistence remains open.
-- Sunshine8638 uses hardware-only VideoToolbox; the current experiment advertises
-  H.264 only (`hevc_mode=1`). Original configuration is backed up in the guest.
+- Sunshine11302 uses hardware-only VideoToolbox. HEVC Main8 advertisement was
+  restored at the user’s request (`hevc_mode=2`); startup finds H.264 and HEVC.
+  Leave both codecs enabled. Original configuration is backed up in the guest.
   LAN server192.168.0.43:48989,
   webhttps://192.168.0.43:48990; existing LAN-only UFW rules retained.
   Relay and guest share the existing supervised deadline; no unlimited session.
@@ -44,8 +45,8 @@ calls. Those locks can contribute to uneven timing but do not explain the entire
 encoder bottleneck. Cursor positioning also has occasional 16–65 ms calls.
 
 After switching the server to H.264 and the user installing Moonlight-Qt, streaming
-is visibly better. Keep this combination while measuring remaining pacing and
-input latency. Do not attribute the gain solely to the client or call 4K60 solved.
+is visibly better. HEVC has since been re-enabled at the user’s request; measure
+each codec separately for remaining pacing and input latency. Do not attribute the gain solely to the client or call 4K60 solved.
 The source-only Sunshine capture-lock candidate is **unbuilt and undeployed**.
 Foundation-sunshine replacement was cancelled by the user; the original app,
 pairing and LAN ports are preserved. No Foundation binary or build dependencies

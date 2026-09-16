@@ -47,10 +47,10 @@ readiness.
   latency independently of mode timing. A prior mixed 90/120 Hz sequence produced
   a user-black desktop and was cleanly restored; those requested rates are not
   proven modes.
-- **Qualify remote streaming:** the current Sunshine server uses hardware H.264
-  with Moonlight-Qt. The user reports 4K60, falling to about 40 FPS over a transparent Safari
-  window; a server
-  trace averages about 55 submissions/s with occasional long calls. Client and
+- **Qualify remote streaming:** Sunshine offers hardware H.264 and HEVC Main8.
+  The H.264 + Moonlight-Qt comparison reached user-reported 4K60, falling to about
+  40 FPS over transparent Safari; a server trace averages about 55 submissions/s
+  with occasional long calls. HEVC remains enabled at the user’s request. Client and
   codec changed together, so their individual effects remain unproven. Sustained
   frame delivery and input latency remain open. [Measurements](findings/research/moonlight-qt-h264-20260916.md)
   · [Setup, LAN access and firewall rules](docs/sunshine.md).
