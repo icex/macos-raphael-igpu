@@ -66,3 +66,15 @@ QEMU image `sha256:51cbd7dcdbad2d6492ce83a263e9854c28620d67a1ea12ebc0562c6fab260
 No main merge/push before full desktop proof. Additional exposure requires a
 named-boot allowance and fresh successful MODE2 through tools/cycle.py.
 No vfio→amdgpu cycling. [Roadmap](docs/ROADMAP.md).
+
+## Active next experiment allowance
+
+One additional exposure (nineteenth) on boot
+`2508eb6d-ddf3-497d-9774-00a7ecebe3ed` is authorized for candidate 280 /
+metal-127 / attempt addressreuse: bounded GPU-buffer address recycling and
+longer reclamation, followed by desktop observations if healthy. Driver and
+QEMU unchanged. Up to 6000 seconds, fresh MODE2 with CP_STAT/RLC_CNTL zero,
+and all existing identity, capture, host-fault and cleanup gates retained.
+Hypothesis: released buffer address ranges are recycled under repeated verified
+copies. Discriminator: logged address recurrence after object release, bounded
+allocation return and CPU-correct data; absence of recurrence alone is inconclusive.
