@@ -78,3 +78,8 @@ Two-process IOSurface visibility now passes within its host-ordered scope.
 Next work: GPU-only interprocess events, broader formats/hazards and longer
 workloads, plus source-guided physical-display/lifecycle investigation. No next
 exposure allowance recorded yet.
+
+Latest offline display audit: clock warnings return fallback frequencies; later
+register polls exhaust. Native logger console filtering hides their caller details.
+[Source/native audit](findings/research/display-clock-wait-20260916.md); exact wait
+register/caller and startup link state remain the next discriminator.

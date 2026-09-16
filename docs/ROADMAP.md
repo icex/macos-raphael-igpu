@@ -240,3 +240,9 @@ No broad display patch is justified by the default properties alone.
 The matching native vtable/assembly audit now traces the boot parser and fixed-link
 selection. Current injected ROM has four paths; no empty-ROM conclusion is valid.
 [Display boot-path analysis](../findings/research/display-boot-path-20260916.md).
+
+The display clock/wait audit distinguishes fallback clock warnings from exhausted
+register polls. Native timeout details are suppressed by a category0-only console
+sink; enabling logger masks alone is insufficient. Next observation is the exact
+wait register/caller plus boot parser/link state, preserving native behavior.
+[Source/native audit](../findings/research/display-clock-wait-20260916.md).

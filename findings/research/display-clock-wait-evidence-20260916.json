@@ -1,0 +1,103 @@
+{
+  "binary": "/home/bogdan/macos-vm/kdk/x/System/Library/Extensions/AMDRadeonX6000Framebuffer.kext/Contents/MacOS/AMDRadeonX6000Framebuffer",
+  "binary_sha256": "0f4b79b62fa66bbf5a907274d1f5442aeda4ba4ee4b67c216c01757dee7e4505",
+  "native_comparison": [
+    {
+      "offset": "000d8412",
+      "matching_instruction_bytes": 133,
+      "differences": [
+        {
+          "offset": "000d8487",
+          "disk": "e800000000",
+          "ghidra": "e874bc2d00",
+          "instruction": "000d8487  e874bc2d00  CALL 0x003b4100 ; <EXTERNAL>::_kprintf"
+        }
+      ],
+      "asm_sha256": "ce1a7e3d6fd46bc050ea8b486e8c197b1c890e63724bb0a61b0dbfb92d21bfaf"
+    },
+    {
+      "offset": "0013bf39",
+      "matching_instruction_bytes": 164,
+      "differences": [
+        {
+          "offset": "0013bfd0",
+          "disk": "e800000000",
+          "ghidra": "e82b812700",
+          "instruction": "0013bfd0  e82b812700  CALL 0x003b4100 ; <EXTERNAL>::_kprintf"
+        }
+      ],
+      "asm_sha256": "33134fd3f54c5988b514ebf12eb8b3c43543beab55f0dbb6d410f4a34608da22"
+    },
+    {
+      "offset": "00110841",
+      "matching_instruction_bytes": 75,
+      "differences": [],
+      "asm_sha256": "338f4708ac20621d257323ff66ad4baae685eb25bf64389f24954c785eaf0a81"
+    },
+    {
+      "offset": "00110bd7",
+      "matching_instruction_bytes": 454,
+      "differences": [
+        {
+          "offset": "00110c69",
+          "disk": "e800000000",
+          "ghidra": "e892342a00",
+          "instruction": "00110c69  e892342a00  CALL 0x003b4100 ; <EXTERNAL>::_kprintf"
+        },
+        {
+          "offset": "00110c8a",
+          "disk": "e800000000",
+          "ghidra": "e871342a00",
+          "instruction": "00110c8a  e871342a00  CALL 0x003b4100 ; <EXTERNAL>::_kprintf"
+        },
+        {
+          "offset": "00110d48",
+          "disk": "e900000000",
+          "ghidra": "e9b3332a00",
+          "instruction": "00110d48  e9b3332a00  JMP 0x003b4100 ; <EXTERNAL>::_kprintf"
+        }
+      ],
+      "asm_sha256": "04edc9462bf2500cb0262be057a895de8e3714173bea4746cdcb41d7d765736a"
+    },
+    {
+      "offset": "00169b83",
+      "matching_instruction_bytes": 356,
+      "differences": [
+        {
+          "offset": "00169c38",
+          "disk": "e800000000",
+          "ghidra": "e8c3942400",
+          "instruction": "00169c38  e8c3942400  CALL 0x003b3100 ; <EXTERNAL>::___bzero"
+        },
+        {
+          "offset": "00169ca3",
+          "disk": "e800000000",
+          "ghidra": "e858b32400",
+          "instruction": "00169ca3  e858b32400  CALL 0x003b5000 ; <EXTERNAL>::_vsnprintf"
+        },
+        {
+          "offset": "00169cf1",
+          "disk": "e800000000",
+          "ghidra": "e80a962400",
+          "instruction": "00169cf1  e80a962400  CALL 0x003b3300 ; <EXTERNAL>::___stack_chk_fail"
+        }
+      ],
+      "asm_sha256": "c2d3e414de0af5edbb3f22f31f74bd9a589fd086d71eefde33ea30668e3014c3"
+    },
+    {
+      "offset": "00169cf6",
+      "matching_instruction_bytes": 48,
+      "differences": [
+        {
+          "offset": "00169d26",
+          "disk": "e900000000",
+          "ghidra": "e9d5a32400",
+          "instruction": "00169d26  e9d5a32400  JMP 0x003b4100 ; <EXTERNAL>::_kprintf"
+        }
+      ],
+      "asm_sha256": "3d779377798e49e484500471bd2ca91afc111d76cb676b102c4055cc1e1586b7"
+    }
+  ],
+  "serial_run": "2afa3401a71e99091aa8bdbd14c50fa7",
+  "serial_sha256": "4fb4b4401e113e116852291b3e86fa041f3be413cb832b343f743a413d2d2fa3"
+}
