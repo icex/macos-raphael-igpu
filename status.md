@@ -34,3 +34,7 @@ entry. Verify runtime classification/list before declaring this expected behavio
 
 Limits: 8-bit 4:2:0 tested; Main10, arbitrary content, full desktop/display and
 crash-recovery repeatability unqualified. No main merge or push.
+
+Repeat prelaunch: MODE2 #141 clean; staging stopped because attempt-specific
+build identities had not been prepared. No QEMU launch and no exposure consumed.
+Prepared isolated retry artifacts with existing prepare_attempt_copy helper.
