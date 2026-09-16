@@ -25,3 +25,10 @@ Previous state: findings/research/status-archives/status-before-hevc-audit-fix-2
 Prelaunch: MODE2 #138 clean; staging refused unregistered candidate/card pair.
 No QEMU/VFIO launch; no exposure ledger entry consumed. Added exact 276/metal-123
 card registration with unchanged safety contract.
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-276-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
