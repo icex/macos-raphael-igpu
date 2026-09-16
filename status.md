@@ -7,16 +7,19 @@ reproduced correctness blocker. Full desktop and physical display acceptance rem
 
 ## Current host / guest
 
-Guest **stopped** after supervised HMP quit in run
-`042d7770f42059319cda491e50396bd8`, candidate280/metal-128/closure,
-MODE2#161, twentieth exposure on boot `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`.
-GPU remains vfio-pci, power/control=on. Probe passed; closure receipt confirms stop.
-Strict capture is incomplete (snapshot14 transport tail), so overall **INVALID**.
-Existing recovery policy authenticates snapshot13/374 records and returns schema6
-`recovered`, `authorizes_launch=true`: five queues dequeued, zero forced clears or
-timeouts, CP_STAT=0, graphics retirement confirmed, no recovery host faults.
-This is positive abnormal-closure cleanup evidence, not clean guest shutdown or
-full lifecycle qualification. [Result](findings/research/supervised-qemu-closure-result-20260916.md).
+Guest **stopped** after run `1606212a998d81718fa354e19c4efdaa`,
+candidate280/metal-127/postclosure, MODE2#162, twenty-first exposure on boot
+`2508eb6d-ddf3-497d-9774-00a7ecebe3ed`. GPU remains vfio-pci, power/control=on.
+Desktop probe passes; raw RFB desktop capture appears clean. Guest-request shutdown,
+schema6 recovered/authorizes_launch=true, CP_STAT=0, no forced clears/timeouts or
+recovery host faults. Overall **CORE_PROBE_PASS**.
+
+This follows run `042d7770f42059319cda491e50396bd8`'s authenticated QEMU quit and
+successful recovery of five active queues plus the graphics ring. That earlier run
+remains **INVALID** due interrupted terminal capture; complete snapshot13/374 records
+authenticated recovery. One abnormal-closure/relaunch/workload/clean-shutdown sequence
+is demonstrated; broader M7 qualification remains open.
+[Lifecycle evidence](findings/research/supervised-qemu-closure-result-20260916.md).
 
 ## Verified progress
 
@@ -28,7 +31,7 @@ full lifecycle qualification. [Result](findings/research/supervised-qemu-closure
 | GPU fences | 128 untracked blit/compute/blit rounds, 134,217,728 correct values; prior cross-queue shared-event checks also pass |
 | Native desktop | Three minutes of moving/resizing native material windows; four clean raw RFB captures |
 | Safari | Two-minute transparency/blur/scrolling page; three clean captures plus clean desktop after larger-buffer pressure |
-| PerfPowerServices | 0.0% CPU, latest 1.04 s cumulative; corrected QEMU on six guest boots, all on one host boot |
+| PerfPowerServices | 0.0% CPU, latest 0.72 s cumulative; corrected QEMU on seven measured guest boots, all on one host boot |
 | Host regression | 948 tests OK, three skipped |
 
 Earlier texture recreation (144 cases / 131,031,576 pixels), feedback rendering
@@ -46,7 +49,7 @@ QEMU image `sha256:51cbd7dcdbad2d6492ce83a263e9854c28620d67a1ea12ebc0562c6fab260
 
 ## Next work / remaining gates
 
-1. Fresh workload after recovered QEMU closure; retain strict capture and recovery rules.
+1. Continue guest-crash/fallback and repeated lifecycle qualification; one post-closure workload now passes.
 2. Guest-crash/command-channel failure and independent-host-boot qualification.
 3. Broader applications, formats, render hazards and interprocess synchronization;
    page-table release beyond cached address reuse; reclamation performance cost.
@@ -57,11 +60,11 @@ No main merge/push before full desktop proof. Another exposure needs a named-boo
 allowance and fresh MODE2 through tools/cycle.py. No vfio→amdgpu cycling.
 [Roadmap](docs/ROADMAP.md).
 
-## Next exposure allowance — post-closure workload
+## Active offline work
 
-One additional exposure (twenty-first) on boot
-`2508eb6d-ddf3-497d-9774-00a7ecebe3ed` for unchanged candidate280/metal-127,
-attempt postclosure. Hypothesis: authorizing abnormal-closure recovery permits
-fresh MODE2 and successful desktop/core execution followed by clean shutdown.
-Falsified by reset, workload, capture, host-fault or recovery failure. Use cycle.py,
-up to 6000 seconds; all existing gates intact, no vfio→amdgpu cycling.
+Using the supplied decompilation plus matching native assembly to trace physical
+display initialization. Current injected ROM contains four nonzero display paths;
+empty published framebuffer properties do not prove an empty ATOM table. Boot parser
+reads EFI properties from the PCI service; trace boot-display selection before patches.
+Next codec qualification is Main10 with actual 10-bit luma/chroma readback; untested.
+No further exposure allowance is recorded yet.

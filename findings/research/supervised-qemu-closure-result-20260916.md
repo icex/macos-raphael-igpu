@@ -26,3 +26,18 @@ including refusal of unbound/failed probe envelopes. Driver/QEMU binaries unchan
 Next discriminating observation: fresh MODE2 plus ordinary desktop/core probe and
 clean guest shutdown after this abnormal closure. Guest panic, command-channel failure,
 repetition and independent host boots remain open.
+
+## Fresh workload after abnormal closure
+
+Run `1606212a998d81718fa354e19c4efdaa`, candidate280/metal-127/postclosure,
+MODE2#162, twenty-first exposure on the same host boot. Existing full desktop
+validator passes. Raw RFB `desktop.png` was inspected: Activity Monitor, wallpaper,
+menu and translucent Dock are unobscured, with no observed corruption in that capture.
+PerfPowerServices PID152: 0.0% CPU, 0.72 s cumulative. This is an additional fresh
+guest boot on the same host boot, not independent host initialization.
+
+Shutdown is exited-after-guest-request. Schema6 recovery is recovered and authorizes
+launch; CP_STAT=0, active_after=0, no forced clears/dequeue timeouts, kernel_messages=[]
+Overall CORE_PROBE_PASS, valid=true. This demonstrates one abnormal-closure → recovery
+→ reset/relaunch → functional probe → clean shutdown sequence; it does not qualify
+repeated guest panics, command-channel fallback or independent host boots.

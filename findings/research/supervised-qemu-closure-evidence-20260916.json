@@ -10,5 +10,20 @@
     "verdict.json": "a364f817bfd290aa94bf35e19ae507150a770b76ff02cf38d1b6a9738c45817a",
     "critical.txt": "17e7f0fc5b72ee3413d8b36a9cf4053d5629b324c898c8e0548946c7b97aa1d5",
     "serial.txt": "c3ae34722a6a0f8f8639f51e83d1ee2467a97a8e4891d1c61ea279da59ab0bde"
+  },
+  "postclosure": {
+    "results": "/home/bogdan/macos-vm/run/candidate-280-attempt-postclosure-results",
+    "sha256": {
+      "manifest.json": "c45794a9476b6d62f50684632eb5d5ceff4f13c6e9f4178b824b7919347f6347",
+      "probe.json": "74473049e5d6a380d2f1a8b45fefb24cb1f8ad0d421912c9786a6bbb18dfe176",
+      "recovery.json": "3b7acb59761e77eeac4c56e8e1e6e6394548b178362c248b832dcaee22287288",
+      "recovery-replay.json": "8cfbbcd972d521fbe309eb293dea84b72f9a8940ec2e71791f049fb2c70f52f9",
+      "verdict.json": "d933695c56782144dd6730aeafc5cada95897ac952888d3045c5abaf3dc0c656",
+      "shutdown.json": "0c3353d014a01061e2ebc1f0c020fad259db39be2f6d4713be27e9115477f178",
+      "critical.txt": "f72d6d393d08779362445752b9a137210a8a4e2347ae6fcd315a28e7242625ac",
+      "desktop.png": "1ded14b0c2602eaac5ae13706c00f37532263077760f344d0575aabd9754056b",
+      "boot-properties-output.txt": "849ac9d806ae5d82b7a3f9acb8b907eeeea9de66dede7c713344898c79aefaca",
+      "gfx0-properties-output.txt": "b516d3e21c7c9ff6b8c75f7ec714827368f0af1776883db4219e31a879e21d9f"
+    }
   }
 }

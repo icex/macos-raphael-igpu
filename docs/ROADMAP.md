@@ -22,7 +22,7 @@ and “next experiment” instructions do not describe today's host.
 | M4 — First correct Metal compute | Achieved | Candidate 194 checked 196,608 values and 4,096 rendered pixels; its overall capture remained inconclusive. Current280 desktop Metal baselines complete with verified device/build identity. |
 | M5 — Rendering, memory and synchronization | Partial | Managed-texture copy correction retained; private/managed/IOSurface and multiple-format readback probes pass. Candidate280 passes48 BGRA8 feedback cases across four distinct-seed processes, including two concurrent clients. 32 measured buffer-reclamation rounds return process-local allocation to baseline with134,217,728 correct values. 144 texture recreation cases and32 cross-queue GPU-event rounds pass. Global VRAM/GART counters return near baseline after exit; GPU VA and long-duration qualification remain open. |
 | M6 — Desktop and physical display | Visual fix verified; broader qualification open | Candidate279 fixes the reproduced feedback corruption. Fresh pixel checks, user observation and unobstructed native RFB captures on280 pass; longer desktop qualification remains. Physical DCN 3.1.5 output is a separate unqualified path. |
-| M7 — Lifecycle and host protection | Partial | Multiple guest-request shutdowns and authorizing recoveries observed on this boot, including four complete 280 runs with the visual and logging fixes. Fresh-host-boot, crash-path and repeated lifecycle qualification remain open. |
+| M7 — Lifecycle and host protection | Partial | Multiple guest-request shutdowns and authorizing recoveries observed on this boot, including four complete 280 runs with the visual and logging fixes. One supervised QEMU closure/recovery/reset/relaunch/clean-shutdown sequence now passes its scoped checks; closure capture remains INVALID. Fresh-host-boot, guest-panic and repeated lifecycle qualification remain open. |
 | M8 — Performance and release | Not qualified | Correctness first; no release, Metal3 conformance, game-support or full-desktop claim. No merge/push to main before demonstrated usable desktop acceleration. |
 
 ## Blocker revalidation — 2026-09-16
@@ -189,8 +189,9 @@ from device enumeration or passing microbenchmarks.
    then representative workloads on independently initialized host boots.
    Supervised HMP quit now has positive cleanup evidence: five queues dequeued,
    graphics ring retired, CP_STAT=0, authorizing recovery. Strict overall verdict
-   remains INVALID due truncated terminal capture. Next verify fresh workload after
-   closure; panic/fallback/repetition/independent host boots remain open.
+   remains INVALID due truncated terminal capture. A fresh post-closure guest now
+   passes the desktop probe, clean shutdown and authorizing recovery.
+   Panic/fallback/repetition/independent host boots remain open.
    [Closure evidence](../findings/research/supervised-qemu-closure-result-20260916.md).
 2. Broaden desktop applications, formats and interprocess synchronization; measure
    reclamation cost and page-table release beyond observed address recycling.
