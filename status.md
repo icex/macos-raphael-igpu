@@ -93,3 +93,11 @@ and crash/fallback durability remain open. Other hypervisors are unqualified.
 
 Milestones update README/status/roadmap, push dev and fast-forward the clean local dev
 checkout. Main remains the user-published experimental snapshot; development is on dev.
+
+## Licensing review — 2026-09-16
+
+BSD-3-Clause and third-party notices added. Both KDK-extracted TOC patterns have
+exact matches in pinned AMD linux-firmware files; vendor-only generation is
+proposed, not implemented. SDK terms, executable notices and broader provenance
+remain open. [Audit](findings/research/licensing-audit-20260916.md). No hardware run
+or functional qualification change.

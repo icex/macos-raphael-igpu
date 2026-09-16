@@ -100,3 +100,10 @@ For implementation background, see the [GPU research](findings/GPU-RE.md),
 Historical diagnoses and per-run details live in those documents rather than the
 project overview. Continue development on `dev`; `main` contains the published
 experimental snapshot. Publication does not imply a stable or fully qualified release.
+
+## Licence
+
+Original project code is [BSD-3-Clause](LICENSE). Firmware and third-party material
+retain their own terms; see [third-party notices](THIRD_PARTY_NOTICES.md). The
+[provenance audit](findings/research/licensing-audit-20260916.md) identifies exact
+AMD sources for the TOC patterns and remaining SDK/distribution review items.
