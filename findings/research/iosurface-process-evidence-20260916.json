@@ -1,0 +1,43 @@
+{
+  "results": "/home/bogdan/macos-vm/run/candidate-280-attempt-iosurfaceprocess-results",
+  "run_id": "2afa3401a71e99091aa8bdbd14c50fa7",
+  "summary": {
+    "parent_bad_pixels": 0,
+    "child_reaped": true,
+    "surface_id": 3,
+    "passed": true,
+    "child_wait_status": 0,
+    "phase": "result",
+    "rounds": 32,
+    "child_bad_pixels": 0,
+    "pid": 719,
+    "child_pid": 720,
+    "registry_id": 4294968085,
+    "pixels_each_direction": 24681824
+  },
+  "source_sha256": "f0e602392d40fff7c78616cfdfd56f48d2c61a47819c61d161613516b41803df",
+  "sha256": {
+    "manifest.json": "daf30ee19d6dc0062191e980ce9fd1b96cfd9dc1bfacc5e63d64750b424e5426",
+    "host-before.json": "bf976df498eb4019d8f8d46d1403bebb53906b5367553676dd5abbd254a77a18",
+    "running-identity.json": "fa8885dadfe1ad59d05efe4a543cf6e42999c38a66101d1fd44dd0798e342e8a",
+    "probe.json": "7464e3cfcaf9bda67eaf60bb0a26557294e7a38b465b39a73d7a6fdd06fe7785",
+    "interactive-ready.json": "7ea6abd1a4e00df460f5c5b05c3dd4fd392fbabfc1a0c21b3b3e45e369c87a21",
+    "compile-command.json": "cc96d71f41d295df3f678bd7278d0f9964979a64e8add0ed5531cad92d1465f2",
+    "compile-output.txt": "ac62efb91dbc3bf00a9a9b2f7b193b34b05d413abb4fc86448bf1319bc2649b2",
+    "surface-command.json": "d1a224c50f8c61cca6751152c4ebdfb237385e70e9f54510a62be2778fd0da6e",
+    "surface-output.txt": "f697e7c8f50e9907c1032bd632991f0a2d92a21f164f9ca8e268037ac89f3550",
+    "surface-summary.json": "87ab44f7091838ea3219716a6937f533842c3e552ac747713579d5131f7d7dcb",
+    "perfpower-output.txt": "b463ceb6ad1ac3c0a38af36b35c45d0f546198b50295d6e6807975e2bff27dc7",
+    "critical-quiesce.json": "c02ec7a758baa9063bb7ab5d5de0a806987fbb00938ef3c3e97eedf6b2f06b7e",
+    "serial.txt": "4fb4b4401e113e116852291b3e86fa041f3be413cb832b343f743a413d2d2fa3",
+    "critical.txt": "79a800af707b44b94949b548519925a793cb542b9fae999b320687175747e2c5",
+    "capture-sha256.json": "b6593a20a78ddb7b1bc98d84b516298a21899debc8dad7998e5be56f1a2f777b",
+    "shutdown.json": "a26b36eaeed963771fcf43e222432d66827824b54c9ca016554c6a20cf0950b0",
+    "host-after.json": "bf976df498eb4019d8f8d46d1403bebb53906b5367553676dd5abbd254a77a18",
+    "host-kernel-messages.json": "213323f55099530317d782be965e8ff6b90bd3a13121537af86ec27db1ce6091",
+    "recovery.json": "1b4a5b053c11a16014ca6878727cb0a1c59c1607d1158b77dba680d56ce58328",
+    "recovery-replay.json": "5347fbfba466759b85cbad5f26e29b7bad07b3e4b1709dabbec5f2400b21b801",
+    "verdict.json": "e8a928b63032cc2898508ccacdd8e7afdd0c320cc5a91ebc4c6c04bf7816f454",
+    "wrapper-result.json": "73059afd78a9f8ec226e4e5c3cf882aaa2e0181044130df7260f28586701b37b"
+  }
+}

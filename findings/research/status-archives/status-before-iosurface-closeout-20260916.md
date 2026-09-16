@@ -7,15 +7,13 @@ reproduced correctness blocker. Full desktop and physical display acceptance rem
 
 ## Current host / guest
 
-Guest **stopped** after run `2afa3401a71e99091aa8bdbd14c50fa7`,
-candidate280/metal-127/iosurfaceprocess, MODE2#165, twenty-fourth exposure on boot
+Guest **stopped** after run `ca1fd405218e175788a332ff0691a058`,
+candidate280/metal-127/depthstencil, MODE2#164, twenty-third exposure on boot
 `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`. GPU remains vfio-pci, power/control=on.
-Two-process IOSurface:32 bidirectional rounds,49,363,648 correct pixels.
-Baseline desktop probe/capture pass;370 critical records, no capture loss.
+128 depth/stencil/color-resolve cases pass:49,625,792 pixels, zero mismatches.
+Baseline desktop probe/capture pass;375 critical records, no capture loss.
 Guest-request shutdown; schema6 recovered/authorizes_launch=true, CP_STAT=0,
 no forced clears/timeouts or recovery host faults. Overall **CORE_PROBE_PASS**.
-[IOSurface evidence](findings/research/iosurface-process-20260916.md).
-Prior depth/stencil/color resolve:128 cases,49,625,792 correct pixels.
 [Depth/stencil evidence](findings/research/depth-stencil-20260916.md).
 
 Prior Main10 decode:32 frames720p/1080p,71,884,800 luma/chroma values exactly
@@ -29,7 +27,6 @@ its scoped checks; closure run itself remains INVALID for truncated terminal cap
 
 | Area | Evidence and scope |
 |---|---|
-| Two-process IOSurface | 32 bidirectional GPU-copy rounds;49,363,648 pixels, zero mismatches; host completion orders transfers |
 | Depth/stencil/MSAA | 128 cases at1×/4× and64×64/1003×769;49,625,792 correct pixels |
 | Main10 decode | 32 frames, 720p/1080p, 71,884,800 full-plane luma/chroma samples, exact software-reference match |
 | Buffer/address reuse | 512 measured rounds, 2,147,483,648 correct values; all 6,144 measured address assignments reused earlier ranges; allocation returns exactly to 544,768 bytes |
@@ -38,7 +35,7 @@ its scoped checks; closure run itself remains INVALID for truncated terminal cap
 | GPU fences | 128 untracked blit/compute/blit rounds, 134,217,728 correct values; prior cross-queue shared-event checks also pass |
 | Native desktop | Three minutes of moving/resizing native material windows; four clean raw RFB captures |
 | Safari | Two-minute transparency/blur/scrolling page; three clean captures plus clean desktop after larger-buffer pressure |
-| PerfPowerServices | 0.0% CPU, latest 0.73 s cumulative; corrected QEMU on ten measured guest boots, all on one host boot |
+| PerfPowerServices | 0.0% CPU, latest 0.69 s cumulative; corrected QEMU on nine measured guest boots, all on one host boot |
 | Host regression | 948 tests OK, three skipped |
 
 Earlier texture recreation (144 cases / 131,031,576 pixels), feedback rendering
@@ -74,7 +71,24 @@ empty published framebuffer properties do not prove an empty ATOM table. Boot pa
 reads EFI properties from the PCI service; trace boot-display selection before patches.
 Main10 decode is now qualified within the short synthetic scope above. Main10
 hardware encoding remains unavailable in the native advertised profile set.
-Two-process IOSurface visibility now passes within its host-ordered scope.
-Next work: GPU-only interprocess events, broader formats/hazards and longer
+Next work: interprocess resource visibility, broader formats/hazards and longer
 workloads, plus source-guided physical-display/lifecycle investigation. No next
-exposure allowance recorded yet.
+exposure allowance recorded below.
+
+## Next-run allowance
+
+One additional, twenty-fourth exposure is authorized on host boot
+`2508eb6d-ddf3-497d-9774-00a7ecebe3ed`, candidate280/metal-127/iosurfaceprocess.
+Unchanged driver and QEMU; fresh MODE2 through cycle.py is required. Test one
+1003×769 BGRA8 IOSurface imported in two separate processes: 32 bidirectional
+GPU-copy rounds with CPU pixel oracles and host completion/pipe ordering.
+A mismatch falsifies visibility for this workload; import failure is unqualified,
+not evidence of a GPU defect. This does not test interprocess GPU shared events.
+All identity, capture, host-fault, deadline, shutdown and recovery guards remain.
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-280-attempt-iosurfaceprocess-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`

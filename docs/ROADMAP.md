@@ -22,7 +22,7 @@ and “next experiment” instructions do not describe today's host.
 | M4 — First correct Metal compute | Achieved | Candidate 194 checked 196,608 values and 4,096 rendered pixels; its overall capture remained inconclusive. Current280 desktop Metal baselines complete with verified device/build identity. |
 | M5 — Rendering, memory and synchronization | Partial | Managed-texture copy correction retained; private/managed/IOSurface and multiple-format readback probes pass. Candidate280 passes48 BGRA8 feedback cases across four distinct-seed processes, including two concurrent clients. 32 measured buffer-reclamation rounds return process-local allocation to baseline with134,217,728 correct values. 144 texture recreation cases and32 cross-queue GPU-event rounds pass. Global VRAM/GART counters return near baseline after exit; GPU VA and long-duration qualification remain open. |
 | M6 — Desktop and physical display | Visual fix verified; broader qualification open | Candidate279 fixes the reproduced feedback corruption. Fresh pixel checks, user observation and unobstructed native RFB captures on280 pass; longer desktop qualification remains. Physical DCN 3.1.5 output is a separate unqualified path. |
-| M7 — Lifecycle and host protection | Partial | Multiple guest-request shutdowns and authorizing recoveries observed on this boot, including seven complete 280 runs with the visual and logging fixes. One supervised QEMU closure/recovery/reset/relaunch/clean-shutdown sequence now passes its scoped checks; closure capture remains INVALID. Fresh-host-boot, guest-panic and repeated lifecycle qualification remain open. |
+| M7 — Lifecycle and host protection | Partial | Multiple guest-request shutdowns and authorizing recoveries observed on this boot, including eight complete 280 runs with the visual and logging fixes. One supervised QEMU closure/recovery/reset/relaunch/clean-shutdown sequence now passes its scoped checks; closure capture remains INVALID. Fresh-host-boot, guest-panic and repeated lifecycle qualification remain open. |
 | M8 — Performance and release | Not qualified | Correctness first; no release, Metal3 conformance, game-support or full-desktop claim. No merge/push to main before demonstrated usable desktop acceleration. |
 
 ## Blocker revalidation — 2026-09-16
@@ -30,7 +30,7 @@ and “next experiment” instructions do not describe today's host.
 | Previously listed issue | Current classification | Revalidation |
 |---|---|---|
 | HEVC decode fails before kernel context creation | Resolved for automatic required-hardware selection | Fresh 120-frame hardware encode/decode pass; original 7-case/9,600-frame artifact hashes rechecked. |
-| PerfPowerServices continuously consumes a CPU core | Resolved in corrected QEMU, observed on nine measured guest boots | Native enumeration passes;0.0% after startup, graphics work and one service restart. Latest post-closure and Main10 guests are also0.0%; independent-host-boot durability remains open. |
+| PerfPowerServices continuously consumes a CPU core | Resolved in corrected QEMU, observed on ten measured guest boots | Native enumeration passes;0.0% after startup, graphics work and one service restart. Latest post-closure and Main10 guests are also0.0%; independent-host-boot durability remains open. |
 | Green/purple transparency and smearing | Fixed for reproduced feedback defect in279 | Reversible native A/B intervention, fresh279/280 pixel passes, unobstructed280 native RFB panels and user reports clean Screen Sharing. Longer desktop qualification remains open. |
 | Critical-event record overflow | Resolved for tested280 workload; finite capacity retained | Earlier smcpmio/279 overflow preserved as failures. Candidate280 finishes with398/512records,0drops and authorizing recovery; strict loss checks unchanged. |
 | Explicit HEVC decoder GPU registry-ID selection | Confirmed remaining limitation | Fresh explicit-ID request returns -12906; automatic hardware request succeeds. Does not block automatic decoding. |
@@ -93,7 +93,10 @@ byte and failed native testing; it is superseded.
 - [x] Bounded Depth32Float_Stencil8 transitions and1×/4× color resolve:
   128 cases,49,625,792 pixels, zero mismatches.
   [Method/scope](../findings/research/depth-stencil-20260916.md).
-- [ ] Broaden formats, cross-pass depth hazards and interprocess event sharing.
+- [x] Two-process IOSurface GPU visibility with host completion/pipe ordering:
+  32 bidirectional rounds,49,363,648 pixels, zero mismatches.
+  [Method/scope](../findings/research/iosurface-process-20260916.md).
+- [ ] Broaden formats, cross-pass depth hazards and GPU-only interprocess event sharing.
 - [x] Exercise sequential independent processes, then concurrent clients with
   distinct data and bounded allocations:280, seeds3/7 sequential and11/29
   concurrent;48 BGRA8 feedback cases. Broader multi-queue coverage remains open.
