@@ -74,7 +74,7 @@ after four index bytes, and returns 0xb8 past the last key. Native AppleSMC call
 verified all six keys and both tested out-of-range indices. On the fresh smcpmio
 guest, PerfPowerServices was 0.0% CPU; after a service restart it was 0.1% CPU with
 0.54 s cumulative CPU time, later 0.0% with the same cumulative time. No Apple service is disabled and no guest binary or
-security setting was patched. Candidate279 and280 supply second through tenth measured guest boots (all0.0% CPU, latest0.73s cumulative).
+security setting was patched. Candidate279 and280 supply second through eleventh measured guest boots (all0.0% CPU, latest0.76s cumulative).
 Longer observation and independent-host-boot durability remain open. The first emulator patch incorrectly waited for a length
 byte and failed native testing; it is superseded.
 [Root cause and native results](../findings/research/perfpower-smc-enumeration-20260916.md),
@@ -96,7 +96,10 @@ byte and failed native testing; it is superseded.
 - [x] Two-process IOSurface GPU visibility with host completion/pipe ordering:
   32 bidirectional rounds,49,363,648 pixels, zero mismatches.
   [Method/scope](../findings/research/iosurface-process-20260916.md).
-- [ ] Broaden formats, cross-pass depth hazards and GPU-only interprocess event sharing.
+- [x] Bounded GPU-only cross-process event sharing over typed XPC:33 consumer-first
+  transfers,25,453,131 correct pixels; helper exit and VM recovery checks pass.
+  [Evidence/scope](../findings/research/xpc-event-20260916.md).
+- [ ] Broaden formats, cross-pass depth hazards and concurrent interprocess writers.
 - [x] Exercise sequential independent processes, then concurrent clients with
   distinct data and bounded allocations:280, seeds3/7 sequential and11/29
   concurrent;48 BGRA8 feedback cases. Broader multi-queue coverage remains open.
@@ -246,3 +249,27 @@ register polls. Native timeout details are suppressed by a category0-only consol
 sink; enabling logger masks alone is insufficient. Next observation is the exact
 wait register/caller plus boot parser/link state, preserving native behavior.
 [Source/native audit](../findings/research/display-clock-wait-20260916.md).
+
+## Portability: remove the patched-QEMU dependency
+
+User priority added2026-09-16. Keep the working patched-QEMU baseline until a
+replacement passes; implement the compatibility at the OpenCore/guest-driver
+layer rather than requiring downstream users to rebuild their hypervisor.
+
+- [ ] Audit every host patch and distinguish SMC emulation from Raphael GPU changes.
+- [ ] Select and implement a guest-side SMC solution: first assess VirtualSMC with
+  OpenCore/ACPI ownership and boot requirements; otherwise a narrowly scoped native
+  AppleSMC compatibility fix. Do not disable PerfPowerServices or fake GPU capability.
+- [ ] On stock QEMU, verify bounded key enumeration including end-of-list, normal
+  boot/key services, sustained idle PerfPowerServices, desktop/codec regressions,
+  capture and clean recovery. Prove which SMC provider handled the requests.
+- [ ] Record per-hypervisor prerequisites: physical PCIe exposure, BAR mappings,
+  interrupts, DMA/IOMMU, ROM/OpenCore delivery and reset/cleanup support.
+- [ ] Investigate VirtualBox separately: virtual display adapters are not Raphael
+  passthrough. Verify actual version/build support before promising acceleration.
+- [ ] Publish a working stock-QEMU/OpenCore setup and a tested compatibility matrix;
+  untested hypervisors stay unqualified. General configuration examples alone are
+  not hardware validation.
+
+Current baseline: VirtualSMC disabled in OpenCore; QEMU AppleSMC enumeration patch
+fixes the reproduced CPU spin. Portability work is not yet qualified.

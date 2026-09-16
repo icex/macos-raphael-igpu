@@ -44,13 +44,13 @@ if a.mode == 'compile':
                    'CFBundleExecutable': 'Worker', 'CFBundlePackageType': 'XPC!',
                    'CFBundleVersion': '1', 'XPCService': {'ServiceType': 'Application'}}
     commands = [f'mkdir -p {q(app + "/Contents/MacOS")} {q(helper + "/Contents/MacOS")}',
-                put(source, app + '/probe.m'),
+                put(source, app + '.m'),
                 put(plistlib.dumps(host_info), app + '/Contents/Info.plist'),
                 put(plistlib.dumps(helper_info), helper + '/Contents/Info.plist')]
     for service, path in [(0, exe), (1, helper + '/Contents/MacOS/Worker')]:
         commands.append(f'xcrun clang -fobjc-arc -O2 -Wall -Wextra -DRGPU_XPC_SERVICE={service} '
-                        f'{q(app + "/probe.m")} -framework Foundation -framework Metal -framework IOSurface -o {q(path)}')
-    commands += [f'codesign --force --sign - {q(helper)}', f'codesign --force --sign - {q(app)}']
+                        f'{q(app + ".m")} -framework Foundation -framework Metal -framework IOSurface -o {q(path)}')
+    commands += [f"rm -f {q(app + '/probe.m')}", f'codesign --force --sign - {q(helper)}', f'codesign --force --sign - {q(app)}']
     command = ' && '.join(commands)
 else:
     count = {'transport': 0, 'one': 1, 'rounds': 32}[a.mode]

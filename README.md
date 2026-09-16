@@ -16,9 +16,10 @@ physical HDMI/DP output, performance and game compatibility are still open.
 |---|---|---|
 | Transparency corruption | Native render-target expansion fixes green/smeared feedback pixels; controlled patch/restore comparison and clean raw RFB captures | [Visual fix](findings/research/feedback-decompression-20260916.md) |
 | Hardware video | H.264 decode/encode and HEVC Main8 decode/encode pass; Main10 decode matches software across 32 frames at 720p/1080p | [HEVC](findings/research/hevc-decode-appleGVA-20260916.md), [Main10](findings/research/main10-qualification-20260916.md) |
-| PerfPowerServices | QEMU AppleSMC key enumeration fixed; 0.0% CPU on ten measured guest boots on one host boot | [SMC fix](findings/research/perfpower-smc-enumeration-20260916.md) |
+| PerfPowerServices | QEMU AppleSMC key enumeration fixed; 0.0% CPU on eleven measured guest boots on one host boot | [SMC fix](findings/research/perfpower-smc-enumeration-20260916.md) |
 | Memory and synchronization | Longer address reuse, 192 MiB allocations, untracked GPU fences and cross-queue events pass CPU oracles | [Memory/GPU tests](findings/research/address-reclaim-desktop-20260916.md) |
 | Depth/stencil and MSAA | 128 cases, 49,625,792 correct pixels at 1×/4× samples | [Depth/stencil](findings/research/depth-stencil-20260916.md) |
+| Cross-process GPU events | Typed XPC import,33 consumer-first transfers,25,453,131 correct pixels | [XPC events](findings/research/xpc-event-20260916.md) |
 | Cross-process IOSurface | 32 bidirectional GPU-copy rounds, 49,363,648 correct pixels; host completion orders transfers | [IOSurface](findings/research/iosurface-process-20260916.md) |
 | Cleanup and relaunch | Clean guest-request shutdown/recovery passes; one abnormal QEMU closure followed by recovery and successful desktop relaunch | [Lifecycle](findings/research/supervised-qemu-closure-result-20260916.md) |
 
@@ -37,9 +38,23 @@ build identities, not these arguments alone, to reproduce a run.
 
 [status.md](status.md) contains current host/guest state, tested binary hashes and the
 next experiment. [docs/ROADMAP.md](docs/ROADMAP.md) tracks scoped acceptance and open
-work, including GPU-only cross-process event sharing through XPC and source-guided
-display initialization. Work is integrated on `dev`; candidate branches retain
+work, including removal of the patched-QEMU SMC dependency through OpenCore/guest code
+and source-guided display initialization. Work is integrated on `dev`; candidate branches retain
 experiment history. No `main` merge or push before full desktop acceptance.
+
+## Quick QEMU setup
+
+Use the [general QEMU guide and example files](examples/qemu/README.md) for a normal
+VM installation or an existing macOS disk. Copy
+[`macos-q35.cfg`](examples/qemu/macos-q35.cfg) into your private VM directory, edit
+firmware/disk paths, RAM, CPU count and your AppleSMC key, then boot without
+passthrough first. The guide includes the QEMU command and remote-access ports.
+
+For Raphael acceleration, add the [VFIO overlay](examples/qemu/raphael-vfio.cfg)
+only after preparing the patched QEMU, matching Lilu/RaphaelGPU, grafted VBIOS,
+OpenCore properties and safe one-way GPU handoff. Guest Screen Sharing provides
+the desktop; physical display output remains unqualified. Use the supervised
+launch/shutdown/recovery path for GPU sessions, including ordinary desktop use.
 
 ## The three things worth knowing
 

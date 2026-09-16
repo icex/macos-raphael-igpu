@@ -7,16 +7,15 @@ reproduced correctness blocker. Full desktop and physical display acceptance rem
 
 ## Current host / guest
 
-Guest **stopped** after run `2afa3401a71e99091aa8bdbd14c50fa7`,
-candidate280/metal-127/iosurfaceprocess, MODE2#165, twenty-fourth exposure on boot
+Guest **stopped** after run `11879a5f49bb2cece67bdbcf31d8c308`,
+candidate280/metal-127/xpcevent2, MODE2#167, twenty-fifth exposure on boot
 `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`. GPU remains vfio-pci, power/control=on.
-Two-process IOSurface:32 bidirectional rounds,49,363,648 correct pixels.
-Baseline desktop probe/capture pass;370 critical records, no capture loss.
-Guest-request shutdown; schema6 recovered/authorizes_launch=true, CP_STAT=0,
-no forced clears/timeouts or recovery host faults. Overall **CORE_PROBE_PASS**.
-[IOSurface evidence](findings/research/iosurface-process-20260916.md).
-Prior depth/stencil/color resolve:128 cases,49,625,792 correct pixels.
-[Depth/stencil evidence](findings/research/depth-stencil-20260916.md).
+XPC-imported GPU event:one preliminary plus32 extended consumer-first transfers,
+25,453,131 correct pixels. All helpers acknowledged shutdown and became absent.
+Baseline/capture pass,382 critical records; clean guest-request shutdown and schema6
+recovered/authorizes_launch=true, CP_STAT=0, no forced clears/timeouts/host faults.
+Overall **CORE_PROBE_PASS**. [XPC event evidence](findings/research/xpc-event-20260916.md).
+Prior host-ordered two-process IOSurface and depth/stencil/MSAA checks also pass.
 
 Prior Main10 decode:32 frames720p/1080p,71,884,800 luma/chroma values exactly
 match software; hardware encoder advertises Main8 only and rejects Main10.
@@ -29,6 +28,7 @@ its scoped checks; closure run itself remains INVALID for truncated terminal cap
 
 | Area | Evidence and scope |
 |---|---|
+| Cross-process GPU events | Typed XPC import;33 consumer-first transfers,25,453,131 correct pixels |
 | Two-process IOSurface | 32 bidirectional GPU-copy rounds;49,363,648 pixels, zero mismatches; host completion orders transfers |
 | Depth/stencil/MSAA | 128 cases at1×/4× and64×64/1003×769;49,625,792 correct pixels |
 | Main10 decode | 32 frames, 720p/1080p, 71,884,800 full-plane luma/chroma samples, exact software-reference match |
@@ -38,7 +38,7 @@ its scoped checks; closure run itself remains INVALID for truncated terminal cap
 | GPU fences | 128 untracked blit/compute/blit rounds, 134,217,728 correct values; prior cross-queue shared-event checks also pass |
 | Native desktop | Three minutes of moving/resizing native material windows; four clean raw RFB captures |
 | Safari | Two-minute transparency/blur/scrolling page; three clean captures plus clean desktop after larger-buffer pressure |
-| PerfPowerServices | 0.0% CPU, latest 0.73 s cumulative; corrected QEMU on ten measured guest boots, all on one host boot |
+| PerfPowerServices | 0.0% CPU, latest 0.76 s cumulative; corrected QEMU on eleven measured guest boots, all on one host boot |
 | Host regression | 953 tests OK, three skipped |
 
 Earlier texture recreation (144 cases / 131,031,576 pixels), feedback rendering
@@ -66,49 +66,19 @@ No main merge/push before full desktop proof. Another exposure needs a named-boo
 allowance and fresh MODE2 through tools/cycle.py. No vfio→amdgpu cycling.
 [Roadmap](docs/ROADMAP.md).
 
-## Active offline work
+## Current work
 
-Using the supplied decompilation plus matching native assembly to trace physical
-display initialization. Current injected ROM contains four nonzero display paths;
-empty published framebuffer properties do not prove an empty ATOM table. Boot parser
-reads EFI properties from the PCI service; trace boot-display selection before patches.
-Main10 decode is now qualified within the short synthetic scope above. Main10
-hardware encoding remains unavailable in the native advertised profile set.
-Two-process IOSurface visibility now passes within its host-ordered scope.
-Next work: GPU-only interprocess events, broader formats/hazards and longer
-workloads, plus source-guided physical-display/lifecycle investigation. No next
-exposure allowance recorded yet.
+User priority: remove the patched-QEMU SMC dependency through an OpenCore/guest
+solution, then validate on stock QEMU and separately qualify other hypervisors.
+Current OpenCore has VirtualSMC disabled; native source detects and avoids an
+already active SMC device, so enabling the kext blindly is not a demonstrated fix.
+The general QEMU setup guide/examples are prepared, with CPU-only paused-QEMU
+configuration validation. No new GPU allowance is recorded.
 
-Latest offline display audit: clock warnings return fallback frequencies; later
-register polls exhaust. Native logger console filtering hides their caller details.
-[Source/native audit](findings/research/display-clock-wait-20260916.md); exact wait
-register/caller and startup link state remain the next discriminator.
+Physical output remains source-guided work: clock warnings fall back; later register
+polls exhaust, with caller details filtered from serial. Exact wait register/caller
+and startup link state remain unobserved. Broader applications, formats, performance,
+independent boots and crash/fallback durability remain open.
 
-GPU-only interprocess event test is in transport preparation: use typed XPC to
-transfer the native handle; the byte-archive draft was rejected before exposure.
-[Reviewed next test](findings/research/iosurface-event-test-plan-20260916.md).
-
-Milestone integration: README, release/game docs and current research summary now
-match this state. `dev` history is reconciled with the candidate; 953 host tests
-pass (3 skipped), plus synthetic texture-setting locator checks. Existing `dev`
-archive/capture-tool changes are retained; current run-admission and QEMU pins
-remain unchanged. Future verified milestones must update docs and push `dev`.
-
-## Next-run allowance
-
-One additional, twenty-fifth exposure on boot
-`2508eb6d-ddf3-497d-9774-00a7ecebe3ed`, candidate280/metal-127/xpcevent2.
-Unchanged hardware-tested driver/QEMU, fresh MODE2 through cycle.py required.
-Compile the bundled typed-XPC probe; first transfer/import one shared-event handle
-with zero GPU submissions. Only if transport and helper exit pass, submit one
-consumer-first event wait/read and producer upload/signal. Expand to32 rounds only
-if the one-round result and helper exit pass. A pixel mismatch or GPU timeout
-falsifies this workload; XPC/import failure remains test-infrastructure evidence.
-Existing capture, host-fault, identity, deadline, shutdown and recovery gates remain.
-
-Prelaunch correction: attempt xpcevent completed MODE2#166 but staging refused an
-unused structural-locator header restored by the dev merge under src/. No QEMU/VFIO
-open occurred and no exposure was consumed. The header has only a host-test consumer;
-it is retained in its update-resilience research directory with that include updated.
-The current src tree again exactly matches the hardware-tested source pin. The
-same one-run allowance continues for isolated attempt xpcevent2 with a fresh reset.
+Milestones must update README/status/roadmap, push dev and fast-forward the clean
+local dev checkout; preserve unrelated changes and stashes.
