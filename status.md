@@ -72,3 +72,19 @@ the native amdgpu driver, software/hardware codec controls and driver tracepoint
 no direct register sampling, kprobe SRAM capture, VFIO handoff or VM launch.
 User resume/continued investigation authorizes the control. Preserve identity,
 host-fault/capture/deadline checks and cleanup. Current iGPU renderD129 verified.
+
+## Native control passed; next isolated macOS run
+
+Linux control`run/linux-vcn-2508eb6d-control/result.json`: H264/HEVC software,
+hardware and repeat hardware encodes exit0; all3frame software/hardware decodes
+validate2675475lumas each,maxerror1(H264)/0(HEVC). Capture complete,workloads stopped,
+amdgpu retained,no kernel faults. No raw register sampling performed.
+
+Authorize first VM exposure/allowance1 on boot`2508eb6d-ddf3-497d-9774-00a7ecebe3ed`
+under user's resume instruction:274/metal-121,from272 with intrusive diagnostics
+removed. Current native GPU functional control passed; host display uses03:00.0,
+iGPU outputs disabled; Brave/Code hold enumeration contexts without engine counters.
+Single amdgpu→VFIO handoff through existing helper, then no reverse binding this
+boot. Require fresh MODE2,exact build/route/capture/host-fault/shutdown/recovery gates,
+max6000s. Decode before encoder,manual normal stop after observations.273 crash
+causality remains uncertain; no automatic replay of its write-pointer experiment.
