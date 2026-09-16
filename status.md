@@ -72,8 +72,9 @@ User priority: remove the patched-QEMU SMC dependency through an OpenCore/guest
 solution, then validate on stock QEMU and separately qualify other hypervisors.
 Current OpenCore has VirtualSMC disabled; native source detects and avoids an
 already active SMC device, so enabling the kext blindly is not a demonstrated fix.
-The general QEMU setup guide/examples are prepared, with CPU-only paused-QEMU
-configuration validation. No new GPU allowance is recorded.
+The README now summarizes current capabilities, goals and setup; detailed evidence
+remains here and in the roadmap. General QEMU setup examples are published, with
+CPU-only paused-QEMU configuration validation. No new GPU allowance is recorded.
 
 Parallel Reims source audit completed at pinned commit `69a57dd69a6958e946c03b73e02db331f330f435`.
 Reviewed test designs now inform open visual, CPU/GPU ownership, plane/view/depth

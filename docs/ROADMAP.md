@@ -3,8 +3,9 @@
 Updated 2026-09-16. Current driver: **candidate 1.0.280**. Full desktop acceleration
 is **not qualified**. The reproduced Screen Sharing transparency defect is fixed
 in candidate279 and retained in280. Candidate280 also passes strict capture and
-clean recovery after visual, concurrent-client and codec workloads. The remaining
-priority is memory, broader lifecycle, physical-display and performance qualification.
+clean recovery after visual, concurrent-client and codec workloads. The immediate
+user priority is removing the patched-QEMU SMC dependency. Broader desktop, memory,
+lifecycle, physical-display and performance qualification remain open.
 
 This is the current roadmap. [Live state and run authority](../status.md) are separate.
 The [previous roadmap](../findings/research/status-archives/roadmap-before-20260916-refresh.md)

@@ -1,163 +1,101 @@
-# macOS on an AMD Raphael iGPU
+# RaphaelGPU
 
-Reverse-engineering notes and tooling for making Apple's Navi 2x graphics stack bind to the
-**integrated GPU of a Ryzen 9000-series (Raphael / Granite Ridge) desktop CPU**, passed through
-with VFIO to a macOS Sequoia guest under QEMU/KVM.
+Experimental macOS graphics acceleration for the **AMD Raphael / Granite Ridge
+integrated GPU**, using Apple's native AMD graphics stack through a Lilu plugin.
+The current development platform is a macOS Sequoia VM on Linux with QEMU/KVM
+and VFIO GPU passthrough.
 
-Development and VM control run on Linux; the kext is cross-compiled on Linux and also built in CI.
+Our goal is a usable, correctly rendered Metal desktop, hardware video acceleration,
+physical display output, and reliable shutdown and recovery. Development is active
+on **`dev`**; this is not yet a generally supported driver release.
 
-## Status — 2026-09-16
+[Current status](status.md) · [Roadmap](docs/ROADMAP.md) ·
+[QEMU setup](examples/qemu/README.md) · [Build instructions](docs/releases.md)
 
-**Candidate 280 renders the remote macOS desktop with the reproduced transparency
-corruption fixed.** This remains an experimental driver: full desktop qualification,
-physical HDMI/DP output, performance and game compatibility are still open.
+## Current status
 
-| Area | Verified result | Evidence |
-|---|---|---|
-| Transparency corruption | Native render-target expansion fixes green/smeared feedback pixels; controlled patch/restore comparison and clean raw RFB captures | [Visual fix](findings/research/feedback-decompression-20260916.md) |
-| Hardware video | H.264 decode/encode and HEVC Main8 decode/encode pass; Main10 decode matches software across 32 frames at 720p/1080p | [HEVC](findings/research/hevc-decode-appleGVA-20260916.md), [Main10](findings/research/main10-qualification-20260916.md) |
-| PerfPowerServices | QEMU AppleSMC key enumeration fixed; 0.0% CPU on eleven measured guest boots on one host boot | [SMC fix](findings/research/perfpower-smc-enumeration-20260916.md) |
-| Memory and synchronization | Longer address reuse, 192 MiB allocations, untracked GPU fences and cross-queue events pass CPU oracles | [Memory/GPU tests](findings/research/address-reclaim-desktop-20260916.md) |
-| Depth/stencil and MSAA | 128 cases, 49,625,792 correct pixels at 1×/4× samples | [Depth/stencil](findings/research/depth-stencil-20260916.md) |
-| Cross-process GPU events | Typed XPC import,33 consumer-first transfers,25,453,131 correct pixels | [XPC events](findings/research/xpc-event-20260916.md) |
-| Cross-process IOSurface | 32 bidirectional GPU-copy rounds, 49,363,648 correct pixels; host completion orders transfers | [IOSurface](findings/research/iosurface-process-20260916.md) |
-| Cleanup and relaunch | Clean guest-request shutdown/recovery passes; one abnormal QEMU closure followed by recovery and successful desktop relaunch | [Lifecycle](findings/research/supervised-qemu-closure-result-20260916.md) |
+As of **2026-09-16**, candidate **1.0.280** runs an accelerated desktop through
+macOS Screen Sharing. Native window effects and Safari composition checks pass,
+including the previously affected transparent areas. Broader application coverage
+and long-duration reliability are still being tested.
 
-The abnormal-closure run retains an INVALID capture verdict for truncated terminal
-serial data; the independent recovery/relaunch result does not erase that verdict.
-Independent host boots, guest-panic and unavailable-command-channel recovery remain
-unqualified. Physical output is unqualified; Screen Sharing is the tested display path.
-No games have been verified. Hardware HEVC Main10 encoding is unavailable in the
-native advertised profile set, and explicit decoder GPU-ID selection remains limited;
-automatic required-hardware decoding works.
-
-The graphics baseline retains `rgpunobin=1`, `rgpusdmacfg=2` and `rgputexdiag=2`:
-these handle Navi23 binning limits, Raphael's SDMA address layout, userspace texture
-addressing and the guarded feedback-expansion fix. Use the exact experiment card and
-build identities, not these arguments alone, to reproduce a run.
-
-[status.md](status.md) contains current host/guest state, tested binary hashes and the
-next experiment. [docs/ROADMAP.md](docs/ROADMAP.md) tracks scoped acceptance and open
-work, including removal of the patched-QEMU SMC dependency through OpenCore/guest code
-and source-guided display initialization. Work is integrated on `dev`; candidate branches retain
-experiment history. No `main` merge or push before full desktop acceptance.
-
-The [Reims vGPU source audit](findings/research/reims-vgpu-audit-20260916.md)
-adds concrete rendering and memory-lifetime tests to the roadmap. Its custom
-AppleParavirtGPU/QEMU architecture does not replace our AMD passthrough driver
-or resolve stock-QEMU SMC compatibility. This was source review, not runtime testing.
-
-## Quick QEMU setup
-
-Use the [general QEMU guide and example files](examples/qemu/README.md) for a normal
-VM installation or an existing macOS disk. Copy
-[`macos-q35.cfg`](examples/qemu/macos-q35.cfg) into your private VM directory, edit
-firmware/disk paths, RAM, CPU count and your AppleSMC key, then boot without
-passthrough first. The guide includes the QEMU command and remote-access ports.
-
-For Raphael acceleration, add the [VFIO overlay](examples/qemu/raphael-vfio.cfg)
-only after preparing the patched QEMU, matching Lilu/RaphaelGPU, grafted VBIOS,
-OpenCore properties and safe one-way GPU handoff. Guest Screen Sharing provides
-the desktop; physical display output remains unqualified. Use the supervised
-launch/shutdown/recovery path for GPU sessions, including ordinary desktop use.
-
-## The three things worth knowing
-
-**1. An APU's VBIOS is missing exactly two ATOM data tables.** Apple's driver wants a PSP
-directory (master-data-table index 9) and a `vram_info` (index 28); an APU ROM has neither,
-because its security processor lives in the SoC. Both can be synthesised — the parsers are
-undemanding, and `populateMemoryConfig` fails only on a *zero* memory type or width, with no enum
-validation at all. Apple never reads `ATOM_ROM_HEADER.pspdirtableoffset`, which is a tempting
-red herring.
-
-**2. Delivery must be the `ATY,bin_image` device property.** `readAtomBios` tries that property
-first and the PCI expansion ROM second — and the ROM path bails when config offset 0x30 reads 0,
-which is always the case under OVMF because EDK2 releases option-ROM BARs after enumeration.
-There is a hard **64 KiB ceiling** on anything Apple will look at, so a real 1 MB discrete ROM
-cannot be injected even in principle.
-
-**3. HWLibs dispatches on the silicon's real IP-discovery versions, not the spoofed PCI id.**
-That is why a device-id spoof gets you a long way and then stops dead. Most of the gates turn out
-to be a single version field pointed at an implementation Apple already ships.
-
-Full write-up with every VMA: [`findings/GPU-RE.md`](findings/GPU-RE.md). Transferable
-bring-up knowledge for other AMD iGPUs: [`docs/hardware-notes.md`](docs/hardware-notes.md).
-
-## Two traps that cost real time
-
-**Passing this iGPU to QEMU NULL-derefs the host kernel** unless the device is pinned awake
-first. Opening a runtime-suspended device with vfio-pci hits
-`vfio_pci_core_runtime_resume -> down_write` on kernel 7.2.x. It presents as a *guest* hang —
-QEMU becomes a zombie, the container still reports "Up", the guest emits zero serial bytes — and
-it is unrecoverable without a reboot, because `power/runtime_status` sticks at `resuming` and any
-operation needing the device's PM lock then blocks uninterruptibly. Pin `power/control=on` before
-anything opens it; `gpu-bind.sh` does this and a udev rule enforces it at boot.
-
-**Lilu silently disables itself on an OS newer than it knows.** On Sequoia it logs
-`automatically disabling on an unsupported operating system` and exits, taking every plugin with
-it. `-lilubetaall` is required. Worth checking early, because it makes WhateverGreen and AppleALC
-inert too.
-
-## Documentation
-
-| Document | Purpose |
+| Capability | Current result |
 |---|---|
-| [status.md](status.md) | Live state: candidate identity, counters, blocking issue |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | What is planned next, and why |
-| [docs/host-safety.md](docs/host-safety.md) | Non-negotiable host rules and recovery procedures |
-| [docs/running-an-experiment.md](docs/running-an-experiment.md) | The change → test → run → classify loop |
-| [docs/releases.md](docs/releases.md) | Cross-build, CI, release packaging |
-| [docs/patch-delivery.md](docs/patch-delivery.md) | How the kext reaches the boot KC; why Lilu's user patcher cannot work on Sequoia |
-| [docs/hardware-notes.md](docs/hardware-notes.md) | Transferable AMD iGPU bring-up knowledge |
-| [docs/critical-replay-v2.md](docs/critical-replay-v2.md) | Serial diagnostics wire format |
-| [findings/GPU-RE.md](findings/GPU-RE.md) | The reverse-engineering write-up |
+| Remote desktop | WindowServer uses the accelerator; tested transparency, blur, window movement and resizing render correctly. |
+| Metal rendering and compute | Verified output in targeted compute, texture, depth/stencil and MSAA tests. Full Metal conformance is not established. |
+| Memory and synchronization | Buffer/texture reuse, GPU fences, shared events and cross-process IOSurface transfers pass targeted checks. |
+| Hardware video | H.264 and HEVC Main8 encode/decode work. HEVC Main10 decoding passes short tests; Main10 hardware encoding is unavailable in the current native profile set. |
+| Shutdown and reuse | Repeated clean guest shutdowns and same-host-boot reuse work in the supervised workflow. Crash recovery and independent-host-boot coverage remain incomplete. |
+| Physical HDMI/DisplayPort | Not yet working as a qualified display path; use guest Screen Sharing. |
 
-## Layout
+The tested baseline is **macOS Sequoia build 24G830** with a matching driver,
+Lilu, OpenCore configuration and grafted VBIOS. It currently uses a QEMU AppleSMC
+patch to keep PerfPowerServices CPU usage normal. Stock-QEMU compatibility is
+an active goal; other hypervisors and arbitrary macOS updates are not validated.
+Performance, games and general application compatibility are not yet qualified.
 
-```
-src/          RaphaelGPU.cpp    the Lilu plugin: patch table, boot-arg mask, hooks
-              *.hpp             address arithmetic, diagnostics, replay, texture parsing
-kext/         recorded experimental executable and Info.plist
-tools/        build-kext.sh     cross-compile the Lilu plugin kext on Linux
-              build-release.py  compile/package an experimental release with pinned identity
-              stage-candidate.py  validate a candidate's contract and stage its boot disk
-              experiment.py     prepare and run one bounded GPU experiment
-              classify-run.py   turn a run's artifacts into a verdict
-              vm-supervision.py launch/capture with an exact-container deadline
-              smu-mode2-reset.py  same-boot GPU reset, so relaunch needs no reboot
-              gpu-bind.sh       amdgpu -> vfio-pci, with the runtime-PM workaround
-              recover-igpu.sh   recovery after the vfio runtime-PM oops
-              vfio-recover.py   rootless GC/SDMA/PSP teardown and reuse receipt
-              mkrom.py          grafts the PSP directory + vram_info onto an APU ROM
-              ocprop.py         edits OpenCore config.plist (device properties, boot-args)
-              agent-server.py   guest command relay with reachability telemetry
-tests/        desktop_metal_probe.m  the in-guest Metal probe
-              test_*.py/.cpp    host-side regression suite (no hardware required)
-findings/     GPU-RE.md         the reverse-engineering write-up
-              research/         per-topic investigations and evidence
-build-support/  pinned Lilu build inputs and the headless-init patch
-```
+See [live status and evidence](status.md) for exact tested builds and the scope of
+each result. A successful build or individual probe does not establish full desktop
+readiness.
 
-## Measurement
+## Goals and next steps
 
-The AMD kexts log through **two** channels and you need both:
+- **Simplify deployment:** move the remaining QEMU-specific SMC compatibility into
+  OpenCore or guest code, validate stock QEMU, and document requirements for other
+  hypervisors, including actual PCIe passthrough support.
+- **Broaden desktop correctness:** test ordinary applications, sustained composition,
+  additional texture formats, resource ownership and concurrent GPU clients.
+- **Strengthen reliability:** qualify crash recovery, repeated shutdown/relaunch,
+  memory reclamation and operation across independently initialized host boots.
+- **Enable physical displays:** bring up the Raphael display engine, then validate
+  modes, reconnection and higher resolutions.
+- **Measure and release:** measure performance after correctness, publish a tested
+  compatibility matrix, and produce reproducible builds with clear support limits.
 
-- `os_log` — read with `log show --predicate 'senderImagePath CONTAINS "AMD"'`
-- `kprintf` — reaches the serial port only with `DB_KPRT` set, i.e. `debug=0x108` in boot-args
+The [roadmap](docs/ROADMAP.md) tracks acceptance criteria and remaining work.
 
-Reading only serial produces a badly wrong picture: it looks like nothing beyond the GPU wrangler
-runs, when in fact the whole stack loads.
+## Get started with QEMU
 
-Static analysis needs the **Kernel Debug Kit** for the exact build. On an installed system every
-AMD kext bundle is a stub, with the code prelinked into `SystemKernelExtensions.kc`.
+1. Follow the [QEMU setup guide](examples/qemu/README.md). Copy the
+   [base VM configuration](examples/qemu/macos-q35.cfg) into a private VM directory
+   and supply your own macOS media, OpenCore disk, firmware and machine settings.
+2. Boot the VM **without GPU passthrough first**. Enable Screen Sharing in macOS;
+   the example forwards it to `127.0.0.1:5900` and SSH to `127.0.0.1:50922`.
+3. Prepare the matching RaphaelGPU/Lilu builds, VBIOS and OpenCore properties
+   described in the guide, then adapt the [Raphael VFIO overlay](examples/qemu/raphael-vfio.cfg).
+4. Run accelerated sessions through the [supervised launch and recovery workflow](docs/running-an-experiment.md).
+   Connect to guest Screen Sharing for the desktop.
 
-The host-side regression suite runs without hardware:
+Read [host safety](docs/host-safety.md) before GPU handoff: the GPU must first be
+initialized by amdgpu, `power/control=on` must be pinned before VFIO access, and
+vfio-pci must not be cycled back to amdgpu within the same host boot. The setup guide
+covers the current QEMU SMC requirement and the complete matching configuration.
+The example files alone do not configure or validate GPU recovery on a new host.
+
+## Development
+
+The driver can be cross-compiled on Linux; CI also builds experimental artifacts.
+Follow the [build and packaging instructions](docs/releases.md) for pinned inputs
+and installation requirements. Hardware-tested binary identities are recorded in
+[status.md](status.md).
+
+Run the host regression suite without GPU access:
 
 ```sh
 python3 -B -m unittest discover -s tests
 ```
 
-## Licence / provenance
+| Path | Contents |
+|---|---|
+| `src/` | RaphaelGPU Lilu plugin and supporting code |
+| `tools/` | Build, configuration, experiment and recovery tools |
+| `tests/` | Host regressions and guest graphics/video probes |
+| `examples/qemu/` | General VM configuration and passthrough example |
+| `docs/` | Setup, safety, architecture and roadmap |
+| `findings/` | Reverse-engineering notes and recorded experiment evidence |
 
-Original work. Technique is informed by the published behaviour of Apple's shipping binaries and
-by Linux's `amdgpu`; no code is copied from ChefKiss projects, whose licence terms differ.
+For implementation background, see the [GPU research](findings/GPU-RE.md),
+[hardware notes](docs/hardware-notes.md) and [patch delivery](docs/patch-delivery.md).
+Historical diagnoses and per-run details live in those documents rather than the
+project overview. Current development is integrated on `dev`; `main` remains gated
+on demonstrated usable desktop acceleration.
