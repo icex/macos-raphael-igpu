@@ -1,0 +1,277 @@
+{
+  "scope": "HEVC Main 8-bit 4:2:0 synthetic luma readback; automatic GPU selection; sequential sessions. Not full desktop or Main10 qualification.",
+  "runs": [
+    {
+      "results": "/home/bogdan/macos-vm/run/candidate-277-results",
+      "run_id": "532ac6d9eefc560e06f6df973245fd67",
+      "boot_id": "2508eb6d-ddf3-497d-9774-00a7ecebe3ed",
+      "binary_sha256": "1e50cf16c8ac4333a84b84321394cce07b28c94947e1264aa5b86463b588b17a",
+      "build_id": "53e6460029a64be299f92c823efa785d",
+      "guest_boot_uuid": "0EF460A0-08E4-4653-A53C-3C5F81EF289C",
+      "functional_cases": [
+        {
+          "output": "/home/bogdan/macos-vm/run/candidate-277-results/h264-hwstream-600-1080-output.txt",
+          "output_sha256": "83db3d875978ed43611e9f56e63d5aaac59db3d58f5b2eba218074e34f427d4b",
+          "command": "/home/bogdan/macos-vm/run/candidate-277-results/h264-hwstream-600-1080-command.json",
+          "command_sha256": "5dc43ec09b86a31a0514521b587cbebd183e203d150987c7f6201534a4c4fc4e",
+          "encoder": {
+            "phase": "selected-encoder",
+            "encoder_id": "com.apple.videotoolbox.videoencoder.h264.gva",
+            "epoch": 1789549258.9779181,
+            "pid": 940,
+            "hardware": true
+          },
+          "decoder": {
+            "status": 0,
+            "phase": "selected-decoder",
+            "epoch": 1789549268.912189,
+            "pid": 940,
+            "hardware": true
+          },
+          "result": {
+            "max_luma_error": 1,
+            "unique_frames": 600,
+            "passed": true,
+            "width": 1920,
+            "encoded_frames": 600,
+            "mean_luma_error": 7.630032161472774e-05,
+            "phase": "result",
+            "epoch": 1789549271.569931,
+            "height": 1080,
+            "luma_values_checked": 1217295000,
+            "decoded_frames": 600,
+            "pid": 940,
+            "errors": 0
+          }
+        },
+        {
+          "output": "/home/bogdan/macos-vm/run/candidate-277-results/hevc-hwstream-600-1080-output.txt",
+          "output_sha256": "bd13543f645991d0f250359d370bc83f7c1eb03c02b83b9de16e006f37d5fe8d",
+          "command": "/home/bogdan/macos-vm/run/candidate-277-results/hevc-hwstream-600-1080-command.json",
+          "command_sha256": "537d6f9ba5bf9e119d99ae2e4d1ea9b837c04f208b1bced64ec566dd7e91dc75",
+          "encoder": {
+            "phase": "selected-encoder",
+            "encoder_id": "com.apple.videotoolbox.videoencoder.hevc.gva",
+            "epoch": 1789549237.115841,
+            "pid": 903,
+            "hardware": true
+          },
+          "decoder": {
+            "status": 0,
+            "phase": "selected-decoder",
+            "epoch": 1789549246.964376,
+            "pid": 903,
+            "hardware": true
+          },
+          "result": {
+            "max_luma_error": 1,
+            "unique_frames": 600,
+            "passed": true,
+            "width": 1920,
+            "encoded_frames": 600,
+            "mean_luma_error": 2.3494715742691787e-06,
+            "phase": "result",
+            "epoch": 1789549249.71784,
+            "height": 1080,
+            "luma_values_checked": 1217295000,
+            "decoded_frames": 600,
+            "pid": 903,
+            "errors": 0
+          }
+        },
+        {
+          "output": "/home/bogdan/macos-vm/run/candidate-277-results/hevc-recreate-600-720-output.txt",
+          "output_sha256": "72140b8beee0522efa01670478c5a1cda5bffa24d0927aa4c2b6e614e33108fc",
+          "command": "/home/bogdan/macos-vm/run/candidate-277-results/hevc-recreate-600-720-command.json",
+          "command_sha256": "144f4795fa9529f1d4c834d5302162ea07b1a9c470d138b0add6adcb9c6acc59",
+          "encoder": {
+            "phase": "selected-encoder",
+            "encoder_id": "com.apple.videotoolbox.videoencoder.hevc.gva",
+            "epoch": 1789549295.608835,
+            "pid": 1004,
+            "hardware": true
+          },
+          "decoder": {
+            "status": 0,
+            "phase": "selected-decoder",
+            "epoch": 1789549298.322126,
+            "pid": 1004,
+            "hardware": true
+          },
+          "result": {
+            "max_luma_error": 0,
+            "unique_frames": 600,
+            "passed": true,
+            "width": 1280,
+            "encoded_frames": 600,
+            "mean_luma_error": 0,
+            "phase": "result",
+            "epoch": 1789549299.8996549,
+            "height": 720,
+            "luma_values_checked": 535095000,
+            "decoded_frames": 600,
+            "pid": 1004,
+            "errors": 0
+          }
+        },
+        {
+          "output": "/home/bogdan/macos-vm/run/candidate-277-results/hevc-swstream-600-720-output.txt",
+          "output_sha256": "54fbcf16201ee795b2eed255992970198142f57de36d2b8d7f43eb3853b5d862",
+          "command": "/home/bogdan/macos-vm/run/candidate-277-results/hevc-swstream-600-720-command.json",
+          "command_sha256": "99540d340c8330edde2d6a24ab358ac945f427447ce2be6086bd716044fa65c9",
+          "encoder": {
+            "phase": "selected-encoder",
+            "encoder_id": "com.apple.videotoolbox.videoencoder.hevc.vcp",
+            "epoch": 1789549175.435036,
+            "pid": 818,
+            "hardware": false
+          },
+          "decoder": {
+            "status": 0,
+            "phase": "selected-decoder",
+            "epoch": 1789549215.561915,
+            "pid": 818,
+            "hardware": true
+          },
+          "result": {
+            "max_luma_error": 0,
+            "unique_frames": 600,
+            "passed": true,
+            "width": 1280,
+            "encoded_frames": 600,
+            "mean_luma_error": 0,
+            "phase": "result",
+            "epoch": 1789549217.134191,
+            "height": 720,
+            "luma_values_checked": 535095000,
+            "decoded_frames": 600,
+            "pid": 818,
+            "errors": 0
+          }
+        }
+      ],
+      "baseline_verdict": "CORE_PROBE_PASS",
+      "shutdown": "exited-after-guest-request",
+      "recovery": "recovered"
+    },
+    {
+      "results": "/home/bogdan/macos-vm/run/candidate-277-attempt-repeat-results",
+      "run_id": "c1b774b2087ecdcd4b3edd2d25e788c7",
+      "boot_id": "2508eb6d-ddf3-497d-9774-00a7ecebe3ed",
+      "binary_sha256": "1e50cf16c8ac4333a84b84321394cce07b28c94947e1264aa5b86463b588b17a",
+      "build_id": "53e6460029a64be299f92c823efa785d",
+      "guest_boot_uuid": "C3AF8D0E-FA2C-49B8-ABBE-82A65F7D55D6",
+      "functional_cases": [
+        {
+          "output": "/home/bogdan/macos-vm/run/candidate-277-attempt-repeat-results/h264-after-hevc-600-1080-output.txt",
+          "output_sha256": "6de8744288acd3434546b6f7a4827e56f988ea38ed905b4e5d3f798f32d5b39f",
+          "command": "/home/bogdan/macos-vm/run/candidate-277-attempt-repeat-results/h264-after-hevc-600-1080-command.json",
+          "command_sha256": "58f7f622b63c4a3217f4aae177f3d142513e6e2a90d60f9ba71b3d4fc0c3a679",
+          "encoder": {
+            "phase": "selected-encoder",
+            "encoder_id": "com.apple.videotoolbox.videoencoder.h264.gva",
+            "epoch": 1789549718.782905,
+            "pid": 889,
+            "hardware": true
+          },
+          "decoder": {
+            "status": 0,
+            "phase": "selected-decoder",
+            "epoch": 1789549727.4080548,
+            "pid": 889,
+            "hardware": true
+          },
+          "result": {
+            "max_luma_error": 1,
+            "unique_frames": 600,
+            "passed": true,
+            "width": 1920,
+            "encoded_frames": 600,
+            "mean_luma_error": 7.630032161472774e-05,
+            "phase": "result",
+            "epoch": 1789549730.070198,
+            "height": 1080,
+            "luma_values_checked": 1217295000,
+            "decoded_frames": 600,
+            "pid": 889,
+            "errors": 0
+          }
+        },
+        {
+          "output": "/home/bogdan/macos-vm/run/candidate-277-attempt-repeat-results/hevc-hwstream-6000-1080-output.txt",
+          "output_sha256": "d8fb9a3a7ed39bbd4ce3f657d854c0981efd7581b14d639e9a5c1b64fd065d53",
+          "command": "/home/bogdan/macos-vm/run/candidate-277-attempt-repeat-results/hevc-hwstream-6000-1080-command.json",
+          "command_sha256": "f42a20a38e6a819f47d1f74a411bf9d20684f3c4ff92e68d753a04342d73f721",
+          "encoder": {
+            "phase": "selected-encoder",
+            "encoder_id": "com.apple.videotoolbox.videoencoder.hevc.gva",
+            "epoch": 1789549476.9959068,
+            "pid": 737,
+            "hardware": true
+          },
+          "decoder": {
+            "status": 0,
+            "phase": "selected-decoder",
+            "epoch": 1789549574.0479798,
+            "pid": 737,
+            "hardware": true
+          },
+          "result": {
+            "max_luma_error": 1,
+            "unique_frames": 6000,
+            "passed": true,
+            "width": 1920,
+            "encoded_frames": 6000,
+            "mean_luma_error": 2.3494715742691787e-06,
+            "phase": "result",
+            "epoch": 1789549601.236273,
+            "height": 1080,
+            "luma_values_checked": 12172950000,
+            "decoded_frames": 6000,
+            "pid": 737,
+            "errors": 0
+          }
+        },
+        {
+          "output": "/home/bogdan/macos-vm/run/candidate-277-attempt-repeat-results/hevc-swstream-600-1080-output.txt",
+          "output_sha256": "39d0499795db6ee6654f67b0f91ffbf96f5adf4eae096d2992099babf0fa1168",
+          "command": "/home/bogdan/macos-vm/run/candidate-277-attempt-repeat-results/hevc-swstream-600-1080-command.json",
+          "command_sha256": "4a8801361cfd2319963d03692992d56e7ee8fc13f2b08e21757713e6cb9b6ba2",
+          "encoder": {
+            "phase": "selected-encoder",
+            "encoder_id": "com.apple.videotoolbox.videoencoder.hevc.vcp",
+            "epoch": 1789549630.630583,
+            "pid": 850,
+            "hardware": false
+          },
+          "decoder": {
+            "status": 0,
+            "phase": "selected-decoder",
+            "epoch": 1789549702.6082392,
+            "pid": 850,
+            "hardware": true
+          },
+          "result": {
+            "max_luma_error": 0,
+            "unique_frames": 600,
+            "passed": true,
+            "width": 1920,
+            "encoded_frames": 600,
+            "mean_luma_error": 0,
+            "phase": "result",
+            "epoch": 1789549705.346833,
+            "height": 1080,
+            "luma_values_checked": 1217295000,
+            "decoded_frames": 600,
+            "pid": 850,
+            "errors": 0
+          }
+        }
+      ],
+      "baseline_verdict": "CORE_PROBE_PASS",
+      "shutdown": "exited-after-guest-request",
+      "recovery": "recovered"
+    }
+  ],
+  "total_sustained_frames": 9600
+}
