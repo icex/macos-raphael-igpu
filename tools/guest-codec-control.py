@@ -71,7 +71,7 @@ def main():
               f"test \"$permit\" = {nonce} && mkdir -p {guest_dir} && "
               f"printf %s {payload} | /usr/bin/base64 -D > {guest_dir}/probe.m && "
               f"/usr/bin/xcrun clang -fobjc-arc -O2 {guest_dir}/probe.m -framework Foundation "
-              f"-framework VideoToolbox -framework CoreMedia -framework CoreVideo "
+              f"-framework VideoToolbox -framework CoreMedia -framework CoreVideo -framework IOKit -framework Metal "
               f"-o {guest_dir}/probe && {guest_dir}/probe "
               + shlex.join(args.args.format(codec=args.codec, mode=args.mode, registry=registry,
                                             dir=guest_dir).split()))
