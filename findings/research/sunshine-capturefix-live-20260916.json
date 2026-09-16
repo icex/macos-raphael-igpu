@@ -26,8 +26,16 @@
     "limitations": "Worker waits overlap; do not sum. First send bucket is second3, so do not treat full elapsed average as uninterrupted streaming throughput."
   },
   "conclusion": "Capture-lock removal is active but insufficient to fix motion-triggered streaming slowdown. No matched unpatched/ patched throughput gain established.",
-  "next": "Temporary command-line max_bitrate=20000 control at unchanged4K60 HEVC; config file unchanged.",
-  "shutdown_recovery": "Pending; same supervised run active.",
+  "next": "Correlate live resource-reclaim latency with encoder stalls; preserve original app as matched baseline. No further hardware work tonight, per user.",
+  "shutdown_recovery": {
+    "verdict": "CORE_PROBE_PASS",
+    "capture_valid": true,
+    "shutdown": "exited-after-guest-request",
+    "recovery": "recovered",
+    "authorizes_launch": true,
+    "recovery_id": "2670fe978626419daa0b7bcb207d22e2",
+    "note": "User ended work for night; technical recovery receipt is not permission to start another run."
+  },
   "artifacts": {
     "permissions-open-output.txt": {
       "path": "/home/bogdan/macos-vm/run/candidate-282-attempt-capturefix3-results/permissions-open-output.txt",
@@ -52,7 +60,49 @@
     "bitrate20-pacing-output.txt": {
       "path": "/home/bogdan/macos-vm/run/candidate-282-attempt-capturefix3-results/bitrate20-pacing-output.txt",
       "sha256": "52f1e20037ec99e0bb34a7719d9b84a1cfde61b9f0dd3f78dcf550587bfea40b"
+    },
+    "bitrate20-pacing-2-output.txt": {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-attempt-capturefix3-results/bitrate20-pacing-2-output.txt",
+      "sha256": "aa83fb9238956a03a3157e815c40c1c1bd103fa95ee6b2189007956626ce4806"
+    },
+    "bitrate20-pacing-3-output.txt": {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-attempt-capturefix3-results/bitrate20-pacing-3-output.txt",
+      "sha256": "54d32c0a1e112a1f066d96dff188c77844e4acf239e02bede1ceef8bf8ede299"
+    },
+    "restore-bitrate-output.txt": {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-attempt-capturefix3-results/restore-bitrate-output.txt",
+      "sha256": "2564b87e0647df713a5bb3a480f2d0d32afdd6f05b9196bb7723cf6c37ff4b08"
+    },
+    "verdict.json": {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-attempt-capturefix3-results/verdict.json",
+      "sha256": "75775f5f3696cb88bfe752df3892015ca2719b9849c0dd4f7b438f078a14aaaa"
+    },
+    "shutdown.json": {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-attempt-capturefix3-results/shutdown.json",
+      "sha256": "0be6e06f59eee84c53f47e801ef62edc93bc60e2a2954a74007f0ae064e21bd2"
+    },
+    "recovery.json": {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-attempt-capturefix3-results/recovery.json",
+      "sha256": "6a6bfe426a413c0c73ffbf52053fb600221f0530417d3455d306d44fa932de31"
+    },
+    "serial.txt": {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-attempt-capturefix3-results/serial.txt",
+      "sha256": "cde8b6d00a77d75e77694529d5899c3c49a8a6a6dbff4106519aec0622922680"
     }
   },
-  "bitrate_control_result": "NO_ACTIVE_STREAM; no performance measurement"
+  "bitrate_control_result": {
+    "user": "Feels worse",
+    "trace2": {
+      "elapsed_us": 13001119,
+      "send_calls": 240,
+      "send_total_us": 12807640
+    },
+    "trace3": {
+      "elapsed_us": 13001120,
+      "send_calls": 192,
+      "send_total_us": 12812196
+    },
+    "limitations": "Multi-second outliers present; workload and trace effects prevent assigning sole causality to bitrate. No support for lowering bitrate as remedy.",
+    "rollback": "CLI cap removed; patched app PID72267 restarted with original configuration, H.264 and HEVC discovery pass."
+  }
 }

@@ -1,95 +1,61 @@
-# Live status — 2026-09-16
+# Live status — 2026-09-16, stopped for the night
 
-Candidate282's guarded allocation-diagnostic sampling patch is installed; generated
-4K codec checks pass. The measured streaming comparison used **Moonlight-Qt
-with hardware H.264**: the user reports 4K60, then clarifies it is better but still
-imperfect: mouse motion over a transparent Safari window falls to about 40 FPS.
-A 12-second server trace completes 663 submissions (~55/s), with a
-5.69 ms mean and occasional 32–131 ms calls. Client and codec changed together;
-neither alone is established as the cause of improvement. Sustained 4K60, latency,
-remain open. Final capture, guest-request shutdown and recovery now pass.
+**Picture clear; motion-triggered4K60 streaming slowdown remains unresolved.**
+The user confirms it occurs across the desktop, not just Safari. Work stopped at
+user request; no running GPU guest and no new experiment planned tonight.
+[Next-session handoff](findings/research/streaming-handoff-20260916.md).
 
-## Current host / guest
+## Host / final run
 
-- Host boot `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`; GPU0000:7b:00.0 remains
-  vfio-pci with power/control=on. Active application comparison run `526953460479934120e31312a466eccc`,
-  attempt capturefix3, MODE2#178, exposure33. Interactive baseline passed;
-  restored Retina3840×2160 backing at60Hz. Final capture/cleanup pending.
-- Completed run `560b1d7e8fea56b2c6f52fd7644d23f8`, candidate282/metal130,
-  MODE2#175, exposure32: valid CORE_PROBE_PASS; exited-after-guest-request;
-  schema6 recovery `5c955d69cbbe4f5699fcf3d8fafc46c8`, authorizes_launch=true.
-- Build `7a26b1a2f6694ae88ed889105de30bc7`, executable SHA256
+- Boot `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`; GPU0000:7b:00.0 remains
+  `vfio-pci`, `power/control=on`. Never cycle back to amdgpu within this boot.
+- Run `526953460479934120e31312a466eccc`, candidate282/metal130,
+  attemptcapturefix3, MODE2#178, exposure33: **valid CORE_PROBE_PASS**.
+  Functional baseline passed; final capture valid; shutdown
+  **exited-after-guest-request**; schema6 recovery **recovered**, authorizes_launch=true,
+  receipt `2670fe978626419daa0b7bcb207d22e2`. Streaming performance is not qualified.
+- Unchanged driver build `7a26b1a2f6694ae88ed889105de30bc7`, executable SHA256
   `9c7e5dffc64fef69e874ea3c8e7b940e9761caf53e31400d2dc68d1591724fc2`.
-  Guarded ALLOCLOG sampling installed. Final capture valid; clean recovery does
-  not close the streaming-performance blocker.
-- Persisted Sunshine configuration keeps hardware-only H.264 and HEVC Main8
-  (`hevc_mode=2`, `vt_software=disabled`), per user request. Pairing is preserved.
-  Exact-instance LAN forwarding restored for capturefix3; web UI responds401
-  as expected without credentials. Patched Sunshine is active after user-approved
-  capture permission; hardware H.264 and HEVC detected. A temporary CLI-only
-  max_bitrate=20000 comparison is awaiting client reconnect; config file unchanged.
-- Retina was 1920×1080 logical /3840×2160 backing /2×/60Hz; login persistence
-  still needs qualification. No 90/120Hz display claim.
+- Exposure33 allowance is consumed. Earlier capturefix/capturefix2 staging failures
+  stopped before QEMU/VFIO and consumed no exposure. Recovery authorizes the
+  technical relaunch path, not additional work after the user's stop instruction.
+- LAN relay ended with this VM; UFW rules persist. Future forwarding must target
+  the new exact container. Retina was1920×1080 logical /3840×2160 backing /60Hz;
+  check/restore after login.90/120Hz remains unqualified.
 
-### One-run continuation allowance
+## Tonight's streaming result
 
-The user's latest instruction to proceed and fix motion-triggered streaming
-latency authorizes the next bounded experiment. Extend this boot's allowance by
-**one exposure (33)** on boot `2508eb6d-ddf3-497d-9774-00a7ecebe3ed` for
-candidate282/metal130, attempt `capturefix3`: build/test the scoped Sunshine
-GPU-buffer CPU-lock candidate and compare the same 4K60 workload. Prior run's
-schema6 recovery authorizes relaunch. Use tools/cycle.py, fresh MODE2, maximum
-6000 seconds, manual-reuse/ack-risk and all existing identity, host-fault,
-capture, shutdown and cleanup gates. No vfio→amdgpu cycling or clock writes.
-Exposure33 is now consumed by capturefix3; no additional launch is covered. The first staging attempt
-(capturefix, MODE2#176) stopped at the unregistered282/131 card pair before QEMU;
-no exposure consumed. The application comparison reuses the approved282/130
-driver baseline and records its separate app hypothesis here. The second attempt
-(capturefix2, MODE2#177) also stopped before QEMU because its isolated build
-identity copy had not been prepared. Neither attempt consumed exposure33.
+The separate “Sunshine Capture Fix” app builds and runs with user-approved capture
+permissions. It removes CPU base-address locks on hardware NV12/P010 buffers;
+valid CoreVideo probes observed no such calls during streaming. The user reports
+clear output, but cursor-motion stalls remain. A light4K60 HEVC trace completed
+553 submissions/13.001s with mean22.32ms. **Lock removal alone is insufficient**;
+no matched original-versus-patched throughput improvement is established.
 
-Candidate281 stopped cleanly with CORE_PROBE_PASS, valid capture and schema6
-recovery authorizing relaunch. Its patch reported installed=0 because it compared
-the import stub directly with kernel kprintf. User still observed3–4FPS.
-Candidate282 validates the stub destination before changing only this diagnostic
-CALL. Native allocation/retry/false returns/counters and global logging are unchanged.
-[Investigation](findings/research/allocation-log-thunk-20260916.md).
+Native encoder completion waits average20.70ms and Metal preprocessing waits7.83ms
+in a separate trace. Worker waits overlap and must not be added. These measurements
+are host-side wait durations, not isolated GPU-engine execution times.
 
-## Current blocker and next observation
+The20Mbps CLI-only bitrate control felt worse and yielded240 and192 submissions
+in two13s traces, with multi-second outliers. It was rejected and **removed before
+shutdown**. Saved configuration remains hardware-only VideoToolbox, realtime,
+`hevc_mode=2`; no resolution downgrade or persistent bitrate cap. The original
+signed `/Applications/Sunshine.app` is intact. The experimental app is not a
+self-contained release or a login default. Foundation replacement stays cancelled.
+[Measurements, configuration rollback and final receipts](findings/research/sunshine-capturefix-live-20260916.json).
 
-HEVC was confirmed at 62.988 Mbps while the user observed 20–30 FPS under mouse
-motion and 60 idle. Active encoder stacks wait for native GPU completion and
-Metal preprocessing. Capture still reaches approximately 60 buffers/s; its CPU
-base-address locks cost 1.232 seconds total over 716 calls, with some 16–65 ms
-calls. Those locks can contribute to uneven timing but do not explain the entire
-encoder bottleneck. Cursor positioning also has occasional 16–65 ms calls.
+## Next session
 
-After switching the server to H.264 and the user installing Moonlight-Qt, streaming
-is visibly better. HEVC has since been re-enabled at the user’s request; measure
-each codec separately for remaining pacing and input latency. The final moving
-HEVC trace requested120FPS against a60Hz display:620 submissions/13.001s, with
-full-second counts30–63 and mean20.67ms submission. The client reconnected at
-60FPS at23:05:20, but the supervised deadline prevented a matching trace. Do not attribute the gain solely to the client or call 4K60 solved.
-The capture-lock candidate is now live with user-approved Screen Recording access.
-The valid CoreVideo probe records zero locks during active hardware capture, but
-motion still slows everywhere on the desktop; the user confirms a clear picture.
-A lighter trace completes553 submissions/13.001s, mean22.32ms. Native encoder
-waits average20.70ms and Metal preprocessing waits7.83ms in a separate trace;
-workers overlap, so those durations cannot be summed. Lock removal alone is
-**not a sufficient fix**, and no matched throughput gain is established.
-A temporary20Mbps CLI override at unchanged4K60 HEVC awaits client reconnect;
-the first control trace had no active stream. Do not report a bitrate result.
-[Live evidence](findings/research/sunshine-capturefix-live-20260916.json).
-Foundation-sunshine replacement was cancelled by the user; the original app,
-pairing and LAN ports are preserved. No Foundation binary or build dependencies
-were installed. [Current evidence](findings/research/moonlight-qt-h264-20260916.md).
-
-Prior scoped results remain: 24+60 generated 4K HEVC encode/decode frames,
-689,188,500 checked luma samples, maximum error 2. Isolated 120-frame HEVC 4K
-throughput is 64.75 FPS reused, 41.47 fresh and 58.89 pooled; H.264 reaches 76.77.
-These simple patterns do not qualify real desktop streaming or establish the
-hardware FPS ceiling. [Throughput investigation](findings/research/streaming-throughput-20260916.md),
-[hardware capabilities](findings/research/9800x3d-streaming-capabilities-20260916.md).
+1. Re-read live host/repository state and obtain the next user instruction before
+   any run. Preserve normal lifecycle/identity/capture gates and per-boot accounting.
+2. Establish matched original/patched4K60 HEVC motion controls. Separate client
+   delivery, server submissions and cursor latency; avoid concurrent stack sampling.
+3. Correlate native video-memory reclaim latency with encoder stalls. Live logs
+   contain many recoverable allocation retries; their production cost is still
+   unmeasured. Do not mistake failure counters for a proven leak or exhausted memory.
+4. If reclaim is not material, isolate surface reuse, Metal preprocessing and VCN
+   completion. Do not infer clocks from compatibility counters or probe the shared
+   SMU mailbox concurrently from the host. No new allocator/cursor/power patch yet.
 
 ## Verified progress
 
@@ -127,30 +93,19 @@ exact OpenCore DSDT ownership patch are required; prior media backups remain ava
 
 ## Remaining roadmap
 
-1. Measure/fix4K remote delivery; preserve crisp Retina60Hz, then qualify login
-   persistence.90/120Hz modes remain unproven. Screen Sharing RAW black captures
-   are not a universal oracle for the user-visible Retina desktop.
+1. Sustained4K remote delivery and input latency; preserve crisp Retina60Hz,
+   then qualify login persistence.90/120Hz modes remain unproven.
 2. Guest-crash/command-channel failure, repeated lifecycle and independent-host-boot
-   qualification. One abnormal-QEMU-close/recovery/relaunch sequence has scoped evidence.
+   qualification. Existing clean stops do not qualify every failure mode.
 3. Broader applications, render hazards, interprocess synchronization and page-table
-   release beyond cached address reuse. Historical direct OpenGL hang and live Metal
-   validation crash remain unresolved; no blind reruns.
+   release. Historical direct OpenGL hang and live Metal validation crash remain open.
 4. Physical DCN output, other hypervisors and measured performance/release qualification.
 
-StockQEMU10.1.2/OpenCore/VirtualSMC1.3.7 works in the tested setup; two guest boots
-verified0.0% PerfPowerServices CPU. Independent-host-boot durability remains open.
-HEVC automatic required-hardware decode works; explicit GPU-ID selection remains
-limited on this topology. Main10 decode passes scoped cases, encoder supports Main8.
-[Roadmap](docs/ROADMAP.md), [setup](docs/stock-qemu-smc.md).
+StockQEMU10.1.2/OpenCore/VirtualSMC1.3.7 works in this tested setup;
+PerfPowerServices was0.0% CPU on two guest boots. Automatic required-hardware HEVC
+decode works; explicit GPU-ID selection remains limited. Main10 decode has scoped
+passes; hardware encode is Main8. [Roadmap](docs/ROADMAP.md).
 
-After each verified milestone update README/status/roadmap/current docs and push dev,
-then fast-forward the clean local dev checkout. Do not push main without new authorization.
-Licensing/provenance work remains tracked in[the audit](findings/research/licensing-audit-20260916.md).
-The previous state and consumed allowances are[archived](findings/research/status-archives/status-before-allocation-thunk-20260916.md).
-
-
-## One-command GPU test
-
-- Output: `/home/bogdan/macos-vm/run/candidate-282-results`
-- Verdict: `CORE_PROBE_PASS`
-- Boundary: `None`
+After milestones update current docs, integrate/push dev and synchronize the local
+checkout. Do not push main without new authorization. Prior live entries and
+consumed allowances are [archived](findings/research/status-archives/status-before-night-close-20260916.md).

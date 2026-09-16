@@ -137,6 +137,9 @@ The follow-up capturefix3 run builds the original upstream Sunshine with the
 scoped GPU-buffer lock patch. The user approved its separate “Sunshine Capture
 Fix” app's capture permission. Live tracing shows zero capture locks; the user
 reports a clear picture but motion stalls across the desktop. Native encoder
-completion and Metal preprocessing waits remain. A temporary CLI20Mbps control
-at4K60 HEVC awaits client reconnect; the saved configuration is unchanged.
+completion and Metal preprocessing waits remain. A CLI20Mbps control
+at4K60 HEVC felt worse and showed long stalls; it was removed before shutdown.
+The saved configuration is unchanged. The guest stopped cleanly with valid
+capture and authorizing recovery; the LAN relay has expired.
+[Next-session handoff](../findings/research/streaming-handoff-20260916.md).
 [Live evidence](../findings/research/sunshine-capturefix-live-20260916.json).

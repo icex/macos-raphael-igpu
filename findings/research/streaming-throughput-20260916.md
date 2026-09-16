@@ -1,8 +1,10 @@
 # Remaining4K streaming cost — 2026-09-16
 
-Candidate282 run560b1d7e8fea56b2c6f52fd7644d23f8 remains supervised; no reset,
-clock change, new exposure or new driver deployment in this investigation.
-Shutdown/recovery for this live run remain pending.
+Historical measurements from candidate282 run560b1d7e8fea56b2c6f52fd7644d23f8,
+which subsequently stopped with valid capture and clean recovery. The later
+capturefix3 run also closed cleanly; its capture-lock patch did not fix motion
+stalls. See the [end-of-night handoff](streaming-handoff-20260916.md) for current
+results and next steps. No clock change was performed in these investigations.
 
 ## Live stream
 

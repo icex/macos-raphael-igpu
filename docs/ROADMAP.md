@@ -234,9 +234,13 @@ from device enumeration or passing microbenchmarks.
    was cancelled. The capture-lock candidate is live with approved permissions:
    no capture locks observed, picture clear, but motion stalls remain across the
    desktop. A lighter4K60 HEVC trace averages22.32ms/submission. Native encoder
-   completion and Metal preprocessing waits remain. A temporary20Mbps control
-   awaits client reconnect; no bitrate result yet.
+   completion and Metal preprocessing waits remain. The20Mbps CLI control felt worse and contained multi-second stalls;
+   its override was removed. Next correlate reclaim latency with encoder waits,
+   then compare original/patched apps under the same4K60 workload.
    [Live evidence](../findings/research/sunshine-capturefix-live-20260916.json).
+   Run closed for the night: valid capture, guest-request shutdown, authorizing
+   recovery. No streaming-performance qualification.
+   [Resume handoff](../findings/research/streaming-handoff-20260916.md).
    [Current measurements](../findings/research/moonlight-qt-h264-20260916.md).
    The isolated simple-frame HEVC result (64.75 FPS) is not desktop qualification.
    Login persistence also remains broken after startup despite the helper exiting0.

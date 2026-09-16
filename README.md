@@ -54,7 +54,8 @@ readiness.
   codec changed together, so their individual effects remain unproven. Sustained
   frame delivery and input latency remain open. A live capture-buffer optimization removes CPU locks and retains a clear picture,
   but motion-triggered encoder stalls remain across the desktop; it is not a complete fix. [Measurements](findings/research/moonlight-qt-h264-20260916.md)
-  · [Setup, LAN access and firewall rules](docs/sunshine.md).
+  · [Setup, LAN access and firewall rules](docs/sunshine.md)
+  · [Current investigation and next steps](findings/research/streaming-handoff-20260916.md).
 - **Broaden portability:** extend the working stock-QEMU/OpenCore setup across
   host boots and supported versions, and document requirements for other hypervisors,
   including actual PCIe passthrough support.
