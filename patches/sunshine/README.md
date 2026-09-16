@@ -25,8 +25,11 @@ locking; capture and dummy-image callbacks propagate lock failure instead of
 exposing a null CPU pointer. Each wrapper records its own lock decision, while
 `nv12_zero_device` retains the CVPixelBuffer through its AVBufferRef.
 
-Source-reviewed only: not built, live-tested, or deployed. Validate the original
-file hashes before applying.
+Native Release build passes with Apple clang17, CMake4.4.3 and the pinned
+FFmpeg release v2026.910.121303. A separate ad-hoc-signed local app starts, but
+macOS denies its Screen Recording access; the original app was restored.
+No live performance or capture-correctness result yet. Validate the original
+file hashes before applying. [Build evidence](../../findings/research/sunshine-capturefix-build-20260916.json).
 
 References: [CVPixelBufferLockBaseAddress](https://developer.apple.com/documentation/corevideo/cvpixelbufferlockbaseaddress(_:_:)) and [managed Metal resource synchronization](https://developer.apple.com/documentation/metal/synchronizing-a-managed-resource-in-macos).
 

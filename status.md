@@ -12,7 +12,9 @@ remain open. Final capture, guest-request shutdown and recovery now pass.
 ## Current host / guest
 
 - Host boot `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`; GPU0000:7b:00.0 remains
-  vfio-pci with power/control=on. No running GPU guest after the supervised stop.
+  vfio-pci with power/control=on. Active application comparison run `526953460479934120e31312a466eccc`,
+  attempt capturefix3, MODE2#178, exposure33. Interactive baseline passed;
+  restored Retina3840×2160 backing at60Hz. Final capture/cleanup pending.
 - Completed run `560b1d7e8fea56b2c6f52fd7644d23f8`, candidate282/metal130,
   MODE2#175, exposure32: valid CORE_PROBE_PASS; exited-after-guest-request;
   schema6 recovery `5c955d69cbbe4f5699fcf3d8fafc46c8`, authorizes_launch=true.
@@ -22,7 +24,8 @@ remain open. Final capture, guest-request shutdown and recovery now pass.
   not close the streaming-performance blocker.
 - Persisted Sunshine configuration keeps hardware-only H.264 and HEVC Main8
   (`hevc_mode=2`, `vt_software=disabled`), per user request. Pairing is preserved.
-  LAN relay expired with the guest; restore exact-instance forwarding on next run.
+  Exact-instance LAN forwarding restored for capturefix3; web UI responds401
+  as expected without credentials. The original signed app remains active.
 - Retina was 1920×1080 logical /3840×2160 backing /2×/60Hz; login persistence
   still needs qualification. No 90/120Hz display claim.
 
@@ -36,7 +39,7 @@ GPU-buffer CPU-lock candidate and compare the same 4K60 workload. Prior run's
 schema6 recovery authorizes relaunch. Use tools/cycle.py, fresh MODE2, maximum
 6000 seconds, manual-reuse/ack-risk and all existing identity, host-fault,
 capture, shutdown and cleanup gates. No vfio→amdgpu cycling or clock writes.
-This allowance is unconsumed until QEMU/VFIO opens. The first staging attempt
+Exposure33 is now consumed by capturefix3; no additional launch is covered. The first staging attempt
 (capturefix, MODE2#176) stopped at the unregistered282/131 card pair before QEMU;
 no exposure consumed. The application comparison reuses the approved282/130
 driver baseline and records its separate app hypothesis here. The second attempt
@@ -65,7 +68,11 @@ each codec separately for remaining pacing and input latency. The final moving
 HEVC trace requested120FPS against a60Hz display:620 submissions/13.001s, with
 full-second counts30–63 and mean20.67ms submission. The client reconnected at
 60FPS at23:05:20, but the supervised deadline prevented a matching trace. Do not attribute the gain solely to the client or call 4K60 solved.
-The source-only Sunshine capture-lock candidate is **unbuilt and undeployed**.
+The Sunshine capture-lock candidate **builds and starts** as a separate local app,
+but macOS denies its Screen Recording permission. Original signed Sunshine was
+restored and again detects hardware H.264/HEVC. User permission is required before
+a live motion comparison; no performance improvement is demonstrated.
+[Build and rollback evidence](findings/research/sunshine-capturefix-build-20260916.json).
 Foundation-sunshine replacement was cancelled by the user; the original app,
 pairing and LAN ports are preserved. No Foundation binary or build dependencies
 were installed. [Current evidence](findings/research/moonlight-qt-h264-20260916.md).

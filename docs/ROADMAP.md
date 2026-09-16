@@ -231,7 +231,10 @@ from device enumeration or passing microbenchmarks.
    encoding and input latency before closing this gate; no single-cause claim.
    Keep H.264 and HEVC advertised (`hevc_mode=2`, user preference) and preserve
    LAN-only access. Compare codecs separately. Foundation replacement
-   was cancelled; a capture-lock source candidate remains unbuilt/undeployed.
+   was cancelled. The capture-lock candidate now compiles and starts, but macOS
+   denies its separate Screen Recording permission. Original Sunshine is restored;
+   await permission and matched motion measurements before judging the patch.
+   [Build evidence](../findings/research/sunshine-capturefix-build-20260916.json).
    [Current measurements](../findings/research/moonlight-qt-h264-20260916.md).
    The isolated simple-frame HEVC result (64.75 FPS) is not desktop qualification.
    Login persistence also remains broken after startup despite the helper exiting0.

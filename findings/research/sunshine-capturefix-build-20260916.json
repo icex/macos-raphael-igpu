@@ -1,0 +1,51 @@
+{
+  "run_id": "526953460479934120e31312a466eccc",
+  "attempt": "capturefix3",
+  "candidate": 282,
+  "boot_id": "2508eb6d-ddf3-497d-9774-00a7ecebe3ed",
+  "mode2_reset": 178,
+  "exposure": 33,
+  "upstream_commit": "63d35f702ee9e362e43263742981836ec0710384",
+  "upstream_tag": "v2026.914.233613",
+  "binary_before_bundle_signing_sha256": "8346cd8400c7eb36bd220d09ffcdb41e58981008691803a3c297c9d1eeb3484d",
+  "ffmpeg_release": "v2026.910.121303",
+  "ffmpeg_archive_sha256": "cb63a85c4599d94b547d68b240d96c6cc146eba33e6bf22b4d591a1bf52ecfc7",
+  "functional": "Native build and --help pass; live capture blocked by macOS Screen Recording permission. No performance result. Original app restored and reports H.264/HEVC hardware encoders.",
+  "capture": "Interactive identity and guest command receipts present; final capture pending.",
+  "cleanup": "Guest remains supervised; final shutdown/recovery pending.",
+  "qualification": "Not fixed or qualified; awaiting capture permission and matched motion comparison.",
+  "artifacts": {
+    "interactive-ready.json": {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-attempt-capturefix3-results/interactive-ready.json",
+      "sha256": "f69e6e10dacaace422c4ef34ed012e124a1d4c94635a020faadcf4aca915718a"
+    },
+    "running-identity.json": {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-attempt-capturefix3-results/running-identity.json",
+      "sha256": "cc79a611e51507e65fdaaa1abc8df97dc609884346c4274f1a054244f628ef15"
+    },
+    "restore-desktop-output.txt": {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-attempt-capturefix3-results/restore-desktop-output.txt",
+      "sha256": "57e820df2593154cf3e6469c1baf872547fea82afe21e4a3147a98b761e4d356"
+    },
+    "build-progress-5-output.txt": {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-attempt-capturefix3-results/build-progress-5-output.txt",
+      "sha256": "9bb4dc7fd98c786d5da3606fc3f515bb864b94743972cdd5e7492bd3bc6e1dff"
+    },
+    "verify-binary-output.txt": {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-attempt-capturefix3-results/verify-binary-output.txt",
+      "sha256": "6f02a08d78a3f6ee131cc2c6e8ada223551c7d7e7ccbed67fc1e3413576d0f49"
+    },
+    "deploy-capturefix-output.txt": {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-attempt-capturefix3-results/deploy-capturefix-output.txt",
+      "sha256": "3285d9226ecea8465f3cc46c809c9e1b4a8d15d9ca6d7a7fe4292bf8a6ec0eb8"
+    },
+    "capturefix-errors-output.txt": {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-attempt-capturefix3-results/capturefix-errors-output.txt",
+      "sha256": "27fdf939234d6fba4f8a477240b546fe1295309bd64fb19c1b4d096bd3907628"
+    },
+    "rollback-capturefix-output.txt": {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-attempt-capturefix3-results/rollback-capturefix-output.txt",
+      "sha256": "fc7f5fde1c3db2c22c3974a173c979b882932a9f533b7b68f9482e5bff450fe0"
+    }
+  }
+}
