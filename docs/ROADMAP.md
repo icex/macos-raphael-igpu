@@ -323,6 +323,18 @@ Cargo license metadata differ; resolve applicable terms before considering sourc
 
 ## Licensing and distribution follow-up
 
+- [ ] **Remove the `libkmod.a` dependency.** Planned only; user requested no
+  implementation on 2026-09-16. Independently implement the required module
+  start/stop and identifier/version/load-tag interfaces, or validate direct entry
+  points, then remove `-lkmod` from the build. Preserve Lilu initialization,
+  active-plugin unload refusal, module metadata and existing C++ initialization
+  behaviour. Inspection of the current x86_64 archive found only `c_start.o` and
+  `c_stop.o`; it does not supply GPU functionality. Future acceptance requires
+  build/link and symbol checks showing no archive dependency, followed by separately
+  authorized guest validation. No live tests are authorized by this roadmap item;
+  coordinate with the active hardware owner. This is a startup-component task,
+  not a rewrite of Lilu, the SDK or Apple's graphics stack. Retain notices for any
+  other incorporated third-party material.
 - Implement the [audited vendor-only firmware sourcing plan](../findings/research/licensing-audit-20260916.md)
   after authorization; preserve exact bytes and all existing match checks.
 - Resolve SDK per-file/OS restrictions and executable source-notice obligations;
