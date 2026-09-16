@@ -39,7 +39,7 @@ its scoped checks; closure run itself remains INVALID for truncated terminal cap
 | Native desktop | Three minutes of moving/resizing native material windows; four clean raw RFB captures |
 | Safari | Two-minute transparency/blur/scrolling page; three clean captures plus clean desktop after larger-buffer pressure |
 | PerfPowerServices | 0.0% CPU, latest 0.73 s cumulative; corrected QEMU on ten measured guest boots, all on one host boot |
-| Host regression | 948 tests OK, three skipped |
+| Host regression | 953 tests OK, three skipped |
 
 Earlier texture recreation (144 cases / 131,031,576 pixels), feedback rendering
 (48 cases / 5,280,000 pixels), and hardware H.264/HEVC encode/decode retain their
@@ -87,3 +87,9 @@ register/caller and startup link state remain the next discriminator.
 GPU-only interprocess event test is in transport preparation: use typed XPC to
 transfer the native handle; the byte-archive draft was rejected before exposure.
 [Reviewed next test](findings/research/iosurface-event-test-plan-20260916.md).
+
+Milestone integration: README, release/game docs and current research summary now
+match this state. `dev` history is reconciled with the candidate; 953 host tests
+pass (3 skipped), plus synthetic texture-setting locator checks. Existing `dev`
+archive/capture-tool changes are retained; current run-admission and QEMU pins
+remain unchanged. Future verified milestones must update docs and push `dev`.

@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 RELEASE_DOCUMENTS = (
     'README.md',
     'status.md',
-    'docs/supported-games.md',
+    'docs/ROADMAP.md',
     'docs/releases.md',
     'build-support/LICENSE.amdgpu',
 )

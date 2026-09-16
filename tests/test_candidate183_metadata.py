@@ -53,7 +53,7 @@ class Candidate183MetadataTests(unittest.TestCase):
         })
 
     def test_candidate183_docs_describe_source_operand_without_allocator_claims(self):
-        release = (ROOT / 'docs/release-notes.md').read_text()
+        release = (ROOT / 'findings/research/release-notes-1.0.181-183.md').read_text()
         first_candidate = release.split('Experimental RaphaelGPU 1.0.182', 1)[0]
         self.assertIn('updateContiguousPTEsWithDMAUsingAddr', first_candidate)
         self.assertIn('real source operand', first_candidate)

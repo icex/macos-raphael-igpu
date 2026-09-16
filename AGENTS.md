@@ -1,13 +1,32 @@
 # Project instructions
 
-- Goal: functional macOS desktop Metal acceleration on the Raphael iGPU, with repeatable cleanup after guest crashes or QEMU closure.
-- Read `status.md` and verify live host/repository state before hardware work.
-- Keep host safety, identity checks, recovery, and regression checks intact.
-- Update `status.md` after every hardware run with evidence, a brief progress table, and the blocking issue.
-- Use `gpt-5.6-luna` with medium reasoning for routine implementation, testing,
-  and reviews when available; the coordinator audits their work. Use Astra only
-  when the user explicitly requests it.
+- Goal: correct, usable macOS desktop Metal acceleration on the Raphael iGPU, with a watchable
+  display path and repeatable cleanup after guest crashes or QEMU closure.
+- Read [status.md](status.md) and verify live host/repository state before hardware work.
+- Read [docs/host-safety.md](docs/host-safety.md) before the first run. Those rules are not
+  optional: no vfio-pci → amdgpu cycling within a boot, `power/control=on` pinned, no sudo on the
+  normal path.
+- Run experiments with `tools/cycle.py` (see [docs/running-an-experiment.md](docs/running-an-experiment.md)).
+  Work in a candidate worktree under `~/macos-vm/run/worktrees/`, never in the `~/src` checkout.
+- Keep host safety, identity checks, recovery, and regression checks intact. The host suite
+  (`python3 -B -m unittest discover -s tests`) must stay green.
+- Update `status.md` after every hardware run with evidence and the blocking issue. Keep it to
+  live state; move superseded entries to `findings/research/status-archives/`.
+- Do not consume a GPU ledger entry when a launch fails before QEMU/VFIO opens; record launches
+  once exposure begins. Extending a boot's allowance needs an explicit note naming the boot id.
 - Do not merge or push to `main` until full desktop acceleration is demonstrated.
-- The normal test path must require no sudo: sleep inhibition runs externally as a user-level `systemd-inhibit --what=idle` process.
-- Do not consume a GPU ledger entry when a launch fails before QEMU/VFIO opens; record launches once exposure begins.
-- User preference for future authorized runs: allow up to 6000 seconds, with manual stop when appropriate; preserve host-fault, identity, capture-fatal, shutdown, and cleanup abort paths.
+- Allow up to 6000 seconds per authorized run, with manual stop when appropriate; preserve
+  host-fault, identity, capture-fatal, shutdown, and cleanup abort paths.
+- Some documents are load-bearing: `tools/experiment.py` and the qualification tools hash the
+  designs under `docs/superpowers/specs/` as `design_sha256` contracts. Do not delete or edit
+  them casually — the regression suite enforces their digests.
+
+## Milestone delivery
+
+- After each verified milestone, update `README.md`, `status.md`, `docs/ROADMAP.md`
+  and affected current-facing docs, integrate completed changes into `dev`, and
+  push `dev`. A candidate-branch push alone does not complete delivery.
+- Preserve unrelated `dev` changes, run appropriate checks and verify the remote
+  ref after a normal non-force push. Continue to respect the `main` restriction.
+- Give the user a 2–3-line brief for each experiment iteration, separating
+  functional output, capture quality and shutdown/recovery results.

@@ -45,7 +45,7 @@ class Candidate180MetadataTests(unittest.TestCase):
         latest = json.loads((ROOT / 'experiments/metal-021.json').read_text())
         self.assertEqual(latest['id'], 'metal-021')
         self.assertEqual(latest['candidate_version'], '1.0.188')
-        notes = (ROOT / 'docs/release-notes.md').read_text()
+        notes = (ROOT / 'findings/research/release-notes-1.0.181-183.md').read_text()
         self.assertTrue(notes.startswith('Experimental RaphaelGPU 1.0.183 '))
 
     def test_candidate182_card_keeps_conversion_and_adds_early_gate(self):

@@ -1,0 +1,142 @@
+{
+  "scope": "one real image and synthetic mutations, read-only, no OS update validation",
+  "checks": [
+    {
+      "name": "real-image",
+      "result": {
+        "instruction_offset": 1288161,
+        "byte_offset": 1288166,
+        "bit_in_byte": 3,
+        "bit": 27,
+        "old_immediate": "0x1ff700000",
+        "new_immediate": "0x1f7700000",
+        "already_clear": false,
+        "instruction": "48b8000070ff01000000"
+      },
+      "pass": true,
+      "synthetic": false
+    },
+    {
+      "name": "different-uuid",
+      "result": {
+        "instruction_offset": 1288161,
+        "byte_offset": 1288166,
+        "bit_in_byte": 3,
+        "bit": 27,
+        "old_immediate": "0x1ff700000",
+        "new_immediate": "0x1f7700000",
+        "already_clear": false,
+        "instruction": "48b8000070ff01000000"
+      },
+      "pass": true,
+      "synthetic": true
+    },
+    {
+      "name": "unrelated-default-bit-changed",
+      "result": {
+        "instruction_offset": 1288161,
+        "byte_offset": 1288166,
+        "bit_in_byte": 3,
+        "bit": 27,
+        "old_immediate": "0x1fb700000",
+        "new_immediate": "0x1f3700000",
+        "already_clear": false,
+        "instruction": "48b8000070fb01000000"
+      },
+      "pass": true,
+      "synthetic": true
+    },
+    {
+      "name": "already-disabled",
+      "result": {
+        "instruction_offset": 1288161,
+        "byte_offset": 1288166,
+        "bit_in_byte": 3,
+        "bit": 27,
+        "old_immediate": "0x1f7700000",
+        "new_immediate": "0x1f7700000",
+        "already_clear": true,
+        "instruction": "48b8000070f701000000"
+      },
+      "pass": true,
+      "synthetic": true
+    },
+    {
+      "name": "metadata-bit-layout-shift",
+      "result": {
+        "instruction_offset": 1288161,
+        "byte_offset": 1288166,
+        "bit_in_byte": 4,
+        "bit": 28,
+        "old_immediate": "0x1ff700000",
+        "new_immediate": "0x1ef700000",
+        "already_clear": false,
+        "instruction": "48b8000070ff01000000"
+      },
+      "pass": true,
+      "synthetic": true
+    },
+    {
+      "name": "moved-constructor-window",
+      "result": {
+        "instruction_offset": 1296353,
+        "byte_offset": 1296358,
+        "bit_in_byte": 3,
+        "bit": 27,
+        "old_immediate": "0x1ff700000",
+        "new_immediate": "0x1f7700000",
+        "already_clear": false,
+        "instruction": "48b8000070ff01000000"
+      },
+      "pass": true,
+      "synthetic": true
+    },
+    {
+      "name": "ambiguous-two-windows",
+      "result": {
+        "refused": "candidate count 2"
+      },
+      "pass": true,
+      "synthetic": true
+    },
+    {
+      "name": "missing-named-metadata",
+      "result": {
+        "refused": "missing/conflicting first-word field"
+      },
+      "pass": true,
+      "synthetic": true
+    },
+    {
+      "name": "changed-dataflow-xor-instead-of-or",
+      "result": {
+        "refused": "candidate count 0"
+      },
+      "pass": true,
+      "synthetic": true
+    },
+    {
+      "name": "lookalike-in-noncode-section",
+      "result": {
+        "instruction_offset": 1288161,
+        "byte_offset": 1288166,
+        "bit_in_byte": 3,
+        "bit": 27,
+        "old_immediate": "0x1ff700000",
+        "new_immediate": "0x1f7700000",
+        "already_clear": false,
+        "instruction": "48b8000070ff01000000"
+      },
+      "pass": true,
+      "synthetic": true
+    },
+    {
+      "name": "truncated-image",
+      "result": {
+        "refused": "section extent"
+      },
+      "pass": true,
+      "synthetic": true
+    }
+  ]
+}

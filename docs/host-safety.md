@@ -54,8 +54,10 @@ python3 -B tools/vm-supervision.py shutdown --state ~/macos-vm/run/supervision.j
 ```
 
 requests the ACPI powerdown, waits out its grace, and then force-stops — the outcome is normally
-`{"outcome": "forced"}`. APFS is journaled and replays, but this is not a clean shutdown. The only
-genuinely clean one is choosing Shut Down inside the guest.
+`{"outcome": "forced"}`. APFS is journaled and replays, but this is not a clean shutdown. A clean shutdown is requested inside the guest: either through the desktop or the
+identity-bound guest shutdown agent used by the experiment harness. Recent runs
+record `exited-after-guest-request`; the standalone ACPI fallback described above
+must not be reported as a clean shutdown.
 
 A standalone request rejects a stale `StartedAt`, so it cannot act on a restarted container.
 

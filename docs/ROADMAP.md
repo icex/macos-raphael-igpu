@@ -74,7 +74,7 @@ after four index bytes, and returns 0xb8 past the last key. Native AppleSMC call
 verified all six keys and both tested out-of-range indices. On the fresh smcpmio
 guest, PerfPowerServices was 0.0% CPU; after a service restart it was 0.1% CPU with
 0.54 s cumulative CPU time, later 0.0% with the same cumulative time. No Apple service is disabled and no guest binary or
-security setting was patched. Candidate279 and280 supply second through ninth measured guest boots (all0.0% CPU, latest0.69s cumulative).
+security setting was patched. Candidate279 and280 supply second through tenth measured guest boots (all0.0% CPU, latest0.73s cumulative).
 Longer observation and independent-host-boot durability remain open. The first emulator patch incorrectly waited for a length
 byte and failed native testing; it is superseded.
 [Root cause and native results](../findings/research/perfpower-smc-enumeration-20260916.md),

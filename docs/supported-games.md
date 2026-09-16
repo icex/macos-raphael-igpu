@@ -1,23 +1,17 @@
 # Game compatibility
 
-Updated 2026-09-09, hardware-tested driver 1.0.171, candidate 1.0.173, macOS Sequoia 15.7.9 (24G830), Raphael iGPU
-spoofed as Navi23 under QEMU/VFIO.
+Updated 2026-09-16; hardware baseline RaphaelGPU1.0.280, macOS Sequoia24G830,
+Raphael iGPU presented through the Navi23 driver under QEMU/VFIO.
 
-**Verified playable games: 0.** No individual game has a recorded compatibility test.
-No title is listed as supported, and untested titles are not being labeled failures.
-Metal 3 enumeration alone does not establish game compatibility.
+**Verified playable games: 0.** No named game has a recorded compatibility test.
+Untested games are neither supported nor known failures.
 
-| Workload | Result | Evidence |
-|---|---|---|
-| Native engine startup | Pass on candidate 171; hybrid engines and power-up succeed, KIQ stamps 1 through 6 complete | Candidate 171 serial evidence |
-| Native Metal compute probe | Not reached; candidate 171 timed out on the first SDMA0 paging submission | Candidate 171 serial evidence |
-| Native offscreen rendering probe | Not reached | Same experiment |
-| Individual games | Not tested | No game test records exist |
+Metal compute, offscreen rendering, texture/buffer copies, bounded depth/stencil
+and color-MSAA resolve, and sampled remote-desktop composition pass their scoped
+checks. These are prerequisites, not game compatibility evidence. The historical
+direct OpenGL probe hang remains unresolved; do not repeat without diagnosis.
 
-A supported entry will require a named game and version, graphics backend, guest/driver
-versions, resolution/settings, actual rendered gameplay, observed duration and linked
-logs/results. Record crashes, rendering defects and performance separately. Passing the
-small Metal probe is a prerequisite for game testing, not proof that games work.
-
-Game qualification is currently deferred. The active target is correct Metal compute,
-offscreen rendering, and accelerated desktop composition through the VM display.
+A supported entry needs the game/version, graphics backend, exact guest/driver
+build, resolution/settings, rendered gameplay, duration, frame times, defects and
+linked raw results. Correctness and cleanup must be recorded separately.
+[Current evidence and remaining gates](ROADMAP.md), [live state](../status.md).

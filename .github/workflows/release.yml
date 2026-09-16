@@ -25,7 +25,7 @@ jobs:
             CriticalTransportQualification.test_real_qemu_ignored_token_hits_boundary_and_cleans_up -v
       - name: Validate address arithmetic
         run: |
-          for source in tests/test_gart_addresses.cpp tests/test_kiq_addresses.cpp tests/test_kiq_queue_preparation.cpp tests/test_sdma_topology.cpp tests/test_sdma_addresses.cpp tests/test_gpu_vm_diagnostics.cpp tests/test_engine_lifecycle.cpp tests/test_recovery_reservation.cpp tests/test_submission_trace.cpp tests/test_gfx_hang_dump.cpp; do
+          for source in tests/test_gart_addresses.cpp tests/test_kiq_addresses.cpp tests/test_kiq_queue_preparation.cpp tests/test_sdma_topology.cpp tests/test_sdma_addresses.cpp tests/test_gpu_vm_diagnostics.cpp tests/test_engine_lifecycle.cpp tests/test_recovery_reservation.cpp tests/test_submission_trace.cpp tests/test_gfx_hang_dump.cpp tests/test_texture_setting_locator.cpp; do
             g++ -std=c++14 -Wall -Wextra -Werror -fsanitize=undefined "$source" -o /tmp/address-test
             /tmp/address-test
           done

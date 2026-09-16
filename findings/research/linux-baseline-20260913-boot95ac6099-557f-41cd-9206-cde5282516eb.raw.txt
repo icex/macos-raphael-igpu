@@ -1,0 +1,437 @@
+timestamp=2026-09-13T00:24:57+03:00
+=== PCI 7b:00.0 ===
+7b:00.0 VGA compatible controller [0300]: Advanced Micro Devices, Inc. [AMD/ATI] Granite Ridge [Radeon Graphics] [1002:13c0] (rev cb)
+	Subsystem: Micro-Star International Co., Ltd. [MSI] Device [1462:7e59]
+	Kernel driver in use: amdgpu
+	Kernel modules: amdgpu
+--- sysfs vendor
+0x1002
+--- sysfs device
+0x13c0
+--- sysfs class
+0x030000
+--- sysfs subsystem_vendor
+0x1462
+--- sysfs subsystem_device
+0x7e59
+--- sysfs resource
+0x000000fc20000000 0x000000fc2fffffff 0x000000000014220c
+0x0000000000000000 0x0000000000000000 0x0000000000000000
+0x00000000dd400000 0x00000000dd5fffff 0x000000000014220c
+0x0000000000000000 0x0000000000000000 0x0000000000000000
+0x000000000000d000 0x000000000000d0ff 0x0000000000040101
+0x00000000dd900000 0x00000000dd97ffff 0x0000000000040200
+0x0000000000000000 0x0000000000000000 0x0000000000000000
+0x0000000000000000 0x0000000000000000 0x0000000000000000
+0x0000000000000000 0x0000000000000000 0x0000000000000000
+0x0000000000000000 0x0000000000000000 0x0000000000000000
+0x0000000000000000 0x0000000000000000 0x0000000000000000
+0x0000000000000000 0x0000000000000000 0x0000000000000000
+0x0000000000000000 0x0000000000000000 0x0000000000000000
+=== DRM memory/uevent ===
+DRIVER=amdgpu
+PCI_CLASS=30000
+PCI_ID=1002:13C0
+PCI_SUBSYS_ID=1462:7E59
+PCI_SLOT_NAME=0000:7b:00.0
+MODALIAS=pci:v00001002d000013C0sv00001462sd00007E59bc03sc00i00
+mem_info_vram_total=536870912
+mem_info_vram_used=153915392
+mem_info_gtt_total=16225910784
+mem_info_gtt_used=49770496
+gpu_busy_percent=0
+=== connectors ===
+--- /sys/class/drm/card0-DP-3/enabled
+disabled
+--- /sys/class/drm/card0-DP-3/modes
+--- /sys/class/drm/card0-DP-3/status
+disconnected
+--- /sys/class/drm/card0-DP-4/enabled
+disabled
+--- /sys/class/drm/card0-DP-4/modes
+--- /sys/class/drm/card0-DP-4/status
+disconnected
+--- /sys/class/drm/card0-DP-5/enabled
+disabled
+--- /sys/class/drm/card0-DP-5/modes
+--- /sys/class/drm/card0-DP-5/status
+disconnected
+--- /sys/class/drm/card0-HDMI-A-3/enabled
+enabled
+--- /sys/class/drm/card0-HDMI-A-3/modes
+3840x2160
+3840x2160
+3840x2160
+3840x2160
+3840x2160
+2560x1440
+1920x1080
+1920x1080
+1920x1080
+1680x1050
+1600x900
+1280x1024
+1280x1024
+1440x900
+1280x800
+1152x864
+1280x720
+1280x720
+1280x720
+1024x768
+1024x768
+1024x768
+800x600
+800x600
+800x600
+720x480
+720x480
+640x480
+640x480
+640x480
+--- /sys/class/drm/card0-HDMI-A-3/status
+connected
+--- /sys/class/drm/card0-Writeback-2/enabled
+disabled
+--- /sys/class/drm/card0-Writeback-2/modes
+--- /sys/class/drm/card0-Writeback-2/status
+unknown
+=== kernel journal ===
+Sep 13 00:21:19 cachyos kernel: Command line: quiet splash rw rootflags=subvol=/@ root=UUID=82ca3bde-4005-4648-99cd-490460fbcef3 amdgpu.runpm=0 drm.edid_firmware=HDMI-A-1:edid/sunshine-virtual.bin video=HDMI-A-1:e nmi_watchdog=1 hardlockup_panic=1 efi_pstore.pstore_disable=0 panic=20
+Sep 13 00:21:19 cachyos kernel: Kernel command line: quiet splash rw rootflags=subvol=/@ root=UUID=82ca3bde-4005-4648-99cd-490460fbcef3 amdgpu.runpm=0 drm.edid_firmware=HDMI-A-1:edid/sunshine-virtual.bin video=HDMI-A-1:e nmi_watchdog=1 hardlockup_panic=1 efi_pstore.pstore_disable=0 panic=20
+Sep 13 00:21:19 cachyos kernel: pci 0000:7b:00.0: [1002:13c0] type 00 class 0x030000 PCIe Legacy Endpoint
+Sep 13 00:21:19 cachyos kernel: pci 0000:7b:00.0: BAR 0 [mem 0xfc20000000-0xfc2fffffff 64bit pref]
+Sep 13 00:21:19 cachyos kernel: pci 0000:7b:00.0: BAR 2 [mem 0xdd400000-0xdd5fffff 64bit pref]
+Sep 13 00:21:19 cachyos kernel: pci 0000:7b:00.0: BAR 4 [io  0xd000-0xd0ff]
+Sep 13 00:21:19 cachyos kernel: pci 0000:7b:00.0: BAR 5 [mem 0xdd900000-0xdd97ffff]
+Sep 13 00:21:19 cachyos kernel: pci 0000:7b:00.0: enabling Extended Tags
+Sep 13 00:21:19 cachyos kernel: pci 0000:7b:00.0: PME# supported from D1 D2 D3hot D3cold
+Sep 13 00:21:19 cachyos kernel: pci 0000:7b:00.0: vgaarb: bridge control possible
+Sep 13 00:21:19 cachyos kernel: pci 0000:7b:00.0: vgaarb: VGA device added: decodes=io+mem,owns=none,locks=none
+Sep 13 00:21:19 cachyos kernel: pci 0000:7b:00.1: D0 power state depends on 0000:7b:00.0
+Sep 13 00:21:19 cachyos kernel: pci 0000:7b:00.0: Adding to iommu group 31
+Sep 13 00:21:19 cachyos kernel: ACPI: bus type drm_connector registered
+Sep 13 00:21:19 cachyos kernel: simple-framebuffer simple-framebuffer.0: [drm] Registered 1 planes with drm panic
+Sep 13 00:21:19 cachyos kernel: [drm] Initialized simpledrm 1.0.0 for simple-framebuffer.0 on minor 0
+Sep 13 00:21:19 cachyos kernel: simple-framebuffer simple-framebuffer.0: [drm] fb0: simpledrmdrmfb frame buffer device
+Sep 13 00:21:21 cachyos kernel: amdgpu: vga_switcheroo: detected switching method \_SB_.PCI0.GP17.VGA_.ATPX handle
+Sep 13 00:21:21 cachyos kernel: amdgpu: ATPX version 1, functions 0x00000000
+Sep 13 00:21:21 cachyos kernel: amdgpu: Virtual CRAT table created for CPU
+Sep 13 00:21:21 cachyos kernel: amdgpu: Topology: Add CPU node
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: enabling device (0006 -> 0007)
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: initializing kernel modesetting (IP DISCOVERY 0x1002:0x7550 0x1DA2:0xE489 0xC0).
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: register mmio base: 0xDDA00000
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: register mmio size: 524288
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: detected ip block number 0 <common_v1_0_0> (soc24_common)
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: detected ip block number 1 <gmc_v12_0_0> (gmc_v12_0)
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: detected ip block number 2 <ih_v7_0_0> (ih_v7_0)
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: detected ip block number 3 <psp_v14_0_0> (psp)
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: detected ip block number 4 <smu_v14_0_0> (smu)
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: detected ip block number 5 <dce_v1_0_0> (dm)
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: detected ip block number 6 <gfx_v12_0_0> (gfx_v12_0)
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: detected ip block number 7 <sdma_v7_0_0> (sdma_v7_0)
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: detected ip block number 8 <vcn_v5_0_0> (vcn_v5_0_0)
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: detected ip block number 9 <jpeg_v5_0_0> (jpeg_v5_0_0)
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: detected ip block number 10 <mes_v12_0_0> (mes_v12_0)
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: Fetched VBIOS from VFCT
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: [drm] ATOM BIOS: 113-1E4893U-N8J, build: 00142583, ver: 023.008.000.068.000001, 2025/03/06
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: vgaarb: deactivate vga console
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: Trusted Memory Zone (TMZ) feature not supported
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: MEM ECC is not presented.
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: SRAM ECC is not presented.
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: vm size is 262144 GB, 4 levels, block size is 9-bit, fragment size is 9-bit
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: VRAM: 16304M 0x0000008000000000 - 0x00000083FAFFFFFF (16304M used)
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: GART: 512M 0x0000000000000000 - 0x000000001FFFFFFF
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: [drm] Detected VRAM RAM=16304M, BAR=16384M
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: [drm] RAM width 256bits GDDR6
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0:  16304M of VRAM memory ready
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0:  15474M of GTT memory ready.
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: [drm] GART: num cpu pages 131072, num gpu pages 131072
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: [drm] PCIE GART of 512M enabled (table at 0x00000083DAB00000).
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: [drm] Loading DMUB firmware via PSP: version=0x0A000C00
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: [VCN instance 0] Found VCN firmware Version ENC: 1.12 DEC: 9 VEP: 0 Revision: 26
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: MES: vmid_mask_mmhub 0x0000ff00, vmid_mask_gfxhub 0x0000ff00
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: MES: gfx_hqd_mask 0x000000fe, compute_hqd_mask 0x0000000c, sdma_hqd_mask 0x000000fc
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: RAP: optional rap ta ucode is not available
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: SECUREDISPLAY: optional securedisplay ta ucode is not available
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: smu driver if version = 0x0000002e, smu fw if version = 0x00000033, smu fw program = 0, smu fw version = 0x00684f00 (104.79.0)
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: SMU is initialized successfully!
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: [drm] Display Core v3.2.384 initialized on DCN 4.0.1
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: [drm] DP-HDMI FRL PCON supported
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: [drm] DMUB hardware initialized: version=0x0A000C00
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: [drm] DP-1: PSR support 0, DC PSR ver -1, sink PSR ver 0 DPCD caps 0x0 su_y_granularity 0
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: [drm] DP-2: PSR support 0, DC PSR ver -1, sink PSR ver 0 DPCD caps 0x0 su_y_granularity 0
+Sep 13 00:21:21 cachyos kernel: [drm] forcing HDMI-A-1 connector on
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: [drm] HDMI-A-2: PSR support 0, DC PSR ver -1, sink PSR ver 0 DPCD caps 0x0 su_y_granularity 0
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: program CP_MES_CNTL : 0x4000000
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: program CP_MES_CNTL : 0xc000000
+Sep 13 00:21:21 cachyos kernel: amdgpu: Virtual CRAT table created for GPU
+Sep 13 00:21:21 cachyos kernel: amdgpu: Topology: Add GPU node [0x1002:0x7550]
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: SE 4, SH per SE 2, CU per SH 8, active_cu_number 64
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: ring gfx_0.0.0 uses VM inv eng 0 on hub 0
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: ring comp_1.0.0 uses VM inv eng 1 on hub 0
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: ring comp_1.1.0 uses VM inv eng 4 on hub 0
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: ring comp_1.0.1 uses VM inv eng 7 on hub 0
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: ring comp_1.1.1 uses VM inv eng 8 on hub 0
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: ring sdma0 uses VM inv eng 9 on hub 0
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: ring sdma1 uses VM inv eng 10 on hub 0
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: ring vcn_unified_0 uses VM inv eng 0 on hub 8
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: ring jpeg_dec uses VM inv eng 1 on hub 8
+Sep 13 00:21:21 cachyos kernel: amdgpu: HMM registered 16304MB device memory
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: runtime pm is manually disabled
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: Runtime PM not available
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: [drm] Registered 4 planes with drm panic
+Sep 13 00:21:21 cachyos kernel: [drm] Initialized amdgpu 3.64.0 for 0000:03:00.0 on minor 1
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: [drm] Failed to setup vendor infoframe on connector HDMI-A-1: -22
+Sep 13 00:21:21 cachyos kernel: fbcon: amdgpudrmfb (fb0) is primary device
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:03:00.0: [drm] fb0: amdgpudrmfb frame buffer device
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:7b:00.0: enabling device (0006 -> 0007)
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:7b:00.0: initializing kernel modesetting (IP DISCOVERY 0x1002:0x13C0 0x1462:0x7E59 0xCB).
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:7b:00.0: register mmio base: 0xDD900000
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:7b:00.0: register mmio size: 524288
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:7b:00.0: detected ip block number 0 <common_v1_0_0> (nv_common)
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:7b:00.0: detected ip block number 1 <gmc_v10_0_0> (gmc_v10_0)
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:7b:00.0: detected ip block number 2 <ih_v5_0_0> (navi10_ih)
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:7b:00.0: detected ip block number 3 <psp_v13_0_0> (psp)
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:7b:00.0: detected ip block number 4 <smu_v13_0_0> (smu)
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:7b:00.0: detected ip block number 5 <dce_v1_0_0> (dm)
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:7b:00.0: detected ip block number 6 <gfx_v10_0_0> (gfx_v10_0)
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:7b:00.0: detected ip block number 7 <sdma_v5_2_0> (sdma_v5_2)
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:7b:00.0: detected ip block number 8 <vcn_v3_0_0> (vcn_v3_0)
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:7b:00.0: detected ip block number 9 <jpeg_v3_0_0> (jpeg_v3_0)
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:7b:00.0: Fetched VBIOS from VFCT
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:7b:00.0: [drm] ATOM BIOS: 102-RAPHAEL-008, build: 612127  , ver: 032.019.000.008.000000, 2022/09/26
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:7b:00.0: Trusted Memory Zone (TMZ) feature disabled as experimental (default)
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:7b:00.0: vm size is 262144 GB, 4 levels, block size is 9-bit, fragment size is 9-bit
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:7b:00.0: VRAM: 512M 0x000000F400000000 - 0x000000F41FFFFFFF (512M used)
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:7b:00.0: GART: 1024M 0x0000000000000000 - 0x000000003FFFFFFF
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:7b:00.0: [drm] Detected VRAM RAM=512M, BAR=512M
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:7b:00.0: [drm] RAM width 128bits DDR5
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:7b:00.0:  512M of VRAM memory ready
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:7b:00.0:  15474M of GTT memory ready.
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:7b:00.0: [drm] GART: num cpu pages 262144, num gpu pages 262144
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:7b:00.0: [drm] PCIE GART of 1024M enabled (table at 0x000000F41FC00000).
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:7b:00.0: [drm] Loading DMUB firmware via PSP: version=0x05003300
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:7b:00.0: [drm] use_doorbell being set to: [true]
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:7b:00.0: [VCN instance 0] Found VCN firmware Version ENC: 1.33 DEC: 4 VEP: 0 Revision: 15
+Sep 13 00:21:21 cachyos kernel: amdgpu 0000:7b:00.0: reserve 0xa00000 from 0xf41e000000 for PSP TMR
+Sep 13 00:21:22 cachyos kernel: amdgpu 0000:7b:00.0: RAS: optional ras ta ucode is not available
+Sep 13 00:21:22 cachyos kernel: amdgpu 0000:7b:00.0: RAP: optional rap ta ucode is not available
+Sep 13 00:21:22 cachyos kernel: amdgpu 0000:7b:00.0: SECUREDISPLAY: optional securedisplay ta ucode is not available
+Sep 13 00:21:22 cachyos kernel: amdgpu 0000:7b:00.0: SMU is initialized successfully!
+Sep 13 00:21:22 cachyos kernel: amdgpu 0000:7b:00.0: [drm] Display Core v3.2.384 initialized on DCN 3.1.5
+Sep 13 00:21:22 cachyos kernel: amdgpu 0000:7b:00.0: [drm] DP-HDMI FRL PCON supported
+Sep 13 00:21:22 cachyos kernel: amdgpu 0000:7b:00.0: [drm] DMUB hardware initialized: version=0x05003300
+Sep 13 00:21:22 cachyos kernel: amdgpu 0000:7b:00.0: [drm] HDMI-A-3: PSR support 0, DC PSR ver -1, sink PSR ver 0 DPCD caps 0x0 su_y_granularity 0
+Sep 13 00:21:22 cachyos kernel: amdgpu 0000:7b:00.0: [drm] DP-3: PSR support 0, DC PSR ver -1, sink PSR ver 0 DPCD caps 0x0 su_y_granularity 0
+Sep 13 00:21:22 cachyos kernel: amdgpu 0000:7b:00.0: [drm] DP-4: PSR support 0, DC PSR ver -1, sink PSR ver 0 DPCD caps 0x0 su_y_granularity 0
+Sep 13 00:21:22 cachyos kernel: amdgpu 0000:7b:00.0: [drm] DP-5: PSR support 0, DC PSR ver -1, sink PSR ver 0 DPCD caps 0x0 su_y_granularity 0
+Sep 13 00:21:22 cachyos kernel: amdgpu 0000:7b:00.0: kiq ring mec 2 pipe 1 q 0
+Sep 13 00:21:22 cachyos kernel: amdgpu: Virtual CRAT table created for GPU
+Sep 13 00:21:22 cachyos kernel: amdgpu: Topology: Add GPU node [0x1002:0x13c0]
+Sep 13 00:21:22 cachyos kernel: kfd kfd: added device 1002:13c0
+Sep 13 00:21:22 cachyos kernel: amdgpu 0000:7b:00.0: SE 1, SH per SE 1, CU per SH 2, active_cu_number 2
+Sep 13 00:21:22 cachyos kernel: amdgpu 0000:7b:00.0: ring gfx_0.0.0 uses VM inv eng 0 on hub 0
+Sep 13 00:21:22 cachyos kernel: amdgpu 0000:7b:00.0: ring gfx_0.1.0 uses VM inv eng 1 on hub 0
+Sep 13 00:21:22 cachyos kernel: amdgpu 0000:7b:00.0: ring comp_1.0.0 uses VM inv eng 4 on hub 0
+Sep 13 00:21:22 cachyos kernel: amdgpu 0000:7b:00.0: ring comp_1.1.0 uses VM inv eng 5 on hub 0
+Sep 13 00:21:22 cachyos kernel: amdgpu 0000:7b:00.0: ring comp_1.2.0 uses VM inv eng 6 on hub 0
+Sep 13 00:21:22 cachyos kernel: amdgpu 0000:7b:00.0: ring comp_1.3.0 uses VM inv eng 7 on hub 0
+Sep 13 00:21:22 cachyos kernel: amdgpu 0000:7b:00.0: ring comp_1.0.1 uses VM inv eng 8 on hub 0
+Sep 13 00:21:22 cachyos kernel: amdgpu 0000:7b:00.0: ring comp_1.1.1 uses VM inv eng 9 on hub 0
+Sep 13 00:21:22 cachyos kernel: amdgpu 0000:7b:00.0: ring comp_1.2.1 uses VM inv eng 10 on hub 0
+Sep 13 00:21:22 cachyos kernel: amdgpu 0000:7b:00.0: ring comp_1.3.1 uses VM inv eng 11 on hub 0
+Sep 13 00:21:22 cachyos kernel: amdgpu 0000:7b:00.0: ring kiq_0.2.1.0 uses VM inv eng 12 on hub 0
+Sep 13 00:21:22 cachyos kernel: amdgpu 0000:7b:00.0: ring sdma0 uses VM inv eng 13 on hub 0
+Sep 13 00:21:22 cachyos kernel: amdgpu 0000:7b:00.0: ring vcn_dec_0 uses VM inv eng 0 on hub 8
+Sep 13 00:21:22 cachyos kernel: amdgpu 0000:7b:00.0: ring vcn_enc_0.0 uses VM inv eng 1 on hub 8
+Sep 13 00:21:22 cachyos kernel: amdgpu 0000:7b:00.0: ring vcn_enc_0.1 uses VM inv eng 4 on hub 8
+Sep 13 00:21:22 cachyos kernel: amdgpu 0000:7b:00.0: ring jpeg_dec uses VM inv eng 5 on hub 8
+Sep 13 00:21:22 cachyos kernel: amdgpu 0000:7b:00.0: runtime pm is manually disabled
+Sep 13 00:21:22 cachyos kernel: amdgpu 0000:7b:00.0: Runtime PM not available
+Sep 13 00:21:22 cachyos kernel: amdgpu 0000:7b:00.0: [drm] Registered 4 planes with drm panic
+Sep 13 00:21:22 cachyos kernel: [drm] Initialized amdgpu 3.64.0 for 0000:7b:00.0 on minor 0
+Sep 13 00:21:22 cachyos kernel: amdgpu 0000:7b:00.0: [drm] fb1: amdgpudrmfb frame buffer device
+Sep 13 00:21:23 cachyos-x8664 systemd[1]: Load Kernel Module drm skipped, unmet condition check ConditionKernelModuleLoaded=!drm
+Sep 13 00:21:23 cachyos-x8664 systemd[1]: Clear Stale Hibernate Storage Info skipped, unmet condition check ConditionPathExists=/sys/firmware/efi/efivars/HibernateLocation-8cf2644b-4b0b-428f-9387-6d876050dc67
+Sep 13 00:21:23 cachyos-x8664 kernel: [drm] pre_validate_dsc:1746 MST_DSC dsc precompute is not needed
+Sep 13 00:21:23 cachyos-x8664 kernel: snd_hda_intel 0000:03:00.1: bound 0000:03:00.0 (ops amdgpu_dm_audio_component_bind_ops [amdgpu])
+Sep 13 00:21:23 cachyos-x8664 kernel: snd_hda_intel 0000:7b:00.1: bound 0000:7b:00.0 (ops amdgpu_dm_audio_component_bind_ops [amdgpu])
+Sep 13 00:21:24 cachyos-x8664 kernel: amdgpu 0000:7b:00.0: [drm] REG_WAIT timeout 1us * 100000 tries - optc31_disable_crtc line:146
+=== IP DISCOVERY SYSFS ===
+0x00000014
+0x00000014
+0x00000014
+0x00000014
+0x000000C0
+0x000000C0
+0x00000260
+0x00000260
+0x00000280
+0x00000280
+0x00000D20
+0x00000D20
+0x00000D20
+0x00000D20
+0x000034C0
+0x000034C0
+0x00007E00
+0x00007E00
+0x00009000
+0x00009000
+0x0000A000
+0x0000A000
+0x0000A000
+0x0000A000
+0x00010400
+0x00010400
+0x00010400
+0x00010400
+0x00013300
+0x00013300
+0x00016A00
+0x00016A00
+0x0001A000
+0x0001A000
+0x0001CC00
+0x0001CC00
+0x00440000
+0x00440000
+0x00B40000
+0x00B40000
+0x00C00000
+0x00C00000
+0x00DC0000
+0x00DC0000
+0x00DC0000
+0x00DC0000
+0x00DC0000
+0x00DC0000
+0x00E00000
+0x00E00000
+0x00E00000
+0x00E00000
+0x00E00000
+0x00E00000
+0x00E40000
+0x00E40000
+0x00E40000
+0x00E40000
+0x00E40000
+0x00E40000
+0x02400C00 instances=0
+0x02400C00 instances=0
+0x02401000
+0x02401000
+0x02401400 instances=0
+0x02401400 instances=0
+0x02401800 instances=0
+0x02401800 instances=0
+0x02402C00 instances=0
+0x02402C00 instances=0
+0x02402C00 instances=0
+0x02402C00 instances=0
+0x02403000 instances=0
+0x02403000 instances=0
+0x02403800 instances=0
+0x02403800 instances=0
+0x02403C00 instances=0
+0x02403C00 instances=0
+0x02406000
+0x02406000
+0x02408800 instances=0
+0x02408800 instances=0
+0x02408C00 instances=0
+0x02408C00 instances=0
+0x0240A000 instances=0
+0x0240A000 instances=0
+0x0240A400 instances=0
+0x0240A400 instances=0
+0x0240B400
+0x0240B400
+0x0240B800
+0x0240B800
+0x0240C000
+0x0240C000
+0x02413C00
+0x02413C00
+0x02416000 instances=0
+0x02416000 instances=0
+0x0241B000
+0x0241B000
+0x0241B000
+0x0241B000
+0x02425800 instances=0
+0x02425800 instances=0
+0x0242D400 instances=0
+0x0242D400 instances=0
+0x0243FC00 instances=0
+0x0243FC00 instances=0
+0x0243FC00 instances=0
+0x0243FC00 instances=0
+0x0243FC00 instances=0
+0x0243FC00 instances=0
+0x04040000 instances=0
+0x04040000 instances=0
+0x04040000 instances=0
+0x04040000 instances=0
+0x04EC0000 instances=0
+0x04EC0000 instances=0
+0x07C00000
+0x07C00000
+0x11000000 instances=0
+0x11000000 instances=0
+0x12400000 instances=0
+0x12400000 instances=0
+1 13.0.5 hw_id=1 base=0x00016000
+108 7.3.0 hw_id=108 base=0x00000000
+11 10.3.6 hw_id=11 base=0x00001260
+12 3.1.2 hw_id=12 base=0x00007800
+14 6.0.0 hw_id=14 base=0x00480000
+150 9.5.0 hw_id=150 base=0x00014000
+2 13.0.5 hw_id=2 base=0x00016000
+24 7.0.1 hw_id=24 base=0x00010000
+255 13.0.5 hw_id=255 base=0x00016000
+271 3.1.5 hw_id=271 base=0x00000012
+3 13.0.4 hw_id=3 base=0x00016600
+34 2.4.1 hw_id=34 base=0x00013200
+35 2.4.1 hw_id=35 base=0x00000C00
+4 13.0.10 hw_id=4 base=0x00016800
+40 5.2.1 hw_id=40 base=0x000010A0
+41 5.2.0 hw_id=41 base=0x00000F20
+42 5.2.6 hw_id=42 base=0x00001260
+45 2.0.1 hw_id=45 base=0x000001E0
+46 4.0.1 hw_id=46 base=0x00007000
+48 7.1.0 hw_id=48 base=0x000002C0
+5 13.0.4 hw_id=5 base=0x00017400
+6 13.0.4 hw_id=6 base=0x00016C00
+70 6.0.0 hw_id=70 base=0x00000000
+ACP 6.0.0 hw_id=14 base=0x00480000
+ATHUB 2.4.1 hw_id=35 base=0x00000C00
+CLKA 13.0.4 hw_id=6 base=0x00016C00
+DBGU_IO 2.0.1 hw_id=45 base=0x000001E0
+DF 4.0.1 hw_id=46 base=0x00007000
+DMU 3.1.5 hw_id=271 base=0x00000012
+FCH 7.1.0 hw_id=48 base=0x000002C0
+FUSE 13.0.4 hw_id=5 base=0x00017400
+GC 10.3.6 hw_id=11 base=0x00001260
+HDP 5.2.0 hw_id=41 base=0x00000F20
+IOHC 7.0.1 hw_id=24 base=0x00010000
+MMHUB 2.4.1 hw_id=34 base=0x00013200
+MP0 13.0.5 hw_id=255 base=0x00016000
+MP1 13.0.5 hw_id=1 base=0x00016000
+MP2 13.0.5 hw_id=2 base=0x00016000
+NBIF 7.3.0 hw_id=108 base=0x00000000
+OSSSYS 5.2.1 hw_id=40 base=0x000010A0
+PCIE 6.0.0 hw_id=70 base=0x00000000
+SDMA0 5.2.6 hw_id=42 base=0x00001260
+SMUIO 13.0.10 hw_id=4 base=0x00016800
+THM 13.0.4 hw_id=3 base=0x00016600
+UMC 9.5.0 hw_id=150 base=0x00014000
+UVD 3.1.2 hw_id=12 base=0x00007800
+=== EDID HASHES ===
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  /sys/class/drm/card0-DP-3/edid
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  /sys/class/drm/card0-DP-4/edid
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  /sys/class/drm/card0-DP-5/edid
+b7b277f882e5fa7df2ca542dee25d7684456a93e0bbd6a7ae3cf31e71da82bc5  /sys/class/drm/card0-HDMI-A-3/edid
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  /sys/class/drm/card0-Writeback-2/edid

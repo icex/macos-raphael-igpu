@@ -5,9 +5,19 @@ Target: AMD Granite Ridge / Raphael integrated GPU, PCI `1002:13c0` rev `0xcb`
 128-bit DDR5). Host CachyOS; guest macOS Sequoia 15.7.9 build 24G830 under QEMU/KVM,
 device handed over with `vfio-pci` and spoofed as `1002:73ff` (Radeon RX 6600, Navi 23).
 
-## Status
+## Current status — 2026-09-16
 
-As of 2026-09-09, candidate 1.0.178-B is the latest controlled hardware result. Candidates
+Candidate280 now passes scoped Metal compute/render, memory, texture, depth/stencil,
+codec and remote-desktop checks. The reproduced transparency corruption is fixed;
+physical output and full desktop qualification remain open. The older no-completed-
+command diagnosis below is historical, not the current blocker.
+[Live state](../status.md), [roadmap](../docs/ROADMAP.md),
+[visual fix](research/feedback-decompression-20260916.md),
+[latest IOSurface result](research/iosurface-process-20260916.md).
+
+## Historical status — 2026-09-09
+
+As of 2026-09-09, candidate 1.0.178-B was the latest controlled hardware result. Candidates
 178-A and 178-B used the same prebound build, configuration and probe with separate reviewed
 activations. Both initialized successfully, completed native KIQ, SDMA, engine and accelerator
 startup, and ran the probe. Both first compute commands failed with status 5 and underlying

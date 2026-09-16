@@ -30,7 +30,13 @@ required during compilation.
 
 ## Validation and installation limits
 
-The release is a research snapshot: Metal execution fails and no games are verified.
+The release is a research snapshot. Candidate280 has passing Metal compute/render,
+texture, memory, depth/stencil, codec and sampled remote-desktop checks, with the
+reproduced transparency corruption fixed. Full desktop acceptance, physical output,
+independent-host-boot durability, performance and games remain unqualified.
+See [live status](../status.md) for the hardware-tested executable identity and
+[roadmap](ROADMAP.md) for exact coverage; a newly built artifact is not automatically
+hardware-qualified.
 Use the matching 24G830 KDK and VM harness preflight before any experimental deployment.
 OpenCore must inject both Lilu and RaphaelGPU into the boot kernel collection;
 `-lilubetaall` is required for the tested Sequoia setup. The kext alone does not
