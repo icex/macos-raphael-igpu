@@ -101,7 +101,12 @@ now lives in OpenCore/VirtualSMC, with no new RaphaelGPU driver patch. README, r
 and the general QEMU guide describe the stock setup and scoped native results.
 The remote4k and retinarestore exposure allowances are consumed. No additional
 GPU exposure allowance is active. The current restore run remains supervised;
-no further mode/virtual-display mutations are planned in this session.
+The user explicitly requested restoring the earlier working4K Retina at60Hz
+on this fresh guest, excluding90/120Hz. This authorizes one bounded60Hz-only
+configuration sequence on current boot `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`
+and existing exposure30, then read-only/functional checks. Avoid redundant public
+mode switches; keep identity, capture, supervision and cleanup gates unchanged.
+The previous mixed sequence did not isolate Retina itself as the cause.
 
 Next: isolate4K backing-allocation/render failures from display reconfiguration
 using the supplied native sources; retain normal remote desktop meanwhile.
