@@ -3,7 +3,7 @@
 #import <Metal/Metal.h>
 #include <signal.h>
 #include <unistd.h>
-static void expired(int s){(void)s;_exit(124);}
+static void expired(int s){(void)s;const char msg[]="{\"phase\":\"error\",\"error\":\"process watchdog\"}\n";write(STDERR_FILENO,msg,sizeof(msg)-1);_exit(124);}
 static void emit(NSDictionary *d){NSData *j=[NSJSONSerialization dataWithJSONObject:d options:0 error:nil];fwrite(j.bytes,1,j.length,stdout);putchar('\n');fflush(stdout);}
 static uint32_t value(uint32_t i,uint32_t seed){uint32_t x=i^(seed*0x9e3779b9U);x^=x>>16;x*=0x7feb352dU;x^=x>>15;x*=0x846ca68bU;return x^(x>>16);}
 int main(int argc,const char **argv){@autoreleasepool{
