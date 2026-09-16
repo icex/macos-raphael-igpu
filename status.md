@@ -57,3 +57,22 @@ QEMU image `sha256:51cbd7dcdbad2d6492ce83a263e9854c28620d67a1ea12ebc0562c6fab260
 No main merge/push before full desktop proof. Another exposure needs a named-boot
 allowance and fresh MODE2 through tools/cycle.py. No vfio→amdgpu cycling.
 [Roadmap](docs/ROADMAP.md).
+
+## Next exposure allowance — supervised QEMU closure
+
+One additional exposure (twentieth) on boot
+`2508eb6d-ddf3-497d-9774-00a7ecebe3ed` is authorized for candidate 280 /
+metal-128 / attempt closure, unchanged driver/QEMU. Fresh MODE2 must show
+CP_STAT=0 and RLC_CNTL=0; all existing admission, capture, host-fault, deadline
+and cleanup gates remain active, up to 6000 seconds.
+
+After the native core probe passes and interactive-ready is recorded, use the
+supervisor's predeclared `intentional-close` action. It validates exact CID and
+StartedAt plus same-results manifest/probe/readiness identity, writes a single-use
+request, authenticates the QEMU monitor peer, sends HMP quit and records stop proof.
+No Docker kill/stop fallback belongs to this action. The coordinator retains its
+existing INVALID-on-closure classification and attempts strict recovery normally.
+This is an abnormal QEMU-closure experiment, never a clean guest shutdown.
+Hypothesis: authenticated retained leases permit queue/firmware cleanup after
+QEMU exits; falsified by missing/invalid capture, incomplete cleanup, forced HQD
+clears, nonzero CP status or a non-authorizing recovery receipt.

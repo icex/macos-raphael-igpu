@@ -20,6 +20,7 @@ import subprocess
 import sys
 import time
 import fcntl
+import hashlib
 
 CID_PATTERN = re.compile(r"[0-9a-f]{64}")
 DOCKER_ENV = ("DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_CONFIG", "DOCKER_TLS_VERIFY",
@@ -261,6 +262,11 @@ with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
     sock.sendall(b'system_powerdown\n')
 """
 
+# This is deliberately HMP ``quit``, rather than Docker stop/kill or ACPI
+# powerdown.  The caller records authorization before docker exec, while this
+# script authenticates the monitor peer inside the container's PID namespace.
+QUIT = POWERDOWN.replace("system_powerdown", "quit")
+
 
 def same_start_running(state):
     cid = full_cid(state["cid"])
@@ -317,6 +323,129 @@ def shutdown(state, grace=20):
         stop_exact(cid)
         return {"cid": cid, "outcome": "forced", "request_sent": requested, "request_error": error}
     return {"cid": cid, "outcome": "exited-after-request" if requested else "already-stopped"}
+
+
+def _durable_json(path, value, exclusive=False):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    flags = os.O_WRONLY | os.O_CREAT | (os.O_EXCL if exclusive else os.O_TRUNC)
+    fd = os.open(path, flags, 0o600)
+    try:
+        with os.fdopen(fd, "w") as stream:
+            fd = None
+            stream.write(json.dumps(value, sort_keys=True) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+    finally:
+        if fd is not None:
+            os.close(fd)
+    directory = os.open(path.parent, os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0))
+    try:
+        os.fsync(directory)
+    finally:
+        os.close(directory)
+
+
+def _validate_close_artifacts(results, run_id, manifest_sha256):
+    results = Path(results)
+    paths = {name: results / name for name in
+             ("manifest.json", "interactive-ready.json", "probe.json")}
+    if not all(path.is_file() for path in paths.values()):
+        raise RuntimeError("closure requires manifest, interactive-ready, and probe artifacts")
+    manifest_raw = paths["manifest.json"].read_bytes()
+    if hashlib.sha256(manifest_raw).hexdigest() != manifest_sha256:
+        raise RuntimeError("closure manifest hash does not match the expected card hash")
+    try:
+        manifest = json.loads(manifest_raw)
+        ready = json.loads(paths["interactive-ready.json"].read_text())
+        probe = json.loads(paths["probe.json"].read_text())
+    except (OSError, ValueError, TypeError) as error:
+        raise RuntimeError("closure artifacts are not valid JSON") from error
+    if (manifest.get("run_id") != run_id or ready.get("run_id") != run_id or
+            probe.get("run_id") != run_id or probe.get("passed") is not True):
+        raise RuntimeError("closure artifacts have mismatched run identity or probe did not pass")
+    if manifest.get("spec", {}).get("lifecycle_test") != "supervised-qemu-quit":
+        raise RuntimeError("closure requires the predeclared supervised-qemu-quit lifecycle test")
+
+
+def intentional_close(state, run_id, manifest_sha256, results, action_seconds=10):
+    """Ask the exact supervised QEMU to exit through its authenticated HMP socket.
+
+    The request is write-ahead and single-use.  This operation never falls back
+    to Docker stop/kill and makes no claim about guest shutdown or recovery.
+    """
+    cid = full_cid(state["cid"])
+    if not isinstance(run_id, str) or not run_id or len(run_id) > 256:
+        raise ValueError("closure run_id is invalid")
+    if not re.fullmatch(r"[0-9a-f]{64}", str(manifest_sha256)):
+        raise ValueError("closure manifest hash must be a SHA-256 hex digest")
+    action_seconds = seconds(action_seconds)
+    if action_seconds < 1 or action_seconds > 30:
+        raise ValueError("closure action seconds must be 1..30")
+    results = Path(results).resolve()
+    request_path = results / "intentional-closure-request.json"
+    receipt_path = results / "intentional-closure-receipt.json"
+    if request_path.exists() or receipt_path.exists():
+        raise RuntimeError("closure request or receipt already exists; refusing replay")
+    state_path = results / "supervision.json"
+    if not state_path.is_file() or json.loads(state_path.read_text()) != state:
+        raise RuntimeError("supplied supervision state is not the canonical results state")
+    if (type(state.get("max_seconds")) is not int or state["max_seconds"] <= 0 or
+            type(state.get("deadline_epoch")) not in (int, float) or
+            not math.isfinite(state["deadline_epoch"]) or state["deadline_epoch"] <= 0):
+        raise RuntimeError("closure requires a finite positive supervision deadline")
+    _validate_close_artifacts(results, run_id, manifest_sha256)
+    verify(state)
+    if not same_start_running(state):
+        raise RuntimeError("closure target is stopped or its identity/start changed")
+    remaining = state["deadline_epoch"] - time.time() - 2
+    if remaining < 1:
+        raise RuntimeError("supervision deadline leaves no time for intentional closure")
+    action_until = time.monotonic() + min(action_seconds, remaining)
+    request = {"schema": 1, "kind": "intentional-qemu-closure-request",
+               "nonce": uuid.uuid4().hex, "cid": cid,
+               "started_at": state["started_at"], "run_id": run_id,
+               "manifest_sha256": manifest_sha256, "requested_at": time.time(),
+               "action_deadline": time.time() + max(0, action_until - time.monotonic())}
+    try:
+        _durable_json(request_path, request, exclusive=True)
+    except FileExistsError:
+        raise RuntimeError("closure request already exists; refusing replay") from None
+    receipt = dict(request, kind="intentional-qemu-closure-receipt")
+    try:
+        # Re-run every supervision gate after the write-ahead record and bind
+        # the action to the same live CID/start immediately before docker exec.
+        verify(state)
+        if not same_start_running(state):
+            raise RuntimeError("closure target changed before HMP action")
+        remaining = min(action_until - time.monotonic(), state["deadline_epoch"] - time.time() - 2)
+        if remaining < 1:
+            raise RuntimeError("closure action deadline elapsed before HMP action")
+        run([binary("docker"), "exec", cid, "python3", "-c", QUIT],
+            timeout=min(4, remaining))
+        receipt["action"] = "hmp-quit"
+        stopped = False
+        while time.monotonic() < action_until:
+            if not same_start_running(state):
+                stopped = True
+                break
+            time.sleep(min(0.2, max(0, action_until - time.monotonic())))
+        receipt["outcome"] = "stopped" if stopped else "deadline-expired"
+        receipt["stopped_confirmed"] = stopped
+    except Exception as error:
+        receipt["outcome"] = "action-failed"
+        receipt["stopped_confirmed"] = False
+        try:
+            receipt["stopped_after_action"] = not same_start_running(state)
+        except Exception:
+            receipt["stopped_after_action"] = False
+        receipt["error_type"] = type(error).__name__
+        receipt["error"] = str(error)[:512]
+    try:
+        _durable_json(receipt_path, receipt, exclusive=True)
+    except FileExistsError:
+        raise RuntimeError("closure receipt appeared during action; refusing overwrite") from None
+    return receipt
 
 
 def arm(vm, cid, maximum, critical_enabled=False):
@@ -684,6 +813,12 @@ def main():
     halt = commands.add_parser("shutdown")
     halt.add_argument("--state", type=Path, required=True)
     halt.add_argument("--grace-seconds", default="20")
+    close = commands.add_parser("intentional-close")
+    close.add_argument("--state", type=Path, required=True)
+    close.add_argument("--run-id", required=True)
+    close.add_argument("--manifest-sha256", required=True)
+    close.add_argument("--results-dir", type=Path, required=True)
+    close.add_argument("--action-seconds", default="10")
     check = commands.add_parser("verify")
     check.add_argument("--state", type=Path, required=True)
     for verb in ("start", "launch", "cleanup"):
@@ -704,6 +839,15 @@ def main():
             result = shutdown(json.loads(args.state.read_text()), args.grace_seconds)
             print(json.dumps(result))
             return 0
+        if args.command == "intentional-close":
+            state_path = args.state.resolve()
+            results = args.results_dir.resolve()
+            if state_path != results / "supervision.json":
+                raise ValueError("--state must be results-dir/supervision.json")
+            result = intentional_close(json.loads(state_path.read_text()), args.run_id,
+                                       args.manifest_sha256, results, args.action_seconds)
+            print(json.dumps(result))
+            return 0 if result.get("stopped_confirmed") is True else 1
         if args.command in ("start", "launch", "cleanup"):
             if args.command == "cleanup":
                 cleanup(args.vm_dir, args.name)

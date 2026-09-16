@@ -1,6 +1,7 @@
 """Exercise supervision commands in subprocesses without Docker or systemd access."""
 from datetime import datetime, timedelta, timezone
 import json
+import hashlib
 import importlib.util
 import os
 from pathlib import Path
@@ -27,6 +28,8 @@ with (root / "calls.jsonl").open("a") as output:
 state = json.loads((root / "fixture.json").read_text())
 failure = state.get("failure", "")
 if command == "docker":
+    if args[0] == "inspect" and state.get("reverify_delay") and (root / "results/intentional-closure-request.json").exists():
+        import time; time.sleep(state["reverify_delay"])
     if args[0] == "ps":
         if '{{.Names}}' in args:
             print(state.get('active_name', ''))
@@ -49,7 +52,11 @@ if command == "docker":
     elif args[0] == "exec":
         if state.get("shutdown_error"):
             sys.exit(1)
-        if state.get("shutdown_stops"):
+        script = args[-1] if args else ""
+        if state.get("closure_peer_error") and "qemu-system-" not in script:
+            sys.exit(1)
+        if ((state.get("closure_stops") and "quit" in script) or
+                (state.get("shutdown_stops") and "system_powerdown" in script)):
             state["running"] = False
             (root / "fixture.json").write_text(json.dumps(state))
     elif args[0] in ("rename", "cp"):
@@ -403,6 +410,107 @@ class SupervisionTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(self.stopped())
         self.assertFalse(any(cmd == "docker" and args[0] == "exec" for cmd, args in self.calls()))
+
+    def intentional_close(self, manifest_sha256=None, action_seconds="3", state_update=None):
+        armed = self.arm()
+        self.assertEqual(armed.returncode, 0, armed.stderr)
+        state_file = self.vm / "run/supervision.json"
+        state_file.write_text(armed.stdout)
+        results = self.vm / "results"; results.mkdir(exist_ok=True)
+        state_file = results / "supervision.json"
+        state_file.write_text(armed.stdout)
+        manifest = {"run_id": "run-1", "spec": {"lifecycle_test": "supervised-qemu-quit"}}
+        manifest_raw = json.dumps(manifest, sort_keys=True).encode() + b"\n"
+        (results / "manifest.json").write_bytes(manifest_raw)
+        (results / "interactive-ready.json").write_text(json.dumps({"run_id": "run-1"}))
+        (results / "probe.json").write_text(json.dumps({"run_id": "run-1", "passed": True}))
+        if state_update:
+            state = json.loads(state_file.read_text()); state.update(state_update)
+            state_file.write_text(json.dumps(state))
+        manifest_sha256 = manifest_sha256 or hashlib.sha256(manifest_raw).hexdigest()
+        args = ["intentional-close", "--state", str(state_file), "--run-id", "run-1",
+                "--manifest-sha256", manifest_sha256, "--results-dir", str(results),
+                "--action-seconds", str(action_seconds)]
+        return self.run_tool(*args)
+
+    def test_intentional_close_writes_wal_and_exact_stopped_receipt(self):
+        self.fixture["closure_stops"] = True; self.fixture["closure_peer_error"] = True
+        self.save()
+        result = self.intentional_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        request = json.loads((self.vm / "results" / "intentional-closure-request.json").read_text())
+        receipt = json.loads((self.vm / "results" / "intentional-closure-receipt.json").read_text())
+        self.assertEqual(request["kind"], "intentional-qemu-closure-request")
+        self.assertEqual(receipt["outcome"], "stopped")
+        self.assertTrue(receipt["stopped_confirmed"])
+        self.assertEqual(receipt["action"], "hmp-quit")
+        calls = self.calls()
+        exec_args = next(args for cmd, args in calls if cmd == "docker" and args[0] == "exec")
+        self.assertIn("qemu-system-", exec_args[-1])
+        self.assertIn("quit", exec_args[-1])
+
+    def test_intentional_close_refuses_restarted_cid_before_wal(self):
+        armed = self.arm(); self.assertEqual(armed.returncode, 0, armed.stderr)
+        self.fixture["closure_stops"] = True; self.save()
+        self.intentional_close(action_seconds="3")
+        results = self.vm / "results"; state_file = results / "supervision.json"
+        request = results / "intentional-closure-request.json"; receipt = results / "intentional-closure-receipt.json"
+        request.unlink(); receipt.unlink()
+        (self.vm / "calls.jsonl").write_text("")
+        self.fixture["started"] = (self.started + timedelta(seconds=1)).isoformat(); self.save()
+        result = self.run_tool("intentional-close", "--state", str(state_file), "--run-id", "run-1",
+                               "--manifest-sha256", hashlib.sha256((results / "manifest.json").read_bytes()).hexdigest(),
+                               "--results-dir", str(results))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((results / "intentional-closure-request.json").exists())
+        self.assertFalse(any(cmd == "docker" and args[0] == "exec" for cmd, args in self.calls()))
+
+    def test_intentional_close_rejects_state_from_other_results_directory(self):
+        armed = self.arm(); self.assertEqual(armed.returncode, 0, armed.stderr)
+        self.intentional_close()
+        result = self.run_tool("intentional-close", "--state", str(self.vm / "run" / "supervision.json"),
+                               "--run-id", "run-1", "--manifest-sha256", "0" * 64,
+                               "--results-dir", str(self.vm / "results"))
+        self.assertNotEqual(result.returncode, 0)
+
+    def test_intentional_close_rejects_missing_or_nonpositive_deadline(self):
+        result = self.intentional_close(state_update={"deadline_epoch": None})
+        self.assertNotEqual(result.returncode, 0)
+        receipt = self.vm / "results" / "intentional-closure-receipt.json"
+        self.assertFalse(receipt.exists())
+
+    def test_intentional_close_reverify_expiry_does_not_exec(self):
+        self.fixture["reverify_delay"] = 1.2; self.save()
+        result = self.intentional_close(action_seconds="1")
+        self.assertNotEqual(result.returncode, 0)
+        receipt = json.loads((self.vm / "results/intentional-closure-receipt.json").read_text())
+        self.assertEqual(receipt["outcome"], "action-failed")
+        self.assertIn("action deadline elapsed before HMP action", receipt["error"])
+        self.assertFalse(any(cmd == "docker" and args[0] == "exec" for cmd, args in self.calls()))
+
+    def test_intentional_close_rejects_operator_supplied_alternate_paths(self):
+        self.intentional_close()
+        result = self.run_tool("intentional-close", "--state", str(self.vm / "results" / "supervision.json"),
+                               "--run-id", "run-1", "--manifest-sha256", "0" * 64,
+                               "--results-dir", str(self.vm / "results"), "--request", "/tmp/other")
+        self.assertNotEqual(result.returncode, 0)
+
+    def test_intentional_close_refuses_manifest_mismatch_and_replay(self):
+        self.assertNotEqual(self.intentional_close(manifest_sha256="c" * 64).returncode, 0)
+        self.fixture["closure_stops"] = True; self.save()
+        first = self.intentional_close(); self.assertEqual(first.returncode, 0, first.stderr)
+        self.fixture["running"] = True; self.save()
+        second = self.intentional_close()
+        self.assertNotEqual(second.returncode, 0)
+
+    def test_intentional_close_records_deadline_without_fallback_stop(self):
+        self.fixture["closure_stops"] = False; self.save()
+        result = self.intentional_close()
+        self.assertNotEqual(result.returncode, 0)
+        receipt = json.loads((self.vm / "results" / "intentional-closure-receipt.json").read_text())
+        self.assertEqual(receipt["outcome"], "deadline-expired")
+        self.assertFalse(receipt["stopped_confirmed"])
+        self.assertFalse(self.stopped())
 
     def test_elapsed_cap_stops_without_starting_a_fresh_timer(self):
         self.fixture["started"] = (self.started - timedelta(seconds=300)).isoformat()
