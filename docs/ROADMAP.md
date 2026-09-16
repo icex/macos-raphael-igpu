@@ -309,3 +309,12 @@ Reims' virtual GOP, Vulkan/Metal translation and custom QEMU device do not estab
 Raphael DCN output, VCN support, VFIO recovery or VirtualBox passthrough. Its pinned
 AppleSMC still lacks key-index enumeration. Keep those roadmap gates open. Root and
 Cargo license metadata differ; resolve applicable terms before considering source reuse.
+
+## Licensing and distribution follow-up
+
+- Implement the [audited vendor-only firmware sourcing plan](../findings/research/licensing-audit-20260916.md)
+  after authorization; preserve exact bytes and all existing match checks.
+- Resolve SDK per-file/OS restrictions and executable source-notice obligations;
+  review other native patterns/excerpts and historical release assets.
+- BSD-3-Clause and verified third-party licence documents are now included.
+  Documentation work does not establish complete legal or hardware qualification.
