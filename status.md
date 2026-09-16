@@ -62,3 +62,14 @@ QEMU image `sha256:51cbd7dcdbad2d6492ce83a263e9854c28620d67a1ea12ebc0562c6fab260
 No main merge/push before full desktop proof. Additional exposure requires a
 named-boot allowance and fresh successful MODE2 through tools/cycle.py.
 No vfio→amdgpu cycling. [Roadmap](docs/ROADMAP.md).
+
+## Next bounded run allowance
+
+The user requests the next roadmap items. Authorize the eighteenth exposure on
+host boot2508eb6d-ddf3-497d-9774-00a7ecebe3ed, candidate280/cardmetal-127, attempt
+textures: private/managed/IOSurface texture recreation, two pixel formats and two
+sizes, CPU-checked upload/readback through two host-ordered queues, distinct-seed
+sequential/concurrent processes, and observational global accounting samples.
+Prior run has an authorizing recovery receipt. Require fresh MODE2 with CP_STAT=0
+and RLC_CNTL=0; preserve all capture, host-fault, identity and cleanup aborts. Maximum
+6000seconds, manual stop after bounded tests. No driver change or main push.
