@@ -6523,7 +6523,8 @@ static uint32_t wrapHwEngInit(void *self) {
             *reinterpret_cast<void **>(static_cast<uint8_t *>(self) + 0x10)));
         const char *name = pci ? pci->getName(gIOServicePlane) : nullptr;
         if (name && !strcmp(name, "S30")) {
-            const bool renamed = pci->setName("GFX0", gIOServicePlane);
+            pci->setName("GFX0", gIOServicePlane);
+            const bool renamed = !strcmp(pci->getName(gIOServicePlane), "GFX0");
             RLOG("HEVCNAME: marked Raphael IOService S30 -> GFX0 result=%u actual=%s",
                  renamed, pci->getName(gIOServicePlane));
         }
