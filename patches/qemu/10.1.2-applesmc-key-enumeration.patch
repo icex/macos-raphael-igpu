@@ -1,0 +1,80 @@
+--- a/hw/misc/applesmc.c
++++ b/hw/misc/applesmc.c
+@@ -126,6 +126,7 @@
+     smc_debug("CMD received: 0x%02x\n", (uint8_t)val);
+     switch (val) {
+     case APPLESMC_READ_CMD:
++    case APPLESMC_GET_KEY_BY_INDEX_CMD:
+         /* did last command run through OK? */
+         if (status == APPLESMC_ST_CMD_DONE || status == APPLESMC_ST_NEW_CMD) {
+             s->cmd = val;
+@@ -157,6 +158,23 @@
+     return NULL;
+ }
+ 
++/* The index argument is big-endian, just like a four-byte key. */
++static const struct AppleSMCData *applesmc_find_index(AppleSMCState *s)
++{
++    struct AppleSMCData *d;
++    uint32_t index = ((uint32_t)(uint8_t)s->key[0] << 24) |
++                     ((uint32_t)(uint8_t)s->key[1] << 16) |
++                     ((uint32_t)(uint8_t)s->key[2] << 8) |
++                     (uint8_t)s->key[3];
++
++    QLIST_FOREACH(d, &s->data_def, node) {
++        if (index-- == 0) {
++            return d;
++        }
++    }
++    return NULL;
++}
++
+ static void applesmc_io_data_write(void *opaque, hwaddr addr, uint64_t val,
+                                    unsigned size)
+ {
+@@ -166,6 +184,7 @@
+     smc_debug("DATA received: 0x%02x\n", (uint8_t)val);
+     switch (s->cmd) {
+     case APPLESMC_READ_CMD:
++    case APPLESMC_GET_KEY_BY_INDEX_CMD:
+         if ((s->status & 0x0f) == APPLESMC_ST_CMD_DONE) {
+             break;
+         }
+@@ -173,10 +192,16 @@
+             s->key[s->read_pos] = val;
+             s->status = APPLESMC_ST_ACK;
+         } else if (s->read_pos == 4) {
+-            d = applesmc_find_key(s);
++            d = s->cmd == APPLESMC_READ_CMD ? applesmc_find_key(s) :
++                                            applesmc_find_index(s);
+             if (d != NULL) {
+-                memcpy(s->data, d->data, d->len);
+-                s->data_len = d->len;
++                if (s->cmd == APPLESMC_GET_KEY_BY_INDEX_CMD) {
++                    memcpy(s->data, d->key, 4);
++                    s->data_len = 4;
++                } else {
++                    memcpy(s->data, d->data, d->len);
++                    s->data_len = d->len;
++                }
+                 s->data_pos = 0;
+                 s->status = APPLESMC_ST_ACK | APPLESMC_ST_DATA_READY;
+                 s->status_1e = APPLESMC_ST_CMD_DONE;  /* clear on valid key */
+@@ -184,7 +209,8 @@
+                 smc_debug("READ_CMD: key '%c%c%c%c' not found!\n",
+                           s->key[0], s->key[1], s->key[2], s->key[3]);
+                 s->status = APPLESMC_ST_CMD_DONE;
+-                s->status_1e = APPLESMC_ST_1E_NOEXIST;
++                s->status_1e = s->cmd == APPLESMC_GET_KEY_BY_INDEX_CMD ?
++                              APPLESMC_ST_1E_BAD_INDEX : APPLESMC_ST_1E_NOEXIST;
+             }
+         }
+         s->read_pos++;
+@@ -208,6 +234,7 @@
+ 
+     switch (s->cmd) {
+     case APPLESMC_READ_CMD:
++    case APPLESMC_GET_KEY_BY_INDEX_CMD:
+         if (!(s->status & APPLESMC_ST_DATA_READY)) {
+             break;
+         }
