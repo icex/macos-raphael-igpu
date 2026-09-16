@@ -6,7 +6,7 @@
   "gpu_id": "0x73ff",
   "gpu_rom": "run/gpu-patched.rom",
   "inhibitor_container": "rgpu-inhibit",
-  "image_id": "sha256:2ada1bb2323f4eefe430a9ea5f0e2f65cad6914aca4f9364c50b0ec3d694654c",
+  "image_id": "sha256:51cbd7dcdbad2d6492ce83a263e9854c28620d67a1ea12ebc0562c6fab2605ad",
   "lilu": {
     "bundle": "run/headless-lilu-verified-1df50f512b55/Lilu.kext",
     "executable_sha256": "1df50f512b55b4f6ec873a18ff4b0db78b11b7fe9022ee195e50466e8573b7f2",

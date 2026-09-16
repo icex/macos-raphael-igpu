@@ -1,65 +1,23 @@
 # Live status — 2026-09-16
 
-Host boot2508eb6d-ddf3-497d-9774-00a7ecebe3ed. GPU0000:7b:00.0 remains vfio-pci,
-power/control=on. Colorrepro run9695b71b4eb9db3f8b99eb42e8814970 is stopped:
-shutdown exited-after-guest-request, recovery recovered/authorizes_launch=true,
-CP_STAT=0. Artifacts: candidate-277-attempt-colorrepro-results. Baseline Metal pass;
-full desktop qualification fails because green/purple backdrop corruption persists.
+Boot2508eb6d-ddf3-497d-9774-00a7ecebe3ed, GPU0000:7b:00.0 vfio-pci, power/control=on.
+Candidate277 driver1.0.277 retains working HEVC hardware decode. Candidate278
+linear-swizzle change rejected. Full desktop unqualified: native transparent
+colored panels still show green/purple diagonal corruption; isolated probes pass.
 
-Use candidate277 driver1.0.277 (SHA1e50cf16c8ac4333a84b84321394cce07b28c94947e1264aa5b86463b588b17a).
-Candidate278 linear-swizzle driver change is rejected; do not run its OpenGL probe.
-HEVC hardware decode is fixed by exact PCI IOService S30→GFX0 rename, tested9600
-frames across two guest boots. Main10/concurrency/arbitrary-media scope remains open.
+Last run ec5d03f7433ad8f4151f35644c5e38c9/smcfinal tested image2ada1bb2323f.
+Baseline passed. PerfPowerServices still busy: enumeration incorrectly waited for
+length byte. Corrected PMIO implementation responds after four index bytes;
+isolated protocol checks pass. Persistent fix NOT yet verified. No service disabling.
+Normal guest-request shutdown, recovery recovered/authorizes_launch=true/CP_STAT=0.
+Results: candidate-277-attempt-smcfinal-results. Earlier smcverified admission
+refusal and staging failures consumed no exposure. Details in perfpower research note.
 
-Colorrepro: half gradients and installed narrow-blur shaders pass12cases each,
-including offset viewport. Plain-alpha windows look clean; native colored backdrop
-still fails. Filter merging/dirty regions controls did not fix it. Metal validation
-crashed in CoreDisplay initialization and supplies no verdict on the corruption.
-All temporary flags restored; validation environment unset. Details and artifacts:
-candidate278 findings/research/transparency-live-composition-20260916.md.
+## Fourteenth exposure allowance
 
-PerfPowerServices100% CPU is a nonterminating SMC-key enumeration: QEMU10.1.2
-rejects command0x12. A one-time correct end-of-list return stops the loop while
-leaving the service alive. QEMU patch and isolated I/O protocol tests are complete;
-persistent fresh-guest verification pending. See perfpower-smc-enumeration-20260916.md.
-
-## Superseded staging-only image pin
-
-Run5cb87082deebc345879d0c3192d39f8d (smcfix) actually launched original image3a3c82c79bc4,
-because experiment prepare read IMAGE rather than cycle pins. CPU loop reproduced;
-this is not a test of the patch. Baseline CORE_PROBE_PASS, guest-request shutdown,
-recovery recovered/authorizes_launch=true. Two prior staging failures did not
-reach QEMU/VFIO and consumed no exposures. Cycle now explicitly passes its pinned
-image to prepare; regression coverage checks that handoff.
-
-## Active exposure allowance
-
-Standing user instruction to fix and continuously test authorizes thirteenth exposure
-on boot2508eb6d-ddf3-497d-9774-00a7ecebe3ed, candidate277/card metal-124, attempt
-smcfinal. Same kext; derived image2ada1bb2323f4eefe430a9ea5f0e2f65cad6914aca4f9364c50b0ec3d694654c
-replaces QEMU with10.1.2 plus SMC enumeration. Fresh MODE2; maximum6000seconds,
-5400second interactive hold, all identity/capture-fatal/host-fault/shutdown/recovery
-aborts retained. Verify PerfPowerServices from startup without debugger changes,
-then resume native transparency diagnosis. No direct OpenGL workload.
-
-
-## One-command GPU test
-
-- Output: `/home/bogdan/macos-vm/run/candidate-277-attempt-smcfix-results`
-- Verdict: `CORE_PROBE_PASS`
-- Boundary: `None`
-
-
-## One-command GPU test
-
-- Output: `/home/bogdan/macos-vm/run/candidate-277-attempt-smcverified-results`
-- Verdict: `INVALID`
-- Boundary: `identity_or_route_missing`
-
-smcverified refused before launch: prepare used the pinned image but admission
-observed the default environment. No QEMU/VFIO exposure, no ledger consumption.
-Cycle now passes the same pin to both prepare and runner; identity gate retained.
-
-RUNNING: smcfinal/ec5d03f7433ad8f4151f35644c5e38c9, actual image2ada1bb2323f
-and QEMU binary SHA1d48acdf0f831e5fe7fc801c988113a9e9f8065c9edb9f826ba3589999ca441d
-verified in running container. Interactive-ready reached. Cleanup pending.
+Standing user fix-and-continuously-test authorization covers one additional run
+on boot2508eb6d-ddf3-497d-9774-00a7ecebe3ed, attempt smcpmio, unchanged candidate277
+and card metal-124. Corrected emulator image51cbd7dcdbad2d6492ce83a263e9854c28620d67a1ea12ebc0562c6fab2605ad.
+Fresh MODE2, maximum6000s, interactive hold5400s, all identity/capture-fatal/host-fault/
+shutdown/recovery aborts preserved. Verify native SMC enumeration and CPU without
+process modification, then continue transparency. No direct OpenGL workload.

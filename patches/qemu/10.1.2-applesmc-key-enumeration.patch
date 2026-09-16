@@ -32,7 +32,7 @@
  static void applesmc_io_data_write(void *opaque, hwaddr addr, uint64_t val,
                                     unsigned size)
  {
-@@ -166,6 +184,7 @@
+@@ -166,17 +184,27 @@
      smc_debug("DATA received: 0x%02x\n", (uint8_t)val);
      switch (s->cmd) {
      case APPLESMC_READ_CMD:
@@ -40,11 +40,15 @@
          if ((s->status & 0x0f) == APPLESMC_ST_CMD_DONE) {
              break;
          }
-@@ -173,10 +192,16 @@
+         if (s->read_pos < 4) {
              s->key[s->read_pos] = val;
              s->status = APPLESMC_ST_ACK;
-         } else if (s->read_pos == 4) {
+-        } else if (s->read_pos == 4) {
 -            d = applesmc_find_key(s);
++        }
++        /* Index requests have no length byte in AppleSMC PMIO. */
++        if ((s->cmd == APPLESMC_GET_KEY_BY_INDEX_CMD && s->read_pos == 3) ||
++            (s->cmd == APPLESMC_READ_CMD && s->read_pos == 4)) {
 +            d = s->cmd == APPLESMC_READ_CMD ? applesmc_find_key(s) :
 +                                            applesmc_find_index(s);
              if (d != NULL) {
@@ -60,7 +64,7 @@
                  s->data_pos = 0;
                  s->status = APPLESMC_ST_ACK | APPLESMC_ST_DATA_READY;
                  s->status_1e = APPLESMC_ST_CMD_DONE;  /* clear on valid key */
-@@ -184,7 +209,8 @@
+@@ -184,7 +212,8 @@
                  smc_debug("READ_CMD: key '%c%c%c%c' not found!\n",
                            s->key[0], s->key[1], s->key[2], s->key[3]);
                  s->status = APPLESMC_ST_CMD_DONE;
@@ -70,7 +74,7 @@
              }
          }
          s->read_pos++;
-@@ -208,6 +234,7 @@
+@@ -208,6 +237,7 @@
  
      switch (s->cmd) {
      case APPLESMC_READ_CMD:

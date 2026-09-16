@@ -48,10 +48,12 @@ def main():
                     def request(op, argument, length, error=0):
                         out(0x304, op)
                         assert inp(0x304) == 0x0c
-                        for byte in argument:
+                        for offset, byte in enumerate(argument):
                             out(0x300, byte)
-                            assert inp(0x304) == 4
-                        out(0x300, length)
+                            if op != 0x12 or offset < 3:
+                                assert inp(0x304) == 4
+                        if op != 0x12:
+                            out(0x300, length)
                         assert inp(0x31e) == error
                         assert inp(0x304) == (0 if error else 5)
                         if error:

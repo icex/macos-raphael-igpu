@@ -39,3 +39,16 @@ smc-end-control.txt and perfpower-after.txt. No real OSK values are recorded.
 
 Primary protocol references: https://gitlab.com/qemu-project/qemu/-/blob/v10.1.2/hw/misc/applesmc.c
 and https://github.com/torvalds/linux/blob/master/drivers/hwmon/applesmc.c .
+
+## First native verification rejected
+
+Actual patched image2ada1bb2323f, binary1d48acdf..., run ec5d03f7433ad8f4151f35644c5e38c9
+(smcfinal) still consumes CPU (~34%). Sampling still shows getAllKeys; index15
+returns -3 after timeout. Initial patch incorrectly required a fifth length byte.
+VirtualSMC kern_pmio.cpp provides the missing discriminator: command0x12 responds
+after sizeof(SMC_KEY_INDEX), four bytes, unlike0x10 read-value. The Linux caller
+writes an extra byte for compatibility; that is not a required PMIO argument.
+Corrected patch completes enumeration on byte4; revised test sends exactly four
+bytes and passes. Do not count the first isolated test as native qualification.
+Source: https://github.com/acidanthera/VirtualSMC/blob/master/VirtualSMC/kern_pmio.cpp .
+The service has not been disabled or patched in this guest. Native retest pending.
