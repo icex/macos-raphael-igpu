@@ -82,3 +82,9 @@ defaults to the canonical candidate-280 worktree, where metal-128 was not yet
 present. No MODE2 reset or QEMU/VFIO exposure occurred; the twentieth allowance
 is unconsumed. Reviewed closure changes are now fast-forwarded into the canonical
 worktree; retry uses that path with all guards unchanged.
+
+The canonical retry passed 946 host tests and MODE2 #160, then staging rejected
+the unsupported (1.0.280, metal-128) pair before QEMU/VFIO exposure. The twentieth
+allowance remains unconsumed. Extend only that reviewed pairing and retain exact
+boot arguments/source/Lilu/capture checks before retrying. Remaining driver work
+will use the supplied decompiled sources and matching native disassembly.

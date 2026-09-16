@@ -187,6 +187,11 @@ from device enumeration or passing microbenchmarks.
 
 1. Qualify supervised QEMU closure and guest-crash/command-channel failure paths,
    then representative workloads on independently initialized host boots.
+   The closure action is implemented and host-tested (946 tests pass). Two launch
+   attempts stopped before QEMU exposure: canonical-worktree selection, then the
+   missing exact staging-card pairing. The latter followed successful MODE2 #160;
+   neither consumed a GPU ledger entry. Hardware closure remains untested until
+   the exact card guard is extended and revalidated.
 2. Broaden desktop applications, formats and interprocess synchronization; measure
    reclamation cost and page-table release beyond observed address recycling.
 3. Progress physical display and measured performance qualification after those gates.
@@ -207,3 +212,15 @@ baseline and evidence after three experiments on an unexplained failure; repeate
 non-discriminating toggles are not progress. Report observed results and scope,
 not an invented completion percentage. Historical investigations and review records
 remain available in the archived roadmap and findings.
+
+## Source basis for remaining driver work
+
+Use the user-provided `macos-vm/re/decompiled-24G830` sources, checking inferred
+prototypes against matching disassembly and vtables before implementation. The
+allocation investigation already combines those sources with live native tracing.
+For physical output, the framebuffer `reportCapabilities_LinkInfo` path at +0xe074
+publishes `NONE`, port -1 and connector type 0 when topology/link lookup supplies
+no usable link. This narrows the observed empty-framebuffer properties; it does
+not yet identify the upstream cause. Next trace topology production and DAL link
+creation, distinguishing ATOM connector parsing from DCN initialization failure.
+No broad display patch is justified by the default properties alone.
