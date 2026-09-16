@@ -23,5 +23,6 @@ END
 {
     printa("WIRE_RESULT result=%d count=%@d\n", @wire_result);
     printa("FALLBACK_RESULT result=%d count=%@d\n", @fallback_result);
-    printa("FAILED_WIRE_STACK %@d\n%k\n", @failed_wire_stack);
+    printf("FAILED_WIRE_STACKS\n");
+    printa(@failed_wire_stack);
 }
