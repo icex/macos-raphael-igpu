@@ -6514,6 +6514,19 @@ static bool isRaphaelHardware(void *self) {
 
 static uint32_t wrapHwEngInit(void *self) {
     if (sdmaTopologyEnabled && sdmaTopologyRoutesReady && isRaphaelHardware(self)) {
+        // AppleGVA 24G830's HEVC capability enumeration only descends from
+        // GFX0/IGPU/IOPP/display nodes. QEMU exposes our marked PCI device as
+        // S30, so the accelerator's valid properties are otherwise invisible
+        // to that search. Change only this known name in the IOService plane;
+        // retain ACPI identity, registry ID, parents, children and properties.
+        auto pci = OSDynamicCast(IOService, reinterpret_cast<OSObject *>(
+            *reinterpret_cast<void **>(static_cast<uint8_t *>(self) + 0x10)));
+        const char *name = pci ? pci->getName(gIOServicePlane) : nullptr;
+        if (name && !strcmp(name, "S30")) {
+            const bool renamed = pci->setName("GFX0", gIOServicePlane);
+            RLOG("HEVCNAME: marked Raphael IOService S30 -> GFX0 result=%u actual=%s",
+                 renamed, pci->getName(gIOServicePlane));
+        }
         auto slots = reinterpret_cast<void **>(reinterpret_cast<uint8_t *>(self) + 0x3b8);
         auto topology = RaphaelSdma::plan(1);
         void *detached = RaphaelSdma::detachExtra(slots, 2, topology);

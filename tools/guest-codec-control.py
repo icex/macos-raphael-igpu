@@ -78,7 +78,7 @@ def main():
     if args.post_log:
         action = (f"{action}; probe_result=$?; /usr/bin/log show --last 3m --style compact "
                   f"--predicate {shlex.quote(args.post_log)} | /usr/bin/head -n 400; "
-                  f"exit $probe_result")
+                  f"( exit $probe_result )")
     command = f"( {action}; result=$?; printf \"\\nRGPU_EXIT {nonce} %s\\n\" \"$result\" )"
     tag = args.tag or f"{Path(args.source).stem.replace('_', '-')}-{args.mode}-{args.codec}"
     (results / f"{tag}-command.json").write_text(json.dumps(
