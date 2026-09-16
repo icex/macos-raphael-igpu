@@ -7,16 +7,16 @@ reproduced correctness blocker. Full desktop and physical display acceptance rem
 
 ## Current host / guest
 
-Previous guest stopped after run `dd5c30a35fea14f9be511dee92ff85be`, candidate 280 /
-metal-127 / attempt addressreuse, MODE2 #159, nineteenth exposure on host boot
-`2508eb6d-ddf3-497d-9774-00a7ecebe3ed`. GPU `0000:7b:00.0` remains vfio-pci,
-`power/control=on`. Results:
-`/home/bogdan/macos-vm/run/candidate-280-attempt-addressreuse-results`.
-
-Identity/capture valid: 372 critical records, zero loss. Guest-request shutdown;
-schema 6 recovery `recovered`, `authorizes_launch=true`, no retained host faults.
-Overall **CORE_PROBE_PASS**. Four candidate 280 runs now have clean shutdown and
-authorizing recovery on this host boot.
+Guest **stopped** after supervised HMP quit in run
+`042d7770f42059319cda491e50396bd8`, candidate280/metal-128/closure,
+MODE2#161, twentieth exposure on boot `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`.
+GPU remains vfio-pci, power/control=on. Probe passed; closure receipt confirms stop.
+Strict capture is incomplete (snapshot14 transport tail), so overall **INVALID**.
+Existing recovery policy authenticates snapshot13/374 records and returns schema6
+`recovered`, `authorizes_launch=true`: five queues dequeued, zero forced clears or
+timeouts, CP_STAT=0, graphics retirement confirmed, no recovery host faults.
+This is positive abnormal-closure cleanup evidence, not clean guest shutdown or
+full lifecycle qualification. [Result](findings/research/supervised-qemu-closure-result-20260916.md).
 
 ## Verified progress
 
@@ -29,7 +29,7 @@ authorizing recovery on this host boot.
 | Native desktop | Three minutes of moving/resizing native material windows; four clean raw RFB captures |
 | Safari | Two-minute transparency/blur/scrolling page; three clean captures plus clean desktop after larger-buffer pressure |
 | PerfPowerServices | 0.0% CPU, latest 1.04 s cumulative; corrected QEMU on six guest boots, all on one host boot |
-| Host regression | 938 tests OK, three skipped |
+| Host regression | 948 tests OK, three skipped |
 
 Earlier texture recreation (144 cases / 131,031,576 pixels), feedback rendering
 (48 cases / 5,280,000 pixels), and hardware H.264/HEVC encode/decode retain their
@@ -46,8 +46,7 @@ QEMU image `sha256:51cbd7dcdbad2d6492ce83a263e9854c28620d67a1ea12ebc0562c6fab260
 
 ## Next work / remaining gates
 
-1. Explicitly recorded, supervisor-owned QEMU closure; retain strict classification,
-   capture and recovery rules. Implementation under review in candidate-280-closure.
+1. Fresh workload after recovered QEMU closure; retain strict capture and recovery rules.
 2. Guest-crash/command-channel failure and independent-host-boot qualification.
 3. Broader applications, formats, render hazards and interprocess synchronization;
    page-table release beyond cached address reuse; reclamation performance cost.
@@ -58,40 +57,11 @@ No main merge/push before full desktop proof. Another exposure needs a named-boo
 allowance and fresh MODE2 through tools/cycle.py. No vfio→amdgpu cycling.
 [Roadmap](docs/ROADMAP.md).
 
-## Next exposure allowance — supervised QEMU closure
+## Next exposure allowance — post-closure workload
 
-One additional exposure (twentieth) on boot
-`2508eb6d-ddf3-497d-9774-00a7ecebe3ed` is authorized for candidate 280 /
-metal-128 / attempt closure, unchanged driver/QEMU. Fresh MODE2 must show
-CP_STAT=0 and RLC_CNTL=0; all existing admission, capture, host-fault, deadline
-and cleanup gates remain active, up to 6000 seconds.
-
-After the native core probe passes and interactive-ready is recorded, use the
-supervisor's predeclared `intentional-close` action. It validates exact CID and
-StartedAt plus same-results manifest/probe/readiness identity, writes a single-use
-request, authenticates the QEMU monitor peer, sends HMP quit and records stop proof.
-No Docker kill/stop fallback belongs to this action. The coordinator retains its
-existing INVALID-on-closure classification and attempts strict recovery normally.
-This is an abnormal QEMU-closure experiment, never a clean guest shutdown.
-Hypothesis: authenticated retained leases permit queue/firmware cleanup after
-QEMU exits; falsified by missing/invalid capture, incomplete cleanup, forced HQD
-clears, nonzero CP status or a non-authorizing recovery receipt.
-
-The initial closure launch invocation stopped in preflight because the cycle
-defaults to the canonical candidate-280 worktree, where metal-128 was not yet
-present. No MODE2 reset or QEMU/VFIO exposure occurred; the twentieth allowance
-is unconsumed. Reviewed closure changes are now fast-forwarded into the canonical
-worktree; retry uses that path with all guards unchanged.
-
-The canonical retry passed 946 host tests and MODE2 #160, then staging rejected
-the unsupported (1.0.280, metal-128) pair before QEMU/VFIO exposure. The twentieth
-allowance remains unconsumed. Extend only that reviewed pairing and retain exact
-boot arguments/source/Lilu/capture checks before retrying. Remaining driver work
-will use the supplied decompiled sources and matching native disassembly.
-
-Current closure run `042d7770f42059319cda491e50396bd8` is **running** after
-947 passing host tests and MODE2 #161. This is the twentieth exposure; the
-allowance is consumed. Native desktop probe passed and interactive-ready exists.
-Closure/cleanup remain pending. Before action, the supervisor probe check is
-being corrected to validate the actual nonce-bound output envelope (the original
-fixture incorrectly supplied a top-level passed field).
+One additional exposure (twenty-first) on boot
+`2508eb6d-ddf3-497d-9774-00a7ecebe3ed` for unchanged candidate280/metal-127,
+attempt postclosure. Hypothesis: authorizing abnormal-closure recovery permits
+fresh MODE2 and successful desktop/core execution followed by clean shutdown.
+Falsified by reset, workload, capture, host-fault or recovery failure. Use cycle.py,
+up to 6000 seconds; all existing gates intact, no vfio→amdgpu cycling.

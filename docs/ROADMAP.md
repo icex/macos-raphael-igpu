@@ -187,10 +187,11 @@ from device enumeration or passing microbenchmarks.
 
 1. Qualify supervised QEMU closure and guest-crash/command-channel failure paths,
    then representative workloads on independently initialized host boots.
-   Current run `042d7770f42059319cda491e50396bd8` has passed the native desktop
-   probe after MODE2 #161 and 947 host tests. Actual closure/cleanup remain pending;
-   a supervisor envelope check is being corrected before action. Two earlier
-   staging/preflight failures consumed no exposure.
+   Supervised HMP quit now has positive cleanup evidence: five queues dequeued,
+   graphics ring retired, CP_STAT=0, authorizing recovery. Strict overall verdict
+   remains INVALID due truncated terminal capture. Next verify fresh workload after
+   closure; panic/fallback/repetition/independent host boots remain open.
+   [Closure evidence](../findings/research/supervised-qemu-closure-result-20260916.md).
 2. Broaden desktop applications, formats and interprocess synchronization; measure
    reclamation cost and page-table release beyond observed address recycling.
 3. Progress physical display and measured performance qualification after those gates.

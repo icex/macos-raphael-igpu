@@ -1,0 +1,14 @@
+{
+  "results": "/home/bogdan/macos-vm/run/candidate-280-attempt-closure-results",
+  "sha256": {
+    "manifest.json": "5d966e5a3e81f2888fec3487aaa0e0d2cd6714e0b9845f5b55fc5c5982e611e6",
+    "probe.json": "4eb5217d39a69b42210d1d941c350c560f83d49e1a9bb0fed9e24bcd863140ae",
+    "intentional-closure-request.json": "6c12d3d50fc574720033ffd8362f62c6af7de871080aafd26e24665ff204459d",
+    "intentional-closure-receipt.json": "8cd741a3153638b1f1937bedae9688cb551ad644719ef15918886cbcc9ee85cf",
+    "recovery.json": "6a802b6280672922d793917492724846073200c75f5c03148b18fd95fb57ded8",
+    "recovery-replay.json": "89b2334bf2d53a668e3296fe1e4809917cff59ff5cb028b44db77975c8f89f8e",
+    "verdict.json": "a364f817bfd290aa94bf35e19ae507150a770b76ff02cf38d1b6a9738c45817a",
+    "critical.txt": "17e7f0fc5b72ee3413d8b36a9cf4053d5629b324c898c8e0548946c7b97aa1d5",
+    "serial.txt": "c3ae34722a6a0f8f8639f51e83d1ee2467a97a8e4891d1c61ea279da59ab0bde"
+  }
+}
