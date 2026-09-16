@@ -9,6 +9,12 @@ two4K hardware codec checks; independent post-fix stream timing remains pending.
 [Evidence](../findings/research/allocation-log-thunk-20260916.md). 4K60 and a controlled comparison with Screen Sharing remain unqualified. macOS support is experimental; gamepad support is
 unavailable in this build.
 
+A log message such as `Minimum FPS target ~30fps` is Sunshine's default idle-frame
+fallback for a60FPS request, not a30FPS cap. Measure moving content and distinguish
+server submissions from client delivery. Encoder-only simple-frame checks reach
+64.75FPS HEVC4K, but an active stream trace reaches~38 submissions/s; buffer and
+encoder waits remain under investigation. [Evidence](../findings/research/streaming-throughput-20260916.md).
+
 ## Experimental driver diagnostic budget
 
 Candidate282 adds the opt-in OpenCore boot argument `rgpualloclog=1`. It samples

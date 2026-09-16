@@ -1,0 +1,54 @@
+{
+  "run_id": "560b1d7e8fea56b2c6f52fd7644d23f8",
+  "build_id": "7a26b1a2f6694ae88ed889105de30bc7",
+  "artifacts": [
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-results/stream-inspect-output.txt",
+      "sha256": "7ca335bf0ae23ea23cf51ac841806c01b784e998caa52287d6ba5ead5e82ffbf"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-results/stream-timing-motion-output.txt",
+      "sha256": "e0a76f79e6a36620f1da8a8d3302bc08b4cf482041884215c90a95dd530db428"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-results/stream-sample-motion-output.txt",
+      "sha256": "c3dd1bdec2f30defefb60deb32a5ee9128f6092e6765bfc8e1c753991d1bdbbd"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-results/stream-sample-current-output.txt",
+      "sha256": "33c3e924798d97603506e7f9e4f2fe1cf5d3654730d79574eaaf8be5526d1115"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-results/stream-saved-stack-output.txt",
+      "sha256": "f5947fbfe5300a7d67e94aab24844aa0ef202240738a8806ee77b882d3ddfb9c"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-results/stream-combined-output.txt",
+      "sha256": "0045fb23aed4f617c7ad243fb698f31497def1ce7c3b2e4de922fea79d75b79a"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-results/stream-buffer-reuse-output.txt",
+      "sha256": "6fe9297ec0b981f1bdded4cd3bd29ed84aebe178e189eff4eb04953abbad3c67"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-results/hevc4k-throughput-output.txt",
+      "sha256": "48a7a8d9b7fc55e0c2b3005c9da441826d5330d0c913b8eef67d3816be71685b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-results/h2644k-throughput-output.txt",
+      "sha256": "f45247058a854a7e9dcd85a868751c84d70175be9ef09d4af0e420b53793d1a3"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-results/hevc1080-throughput-output.txt",
+      "sha256": "652fa9ea3558d58a0639af1b40d9bdc8d8aa001be41875bd3912694474cffaaf"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-results/hevc4k-fresh-output.txt",
+      "sha256": "779d67ad6d8ac52e1bc3d5a8dbfb03fd221796ae01cb55a53dcb74cbe10d3b74"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-results/hevc4k-pool-output.txt",
+      "sha256": "b7f6b8df3e7016c857f5010b65f571e7f9d7f65378ba5534b04ea6f947b0ca69"
+    }
+  ]
+}

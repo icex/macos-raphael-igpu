@@ -39,7 +39,12 @@ Under the second workload, failed allocation calls average41–60us; the prior
 active stream averaged~1.9ms. Workload differences prevent a streaming speedup claim.
 User now observes1080p60 and4K20–30FPS after the installed patch, confirming
 a substantial practical improvement.4K60 remains open; no published exact CPU
-encoder FPS ceiling was found. Separate capture/conversion/encode timings next.
+encoder FPS ceiling was found. Active trace:451 submissions/12s (~38FPS),23.91ms average submission; subsequent
+encoder stack sample was idle and is not active evidence. Isolated120-frame HEVC
+4K reaches64.75FPS reused,41.47 fresh,58.89 pooled; H2644K76.77FPS. These simple
+patterns do not qualify real4K60 streaming. Next: uninterrupted capture-buffer
+reuse and encoder-stage trace before choosing a production optimization.
+[Current investigation](findings/research/streaming-throughput-20260916.md).
 [Hardware capability check](findings/research/9800x3d-streaming-capabilities-20260916.md).
 [Baseline evidence](findings/research/sunshine-performance-20260916.md).
 

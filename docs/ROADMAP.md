@@ -227,7 +227,10 @@ from device enumeration or passing microbenchmarks.
    costly native allocation diagnostic;24+60-frame4K hardware HEVC checks pass.
    Failed allocation calls average41–60us in the generated-pattern test versus~1.9ms
    in the prior live stream, and the user now reports1080p60 /4K20–30FPS.4K60 remains open; an exact
-   hardware FPS ceiling is not established.
+   hardware FPS ceiling is not established. Isolated HEVC4K reaches64.75FPS with
+   reused surfaces versus41.47FPS fresh and58.89FPS pooled. Trace live capture-buffer
+   reuse before deploying a pool/copy change; a blind extra copy can add stalls.
+   [Measurements](../findings/research/streaming-throughput-20260916.md).
    Login persistence also remains broken after startup despite the helper exiting0.
    [Evidence](../findings/research/allocation-log-thunk-20260916.md). Physical
    output is a separate gate.
