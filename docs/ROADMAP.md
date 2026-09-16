@@ -1,6 +1,6 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-09-16. Current driver: **candidate 1.0.280**. Full desktop acceleration
+Updated 2026-09-16. Current performance experiment: **candidate 1.0.282**; prior broader baseline: **1.0.280**. Full desktop acceleration
 is **not qualified**. The reproduced Screen Sharing transparency defect is fixed
 in candidate279 and retained in280. Candidate280 also passes strict capture and
 clean recovery after visual, concurrent-client and codec workloads. The patched-QEMU
@@ -16,7 +16,7 @@ and “next experiment” instructions do not describe today's host.
 
 | Milestone | State | Evidence and remaining work |
 |---|---|---|
-| M0 — Experiment identity and supervision | Implemented; maintained | Immutable manifests, loaded-build checks, capture, deadlines and cleanup. Fixed cycle image selection so preparation and admission use the same pinned emulator. Host suite: 958 tests, OK (3 skipped). |
+| M0 — Experiment identity and supervision | Implemented; maintained | Immutable manifests, loaded-build checks, capture, deadlines and cleanup. Fixed cycle image selection so preparation and admission use the same pinned emulator. Host suite: 965 tests, OK (3 skipped). |
 | M1 — Controlled starting state | Demonstrated for current workflow | One-way amdgpu→vfio-pci handoff, power/control=on, fresh MODE2 and clean-state receipts. Broad independent-host-boot qualification remains open. |
 | M2 — Native startup failure localization | Completed for original blocker | False second SDMA instance and subsequent channel routing were traced; historical evidence retained. |
 | M3 — Native engine startup repair | Demonstrated | Raphael topology/address adaptations reach native startup and completed Metal work. Preserve these fixes while diagnosing desktop rendering. |
@@ -223,8 +223,12 @@ from device enumeration or passing microbenchmarks.
    nominal60Hz mode timing separately from measured remote frame delivery and
    latency. Sunshine is installed and detects hardware-only H.264/HEVC Main8 at
    startup. LAN relay and subnet-restricted UFW rules are configured; actual
-   4K streaming works but delivers only3–4FPS. Native encode submission and
-   video-memory reclaim stall; diagnose these before claiming streaming performance. Physical
+   4K streaming baseline is3–4FPS. Candidate282 installs guarded sampling of the
+   costly native allocation diagnostic;24+60-frame4K hardware HEVC checks pass.
+   Failed allocation calls average41–60us in the generated-pattern test versus~1.9ms
+   in the prior live stream, but actual Moonlight improvement remains unverified.
+   Login persistence also remains broken after startup despite the helper exiting0.
+   [Evidence](../findings/research/allocation-log-thunk-20260916.md). Physical
    output is a separate gate.
 2. Qualify supervised QEMU closure and guest-crash/command-channel failure paths,
    then representative workloads on independently initialized host boots.

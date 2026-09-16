@@ -25,5 +25,31 @@
       "path": "/home/bogdan/macos-vm/run/candidate-281-results/sunshine-encode-baseline-output.txt",
       "sha256": "cfb9f0202d4a30dc0447a744ed523e705fdba603e20c055bc4508e1a25b7aa1b"
     }
-  ]
+  ],
+  "candidate282": {
+    "run_id": "560b1d7e8fea56b2c6f52fd7644d23f8",
+    "mode2": 175,
+    "exposure": 32,
+    "build_id": "7a26b1a2f6694ae88ed889105de30bc7",
+    "patch_installed": true,
+    "cleanup": "pending",
+    "artifacts": [
+      {
+        "path": "/home/bogdan/macos-vm/run/candidate-282-results/hevc4k-correctness-output.txt",
+        "sha256": "27d19af10e2022da8442eaa75ed67acdcce6a253c6b32c227faab9ff8abc4a21"
+      },
+      {
+        "path": "/home/bogdan/macos-vm/run/candidate-282-results/allocation-cost-hevc4k-output.txt",
+        "sha256": "e0f4930942fd66660d00098b5352ed6c81da2c991ad718534b296edf2e8f3f13"
+      },
+      {
+        "path": "/home/bogdan/macos-vm/run/candidate-282-results/sunshine-configure-output.txt",
+        "sha256": "82bf03febe43c89472a6e0d22024e5624793233a0da85cd3e356405fcea4f40c"
+      },
+      {
+        "path": "/home/bogdan/macos-vm/run/candidate-282-results/sunshine-encode-first-output.txt",
+        "sha256": "805fa121114739c570405a71f1daf0421ccda54b11409a6a423fe18d6857373b"
+      }
+    ]
+  }
 }

@@ -41,3 +41,23 @@ and the actual282 performance comparison must be recorded separately.
 Candidate281 completed with CORE_PROBE_PASS and valid capture; guest-requested
 shutdown was clean and schema6 recovery authorizes relaunch. Candidate282 host
 suite:965 tests OK, three skipped. Performance fix remains untested.
+
+## Candidate282 active patch and4K checks
+
+Run560b1d7e8fea56b2c6f52fd7644d23f8, MODE2#175, exposure32, build
+7a26b1a2f6694ae88ed889105de30bc7. ALLOCLOG guarded=1 installed=1,
+resolved=expected=kernel kprintf; sampled cumulative messages execute. Baseline
+Metal probe completes; live capture continues and final shutdown/recovery is pending.
+
+Two independent4K HEVC generated-pattern encode/decode checks pass:24 then60 unique
+frames,196,911,000 and492,277,500 checked luma samples; maximum error2 against limit8.
+Both encoder and decoder report hardware=true. Encoding including CPU pattern
+production and flush takes0.642473s for24frames and1.565685s for60frames. These
+are not Sunshine capture/stream benchmarks, and bitrate/content differ.
+
+During the second test, native failed allocation calls in the encoder service
+average2007us/49=40.96us (max114us); WindowServer3052us/51=59.84us (max1593us).
+Earlier active Sunshine traces averaged~1.9ms. This supports reduced logging cost,
+but different workloads and instrumentation prevent an exact streaming speedup claim.
+One attempted stream timing window had no connected client and no samples.
+Actual Moonlight performance remains awaiting an active same-settings comparison.
