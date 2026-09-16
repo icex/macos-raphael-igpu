@@ -15,7 +15,7 @@
 	<key>CFBundlePackageType</key>
 	<string>KEXT</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0.274</string>
+	<string>1.0.275</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
 	<key>CFBundleSupportedPlatforms</key>
@@ -23,7 +23,7 @@
 		<string>MacOSX</string>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>1.0.274</string>
+	<string>1.0.275</string>
 	<key>IOKitPersonalities</key>
 	<dict>
 		<key>as.rgpu.RaphaelGPU</key>

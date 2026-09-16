@@ -251,6 +251,9 @@ static bool vcnResetEnabled = false;
 static bool vcnDpgEnabled = false;
 static bool vcnDecodeFirstEnabled = false;
 static bool vcnNoDpmEnabled = false;
+static bool vcnWptrEnabled = false;
+static mach_vm_address_t orgVcnDecodeSubmit = 0;
+static uint32_t vcnDecodeSubmitCalls = 0;
 static bool ppCompatibilityBypassed = false;
 static mach_vm_address_t orgVcnWriteRegister = 0;
 static mach_vm_address_t orgAddToDpgSram = 0;
@@ -744,6 +747,7 @@ static constexpr size_t kOffBif61EnableDb  = 0x23b627; // _bif6_1_enable_doorbel
 static constexpr size_t kOffBif50EnableDb  = 0x23ac1b; // _bif50_enable_doorbell_aperture
 static constexpr size_t kOffNbio72EnableDb = 0x24137e; // _nbio7_2_enable_doorbell_aperture
 static constexpr size_t kOffNbio23EnableDb = 0x23ddcb; // _nbio2_3_enable_doorbell_aperture
+static constexpr size_t kOffNbio72SetDbRange = 0x2413da; // _nbio7_2_set_doorbell_aperture_range
 static constexpr size_t kOffBcsReadMmr     = 0x23579c; // _bcs_read_mmr (called, not routed)
 static constexpr size_t kOffGcCgsRead2     = 0xb598;   // _gc_cgs_read_register_ext2 (called only)
 static constexpr size_t kOffGcCgsWrite2    = 0xb519;   // _gc_cgs_write_register_ext2
@@ -930,6 +934,7 @@ static mach_vm_address_t orgBif61EnableDb {};
 static mach_vm_address_t orgBif50EnableDb {};
 static mach_vm_address_t orgNbio72EnableDb {};
 static mach_vm_address_t orgNbio23EnableDb {};
+static mach_vm_address_t orgNbio72SetDbRange {};
 static mach_vm_address_t orgGcCgsWrite2 {};
 static mach_vm_address_t orgGcCgsWrite {};
 static mach_vm_address_t orgGcCgsWriteExt {};
@@ -2002,6 +2007,20 @@ static uint32_t wrapNbio72EnableDb(void *ctx, uint32_t e) {
 static uint32_t wrapNbio23EnableDb(void *ctx, uint32_t e) {
     return wrapBifEnableDb(ctx, e, "nbio2_3_enable_doorbell_aperture", orgNbio23EnableDb);
 }
+// Observe the doorbell ranges Apple programs through the NBIO 7.2 family. Linux
+// nbio_v7_2_vcn_doorbell_range writes GDC0_BIF_VCN0_DOORBELL_RANGE (RSMU byte
+// address 0x1403bcc) with OFFSET=0x1f0<<2 and SIZE=8 -> 0x807c0. The request is
+// {type(5=VCN,0=SDMA,4=IH), offset0, size0(64-bit), offset1, size1(64-bit)}.
+static uint32_t wrapNbio72SetDbRange(void *ctx, const int32_t *req) {
+    const uint32_t r = FunctionCast(wrapNbio72SetDbRange, orgNbio72SetDbRange)(ctx, req);
+    if (req) {
+        const int64_t size0 = *reinterpret_cast<const int64_t *>(req + 4);
+        const int64_t size1 = *reinterpret_cast<const int64_t *>(req + 8);
+        RLOG("XK: nbio7_2_set_doorbell_aperture_range type=%d offset0=%#x size0=%lld offset1=%#x size1=%lld -> %u",
+             req[0], req[2], size0, req[6], size1, r);
+    }
+    return r;
+}
 
 // The SDMA half of the same gate. With GC HW_INIT through, hw_init fails one client
 // later at SDMA, on a predicate that is one register read:
@@ -2459,6 +2478,56 @@ static void wrapMmhub21(void *vm) {
             *reinterpret_cast<const uint32_t *>(table + 0x3a8),
             *reinterpret_cast<const uint32_t *>(table + 0x7a0));
     }
+}
+
+// Trace the native decoder queue submission (HWLibs _queue_decode_3_0_submit_frame).
+// Native ownership, copy, pointer advancement and commit are unchanged. Capture
+// only the first four complete kernel-owned queue slots and their immediate MMIO
+// readbacks; no waits or command submission are added by this wrapper.
+static uint32_t wrapVcnDecodeSubmit(void *queue, const void *frame) {
+    const uint32_t n = __atomic_add_fetch(&vcnDecodeSubmitCalls, 1u, __ATOMIC_RELAXED);
+    auto q = static_cast<const uint8_t *>(queue);
+    auto engine = q ? *reinterpret_cast<void *const *>(q + 8) : nullptr;
+    auto ctx = engine ? *reinterpret_cast<const uint8_t *const *>(
+        static_cast<const uint8_t *>(engine) + 0x10) : nullptr;
+    const uint32_t slotBytes = q ? *reinterpret_cast<const uint32_t *>(q + 0x58) : 0;
+    const uint32_t slots = q ? *reinterpret_cast<const uint32_t *>(q + 0x54) : 0;
+    const uint32_t slot = q ? *reinterpret_cast<const uint32_t *>(q + 0x50) : 0;
+    const bool selected = n <= 4 && vcnWptrEnabled && q && ctx && frame &&
+        __atomic_load_n(&raphaelTargetConfirmed, __ATOMIC_ACQUIRE) &&
+        *reinterpret_cast<const uint32_t *>(ctx + 0x268) == 0x30001 &&
+        *reinterpret_cast<const uint32_t *>(q + 0x10) == 1 &&
+        slotBytes >= 32 && slotBytes <= 0x1000 && !(slotBytes & 3) &&
+        slots && slots <= 0x1000 && slot < slots;
+    if (n <= 4 && q && ctx)
+        CRLOG("VCNQ: submit n=%u selected=%u flags=%x ctxflags=%x slot=%u slots=%u bytes=%u gpu=%#llx",
+              n, selected, *reinterpret_cast<const uint32_t *>(q),
+              *reinterpret_cast<const uint32_t *>(ctx), slot, slots, slotBytes,
+              *reinterpret_cast<const uint64_t *>(q + 0x28));
+    if (selected) {
+        auto words = static_cast<const uint32_t *>(frame);
+        const unsigned count = slotBytes / 4 < 64 ? slotBytes / 4 : 64;
+        for (unsigned i = 0; i + 7 < count; i += 8)
+            CRLOG("VCNQ: packet n=%u dword=%u %08x %08x %08x %08x %08x %08x %08x %08x",
+                  n, i, words[i], words[i+1], words[i+2], words[i+3],
+                  words[i+4], words[i+5], words[i+6], words[i+7]);
+    }
+    const uint32_t result = FunctionCast(wrapVcnDecodeSubmit, orgVcnDecodeSubmit)(queue, frame);
+    if (selected) {
+        auto read = reinterpret_cast<uint32_t (*)(void *, uint32_t, uint32_t)>(hwlibsBase + 0x86834);
+        auto shared = *reinterpret_cast<const uint8_t *const *>(ctx + 0x388);
+        CRLOG("VCNQ: committed n=%u result=%u index=%u rptr=%x wptr=%x scratch2=%x shared-rptr=%x shared-wptr=%x",
+              n, result, *reinterpret_cast<const uint32_t *>(q + 0x50),
+              read(engine,1,0x2e0), read(engine,1,0x2e1), read(engine,1,0x16),
+              shared ? *reinterpret_cast<const uint32_t *>(shared + 0x30) : 0xffffffff,
+              shared ? *reinterpret_cast<const uint32_t *>(shared + 0x34) : 0xffffffff);
+        // AON/RBC registers only (all read without incident in 272's VCNDF);
+        // no LMI-domain or DPG-gated register reads here.
+        CRLOG("VCNQ: state n=%u power=%x pause=%x rb-cntl=%x doorbell-page-offset=%x", n,
+              read(engine,1,4), read(engine,1,0x14), read(engine,1,0x2de),
+              static_cast<unsigned>(*reinterpret_cast<const uint64_t *>(q + 0x60) & 0xfff));
+    }
+    return result;
 }
 
 // Candidate 252: the secure DPG path (decode_sram_secure_initialize) builds the DPG SRAM with
@@ -3078,6 +3147,8 @@ static void installDiagnostics(KernelPatcher &patcher, mach_vm_address_t base) {
          "nbio7_2_enable_doorbell_aperture"},
         {kOffNbio23EnableDb, &orgNbio23EnableDb, reinterpret_cast<void *>(wrapNbio23EnableDb),
          "nbio2_3_enable_doorbell_aperture"},
+        {kOffNbio72SetDbRange, &orgNbio72SetDbRange, reinterpret_cast<void *>(wrapNbio72SetDbRange),
+         "nbio7_2_set_doorbell_aperture_range"},
         {kOffGcCgsWrite2, &orgGcCgsWrite2, reinterpret_cast<void *>(wrapGcCgsWrite2),
          "gc_cgs_write_register_ext2"},
         {kOffGcCgsWrite, &orgGcCgsWrite, reinterpret_cast<void *>(wrapGcCgsWrite),
@@ -3090,6 +3161,30 @@ static void installDiagnostics(KernelPatcher &patcher, mach_vm_address_t base) {
                      reinterpret_cast<mach_vm_address_t>(e.fn), true);
         RLOG("route %s -> %s (org=0x%llx)", e.name, *e.org ? "ok" : "FAILED", *e.org);
         patcher.clearError();
+    }
+    if (vcnWptrEnabled) {
+        const uint8_t entry[] = {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,
+                                0x53,0x50,0x48,0x89,0xfb,0x4c,0x8b,0x7f,0x08};
+        // MOV ECX,R14D; OR ECX,80000000; shared.wptr=ECX; SCRATCH2=ECX.
+        // Match Linux vcn_v3_0_dec_ring_set_wptr's raw DWORD pointer in both
+        // destinations. OR0 retains the native footprint and control flow.
+        const uint8_t before[] = {0x44,0x89,0xf1,0x81,0xc9,0x00,0x00,0x00,0x80,0x89,0x48,0x34};
+        const uint8_t after[]  = {0x44,0x89,0xf1,0x81,0xc9,0x00,0x00,0x00,0x00,0x89,0x48,0x34};
+        const bool guard = !memcmp(reinterpret_cast<const void *>(base + 0x95650), entry, sizeof(entry)) &&
+            !memcmp(reinterpret_cast<const void *>(base + 0x956b4), before, sizeof(before));
+        bool patched = false;
+        if (guard) {
+            KernelPatcher::LookupPatch lp {&kexts[KextHWLibs], before, after, sizeof(before), 1};
+            patcher.applyLookupPatch(&lp, reinterpret_cast<uint8_t *>(base + 0x956b4), sizeof(before) + 1);
+            patched = patcher.getError() == KernelPatcher::Error::NoError &&
+                !memcmp(reinterpret_cast<const void *>(base + 0x956b4), after, sizeof(after));
+            patcher.clearError();
+            if (patched) orgVcnDecodeSubmit = patcher.routeFunction(base + 0x95650,
+                reinterpret_cast<mach_vm_address_t>(wrapVcnDecodeSubmit), true);
+            patcher.clearError();
+        }
+        CRLOG("VCNQ: raw-wptr guard=%u patched=%u submit-route=%u", guard, patched,
+              orgVcnDecodeSubmit != 0);
     }
     if (mmhubFixEnabled) {
         const uint8_t guard[] = {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,
@@ -9134,6 +9229,9 @@ static void pluginStart() {
     uint32_t vcnNoDpm = 0;
     vcnNoDpmEnabled = PE_parse_boot_argn("rgpuvcnnodpm", &vcnNoDpm, sizeof(vcnNoDpm)) &&
         vcnNoDpm == 1 && (mask & XI) && vcnSmuEnabled && vcnDpgEnabled;
+    uint32_t vcnWptr = 0;
+    vcnWptrEnabled = PE_parse_boot_argn("rgpuvcnwptr", &vcnWptr, sizeof(vcnWptr)) &&
+        vcnWptr == 1 && vcnNoDpmEnabled && vcnFirmwareEnabled && vcnApuEnabled;
     if (texDiagEnabled == 2 || vcnNoDpmEnabled) textureDiagCowLock = IOLockAlloc();
     CRLOG("VCNDPM: capability alignment enabled=%u lock=%u", vcnNoDpmEnabled,
           textureDiagCowLock != nullptr);
