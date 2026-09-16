@@ -2,13 +2,23 @@
 
 ## Host and task boundary
 
-Boot `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`: candidate 277 userdesktop run
-`d7190def5989c624ca02a9066edafeab` ended by guest-request shutdown and recovered,
-per shutdown.json/recovery.json in candidate-277-attempt-userdesktop-results.
-The baseline and additional 12 filtered-blur cases passed; raw-desktop-before.png
-independently reproduces the user's green/purple menu corruption over raw RFB.
-This is NOT desktop qualification. Work continues in candidate-278 (linear-layout
-discriminator); consult its status for the current hardware run.
+Boot `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`: capturepath run
+`b92d134b7f4cfde7658852b446d594db` stopped by guest-request and recovered
+(shutdown.json and recovery.json, CP_STAT=0). GPU remains vfio-pci, power/control=on.
+Green/purple transparency corruption remains unresolved. Native animated colored
+NSVisualEffectView backdrop reproduces it; gray-only probes were insufficient.
+Desktop GPU trace is complete; colored-backdrop trace is partial (metadata missing).
+Detailed evidence and probes are in candidate278; its driver change is rejected.
+
+## Color interpolation follow-up allowance
+
+Standing user instruction to fix and continuously test authorizes one additional
+exposure (eleventh) on boot `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`, attempt colorrepro,
+using unchanged candidate277/card metal-124 with fresh MODE2, maximum6000 seconds,
+5400-second hold and all identity/capture-fatal/host-fault/shutdown/recovery aborts.
+Hypothesis: nonconstant half-precision interpolants fail; smallest discriminator
+is CPU-verified varying-color gradient, followed by controlled native reproduction.
+No direct OpenGL workload. Earlier successful probes do not qualify the desktop.
 
 ## Fix and evidence
 
@@ -76,3 +86,10 @@ Candidate278’s linear layout did not fix corruption and its direct OpenGL rend
 probe hung the guest; guest-request shutdown and recovery both completed.
 Revert to 277 for tracing ScreensharingAgent capture and its native fallback paths.
 Do not rerun the hanging OpenGL workload. Preserve the working Metal/codec stack.
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-277-attempt-capturepath-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
