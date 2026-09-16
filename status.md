@@ -88,3 +88,16 @@ Single amdgpu→VFIO handoff through existing helper, then no reverse binding th
 boot. Require fresh MODE2,exact build/route/capture/host-fault/shutdown/recovery gates,
 max6000s. Decode before encoder,manual normal stop after observations.273 crash
 causality remains uncertain; no automatic replay of its write-pointer experiment.
+
+## Next authorized run: 275 raw decoder write pointer on the 274 baseline
+
+Extend allowance 1→2 on boot `2508eb6d-ddf3-497d-9774-00a7ecebe3ed` under the user's
+resumed testing authorization (2026-09-16). 274 exited after a guest shutdown request
+with a recovered receipt and no recovery kernel messages. 275 = 274's diagnostic-free
+source plus 273's exact HWLibs OR-immediate patch (raw shared/SCRATCH2 decoder write
+pointer, matching every released Linux vcn_v3_0), a bounded four-submission trace that
+reads only AON/RBC registers, and a read-only observer on the NBIO 7.2 doorbell range
+request. Offline verification in `findings/research/vcn-raw-wptr-20260916.md`. Hardware
+decode first after the desktop probe, via `tools/guest-codec-control.py`. Fresh MODE2,
+all identity/capture/host-fault/cleanup gates, max 6000 s. No amdgpu rebind, merge or push.
+Stop through the normal harness (`stop-requested`).
