@@ -7,33 +7,31 @@ reproduced correctness blocker. Full desktop and physical display acceptance rem
 
 ## Current host / guest
 
-Guest **stopped** after run `f846abef4a573a0059fbe0ecdd28ecfc`,
-candidate280/metal-127/main10, MODE2#163, twenty-second exposure on boot
+Guest **stopped** after run `1606212a998d81718fa354e19c4efdaa`,
+candidate280/metal-127/postclosure, MODE2#162, twenty-first exposure on boot
 `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`. GPU remains vfio-pci, power/control=on.
-Baseline desktop probe/capture pass;398 critical records, no capture loss.
-Guest-request shutdown; schema6 recovered/authorizes_launch=true, CP_STAT=0,
-no forced clears/timeouts or recovery host faults. Overall **CORE_PROBE_PASS**.
+Desktop probe passes; raw RFB desktop capture appears clean. Guest-request shutdown,
+schema6 recovered/authorizes_launch=true, CP_STAT=0, no forced clears/timeouts or
+recovery host faults. Overall **CORE_PROBE_PASS**.
 
-Main10 hardware decode passes32 frames at720p/1080p,71,884,800 luma/chroma samples
-exactly matching software reference. Main10 hardware encode is rejected before frames;
-native hardware encoder advertises Main8 only. Prior Main8 encoding remains valid.
-[Main10 evidence](findings/research/main10-qualification-20260916.md).
-One abnormal-QEMU-closure/recovery/relaunch/workload/clean-shutdown sequence also
-passes its scoped checks; the closure run itself remains INVALID for truncated capture.
+This follows run `042d7770f42059319cda491e50396bd8`'s authenticated QEMU quit and
+successful recovery of five active queues plus the graphics ring. That earlier run
+remains **INVALID** due interrupted terminal capture; complete snapshot13/374 records
+authenticated recovery. One abnormal-closure/relaunch/workload/clean-shutdown sequence
+is demonstrated; broader M7 qualification remains open.
 [Lifecycle evidence](findings/research/supervised-qemu-closure-result-20260916.md).
 
 ## Verified progress
 
 | Area | Evidence and scope |
 |---|---|
-| Main10 decode | 32 frames, 720p/1080p, 71,884,800 full-plane luma/chroma samples, exact software-reference match |
 | Buffer/address reuse | 512 measured rounds, 2,147,483,648 correct values; all 6,144 measured address assignments reused earlier ranges; allocation returns exactly to 544,768 bytes |
 | Larger allocations | 192 MiB live resources, four measured rounds, 67,108,864 correct values, exact allocation return |
 | Native reclaim | 81 traced calls: 41 true, 40 false; all 40 false returns followed by same-thread/map success; 1,525 internal wire failures observed |
 | GPU fences | 128 untracked blit/compute/blit rounds, 134,217,728 correct values; prior cross-queue shared-event checks also pass |
 | Native desktop | Three minutes of moving/resizing native material windows; four clean raw RFB captures |
 | Safari | Two-minute transparency/blur/scrolling page; three clean captures plus clean desktop after larger-buffer pressure |
-| PerfPowerServices | 0.0% CPU, latest 0.75 s cumulative; corrected QEMU on eight measured guest boots, all on one host boot |
+| PerfPowerServices | 0.0% CPU, latest 0.72 s cumulative; corrected QEMU on seven measured guest boots, all on one host boot |
 | Host regression | 948 tests OK, three skipped |
 
 Earlier texture recreation (144 cases / 131,031,576 pixels), feedback rendering
@@ -68,8 +66,24 @@ Using the supplied decompilation plus matching native assembly to trace physical
 display initialization. Current injected ROM contains four nonzero display paths;
 empty published framebuffer properties do not prove an empty ATOM table. Boot parser
 reads EFI properties from the PCI service; trace boot-display selection before patches.
-Main10 decode is now qualified within the short synthetic scope above. Main10
-hardware encoding remains unavailable in the native advertised profile set.
-Next work: interprocess resource visibility and longer/more varied workloads,
-plus source-guided physical-display and lifecycle investigation. No next exposure
-allowance recorded yet.
+Next codec qualification is Main10 with actual 10-bit luma/chroma readback; untested.
+One additional exposure (twenty-second) on boot
+`2508eb6d-ddf3-497d-9774-00a7ecebe3ed` is authorized for unchanged candidate280 /
+metal-127 / attempt main10. Hypothesis: advertised Main10 decode produces the same
+10-bit420 luma/chroma as software decoding of the identical stream. Test software
+encode first, then hardware encode if successful, up to16frames/case. Probe has a
+180s process alarm; standard6000s supervisor, fresh MODE2, capture/identity/host-fault
+and cleanup guards remain intact. First compile the probe before codec execution.
+Unsupported format, selection failure or any CPU mismatch falsifies this scoped
+case; do not infer failure of previously passing Main8. No vfio→amdgpu cycling.
+
+Current Main10 run `f846abef4a573a0059fbe0ecdd28ecfc` is **running** after
+MODE2#163, twenty-second exposure. The allowance is consumed. Probe/codec execution
+and cleanup outcomes remain pending; driver and QEMU binaries unchanged.
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-280-attempt-main10-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`

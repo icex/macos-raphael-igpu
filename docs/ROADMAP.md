@@ -229,3 +229,11 @@ No broad display patch is justified by the default properties alone.
 The matching native vtable/assembly audit now traces the boot parser and fixed-link
 selection. Current injected ROM has four paths; no empty-ROM conclusion is valid.
 [Display boot-path analysis](../findings/research/display-boot-path-20260916.md).
+
+## Additional codec qualification
+
+Main10 hardware decode now passes32 frames at720p/1080p:71,884,800 full-plane
+luma/chroma samples exactly match VCP software decoding of identical streams.
+Native hardware HEVC encoder advertises only Main8 and rejects Main10 before
+frame submission; keep that limitation separate from working Main10 decoding.
+[Main10 evidence](../findings/research/main10-qualification-20260916.md).
