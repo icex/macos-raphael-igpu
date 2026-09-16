@@ -1,0 +1,32 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Raphael desktop composition check</title>
+<style>
+body { margin:0; min-height:180vh; color:white; font:18px system-ui; background:#102041; }
+.backdrop { position:fixed; inset:-50%; background:repeating-conic-gradient(#f04b63 0 30deg,#176bf5 30deg 60deg,#35c990 60deg 90deg); animation:spin 30s linear infinite; }
+main { position:relative; max-width:800px; margin:70px auto; }
+article { background:#17264099; backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); border:1px solid #ffffff88; border-radius:24px; padding:24px; margin:20px; box-shadow:0 8px 24px #0006; }
+.row { display:flex; gap:15px; }
+.row div { flex:1; padding:30px; background:#ffffff33; border-radius:14px; animation:move 3s ease-in-out infinite alternate; }
+.row div:nth-child(2) { animation-delay:-1s; background:#e4428577; }
+.row div:nth-child(3) { animation-delay:-2s; background:#22aabb77; }
+@keyframes spin { to { transform:rotate(360deg); } }
+@keyframes move { to { transform:translateY(22px) scale(.9); opacity:.45; } }
+</style>
+<div class="backdrop"></div>
+<main>
+<article><h1>Desktop composition check</h1><p>Animated colors, transparency, blur, text and scrolling.</p><p id="progress">Starting animation</p></article>
+<article class="row"><div>Alpha</div><div>Blur</div><div>Motion</div></article>
+<article><h2>Readability check</h2><p>Text should remain sharp while the colored backdrop moves. Look for green smears, diagonal tiles, stale rectangles or flashing transparent areas.</p></article>
+<article><h2>Scrolling region</h2><p>The page scrolls gently for two minutes, then returns to the top.</p></article>
+</main>
+<script>
+const started=performance.now(); let ticks=0;
+function draw(now) {
+ const elapsed=(now-started)/1000; ++ticks;
+ document.getElementById('progress').textContent=`Animation callbacks: ${ticks}; elapsed: ${elapsed.toFixed(1)} seconds`;
+ if(elapsed<120) { scrollTo(0,80+80*Math.sin(elapsed*.4)); requestAnimationFrame(draw); }
+ else { scrollTo(0,0); document.title='Raphael composition check completed'; }
+}
+requestAnimationFrame(draw);
+</script>
