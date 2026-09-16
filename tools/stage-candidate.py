@@ -137,6 +137,7 @@ SUPPORTED_CARD_DIAGNOSTICS = {
     ("1.0.280", "metal-128"): "rgpuvmdiag=1",
     ("1.0.281", "metal-129"): "rgpuvmdiag=1",
     ("1.0.282", "metal-130"): "rgpuvmdiag=1",
+    ("1.0.283", "metal-131"): "rgpuvmdiag=1",
     ("1.0.261", "metal-107"): "rgpuvmdiag=1",
     ("1.0.260", "metal-106"): "rgpuvmdiag=1",
     ("1.0.259", "metal-105"): "rgpuvmdiag=1",
@@ -218,8 +219,8 @@ def configure(version, card_id, attempt=None):
     """Select the exact reviewed candidate/card pair; defaults are 1.0.185."""
     global CANDIDATE_VERSION, CARD_ID, NUMBER, WT, CANDIDATE, DIST, IDENTITIES
     global RUN_ID_FILE, CARD
-    if not re.fullmatch(r"1\.0\.((?:1[0-9]{2}|2[0-5][0-9]|2[67][0-9]|280|281|282))", version):
-        raise RuntimeError("candidate version must be in the reviewed 1.0.100–1.0.282 range")
+    if not re.fullmatch(r"1\.0\.((?:1[0-9]{2}|2[0-5][0-9]|2[67][0-9]|280|281|282|283))", version):
+        raise RuntimeError("candidate version must be in the reviewed 1.0.100–1.0.283 range")
     if not re.fullmatch(r"metal-[0-9]{3}", card_id):
         raise RuntimeError("card id must be metal-NNN")
     if attempt is not None and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,31}", attempt):
@@ -623,6 +624,10 @@ def validate_card(raw, expected_sha256):
     ("1.0.282", "metal-130"): {"rgpuvmroot": "5", "rgpudump": "5000", "rgpugolden": "1",
                                    "rgpuhangdump": "1", "rgpunobin": "1", "rgpusdmacfg": "2",
                                    "rgputexdiag": "2", "rgpummhub": "1", "rgpuvcnfw": "1", "rgpuvcnapu": "1", "rgpuvcnsmu": "1", "rgpuvcndpg": "1", "rgpuvcndecfirst": "1", "rgpuvcnnodpm": "1", "rgpuvcnwptr": "1", "rgpualloclog": "1"},
+    ("1.0.283", "metal-131"): {"rgpuvmroot": "5", "rgpudump": "5000", "rgpugolden": "1",
+                                   "rgpuhangdump": "1", "rgpunobin": "1", "rgpusdmacfg": "2",
+                                   "rgputexdiag": "2", "rgpummhub": "1", "rgpuvcnfw": "1", "rgpuvcnapu": "1", "rgpuvcnsmu": "1", "rgpuvcndpg": "1", "rgpuvcndecfirst": "1", "rgpuvcnnodpm": "1", "rgpuvcnwptr": "1", "rgpualloclog": "1",
+                                   "rgpuvcnclk": "1600", "rgpusmuquery": "1"},
     ("1.0.260", "metal-106"): {"rgpuvmroot": "5", "rgpudump": "5000", "rgpugolden": "1",
                                    "rgpuhangdump": "1", "rgpunobin": "1", "rgpusdmacfg": "2",
                                    "rgputexdiag": "2", "rgpummhub": "1", "rgpuvcnfw": "1", "rgpuvcnapu": "1", "rgpuvcnsmu": "1", "rgpuvcndpg": "1"},
