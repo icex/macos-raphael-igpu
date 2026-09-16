@@ -44,7 +44,8 @@ static NSArray *inventory(void) {
     if(CGGetOnlineDisplayList(32,ids,&n)!=kCGErrorSuccess)return nil;
     NSMutableArray *a=[NSMutableArray new];
     for(unsigned i=0;i<n;i++) {
-        CGDisplayModeRef m=CGDisplayCopyDisplayMode(ids[i]);if(!m)return nil;
+        CGDisplayModeRef m=CGDisplayCopyDisplayMode(ids[i]);
+        if(!m){[a addObject:@{@"id":@(ids[i]),@"mode_unavailable":@YES,@"active":@(CGDisplayIsActive(ids[i])!=0),@"online":@(CGDisplayIsOnline(ids[i])!=0)}];continue;}
         CGRect b=CGDisplayBounds(ids[i]);
         [a addObject:@{@"id":@(ids[i]),@"main":@(CGDisplayIsMain(ids[i])!=0),
             @"active":@(CGDisplayIsActive(ids[i])!=0),@"vendor":@(CGDisplayVendorNumber(ids[i])),
