@@ -66,3 +66,13 @@ No automated codec workloads beyond the standard baseline probe during this hold
 - Output: `/home/bogdan/macos-vm/run/candidate-277-attempt-userdesktop-results`
 - Verdict: `CORE_PROBE_PASS`
 - Boundary: `None`
+
+## Capture-path follow-up allowance
+
+User’s standing fix-and-test instruction covers one additional exposure (tenth)
+on boot `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`: known candidate277, isolated attempt
+capturepath, card metal-124, fresh clean MODE2, 6000s maximum, all safety aborts.
+Candidate278’s linear layout did not fix corruption and its direct OpenGL render
+probe hung the guest; guest-request shutdown and recovery both completed.
+Revert to 277 for tracing ScreensharingAgent capture and its native fallback paths.
+Do not rerun the hanging OpenGL workload. Preserve the working Metal/codec stack.
