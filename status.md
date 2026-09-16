@@ -83,3 +83,7 @@ Latest offline display audit: clock warnings return fallback frequencies; later
 register polls exhaust. Native logger console filtering hides their caller details.
 [Source/native audit](findings/research/display-clock-wait-20260916.md); exact wait
 register/caller and startup link state remain the next discriminator.
+
+GPU-only interprocess event test is in transport preparation: use typed XPC to
+transfer the native handle; the byte-archive draft was rejected before exposure.
+[Reviewed next test](findings/research/iosurface-event-test-plan-20260916.md).
