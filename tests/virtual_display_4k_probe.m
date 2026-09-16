@@ -57,7 +57,10 @@ static NSArray *inventory(void) {
 }
 static bool signature(NSString *className,NSString *selector,const char *result,NSArray *args) {
     NSMethodSignature *s=[NSClassFromString(className) instanceMethodSignatureForSelector:NSSelectorFromString(selector)];
-    if(!s||strcmp(s.methodReturnType,result)||s.numberOfArguments!=args.count+2)return false;
+    if(!s||strcmp(s.methodReturnType,result)||s.numberOfArguments!=args.count+2) {
+        emit(@{@"phase":@"abi_error",@"class":className,@"selector":selector,
+            @"actual_return":s?@(s.methodReturnType):@"missing",@"expected_return":@(result)});return false;
+    }
     for(NSUInteger i=0;i<args.count;i++)if(strcmp([s getArgumentTypeAtIndex:i+2],[args[i] UTF8String]))return false;
     return true;
 }
@@ -71,8 +74,8 @@ static bool abi(void) {
     for(NSString *s in @[@"setName:",@"setQueue:"])
         if(!signature(@"CGVirtualDisplayDescriptor",s,@encode(void),@[@"@"]))return false;
     return signature(@"CGVirtualDisplayDescriptor",@"setSizeInMillimeters:",@encode(void),@[@(@encode(CGSize))]) &&
-        signature(@"CGVirtualDisplayMode",@"initWithWidth:height:refreshRate:",@"@",@[@(@encode(unsigned int)),@(@encode(unsigned int)),@(@encode(double))]) &&
-        signature(@"CGVirtualDisplay",@"initWithDescriptor:",@"@",@[@"@"]) &&
+        signature(@"CGVirtualDisplayMode",@"initWithWidth:height:refreshRate:","@",@[@(@encode(unsigned int)),@(@encode(unsigned int)),@(@encode(double))]) &&
+        signature(@"CGVirtualDisplay",@"initWithDescriptor:","@",@[@"@"]) &&
         signature(@"CGVirtualDisplay",@"applySettings:",@encode(BOOL),@[@"@"]) &&
         signature(@"CGVirtualDisplay",@"displayID",@encode(unsigned int),@[]) &&
         signature(@"CGVirtualDisplaySettings",@"setModes:",@encode(void),@[@"@"]);
