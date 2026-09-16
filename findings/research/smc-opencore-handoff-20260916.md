@@ -52,3 +52,22 @@ prepared with VirtualSMC1.3.7 and the handoff config, and both raw/qcow2 readbac
 matched. The normal cycle will stage fresh driver/nonces and bind the entire boot
 image to the run. The first test uses the unchanged280 driver/card baseline with
 an explicit stock-QEMU image pin and a named-boot allowance in status.md.
+
+## First native result
+
+Run `711baaeda692ee9629548284c3c3a7ad`, MODE2#168, exposure26, stock packaged
+QEMU10.1.2 executable SHA256 `bf7a8b373cda802d5b63dc162fee9cbf4698a5920b50d9a993458c676ecdafa3`.
+Metal baseline passes. One AppleSMC, parent VirtualSMC1.3.7;69 distinct keys,
+repeat enumeration and end-of-list pass, including after a PerfPowerServices restart.
+Service CPU0.0% initially0.73s, after workload0.79s, new PID after restart0.0%/0.59s.
+H.264 and HEVC both select hardware encoder/decoder and each pass120frames720p
+with107,019,000 checked luma values; maximum error1 and0 respectively.
+Three-minute native material workload completes1,828 event ticks (not FPS); two raw
+RFB captures are clean by visual inspection. Initial capture client attempts failed
+at credential decoding/authentication and produced no images; successful captures
+use native account authentication and Raw encoding. No transport workaround applied.
+
+Clean guest-request shutdown, schema6 recovered/authorizes_launch=true, CP_STAT0,
+active_after0, forced_inactive0, dequeue_timeouts0, no host kernel messages.
+Overall CORE_PROBE_PASS with valid capture. A fresh-guest-boot repeat is next;
+independent host boots, arbitrary macOS/QEMU builds and other hypervisors remain open.

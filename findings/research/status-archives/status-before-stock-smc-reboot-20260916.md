@@ -7,16 +7,15 @@ reproduced correctness blocker. Full desktop and physical display acceptance rem
 
 ## Current host / guest
 
-Guest **stopped** after stock-QEMU run `711baaeda692ee9629548284c3c3a7ad`,
-candidate280/metal-127/smchandoff, MODE2#168, twenty-sixth exposure on boot
+Guest **stopped** after run `11879a5f49bb2cece67bdbcf31d8c308`,
+candidate280/metal-127/xpcevent2, MODE2#167, twenty-fifth exposure on boot
 `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`. GPU remains vfio-pci, power/control=on.
-VirtualSMC1.3.7 owns the sole AppleSMC:69 keys, bounded enumeration/end-of-list0xb8.
-PerfPowerServices0.0% before/after graphics and after service restart. Metal baseline,
-120-frame hardware H.264 and HEVC encode/decode, three-minute native material workload
-and two clean raw RFB captures pass their scoped checks. Guest-request shutdown;
-schema6 recovered/authorizes_launch=true, CP_STAT=0, no forced clears/timeouts/host
-faults. Overall **CORE_PROBE_PASS**. First stock-QEMU guest boot; durability pending.
-[SMC handoff investigation](findings/research/smc-opencore-handoff-20260916.md).
+XPC-imported GPU event:one preliminary plus32 extended consumer-first transfers,
+25,453,131 correct pixels. All helpers acknowledged shutdown and became absent.
+Baseline/capture pass,382 critical records; clean guest-request shutdown and schema6
+recovered/authorizes_launch=true, CP_STAT=0, no forced clears/timeouts/host faults.
+Overall **CORE_PROBE_PASS**. [XPC event evidence](findings/research/xpc-event-20260916.md).
+Prior host-ordered two-process IOSurface and depth/stencil/MSAA checks also pass.
 
 Prior Main10 decode:32 frames720p/1080p,71,884,800 luma/chroma values exactly
 match software; hardware encoder advertises Main8 only and rejects Main10.
@@ -40,7 +39,7 @@ its scoped checks; closure run itself remains INVALID for truncated terminal cap
 | Native desktop | Three minutes of moving/resizing native material windows; four clean raw RFB captures |
 | Safari | Two-minute transparency/blur/scrolling page; three clean captures plus clean desktop after larger-buffer pressure |
 | PerfPowerServices | 0.0% CPU, latest 0.76 s cumulative; corrected QEMU on eleven measured guest boots, all on one host boot |
-| Host regression | 958 tests OK, three skipped |
+| Host regression | 953 tests OK, three skipped |
 
 Earlier texture recreation (144 cases / 131,031,576 pixels), feedback rendering
 (48 cases / 5,280,000 pixels), and hardware H.264/HEVC encode/decode retain their
@@ -49,8 +48,7 @@ a selection limitation on the built-in topology; automatic required-hardware sel
 
 Driver build `51bfd732cf824249b70981f0c36fe314`; executable SHA256
 `7d06082f35959f900b5c59cb5f6d9e2efc67df13e935d338d7783524df63259b`.
-Current stock QEMU image `sha256:3a3c82c79bc4e73531f819ccdfa4053b3084efd7c1f645678dbf8b4b3a24369c`.
-Patched-QEMU results above remain historical evidence; stock-QEMU repetition is in progress.
+QEMU image `sha256:51cbd7dcdbad2d6492ce83a263e9854c28620d67a1ea12ebc0562c6fab2605ad`.
 [Address/desktop qualification](findings/research/address-reclaim-desktop-20260916.md),
 [artifact hashes](findings/research/address-reclaim-desktop-evidence-20260916.json),
 [native retry analysis](findings/research/allocation-retry-analysis-20260916.md),
@@ -74,12 +72,12 @@ No vfio→amdgpu cycling.
 
 User priority: remove the patched-QEMU SMC dependency through an OpenCore/guest
 solution, then validate on stock QEMU and separately qualify other hypervisors.
-Current OpenCore enables VirtualSMC1.3.7/gen2 and hides only QEMU SMC ACPI presence.
-First native run proves ownership and correct enumeration; a fresh-boot repeat is next.
+Current OpenCore has VirtualSMC disabled; native source detects and avoids an
+already active SMC device, so enabling the kext blindly is not a demonstrated fix.
 The README now summarizes current capabilities, goals and setup; detailed evidence
 remains here and in the roadmap. General QEMU setup examples are published, with
 CPU-only paused-QEMU configuration validation. The stock-QEMU handoff iteration
-below now has a named-boot allowance for repeatability testing.
+below now has a named-boot allowance; native validation is pending.
 
 Parallel Reims source audit completed at pinned commit `69a57dd69a6958e946c03b73e02db331f330f435`.
 Reviewed test designs now inform open visual, CPU/GPU ownership, plane/view/depth
@@ -95,12 +93,27 @@ independent boots and crash/fallback durability remain open.
 Milestones must update README/status/roadmap, push dev and fast-forward the clean
 local dev checkout; preserve unrelated changes and stashes.
 
-## Authorized next iteration — repeat stock-QEMU boot
+## Authorized next iteration — stock QEMU SMC handoff
 
 One additional exposure on boot `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`,
-candidate280/metal-127/attempt `smcreboot`, to repeat the successful stock-QEMU
-SMC ownership configuration on a fresh guest boot. Same stock image, VirtualSMC1.3.7,
-gen2 and exact DSDT patch as smchandoff; unchanged GPU driver. Check provider,
-bounded enumeration, PerfPowerServices, Metal baseline, hardware codec and cleanup.
-Fresh MODE2 plus every cycle identity/capture/abort/recovery gate retained, up to6000s.
-No exposure has occurred for this repeat yet. Earlier allowance/results archived.
+candidate280/metal-127/attempt `smchandoff`, to test the user-requested stock-QEMU
+portability solution. Use stock image `sha256:3a3c82c79bc4e73531f819ccdfa4053b3084efd7c1f645678dbf8b4b3a24369c`,
+VirtualSMC1.3.7/gen2 and an exact OpenCore DSDT patch setting only QEMU SMC `_STA`
+to zero; retain QEMU's device for boot-time key access. Driver/source identity and
+GPU baseline are unchanged. Private-media readback verified; prior boot media and
+config preserved under `run/research/smc-ownership-20260916/baseline-*`.
+
+Hypothesis: preventing native attachment to QEMU's incomplete SMC lets VirtualSMC
+own AppleSMC and provide bounded enumeration without a hypervisor patch. Require
+one AppleSMC with a VirtualSMC parent, native end-of-list0xb8, low PerfPowerServices
+CPU, graphics baseline/capture and clean shutdown/recovery. Boot failure, wrong
+provider or unbounded enumeration falsifies this configuration. Fresh MODE2 and
+all cycle admission/identity/capture/abort/cleanup gates remain required; up to6000s.
+No exposure has occurred for this iteration yet.
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-280-attempt-smchandoff-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
