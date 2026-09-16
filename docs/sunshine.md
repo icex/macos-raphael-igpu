@@ -3,17 +3,21 @@
 Sunshine is an optional alternative to macOS Screen Sharing. The current guest has
 [Sunshine v2026.914.233613](https://github.com/LizardByte/Sunshine/releases/tag/v2026.914.233613)
 installed from the official Intel DMG. Hardware-only VideoToolbox startup probes
-find H.264 and HEVC Main8. After candidate282, the user reports1080p60 and4K20–30FPS, improved from3–4FPS.
-Candidate282 now samples one costly allocation-failure diagnostic and passes
-two4K hardware codec checks; independent post-fix stream timing remains pending.
-[Evidence](../findings/research/allocation-log-thunk-20260916.md). 4K60 and a controlled comparison with Screen Sharing remain unqualified. macOS support is experimental; gamepad support is
-unavailable in this build.
+find H.264 and HEVC Main8. The current experiment advertises **H.264 only** and
+uses Moonlight-Qt. The user reports 4K60, but describes it as better rather than
+perfect, with about 40 FPS when moving over a transparent Safari window. An
+active server trace averages ~55 submissions/s with occasional long calls. The client and codec changed together, so this does not prove a client-only
+fix. Sustained 4K60 and input latency remain unqualified.
+[Current evidence](../findings/research/moonlight-qt-h264-20260916.md).
+
+Foundation-sunshine was investigated, then the user cancelled replacement. The
+original app, pairing and LAN settings remain. No Foundation app was installed.
+macOS support is experimental; gamepad support is unavailable in this build.
 
 A log message such as `Minimum FPS target ~30fps` is Sunshine's default idle-frame
-fallback for a60FPS request, not a30FPS cap. Measure moving content and distinguish
-server submissions from client delivery. Encoder-only simple-frame checks reach
-64.75FPS HEVC4K, but an active stream trace reaches~38 submissions/s; buffer and
-encoder waits remain under investigation. [Evidence](../findings/research/streaming-throughput-20260916.md).
+fallback for a 60 FPS request, not a 30 FPS cap. Measure moving content and
+separate server submissions from delivered frames. Simple-frame encoder-only
+results do not establish desktop performance.
 
 ## Experimental driver diagnostic budget
 
@@ -40,11 +44,15 @@ port = 48989
 encoder = videotoolbox
 vt_software = disabled
 vt_realtime = enabled
-hevc_mode = 2
+hevc_mode = 1
 av1_mode = 1
 origin_web_ui_allowed = lan
 upnp = disabled
 ```
+
+`hevc_mode=1` disables HEVC advertisement for this H.264 performance experiment;
+`2` restores HEVC Main8 advertisement. The driver retains HEVC support. The guest
+keeps the prior configuration as `sunshine.conf.before-h264-ab-282`.
 
 This separate port family avoids the default host Sunshine ports. The web UI is
 `https://GUEST_OR_FORWARDING_HOST:48990`; accept the local server certificate for

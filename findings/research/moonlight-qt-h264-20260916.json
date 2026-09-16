@@ -1,0 +1,70 @@
+{
+  "run_id": "560b1d7e8fea56b2c6f52fd7644d23f8",
+  "build_id": "7a26b1a2f6694ae88ed889105de30bc7",
+  "artifacts": [
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-results/cursor-active-buffers-output.txt",
+      "sha256": "f77aed4e09b481ceb009ede18d2d60cbd47b0e8f5239869270802775e9520e06"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-results/cursor-active-stacks-output.txt",
+      "sha256": "9eec9a0c4f19fe6c62278def04e45ad10147648e1587a663c51b7d9eb7baf472"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-results/cursor-latency-output.txt",
+      "sha256": "0b8abb59dd5e8eca34e1ca9dfc82b11e5d878bec718adb56546472b6b4ee7cad"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-results/capture-lock-output.txt",
+      "sha256": "9ebb1fef4a306df9c47053e7eba32d63430d2d134132d54279ed2c7913607b01"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-results/sunshine-build-info-output.txt",
+      "sha256": "6622b5ea045a2c7a31f6724d1d66eb336da3c2220ed0a6d28f7ce0683d86a6c5"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-results/sunshine-h264-ab-output.txt",
+      "sha256": "34da0debe2e05c0fdbe747d26a34cc80756409be6bff860ff4ae21674f19d83f"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-results/sunshine-qt-result-output.txt",
+      "sha256": "48c7ce6b00a720e73a2175ef5a01f893a1946b06a997a79ef1e4dbdd0b0a872f"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-results/h264-qt-active-output.txt",
+      "sha256": "dac784b9312e1c1ab44aafbc227dbaca136e294112bb557a1a864d50780e6f94"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-results/qt-pacing-output.txt",
+      "sha256": "9adc90b573009ffd7f546f6ffc752bb4257a04bce38867611e789c51cb5b556b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-results/qt-pacing-corrected-output.txt",
+      "sha256": "cf641a12f3d564086a95893e3bd647e4b1c1253a3cf7850e0e0dd4820d04836e"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-results/foundation-bootstrap-output.txt",
+      "sha256": "b2c2644a5274793a93a9a34881dd1dc930c06e82e0501bbb1a557156283beb3e"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-results/qt-session-events-output.txt",
+      "sha256": "c42dcca61f4c3c4287836eb2a001191612c1255a6e75331f24840df3d0c8fa83"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-results/safari-pacing-output.txt",
+      "sha256": "9458ba91caacadfaf814de26ddb03a5093e102e112add9a29efc09896553fa06"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-282-results/safari-pacing-armed-output.txt",
+      "sha256": "053dc703b45e69eaa855e84578d4b1264e77181e25ad9a4816948a57e22d5cc4"
+    }
+  ],
+  "qualification": "User reports improved 4K60 with Moonlight-Qt plus H.264, still imperfect. Sustained delivery/input latency and current-run cleanup remain open.",
+  "latest_user_report": "4K60 improved with Moonlight-Qt and H.264; drops to about40FPS when moving cursor over transparent Safari window.",
+  "host_regression": {
+    "tests": 965,
+    "skipped": 3,
+    "result": "OK",
+    "log": "/home/bogdan/macos-vm/run/candidate-282-qt-host-tests.log"
+  }
+}

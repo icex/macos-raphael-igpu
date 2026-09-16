@@ -1,13 +1,10 @@
 # Live status — 2026-09-16
 
-Candidate282's guarded allocation-diagnostic sampling patch is installed; generated
-4K codec checks pass. The current usable streaming combination is **Moonlight-Qt
-with hardware H.264**: the user reports 4K60, then clarifies it is better but still
-imperfect: mouse motion over a transparent Safari window falls to about 40 FPS.
-A 12-second server trace completes 663 submissions (~55/s), with a
-5.69 ms mean and occasional 32–131 ms calls. Client and codec changed together;
-neither alone is established as the cause of improvement. Sustained 4K60, latency,
-and this run's final capture/cleanup qualification remain open.
+Candidate282 is testing a targeted fix for4K Sunshine encoder stalls. Its guarded
+allocation-diagnostic sampling patch is installed; generated-pattern4K codec checks pass. User now reports1080p60 and4K20–30FPS;
+post-fix stream timing is not yet independently captured.
+The transparency fix and prior codec/Metal passes retain their documented scopes.
+Full desktop, physical output and release qualification remain open.
 
 ## Current host / guest
 
@@ -21,9 +18,7 @@ and this run's final capture/cleanup qualification remain open.
   Baseline Metal probe completed. Capture ongoing; final validity and cleanup pending.
 - Retina restored manually:1920x1080 logical/3840x2160 backing,2x,60Hz.
   Login agent exited0 but backing reverted1080p after boot; persistence remains open.
-- Sunshine8638 uses hardware-only VideoToolbox; the current experiment advertises
-  H.264 only (`hevc_mode=1`). Original configuration is backed up in the guest.
-  LAN server192.168.0.43:48989,
+- Sunshine742 uses hardware-only VideoToolbox. LAN server192.168.0.43:48989,
   webhttps://192.168.0.43:48990; existing LAN-only UFW rules retained.
   Relay and guest share the existing supervised deadline; no unlimited session.
 
@@ -36,27 +31,22 @@ CALL. Native allocation/retry/false returns/counters and global logging are unch
 
 ## Current blocker and next observation
 
-HEVC was confirmed at 62.988 Mbps while the user observed 20–30 FPS under mouse
-motion and 60 idle. Active encoder stacks wait for native GPU completion and
-Metal preprocessing. Capture still reaches approximately 60 buffers/s; its CPU
-base-address locks cost 1.232 seconds total over 716 calls, with some 16–65 ms
-calls. Those locks can contribute to uneven timing but do not explain the entire
-encoder bottleneck. Cursor positioning also has occasional 16–65 ms calls.
-
-After switching the server to H.264 and the user installing Moonlight-Qt, streaming
-is visibly better. Keep this combination while measuring remaining pacing and
-input latency. Do not attribute the gain solely to the client or call 4K60 solved.
-The source-only Sunshine capture-lock candidate is **unbuilt and undeployed**.
-Foundation-sunshine replacement was cancelled by the user; the original app,
-pairing and LAN ports are preserved. No Foundation binary or build dependencies
-were installed. [Current evidence](findings/research/moonlight-qt-h264-20260916.md).
-
-Prior scoped results remain: 24+60 generated 4K HEVC encode/decode frames,
-689,188,500 checked luma samples, maximum error 2. Isolated 120-frame HEVC 4K
-throughput is 64.75 FPS reused, 41.47 fresh and 58.89 pooled; H.264 reaches 76.77.
-These simple patterns do not qualify real desktop streaming or establish the
-hardware FPS ceiling. [Throughput investigation](findings/research/streaming-throughput-20260916.md),
-[hardware capabilities](findings/research/9800x3d-streaming-capabilities-20260916.md).
+Prior active4K stream completed43 encoder submissions in12 seconds, matching the
+reported3–4FPS. Native allocation failures averaged about1.9ms despite much faster
+allocation primitives. Diagnostic logging is the testable hypothesis, not yet a
+proven root cause. Two4K HEVC checks pass24+60 frames,689,188,500 luma samples checked, maximum error2.
+Under the second workload, failed allocation calls average41–60us; the prior
+active stream averaged~1.9ms. Workload differences prevent a streaming speedup claim.
+User now observes1080p60 and4K20–30FPS after the installed patch, confirming
+a substantial practical improvement.4K60 remains open; no published exact CPU
+encoder FPS ceiling was found. Active trace:451 submissions/12s (~38FPS),23.91ms average submission; subsequent
+encoder stack sample was idle and is not active evidence. Isolated120-frame HEVC
+4K reaches64.75FPS reused,41.47 fresh,58.89 pooled; H2644K76.77FPS. These simple
+patterns do not qualify real4K60 streaming. Next: uninterrupted capture-buffer
+reuse and encoder-stage trace before choosing a production optimization.
+[Current investigation](findings/research/streaming-throughput-20260916.md).
+[Hardware capability check](findings/research/9800x3d-streaming-capabilities-20260916.md).
+[Baseline evidence](findings/research/sunshine-performance-20260916.md).
 
 ## Verified progress
 

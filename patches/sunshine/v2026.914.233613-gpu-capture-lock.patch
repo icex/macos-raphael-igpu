@@ -1,0 +1,135 @@
+--- a/src/platform/macos/av_img_t.h
++++ b/src/platform/macos/av_img_t.h
+@@ -39,6 +39,7 @@
+    */
+   struct av_pixel_buf_t {
+     CVPixelBufferRef buf;  ///< Pixel buffer extracted from the sample buffer.
++    bool locked {};  ///< True only when this wrapper acquired a CPU base-address lock.
+ 
+     // Constructor
+     /**
+@@ -46,11 +47,9 @@
+      *
+      * @param sb Sample buffer that owns the image data.
+      */
+-    explicit av_pixel_buf_t(CMSampleBufferRef sb):
+-        buf(
+-          CMSampleBufferGetImageBuffer(sb)
+-        ) {
+-      CVPixelBufferLockBaseAddress(buf, kCVPixelBufferLock_ReadOnly);
++    explicit av_pixel_buf_t(CMSampleBufferRef sb, bool lock_base_address):
++        buf(CMSampleBufferGetImageBuffer(sb)),
++        locked(lock_base_address && CVPixelBufferLockBaseAddress(buf, kCVPixelBufferLock_ReadOnly) == kCVReturnSuccess) {
+     }
+ 
+     /**
+@@ -59,12 +58,12 @@
+      * @return Pointer to the first byte of image data in the pixel buffer.
+      */
+     [[nodiscard]] uint8_t *data() const {
+-      return static_cast<uint8_t *>(CVPixelBufferGetBaseAddress(buf));
++      return locked ? static_cast<uint8_t *>(CVPixelBufferGetBaseAddress(buf)) : nullptr;
+     }
+ 
+     // Destructor
+     ~av_pixel_buf_t() {
+-      if (buf != nullptr) {
++      if (buf != nullptr && locked) {
+         CVPixelBufferUnlockBaseAddress(buf, kCVPixelBufferLock_ReadOnly);
+       }
+     }
+--- a/src/platform/macos/display.mm
++++ b/src/platform/macos/display.mm
+@@ -6,6 +6,7 @@
+ // standard includes
+ #include <charconv>
+ #include <chrono>
++#include <atomic>
+ #include <optional>
+ #include <string_view>
+ 
+@@ -60,6 +61,7 @@
+   struct av_display_t: public display_t {
+     AVVideo *av_capture {};  ///< AV capture.
+     CGDirectDisplayID display_id {};  ///< Display ID.
++    std::atomic_bool zero_copy_nv12 {};  ///< Set only by the VideoToolbox NV12/P010 path.
+     std::unique_ptr<display_device::DisplayPowerGuardInterface> display_power_guard;  ///< Display power guard.
+ 
+     ~av_display_t() override {
+@@ -67,9 +69,15 @@
+     }
+ 
+     capture_e capture(const push_captured_image_cb_t &push_captured_image_cb, const pull_free_image_cb_t &pull_free_image_cb, bool *cursor) override {
++      __block bool lock_failed = false;
+       auto signal = [av_capture capture:^(CMSampleBufferRef sampleBuffer) {
+         auto new_sample_buffer = std::make_shared<av_sample_buf_t>(sampleBuffer);
+-        auto new_pixel_buffer = std::make_shared<av_pixel_buf_t>(new_sample_buffer->buf);
++        const OSType pixel_format = CVPixelBufferGetPixelFormatType(CMSampleBufferGetImageBuffer(new_sample_buffer->buf));
++        const bool zero_copy = zero_copy_nv12.load(std::memory_order_acquire) &&
++          (pixel_format == kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange ||
++           pixel_format == kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange);
++        auto new_pixel_buffer = std::make_shared<av_pixel_buf_t>(new_sample_buffer->buf, !zero_copy);
++        if (!zero_copy && !new_pixel_buffer->locked) { lock_failed = true; return false; }
+ 
+         std::shared_ptr<img_t> img_out;
+         if (!pull_free_image_cb(img_out)) {
+@@ -108,7 +116,7 @@
+       // FIXME: We should time out if an image isn't returned for a while
+       dispatch_semaphore_wait(signal, DISPATCH_TIME_FOREVER);
+ 
+-      return capture_e::ok;
++      return lock_failed ? capture_e::error : capture_e::ok;
+     }
+ 
+     /**
+@@ -128,16 +136,19 @@
+      */
+     std::unique_ptr<avcodec_encode_device_t> make_avcodec_encode_device(pix_fmt_e pix_fmt) override {
+       if (pix_fmt == pix_fmt_e::yuv420p) {
++        zero_copy_nv12.store(false, std::memory_order_release);
+         av_capture.pixelFormat = kCVPixelFormatType_32BGRA;
+ 
+         return std::make_unique<avcodec_encode_device_t>();
+       } else if (pix_fmt == pix_fmt_e::nv12 || pix_fmt == pix_fmt_e::p010) {
++        zero_copy_nv12.store(true, std::memory_order_release);
+         auto device = std::make_unique<nv12_zero_device>();
+ 
+         device->init(static_cast<void *>(av_capture), pix_fmt, setResolution, setPixelFormat);
+ 
+         return device;
+       } else {
++        zero_copy_nv12.store(false, std::memory_order_release);
+         BOOST_LOG(error) << "Unsupported Pixel Format."sv;
+         return nullptr;
+       }
+@@ -150,6 +161,7 @@
+      * @return Capture status reported to the streaming pipeline.
+      */
+     int dummy_img(img_t *img) override {
++      __block bool lock_failed = false;
+       if (!platf::is_screen_capture_allowed()) {
+         // If we don't have the screen capture permission, this function will hang
+         // indefinitely without doing anything useful. Exit instead to avoid this.
+@@ -159,7 +171,12 @@
+ 
+       auto signal = [av_capture capture:^(CMSampleBufferRef sampleBuffer) {
+         auto new_sample_buffer = std::make_shared<av_sample_buf_t>(sampleBuffer);
+-        auto new_pixel_buffer = std::make_shared<av_pixel_buf_t>(new_sample_buffer->buf);
++        const OSType pixel_format = CVPixelBufferGetPixelFormatType(CMSampleBufferGetImageBuffer(new_sample_buffer->buf));
++        const bool zero_copy = zero_copy_nv12.load(std::memory_order_acquire) &&
++          (pixel_format == kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange ||
++           pixel_format == kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange);
++        auto new_pixel_buffer = std::make_shared<av_pixel_buf_t>(new_sample_buffer->buf, !zero_copy);
++        if (!zero_copy && !new_pixel_buffer->locked) { lock_failed = true; return false; }
+ 
+         auto av_img = (av_img_t *) img;
+ 
+@@ -186,7 +203,7 @@
+ 
+       dispatch_semaphore_wait(signal, DISPATCH_TIME_FOREVER);
+ 
+-      return 0;
++      return lock_failed ? 1 : 0;
+     }
+ 
+     /**

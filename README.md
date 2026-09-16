@@ -47,15 +47,13 @@ readiness.
   latency independently of mode timing. A prior mixed 90/120 Hz sequence produced
   a user-black desktop and was cleanly restored; those requested rates are not
   proven modes.
-- **Evaluate remote streaming:** Sunshine 2026.914.233613 is installed in the
-  current guest. Startup hardware-only VideoToolbox selection detects H.264/HEVC
-  Main8. After the allocation-log fix, the user reports1080p60 and4K20–30FPS;
-  candidate282 now samples the costly allocation diagnostic and passes two4K
-  hardware codec checks. An isolated simple-frame test exceeds4K60; live4K60 and sustained streaming remain
-  unqualified. [Remaining bottleneck](findings/research/streaming-throughput-20260916.md). [Setup, LAN access and firewall rules](docs/sunshine.md). Lowering Apple
-  Screen Sharing quality improved observed speed. A raw vncdotool black frame in
-  the same working user session is a limited capture oracle, not a universal black
-  desktop result.
+- **Qualify remote streaming:** the current Sunshine server uses hardware H.264
+  with Moonlight-Qt. The user reports 4K60, falling to about 40 FPS over a transparent Safari
+  window; a server
+  trace averages about 55 submissions/s with occasional long calls. Client and
+  codec changed together, so their individual effects remain unproven. Sustained
+  frame delivery and input latency remain open. [Measurements](findings/research/moonlight-qt-h264-20260916.md)
+  · [Setup, LAN access and firewall rules](docs/sunshine.md).
 - **Broaden portability:** extend the working stock-QEMU/OpenCore setup across
   host boots and supported versions, and document requirements for other hypervisors,
   including actual PCIe passthrough support.

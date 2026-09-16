@@ -221,16 +221,18 @@ from device enumeration or passing microbenchmarks.
    modes, framebuffer allocation and capture geometry; confirm the active backing
    pixels, correct composition under motion, and clean shutdown/recovery. Treat
    nominal60Hz mode timing separately from measured remote frame delivery and
-   latency. Sunshine is installed and detects hardware-only H.264/HEVC Main8 at
-   startup. LAN relay and subnet-restricted UFW rules are configured; actual
-   Pre-fix4K streaming baseline was3–4FPS. Candidate282 installs guarded sampling of the
-   costly native allocation diagnostic;24+60-frame4K hardware HEVC checks pass.
-   Failed allocation calls average41–60us in the generated-pattern test versus~1.9ms
-   in the prior live stream, and the user now reports1080p60 /4K20–30FPS.4K60 remains open; an exact
-   hardware FPS ceiling is not established. Isolated HEVC4K reaches64.75FPS with
-   reused surfaces versus41.47FPS fresh and58.89FPS pooled. Trace live capture-buffer
-   reuse before deploying a pool/copy change; a blind extra copy can add stalls.
-   [Measurements](../findings/research/streaming-throughput-20260916.md).
+   latency. Sunshine's guarded allocation-diagnostic sampling is installed in282;
+   24+60 generated 4K hardware HEVC checks pass. HEVC streaming still fell to
+   20–30 FPS under mouse motion. After changing both the server to H.264 and the
+   client to Moonlight-Qt, the user reports 4K60, then clarifies it is better but
+   still imperfect, dropping to about 40 FPS with the cursor over transparent
+   Safari. The active H.264 trace averages ~55 submissions/s and 5.69 ms
+   submission time, with occasional 32–131 ms calls. Separate client delivery,
+   encoding and input latency before closing this gate; no single-cause claim.
+   Preserve the current H.264 setup and LAN-only access. Foundation replacement
+   was cancelled; a capture-lock source candidate remains unbuilt/undeployed.
+   [Current measurements](../findings/research/moonlight-qt-h264-20260916.md).
+   The isolated simple-frame HEVC result (64.75 FPS) is not desktop qualification.
    Login persistence also remains broken after startup despite the helper exiting0.
    [Evidence](../findings/research/allocation-log-thunk-20260916.md). Physical
    output is a separate gate.
