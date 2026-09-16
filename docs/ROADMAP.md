@@ -222,7 +222,8 @@ from device enumeration or passing microbenchmarks.
    pixels, correct composition under motion, and clean shutdown/recovery. Treat
    nominal60Hz mode timing separately from measured remote frame delivery and
    latency. Sunshine is installed and detects hardware-only H.264/HEVC Main8 at
-   startup, but Moonlight streaming and LAN performance remain untested. Physical
+   startup. LAN relay and subnet-restricted UFW rules are configured; actual
+   Moonlight streaming and LAN performance remain untested. Physical
    output is a separate gate.
 2. Qualify supervised QEMU closure and guest-crash/command-channel failure paths,
    then representative workloads on independently initialized host boots.

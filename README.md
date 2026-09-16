@@ -49,7 +49,7 @@ readiness.
   proven modes.
 - **Evaluate remote streaming:** Sunshine 2026.914.233613 is installed in the
   current guest. Startup hardware-only VideoToolbox selection detects H.264/HEVC
-  Main8; actual Moonlight playback remains untested. [Setup and LAN access](docs/sunshine.md). Lowering Apple
+  Main8; actual Moonlight playback remains untested. [Setup, LAN access and firewall rules](docs/sunshine.md). Lowering Apple
   Screen Sharing quality improved observed speed. A raw vncdotool black frame in
   the same working user session is a limited capture oracle, not a universal black
   desktop result.

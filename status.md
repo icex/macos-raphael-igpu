@@ -25,6 +25,8 @@ with software fallback disabled; startup detects H.264 and HEVC Main8. Its strea
 API responds as Raphael macOS on48989; the authenticated web interface responds
 on48990. LAN relay is active on192.168.0.43:48989, with web UI on48990;
 serverinfo200 and authenticated UI401 verified through the LAN address.
+UFW rules now allow the guest TCP/UDP port family from192.168.0.0/24 onenp9s0;
+other-device connectivity remains to be checked.
 No Moonlight playback/FPS result yet. [Setup](docs/sunshine.md),
 [artifact hashes](findings/research/sunshine-lan-20260916.json).
 Requested90/120FPS client settings are distinct from the observed60Hz desktop.

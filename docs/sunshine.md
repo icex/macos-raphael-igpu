@@ -86,3 +86,19 @@ Current development session: Moonlight `192.168.0.43:48989`, web UI
 that LAN address; another device's connection and actual UDP stream are not yet
 verified. This live relay expires at21:55:14 Europe/Bucharest on2026-09-16.
 [Evidence hashes](../findings/research/sunshine-lan-20260916.json).
+
+## Host firewall
+
+The current host uses UFW. Guest streaming needs its own rules, separate from a
+host Sunshine server's default479xx ports. The following rules are now active;
+substitute your interface, LAN subnet and host address on another installation:
+
+```sh
+ufw allow in on enp9s0 proto tcp from 192.168.0.0/24 to 192.168.0.43 port 48984,48989,48990,49010 comment 'Raphael guest Sunshine control and web UI'
+ufw allow in on enp9s0 proto udp from 192.168.0.0/24 to 192.168.0.43 port 48998,48999,49000 comment 'Raphael guest Sunshine stream'
+```
+
+These require administrator privileges. On this development host they were applied
+through a short-lived privileged container, without host sudo. UFW confirms both
+rules active. They persist across boots; the streaming relay still expires with
+the VM session. Access from another LAN device remains the end-to-end check.
