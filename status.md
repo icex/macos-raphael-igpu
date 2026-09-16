@@ -73,4 +73,15 @@ Main10 decode is now qualified within the short synthetic scope above. Main10
 hardware encoding remains unavailable in the native advertised profile set.
 Next work: interprocess resource visibility, broader formats/hazards and longer
 workloads, plus source-guided physical-display/lifecycle investigation. No next
-exposure allowance recorded yet.
+exposure allowance recorded below.
+
+## Next-run allowance
+
+One additional, twenty-fourth exposure is authorized on host boot
+`2508eb6d-ddf3-497d-9774-00a7ecebe3ed`, candidate280/metal-127/iosurfaceprocess.
+Unchanged driver and QEMU; fresh MODE2 through cycle.py is required. Test one
+1003×769 BGRA8 IOSurface imported in two separate processes: 32 bidirectional
+GPU-copy rounds with CPU pixel oracles and host completion/pipe ordering.
+A mismatch falsifies visibility for this workload; import failure is unqualified,
+not evidence of a GPU defect. This does not test interprocess GPU shared events.
+All identity, capture, host-fault, deadline, shutdown and recovery guards remain.
