@@ -31,7 +31,7 @@ remain open. Final capture, guest-request shutdown and recovery now pass.
 The user's latest instruction to proceed and fix motion-triggered streaming
 latency authorizes the next bounded experiment. Extend this boot's allowance by
 **one exposure (33)** on boot `2508eb6d-ddf3-497d-9774-00a7ecebe3ed` for
-candidate282/metal130, attempt `capturefix2`: build/test the scoped Sunshine
+candidate282/metal130, attempt `capturefix3`: build/test the scoped Sunshine
 GPU-buffer CPU-lock candidate and compare the same 4K60 workload. Prior run's
 schema6 recovery authorizes relaunch. Use tools/cycle.py, fresh MODE2, maximum
 6000 seconds, manual-reuse/ack-risk and all existing identity, host-fault,
@@ -39,7 +39,9 @@ capture, shutdown and cleanup gates. No vfio→amdgpu cycling or clock writes.
 This allowance is unconsumed until QEMU/VFIO opens. The first staging attempt
 (capturefix, MODE2#176) stopped at the unregistered282/131 card pair before QEMU;
 no exposure consumed. The application comparison reuses the approved282/130
-driver baseline and records its separate app hypothesis here.
+driver baseline and records its separate app hypothesis here. The second attempt
+(capturefix2, MODE2#177) also stopped before QEMU because its isolated build
+identity copy had not been prepared. Neither attempt consumed exposure33.
 
 Candidate281 stopped cleanly with CORE_PROBE_PASS, valid capture and schema6
 recovery authorizing relaunch. Its patch reported installed=0 because it compared
