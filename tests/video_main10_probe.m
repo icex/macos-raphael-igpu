@@ -129,6 +129,19 @@ static BOOL selection(VTSessionRef session,CFStringRef key,BOOL expected,NSStrin
     BOOL hardware=valid && CFEqual(value,kCFBooleanTrue);
     emit(phase,@{@"status":@(s),@"property_valid":@(valid),@"hardware":@(hardware)});
     if(value) CFRelease(value);
+    // The VCP software encoder returns PropertyNotSupported for this property.
+    // Accept that exact case only when the independently queried encoder ID is
+    // the explicitly requested VCP implementation; hardware still needs true.
+    if(!expected && s==kVTPropertyNotSupportedErr &&
+       CFEqual(key,kVTCompressionPropertyKey_UsingHardwareAcceleratedVideoEncoder)) {
+        CFTypeRef encoderID=NULL;
+        OSStatus idStatus=VTSessionCopyProperty(session,kVTCompressionPropertyKey_EncoderID,NULL,&encoderID);
+        BOOL software=!idStatus && encoderID && CFEqual(encoderID,CFSTR("com.apple.videotoolbox.videoencoder.hevc.vcp"));
+        emit(@"software-encoder-identity",@{@"status":@(idStatus),@"matched":@(software),
+            @"encoder_id":encoderID ? [(__bridge id)encoderID description] : @"missing"});
+        if(encoderID) CFRelease(encoderID);
+        if(software) return YES;
+    }
     if(!valid || hardware!=expected) { errors++; return NO; }
     return YES;
 }
@@ -168,6 +181,7 @@ int main(int argc,const char **argv) {
         NSMutableDictionary *spec=[@{(__bridge id)kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder:@(hardware)} mutableCopy];
         if(hardware) { spec[(__bridge id)kVTVideoEncoderSpecification_RequireHardwareAcceleratedVideoEncoder]=@YES;
             spec[(__bridge id)kVTVideoEncoderSpecification_RequiredEncoderGPURegistryID]=@(registry); }
+        if(!hardware) spec[(__bridge id)kVTVideoEncoderSpecification_EncoderID]=@"com.apple.videotoolbox.videoencoder.hevc.vcp";
         VTCompressionSessionRef enc=NULL;
         OSStatus s=VTCompressionSessionCreate(NULL,width,height,kCMVideoCodecType_HEVC,(__bridge CFDictionaryRef)spec,
                                              (__bridge CFDictionaryRef)attrs,NULL,encoded,NULL,&enc);
