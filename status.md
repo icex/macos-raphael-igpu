@@ -36,7 +36,7 @@ image to prepare; regression coverage checks that handoff.
 
 Standing user instruction to fix and continuously test authorizes thirteenth exposure
 on boot2508eb6d-ddf3-497d-9774-00a7ecebe3ed, candidate277/card metal-124, attempt
-smcverified. Same kext; derived image2ada1bb2323f4eefe430a9ea5f0e2f65cad6914aca4f9364c50b0ec3d694654c
+smcfinal. Same kext; derived image2ada1bb2323f4eefe430a9ea5f0e2f65cad6914aca4f9364c50b0ec3d694654c
 replaces QEMU with10.1.2 plus SMC enumeration. Fresh MODE2; maximum6000seconds,
 5400second interactive hold, all identity/capture-fatal/host-fault/shutdown/recovery
 aborts retained. Verify PerfPowerServices from startup without debugger changes,
@@ -48,3 +48,14 @@ then resume native transparency diagnosis. No direct OpenGL workload.
 - Output: `/home/bogdan/macos-vm/run/candidate-277-attempt-smcfix-results`
 - Verdict: `CORE_PROBE_PASS`
 - Boundary: `None`
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-277-attempt-smcverified-results`
+- Verdict: `INVALID`
+- Boundary: `identity_or_route_missing`
+
+smcverified refused before launch: prepare used the pinned image but admission
+observed the default environment. No QEMU/VFIO exposure, no ledger consumption.
+Cycle now passes the same pin to both prepare and runner; identity gate retained.

@@ -195,7 +195,8 @@ class CommandRegressionTest(unittest.TestCase):
                 with patch.object(cycle, 'run_step', return_value=completed) as step:
                     result = cycle.prepare_and_run(
                         make_args(manual_reuse=manual, ack_risk=manual), {'image_id': 'sha256:pinned'}, vm, vm, 'run')
-                self.assertEqual(step.call_args_list[0].kwargs['env'], {'IMAGE': 'sha256:pinned'})
+                for call in step.call_args_list:
+                    self.assertEqual(call.kwargs['env'], {'IMAGE': 'sha256:pinned'})
                 command = step.call_args.args[1]
                 self.assertEqual('--manual-reuse' in command, manual)
                 self.assertEqual('--ack-risk' in command, manual)

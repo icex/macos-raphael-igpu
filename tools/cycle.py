@@ -242,7 +242,8 @@ def prepare_and_run(args, facts: dict, worktree: Path, vm: Path, run_id: str) ->
     if getattr(args, "manual_reuse", False):
         runner += ["--manual-reuse", "--ack-risk"]
     result = run_step("gpu run", runner, cwd=worktree, allow_failure=True,
-                      log=vm / "run" / f"candidate-{args.candidate}{suffix}-run.log")
+                      log=vm / "run" / f"candidate-{args.candidate}{suffix}-run.log",
+                      env={"IMAGE": facts["image_id"]})
     try:
         verdict = json.loads(result.stdout.strip().splitlines()[-1])
         if not isinstance(verdict, dict):
