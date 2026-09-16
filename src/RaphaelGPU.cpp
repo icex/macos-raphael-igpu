@@ -8955,7 +8955,7 @@ static bool textureDiagRead(void *opaque, uint64_t address, void *out, size_t si
     return textureDiagReadUser(context->map, address, out, size) == KERN_SUCCESS;
 }
 
-// Both exact targets change only byte5. Retain the complete instruction guard,
+// Retain the complete instruction guard for every exact userspace target,
 // task-private copy-on-write mapping, post-write verification and RX restoration.
 // The VCN target advertises unavailable Apple DPM; native setupPowerState owns its
 // no-DPM cleanup, while wrapVcnInitialize retains actual Raphael SMU power-up.
@@ -8986,7 +8986,8 @@ static void textureDiagCow(TextureDiagReadContext *context, int pid,
     if (readBefore != KERN_SUCCESS || memcmp(before, target.instruction, target.instructionSize) != 0) {
         return;
     }
-    const uint8_t replacement = target.patchedInstruction[5];
+    size_t patchOffset = 0, patchSize = 0;
+    if (!RaphaelTextureDiag::patchSpan(target, patchOffset, patchSize)) return;
     kern_return_t protectRc = textureDiagProtect(context->map, page, 0x1000, FALSE,
                                                    VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
     kern_return_t writeRc = KERN_FAILURE;
@@ -8998,8 +8999,8 @@ static void textureDiagCow(TextureDiagReadContext *context, int pid,
                                                     afterProtect, target.instructionSize) &&
             memcmp(afterProtect, target.instruction, target.instructionSize) == 0;
         if (stillOriginal)
-            writeRc = textureDiagWriteUser(context->map, &replacement,
-                                           result.instructionAddress + 5, 1);
+            writeRc = textureDiagWriteUser(context->map, target.patchedInstruction + patchOffset,
+                                           result.instructionAddress + patchOffset, patchSize);
     }
     // The protection API can fail after partial map work: always restore.
     restoreRc = textureDiagProtect(context->map, page, 0x1000, FALSE, regionProt);
@@ -9011,6 +9012,9 @@ static void textureDiagCow(TextureDiagReadContext *context, int pid,
                     memcmp(after, target.patchedInstruction, target.instructionSize) == 0) ?
             KERN_SUCCESS : KERN_FAILURE;
     }
+    if (&target == &RaphaelTextureDiag::kFeedbackTarget)
+        CRLOG("FBEXPAND: COW pid=%d addr=%#llx p=%d w=%d r=%d v=%d", pid,
+              result.instructionAddress, protectRc, writeRc, restoreRc, verifyRc);
     if (vcnTarget)
         CRLOG("VCNDPM: COW pid=%d addr=%#llx p=%d w=%d r=%d v=%d", pid,
               result.instructionAddress, protectRc, writeRc, restoreRc, verifyRc);
@@ -9037,12 +9041,13 @@ static void applyCurrentTaskImagePatches(bool includeMetal) {
         kern_return_t taskRc = (task && textureDiagTaskInfo) ?
             textureDiagTaskInfo(task, TASK_DYLD_INFO,
                                 reinterpret_cast<task_info_t>(&dyld), &count) : KERN_FAILURE;
-        for (unsigned targetIndex = 0; targetIndex < 2; ++targetIndex) {
+        for (unsigned targetIndex = 0; targetIndex < 3; ++targetIndex) {
             const bool vcnTarget = targetIndex == 1;
             if (vcnTarget ? !(vcnNoDpmEnabled && __atomic_load_n(&ppCompatibilityBypassed, __ATOMIC_ACQUIRE)) : (!includeMetal || texDiagEnabled == 0))
                 continue;
             const auto &target = vcnTarget ? RaphaelTextureDiag::kVcnDpmTarget :
-                                            RaphaelTextureDiag::kTextureTarget;
+                                            (targetIndex == 2 ? RaphaelTextureDiag::kFeedbackTarget :
+                                                                RaphaelTextureDiag::kTextureTarget);
             RaphaelTextureDiag::Result result {};
             if (taskRc == KERN_SUCCESS && count >= TASK_DYLD_INFO_COUNT &&
                 dyld.all_image_info_size >= 16 && map != nullptr)

@@ -65,6 +65,30 @@ static constexpr Target kTextureTarget = {
     kDriverPath, sizeof(kDriverPath), kUuid, kInstructionOffset,
     kInstruction, kPatchedInstruction, sizeof(kInstruction)
 };
+// GFX10 texture feedback must expand compressed color attachments before shader
+// reads alias the current render target. Preserve the existing per-encoder
+// "already expanded" bit; only remove the skip requested by the newer barrier.
+// TEST ESI,ESI; SETZ DL; OR DL,DIL -> TEST ESI,ESI; XOR DL,DL; NOP; OR DL,DIL.
+static constexpr uint8_t kFeedbackInstruction[8] = {0x85,0xf6,0x0f,0x94,0xc2,0x40,0x08,0xfa};
+static constexpr uint8_t kFeedbackPatchedInstruction[8] = {0x85,0xf6,0x30,0xd2,0x90,0x40,0x08,0xfa};
+static constexpr Target kFeedbackTarget = {
+    kDriverPath, sizeof(kDriverPath), kUuid, 0x173ac3,
+    kFeedbackInstruction, kFeedbackPatchedInstruction, sizeof(kFeedbackInstruction)
+};
+
+// Return only the changed byte span; existing single-byte patches stay single-byte.
+inline bool patchSpan(const Target &target, size_t &offset, size_t &size) {
+    if (!target.instruction || !target.patchedInstruction || !target.instructionSize ||
+        target.instructionSize > 16) return false;
+    offset = 0;
+    while (offset < target.instructionSize &&
+           target.instruction[offset] == target.patchedInstruction[offset]) ++offset;
+    if (offset == target.instructionSize) return false;
+    size = target.instructionSize - offset;
+    while (size > 1 && target.instruction[offset + size - 1] ==
+                       target.patchedInstruction[offset + size - 1]) --size;
+    return true;
+}
 static constexpr char kVcnDpmDriverPath[] =
     "/System/Library/Extensions/AMDRadeonVADriver2.bundle/Contents/MacOS/AMDRadeonVADriver2";
 static constexpr uint8_t kVcnDpmUuid[16] = {

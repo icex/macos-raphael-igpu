@@ -70,3 +70,11 @@ host boot, unchanged 277/card metal-124, corrected QEMU image, maximum 6000 seco
 5400-second hold. All identity/capture-fatal/host-fault/shutdown/recovery aborts remain.
 Stop through the run's `stop-requested` file; a future exposure needs its own named
 boot allowance and fresh clean MODE2. No merge/push to main before full desktop proof.
+
+## Candidate279 prepared
+
+Native transparency has a controlled fix: expanding compressed render targets before
+shader feedback clears the reproducer; restoring original bytes brings corruption
+back. See findings/research/feedback-decompression-20260916.md. Candidate279 retains
+277 topology/codecs and adds the guarded three-byte userspace repair; fresh guest
+validation pending. Current277 guest remains supervised until normal stop.

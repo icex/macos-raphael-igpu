@@ -72,6 +72,25 @@ static void makeVcnValid(Fixture &f, bool wrongUuid = false) {
 }
 
 int main() {
+    {
+        size_t offset=99, size=99;
+        assert(RaphaelTextureDiag::patchSpan(RaphaelTextureDiag::kTextureTarget,offset,size));
+        assert(offset==5 && size==1);
+        assert(RaphaelTextureDiag::patchSpan(RaphaelTextureDiag::kVcnDpmTarget,offset,size));
+        assert(offset==5 && size==1);
+        assert(RaphaelTextureDiag::patchSpan(RaphaelTextureDiag::kFeedbackTarget,offset,size));
+        assert(offset==2 && size==3);
+        Fixture f; makeValid(f);
+        auto &target=RaphaelTextureDiag::kFeedbackTarget;
+        std::memcpy(f.bytes.data()+0x400+target.instructionOffset,target.instruction,target.instructionSize);
+        auto check=[&](){ return RaphaelTextureDiag::inspect(readFixture,&f,f.base()+0x100,1,target); };
+        assert(check().instructionMatch && !check().alreadyPatched);
+        std::memcpy(f.bytes.data()+0x400+target.instructionOffset+offset,target.patchedInstruction+offset,size);
+        assert(check().status==RaphaelTextureDiag::Ok && check().alreadyPatched);
+        f.bytes[0x400+target.instructionOffset+7]^=1;
+        assert(!check().instructionMatch);
+    }
+
     Fixture valid;
     makeValid(valid);
     auto result = RaphaelTextureDiag::inspect(readFixture, &valid,
