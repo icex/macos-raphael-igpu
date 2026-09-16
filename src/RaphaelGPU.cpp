@@ -8604,6 +8604,8 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
                 entryMatches(addr, sz, 0x53375, tail, sizeof(tail));
             uint8_t before[5] {}, after[5] {};
             bool installed = false;
+            mach_vm_address_t target = 0, resolvedLogger = 0;
+            bool reachable = false;
             const mach_vm_address_t expectedLogger = patcher.solveSymbol(
                 KernelPatcher::KernelID, "_kprintf");
             patcher.clearError();
@@ -8611,11 +8613,29 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
                 memcpy(before, reinterpret_cast<const void *>(addr + 0x53370), sizeof(before));
                 int32_t originalDisplacement = 0;
                 memcpy(&originalDisplacement, before + 1, sizeof(originalDisplacement));
-                const auto target = static_cast<mach_vm_address_t>(
+                target = static_cast<mach_vm_address_t>(
                     static_cast<int64_t>(addr + 0x53375) + originalDisplacement);
-                if (before[0] == 0xe8 && target == expectedLogger &&
-                    RaphaelAllocationLog::makeCall(addr + 0x53370,
-                        reinterpret_cast<mach_vm_address_t>(budgetAllocationFailure), after)) {
+                resolvedLogger = target;
+                // The kernel collection binds this native CALL to an import island,
+                // not directly to kprintf. Validate the single FF25 RIP-relative
+                // jump and its pointer; never accept an arbitrary imported target.
+                // The exact native CALL/prefix/tail identify this loader-owned stub.
+                if (before[0] == 0xe8 && target != expectedLogger &&
+                    target >= 0xffffff0000000000ULL && target <= UINT64_MAX - 6) {
+                    uint8_t stub[6] {};
+                    memcpy(stub, reinterpret_cast<const void *>(target), sizeof(stub));
+                    if (stub[0] == 0xff && stub[1] == 0x25) {
+                        int32_t displacement = 0;
+                        memcpy(&displacement, stub + 2, sizeof(displacement));
+                        const auto slot = static_cast<mach_vm_address_t>(
+                            static_cast<int64_t>(target + 6) + displacement);
+                        if (slot >= 0xffffff0000000000ULL && slot <= UINT64_MAX - 8)
+                            memcpy(&resolvedLogger, reinterpret_cast<const void *>(slot), sizeof(resolvedLogger));
+                    }
+                }
+                reachable = RaphaelAllocationLog::makeCall(addr + 0x53370,
+                    reinterpret_cast<mach_vm_address_t>(budgetAllocationFailure), after);
+                if (before[0] == 0xe8 && resolvedLogger == expectedLogger && reachable) {
                     originalAllocationLogger = target;
                     KernelPatcher::LookupPatch lp {&kexts[KextX6000], before, after, sizeof(before), 1};
                     patcher.applyLookupPatch(&lp, reinterpret_cast<uint8_t *>(addr + 0x53370), sizeof(before) + 1);
@@ -8624,8 +8644,10 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
                 }
             }
             allocationLogInstalled = installed;
-            CRLOG("ALLOCLOG: guarded=%u installed=%u first=8 every=1024 original=%#llx",
-                  guard, installed, originalAllocationLogger);
+            CRLOG("ALLOCLOG: guarded=%u installed=%u first=8 every=1024 original=%#llx "
+                  "target=%#llx resolved=%#llx expected=%#llx reachable=%u",
+                  guard, installed, originalAllocationLogger, target, resolvedLogger,
+                  expectedLogger, reachable);
             patcher.clearError();
         }
         if (vcnDpgEnabled) {

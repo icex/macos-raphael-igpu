@@ -1189,3 +1189,12 @@ class Candidate280ContractTest(unittest.TestCase):
         self.assertEqual(card["candidate_version"], "1.0.281")
         self.assertEqual(card["functional_boot_arguments"]["rgpualloclog"], "1")
         self.assertEqual(card["functional_boot_arguments"]["rgputexdiag"], "2")
+
+    def test_candidate282_preserves_281_guards_and_adds_new_pair(self):
+        tool = load_tool()
+        tool.configure("1.0.282", "metal-130")
+        raw = (ROOT / "experiments/metal-130.json").read_bytes()
+        card = tool.validate_card(raw, hashlib.sha256(raw).hexdigest())
+        self.assertEqual(card["candidate_version"], "1.0.282")
+        self.assertEqual(card["functional_boot_arguments"]["rgpualloclog"], "1")
+        self.assertEqual(card["functional_boot_arguments"]["rgpummhub"], "1")
