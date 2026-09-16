@@ -2,12 +2,19 @@
 
 ## Host and task boundary
 
-Boot `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`, seven VM exposures completed.
-Latest run `c1b774b2087ecdcd4b3edd2d25e788c7` (candidate 277 repeat), MODE2 #142:
-CORE_PROBE_PASS, exited-after-guest-request, recovered. No GPU/host fault in
-captured kernel messages (network/container messages are present). No QEMU remains;
-Raphael `0000:7b:00.0` stays vfio-pci, power/control=on. No further run needed for
-this fix; any new exposure requires its own named-boot allowance. No main merge/push.
+Boot `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`: **candidate 277 is RUNNING** for
+the user's remote-desktop testing, eighth VM exposure. Run `d7190def5989c624ca02a9066edafeab`,
+attempt userdesktop, fresh clean MODE2 #143. Standard baseline probe complete;
+interactive-ready receipt present; Screen Sharing returned `RFB 003.889` at
+127.0.0.1:5900. LAN endpoint 192.168.0.43:5900.
+
+Supervised interactive hold ends **2026-09-16 13:48:04 EEST**.
+Coordinator runs independently as `rgpu-candidate277-userdesktop.service`; existing
+6000s hard cap, identity/capture/host-fault aborts and cleanup paths remain active.
+Stop through `candidate-277-attempt-userdesktop-results/stop-requested`.
+Cleanup for this active run is pending, not claimed. GPU remains vfio-pci,
+power/control=on. Prior seven exposures completed; the preceding candidate 277
+repeat shut down by guest request and recovered. No main merge/push.
 
 ## Fix and evidence
 
