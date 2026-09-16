@@ -76,3 +76,9 @@ This is an abnormal QEMU-closure experiment, never a clean guest shutdown.
 Hypothesis: authenticated retained leases permit queue/firmware cleanup after
 QEMU exits; falsified by missing/invalid capture, incomplete cleanup, forced HQD
 clears, nonzero CP status or a non-authorizing recovery receipt.
+
+The initial closure launch invocation stopped in preflight because the cycle
+defaults to the canonical candidate-280 worktree, where metal-128 was not yet
+present. No MODE2 reset or QEMU/VFIO exposure occurred; the twentieth allowance
+is unconsumed. Reviewed closure changes are now fast-forwarded into the canonical
+worktree; retry uses that path with all guards unchanged.
