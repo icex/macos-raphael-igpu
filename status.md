@@ -1,69 +1,56 @@
 # Live status — 2026-09-16
 
-**Visual fix implemented and reproduced:** candidate279 expands compressed render
-targets before Metal feedback reads. Controlled native panels become clean with
-the patch and corrupt again after restoration. Fresh279 passes the previously
-failing pixel test; user reports no more Screen Sharing corruption. Full desktop
-and physical display qualification remain open.
+**Candidate280 passes the bounded visual, codec and cleanup checks.** The reproduced
+Screen Sharing transparency defect is fixed; routine critical-log exhaustion is
+also corrected. Full desktop and physical display qualification remain open.
 
 ## Current host / guest
 
-Guest is **stopped**. Run3f5d8049506b1164b29292988b0eacb5, candidate279/cardmetal-126,
-MODE2#154, fifteenth exposure on host boot2508eb6d-ddf3-497d-9774-00a7ecebe3ed.
-GPU0000:7b:00.0 remains vfio-pci, power/control=on. Results:
-`/home/bogdan/macos-vm/run/candidate-279-results`.
+Guest is **stopped** after run4eeb58b45c54db193ec9b14421f23f33,
+candidate280/cardmetal-127, MODE2#156, sixteenth exposure on host boot
+2508eb6d-ddf3-497d-9774-00a7ecebe3ed. GPU0000:7b:00.0 remains vfio-pci,
+power/control=on. Results: `/home/bogdan/macos-vm/run/candidate-280-results`.
 
-The supervisor detected critical capture overflow and requested shutdown. Guest
-exited-after-guest-request. Overall INVALID/capture_loss; recovery refused with
-`CR2 snapshot reports loss`. **No clean recovery receipt.** Independent MODE2#154
-had passed before this run; it does not establish post-run recovery.
+Functional checks passed; identity/capture valid,398critical records with no loss.
+Shutdown: exited-after-guest-request. Recovery: schema6/recovered,
+authorizes_launch=true, CP_STAT=0, active_after=0, no forced HQD clears.
+Overall **CORE_PROBE_PASS**, which does not qualify the entire desktop roadmap.
 
 ## Verified current changes
 
-- **Transparency:** exact driver UUID/byte-guarded three-byte COW repair, preserving
-  the per-encoder expansion guard. Fresh279 feedback check12cases/1,320,000pixels,
-  zero bad pixels; maxerror1byte. Desktop Metal baseline passed.
-- **Codecs:** fresh120-frame HEVC and120-frame H.264 hardware encode/decode passed,
-  maxlumaerror0/1. Original seven sustained cases/9,600frames remain evidence in
-  their scope. Explicit decoder GPU-ID selection still fails; automatic hardware
-  selection works. Main10/arbitrary-media/chroma/concurrency remain unqualified.
-- **PerfPowerServices:** corrected QEMU enumeration works on two guest boots on
-  this host boot; latest PID152 at0.0% CPU/0.76s cumulative. Earlier normal service
-  restart also passed. No service disabling or guest security change.
-- **Host regression suite:**937tests OK,3skipped.
+- **Transparency:** exact UUID/byte-guarded feedback expansion repair retained.
+  Fresh280 unobstructed raw RFB captures show clean animated native panels.
+  Four independently seeded processes (two sequential, two concurrent) pass
+  48cases/5,280,000pixels with no mismatches, maximum error1byte. Fresh279 passed
+  the original12cases and the user reported no more corruption.
+- **Capture:** routine image queries/packet dumps remain in ordinary serial;
+  successful COW critical records are bounded, failures remain critical. Strict
+  loss detection and recovery checks are unchanged. Final398/512records,0drops.
+- **Codecs:** fresh120-frame HEVC and120-frame H.264 hardware encode/decode pass,
+  maxlumaerror0/1. Original seven sustained cases/9,600frames remain separate
+  evidence. Explicit decoder GPU-ID selection remains unsupported; automatic
+  required-hardware selection works. Main10/chroma/arbitrary-media/concurrency
+  remain unqualified.
+- **PerfPowerServices:** corrected QEMU now observed on three fresh guest boots
+  on this host boot; latest0.0% CPU/0.77s cumulative after graphics/codecs.
+- **Host suite:**938tests OK,3skipped.
 
-Driver build eb7ebdfeb3d1440c99601da45ce83069; executable SHA256
-`e9d918e94bc5d8e1f20d636ff65cf078d46ac0848650565f878bdec2f8fe5aee`.
+Driver build51bfd732cf824249b70981f0c36fe314; executable SHA256
+`7d06082f35959f900b5c59cb5f6d9e2efc67df13e935d338d7783524df63259b`.
 QEMU image `sha256:51cbd7dcdbad2d6492ce83a263e9854c28620d67a1ea12ebc0562c6fab2605ad`.
-[Mechanism, decompiled sources, scope and limitations](findings/research/feedback-decompression-20260916.md),
-[artifact hashes](findings/research/feedback-decompression-evidence-20260916.json).
+[Visual mechanism](findings/research/feedback-decompression-20260916.md),
+[capture correction and scope](findings/research/critical-record-overflow-20260916.md),
+[280 artifact hashes](findings/research/candidate-280-qualification-20260916.json).
 
-## Current blockers / next work
+## Remaining work
 
-1. Stop routine diagnostics exhausting the512-record critical buffer while retaining
-   all required identity, fatal, recovery and lifecycle evidence. Do not relax the
-   loss detector or manufacture a successful recovery receipt.
-2. Repeat unobstructed native-panel capture, longer normal desktop use and complete
-   shutdown/recovery after that correction. First279 panel captures were obscured;
-   the follow-up capture was interrupted by the supervisor.
-3. Complete M5 concurrency/reclamation and M7 independent-host-boot/crash coverage,
-   then physical DCN output and performance qualification.
+1. Measure M5 resource reclamation across bounded allocation/recreation cycles;
+   current distinct-seed concurrency evidence covers BGRA8 feedback only.
+2. Longer ordinary desktop interaction, broader synchronization/format coverage,
+   M7 independent-host-boot and crash/closure qualification.
+3. Physical DCN output and performance qualification after correctness gates.
 
-Historical candidate278 OpenGL hang and live validation crash are not marked fixed.
-No main merge/push until full desktop proof. New exposure needs a named-boot
-allowance and fresh successful MODE2 through tools/cycle.py. No vfio→amdgpu cycling.
-[Roadmap](docs/ROADMAP.md).
-
-## Candidate280 one-run allowance
-
-Standing instructions authorize the sixteenth exposure on host boot
-2508eb6d-ddf3-497d-9774-00a7ecebe3ed, candidate280/cardmetal-127, to validate bounded
-routine diagnostics and the279 visual fix. Prior279 guest shut down normally but
-its lossy capture supplies no recovery receipt. Use documented manual-reuse/ack-risk
-with fresh MODE2 requiring CP_STAT=0 and RLC_CNTL=0. Preserve all identity, capture-
-fatal, host-fault, shutdown and recovery checks; max6000seconds with manual stop
-after bounded visual, codec and process-recreation checks. Host937tests pass3skipped.
-
-First280 attempt rejected before QEMU because the stage version parser ended at279.
-Extended only to the reviewed280/card127 pair and tested its boundary. MODE2#155
-passed CP_STAT=0/RLC_CNTL=0; no launch/ledger entry consumed.
+Historical candidate278 direct OpenGL hang and live-validation crash remain
+unresolved. No main merge/push before full desktop proof. Additional exposure
+requires a named-boot allowance and fresh successful MODE2 through tools/cycle.py.
+No vfio→amdgpu cycling. [Roadmap](docs/ROADMAP.md).

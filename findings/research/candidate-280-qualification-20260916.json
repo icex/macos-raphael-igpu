@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "run_id": "4eeb58b45c54db193ec9b14421f23f33",
+  "results": "/home/bogdan/macos-vm/run/candidate-280-results",
+  "build_id": "51bfd732cf824249b70981f0c36fe314",
+  "host_boot": "2508eb6d-ddf3-497d-9774-00a7ecebe3ed",
+  "functional": "48 feedback cases, 5280000 pixels, zero mismatches; native RFB captures0/2 visually clean; hardware H264 and HEVC120frames each pass",
+  "capture": "valid; final398 records, zero loss",
+  "cleanup": "exited-after-guest-request; schema6 recovered authorizes_launch=true; CP_STAT=0, active_after=0, forced_inactive=0",
+  "overall": "CORE_PROBE_PASS; broader roadmap not qualified",
+  "artifacts": {
+    "manifest.json": "072778f5099d573d1c7b0d3ef1daa771df90f3422b627c412b91d67784887c00",
+    "running-identity.json": "47b3f26b68473863b1606098a4fa569902f31a41932f5d402021c09721c0c730",
+    "probe.json": "2b7569a122bd28d9c106c142f3e75ab69792296a0d442dcfabd0c7508b76a6f3",
+    "feedback-isolation-command.json": "56070ed34379a1f3407ee8028e37c423ce19c1e4c2d2cd4c150d0e6d674cedde",
+    "feedback-isolation-output.txt": "60d57daa942e4c2804c28d2e2698831e1e603faf3d2c46e3d1fbe068bb954d53",
+    "fixed-visible-panels-launch.txt": "a182f14800a3d3893bb13ed9bed886e197fc185af9524e0b2f061e5ecd7b572e",
+    "fixed-visible-panels-0.png": "28434cb57a012c8884bab9c047de5c994b1e17f11a897be9cdfd610f7a7e6aae",
+    "fixed-visible-panels-1.png": "77214fe1cc242093cecd2a149adc544808f090e22b3c4e0c1ff26f9596d600a1",
+    "fixed-visible-panels-2.png": "9a469381b6dad93036e0311382b35ced1a7614d18c09c63104010c88c0b1058e",
+    "budget-hevc-120-output.txt": "1ec06be06d663e0c611edefbcebac2c1065eb6b83c5947854c077de61ab57ca7",
+    "budget-h264-120-output.txt": "0824fb8d6573d66768f384f1761119873896d3ffbb47dcd678ec9b6081b8de1c",
+    "pre-shutdown-processes.txt": "bfcf03339010f3a0358a54985a8d8cc80e980a09bbc3ca27c0bb7d69ff29fb9c",
+    "critical-quiesce.json": "b356eac5f3bdd3fa74fb11c57767e27584a0838c4179de5b98b5635d87b2fba5",
+    "critical.txt": "39b33e77b31fb5fdbbeb8627e25108a3c5cdc119aea37ef37525e56447fb9c3b",
+    "shutdown.json": "4c0dfb1a0d12d304698fa61d09f384b371af5c9074376e662e2f674d1cfb4b03",
+    "recovery.json": "54b54492356b2150faa831b90200ee076fc0e7d2d6beb6d79454585f7192afcc",
+    "verdict.json": "2ffe6007b21abf6ae27d2203c3d2e3e9bbdb30fa1c58edc3fce4681f30a33475",
+    "host-kernel-messages.json": "08ae794243fe8462e8c04b205da2a67cd794fb67a6c1caa0ce9956c5290fb5a9"
+  }
+}

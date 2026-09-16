@@ -1,10 +1,10 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-09-16. Current driver: **candidate 1.0.279**. Full desktop acceleration
+Updated 2026-09-16. Current driver: **candidate 1.0.280**. Full desktop acceleration
 is **not qualified**. The reproduced Screen Sharing transparency defect is fixed
-in candidate279; critical diagnostic overflow now interrupts longer sessions.
-The immediate priority is reliable capture and cleanup, then complete the
-memory, lifecycle, physical-display and performance gates below.
+in candidate279 and retained in280. Candidate280 also passes strict capture and
+clean recovery after visual, concurrent-client and codec workloads. The remaining
+priority is memory, broader lifecycle, physical-display and performance qualification.
 
 This is the current roadmap. [Live state and run authority](../status.md) are separate.
 The [previous roadmap](../findings/research/status-archives/roadmap-before-20260916-refresh.md)
@@ -15,14 +15,14 @@ and “next experiment” instructions do not describe today's host.
 
 | Milestone | State | Evidence and remaining work |
 |---|---|---|
-| M0 — Experiment identity and supervision | Implemented; maintained | Immutable manifests, loaded-build checks, capture, deadlines and cleanup. Fixed cycle image selection so preparation and admission use the same pinned emulator. Host suite: 937 tests, OK (3 skipped). |
+| M0 — Experiment identity and supervision | Implemented; maintained | Immutable manifests, loaded-build checks, capture, deadlines and cleanup. Fixed cycle image selection so preparation and admission use the same pinned emulator. Host suite: 938 tests, OK (3 skipped). |
 | M1 — Controlled starting state | Demonstrated for current workflow | One-way amdgpu→vfio-pci handoff, power/control=on, fresh MODE2 and clean-state receipts. Broad independent-host-boot qualification remains open. |
 | M2 — Native startup failure localization | Completed for original blocker | False second SDMA instance and subsequent channel routing were traced; historical evidence retained. |
 | M3 — Native engine startup repair | Demonstrated | Raphael topology/address adaptations reach native startup and completed Metal work. Preserve these fixes while diagnosing desktop rendering. |
-| M4 — First correct Metal compute | Achieved | Candidate 194 checked 196,608 values and 4,096 rendered pixels; its overall capture remained inconclusive. Current277 desktop Metal baselines complete with verified device/build identity. |
-| M5 — Rendering, memory and synchronization | Partial | Managed-texture copy correction retained; private/managed/IOSurface and multiple-format readback probes pass. Full concurrent-client, resource-reclamation and synchronization matrix remains open. |
-| M6 — Desktop and physical display | Visual fix verified; broader qualification open | Candidate279 fixes the reproduced feedback corruption. Fresh pixel checks and user observation pass; unobstructed fresh native capture and longer desktop qualification remain. Physical DCN 3.1.5 output is a separate unqualified path. |
-| M7 — Lifecycle and host protection | Partial | Multiple guest-request shutdowns and authorizing recoveries observed on this boot. Fresh-host-boot, crash-path and repeated lifecycle qualification remain open. |
+| M4 — First correct Metal compute | Achieved | Candidate 194 checked 196,608 values and 4,096 rendered pixels; its overall capture remained inconclusive. Current280 desktop Metal baselines complete with verified device/build identity. |
+| M5 — Rendering, memory and synchronization | Partial | Managed-texture copy correction retained; private/managed/IOSurface and multiple-format readback probes pass. Candidate280 passes48 BGRA8 feedback cases across four distinct-seed processes, including two concurrent clients. Resource reclamation and the broader synchronization matrix remain open. |
+| M6 — Desktop and physical display | Visual fix verified; broader qualification open | Candidate279 fixes the reproduced feedback corruption. Fresh pixel checks, user observation and unobstructed native RFB captures on280 pass; longer desktop qualification remains. Physical DCN 3.1.5 output is a separate unqualified path. |
+| M7 — Lifecycle and host protection | Partial | Multiple guest-request shutdowns and authorizing recoveries observed on this boot, including280 with the visual and logging fixes. Fresh-host-boot, crash-path and repeated lifecycle qualification remain open. |
 | M8 — Performance and release | Not qualified | Correctness first; no release, Metal3 conformance, game-support or full-desktop claim. No merge/push to main before demonstrated usable desktop acceleration. |
 
 ## Blocker revalidation — 2026-09-16
@@ -30,11 +30,11 @@ and “next experiment” instructions do not describe today's host.
 | Previously listed issue | Current classification | Revalidation |
 |---|---|---|
 | HEVC decode fails before kernel context creation | Resolved for automatic required-hardware selection | Fresh 120-frame hardware encode/decode pass; original 7-case/9,600-frame artifact hashes rechecked. |
-| PerfPowerServices continuously consumes a CPU core | Resolved in corrected QEMU, observed on two guest boots | Native enumeration passes;0.0% after startup, graphics work and one service restart. Second guest boot279 is also0.0%; independent-host-boot durability remains open. |
-| Green/purple transparency and smearing | Fixed for reproduced feedback defect in279 | Reversible native A/B intervention, fresh12-case pixel pass, user reports clean Screen Sharing. Longer desktop qualification remains open. |
-| Critical-event record overflow | Confirmed active capture/lifecycle blocker | Runs smcpmio and279 fill512records; loss detection stops the guest and recovery refuses lossy evidence. |
+| PerfPowerServices continuously consumes a CPU core | Resolved in corrected QEMU, observed on three guest boots | Native enumeration passes;0.0% after startup, graphics work and one service restart. Guest boots279/280 are also0.0%; independent-host-boot durability remains open. |
+| Green/purple transparency and smearing | Fixed for reproduced feedback defect in279 | Reversible native A/B intervention, fresh279/280 pixel passes, unobstructed280 native RFB panels and user reports clean Screen Sharing. Longer desktop qualification remains open. |
+| Critical-event record overflow | Resolved for tested280 workload; finite capacity retained | Earlier smcpmio/279 overflow preserved as failures. Candidate280 finishes with398/512records,0drops and authorizing recovery; strict loss checks unchanged. |
 | Explicit HEVC decoder GPU registry-ID selection | Confirmed remaining limitation | Fresh explicit-ID request returns -12906; automatic hardware request succeeds. Does not block automatic decoding. |
-| No Metal execution / initial SDMA startup failure / pre-submit allocation failure | Superseded as current-baseline blockers | Current277 probe passed, completed GPU work and has a WindowServer accelerator client. Broader memory coverage remains open. |
+| No Metal execution / initial SDMA startup failure / pre-submit allocation failure | Superseded as current-baseline blockers | Current280 probe passed, completed GPU work and has a WindowServer accelerator client. Broader memory coverage remains open. |
 | Same-boot restart impossible / reboot required after every run | Superseded as a blanket claim | Recorded guest-request shutdowns, authorizing recovery and subsequent starts. This is not universal crash or host stability qualification. |
 | Candidate 278 direct OpenGL hang | Historical reproduced failure, not revalidated on 277 | Workload intentionally excluded pending first-draw diagnosis; do not claim it is fixed or a current 277 reproduction. |
 | Live Metal validation crashes | Unresolved diagnostic limitation | Earlier CoreDisplay initialization crash; no successful validation verdict, no fresh repeat. |
@@ -68,7 +68,7 @@ after four index bytes, and returns 0xb8 past the last key. Native AppleSMC call
 verified all six keys and both tested out-of-range indices. On the fresh smcpmio
 guest, PerfPowerServices was 0.0% CPU; after a service restart it was 0.1% CPU with
 0.54 s cumulative CPU time, later 0.0% with the same cumulative time. No Apple service is disabled and no guest binary or
-security setting was patched. Candidate279 supplies a second passing guest boot (0.0% CPU,0.76s cumulative).
+security setting was patched. Candidate279 and280 supply second and third passing guest boots (0.0% CPU,0.76s/0.77s cumulative).
 Longer observation and independent-host-boot durability remain open. The first emulator patch incorrectly waited for a length
 byte and failed native testing; it is superseded.
 [Root cause and native results](../findings/research/perfpower-smc-enumeration-20260916.md),
@@ -80,8 +80,9 @@ byte and failed native testing; it is superseded.
 - [x] Targeted storage/format, upload/copy, blur and interpolation probes.
 - [ ] Complete the bounded storage/synchronization matrix with distinct seeds and
   resource recreation; retain exact tested-feature coverage.
-- [ ] Exercise sequential independent processes, then concurrent clients/queues
-  with non-overlapping data and bounded allocations.
+- [x] Exercise sequential independent processes, then concurrent clients with
+  distinct data and bounded allocations:280, seeds3/7 sequential and11/29
+  concurrent;48 BGRA8 feedback cases. Broader multi-queue coverage remains open.
 - [ ] Measure resource reclamation and verify no stale mapping or cross-client corruption.
 - [ ] Attribute a failure to its actual engine before making an SDMA/GFX diagnosis.
 
@@ -96,7 +97,8 @@ Passing isolated shaders does not establish correct desktop composition.
 - [x] Isolate and fix compressed render-target feedback corruption (candidate279).
 - [ ] Verify clean transparent windows, animation and ordinary desktop interaction
   through Screen Sharing, with repeatable captures and no new GPU faults.
-- [ ] Confirm the same driver on a fresh guest boot with working Metal and codecs.
+- [x] Confirm the feedback repair on fresh279 and280 guest boots with working Metal
+  and hardware H.264/HEVC encode/decode.
 - [ ] Map real connectors/HPD/AUX/PHY and DCN 3.1.5 differences; implement only
   demonstrated incompatibilities, beginning with one changing 1080p60 output.
 - [ ] Qualify modes, reconnection and higher resolutions after first stable output.
@@ -109,15 +111,17 @@ artifacts. Native blur, varying-half gradients and offset-viewport replays pass,
 but do not reproduce the complete failing compositor state.
 
 Candidate 278's linear-swizzle change did not fix the defect and is rejected.
-Its direct OpenGL probe hung; do not repeat it without a diagnosis. Keep277 as the
-hardware baseline. Temporary precision, binning, filter-merging and dirty-region
+Its direct OpenGL probe hung; do not repeat it without a diagnosis. Use280 as the
+current hardware baseline. Temporary precision, binning, filter-merging and dirty-region
 controls did not resolve the corruption; their coverage limits are recorded.
 The live validation attempt crashed during CoreDisplay initialization, so it gives
 no validation verdict on the original defect. Candidate279 uses the native expansion path before render-target feedback.
 Its single-pass reproducer passes12cases/1,320,000pixels after previously failing
 private/native-barrier cases. Controlled native panels clear with the patch and
-fail after restoration. Fresh panel captures were obscured; repeat after capture
-overflow is corrected. See [fix evidence](../findings/research/feedback-decompression-20260916.md).
+fail after restoration. The initial279 panel captures were obscured. Fresh280 foreground native panels
+are unobstructed and clean in raw RFB captures0/2, after different animation frames.
+Four distinct-seed280 processes pass48cases/5,280,000pixels, including two concurrent
+clients. Longer desktop use remains an acceptance gate. See [fix evidence](../findings/research/feedback-decompression-20260916.md).
 [Display evidence](../findings/research/transparency-live-composition-20260916.md)
 (probes are also retained in the candidate 278 research worktree).
 
@@ -158,14 +162,16 @@ from device enumeration or passing microbenchmarks.
 
 ## Next work, in order
 
-1. Fix critical-record exhaustion without weakening capture/recovery validation;
-   retain required identity, faults and lifecycle events, bound routine diagnostics.
-2. Repeat native transparency captures and normal desktop use on279; keep
-   measuring the SMC CPU fix without disabling the service.
-3. Complete a clean lifecycle with the visual fix; Metal and120-frame checks for
-   each hardware codec already pass on279.
-4. Complete M5 concurrent-resource coverage and M7 independent-boot/lifecycle gates;
-   then progress physical display and measured performance qualification.
+1. Measure resource reclamation under bounded allocate/execute/release cycles;
+   retain distinct-seed correctness checks while tracking allocation return.
+2. Broaden normal desktop and synchronization coverage on280; keep observing the
+   SMC CPU fix without disabling the service.
+3. Complete M7 independent-host-boot and crash/closure lifecycle gates.
+4. Progress physical display and measured performance qualification after those gates.
+
+Candidate280 already closes the immediate capture-loss blocker:398critical records,
+no loss, guest-request shutdown and authorizing recovery. See
+[280 evidence](../findings/research/candidate-280-qualification-20260916.json).
 
 One owner controls hardware and the guest command channel. Review the hypothesis,
 baseline and evidence after three experiments on an unexplained failure; repeated

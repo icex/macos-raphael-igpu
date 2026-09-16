@@ -23,3 +23,19 @@ Regression coverage exercises1000successes per COW family followed by failures a
 lifecycle records after400earlier critical records:413retained,0drops, faults and
 final lifecycle record readable. This verifies the budget primitive; hardware
 qualification must still demonstrate no critical drops and successful cleanup.
+
+## Hardware validation — candidate280
+
+Run4eeb58b45c54db193ec9b14421f23f33, build51bfd732cf824249b70981f0c36fe314,
+host boot2508eb6d-ddf3-497d-9774-00a7ecebe3ed, MODE2#156. Four independently
+seeded feedback processes (two sequential, two concurrent) pass48cases and
+5,280,000checked pixels; fresh foreground native-panel RFB captures0/2 are clean.
+Hardware H.264 and HEVC each encode/decode120unique frames with maxlumaerror1/0.
+PerfPowerServices remains0.0% CPU/0.77s cumulative.
+
+Final acknowledged critical snapshot18 has398records, zero loss. Guest exits after
+requested shutdown. Schema6 recovery authorizes launch with CP_STAT=0, active_after=0,
+forced_inactive=0. Overall CORE_PROBE_PASS. Host938tests OK,3skipped.
+This closes overflow for the tested workload; it does not prove unlimited diagnostic
+capacity, full desktop correctness, resource reclamation or independent-host-boot
+recovery. Earlier lossy runs remain INVALID. [Artifact hashes](candidate-280-qualification-20260916.json).
