@@ -49,3 +49,12 @@ Tested Main 8-bit 4:2:0 synthetic luma patterns, sequential sessions, 720p/1080p
 Main10, arbitrary media/chroma fidelity, concurrent sessions and crash recovery
 repeatability remain unqualified. Full desktop/display and managed-texture copy
 issues unchanged. Handoff client guard remains uninstalled/untested on hardware.
+
+## User remote-desktop run allowance
+
+User explicitly requested starting QEMU for hands-on remote desktop testing.
+Extend allowance by one exposure (eighth total) on boot
+`2508eb6d-ddf3-497d-9774-00a7ecebe3ed`: same tested candidate 277 binary, fresh
+MODE2, manual-reuse/ack-risk, 6000s maximum and 5400s interactive hold, retaining
+all identity, capture-fatal, host-fault, shutdown and recovery paths.
+No automated codec workloads beyond the standard baseline probe during this hold.

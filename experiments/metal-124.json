@@ -79,7 +79,7 @@
     "generic_client_observations_conditional",
     "no_root_correlation_claim"
   ],
-  "repeat_policy": "Sixth exposure allowed on boot 2508eb6d-ddf3-497d-9774-00a7ecebe3ed under explicit user direction to fix and repeat testing. Fresh MODE2 and manual reuse required.",
+  "repeat_policy": "Eighth exposure on boot 2508eb6d-ddf3-497d-9774-00a7ecebe3ed explicitly requested by user for remote desktop testing; fresh MODE2 and unchanged safety/cleanup gates.",
   "abort_on": [
     "identity_mismatch",
     "capture_loss",
@@ -159,5 +159,5 @@
   "critical_replay_quiesce": {
     "version": 1
   },
-  "interactive_hold_seconds": 1800
+  "interactive_hold_seconds": 5400
 }
