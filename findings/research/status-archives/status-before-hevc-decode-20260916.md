@@ -1,0 +1,81 @@
+# Live status — 2026-09-16, candidate 275: hardware video encode and decode work
+
+## Current host and task boundary
+
+Boot `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`, Raphael `0000:7b:00.0` on **vfio-pci**,
+`power/control=on`, no QEMU. Two VM exposures on this boot (274, 275); both ended
+with `exited-after-guest-request` and a `recovered` receipt with no kernel messages.
+Another run on this boot needs a new allowance note here plus MODE2 reset (next #135)
+and `--manual-reuse --ack-risk`. No vfio-pci → amdgpu rebinding within a boot. Keep PCI
+reset methods disabled. Nothing merged or pushed to main.
+
+## Candidate275 — hardware codec milestone
+
+Branch `candidate-275-vcn-wptr`, worktree `/home/bogdan/macos-vm/run/worktrees/candidate-275`,
+kext 1.0.275, card `metal-122`, source `50fc83c`, run `5cb7876d841a17cec484c12398fdf135`,
+build `39ee63ee96744007acbaf658fc254ccd`, MODE2 reset 134. Verdict **CORE_PROBE_PASS**
+(offscreen Metal 1,000 frames, 24 readback cases). Artifacts
+`/home/bogdan/macos-vm/run/candidate-275-results/`.
+
+275 = 274's diagnostic-free source + 273's exact HWLibs OR-immediate patch at
+`_queue_decode_3_0_submit_frame`+0x64 (`OR ECX,0x80000000` → `OR ECX,0`), so the shared
+`rb.wptr` and `SCRATCH2` carry the raw DWORD write pointer as every released Linux
+`vcn_v3_0` does. Apple only sets bit 31 in its DPG branch, which no shipping Apple
+product runs. Guard/patch/route all reported 1. Read-only observers added: NBIO 7.2
+doorbell range request (VCN type 5 → offset 0x310, size 8, result 0) and per-submission
+AON/RBC readbacks.
+
+Interactive-hold workloads (`tools/guest-codec-control.py`, 1280×720, 3 frames,
+registry 4294968063), all with normal exit and no ring restart:
+
+| Workload | Result |
+|---|---|
+| H.264 sw encode → **HW decode** (`decode-control-hw-h264-output.txt`) | 3/3 frames, 2,675,475 luma values, max error 1 — first hardware decode |
+| H.264 **HW encode** (h264.gva) → HW decode (`video-codec-probe-hw-h264-*`) | 3/3, max error 1, 248/320/328 bytes |
+| HEVC **HW encode** (hevc.gva) → HW decode (`video-codec-probe-hw-hevc-*`) | 3/3, max error 0 |
+| HEVC sw encode (hevc.vcp) → HW decode (`decode-control-hw-hevc-*`) | decoder creation −12913, no kernel context; open |
+
+Kernel evidence (serial `VCNQ`): four submissions, `wptr=40/80/c0/100`, `scratch2` equal,
+`rptr` advancing to `c0`, doorbell page offset `0xc40` (= index 0x310 × 4, matching the
+programmed range), power 905/906, pause 0. The earlier "VCPU never boots / wall below
+the driver" conclusion is retracted: cache-BAR/soft-reset `0xffffffff` reads are normal
+on working Linux as well.
+
+## Open issues
+
+1. HEVC hardware decode of a software-encoded (hevc.vcp) stream fails at
+   `VTDecompressionSessionCreate` (−12913) before any kernel VCN context; the same
+   decoder accepts the hardware-encoded HEVC stream. Userspace/format-description
+   investigation, not a ring issue.
+2. Only three-frame workloads are qualified. Sustained streams, other resolutions,
+   HEVC Main10, alpha, and concurrent sessions are untested.
+3. Full desktop/display path (DCN 3.1.5) remains unqualified; managed-texture copy
+   limitation unchanged.
+4. GPU handoff client guard (`fix/gpu-handoff-clients`, worktree `gpu-handoff-clients`):
+   fixture-tested, not installed into `~/macos-vm/` copies or `experiment.py` harness
+   list, not hardware-tested. Needed before any future amdgpu → VFIO handoff.
+
+## Suggested continuation
+
+1. HEVC sw-stream decode: compare the hevc.vcp and hevc.gva format descriptions
+   (hvcC, chroma/profile) in the guest; likely a VideoToolbox capability mismatch.
+2. Longer codec qualification (e.g. 600-frame H.264/HEVC like the Linux baseline)
+   under one hold, then consider merging the 275 kext changes toward `dev`.
+3. Finish the handoff guard before the next reboot-based Linux control.
+
+Previous state archived in
+`findings/research/status-archives/status-before-candidate275-result-20260916.md`.
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-275-attempt-hevc1-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-275-attempt-hevc2-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
