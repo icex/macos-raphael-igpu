@@ -1145,3 +1145,13 @@ class AttemptNamespaceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class Candidate280ContractTest(unittest.TestCase):
+    def test_exact_card_and_version_boundary(self):
+        tool = load_tool()
+        tool.configure("1.0.280", "metal-127")
+        raw = (ROOT / "experiments/metal-127.json").read_bytes()
+        card = tool.validate_card(raw, hashlib.sha256(raw).hexdigest())
+        self.assertEqual(card["candidate_version"], "1.0.280")
+        with self.assertRaises(RuntimeError):
+            tool.configure("1.0.281", "metal-128")

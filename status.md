@@ -63,3 +63,7 @@ its lossy capture supplies no recovery receipt. Use documented manual-reuse/ack-
 with fresh MODE2 requiring CP_STAT=0 and RLC_CNTL=0. Preserve all identity, capture-
 fatal, host-fault, shutdown and recovery checks; max6000seconds with manual stop
 after bounded visual, codec and process-recreation checks. Host937tests pass3skipped.
+
+First280 attempt rejected before QEMU because the stage version parser ended at279.
+Extended only to the reviewed280/card127 pair and tested its boundary. MODE2#155
+passed CP_STAT=0/RLC_CNTL=0; no launch/ledger entry consumed.
