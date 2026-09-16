@@ -1,4 +1,36 @@
-# 4K / Retina feasibility: metadata passes, desktop default fails
+# Current correction: isolated60Hz Retina is user-visible and crisp
+
+The historical record below describes exposure29 and its initial restoration;
+it is superseded for current setup recommendations by exposure30,
+`2456747451ac073cf5fa0ea1657590cf` (MODE2#172), on the same host boot.
+After the clean baseline restoration, a revised helper avoiding redundant public
+mode switches configured1920×1080 logical /3840×2160 backing /2× at60Hz.
+The user explicitly confirmed visible, crisp output, then improved responsiveness
+by lowering Apple Screen Sharing quality. RAW vncdotool captures are black in this
+same working user session. Those frames are not a universal desktop oracle.
+
+This retracts the earlier general conclusion that Retina itself fails or that its
+login helper must stay disabled. The prior user-observed black desktop remains real;
+the mixed90/120/default sequence did not isolate its cause. Allocation failures
+remain correlated observations, not a proven explanation of the black screen.
+
+Current `tools/remote-retina.m` and `tools/install-remote-retina.sh` provide an
+idempotent60Hz-only setup. The helper is installed and enabled, its launchd job ran
+once and exited0, and a fresh process confirms1920×1080/3840×2160/2×/60Hz after
+Sunshine startup. Fresh-login/reboot persistence remains untested. Requested90/120Hz
+have not been demonstrated: the observed fallback remains60Hz.
+
+Sunshine official Intel v2026.914.233613 is installed with hardware-only
+VideoToolbox selection. Startup detectsH.264 and HEVCMain8; actual Moonlight
+streaming remains untested. [Setup and networking](../../docs/sunshine.md).
+Current session capture/final shutdown/recovery remain pending under the original
+21:55:14 local interactive deadline. Artifacts in
+`candidate-280-attempt-retinarestore-results`: `retina60-install-output.txt`,
+`sunshine-retina-verified-output.txt`, `sunshine-configure-lan-output.txt`.
+
+---
+
+# Historical4K / Retina experiment: metadata passes, mixed default sequence fails
 
 Candidate280, stock QEMU10.1.2, macOS15.7.9/24G830; run
 `aaa3f63204f17d12bcb4a8d855774cf1`, MODE2#171/exposure29 on host boot

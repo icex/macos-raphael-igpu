@@ -31,7 +31,7 @@ and “next experiment” instructions do not describe today's host.
 | Previously listed issue | Current classification | Revalidation |
 |---|---|---|
 | HEVC decode fails before kernel context creation | Resolved for automatic required-hardware selection | Fresh 120-frame hardware encode/decode pass; original 7-case/9,600-frame artifact hashes rechecked. |
-| 4K /1080p HiDPI default | Open: metadata success, desktop failure | Temporary setup exposes4K backing/2×, but default setup later produced black. Agent disabled; clean baseline relaunch and user confirmation pass.90/120Hz remain unverified; fallback reports60Hz. [Evidence](../findings/research/remote-retina-20260916.md). |
+| 4K /1080p HiDPI default | Scoped setup works; boot and transport qualification open | Isolated no-redundant-switch helper yields a crisp 1920×1080 logical / 3840×2160 backing desktop at nominal 60 Hz. A raw vncdotool black frame in the same working user session is a limited oracle; a prior mixed 90/120 Hz sequence did produce user-black and was cleanly restored. Requested 90/120 Hz are not proven modes. [Evidence](../findings/research/remote-retina-20260916.md). |
 | PerfPowerServices continuously consumes a CPU core | Resolved on stock QEMU via OpenCore/VirtualSMC | Two fresh guest boots: one verified VirtualSMC provider,69 keys/end-of-list0xb8,0.0% CPU before/after work and after a service restart. Prior patched-QEMU passes retained; independent-host-boot durability remains open. |
 | Green/purple transparency and smearing | Fixed for reproduced feedback defect in279 | Reversible native A/B intervention, fresh279/280 pixel passes, unobstructed280 native RFB panels and user reports clean Screen Sharing. Longer desktop qualification remains open. |
 | Critical-event record overflow | Resolved for tested280 workload; finite capacity retained | Earlier smcpmio/279 overflow preserved as failures. Candidate280 finishes with398/512records,0drops and authorizing recovery; strict loss checks unchanged. |
@@ -209,18 +209,21 @@ from device enumeration or passing microbenchmarks.
 
 ## Next work, in order
 
-1. **Full 4K remote desktop (user priority,2026-09-16).** Expose and validate a
-   native3840×2160 desktop and1920×1080 HiDPI with4K backing through macOS
-   Screen Sharing. Start with bounded, reversible guest-side feasibility; if it needs
-   a substantial detour, continue the other roadmap items. **Initial Retina-default
-   attempt failed:** backing metadata reached4K/2× but the desktop later went black;
-   login helper disabled.90/120Hz requests still produced60Hz fallback. Diagnose
-   allocation/rendering separately before retrying mode setup.
+1. **Full 4K remote desktop (user priority,2026-09-16).** The current retina60
+   helper is installed and enabled idempotently; isolated setup is visibly crisp at
+   1920×1080 logical with 3840×2160 backing and nominal 60 Hz. Validate login/reboot
+   persistence, active backing pixels, composition under motion, and Screen Sharing
+   transport. Lower Apple Screen Sharing quality improved observed speed. A prior
+   mixed 90/120 Hz sequence produced user-black and was cleanly restored; actual
+   90/120 Hz operation is unproven. Keep the raw vncdotool black result scoped to
+   that capture oracle and preserve the lower-resolution fallback.
    [Evidence](../findings/research/remote-retina-20260916.md). Trace advertised display
    modes, framebuffer allocation and capture geometry; confirm the active backing
    pixels, correct composition under motion, and clean shutdown/recovery. Treat
    nominal60Hz mode timing separately from measured remote frame delivery and
-   latency. Preserve lower-resolution fallback; physical output is a separate gate.
+   latency. Sunshine is installed and detects hardware-only H.264/HEVC Main8 at
+   startup, but Moonlight streaming and LAN performance remain untested. Physical
+   output is a separate gate.
 2. Qualify supervised QEMU closure and guest-crash/command-channel failure paths,
    then representative workloads on independently initialized host boots.
    Supervised HMP quit now has positive cleanup evidence: five queues dequeued,

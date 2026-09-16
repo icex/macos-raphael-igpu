@@ -113,3 +113,10 @@ disks/SMC data and exits through QMP without errors. This checks config/device
 syntax, not a new macOS installation or GPU passthrough. The [stock-QEMU SMC handoff](../../docs/stock-qemu-smc.md) has separate native
 boot, provider, CPU, Metal, codec and lifecycle evidence; the base-config syntax
 check alone does not establish those results.
+
+## Optional Retina and Moonlight streaming
+
+For1080p HiDPI backed by4K pixels and a hardware-only VideoToolbox Sunshine setup,
+see the [Sunshine guide](../../docs/sunshine.md). It includes the additional QEMU
+TCP/UDP forwarding entries for LAN access. The tested desktop timing is60Hz;
+90/120FPS client requests and actual delivered frames need separate measurement.

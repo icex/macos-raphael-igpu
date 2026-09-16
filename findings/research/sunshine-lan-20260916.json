@@ -1,0 +1,18 @@
+{
+  "run_id": "2456747451ac073cf5fa0ea1657590cf",
+  "boot_id": "2508eb6d-ddf3-497d-9774-00a7ecebe3ed",
+  "observed_epoch": 1789581082.7823603,
+  "results_directory": "/home/bogdan/macos-vm/run/candidate-280-attempt-retinarestore-results",
+  "artifacts_sha256": {
+    "sunshine-configure-lan-output.txt": "53f6d022062c322f33f7a9f3e7135a6993bea1f2b99d620a24dd99975010ec6a",
+    "sunshine-retina-verified-output.txt": "76583a826688d2e5daa72b8fd580985e717b8f91375388c0b324b16b47d5fb03",
+    "sunshine-qemu-forwarding.json": "cc5591c2533153081cb67c5bba05a9df5592af9730309f27571b40ae670a1ef2",
+    "sunshine-lan-serverinfo.xml": "aca317d578e51436496be4ddf0b0f77764fb850394cf695b080ea268ce188c36",
+    "retina60-install-output.txt": "a3d027ca78dedf2de00795b7c1c56817a59c581484f89fa67b93e498fd7af919",
+    "sunshine-lan-relay-ready-snapshot.json": "d3ce4ec1bd3135b09d10a6bd5ef5da7e81a62a2bd719849eeda8bd73525692ac"
+  },
+  "functional": "Retina metadata verified; user confirms crisp Apple Screen Sharing; Sunshine hardware-only startup detects H264/HEVC Main8; LAN-address serverinfo200 and WebUI401",
+  "capture": "No actual Moonlight stream yet; RAW RFB not reliable oracle for Apple Retina client",
+  "cleanup": "Current session remains supervised, pending shutdown/recovery",
+  "deadline_local": "2026-09-16 21:55:14 Europe/Bucharest"
+}

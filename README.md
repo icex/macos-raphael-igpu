@@ -21,7 +21,7 @@ and long-duration reliability are still being tested.
 
 | Capability | Current result |
 |---|---|
-| Remote desktop | WindowServer uses the accelerator; tested transparency, blur, window movement and resizing render correctly. |
+| Remote desktop | WindowServer uses the accelerator; a restored isolated setup is visibly crisp at 1920×1080 logical, 3840×2160 backing, 2× and nominal 60 Hz. Transparency, blur, window movement and resizing render correctly. |
 | Metal rendering and compute | Verified output in targeted compute, texture, depth/stencil and MSAA tests. Full Metal conformance is not established. |
 | Memory and synchronization | Buffer/texture reuse, synchronized CPU/GPU texture updates, retained color contents, GPU fences, shared events and cross-process IOSurface transfers pass targeted checks. |
 | Hardware video | H.264 and HEVC Main8 encode/decode work. HEVC Main10 decoding passes short tests; Main10 hardware encoding is unavailable in the current native profile set. |
@@ -41,10 +41,18 @@ readiness.
 
 ## Goals and next steps
 
-- **Enable full 4K Screen Sharing:** expose and verify a native3840×2160 remote
-  desktop, then measure delivered frame rate and latency independently of mode timing.
-  The initial Retina-default experiment produced a black screen and was rolled back;
-  1080p HiDPI and90/120Hz are not supported defaults yet.
+- **Qualify full 4K Screen Sharing:** the isolated Retina helper now selects a crisp
+  1920×1080 logical desktop with 3840×2160 backing at nominal 60 Hz. Continue
+  validating reboot/login behavior, capture transport, delivered frame rate and
+  latency independently of mode timing. A prior mixed 90/120 Hz sequence produced
+  a user-black desktop and was cleanly restored; those requested rates are not
+  proven modes.
+- **Evaluate remote streaming:** Sunshine 2026.914.233613 is installed in the
+  current guest. Startup hardware-only VideoToolbox selection detects H.264/HEVC
+  Main8; actual Moonlight playback remains untested. [Setup and LAN access](docs/sunshine.md). Lowering Apple
+  Screen Sharing quality improved observed speed. A raw vncdotool black frame in
+  the same working user session is a limited capture oracle, not a universal black
+  desktop result.
 - **Broaden portability:** extend the working stock-QEMU/OpenCore setup across
   host boots and supported versions, and document requirements for other hypervisors,
   including actual PCIe passthrough support.

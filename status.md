@@ -2,31 +2,41 @@
 
 **Candidate 280 passes longer buffer/address, explicit GPU-fence and broader desktop checks.**
 The reproduced transparency corruption remains fixed. Native allocation errors were
-traced to successful reclaim/retry in earlier pressure tests. A new Retina-default
-attempt produced a black desktop with repeated4K-sized allocation errors; its cause
-is unresolved. Full desktop and physical display acceptance remain open.
+traced to successful reclaim/retry in earlier pressure tests. The user now confirms
+visible, crisp 1080p HiDPI with 4K backing at60Hz; lowering Apple Screen Sharing
+quality improves responsiveness. Full desktop and physical display acceptance remain open.
 
 ## Current host / guest
 
-Guest **running** in baseline restoration run `2456747451ac073cf5fa0ea1657590cf`,
+Guest **running** in run `2456747451ac073cf5fa0ea1657590cf`,
 candidate280/metal-127/retinarestore, MODE2#172, thirtieth exposure on boot
 `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`. GPU remains vfio-pci, power/control=on.
-Baseline Metal probe passed; public inventory shows1280×1024 at60Hz/1× with ordinary
-1080p available. Fresh raw capture is visibly correct and the user confirmed
-"yes normal". The Retina agent is absent from launchd and its plist is disabled.
-Guest is left available for the user under supervision; interactive hold ends
-**21:55:14 Europe/Bucharest on2026-09-16**, then normal harness shutdown/recovery.
-Final capture and cleanup for this running restore session are pending.
+Baseline Metal probe passed. An isolated60Hz-only setup restored1920×1080 logical /
+3840×2160 backing /2×. The user confirms visible, crisp output. The corrected,
+idempotent Retina login helper is installed; persistence across a fresh login is
+not yet qualified. Standard RAW RFB captures are black in this user-visible working
+session, so they cannot qualify Apple's client presentation at this mode.
+Guest remains supervised; interactive hold ends **21:55:14 Europe/Bucharest
+on2026-09-16**, then normal harness shutdown/recovery. Final capture and cleanup
+for this running session are pending.
 
-Prior run `aaa3f63204f17d12bcb4a8d855774cf1` (MODE2#171/exposure29) failed
-Retina-default qualification:1920×1080 logical/3840×2160 backing/2× was observed,
-but the user and a fresh raw capture later showed black. Public-mode rollback
-failed.90/120Hz requests restored a60Hz fallback. The failed helper is archived,
-not a supported setup tool. WindowServer stayed alive; repeated33,423,360-byte
-allocation failures are correlated, not causal proof. Initial CORE_PROBE_PASS
-and valid capture do not make the Retina workload pass. That run shut down and
-recovered cleanly, all CP/active/forced/timeout counters0 and no host faults.
-[Retina failure and restoration](findings/research/remote-retina-20260916.md).
+Sunshine v2026.914.233613 official Intel DMG is installed. VideoToolbox is selected
+with software fallback disabled; startup detects H.264 and HEVC Main8. Its streaming
+API responds as Raphael macOS on48989; the authenticated web interface responds
+on48990. LAN relay is active on192.168.0.43:48989, with web UI on48990;
+serverinfo200 and authenticated UI401 verified through the LAN address.
+No Moonlight playback/FPS result yet. [Setup](docs/sunshine.md),
+[artifact hashes](findings/research/sunshine-lan-20260916.json).
+Requested90/120FPS client settings are distinct from the observed60Hz desktop.
+
+Prior run `aaa3f63204f17d12bcb4a8d855774cf1` (MODE2#171/exposure29) produced a
+user-observed black desktop after a mixed mode/default sequence; public-mode rollback
+failed.90/120Hz requests left a60Hz fallback. It shut down and recovered cleanly,
+all CP/active/forced/timeout counters0 and no host faults. Its archived helper is
+superseded by the isolated60Hz-only version. Repeated33,423,360-byte allocation
+failures were correlated, not causal proof; the newer positive user observation
+retracts the broader claim that Retina itself fails.
+[Retina investigation and correction](findings/research/remote-retina-20260916.md).
 
 Prior managed ownership checks pass96 cases/111,658,032 pixel comparisons with
 no mismatches. [Evidence](findings/research/texture-ownership-20260916.md).
@@ -61,7 +71,7 @@ its scoped checks; closure run itself remains INVALID for truncated terminal cap
 | Native desktop | Three minutes of moving/resizing native material windows; four clean raw RFB captures |
 | Safari | Two-minute transparency/blur/scrolling page; three clean captures plus clean desktop after larger-buffer pressure |
 | Stock QEMU / PerfPowerServices | OpenCore/VirtualSMC fix passes two guest boots,0.0% CPU, latest0.86s; prior patched-QEMU evidence retained separately |
-| Host regression | 958 tests OK, three skipped |
+| Host regression | 961 tests OK, three skipped; final UDP relay burst/cleanup check also passes |
 
 Earlier texture recreation (144 cases / 131,031,576 pixels), feedback rendering
 (48 cases / 5,280,000 pixels), and hardware H.264/HEVC encode/decode retain their
@@ -106,10 +116,18 @@ on this fresh guest, excluding90/120Hz. This authorizes one bounded60Hz-only
 configuration sequence on current boot `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`
 and existing exposure30, then read-only/functional checks. Avoid redundant public
 mode switches; keep identity, capture, supervision and cleanup gates unchanged.
-The previous mixed sequence did not isolate Retina itself as the cause.
+The previous mixed sequence did not isolate Retina itself as the cause. In the
+fresh60Hz-only session, the user confirms visible/crisp Retina while standard RAW
+RFB capture is black: that capture path cannot be treated as a universal desktop
+oracle at this mode. Lowering Apple Screen Sharing quality improved responsiveness.
+The user explicitly requested Sunshine/Moonlight installation and60/90/120FPS
+choices; prepare those on the current supervised guest, preserving existing host
+Sunshine and the original shutdown deadline. Desktop timings remain separately
+measured; do not label client FPS choices as proven panel refresh.
 
-Next: isolate4K backing-allocation/render failures from display reconfiguration
-using the supplied native sources; retain normal remote desktop meanwhile.
+Next: measure actual Sunshine streamed output/encoder behavior,
+keeping the user-confirmed Retina60Hz desktop. Use native-source analysis and the
+optional4K readback probe if a rendering failure is reproduced.
 Broader configurations, lifecycle, rendering tests and physical output follow. The Reims CPU/GPU ownership task now passes its managed-texture scope.
 Visual-oracle, plane/view/depth and heap-alias tests remain open.
 [Audit](findings/research/reims-vgpu-audit-20260916.md).
