@@ -62,8 +62,10 @@ QEMU image `sha256:51cbd7dcdbad2d6492ce83a263e9854c28620d67a1ea12ebc0562c6fab260
 3. Physical DCN output and measured performance. Historical direct OpenGL hang and
    live-validation crash remain unresolved; do not repeat without diagnosis.
 
-No main merge/push before full desktop proof. Another exposure needs a named-boot
-allowance and fresh MODE2 through tools/cycle.py. No vfio→amdgpu cycling.
+The user requested publication of the current `dev` snapshot to `main` on2026-09-16.
+Development continues on `dev`; full desktop qualification remains open. Another
+exposure needs a named-boot allowance and fresh MODE2 through tools/cycle.py.
+No vfio→amdgpu cycling.
 [Roadmap](docs/ROADMAP.md).
 
 ## Current work

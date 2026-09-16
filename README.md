@@ -97,5 +97,5 @@ python3 -B -m unittest discover -s tests
 For implementation background, see the [GPU research](findings/GPU-RE.md),
 [hardware notes](docs/hardware-notes.md) and [patch delivery](docs/patch-delivery.md).
 Historical diagnoses and per-run details live in those documents rather than the
-project overview. Current development is integrated on `dev`; `main` remains gated
-on demonstrated usable desktop acceleration.
+project overview. Continue development on `dev`; `main` contains the published
+experimental snapshot. Publication does not imply a stable or fully qualified release.

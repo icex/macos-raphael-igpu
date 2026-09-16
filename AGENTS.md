@@ -14,7 +14,8 @@
   live state; move superseded entries to `findings/research/status-archives/`.
 - Do not consume a GPU ledger entry when a launch fails before QEMU/VFIO opens; record launches
   once exposure begins. Extending a boot's allowance needs an explicit note naming the boot id.
-- Do not merge or push to `main` until full desktop acceleration is demonstrated.
+- Continue development and milestone delivery on `dev`. Publish to `main` only on
+  explicit user instruction; publication does not establish full desktop qualification.
 - Allow up to 6000 seconds per authorized run, with manual stop when appropriate; preserve
   host-fault, identity, capture-fatal, shutdown, and cleanup abort paths.
 - Some documents are load-bearing: `tools/experiment.py` and the qualification tools hash the
@@ -27,6 +28,6 @@
   and affected current-facing docs, integrate completed changes into `dev`, and
   push `dev`. A candidate-branch push alone does not complete delivery.
 - Preserve unrelated `dev` changes, run appropriate checks and verify the remote
-  ref after a normal non-force push. Continue to respect the `main` restriction.
+  ref after a normal non-force push. Keep `main` publication explicitly user-directed.
 - Give the user a 2–3-line brief for each experiment iteration, separating
   functional output, capture quality and shutdown/recovery results.
