@@ -209,7 +209,9 @@ from device enumeration or passing microbenchmarks.
 ## Next work, in order
 
 1. **Full 4K remote desktop (user priority,2026-09-16).** Expose and validate a
-   native3840×2160 desktop through macOS Screen Sharing. Trace advertised display
+   native3840×2160 desktop and1920×1080 HiDPI with4K backing through macOS
+   Screen Sharing. Start with bounded, reversible guest-side feasibility; if it needs
+   a substantial detour, continue the other roadmap items. Trace advertised display
    modes, framebuffer allocation and capture geometry; confirm the active backing
    pixels, correct composition under motion, and clean shutdown/recovery. Treat
    nominal60Hz mode timing separately from measured remote frame delivery and

@@ -86,18 +86,9 @@ No vfio→amdgpu cycling.
 The immediate patched-QEMU dependency is removed for the tested setup. Compatibility
 now lives in OpenCore/VirtualSMC, with no new RaphaelGPU driver patch. README, roadmap
 and the general QEMU guide describe the stock setup and scoped native results.
-The ownership allowance is consumed. One additional exposure is allowed on boot
-`2508eb6d-ddf3-497d-9774-00a7ecebe3ed` for candidate280/metal-127/remote4k,
-exposure29 if VFIO opens. Test a reversible60-second CGVirtualDisplay at3840×2160
-and, if successful,1920×1080 HiDPI with3840×2160 backing. Hypothesis: the fallback
-virtual display mode list, rather than an accelerator limit, explains the1080p
-ceiling. Refused creation, incorrect backing dimensions, unusable capture or failed
-removal blocks this approach; no native driver patch or permanent guest installation
-is included. Preserve lower-resolution fallback. Use tools/cycle.py with fresh
-MODE2 CP_STAT=0/RLC_CNTL=0 and all identity/capture/shutdown/recovery gates intact.
+The ownership allowance is consumed; no further GPU exposure allowance is active.
 
-Next: bounded feasibility for full4K/Retina Screen Sharing, per the user’s request;
-if it needs a substantial detour, return to the remaining roadmap.
+Next: enable and qualify full4K Screen Sharing, per the user’s priority request.
 Broader configurations, lifecycle, rendering tests and physical output follow. The Reims CPU/GPU ownership task now passes its managed-texture scope.
 Visual-oracle, plane/view/depth and heap-alias tests remain open.
 [Audit](findings/research/reims-vgpu-audit-20260916.md).
