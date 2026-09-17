@@ -252,6 +252,8 @@ static bool vcnStaticEnabled = false;
 static bool vcnSmuEnabled = false;
 static uint32_t vcnClockMHz = 0; // rgpuvcnclk=<MHz>: opt-in SetHardMinVcn/SetSoftMaxVcn after PowerUpVcn
 static bool smuQueryEnabled = false; // rgpusmuquery=1: read-only GetGfxclkFrequency/GetEnabledSmuFeatures
+static uint32_t gfxClockMHz = 0; // rgpugfxclk=<MHz>: opt-in SetHardMinGfxClk after PowerUpVcn
+static uint32_t dcnClockMHz = 0; // rgpudclk=<MHz>: opt-in DCLK SetHardMinVcn/SetSoftMaxVcn
 static bool vcnResetEnabled = false;
 static bool vcnDpgEnabled = false;
 static bool vcnDecodeFirstEnabled = false;
@@ -2745,7 +2747,7 @@ static uint32_t wrapVcnInitialize(void *engine) {
         auto power = RaphaelVcnPower::enable(
             [&](uint32_t address) { return read(handle, address); },
             [&](uint32_t address, uint32_t value) { write(handle, address, value); },
-            []() { IOSleep(1); }, cycleVcn, vcnClockMHz, smuQueryEnabled);
+            []() { IOSleep(1); }, cycleVcn, vcnClockMHz, smuQueryEnabled, gfxClockMHz, dcnClockMHz);
         IOLockUnlock(vcnSmuLock);
         RLOG("VCNCYCLE: selected=%u down-response=%x active-queues=%u",
              cycleVcn, power.downResponse, queues ? queues[0] : 0xffffffffu);
@@ -2759,6 +2761,13 @@ static uint32_t wrapVcnInitialize(void *engine) {
             RLOG("VCNCLK: requested=%u hardmin-response=%x softmax-response=%x applied=%u",
                  vcnClockMHz, power.clockMinResponse, power.clockMaxResponse,
                  power.clockMinResponse == 1 && power.clockMaxResponse == 1);
+        if (dcnClockMHz)
+            RLOG("DCLK: requested=%u hardmin-response=%x softmax-response=%x applied=%u",
+                 dcnClockMHz, power.dclkMinResponse, power.dclkMaxResponse,
+                 power.dclkMinResponse == 1 && power.dclkMaxResponse == 1);
+        if (gfxClockMHz)
+            RLOG("GFXCLK: requested=%u hardmin-response=%x applied=%u", gfxClockMHz,
+                 power.gfxMinResponse, power.gfxMinResponse == 1);
         if (power.error) return 1;
     }
     if (vcnStaticEnabled && !vcnDpgEnabled) {
@@ -9295,7 +9304,14 @@ static void pluginStart() {
         vcnClockMHz = vcnClock;
     uint32_t smuQuery = 0;
     smuQueryEnabled = PE_parse_boot_argn("rgpusmuquery", &smuQuery, sizeof(smuQuery)) && smuQuery == 1;
-    RLOG("VCNCLK: rgpuvcnclk=%u rgpusmuquery=%u (effective only with rgpuvcnsmu=1)", vcnClockMHz, smuQueryEnabled);
+    uint32_t gfxClock = 0;
+    if (PE_parse_boot_argn("rgpugfxclk", &gfxClock, sizeof(gfxClock)) && gfxClock >= 200 && gfxClock <= 3000)
+        gfxClockMHz = gfxClock;
+    uint32_t dcnClock = 0;
+    if (PE_parse_boot_argn("rgpudclk", &dcnClock, sizeof(dcnClock)) && dcnClock >= 200 && dcnClock <= 3000)
+        dcnClockMHz = dcnClock;
+    RLOG("VCNCLK: rgpuvcnclk=%u rgpudclk=%u rgpugfxclk=%u rgpusmuquery=%u (effective only with rgpuvcnsmu=1)",
+         vcnClockMHz, dcnClockMHz, gfxClockMHz, smuQueryEnabled);
     uint32_t vcnStatic = 0;
     vcnStaticEnabled = PE_parse_boot_argn("rgpuvcnstatic", &vcnStatic, sizeof(vcnStatic)) && vcnStatic == 1;
     uint32_t vcnApu = 0;

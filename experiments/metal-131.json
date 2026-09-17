@@ -1,6 +1,6 @@
 {
   "id": "metal-131",
-  "question": "Does an opt-in Raphael SMU VCN clock request (SetHardMinVcn/SetSoftMaxVcn 1600MHz after PowerUpVcn) raise VideoToolbox 4K encode throughput above the measured 62-64 fps / 15.5 ms-per-frame ceiling, with SMU telemetry logged and all other behavior unchanged?",
+  "question": "Do full Raphael SMU clock floors after PowerUpVcn (VCLK 1200MHz and DCLK 1028MHz via SetHardMinVcn/SetSoftMaxVcn, GFX 2200MHz via SetHardMinGfxClk) lower the VideoToolbox 4K HEVC encode cost below the measured 15.5ms per frame (64fps) toward the Linux VAAPI ceiling of 11ms (91fps), with SMU telemetry logged and all other behavior unchanged?",
   "candidate_version": "1.0.283",
   "probe_profile": {
     "name": "desktop-metal",
@@ -21,7 +21,7 @@
     "socket": "run/critical.sock",
     "capture": "critical.txt"
   },
-  "behavior_change": "Adds two independently-gated, opt-in boot arguments, both processed after the existing PowerUpVcn call in RaphaelVcnPower::enable and both no-ops unless requested: rgpusmuquery=1 sends SMU13.0.5 GetGfxclkFrequency (message 15) then GetEnabledSmuFeatures (message 16) with parameters 0 and 1 to read current gfxclk and the enabled feature mask; rgpuvcnclk=<MHz> (200-3000, here 1600) sends SetHardMinVcn (message 7) and, only if that call succeeds, SetSoftMaxVcn (message 17), both carrying the requested MHz as the SMU argument. Neither request can fail VCN bring-up: Result.error is untouched by either path, and every response code is only written to the serial log, as VCNCLK: and SMUQ: lines in wrapVcnInitialize (RaphaelGPU.cpp). No other VCN initialization step, existing boot argument, or Metal/VideoToolbox behavior changes.",
+  "behavior_change": "Adds independently gated, opt-in boot arguments on the existing serialized Raphael SMU 13.0.5 mailbox path, applied only after a successful PowerUpVcn and only with rgpuvcnsmu=1: rgpuvcnclk=<MHz> sends SetHardMinVcn(7) then SetSoftMaxVcn(17) with MHz<<16 (Linux SMU_13_VCLK_SHIFT); rgpudclk=<MHz> sends the same two messages with the unshifted MHz; rgpugfxclk=<MHz> sends SetHardMinGfxClk(21); rgpusmuquery=1 then reads GetGfxclkFrequency(15) and GetEnabledSmuFeatures(16, params 0 and 1). Values outside 200-3000MHz are ignored. A refused minimum suppresses its maximum. All responses are logged (VCNCLK:, DCLK:, GFXCLK:, SMUQ:) and none is fatal: VCN initialization proceeds unchanged. Nothing else changes.",
   "required_observations": [
     "loaded_build",
     "route_guards",
@@ -145,8 +145,10 @@
     "rgpuvcnnodpm": "1",
     "rgpuvcnwptr": "1",
     "rgpualloclog": "1",
-    "rgpuvcnclk": "1600",
-    "rgpusmuquery": "1"
+    "rgpuvcnclk": "1200",
+    "rgpusmuquery": "1",
+    "rgpudclk": "1028",
+    "rgpugfxclk": "2200"
   },
   "launch_options": {
     "BOOTDISK_MODE": "custom",

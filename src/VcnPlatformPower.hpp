@@ -8,21 +8,23 @@ constexpr uint32_t ExpectedVersion = 0x00625300; // current host GetSmuVersion r
 // smu_v13_0_5_ppsmc.h message ids used here. Never Navi PPSMC ids.
 constexpr uint32_t MsgGetSmuVersion = 2, MsgPowerDownVcn = 5, MsgPowerUpVcn = 6,
     MsgSetHardMinVcn = 7, MsgGetGfxclkFrequency = 15, MsgGetEnabledSmuFeatures = 16,
-    MsgSetSoftMaxVcn = 17;
+    MsgSetSoftMaxVcn = 17, MsgSetHardMinGfxClk = 21;
+constexpr uint32_t VclkShift = 16; // Linux SMU_13_VCLK_SHIFT
 struct Result {
     uint32_t error = 0, pre = 0, version = 0, response = 0, downResponse = 0;
     // Optional, non-fatal telemetry/clock request results (0 = not attempted).
     uint32_t gfxclkResponse = 0, gfxclkMHz = 0, featuresResponse = 0, featuresLow = 0,
-        featuresHigh = 0, clockMinResponse = 0, clockMaxResponse = 0;
+        featuresHigh = 0, clockMinResponse = 0, clockMaxResponse = 0, gfxMinResponse = 0,
+        dclkMinResponse = 0, dclkMaxResponse = 0;
 };
-// After a successful PowerUpVcn, `query` reads GetGfxclkFrequency and the enabled
-// feature mask, and `vcnClockMHz` (nonzero) requests SetHardMinVcn/SetSoftMaxVcn at
-// that frequency exactly as Linux smu_v13_0_5_set_soft_freq_limited_range does for
-// SMU_VCLK. Neither changes `error`: VCN initialization proceeds regardless, and the
-// firmware's own response codes are recorded for the serial log.
+// After a successful PowerUpVcn, optional non-fatal requests: `vcnClockMHz` (encode VCLK)
+// and `dcnClockMHz` (decode DCLK) hard-min/soft-max, `gfxClockMHz` GFX hard minimum, then
+// `query` reads GetGfxclkFrequency and the enabled feature mask. None of these change
+// `error`; the firmware's response codes are recorded for the serial log.
 template<class Read, class Write, class Delay>
 Result enable(Read read, Write write, Delay delay, bool cycle = false,
-              uint32_t vcnClockMHz = 0, bool query = false) {
+              uint32_t vcnClockMHz = 0, bool query = false, uint32_t gfxClockMHz = 0,
+              uint32_t dcnClockMHz = 0) {
     Result result;
     auto poll = [&]() {
         uint32_t response = read(Response);
@@ -48,6 +50,21 @@ Result enable(Read read, Write write, Delay delay, bool cycle = false,
     }
     result.response = send(MsgPowerUpVcn); // PowerUpVcn, parameter0, never Navi's message enum
     if (result.response != 1) { result.error = 4; return result; }
+    // Clock requests mirror Linux smu_v13_0_5_set_soft_freq_limited_range: VCLK and DCLK
+    // share SetHardMinVcn/SetSoftMaxVcn, VCLK in MHz shifted by VclkShift, DCLK in MHz
+    // unshifted; GFX uses SetHardMinGfxClk in MHz. A refused minimum suppresses its maximum.
+    if (vcnClockMHz) {
+        result.clockMinResponse = sendWith(MsgSetHardMinVcn, vcnClockMHz << VclkShift);
+        if (result.clockMinResponse == 1)
+            result.clockMaxResponse = sendWith(MsgSetSoftMaxVcn, vcnClockMHz << VclkShift);
+    }
+    if (dcnClockMHz) {
+        result.dclkMinResponse = sendWith(MsgSetHardMinVcn, dcnClockMHz);
+        if (result.dclkMinResponse == 1)
+            result.dclkMaxResponse = sendWith(MsgSetSoftMaxVcn, dcnClockMHz);
+    }
+    if (gfxClockMHz) result.gfxMinResponse = sendWith(MsgSetHardMinGfxClk, gfxClockMHz);
+    // Telemetry after the requests, so GetGfxclkFrequency reflects what was applied.
     if (query) {
         result.gfxclkResponse = send(MsgGetGfxclkFrequency);
         if (result.gfxclkResponse == 1) result.gfxclkMHz = read(Argument);
@@ -56,11 +73,6 @@ Result enable(Read read, Write write, Delay delay, bool cycle = false,
             result.featuresLow = read(Argument);
             if (sendWith(MsgGetEnabledSmuFeatures, 1) == 1) result.featuresHigh = read(Argument);
         }
-    }
-    if (vcnClockMHz) {
-        result.clockMinResponse = sendWith(MsgSetHardMinVcn, vcnClockMHz);
-        if (result.clockMinResponse == 1)
-            result.clockMaxResponse = sendWith(MsgSetSoftMaxVcn, vcnClockMHz);
     }
     return result;
 }
