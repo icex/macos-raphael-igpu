@@ -124,3 +124,10 @@ passes; hardware encode is Main8. [Roadmap](docs/ROADMAP.md).
 After milestones update current docs, integrate/push dev and synchronize the local
 checkout. Do not push main without new authorization. Prior live entries and
 consumed allowances are [archived](findings/research/status-archives/status-before-night-close-20260916.md).
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-284-results`
+- Verdict: `INVALID`
+- Boundary: `identity_or_route_missing`

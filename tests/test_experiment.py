@@ -3929,4 +3929,40 @@ class ExperimentTests(unittest.TestCase):
                 self.assertEqual(calls.count('start'), 1)
 
 
+
+class ReserveBootSchemaSixReceiptTest(unittest.TestCase):
+    def test_schema6_reservation_validates_with_manifest_helper_hashes(self):
+        import tempfile
+        path = ROOT / 'tools/experiment.py'
+        spec = importlib.util.spec_from_file_location('experiment_reserve_schema6', path)
+        experiment = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(experiment)
+        seen = []
+        original = experiment.validate_recovery_receipt_v6
+        def recorder(receipt, boot_id, prior_run_id, helper_hashes=None):
+            seen.append((boot_id, prior_run_id, helper_hashes))
+            return [] if helper_hashes == {'vfio-recover.py': 'a' * 64} else ['recovery_receipt']
+        experiment.validate_recovery_receipt_v6 = recorder
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                used = Path(tmp) / 'run' / 'used-gpu-boots'
+                used.mkdir(parents=True)
+                boot = 'b00700000000'
+                prior = 'c' * 32
+                (used / (boot + '.json')).write_text(json.dumps(
+                    {'schema': 2, 'boot_id': boot, 'max_launches': 3,
+                     'launches': [{'run_id': prior, 'reserved_epoch': 1.0}]}))
+                receipt = {'schema': 6, 'status': 'recovered', 'authorizes_launch': True,
+                           'recovery_id': 'd' * 32, 'prior_run_id': prior, 'boot_id': boot}
+                manifest = {'recovery_lease_schema': 3,
+                            'recovery_helpers_sha256': {'vfio-recover.py': 'a' * 64}}
+                experiment.reserve_boot(used, boot, 'e' * 32, receipt, manifest,
+                                        Path(tmp) / 'manifest.json')
+                ledger = json.loads((used / (boot + '.json')).read_text())
+        finally:
+            experiment.validate_recovery_receipt_v6 = original
+        self.assertEqual(seen, [(boot, prior, {'vfio-recover.py': 'a' * 64})])
+        self.assertEqual(ledger['launches'][-1]['run_id'], 'e' * 32)
+        self.assertEqual(ledger['launches'][-1]['recovery_id'], 'd' * 32)
+
 if __name__ == '__main__': unittest.main()

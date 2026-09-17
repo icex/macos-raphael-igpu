@@ -2846,10 +2846,14 @@ def reserve_boot(directory, boot_id, experiment, recovery=None,
     error_key = ('startup_noqueue_receipt' if startup else
                  'retained_kiq_continuation_receipt' if retained else
                  'recovery_receipt')
+    # Schema-6 receipts bind the recovery helper hashes pinned in the manifest;
+    # validating them without the manifest refuses every genuine receipt.
+    schema6 = isinstance(recovery, dict) and recovery.get('schema') == 6
     vm = directory.parent.parent
     errors = validate_reuse_receipt(
         recovery, boot_id, prior, vm if startup or retained else None,
-        experiment if retained else None, manifest if retained else None,
+        experiment if retained else None,
+        manifest if retained or schema6 else None,
         manifest_path if retained else None)
     if any(row.get('run_id') == experiment for row in launches): errors.append('run_id_reused')
     if recovery.get('recovery_id') in {row.get('recovery_id') for row in launches}:
