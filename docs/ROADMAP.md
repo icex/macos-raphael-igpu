@@ -1,6 +1,6 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-09-16. Current performance experiment: **candidate 1.0.282**; prior broader baseline: **1.0.280**. Full desktop acceleration
+Updated 2026-09-17. Current display-port candidate: **1.0.286** (not yet run); last hardware baseline: **1.0.284**; prior broader baseline: **1.0.280**. Full desktop acceleration
 is **not qualified**. The reproduced Screen Sharing transparency defect is fixed
 in candidate279 and retained in280. Candidate280 also passes strict capture and
 clean recovery after visual, concurrent-client and codec workloads. The patched-QEMU
@@ -149,8 +149,11 @@ Passing isolated shaders does not establish correct desktop composition.
   these sampled workloads; keep independent-boot and physical-output gates open.
 - [x] Confirm the feedback repair on fresh279 and280 guest boots with working Metal
   and hardware H.264/HEVC encode/decode.
-- [ ] Map real connectors/HPD/AUX/PHY and DCN 3.1.5 differences; implement only
-  demonstrated incompatibilities, beginning with one changing 1080p60 output.
+- [x] Map DCN 3.1.5 differences against Apple's DCN 3.02 path (registers, fields, power
+  domains, clock manager, DMUB, VBIOS tables): see the display port plan. Hardware
+  confirmation pending.
+- [ ] Bring up DMCUB without guest-initiated firmware actions (a guest PSP DMCUB load froze
+  the host), then one changing 1080p60 output.
 - [ ] Qualify modes, reconnection and higher resolutions after first stable output.
 
 Current evidence puts corrupt pixels in the scanout/DisplayStream path before
@@ -214,6 +217,31 @@ from device enumeration or passing microbenchmarks.
 
 ## Next work, in order
 
+0. **Physical display and HDMI audio (user priority, 2026-09-17).**
+   [Port plan and evidence](../findings/research/display-dcn315-port-20260917.md),
+   [HDMI audio plan](../findings/research/hdmi-audio-passthrough-20260917.md),
+   [host freeze analysis](../findings/research/dcn315-dmcub-host-crash-20260917.md).
+   - **What Apple's framebuffer has.** It embeds AMD DC 3.2.145. Raphael's unreadable strap
+     makes it build the DCN 2.0 pool, which fails. The DCN 3.02 pool is the closest match.
+   - **What candidate 285/286 do.** They switch that pool on (`hw_internal_rev` 60), interpose
+     every DAL register access and translate DCN 3.0.2 indices to 3.1.5 (generated from the
+     Linux headers). The Navi DALSMC mailbox is emulated.
+   - **The freeze.** Candidate 285 also registered Raphael's DMCUB firmware for PSP from the
+     guest, and that froze the host. Candidate 286 removes it and fences DMCUB off: the strap
+     reads absent and DMCUB writes are dropped.
+   - **Next.**
+     a. Run metal-134 for DCN 3.02 pool init plus HPD/EDID over DDC1. This needs the root GPU
+        bind and the user's agreement.
+     b. Resolve DMCUB without any guest-initiated load, start or reset. Raphael's VBIOS has no
+        transmitter or pixel-clock tables, so HDMI PHY and PLL exist only in DMCUB firmware.
+        Start with a read-only dump of the DMCUB windows under host amdgpu.
+     c. Then:
+        - a PMFW clock manager: VBIOSSMC display messages, agreed with the user first, since
+          they go to the SMU that also governs the CPU;
+        - detile buffer and APU context;
+        - 1080p60 then 2160p60.
+     d. HDMI audio: spoof 7b:00.1 as ab28, add the AppleGFXHDA pairing patch, bind .1 as root,
+        and update the launcher gates.
 1. **Full 4K remote desktop streaming (user priority, updated 2026-09-17).** 4K60 is
    now stable. Three fixes got there: the VCN preset patch (candidate 284, encode 11ms at 4K,
    equal to Linux), a 2GB BIOS UMA carve-out (no allocation failures; host tools detect the

@@ -32,72 +32,31 @@ validation: 965 Python tests OK (3 skipped), both software-UART qualifications
 and all CI C++/sanitizer checks pass. Hosted validation follows on `dev`; this
 changes no hardware qualification or launch authority.
 
-## Host / final run
+## Next session (display and HDMI audio are the user's priority)
 
-- Boot `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`; GPU0000:7b:00.0 remains
-  `vfio-pci`, `power/control=on`. Never cycle back to amdgpu within this boot.
-- Run `526953460479934120e31312a466eccc`, candidate282/metal130,
-  attemptcapturefix3, MODE2#178, exposure33: **valid CORE_PROBE_PASS**.
-  Functional baseline passed; final capture valid; shutdown
-  **exited-after-guest-request**; schema6 recovery **recovered**, authorizes_launch=true,
-  receipt `2670fe978626419daa0b7bcb207d22e2`. Streaming performance is not qualified.
-- Unchanged driver build `7a26b1a2f6694ae88ed889105de30bc7`, executable SHA256
-  `9c7e5dffc64fef69e874ea3c8e7b940e9761caf53e31400d2dc68d1591724fc2`.
-- Exposure33 allowance is consumed. Earlier capturefix/capturefix2 staging failures
-  stopped before QEMU/VFIO and consumed no exposure. Recovery authorizes the
-  technical relaunch path, not additional work after the user's stop instruction.
-- LAN relay ended with this VM; UFW rules persist. Future forwarding must target
-  the new exact container. Retina was1920×1080 logical /3840×2160 backing /60Hz;
-  check/restore after login.90/120Hz remains unqualified.
-
-## One-run continuation allowance (exposure34)
-
-The user's instruction on 2026-09-17 to resume the Sunshine 4K60 slowness work and
-test it end to end authorizes the next bounded experiment. Extend this boot's
-allowance by **one exposure (34)** on boot `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`
-for candidate282/metal130, attempt `clock1`: unchanged driver build
-`7a26b1a2f6694ae88ed889105de30bc7`; measure effective GPU clock/bandwidth in the
-guest with `tests/gpu_clock_probe.m`, and measure delivered Moonlight-Qt FPS from
-the Linux host at 4K60 HEVC/H.264 with cursor motion. Prior run's schema6 recovery
-`2670fe978626419daa0b7bcb207d22e2` authorizes relaunch. Use tools/cycle.py, fresh
-MODE2, maximum 6000 seconds; `--manual-reuse`/`--ack-risk` no longer exist (same-boot
-reuse is admitted automatically from this recovery receipt) and all existing identity,
-host-fault, capture, shutdown and cleanup gates apply. No vfio→amdgpu cycling; no clock
-writes in this attempt (measurement only).
-
-## Tonight's streaming result
-
-The separate “Sunshine Capture Fix” app builds and runs with user-approved capture
-permissions. It removes CPU base-address locks on hardware NV12/P010 buffers;
-valid CoreVideo probes observed no such calls during streaming. The user reports
-clear output, but cursor-motion stalls remain. A light4K60 HEVC trace completed
-553 submissions/13.001s with mean22.32ms. **Lock removal alone is insufficient**;
-no matched original-versus-patched throughput improvement is established.
-
-Native encoder completion waits average20.70ms and Metal preprocessing waits7.83ms
-in a separate trace. Worker waits overlap and must not be added. These measurements
-are host-side wait durations, not isolated GPU-engine execution times.
-
-The20Mbps CLI-only bitrate control felt worse and yielded240 and192 submissions
-in two13s traces, with multi-second outliers. It was rejected and **removed before
-shutdown**. Saved configuration remains hardware-only VideoToolbox, realtime,
-`hevc_mode=2`; no resolution downgrade or persistent bitrate cap. The original
-signed `/Applications/Sunshine.app` is intact. The experimental app is not a
-self-contained release or a login default. Foundation replacement stays cancelled.
-[Measurements, configuration rollback and final receipts](findings/research/sunshine-capturefix-live-20260916.json).
-
-## Next session
-
-1. Re-read live host/repository state and obtain the next user instruction before
-   any run. Preserve normal lifecycle/identity/capture gates and per-boot accounting.
-2. Establish matched original/patched4K60 HEVC motion controls. Separate client
-   delivery, server submissions and cursor latency; avoid concurrent stack sampling.
-3. Correlate native video-memory reclaim latency with encoder stalls. Live logs
-   contain many recoverable allocation retries; their production cost is still
-   unmeasured. Do not mistake failure counters for a proven leak or exhausted memory.
-4. If reclaim is not material, isolate surface reuse, Metal preprocessing and VCN
-   completion. Do not infer clocks from compatibility counters or probe the shared
-   SMU mailbox concurrently from the host. No new allocator/cursor/power patch yet.
+1. **Host.** The iGPU is on `amdgpu` in boot `365fcd4e`. A guest run needs the user to run
+   `sudo ~/macos-vm/gpu-bind.sh`. The candidate 285 launch has no recovery receipt; this is a
+   fresh boot.
+2. **Get the user's agreement, then run candidate 286 / metal-134.** It is built, its identity
+   is recorded, and its card is committed on branch `candidate-286`. Launch with the
+   `c285-launch.sh` pattern adapted to 286. Expected outcome:
+   - the DCN 3.02 pool builds without a panic or host fault;
+   - the DCN wait and trace lines name the registers;
+   - HPD and EDID are read over DDC1 from the dummy plug;
+   - no picture, because DMCUB is absent;
+   - DMCUB stays untouched (`DCN: DMCUB ... CNTL/SCRATCH0` unchanged, no blocked writes that
+     matter).
+   In the interactive hold, disassemble CoreDisplay's `_CGXVirtualDisplayApply` in WindowServer
+   to confirm the `rgpuvd120` r14 = entry+0x30 assumption before enabling it.
+3. **DMCUB decision (blocks HDMI output).** Never load, start or reset DMCUB from the guest.
+   Next evidence is read-only: dump the DMCUB windows under a working host amdgpu (root). Then
+   discuss options with the user: keep the host-loaded firmware alive across the handoff, or
+   another route. See [display port plan](findings/research/display-dcn315-port-20260917.md) §5.
+4. **HDMI audio** follows the display link:
+   [plan](findings/research/hdmi-audio-passthrough-20260917.md) (spoof ab28, AppleGFXHDA pairing
+   patch, root bind of 7b:00.1, launcher gates).
+5. **Real monitor.** The iGPU HDMI port has a dummy plug. Ask the user to connect a real monitor
+   only after EDID, link and OTG CRC evidence.
 
 ## Verified progress
 
@@ -149,40 +108,7 @@ decode works; explicit GPU-ID selection remains limited. Main10 decode has scope
 passes; hardware encode is Main8. [Roadmap](docs/ROADMAP.md).
 
 After milestones update current docs, integrate/push dev and synchronize the local
-checkout. Do not push main without new authorization. Prior live entries and
-consumed allowances are [archived](findings/research/status-archives/status-before-night-close-20260916.md).
+checkout. Do not push main without new authorization. Prior live entries are [archived](findings/research/status-archives/status-before-display-port-20260917.md)
+and [earlier](findings/research/status-archives/status-before-night-close-20260916.md).
 
 
-## One-command GPU test
-
-- Output: `/home/bogdan/macos-vm/run/candidate-284-results`
-- Verdict: `INVALID`
-- Boundary: `identity_or_route_missing`
-
-
-## One-command GPU test
-
-- Output: `/home/bogdan/macos-vm/run/candidate-284-attempt-r2-results`
-- Verdict: `CORE_PROBE_PASS`
-- Boundary: `None`
-
-
-## One-command GPU test
-
-- Output: `/home/bogdan/macos-vm/run/candidate-284-attempt-uma2g-results`
-- Verdict: `INVALID`
-- Boundary: `vmid2_entry_update_child_invalid`
-
-
-## One-command GPU test
-
-- Output: `/home/bogdan/macos-vm/run/candidate-284-attempt-uma2g2-results`
-- Verdict: `CORE_PROBE_PASS`
-- Boundary: `None`
-
-
-## One-command GPU test
-
-- Output: `/home/bogdan/macos-vm/run/candidate-284-attempt-uma2g3-results`
-- Verdict: `CORE_PROBE_PASS`
-- Boundary: `None`
