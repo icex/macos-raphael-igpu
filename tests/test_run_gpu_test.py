@@ -18,7 +18,9 @@ class RunGpuTestTests(unittest.TestCase):
         self.assertNotIn('--what=sleep:idle', cmd)
         self.assertIn('/wt/tools/experiment.py', cmd)
 
-    def test_explicit_reuse_is_forwarded_and_requires_both_flags(self):
+    def test_stale_manual_reuse_attrs_are_never_forwarded(self):
+        # Same-boot reuse is admitted automatically now; there is no flag to forward,
+        # even if a caller still sets these now-meaningless attributes.
         with tempfile.TemporaryDirectory() as d:
             vm = Path(d); (vm/'manifest').write_text('{}')
             args = type('A', (), {'vm_dir':str(vm), 'manifest':str(vm/'manifest'),
@@ -27,10 +29,8 @@ class RunGpuTestTests(unittest.TestCase):
             with patch('builtins.print') as output:
                 self.assertEqual(mod.run(args), 0)
             command = json.loads(output.call_args.args[0])['command']
-            self.assertEqual(command[-2:], ['--manual-reuse', '--ack-risk'])
-            args.ack_risk = False
-            with self.assertRaisesRegex(SystemExit, 'supplied together'):
-                mod.run(args)
+            self.assertNotIn('--manual-reuse', command)
+            self.assertNotIn('--ack-risk', command)
 
     def test_status_append_is_compact(self):
         with tempfile.TemporaryDirectory() as d:

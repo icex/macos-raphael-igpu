@@ -110,13 +110,14 @@ class PreflightGateTest(unittest.TestCase):
             with self.assertRaisesRegex(cycle.CycleError, 'power/control'):
                 cycle.preflight(make_args(), self.pins, self.worktree, self.vm)
 
-    def test_used_boot_requires_explicit_reuse(self):
+    def test_used_boot_no_longer_blocks_preflight(self):
+        # Same-boot reuse is admitted automatically by experiment.py's recovery-receipt
+        # check; preflight itself no longer inspects the ledger or needs a flag.
         ledger = self.vm / 'run/used-gpu-boots/test-boot.json'
         ledger.parent.mkdir()
         ledger.write_text('{}')
-        with self.assertRaisesRegex(cycle.CycleError, 'boot_already_used'):
-            cycle.preflight(make_args(), self.pins, self.worktree, self.vm)
-        cycle.preflight(make_args(manual_reuse=True, ack_risk=True), self.pins, self.worktree, self.vm)
+        facts = cycle.preflight(make_args(), self.pins, self.worktree, self.vm)
+        self.assertEqual(facts['boot_id'], 'test-boot')
 
     def test_refuses_when_gpu_not_on_vfio(self):
         cycle.gpu_driver = lambda bdf: "amdgpu"
@@ -187,22 +188,22 @@ class CommandRegressionTest(unittest.TestCase):
             self.assertNotEqual(cycle.main(), 0)
 
 
-    def test_run_forwards_only_explicit_reuse_and_keeps_failure(self):
-        for manual in (False, True):
-            with self.subTest(manual=manual), tempfile.TemporaryDirectory() as temp:
-                vm = Path(temp)
-                completed = subprocess.CompletedProcess([], 7, '{"verdict":"WRAPPER_FAILURE"}\n', '')
-                with patch.object(cycle, 'run_step', return_value=completed) as step:
-                    result = cycle.prepare_and_run(
-                        make_args(manual_reuse=manual, ack_risk=manual), {'image_id': 'sha256:pinned'}, vm, vm, 'run')
-                for call in step.call_args_list:
-                    self.assertEqual(call.kwargs['env'], {'IMAGE': 'sha256:pinned'})
-                command = step.call_args.args[1]
-                self.assertEqual('--manual-reuse' in command, manual)
-                self.assertEqual('--ack-risk' in command, manual)
-                self.assertEqual(result['returncode'], 7)
+    def test_run_never_forwards_removed_reuse_flags_and_keeps_failure(self):
+        # Same-boot reuse is admitted automatically now; there is no flag to forward.
+        with tempfile.TemporaryDirectory() as temp:
+            vm = Path(temp)
+            completed = subprocess.CompletedProcess([], 7, '{"verdict":"WRAPPER_FAILURE"}\n', '')
+            with patch.object(cycle, 'run_step', return_value=completed) as step:
+                result = cycle.prepare_and_run(
+                    make_args(), {'image_id': 'sha256:pinned'}, vm, vm, 'run')
+            for call in step.call_args_list:
+                self.assertEqual(call.kwargs['env'], {'IMAGE': 'sha256:pinned'})
+            command = step.call_args.args[1]
+            self.assertNotIn('--manual-reuse', command)
+            self.assertNotIn('--ack-risk', command)
+            self.assertEqual(result['returncode'], 7)
 
-    def test_cli_rejects_incomplete_reuse_before_preflight(self):
+    def test_manual_reuse_flags_no_longer_exist(self):
         for flag in ('--manual-reuse', '--ack-risk'):
             with self.subTest(flag=flag), patch.object(cycle, 'preflight') as preflight, \
                  patch('sys.argv', ['cycle', '--candidate', '231', '--card', 'metal-079', flag]):

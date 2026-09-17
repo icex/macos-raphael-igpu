@@ -1472,32 +1472,27 @@ class ExperimentTests(unittest.TestCase):
             self.assertEqual(json.loads((root / 'boot-A.json').read_text())['launches'][0]['run_id'],
                              'first')
 
-    def test_manual_override_reservation_is_explicit_and_not_a_receipt(self):
+    def test_reserve_boot_has_no_launch_count_ceiling_given_a_valid_receipt(self):
+        # The per-boot launch ceiling and the --manual-reuse/--ack-risk escape hatch
+        # are gone. A same-boot reservation is admitted purely on a valid recovery
+        # receipt for the immediately prior run, no matter how many launches the
+        # ledger already records.
         tool = self.module()
         with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp); manifest = root/'manifest.json'
-            manifest.write_text('{"run_id":"current"}\n')
+            root = Path(temp); manifest_path = root/'manifest.json'
+            manifest_path.write_text('{"run_id":"d"*32}\n')
             reserve = root/'boot-A.json'
             reserve.write_text(json.dumps({'schema':2, 'boot_id':'boot-A',
                                            'max_launches':3,
-                                           'launches':[{'run_id':'prior'}]})+'\n')
-            tool.reserve_boot(root, 'boot-A', 'current', 'manual-override',
-                              {}, manifest)
-            row = json.loads(reserve.read_text())['launches'][-1]
-            self.assertTrue(row['manual_override'])
-            self.assertEqual(row['prior_run_id'], 'prior')
-            self.assertEqual(row['manifest_sha256'], tool.sha(manifest.read_bytes()))
-            self.assertNotIn('recovery_id', row)
-            reserve.write_text(json.dumps({'schema':2, 'boot_id':'boot-A',
-                                           'max_launches':3,
                                            'launches':[{'run_id':'a'}, {'run_id':'b'},
-                                                       {'run_id':'c'}]})+'\n')
-            tool.reserve_boot(root, 'boot-A', 'current', 'manual-override',
-                              {}, manifest)
-            self.assertEqual(len(json.loads(reserve.read_text())['launches']), 4)
-            with self.assertRaises(ValueError):
-                tool.reserve_boot(root, 'boot-A', 'current', 'manual-override',
-                                  {}, manifest)
+                                                       {'run_id':'c'*32}]})+'\n')
+            receipt = self.recovery_receipt(tool, prior='c'*32, recovery='f'*32)
+            tool.reserve_boot(root, 'boot-A', 'd'*32, receipt, None, manifest_path)
+            launches = json.loads(reserve.read_text())['launches']
+            self.assertEqual(len(launches), 4)
+            self.assertEqual(launches[-1]['run_id'], 'd'*32)
+            self.assertEqual(launches[-1]['recovery_id'], 'f'*32)
+            self.assertNotIn('manual_override', launches[-1])
 
     def test_preexposure_failure_reconciliation_removes_only_proven_reservation(self):
         tool = self.module()
@@ -1965,11 +1960,12 @@ class ExperimentTests(unittest.TestCase):
                              [first, prior, current])
             self.assertEqual(updated['launches'][2]['authorization_id'], '4'*32)
             self.assertEqual(updated['launches'][2]['recovery_id'], '3'*32)
+            # No launch-count ceiling any more: a fourth same-boot launch is refused
+            # only because it has no recovery receipt of its own, not by count.
             replay, replay_errors = tool.reuse_authorization(
                 vm, 'boot-A', 'd'*32, manifest, manifest_path)
             self.assertIsNone(replay)
-            self.assertIn('launch_ceiling', replay_errors)
-            self.assertIn('recovery_receipt', replay_errors)
+            self.assertEqual(replay_errors, ['recovery_receipt'])
 
     def test_candidate176_receipt_requires_helper_manifest_and_raw_ledger(self):
         tool = self.module()
@@ -2621,7 +2617,7 @@ class ExperimentTests(unittest.TestCase):
                         manifest_path, output, authorization)
             refused_replace.assert_not_called()
 
-    def test_reuse_requires_latest_predecessor_and_stops_at_three_launches(self):
+    def test_reuse_requires_latest_predecessor_and_a_valid_receipt(self):
         tool = self.module()
         with tempfile.TemporaryDirectory() as temp:
             vm = Path(temp); used = vm/'run/used-gpu-boots'; used.mkdir(parents=True)
@@ -2669,10 +2665,11 @@ class ExperimentTests(unittest.TestCase):
                                  {'command':0x000c0000, 'response':0x800c0000,
                                   'confirmed':True}]}
             (receipt_dir/(runs[2]+'.json')).write_text(json.dumps(wrong))
+            # No launch-count ceiling any more: a fourth launch on this boot is
+            # refused solely because the latest predecessor's receipt is invalid.
             authorization, errors = tool.reuse_authorization(vm, 'boot-A', 'd'*32)
             self.assertIsNone(authorization)
-            self.assertIn('launch_ceiling', errors)
-            self.assertIn('recovery_receipt', errors)
+            self.assertEqual(errors, ['recovery_receipt'])
 
     def test_recovery_receipt_validation_fails_closed(self):
         tool = self.module()
@@ -3415,7 +3412,7 @@ class ExperimentTests(unittest.TestCase):
     def test_run_one_rejects_bytes_after_producer_ack(self):
         self.exercise_run('producer-quiesce-post-ack-tail')
 
-    def test_v2_receipt_does_not_create_generic_same_boot_authority(self):
+    def test_valid_v2_receipt_authorizes_generic_same_boot_reuse(self):
         tool = self.module()
         with tempfile.TemporaryDirectory() as temp:
             vm = Path(temp); (vm/'run').mkdir()
@@ -3529,22 +3526,28 @@ class ExperimentTests(unittest.TestCase):
                 first = tool.run_one(vm, manifests[0][1], vm/'evidence-a')
                 second = tool.run_one(vm, manifests[1][1], vm/'evidence-b')
 
+            # No flag and no status.md allowance: the second run is admitted purely
+            # because the first run's teardown left a valid recovery receipt.
             self.assertEqual(first['warm_reuse'], 'recovered')
-            self.assertEqual(second['verdict'], 'INVALID')
-            self.assertIn('v2_reuse_requires_finite_authority', second['error'])
+            self.assertNotEqual(second['verdict'], 'INVALID')
+            self.assertNotIn('error', second)
+            self.assertEqual(second['warm_reuse'], 'recovered')
             self.assertEqual([call for call in calls if call[0] == 'start'], [
                 ('start', ['--gpu','0000:7b:00.0','--gpu-id','0x73ff',
-                           '--gpu-rom','run/gpu-patched.rom'])])
+                           '--gpu-rom','run/gpu-patched.rom'])]*2)
             self.assertEqual(len([call for call in calls
-                                  if call[0] == 'forced-stop-confirmed']), 1)
+                                  if call[0] == 'forced-stop-confirmed']), 2)
             self.assertNotIn(('unexpected-stop', 'c'*64), calls)
             ledger = json.loads((vm/'run/used-gpu-boots/boot-A.json').read_text())
             self.assertEqual([row['run_id'] for row in ledger['launches']],
-                             ['a'*32])
-            admitted = json.loads(
-                (vm/'run/vfio-recovery/boot-A'/('a'*32+'.json')).read_text())
-            self.assertEqual(tool.validate_recovery_receipt(
-                admitted, 'boot-A', 'a'*32), [])
+                             ['a'*32, 'b'*32])
+            self.assertEqual(ledger['launches'][1]['recovery_id'], 'f'*32)
+            self.assertEqual(ledger['launches'][1]['prior_run_id'], 'a'*32)
+            for run_id in ('a'*32, 'b'*32):
+                admitted = json.loads(
+                    (vm/'run/vfio-recovery/boot-A'/(run_id+'.json')).read_text())
+                self.assertEqual(tool.validate_recovery_receipt(
+                    admitted, 'boot-A', run_id), [])
 
     def exercise_run(self, mode):
         tool = self.module()

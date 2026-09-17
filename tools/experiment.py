@@ -2131,7 +2131,6 @@ def reuse_authorization(vm, boot_id, run_id, manifest=None, manifest_path=None):
     launches = ledger.get('launches')
     if not isinstance(launches, list) or not launches: return None, ['boot_ledger']
     if any(row.get('run_id') == run_id for row in launches): return None, ['run_id_reused']
-    ceiling = len(launches) >= 3
     prior = launches[-1].get('run_id')
     continuation_path = (vm/'run/retained-kiq-continuations'/boot_id/
                          (str(prior)+'.json'))
@@ -2149,7 +2148,7 @@ def reuse_authorization(vm, boot_id, run_id, manifest=None, manifest_path=None):
             error_key = 'startup_noqueue_receipt'
     try: receipt = json.loads(receipt_path.read_text())
     except (OSError, ValueError):
-        return None, sorted({error_key, 'launch_ceiling'} if ceiling else {error_key})
+        return None, [error_key]
     errors = validate_reuse_receipt(
         receipt, boot_id, prior, vm, run_id, manifest, manifest_path)
     used_recovery_ids = {row.get('recovery_id') for row in launches}
@@ -2163,8 +2162,6 @@ def reuse_authorization(vm, boot_id, run_id, manifest=None, manifest_path=None):
         used_authorization_ids = {row.get('authorization_id') for row in launches}
         if receipt.get('authorization_id') in used_authorization_ids:
             errors.append('retained_kiq_continuation_receipt')
-    if ceiling:
-        errors.append('launch_ceiling')
     return (receipt if not errors else None), sorted(set(errors))
 
 
@@ -2820,26 +2817,9 @@ def reserve_boot(directory, boot_id, experiment, recovery=None,
     ledger_raw = path.read_bytes()
     ledger = read_boot_ledger(path); launches = ledger.get('launches', [])
     prior = launches[-1].get('run_id') if launches else None
-    if recovery == 'manual-override':
-        # This sentinel is accepted only from the explicit CLI
-        # --manual-reuse --ack-risk path.  It is deliberately not passed to
-        # receipt validation and cannot create recovery authority.  The
-        # explicit experiment acknowledgement permits this one launch beyond
-        # the ordinary finite ledger ceiling.
-        if any(row.get('run_id') == experiment for row in launches):
-            raise ValueError('manual override reservation refused: run_id_reused')
-        reservation = {'run_id': experiment, 'reserved_epoch': time.time(),
-                       'manual_override': True, 'prior_run_id': prior,
-                       'manifest_sha256': (sha(Path(manifest_path).read_bytes())
-                                           if manifest_path is not None else None)}
-        launches.append(reservation)
-        ledger.update(schema=2, boot_id=boot_id,
-                      max_launches=ledger.get('max_launches'), launches=launches)
-        ledger.pop('experiment', None)
-        replace_json(path, ledger)
-        return
-    if len(launches) >= 3:
-        raise RuntimeError('launch ceiling exhausted')
+    # A same-boot reservation is never refused by launch count: the MODE2-reset +
+    # recovery-receipt teardown protocol is the proven safety boundary, and the
+    # ledger below is only ever appended to as the (unbounded) audit trail of it.
     if noqueue_proof is not None:
         current_raw = path.read_bytes()
         nq = helper('noqueue-qualification')
@@ -3283,12 +3263,8 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
             one_run_policy_sha256=None,
             one_run_activation_sha256=None,
             prelaunch_proof_sha256=None,
-            manual_reuse=False, noqueue_reuse=None):
+            noqueue_reuse=None):
     """One bounded launch; a verified prior recovery may authorize same-boot reuse."""
-    # The explicit --manual-reuse/--ack-risk mode is reserved for a reviewed
-    # same-boot experiment when normal recovery authority is unavailable.  It
-    # remains opt-in at the CLI and is recorded as an experimental override;
-    # it must never be mistaken for a recovery receipt.
     noqueue_requested = bool(noqueue_reuse)
     one_run_requested = bool(one_run_policy_sha256 or one_run_activation_sha256)
     if bool(one_run_policy_sha256) != bool(one_run_activation_sha256):
@@ -3323,12 +3299,9 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
     if candidate179_requested and (resume_prelaunch or
             cap_revision_authority_sha256 or warm_requested):
         raise ValueError('candidate179 qualification cannot use another launch mode')
-    if manual_reuse and (resume_prelaunch or cap_revision_authority_sha256 or
-                         warm_requested or candidate179_requested):
-        raise ValueError('manual reuse cannot use another launch mode')
     if noqueue_requested and (resume_prelaunch or cap_revision_authority_sha256 or
                               warm_requested or candidate179_requested or
-                              one_run_requested or manual_reuse):
+                              one_run_requested):
         raise ValueError('noqueue reuse cannot use another launch mode')
     manifest = json.loads(manifest_path.read_text())
     probe_profile(manifest)
@@ -3463,12 +3436,13 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                         if cap_revision is not None:
                             recovery = cap_revision['receipt']
                     else:
-                        # Schema-2 launches have no generic same-boot authority.
-                        # A reviewed finite policy must select and bind one exact
-                        # launch instead of inheriting the historical rolling cap.
-                        recovery = 'manual-override' if manual_reuse else None
-                        if (used/(host['boot_id']+'.json')).exists() and not manual_reuse:
-                            reuse_errors = ['v2_reuse_requires_finite_authority']
+                        # Same-boot reuse is admitted automatically whenever the
+                        # immediately prior run on this boot left a valid recovery
+                        # receipt (authorizes_launch=true); no flag, no allowance
+                        # note. A fresh boot has no ledger file yet, so this is a
+                        # no-op there.
+                        recovery, reuse_errors = reuse_authorization(
+                            vm, host['boot_id'], manifest['run_id'], manifest, manifest_path)
                     if noqueue_requested:
                         noqueue_proof, reuse_errors = noqueue_admission(
                             vm, host, manifest, manifest_path, noqueue_reuse, errors)
@@ -3750,12 +3724,8 @@ if __name__ == '__main__':
     parser.add_argument('--candidate179-activation-sha256')
     parser.add_argument('--one-run-policy-sha256')
     parser.add_argument('--one-run-activation-sha256')
-    parser.add_argument('--manual-reuse', action='store_true',
-                        help='explicitly reuse a boot without a recovery receipt')
     parser.add_argument('--noqueue-reuse', type=Path,
                         help='authorize one explicit same-boot no-queue reuse from prior output')
-    parser.add_argument('--ack-risk', action='store_true',
-                        help='required acknowledgement for --manual-reuse')
     args = parser.parse_args()
     one_run_requested = bool(args.one_run_policy_sha256 or
                              args.one_run_activation_sha256)
@@ -3763,10 +3733,6 @@ if __name__ == '__main__':
         parser.error('one-run qualification requires both hashes')
     if one_run_requested and args.action != 'run':
         parser.error('one-run qualification is only valid with run')
-    if args.ack_risk and not args.manual_reuse:
-        parser.error('--ack-risk requires --manual-reuse')
-    if args.manual_reuse and (args.action != 'run' or not args.ack_risk):
-        parser.error('--manual-reuse requires run and --ack-risk')
     if one_run_requested and (args.resume_prelaunch or args.cap_revision_authority_sha256 or
                               args.warm_qualification_policy_sha256 or
                               args.candidate179_policy_sha256):
@@ -3826,5 +3792,5 @@ if __name__ == '__main__':
                          args.one_run_policy_sha256,
                          args.one_run_activation_sha256,
                          args.prelaunch_proof_sha256,
-                         args.manual_reuse, args.noqueue_reuse)
+                         args.noqueue_reuse)
     print(json.dumps(result, indent=2))
