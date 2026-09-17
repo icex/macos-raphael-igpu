@@ -1,0 +1,25 @@
+--- a/Headers/kern_user.hpp
++++ b/Headers/kern_user.hpp
+@@ -132,6 +132,22 @@
+ 		vm_address_t endTEXT;
+ 		vm_address_t startDATA;
+ 		vm_address_t endDATA;
++		/*
++		 *  Optional: explicit per-patch __TEXT-segment offsets used when the on-disk file at
++		 *  `path` is absent (shared-cache-only dylibs, e.g. AMDRadeonX6000MTLDriver on a sealed
++		 *  system volume). One entry per patch; nullptr keeps the normal file-scanning behaviour.
++		 *  Only honoured for shared-cache patching, which verifies the live bytes against
++		 *  patch.find before writing.
++		 */
++		const vm_address_t *filelessSegOffs {nullptr};
++		/*
++		 *  Optional: the module's unslid __TEXT base and size. When set, the shared-cache
++		 *  patcher uses this range directly instead of the dyld_shared_cache .map, so a
++		 *  fileless mod can be patched even when the .map is absent (split caches on newer
++		 *  macOS) or does not list the module. patchSharedCache still verifies the live bytes.
++		 */
++		vm_address_t filelessTextBase {0};
++		vm_address_t filelessTextSize {0};
+ 	};
+ 
+ 	/**

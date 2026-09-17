@@ -69,6 +69,7 @@ jobs:
           LILU_SHA=$(python3 -c 'import json; print(json.load(open("build-support/inputs.json"))["lilu_archive_sha256"])')
           echo "$LILU_SHA  $RUNNER_TEMP/lilu.zip" | shasum -a 256 -c -
           unzip -q "$RUNNER_TEMP/lilu.zip" -d "$RUNNER_TEMP/toolchain/liludbg"
+          patch -d "$RUNNER_TEMP/toolchain/liludbg/Lilu.kext/Contents/Resources" -p1 < build-support/lilu-1.6.8-fileless-headers.patch
       - name: Compile release from source
         shell: bash
         run: |

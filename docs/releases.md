@@ -7,6 +7,11 @@ Run `python3 -B -m unittest discover -s tests` from a full checkout. Lilu valida
 and launcher tests create temporary fixtures; they require neither a local Lilu
 build nor access to `/dev/kvm`. The separate software-UART qualification uses QEMU
 software emulation. The macOS job then builds the kext from pinned dependencies.
+After verifying the upstream Lilu archive, it applies
+`build-support/lilu-1.6.8-fileless-headers.patch` to reproduce the existing pinned
+resource tree. These ABI additions match the custom Lilu used by this project;
+stock Lilu is not a runtime substitute. The build still verifies the complete
+SDK and patched Lilu resource digests before compiling.
 It compiles an x86_64 `MH_KEXT_BUNDLE` from the checked-out source using pinned
 MacKernelSDK and Lilu build inputs, then uploads a ZIP and SHA-256 checksum file.
 A `v*` tag publishes the verified build assets as a GitHub **prerelease** only after
