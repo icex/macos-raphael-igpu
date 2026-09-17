@@ -46,6 +46,8 @@ enum : uint32_t {
 };
 
 static constexpr uint32_t kMaxImages = 2048;
+// Largest exact instruction window a target may guard (the CoreDisplay refresh fix is 98 bytes).
+static constexpr size_t kMaxInstructionSize = 128;
 static constexpr size_t kMaxLoadCommands = 16 * 1024;
 static constexpr char kDriverPath[] =
     "/System/Library/Extensions/AMDRadeonX6000MTLDriver.bundle/Contents/MacOS/"
@@ -79,7 +81,7 @@ static constexpr Target kFeedbackTarget = {
 // Return only the changed byte span; existing single-byte patches stay single-byte.
 inline bool patchSpan(const Target &target, size_t &offset, size_t &size) {
     if (!target.instruction || !target.patchedInstruction || !target.instructionSize ||
-        target.instructionSize > 16) return false;
+        target.instructionSize > kMaxInstructionSize) return false;
     offset = 0;
     while (offset < target.instructionSize &&
            target.instruction[offset] == target.patchedInstruction[offset]) ++offset;
@@ -89,6 +91,41 @@ inline bool patchSpan(const Target &target, size_t &offset, size_t &size) {
                        target.patchedInstruction[offset + size - 1]) --size;
     return true;
 }
+// CoreDisplay 24G830 (dyld shared cache, UUID B52FFBDE-B5F7-3F53-8D5E-2A822E7EE75E):
+// _CGXVirtualDisplayApply fills each virtual-display mode entry's integer refresh (+0x24)
+// with 60 and VFBGetVBLTiming derives vsync from it, so every CGVirtualDisplay runs at 60Hz.
+// The 98-byte window at TEXT+0x371de (r14 = entry+0x30) keeps the 16.16 refresh store at
+// +0xbc, additionally stores refresh>>16 at +0x24 (60 when that is 0), and preserves the
+// flags for the following cmovg. See findings/research/encoder-pipeline-20260917.md.
+static constexpr char kCoreDisplayPath[] =
+    "/System/Library/Frameworks/CoreDisplay.framework/Versions/A/CoreDisplay";
+static constexpr uint8_t kCoreDisplayUuid[16] = {
+    0xb5, 0x2f, 0xfb, 0xde, 0xb5, 0xf7, 0x3f, 0x53,
+    0x8d, 0x5e, 0x2a, 0x82, 0x2e, 0x7e, 0xe7, 0x5e
+};
+static constexpr uint8_t kVirtualDisplayRefreshInstruction[98] = {
+    0x44, 0x8b, 0x75, 0x9c, 0xf2, 0x0f, 0x10, 0x85, 0x20, 0xff, 0xff, 0xff, 0xf2, 0x0f,
+    0x59, 0x05, 0xa6, 0xf2, 0x0b, 0x00, 0xf2, 0x0f, 0x58, 0x05, 0x66, 0xf1, 0x0b, 0x00,
+    0x66, 0x0f, 0x3a, 0x0b, 0xc0, 0x09, 0xf2, 0x48, 0x0f, 0x2c, 0xc0, 0x48, 0x8b, 0x4d,
+    0x88, 0x48, 0x8b, 0x89, 0x78, 0x01, 0x00, 0x00, 0x44, 0x0f, 0xaf, 0xbd, 0x34, 0xff,
+    0xff, 0xff, 0x48, 0x8b, 0xb5, 0x28, 0xff, 0xff, 0xff, 0x41, 0x39, 0xf7, 0x8b, 0x95,
+    0x78, 0xff, 0xff, 0xff, 0x41, 0x0f, 0x4f, 0xd5, 0x89, 0x95, 0x78, 0xff, 0xff, 0xff,
+    0x48, 0x8b, 0x95, 0x68, 0xff, 0xff, 0xff, 0x89, 0x84, 0x11, 0xbc, 0x00, 0x00, 0x00
+};
+static constexpr uint8_t kVirtualDisplayRefreshPatchedInstruction[98] = {
+    0x0f, 0x1f, 0x40, 0x00, 0xf2, 0x0f, 0x10, 0x85, 0x20, 0xff, 0xff, 0xff, 0xf2, 0x0f,
+    0x59, 0x05, 0xa6, 0xf2, 0x0b, 0x00, 0xf2, 0x0f, 0x58, 0x05, 0x66, 0xf1, 0x0b, 0x00,
+    0xf2, 0x48, 0x0f, 0x2c, 0xc0, 0x41, 0x89, 0x86, 0x8c, 0x00, 0x00, 0x00, 0xc1, 0xe8,
+    0x10, 0x75, 0x05, 0xb8, 0x3c, 0x00, 0x00, 0x00, 0x41, 0x89, 0x46, 0xf4, 0x44, 0x8b,
+    0x75, 0x9c, 0x44, 0x0f, 0xaf, 0xbd, 0x34, 0xff, 0xff, 0xff, 0x48, 0x8b, 0xb5, 0x28,
+    0xff, 0xff, 0xff, 0x41, 0x39, 0xf7, 0x7e, 0x07, 0x44, 0x89, 0xad, 0x78, 0xff, 0xff,
+    0xff, 0x0f, 0x1f, 0x80, 0x00, 0x00, 0x00, 0x00, 0x66, 0x0f, 0x1f, 0x44, 0x00, 0x00
+};
+static constexpr Target kVirtualDisplayRefreshTarget = {
+    kCoreDisplayPath, sizeof(kCoreDisplayPath), kCoreDisplayUuid, 0x371de,
+    kVirtualDisplayRefreshInstruction, kVirtualDisplayRefreshPatchedInstruction,
+    sizeof(kVirtualDisplayRefreshInstruction)
+};
 static constexpr char kVcnDpmDriverPath[] =
     "/System/Library/Extensions/AMDRadeonVADriver2.bundle/Contents/MacOS/AMDRadeonVADriver2";
 static constexpr uint8_t kVcnDpmUuid[16] = {
@@ -177,7 +214,7 @@ inline Result inspect(ReadFn read, void *context, uint64_t allImageInfoAddress,
     if (target.driverPath == nullptr || target.uuid == nullptr ||
         target.instruction == nullptr || target.patchedInstruction == nullptr ||
         target.pathSize == 0 || target.pathSize > 256 || target.instructionSize == 0 ||
-        target.instructionSize > 16) {
+        target.instructionSize > kMaxInstructionSize) {
         result.status = BadPath;
         return result;
     }
@@ -260,7 +297,7 @@ inline Result inspect(ReadFn read, void *context, uint64_t allImageInfoAddress,
             result.status = BadText;
             return result;
         }
-        uint8_t instruction[16] {};
+        uint8_t instruction[kMaxInstructionSize] {};
         const bool readOk = boundedRead(read, context, result.instructionAddress,
                                         instruction, target.instructionSize);
         result.instructionMatch = readOk &&

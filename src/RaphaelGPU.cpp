@@ -56,6 +56,8 @@
 #include "CriticalReplay.hpp"
 #include "CriticalUart.hpp"
 #include "AllocationLogBudget.hpp"
+#include "DcnTranslation.hpp"
+#include "DmcubFirmware.hpp"
 #if __has_include("BuildIdentity.hpp")
 #include "BuildIdentity.hpp"
 #else
@@ -8328,6 +8330,331 @@ static void relocateFbAperture() {
          phys - (static_cast<uint64_t>(oldOff) << 24));
 }
 
+static bool entryMatches(mach_vm_address_t base, size_t imageSize, size_t offset,
+                         const uint8_t *expected, size_t expectedSize);
+
+// ---- Physical display: Apple's DCN 3.02 display core on Raphael's DCN 3.1.5 ----
+//
+// AMDRadeonX6000Framebuffer embeds AMD's display core (DC 3.2.145) with DCN 2.0, 2.1, 3.0
+// and 3.02 resource pools. resource_parse_asic_id (0xb3084) maps family 0x8f by
+// hw_internal_rev: [60,70) -> DCN 3.02 (Navi 23), [40,70) -> DCN 3.0, else DCN 2.0. The
+// unreadable strap makes Raphael report rev 75, so today the DAL builds a Navi 10 pool.
+// DCN 3.0.2 is the closest register map to Raphael's 3.1.5 (same base segments, 94% of
+// shared registers at the same index), so rgpudcn steers the DAL there and rewrites the
+// rest of the register indices where every DAL register access goes: the cgs_device's
+// read/write slots. dm_read_reg/dm_write_reg (0x6dcb8/0x6dca6) and the DMUB register
+// callbacks (0x888a4/0x888b8) all jump through [cgs+0x40]/[cgs+0x48](cgs->ctx, ...).
+//
+//   0xfea5e  dc_create(init_data): +0x00 hw_asic_id (+4 family, +0xc rev), +0x30 cgs_device
+//   0xff053  dc_hardware_init(dc): calls hwss.init_hw; dc+0x308 ctx, ctx+0x88 dc_dmub_srv
+//   0x110bd7 generic_reg_wait(ctx, index, shift, mask, expected, delay_us, tries, func, line)
+//   HWLibs 0x7a38 _dmcub_set_fw_entry_info(dmcu, version source, fw list)
+//   HWLibs 0x78ee _dmcub_load_fw(dmcu, name, image, size, fw list)
+//
+// The Raphael VBIOS has no transmitter/pixel-clock command tables, so HDMI link bring-up
+// needs DMCUB running Raphael's own firmware. HWLibs registers DMCUB firmware for PSP
+// only for DCN 3.0.x; rgpudcn bit 8 registers dcn_3_1_5_dmcub.bin the same way.
+//
+// rgpudcn=<mask>: 1 trace, 2 translate (needs 4), 4 DCN 3.02 pool (rev 75 -> 60),
+// 8 Raphael DMCUB firmware for PSP, 16 inert dc_dmub_srv if DMCUB never attached (dcn30
+// init_hw dereferences ctx->dmub_srv unconditionally). rgpudcntrace=<lines> bounds the
+// access trace (default 1500).
+static constexpr size_t kOffDcnRegWait     = 0x110bd7;
+static constexpr size_t kOffDcCreate       = 0xfea5e;
+static constexpr size_t kOffDcHardwareInit = 0xff053;
+static constexpr size_t kOffDmcubSetFwEntry = 0x7a38;   // [hwlibs]
+static constexpr size_t kOffDmcubLoadFw     = 0x78ee;   // [hwlibs]
+enum : uint32_t {
+    kDcnTrace = 1, kDcnTranslate = 2, kDcnPool302 = 4, kDcnDmcubFirmware = 8, kDcnDmubGuard = 16,
+    kDcnAll = 31,
+};
+static uint32_t dcnMode = 0;
+static uint32_t dcnTraceBudget = 1500;
+static mach_vm_address_t orgDcnRegWait = 0, orgDcCreate = 0, orgDcHardwareInit = 0,
+    orgDmcubSetFwEntry = 0;
+using DcnRegRead = uint32_t (*)(void *, uint32_t);
+using DcnRegWrite = void (*)(void *, uint32_t, uint32_t);
+static DcnRegRead dcnNativeRead = nullptr;
+static DcnRegWrite dcnNativeWrite = nullptr;
+static void *dcnRegContext = nullptr;
+static RaphaelDcn::AccessCounter<4096> dcnAccesses;
+static RaphaelDcn::DalMailbox dcnDalMailbox;
+static volatile uint32_t dcnTraceLines = 0;
+static volatile uint32_t dcnDropped = 0;
+
+static bool dcnTranslating() {
+    return (dcnMode & (kDcnTranslate | kDcnPool302)) == (kDcnTranslate | kDcnPool302);
+}
+
+// Return addresses one and two frames above the register accessor's caller. Every native
+// frame here keeps RBP (push rbp; mov rbp,rsp), and so does this kext.
+static void dcnCallers(void *frame, uint64_t *first, uint64_t *second) {
+    *first = *second = 0;
+    auto valid = [](uint64_t p) { return p >= 0xffffff8000000000ULL && (p & 7) == 0; };
+    const uint64_t callerFrame = frame ? *reinterpret_cast<uint64_t *>(frame) : 0;
+    if (!valid(callerFrame)) return;
+    *first = reinterpret_cast<uint64_t *>(callerFrame)[1];
+    const uint64_t upper = *reinterpret_cast<uint64_t *>(callerFrame);
+    if (valid(upper)) *second = reinterpret_cast<uint64_t *>(upper)[1];
+}
+
+static uint64_t dcnRel(uint64_t address) {
+    return fbBase && address >= fbBase && address < fbBase + 0x400000 ? address - fbBase : address;
+}
+
+static void dcnTraceAccess(char op, uint32_t from, const RaphaelDcn::Mapping &m, uint32_t value,
+                           uint64_t ret, void *frame, const char *note = "") {
+    if (!(dcnMode & kDcnTrace)) return;
+    const uint32_t seen = dcnAccesses.note(RaphaelDcn::accessKey(from, op == 'W'));
+    const bool dropped = m.action == RaphaelDcn::Action::Drop;
+    if (!(seen == 1 || seen == 2 || (dropped && seen <= 3) || *note)) return;
+    if (__sync_add_and_fetch(&dcnTraceLines, 1) > dcnTraceBudget) return;
+    uint64_t up1 = 0, up2 = 0;
+    dcnCallers(frame, &up1, &up2);
+    RLOG("DCN: %c %#x%s%#x v=%#x n=%u @%#llx<%#llx<%#llx%s", op, from,
+         dropped ? " DROP " : m.action == RaphaelDcn::Action::Move ? " -> " : " = ",
+         m.index, value, seen, dcnRel(ret), dcnRel(up1), dcnRel(up2), note);
+}
+
+__attribute__((noinline))
+static uint32_t wrapDcnRegRead(void *context, uint32_t index) {
+    using namespace RaphaelDcn;
+    Mapping m {Action::Pass, index};
+    const char *note = "";
+    uint32_t value = 0;
+    if (!dcnTranslating()) {
+        value = dcnNativeRead(context, index);
+    } else if (DalMailbox::owns(index)) {
+        m = {Action::Drop, index};
+        value = dcnDalMailbox.read(index);
+        note = " (DALSMC emulated)";
+    } else {
+        m = translate(index);
+        if (m.action == Action::Drop) {
+            __sync_add_and_fetch(&dcnDropped, 1);
+        } else if (index == k302DmcubCntl) {
+            value = (dcnNativeRead(context, index) & ~kDmcubCntlSoftReset302) |
+                ((dcnNativeRead(context, k315DmcubCntl2) & kDmcubCntl2SoftReset) ?
+                 kDmcubCntlSoftReset302 : 0);
+        } else {
+            value = dcnNativeRead(context, m.index);
+            if (const FieldRemap *remap = fieldRemap(index)) value = remapRead(*remap, value);
+        }
+    }
+    dcnTraceAccess('R', index, m, value, reinterpret_cast<uint64_t>(__builtin_return_address(0)),
+                   __builtin_frame_address(0), note);
+    return value;
+}
+
+__attribute__((noinline))
+static void wrapDcnRegWrite(void *context, uint32_t index, uint32_t value) {
+    using namespace RaphaelDcn;
+    Mapping m {Action::Pass, index};
+    const char *note = "";
+    if (!dcnTranslating()) {
+        dcnNativeWrite(context, index, value);
+    } else if (DalMailbox::owns(index)) {
+        m = {Action::Drop, index};
+        note = " (DALSMC emulated)";
+        if (dcnDalMailbox.write(index, value))
+            CRLOG("DCN: DALSMC message %#x argument %#x answered failed (Raphael has no DAL "
+                  "mailbox)", dcnDalMailbox.message(), dcnDalMailbox.argument());
+    } else {
+        m = translate(index);
+        if (m.action == Action::Drop) {
+            __sync_add_and_fetch(&dcnDropped, 1);
+        } else if (index == k302DmcubCntl) {
+            const uint32_t cntl2 = dcnNativeRead(context, k315DmcubCntl2);
+            const bool reset = (value & kDmcubCntlSoftReset302) != 0;
+            // Assert reset before touching ENABLE; release it only after ENABLE is written.
+            if (reset) dcnNativeWrite(context, k315DmcubCntl2, cntl2 | kDmcubCntl2SoftReset);
+            dcnNativeWrite(context, index, value & ~kDmcubCntlSoftReset302);
+            if (!reset) dcnNativeWrite(context, k315DmcubCntl2, cntl2 & ~kDmcubCntl2SoftReset);
+            note = reset ? " (DMCUB soft reset -> CNTL2 set)" : " (DMCUB soft reset -> CNTL2 clear)";
+        } else if (const FieldRemap *remap = fieldRemap(index)) {
+            dcnNativeWrite(context, m.index,
+                           remapWrite(*remap, value, dcnNativeRead(context, m.index)));
+            note = " (fields remapped)";
+        } else {
+            dcnNativeWrite(context, m.index, value);
+        }
+    }
+    dcnTraceAccess('W', index, m, value, reinterpret_cast<uint64_t>(__builtin_return_address(0)),
+                   __builtin_frame_address(0), note);
+}
+
+// Every exhausted wait prints "generic_reg_wait:513" with no register; name each one.
+static void wrapDcnRegWait(void *ctx, uint32_t index, uint32_t shift, uint32_t fieldMask,
+                           uint32_t expected, uint32_t delayUs, uint32_t tries,
+                           const char *func, int line) {
+    static volatile uint32_t waits = 0;
+    const uint32_t n = __sync_add_and_fetch(&waits, 1);
+    const RaphaelDcn::Mapping m = dcnTranslating() ? RaphaelDcn::translate(index)
+                                                   : RaphaelDcn::Mapping{RaphaelDcn::Action::Pass, index};
+    FunctionCast(wrapDcnRegWait, orgDcnRegWait)(ctx, index, shift, fieldMask, expected, delayUs,
+                                               tries, func, line);
+    if (n <= 64)
+        RLOG("DCN: wait#%u %s:%d reg %#x%s%#x field(<<%u & %#x) == %#x delay=%uus tries=%u",
+             n, func ? func : "?", line, index,
+             m.action == RaphaelDcn::Action::Drop ? " DROP " : " -> ", m.index, shift, fieldMask,
+             expected, delayUs, tries);
+}
+
+// Steer only the display core: the asic id reaches no other client through this struct.
+static void *wrapDcCreate(void *init) {
+    if (init != nullptr && (dcnMode & kDcnPool302)) {
+        auto asic = reinterpret_cast<uint32_t *>(init);
+        const uint32_t family = asic[1], rev = asic[3];
+        if (family == 0x8f && (rev < 60 || rev >= 70)) asic[3] = 60;
+        CRLOG("DCN: dc_create chip=%#x family=%#x pci_rev=%#x hw_internal_rev %u -> %u "
+              "(DCN 3.02 pool)", asic[0], family, asic[2], rev, asic[3]);
+    }
+    if (init != nullptr && (dcnMode & (kDcnTrace | kDcnTranslate)) && dcnNativeRead == nullptr) {
+        const auto cgs = *reinterpret_cast<uint64_t **>(reinterpret_cast<uint8_t *>(init) + 0x30);
+        const auto kernelText = [](uint64_t p) { return p >= 0xffffff8000000000ULL; };
+        if (cgs != nullptr && kernelText(cgs[8]) && kernelText(cgs[9])) {
+            dcnRegContext = reinterpret_cast<void *>(cgs[5]);
+            dcnNativeRead = reinterpret_cast<DcnRegRead>(cgs[8]);
+            dcnNativeWrite = reinterpret_cast<DcnRegWrite>(cgs[9]);
+            cgs[9] = reinterpret_cast<uint64_t>(wrapDcnRegWrite);
+            cgs[8] = reinterpret_cast<uint64_t>(wrapDcnRegRead);
+        }
+        CRLOG("DCN: cgs %p read=%#llx write=%#llx -> %s", cgs,
+              dcnRel(reinterpret_cast<uint64_t>(dcnNativeRead)),
+              dcnRel(reinterpret_cast<uint64_t>(dcnNativeWrite)),
+              dcnNativeRead ? "interposed" : "NOT interposed");
+        if (!dcnNativeRead) dcnMode &= ~(kDcnTrace | kDcnTranslate);
+    }
+    void *dc = FunctionCast(wrapDcCreate, orgDcCreate)(init);
+    CRLOG("DCN: dc_create -> %p (translate=%u trace-lines=%u dropped=%u unique=%zu)", dc,
+          dcnTranslating(), dcnTraceLines, dcnDropped, dcnAccesses.used());
+    return dc;
+}
+
+static void dcnLogDmcubState(const char *when) {
+    if (dcnNativeRead == nullptr) return;
+    const uint32_t cntl = dcnNativeRead(dcnRegContext, RaphaelDcn::k302DmcubCntl);
+    const uint32_t cntl2 = dcnNativeRead(dcnRegContext, RaphaelDcn::k315DmcubCntl2);
+    const uint32_t status = dcnNativeRead(dcnRegContext, RaphaelDcn::k315DmcubScratch0);
+    CRLOG("DCN: DMCUB %s CNTL=%#x CNTL2=%#x SCRATCH0=%#x (dal_fw=%u mailbox_rdy=%u) "
+          "SCRATCH15=%#x", when, cntl, cntl2, status, status & 1, (status >> 1) & 1,
+          dcnNativeRead(dcnRegContext, RaphaelDcn::k315DmcubScratch15));
+}
+
+static void wrapDcHardwareInit(void *dc) {
+    if (dc != nullptr) {
+        const auto ctx = *reinterpret_cast<uint8_t **>(reinterpret_cast<uint8_t *>(dc) + 0x308);
+        const auto slot = ctx ? reinterpret_cast<void **>(ctx + 0x88) : nullptr;
+        dcnLogDmcubState("before init_hw");
+        CRLOG("DCN: dc_hardware_init dc=%p ctx=%p dmub_srv=%p", dc, ctx, slot ? *slot : nullptr);
+        if ((dcnMode & kDcnDmubGuard) && slot != nullptr && *slot == nullptr) {
+            // dc_dmub_srv is 0x68 bytes: +0x00 struct dmub_srv *, +0x58 dc_context *. A zeroed
+            // dmub_srv has hw_init == false, so every DMUB call returns an error instead.
+            static uint8_t inertDmub[0x1000] {};
+            static uint64_t inertDcDmub[13] {};
+            inertDcDmub[0] = reinterpret_cast<uint64_t>(inertDmub);
+            inertDcDmub[11] = reinterpret_cast<uint64_t>(ctx);
+            *slot = inertDcDmub;
+            CRLOG("DCN: DMUB service never attached; installed an inert dc_dmub_srv so "
+                  "dcn30_init_hw cannot dereference NULL");
+        }
+    }
+    FunctionCast(wrapDcHardwareInit, orgDcHardwareInit)(dc);
+    dcnLogDmcubState("after init_hw");
+    CRLOG("DCN: dc_hardware_init done (trace-lines=%u dropped=%u unique=%zu)", dcnTraceLines,
+          dcnDropped, dcnAccesses.used());
+}
+
+// HWLibs' DMCU service registers DMCUB firmware with PSP only for DCN 3.0.x
+// (_dmcub_dcn302_get_fw_constrant: when strap 0x358a bit 16 is set, stage the image
+// through _dmcub_load_fw). DCN 3.1.x takes a constraint that loads nothing. Mirror the
+// DCN 3.02 constraint with Raphael's signed DMCUB image, staged in the service's own
+// 1 MiB buffer (dmcu+0x510, allocated by _dmcub_sw_init) exactly as a file load would be.
+static uint32_t wrapDmcubSetFwEntry(void *dmcu, void *versionSource, void *list) {
+    const auto versionFields = reinterpret_cast<const int32_t *>(
+        reinterpret_cast<uint8_t *>(versionSource) + 0xc);
+    const uint32_t hw = (static_cast<uint32_t>(versionFields[0]) << 16) |
+        (static_cast<uint32_t>(versionFields[1]) << 8) | static_cast<uint32_t>(versionFields[2]);
+    const auto entries = list ? reinterpret_cast<uint32_t *>(reinterpret_cast<uint8_t *>(list) + 0x10) : nullptr;
+    const uint32_t before = entries ? *entries : 0;
+    const uint32_t result = FunctionCast(wrapDmcubSetFwEntry, orgDmcubSetFwEntry)(dmcu, versionSource, list);
+    const uint32_t added = entries ? *entries - before : 0;
+    CRLOG("DMCUB: set_fw_entry_info hw=%#x -> %u (entries %u -> %u)", hw, result, before,
+          entries ? *entries : 0);
+    if (!(dcnMode & kDcnDmcubFirmware) || dmcu == nullptr || entries == nullptr) return result;
+    const auto service = reinterpret_cast<uint8_t *>(dmcu);
+    const auto buffer = *reinterpret_cast<uint8_t **>(service + 0x510);
+    if (hw < 0x30100 || added != 0 || buffer == nullptr ||
+        *reinterpret_cast<uint32_t *>(service + 0x298) > 1 ||
+        sizeof(raphaelDmcubFirmware) > 0x100000) {
+        CRLOG("DMCUB: Raphael firmware not registered (hw=%#x added=%u buffer=%p state=%u)", hw,
+              added, buffer, *reinterpret_cast<uint32_t *>(service + 0x298));
+        return result;
+    }
+    memcpy(service + 0x2a8, service + 0x30, 0x260);
+    *reinterpret_cast<uint32_t *>(service + 0x508) = hw;
+    memcpy(buffer, raphaelDmcubFirmware, sizeof(raphaelDmcubFirmware));
+    using LoadFw = uint32_t (*)(void *, const char *, uint8_t *, uint32_t, void *);
+    const uint32_t loaded = reinterpret_cast<LoadFw>(hwlibsBase + kOffDmcubLoadFw)(
+        dmcu, "atidmcub_raphael.dat", buffer, sizeof(raphaelDmcubFirmware), list);
+    CRLOG("DMCUB: registered Raphael DMCUB %#x (%zu bytes) for PSP -> %u (entries %u)",
+          raphaelDmcubFirmwareVersion, sizeof(raphaelDmcubFirmware), loaded, *entries);
+    return result;
+}
+
+static void installDcnHwlibsRoutes(KernelPatcher &patcher, mach_vm_address_t addr, size_t size) {
+    if (!(dcnMode & kDcnDmcubFirmware)) return;
+    static const uint8_t setEntry[] = {0x55,0x48,0x89,0xe5,0x41,0x56,0x53,0x48,0x83,0xec,0x10,
+                                       0x48,0x89,0xd3,0x49,0x89,0xfe,0x48,0x8b,0x46};
+    static const uint8_t loadFw[] = {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x41,0x55,0x41,
+                                     0x54,0x53,0x48,0x83,0xec,0x28,0x41,0x89,0xce};
+    const bool matches = entryMatches(addr, size, kOffDmcubSetFwEntry, setEntry, sizeof(setEntry)) &&
+                         entryMatches(addr, size, kOffDmcubLoadFw, loadFw, sizeof(loadFw));
+    if (matches) orgDmcubSetFwEntry = patcher.routeFunction(addr + kOffDmcubSetFwEntry,
+        reinterpret_cast<mach_vm_address_t>(wrapDmcubSetFwEntry), true);
+    CRLOG("DMCUB: route _dmcub_set_fw_entry_info -> %s (prologues=%u)",
+          orgDmcubSetFwEntry ? "ok" : "FAILED", matches);
+    patcher.clearError();
+}
+
+static void installDcnRoutes(KernelPatcher &patcher, mach_vm_address_t addr, size_t size) {
+    if (dcnMode == 0) return;
+    struct Target {
+        size_t offset; const uint8_t *prologue; size_t length; mach_vm_address_t wrapper;
+        mach_vm_address_t *org; const char *name; bool wanted;
+    };
+    static const uint8_t regWait[]  = {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x41,0x55,0x41,
+                                       0x54,0x53,0x48,0x83,0xec,0x38,0x45,0x89,0xcd};
+    static const uint8_t dcCreate[] = {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x53,0x48,0x83,
+                                       0xec,0x18,0x49,0x89,0xfe,0xbf,0x48,0xea,0x00};
+    static const uint8_t hwInit[]   = {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x41,0x55,0x41,
+                                       0x54,0x53,0x48,0x83,0xec,0x28,0x48,0x89,0xfb};
+    const Target targets[] = {
+        {kOffDcnRegWait, regWait, sizeof(regWait),
+         reinterpret_cast<mach_vm_address_t>(wrapDcnRegWait), &orgDcnRegWait, "generic_reg_wait",
+         (dcnMode & kDcnTrace) != 0},
+        {kOffDcCreate, dcCreate, sizeof(dcCreate),
+         reinterpret_cast<mach_vm_address_t>(wrapDcCreate), &orgDcCreate, "dc_create", true},
+        {kOffDcHardwareInit, hwInit, sizeof(hwInit),
+         reinterpret_cast<mach_vm_address_t>(wrapDcHardwareInit), &orgDcHardwareInit,
+         "dc_hardware_init", true},
+    };
+    for (const auto &t : targets) {
+        if (!t.wanted) continue;
+        const bool matches = entryMatches(addr, size, t.offset, t.prologue, t.length);
+        if (matches) *t.org = patcher.routeFunction(addr + t.offset, t.wrapper, true);
+        CRLOG("DCN: route %s -> %s (prologue=%u org=%#llx)", t.name, *t.org ? "ok" : "FAILED",
+              matches, *t.org);
+        patcher.clearError();
+    }
+    if (!orgDcCreate && (dcnMode & (kDcnPool302 | kDcnTranslate | kDcnTrace))) {
+        // Without the pool change the indices are DCN 2.0 ones; never translate them.
+        dcnMode &= ~(kDcnPool302 | kDcnTranslate | kDcnTrace);
+        CRLOG("DCN: dc_create route missing; pool, translation and trace disabled");
+    }
+    if (!orgDcHardwareInit) dcnMode &= ~kDcnDmubGuard;
+}
+
 static uint32_t wrapFbXgmiConfig(void *self) {
     asicInfo = self;
     relocateFbAperture();   // no-op unless rgpufb is set
@@ -8420,6 +8747,16 @@ static TextureDiagCurrentTask textureDiagCurrentTask = nullptr;
 static TextureDiagGetTaskMap textureDiagGetTaskMap = nullptr;
 static TextureDiagReadUser textureDiagReadUser = nullptr;
 static TextureDiagSelfPid textureDiagSelfPid = nullptr;
+// rgpuvd120=1: patch CoreDisplay's virtual-display refresh integer, WindowServer only.
+static bool vd120Enabled = false;
+using TextureDiagSelfName = void (*)(char *, int);
+static TextureDiagSelfName textureDiagSelfName = nullptr;
+static bool currentProcessIsWindowServer() {
+    if (textureDiagSelfName == nullptr) return false;
+    char name[32] {};
+    textureDiagSelfName(name, sizeof(name));
+    return strcmp(name, "WindowServer") == 0;
+}
 static TextureDiagRegionRecurse textureDiagRegionRecurse = nullptr;
 static TextureDiagProtect textureDiagProtect = nullptr;
 static TextureDiagWriteUser textureDiagWriteUser = nullptr;
@@ -8438,6 +8775,7 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
            index, kexts[KextHWLibs].loadIndex, kexts[KextFB].loadIndex, addr, sz);
     if (kexts[KextHWLibs].loadIndex == index) {
         RLOG("HWLibs loaded, mask=0x%x", mask);
+        installDcnHwlibsRoutes(patcher, addr, sz);
         if (hybridProbeEnabled) {
             // Bind both offsets to HWLibs and verify complete displaced instructions.
             // Builds 160/161 used an X6000 base here and were invalid experiments.
@@ -8514,6 +8852,7 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
         RLOG("Framebuffer loaded, mask=0x%x", mask);
         fbBase = addr;
         applyFor(patcher, false);
+        installDcnRoutes(patcher, addr, sz);
         if (mask & XI) {
             orgPpPowerUp = patcher.routeFunction(addr + kOffPpPowerUp,
                              reinterpret_cast<mach_vm_address_t>(wrapPpPowerUp), true);
@@ -8532,7 +8871,9 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
         if (mask & P1) reprobeGpu();
     } else if (kexts[KextX6000].loadIndex == index) {
         RLOG("X6000 loaded, mask=0x%x", mask);
-        if (texDiagEnabled != 0 || vcnNoDpmEnabled) {
+        if (texDiagEnabled != 0 || vcnNoDpmEnabled || vd120Enabled) {
+            textureDiagSelfName = reinterpret_cast<TextureDiagSelfName>(
+                patcher.solveSymbol(KernelPatcher::KernelID, "_proc_selfname"));
             textureDiagTaskInfo = reinterpret_cast<TextureDiagTaskInfo>(
                 patcher.solveSymbol(KernelPatcher::KernelID, "_task_info"));
             textureDiagCurrentTask = reinterpret_cast<TextureDiagCurrentTask>(
@@ -9077,7 +9418,8 @@ static bool textureDiagRead(void *opaque, uint64_t address, void *out, size_t si
 // by rgputexdiag=2, kVcnDpm and kVcnPreset by the vcnNoDpm capability-alignment
 // gate (kVcnPreset additionally requires rgpuvcnpreset=1). The kind selects both
 // the gate and the log line; the underlying guard/COW mechanics are identical.
-enum class DiagTargetKind { kMetal, kFeedback, kVcnDpm, kVcnPreset };
+enum class DiagTargetKind { kMetal, kFeedback, kVcnDpm, kVcnPreset, kVirtualDisplay120 };
+
 
 static bool diagTargetGateOpen(DiagTargetKind kind) {
     switch (kind) {
@@ -9086,6 +9428,8 @@ static bool diagTargetGateOpen(DiagTargetKind kind) {
     case DiagTargetKind::kVcnPreset:
         return vcnPresetEnabled && vcnNoDpmEnabled &&
                __atomic_load_n(&ppCompatibilityBypassed, __ATOMIC_ACQUIRE);
+    case DiagTargetKind::kVirtualDisplay120:
+        return vd120Enabled && currentProcessIsWindowServer();
     case DiagTargetKind::kMetal:
     case DiagTargetKind::kFeedback:
     default:
@@ -9117,9 +9461,10 @@ static void textureDiagCow(TextureDiagReadContext *context, int pid,
         (regionMax & (VM_PROT_READ | VM_PROT_EXECUTE)) !=
             (VM_PROT_READ | VM_PROT_EXECUTE))
         return;
-    if (target.instructionSize < 6 || target.instructionSize > 16 ||
+    if (target.instructionSize < 6 ||
+        target.instructionSize > RaphaelTextureDiag::kMaxInstructionSize ||
         (result.instructionAddress & 0xfff) > 0x1000 - target.instructionSize) return;
-    uint8_t before[16] {};
+    uint8_t before[RaphaelTextureDiag::kMaxInstructionSize] {};
     kern_return_t readBefore = textureDiagRead(context, result.instructionAddress,
                                                 before, target.instructionSize) ? KERN_SUCCESS : KERN_FAILURE;
     if (readBefore != KERN_SUCCESS || memcmp(before, target.instruction, target.instructionSize) != 0) {
@@ -9159,6 +9504,9 @@ static void textureDiagCow(TextureDiagReadContext *context, int pid,
     if (kind == DiagTargetKind::kVcnDpm)
         SAMPLED_CRLOG(vcnCowRecordBudget, cowSucceeded, "VCNDPM: COW pid=%d addr=%#llx p=%d w=%d r=%d v=%d", pid,
               result.instructionAddress, protectRc, writeRc, restoreRc, verifyRc);
+    if (kind == DiagTargetKind::kVirtualDisplay120)
+        CRLOG("VD120: COW pid=%d addr=%#llx p=%d w=%d r=%d v=%d", pid,
+              result.instructionAddress, protectRc, writeRc, restoreRc, verifyRc);
     if (kind == DiagTargetKind::kVcnPreset)
         SAMPLED_CRLOG(vcnPresetCowRecordBudget, cowSucceeded,
               "VCNPRESET: COW target=%s pid=%d addr=%#llx p=%d w=%d r=%d v=%d", label, pid,
@@ -9187,14 +9535,16 @@ const DiagTargetEntry kDiagTargets[] = {
     {&RaphaelTextureDiag::kVcnPresetValueTarget, DiagTargetKind::kVcnPreset, "preset-value"},
     {&RaphaelTextureDiag::kVcnPresetHevcGateTarget, DiagTargetKind::kVcnPreset, "hevc-gate"},
     {&RaphaelTextureDiag::kVcnPresetAvcGateTarget, DiagTargetKind::kVcnPreset, "avc-gate"},
+    {&RaphaelTextureDiag::kVirtualDisplayRefreshTarget, DiagTargetKind::kVirtualDisplay120, "coredisplay-refresh"},
 };
 } // namespace
 
 static void applyCurrentTaskImagePatches(bool includeMetal) {
-    if (texDiagEnabled != 0 || vcnNoDpmEnabled) {
+    if (texDiagEnabled != 0 || vcnNoDpmEnabled || vd120Enabled) {
         const bool emit = __atomic_fetch_add(&textureDiagLogCount, 1u,
                                              __ATOMIC_RELAXED) < 64;
-        const bool cowLocked = (texDiagEnabled == 2 || vcnNoDpmEnabled || vcnPresetEnabled) &&
+        const bool cowLocked = (texDiagEnabled == 2 || vcnNoDpmEnabled || vcnPresetEnabled ||
+                                vd120Enabled) &&
                                textureDiagCowLock != nullptr;
         if (cowLocked) IOLockLock(textureDiagCowLock);
         task_t task = textureDiagCurrentTask ? textureDiagCurrentTask() : nullptr;
@@ -9208,7 +9558,8 @@ static void applyCurrentTaskImagePatches(bool includeMetal) {
                                 reinterpret_cast<task_info_t>(&dyld), &count) : KERN_FAILURE;
         for (const auto &entry : kDiagTargets) {
             const bool vcnLike = entry.kind == DiagTargetKind::kVcnDpm ||
-                                 entry.kind == DiagTargetKind::kVcnPreset;
+                                 entry.kind == DiagTargetKind::kVcnPreset ||
+                                 entry.kind == DiagTargetKind::kVirtualDisplay120;
             if (vcnLike ? !diagTargetGateOpen(entry.kind) : (!includeMetal || texDiagEnabled == 0))
                 continue;
             const auto &target = *entry.target;
@@ -9254,6 +9605,12 @@ static void applyCurrentTaskImagePatches(bool includeMetal) {
                        pid, result.status, result.uuidMatch, result.instructionMatch,
                        result.alreadyPatched, result.instructionAddress);
             }
+            static volatile uint32_t vd120ImageLogs = 0;
+            if (entry.kind == DiagTargetKind::kVirtualDisplay120 &&
+                __atomic_fetch_add(&vd120ImageLogs, 1u, __ATOMIC_RELAXED) < 6)
+                CRLOG("VD120: image pid=%d st=%u uuid=%u bytes=%u patched=%u addr=%#llx",
+                      pid, result.status, result.uuidMatch, result.instructionMatch,
+                      result.alreadyPatched, result.instructionAddress);
             if (entry.kind == DiagTargetKind::kVcnPreset && (emit || result.found)) {
                 const bool invalidTarget = result.found && result.status != RaphaelTextureDiag::Ok;
                 diagAppend(invalidTarget,
@@ -9453,7 +9810,18 @@ static void pluginStart() {
     vcnPresetEnabled = PE_parse_boot_argn("rgpuvcnpreset", &vcnPreset, sizeof(vcnPreset)) &&
         vcnPreset == 1;
     RLOG("VCNPRESET: rgpuvcnpreset=%u", vcnPresetEnabled);
-    if (texDiagEnabled == 2 || vcnNoDpmEnabled || vcnPresetEnabled)
+    uint32_t dcn = 0, dcnTrace = 0;
+    if (PE_parse_boot_argn("rgpudcn", &dcn, sizeof(dcn)) && dcn <= kDcnAll) dcnMode = dcn;
+    if (PE_parse_boot_argn("rgpudcntrace", &dcnTrace, sizeof(dcnTrace)) && dcnTrace <= 20000)
+        dcnTraceBudget = dcnTrace;
+    CRLOG("DCN: rgpudcn=%#x (trace=%u translate=%u pool302=%u dmcub-firmware=%u dmub-guard=%u) "
+          "trace-lines=%u", dcnMode, (dcnMode & kDcnTrace) != 0, (dcnMode & kDcnTranslate) != 0,
+          (dcnMode & kDcnPool302) != 0, (dcnMode & kDcnDmcubFirmware) != 0,
+          (dcnMode & kDcnDmubGuard) != 0, dcnTraceBudget);
+    uint32_t vd120 = 0;
+    vd120Enabled = PE_parse_boot_argn("rgpuvd120", &vd120, sizeof(vd120)) && vd120 == 1;
+    CRLOG("VD120: rgpuvd120=%u", vd120Enabled);
+    if (texDiagEnabled == 2 || vcnNoDpmEnabled || vcnPresetEnabled || vd120Enabled)
         textureDiagCowLock = IOLockAlloc();
     CRLOG("VCNDPM: capability alignment enabled=%u lock=%u", vcnNoDpmEnabled,
           textureDiagCowLock != nullptr);

@@ -263,4 +263,35 @@ int main() {
                    !presetResult.instructionMatch && !presetResult.alreadyPatched);
         }
     }
+    // candidate 285: CoreDisplay virtual-display refresh (98-byte window, shared cache image).
+    {
+        const auto &t = RaphaelTextureDiag::kVirtualDisplayRefreshTarget;
+        assert(t.instructionOffset == 0x371de && t.instructionSize == 98);
+        assert(t.instructionSize <= RaphaelTextureDiag::kMaxInstructionSize);
+        size_t offset = 99, size = 99;
+        assert(RaphaelTextureDiag::patchSpan(t, offset, size));
+        assert(offset == 0 && size == 96);   // the trailing "00 00" is shared
+        // The rip-relative mulsd/addsd (bytes 12..27) must stay at their original addresses.
+        assert(std::memcmp(t.instruction + 12, t.patchedInstruction + 12, 16) == 0);
+        Fixture cd;
+        makeValid(cd);
+        std::memset(cd.bytes.data() + 0x500, 0, t.pathSize);
+        std::memcpy(cd.bytes.data() + 0x500, RaphaelTextureDiag::kCoreDisplayPath, t.pathSize);
+        std::memcpy(cd.bytes.data() + 0x428, RaphaelTextureDiag::kCoreDisplayUuid, 16);
+        std::memcpy(cd.bytes.data() + 0x400 + t.instructionOffset, t.instruction, t.instructionSize);
+        auto inspect = [&]() {
+            return RaphaelTextureDiag::inspect(readFixture, &cd, cd.base() + 0x100, 1, t);
+        };
+        auto r = inspect();
+        assert(r.found && r.uuidMatch && r.instructionMatch && !r.alreadyPatched &&
+               r.status == RaphaelTextureDiag::Ok);
+        std::memcpy(cd.bytes.data() + 0x400 + t.instructionOffset, t.patchedInstruction,
+                    t.instructionSize);
+        r = inspect();
+        assert(r.found && r.alreadyPatched && r.status == RaphaelTextureDiag::Ok);
+        cd.bytes[0x400 + t.instructionOffset + 97] ^= 0xff;   // last byte of the window
+        r = inspect();
+        assert(r.status == RaphaelTextureDiag::BadInstruction && !r.instructionMatch &&
+               !r.alreadyPatched);
+    }
 }
