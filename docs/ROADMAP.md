@@ -188,9 +188,10 @@ functional probe passes.
   intentionally provoking a host lockup.
 
 No vfio-pci→amdgpu cycling within a boot; power/control stays on. Use tools/cycle.py
-and candidate worktrees. Fresh MODE2 and a recorded boot-specific allowance are
-required for additional exposure; a reset receipt alone is not authorization.
-No host sudo on the normal path. Preserve every identity, capture-fatal, host-fault,
+and candidate worktrees. Fresh MODE2 and the prior run's valid recovery receipt admit
+additional exposure automatically; a reset receipt alone is not authorization, and
+there is no flag or status.md allowance note. No host sudo on the normal path.
+Preserve every identity, capture-fatal, host-fault,
 shutdown and recovery abort. Current authorized runs allow up to 6000 seconds with
 manual stop; this replaces the historical 180-second limit. See
 [host safety](host-safety.md) and [experiment procedure](running-an-experiment.md).

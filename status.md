@@ -33,8 +33,9 @@ for candidate282/metal130, attempt `clock1`: unchanged driver build
 guest with `tests/gpu_clock_probe.m`, and measure delivered Moonlight-Qt FPS from
 the Linux host at 4K60 HEVC/H.264 with cursor motion. Prior run's schema6 recovery
 `2670fe978626419daa0b7bcb207d22e2` authorizes relaunch. Use tools/cycle.py, fresh
-MODE2, maximum 6000 seconds, manual-reuse/ack-risk and all existing identity,
-host-fault, capture, shutdown and cleanup gates. No vfio→amdgpu cycling; no clock
+MODE2, maximum 6000 seconds; `--manual-reuse`/`--ack-risk` no longer exist (same-boot
+reuse is admitted automatically from this recovery receipt) and all existing identity,
+host-fault, capture, shutdown and cleanup gates apply. No vfio→amdgpu cycling; no clock
 writes in this attempt (measurement only).
 
 ## Tonight's streaming result

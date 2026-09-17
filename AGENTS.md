@@ -13,7 +13,9 @@
 - Update `status.md` after every hardware run with evidence and the blocking issue. Keep it to
   live state; move superseded entries to `findings/research/status-archives/`.
 - Do not consume a GPU ledger entry when a launch fails before QEMU/VFIO opens; record launches
-  once exposure begins. Extending a boot's allowance needs an explicit note naming the boot id.
+  once exposure begins. Same-boot reuse is admitted automatically once the prior run on this
+  boot has a valid recovery receipt (`authorizes_launch=true`); there is no flag and no
+  `status.md` allowance note.
 - Continue development and milestone delivery on `dev`. Publish to `main` only on
   explicit user instruction; publication does not establish full desktop qualification.
 - Allow up to 6000 seconds per authorized run, with manual stop when appropriate; preserve
