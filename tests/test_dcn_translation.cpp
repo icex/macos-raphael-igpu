@@ -23,7 +23,15 @@ int main() {
     const Mapping dsc0 = translate(0x34c0 + 0x00a1);                      // DOMAIN16_PG_CONFIG
     assert(dsc0.action == Action::Move && dsc0.index == 0x34c0 + 0x0089);
     assert(translate(0x34c0 + 0x00a9).action == Action::Drop);            // DOMAIN20_PG_CONFIG
-    assert(k302DmcubCntl == 0x34c0 + 0x01f6 && k315DmcubCntl2 == 0x34c0 + 0x0200);
+    // DMCUB block: every DMCUB_* register is fenced off, the strap reports DMCUB absent.
+    assert(k302DmcubCntl == 0x34c0 + 0x01f6 && k302CcDcPipeDis == 0x34c0 + 0x00ca);
+    assert(isDmcubRegister(k302DmcubCntl));
+    assert(isDmcubRegister(0x34c0 + 0x01b5));                              // DMCUB_REGION3_CW0_OFFSET
+    assert(!isDmcubRegister(k302CcDcPipeDis) && !isDmcubRegister(0x34c0 + 0x1b41));
+    const uint32_t dmcubList[] = {3, 7, 9};
+    assert(isDmcubRegister(dmcubList, 3, 3) && isDmcubRegister(dmcubList, 3, 9) &&
+           !isDmcubRegister(dmcubList, 3, 8) && !isDmcubRegister(dmcubList, 0, 3));
+    assert(maskDmcubStrap(0x000100ff) == 0xff && maskDmcubStrap(0xf) == 0xf);
     assert(translate(0xffffffff).action == Action::Pass);
     assert(translate(0).action == Action::Pass);
 

@@ -1,25 +1,27 @@
-# Live status — 2026-09-17, stopped for the day
+# Live status — 2026-09-17
 
-**4K60 streaming is stable. A true 120Hz virtual display is proven but not yet permanent.**
-No GPU guest is running. [Evidence](findings/research/encoder-pipeline-20260917.md).
+**Candidate 285 froze the host. The cause is localized and removed; no GPU guest is running.**
+[Crash analysis](findings/research/dcn315-dmcub-host-crash-20260917.md).
 
-- **Encoder:** candidate 284 (merged into `dev`) forces the VCN BALANCE preset through guarded COW
-  patches in AMDRadeonVADriver2. 4K HEVC encodes in 11.15ms (88fps), matching Linux VAAPI.
-- **VRAM:** the BIOS UMA carve-out is now 2GB, with zero allocation failures. The host classifier
-  and recovery tools detect the carve-out size and base automatically (commits `5558426`,
-  `3e6ad72`).
-- **Capture:** guest Sunshine uses ScreenCaptureKit with session-range NV12
-  (`patches/sunshine/*sckit-capture.patch`, `*capture-color-range.patch`). The user reports a stable
-  stream with no stutter at 60fps. The app is signed with a stable local identity, so rebuilds keep
-  its Screen Recording and Accessibility grants. The stock Sunshine.app was removed.
-- **120Hz:** CoreDisplay derives the virtual display vsync from a mode-table integer field that is
-  hardcoded to 60. A live WindowServer poke gave an 8.33ms VBL and 112–122 captured frames/s. The
-  permanent 98-byte CoreDisplay patch is designed and assembler-verified but not built (roadmap
-  item 1a). 4K live encoding tops out at ~66–83fps, so use 1440p/1080p for 120fps.
-- **Last run:** host boot `7ee81442-5848-489e-9853-9fbeff78a8c2`; GPU 0000:7b:00.0 on `vfio-pci`.
-  Run `a8ac7432f1896779b154f619594898e9` (candidate 284, metal-132, attempt uma2g3, MODE2#186):
-  CORE_PROBE_PASS, shutdown **exited-after-guest-request**, recovery **recovered**
-  (authorizes_launch=true, `57f800271df14d75b553062c4d75de08`).
+- **Host fault:** run `6a14565ae903af4ba86bdd91315fc629` (candidate 285, metal-133, MODE2#188, boot
+  `7ee81442`) froze the whole machine about eight seconds into the guest boot, during HWLibs
+  TTL/PSP init. There was no kernel message, pstore, MCE or BERT record. The only new code that
+  ran was `rgpudcn` bit 8, which registered Raphael's DMCUB firmware for PSP from the guest. The
+  display core never ran. There is no shutdown or recovery receipt for this launch.
+- **Change:** candidate 286 removes the guest DMCUB firmware path and refuses bit 8. It fences off
+  DMCUB: the strap reads as absent, every DMCUB write is dropped, and the DCN 3.02 pool is only
+  selected after the register interposition is live. HDMI PHY/pixel-clock bring-up needs DMCUB, so
+  it is blocked until DMCUB can be started without a guest-initiated load.
+- **Display port (candidates 285/286):** Apple's DC 3.2.145 is steered onto its DCN 3.02 pool with
+  DCN 3.0.2 to 3.1.5 register translation (307 moves, 1484 drops, pipe power domains, 9 field
+  remaps). The Navi DALSMC mailbox is emulated. This is untested on hardware.
+- **Host now:** boot `365fcd4e-6d9d-420f-a006-5ab784a4cd0d`. GPU 0000:7b:00.0 is back on `amdgpu`
+  after the power cycle and needs the root `gpu-bind.sh` handoff before any run.
+- **120Hz:** the CoreDisplay patch is built into candidate 285/286 behind `rgpuvd120=1` and has not
+  yet run. Its r14 = entry+0x30 assumption must be checked by disassembly in the guest first.
+- **Streaming (candidate 284, merged):** stable 4K60. The VCN preset fix gives 88fps at 4K HEVC.
+  The UMA carve-out is 2GB. Guest Sunshine uses ScreenCaptureKit.
+  [Evidence](findings/research/encoder-pipeline-20260917.md).
 
 ## CI portability — 2026-09-17
 

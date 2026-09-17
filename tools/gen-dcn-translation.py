@@ -45,13 +45,10 @@ KIND_MOVE, KIND_DROP = 0, 1
 # Named indices the plugin handles specially: (constant, header version, register name).
 NAMED = (
     ('k302DmcubCntl', 'old', 'DMCUB_CNTL'),
-    ('k315DmcubCntl2', 'new', 'DMCUB_CNTL2'),
     ('k315DmcubScratch0', 'new', 'DMCUB_SCRATCH0'),
-    ('k315DmcubScratch15', 'new', 'DMCUB_SCRATCH15'),
+    ('k302CcDcPipeDis', 'old', 'CC_DC_PIPE_DIS'),
     ('k315DcIpRequestCntl', 'new', 'DC_IP_REQUEST_CNTL'),
     ('k315Domain0PgConfig', 'new', 'DOMAIN0_PG_CONFIG'),
-    ('k315OtgPixelRateCntl0', 'new', 'OTG0_PIXEL_RATE_CNTL'),
-    ('k315DentistDispclkCntl', 'new', 'DENTIST_DISPCLK_CNTL'),
 )
 
 
@@ -105,6 +102,7 @@ def field_remap(old_layout, new_layout):
 
 def build(linux_src):
     moves, drops, ambiguous, digests, remaps, named = {}, {}, {}, {}, {}, {}
+    dmcub = []
     for sub, old_name, new_name in PAIRS:
         root = Path(linux_src) / HEADER_ROOT / sub
         old_text, old = load_offsets(root / f'{old_name}_offset.h')
@@ -116,6 +114,7 @@ def build(linux_src):
             new_fields = load_fields(root / f'{new_name}_sh_mask.h')
             for constant, version, register in NAMED:
                 named[constant] = (old if version == 'old' else new)[register]
+            dmcub = sorted({i for n, i in old.items() if n.startswith('DMCUB_')})
         by_index = defaultdict(list)
         for name, index in old.items():
             by_index[index].append(name)
@@ -145,10 +144,10 @@ def build(linux_src):
     for index in list(drops):
         if index in moves:
             del drops[index]
-    return moves, drops, ambiguous, digests, remaps, named
+    return moves, drops, ambiguous, digests, remaps, named, dmcub
 
 
-def render(moves, drops, ambiguous, digests, remaps, named):
+def render(moves, drops, ambiguous, digests, remaps, named, dmcub):
     entries = sorted([(i, t, KIND_MOVE, n) for i, (t, n) in moves.items()] +
                      [(i, 0, KIND_DROP, n) for i, n in drops.items()])
     lines = [
@@ -172,7 +171,13 @@ def render(moves, drops, ambiguous, digests, remaps, named):
     ]
     for constant, index in named.items():
         lines.append(f'static constexpr uint32_t {constant} = {index:#08x};')
-    lines += ['', 'static const XlatEntry kDcn302To315[] = {']
+    lines += ['',
+              '// Every DCN 3.0.2 DMCUB_* register (sorted). The guest never programs DMCUB: see',
+              '// findings/research/dcn315-dmcub-host-crash-20260917.md.',
+              'static const uint32_t kDcn302DmcubRegisters[] = {']
+    for i in range(0, len(dmcub), 8):
+        lines.append('    ' + ', '.join(f'{x:#07x}' for x in dmcub[i:i + 8]) + ',')
+    lines += ['};', '', 'static const XlatEntry kDcn302To315[] = {']
     for index, target, kind, name in entries:
         lines.append(f'    {{{index:#08x}, {target:#08x}, {kind}}},  // {name}')
     lines += ['};', '',
@@ -194,8 +199,8 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--report', action='store_true', help='print ambiguous groups and remaps')
     args = parser.parse_args()
-    moves, drops, ambiguous, digests, remaps, named = build(args.linux_src)
-    args.output.write_text(render(moves, drops, ambiguous, digests, remaps, named))
+    moves, drops, ambiguous, digests, remaps, named, dmcub = build(args.linux_src)
+    args.output.write_text(render(moves, drops, ambiguous, digests, remaps, named, dmcub))
     print(f'{len(moves)} moved, {len(drops)} removed, {len(ambiguous)} ambiguous, '
           f'{len(remaps)} field remaps -> {args.output}')
     if args.report:

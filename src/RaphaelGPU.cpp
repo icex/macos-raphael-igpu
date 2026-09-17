@@ -57,7 +57,6 @@
 #include "CriticalUart.hpp"
 #include "AllocationLogBudget.hpp"
 #include "DcnTranslation.hpp"
-#include "DmcubFirmware.hpp"
 #if __has_include("BuildIdentity.hpp")
 #include "BuildIdentity.hpp"
 #else
@@ -8348,30 +8347,28 @@ static bool entryMatches(mach_vm_address_t base, size_t imageSize, size_t offset
 //   0xfea5e  dc_create(init_data): +0x00 hw_asic_id (+4 family, +0xc rev), +0x30 cgs_device
 //   0xff053  dc_hardware_init(dc): calls hwss.init_hw; dc+0x308 ctx, ctx+0x88 dc_dmub_srv
 //   0x110bd7 generic_reg_wait(ctx, index, shift, mask, expected, delay_us, tries, func, line)
-//   HWLibs 0x7a38 _dmcub_set_fw_entry_info(dmcu, version source, fw list)
-//   HWLibs 0x78ee _dmcub_load_fw(dmcu, name, image, size, fw list)
 //
-// The Raphael VBIOS has no transmitter/pixel-clock command tables, so HDMI link bring-up
-// needs DMCUB running Raphael's own firmware. HWLibs registers DMCUB firmware for PSP
-// only for DCN 3.0.x; rgpudcn bit 8 registers dcn_3_1_5_dmcub.bin the same way.
+// The guest never programs DMCUB. Registering Raphael's DMCUB firmware for PSP from the
+// guest (the withdrawn rgpudcn bit 8) froze the host within a second of the PSP firmware
+// load on 2026-09-17 (findings/research/dcn315-dmcub-host-crash-20260917.md): DMCUB boots
+// from PSP-owned windows and reaches memory through its own secure unit. While translating,
+// the DAL reads CC_DC_PIPE_DIS with DC_DMCUB_ENABLE cleared, so dmub_srv_has_hw_support()
+// fails, and every DMCUB_* register write is dropped.
 //
 // rgpudcn=<mask>: 1 trace, 2 translate (needs 4), 4 DCN 3.02 pool (rev 75 -> 60),
-// 8 Raphael DMCUB firmware for PSP, 16 inert dc_dmub_srv if DMCUB never attached (dcn30
-// init_hw dereferences ctx->dmub_srv unconditionally). rgpudcntrace=<lines> bounds the
-// access trace (default 1500).
+// 16 inert dc_dmub_srv if DMUB never attached (dcn30 init_hw dereferences ctx->dmub_srv
+// unconditionally). Bit 8 is refused. rgpudcntrace=<lines> bounds the access trace
+// (default 1500).
 static constexpr size_t kOffDcnRegWait     = 0x110bd7;
 static constexpr size_t kOffDcCreate       = 0xfea5e;
 static constexpr size_t kOffDcHardwareInit = 0xff053;
-static constexpr size_t kOffDmcubSetFwEntry = 0x7a38;   // [hwlibs]
-static constexpr size_t kOffDmcubLoadFw     = 0x78ee;   // [hwlibs]
 enum : uint32_t {
-    kDcnTrace = 1, kDcnTranslate = 2, kDcnPool302 = 4, kDcnDmcubFirmware = 8, kDcnDmubGuard = 16,
-    kDcnAll = 31,
+    kDcnTrace = 1, kDcnTranslate = 2, kDcnPool302 = 4, kDcnWithdrawnDmcubFirmware = 8,
+    kDcnDmubGuard = 16, kDcnAllowed = kDcnTrace | kDcnTranslate | kDcnPool302 | kDcnDmubGuard,
 };
 static uint32_t dcnMode = 0;
 static uint32_t dcnTraceBudget = 1500;
-static mach_vm_address_t orgDcnRegWait = 0, orgDcCreate = 0, orgDcHardwareInit = 0,
-    orgDmcubSetFwEntry = 0;
+static mach_vm_address_t orgDcnRegWait = 0, orgDcCreate = 0, orgDcHardwareInit = 0;
 using DcnRegRead = uint32_t (*)(void *, uint32_t);
 using DcnRegWrite = void (*)(void *, uint32_t, uint32_t);
 static DcnRegRead dcnNativeRead = nullptr;
@@ -8432,10 +8429,9 @@ static uint32_t wrapDcnRegRead(void *context, uint32_t index) {
         m = translate(index);
         if (m.action == Action::Drop) {
             __sync_add_and_fetch(&dcnDropped, 1);
-        } else if (index == k302DmcubCntl) {
-            value = (dcnNativeRead(context, index) & ~kDmcubCntlSoftReset302) |
-                ((dcnNativeRead(context, k315DmcubCntl2) & kDmcubCntl2SoftReset) ?
-                 kDmcubCntlSoftReset302 : 0);
+        } else if (index == k302CcDcPipeDis) {
+            value = maskDmcubStrap(dcnNativeRead(context, m.index));
+            note = " (DMCUB reported absent)";
         } else {
             value = dcnNativeRead(context, m.index);
             if (const FieldRemap *remap = fieldRemap(index)) value = remapRead(*remap, value);
@@ -8461,16 +8457,12 @@ static void wrapDcnRegWrite(void *context, uint32_t index, uint32_t value) {
                   "mailbox)", dcnDalMailbox.message(), dcnDalMailbox.argument());
     } else {
         m = translate(index);
-        if (m.action == Action::Drop) {
+        if (isDmcubRegister(index)) {
+            m = {Action::Drop, index};
+            note = " (DMCUB write blocked)";
+            CRLOG("DCN: blocked DMCUB register write %#x = %#x", index, value);
+        } else if (m.action == Action::Drop) {
             __sync_add_and_fetch(&dcnDropped, 1);
-        } else if (index == k302DmcubCntl) {
-            const uint32_t cntl2 = dcnNativeRead(context, k315DmcubCntl2);
-            const bool reset = (value & kDmcubCntlSoftReset302) != 0;
-            // Assert reset before touching ENABLE; release it only after ENABLE is written.
-            if (reset) dcnNativeWrite(context, k315DmcubCntl2, cntl2 | kDmcubCntl2SoftReset);
-            dcnNativeWrite(context, index, value & ~kDmcubCntlSoftReset302);
-            if (!reset) dcnNativeWrite(context, k315DmcubCntl2, cntl2 & ~kDmcubCntl2SoftReset);
-            note = reset ? " (DMCUB soft reset -> CNTL2 set)" : " (DMCUB soft reset -> CNTL2 clear)";
         } else if (const FieldRemap *remap = fieldRemap(index)) {
             dcnNativeWrite(context, m.index,
                            remapWrite(*remap, value, dcnNativeRead(context, m.index)));
@@ -8501,14 +8493,9 @@ static void wrapDcnRegWait(void *ctx, uint32_t index, uint32_t shift, uint32_t f
 }
 
 // Steer only the display core: the asic id reaches no other client through this struct.
+// The DCN 3.02 pool brings Apple's DMUB service with it, so the pool is only selected once
+// the register interposition that fences DMCUB off is in place.
 static void *wrapDcCreate(void *init) {
-    if (init != nullptr && (dcnMode & kDcnPool302)) {
-        auto asic = reinterpret_cast<uint32_t *>(init);
-        const uint32_t family = asic[1], rev = asic[3];
-        if (family == 0x8f && (rev < 60 || rev >= 70)) asic[3] = 60;
-        CRLOG("DCN: dc_create chip=%#x family=%#x pci_rev=%#x hw_internal_rev %u -> %u "
-              "(DCN 3.02 pool)", asic[0], family, asic[2], rev, asic[3]);
-    }
     if (init != nullptr && (dcnMode & (kDcnTrace | kDcnTranslate)) && dcnNativeRead == nullptr) {
         const auto cgs = *reinterpret_cast<uint64_t **>(reinterpret_cast<uint8_t *>(init) + 0x30);
         const auto kernelText = [](uint64_t p) { return p >= 0xffffff8000000000ULL; };
@@ -8523,7 +8510,14 @@ static void *wrapDcCreate(void *init) {
               dcnRel(reinterpret_cast<uint64_t>(dcnNativeRead)),
               dcnRel(reinterpret_cast<uint64_t>(dcnNativeWrite)),
               dcnNativeRead ? "interposed" : "NOT interposed");
-        if (!dcnNativeRead) dcnMode &= ~(kDcnTrace | kDcnTranslate);
+    }
+    if (dcnNativeRead == nullptr) dcnMode &= ~(kDcnTrace | kDcnTranslate | kDcnPool302);
+    if (init != nullptr && dcnTranslating()) {
+        auto asic = reinterpret_cast<uint32_t *>(init);
+        const uint32_t family = asic[1], rev = asic[3];
+        if (family == 0x8f && (rev < 60 || rev >= 70)) asic[3] = 60;
+        CRLOG("DCN: dc_create chip=%#x family=%#x pci_rev=%#x hw_internal_rev %u -> %u "
+              "(DCN 3.02 pool)", asic[0], family, asic[2], rev, asic[3]);
     }
     void *dc = FunctionCast(wrapDcCreate, orgDcCreate)(init);
     CRLOG("DCN: dc_create -> %p (translate=%u trace-lines=%u dropped=%u unique=%zu)", dc,
@@ -8533,12 +8527,10 @@ static void *wrapDcCreate(void *init) {
 
 static void dcnLogDmcubState(const char *when) {
     if (dcnNativeRead == nullptr) return;
+    // Reads only: DMCUB_CNTL and the boot status never change what the microcontroller does.
     const uint32_t cntl = dcnNativeRead(dcnRegContext, RaphaelDcn::k302DmcubCntl);
-    const uint32_t cntl2 = dcnNativeRead(dcnRegContext, RaphaelDcn::k315DmcubCntl2);
     const uint32_t status = dcnNativeRead(dcnRegContext, RaphaelDcn::k315DmcubScratch0);
-    CRLOG("DCN: DMCUB %s CNTL=%#x CNTL2=%#x SCRATCH0=%#x (dal_fw=%u mailbox_rdy=%u) "
-          "SCRATCH15=%#x", when, cntl, cntl2, status, status & 1, (status >> 1) & 1,
-          dcnNativeRead(dcnRegContext, RaphaelDcn::k315DmcubScratch15));
+    CRLOG("DCN: DMCUB %s CNTL=%#x SCRATCH0=%#x (untouched by the guest)", when, cntl, status);
 }
 
 static void wrapDcHardwareInit(void *dc) {
@@ -8563,58 +8555,6 @@ static void wrapDcHardwareInit(void *dc) {
     dcnLogDmcubState("after init_hw");
     CRLOG("DCN: dc_hardware_init done (trace-lines=%u dropped=%u unique=%zu)", dcnTraceLines,
           dcnDropped, dcnAccesses.used());
-}
-
-// HWLibs' DMCU service registers DMCUB firmware with PSP only for DCN 3.0.x
-// (_dmcub_dcn302_get_fw_constrant: when strap 0x358a bit 16 is set, stage the image
-// through _dmcub_load_fw). DCN 3.1.x takes a constraint that loads nothing. Mirror the
-// DCN 3.02 constraint with Raphael's signed DMCUB image, staged in the service's own
-// 1 MiB buffer (dmcu+0x510, allocated by _dmcub_sw_init) exactly as a file load would be.
-static uint32_t wrapDmcubSetFwEntry(void *dmcu, void *versionSource, void *list) {
-    const auto versionFields = reinterpret_cast<const int32_t *>(
-        reinterpret_cast<uint8_t *>(versionSource) + 0xc);
-    const uint32_t hw = (static_cast<uint32_t>(versionFields[0]) << 16) |
-        (static_cast<uint32_t>(versionFields[1]) << 8) | static_cast<uint32_t>(versionFields[2]);
-    const auto entries = list ? reinterpret_cast<uint32_t *>(reinterpret_cast<uint8_t *>(list) + 0x10) : nullptr;
-    const uint32_t before = entries ? *entries : 0;
-    const uint32_t result = FunctionCast(wrapDmcubSetFwEntry, orgDmcubSetFwEntry)(dmcu, versionSource, list);
-    const uint32_t added = entries ? *entries - before : 0;
-    CRLOG("DMCUB: set_fw_entry_info hw=%#x -> %u (entries %u -> %u)", hw, result, before,
-          entries ? *entries : 0);
-    if (!(dcnMode & kDcnDmcubFirmware) || dmcu == nullptr || entries == nullptr) return result;
-    const auto service = reinterpret_cast<uint8_t *>(dmcu);
-    const auto buffer = *reinterpret_cast<uint8_t **>(service + 0x510);
-    if (hw < 0x30100 || added != 0 || buffer == nullptr ||
-        *reinterpret_cast<uint32_t *>(service + 0x298) > 1 ||
-        sizeof(raphaelDmcubFirmware) > 0x100000) {
-        CRLOG("DMCUB: Raphael firmware not registered (hw=%#x added=%u buffer=%p state=%u)", hw,
-              added, buffer, *reinterpret_cast<uint32_t *>(service + 0x298));
-        return result;
-    }
-    memcpy(service + 0x2a8, service + 0x30, 0x260);
-    *reinterpret_cast<uint32_t *>(service + 0x508) = hw;
-    memcpy(buffer, raphaelDmcubFirmware, sizeof(raphaelDmcubFirmware));
-    using LoadFw = uint32_t (*)(void *, const char *, uint8_t *, uint32_t, void *);
-    const uint32_t loaded = reinterpret_cast<LoadFw>(hwlibsBase + kOffDmcubLoadFw)(
-        dmcu, "atidmcub_raphael.dat", buffer, sizeof(raphaelDmcubFirmware), list);
-    CRLOG("DMCUB: registered Raphael DMCUB %#x (%zu bytes) for PSP -> %u (entries %u)",
-          raphaelDmcubFirmwareVersion, sizeof(raphaelDmcubFirmware), loaded, *entries);
-    return result;
-}
-
-static void installDcnHwlibsRoutes(KernelPatcher &patcher, mach_vm_address_t addr, size_t size) {
-    if (!(dcnMode & kDcnDmcubFirmware)) return;
-    static const uint8_t setEntry[] = {0x55,0x48,0x89,0xe5,0x41,0x56,0x53,0x48,0x83,0xec,0x10,
-                                       0x48,0x89,0xd3,0x49,0x89,0xfe,0x48,0x8b,0x46};
-    static const uint8_t loadFw[] = {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x41,0x55,0x41,
-                                     0x54,0x53,0x48,0x83,0xec,0x28,0x41,0x89,0xce};
-    const bool matches = entryMatches(addr, size, kOffDmcubSetFwEntry, setEntry, sizeof(setEntry)) &&
-                         entryMatches(addr, size, kOffDmcubLoadFw, loadFw, sizeof(loadFw));
-    if (matches) orgDmcubSetFwEntry = patcher.routeFunction(addr + kOffDmcubSetFwEntry,
-        reinterpret_cast<mach_vm_address_t>(wrapDmcubSetFwEntry), true);
-    CRLOG("DMCUB: route _dmcub_set_fw_entry_info -> %s (prologues=%u)",
-          orgDmcubSetFwEntry ? "ok" : "FAILED", matches);
-    patcher.clearError();
 }
 
 static void installDcnRoutes(KernelPatcher &patcher, mach_vm_address_t addr, size_t size) {
@@ -8648,7 +8588,7 @@ static void installDcnRoutes(KernelPatcher &patcher, mach_vm_address_t addr, siz
         patcher.clearError();
     }
     if (!orgDcCreate && (dcnMode & (kDcnPool302 | kDcnTranslate | kDcnTrace))) {
-        // Without the pool change the indices are DCN 2.0 ones; never translate them.
+        // No interposition, so no DMCUB fence: never select the DCN 3.02 pool.
         dcnMode &= ~(kDcnPool302 | kDcnTranslate | kDcnTrace);
         CRLOG("DCN: dc_create route missing; pool, translation and trace disabled");
     }
@@ -8775,7 +8715,6 @@ static void processKext(void *, KernelPatcher &patcher, size_t index,
            index, kexts[KextHWLibs].loadIndex, kexts[KextFB].loadIndex, addr, sz);
     if (kexts[KextHWLibs].loadIndex == index) {
         RLOG("HWLibs loaded, mask=0x%x", mask);
-        installDcnHwlibsRoutes(patcher, addr, sz);
         if (hybridProbeEnabled) {
             // Bind both offsets to HWLibs and verify complete displaced instructions.
             // Builds 160/161 used an X6000 base here and were invalid experiments.
@@ -9811,13 +9750,16 @@ static void pluginStart() {
         vcnPreset == 1;
     RLOG("VCNPRESET: rgpuvcnpreset=%u", vcnPresetEnabled);
     uint32_t dcn = 0, dcnTrace = 0;
-    if (PE_parse_boot_argn("rgpudcn", &dcn, sizeof(dcn)) && dcn <= kDcnAll) dcnMode = dcn;
+    // The DCN 3.02 pool and translation are only meaningful, and only safe, together.
+    if (PE_parse_boot_argn("rgpudcn", &dcn, sizeof(dcn)) && (dcn & ~kDcnAllowed) == 0 &&
+        ((dcn & kDcnPool302) != 0) == ((dcn & kDcnTranslate) != 0)) dcnMode = dcn;
+    else if (dcn != 0) CRLOG("DCN: rgpudcn=%#x refused (bit 8 froze the host; bits 2 and 4 must be "
+                             "set together)", dcn);
     if (PE_parse_boot_argn("rgpudcntrace", &dcnTrace, sizeof(dcnTrace)) && dcnTrace <= 20000)
         dcnTraceBudget = dcnTrace;
-    CRLOG("DCN: rgpudcn=%#x (trace=%u translate=%u pool302=%u dmcub-firmware=%u dmub-guard=%u) "
-          "trace-lines=%u", dcnMode, (dcnMode & kDcnTrace) != 0, (dcnMode & kDcnTranslate) != 0,
-          (dcnMode & kDcnPool302) != 0, (dcnMode & kDcnDmcubFirmware) != 0,
-          (dcnMode & kDcnDmubGuard) != 0, dcnTraceBudget);
+    CRLOG("DCN: rgpudcn=%#x (trace=%u translate=%u pool302=%u dmub-guard=%u) trace-lines=%u",
+          dcnMode, (dcnMode & kDcnTrace) != 0, (dcnMode & kDcnTranslate) != 0,
+          (dcnMode & kDcnPool302) != 0, (dcnMode & kDcnDmubGuard) != 0, dcnTraceBudget);
     uint32_t vd120 = 0;
     vd120Enabled = PE_parse_boot_argn("rgpuvd120", &vd120, sizeof(vd120)) && vd120 == 1;
     CRLOG("VD120: rgpuvd120=%u", vd120Enabled);

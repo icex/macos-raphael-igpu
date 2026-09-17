@@ -103,9 +103,31 @@ inline uint32_t remapRead(const FieldRemap &remap, uint32_t value315) {
     return out;
 }
 
-// DMCUB_SOFT_RESET is DMCUB_CNTL bit 17 on 3.0.2 and DMCUB_CNTL2 bit 0 on 3.1.5.
-static constexpr uint32_t kDmcubCntlSoftReset302 = 1u << 17;
-static constexpr uint32_t kDmcubCntl2SoftReset = 1u << 0;
+// ---- DMCUB stays untouched ----
+// The DMCUB microcontroller boots through PSP-owned code/data windows and reaches memory
+// through its own secure memory unit. Starting it from the guest froze the host
+// (findings/research/dcn315-dmcub-host-crash-20260917.md), so the DAL must see DMCUB as
+// absent and may never write a DMCUB register.
+static constexpr uint32_t kDcDmcubEnable = 1u << 16;   // CC_DC_PIPE_DIS.DC_DMCUB_ENABLE
+
+inline bool isDmcubRegister(const uint32_t *table, size_t count, uint32_t index) {
+    size_t lo = 0, hi = count;
+    while (lo < hi) {
+        const size_t mid = lo + (hi - lo) / 2;
+        if (table[mid] < index) lo = mid + 1;
+        else hi = mid;
+    }
+    return lo < count && table[lo] == index;
+}
+
+inline bool isDmcubRegister(uint32_t index) {
+    return isDmcubRegister(kDcn302DmcubRegisters,
+                           sizeof(kDcn302DmcubRegisters) / sizeof(kDcn302DmcubRegisters[0]), index);
+}
+
+// What the DAL reads from the DMCUB strap: the pipe fuses unchanged, DMCUB reported absent,
+// so dmub_srv_has_hw_support() fails and no DMUB hardware initialization is attempted.
+inline uint32_t maskDmcubStrap(uint32_t value) { return value & ~kDcDmcubEnable; }
 
 // ---- Navi 2x DAL SMU mailbox ----
 // Apple's dcn30 clock manager messages the dGPU DALSMC mailbox directly (message 0x1628a,
