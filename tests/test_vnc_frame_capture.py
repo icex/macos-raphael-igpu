@@ -28,6 +28,12 @@ class VncCaptureTests(unittest.TestCase):
                 for y in range(32): image.putpixel((x,y),(255,0,0))
             image.save(path)
             self.assertFalse(tool._dominant(path,(255,0,0)))
+            for color in ((255,0,0), (0,255,255)):
+                with self.subTest(color=color):
+                    image.paste(color, (320,180,960,540))
+                    image.save(path)
+                    self.assertTrue(tool._dominant(path,color))
+                    self.assertFalse(tool._dominant(path,(0,255,0)))
 
 
 if __name__ == '__main__': unittest.main()

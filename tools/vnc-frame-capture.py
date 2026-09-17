@@ -12,7 +12,10 @@ def _dominant(path, expected):
     from PIL import Image
     image=Image.open(path).convert('RGB')
     if image.size != (1280,720): return False
-    roi=image.crop((320,180,960,540)); pixels=list(roi.get_flattened_data())
+    roi=image.crop((320,180,960,540))
+    # RGB bytes work with both Ubuntu's Pillow and newer Pillow releases.
+    channels=iter(roi.tobytes())
+    pixels=list(zip(channels,channels,channels))
     return sum(all(abs(pixel[i]-expected[i]) <= 12 for i in range(3))
                for pixel in pixels) >= int(len(pixels)*0.70)
 
