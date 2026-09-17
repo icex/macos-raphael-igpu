@@ -1605,13 +1605,33 @@ def _recovery_checksum(prior_run_id):
     return checksum & 0xffffffffffffffff
 
 
-def _valid_hdp_flush(value):
-    return (isinstance(value, dict) and set(value) == {'remap', 'posted_read'} and
+LEGACY_CONFIG_MEMSIZE = 0x200
+
+
+def receipt_config_memsize(receipt):
+    """CONFIG_MEMSIZE (MiB) a recovery receipt was produced against.
+
+    vfio-recover detects it from the boot's own MODE2 receipts and records it as
+    expected_config_memsize; receipts written before that field existed all came
+    from 512 MiB carve-outs. Anything implausible yields None, which fails every
+    posted_read comparison."""
+    if not isinstance(receipt, dict):
+        return None
+    value = receipt.get('expected_config_memsize', LEGACY_CONFIG_MEMSIZE)
+    if (type(value) is not int or not 256 <= value <= 16384 or
+            value & (value - 1)):
+        return None
+    return value
+
+
+def _valid_hdp_flush(value, config_memsize=LEGACY_CONFIG_MEMSIZE):
+    return (config_memsize is not None and
+            isinstance(value, dict) and set(value) == {'remap', 'posted_read'} and
             type(value.get('remap')) is int and value.get('remap') in (0x385c, 0x7f000) and
-            type(value.get('posted_read')) is int and value.get('posted_read') == 0x200)
+            type(value.get('posted_read')) is int and value.get('posted_read') == config_memsize)
 
 
-def _valid_reservation(value, prior_run_id):
+def _valid_reservation(value, prior_run_id, config_memsize=LEGACY_CONFIG_MEMSIZE):
     if isinstance(value, dict) and value.get('schema') in (2, 3):
         try:
             validator = ('valid_v3_lease_proof' if value.get('schema') == 3
@@ -1634,7 +1654,7 @@ def _valid_reservation(value, prior_run_id):
             value.get('run_id') == prior_run_id and
             value.get('checksum') == _recovery_checksum(prior_run_id) and
             value.get('consumed') is True and
-            _valid_hdp_flush(value.get('consume_hdp_flush')))
+            _valid_hdp_flush(value.get('consume_hdp_flush'), config_memsize))
 
 
 def _valid_recovery_regions(value):
@@ -1760,7 +1780,7 @@ def _graphics_final_clean(snapshot):
 
 
 def _valid_host_kiq(value, reservation, gc, hqd_doorbell_values,
-                    gart_forbidden_ranges=RECOVERY_LEGACY_GART_EXCLUSION):
+                    gart_forbidden_ranges=RECOVERY_LEGACY_GART_EXCLUSION, config_memsize=LEGACY_CONFIG_MEMSIZE):
     if not isinstance(value, dict):
         return False
     expected_keys = {'status','selector','packet_dwords','rptr_after',
@@ -1787,7 +1807,7 @@ def _valid_host_kiq(value, reservation, gc, hqd_doorbell_values,
             value.get('gfx_active_before_scrub') != 0 or
             value.get('gfx_doorbell_offset') != 0x400 or
             value.get('reservation') != reservation or
-            not _valid_hdp_flush(value.get('hdp_flush')) or
+            not _valid_hdp_flush(value.get('hdp_flush'), config_memsize) or
             not _valid_gart(value.get('gart'), gart_forbidden_ranges) or
             not _valid_graphics_snapshot(value.get('graphics_pipes_after_unmap')) or
             value.get('graphics_pipes_after_unmap') !=
@@ -1903,7 +1923,8 @@ def _validate_recovery_receipt(receipt, boot_id, prior_run_id,
         errors.append('recovery_receipt')
     if isinstance(gc, dict):
         reservation = gc.get('reservation')
-        if not _valid_reservation(reservation, prior_run_id):
+        if not _valid_reservation(reservation, prior_run_id,
+                                  receipt_config_memsize(receipt)):
             errors.append('recovery_receipt')
         guard = gc.get('graphics_pipe_guard')
         before = gc.get('graphics_pipes_before')
@@ -1923,7 +1944,8 @@ def _validate_recovery_receipt(receipt, boot_id, prior_run_id,
         host_kiq = gc.get('host_kiq')
         if gc.get('gfx_needs_unmap') is True:
             if not _valid_host_kiq(host_kiq, reservation, gc,
-                                   hqd_doorbell_values, gart_forbidden_ranges):
+                                   hqd_doorbell_values, gart_forbidden_ranges,
+                                   config_memsize=receipt_config_memsize(receipt)):
                 errors.append('recovery_receipt')
         elif (gc.get('gfx_needs_unmap') is not False or
               host_kiq != {'status':'not-needed'}):
@@ -1973,7 +1995,8 @@ def validate_recovery_receipt_v6(receipt, boot_id, prior_run_id,
                 any(not re.fullmatch(r'[0-9a-f]{64}', str(value))
                     for value in recovery_helpers_sha256.values()) or
                 receipt_helpers != recovery_helpers_sha256 or
-                not _valid_reservation(reservation, prior_run_id) or
+                not _valid_reservation(reservation, prior_run_id,
+                                       receipt_config_memsize(receipt)) or
                 (native_schema == 3 and
                  receipt.get('recovery_lease_schema') != 3) or
                 (native_schema == 2 and

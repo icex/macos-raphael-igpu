@@ -3972,4 +3972,26 @@ class ReserveBootSchemaSixReceiptTest(unittest.TestCase):
         self.assertEqual(ledger['launches'][-1]['run_id'], 'e' * 32)
         self.assertEqual(ledger['launches'][-1]['recovery_id'], 'd' * 32)
 
+
+class ReceiptConfigMemsizeTest(unittest.TestCase):
+    def module(self):
+        spec = importlib.util.spec_from_file_location(
+            'experiment_config_memsize', ROOT / 'tools/experiment.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_hdp_flush_uses_receipt_recorded_carveout_size(self):
+        tool = self.module()
+        flush = lambda posted: {'remap': 0x385c, 'posted_read': posted}
+        self.assertEqual(tool.receipt_config_memsize({}), 0x200)
+        self.assertEqual(tool.receipt_config_memsize({'expected_config_memsize': 2048}), 2048)
+        for bad in (0, 300, 32768, '2048', None):
+            self.assertIsNone(tool.receipt_config_memsize({'expected_config_memsize': bad}))
+        self.assertTrue(tool._valid_hdp_flush(flush(0x200)))
+        self.assertFalse(tool._valid_hdp_flush(flush(0x800)))
+        self.assertTrue(tool._valid_hdp_flush(flush(0x800), 2048))
+        self.assertFalse(tool._valid_hdp_flush(flush(0x200), 2048))
+        self.assertFalse(tool._valid_hdp_flush(flush(0x800), None))
+
 if __name__ == '__main__': unittest.main()
