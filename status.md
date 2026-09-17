@@ -161,3 +161,10 @@ consumed allowances are [archived](findings/research/status-archives/status-befo
 - Output: `/home/bogdan/macos-vm/run/candidate-284-attempt-uma2g2-results`
 - Verdict: `CORE_PROBE_PASS`
 - Boundary: `None`
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-284-attempt-uma2g3-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
