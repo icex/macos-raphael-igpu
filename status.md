@@ -131,3 +131,10 @@ consumed allowances are [archived](findings/research/status-archives/status-befo
 - Output: `/home/bogdan/macos-vm/run/candidate-284-results`
 - Verdict: `INVALID`
 - Boundary: `identity_or_route_missing`
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-284-attempt-r2-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
