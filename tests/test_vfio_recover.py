@@ -147,6 +147,98 @@ class FakeTransport:
 class VfioRecoveryTests(unittest.TestCase):
     def setUp(self):
         self.tool = load_tool()
+        # Fix the expected CONFIG_MEMSIZE for this test's synthetic boot so no
+        # test depends on real tools/smu-mode2-reset.py receipts on disk; see
+        # tool.detect_expected_config_memsize.
+        self.tool.EXPECTED_CONFIG_MEMSIZE = 0x200
+
+    def write_mode2_receipt(self, directory, index, boot_id, memsize_before,
+                            memsize_after=None, mode='execute'):
+        receipt = {'schema': 1, 'mode': mode, 'boot_id': boot_id,
+                  'memsize_before': memsize_before}
+        if memsize_after is not None:
+            receipt['memsize_after'] = memsize_after
+        (Path(directory)/f'mode2-reset-{index}.json').write_text(json.dumps(receipt))
+
+    def test_detect_config_memsize_returns_512_from_matching_512mb_receipts(self):
+        tool = self.tool
+        with tempfile.TemporaryDirectory() as directory:
+            self.write_mode2_receipt(directory, 1, 'boot-A', 512, 512)
+            self.write_mode2_receipt(directory, 2, 'boot-A', 512, 512)
+            self.assertEqual(
+                tool.detect_expected_config_memsize('boot-A', directory), 512)
+
+    def test_detect_config_memsize_returns_2048_from_matching_2gb_receipts(self):
+        tool = self.tool
+        with tempfile.TemporaryDirectory() as directory:
+            self.write_mode2_receipt(directory, 1, 'boot-B', 2048, 2048)
+            self.assertEqual(
+                tool.detect_expected_config_memsize('boot-B', directory), 2048)
+
+    def test_detect_config_memsize_ignores_other_boots_and_probe_only_receipts(self):
+        tool = self.tool
+        with tempfile.TemporaryDirectory() as directory:
+            self.write_mode2_receipt(directory, 1, 'boot-old', 512, 512)
+            self.write_mode2_receipt(directory, 2, 'boot-B', 2048, mode='probe')
+            self.write_mode2_receipt(directory, 3, 'boot-B', 2048, 2048)
+            self.assertEqual(
+                tool.detect_expected_config_memsize('boot-B', directory), 2048)
+
+    def test_detect_config_memsize_refuses_disagreeing_receipts(self):
+        tool = self.tool
+        with tempfile.TemporaryDirectory() as directory:
+            self.write_mode2_receipt(directory, 1, 'boot-C', 512, 512)
+            self.write_mode2_receipt(directory, 2, 'boot-C', 2048, 2048)
+            with self.assertRaisesRegex(tool.RecoveryError, 'disagree'):
+                tool.detect_expected_config_memsize('boot-C', directory)
+
+    def test_detect_config_memsize_refuses_a_reset_that_changed_the_value(self):
+        tool = self.tool
+        with tempfile.TemporaryDirectory() as directory:
+            self.write_mode2_receipt(directory, 1, 'boot-D', 512, 2048)
+            with self.assertRaisesRegex(tool.RecoveryError, 'changed CONFIG_MEMSIZE'):
+                tool.detect_expected_config_memsize('boot-D', directory)
+
+    def test_detect_config_memsize_refuses_missing_receipts(self):
+        tool = self.tool
+        with tempfile.TemporaryDirectory() as directory:
+            self.write_mode2_receipt(directory, 1, 'boot-other', 512, 512)
+            with self.assertRaisesRegex(tool.RecoveryError, 'no MODE2 reset receipt'):
+                tool.detect_expected_config_memsize('boot-missing', directory)
+            with self.assertRaisesRegex(tool.RecoveryError, 'no MODE2 reset receipt'):
+                tool.detect_expected_config_memsize('boot-missing', tempfile.mkdtemp())
+
+    def test_detect_config_memsize_refuses_implausible_values(self):
+        tool = self.tool
+        with tempfile.TemporaryDirectory() as directory:
+            self.write_mode2_receipt(directory, 1, 'boot-E', 100, 100)
+            with self.assertRaisesRegex(tool.RecoveryError, 'implausible'):
+                tool.detect_expected_config_memsize('boot-E', directory)
+        with tempfile.TemporaryDirectory() as directory:
+            self.write_mode2_receipt(directory, 1, 'boot-F', 768, 768)
+            with self.assertRaisesRegex(tool.RecoveryError, 'implausible'):
+                tool.detect_expected_config_memsize('boot-F', directory)
+
+    def test_resolve_config_memsize_caches_after_first_detection(self):
+        tool = self.tool
+        tool.EXPECTED_CONFIG_MEMSIZE = None
+        with tempfile.TemporaryDirectory() as directory:
+            self.write_mode2_receipt(directory, 1, 'boot-G', 2048, 2048)
+            self.assertEqual(
+                tool.resolve_expected_config_memsize('boot-G', directory), 2048)
+            # A later call with different (even wrong) arguments still returns
+            # the cached value instead of re-detecting.
+            self.assertEqual(
+                tool.resolve_expected_config_memsize('boot-nonexistent', '/nonexistent'),
+                2048)
+
+    def test_posted_barrier_refuses_a_readback_that_differs_from_detected_memsize(self):
+        tool = self.tool
+        transport = tool.LegacyVfio()
+        transport.bar = bytearray(0x80000)
+        struct.pack_into('<I', transport.bar, tool.NBIO_CONFIG_MEMSIZE_OFFSET, 0x800)
+        with self.assertRaisesRegex(tool.RecoveryError, 'CONFIG_MEMSIZE'):
+            transport.posted_barrier()
 
     def test_sdma_registers_use_ip_discovery_segment_zero(self):
         tool = self.tool

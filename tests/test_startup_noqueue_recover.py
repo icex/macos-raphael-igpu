@@ -146,6 +146,7 @@ class StartupNoQueueRecoveryTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tool = load(TOOL_PATH, 'startup_noqueue_recover')
+        cls.tool.RECOVERY.EXPECTED_CONFIG_MEMSIZE = 0x200
         cls.inspection_bytes = INSPECTION_PATH.read_bytes()
         cls.inspection = json.loads(cls.inspection_bytes)
         archive = ROOT / 'findings/experiments/metal-007-174-prelaunch-continuation'

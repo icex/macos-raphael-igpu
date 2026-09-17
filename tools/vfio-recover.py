@@ -234,7 +234,14 @@ NBIO_CONFIG_MEMSIZE_OFFSET = (NBIO_SEG2 + 0x0c3) * 4
 HDP_MEM_FLUSH_NATIVE_OFFSET = (NBIO_SEG2 + 0x0f7) * 4
 HDP_MEM_FLUSH_REMAP_OFFSET = 0x7f000
 HDP_MEM_FLUSH_TARGETS = (HDP_MEM_FLUSH_NATIVE_OFFSET, HDP_MEM_FLUSH_REMAP_OFFSET)
-EXPECTED_CONFIG_MEMSIZE = 0x200
+# The BIOS UMA frame-buffer size (this host went from 512 MiB to 2 GiB) sets
+# CONFIG_MEMSIZE, so it must never be assumed fixed here. EXPECTED_CONFIG_MEMSIZE
+# starts unresolved and is filled in, once per process, by
+# resolve_expected_config_memsize() from this boot's own smu-mode2-reset.py
+# receipts -- see detect_expected_config_memsize below. A test that wants a
+# known value without touching the filesystem sets this attribute directly
+# before exercising any code that reads it.
+EXPECTED_CONFIG_MEMSIZE = None
 
 # The retained Raphael IP-discovery binary reports HDP 5.2.0 with segment-zero
 # base 0xf20. Linux routes HDP 5.2.0 through hdp_v5_0 and writes one to relative
@@ -248,6 +255,76 @@ class RecoveryError(RuntimeError):
     def __init__(self, message, *, evidence=None):
         super().__init__(message)
         self.evidence = evidence
+
+
+def current_boot_id():
+    return Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+
+
+def _mode2_reset_receipts(run_root):
+    for path in sorted(Path(run_root).glob('mode2-reset-*.json')):
+        try:
+            receipt = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+        if isinstance(receipt, dict):
+            yield path, receipt
+
+
+def detect_expected_config_memsize(boot_id=None, run_root=None):
+    """The CONFIG_MEMSIZE (MiB) this host boot's own MODE2 receipts recorded.
+
+    Never assumes any particular carveout size (512 MiB or otherwise): every
+    tools/smu-mode2-reset.py receipt (mode2-reset-<N>.json) for the CURRENT
+    boot_id must report the same memsize, and any receipt that completed a
+    reset (has both memsize_before and memsize_after) must show the reset left
+    it unchanged. A boot with no receipt yet fails closed rather than
+    defaulting to any particular size.
+    """
+    if boot_id is None:
+        boot_id = current_boot_id()
+    if run_root is None:
+        run_root = Path.home() / 'macos-vm/run'
+    values = set()
+    for path, receipt in _mode2_reset_receipts(run_root):
+        if receipt.get('boot_id') != boot_id:
+            continue
+        before = receipt.get('memsize_before')
+        if type(before) is not int:
+            continue
+        if 'memsize_after' in receipt:
+            after = receipt.get('memsize_after')
+            if type(after) is not int or after != before:
+                raise RecoveryError(
+                    f'{path.name}: MODE2 reset changed CONFIG_MEMSIZE '
+                    f'({before} -> {after!r}); refusing to trust it')
+        values.add(before)
+    if not values:
+        raise RecoveryError(
+            f'no MODE2 reset receipt records a CONFIG_MEMSIZE for boot {boot_id}; '
+            'cannot detect the expected value')
+    if len(values) > 1:
+        raise RecoveryError(
+            f'MODE2 reset receipts for boot {boot_id} disagree on CONFIG_MEMSIZE: '
+            f'{sorted(values)}')
+    memsize = next(iter(values))
+    if memsize <= 0 or memsize & (memsize - 1) or not (256 <= memsize <= 16384):
+        raise RecoveryError(
+            f'MODE2 reset receipts report an implausible CONFIG_MEMSIZE {memsize}')
+    return memsize
+
+
+def resolve_expected_config_memsize(boot_id=None, run_root=None):
+    """EXPECTED_CONFIG_MEMSIZE, resolved once per process and cached.
+
+    A caller that already knows the value for this boot (or a test that wants
+    a fixed value without touching the filesystem) can set the module
+    attribute directly beforehand to skip detection.
+    """
+    global EXPECTED_CONFIG_MEMSIZE
+    if EXPECTED_CONFIG_MEMSIZE is None:
+        EXPECTED_CONFIG_MEMSIZE = detect_expected_config_memsize(boot_id, run_root)
+    return EXPECTED_CONFIG_MEMSIZE
 
 
 class HostKiqLayout(NamedTuple):
@@ -526,9 +603,10 @@ class LegacyVfio:
 
     def posted_barrier(self):
         value = self.read32(NBIO_CONFIG_MEMSIZE_OFFSET)
-        if value != EXPECTED_CONFIG_MEMSIZE:
+        expected = resolve_expected_config_memsize()
+        if value != expected:
             raise RecoveryError(
-                f'NBIO CONFIG_MEMSIZE is {value:#x}, expected {EXPECTED_CONFIG_MEMSIZE:#x}')
+                f'NBIO CONFIG_MEMSIZE is {value:#x}, expected {expected:#x}')
         return value
 
     def write32(self, offset, value):
@@ -1051,7 +1129,7 @@ def valid_consumed_reservation(proof, run_id):
             type(flush.get('remap')) is int and
             flush.get('remap') in HDP_MEM_FLUSH_TARGETS and
             type(flush.get('posted_read')) is int and
-            flush.get('posted_read') == EXPECTED_CONFIG_MEMSIZE)
+            flush.get('posted_read') == resolve_expected_config_memsize())
 
 
 def valid_v2_lease_proof(proof, run_id):
@@ -1815,7 +1893,7 @@ def _stopped_wptr_eligibility(host_kiq, forced_inactive):
     flush = evidence.get('hdp_flush')
     if (not isinstance(flush, dict) or set(flush) != {'remap', 'posted_read'} or
             flush.get('remap') not in HDP_MEM_FLUSH_TARGETS or
-            flush.get('posted_read') != EXPECTED_CONFIG_MEMSIZE):
+            flush.get('posted_read') != resolve_expected_config_memsize()):
         errors.append('host KIQ HDP flush')
     invalidate = evidence.get('hdp_read_invalidate')
     last_invalidate = invalidate.get('last') if isinstance(invalidate, dict) else None
@@ -2896,6 +2974,7 @@ def perform_recovery(expected_boot, prior_run_id, state_reader, transport_factor
         'gc_quiesce': gc_quiesce,
         'commands': commands, 'kernel_cursor_before': cursor,
         'kernel_cursor_after': final_cursor, 'kernel_messages': messages,
+        'expected_config_memsize': resolve_expected_config_memsize(),
     }
     if helper_hashes is not None:
         receipt['recovery_helpers_sha256'] = helper_hashes

@@ -16,6 +16,7 @@ def load_tool():
     spec = importlib.util.spec_from_file_location('inspect_retained_idle', path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    module.RECOVERY.EXPECTED_CONFIG_MEMSIZE = 0x200
     return module
 
 

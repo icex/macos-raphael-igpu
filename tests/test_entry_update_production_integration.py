@@ -52,6 +52,9 @@ class EntryUpdateProductionIntegrationTests(unittest.TestCase):
                  aperture=True, mode=selected_mode),
             dict(kind='vm_entry_update_route', build='abc', seq=8, ok=True,
                  entry=True, original=0x559dc),
+            dict(kind='fb_aperture', build='abc', ok=True,
+                 mc_base=0xf400000000, physical_base=0x840000000,
+                 aperture_size=0x20000000),
         ]
         if selected_mode == 5:
             base.append(dict(kind='vm_map_process_route', build='abc', seq=8,
@@ -100,6 +103,11 @@ class EntryUpdateProductionIntegrationTests(unittest.TestCase):
             ''.join(lines[:end + 1]), critical_replay_schema=2,
             expected_build=manifest['build_id'],
             critical_replay_tolerance='terminal-prefix')
+        # The VMID2 aperture (512 MiB on this frozen candidate) is not part of
+        # the CR2 protocol; it comes from the plain serial console the same way
+        # the real classify-run.py pipeline reads it (parse_manifest_files).
+        events += classifier.parse_console_lifecycle(
+            (run / 'serial.txt').read_text(errors='replace'), manifest['build_id'])
         result = classifier.classify_probe_readiness(manifest, events)
         self.assertEqual(result['verdict'], 'INVALID')
         self.assertEqual(result['earliest_failure'], 'vmid2_entry_update_state')
