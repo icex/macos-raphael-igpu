@@ -102,6 +102,51 @@ static constexpr Target kVcnDpmTarget = {
     kVcnDpmInstruction, kVcnDpmPatchedInstruction, sizeof(kVcnDpmInstruction)
 };
 
+// AMDRadeonVADriver2 24G830 never issues RENCODE_IB_OP_SET_BALANCE_ENCODING_MODE
+// (0x01000007), so VCN3 firmware runs its slow default encode preset. Same image
+// identity as kVcnDpmTarget (path/UUID/TEXT base); three sites in the same image:
+//
+// 1. Vcn3EncCommand::addPresetEncodeModePacket loads the preset from [rdi+0x30]
+//    (always 0) and bails unless it is 0x01000006..8. Replace the load+range-check
+//    with an unconditional mov esi,0x01000007 (+ 9-byte NOP filler) so it always
+//    tail-calls addPacket(this, 0x01000007, 0, 0).
+static constexpr uint64_t kVcnPresetValueOffset = 0x4d458;
+static constexpr uint8_t kVcnPresetValueInstruction[14] = {
+    0x8b, 0x77, 0x30, 0x8d, 0x86, 0xfa, 0xff, 0xff, 0xfe, 0x83, 0xf8, 0x02, 0x77, 0x0a
+};
+static constexpr uint8_t kVcnPresetValuePatchedInstruction[14] = {
+    0xbe, 0x07, 0x00, 0x00, 0x01, 0x66, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+static constexpr Target kVcnPresetValueTarget = {
+    kVcnDpmDriverPath, sizeof(kVcnDpmDriverPath), kVcnDpmUuid, kVcnPresetValueOffset,
+    kVcnPresetValueInstruction, kVcnPresetValuePatchedInstruction,
+    sizeof(kVcnPresetValueInstruction)
+};
+
+// 2/3. Vcn3EncHevcCommand::buildGeneralCommand and Vcn3EncAvcCommand::buildGeneralCommand
+//    each gate the call to addPresetEncodeModePacket behind
+//    `cmp byte [r12+0x1c],1; jnz +0xb`, and the flag at [r12+0x1c] is never set by
+//    the plugin. Nopping the jnz makes the call unconditional. Same 8 bytes at
+//    both sites (only the TEXT offset differs).
+static constexpr uint64_t kVcnPresetHevcGateOffset = 0x4dd74;
+static constexpr uint64_t kVcnPresetAvcGateOffset = 0x4d88c;
+static constexpr uint8_t kVcnPresetGateInstruction[8] = {
+    0x41, 0x80, 0x7c, 0x24, 0x1c, 0x01, 0x75, 0x0b
+};
+static constexpr uint8_t kVcnPresetGatePatchedInstruction[8] = {
+    0x41, 0x80, 0x7c, 0x24, 0x1c, 0x01, 0x90, 0x90
+};
+static constexpr Target kVcnPresetHevcGateTarget = {
+    kVcnDpmDriverPath, sizeof(kVcnDpmDriverPath), kVcnDpmUuid, kVcnPresetHevcGateOffset,
+    kVcnPresetGateInstruction, kVcnPresetGatePatchedInstruction,
+    sizeof(kVcnPresetGateInstruction)
+};
+static constexpr Target kVcnPresetAvcGateTarget = {
+    kVcnDpmDriverPath, sizeof(kVcnDpmDriverPath), kVcnDpmUuid, kVcnPresetAvcGateOffset,
+    kVcnPresetGateInstruction, kVcnPresetGatePatchedInstruction,
+    sizeof(kVcnPresetGateInstruction)
+};
+
 inline uint32_t u32(const uint8_t *p) {
     return uint32_t(p[0]) | (uint32_t(p[1]) << 8) | (uint32_t(p[2]) << 16) |
            (uint32_t(p[3]) << 24);
