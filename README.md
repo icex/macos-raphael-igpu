@@ -50,15 +50,15 @@ Host tests and the macOS source build run in GitHub Actions on `dev`; see
   latency independently of mode timing. A prior mixed 90/120 Hz sequence produced
   a user-black desktop and was cleanly restored; those requested rates are not
   proven modes.
-- **Qualify remote streaming:** Sunshine offers hardware H.264 and HEVC Main8.
-  The H.264 + Moonlight-Qt comparison reached user-reported 4K60, falling to about
-  40 FPS over transparent Safari; a server trace averages about 55 submissions/s
-  with occasional long calls. HEVC remains enabled at the user’s request. Client and
-  codec changed together, so their individual effects remain unproven. Sustained
-  frame delivery and input latency remain open. A live capture-buffer optimization removes CPU locks and retains a clear picture,
-  but motion-triggered encoder stalls remain across the desktop; it is not a complete fix. [Measurements](findings/research/moonlight-qt-h264-20260916.md)
+- **Qualify remote streaming:** Sunshine offers hardware H.264 and HEVC Main8. With the
+  VCN preset fix (candidate 284; 4K encode 11ms, equal to Linux), a 2GB BIOS UMA
+  carve-out and ScreenCaptureKit capture, the user reports stable 4K60 streaming in Moonlight
+  with no stutter. True 120Hz needs a CoreDisplay patch: macOS virtual displays vsync at a
+  hardcoded 60Hz, a live memory patch proved 120Hz, and the permanent patch is designed but
+  not built. 4K encoding tops out at ~66–83fps; 1440p/1080p should reach 120fps.
+  [Measurements and 120Hz design](findings/research/encoder-pipeline-20260917.md)
   · [Setup, LAN access and firewall rules](docs/sunshine.md)
-  · [Current investigation and next steps](findings/research/streaming-handoff-20260916.md).
+  · [Sunshine patches](patches/sunshine/).
 - **Broaden portability:** extend the working stock-QEMU/OpenCore setup across
   host boots and supported versions, and document requirements for other hypervisors,
   including actual PCIe passthrough support.
@@ -126,7 +126,6 @@ retain their own terms; see [third-party notices](THIRD_PARTY_NOTICES.md). The
 [provenance audit](findings/research/licensing-audit-20260916.md) identifies exact
 AMD sources for the TOC patterns and remaining SDK/distribution review items.
 
-Candidate282's streaming investigation ended with valid capture, a clean
-guest-request shutdown and authorizing recovery. Motion performance remains
-open; the final120FPS-request/60Hz-display trace requires a matching4K60 control.
-[Final evidence](findings/research/safari-motion-20260916.json).
+Candidate284's streaming work (2026-09-17) ended with CORE_PROBE_PASS, a clean
+guest-request shutdown and authorizing recovery. The user reports stable 4K60 streaming;
+permanent 120Hz is the next step. [Evidence](findings/research/encoder-pipeline-20260917.md).
