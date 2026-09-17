@@ -21,7 +21,7 @@ class VcnPresetSourceTests(unittest.TestCase):
     def test_lock_allocated_when_boot_arg_set(self):
         source = (ROOT / 'src/RaphaelGPU.cpp').read_text()
         self.assertIn(
-            'if (texDiagEnabled == 2 || vcnNoDpmEnabled || vcnPresetEnabled)\n'
+            'if (texDiagEnabled == 2 || vcnNoDpmEnabled || vcnPresetEnabled || vd120Enabled)\n'
             '        textureDiagCowLock = IOLockAlloc();',
             source)
 

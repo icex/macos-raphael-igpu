@@ -26,7 +26,7 @@ and long-duration reliability are still being tested.
 | Memory and synchronization | Buffer/texture reuse, synchronized CPU/GPU texture updates, retained color contents, GPU fences, shared events and cross-process IOSurface transfers pass targeted checks. |
 | Hardware video | H.264 and HEVC Main8 encode/decode work. HEVC Main10 decoding passes short tests; Main10 hardware encoding is unavailable in the current native profile set. |
 | Shutdown and reuse | Repeated clean guest shutdowns and same-host-boot reuse work in the supervised workflow. Crash recovery and independent-host-boot coverage remain incomplete. |
-| Physical HDMI/DisplayPort | Not yet working as a qualified display path; use guest Screen Sharing. |
+| Physical HDMI/DisplayPort | Not working yet; use guest Screen Sharing. A DCN 3.1.5 port of Apple's display core is in progress (candidate 286). HDMI output needs Raphael's DMCUB display firmware, which the guest must not start: a guest firmware load froze the host on 2026-09-17. HDMI audio follows the display link. |
 
 The tested baseline is **macOS Sequoia build 24G830** with a matching driver,
 Lilu, OpenCore configuration and grafted VBIOS. Stock QEMU 10.1.2 now works with
@@ -66,8 +66,10 @@ Host tests and the macOS source build run in GitHub Actions on `dev`; see
   additional texture formats, resource ownership and concurrent GPU clients.
 - **Strengthen reliability:** qualify crash recovery, repeated shutdown/relaunch,
   memory reclamation and operation across independently initialized host boots.
-- **Enable physical displays:** bring up the Raphael display engine, then validate
-  modes, reconnection and higher resolutions.
+- **Enable physical displays and HDMI audio:** Apple's embedded display core is being
+  steered onto its DCN 3.02 path with DCN 3.1.5 register translation. DMCUB bring-up without
+  guest firmware actions is the blocker. [Port plan](findings/research/display-dcn315-port-20260917.md)
+  · [HDMI audio plan](findings/research/hdmi-audio-passthrough-20260917.md).
 - **Measure and release:** measure performance after correctness, publish a tested
   compatibility matrix, and produce reproducible builds with clear support limits.
 
