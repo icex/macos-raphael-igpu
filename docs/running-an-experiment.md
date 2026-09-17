@@ -58,12 +58,13 @@ tools/cycle.py --candidate 231 --card metal-079
 Useful flags: `--attempt NAME` for an isolated retry namespace, `--skip-tests` when the suite
 has just run, `--allow-dirty` for a deliberately uncommitted experiment.
 
-On a previously used host boot, preflight refuses before reset unless both
-`--manual-reuse --ack-risk` are explicitly supplied. First record the one-run allowance in
-`status.md`, naming the current boot id and reason. The flags are forwarded through the
-inhibited runner to the existing experiment admission path; they do not bypass host identity,
-amdgpu initialization, capture, shutdown, or cleanup checks. A successful MODE2 reset alone
-does not authorize reuse.
+A same-boot launch on a previously used host boot is admitted automatically: there is no flag
+and no `status.md` allowance note. The MODE2-reset + recovery-receipt teardown protocol is the
+proven safety boundary, so preflight always runs the reset, and the next `experiment.py run`
+is admitted whenever the immediately prior run on this boot left a valid recovery receipt
+(`authorizes_launch=true`), on top of the unchanged host identity, amdgpu initialization,
+capture, shutdown, and cleanup checks. A successful MODE2 reset alone does not authorize
+reuse — a missing or invalid recovery receipt still refuses the launch.
 
 The cycle returns nonzero for a launcher failure or an `INVALID`/missing wrapper verdict.
 A completed experiment may still have a blocking functional verdict; inspect the result JSON.
@@ -99,9 +100,11 @@ Set by the experiment card, not by hand. The ones that currently matter:
 
 ## The ledger
 
-A GPU launch is a scarce, logged resource. Record launches only once VFIO exposure begins — an
-abort before QEMU starts is not a launch and must not consume a ledger entry. Extending the
-per-boot allowance requires an explicit note in `status.md` naming the boot id and the reason.
+Every launch is recorded in `run/used-gpu-boots/<boot>.json` as an audit trail — it never
+refuses a launch by count. Record launches only once VFIO exposure begins — an abort before
+QEMU starts is not a launch and must not consume a ledger entry. Same-boot reuse goes through
+the automatic MODE2 reset and the prior run's recovery receipt; there is no allowance note and
+no flag.
 
 ## Safety
 

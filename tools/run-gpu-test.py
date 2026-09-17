@@ -47,12 +47,6 @@ def run(args: argparse.Namespace) -> int:
     if not (worktree / "tools" / "experiment.py").is_file(): raise SystemExit(f"missing experiment runner: {worktree}")
     if output.exists(): raise SystemExit(f"output already exists: {output}")
     command = build_command(vm, manifest, output, worktree)
-    manual_reuse = getattr(args, "manual_reuse", False)
-    ack_risk = getattr(args, "ack_risk", False)
-    if manual_reuse != ack_risk:
-        raise SystemExit("--manual-reuse and --ack-risk must be supplied together")
-    if manual_reuse:
-        command += ["--manual-reuse", "--ack-risk"]
     if args.dry_run:
         print(json.dumps({"dry_run": True, "command": command}, indent=2)); return 0
     identity = manifest_identity(manifest)
@@ -90,9 +84,6 @@ def main() -> int:
     parser.add_argument("--worktree", default=str(ROOT), help="clean candidate worktree containing tools/experiment.py")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--status-path", default=str(default_status_path()))
-    parser.add_argument("--manual-reuse", action="store_true",
-                        help="explicit same-boot reuse under a recorded status.md allowance")
-    parser.add_argument("--ack-risk", action="store_true")
     return run(parser.parse_args())
 
 if __name__ == "__main__": raise SystemExit(main())

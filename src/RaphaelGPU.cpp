@@ -227,6 +227,7 @@ static rgpu::SuccessRecordBudget kiqSubmitRecordBudget {};
 static rgpu::SuccessRecordBudget preClearFaultRecordBudget {};
 static rgpu::SuccessRecordBudget feedbackCowRecordBudget {};
 static rgpu::SuccessRecordBudget vcnCowRecordBudget {};
+static rgpu::SuccessRecordBudget vcnPresetCowRecordBudget {};
 static rgpu::ObservationBuffer<RaphaelVm::PreparedRequest, 8> vmid2Programs {};
 static rgpu::ObservationBuffer<RaphaelSdma::SubmitInfoObservation, 8> vmid2Submits {};
 static RaphaelSubmit::Store<64, 32> submissionTrace {};
@@ -250,11 +251,20 @@ static bool vcnFirmwareEnabled = false;
 static bool vcnApuEnabled = false;
 static bool vcnStaticEnabled = false;
 static bool vcnSmuEnabled = false;
+static uint32_t vcnClockMHz = 0; // rgpuvcnclk=<MHz>: opt-in SetHardMinVcn/SetSoftMaxVcn after PowerUpVcn
+static bool smuQueryEnabled = false; // rgpusmuquery=1: read-only GetGfxclkFrequency/GetEnabledSmuFeatures
+static uint32_t gfxClockMHz = 0; // rgpugfxclk=<MHz>: opt-in SetHardMinGfxClk after PowerUpVcn
+static uint32_t dcnClockMHz = 0; // rgpudclk=<MHz>: opt-in DCLK SetHardMinVcn/SetSoftMaxVcn
 static bool vcnResetEnabled = false;
 static bool vcnDpgEnabled = false;
 static bool vcnDecodeFirstEnabled = false;
 static bool vcnNoDpmEnabled = false;
 static bool vcnWptrEnabled = false;
+// rgpuvcnpreset=1: force RENCODE_IB_OP_SET_BALANCE_ENCODING_MODE in
+// AMDRadeonVADriver2 via the same current-task COW path as kVcnDpmTarget.
+// Effective only when the existing vcnNoDpmEnabled/ppCompatibilityBypassed
+// gate also holds, so it runs in the same video process at the same moment.
+static bool vcnPresetEnabled = false;
 static mach_vm_address_t orgVcnDecodeSubmit = 0;
 static uint32_t vcnDecodeSubmitCalls = 0;
 static bool ppCompatibilityBypassed = false;
@@ -2743,12 +2753,27 @@ static uint32_t wrapVcnInitialize(void *engine) {
         auto power = RaphaelVcnPower::enable(
             [&](uint32_t address) { return read(handle, address); },
             [&](uint32_t address, uint32_t value) { write(handle, address, value); },
-            []() { IOSleep(1); }, cycleVcn);
+            []() { IOSleep(1); }, cycleVcn, vcnClockMHz, smuQueryEnabled, gfxClockMHz, dcnClockMHz);
         IOLockUnlock(vcnSmuLock);
         RLOG("VCNCYCLE: selected=%u down-response=%x active-queues=%u",
              cycleVcn, power.downResponse, queues ? queues[0] : 0xffffffffu);
         RLOG("VCNM: pre=%x version=%x power-response=%x error=%u",
              power.pre, power.version, power.response, power.error);
+        if (smuQueryEnabled)
+            RLOG("SMUQ: gfxclk-response=%x gfxclk-mhz=%u features-response=%x features=%08x%08x",
+                 power.gfxclkResponse, power.gfxclkMHz, power.featuresResponse,
+                 power.featuresHigh, power.featuresLow);
+        if (vcnClockMHz)
+            RLOG("VCNCLK: requested=%u hardmin-response=%x softmax-response=%x applied=%u",
+                 vcnClockMHz, power.clockMinResponse, power.clockMaxResponse,
+                 power.clockMinResponse == 1 && power.clockMaxResponse == 1);
+        if (dcnClockMHz)
+            RLOG("DCLK: requested=%u hardmin-response=%x softmax-response=%x applied=%u",
+                 dcnClockMHz, power.dclkMinResponse, power.dclkMaxResponse,
+                 power.dclkMinResponse == 1 && power.dclkMaxResponse == 1);
+        if (gfxClockMHz)
+            RLOG("GFXCLK: requested=%u hardmin-response=%x applied=%u", gfxClockMHz,
+                 power.gfxMinResponse, power.gfxMinResponse == 1);
         if (power.error) return 1;
     }
     if (vcnStaticEnabled && !vcnDpgEnabled) {
@@ -9047,16 +9072,38 @@ static bool textureDiagRead(void *opaque, uint64_t address, void *out, size_t si
     return textureDiagReadUser(context->map, address, out, size) == KERN_SUCCESS;
 }
 
+// Every exact userspace target this kext patches through the current-task COW
+// path advertises different behavior once patched: kMetal/kFeedback are gated
+// by rgputexdiag=2, kVcnDpm and kVcnPreset by the vcnNoDpm capability-alignment
+// gate (kVcnPreset additionally requires rgpuvcnpreset=1). The kind selects both
+// the gate and the log line; the underlying guard/COW mechanics are identical.
+enum class DiagTargetKind { kMetal, kFeedback, kVcnDpm, kVcnPreset };
+
+static bool diagTargetGateOpen(DiagTargetKind kind) {
+    switch (kind) {
+    case DiagTargetKind::kVcnDpm:
+        return vcnNoDpmEnabled && __atomic_load_n(&ppCompatibilityBypassed, __ATOMIC_ACQUIRE);
+    case DiagTargetKind::kVcnPreset:
+        return vcnPresetEnabled && vcnNoDpmEnabled &&
+               __atomic_load_n(&ppCompatibilityBypassed, __ATOMIC_ACQUIRE);
+    case DiagTargetKind::kMetal:
+    case DiagTargetKind::kFeedback:
+    default:
+        return texDiagEnabled == 2;
+    }
+}
+
 // Retain the complete instruction guard for every exact userspace target,
 // task-private copy-on-write mapping, post-write verification and RX restoration.
-// The VCN target advertises unavailable Apple DPM; native setupPowerState owns its
+// The VCN targets advertise unavailable Apple DPM; native setupPowerState owns its
 // no-DPM cleanup, while wrapVcnInitialize retains actual Raphael SMU power-up.
 static void textureDiagCow(TextureDiagReadContext *context, int pid,
                            const RaphaelTextureDiag::Result &result,
                            mach_vm_address_t regionStart, mach_vm_size_t regionSize,
                            vm_prot_t regionProt, vm_prot_t regionMax, bool emit,
-                           const RaphaelTextureDiag::Target &target, bool vcnTarget) {
-    if ((vcnTarget ? !(vcnNoDpmEnabled && __atomic_load_n(&ppCompatibilityBypassed, __ATOMIC_ACQUIRE)) : texDiagEnabled != 2) || context == nullptr || context->map == nullptr ||
+                           const RaphaelTextureDiag::Target &target, DiagTargetKind kind,
+                           const char *label) {
+    if (!diagTargetGateOpen(kind) || context == nullptr || context->map == nullptr ||
         textureDiagCowLock == nullptr || textureDiagProtect == nullptr ||
         textureDiagWriteUser == nullptr || pid <= 0 || !result.found || result.alreadyPatched ||
         result.status != RaphaelTextureDiag::Ok || !result.instructionMatch ||
@@ -9106,11 +9153,15 @@ static void textureDiagCow(TextureDiagReadContext *context, int pid,
     }
     const bool cowSucceeded = protectRc == KERN_SUCCESS && writeRc == KERN_SUCCESS &&
                               restoreRc == KERN_SUCCESS && verifyRc == KERN_SUCCESS;
-    if (&target == &RaphaelTextureDiag::kFeedbackTarget)
+    if (kind == DiagTargetKind::kFeedback)
         SAMPLED_CRLOG(feedbackCowRecordBudget, cowSucceeded, "FBEXPAND: COW pid=%d addr=%#llx p=%d w=%d r=%d v=%d", pid,
               result.instructionAddress, protectRc, writeRc, restoreRc, verifyRc);
-    if (vcnTarget)
+    if (kind == DiagTargetKind::kVcnDpm)
         SAMPLED_CRLOG(vcnCowRecordBudget, cowSucceeded, "VCNDPM: COW pid=%d addr=%#llx p=%d w=%d r=%d v=%d", pid,
+              result.instructionAddress, protectRc, writeRc, restoreRc, verifyRc);
+    if (kind == DiagTargetKind::kVcnPreset)
+        SAMPLED_CRLOG(vcnPresetCowRecordBudget, cowSucceeded,
+              "VCNPRESET: COW target=%s pid=%d addr=%#llx p=%d w=%d r=%d v=%d", label, pid,
               result.instructionAddress, protectRc, writeRc, restoreRc, verifyRc);
     if (restoreRc != KERN_SUCCESS)
         CRLOG("XTCOW pid=%d p=%d w=%d r=%d v=%d unsafe", pid, protectRc, writeRc,
@@ -9120,11 +9171,31 @@ static void textureDiagCow(TextureDiagReadContext *context, int pid,
              restoreRc, verifyRc);
 }
 
+namespace {
+struct DiagTargetEntry {
+    const RaphaelTextureDiag::Target *target;
+    DiagTargetKind kind;
+    const char *label; // only used for the VCNPRESET image/COW log lines
+};
+// Table order matches the historical targetIndex 0/1/2 exactly for the first
+// three entries (Metal texture, VCN DPM, texture feedback); the three VCN
+// preset sites are appended, sharing kVcnDpmTarget's image identity.
+const DiagTargetEntry kDiagTargets[] = {
+    {&RaphaelTextureDiag::kTextureTarget, DiagTargetKind::kMetal, nullptr},
+    {&RaphaelTextureDiag::kVcnDpmTarget, DiagTargetKind::kVcnDpm, nullptr},
+    {&RaphaelTextureDiag::kFeedbackTarget, DiagTargetKind::kFeedback, nullptr},
+    {&RaphaelTextureDiag::kVcnPresetValueTarget, DiagTargetKind::kVcnPreset, "preset-value"},
+    {&RaphaelTextureDiag::kVcnPresetHevcGateTarget, DiagTargetKind::kVcnPreset, "hevc-gate"},
+    {&RaphaelTextureDiag::kVcnPresetAvcGateTarget, DiagTargetKind::kVcnPreset, "avc-gate"},
+};
+} // namespace
+
 static void applyCurrentTaskImagePatches(bool includeMetal) {
     if (texDiagEnabled != 0 || vcnNoDpmEnabled) {
         const bool emit = __atomic_fetch_add(&textureDiagLogCount, 1u,
                                              __ATOMIC_RELAXED) < 64;
-        const bool cowLocked = (texDiagEnabled == 2 || vcnNoDpmEnabled) && textureDiagCowLock != nullptr;
+        const bool cowLocked = (texDiagEnabled == 2 || vcnNoDpmEnabled || vcnPresetEnabled) &&
+                               textureDiagCowLock != nullptr;
         if (cowLocked) IOLockLock(textureDiagCowLock);
         task_t task = textureDiagCurrentTask ? textureDiagCurrentTask() : nullptr;
         const int pid = textureDiagSelfPid ? textureDiagSelfPid() : -1;
@@ -9135,13 +9206,12 @@ static void applyCurrentTaskImagePatches(bool includeMetal) {
         kern_return_t taskRc = (task && textureDiagTaskInfo) ?
             textureDiagTaskInfo(task, TASK_DYLD_INFO,
                                 reinterpret_cast<task_info_t>(&dyld), &count) : KERN_FAILURE;
-        for (unsigned targetIndex = 0; targetIndex < 3; ++targetIndex) {
-            const bool vcnTarget = targetIndex == 1;
-            if (vcnTarget ? !(vcnNoDpmEnabled && __atomic_load_n(&ppCompatibilityBypassed, __ATOMIC_ACQUIRE)) : (!includeMetal || texDiagEnabled == 0))
+        for (const auto &entry : kDiagTargets) {
+            const bool vcnLike = entry.kind == DiagTargetKind::kVcnDpm ||
+                                 entry.kind == DiagTargetKind::kVcnPreset;
+            if (vcnLike ? !diagTargetGateOpen(entry.kind) : (!includeMetal || texDiagEnabled == 0))
                 continue;
-            const auto &target = vcnTarget ? RaphaelTextureDiag::kVcnDpmTarget :
-                                            (targetIndex == 2 ? RaphaelTextureDiag::kFeedbackTarget :
-                                                                RaphaelTextureDiag::kTextureTarget);
+            const auto &target = *entry.target;
             RaphaelTextureDiag::Result result {};
             if (taskRc == KERN_SUCCESS && count >= TASK_DYLD_INFO_COUNT &&
                 dyld.all_image_info_size >= 16 && map != nullptr)
@@ -9172,7 +9242,7 @@ static void applyCurrentTaskImagePatches(bool includeMetal) {
                     ++depth;
                 }
             }
-            if (vcnTarget && (emit || result.found)) {
+            if (entry.kind == DiagTargetKind::kVcnDpm && (emit || result.found)) {
                 // Absent images and already-patched processes are routine queries,
                 // not lifecycle evidence. A found but invalid target remains critical.
                 const bool invalidTarget = result.found && result.status != RaphaelTextureDiag::Ok;
@@ -9184,7 +9254,17 @@ static void applyCurrentTaskImagePatches(bool includeMetal) {
                        pid, result.status, result.uuidMatch, result.instructionMatch,
                        result.alreadyPatched, result.instructionAddress);
             }
-            if (!vcnTarget && emit) RLOG("XTDIAG pid=%d task=%p ti=%d fmt=%d images=%u n=%u st=%u uuid=%u path=%u "
+            if (entry.kind == DiagTargetKind::kVcnPreset && (emit || result.found)) {
+                const bool invalidTarget = result.found && result.status != RaphaelTextureDiag::Ok;
+                diagAppend(invalidTarget,
+                           "VCNPRESET: image target=%s pid=%d st=%u uuid=%u bytes=%u patched=%u addr=%#llx",
+                           entry.label, pid, result.status, result.uuidMatch, result.instructionMatch,
+                           result.alreadyPatched, result.instructionAddress);
+                SYSLOG("rgpu", "VCNPRESET: image target=%s pid=%d st=%u uuid=%u bytes=%u patched=%u addr=%#llx",
+                       entry.label, pid, result.status, result.uuidMatch, result.instructionMatch,
+                       result.alreadyPatched, result.instructionAddress);
+            }
+            if (!vcnLike && emit) RLOG("XTDIAG pid=%d task=%p ti=%d fmt=%d images=%u n=%u st=%u uuid=%u path=%u "
                  "text=%#llx instr=%#llx bytes=%u patched=%u",
                  pid, task, taskRc, dyld.all_image_info_format, result.imageCount, result.inspected,
                  result.status, result.uuidMatch, result.pathTerminated,
@@ -9195,7 +9275,7 @@ static void applyCurrentTaskImagePatches(bool includeMetal) {
             if (regionRc == KERN_SUCCESS && !regionSubmap && result.status == RaphaelTextureDiag::Ok &&
                 result.instructionMatch && result.uuidMatch && result.pathTerminated)
                 textureDiagCow(&readContext, pid, result, regionStart, regionSize,
-                               regionProt, regionMax, emit, target, vcnTarget);
+                               regionProt, regionMax, emit, target, entry.kind, entry.label);
         }
         if (cowLocked) IOLockUnlock(textureDiagCowLock);
     }
@@ -9280,6 +9360,19 @@ static void pluginStart() {
     uint32_t vcnSmu = 0;
     vcnSmuEnabled = PE_parse_boot_argn("rgpuvcnsmu", &vcnSmu, sizeof(vcnSmu)) && vcnSmu == 1;
     if (vcnSmuEnabled) vcnSmuLock = IOLockAlloc();
+    uint32_t vcnClock = 0;
+    if (PE_parse_boot_argn("rgpuvcnclk", &vcnClock, sizeof(vcnClock)) && vcnClock >= 200 && vcnClock <= 3000)
+        vcnClockMHz = vcnClock;
+    uint32_t smuQuery = 0;
+    smuQueryEnabled = PE_parse_boot_argn("rgpusmuquery", &smuQuery, sizeof(smuQuery)) && smuQuery == 1;
+    uint32_t gfxClock = 0;
+    if (PE_parse_boot_argn("rgpugfxclk", &gfxClock, sizeof(gfxClock)) && gfxClock >= 200 && gfxClock <= 3000)
+        gfxClockMHz = gfxClock;
+    uint32_t dcnClock = 0;
+    if (PE_parse_boot_argn("rgpudclk", &dcnClock, sizeof(dcnClock)) && dcnClock >= 200 && dcnClock <= 3000)
+        dcnClockMHz = dcnClock;
+    RLOG("VCNCLK: rgpuvcnclk=%u rgpudclk=%u rgpugfxclk=%u rgpusmuquery=%u (effective only with rgpuvcnsmu=1)",
+         vcnClockMHz, dcnClockMHz, gfxClockMHz, smuQueryEnabled);
     uint32_t vcnStatic = 0;
     vcnStaticEnabled = PE_parse_boot_argn("rgpuvcnstatic", &vcnStatic, sizeof(vcnStatic)) && vcnStatic == 1;
     uint32_t vcnApu = 0;
@@ -9356,7 +9449,12 @@ static void pluginStart() {
     uint32_t vcnWptr = 0;
     vcnWptrEnabled = PE_parse_boot_argn("rgpuvcnwptr", &vcnWptr, sizeof(vcnWptr)) &&
         vcnWptr == 1 && vcnNoDpmEnabled && vcnFirmwareEnabled && vcnApuEnabled;
-    if (texDiagEnabled == 2 || vcnNoDpmEnabled) textureDiagCowLock = IOLockAlloc();
+    uint32_t vcnPreset = 0;
+    vcnPresetEnabled = PE_parse_boot_argn("rgpuvcnpreset", &vcnPreset, sizeof(vcnPreset)) &&
+        vcnPreset == 1;
+    RLOG("VCNPRESET: rgpuvcnpreset=%u", vcnPresetEnabled);
+    if (texDiagEnabled == 2 || vcnNoDpmEnabled || vcnPresetEnabled)
+        textureDiagCowLock = IOLockAlloc();
     CRLOG("VCNDPM: capability alignment enabled=%u lock=%u", vcnNoDpmEnabled,
           textureDiagCowLock != nullptr);
     RLOG("rgputexdiag=%u: current-task Metal image diagnostic %s",

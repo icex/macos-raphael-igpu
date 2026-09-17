@@ -96,6 +96,59 @@ class ClassifyTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'conflicting build identity'):
             classifier.parse_console_lifecycle(console, CR2_BUILD)
 
+    @staticmethod
+    def xr_lines(base, top, offset, phases=('pre-TTL', 'post-TTL')):
+        return ''.join(
+            f'RaphaelGPU      rgpu: @ XR: {phase}: CP_STAT=0 CPC_STATUS=0 '
+            f'CPC_STALLED=0 CPF_BUSY=0 | FB base={base:#x} top={top:#x} '
+            f'offset={offset:#x}\n'
+            for phase in phases)
+
+    def test_fb_aperture_resolves_both_512mb_and_2gb_carveouts(self):
+        classifier = self.classifier()
+        for base, top, offset, mc_base, physical_base, size in (
+                (0xf400, 0xf41f, 0x840, 0xf400000000, 0x840000000, 0x20000000),
+                (0xf400, 0xf47f, 0x7e0, 0xf400000000, 0x7e0000000, 0x80000000)):
+            with self.subTest(size=size):
+                rows = classifier.parse_console_lifecycle(
+                    self.xr_lines(base, top, offset), 'abc')
+                aperture = [row for row in rows if row['kind'] == 'fb_aperture']
+                self.assertEqual(len(aperture), 1)
+                self.assertTrue(aperture[0]['ok'])
+                self.assertEqual(aperture[0]['mc_base'], mc_base)
+                self.assertEqual(aperture[0]['physical_base'], physical_base)
+                self.assertEqual(aperture[0]['aperture_size'], size)
+
+    def test_fb_aperture_console_lines_absent_add_no_event(self):
+        classifier = self.classifier()
+        rows = classifier.parse_console_lifecycle(
+            'RaphaelGPU rgpu: @ BUILD: identity=abc\n', 'abc')
+        self.assertFalse([row for row in rows if row['kind'] == 'fb_aperture'])
+
+    def test_fb_aperture_fails_closed_on_disagreement_or_nonsense(self):
+        classifier = self.classifier()
+        conflicting = (self.xr_lines(0xf400, 0xf41f, 0x840, phases=('pre-TTL',)) +
+                       self.xr_lines(0xf400, 0xf47f, 0x7e0, phases=('post-TTL',)))
+        rows = classifier.parse_console_lifecycle(conflicting, 'abc')
+        aperture = [row for row in rows if row['kind'] == 'fb_aperture']
+        self.assertEqual(len(aperture), 1)
+        self.assertFalse(aperture[0]['ok'])
+        self.assertEqual(aperture[0]['reason'], 'vm_aperture_evidence_conflicting')
+
+        for label, (base, top, offset) in (
+                ('inverted', (0xf400, 0xf3ff, 0x840)),
+                ('zero-base', (0, 0xf41f, 0x840)),
+                ('zero-offset', (0xf400, 0xf41f, 0)),
+                ('below-minimum-size', (0xf400, 0xf400, 0x840)),
+                ('not-power-of-two', (0xf400, 0xf420, 0x840))):
+            with self.subTest(label=label):
+                rows = classifier.parse_console_lifecycle(
+                    self.xr_lines(base, top, offset, phases=('pre-TTL',)), 'abc')
+                aperture = [row for row in rows if row['kind'] == 'fb_aperture']
+                self.assertEqual(len(aperture), 1)
+                self.assertFalse(aperture[0]['ok'])
+                self.assertEqual(aperture[0]['reason'], 'vm_aperture_evidence_invalid')
+
     def test_manifested_files_require_exact_completed_producer_ready(self):
         classifier = self.classifier()
         transport = {'kind':'isa-serial', 'version':1, 'index':1,
@@ -1932,7 +1985,10 @@ Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0
                      domain='converted', destination=0x84b709000, count=1,
                      source=0xf40b763000, result=0x84b763000,
                      template=0x2000000000000001, increment=0,
-                     constructed=0x200000084b763001, state='returned')]
+                     constructed=0x200000084b763001, state='returned'),
+                dict(kind='fb_aperture', build='abc', ok=True,
+                     mc_base=0xf400000000, physical_base=0x840000000,
+                     aperture_size=0x20000000)]
         route = dict(kind='vm_map_process_route', build='abc', seq=6, ok=True,
                      entry=True, original=0x8edce)
         repaired = dict(kind='vm_map_process_root', build='abc', seq=7, ok=True,
@@ -1985,7 +2041,10 @@ Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0
         base = self.events(available=1, status=0, started=1) + [
             dict(kind='accelerator_start', build='abc', seq=6, result=1),
             dict(kind='vm_entry_gate', build='abc', seq=7,
-                 marked=True, aperture=True, mode=4)]
+                 marked=True, aperture=True, mode=4),
+            dict(kind='fb_aperture', build='abc', ok=True,
+                 mc_base=0xf400000000, physical_base=0x840000000,
+                 aperture_size=0x20000000)]
         route = dict(kind='vm_entry_update_route', build='abc', seq=8,
                      ok=True, entry=True)
         summary = dict(
@@ -2137,6 +2196,73 @@ Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0
         self.assertEqual(refused['verdict'], 'INCONCLUSIVE')
         self.assertEqual(refused['earliest_failure'],
                          'vmid2_root_repair_refused:not-raphael')
+
+    def entry_update_events_for_aperture(self, mc_base, physical_base, offset=0x0b6f4000):
+        """A minimal, otherwise-valid vmid2_entry_update sequence for one aperture."""
+        classifier = self.classifier()
+        source = mc_base + offset
+        result = physical_base + offset
+        return self.events(available=1, status=0, started=1) + [
+            dict(kind='accelerator_start', build='abc', seq=6, result=1),
+            dict(kind='vm_entry_gate', build='abc', seq=7,
+                 marked=True, aperture=True, mode=4),
+            dict(kind='vm_entry_update_route', build='abc', seq=8,
+                 ok=True, entry=True),
+            dict(kind='vm_entry_update', build='abc', seq=9, mode=4, route=True,
+                 inactive=0,
+                 counts={key:(1 if key == 'converted' else 0)
+                         for key in classifier.ENTRY_UPDATE_COUNT_KEYS},
+                 omitted={key:0 for key in classifier.ENTRY_UPDATE_OMISSION_KEYS},
+                 ok=True),
+            dict(kind='vm_entry_update_sample', build='abc', seq=10, ok=True,
+                 bucket='child', caller=0x55a72, producer='child',
+                 domain='converted', destination=result, count=1,
+                 source=source, result=result, template=0x2000000000000001,
+                 increment=0, constructed=0x2000000000000001 | result,
+                 state='returned'),
+        ]
+
+    def test_classifier_accepts_conversions_for_512mb_and_2gb_apertures(self):
+        classifier = self.classifier()
+        manifest = {'build_id':'abc', 'spec':{'required_observations':[
+            'vmid2_entry_gate', 'vmid2_entry_update']}}
+        for mc_base, physical_base, aperture_size in (
+                (0xf400000000, 0x840000000, 0x20000000),
+                (0xf400000000, 0x7e0000000, 0x80000000)):
+            with self.subTest(aperture_size=aperture_size):
+                events = self.entry_update_events_for_aperture(
+                    mc_base, physical_base) + [
+                    dict(kind='fb_aperture', build='abc', ok=True,
+                         mc_base=mc_base, physical_base=physical_base,
+                         aperture_size=aperture_size)]
+                result = classifier.classify_probe_readiness(manifest, events)
+                self.assertEqual(result['verdict'], 'PROBE_NOT_RUN')
+                self.assertTrue(result['valid'])
+
+    def test_classifier_rejects_conversion_inconsistent_with_parsed_aperture(self):
+        classifier = self.classifier()
+        manifest = {'build_id':'abc', 'spec':{'required_observations':[
+            'vmid2_entry_gate', 'vmid2_entry_update']}}
+        # Addresses are constructed for the 512 MiB window, but the parsed
+        # evidence says this run's aperture is the 2 GiB one: the conversion
+        # must not be validated against a mismatched aperture.
+        events = self.entry_update_events_for_aperture(
+            0xf400000000, 0x840000000) + [
+            dict(kind='fb_aperture', build='abc', ok=True,
+                 mc_base=0xf400000000, physical_base=0x7e0000000,
+                 aperture_size=0x80000000)]
+        result = classifier.classify_probe_readiness(manifest, events)
+        self.assertEqual(result['verdict'], 'INVALID')
+        self.assertEqual(result['earliest_failure'], 'vmid2_entry_update_child_invalid')
+
+    def test_classifier_fails_closed_without_aperture_evidence(self):
+        classifier = self.classifier()
+        manifest = {'build_id':'abc', 'spec':{'required_observations':[
+            'vmid2_entry_gate', 'vmid2_entry_update']}}
+        events = self.entry_update_events_for_aperture(0xf400000000, 0x840000000)
+        result = classifier.classify_probe_readiness(manifest, events)
+        self.assertEqual(result['verdict'], 'INCONCLUSIVE')
+        self.assertEqual(result['earliest_failure'], 'vm_aperture_evidence_missing')
 
     def test_candidate182_requires_exact_early_entry_gate(self):
         classifier = self.classifier()

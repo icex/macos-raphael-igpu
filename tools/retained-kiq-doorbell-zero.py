@@ -206,10 +206,10 @@ class DoorbellZeroTransport:
 
     def _posting_barrier(self):
         value = self._raw32(RECOVERY.NBIO_CONFIG_MEMSIZE_OFFSET)
-        if value != RECOVERY.EXPECTED_CONFIG_MEMSIZE:
+        expected = RECOVERY.resolve_expected_config_memsize()
+        if value != expected:
             raise DoorbellZeroError(
-                f'posting read is {value:#x}, expected '
-                f'{RECOVERY.EXPECTED_CONFIG_MEMSIZE:#x}')
+                f'posting read is {value:#x}, expected {expected:#x}')
         return value
 
     def select(self, value):

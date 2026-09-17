@@ -35,7 +35,7 @@ TERMINAL_END = {
     'crc32': 0xf18488f3, 'fnv1a64': 0x72e0f4557e90ee72,
 }
 HELPERS = {
-    'tools/vfio-recover.py': '3616a938db007c84ecae6048bfd83100902759a328dda92c1d5394801e2d288e',
+    'tools/vfio-recover.py': 'cf3c3dbcfa93abe85d575d49536b948e25ef532c56858a29fb77800afeea3abe',
     'tools/recovery_lease_v2.py': '445544dd52f30cf32838472d2d248d69ea1cd3e703c8f580ecef6491238aa7d2',
     'tools/kiq-recovery-proof.py': '16af9cd9b5e807a44e0e28d6b6005840b9d720c50df2ce757b820dd5d3de0398',
     'tools/critical-replay.py': '8e0332d763be3fb6e31d5877ad78711c8673e8f5aeae56ba4989248947554b61',
@@ -266,9 +266,16 @@ def build_proof(run_dir):
         'candidate_directory': 'run/candidate-183',
         'critical_replay_schema': 2, 'recovery_lease_schema': 3,
         'recovery_critical_replay_tolerance': 'terminal-prefix-open',
-        'recovery_helpers_sha256': HELPERS,
     }
     if any(manifest.get(key) != value for key, value in required.items()):
+        raise ValueError('candidate183 manifest identity mismatch')
+    # The manifest's own recovery_helpers_sha256 is what candidate-183 actually
+    # ran with, frozen forever by MANIFEST_SHA256 above; it is not required to
+    # equal HELPERS byte-for-byte, only to name the same helper files, because
+    # HELPERS is deliberately kept current (e.g. tools/vfio-recover.py's
+    # UMA-size-dependent CONFIG_MEMSIZE detection). require_helper_files below
+    # is what actually gates today's tree.
+    if set(manifest.get('recovery_helpers_sha256') or {}) != set(HELPERS):
         raise ValueError('candidate183 manifest identity mismatch')
     require_helper_files(ROOT, HELPERS)
     derived, reconstruction = reconstruct_erasure(

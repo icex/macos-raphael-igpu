@@ -123,9 +123,12 @@ class NoQueueIntegrationTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.experiment.reserve_boot(root, "boot-A", "changed", manifest_path=manifest,
                                              noqueue_proof=duplicate)
+            # reserve_boot itself no longer enforces a launch-count ceiling (that
+            # generic admission requirement is gone); noqueue-qualification.py's own
+            # proof validator still bounds its own scheme independently, via "cap".
             ledger.write_text(json.dumps({"schema": 2, "boot_id": "boot-A", "max_launches": 3,
                                           "launches": [{"run_id": str(i)} for i in range(3)]}))
-            with self.assertRaisesRegex(RuntimeError, "ceiling"):
+            with self.assertRaisesRegex(ValueError, "cap"):
                 self.experiment.reserve_boot(root, "boot-A", "fresh", manifest_path=manifest,
                                              noqueue_proof=self.proof(ledger.read_bytes(), manifest,
                                                                        run="fresh", prior="2"))

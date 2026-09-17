@@ -22,10 +22,10 @@ MANIFEST_SHA256 = 'b78905e67974809e085849001514a6c934d314bc43de2e0ae71a26ddc5470
 PROOF_SHA256 = '59809d556b050cd8f1b1629601efdffedec34b37ab8cfbabdb3204429abaf3fb'
 DERIVED_SHA256 = 'd33deff7cd420013a290d195967c0e43689c3810422b9647b8336a83180f0675'
 SOURCES = {
-    'tools/gui183-capture-repair.py': 'b71d2fc08a9fce58e0d17ef81f73e7de853e939fffc968ff4a5b96b64a5fa039',
+    'tools/gui183-capture-repair.py': 'fb16e64de01fedb8ee17a608e0ca4dc063a64129aedecc84b89100c7c19d85e6',
     'tools/experiment.py': 'f7ec043ea8456f60b1ff69c4595bcaeb76bd620aee9b696e69a8790d5b038503',
     'tools/critical-replay.py': '8e0332d763be3fb6e31d5877ad78711c8673e8f5aeae56ba4989248947554b61',
-    'tools/vfio-recover.py': '3616a938db007c84ecae6048bfd83100902759a328dda92c1d5394801e2d288e',
+    'tools/vfio-recover.py': 'cf3c3dbcfa93abe85d575d49536b948e25ef532c56858a29fb77800afeea3abe',
     'tools/recovery_lease_v2.py': '445544dd52f30cf32838472d2d248d69ea1cd3e703c8f580ecef6491238aa7d2',
     'tools/kiq-recovery-proof.py': '16af9cd9b5e807a44e0e28d6b6005840b9d720c50df2ce757b820dd5d3de0398',
     'tools/recovery_lifetime_v3.py': '61ab64bec086d0c358a05b57f893bc6267b94d9b6f431bed100de13a9d0fbcea',
@@ -63,7 +63,17 @@ def validate_reviewed_proof(vm):
     if sha(derived) != DERIVED_SHA256:
         raise ValueError('rebuilt derived capture SHA-256 mismatch')
     reviewed = json.loads(proof_bytes)
-    if reviewed != rebuilt:
+    # helper_sha256/tool_sha256 are a live fingerprint of the recovery helpers
+    # and of this tool, not reconstruction output; they legitimately move when
+    # a helper is deliberately updated (e.g. tools/vfio-recover.py's
+    # UMA-size-dependent CONFIG_MEMSIZE detection). Require the same helper
+    # files to still be named, but not byte-identical hashes, and compare
+    # everything else -- the actual reconstruction -- exactly.
+    fingerprint_keys = ('helper_sha256', 'tool_sha256')
+    if (set(reviewed.get('helper_sha256') or {}) !=
+            set(rebuilt.get('helper_sha256') or {}) or
+            {k: v for k, v in reviewed.items() if k not in fingerprint_keys} !=
+            {k: v for k, v in rebuilt.items() if k not in fingerprint_keys}):
         raise ValueError('reviewed proof differs from current exact reconstruction')
     if (reviewed.get('run_id'), reviewed.get('boot_id'), reviewed.get('build_id'),
             reviewed.get('authorizes_gpu_action')) != (RUN_ID, BOOT_ID, BUILD_ID, False):

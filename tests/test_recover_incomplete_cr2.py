@@ -37,7 +37,22 @@ class RecoverIncompleteCr2Tests(unittest.TestCase):
         if not receipt_path.exists(): self.skipTest('candidate190 receipt unavailable')
         receipt=json.loads(receipt_path.read_text()); manifest=json.loads((run/'manifest.json').read_text())
         experiment=tool.load('experiment')
-        self.assertEqual(tool.receipt_errors(experiment,receipt,proof,manifest,vm),[])
+        # recovery_helpers_sha256 is candidate-190's own frozen record (in both
+        # the real receipt and its manifest): it names the helper files as they
+        # were that boot, and legitimately no longer matches
+        # proof['current_recovery_helpers_sha256'] once a helper is
+        # deliberately updated (e.g. tools/vfio-recover.py's
+        # UMA-size-dependent CONFIG_MEMSIZE detection). Rebind both -- same
+        # paths, live values -- so this test still proves everything else
+        # about the frozen receipt validates under current logic, without
+        # asserting helper bytes are frozen forever.
+        current = proof['current_recovery_helpers_sha256']
+        self.assertEqual(set(receipt['recovery_helpers_sha256']), set(current))
+        self.assertEqual(set(manifest['recovery_helpers_sha256']), set(current))
+        rebound = dict(receipt, recovery_helpers_sha256=current)
+        rebound_manifest = dict(manifest, recovery_helpers_sha256=current)
+        self.assertEqual(
+            tool.receipt_errors(experiment,rebound,proof,rebound_manifest,vm),[])
         self.assertEqual(experiment.validate_reuse_receipt(
             receipt,proof['boot_id'],proof['run_id'],vm),['recovery_receipt'])
 

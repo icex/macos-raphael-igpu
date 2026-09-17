@@ -98,6 +98,7 @@ class RetainedKiqDoorbellZeroTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tool = load_tool()
+        cls.tool.RECOVERY.EXPECTED_CONFIG_MEMSIZE = 0x200
         cls.fixture = json.loads(FIXTURE.read_text())['transaction']['after']
 
     def proof(self):

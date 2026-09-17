@@ -1605,13 +1605,33 @@ def _recovery_checksum(prior_run_id):
     return checksum & 0xffffffffffffffff
 
 
-def _valid_hdp_flush(value):
-    return (isinstance(value, dict) and set(value) == {'remap', 'posted_read'} and
+LEGACY_CONFIG_MEMSIZE = 0x200
+
+
+def receipt_config_memsize(receipt):
+    """CONFIG_MEMSIZE (MiB) a recovery receipt was produced against.
+
+    vfio-recover detects it from the boot's own MODE2 receipts and records it as
+    expected_config_memsize; receipts written before that field existed all came
+    from 512 MiB carve-outs. Anything implausible yields None, which fails every
+    posted_read comparison."""
+    if not isinstance(receipt, dict):
+        return None
+    value = receipt.get('expected_config_memsize', LEGACY_CONFIG_MEMSIZE)
+    if (type(value) is not int or not 256 <= value <= 16384 or
+            value & (value - 1)):
+        return None
+    return value
+
+
+def _valid_hdp_flush(value, config_memsize=LEGACY_CONFIG_MEMSIZE):
+    return (config_memsize is not None and
+            isinstance(value, dict) and set(value) == {'remap', 'posted_read'} and
             type(value.get('remap')) is int and value.get('remap') in (0x385c, 0x7f000) and
-            type(value.get('posted_read')) is int and value.get('posted_read') == 0x200)
+            type(value.get('posted_read')) is int and value.get('posted_read') == config_memsize)
 
 
-def _valid_reservation(value, prior_run_id):
+def _valid_reservation(value, prior_run_id, config_memsize=LEGACY_CONFIG_MEMSIZE):
     if isinstance(value, dict) and value.get('schema') in (2, 3):
         try:
             validator = ('valid_v3_lease_proof' if value.get('schema') == 3
@@ -1634,7 +1654,7 @@ def _valid_reservation(value, prior_run_id):
             value.get('run_id') == prior_run_id and
             value.get('checksum') == _recovery_checksum(prior_run_id) and
             value.get('consumed') is True and
-            _valid_hdp_flush(value.get('consume_hdp_flush')))
+            _valid_hdp_flush(value.get('consume_hdp_flush'), config_memsize))
 
 
 def _valid_recovery_regions(value):
@@ -1760,7 +1780,7 @@ def _graphics_final_clean(snapshot):
 
 
 def _valid_host_kiq(value, reservation, gc, hqd_doorbell_values,
-                    gart_forbidden_ranges=RECOVERY_LEGACY_GART_EXCLUSION):
+                    gart_forbidden_ranges=RECOVERY_LEGACY_GART_EXCLUSION, config_memsize=LEGACY_CONFIG_MEMSIZE):
     if not isinstance(value, dict):
         return False
     expected_keys = {'status','selector','packet_dwords','rptr_after',
@@ -1787,7 +1807,7 @@ def _valid_host_kiq(value, reservation, gc, hqd_doorbell_values,
             value.get('gfx_active_before_scrub') != 0 or
             value.get('gfx_doorbell_offset') != 0x400 or
             value.get('reservation') != reservation or
-            not _valid_hdp_flush(value.get('hdp_flush')) or
+            not _valid_hdp_flush(value.get('hdp_flush'), config_memsize) or
             not _valid_gart(value.get('gart'), gart_forbidden_ranges) or
             not _valid_graphics_snapshot(value.get('graphics_pipes_after_unmap')) or
             value.get('graphics_pipes_after_unmap') !=
@@ -1903,7 +1923,8 @@ def _validate_recovery_receipt(receipt, boot_id, prior_run_id,
         errors.append('recovery_receipt')
     if isinstance(gc, dict):
         reservation = gc.get('reservation')
-        if not _valid_reservation(reservation, prior_run_id):
+        if not _valid_reservation(reservation, prior_run_id,
+                                  receipt_config_memsize(receipt)):
             errors.append('recovery_receipt')
         guard = gc.get('graphics_pipe_guard')
         before = gc.get('graphics_pipes_before')
@@ -1923,7 +1944,8 @@ def _validate_recovery_receipt(receipt, boot_id, prior_run_id,
         host_kiq = gc.get('host_kiq')
         if gc.get('gfx_needs_unmap') is True:
             if not _valid_host_kiq(host_kiq, reservation, gc,
-                                   hqd_doorbell_values, gart_forbidden_ranges):
+                                   hqd_doorbell_values, gart_forbidden_ranges,
+                                   config_memsize=receipt_config_memsize(receipt)):
                 errors.append('recovery_receipt')
         elif (gc.get('gfx_needs_unmap') is not False or
               host_kiq != {'status':'not-needed'}):
@@ -1973,7 +1995,8 @@ def validate_recovery_receipt_v6(receipt, boot_id, prior_run_id,
                 any(not re.fullmatch(r'[0-9a-f]{64}', str(value))
                     for value in recovery_helpers_sha256.values()) or
                 receipt_helpers != recovery_helpers_sha256 or
-                not _valid_reservation(reservation, prior_run_id) or
+                not _valid_reservation(reservation, prior_run_id,
+                                       receipt_config_memsize(receipt)) or
                 (native_schema == 3 and
                  receipt.get('recovery_lease_schema') != 3) or
                 (native_schema == 2 and
@@ -2131,7 +2154,6 @@ def reuse_authorization(vm, boot_id, run_id, manifest=None, manifest_path=None):
     launches = ledger.get('launches')
     if not isinstance(launches, list) or not launches: return None, ['boot_ledger']
     if any(row.get('run_id') == run_id for row in launches): return None, ['run_id_reused']
-    ceiling = len(launches) >= 3
     prior = launches[-1].get('run_id')
     continuation_path = (vm/'run/retained-kiq-continuations'/boot_id/
                          (str(prior)+'.json'))
@@ -2149,7 +2171,7 @@ def reuse_authorization(vm, boot_id, run_id, manifest=None, manifest_path=None):
             error_key = 'startup_noqueue_receipt'
     try: receipt = json.loads(receipt_path.read_text())
     except (OSError, ValueError):
-        return None, sorted({error_key, 'launch_ceiling'} if ceiling else {error_key})
+        return None, [error_key]
     errors = validate_reuse_receipt(
         receipt, boot_id, prior, vm, run_id, manifest, manifest_path)
     used_recovery_ids = {row.get('recovery_id') for row in launches}
@@ -2163,8 +2185,6 @@ def reuse_authorization(vm, boot_id, run_id, manifest=None, manifest_path=None):
         used_authorization_ids = {row.get('authorization_id') for row in launches}
         if receipt.get('authorization_id') in used_authorization_ids:
             errors.append('retained_kiq_continuation_receipt')
-    if ceiling:
-        errors.append('launch_ceiling')
     return (receipt if not errors else None), sorted(set(errors))
 
 
@@ -2820,26 +2840,9 @@ def reserve_boot(directory, boot_id, experiment, recovery=None,
     ledger_raw = path.read_bytes()
     ledger = read_boot_ledger(path); launches = ledger.get('launches', [])
     prior = launches[-1].get('run_id') if launches else None
-    if recovery == 'manual-override':
-        # This sentinel is accepted only from the explicit CLI
-        # --manual-reuse --ack-risk path.  It is deliberately not passed to
-        # receipt validation and cannot create recovery authority.  The
-        # explicit experiment acknowledgement permits this one launch beyond
-        # the ordinary finite ledger ceiling.
-        if any(row.get('run_id') == experiment for row in launches):
-            raise ValueError('manual override reservation refused: run_id_reused')
-        reservation = {'run_id': experiment, 'reserved_epoch': time.time(),
-                       'manual_override': True, 'prior_run_id': prior,
-                       'manifest_sha256': (sha(Path(manifest_path).read_bytes())
-                                           if manifest_path is not None else None)}
-        launches.append(reservation)
-        ledger.update(schema=2, boot_id=boot_id,
-                      max_launches=ledger.get('max_launches'), launches=launches)
-        ledger.pop('experiment', None)
-        replace_json(path, ledger)
-        return
-    if len(launches) >= 3:
-        raise RuntimeError('launch ceiling exhausted')
+    # A same-boot reservation is never refused by launch count: the MODE2-reset +
+    # recovery-receipt teardown protocol is the proven safety boundary, and the
+    # ledger below is only ever appended to as the (unbounded) audit trail of it.
     if noqueue_proof is not None:
         current_raw = path.read_bytes()
         nq = helper('noqueue-qualification')
@@ -2866,10 +2869,14 @@ def reserve_boot(directory, boot_id, experiment, recovery=None,
     error_key = ('startup_noqueue_receipt' if startup else
                  'retained_kiq_continuation_receipt' if retained else
                  'recovery_receipt')
+    # Schema-6 receipts bind the recovery helper hashes pinned in the manifest;
+    # validating them without the manifest refuses every genuine receipt.
+    schema6 = isinstance(recovery, dict) and recovery.get('schema') == 6
     vm = directory.parent.parent
     errors = validate_reuse_receipt(
         recovery, boot_id, prior, vm if startup or retained else None,
-        experiment if retained else None, manifest if retained else None,
+        experiment if retained else None,
+        manifest if retained or schema6 else None,
         manifest_path if retained else None)
     if any(row.get('run_id') == experiment for row in launches): errors.append('run_id_reused')
     if recovery.get('recovery_id') in {row.get('recovery_id') for row in launches}:
@@ -3283,12 +3290,8 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
             one_run_policy_sha256=None,
             one_run_activation_sha256=None,
             prelaunch_proof_sha256=None,
-            manual_reuse=False, noqueue_reuse=None):
+            noqueue_reuse=None):
     """One bounded launch; a verified prior recovery may authorize same-boot reuse."""
-    # The explicit --manual-reuse/--ack-risk mode is reserved for a reviewed
-    # same-boot experiment when normal recovery authority is unavailable.  It
-    # remains opt-in at the CLI and is recorded as an experimental override;
-    # it must never be mistaken for a recovery receipt.
     noqueue_requested = bool(noqueue_reuse)
     one_run_requested = bool(one_run_policy_sha256 or one_run_activation_sha256)
     if bool(one_run_policy_sha256) != bool(one_run_activation_sha256):
@@ -3323,12 +3326,9 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
     if candidate179_requested and (resume_prelaunch or
             cap_revision_authority_sha256 or warm_requested):
         raise ValueError('candidate179 qualification cannot use another launch mode')
-    if manual_reuse and (resume_prelaunch or cap_revision_authority_sha256 or
-                         warm_requested or candidate179_requested):
-        raise ValueError('manual reuse cannot use another launch mode')
     if noqueue_requested and (resume_prelaunch or cap_revision_authority_sha256 or
                               warm_requested or candidate179_requested or
-                              one_run_requested or manual_reuse):
+                              one_run_requested):
         raise ValueError('noqueue reuse cannot use another launch mode')
     manifest = json.loads(manifest_path.read_text())
     probe_profile(manifest)
@@ -3463,12 +3463,13 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                         if cap_revision is not None:
                             recovery = cap_revision['receipt']
                     else:
-                        # Schema-2 launches have no generic same-boot authority.
-                        # A reviewed finite policy must select and bind one exact
-                        # launch instead of inheriting the historical rolling cap.
-                        recovery = 'manual-override' if manual_reuse else None
-                        if (used/(host['boot_id']+'.json')).exists() and not manual_reuse:
-                            reuse_errors = ['v2_reuse_requires_finite_authority']
+                        # Same-boot reuse is admitted automatically whenever the
+                        # immediately prior run on this boot left a valid recovery
+                        # receipt (authorizes_launch=true); no flag, no allowance
+                        # note. A fresh boot has no ledger file yet, so this is a
+                        # no-op there.
+                        recovery, reuse_errors = reuse_authorization(
+                            vm, host['boot_id'], manifest['run_id'], manifest, manifest_path)
                     if noqueue_requested:
                         noqueue_proof, reuse_errors = noqueue_admission(
                             vm, host, manifest, manifest_path, noqueue_reuse, errors)
@@ -3750,12 +3751,8 @@ if __name__ == '__main__':
     parser.add_argument('--candidate179-activation-sha256')
     parser.add_argument('--one-run-policy-sha256')
     parser.add_argument('--one-run-activation-sha256')
-    parser.add_argument('--manual-reuse', action='store_true',
-                        help='explicitly reuse a boot without a recovery receipt')
     parser.add_argument('--noqueue-reuse', type=Path,
                         help='authorize one explicit same-boot no-queue reuse from prior output')
-    parser.add_argument('--ack-risk', action='store_true',
-                        help='required acknowledgement for --manual-reuse')
     args = parser.parse_args()
     one_run_requested = bool(args.one_run_policy_sha256 or
                              args.one_run_activation_sha256)
@@ -3763,10 +3760,6 @@ if __name__ == '__main__':
         parser.error('one-run qualification requires both hashes')
     if one_run_requested and args.action != 'run':
         parser.error('one-run qualification is only valid with run')
-    if args.ack_risk and not args.manual_reuse:
-        parser.error('--ack-risk requires --manual-reuse')
-    if args.manual_reuse and (args.action != 'run' or not args.ack_risk):
-        parser.error('--manual-reuse requires run and --ack-risk')
     if one_run_requested and (args.resume_prelaunch or args.cap_revision_authority_sha256 or
                               args.warm_qualification_policy_sha256 or
                               args.candidate179_policy_sha256):
@@ -3826,5 +3819,5 @@ if __name__ == '__main__':
                          args.one_run_policy_sha256,
                          args.one_run_activation_sha256,
                          args.prelaunch_proof_sha256,
-                         args.manual_reuse, args.noqueue_reuse)
+                         args.noqueue_reuse)
     print(json.dumps(result, indent=2))

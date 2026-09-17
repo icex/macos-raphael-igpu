@@ -15,6 +15,7 @@ FIXTURE = ROOT / 'tests/fixtures/stopped-wptr-clear-schema6-positive.json'
 class StoppedWptrRecoveryTests(unittest.TestCase):
     def setUp(self):
         self.tool = load_tool()
+        self.tool.EXPECTED_CONFIG_MEMSIZE = 0x200
 
     def _host_kiq_registers(self):
         tool = self.tool

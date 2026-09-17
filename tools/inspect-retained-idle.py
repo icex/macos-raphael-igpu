@@ -177,7 +177,7 @@ class Bar5SelectorTransport(OBSERVER.Bar0ReadTransport):
             raise IdleInspectionError(f'forbidden selector value {value!r}')
         struct.pack_into('<I', self.bar0, RECOVERY.GRBM_GFX_CNTL_OFFSET, value)
         posted = self._raw32(RECOVERY.NBIO_CONFIG_MEMSIZE_OFFSET)
-        if posted != RECOVERY.EXPECTED_CONFIG_MEMSIZE:
+        if posted != RECOVERY.resolve_expected_config_memsize():
             raise IdleInspectionError('selector posting read failed')
 
     def metadata(self):

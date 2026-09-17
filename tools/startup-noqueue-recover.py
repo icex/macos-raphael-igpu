@@ -804,7 +804,7 @@ def _validate_transaction(value):
             set(reservation['hdp_flush']) != {'remap', 'posted_read'} or
             reservation['hdp_flush'].get('remap') not in RECOVERY.HDP_MEM_FLUSH_TARGETS or
             reservation['hdp_flush'].get('posted_read') !=
-            RECOVERY.EXPECTED_CONFIG_MEMSIZE):
+            RECOVERY.resolve_expected_config_memsize()):
         raise StartupRecoveryError('transaction reservation')
     if value['bar5'] != value['pre_scan']['vfio_region']:
         raise StartupRecoveryError('transaction BAR metadata')

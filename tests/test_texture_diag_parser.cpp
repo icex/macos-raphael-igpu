@@ -174,4 +174,93 @@ int main() {
     result = RaphaelTextureDiag::inspect(readFixture, &vcn, vcn.base() + 0x100, 1, crossed);
     assert(result.status == RaphaelTextureDiag::BadText);
 
+    // candidate 284: three RENCODE_IB_OP_SET_BALANCE_ENCODING_MODE (0x01000007) targets
+    // in the same AMDRadeonVADriver2 image as kVcnDpmTarget.
+    {
+        const RaphaelTextureDiag::Target *presetTargets[] = {
+            &RaphaelTextureDiag::kVcnPresetValueTarget,
+            &RaphaelTextureDiag::kVcnPresetHevcGateTarget,
+            &RaphaelTextureDiag::kVcnPresetAvcGateTarget,
+        };
+        for (auto *t : presetTargets) {
+            assert(t->driverPath == RaphaelTextureDiag::kVcnDpmTarget.driverPath);
+            assert(t->pathSize == RaphaelTextureDiag::kVcnDpmTarget.pathSize);
+            assert(t->uuid == RaphaelTextureDiag::kVcnDpmTarget.uuid);
+        }
+
+        // Exact TEXT offsets verified against the decompiled asm and the raw
+        // Mach-O (file offset = address - __TEXT vmaddr + __TEXT fileoff).
+        assert(RaphaelTextureDiag::kVcnPresetValueTarget.instructionOffset == 0x4d458);
+        assert(RaphaelTextureDiag::kVcnPresetHevcGateTarget.instructionOffset == 0x4dd74);
+        assert(RaphaelTextureDiag::kVcnPresetAvcGateTarget.instructionOffset == 0x4d88c);
+
+        // Vcn3EncCommand::addPresetEncodeModePacket: original load+range-check
+        // replaced by an unconditional mov esi,0x01000007 + 9-byte NOP.
+        static const uint8_t presetValueOriginal[14] = {
+            0x8b, 0x77, 0x30, 0x8d, 0x86, 0xfa, 0xff, 0xff, 0xfe, 0x83, 0xf8, 0x02, 0x77, 0x0a
+        };
+        static const uint8_t presetValuePatched[14] = {
+            0xbe, 0x07, 0x00, 0x00, 0x01, 0x66, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00
+        };
+        assert(RaphaelTextureDiag::kVcnPresetValueTarget.instructionSize == 14);
+        assert(std::memcmp(RaphaelTextureDiag::kVcnPresetValueTarget.instruction,
+                            presetValueOriginal, 14) == 0);
+        assert(std::memcmp(RaphaelTextureDiag::kVcnPresetValueTarget.patchedInstruction,
+                            presetValuePatched, 14) == 0);
+        size_t offset = 99, size = 99;
+        assert(RaphaelTextureDiag::patchSpan(RaphaelTextureDiag::kVcnPresetValueTarget, offset, size));
+        assert(offset == 0 && size == 14);
+
+        // Vcn3EncHevcCommand::buildGeneralCommand / Vcn3EncAvcCommand::buildGeneralCommand:
+        // cmp byte [r12+0x1c],1; jnz +0xb -> jnz replaced with two NOPs, same 8 bytes
+        // at both sites.
+        static const uint8_t gateOriginal[8] = {0x41, 0x80, 0x7c, 0x24, 0x1c, 0x01, 0x75, 0x0b};
+        static const uint8_t gatePatched[8] = {0x41, 0x80, 0x7c, 0x24, 0x1c, 0x01, 0x90, 0x90};
+        for (auto *t : {&RaphaelTextureDiag::kVcnPresetHevcGateTarget,
+                        &RaphaelTextureDiag::kVcnPresetAvcGateTarget}) {
+            assert(t->instructionSize == 8);
+            assert(std::memcmp(t->instruction, gateOriginal, 8) == 0);
+            assert(std::memcmp(t->patchedInstruction, gatePatched, 8) == 0);
+            offset = 99; size = 99;
+            assert(RaphaelTextureDiag::patchSpan(*t, offset, size));
+            assert(offset == 6 && size == 2);
+        }
+        assert(RaphaelTextureDiag::kVcnPresetHevcGateTarget.instructionOffset !=
+               RaphaelTextureDiag::kVcnPresetAvcGateTarget.instructionOffset);
+    }
+
+    // inspect() round trip for each new target, reusing the VCN image identity fixture.
+    {
+        const RaphaelTextureDiag::Target *presetTargets[] = {
+            &RaphaelTextureDiag::kVcnPresetValueTarget,
+            &RaphaelTextureDiag::kVcnPresetHevcGateTarget,
+            &RaphaelTextureDiag::kVcnPresetAvcGateTarget,
+        };
+        for (auto *t : presetTargets) {
+            Fixture preset;
+            makeVcnValid(preset);
+            std::memcpy(preset.bytes.data() + 0x400 + t->instructionOffset,
+                        t->instruction, t->instructionSize);
+            auto presetResult = RaphaelTextureDiag::inspect(readFixture, &preset,
+                                                            preset.base() + 0x100, 1, *t);
+            assert(presetResult.found && presetResult.uuidMatch &&
+                   presetResult.instructionMatch &&
+                   presetResult.status == RaphaelTextureDiag::Ok);
+
+            std::memcpy(preset.bytes.data() + 0x400 + t->instructionOffset,
+                        t->patchedInstruction, t->instructionSize);
+            presetResult = RaphaelTextureDiag::inspect(readFixture, &preset,
+                                                       preset.base() + 0x100, 1, *t);
+            assert(presetResult.found && presetResult.alreadyPatched &&
+                   presetResult.status == RaphaelTextureDiag::Ok);
+
+            std::memcpy(preset.bytes.data() + 0x400 + t->instructionOffset,
+                        t->instruction, t->instructionSize);
+            preset.bytes[0x400 + t->instructionOffset] ^= 0xff;
+            presetResult = RaphaelTextureDiag::inspect(readFixture, &preset,
+                                                       preset.base() + 0x100, 1, *t);
+            assert(presetResult.status == RaphaelTextureDiag::BadInstruction &&
+                   !presetResult.instructionMatch && !presetResult.alreadyPatched);
+        }
+    }
 }

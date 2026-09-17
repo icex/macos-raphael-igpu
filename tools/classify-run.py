@@ -7,14 +7,67 @@ from pathlib import Path
 import re
 import struct
 
-ENTRY_MC_BASE = 0xf400000000
-ENTRY_PHYSICAL_BASE = 0x840000000
-ENTRY_APERTURE_SIZE = 0x20000000
+# The VMID2 aperture's MC base, physical base and size are BIOS UMA-frame-buffer
+# dependent (the host raised this from 512 MiB to 2 GiB) and must never be assumed
+# fixed here. They are read from the kext's own "XR: <phase>: ... | FB base=...
+# top=... offset=..." serial lines (RaphaelGPU.cpp reportCpState -- units are
+# 16 MiB, i.e. each field is the live GCMC_VM_FB_LOCATION_BASE/TOP/OFFSET value
+# already masked to its low 24 bits) by _parse_fb_aperture_samples/_reduce_fb_aperture
+# below, and surfaced to _classify as a 'fb_aperture' event.
+FB_APERTURE_LINE = re.compile(
+    r'RaphaelGPU\s+rgpu:\s*@\s+XR:\s*(\S+):.*?\|\s*FB base=(0x[0-9a-fA-F]+)\s+'
+    r'top=(0x[0-9a-fA-F]+)\s+offset=(0x[0-9a-fA-F]+)')
+FB_APERTURE_UNIT_BITS = 24
+FB_APERTURE_MIN_SIZE = 1 << 28   # 256 MiB
+FB_APERTURE_MAX_SIZE = 1 << 34   # 16 GiB
 ENTRY_CHILD_CALLER = 0x55a72
 ENTRY_UPDATE_COUNT_KEYS = (
     'converted', 'physical', 'outside', 'system', 'invalid_template',
     'invalid_aperture', 'empty', 'overflow', 'span', 'zero')
 ENTRY_UPDATE_OMISSION_KEYS = ('child', 'eligible', 'control')
+
+
+def _parse_fb_aperture_samples(serial):
+    """Every 'XR: <phase>: ... | FB base=... top=... offset=...' sample.
+
+    These are plain kernel printf lines (RaphaelGPU.cpp reportCpState), not part
+    of the RGPU_EVENT/critical-replay protocol, so they must be read from the
+    plain serial capture directly, regardless of transport configuration.
+    """
+    text = serial.replace('\r', '')
+    return [dict(when=m[1], base=int(m[2], 16), top=int(m[3], 16),
+                 offset=int(m[4], 16))
+            for m in FB_APERTURE_LINE.finditer(text)]
+
+
+def _reduce_fb_aperture(samples):
+    """Reduce parsed XR samples to one validated aperture, or a failure reason.
+
+    Every XR: sample in a run must describe the same aperture:
+    relocateFbAperture() (RaphaelGPU.cpp) moves FB_LOCATION_BASE/TOP at most
+    once, before the first reportCpState() call, so every later sample should
+    agree. Disagreement means the aperture moved mid-run or the capture is
+    unreliable -- either way, it is not evidence a VMID2 conversion can be
+    checked against, so this fails closed rather than picking one sample.
+
+    Returns (aperture, None) on success, aperture being a dict of mc_base,
+    physical_base and aperture_size in bytes; or (None, failure_stage).
+    """
+    if not samples:
+        return None, 'vm_aperture_evidence_missing'
+    distinct = {(s['base'], s['top'], s['offset']) for s in samples}
+    if len(distinct) > 1:
+        return None, 'vm_aperture_evidence_conflicting'
+    base, top, offset = next(iter(distinct))
+    if (base == 0 or top == 0 or offset == 0 or top < base or
+            base > 0xffffff or top > 0xffffff or offset > 0xffffff):
+        return None, 'vm_aperture_evidence_invalid'
+    size = (top - base + 1) << FB_APERTURE_UNIT_BITS
+    if size & (size - 1) or not (FB_APERTURE_MIN_SIZE <= size <= FB_APERTURE_MAX_SIZE):
+        return None, 'vm_aperture_evidence_invalid'
+    return dict(mc_base=base << FB_APERTURE_UNIT_BITS,
+                physical_base=offset << FB_APERTURE_UNIT_BITS,
+                aperture_size=size), None
 
 
 def _recovery_lease_v2():
@@ -825,15 +878,25 @@ def parse_serial(serial, *, critical_replay_schema=None, expected_build=None,
 
 
 def parse_console_lifecycle(serial, expected_build):
-    """Read only console identity and panic evidence for dedicated CR2 runs."""
+    """Read only console identity, panic and FB-aperture evidence for dedicated CR2 runs."""
     identities = set(re.findall(
         r'RaphaelGPU\s+rgpu:\s*@\s+BUILD: identity=(\S+)',
         serial.replace('\r', '')))
     if identities - {expected_build}:
         raise ValueError('console has a conflicting build identity')
-    return [dict(row, build=expected_build)
+    rows = [dict(row, build=expected_build)
             for row in _parse_legacy_serial(serial)
             if row.get('kind') == 'guest_panic']
+    samples = _parse_fb_aperture_samples(serial)
+    if samples:
+        aperture, failure = _reduce_fb_aperture(samples)
+        row = dict(kind='fb_aperture', build=expected_build, ok=aperture is not None)
+        if aperture is not None:
+            row.update(aperture)
+        else:
+            row['reason'] = failure
+        rows.append(row)
+    return rows
 
 
 def parse_manifest_files(manifest, run):
@@ -1007,6 +1070,22 @@ def _classify(manifest, events, probe, defer_absent_workload=False):
         return verdict('INCONCLUSIVE', stage='identity_or_route_missing')
     probe_status = _probe_status(manifest, probe)
     required = manifest.get('spec', {}).get('required_observations', [])
+
+    def resolve_fb_aperture():
+        """This run's validated (mc_base, physical_base, aperture_size), or a
+        (verdict_name, stage) failure if the evidence is missing, conflicting or
+        implausible. Never assumes any particular carveout size -- see
+        _reduce_fb_aperture."""
+        rows = [r for r in events if r['kind'] == 'fb_aperture']
+        if not rows:
+            return None, ('INCONCLUSIVE', 'vm_aperture_evidence_missing')
+        if len(rows) > 1:
+            return None, ('INVALID', 'vm_aperture_evidence_conflicting')
+        row = rows[0]
+        if not row.get('ok'):
+            return None, ('INVALID', row.get('reason') or 'vm_aperture_evidence_invalid')
+        return (row['mc_base'], row['physical_base'], row['aperture_size']), None
+
     if manifest.get('recovery_lease_schema') in (2, 3):
         lease = _recovery_lease_v2()
         wire = [r.get('raw', '') for r in events
@@ -1211,17 +1290,21 @@ def _classify(manifest, events, probe, defer_absent_workload=False):
             if source > (1 << 64) - 1 - span:
                 return False
             return (template & 1 == 1 and template & 2 == 0 and
-                    ENTRY_MC_BASE <= source < ENTRY_MC_BASE + ENTRY_APERTURE_SIZE and
-                    source + span < ENTRY_MC_BASE + ENTRY_APERTURE_SIZE and
-                    ENTRY_PHYSICAL_BASE <= result <
-                        ENTRY_PHYSICAL_BASE + ENTRY_APERTURE_SIZE and
-                    result + span < ENTRY_PHYSICAL_BASE + ENTRY_APERTURE_SIZE and
-                    result == source - ENTRY_MC_BASE + ENTRY_PHYSICAL_BASE and
+                    mc_base <= source < mc_base + aperture_size and
+                    source + span < mc_base + aperture_size and
+                    physical_base <= result < physical_base + aperture_size and
+                    result + span < physical_base + aperture_size and
+                    result == source - mc_base + physical_base and
                     constructed == template | result and
                     row.get('bucket') in ('child', 'eligible') and
                     row.get('state') == 'returned')
 
         converted = [r for r in samples if r.get('domain') == 'converted']
+        if converted:
+            aperture, failure = resolve_fb_aperture()
+            if aperture is None:
+                return verdict(failure[0], stage=failure[1])
+            mc_base, physical_base, aperture_size = aperture
         if any(not valid_converted(row) for row in converted):
             return verdict('INVALID', stage='vmid2_entry_update_child_invalid')
         children = [r for r in converted if r.get('bucket') == 'child' and
@@ -1248,13 +1331,20 @@ def _classify(manifest, events, probe, defer_absent_workload=False):
         summaries = [r for r in events if r['kind'] == 'vm_map_process_summary']
         if any(not r.get('ok') for r in summaries):
             return verdict('INVALID', stage='map_process_root_summary')
+        root_aperture = None
         for row in roots:
             if row.get('repaired'):
+                if root_aperture is None:
+                    aperture, failure = resolve_fb_aperture()
+                    if aperture is None:
+                        return verdict(failure[0], stage=failure[1])
+                    root_aperture = aperture
+                mc_base, physical_base, aperture_size = root_aperture
                 attributes = row['native_root'] & ~0x0000ffffffffffc0
                 source = row['native_root'] & 0x0000ffffffffffc0
-                expected = source - ENTRY_MC_BASE + ENTRY_PHYSICAL_BASE
+                expected = source - mc_base + physical_base
                 if (attributes not in (0, 1, 5) or
-                        not ENTRY_MC_BASE <= source < ENTRY_MC_BASE + ENTRY_APERTURE_SIZE or
+                        not mc_base <= source < mc_base + aperture_size or
                         row['final_root'] != (expected | attributes)):
                     return verdict('INVALID', stage='map_process_root_conversion')
     if 'sdma_vm_program' in required:
