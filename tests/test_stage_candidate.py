@@ -648,26 +648,41 @@ class Candidate186StageTests(unittest.TestCase):
         self.assertIn("card_source_sha256", source[source.index("def verify_build_inputs"):source.index("def active_or_pending_vm")])
 
     def test_lilu_bundle_refuses_wrong_executable_or_info_bytes(self):
-        durable = Path("/home/bogdan/macos-vm/run/headless-lilu-verified-53b5a19812e6")
-        bundle = durable / "Lilu.kext"
-        manifest = durable / "build-manifest.json"
-        expected = self.tool.validate_lilu_inputs(
-            bundle,
-            "53b5a19812e66eeea3d3b874fe642f441cbfeccd171fb5ba05dc2e0ced3b8887",
-            "6714fee51444238c0540814729767485572441435bcf36a158571cf78317a669",
-            "e5d2554d29658699dd9535a9b8dd38ca9aae5aa5a12f65508b083d3c519cf378")
-        self.assertEqual(expected["lilu_bundle"], str(bundle.resolve()))
-        self.assertEqual(expected["lilu_build_manifest"], str(manifest.resolve()))
-        for key in ("lilu_executable_sha256", "lilu_info_sha256"):
-            kwargs = {
-                "lilu_executable_sha256": expected["lilu_executable_sha256"],
-                "lilu_info_sha256": expected["lilu_info_sha256"],
-            }
-            kwargs[key] = "0" * 64
-            with self.subTest(key=key), self.assertRaisesRegex(RuntimeError, "Lilu .* changed"):
-                self.tool.validate_lilu_inputs(
-                    bundle, kwargs["lilu_executable_sha256"],
-                    kwargs["lilu_info_sha256"], expected["lilu_build_manifest_sha256"])
+        with tempfile.TemporaryDirectory() as directory:
+            bundle = Path(directory) / "Lilu.kext"
+            executable = bundle / "Contents/MacOS/Lilu"
+            executable.parent.mkdir(parents=True)
+            # Minimal x86_64 MH_KEXT_BUNDLE header; no local driver is needed.
+            executable.write_bytes(bytes.fromhex(
+                "cffaedfe07000001030000000b000000" + "00" * 16))
+            info = bundle / "Contents/Info.plist"
+            info.write_bytes(plistlib.dumps({
+                "CFBundleIdentifier": "as.vit9696.Lilu",
+                "CFBundleExecutable": "Lilu", "CFBundleVersion": "1.6.8",
+            }))
+            digest = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
+            manifest = Path(directory) / "build-manifest.json"
+            manifest.write_text(json.dumps({
+                "product": "Lilu", "version": "1.6.8",
+                "bundle_id": "as.vit9696.Lilu", "architecture": "x86_64",
+                "macho_type": "MH_KEXT_BUNDLE", "signed": False,
+                "executable_sha256": digest(executable),
+                "info_plist_sha256": digest(info),
+            }))
+            expected = self.tool.validate_lilu_inputs(
+                bundle, digest(executable), digest(info), digest(manifest))
+            self.assertEqual(expected["lilu_bundle"], str(bundle.resolve()))
+            self.assertEqual(expected["lilu_build_manifest"], str(manifest.resolve()))
+            for path in (executable, info, manifest):
+                original = path.read_bytes()
+                path.write_bytes(original + b"tampered")
+                with self.subTest(path=path.name), self.assertRaisesRegex(
+                        RuntimeError, "Lilu .* changed"):
+                    self.tool.validate_lilu_inputs(
+                        bundle, expected["lilu_executable_sha256"],
+                        expected["lilu_info_sha256"],
+                        expected["lilu_build_manifest_sha256"])
+                path.write_bytes(original)
 
     def test_wrong_lilu_or_config_readback_does_not_replace_private_image(self):
         expected = {

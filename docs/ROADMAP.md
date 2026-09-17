@@ -12,6 +12,10 @@ The [previous roadmap](../findings/research/status-archives/roadmap-before-20260
 preserves the candidate159–194 history and review decisions; its dated launch budgets
 and “next experiment” instructions do not describe today's host.
 
+CI portability (2026-09-17): install image-analysis dependencies, fetch historical
+source contracts, and use temporary Lilu/KVM fixtures in host tests. The Linux
+regression and macOS source-build jobs remain required; see [CI setup](releases.md).
+
 ## Progress and remaining gates
 
 | Milestone | State | Evidence and remaining work |

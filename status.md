@@ -5,6 +5,15 @@ The user confirms it occurs across the desktop, not just Safari. Work stopped at
 user request; no running GPU guest and no new experiment planned tonight.
 [Next-session handoff](findings/research/streaming-handoff-20260916.md).
 
+## CI portability — 2026-09-17
+
+Run `35143887854` failed on missing NumPy/Pillow, shallow Git history, a local-only
+Lilu fixture and host KVM permissions. The repair supplies the CI dependencies and
+history and makes both fixture tests independent of host installations. Local
+validation: 965 Python tests OK (3 skipped), both software-UART qualifications
+and all CI C++/sanitizer checks pass. Hosted validation follows on `dev`; this
+changes no hardware qualification or launch authority.
+
 ## Host / final run
 
 - Boot `2508eb6d-ddf3-497d-9774-00a7ecebe3ed`; GPU0000:7b:00.0 remains

@@ -39,6 +39,9 @@ See [live status and evidence](status.md) for exact tested builds and the scope 
 each result. A successful build or individual probe does not establish full desktop
 readiness.
 
+Host tests and the macOS source build run in GitHub Actions on `dev`; see
+[CI prerequisites and scope](docs/releases.md).
+
 ## Goals and next steps
 
 - **Qualify full 4K Screen Sharing:** the isolated Retina helper now selects a crisp

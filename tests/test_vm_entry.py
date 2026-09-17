@@ -118,7 +118,12 @@ class VmEntryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             vm = Path(temporary)
             launcher = vm / "macos-vm.sh"
-            launcher.write_bytes((ROOT / "tools/macos-vm.sh").read_bytes())
+            # Exercise the real preflight against a fixture, without requiring KVM.
+            kvm = vm / "kvm"
+            kvm.touch()
+            source = (ROOT / "tools/macos-vm.sh").read_text()
+            self.assertIn("[[ -w /dev/kvm ]]", source)
+            launcher.write_text(source.replace("/dev/kvm", str(kvm)))
             launcher.chmod(0o700)
             for name in ("mac_hdd_ng.img", "OpenCore.qcow2", "env", "vm-entry.sh"):
                 (vm / name).touch()
@@ -146,6 +151,15 @@ class VmEntryTests(unittest.TestCase):
             for forbidden in ("/tmp/.X11-unix", ".Xauthority", "DISPLAY=", "--ipc=host",
                               "/dev/dri", "/dev/snd", "/pulse"):
                 self.assertNotIn(forbidden, joined)
+
+            # Missing KVM must still fail before the mocked Docker invocation.
+            kvm.unlink()
+            capture.unlink()
+            refused = subprocess.run([str(launcher), "run"], env=env, text=True,
+                                     capture_output=True, timeout=5)
+            self.assertNotEqual(refused.returncode, 0)
+            self.assertIn("is not writable", refused.stderr)
+            self.assertFalse(capture.exists())
 
 
 if __name__ == "__main__":

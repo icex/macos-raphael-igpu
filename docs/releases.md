@@ -1,6 +1,12 @@
 # Experimental releases
 
 GitHub Actions runs host-independent tests on `main`, `dev`, pull requests and `v*` tags.
+The Linux test job needs full Git history for historical identity regressions and
+`g++-multilib mtools qemu-system-x86 python3-numpy python3-pil` (Ubuntu packages).
+Run `python3 -B -m unittest discover -s tests` from a full checkout. Lilu validation
+and launcher tests create temporary fixtures; they require neither a local Lilu
+build nor access to `/dev/kvm`. The separate software-UART qualification uses QEMU
+software emulation. The macOS job then builds the kext from pinned dependencies.
 It compiles an x86_64 `MH_KEXT_BUNDLE` from the checked-out source using pinned
 MacKernelSDK and Lilu build inputs, then uploads a ZIP and SHA-256 checksum file.
 A `v*` tag publishes the verified build assets as a GitHub **prerelease** only after
