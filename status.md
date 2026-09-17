@@ -1,9 +1,25 @@
-# Live status — 2026-09-16, stopped for the night
+# Live status — 2026-09-17, stopped for the day
 
-**Picture clear; motion-triggered4K60 streaming slowdown remains unresolved.**
-The user confirms it occurs across the desktop, not just Safari. Work stopped at
-user request; no running GPU guest and no new experiment planned tonight.
-[Next-session handoff](findings/research/streaming-handoff-20260916.md).
+**4K60 streaming is stable. A true 120Hz virtual display is proven but not yet permanent.**
+No GPU guest is running. [Evidence](findings/research/encoder-pipeline-20260917.md).
+
+- **Encoder:** candidate 284 (merged into `dev`) forces the VCN BALANCE preset through guarded COW
+  patches in AMDRadeonVADriver2. 4K HEVC encodes in 11.15ms (88fps), matching Linux VAAPI.
+- **VRAM:** the BIOS UMA carve-out is now 2GB, with zero allocation failures. The host classifier
+  and recovery tools detect the carve-out size and base automatically (commits `5558426`,
+  `3e6ad72`).
+- **Capture:** guest Sunshine uses ScreenCaptureKit with session-range NV12
+  (`patches/sunshine/*sckit-capture.patch`, `*capture-color-range.patch`). The user reports a stable
+  stream with no stutter at 60fps. The app is signed with a stable local identity, so rebuilds keep
+  its Screen Recording and Accessibility grants. The stock Sunshine.app was removed.
+- **120Hz:** CoreDisplay derives the virtual display vsync from a mode-table integer field that is
+  hardcoded to 60. A live WindowServer poke gave an 8.33ms VBL and 112–122 captured frames/s. The
+  permanent 98-byte CoreDisplay patch is designed and assembler-verified but not built (roadmap
+  item 1a). 4K live encoding tops out at ~66–83fps, so use 1440p/1080p for 120fps.
+- **Last run:** host boot `7ee81442-5848-489e-9853-9fbeff78a8c2`; GPU 0000:7b:00.0 on `vfio-pci`.
+  Run `a8ac7432f1896779b154f619594898e9` (candidate 284, metal-132, attempt uma2g3, MODE2#186):
+  CORE_PROBE_PASS, shutdown **exited-after-guest-request**, recovery **recovered**
+  (authorizes_launch=true, `57f800271df14d75b553062c4d75de08`).
 
 ## CI portability — 2026-09-17
 

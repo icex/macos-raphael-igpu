@@ -14,6 +14,12 @@
 #import <Foundation/Foundation.h>
 #import <VideoToolbox/VideoToolbox.h>
 #import <IOSurface/IOSurface.h>
+extern const CFStringRef kVTCompressionPropertyKey_Priority __attribute__((weak_import));
+extern const CFStringRef kVTCompressionPropertyKey_LowLatencyMode __attribute__((weak_import));
+extern const CFStringRef kVTLowLatencyMode_Auto __attribute__((weak_import));
+extern const CFStringRef kVTLowLatencyMode_Low __attribute__((weak_import));
+extern const CFStringRef kVTLowLatencyMode_Medium __attribute__((weak_import));
+extern const CFStringRef kVTLowLatencyMode_Minimum __attribute__((weak_import));
 #include <stdint.h>
 #include <signal.h>
 #include <stdio.h>
@@ -162,6 +168,21 @@ int main(int argc, const char **argv) {
                     prioSpeed ? kCFBooleanTrue : kCFBooleanFalse);
             
                 if (s) { fprintf(stdout, "UNSUPPORTED PrioritizeEncodingSpeedOverQuality %d\n", (int)s); prioSpeed = -2; }
+            }
+            // Optional private/newer keys for encoder-preset experiments (non-fatal).
+            const char *envPriority = getenv("VT_PRIORITY");
+            if (!configStatus && envPriority) {
+                OSStatus s = VTSessionSetProperty(session, kVTCompressionPropertyKey_Priority,
+                                                  (__bridge CFTypeRef)@(atoi(envPriority)));
+                fprintf(stdout, "SET Priority=%d status=%d\n", atoi(envPriority), (int)s);
+            }
+            const char *envLowLatency = getenv("VT_LOWLATENCY");
+            if (!configStatus && envLowLatency) {
+                CFStringRef mode = !strcmp(envLowLatency, "minimum") ? kVTLowLatencyMode_Minimum :
+                                   !strcmp(envLowLatency, "low") ? kVTLowLatencyMode_Low :
+                                   !strcmp(envLowLatency, "medium") ? kVTLowLatencyMode_Medium : kVTLowLatencyMode_Auto;
+                OSStatus s = VTSessionSetProperty(session, kVTCompressionPropertyKey_LowLatencyMode, mode);
+                fprintf(stdout, "SET LowLatencyMode=%s status=%d\n", envLowLatency, (int)s);
             }
             if (!configStatus) configStatus = VTCompressionSessionPrepareToEncodeFrames(session);
             CFTypeRef actual = NULL;

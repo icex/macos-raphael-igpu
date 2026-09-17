@@ -214,43 +214,23 @@ from device enumeration or passing microbenchmarks.
 
 ## Next work, in order
 
-1. **Full 4K remote desktop (user priority,2026-09-16).** The current retina60
-   helper is installed and enabled idempotently; isolated setup is visibly crisp at
-   1920×1080 logical with 3840×2160 backing and nominal 60 Hz. Validate login/reboot
-   persistence, active backing pixels, composition under motion, and Screen Sharing
-   transport. Lower Apple Screen Sharing quality improved observed speed. A prior
-   mixed 90/120 Hz sequence produced user-black and was cleanly restored; actual
-   90/120 Hz operation is unproven. Keep the raw vncdotool black result scoped to
-   that capture oracle and preserve the lower-resolution fallback.
-   [Evidence](../findings/research/remote-retina-20260916.md). Trace advertised display
-   modes, framebuffer allocation and capture geometry; confirm the active backing
-   pixels, correct composition under motion, and clean shutdown/recovery. Treat
-   nominal60Hz mode timing separately from measured remote frame delivery and
-   latency. Sunshine's guarded allocation-diagnostic sampling is installed in282;
-   24+60 generated 4K hardware HEVC checks pass. HEVC streaming still fell to
-   20–30 FPS under mouse motion. After changing both the server to H.264 and the
-   client to Moonlight-Qt, the user reports 4K60, then clarifies it is better but
-   still imperfect, dropping to about 40 FPS with the cursor over transparent
-   Safari. The active H.264 trace averages ~55 submissions/s and 5.69 ms
-   submission time, with occasional 32–131 ms calls. Separate client delivery,
-   encoding and input latency before closing this gate; no single-cause claim.
-   Keep H.264 and HEVC advertised (`hevc_mode=2`, user preference) and preserve
-   LAN-only access. Compare codecs separately. Foundation replacement
-   was cancelled. The capture-lock candidate is live with approved permissions:
-   no capture locks observed, picture clear, but motion stalls remain across the
-   desktop. A lighter4K60 HEVC trace averages22.32ms/submission. Native encoder
-   completion and Metal preprocessing waits remain. The20Mbps CLI control felt worse and contained multi-second stalls;
-   its override was removed. Next correlate reclaim latency with encoder waits,
-   then compare original/patched apps under the same4K60 workload.
-   [Live evidence](../findings/research/sunshine-capturefix-live-20260916.json).
-   Run closed for the night: valid capture, guest-request shutdown, authorizing
-   recovery. No streaming-performance qualification.
-   [Resume handoff](../findings/research/streaming-handoff-20260916.md).
-   [Current measurements](../findings/research/moonlight-qt-h264-20260916.md).
-   The isolated simple-frame HEVC result (64.75 FPS) is not desktop qualification.
-   Login persistence also remains broken after startup despite the helper exiting0.
-   [Evidence](../findings/research/allocation-log-thunk-20260916.md). Physical
-   output is a separate gate.
+1. **Full 4K remote desktop streaming (user priority, updated 2026-09-17).** 4K60 is
+   now stable. Three fixes got there: the VCN preset patch (candidate 284, encode 11ms at 4K,
+   equal to Linux), a 2GB BIOS UMA carve-out (no allocation failures; host tools detect the
+   carve-out automatically), and Sunshine ScreenCaptureKit capture with session-range NV12
+   (no Sunshine GPU transfers; the user reports no stutter at 60fps).
+   [Evidence](../findings/research/encoder-pipeline-20260917.md). Remaining, in order:
+   a. **Permanent 120Hz virtual display.** macOS CoreDisplay fills every virtual display
+      mode's integer refresh with 60 and derives vsync from it. A live WindowServer memory
+      poke proved true 120Hz (8.33ms VBL, 112–122 capture frames/s). Build the designed
+      98-byte guarded COW patch in `_CGXVirtualDisplayApply` (CoreDisplay UUID
+      `B52FFBDE-B5F7-3F53-8D5E-2A822E7EE75E`, TEXT+0x371de) as a candidate 285 target
+      applied in WindowServer, then verify the VBL delta and 1440p120/1080p120 stream rates.
+   b. Persist the 120Hz CGVirtualDisplay holder as a LaunchAgent (currently a test
+      holder in `/var/tmp`), and Sunshine's high priority (renice -20, taskpolicy tier 0).
+   c. 4K above ~66–83fps is limited by the serialized VT plugin path (Metal pre-pass
+      ~5ms + VCN ~10ms). Only pursue this if 4K90 matters; 4K120 is beyond this VCN.
+   d. Login persistence of the display helper and physical output remain separate gates.
 2. Qualify supervised QEMU closure and guest-crash/command-channel failure paths,
    then representative workloads on independently initialized host boots.
    Supervised HMP quit now has positive cleanup evidence: five queues dequeued,
