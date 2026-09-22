@@ -56,7 +56,7 @@
     "gdb_hub0_vmid1_reprogram1",
     "map_process_summary"
   ],
-  "max_seconds": 6000,
+  "max_seconds": 43200,
   "prerequisites": [
     "candidate203_offline_capacity_discovery_reviewed",
     "audited_headless_lilu_bundle_and_manifest_pinned",
@@ -168,5 +168,5 @@
   "critical_replay_quiesce": {
     "version": 1
   },
-  "interactive_hold_seconds": 5400
+  "interactive_hold_seconds": 43000
 }

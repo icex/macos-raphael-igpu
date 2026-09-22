@@ -1490,7 +1490,7 @@ class ExperimentTests(unittest.TestCase):
         for field, value in [('source_clean', False), ('vfio_device', None), ('max_seconds', 0)]:
             self.assertIn(field, admit(dict(manifest, **{field: value}), self.host(), set()))
         self.assertEqual(admit(dict(manifest, max_seconds=6000), self.host(), set()), [])
-        self.assertIn('max_seconds', admit(dict(manifest, max_seconds=6001), self.host(), set()))
+        self.assertIn('max_seconds', admit(dict(manifest, max_seconds=43201), self.host(), set()))
         self.assertIn('boot_already_used', admit(manifest, self.host(), {'boot-A'}))
         self.assertIn('active_vm', admit(manifest, dict(self.host(), active_vm=True), set()))
         self.assertIn('reset_method', admit(

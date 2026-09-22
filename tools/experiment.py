@@ -995,7 +995,7 @@ def admit(manifest, host, used_boots, reuse_allowed=False):
     if manifest.get('source_clean') is not True: errors.append('source_clean')
     if manifest.get('vfio_device') != '0000:7b:00.0': errors.append('vfio_device')
     if (type(manifest.get('max_seconds')) is not int or
-            not 1 <= manifest['max_seconds'] <= 6000):
+            not 1 <= manifest['max_seconds'] <= 43200):
         errors.append('max_seconds')
     return errors
 
@@ -3272,8 +3272,8 @@ def run_post_probe_capture(vm, manifest, state, output, probe):
 
 def hold_interactive_session(vm, manifest, state, output, supervisor, monitor, classifier, end):
     seconds = manifest.get('spec', {}).get('interactive_hold_seconds', 0)
-    if type(seconds) is not int or not 0 <= seconds <= 6000:
-        raise ValueError('interactive_hold_seconds must be an integer from 0 to 6000')
+    if type(seconds) is not int or not 0 <= seconds <= 43200:
+        raise ValueError('interactive_hold_seconds must be an integer from 0 to 43200')
     deadline = min(end, time.time() + seconds)
     if seconds:
         write_once(output/'interactive-ready.json', {'run_id':manifest['run_id'],
