@@ -141,6 +141,7 @@ SUPPORTED_CARD_DIAGNOSTICS = {
     ("1.0.284", "metal-132"): "rgpuvmdiag=1",
     ("1.0.285", "metal-133"): "rgpuvmdiag=1",
     ("1.0.286", "metal-134"): "rgpuvmdiag=1",
+    ("1.0.287", "metal-135"): "rgpuvmdiag=1",
     ("1.0.261", "metal-107"): "rgpuvmdiag=1",
     ("1.0.260", "metal-106"): "rgpuvmdiag=1",
     ("1.0.259", "metal-105"): "rgpuvmdiag=1",
@@ -223,7 +224,7 @@ def configure(version, card_id, attempt=None):
     global CANDIDATE_VERSION, CARD_ID, NUMBER, WT, CANDIDATE, DIST, IDENTITIES
     global RUN_ID_FILE, CARD
     if not re.fullmatch(r"1\.0\.((?:1[0-9]{2}|2[0-5][0-9]|2[67][0-9]|280|281|282|283|284|285|286))", version):
-        raise RuntimeError("candidate version must be in the reviewed 1.0.100–1.0.286 range")
+        raise RuntimeError("candidate version must be in the reviewed 1.0.100–1.0.287 range")
     if not re.fullmatch(r"metal-[0-9]{3}", card_id):
         raise RuntimeError("card id must be metal-NNN")
     if attempt is not None and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,31}", attempt):
@@ -641,6 +642,11 @@ def validate_card(raw, expected_sha256):
                                    "rgpuvcnclk": "1200", "rgpudclk": "1028", "rgpugfxclk": "2200", "rgpusmuquery": "1", "rgpuvcnpreset": "1",
                                    "rgpudcn": "31", "rgpudcntrace": "6000"},
     ("1.0.286", "metal-134"): {"rgpuvmroot": "5", "rgpudump": "5000", "rgpugolden": "1",
+                                   "rgpuhangdump": "1", "rgpunobin": "1", "rgpusdmacfg": "2",
+                                   "rgputexdiag": "2", "rgpummhub": "1", "rgpuvcnfw": "1", "rgpuvcnapu": "1", "rgpuvcnsmu": "1", "rgpuvcndpg": "1", "rgpuvcndecfirst": "1", "rgpuvcnnodpm": "1", "rgpuvcnwptr": "1", "rgpualloclog": "1",
+                                   "rgpuvcnclk": "1200", "rgpudclk": "1028", "rgpugfxclk": "2200", "rgpusmuquery": "1", "rgpuvcnpreset": "1",
+                                   "rgpudcn": "23", "rgpudcntrace": "6000"},
+    ("1.0.287", "metal-135"): {"rgpuvmroot": "5", "rgpudump": "5000", "rgpugolden": "1",
                                    "rgpuhangdump": "1", "rgpunobin": "1", "rgpusdmacfg": "2",
                                    "rgputexdiag": "2", "rgpummhub": "1", "rgpuvcnfw": "1", "rgpuvcnapu": "1", "rgpuvcnsmu": "1", "rgpuvcndpg": "1", "rgpuvcndecfirst": "1", "rgpuvcnnodpm": "1", "rgpuvcnwptr": "1", "rgpualloclog": "1",
                                    "rgpuvcnclk": "1200", "rgpudclk": "1028", "rgpugfxclk": "2200", "rgpusmuquery": "1", "rgpuvcnpreset": "1",
@@ -1630,7 +1636,7 @@ def stage(expected_commit, expected_boot_id, expected_card_sha256,
                                ("1.0.220", "metal-067"), ("1.0.221", "metal-068"),
                                ("1.0.222", "metal-069"), ("1.0.223", "metal-070"),
                                ("1.0.224", "metal-071"), ("1.0.225", "metal-072"),
-                               ("1.0.225", "metal-073"), ("1.0.226", "metal-074"), ("1.0.227", "metal-075"), ("1.0.228", "metal-076"), ("1.0.229", "metal-077"), ("1.0.230", "metal-078"), ("1.0.269", "metal-115"), ("1.0.269", "metal-116"), ("1.0.270", "metal-117"), ("1.0.271", "metal-118"), ("1.0.272", "metal-119"), ("1.0.273", "metal-120"), ("1.0.274", "metal-121"), ("1.0.275", "metal-122"), ("1.0.276", "metal-123"), ("1.0.277", "metal-124"), ("1.0.279", "metal-126"), ("1.0.280", "metal-127"), ("1.0.280", "metal-128"), ("1.0.281", "metal-129"), ("1.0.282", "metal-130"), ("1.0.283", "metal-131"), ("1.0.284", "metal-132"), ("1.0.285", "metal-133"), ("1.0.286", "metal-134"), ("1.0.268", "metal-114"), ("1.0.267", "metal-113"), ("1.0.266", "metal-112"), ("1.0.265", "metal-111"), ("1.0.264", "metal-110"), ("1.0.263", "metal-109"), ("1.0.262", "metal-108"), ("1.0.261", "metal-107"), ("1.0.260", "metal-106"), ("1.0.259", "metal-105"), ("1.0.258", "metal-104"), ("1.0.257", "metal-103"), ("1.0.256", "metal-102"), ("1.0.255", "metal-101"), ("1.0.254", "metal-100"), ("1.0.253", "metal-099"), ("1.0.252", "metal-098"), ("1.0.251", "metal-097"), ("1.0.250", "metal-096"), ("1.0.249", "metal-095"), ("1.0.248", "metal-094"), ("1.0.247", "metal-093"), ("1.0.246", "metal-092"), ("1.0.245", "metal-091"), ("1.0.244", "metal-090"), ("1.0.243", "metal-089"), ("1.0.242", "metal-088"), ("1.0.241", "metal-087"), ("1.0.240", "metal-086"), ("1.0.239", "metal-085"), ("1.0.238", "metal-084"), ("1.0.237", "metal-083"), ("1.0.236", "metal-082"), ("1.0.235", "metal-081"), ("1.0.234", "metal-080"), ("1.0.233", "metal-079"))
+                               ("1.0.225", "metal-073"), ("1.0.226", "metal-074"), ("1.0.227", "metal-075"), ("1.0.228", "metal-076"), ("1.0.229", "metal-077"), ("1.0.230", "metal-078"), ("1.0.269", "metal-115"), ("1.0.269", "metal-116"), ("1.0.270", "metal-117"), ("1.0.271", "metal-118"), ("1.0.272", "metal-119"), ("1.0.273", "metal-120"), ("1.0.274", "metal-121"), ("1.0.275", "metal-122"), ("1.0.276", "metal-123"), ("1.0.277", "metal-124"), ("1.0.279", "metal-126"), ("1.0.280", "metal-127"), ("1.0.280", "metal-128"), ("1.0.281", "metal-129"), ("1.0.282", "metal-130"), ("1.0.283", "metal-131"), ("1.0.284", "metal-132"), ("1.0.285", "metal-133"), ("1.0.286", "metal-134"), ("1.0.287", "metal-135"), ("1.0.268", "metal-114"), ("1.0.267", "metal-113"), ("1.0.266", "metal-112"), ("1.0.265", "metal-111"), ("1.0.264", "metal-110"), ("1.0.263", "metal-109"), ("1.0.262", "metal-108"), ("1.0.261", "metal-107"), ("1.0.260", "metal-106"), ("1.0.259", "metal-105"), ("1.0.258", "metal-104"), ("1.0.257", "metal-103"), ("1.0.256", "metal-102"), ("1.0.255", "metal-101"), ("1.0.254", "metal-100"), ("1.0.253", "metal-099"), ("1.0.252", "metal-098"), ("1.0.251", "metal-097"), ("1.0.250", "metal-096"), ("1.0.249", "metal-095"), ("1.0.248", "metal-094"), ("1.0.247", "metal-093"), ("1.0.246", "metal-092"), ("1.0.245", "metal-091"), ("1.0.244", "metal-090"), ("1.0.243", "metal-089"), ("1.0.242", "metal-088"), ("1.0.241", "metal-087"), ("1.0.240", "metal-086"), ("1.0.239", "metal-085"), ("1.0.238", "metal-084"), ("1.0.237", "metal-083"), ("1.0.236", "metal-082"), ("1.0.235", "metal-081"), ("1.0.234", "metal-080"), ("1.0.233", "metal-079"))
     if candidate186 and identities["source_sha256"] != card["raphael_source_sha256"]:
         raise RuntimeError("candidate source differs from its experiment card")
     lilu = (validate_lilu_inputs(

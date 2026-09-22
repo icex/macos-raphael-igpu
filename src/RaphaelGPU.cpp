@@ -8498,7 +8498,13 @@ static void wrapDcnRegWait(void *ctx, uint32_t index, uint32_t shift, uint32_t f
 static void *wrapDcCreate(void *init) {
     if (init != nullptr && (dcnMode & (kDcnTrace | kDcnTranslate)) && dcnNativeRead == nullptr) {
         const auto cgs = *reinterpret_cast<uint64_t **>(reinterpret_cast<uint8_t *>(init) + 0x30);
-        const auto kernelText = [](uint64_t p) { return p >= 0xffffff8000000000ULL; };
+        // Kext text lives in the auxiliary collection at 0xffffff7f8... as well as in the
+        // boot collection at 0xffffff80...; HWLibs' cgs register functions are the former.
+        const auto kernelText = [](uint64_t p) { return p >= 0xffffff7f80000000ULL; };
+        if (cgs != nullptr) {
+            CRLOG("DCN: cgs %p slots ctx=%#llx read=%#llx write=%#llx getProperty=%#llx", cgs,
+                  cgs[5], cgs[8], cgs[9], cgs[10]);
+        }
         if (cgs != nullptr && kernelText(cgs[8]) && kernelText(cgs[9])) {
             dcnRegContext = reinterpret_cast<void *>(cgs[5]);
             dcnNativeRead = reinterpret_cast<DcnRegRead>(cgs[8]);
