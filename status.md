@@ -53,6 +53,16 @@ pool stayed off and DC ran its usual DCN 2.0 path (40 named waits, no panic): th
 offsets need re-deriving from a live `dc_context`.
 [Notes](findings/research/hdmi-audio-passthrough-20260917.md).
 
+## LAN, Screen Sharing and client size — 2026-09-22 evening
+
+The guest now has a second NIC bridged on the LAN (macvtap `rgpu-lan`, fixed `192.168.0.44`,
+primary service), which is what Apple Screen Sharing's High Performance mode needed; port
+forwards cannot carry it. RealVNC, Apple standard mode and High Performance mode work at
+`.44`; Sunshine listens there too. The fallback display can adopt a client's size with
+`remote-retina --size WxH`; a persistent virtual display was tried and is unusable here (1 s
+capture latency). [Notes](findings/research/lan-bridged-screen-sharing-20260922.md).
+Per boot the user runs the three root commands from the notes; the launcher does the rest.
+
 ## Next session (display and HDMI audio are the user's priority)
 
 1. **Host.** The iGPU is on `amdgpu` in boot `365fcd4e`. A guest run needs the user to run
