@@ -64,3 +64,18 @@ Next: find why the daemon's scale goes stale after a mode switch (compare `SLSDi
 properties before/after; try switching the mode before screensharingd starts, or restart
 screensharingd *and* the ScreensharingAgent's parent session), and the tap input-stream
 requirement (a real input device, e.g. QEMU usb-audio with a capture endpoint, may satisfy it).
+
+## 22:20 — virtual display as a login agent: same ~1.2 s capture latency [V]
+`virtual-display-server --serve` bootstrapped in `gui/501` (proper session, RunAtLoad) came up
+as main display 1920x1080@2x with a real picture, but ScreenCaptureKit again reported
+`latency count 1023 min 1192 ms max 1193 ms avg 1152 ms` and every Apple session dropped. So
+the launch domain was not the cause. Working theory: the CGVirtualDisplay's frame pacing (VBL)
+is not driven under the RaphaelGPU kext (compare the fallback display, whose capture is
+immediate), so frames arrive on a ~1 Hz fallback timer. This is the engineering item behind
+"client resolution": until a virtual display paces frames, the guest cannot offer arbitrary
+modes to Apple's client. The agent plist is parked as
+`org.raphaelgpu.virtual-display.plist.disabled-capture-latency`.
+Also: with the legacy VNC password enabled, Apple's iPad app authenticates with it
+(`authProtocol 2`) and runs standard mode (codec 1011); it used RSA/Mac login only when the
+server offered no VNC password... Sequoia refuses the DH method (type 30) that third-party iOS
+VNC apps use, so the VNC password must stay enabled for them.
