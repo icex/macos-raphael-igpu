@@ -32,14 +32,50 @@ validation: 965 Python tests OK (3 skipped), both software-UART qualifications
 and all CI C++/sanitizer checks pass. Hosted validation follows on `dev`; this
 changes no hardware qualification or launch authority.
 
+## Guest audio — 2026-09-22
+
+The user needs audio while using the VM over VNC/streaming. HDMI audio stays gated on the display
+link and DMCUB, so candidate 286 gets a host-backed output first: launch option `AUDIO=usb`
+replaces the image's driverless HDA codec with a QEMU `usb-audio` device on the host PipeWire
+pulse socket, driven by macOS's own USB audio class driver (no guest kext, no root).
+Launcher, entry script, harness contract and staging admit it; card `metal-134` carries it;
+999 host tests OK (3 skipped); container QEMU connects to PipeWire and creates the device.
+**Run 2026-09-22 (candidate 286, metal-134, run `04abf9aa923b43423685faadc2551432`, boot
+`67ab8c3f`, MODE2 #189):** verified. macOS lists the QEMU USB device as default output
+(2ch, 48kHz, USB transport), playback starts its engine, and the host sees an uncorked QEMU
+stream on the default sink. Desktop Metal probe OK (zero mismatches). In the guest, BlackHole
+2ch 0.7.1 is installed (hash checked against the Homebrew cask), a stacked multi-output device
+"Raphael Multi-Output" (USB + BlackHole) is the default output, and Sunshine's `audio_sink` is
+`BlackHole 2ch`; Sunshine plus the LAN relay were up at `192.168.0.43:48989` for the user's
+Moonlight test. The display hook attached its three routes but found the `cgs_device`
+read/write slots empty (`read=0 write=0 -> NOT interposed`), so translation and the DCN 3.02
+pool stayed off and DC ran its usual DCN 2.0 path (40 named waits, no panic): the slot
+offsets need re-deriving from a live `dc_context`.
+[Notes](findings/research/hdmi-audio-passthrough-20260917.md).
+
+## LAN, Screen Sharing and client size — 2026-09-22 evening
+
+The guest now has a second NIC bridged on the LAN (macvtap `rgpu-lan`, fixed `192.168.0.44`,
+primary service), which is what Apple Screen Sharing's High Performance mode needed; port
+forwards cannot carry it. RealVNC, Apple standard mode and High Performance mode work at
+`.44`; Sunshine listens there too. The fallback display can adopt a client's size with
+`remote-retina --size WxH`; a persistent virtual display was tried and is unusable here (1 s
+capture latency). [Notes](findings/research/lan-bridged-screen-sharing-20260922.md).
+Per boot the user runs the three root commands from the notes; the launcher does the rest.
+Evening: Moonlight video+audio work at `.44`; RealVNC works; Apple High Performance mode streamed
+only right after a login at 1920x1080 Retina with Mac login, and breaks after any display mode
+switch (stale scale until a WindowServer restart); Apple client audio tap fails; client
+resolution never works. Sessions can now last 12 h. Details in the notes.
+
 ## Next session (display and HDMI audio are the user's priority)
 
 1. **Host.** The iGPU is on `amdgpu` in boot `365fcd4e`. A guest run needs the user to run
    `sudo ~/macos-vm/gpu-bind.sh`. The candidate 285 launch has no recovery receipt; this is a
    fresh boot.
 2. **Get the user's agreement, then run candidate 286 / metal-134.** It is built, its identity
-   is recorded, and its card is committed on branch `candidate-286`. Launch with the
-   `c285-launch.sh` pattern adapted to 286. Expected outcome:
+   is recorded, and its card is committed on branch `candidate-286`. Launch with
+   `run/c286-launch.sh` (systemd-run, cycle.py). Expected outcome:
+   - the guest lists the QEMU USB audio device as its output and a sound reaches the host sink;
    - the DCN 3.02 pool builds without a panic or host fault;
    - the DCN wait and trace lines name the registers;
    - HPD and EDID are read over DDC1 from the dummy plug;
@@ -112,3 +148,31 @@ checkout. Do not push main without new authorization. Prior live entries are [ar
 and [earlier](findings/research/status-archives/status-before-night-close-20260916.md).
 
 
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-286-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-286-attempt-udp-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-286-attempt-lan-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-286-attempt-lan2-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`

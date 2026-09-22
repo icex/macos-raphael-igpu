@@ -111,7 +111,11 @@ static void report(NSString *phase,bool passed) {
 }
 int main(int argc,const char **argv) { @autoreleasepool {
     signal(SIGALRM,expired);alarm(45);[NSApplication sharedApplication];
-    if(argc!=2||(strcmp(argv[1],"--configure")&&strcmp(argv[1],"--status")&&strcmp(argv[1],"--low-resolution")))return 2;
+    // --size WxH: like --configure, but the fallback adopts WxH HiDPI (e.g. a
+    // remote client's own size) instead of 1920x1080. Not idempotent-checked.
+    unsigned wantW=1920,wantH=1080;bool sized=false;
+    if(argc==3&&!strcmp(argv[1],"--size")&&sscanf(argv[2],"%ux%u",&wantW,&wantH)==2&&wantW>=640&&wantH>=480&&wantW<=1920&&wantH<=1152)sized=true;
+    else if(argc!=2||(strcmp(argv[1],"--configure")&&strcmp(argv[1],"--status")&&strcmp(argv[1],"--low-resolution")))return 2;
     NSArray *before=inventory();
     if(!strcmp(argv[1],"--status")){report(@"status",retina(before));return retina(before)?0:1;}
     if(!fallback(before)){emit(@{@"error":@"expected exactly one active headless fallback display; no changes made",@"displays":before?:@[]});return 2;}
@@ -119,18 +123,18 @@ int main(int argc,const char **argv) { @autoreleasepool {
         bool ok=selectMode(1920,1080,1920,1080);pump(0.5);report(@"low-resolution",ok);return ok?0:3;
     }
     // Be idempotent: never switch an already-correct fallback mode.
-    if(retina(before)){report(@"configured",true);return 0;}
+    if(!sized&&retina(before)){report(@"configured",true);return 0;}
     if(!abi()){emit(@{@"error":@"virtual display ABI is unsupported; no changes made"});return 2;}
     CGVirtualDisplayDescriptor *d=[CGVirtualDisplayDescriptor new];
     d.queue=dispatch_get_main_queue();d.name=@"Raphael Retina setup";
     d.vendorID=0x5250;d.productID=0x344b;d.serialNum=0x344b0001;d.serialNumber=0x344b0001;
-    d.maxPixelsWide=3840;d.maxPixelsHigh=2160;d.sizeInMillimeters=CGSizeMake(600,337.5);
+    d.maxPixelsWide=3840;d.maxPixelsHigh=2304;d.sizeInMillimeters=CGSizeMake(600,337.5);
     d.redPrimary=CGPointMake(0.64,0.33);d.greenPrimary=CGPointMake(0.30,0.60);
     d.bluePrimary=CGPointMake(0.15,0.06);d.whitePoint=CGPointMake(0.3127,0.3290);
     CGVirtualDisplay *display=[[CGVirtualDisplay alloc] initWithDescriptor:d];
     if(!display){emit(@{@"error":@"temporary virtual display refused"});return 3;}
     CGDirectDisplayID temporary=display.displayID;
-    CGVirtualDisplayMode *mode=[[CGVirtualDisplayMode alloc] initWithWidth:1920 height:1080 refreshRate:60];
+    CGVirtualDisplayMode *mode=[[CGVirtualDisplayMode alloc] initWithWidth:wantW height:wantH refreshRate:60];
     CGVirtualDisplaySettings *settings=[CGVirtualDisplaySettings new];settings.hiDPI=1;settings.rotation=0;settings.modes=mode?@[mode]:@[];
     bool applied=mode&&[display applySettings:settings];
     // On24G830 the temporary display is online but lacks a public mode object.
@@ -146,7 +150,9 @@ int main(int argc,const char **argv) { @autoreleasepool {
     // Removing the temporary60Hz display chooses the fallback default itself.
     // Do not issue a redundant CGDisplaySetDisplayMode on that synthetic mode.
     bool selected=applied&&removed;pump(0.5);
-    bool ok=selected&&retina(inventory());
+    NSArray *after=inventory();
+    bool ok=selected&&(sized?(fallback(after)&&[after[0][@"width"] unsignedIntValue]==wantW&&[after[0][@"height"] unsignedIntValue]==wantH&&
+                                 [after[0][@"pixel_width"] unsignedIntValue]==2*wantW):retina(after));
     // A mismatch is reported for supervised recovery, not followed by another
     // unqualified synthetic-mode switch.
     emit(@{@"phase":@"transition",@"applied":@(applied),@"temporary_removed":@(removed),@"selected":@(selected)});

@@ -240,8 +240,11 @@ from device enumeration or passing microbenchmarks.
           they go to the SMU that also governs the CPU;
         - detile buffer and APU context;
         - 1080p60 then 2160p60.
-     d. HDMI audio: spoof 7b:00.1 as ab28, add the AppleGFXHDA pairing patch, bind .1 as root,
-        and update the launcher gates.
+     d. Guest audio for VNC/streaming (added 2026-09-22): launch option `AUDIO=usb` gives the
+        guest a QEMU USB audio device on the host PipeWire sink, no guest kext. Verify in the
+        metal-134 run; then BlackHole in the guest for Sunshine capture.
+     e. HDMI audio on the port: spoof 7b:00.1 as ab28, add the AppleGFXHDA pairing patch, bind
+        .1 as root, and update the launcher gates. Only after the display link works.
 1. **Full 4K remote desktop streaming (user priority, updated 2026-09-17).** 4K60 is
    now stable. Three fixes got there: the VCN preset patch (candidate 284, encode 11ms at 4K,
    equal to Linux), a 2GB BIOS UMA carve-out (no allocation failures; host tools detect the
