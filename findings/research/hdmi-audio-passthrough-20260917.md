@@ -28,9 +28,19 @@ DMCUB, which the guest must not start. So the guest gets a host-backed audio out
   loopback such as BlackHole 2ch (`https://existential.audio/downloads/BlackHole2ch-0.7.1.pkg`,
   sha256 `57b540f27a3e29c37e310e01bee0fdfab76733087e47f997ef9dccf851400dcf`, per the Homebrew
   cask) installed in the guest and selected as output. Not done yet.
-- **Guest check for the metal-134 run:** `system_profiler SPAudioDataType` lists the USB
-  device as default output; `afplay /System/Library/Sounds/Glass.aiff` produces a QEMU
-  sink-input on the host (`pactl list sink-inputs`).
+- **Verified 2026-09-22 (run `04abf9aa…`, boot `67ab8c3f`) [V]:** the guest enumerated
+  `QEMU USB Audio` (0x46f4:0002) on xHCI; `system_profiler` shows it as default output, 2ch,
+  48kHz, transport USB; `ioreg` engine state 1 with one client while playing; the host showed
+  `Sink Input` application.name=qemu, media.name=hda, s16le 44.1kHz stereo, uncorked. The only
+  QEMU pa messages are the benign volume/mute warnings.
+- **Streaming audio done the same day [V]:** BlackHole 2ch 0.7.1 installed in the guest
+  (sha256 verified), coreaudiod restarted, a stacked multi-output device "Raphael Multi-Output"
+  (main = QEMU USB, drift-compensated BlackHole) created with CoreAudio
+  (`AudioHardwareCreateAggregateDevice`, persistent) and set as default and system output, so
+  host speakers and Sunshine both receive system audio. `audio_sink = BlackHole 2ch` was added
+  to `~/.config/sunshine/sunshine.conf`. Tool: `tools/guest-audio-route.swift` (`list`/`apply`).
+  Caveat: macOS disables the volume keys on a multi-output device; set volume per app or in the
+  host.
 
 
 Research only. No device was bound and no VM was run for this. **[V]** verified in a binary, a

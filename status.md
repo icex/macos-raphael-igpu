@@ -40,7 +40,18 @@ replaces the image's driverless HDA codec with a QEMU `usb-audio` device on the 
 pulse socket, driven by macOS's own USB audio class driver (no guest kext, no root).
 Launcher, entry script, harness contract and staging admit it; card `metal-134` carries it;
 999 host tests OK (3 skipped); container QEMU connects to PipeWire and creates the device.
-Unrun on a guest. [Notes](findings/research/hdmi-audio-passthrough-20260917.md).
+**Run 2026-09-22 (candidate 286, metal-134, run `04abf9aa923b43423685faadc2551432`, boot
+`67ab8c3f`, MODE2 #189):** verified. macOS lists the QEMU USB device as default output
+(2ch, 48kHz, USB transport), playback starts its engine, and the host sees an uncorked QEMU
+stream on the default sink. Desktop Metal probe OK (zero mismatches). In the guest, BlackHole
+2ch 0.7.1 is installed (hash checked against the Homebrew cask), a stacked multi-output device
+"Raphael Multi-Output" (USB + BlackHole) is the default output, and Sunshine's `audio_sink` is
+`BlackHole 2ch`; Sunshine plus the LAN relay were up at `192.168.0.43:48989` for the user's
+Moonlight test. The display hook attached its three routes but found the `cgs_device`
+read/write slots empty (`read=0 write=0 -> NOT interposed`), so translation and the DCN 3.02
+pool stayed off and DC ran its usual DCN 2.0 path (40 named waits, no panic): the slot
+offsets need re-deriving from a live `dc_context`.
+[Notes](findings/research/hdmi-audio-passthrough-20260917.md).
 
 ## Next session (display and HDMI audio are the user's priority)
 
