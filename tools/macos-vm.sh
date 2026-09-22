@@ -39,7 +39,6 @@ GENERIC_GRAPHICS="${GENERIC_GRAPHICS:-on}" # off = authenticated headless/no-VGA
 GDB="${GDB:-off}"              # on = gdbstub on 127.0.0.1:1234 | wait = also start halted
 SSH_PORT="${SSH_PORT:-50922}"
 SCREEN_PORT="${SCREEN_PORT:-5900}"
-GUEST_HOSTFWD="hostfwd=udp::5900-:5900,hostfwd=udp::5901-:5901,hostfwd=udp::5902-:5902,hostfwd=tcp::48984-:48984,hostfwd=tcp::48989-:48989,hostfwd=tcp::48990-:48990,hostfwd=tcp::49010-:49010,hostfwd=udp::48998-:48998,hostfwd=udp::48999-:48999,hostfwd=udp::49000-:49000"
 
 usage() { sed -n '2,17p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 
@@ -244,15 +243,7 @@ DOCKER_ARGS=(
     --dns 1.1.1.1
     --dns 9.9.9.9
     -p "127.0.0.1:${SSH_PORT}:10022"
-    -p "${SCREEN_BIND:-127.0.0.1}:${SCREEN_PORT}:5900"
-    # Apple Screen Sharing's High Performance mode (HEVC) streams over UDP
-    # 5900-5902 in both directions; Sunshine uses its port family. Publish
-    # them next to the TCP viewer port and forward the same ports inside QEMU
-    # (ADDITIONAL_PORTS is appended to the image's -netdev user line).
-    -p "${SCREEN_BIND:-127.0.0.1}:5900:5900/udp" -p "${SCREEN_BIND:-127.0.0.1}:5901:5901/udp" -p "${SCREEN_BIND:-127.0.0.1}:5902:5902/udp"
-    -p "${SCREEN_BIND:-127.0.0.1}:48984:48984" -p "${SCREEN_BIND:-127.0.0.1}:48989:48989" -p "${SCREEN_BIND:-127.0.0.1}:48990:48990" -p "${SCREEN_BIND:-127.0.0.1}:49010:49010"
-    -p "${SCREEN_BIND:-127.0.0.1}:48998:48998/udp" -p "${SCREEN_BIND:-127.0.0.1}:48999:48999/udp" -p "${SCREEN_BIND:-127.0.0.1}:49000:49000/udp"
-    -e "ADDITIONAL_PORTS=${GUEST_HOSTFWD}"
+    -p "127.0.0.1:${SCREEN_PORT}:5900"
     -v "${VM_DIR}/mac_hdd_ng.img:/home/arch/OSX-KVM/mac_hdd_ng.img"
     -v "${VM_DIR}/run:/run/vm"
     -v "${VM_DIR}/vm-entry.sh:/entry.sh:ro"
