@@ -77,6 +77,15 @@ case "${GENERIC_GRAPHICS:-on}" in
     *) echo "unknown GENERIC_GRAPHICS=${GENERIC_GRAPHICS}" >&2; exit 1 ;;
 esac
 
+if [[ -n "${LAN_TAP_NODE:-}" ]]; then
+    # Bridged LAN NIC: open the macvtap node here and hand it to QEMU by
+    # descriptor; the guest gets its own LAN address next to the NAT NIC.
+    [[ -c "${LAN_TAP_NODE}" ]] || { echo "LAN tap node ${LAN_TAP_NODE} missing" >&2; exit 1; }
+    [[ "${LAN_MAC:-}" =~ ^([0-9a-f]{2}:){5}[0-9a-f]{2}$ ]] || { echo "LAN_MAC must be a lowercase MAC" >&2; exit 1; }
+    exec 3<>"${LAN_TAP_NODE}"
+    export EXTRA="${EXTRA:-} -netdev tap,id=lan0,fd=3 -device vmxnet3,netdev=lan0,id=lan0,mac=${LAN_MAC}"
+fi
+
 ./enable-ssh.sh >/dev/null 2>&1 || true
 echo "QEMU graphics policy: GENERIC_GRAPHICS=${GENERIC_GRAPHICS:-on}"
 exec bash "${LAUNCH}"

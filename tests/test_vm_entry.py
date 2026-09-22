@@ -11,7 +11,7 @@ ENTRY = ROOT / "tools/vm-entry.sh"
 
 
 class VmEntryTests(unittest.TestCase):
-    def run_entry(self, launch, mode="off", extra="-display none", audio=None):
+    def run_entry(self, launch, mode="off", extra="-display none", audio=None, more_env=None):
         with tempfile.TemporaryDirectory() as temporary:
             vm = Path(temporary)
             (vm / "Launch.sh").write_text("#!/bin/sh\n" + launch + "\n")
@@ -32,6 +32,8 @@ class VmEntryTests(unittest.TestCase):
                        DISK_BUS="ahci")
             if audio is not None:
                 env["AUDIO_DRIVER"] = audio
+            if more_env:
+                env.update(more_env)
             result = subprocess.run(["bash", str(ENTRY)], env=env, text=True,
                                     capture_output=True, timeout=5)
             return result, capture.read_text().splitlines() if capture.exists() else []
@@ -147,6 +149,29 @@ class VmEntryTests(unittest.TestCase):
                 + "\n-device hda-micro,audiodev=hda -vga vmware $EXTRA"):
             result, argv = self.run_entry(launch, audio="usb")
             self.assertNotEqual(result.returncode, 0, launch)
+            self.assertEqual(argv, [])
+
+    def test_lan_tap_node_is_opened_and_added_as_second_nic(self):
+        launch = "qemu-system-x86_64 -device qemu-xhci,id=xhci -vga vmware $EXTRA"
+        with tempfile.TemporaryDirectory() as temporary:
+            node = Path(temporary) / "tap7"; node.write_bytes(b"")
+            env_extra = {"LAN_TAP_NODE": str(node), "LAN_MAC": "52:54:00:52:47:44"}
+            # A regular file stands in for the character device only in the refusal
+            # test below; here the script must refuse it before touching QEMU.
+            result, argv = self.run_entry(launch, audio="none", extra="-display none",
+                                          more_env=env_extra)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(argv, [])
+            result, argv = self.run_entry(launch, audio="none", extra="-display none",
+                                          more_env={"LAN_TAP_NODE": "/dev/null",
+                                                    "LAN_MAC": "52:54:00:52:47:44"})
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("tap,id=lan0,fd=3", argv)
+            self.assertIn("vmxnet3,netdev=lan0,id=lan0,mac=52:54:00:52:47:44", argv)
+            self.assertEqual(argv.count("-netdev"), 1)
+            result, argv = self.run_entry(launch, audio="none", extra="-display none",
+                                          more_env={"LAN_TAP_NODE": "/dev/null", "LAN_MAC": "bad"})
+            self.assertNotEqual(result.returncode, 0)
             self.assertEqual(argv, [])
 
     def test_headless_launcher_reaches_docker_without_x11_or_host_media_devices(self):

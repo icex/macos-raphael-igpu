@@ -139,6 +139,20 @@ if [[ "${RAM_GB}" == auto ]]; then
     (( RAM_GB < 8 ))  && RAM_GB=8
 fi
 
+# --- bridged LAN NIC ----------------------------------------------------------
+# When the host has the rgpu-lan macvtap (created by root: ip link add link
+# enp9s0 name rgpu-lan type macvtap mode bridge; chown the /dev/tapN node), the
+# guest gets a second NIC on it and its own LAN address. Nothing is published
+# or forwarded on the host for it; host <-> guest traffic keeps the NAT NIC.
+LAN_ARGS=()
+LAN_IF="${LAN_IF:-rgpu-lan}"
+if [[ -d "/sys/class/net/${LAN_IF}" ]]; then
+    lan_node="/dev/tap$(cat "/sys/class/net/${LAN_IF}/ifindex")"
+    [[ -c "${lan_node}" && -r "${lan_node}" && -w "${lan_node}" ]] || die "${LAN_IF} exists but ${lan_node} is not readable and writable by $(id -un)"
+    LAN_ARGS=(--device "${lan_node}:${lan_node}" -e "LAN_TAP_NODE=${lan_node}"
+              -e "LAN_MAC=${LAN_MAC:-52:54:00:52:47:44}")
+fi
+
 # --- audio backend -----------------------------------------------------------
 AUDIO_ARGS=()
 case "${AUDIO}" in
@@ -244,6 +258,7 @@ DOCKER_ARGS=(
     --dns 9.9.9.9
     -p "127.0.0.1:${SSH_PORT}:10022"
     -p "127.0.0.1:${SCREEN_PORT}:5900"
+    "${LAN_ARGS[@]}"
     -v "${VM_DIR}/mac_hdd_ng.img:/home/arch/OSX-KVM/mac_hdd_ng.img"
     -v "${VM_DIR}/run:/run/vm"
     -v "${VM_DIR}/vm-entry.sh:/entry.sh:ro"
