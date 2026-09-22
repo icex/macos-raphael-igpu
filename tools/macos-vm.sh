@@ -149,8 +149,10 @@ LAN_IF="${LAN_IF:-rgpu-lan}"
 if [[ -d "/sys/class/net/${LAN_IF}" ]]; then
     lan_node="/dev/tap$(cat "/sys/class/net/${LAN_IF}/ifindex")"
     [[ -c "${lan_node}" && -r "${lan_node}" && -w "${lan_node}" ]] || die "${LAN_IF} exists but ${lan_node} is not readable and writable by $(id -un)"
+    # A macvtap delivers unicast frames only for its own MAC, so the guest NIC
+    # must carry that address (or root must set the macvtap to the guest's).
     LAN_ARGS=(--device "${lan_node}:${lan_node}" -e "LAN_TAP_NODE=${lan_node}"
-              -e "LAN_MAC=${LAN_MAC:-52:54:00:52:47:44}")
+              -e "LAN_MAC=${LAN_MAC:-$(cat "/sys/class/net/${LAN_IF}/address")}")
 fi
 
 # --- audio backend -----------------------------------------------------------
