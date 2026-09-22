@@ -35,3 +35,32 @@
 - Working route: `remote-retina --size WxH` (new) makes the fallback adopt WxH HiDPI through the
   temporary-display trick; `1180x820` (11-inch iPad) gives a 2360x1640 backing with a real
   picture [V]. Use it with the client-resolution option off.
+
+## Evening results (22:10) — what streams and what does not [V]
+- **Works:** RealVNC (standard RFB) at .44; Moonlight video and audio at .44 (Sunshine as a
+  keep-alive login agent, `audio_sink = BlackHole 2ch`, BlackHole default output, microphone
+  permission granted by the user in System Settings); guest sound to the host speakers via the
+  USB device (when it is the default output).
+- **Apple Screen Sharing (iPadOS 26 client):** High Performance streamed twice (20:34, 20:52),
+  both right after a login with the display at 1920x1080 Retina and with **Mac login** auth.
+  Every session with the VNC password is standard mode and fails (tiled OpenCL codec sends
+  nothing after the first frame; the client shows "waiting for first screen update" or the
+  session-select login screen). After any display mode switch (remote-retina --size, Sunshine
+  changing the mode for a Moonlight client) the daemon describes the screen in pixels
+  (e.g. `global rect 0 0 2064 2752`) instead of points and the client drops; only a
+  WindowServer restart (logout) cleared it, twice. The client-resolution option never works.
+- **Apple client audio:** the system-audio tap fails in coreaudiod with
+  `HALS_MetaDevice: hasNonTapInputStream == false` regardless of the default output device
+  (USB, multi-output, BlackHole) and of a default input (BlackHole). Open.
+- **Session length:** harness caps raised from 6000 s to 43200 s (experiment.py admission,
+  hold_interactive_session, stage-candidate) so a manual test session lasts 12 h.
+- **Auto-login:** configured since Sep 11 (`autoLoginUser` + kcpassword) but does not fire
+  after a `killall -HUP WindowServer`; the password had to be typed through the QEMU monitor
+  (`tools/drive.py type ... enter`).
+- **Login default** set back to `--configure` (1920x1080 Retina), the only state in which High
+  Performance mode has streamed; the iPad size is a manual `--size 1376x1032` afterwards.
+
+Next: find why the daemon's scale goes stale after a mode switch (compare `SLSDisplay`
+properties before/after; try switching the mode before screensharingd starts, or restart
+screensharingd *and* the ScreensharingAgent's parent session), and the tap input-stream
+requirement (a real input device, e.g. QEMU usb-audio with a capture endpoint, may satisfy it).

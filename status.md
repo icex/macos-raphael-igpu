@@ -62,6 +62,10 @@ forwards cannot carry it. RealVNC, Apple standard mode and High Performance mode
 `remote-retina --size WxH`; a persistent virtual display was tried and is unusable here (1 s
 capture latency). [Notes](findings/research/lan-bridged-screen-sharing-20260922.md).
 Per boot the user runs the three root commands from the notes; the launcher does the rest.
+Evening: Moonlight video+audio work at `.44`; RealVNC works; Apple High Performance mode streamed
+only right after a login at 1920x1080 Retina with Mac login, and breaks after any display mode
+switch (stale scale until a WindowServer restart); Apple client audio tap fails; client
+resolution never works. Sessions can now last 12 h. Details in the notes.
 
 ## Next session (display and HDMI audio are the user's priority)
 
