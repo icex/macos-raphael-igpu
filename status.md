@@ -134,3 +134,10 @@ checkout. Do not push main without new authorization. Prior live entries are [ar
 and [earlier](findings/research/status-archives/status-before-night-close-20260916.md).
 
 
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-286-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
