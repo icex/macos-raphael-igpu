@@ -67,6 +67,15 @@ only right after a login at 1920x1080 Retina with Mac login, and breaks after an
 switch (stale scale until a WindowServer restart); Apple client audio tap fails; client
 resolution never works. Sessions can now last 12 h. Details in the notes.
 
+## Candidate 287 ready — 2026-09-22 22:45
+
+Built and preflighted (1000 tests): the display hook's cgs pointer check now accepts the
+auxiliary kext collection range, which is why metal-134 never interposed the DAL registers.
+Run `run/c287-launch.sh` (card metal-135, rgpudcn=23, AUDIO=usb) once the user's 12-hour test
+session on candidate 286 ends (Wed 09:59 or earlier by stop file). Remote display: the virtual
+display's 1.2 s capture latency is a ScreenCaptureKit metric, not VBL; a permissioned SCKit
+probe is the next measurement. [Notes](findings/research/lan-bridged-screen-sharing-20260922.md).
+
 ## Next session (display and HDMI audio are the user's priority)
 
 1. **Host.** The iGPU is on `amdgpu` in boot `365fcd4e`. A guest run needs the user to run
