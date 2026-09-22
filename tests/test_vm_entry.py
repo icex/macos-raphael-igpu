@@ -11,7 +11,7 @@ ENTRY = ROOT / "tools/vm-entry.sh"
 
 
 class VmEntryTests(unittest.TestCase):
-    def run_entry(self, launch, mode="off", extra="-display none"):
+    def run_entry(self, launch, mode="off", extra="-display none", audio=None):
         with tempfile.TemporaryDirectory() as temporary:
             vm = Path(temporary)
             (vm / "Launch.sh").write_text("#!/bin/sh\n" + launch + "\n")
@@ -30,6 +30,8 @@ class VmEntryTests(unittest.TestCase):
                        VM_ENTRY_ROOT=str(vm), VM_ENTRY_CAPTURE=str(capture),
                        GENERIC_GRAPHICS=mode, EXTRA=extra, NOPICKER="false",
                        DISK_BUS="ahci")
+            if audio is not None:
+                env["AUDIO_DRIVER"] = audio
             result = subprocess.run(["bash", str(ENTRY)], env=env, text=True,
                                     capture_output=True, timeout=5)
             return result, capture.read_text().splitlines() if capture.exists() else []
@@ -114,6 +116,39 @@ class VmEntryTests(unittest.TestCase):
                 else:
                     self.assertEqual(argv[argv.index("-vga") + 1], "vmware")
 
+    IMAGE_AUDIO = ("-audiodev ${AUDIO_DRIVER:-alsa},id=hda -device ich9-intel-hda "
+                   "-device hda-duplex,audiodev=hda \\")
+
+    def test_usb_audio_replaces_the_image_hda_codec_on_the_pulse_backend(self):
+        launch = ("qemu-system-x86_64 -machine q35 \\\n-device qemu-xhci,id=xhci \\\n"
+                  "-device usb-kbd,bus=xhci.0 -device usb-tablet,bus=xhci.0 \\\n"
+                  + self.IMAGE_AUDIO + "\n-vga vmware $EXTRA")
+        result, argv = self.run_entry(launch, audio="usb")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(argv[argv.index("-audiodev") + 1], "pa,id=hda")
+        devices = [argv[index + 1] for index, value in enumerate(argv[:-1]) if value == "-device"]
+        self.assertEqual([d for d in devices if "audio" in d or "hda" in d],
+                         ["usb-audio,audiodev=hda,bus=xhci.0"])
+        self.assertEqual(argv.count("-audiodev"), 1)
+        # Every other mode leaves the image's codec line alone or strips it.
+        result, argv = self.run_entry(launch, audio="pa")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("hda-duplex,audiodev=hda", argv)
+        self.assertNotIn("usb-audio,audiodev=hda,bus=xhci.0", argv)
+        result, argv = self.run_entry(launch, audio="none")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(any("audio" in a or "hda" in a for a in argv))
+
+    def test_usb_audio_refuses_an_image_without_the_codec_or_xhci_shape(self):
+        for launch in (
+                "qemu-system-x86_64 -vga vmware " + self.IMAGE_AUDIO + "\n$EXTRA",   # no xhci
+                "qemu-system-x86_64 -device qemu-xhci,id=xhci -vga vmware $EXTRA",   # no codec
+                "qemu-system-x86_64 -device qemu-xhci,id=xhci \\\n" + self.IMAGE_AUDIO
+                + "\n-device hda-micro,audiodev=hda -vga vmware $EXTRA"):
+            result, argv = self.run_entry(launch, audio="usb")
+            self.assertNotEqual(result.returncode, 0, launch)
+            self.assertEqual(argv, [])
+
     def test_headless_launcher_reaches_docker_without_x11_or_host_media_devices(self):
         with tempfile.TemporaryDirectory() as temporary:
             vm = Path(temporary)
@@ -151,6 +186,27 @@ class VmEntryTests(unittest.TestCase):
             for forbidden in ("/tmp/.X11-unix", ".Xauthority", "DISPLAY=", "--ipc=host",
                               "/dev/dri", "/dev/snd", "/pulse"):
                 self.assertNotIn(forbidden, joined)
+
+            # AUDIO=usb is the one display-less mode that keeps a host audio path:
+            # the pulse socket is mounted and the entry script sees AUDIO_DRIVER=usb.
+            pulse = vm / "pulse"; pulse.mkdir()
+            import socket
+            with socket.socket(socket.AF_UNIX) as native:
+                native.bind(str(pulse / "native"))
+                capture.unlink()
+                source_usb = launcher.read_text().replace(
+                    'pulse_dir="/run/user/$(id -u)/pulse"', f'pulse_dir="{pulse}"')
+                launcher.write_text(source_usb)
+                usb = subprocess.run([str(launcher), "run"], env=dict(env, AUDIO="usb"),
+                                     text=True, capture_output=True, timeout=5)
+                self.assertEqual(usb.returncode, 0, usb.stderr)
+                argv_usb = capture.read_text().splitlines()
+                self.assertIn("AUDIO_DRIVER=usb", argv_usb)
+                self.assertIn(f"{pulse}:/xdgrt/pulse", argv_usb)
+                self.assertNotIn("AUDIO_DRIVER=none", argv_usb)
+                for forbidden in ("/tmp/.X11-unix", "/dev/dri", "/dev/snd"):
+                    self.assertNotIn(forbidden, "\n".join(argv_usb))
+                launcher.write_text(source.replace("/dev/kvm", str(kvm)))
 
             # Missing KVM must still fail before the mocked Docker invocation.
             kvm.unlink()

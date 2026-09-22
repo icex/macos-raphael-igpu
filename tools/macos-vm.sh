@@ -24,7 +24,7 @@ NAME="${NAME:-macos-sequoia}"
 VCPUS="${VCPUS:-8}"            # vCPUs; host has 8 cores / 16 threads
 RAM_GB="${RAM_GB:-auto}"       # auto = leave 8G for the host, clamp to 8..20
 DISK_BUS="${DISK_BUS:-ahci}"   # ahci (safe) | nvme (faster) | virtio
-AUDIO="${AUDIO:-pa}"           # pa (PipeWire's pulse server) | alsa | none
+AUDIO="${AUDIO:-pa}"           # pa (PipeWire's pulse server) | alsa | none | usb (USB audio class device on pa)
 NVRAM="${NVRAM:-stock}"        # stock (image default) | persist (EFI vars survive reboots)
 BOOTDISK_MODE="${BOOTDISK_MODE:-custom}"  # custom (per-VM serials, working) | stock (image default)
 NIC="${NIC:-vmxnet3}"          # Sequoia ships a vmxnet3 driver; it has no e1000 driver at all
@@ -126,8 +126,9 @@ if [[ "${GENERIC_GRAPHICS}" == on ]]; then
     fi
     [[ -n "${XAUTH}" && -r "${XAUTH}" ]] || die "no readable X authority file; set XAUTHORITY"
 else
-    # A display-less diagnostic run has no host audio consumer either.
-    AUDIO=none
+    # A display-less diagnostic run keeps no HDA codec (macOS has no driver for
+    # it); only the USB audio class device, which macOS drives itself, passes.
+    [[ "${AUDIO}" == usb ]] || AUDIO=none
 fi
 
 # RAM: macOS + Xcode wants a lot, the host still needs room to breathe.
@@ -141,14 +142,14 @@ fi
 # --- audio backend -----------------------------------------------------------
 AUDIO_ARGS=()
 case "${AUDIO}" in
-    pa)
+    pa|usb)
         # libpulse insists XDG_RUNTIME_DIR be a 0700 dir owned by the calling uid,
         # so hand it one from this directory rather than a root-owned docker mount.
         pulse_dir="/run/user/$(id -u)/pulse"
         [[ -S "${pulse_dir}/native" ]] || die "no PulseAudio/PipeWire socket at ${pulse_dir}/native; try --audio alsa"
         mkdir -p "${VM_DIR}/xdg"; chmod 700 "${VM_DIR}/xdg"
         AUDIO_ARGS=(-v "${VM_DIR}/xdg:/xdgrt" -v "${pulse_dir}:/xdgrt/pulse"
-                    -e XDG_RUNTIME_DIR=/xdgrt -e AUDIO_DRIVER=pa)
+                    -e XDG_RUNTIME_DIR=/xdgrt -e "AUDIO_DRIVER=${AUDIO}")
         ;;
     alsa)  AUDIO_ARGS=(--device /dev/snd -e AUDIO_DRIVER=alsa) ;;
     none)  AUDIO_ARGS=(-e AUDIO_DRIVER=none) ;;

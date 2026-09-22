@@ -26,7 +26,7 @@ and long-duration reliability are still being tested.
 | Memory and synchronization | Buffer/texture reuse, synchronized CPU/GPU texture updates, retained color contents, GPU fences, shared events and cross-process IOSurface transfers pass targeted checks. |
 | Hardware video | H.264 and HEVC Main8 encode/decode work. HEVC Main10 decoding passes short tests; Main10 hardware encoding is unavailable in the current native profile set. |
 | Shutdown and reuse | Repeated clean guest shutdowns and same-host-boot reuse work in the supervised workflow. Crash recovery and independent-host-boot coverage remain incomplete. |
-| Physical HDMI/DisplayPort | Not working yet; use guest Screen Sharing. A DCN 3.1.5 port of Apple's display core is in progress (candidate 286). HDMI output needs Raphael's DMCUB display firmware, which the guest must not start: a guest firmware load froze the host on 2026-09-17. HDMI audio follows the display link. |
+| Physical HDMI/DisplayPort | Not working yet; use guest Screen Sharing. A DCN 3.1.5 port of Apple's display core is in progress (candidate 286). HDMI output needs Raphael's DMCUB display firmware, which the guest must not start: a guest firmware load froze the host on 2026-09-17. HDMI audio follows the display link. Guest audio for remote use comes from a QEMU USB audio device on the host (launch option `AUDIO=usb`, first run pending). |
 
 The tested baseline is **macOS Sequoia build 24G830** with a matching driver,
 Lilu, OpenCore configuration and grafted VBIOS. Stock QEMU 10.1.2 now works with

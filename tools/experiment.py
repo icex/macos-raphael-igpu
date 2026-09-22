@@ -393,7 +393,11 @@ def launch_options(data):
     value = data.get('launch_options')
     headless = dict(historical, GENERIC_GRAPHICS='off')
     debugger = dict(headless, GDB='on')
-    if type(value) is not dict or value not in (historical, headless, debugger):
+    # AUDIO=usb: the launcher swaps the image's HDA codec (no macOS driver) for
+    # a QEMU usb-audio device on the host pulse socket. Display-less only.
+    contracts = (historical, headless, debugger,
+                 dict(headless, AUDIO='usb'), dict(debugger, AUDIO='usb'))
+    if type(value) is not dict or value not in contracts:
         raise ValueError('launch options must select the exact historical, no-graphics, or debugger contract')
     return dict(value)
 
@@ -2996,6 +3000,13 @@ def validate_running(manifest, observed):
     if manifest.get('launch_options', {}).get('GENERIC_GRAPHICS') == 'off' and \
             graphics != ['-vga', 'none', '-display', 'none']:
         errors.append('generic_graphics')
+    usb_audio = [row for row in observed.get('pci_topology', [])
+                 if row.get('model') == 'usb-audio']
+    if manifest.get('launch_options', {}).get('AUDIO') == 'usb':
+        if usb_audio != [{'model':'usb-audio', 'bus':'xhci.0'}]:
+            errors.append('usb_audio_device')
+    elif usb_audio:
+        errors.append('unexpected_usb_audio_device')
     if manifest.get('gpu') is False:
         if vfio: errors.append('unexpected_vfio_device')
         return errors

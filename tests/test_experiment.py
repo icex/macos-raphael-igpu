@@ -996,6 +996,32 @@ class ExperimentTests(unittest.TestCase):
             with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, 'launch options'):
                 tool.launch_options({'launch_options':bad})
 
+    def test_usb_audio_launch_option_is_display_less_only_and_checked_in_argv(self):
+        tool = self.module()
+        headless = {'BOOTDISK_MODE':'custom', 'NVRAM':'stock', 'GENERIC_GRAPHICS':'off'}
+        debugger = dict(headless, GDB='on')
+        for good in (dict(headless, AUDIO='usb'), dict(debugger, AUDIO='usb')):
+            self.assertEqual(tool.launch_options({'launch_options':good}), good)
+        for bad in (dict(headless, AUDIO='pa'), dict(headless, AUDIO='none'),
+                    dict(debugger, AUDIO='on'),
+                    {'BOOTDISK_MODE':'custom', 'NVRAM':'stock', 'AUDIO':'usb'}):
+            with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, 'launch options'):
+                tool.launch_options({'launch_options':bad})
+        observed = {'image_id':'img', 'vfio_args':[], 'serial_args':[],
+                    'graphics_args':['-vga', 'none', '-display', 'none'],
+                    'pci_topology':[{'model':'qemu-xhci'},
+                                    {'model':'usb-audio', 'bus':'xhci.0'}]}
+        manifest = {'image_id':'img', 'gpu':False, 'launch_options':dict(headless, AUDIO='usb')}
+        self.assertEqual(tool.validate_running(manifest, observed), [])
+        plain = {'image_id':'img', 'gpu':False, 'launch_options':headless}
+        self.assertIn('unexpected_usb_audio_device', tool.validate_running(plain, observed))
+        for topology in ([{'model':'qemu-xhci'}],
+                         [{'model':'usb-audio', 'bus':'xhci.0'}] * 2,
+                         [{'model':'usb-audio', 'bus':'pcie.0', 'slot':7, 'function':0}]):
+            with self.subTest(topology=topology):
+                bad = dict(observed, pci_topology=topology)
+                self.assertIn('usb_audio_device', tool.validate_running(manifest, bad))
+
     def test_critical_replay_manifest_selector_is_explicit_and_numeric(self):
         tool = self.module()
         self.assertIsNone(tool.critical_replay_schema({}))

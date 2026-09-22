@@ -37,6 +37,20 @@ if [[ "${AUDIO_DRIVER:-}" == none ]]; then
     sed -i '/-audiodev/d; /intel-hda/d; /hda-duplex/d' "${LAUNCH}"
 fi
 
+if [[ "${AUDIO_DRIVER:-}" == usb ]]; then
+    # Swap the image's HDA codec (no macOS driver) for a USB audio class device
+    # on the pulse backend; macOS's own AppleUSBAudio drives it, no guest kext.
+    grep -Eq -- '-device qemu-xhci,id=xhci([[:space:],\\]|$)' "${LAUNCH}" || {
+        echo 'usb audio needs the image xhci controller' >&2; exit 1; }
+    sed -i -E 's/-audiodev [^[:space:],]+,id=hda([[:space:],\\]|$)/-audiodev pa,id=hda\1/;
+               s/-device ich9-intel-hda -device hda-duplex,audiodev=hda([[:space:],\\]|$)/-device usb-audio,audiodev=hda,bus=xhci.0\1/' "${LAUNCH}"
+    launch_body="$(grep -v '^[[:space:]]*#' "${LAUNCH}")"
+    [[ $(grep -c -- '-audiodev pa,id=hda' <<<"${launch_body}") -eq 1 &&
+       $(grep -c -- '-device usb-audio,audiodev=hda,bus=xhci.0' <<<"${launch_body}") -eq 1 ]] &&
+        ! grep -Eq -- 'intel-hda|hda-duplex|hda-micro|hda-output' <<<"${launch_body}" || {
+        echo 'failed to produce exactly one usb-audio device on the pa backend' >&2; exit 1; }
+fi
+
 case "${GENERIC_GRAPHICS:-on}" in
     on) ;;
     off)

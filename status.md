@@ -32,14 +32,25 @@ validation: 965 Python tests OK (3 skipped), both software-UART qualifications
 and all CI C++/sanitizer checks pass. Hosted validation follows on `dev`; this
 changes no hardware qualification or launch authority.
 
+## Guest audio — 2026-09-22
+
+The user needs audio while using the VM over VNC/streaming. HDMI audio stays gated on the display
+link and DMCUB, so candidate 286 gets a host-backed output first: launch option `AUDIO=usb`
+replaces the image's driverless HDA codec with a QEMU `usb-audio` device on the host PipeWire
+pulse socket, driven by macOS's own USB audio class driver (no guest kext, no root).
+Launcher, entry script, harness contract and staging admit it; card `metal-134` carries it;
+999 host tests OK (3 skipped); container QEMU connects to PipeWire and creates the device.
+Unrun on a guest. [Notes](findings/research/hdmi-audio-passthrough-20260917.md).
+
 ## Next session (display and HDMI audio are the user's priority)
 
 1. **Host.** The iGPU is on `amdgpu` in boot `365fcd4e`. A guest run needs the user to run
    `sudo ~/macos-vm/gpu-bind.sh`. The candidate 285 launch has no recovery receipt; this is a
    fresh boot.
 2. **Get the user's agreement, then run candidate 286 / metal-134.** It is built, its identity
-   is recorded, and its card is committed on branch `candidate-286`. Launch with the
-   `c285-launch.sh` pattern adapted to 286. Expected outcome:
+   is recorded, and its card is committed on branch `candidate-286`. Launch with
+   `run/c286-launch.sh` (systemd-run, cycle.py). Expected outcome:
+   - the guest lists the QEMU USB audio device as its output and a sound reaches the host sink;
    - the DCN 3.02 pool builds without a panic or host fault;
    - the DCN wait and trace lines name the registers;
    - HPD and EDID are read over DDC1 from the dummy plug;

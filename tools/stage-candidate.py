@@ -660,9 +660,11 @@ def validate_card(raw, expected_sha256):
                 card.get("recovery_critical_replay_tolerance") != "terminal-prefix-open" or
                 card.get("functional_boot_arguments") != CANDIDATE203_FUNCTIONAL[pair] or
                 card.get("required_boot_flags") != ["-liluheadless"] or
-                card.get("launch_options") != {
+                card.get("launch_options") not in ({
                     "BOOTDISK_MODE": "custom", "NVRAM": "stock",
-                    "GENERIC_GRAPHICS": "off", "GDB": "on"} or
+                    "GENERIC_GRAPHICS": "off", "GDB": "on"}, {
+                    "BOOTDISK_MODE": "custom", "NVRAM": "stock",
+                    "GENERIC_GRAPHICS": "off", "GDB": "on", "AUDIO": "usb"}) or
                 not re.fullmatch(r"[0-9a-f]{64}", str(card.get("raphael_source_sha256", ""))) or
                 not re.fullmatch(r"[0-9a-f]{40}", str(card.get("raphael_source_commit", "")))):
             raise RuntimeError("candidate card contract mismatch")

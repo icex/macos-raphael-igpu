@@ -1,5 +1,38 @@
 # HDMI audio for the passed-through Raphael iGPU — plan, 2026-09-17
 
+## Update 2026-09-22 — guest audio for remote use goes through a USB audio device first
+
+The user's need is audio while using the VM over Screen Sharing/VNC and streaming, not sound on
+the HDMI port itself. HDMI audio (below) is gated on the display link, and that link is gated on
+DMCUB, which the guest must not start. So the guest gets a host-backed audio output first:
+
+- **Mechanism [V]:** launch option `AUDIO=usb`. `tools/macos-vm.sh` mounts the host pulse
+  socket (PipeWire) into the container and `tools/vm-entry.sh` rewrites the image's
+  `-audiodev ${AUDIO_DRIVER},id=hda -device ich9-intel-hda -device hda-duplex,audiodev=hda` into
+  `-audiodev pa,id=hda -device usb-audio,audiodev=hda,bus=xhci.0`, fail-closed (exactly one
+  usb-audio device, no HDA codec left, image xhci controller required). Guest sound then plays
+  on the host's default sink, next to the VNC viewer.
+- **Why USB, not the image's HDA codec [V]:** the guest has no driver for QEMU's HDA codec
+  (AppleALC is disabled and has no entry for it; no VoodooHDA on the host), so past guests had no
+  audio device at all. macOS drives a USB audio class device with its own `AppleUSBAudio`, so no
+  guest kext, no OpenCore change and no host root work.
+- **Harness [V]:** `experiment.py launch_options` admits `AUDIO=usb` only on the display-less and
+  debugger contracts; `validate_running` requires exactly one `usb-audio` on `xhci.0` when the
+  option is set and refuses one otherwise. `stage-candidate.py` accepts the option for the
+  functional card contract. Card `metal-134` (candidate 286) carries it.
+- **Smoke test [V]:** the container QEMU 10.1.2 connects to the host PipeWire pulse socket as
+  the container user and instantiates `usb-audio` (only benign `set_sink_input_volume` warnings).
+  The deployed `vm-entry.sh` transforms the real image `Launch.sh` correctly (dry run, 52 argv).
+- **Streaming caveat [I]:** Sunshine on macOS captures audio from an *input* device named by
+  `audio_sink`; a plain output device is not enough. Moonlight audio therefore also needs a
+  loopback such as BlackHole 2ch (`https://existential.audio/downloads/BlackHole2ch-0.7.1.pkg`,
+  sha256 `57b540f27a3e29c37e310e01bee0fdfab76733087e47f997ef9dccf851400dcf`, per the Homebrew
+  cask) installed in the guest and selected as output. Not done yet.
+- **Guest check for the metal-134 run:** `system_profiler SPAudioDataType` lists the USB
+  device as default output; `afplay /System/Library/Sounds/Glass.aiff` produces a QEMU
+  sink-input on the host (`pactl list sink-inputs`).
+
+
 Research only. No device was bound and no VM was run for this. **[V]** verified in a binary, a
 plist, a source file or live sysfs. **[I]** inferred.
 

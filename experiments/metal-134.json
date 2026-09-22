@@ -1,6 +1,6 @@
 {
   "id": "metal-134",
-  "question": "With rgpudcn=23 (trace, translate, DCN 3.02 pool, inert DMUB guard) and DMCUB fenced off (strap reports DMCUB absent, all DMCUB writes dropped, no guest DMCUB firmware), does Apple's display core build its DCN 3.02 pool on Raphael, translate every DAL register access without a guest panic or host fault, detect the HDMI sink and read its EDID over DDC1, while Metal, the desktop and teardown stay unchanged?",
+  "question": "With rgpudcn=23 (trace, translate, DCN 3.02 pool, inert DMUB guard) and DMCUB fenced off (strap reports DMCUB absent, all DMCUB writes dropped, no guest DMCUB firmware), does Apple's display core build its DCN 3.02 pool on Raphael, translate every DAL register access without a guest panic or host fault, detect the HDMI sink and read its EDID over DDC1, while Metal, the desktop and teardown stay unchanged, and does macOS drive the QEMU usb-audio device (AUDIO=usb) as an output that reaches the host PipeWire sink when the guest plays a sound?",
   "candidate_version": "1.0.286",
   "probe_profile": {
     "name": "desktop-metal",
@@ -21,7 +21,7 @@
     "socket": "run/critical.sock",
     "capture": "critical.txt"
   },
-  "behavior_change": "Candidate 286 removes candidate 285's guest DMCUB firmware registration (which froze the host) and refuses rgpudcn bit 8. rgpudcn=23: dc_create 0xfea5e interposes the cgs_device read/write slots and, only then, sets hw_internal_rev 60 for family 0x8f (DCN 3.02 pool); DCN 3.0.2 register indices are translated to 3.1.5 (307 moves, 1484 drops, pipe power domains renumbered, 9 field permutations); CC_DC_PIPE_DIS reads with DC_DMCUB_ENABLE cleared and every DMCUB register write is dropped; the Navi DALSMC mailbox is emulated; dc_hardware_init 0xff053 installs an inert dc_dmub_srv if needed; generic_reg_wait 0x110bd7 names each wait. rgpuvd120 is not set. All other boot arguments are unchanged from metal-132.",
+  "behavior_change": "Candidate 286 removes candidate 285's guest DMCUB firmware registration (which froze the host) and refuses rgpudcn bit 8. rgpudcn=23: dc_create 0xfea5e interposes the cgs_device read/write slots and, only then, sets hw_internal_rev 60 for family 0x8f (DCN 3.02 pool); DCN 3.0.2 register indices are translated to 3.1.5 (307 moves, 1484 drops, pipe power domains renumbered, 9 field permutations); CC_DC_PIPE_DIS reads with DC_DMCUB_ENABLE cleared and every DMCUB register write is dropped; the Navi DALSMC mailbox is emulated; dc_hardware_init 0xff053 installs an inert dc_dmub_srv if needed; generic_reg_wait 0x110bd7 names each wait. rgpuvd120 is not set. All other boot arguments are unchanged from metal-132. Launch option AUDIO=usb (new): the launcher mounts the host pulse socket and the entry script replaces the image HDA codec with a USB audio class device (-device usb-audio,audiodev=hda,bus=xhci.0 on -audiodev pa); macOS drives it with AppleUSBAudio, no guest kext.",
   "required_observations": [
     "loaded_build",
     "route_guards",
@@ -157,7 +157,8 @@
     "BOOTDISK_MODE": "custom",
     "NVRAM": "stock",
     "GENERIC_GRAPHICS": "off",
-    "GDB": "on"
+    "GDB": "on",
+    "AUDIO": "usb"
   },
   "required_boot_flags": [
     "-liluheadless"
