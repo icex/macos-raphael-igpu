@@ -79,6 +79,24 @@ for d in all {
     print("\(d.id)\t\(d.name)\tuid=\(d.uid)\tmaker=\(d.manufacturer)\tin=\(d.inputs) out=\(d.outputs)\(flags)")
 }
 if mode == "list" { exit(0) }
+if mode == "default-input" {
+    let needle = CommandLine.arguments.count > 2 ? CommandLine.arguments[2] : ""
+    guard let target = all.first(where: { $0.inputs > 0 && $0.name.contains(needle) }) else {
+        print("no input device matching \(needle)"); exit(2) }
+    let s = setDefault(kAudioHardwarePropertyDefaultInputDevice, target.id)
+    print("default input -> \(target.name) (\(target.id)): \(s)")
+    exit(s == noErr ? 0 : 4)
+}
+if mode == "default" {
+    // default <name substring>: make that device the default and system output.
+    let needle = CommandLine.arguments.count > 2 ? CommandLine.arguments[2] : ""
+    guard let target = all.first(where: { $0.outputs > 0 && $0.name.contains(needle) }) else {
+        print("no output device matching \(needle)"); exit(2) }
+    let s1 = setDefault(kAudioHardwarePropertyDefaultOutputDevice, target.id)
+    let s2 = setDefault(kAudioHardwarePropertyDefaultSystemOutputDevice, target.id)
+    print("default output -> \(target.name) (\(target.id)): \(s1) system output: \(s2)")
+    exit(s1 == noErr && s2 == noErr ? 0 : 4)
+}
 
 guard let usb = all.first(where: { $0.manufacturer.contains("QEMU") && $0.outputs > 0 }) else {
     print("no QEMU USB output device"); exit(2) }
