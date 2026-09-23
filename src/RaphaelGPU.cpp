@@ -8727,8 +8727,11 @@ static void wrapDcDmubQueue(void *dcDmub, const uint32_t *cmd) {
     size_t len = 0;
     line[0] = 0;
     for (unsigned d = 0; d < 16; d++) len += snprintf(line + len, sizeof(line) - len, " %08x", cmd[d]);
-    // Raphael has four display pipes; DCN 3.02 code also gates a fifth.
-    const bool deliver = type == 128 && !(sub == 3 && (cmd[1] & 0xff) >= 4) && dmubDeliverReady();
+    // Raphael has four display pipes and four pixel PLLs (0x14-0x17, the host only uses 0x14);
+    // DCN 3.02 code also addresses a fifth of each.
+    const bool extraPipe = sub == 3 && (cmd[1] & 0xff) >= 4;
+    const bool extraPll = sub == 2 && ((cmd[2] & 0xff) > 0x17);
+    const bool deliver = type == 128 && !extraPipe && !extraPll && dmubDeliverReady();
     CRLOG("DCN: DMUB cmd#%u type=%u sub=%u bytes=%u %s:%s", dmubCommands, type, sub, bytes,
           deliver ? "deliver" : "log-only", line);
     if (!deliver) return;
@@ -8740,7 +8743,15 @@ static void wrapDcDmubQueue(void *dcDmub, const uint32_t *cmd) {
         dmubDeliverDead = true;
         return;
     }
-    for (unsigned d = 0; d < 16; d++) fb[(dcnRingBar + dmubWptr + 4 * d) / 4] = cmd[d];
+    uint32_t out[16];
+    for (unsigned d = 0; d < 16; d++) out[d] = cmd[d];
+    // DIG1_TRANSMITTER_CONTROL: the host's own HDMI command carries connobj_id 0x0c (HDMI
+    // type A) where Apple's leaves 0; digmode 3 is HDMI.
+    if (sub == 1 && ((out[1] >> 16) & 0xff) == 3 && ((out[3] >> 16) & 0xff) == 0) {
+        out[3] |= 0x0cu << 16;
+        CRLOG("DCN: DMUB cmd#%u transmitter connobj_id 0 -> 0x0c", dmubCommands);
+    }
+    for (unsigned d = 0; d < 16; d++) fb[(dcnRingBar + dmubWptr + 4 * d) / 4] = out[d];
     __sync_synchronize();
     dmubWptr = (dmubWptr + 64) % dcnRingSize;
     dmubPending = true;

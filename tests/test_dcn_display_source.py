@@ -76,7 +76,7 @@ class DcnDisplaySourceTests(unittest.TestCase):
     def test_dmub_delivery_is_gated(self):
         start = SOURCE.index('static void wrapDcDmubQueue(')
         body = SOURCE[start:SOURCE.index('\nstatic void installDcnRoutes(', start)]
-        self.assertIn('const bool deliver = type == 128 && !(sub == 3 && (cmd[1] & 0xff) >= 4) && dmubDeliverReady();', body)
+        self.assertIn('const bool deliver = type == 128 && !extraPipe && !extraPll && dmubDeliverReady();', body)
         self.assertIn('PE_parse_boot_argn("rgpudallog", &dalLogMask, sizeof(dalLogMask));', SOURCE)
         self.assertIn('(dcnMode & kDcnDmubDeliver) && !dmubDeliverDead', SOURCE)
         # The only DMCUB register the hooks write is INBOX1_WPTR.
