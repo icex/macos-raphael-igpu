@@ -11,8 +11,7 @@ boot `dc8add85-5070-419f-959d-6cc094c914be`, MODE2 #223.
   stayed at 0x17c0 after WPTR advanced to 0x1800, timing out at 100ms; delivery
   disabled itself. Timer advances, CNTL=0x900c6, SCRATCH0=0x43. This proves CPU
   access, not firmware responsiveness or physical HDMI output.
-- **Capture:** CORE_PROBE_PASS, final critical record count 424. No HDMI picture
-  confirmed. Offscreen probe success is separate from physical presentation.
+- **Capture:** CORE_PROBE_PASS, final critical record count 424. User reported Samsung **No signal**. Offscreen probe success is separate from physical presentation.
 - **Shutdown/recovery:** exited-after-guest-request; recovered with
   authorizes_launch=true. Post-run SMU version query OK. No guest running.
 - **Next:** query running firmware version through Linux's GPINT channel, independent

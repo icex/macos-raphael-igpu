@@ -142,3 +142,6 @@ unbind, while dm_sw_fini destroys the DMUB service. Thus a host reboot is not a
 guarantee of retained firmware after handoff; early liveness evidence is required
 before attributing a failure to guest PSP transitions. Existing retained scratch
 registers and the hardware timer do not establish firmware command-loop health.
+
+User observation for candidate 302: Samsung showed **No signal**. This confirms
+the physical-output failure independently of its passing offscreen Metal probe.
