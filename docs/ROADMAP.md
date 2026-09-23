@@ -417,3 +417,6 @@ Candidate 298 distinguishes raw all-ones inbox reads from CGS-generated zeros;
 nonzero BAR controls match both accessors. Clean guest shutdown completed, but
 CR2 producer overflow (512 records, five drops) blocked recovery and reuse.
 Reduce optional diagnostic volume before another launch; preserve loss gates.
+
+Candidate 299 is built/tested but unrun: read-only aperture-boundary checks and
+reduced optional CR2 logging, awaiting reboot after 298 failed recovery.

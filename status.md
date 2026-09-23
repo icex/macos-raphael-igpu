@@ -33,9 +33,18 @@ forced stop, authorizing recovery and responsive SMU. [Archive](findings/researc
 
 No guest running after 298. GPU remains vfio-pci, power/control=on. GitHub icex
 authentication works. Candidates 291–297 integrated on remote dev at 153a23d;
-298 delivery follows this status commit. 1004 host tests OK (three skips).
+298 and the archived 291–293 branch-tip verdicts are delivered at 761774b. 1004 host tests OK (three skips).
 HDMI audio remains gated on verified physical video; prior USB/Moonlight audio
 and remote-rendering evidence retain their separate scope.
+
+## Next candidate prepared
+
+Candidate 299 / metal-147 is built and dry-run clean (1004 tests OK, three skips),
+not launched. It reduces optional CR2 logging while preserving critical failures,
+and probes indirect reads around the PCI aperture boundary. Launch script:
+`~/macos-vm/run/c299-launch.sh`. It remains gated on a fresh boot and user gpu-bind;
+no same-boot recovery exception was introduced. Linux/Apple source audit is in the
+[access-path note](findings/research/c298-indirect-access-20260923.md).
 
 ## Verified progress
 

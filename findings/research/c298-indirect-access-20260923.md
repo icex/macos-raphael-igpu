@@ -32,3 +32,38 @@ raw MM_DATA is 0xffffffff and CGS returns 0; so the validated accessor masks fai
 reads, but bypassing it does not make the inbox reachable. The inbox stayed disabled.
 Clean guest-request shutdown completed. CR2 count=512/drop=5 prevented recovery
 and same-boot reuse despite a successful subsequent SMU probe. See live status.
+
+## Linux and Apple source audit; candidate 299 prepared
+
+Linux `gmc_v10_0.c:693-703` uses PCI BAR0 normally, but on native x86 APU
+(non-passthrough) replaces that aperture with get_mc_fb_offset and real VRAM size.
+Thus the host journal's BAR=2048MiB does not establish a 2GiB PCI BAR; live sysfs
+still exposes 256MiB. No resource0_resize file is exposed on this host.
+`amdgpu_device.c:717-752` confirms the MM_INDEX/HI/DATA sequence used here.
+`amdgpu_device_aper_access` prefers the CPU aperture and applies HDP coherency;
+`amdgpu_device_vram_access` falls back to MM_INDEX only beyond that aperture.
+Native APU success therefore does not validate this guest's high-offset MM path.
+
+Linux `amdgpu_dm_dmub.c:654-674` allocates the DMUB region BO and records both
+CPU and GPU addresses. `dmub_dcn31.c:191-218` programs CW3/CW4 directly from GPU
+addresses, unlike the separately translated firmware CW0/CW1. Subtracting GFXHUB
+FB_BASE for the inbox is source-supported; applying CW0's physical translation
+to CW4 would not be justified by this code. The host TMR reservation on boot
+90122d1c is fb+0x7e000000, size 0xa00000; inbox fb+0x7fae5400 lies beyond it.
+That does not establish the exact hardware access policy for the inbox.
+
+Apple 24G830 `AMDRadeonX6000Framebuffer` disassembly at 0x4a054/0x4a06a and
+0x1c9ba/0x1ca34 establishes raw versus validated reads; candidate 298 verifies
+that distinction live. HWLibs `_hdp_5_0_initialize_aperture` at 0x3a65d and
+`_hdp_5_0_3_initialize_aperture` at 0x3ae2a clear aperture registers through
+_gvm_write_register; register-index table decoding is still required before
+attributing the failure to those writes. No speculative HDP change is applied.
+
+Candidate 299, metal-147, adds read-only samples around 256MiB and at higher
+in-range VRAM offsets (excluding the host TMR). Ordinary serial retains detailed
+indirect checks, register/window dumps and command payloads; critical summaries,
+readback failures and recovery records stay in CR2. This reduces optional record
+pressure without enlarging the buffer or relaxing capture/recovery gates.
+Built and 1004 host tests OK, dry-run clean; NOT launched. Launcher:
+`~/macos-vm/run/c299-launch.sh`. Boot 90122d1c still lacks 298's recovery receipt;
+user reboot and gpu-bind are required before the next cycle.
