@@ -8364,9 +8364,9 @@ static constexpr size_t kOffDcCreate       = 0xfea5e;
 static constexpr size_t kOffDcHardwareInit = 0xff053;
 enum : uint32_t {
     kDcnTrace = 1, kDcnTranslate = 2, kDcnPool302 = 4, kDcnWithdrawnDmcubFirmware = 8,
-    kDcnDmubGuard = 16, kDcnDioWake = 32, kDcnHostI2cSpeed = 64,
+    kDcnDmubGuard = 16, kDcnDioWake = 32, kDcnHostI2cSpeed = 64, kDcnDmcubSurvey = 128,
     kDcnAllowed = kDcnTrace | kDcnTranslate | kDcnPool302 | kDcnDmubGuard | kDcnDioWake |
-                  kDcnHostI2cSpeed,
+                  kDcnHostI2cSpeed | kDcnDmcubSurvey,
 };
 static uint32_t dcnMode = 0;
 static uint32_t dcnTraceBudget = 1500;
@@ -8538,6 +8538,79 @@ static void *wrapDcCreate(void *init) {
     return dc;
 }
 
+
+// Read-only survey of the DMCUB the host driver left running (rgpudcn bit 128). Nothing here
+// writes a register or VRAM: it logs every non-zero DMCUB register, whether the firmware timer
+// advances, where each memory window lives in VRAM, and the last commands in the inbox ring.
+static void dcnSurveyDmcub(const char *when) {
+    if (!(dcnMode & kDcnDmcubSurvey) || dcnNativeRead == nullptr) return;
+    auto rd = [](uint32_t index) { return dcnNativeRead(dcnRegContext, index); };
+    char line[240];
+    size_t len = 0;
+    unsigned printed = 0;
+    auto emit = [&](uint32_t index, uint32_t value) {
+        len += snprintf(line + len, sizeof(line) - len, " %x=%x", index, value);
+        if (++printed % 8 == 0) { CRLOG("DCN: DMCUB %s regs%s", when, line); len = 0; line[0] = 0; }
+    };
+    line[0] = 0;
+    if (const uint32_t v = rd(0x363a)) emit(0x363a, v);                  // DMCUB_RBBMIF_SEC_CNTL
+    for (uint32_t index = 0x364e; index <= 0x36c0; index++)
+        if (const uint32_t v = rd(index)) emit(index, v);
+    if (len) CRLOG("DCN: DMCUB %s regs%s", when, line);
+
+    const uint32_t t0 = rd(0x36bd);                                      // DMCUB_TIMER_CURRENT
+    IODelay(1000);
+    const uint32_t t1 = rd(0x36bd);
+    CRLOG("DCN: DMCUB %s timer %#x -> %#x in 1 ms (%s), CNTL=%#x SCRATCH0=%#x", when, t0, t1,
+          t1 != t0 ? "running" : "STOPPED", rd(0x36b6), rd(0x36a3));
+
+    // Memory windows: REGION3_CWn maps [BASE, TOP) of the DMCUB address space to the MC
+    // address in CWn_OFFSET. On this APU the MC address is inside the framebuffer aperture.
+    const uint64_t fbMc = asicInfo != nullptr
+        ? static_cast<uint64_t>(fbRead(asicInfo, kGcFbBase) & 0xffffff) << 24 : 0;
+    auto volatile *fb = fbAperture();
+    auto visible = [](uint64_t off, uint64_t size) {
+        uint64_t end = 0;
+        return discoveredCapacityValid ? fitsDiscoveredBar(off, size)
+                                       : (RaphaelRecoveryV2::checkedAdd(off, size, end) &&
+                                          end <= cachedBarMapLength);
+    };
+    uint32_t cwBase[8] {}, cwTop[8] {};
+    uint64_t cwMc[8] {};
+    for (unsigned cw = 0; cw < 8; cw++) {
+        cwBase[cw] = rd(0x3665 + cw);
+        cwTop[cw] = rd(0x366d + cw) & 0x1fffffff;
+        cwMc[cw] = rd(0x3675 + 2 * cw) | (static_cast<uint64_t>(rd(0x3676 + 2 * cw)) << 32);
+        if (cwBase[cw] == 0 && cwMc[cw] == 0) continue;
+        const bool inFb = fbMc != 0 && cwMc[cw] >= fbMc;
+        const uint64_t bar = inFb ? cwMc[cw] - fbMc : 0;
+        CRLOG("DCN: DMCUB %s CW%u dmcub [%#x,%#x) -> MC %#llx fb+%#llx %s", when, cw,
+              cwBase[cw], cwTop[cw], cwMc[cw], bar,
+              !inFb ? "outside FB" : visible(bar, 0x1000) ? "BAR-visible" : "not BAR-visible");
+    }
+
+    // Inbox1 ring: 64-byte commands. Dump the last four the host driver wrote.
+    const uint32_t inBase = rd(0x3694), inSize = rd(0x3695), inW = rd(0x3696), inR = rd(0x3697);
+    CRLOG("DCN: DMCUB %s inbox1 base=%#x size=%#x wptr=%#x rptr=%#x | outbox1 base=%#x size=%#x "
+          "wptr=%#x rptr=%#x | fbMc=%#llx bar=%p", when, inBase, inSize, inW, inR, rd(0x369c),
+          rd(0x369d), rd(0x369e), rd(0x369f), fbMc, fb);
+    if (fb == nullptr || fbMc == 0 || inSize == 0 || inSize > 0x100000) return;
+    for (unsigned cw = 0; cw < 8; cw++) {
+        if (inBase < cwBase[cw] || inBase >= cwTop[cw] || cwMc[cw] < fbMc) continue;
+        const uint64_t ringBar = cwMc[cw] - fbMc + (inBase - cwBase[cw]);
+        if (!visible(ringBar, inSize)) { CRLOG("DCN: DMCUB inbox ring fb+%#llx not visible", ringBar); return; }
+        for (unsigned k = 4; k >= 1; k--) {
+            const uint32_t at = (inW + inSize - 64 * k) % inSize;
+            len = 0; line[0] = 0;
+            for (unsigned d = 0; d < 16; d++)
+                len += snprintf(line + len, sizeof(line) - len, " %08x", fb[(ringBar + at + 4 * d) / 4]);
+            CRLOG("DCN: DMCUB %s inbox[%#x]%s", when, at, line);
+        }
+        return;
+    }
+    CRLOG("DCN: DMCUB inbox base %#x is in no mapped window", inBase);
+}
+
 static void dcnLogDmcubState(const char *when) {
     if (dcnNativeRead == nullptr) return;
     // Reads only: DMCUB_CNTL and the boot status never change what the microcontroller does.
@@ -8551,6 +8624,7 @@ static void wrapDcHardwareInit(void *dc) {
         const auto ctx = *reinterpret_cast<uint8_t **>(reinterpret_cast<uint8_t *>(dc) + 0x308);
         const auto slot = ctx ? reinterpret_cast<void **>(ctx + 0x88) : nullptr;
         dcnLogDmcubState("before init_hw");
+        dcnSurveyDmcub("before");
         CRLOG("DCN: dc_hardware_init dc=%p ctx=%p dmub_srv=%p", dc, ctx, slot ? *slot : nullptr);
         if ((dcnMode & kDcnDmubGuard) && slot != nullptr && *slot == nullptr) {
             // dc_dmub_srv is 0x68 bytes: +0x00 struct dmub_srv *, +0x58 dc_context *. A zeroed
@@ -8566,6 +8640,7 @@ static void wrapDcHardwareInit(void *dc) {
     }
     FunctionCast(wrapDcHardwareInit, orgDcHardwareInit)(dc);
     dcnLogDmcubState("after init_hw");
+    dcnSurveyDmcub("after");
     if ((dcnMode & kDcnDioWake) && dcnNativeRead != nullptr && dcnNativeWrite != nullptr) {
         // Wake the DIO I2C engine memory the host driver left in forced light sleep, and keep
         // it awake; poll the power state like dce_i2c_hw does before a transaction.

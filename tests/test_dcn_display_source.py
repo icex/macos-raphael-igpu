@@ -16,9 +16,9 @@ class DcnDisplaySourceTests(unittest.TestCase):
     def test_boot_arguments_are_bounded_and_logged(self):
         self.assertIn('PE_parse_boot_argn("rgpudcntrace", &dcnTrace, sizeof(dcnTrace))', SOURCE)
         self.assertIn('PE_parse_boot_argn("rgpuvd120", &vd120, sizeof(vd120)) && vd120 == 1', SOURCE)
-        self.assertIn('kDcnDmubGuard = 16, kDcnDioWake = 32, kDcnHostI2cSpeed = 64,\n'
+        self.assertIn('kDcnDmubGuard = 16, kDcnDioWake = 32, kDcnHostI2cSpeed = 64, kDcnDmcubSurvey = 128,\n'
                       '    kDcnAllowed = kDcnTrace | kDcnTranslate | kDcnPool302 | kDcnDmubGuard | kDcnDioWake |\n'
-                      '                  kDcnHostI2cSpeed,', SOURCE)
+                      '                  kDcnHostI2cSpeed | kDcnDmcubSurvey,', SOURCE)
 
     def test_withdrawn_dmcub_firmware_and_unpaired_pool_are_refused(self):
         self.assertIn('(dcn & ~kDcnAllowed) == 0 &&\n'
@@ -62,6 +62,14 @@ class DcnDisplaySourceTests(unittest.TestCase):
                      '"DCN: blocked DMCUB register write %#x = %#x"',
                      '"VD120: COW pid=%d addr=%#llx p=%d w=%d r=%d v=%d"'):
             self.assertIn(line, SOURCE)
+
+
+    def test_dmcub_survey_is_read_only(self):
+        start = SOURCE.index('static void dcnSurveyDmcub(')
+        body = SOURCE[start:SOURCE.index('\nstatic void dcnLogDmcubState(', start)]
+        self.assertNotIn('dcnNativeWrite', body)
+        self.assertNotRegex(body, r'fb\[[^\]]*\]\s*=[^=]')
+        self.assertIn('if (!(dcnMode & kDcnDmcubSurvey)', body)
 
 
 if __name__ == '__main__':
