@@ -94,3 +94,18 @@ after a reboot and before gpu-bind) records the `amdgpu_dc_rreg/wreg` tracepoint
 connector is re-detected, and `tools/dcn-trace-decode.py --host-trace` names the registers, so
 the host's DDC read can be diffed against the guest's. Until then the display path stays
 "initialised, no sink"; candidate 290 is a complete VM (audio, LAN, Metal) for daily use.
+
+## 15:40 — EDID reads work; the earlier NACK was the plug, not the guest [V]
+On the fresh boot c8a7ed8f (candidate 290, attempt lan2) the guest's boot-time DDC1 read
+returned a valid 128-byte EDID from the dummy adapter (vendor "BBC", product 0x104, serial
+0x99999999, 2018, one extension, checksum OK) and, after the user hot-plugged the Samsung, a
+second detection read the Samsung's EDID (manufacturer bytes 4C 2D) plus extension blocks and
+DDC/CI traffic at 0x37. The same transaction sequence had been NACKed on boot c0abc1a2 in every
+run (287–290). Most likely the adapter's EEPROM was left mid-transaction by the host freeze that
+morning and stayed locked until it was unplugged. Candidates 288–290 therefore tested
+non-causes; their tooling (full I2C trace, decoder, host trace script) stays.
+- After detection the framebuffer still publishes `display-type NONE` on every connector and
+  no AppleDisplay appears. Init already logged "Error queuing DMUB command: status=4 / Error
+  starting DMUB execution" from the inert `dc_dmub_srv`: the link path (DIG/PHY via DMUB
+  command tables) is the next blocker, as predicted. The host-loaded DMCUB is still booted
+  (`SCRATCH0=0x43`), which makes "attach DAL to the running firmware" the next design.

@@ -67,6 +67,15 @@ only right after a login at 1920x1080 Retina with Mac login, and breaks after an
 switch (stale scale until a WindowServer restart); Apple client audio tap fails; client
 resolution never works. Sessions can now last 12 h. Details in the notes.
 
+## EDID works — 2026-09-23 15:40
+
+Fresh boot: the guest read the dummy adapter's EDID at boot and the Samsung's after a hot-plug
+(full I2C trace). The 287–290 NACKs were the adapter's EEPROM locked by the morning's host
+freeze, not the guest. Display core state: sink detected, no display published; the link needs
+DMUB (init logs "Error queuing DMUB command"). Next design: attach DAL to the DMCUB firmware the
+host driver left running, without loading or resetting it.
+[Notes](findings/research/dcn315-first-init-20260923.md).
+
 ## Candidates 288–290 — 2026-09-23 afternoon
 
 The EDID read on the HDMI plug is a clean NACK of address 0xa0 by the plug, with the engine,
