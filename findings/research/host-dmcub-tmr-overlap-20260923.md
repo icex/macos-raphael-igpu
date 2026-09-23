@@ -70,3 +70,17 @@ Hypothesis: old-header contents are an overly restrictive accessibility test.
 Falsification: failed write/readback or restoration; successful readback followed
 by a delivery timeout would instead establish accessible CPU memory without
 proving a working firmware consumer. Candidate 301 was prepared but not launched.
+
+## Candidate 303: independent firmware liveness query
+
+302 proved inbox CPU access but RPTR did not consume the first 64-byte command.
+A running hardware timer and retained SCRATCH0 bits are not proof that firmware
+is executing its command loop. Linux dmub_srv_send_gpint_command with
+DMUB_GPINT__GET_FW_VERSION=1 writes 0x10010000 to DATAIN1 and waits for
+0x00010000 acknowledgment; dmub_dcn31_get_gpint_response reads SCRATCH7.
+DCN315 offsets resolve to register indices 0x36b8 and 0x36aa.
+303 queries before and after native display init, refuses a busy GPINT channel
+or disabled/reset firmware, and never changes firmware execution controls.
+Inbox delivery is disabled for this diagnostic. A GPINT ACK distinguishes a
+responsive processor from an inbox-specific problem; timeout alone does not
+identify the cause. No same-boot reset/restart of DMCUB is attempted.

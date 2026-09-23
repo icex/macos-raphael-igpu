@@ -1625,6 +1625,7 @@ static uint32_t wrapCosRelMemHnd(void *self, void *handle) {
 static mach_vm_address_t orgPspTmrInit {};
 static mach_vm_address_t orgGmmSetMemoryAttributes {};
 static bool hostReserveEnabled = false, hostReservationReady = false;
+static bool dcnVersionQueryEnabled = false;
 static uint64_t hostReservationLimit = 0;
 static uint32_t wrapGmmSetMemoryAttributes(void *self, uint32_t type, void *attributes);
 
@@ -8834,6 +8835,32 @@ static void dcnLogDmcubState(const char *when) {
     CRLOG("DCN: DMCUB %s CNTL=%#x SCRATCH0=%#x (untouched by the guest)", when, cntl, status);
 }
 
+// Linux dmub_srv_send_gpint_command(GET_FW_VERSION): independent of inbox VRAM.
+// DCN315 base 0x34c0 + GPINT_DATAIN1 0x1f8 = 0x36b8; SCRATCH7 = 0x36aa.
+// This queries already-running firmware; it never starts, stops, resets or loads it.
+static void dcnQueryFirmwareVersion(const char *when) {
+    if (!dcnVersionQueryEnabled || dcnNativeRead == nullptr || dcnNativeWrite == nullptr) return;
+    auto rd = [](uint32_t index) { return dcnNativeRead(dcnRegContext, index); };
+    const uint32_t before = rd(0x36b8), responseBefore = rd(0x36aa);
+    const uint32_t cntl = rd(0x36b6), reset = rd(0x36c0);
+    if ((before & 0xf0000000u) || !(cntl & 0x10000) || (reset & 1)) {
+        CRLOG("DCN: GPINT version %s refused busy/reset/disabled input=%#x CNTL=%#x CNTL2=%#x",
+              when, before, cntl, reset);
+        return;
+    }
+    // status=1, command_code=1 (GET_FW_VERSION), parameter=0.
+    dcnNativeWrite(dcnRegContext, 0x36b8, 0x10010000);
+    uint32_t ack = 0, waited = 0;
+    for (; waited < 100000; waited += 10) {
+        ack = rd(0x36b8);
+        if (ack == 0x00010000) break;
+        IODelay(10);
+    }
+    CRLOG("DCN: GPINT version %s %s input=%#x->%#x response=%#x->%#x waited=%u us CNTL=%#x CNTL2=%#x",
+          when, ack == 0x00010000 ? "ACK" : "TIMEOUT", before, ack,
+          responseBefore, rd(0x36aa), waited, cntl, reset);
+}
+
 // Separate from the read-only survey: only delivery mode may test an unsubmitted slot.
 static void dcnValidateEmptyInbox() {
     if (dcnRingUsable || !dcnRingProbeEligible || !(dcnMode & kDcnDmubDeliver) ||
@@ -8863,6 +8890,7 @@ static void wrapDcHardwareInit(void *dc) {
         const auto slot = ctx ? reinterpret_cast<void **>(ctx + 0x88) : nullptr;
         dcnLogDmcubState("before init_hw");
         dcnSurveyDmcub("before");
+        dcnQueryFirmwareVersion("before init_hw");
         dcnValidateEmptyInbox();
         CRLOG("DCN: dc_hardware_init dc=%p ctx=%p dmub_srv=%p", dc, ctx, slot ? *slot : nullptr);
         if ((dcnMode & kDcnDmubGuard) && slot != nullptr && *slot == nullptr) {
@@ -8880,6 +8908,7 @@ static void wrapDcHardwareInit(void *dc) {
     FunctionCast(wrapDcHardwareInit, orgDcHardwareInit)(dc);
     dcnLogDmcubState("after init_hw");
     dcnSurveyDmcub("after");
+    dcnQueryFirmwareVersion("after init_hw");
     dcnValidateEmptyInbox();
     if ((dcnMode & kDcnDioWake) && dcnNativeRead != nullptr && dcnNativeWrite != nullptr) {
         // Wake the DIO I2C engine memory the host driver left in forced light sleep, and keep
@@ -10227,6 +10256,8 @@ static void pluginStart() {
     hostReserveEnabled = PE_parse_boot_argn("rgpuhostreserve", &hostReserve, sizeof(hostReserve)) && hostReserve == 1;
     uint32_t dcn = 0, dcnTrace = 0;
     // The DCN 3.02 pool and translation are only meaningful, and only safe, together.
+    uint32_t dmubQuery = 0;
+    dcnVersionQueryEnabled = PE_parse_boot_argn("rgpudmubquery", &dmubQuery, sizeof(dmubQuery)) && dmubQuery == 1;
     if (PE_parse_boot_argn("rgpudcn", &dcn, sizeof(dcn)) && (dcn & ~kDcnAllowed) == 0 &&
         ((dcn & kDcnPool302) != 0) == ((dcn & kDcnTranslate) != 0)) dcnMode = dcn;
     else if (dcn != 0) CRLOG("DCN: rgpudcn=%#x refused (bit 8 froze the host; bits 2 and 4 must be "
