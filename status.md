@@ -29,6 +29,10 @@ Evidence: `~/macos-vm/run/candidate-304-results/`,
 [Source audit](findings/research/host-dmcub-tmr-overlap-20260923.md).
 Development stays on dev in candidate worktrees, pulling remote before each
 candidate. SSH push works. Main unchanged. Host suite: 1007 tests OK, three skipped.
+Candidate 305 / metal-153 is built (source `2c9e33e`) and not launched. It adds
+early raw-MMIO GPINT observations around PSP transitions and requires a live
+firmware response before delivering commands. Current boot remains blocked on
+firmware responsiveness, independently of the valid GPU recovery receipt.
 
 ## Verified progress
 

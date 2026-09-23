@@ -125,3 +125,20 @@ the old TMR under XC before native LOAD_TOC/setup. Host CW0/1 code/data are in
 the host TMR at fb+0x7e300000; native reservation protects allocation but may
 not preserve PSP TMR ownership. Query before/after that sequence to locate the
 first loss of firmware responsiveness. Do not claim this hypothesis proven.
+
+## Candidate 305 preparation
+
+GPINT queries now use the existing audited raw AmdRegisterAccess vtable path,
+which is available before DCN's CGS context is installed. Observations bracket
+PSP TMR unload, native LOAD_TOC/allocation, SETUP_TMR and the early IP loads.
+The LOAD_TOC function does not itself issue SETUP_TMR: decoded psp_tmr_init
+(0x52bbd) performs TOC/allocation, psp_tmr_load (0x52dae) submits wire5 later.
+Queries at the next buffer-preparation boundary observe prior wire5/IP results.
+No PSP behavior is changed. Delivery additionally requires a fresh successful
+GPINT version response, alongside the preserved reservation and ring readback.
+
+Also audit the host handoff: local Linux psp_hw_fini calls psp_tmr_terminate on
+unbind, while dm_sw_fini destroys the DMUB service. Thus a host reboot is not a
+guarantee of retained firmware after handoff; early liveness evidence is required
+before attributing a failure to guest PSP transitions. Existing retained scratch
+registers and the hardware timer do not establish firmware command-loop health.
