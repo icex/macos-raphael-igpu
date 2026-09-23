@@ -1,31 +1,50 @@
 # Live status — 2026-09-23
 
-## Candidate 299: inbox overlaps guest PSP TMR
+## HDMI: candidate 298 isolates an inaccessible inbox address
 
-Run `b4ca8c0ec8070df1cf55970438b07ccd`, metal-147, boot
-`dc8add85-5070-419f-959d-6cc094c914be`, MODE2 #220, source `4b9c141`.
+Run `b062b9e3a17f7c79591df33095b47efd`, metal-146, source `7c152f4`,
+boot `90122d1c-38ea-40af-9c35-ed2b6899c281`, MODE2 #219.
 
-- **Functional:** indirect reads return data at 256MiB, 512MiB and 1GiB, rejecting
-  a simple 256MiB PCI aperture limit. Inbox at fb+0x7fae5400 still reads raw
-  all-ones / CGS zero. Delivery disabled. User reports Samsung woke, no signal.
-  Desktop offscreen Metal probe passes; physical presentation remains unverified.
-- **Capture:** CORE_PROBE_PASS; complete final CR2 snapshot count=417, drop=0,
-  trunc=0. Moving optional dumps out of critical replay removed the observed overflow.
-- **Shutdown/recovery:** exited-after-guest-request; recovered,
-  authorizes_launch=true. Post-run SMU probe OK. No guest running.
-- **New evidence:** serial wire SETUP_TMR command 5 sets guest TMR to
-  fb+0x7f400000, size 0xa00000 (end 0x7fe00000). The host DMCUB inbox is inside
-  that guest protected interval. Host TMR was fb+0x7e000000, size 0xa00000.
-  This overlapping guest allocation is the leading cause of failed inbox reads.
-- **Next discriminator:** reserve the host firmware/window tail through Apple's
-  native reservation accounting before guest TMR allocation; verify guest TMR
-  placement and ring headers. Never load/start/reset DMCUB firmware in the guest.
+- **Functional:** four nonzero BAR controls match both raw MM_DATA and CGS reads
+  (offsets 0x101c, 0x1020, 0x1418, 0x141c). Four inbox headers at
+  `fb+0x7fae5ac0..0x7fae5b80` return raw `0xffffffff`, while CGS returns zero.
+  Generic indirect access works; Apple's validated accessor hides failed reads.
+  Inbox delivery remains disabled. Offscreen Metal probe passed with zero
+  reported mismatches; window presentation was not verified.
+- **Physical output:** user confirmed Samsung **no signal** for candidate 297.
+  298 is a read-only access diagnostic, not a delivery fix; no picture claimed.
+- **Capture/qualification:** INVALID. Final CR2 snapshot has count=512, drop=5,
+  trunc=0. This is producer capacity loss, not permission to relax the gate.
+- **Shutdown/recovery:** guest-request shutdown completed (`exited-after-guest-request`).
+  Recovery failed with `CriticalReplayError: CR2 snapshot reports loss`.
+  No authorizing receipt: **same-boot launch is blocked; reboot + user gpu-bind required**.
+  The post-run SMU version probe still answered OK and CP_STAT=0; neither substitutes
+  for a recovery receipt.
+- **Evidence:** `~/macos-vm/run/candidate-298-results/` and
+  `~/macos-vm/run/c298-post-mode2-probe.json`.
+- **Next:** reduce nonessential diagnostic CR2 volume while preserving recovery
+  records and loss gates; audit the inaccessible address range and address domains.
+  Never load/start/reset DMCUB firmware from the guest.
 
-Evidence: `~/macos-vm/run/candidate-299-results/`,
-`~/macos-vm/run/c299-post-mode2-probe.json`. Earlier status is
-[archived](findings/research/status-archives/status-before-c299-result-20260923.md).
-Work directly on dev in candidate worktrees; pull remote before each candidate,
-per the user's correction. No new branch per candidate. Remote main unchanged.
+[Access-path evidence](findings/research/c298-indirect-access-20260923.md).
+Previous 297 result: ring refused, offscreen probe passed, incomplete capture,
+forced stop, authorizing recovery and responsive SMU. [Archive](findings/research/status-archives/status-after-c297-before-c298-20260923.md).
+296-d belonged to the previous boot and has no completed recovery receipt.
+
+No guest running after 298. GPU remains vfio-pci, power/control=on. GitHub icex
+authentication works. Candidates 291–297 integrated on remote dev at 153a23d;
+298 and the archived 291–293 branch-tip verdicts are delivered at 761774b. 1004 host tests OK (three skips).
+HDMI audio remains gated on verified physical video; prior USB/Moonlight audio
+and remote-rendering evidence retain their separate scope.
+
+## Next candidate prepared
+
+Candidate 299 / metal-147 is built and dry-run clean (1004 tests OK, three skips),
+not launched. It reduces optional CR2 logging while preserving critical failures,
+and probes indirect reads around the PCI aperture boundary. Launch script:
+`~/macos-vm/run/c299-launch.sh`. It remains gated on a fresh boot and user gpu-bind;
+no same-boot recovery exception was introduced. Linux/Apple source audit is in the
+[access-path note](findings/research/c298-indirect-access-20260923.md).
 
 ## Verified progress
 
