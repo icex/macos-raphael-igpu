@@ -2799,12 +2799,14 @@ static uint32_t wrapVcnInitialize(void *engine) {
             const auto idle = RaphaelDisplayPower::exitIdle(
                 [&](uint32_t address) { return read(handle, address); },
                 [&](uint32_t address, uint32_t value) { write(handle, address, value); },
-                []() { IOSleep(1); }, RaphaelVcnPower::ExpectedVersion);
+                []() { IOSleep(1); }, RaphaelVcnPower::ExpectedVersion, 1000);
             CRLOG("DCN: display-idle exit pre=%#x version-response=%#x version=%#x wake-response=%#x",
                   idle.pre, idle.versionResponse, idle.version, idle.wakeResponse);
+            CRLOG("DCN: DCFCLK hard-min request=1000 MHz response=%#x returned=%u MHz",
+                  idle.dcfResponse, idle.dcfMHz);
             if (idle.wakeResponse == 1) {
                 IOSleep(10);
-                dcnQueryFirmwareVersion("after display-idle exit");
+                dcnQueryFirmwareVersion("after display-idle exit and DCFCLK request");
             }
         }
         IOLockUnlock(vcnSmuLock);

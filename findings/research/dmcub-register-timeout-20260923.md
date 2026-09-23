@@ -43,3 +43,33 @@ after a successful ACK rejects the ACK as a sufficient remedy.
 GPINT still times out. This rejects acknowledgement alone as sufficient, without
 establishing what originally caused the retained PHY timeout. CORE_PROBE_PASS,
 clean shutdown, ordinary recovery authorizes reuse.
+
+## Candidate 309 and stopped-device comparison
+
+Fresh GPINT writes (including after accepted SMU display wake) still timed out.
+Run `4f5412a582419991778ee5d78dff4dc9` passed the Metal core probe and
+exited-after-guest-request; recovery authorizes the next same-boot launch.
+
+`~/macos-vm/run/c309-retained-dmcub-state/` contains two stopped-device
+read-only captures. CW4, CW5 and CW6 are byte-identical to the capture after307.
+All sampled registers also match except TIMER_CURRENT. GPINT1 interrupt enable
+is set (register3685=800); CNTL has PWAIT_MODE_STATUS clear. This does not
+establish a live firmware instruction stream. No firmware reset/load occurred.
+
+The last trace entry can now be interpreted more precisely using the exact
+installed firmware: dispatcher600099c6 uses table60001010 indexed by command
+type. Its entry128 (60001210) branches to60009ae5, which calls60011d84.
+That function logs code33 with header subtype, dispatches the subtype, then
+logs code34 at60011db6 with the same subtype and zero second parameter.
+Linux dmub_cmd.h identifies type128/subtype2 as VBIOS_SET_PIXEL_CLOCK.
+Thus final code34/param2 marks that handler returning, not an identified
+power-state event or an exception. The retained inbox entry at1d40 is
+80020010/00000000/14000f01/ff000000: a zero pixel-clock request.
+This locates the last recorded activity in display teardown but does not
+identify which later handoff operation stopped mailbox progress.
+
+The local Linux reference unloads the PSP TMR in psp_hw_fini and frees the
+DMUB buffer in amdgpu_dm_fini. It is a newer reference kernel than the running
+host; these source paths are supporting hypotheses, not a captured handoff.
+Further testing must distinguish that ownership transition from MODE2 and
+early guest initialization; another query-only guest variant will not do so.

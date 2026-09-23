@@ -1,24 +1,24 @@
 # Live status — 2026-09-23
 
-## Candidate 308: timeout acknowledged, GPINT still unresponsive
+## Candidate 309: fresh GPINT requests still unanswered
 
-Run `0b4d8381476cd6a75805f07b976f83c2`, metal-156, source `9868bf9`,
-boot `5074c0e5-b2f6-46da-99b2-299ba322b41e`, MODE2 #231.
+Run `4f5412a582419991778ee5d78dff4dc9`, metal-157, source `781cbb7`,
+boot `5074c0e5-b2f6-46da-99b2-299ba322b41e`, MODE2 #232.
 
-- **Functional:** RBBMIF ACK succeeded: b000e808 -> c0000000 -> 80000000,
-  clients8 ->0, MASK preserved. GPINT still timed out, including after accepted
-  display idle exit. The ACK alone does not restore mailbox responsiveness.
-  Metal probe passed; physical HDMI remains unresolved.
+- **Functional:** fresh GET_FW_VERSION requests time out, including after accepted
+  display idle exit. Re-polling an old request was not the explanation. Metal
+  probe passed; physical HDMI remains unresolved.
 - **Capture:** CORE_PROBE_PASS; no reported boundary.
-- **Shutdown/recovery:** clean guest-requested exit, recovered,
-  authorizes_launch=true. Continue on this boot.
-- **Next:** match Linux's fresh GPINT write on every query. Current later checks
-  only poll our already timed-out command, including after display wake.
-  Keep refusing a foreign pending command; GET_FW_VERSION is read-only/idempotent.
+- **Shutdown/recovery:** exited-after-guest-request; recovered,
+  authorizes_launch=true. Same-boot reuse remains available.
+- **Next:** audit firmware interrupt dispatch and retained host handoff state;
+  do not repeat timeout-only variants or restart DMCUB firmware.
 
-Evidence: `~/macos-vm/run/candidate-308-results/`.
+Evidence: `~/macos-vm/run/candidate-309-results/`.
 [Retained timeout audit](findings/research/dmcub-register-timeout-20260923.md).
-Host regression: 1017 tests OK, three skipped. dev only; no firmware restart.
+Host regression: 1017 tests OK, three skipped.
+User instruction: retain subsequent work locally; hold commits/pushes to dev
+until meaningful progress. Uncommitted runs must preserve build/artifact identity.
 
 ## Verified progress
 
@@ -73,9 +73,3 @@ After milestones update current docs, integrate/push dev and synchronize the loc
 checkout. Do not push main without new authorization. Prior live entries are [archived](findings/research/status-archives/status-before-display-port-20260917.md)
 and [earlier](findings/research/status-archives/status-before-night-close-20260916.md).
 
-
-## One-command GPU test
-
-- Output: `/home/bogdan/macos-vm/run/candidate-308-results`
-- Verdict: `CORE_PROBE_PASS`
-- Boundary: `None`
