@@ -1,29 +1,29 @@
 # Live status — 2026-09-23
 
-## Candidate 307: early kernel panic; fingerprint untested
+## Candidate 306: early fingerprint refused; no code-memory evidence
 
-Run `f5dbd9efeff69ca6b5a76084bea2492b`, metal-155, source `6488386`,
-boot `5074c0e5-b2f6-46da-99b2-299ba322b41e`, MODE2 #228.
+Run `958f07ada16e6da27cc5f621594db603`, metal-154, source `d6a73d9`,
+boot `5074c0e5-b2f6-46da-99b2-299ba322b41e`, MODE2 #227.
 
-- **Functional:** guest panicked at about 10.4 seconds in launchd/kernel event
-  handling, before host reservation or the DMCUB code fingerprint. Cause is
-  unresolved. No new instruction-memory or physical HDMI result.
-- **Capture:** serial includes the early panic and recursive traps; wrapper INVALID,
-  identity_or_route_missing. This run did not reach the Metal probe.
-- **Shutdown/recovery:** forced through identity-bound vm-supervision shutdown
-  (request_sent=true); runner later recorded already-stopped. Not a clean shutdown.
-  Recovery failed: missing XH2 ownership record. No authorizing reuse receipt.
-- **Next:** retry the unchanged 307 build after the crash-recovery boot boundary.
-  Current harness cannot authorize reuse without the native lease; MODE2 alone is
-  explicitly insufficient. Do not weaken that gate or reuse an earlier run's lease.
+- **Functional:** CW0 fingerprint refused its bounds check: the general capacity
+  discovery cache is not populated at this early PSP point. No instruction-memory
+  reads occurred. GPINT remains unresponsive; four sane inbox headers remain.
+  Normal display wake succeeds without restoring firmware response. Delivery off.
+- **Capture:** CORE_PROBE_PASS; final critical count 448. Physical output unqualified.
+- **Shutdown/recovery:** exited-after-guest-request, recovered,
+  authorizes_launch=true; post-run SMU probe succeeds, no guest running.
+- **Next:** use the native reservation's already validated total for the early
+  read-only fingerprint. Preserve bounds checks; do not treat refusal as evidence
+  of missing or inaccessible firmware. Continue on this authorized boot.
 
-305 already established GPINT timeout before guest TMR changes on a fresh boot.
-Reboot is not an HDMI remedy; the pending reboot request clears only 307's
-missing crash-recovery authorization. Continue host-unbind/MODE2 source research.
-Evidence: `~/macos-vm/run/candidate-307-results/` and cycle log.
+305 established timeout before guest TMR changes on a fresh boot, so another
+identical reboot/bind is not the next test. Investigate host handoff/MODE2/earlier
+guest setup after obtaining actual code-memory evidence.
+Evidence: `~/macos-vm/run/candidate-306-results/`,
+`~/macos-vm/run/c306-post-mode2-probe.json`.
 [Source audit](findings/research/host-dmcub-tmr-overlap-20260923.md).
-Work stays on dev in candidate worktrees; pull remote before each candidate.
-Host suite for 307: 1007 tests OK, three skipped. Main unchanged.
+Work stays on dev in candidate worktrees; pull remote before each candidate and
+push dev over SSH. Main unchanged. Host suite: 1007 tests OK, three skipped.
 
 ## Verified progress
 
@@ -77,3 +77,65 @@ passes; hardware encode is Main8. [Roadmap](docs/ROADMAP.md).
 After milestones update current docs, integrate/push dev and synchronize the local
 checkout. Do not push main without new authorization. Prior live entries are [archived](findings/research/status-archives/status-before-display-port-20260917.md)
 and [earlier](findings/research/status-archives/status-before-night-close-20260916.md).
+
+
+
+
+
+
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-299-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-300-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-302-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-303-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-304-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-305-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-306-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-307-results`
+- Verdict: `INVALID`
+- Boundary: `identity_or_route_missing`
