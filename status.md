@@ -32,8 +32,9 @@ recovery. [Prior status](findings/research/status-archives/status-before-c300-re
 
 Development uses dev directly in candidate worktrees, with a remote pull before
 each candidate. HTTPS credentials are unavailable after reboot; SSH authentication is verified
-and is being used to deliver dev. Candidate 301 / metal-149 is built for guarded
-delivery with the native tail reservation retained; not yet launched.
+and is being used to deliver dev. Candidate 301 was not launched. Candidate 302 / metal-150 is built to validate
+an empty inbox by reversible readback, then attempt guarded delivery on this
+authorized host boot. Native reservation and all harness gates remain intact.
 Main remains unchanged. Host suite: 1005 tests OK, three skipped.
 
 ## Verified progress
