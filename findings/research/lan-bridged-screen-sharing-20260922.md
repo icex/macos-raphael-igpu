@@ -102,3 +102,16 @@ were at `0xffffff8010...`; HWLibs' cgs register functions fail the check, so tra
 off. Candidate 287 (`8629b9b`, card `metal-135`, launch `run/c287-launch.sh`) accepts
 `>= 0xffffff7f80000000` and logs the raw slots. Not run yet: the GPU is held by the user's
 12-hour test session.
+
+## 2026-09-23 — UDP verified end to end; MacBook audio is a platform limit [V]
+- UDP echo on the bridged NIC: packets from the MacBook (192.168.0.25) to 192.168.0.44:5902
+  arrived in the guest and the reply came back (`/tmp/udp-echo.log`). No NAT, no forwards.
+- The MacBook's Screen Sharing app (7.0.0, macOS 27) negotiates the standard TCP session
+  (`viewer->mode 1`) and creates no audio stream. Apple documents that High Performance screen
+  sharing (the only mode with audio) requires both Macs to be Apple silicon; the guest
+  identifies as an Intel Mac. The iPad app uses its own audio stream path and streamed in High
+  Performance mode at host resolution on 2026-09-22 once the guest had its LAN address.
+- Audio capture on the guest side needs a default output device with an input side: the
+  multi-output aggregate fails CoreAudio's "no non-reference input stream" check; BlackHole 2ch
+  as default output and input is the working configuration. `gpu-bind.sh` now creates the
+  `rgpu-lan` macvtap itself, so the LAN NIC no longer needs separate root commands per boot.
