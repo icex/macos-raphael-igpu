@@ -242,3 +242,10 @@ and [earlier](findings/research/status-archives/status-before-night-close-202609
 - Output: `/home/bogdan/macos-vm/run/candidate-296-attempt-b-results`
 - Verdict: `INVALID`
 - Boundary: `identity_or_route_missing`
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-296-attempt-c-results`
+- Verdict: `INVALID`
+- Boundary: `identity_or_route_missing`
