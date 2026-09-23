@@ -1636,7 +1636,7 @@ static bool hostReserveEnabled = false, hostReservationReady = false;
 static bool dcnVersionQueryEnabled = false, displayIdleExitEnabled = false;
 static bool dcnFirmwareResponsive = false;
 static void dcnQueryFirmwareVersion(const char *when);
-static uint64_t hostReservationLimit = 0;
+static uint64_t hostReservationLimit = 0, hostReservationTotal = 0;
 static uint32_t wrapGmmSetMemoryAttributes(void *self, uint32_t type, void *attributes);
 
 // Unload any pre-existing TMR before Apple tries to establish one.
@@ -3645,6 +3645,7 @@ static uint32_t wrapGmmSetMemoryAttributes(void *self, uint32_t type, void *attr
           plan.reserved, plan.additional, *reinterpret_cast<uint64_t *>(o + 0x4c0),
           *reinterpret_cast<uint64_t *>(o + 0x4c8), hostReservationReady ? "ready" : "FAILED");
     hostReservationLimit = hostReservationReady ? plan.limit : 0;
+    hostReservationTotal = hostReservationReady ? total : 0;
     return hostReservationReady ? result : 2;
 }
 
@@ -8771,11 +8772,11 @@ static void dcnFingerprintHostCode(const char *when) {
     const uint32_t base = fbRead(asicInfo, 0x3665) & 0x1fffffff;
     const uint32_t top = fbRead(asicInfo, 0x366d);
     uint64_t off = UINT64_MAX;
-    if (address >= physical && address - physical < discoveredVramTotal) off = address - physical;
-    else if (address >= mc && address - mc < discoveredVramTotal) off = address - mc;
-    if (!discoveredCapacityValid || !(top & 0x80000000u) || (top & 0x1fffffff) < base ||
+    if (address >= physical && address - physical < hostReservationTotal) off = address - physical;
+    else if (address >= mc && address - mc < hostReservationTotal) off = address - mc;
+    if (!hostReservationTotal || !(top & 0x80000000u) || (top & 0x1fffffff) < base ||
         uint64_t((top & 0x1fffffff) - base) + 1 < 4096 || off < hostReservationLimit ||
-        off > discoveredVramTotal || discoveredVramTotal - off < 4096) {
+        off > hostReservationTotal || hostReservationTotal - off < 4096) {
         CRLOG("DCN: host-code %s bounds refused address=%#llx off=%#llx", when, address, off);
         return;
     }

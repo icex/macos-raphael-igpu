@@ -160,3 +160,8 @@ FNV1a6281abc0. A match validates only this prefix, not the whole firmware.
 All-ones may mean denied access, not missing firmware; zeros/mismatch alone
 do not locate when content changed. Same-boot test intentionally examines the
 already unresponsive state. No firmware restart or load is attempted.
+
+306's fingerprint refused because the later general capacity cache was not yet
+populated. It collected no instruction bytes. 307 uses the total already
+validated by native reservation against GFXHUB hardware size, with the same
+window/reserved-tail/overflow checks. No memory-writing behavior changes.
