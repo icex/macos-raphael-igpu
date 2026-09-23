@@ -1,6 +1,6 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-09-23. Latest display experiment: **1.0.298** (inbox reads fail; Samsung no signal on 297); prior streaming baseline: **1.0.284**; broader baseline: **1.0.280**. Full desktop acceleration
+Updated 2026-09-23. Latest display experiment: **1.0.300** (TMR overlap removed; physical HDMI still unverified); prior streaming baseline: **1.0.284**; broader baseline: **1.0.280**. Full desktop acceleration
 is **not qualified**. The reproduced Screen Sharing transparency defect is fixed
 in candidate279 and retained in280. Candidate280 also passes strict capture and
 clean recovery after visual, concurrent-client and codec workloads. The patched-QEMU
@@ -420,3 +420,10 @@ Reduce optional diagnostic volume before another launch; preserve loss gates.
 
 Candidate 299 is built/tested but unrun: read-only aperture-boundary checks and
 reduced optional CR2 logging, awaiting reboot after 298 failed recovery.
+
+## Host DMCUB memory preservation — 2026-09-23
+
+300 reserves the host window tail through native GMM accounting; guest TMR moves
+below it and inbox reads stop returning access-denied all-ones. Old contents remain
+zero after preceding unreserved runs. Clean capture, guest shutdown and recovery
+pass. Next: fresh host initialization and guarded delivery.

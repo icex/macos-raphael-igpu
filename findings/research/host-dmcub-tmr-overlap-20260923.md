@@ -30,3 +30,13 @@ Expected on this boot: preserved tail 0x7e000000..0x80000000, guest TMR below
 0x7e000000, then usable host ring headers. Firmware code is never loaded, started
 or reset by this change. If prior guest TMR writes destroyed the inbox contents,
 a fresh host boot may still be necessary; the header guard will not be bypassed.
+
+## 300 hardware result
+
+Native reservation ready: tail 32MiB, additional 30MiB, cursor 0x7e000000,
+accounted 32MiB. SETUP_TMR moved to MC 0xf47d600000 / 0xa00000. Inbox raw
+reads changed from 0xffffffff to zero; old command headers remain erased.
+CORE_PROBE_PASS, 419 critical records with no loss, clean guest shutdown and
+authorizing recovery. Fresh host initialization is needed to recreate the inbox
+contents before guarded delivery. This run establishes reservation behavior and
+removes the access denial; it does not establish HDMI output.

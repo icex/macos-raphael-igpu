@@ -1,36 +1,31 @@
 # Live status — 2026-09-23
 
-## Candidate 300: host DMCUB tail reserved, old inbox contents erased
+## Candidate 299: inbox overlaps guest PSP TMR
 
-Run `120b9e2929247fb4057dfa81e241d71c`, metal-148, source `befcae4`,
-boot `dc8add85-5070-419f-959d-6cc094c914be`, MODE2 #221.
+Run `b4ca8c0ec8070df1cf55970438b07ccd`, metal-147, boot
+`dc8add85-5070-419f-959d-6cc094c914be`, MODE2 #220, source `4b9c141`.
 
-- **Functional:** native reservation increased from 2MiB to 32MiB, with cursor
-  fb+0x7e000000 and correct native accounting. Guest PSP TMR now starts at
-  fb+0x7d600000, size 10MiB, ending exactly below the protected host tail.
-  Inbox reads changed from raw all-ones to raw zero: the access denial is removed,
-  but the old commands are zero. Earlier guest TMR overlap likely erased them.
-  DMCUB timer runs, SCRATCH0=0x43; no firmware load/start/reset was added.
-  Header guard refuses delivery; no HDMI picture claimed.
-- **Capture:** CORE_PROBE_PASS; complete final CR2 count=419, drop=0, trunc=0.
-  Offscreen Metal probe passes; this does not qualify physical presentation.
-- **Shutdown/recovery:** exited-after-guest-request, recovered,
-  authorizes_launch=true. Post-run SMU version probe OK. No guest running.
-- **Next:** fresh host boot and user gpu-bind to recreate host-loaded DMCUB contents,
-  then guarded delivery with the reservation retained. Do not bypass the sane-header
-  check or load/start/reset guest DMCUB firmware. Same-boot reuse is authorized,
-  but cannot restore the erased host inbox state required by this experiment.
+- **Functional:** indirect reads return data at 256MiB, 512MiB and 1GiB, rejecting
+  a simple 256MiB PCI aperture limit. Inbox at fb+0x7fae5400 still reads raw
+  all-ones / CGS zero. Delivery disabled. User reports Samsung woke, no signal.
+  Desktop offscreen Metal probe passes; physical presentation remains unverified.
+- **Capture:** CORE_PROBE_PASS; complete final CR2 snapshot count=417, drop=0,
+  trunc=0. Moving optional dumps out of critical replay removed the observed overflow.
+- **Shutdown/recovery:** exited-after-guest-request; recovered,
+  authorizes_launch=true. Post-run SMU probe OK. No guest running.
+- **New evidence:** serial wire SETUP_TMR command 5 sets guest TMR to
+  fb+0x7f400000, size 0xa00000 (end 0x7fe00000). The host DMCUB inbox is inside
+  that guest protected interval. Host TMR was fb+0x7e000000, size 0xa00000.
+  This overlapping guest allocation is the leading cause of failed inbox reads.
+- **Next discriminator:** reserve the host firmware/window tail through Apple's
+  native reservation accounting before guest TMR allocation; verify guest TMR
+  placement and ring headers. Never load/start/reset DMCUB firmware in the guest.
 
-Evidence: `~/macos-vm/run/candidate-300-results/`,
-`~/macos-vm/run/c300-post-mode2-probe.json`.
-[Source audit and interval evidence](findings/research/host-dmcub-tmr-overlap-20260923.md).
-299: Samsung woke with no signal; guest TMR overlapped inbox, clean capture and
-recovery. [Prior status](findings/research/status-archives/status-before-c300-result-20260923.md).
-
-Development uses dev directly in candidate worktrees, with a remote pull before
-each candidate. Remote currently fd413c0: pushes after this reboot fail because
-GitHub credentials are unavailable/invalid; local commits are preserved on dev.
-Main remains unchanged. Host suite: 1005 tests OK, three skipped.
+Evidence: `~/macos-vm/run/candidate-299-results/`,
+`~/macos-vm/run/c299-post-mode2-probe.json`. Earlier status is
+[archived](findings/research/status-archives/status-before-c299-result-20260923.md).
+Work directly on dev in candidate worktrees; pull remote before each candidate,
+per the user's correction. No new branch per candidate. Remote main unchanged.
 
 ## Verified progress
 
