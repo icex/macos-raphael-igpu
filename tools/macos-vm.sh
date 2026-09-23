@@ -163,6 +163,14 @@ case "${AUDIO}" in
         # so hand it one from this directory rather than a root-owned docker mount.
         pulse_dir="/run/user/$(id -u)/pulse"
         [[ -S "${pulse_dir}/native" ]] || die "no PulseAudio/PipeWire socket at ${pulse_dir}/native; try --audio alsa"
+        # The socket alone is not proof: after a reboot with no desktop login the socket unit
+        # exists but the server may be down, and QEMU then exits in -audiodev init. Start the
+        # user audio services and require a live server here, before any VFIO exposure.
+        if ! pactl info >/dev/null 2>&1; then
+            systemctl --user start pipewire.service wireplumber.service pipewire-pulse.service 2>/dev/null || true
+            for _ in 1 2 3 4 5 6 7 8 9 10; do pactl info >/dev/null 2>&1 && break; sleep 0.5; done
+            pactl info >/dev/null 2>&1 || die "PulseAudio/PipeWire server at ${pulse_dir}/native is not answering; try --audio none"
+        fi
         mkdir -p "${VM_DIR}/xdg"; chmod 700 "${VM_DIR}/xdg"
         AUDIO_ARGS=(-v "${VM_DIR}/xdg:/xdgrt" -v "${pulse_dir}:/xdgrt/pulse"
                     -e XDG_RUNTIME_DIR=/xdgrt -e "AUDIO_DRIVER=${AUDIO}")
