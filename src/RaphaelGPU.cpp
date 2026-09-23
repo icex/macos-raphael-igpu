@@ -8657,7 +8657,7 @@ static void *wrapDcCreate(void *init) {
 // when it fits, otherwise through MM_INDEX/MM_DATA after the host's last commands read back sane.
 static uint64_t dcnRingBar = 0;
 static uint32_t dcnRingSize = 0;
-static bool dcnRingUsable = false, dcnRingIndirect = false;
+static bool dcnRingUsable = false, dcnRingIndirect = false, dcnRingProbeEligible = false;
 
 // Indirect framebuffer access (amdgpu_device_mm_access): MM_INDEX takes the low 31 bits of the
 // VRAM offset with bit 31 set, MM_INDEX_HI the rest, and MM_DATA moves one dword. It reaches the
@@ -8786,6 +8786,7 @@ static void dcnSurveyDmcub(const char *when) {
           "wptr=%#x rptr=%#x | fbMc=%#llx bar=%p", when, inBase, inSize, inW, inR, rd(0x369c),
           rd(0x369d), rd(0x369e), rd(0x369f), fbMc, fb);
     dcnRingUsable = false;
+    dcnRingProbeEligible = false;
     if (fb == nullptr || fbMc == 0 || inSize < 256 || inSize > 0x100000 ||
         (inSize & 63) || inW >= inSize || inR >= inSize || (inW & 63) || (inR & 63)) return;
     // CWn_BASE/TOP hold the window without the 0x60000000 DMCUB prefix the inbox base carries.
@@ -8816,25 +8817,8 @@ static void dcnSurveyDmcub(const char *when) {
             RLOG("DCN: DMCUB %s inbox[%#x]%s", when, at, line);
         }
         dcnRingUsable = sane >= 2;
-        // Linux queues into the slot at WPTR before publishing WPTR. When RPTR ==
-        // WPTR nothing is pending: validate that unsubmitted slot, then restore it.
-        // Never publish the probe or touch firmware/reset controls.
-        if (!dcnRingUsable && (dcnMode & kDcnDmubDeliver) && hostReservationReady &&
-            ringBar >= hostReservationLimit && cw == 4 && inW == inR && t0 != t1 &&
-            (rd(0x36a3) & 3) == 3 && rd(0x3696) == inW && rd(0x3697) == inR) {
-            const uint32_t savedIndex = rd(kMmIndex), savedHi = rd(kMmIndexHi);
-            auto read = [](uint64_t off) { return dcnRingRead(off); };
-            auto write = [](uint64_t off, uint32_t value) { dcnRingWrite(off, value); };
-            const auto probe = RaphaelDmubRing::probe(ringBar + inW, read, write);
-            if (dcnRingIndirect) {
-                dcnNativeWrite(dcnRegContext, kMmIndex, savedIndex);
-                dcnNativeWrite(dcnRegContext, kMmIndexHi, savedHi);
-            }
-            const bool stable = rd(0x3696) == inW && rd(0x3697) == inR;
-            dcnRingUsable = probe.matched && probe.restored && stable;
-            CRLOG("DCN: inbox reversible readback matched=%u restored=%u pointers-stable=%u; %s",
-                  probe.matched, probe.restored, stable, dcnRingUsable ? "usable" : "REFUSED");
-        }
+        dcnRingProbeEligible = hostReservationReady && ringBar >= hostReservationLimit &&
+            cw == 4 && inW == inR && t0 != t1 && (rd(0x36a3) & 3) == 3;
         CRLOG("DCN: DMCUB inbox ring %s (%u/4 sane headers, %s)", dcnRingUsable ? "usable" : "UNUSABLE",
               sane, dcnRingIndirect ? "MM_INDEX" : "BAR");
         return;
@@ -8850,12 +8834,36 @@ static void dcnLogDmcubState(const char *when) {
     CRLOG("DCN: DMCUB %s CNTL=%#x SCRATCH0=%#x (untouched by the guest)", when, cntl, status);
 }
 
+// Separate from the read-only survey: only delivery mode may test an unsubmitted slot.
+static void dcnValidateEmptyInbox() {
+    if (dcnRingUsable || !dcnRingProbeEligible || !(dcnMode & kDcnDmubDeliver) ||
+        dcnNativeRead == nullptr || dcnNativeWrite == nullptr) return;
+    auto rd = [](uint32_t index) { return dcnNativeRead(dcnRegContext, index); };
+    const uint32_t inW = rd(0x3696), inR = rd(0x3697);
+    if (inW != inR || inW >= dcnRingSize || (inW & 63)) return;
+    // Linux copies into WPTR's slot before publishing WPTR. Leave that pointer
+    // unchanged, and restore the entire slot even after failed readback.
+    const uint32_t savedIndex = rd(kMmIndex), savedHi = rd(kMmIndexHi);
+    auto read = [](uint64_t off) { return dcnRingRead(off); };
+    auto write = [](uint64_t off, uint32_t value) { dcnRingWrite(off, value); };
+    const auto probe = RaphaelDmubRing::probe(dcnRingBar + inW, read, write);
+    if (dcnRingIndirect) {
+        dcnNativeWrite(dcnRegContext, kMmIndex, savedIndex);
+        dcnNativeWrite(dcnRegContext, kMmIndexHi, savedHi);
+    }
+    const bool stable = rd(0x3696) == inW && rd(0x3697) == inR;
+    dcnRingUsable = probe.matched && probe.restored && stable;
+    CRLOG("DCN: inbox reversible readback matched=%u restored=%u pointers-stable=%u; %s",
+          probe.matched, probe.restored, stable, dcnRingUsable ? "usable" : "REFUSED");
+}
+
 static void wrapDcHardwareInit(void *dc) {
     if (dc != nullptr) {
         const auto ctx = *reinterpret_cast<uint8_t **>(reinterpret_cast<uint8_t *>(dc) + 0x308);
         const auto slot = ctx ? reinterpret_cast<void **>(ctx + 0x88) : nullptr;
         dcnLogDmcubState("before init_hw");
         dcnSurveyDmcub("before");
+        dcnValidateEmptyInbox();
         CRLOG("DCN: dc_hardware_init dc=%p ctx=%p dmub_srv=%p", dc, ctx, slot ? *slot : nullptr);
         if ((dcnMode & kDcnDmubGuard) && slot != nullptr && *slot == nullptr) {
             // dc_dmub_srv is 0x68 bytes: +0x00 struct dmub_srv *, +0x58 dc_context *. A zeroed
@@ -8872,6 +8880,7 @@ static void wrapDcHardwareInit(void *dc) {
     FunctionCast(wrapDcHardwareInit, orgDcHardwareInit)(dc);
     dcnLogDmcubState("after init_hw");
     dcnSurveyDmcub("after");
+    dcnValidateEmptyInbox();
     if ((dcnMode & kDcnDioWake) && dcnNativeRead != nullptr && dcnNativeWrite != nullptr) {
         // Wake the DIO I2C engine memory the host driver left in forced light sleep, and keep
         // it awake; poll the power state like dce_i2c_hw does before a transaction.
