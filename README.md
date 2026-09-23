@@ -137,3 +137,11 @@ reserved host DMCUB inbox on the same host boot. The first command passed full
 readback but firmware did not consume it; HDMI output remains unqualified.
 Capture and guest-request shutdown completed, recovery authorizes reuse.
 See [live status](status.md).
+
+### Same-boot recovery without a guest lease (2026-09-23)
+
+Candidate 307's early panic was recovered on the same host boot using MODE2,
+complete stable stopped-queue/SDMA scans and PSP ring teardown. The new schema-9
+receipt permits one normal harness launch without borrowing an older lease.
+This is a stopped, queue-free recovery result; active-queue recovery and physical
+HDMI output remain separately qualified. Host regression: 1017 tests pass.

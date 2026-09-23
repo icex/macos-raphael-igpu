@@ -13,20 +13,19 @@ boot `5074c0e5-b2f6-46da-99b2-299ba322b41e`, MODE2 #228.
 - **Shutdown/recovery:** forced through identity-bound vm-supervision shutdown
   (request_sent=true); runner later recorded already-stopped. Not a clean shutdown.
   Recovery failed: missing XH2 ownership record. No authorizing reuse receipt.
-- **Manual cleanup follow-up:** standalone vfio-recover refused the current run
-  with `guest host-KIQ reservation launch nonce does not match`. Capture-repair
-  proof also refused this run type. SMU version probe and MODE2 reset both
-  succeeded on the same boot; CP_STAT=0, RLC_CNTL=0, PCI config unchanged.
-- **Next:** resolve the missing-lease recovery admission for this early panic.
-  Hardware reboot necessity is NOT established; the earlier reboot request was
-  premature. A successful MODE2 reset is real evidence, but the current harness
-  still requires an additional valid recovery receipt before relaunch.
+- **Same-boot cleanup now verified:** new `mode2-noqueue-recover.py` completed
+  MODE2, two stable full queue/SDMA scans, both PSP ring destroys and final scans.
+  Schema-9 receipt reports recovered, authorizes_launch=true, no host faults.
+  No guest lease, VRAM write, DMCUB reset or reboot was needed.
+- **Next:** retry unchanged 307 using the normal harness and this receipt.
+  Recovery is scoped to stopped, halted, queue-free state; active queues still
+  refuse the new path. The original failed run/recovery artifacts are preserved.
 
-305 established GPINT timeout before guest TMR changes on a fresh boot.
-Another identical reboot/bind is not an established HDMI fix.
-Manual evidence: `~/macos-vm/run/c307-manual-cleanup.json`,
-`~/macos-vm/run/c307-cleanup-smu-probe.json`,
-`~/macos-vm/run/c307-cleanup-mode2-reset.json`.
+Regression: 1017 tests OK, three skipped. Evidence for cleanup:
+`~/macos-vm/run/c307-mode2-noqueue-recovery.json` and
+`~/macos-vm/run/c307-mode2-recovery-final-tests.log`.
+305 established GPINT timeout before guest TMR changes on a fresh boot;
+reboot is not an established HDMI fix.
 Evidence: `~/macos-vm/run/candidate-307-results/` and cycle log.
 [Source audit](findings/research/host-dmcub-tmr-overlap-20260923.md).
 Work stays on dev in candidate worktrees; pull remote before each candidate.
