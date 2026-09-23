@@ -34,6 +34,7 @@
 #include <Headers/kern_util.hpp>
 #include <Headers/plugin_start.hpp>
 #include "KiqAddresses.hpp"
+#include "HostMemoryReservation.hpp"
 #include "KiqQueuePreparation.hpp"
 #include "GartAddresses.hpp"
 #include "DiagnosticRecords.hpp"
@@ -1621,6 +1622,9 @@ static uint32_t wrapCosRelMemHnd(void *self, void *handle) {
 }
 
 static mach_vm_address_t orgPspTmrInit {};
+static mach_vm_address_t orgGmmSetMemoryAttributes {};
+static bool hostReserveEnabled = false, hostReservationReady = false;
+static uint32_t wrapGmmSetMemoryAttributes(void *self, uint32_t type, void *attributes);
 
 // Unload any pre-existing TMR before Apple tries to establish one.
 //
@@ -1640,6 +1644,10 @@ static mach_vm_address_t orgPspTmrInit {};
 // else; psp_tmr_destroy also frees allocations that do not exist yet, so call the unload
 // alone.
 static uint32_t wrapPspTmrInit(void *psp) {
+    if (hostReserveEnabled && !hostReservationReady) {
+        CRLOG("HOSTRESERVE: refusing PSP TMR init without native host-window reservation");
+        return 2;
+    }
     if ((mask & XC) != 0 && hwlibsBase != 0 && psp != nullptr) {
         auto unload = reinterpret_cast<uint32_t (*)(void *)>(hwlibsBase + kOffPspTmrUnload);
         uint32_t u = unload(psp);
@@ -3142,6 +3150,17 @@ static void installDiagnostics(KernelPatcher &patcher, mach_vm_address_t base) {
     RLOG("route cosReleaseMemoryHandle -> %s (org=0x%llx)",
          orgCosRelMemHnd ? "ok" : "FAILED", orgCosRelMemHnd);
     patcher.clearError();
+    if (hostReserveEnabled) {
+        // Exact 24G830 native callback entries, checked before routing/calling.
+        const uint8_t setEntry[] = {0x55,0x48,0x89,0xe5,0x41,0x56,0x53,0x48,0x85,0xd2};
+        const uint8_t reserveEntry[] = {0x55,0x48,0x89,0xe5,0x41,0x56,0x53,0x49,0x89,0xf6};
+        if (memcmp(reinterpret_cast<void *>(base + 0xb1590), setEntry, sizeof(setEntry)) == 0 &&
+            memcmp(reinterpret_cast<void *>(base + 0xb2950), reserveEntry, sizeof(reserveEntry)) == 0)
+            orgGmmSetMemoryAttributes = patcher.routeFunction(base + 0xb1590,
+                reinterpret_cast<mach_vm_address_t>(wrapGmmSetMemoryAttributes), true);
+        CRLOG("HOSTRESERVE: native reservation route %s", orgGmmSetMemoryAttributes ? "ready" : "FAILED");
+        patcher.clearError();
+    }
     orgPspTmrInit = patcher.routeFunction(base + kOffPspTmrInit,
                       reinterpret_cast<mach_vm_address_t>(wrapPspTmrInit), true);
     RLOG("route psp_tmr_init -> %s (org=0x%llx)",
@@ -3536,6 +3555,64 @@ static void reprobeGpu() {
 static constexpr uint32_t kGcFbBase   = 0x295c;   // GC 0x1260 + gc_10_3 0x16fc
 static constexpr uint32_t kGcFbTop    = 0x295d;   // GC 0x1260 + gc_10_3 0x16fd
 static constexpr uint32_t kGcFbOffset = 0x2947;   // GC 0x1260 + gc_10_3 0x16e7
+
+// Native gmmCbSetMemoryAttributes consumes gmmCbReserveFbMemory's tail reservation
+// before the first PSP allocation. Preserve host DMCUB code/data AND mailbox windows;
+// do not change hardware aperture registers, firmware state, or advertised VRAM size.
+static uint32_t wrapGmmSetMemoryAttributes(void *self, uint32_t type, void *attributes) {
+    auto original = FunctionCast(wrapGmmSetMemoryAttributes, orgGmmSetMemoryAttributes);
+    if (!hostReserveEnabled || type != 0 || attributes == nullptr)
+        return original(self, type, attributes);
+    auto a = reinterpret_cast<uint8_t *>(attributes);
+    if (!(*reinterpret_cast<uint32_t *>(a + 4) & 1)) return original(self, type, attributes);
+    hostReservationReady = false;
+    if (self == nullptr || asicInfo == nullptr || hwlibsBase == 0) return 2;
+    auto o = reinterpret_cast<uint8_t *>(self);
+    const uint64_t total = *reinterpret_cast<uint64_t *>(a + 8);
+    const uint64_t visible = *reinterpret_cast<uint64_t *>(o + 0x4a0);
+    const uint64_t existing = *reinterpret_cast<uint64_t *>(o + 0x4d0);
+    const uint32_t base = fbRead(asicInfo, kGcFbBase) & 0xffffff;
+    const uint32_t top = fbRead(asicInfo, kGcFbTop) & 0xffffff;
+    const uint64_t physical = uint64_t(fbRead(asicInfo, kGcFbOffset) & 0xffffff) << 24;
+    if (top < base || total != (uint64_t(top - base) + 1) << 24 ||
+        (fbRead(asicInfo, 0x36a3) & 3) != 3) {
+        CRLOG("HOSTRESERVE: invalid framebuffer or DMCUB identity");
+        return 2;
+    }
+    RaphaelHostMemory::Window windows[6] {};
+    const unsigned indices[] = {0,1,3,4,5,6};
+    for (unsigned i = 0; i < 6; i++) {
+        const unsigned cw = indices[i];
+        const uint32_t lo = fbRead(asicInfo, 0x3665 + cw) & 0x1fffffff;
+        const uint32_t hi = fbRead(asicInfo, 0x366d + cw) & 0x1fffffff;
+        const uint64_t address = fbRead(asicInfo, 0x3675 + 2*cw) |
+            (uint64_t(fbRead(asicInfo, 0x3676 + 2*cw)) << 32);
+        if (hi <= lo) return 2;
+        windows[i] = {address, uint64_t(hi - lo) + 1};
+        RLOG("HOSTRESERVE: CW%u address=%#llx bytes=%#llx", cw, address, windows[i].bytes);
+    }
+    RaphaelHostMemory::Plan plan {};
+    if (!RaphaelHostMemory::plan(uint64_t(base) << 24, physical, total, visible,
+                                 existing, windows, 6, plan)) {
+        CRLOG("HOSTRESERVE: window range refused total=%#llx visible=%#llx reserved=%#llx",
+              total, visible, existing);
+        return 2;
+    }
+    if (plan.additional) {
+        uint64_t input[2] = {(uint64_t(base) << 24) + plan.limit, plan.additional};
+        auto reserve = reinterpret_cast<uint32_t (*)(void *, void *)>(hwlibsBase + 0xb2950);
+        if (reserve(self, input) != 0 || *reinterpret_cast<uint64_t *>(o + 0x4d0) != plan.reserved)
+            return 2;
+    }
+    const uint32_t result = original(self, type, attributes);
+    hostReservationReady = result == 0 &&
+        *reinterpret_cast<uint64_t *>(o + 0x4c0) == plan.limit &&
+        *reinterpret_cast<uint64_t *>(o + 0x4c8) >= plan.reserved;
+    CRLOG("HOSTRESERVE: native tail=%#llx additional=%#llx cursor=%#llx accounted=%#llx %s",
+          plan.reserved, plan.additional, *reinterpret_cast<uint64_t *>(o + 0x4c0),
+          *reinterpret_cast<uint64_t *>(o + 0x4c8), hostReservationReady ? "ready" : "FAILED");
+    return hostReservationReady ? result : 2;
+}
 
 // Keep the first functional lease experiment inside the CPU-visible BAR.
 //
@@ -10106,6 +10183,8 @@ static void pluginStart() {
     vcnPresetEnabled = PE_parse_boot_argn("rgpuvcnpreset", &vcnPreset, sizeof(vcnPreset)) &&
         vcnPreset == 1;
     RLOG("VCNPRESET: rgpuvcnpreset=%u", vcnPresetEnabled);
+    uint32_t hostReserve = 0;
+    hostReserveEnabled = PE_parse_boot_argn("rgpuhostreserve", &hostReserve, sizeof(hostReserve)) && hostReserve == 1;
     uint32_t dcn = 0, dcnTrace = 0;
     // The DCN 3.02 pool and translation are only meaningful, and only safe, together.
     if (PE_parse_boot_argn("rgpudcn", &dcn, sizeof(dcn)) && (dcn & ~kDcnAllowed) == 0 &&
