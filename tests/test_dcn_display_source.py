@@ -85,5 +85,12 @@ class DcnDisplaySourceTests(unittest.TestCase):
         self.assertIn('dmubDeliverDead = true;', body)
 
 
+    def test_agdp_pikera_is_gated_and_exact(self):
+        self.assertIn('PE_parse_boot_argn("rgpuagdp", &agdpPikera, sizeof(agdpPikera));', SOURCE)
+        self.assertIn('static const uint8_t find[] = "board-id";', SOURCE)
+        self.assertIn('static const uint8_t repl[] = "board-ix";', SOURCE)
+        self.assertIn('KernelPatcher::LookupPatch lp {&kexts[KextAgdp], find, repl, sizeof(find), 1};', SOURCE)
+
+
 if __name__ == '__main__':
     unittest.main()

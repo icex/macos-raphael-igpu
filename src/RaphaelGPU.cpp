@@ -82,6 +82,10 @@ static const char *pathFB[] {
 static const char *pathX6000[] {
     "/System/Library/Extensions/AMDRadeonX6000.kext/Contents/MacOS/AMDRadeonX6000"
 };
+static const char *pathAgdp[] {
+    "/System/Library/Extensions/AppleGraphicsControl.kext/Contents/PlugIns/"
+    "AppleGraphicsDevicePolicy.kext/Contents/MacOS/AppleGraphicsDevicePolicy"
+};
 
 // sys[0] == SysFlags::Loaded: invoke the callback even if the kext is already loaded.
 // Both of these are prelinked into SystemKernelExtensions.kc, so by the time a Lilu
@@ -92,7 +96,7 @@ static const char *pathX6000[] {
 // SINGLE call. Registering the kexts and the callback separately (and passing
 // nullptr/0 for the callback-only registration) does not work -- pluginStart
 // stopped executing right there, with no further log output.
-enum { KextHWLibs, KextFB, KextX6000 };
+enum { KextHWLibs, KextFB, KextX6000, KextAgdp };
 static KernelPatcher::KextInfo kexts[] {
     {"com.apple.kext.AMDRadeonX6000HWLibs", pathHWLibs, arrsize(pathHWLibs),
      {true}, {}, KernelPatcher::KextInfo::Unloaded},
@@ -100,7 +104,14 @@ static KernelPatcher::KextInfo kexts[] {
      {true}, {}, KernelPatcher::KextInfo::Unloaded},
     {"com.apple.kext.AMDRadeonX6000", pathX6000, arrsize(pathX6000),
      {true}, {}, KernelPatcher::KextInfo::Unloaded},
+    {"com.apple.driver.AppleGraphicsDevicePolicy", pathAgdp, arrsize(pathAgdp),
+     {true}, {}, KernelPatcher::KextInfo::Unloaded},
 };
+
+// rgpuagdp=1: WhateverGreen agdpmod=pikera. AppleGraphicsDevicePolicy looks up "board-id" to
+// pick a per-board policy; renaming the key makes it find none and use the default, which
+// enables the AMD display controller. Without it the controller stays "NOT enabled".
+static uint32_t agdpPikera = 0;
 
 // ---- the patch table --------------------------------------------------------
 // bit 0 = m1 ... bit 6 = m7, matching milestones.py
@@ -8931,6 +8942,19 @@ static int wrapVideoGetHWInfo(void *self, void *values);
 
 static void processKext(void *, KernelPatcher &patcher, size_t index,
                         mach_vm_address_t addr, size_t sz) {
+    if (kexts[KextAgdp].loadIndex == index) {
+        if (agdpPikera) {
+            static const uint8_t find[] = "board-id";
+            static const uint8_t repl[] = "board-ix";
+            KernelPatcher::LookupPatch lp {&kexts[KextAgdp], find, repl, sizeof(find), 1};
+            patcher.applyLookupPatch(&lp);
+            CRLOG("AGDP: board-id -> board-ix (pikera) %s (error %d)",
+                  patcher.getError() == KernelPatcher::Error::NoError ? "applied" : "FAILED",
+                  static_cast<int>(patcher.getError()));
+            patcher.clearError();
+        }
+        return;
+    }
     RLOG("kext callback: index=%lu hwlibs=%lu fb=%lu addr=%llx size=%lu",
            index, kexts[KextHWLibs].loadIndex, kexts[KextFB].loadIndex, addr, sz);
     if (kexts[KextHWLibs].loadIndex == index) {
@@ -9976,6 +10000,7 @@ static void pluginStart() {
     else if (dcn != 0) CRLOG("DCN: rgpudcn=%#x refused (bit 8 froze the host; bits 2 and 4 must be "
                              "set together)", dcn);
     PE_parse_boot_argn("rgpudallog", &dalLogMask, sizeof(dalLogMask));
+    PE_parse_boot_argn("rgpuagdp", &agdpPikera, sizeof(agdpPikera));
     if (PE_parse_boot_argn("rgpudcntrace", &dcnTrace, sizeof(dcnTrace)) && dcnTrace <= 20000)
         dcnTraceBudget = dcnTrace;
     CRLOG("DCN: rgpudcn=%#x (trace=%u translate=%u pool302=%u dmub-guard=%u) trace-lines=%u",
