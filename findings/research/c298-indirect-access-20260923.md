@@ -24,3 +24,11 @@ all identity, capture, shutdown and recovery gates remain enabled.
 Next: if the controls match, audit inbox backing/address domains and host handoff
 lifetime. If raw matches and CGS differs, use raw reads for the indirect path with
 appropriate selector serialization and restoration before any delivery experiment.
+
+## Result
+
+Both paths reproduce four nonzero BAR words. At four inbox header addresses,
+raw MM_DATA is 0xffffffff and CGS returns 0; so the validated accessor masks failed
+reads, but bypassing it does not make the inbox reachable. The inbox stayed disabled.
+Clean guest-request shutdown completed. CR2 count=512/drop=5 prevented recovery
+and same-boot reuse despite a successful subsequent SMU probe. See live status.

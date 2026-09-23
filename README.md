@@ -26,7 +26,7 @@ and long-duration reliability are still being tested.
 | Memory and synchronization | Buffer/texture reuse, synchronized CPU/GPU texture updates, retained color contents, GPU fences, shared events and cross-process IOSurface transfers pass targeted checks. |
 | Hardware video | H.264 and HEVC Main8 encode/decode work. HEVC Main10 decoding passes short tests; Main10 hardware encoding is unavailable in the current native profile set. |
 | Shutdown and reuse | Repeated clean guest shutdowns and same-host-boot reuse work in the supervised workflow. Crash recovery and independent-host-boot coverage remain incomplete. |
-| Physical HDMI/DisplayPort | Unverified. Candidate 297 detects the Samsung and publishes AppleDisplay, but cannot reach the running DMCUB's inbox: indirect reads returned zeros and delivery was refused. The guest must never load/start/reset DMCUB firmware. HDMI audio follows a verified picture; USB and Moonlight audio have separate passing evidence. |
+| Physical HDMI/DisplayPort | Unverified. Samsung reports no signal. Candidates 297–298 publish AppleDisplay but cannot reach the running DMCUB's inbox: raw indirect reads fail while known BAR controls match; delivery is refused. The guest must never load/start/reset DMCUB firmware. HDMI audio follows a verified picture; USB and Moonlight audio have separate passing evidence. |
 
 The tested baseline is **macOS Sequoia build 24G830** with a matching driver,
 Lilu, OpenCore configuration and grafted VBIOS. Stock QEMU 10.1.2 now works with

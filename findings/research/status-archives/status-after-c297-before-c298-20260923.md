@@ -1,41 +1,43 @@
 # Live status — 2026-09-23
 
-## HDMI: candidate 298 isolates an inaccessible inbox address
+## HDMI: candidate 297 completed, delivery blocked by inaccessible inbox
 
-Run `b062b9e3a17f7c79591df33095b47efd`, metal-146, source `7c152f4`,
-boot `90122d1c-38ea-40af-9c35-ed2b6899c281`, MODE2 #219.
+Run `f877ded2ff28ffbbfe241275270db0b3`, card `metal-145`, source `ab45629`,
+boot `90122d1c-38ea-40af-9c35-ed2b6899c281`, MODE2 #218.
 
-- **Functional:** four nonzero BAR controls match both raw MM_DATA and CGS reads
-  (offsets 0x101c, 0x1020, 0x1418, 0x141c). Four inbox headers at
-  `fb+0x7fae5ac0..0x7fae5b80` return raw `0xffffffff`, while CGS returns zero.
-  Generic indirect access works; Apple's validated accessor hides failed reads.
-  Inbox delivery remains disabled. Offscreen Metal probe passed with zero
-  reported mismatches; window presentation was not verified.
-- **Physical output:** user confirmed Samsung **no signal** for candidate 297.
-  298 is a read-only access diagnostic, not a delivery fix; no picture claimed.
-- **Capture/qualification:** INVALID. Final CR2 snapshot has count=512, drop=5,
-  trunc=0. This is producer capacity loss, not permission to relax the gate.
-- **Shutdown/recovery:** guest-request shutdown completed (`exited-after-guest-request`).
-  Recovery failed with `CriticalReplayError: CR2 snapshot reports loss`.
-  No authorizing receipt: **same-boot launch is blocked; reboot + user gpu-bind required**.
-  The post-run SMU version probe still answered OK and CP_STAT=0; neither substitutes
-  for a recovery receipt.
-- **Evidence:** `~/macos-vm/run/candidate-298-results/` and
-  `~/macos-vm/run/c298-post-mode2-probe.json`.
-- **Next:** reduce nonessential diagnostic CR2 volume while preserving recovery
-  records and loss gates; audit the inaccessible address range and address domains.
-  Never load/start/reset DMCUB firmware from the guest.
+- **Functional:** DMCUB timer advances, SCRATCH0=0x43. Inbox CW4 maps to
+  `fb+0x7fae5400`, beyond the 256 MiB PCI BAR. MM_INDEX reads returned zero for
+  all four previous command slots: `UNUSABLE (0/4 sane headers, MM_INDEX)`.
+  The delivery gate stayed closed; pixel-clock/encoder/transmitter commands were
+  log-only. No guest panic observed. Samsung EDID is published as AppleDisplay;
+  the desktop Metal probe passed offscreen checks with zero reported mismatches,
+  but window presentation was not verified. Physical picture awaits user report.
+- **Capture/qualification:** INVALID (`identity_or_route_missing`), with an
+  incomplete CR2 transport line. Probe success does not qualify HDMI or capture.
+- **Shutdown/recovery:** stop-requested plus the existing vm-supervision shutdown
+  path stopped the container forcibly. The experiment recorded already-stopped;
+  this is NOT a clean guest shutdown. Recovery receipt says recovered,
+  `authorizes_launch=true`; post-run SMU version probe answered OK, CP_STAT=0.
+- **Evidence:** `~/macos-vm/run/candidate-297-results/` (serial, probe, verdict,
+  shutdown and recovery), `run/c297-post-mode2-probe.json`, `run/c297-post-dcn.json`.
+- **Next discriminator:** establish why MM_INDEX reads zero: audit native CGS
+  access against direct BAR MMIO and independently verify address translation
+  before allowing inbox writes. Never load, start or reset DMCUB in the guest.
 
-[Access-path evidence](findings/research/c298-indirect-access-20260923.md).
-Previous 297 result: ring refused, offscreen probe passed, incomplete capture,
-forced stop, authorizing recovery and responsive SMU. [Archive](findings/research/status-archives/status-after-c297-before-c298-20260923.md).
-296-d belonged to the previous boot and has no completed recovery receipt.
+## Current host and delivery
 
-No guest running after 298. GPU remains vfio-pci, power/control=on. GitHub icex
-authentication works. Candidates 291–297 integrated on remote dev at 153a23d;
-298 delivery follows this status commit. 1004 host tests OK (three skips).
-HDMI audio remains gated on verified physical video; prior USB/Moonlight audio
-and remote-rendering evidence retain their separate scope.
+No guest running after 297. GPU stays on vfio-pci with power/control=on.
+Same-boot recovery is authorized; a fresh MODE2 reset remains required by cycle.py.
+Candidate 296-d belonged to the prior boot and has no completed result receipts;
+the host was already rebooted before this session. No recovery success is claimed for it.
+GitHub authentication for icex and remote dev access verified. Candidates 291–297
+are cumulative development, not physical-display qualification. Host suite: 1004
+run, OK with three skips. Candidate 297 card capped at 6000 seconds.
+
+HDMI audio follows a verified picture; USB/streaming audio retains its prior scope.
+[Handoff](findings/research/handoff-hdmi-dmub-20260923.md),
+[DCN research](findings/research/dcn315-first-init-20260923.md).
+Superseded live entries: [archive](findings/research/status-archives/status-before-c297-20260923.md).
 
 ## Verified progress
 
@@ -95,3 +97,8 @@ and [earlier](findings/research/status-archives/status-before-night-close-202609
 
 
 
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-298-results`
+- Verdict: `INVALID`
+- Boundary: `identity_or_route_missing`

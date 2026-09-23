@@ -1,6 +1,6 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-09-23. Latest display experiment: **1.0.297** (inbox delivery refused; physical output unverified); prior streaming baseline: **1.0.284**; broader baseline: **1.0.280**. Full desktop acceleration
+Updated 2026-09-23. Latest display experiment: **1.0.298** (inbox reads fail; Samsung no signal on 297); prior streaming baseline: **1.0.284**; broader baseline: **1.0.280**. Full desktop acceleration
 is **not qualified**. The reproduced Screen Sharing transparency defect is fixed
 in candidate279 and retained in280. Candidate280 also passes strict capture and
 clean recovery after visual, concurrent-client and codec workloads. The patched-QEMU
@@ -412,3 +412,8 @@ pass, capture remains INVALID, and forced shutdown yielded an authorizing recove
 The SMU answered the post-run probe. Next: validate the register-access and address
 path before writing the inbox; then verify physical picture before HDMI audio.
 See [live status](../status.md) for run identity and artifacts.
+
+Candidate 298 distinguishes raw all-ones inbox reads from CGS-generated zeros;
+nonzero BAR controls match both accessors. Clean guest shutdown completed, but
+CR2 producer overflow (512 records, five drops) blocked recovery and reuse.
+Reduce optional diagnostic volume before another launch; preserve loss gates.
