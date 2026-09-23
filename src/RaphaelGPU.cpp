@@ -8601,6 +8601,37 @@ static void dcnRingWrite(uint64_t off, uint32_t value) {
     else fbAperture()[off / 4] = value;
 }
 
+// Candidate 298 diagnostic: compare CGS validated reads with the raw accessor.
+// Only the existing MM_INDEX selectors are written; never MM_DATA or DMCUB control.
+// Restore selectors before returning. Known BAR data is a control for offset semantics.
+static void dcnCheckIndirect(uint64_t ringBar) {
+    if (asicInfo == nullptr) return;
+    const uint32_t savedIndex = fbRead(asicInfo, kMmIndex);
+    const uint32_t savedHi = fbRead(asicInfo, kMmIndexHi);
+    auto sample = [](const char *tag, uint64_t off, uint32_t expected) {
+        fbWrite(asicInfo, kMmIndex, static_cast<uint32_t>(off) | 0x80000000u);
+        fbWrite(asicInfo, kMmIndexHi, static_cast<uint32_t>(off >> 31));
+        const uint32_t index = fbRead(asicInfo, kMmIndex);
+        const uint32_t hi = fbRead(asicInfo, kMmIndexHi);
+        const uint32_t raw = fbRead(asicInfo, kMmData);
+        const uint32_t cgs = dcnNativeRead(dcnRegContext, kMmData);
+        CRLOG("DCN: indirect-check %s off=%#llx index=%#x hi=%#x raw=%#x cgs=%#x BAR=%#x",
+              tag, off, index, hi, raw, cgs, expected);
+    };
+    auto fb = fbAperture();
+    if (fb != nullptr && fitsDiscoveredBar(0, 64)) {
+        for (unsigned d = 0; d < 4; d++) sample("control", 4 * d, fb[d]);
+    }
+    const uint32_t wptr = fbRead(asicInfo, 0x3696);
+    const uint32_t size = fbRead(asicInfo, 0x3695);
+    if (size >= 256 && size <= 0x100000 && wptr < size) {
+        for (unsigned k = 4; k >= 1; k--)
+            sample("inbox", ringBar + (wptr + size - 64 * k) % size, 0);
+    }
+    fbWrite(asicInfo, kMmIndex, savedIndex);
+    fbWrite(asicInfo, kMmIndexHi, savedHi);
+}
+
 // Read-only survey of the DMCUB the host driver left running (rgpudcn bit 128). Nothing here
 // writes a register or VRAM: it logs every non-zero DMCUB register, whether the firmware timer
 // advances, where each memory window lives in VRAM, and the last commands in the inbox ring.
@@ -8662,6 +8693,7 @@ static void dcnSurveyDmcub(const char *when) {
     for (unsigned cw = 0; cw < 8; cw++) {
         if (inOff < cwBase[cw] || inOff >= cwTop[cw] || cwMc[cw] < fbMc) continue;
         const uint64_t ringBar = cwMc[cw] - fbMc + (inOff - cwBase[cw]);
+        dcnCheckIndirect(ringBar);
         dcnRingBar = ringBar;
         dcnRingSize = inSize;
         dcnRingIndirect = !visible(ringBar, inSize);
