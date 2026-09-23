@@ -1,6 +1,6 @@
 # Live status — 2026-09-23
 
-## Candidate 300: host DMCUB tail reserved, old inbox contents erased
+## Candidate 300: host DMCUB tail reserved, inbox reads zero
 
 Run `120b9e2929247fb4057dfa81e241d71c`, metal-148, source `befcae4`,
 boot `dc8add85-5070-419f-959d-6cc094c914be`, MODE2 #221.
@@ -19,7 +19,7 @@ boot `dc8add85-5070-419f-959d-6cc094c914be`, MODE2 #221.
 - **Next:** fresh host boot and user gpu-bind to recreate host-loaded DMCUB contents,
   then guarded delivery with the reservation retained. Do not bypass the sane-header
   check or load/start/reset guest DMCUB firmware. Same-boot reuse is authorized,
-  but cannot restore the erased host inbox state required by this experiment.
+  but does not establish fresh host inbox contents for this experiment.
 
 Evidence: `~/macos-vm/run/candidate-300-results/`,
 `~/macos-vm/run/c300-post-mode2-probe.json`.
@@ -28,8 +28,9 @@ Evidence: `~/macos-vm/run/candidate-300-results/`,
 recovery. [Prior status](findings/research/status-archives/status-before-c300-result-20260923.md).
 
 Development uses dev directly in candidate worktrees, with a remote pull before
-each candidate. Remote currently fd413c0: pushes after this reboot fail because
-GitHub credentials are unavailable/invalid; local commits are preserved on dev.
+each candidate. HTTPS credentials are unavailable after reboot; SSH authentication is verified
+and is being used to deliver dev. Candidate 301 / metal-149 is built for guarded
+delivery after a fresh host boot, with the native tail reservation retained.
 Main remains unchanged. Host suite: 1005 tests OK, three skipped.
 
 ## Verified progress
