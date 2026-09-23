@@ -1,30 +1,40 @@
 # Live status — 2026-09-23
 
-## Candidate 305: firmware query fails before guest TMR changes on fresh boot
+## Candidate 304: normal display wake accepted; DMCUB still unresponsive
 
-Run `b6daacf9f42f33bf735a2167855b110b`, metal-153, source `2c9e33e`,
-boot `5074c0e5-b2f6-46da-99b2-299ba322b41e`, MODE2 #226.
+Run `f721fecfe53efb0fa0bef789c4e5314f`, metal-152, source `eee7966`,
+boot `dc8add85-5070-419f-959d-6cc094c914be`, MODE2 #225.
 
-- **Functional:** GPINT GET_FW_VERSION times out before guest TMR unload:
-  input0x80000->0x10010000, response0, CNTL0x1900c6, CNTL2=0. Later queries
-  also time out. Host inbox retains four sane command headers, and native tail
-  reservation succeeds. Delivery refuses without a live firmware acknowledgment.
-  Normal display-idle exit is accepted but does not restore GPINT response.
-  No HDMI output established. This fresh-boot observation moves the earliest
-  failure before guest TMR changes; reboot/bind alone did not fix it.
-- **Capture:** CORE_PROBE_PASS; inspect final critical record count in receipt.
+- **Functional:** separate VBIOS SMU GetPmfwVersion succeeded (0x625300), then
+  SetDisplayIdleOptimizations(0) succeeded. GPINT version request still timed out
+  afterward. Inbox delivery disabled; no image/audio established.
+- **Capture:** CORE_PROBE_PASS; final critical count 426.
 - **Shutdown/recovery:** exited-after-guest-request, recovered,
-  authorizes_launch=true. Post-run SMU version query OK; no guest running.
-- **Next:** compare read-only firmware-code bytes at CW0 with the installed host
-  firmware image to distinguish lost code from a processor/control-path failure.
-  Investigate host unbind and MODE2 separately; do not claim either causal yet.
-  No further identical reboot/bind requested; same-boot reuse is authorized.
+  authorizes_launch=true. Post-run SMU query succeeds; no guest running.
+- **Blocker:** CPU inbox access works (302); command consumption and independent
+  GPINT are unresponsive (302–304), including after normal display-idle exit.
+  GPINT1 interrupt and wake sources are enabled; firmware reset is deasserted.
+  Existing VBIOS lacks encoder/transmitter/pixel-clock legacy command tables.
+  No source-supported non-reset firmware recovery has been identified. Host
+  reboot/gpu-bind requested for reinitialization under the no-guest-firmware-reset
+  and no-same-boot-amdgpu-rebind rules. This is not a missing recovery receipt:
+  same-boot GPU cycles remain authorized.
+- **Next:** preserve the 32MiB host tail and inspect firmware responsiveness earlier
+  around the existing PSP TMR unload/setup sequence before more delivery. The
+  host firmware code is inside the original host TMR; reservation alone may not
+  preserve PSP ownership. This is a hypothesis to audit, not established causation.
 
-Evidence: `~/macos-vm/run/candidate-305-results/`,
-`~/macos-vm/run/c305-post-mode2-probe.json`.
+Evidence: `~/macos-vm/run/candidate-304-results/`,
+`~/macos-vm/run/c304-post-mode2-probe.json`.
 [Source audit](findings/research/host-dmcub-tmr-overlap-20260923.md).
-Development uses dev directly in candidate worktrees, with remote pulls and SSH
-pushes. Main unchanged. Host suite: 1007 tests OK, three skipped.
+Development stays on dev in candidate worktrees, pulling remote before each
+candidate. SSH push works. Main unchanged. Host suite: 1007 tests OK, three skipped.
+Candidate 305 / metal-153 is built (source `2c9e33e`), passes all 1007 host
+tests and dry-run preflight, and is not launched. Launcher:
+`~/macos-vm/run/c305-launch.sh`. It adds
+early raw-MMIO GPINT observations around PSP transitions and requires a live
+firmware response before delivering commands. Current boot remains blocked on
+firmware responsiveness, independently of the valid GPU recovery receipt.
 
 ## Verified progress
 
