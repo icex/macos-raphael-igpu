@@ -1534,6 +1534,7 @@ static void substituteCpFirmware(uint8_t *arr, uint32_t count) {
 #endif
 
 static void dcnQueryFirmwareVersion(const char *when);
+static void dcnFingerprintHostCode(const char *when);
 static mach_vm_address_t orgPspBufPrep {};
 static uint32_t bufPrepCount = 0;
 // psp_gfx_resp sits at command-buffer +864: status +0, fw_addr_lo +8, fw_addr_hi +12,
@@ -1660,6 +1661,7 @@ static uint32_t wrapPspTmrInit(void *psp) {
         CRLOG("HOSTRESERVE: refusing PSP TMR init without native host-window reservation");
         return 2;
     }
+    dcnFingerprintHostCode("before PSP TMR unload");
     dcnQueryFirmwareVersion("before PSP TMR unload");
     if ((mask & XC) != 0 && hwlibsBase != 0 && psp != nullptr) {
         auto unload = reinterpret_cast<uint32_t (*)(void *)>(hwlibsBase + kOffPspTmrUnload);
@@ -1668,6 +1670,7 @@ static uint32_t wrapPspTmrInit(void *psp) {
         dcnQueryFirmwareVersion("after PSP TMR unload");
     }
     const auto result = FunctionCast(wrapPspTmrInit, orgPspTmrInit)(psp);
+    dcnFingerprintHostCode("after PSP LOAD_TOC/allocation");
     dcnQueryFirmwareVersion("after PSP LOAD_TOC/allocation");
     return result;
 }
@@ -8756,6 +8759,41 @@ static void dcnCheckIndirect(uint64_t ringBar) {
     }
     fbWrite(asicInfo, kMmIndex, savedIndex);
     fbWrite(asicInfo, kMmIndexHi, savedHi);
+}
+
+// Read-only 4KiB fingerprint of the host instruction window. Compare with the
+// installed Linux firmware payload, not with mutable firmware state or scratch bits.
+static void dcnFingerprintHostCode(const char *when) {
+    if (!dcnVersionQueryEnabled || !hostReservationReady || asicInfo == nullptr) return;
+    const uint64_t physical = uint64_t(fbRead(asicInfo, kGcFbOffset) & 0xffffff) << 24;
+    const uint64_t mc = uint64_t(fbRead(asicInfo, kGcFbBase) & 0xffffff) << 24;
+    const uint64_t address = fbRead(asicInfo, 0x3675) | (uint64_t(fbRead(asicInfo, 0x3676)) << 32);
+    const uint32_t base = fbRead(asicInfo, 0x3665) & 0x1fffffff;
+    const uint32_t top = fbRead(asicInfo, 0x366d);
+    uint64_t off = UINT64_MAX;
+    if (address >= physical && address - physical < discoveredVramTotal) off = address - physical;
+    else if (address >= mc && address - mc < discoveredVramTotal) off = address - mc;
+    if (!discoveredCapacityValid || !(top & 0x80000000u) || (top & 0x1fffffff) < base ||
+        uint64_t((top & 0x1fffffff) - base) + 1 < 4096 || off < hostReservationLimit ||
+        off > discoveredVramTotal || discoveredVramTotal - off < 4096) {
+        CRLOG("DCN: host-code %s bounds refused address=%#llx off=%#llx", when, address, off);
+        return;
+    }
+    const uint32_t savedIndex = fbRead(asicInfo, kMmIndex), savedHi = fbRead(asicInfo, kMmIndexHi);
+    uint32_t hash=2166136261u, zero=0, ones=0, first[8] {};
+    for (unsigned d=0; d<1024; d++) {
+        const uint64_t at=off+4*d;
+        fbWrite(asicInfo, kMmIndex, uint32_t(at) | 0x80000000u);
+        fbWrite(asicInfo, kMmIndexHi, uint32_t(at >> 31));
+        const uint32_t v=fbRead(asicInfo, kMmData);
+        if (d<8) first[d]=v;
+        zero += v==0; ones += v==0xffffffffu;
+        for (unsigned b=0;b<4;b++) hash=(hash ^ ((v >> (8*b)) & 0xff))*16777619u;
+    }
+    fbWrite(asicInfo, kMmIndex, savedIndex);
+    fbWrite(asicInfo, kMmIndexHi, savedHi);
+    CRLOG("DCN: host-code %s off=%#llx bytes=4096 fnv1a=%08x zero=%u ones=%u first=%08x/%08x/%08x/%08x/%08x/%08x/%08x/%08x",
+          when, off, hash, zero, ones, first[0],first[1],first[2],first[3],first[4],first[5],first[6],first[7]);
 }
 
 // Read-only survey of the DMCUB the host driver left running (rgpudcn bit 128). Nothing here

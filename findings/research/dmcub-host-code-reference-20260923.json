@@ -1,0 +1,18 @@
+{
+  "source": "/usr/lib/firmware/amdgpu/dcn_3_1_5_dmcub.bin.zst",
+  "uncompressed_sha256": "c198f520748ed8ac0b8bec04c7d85d2962865c6bbe6c9a6791e661c23750b8d5",
+  "firmware_version": "0x5003500",
+  "payload_sample_offset": 512,
+  "bytes": 4096,
+  "fnv1a": "6281abc0",
+  "first_dwords": [
+    "1049c500",
+    "e52049d5",
+    "49f53049",
+    "00003400",
+    "6100ffdc",
+    "6100ffd0",
+    "61010010",
+    "0004002f"
+  ]
+}

@@ -12,7 +12,7 @@ boot `5074c0e5-b2f6-46da-99b2-299ba322b41e`, MODE2 #226.
   Normal display-idle exit is accepted but does not restore GPINT response.
   No HDMI output established. This fresh-boot observation moves the earliest
   failure before guest TMR changes; reboot/bind alone did not fix it.
-- **Capture:** CORE_PROBE_PASS; inspect final critical record count in receipt.
+- **Capture:** CORE_PROBE_PASS; inspect final critical record count 449.
 - **Shutdown/recovery:** exited-after-guest-request, recovered,
   authorizes_launch=true. Post-run SMU version query OK; no guest running.
 - **Next:** compare read-only firmware-code bytes at CW0 with the installed host
