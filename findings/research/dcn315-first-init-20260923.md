@@ -109,3 +109,23 @@ non-causes; their tooling (full I2C trace, decoder, host trace script) stays.
   starting DMUB execution" from the inert `dc_dmub_srv`: the link path (DIG/PHY via DMUB
   command tables) is the next blocker, as predicted. The host-loaded DMCUB is still booted
   (`SCRATCH0=0x43`), which makes "attach DAL to the running firmware" the next design.
+
+## 16:20 — survey of the DMCUB the host left running (candidate 291, read-only) [V]
+- Alive: `DMCUB_TIMER_CURRENT` advances ~29k ticks/ms before and after DAL init; CNTL 0x900c6,
+  SCRATCH0 0x43 (DAL_FW | MAILBOX_READY | 0x40) unchanged; no fault addresses latched.
+- Inbox1 base 0x64000000 size 0x2000, WPTR = RPTR = 0x1bc0 (idle). Outbox1 0x64002000 idle.
+- Windows (DMCUB space -> MC): CW0 inst [0,0x3a51f) and CW1 stack/data -> 0x8_5e30_0000 /
+  0x8_5e33_a600 (outside the FB aperture: the PSP-loaded protected region); CW3 VBIOS
+  fb+0x2da600, CW4 mailbox fb+0x2e5400, CW5 trace fb+0x2e9400, CW6 fw state fb+0x2f9500 — all in
+  the first 3 MB of the carve-out and BAR0-visible. REGION4/5 point at the same trace/data.
+- Ring dump missed: CWn_BASE/TOP omit the 0x60000000 prefix of the inbox address; fixed in 292.
+- Compatibility: DMUB command header and the VBIOS command IDs/structs (encoder control 0,
+  transmitter control 1, set pixel clock 2) are identical between Linux v5.14 (Apple's DC
+  3.2.145 era) and current, so Apple-built commands should be accepted by the dcn315 firmware.
+
+## Candidate 292 (built, not run): DMUB path hooks
+Apple's dc_dmub_srv_cmd_queue 0x1b06de / execute 0x1b0756 / wait_idle 0x1b0797 are replaced.
+`rgpudcn` 256 = log every command, report success, write nothing (card metal-140, 407). 512 adds
+delivery of VBIOS-type commands into the live inbox1 ring (fb+0x2e5400) plus an INBOX1_WPTR
+write, with a full-ring check, 100 ms RPTR wait and fail-closed disable on the first timeout.
+Launch needs the user's go-ahead: the session's permission check refused to launch it.

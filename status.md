@@ -67,6 +67,14 @@ only right after a login at 1920x1080 Retina with Mac login, and breaks after an
 switch (stale scale until a WindowServer restart); Apple client audio tap fails; client
 resolution never works. Sessions can now last 12 h. Details in the notes.
 
+## DMCUB survey and DMUB hooks — 2026-09-23 16:30
+
+Candidate 291 (read-only) found the host-loaded DMCUB alive and idle, with its mailbox, VBIOS,
+trace and state windows in the first 3 MB of VRAM (BAR0-visible). Candidate 292 is built and
+preflighted: hooks for Apple's DMUB queue/execute/wait, card metal-140 in log-only mode
+(`rgpudcn=407`). Next run: 292 log-only, then a delivery card (+512) for the first real
+transmitter/pixel-clock commands. [Notes](findings/research/dcn315-first-init-20260923.md).
+
 ## EDID works — 2026-09-23 15:40
 
 Fresh boot: the guest read the dummy adapter's EDID at boot and the Samsung's after a hot-plug
