@@ -1,6 +1,6 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-09-17. Current display-port candidate: **1.0.286** (not yet run); last hardware baseline: **1.0.284**; prior broader baseline: **1.0.280**. Full desktop acceleration
+Updated 2026-09-23. Latest display experiment: **1.0.297** (inbox delivery refused; physical output unverified); prior streaming baseline: **1.0.284**; broader baseline: **1.0.280**. Full desktop acceleration
 is **not qualified**. The reproduced Screen Sharing transparency defect is fixed
 in candidate279 and retained in280. Candidate280 also passes strict capture and
 clean recovery after visual, concurrent-client and codec workloads. The patched-QEMU
@@ -403,3 +403,12 @@ Candidate282's streaming investigation ended with valid capture, a clean
 guest-request shutdown and authorizing recovery. Motion performance remains
 open; the final120FPS-request/60Hz-display trace requires a matching4K60 control.
 [Final evidence](../findings/research/safari-motion-20260916.json).
+
+## HDMI inbox access — 2026-09-23
+
+Candidate 297 detects the Samsung but reads zeros through MM_INDEX for the host-loaded
+DMCUB inbox beyond the BAR. No DMUB commands were delivered. Offscreen Metal checks
+pass, capture remains INVALID, and forced shutdown yielded an authorizing recovery.
+The SMU answered the post-run probe. Next: validate the register-access and address
+path before writing the inbox; then verify physical picture before HDMI audio.
+See [live status](../status.md) for run identity and artifacts.

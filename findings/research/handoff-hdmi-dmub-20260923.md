@@ -1,5 +1,9 @@
 # Handoff: HDMI output via the running DMCUB (2026-09-23 18:15 EEST)
 
+**Historical handoff, superseded by [live status](../../../status.md).** Candidate 297 has
+now run on boot 90122d1c; inbox reads were zero, delivery refused, recovery authorizes
+reuse and SMU probe passes. GitHub credentials work. See repository status for details.
+
 Goal: a picture on the user's Samsung over the Raphael iGPU HDMI port. HDMI audio comes after that
 (plan: `findings/research/hdmi-audio-passthrough-20260917.md`).
 
