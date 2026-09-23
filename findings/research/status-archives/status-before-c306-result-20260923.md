@@ -1,29 +1,30 @@
 # Live status — 2026-09-23
 
-## Candidate 306: early fingerprint refused; no code-memory evidence
+## Candidate 305: firmware query fails before guest TMR changes on fresh boot
 
-Run `958f07ada16e6da27cc5f621594db603`, metal-154, source `d6a73d9`,
-boot `5074c0e5-b2f6-46da-99b2-299ba322b41e`, MODE2 #227.
+Run `b6daacf9f42f33bf735a2167855b110b`, metal-153, source `2c9e33e`,
+boot `5074c0e5-b2f6-46da-99b2-299ba322b41e`, MODE2 #226.
 
-- **Functional:** CW0 fingerprint refused its bounds check: the general capacity
-  discovery cache is not populated at this early PSP point. No instruction-memory
-  reads occurred. GPINT remains unresponsive; four sane inbox headers remain.
-  Normal display wake succeeds without restoring firmware response. Delivery off.
-- **Capture:** CORE_PROBE_PASS; final critical count 448. Physical output unqualified.
+- **Functional:** GPINT GET_FW_VERSION times out before guest TMR unload:
+  input0x80000->0x10010000, response0, CNTL0x1900c6, CNTL2=0. Later queries
+  also time out. Host inbox retains four sane command headers, and native tail
+  reservation succeeds. Delivery refuses without a live firmware acknowledgment.
+  Normal display-idle exit is accepted but does not restore GPINT response.
+  No HDMI output established. This fresh-boot observation moves the earliest
+  failure before guest TMR changes; reboot/bind alone did not fix it.
+- **Capture:** CORE_PROBE_PASS; inspect final critical record count 449.
 - **Shutdown/recovery:** exited-after-guest-request, recovered,
-  authorizes_launch=true; post-run SMU probe succeeds, no guest running.
-- **Next:** use the native reservation's already validated total for the early
-  read-only fingerprint. Preserve bounds checks; do not treat refusal as evidence
-  of missing or inaccessible firmware. Continue on this authorized boot.
+  authorizes_launch=true. Post-run SMU version query OK; no guest running.
+- **Next:** compare read-only firmware-code bytes at CW0 with the installed host
+  firmware image to distinguish lost code from a processor/control-path failure.
+  Investigate host unbind and MODE2 separately; do not claim either causal yet.
+  No further identical reboot/bind requested; same-boot reuse is authorized.
 
-305 established timeout before guest TMR changes on a fresh boot, so another
-identical reboot/bind is not the next test. Investigate host handoff/MODE2/earlier
-guest setup after obtaining actual code-memory evidence.
-Evidence: `~/macos-vm/run/candidate-306-results/`,
-`~/macos-vm/run/c306-post-mode2-probe.json`.
+Evidence: `~/macos-vm/run/candidate-305-results/`,
+`~/macos-vm/run/c305-post-mode2-probe.json`.
 [Source audit](findings/research/host-dmcub-tmr-overlap-20260923.md).
-Work stays on dev in candidate worktrees; pull remote before each candidate and
-push dev over SSH. Main unchanged. Host suite: 1007 tests OK, three skipped.
+Development uses dev directly in candidate worktrees, with remote pulls and SSH
+pushes. Main unchanged. Host suite: 1007 tests OK, three skipped.
 
 ## Verified progress
 
