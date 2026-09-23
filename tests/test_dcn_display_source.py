@@ -17,8 +17,9 @@ class DcnDisplaySourceTests(unittest.TestCase):
         self.assertIn('PE_parse_boot_argn("rgpudcntrace", &dcnTrace, sizeof(dcnTrace))', SOURCE)
         self.assertIn('PE_parse_boot_argn("rgpuvd120", &vd120, sizeof(vd120)) && vd120 == 1', SOURCE)
         self.assertIn('kDcnDmubGuard = 16, kDcnDioWake = 32, kDcnHostI2cSpeed = 64, kDcnDmcubSurvey = 128,\n'
+                      '    kDcnDmubHook = 256, kDcnDmubDeliver = 512,\n'
                       '    kDcnAllowed = kDcnTrace | kDcnTranslate | kDcnPool302 | kDcnDmubGuard | kDcnDioWake |\n'
-                      '                  kDcnHostI2cSpeed | kDcnDmcubSurvey,', SOURCE)
+                      '                  kDcnHostI2cSpeed | kDcnDmcubSurvey | kDcnDmubHook | kDcnDmubDeliver,', SOURCE)
 
     def test_withdrawn_dmcub_firmware_and_unpaired_pool_are_refused(self):
         self.assertIn('(dcn & ~kDcnAllowed) == 0 &&\n'
@@ -70,6 +71,17 @@ class DcnDisplaySourceTests(unittest.TestCase):
         self.assertNotIn('dcnNativeWrite', body)
         self.assertNotRegex(body, r'fb\[[^\]]*\]\s*=[^=]')
         self.assertIn('if (!(dcnMode & kDcnDmcubSurvey)', body)
+
+
+    def test_dmub_delivery_is_gated(self):
+        start = SOURCE.index('static void wrapDcDmubQueue(')
+        body = SOURCE[start:SOURCE.index('\nstatic void installDcnRoutes(', start)]
+        self.assertIn('const bool deliver = type == 128 && dmubDeliverReady();', body)
+        self.assertIn('(dcnMode & kDcnDmubDeliver) && !dmubDeliverDead', SOURCE)
+        # The only DMCUB register the hooks write is INBOX1_WPTR.
+        self.assertEqual(body.count('dcnNativeWrite('), 1)
+        self.assertIn('dcnNativeWrite(dcnRegContext, 0x3696, dmubWptr);', body)
+        self.assertIn('dmubDeliverDead = true;', body)
 
 
 if __name__ == '__main__':

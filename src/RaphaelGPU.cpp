@@ -8362,11 +8362,15 @@ static bool entryMatches(mach_vm_address_t base, size_t imageSize, size_t offset
 static constexpr size_t kOffDcnRegWait     = 0x110bd7;
 static constexpr size_t kOffDcCreate       = 0xfea5e;
 static constexpr size_t kOffDcHardwareInit = 0xff053;
+static constexpr size_t kOffDcDmubQueue = 0x1b06de;    // dc_dmub_srv_cmd_queue
+static constexpr size_t kOffDcDmubExecute = 0x1b0756;  // dc_dmub_srv_cmd_execute
+static constexpr size_t kOffDcDmubWait = 0x1b0797;     // dc_dmub_srv_wait_idle
 enum : uint32_t {
     kDcnTrace = 1, kDcnTranslate = 2, kDcnPool302 = 4, kDcnWithdrawnDmcubFirmware = 8,
     kDcnDmubGuard = 16, kDcnDioWake = 32, kDcnHostI2cSpeed = 64, kDcnDmcubSurvey = 128,
+    kDcnDmubHook = 256, kDcnDmubDeliver = 512,
     kDcnAllowed = kDcnTrace | kDcnTranslate | kDcnPool302 | kDcnDmubGuard | kDcnDioWake |
-                  kDcnHostI2cSpeed | kDcnDmcubSurvey,
+                  kDcnHostI2cSpeed | kDcnDmcubSurvey | kDcnDmubHook | kDcnDmubDeliver,
 };
 static uint32_t dcnMode = 0;
 static uint32_t dcnTraceBudget = 1500;
@@ -8539,6 +8543,10 @@ static void *wrapDcCreate(void *init) {
 }
 
 
+// Inbox1 ring of the running DMCUB, found by the survey (BAR0 offset and size; 0 = unknown).
+static uint64_t dcnRingBar = 0;
+static uint32_t dcnRingSize = 0;
+
 // Read-only survey of the DMCUB the host driver left running (rgpudcn bit 128). Nothing here
 // writes a register or VRAM: it logs every non-zero DMCUB register, whether the firmware timer
 // advances, where each memory window lives in VRAM, and the last commands in the inbox ring.
@@ -8595,9 +8603,13 @@ static void dcnSurveyDmcub(const char *when) {
           "wptr=%#x rptr=%#x | fbMc=%#llx bar=%p", when, inBase, inSize, inW, inR, rd(0x369c),
           rd(0x369d), rd(0x369e), rd(0x369f), fbMc, fb);
     if (fb == nullptr || fbMc == 0 || inSize == 0 || inSize > 0x100000) return;
+    // CWn_BASE/TOP hold the window without the 0x60000000 DMCUB prefix the inbox base carries.
+    const uint32_t inOff = inBase & 0x1fffffff;
     for (unsigned cw = 0; cw < 8; cw++) {
-        if (inBase < cwBase[cw] || inBase >= cwTop[cw] || cwMc[cw] < fbMc) continue;
-        const uint64_t ringBar = cwMc[cw] - fbMc + (inBase - cwBase[cw]);
+        if (inOff < cwBase[cw] || inOff >= cwTop[cw] || cwMc[cw] < fbMc) continue;
+        const uint64_t ringBar = cwMc[cw] - fbMc + (inOff - cwBase[cw]);
+        dcnRingBar = ringBar;
+        dcnRingSize = inSize;
         if (!visible(ringBar, inSize)) { CRLOG("DCN: DMCUB inbox ring fb+%#llx not visible", ringBar); return; }
         for (unsigned k = 4; k >= 1; k--) {
             const uint32_t at = (inW + inSize - 64 * k) % inSize;
@@ -8665,6 +8677,77 @@ static void wrapDcHardwareInit(void *dc) {
           dcnDropped, dcnAccesses.used());
 }
 
+// DMUB command path (rgpudcn 256/512). Apple's dc_dmub_srv_cmd_queue/execute/wait_idle
+// (0x1b06de/0x1b0756/0x1b0797) are replaced. With 256 alone every command is logged and
+// reported successful; nothing is written. With 512 as well, VBIOS commands (type 128) are
+// copied into the running firmware's inbox1 ring and INBOX1_WPTR is advanced; everything else
+// is still only logged. The first timeout turns delivery off for the rest of the boot.
+static mach_vm_address_t orgDcDmubQueue {}, orgDcDmubExecute {}, orgDcDmubWait {};
+static uint32_t dmubWptr = 0, dmubCommands = 0, dmubDelivered = 0;
+static bool dmubPending = false, dmubDeliverDead = false;
+
+static bool dmubDeliverReady() {
+    return (dcnMode & kDcnDmubDeliver) && !dmubDeliverDead && dcnNativeRead != nullptr &&
+           dcnNativeWrite != nullptr && dcnRingBar != 0 && dcnRingSize >= 0x400 &&
+           dcnRingSize <= 0x100000 && fbAperture() != nullptr;
+}
+
+static void wrapDcDmubQueue(void *dcDmub, const uint32_t *cmd) {
+    (void)dcDmub;
+    if (cmd == nullptr) return;
+    const uint32_t header = cmd[0];
+    const uint32_t type = header & 0xff, sub = (header >> 8) & 0xff, bytes = (header >> 24) & 0x3f;
+    dmubCommands++;
+    char line[200];
+    size_t len = 0;
+    line[0] = 0;
+    for (unsigned d = 0; d < 16; d++) len += snprintf(line + len, sizeof(line) - len, " %08x", cmd[d]);
+    const bool deliver = type == 128 && dmubDeliverReady();
+    CRLOG("DCN: DMUB cmd#%u type=%u sub=%u bytes=%u %s:%s", dmubCommands, type, sub, bytes,
+          deliver ? "deliver" : "log-only", line);
+    if (!deliver) return;
+    auto volatile *fb = fbAperture();
+    const uint32_t rptr = dcnNativeRead(dcnRegContext, 0x3697);         // DMCUB_INBOX1_RPTR
+    if (!dmubPending) dmubWptr = dcnNativeRead(dcnRegContext, 0x3696);  // DMCUB_INBOX1_WPTR
+    if ((dmubWptr + 64) % dcnRingSize == rptr) {
+        CRLOG("DCN: DMUB ring full (wptr %#x rptr %#x); delivery disabled", dmubWptr, rptr);
+        dmubDeliverDead = true;
+        return;
+    }
+    for (unsigned d = 0; d < 16; d++) fb[(dcnRingBar + dmubWptr + 4 * d) / 4] = cmd[d];
+    __sync_synchronize();
+    dmubWptr = (dmubWptr + 64) % dcnRingSize;
+    dmubPending = true;
+}
+
+static void wrapDcDmubExecute(void *dcDmub) {
+    (void)dcDmub;
+    if (!dmubPending || !dmubDeliverReady()) return;
+    dcnNativeWrite(dcnRegContext, 0x3696, dmubWptr);                     // DMCUB_INBOX1_WPTR
+}
+
+static void wrapDcDmubWait(void *dcDmub) {
+    (void)dcDmub;
+    if (!dmubPending) return;
+    dmubPending = false;
+    if (!dmubDeliverReady()) return;
+    uint32_t rptr = 0, waited = 0;
+    for (; waited < 100000; waited += 10) {
+        rptr = dcnNativeRead(dcnRegContext, 0x3697);
+        if (rptr == dmubWptr) break;
+        IODelay(10);
+    }
+    if (rptr == dmubWptr) {
+        dmubDelivered++;
+        CRLOG("DCN: DMUB delivered #%u, firmware consumed to %#x in %u us", dmubDelivered, rptr, waited);
+        return;
+    }
+    dmubDeliverDead = true;
+    CRLOG("DCN: DMUB TIMEOUT wptr %#x rptr %#x after %u us, CNTL=%#x SCRATCH0=%#x; delivery disabled",
+          dmubWptr, rptr, waited, dcnNativeRead(dcnRegContext, 0x36b6),
+          dcnNativeRead(dcnRegContext, 0x36a3));
+}
+
 static void installDcnRoutes(KernelPatcher &patcher, mach_vm_address_t addr, size_t size) {
     if (dcnMode == 0) return;
     struct Target {
@@ -8677,6 +8760,10 @@ static void installDcnRoutes(KernelPatcher &patcher, mach_vm_address_t addr, siz
                                        0xec,0x18,0x49,0x89,0xfe,0xbf,0x48,0xea,0x00};
     static const uint8_t hwInit[]   = {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x41,0x55,0x41,
                                        0x54,0x53,0x48,0x83,0xec,0x28,0x48,0x89,0xfb};
+    static const uint8_t dmubQueue[] = {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x41,0x54,0x53,
+                                        0x49,0x89,0xf6};
+    static const uint8_t dmubExec[]  = {0x55,0x48,0x89,0xe5,0x41,0x56,0x53,0x48,0x89,0xfb,0x48,
+                                        0x8b,0x3f,0x4c,0x8b,0x73,0x58};
     const Target targets[] = {
         {kOffDcnRegWait, regWait, sizeof(regWait),
          reinterpret_cast<mach_vm_address_t>(wrapDcnRegWait), &orgDcnRegWait, "generic_reg_wait",
@@ -8686,6 +8773,15 @@ static void installDcnRoutes(KernelPatcher &patcher, mach_vm_address_t addr, siz
         {kOffDcHardwareInit, hwInit, sizeof(hwInit),
          reinterpret_cast<mach_vm_address_t>(wrapDcHardwareInit), &orgDcHardwareInit,
          "dc_hardware_init", true},
+        {kOffDcDmubQueue, dmubQueue, sizeof(dmubQueue),
+         reinterpret_cast<mach_vm_address_t>(wrapDcDmubQueue), &orgDcDmubQueue,
+         "dc_dmub_srv_cmd_queue", (dcnMode & kDcnDmubHook) != 0},
+        {kOffDcDmubExecute, dmubExec, sizeof(dmubExec),
+         reinterpret_cast<mach_vm_address_t>(wrapDcDmubExecute), &orgDcDmubExecute,
+         "dc_dmub_srv_cmd_execute", (dcnMode & kDcnDmubHook) != 0},
+        {kOffDcDmubWait, dmubExec, sizeof(dmubExec),
+         reinterpret_cast<mach_vm_address_t>(wrapDcDmubWait), &orgDcDmubWait,
+         "dc_dmub_srv_wait_idle", (dcnMode & kDcnDmubHook) != 0},
     };
     for (const auto &t : targets) {
         if (!t.wanted) continue;
@@ -8701,6 +8797,7 @@ static void installDcnRoutes(KernelPatcher &patcher, mach_vm_address_t addr, siz
         CRLOG("DCN: dc_create route missing; pool, translation and trace disabled");
     }
     if (!orgDcHardwareInit) dcnMode &= ~kDcnDmubGuard;
+    if (!orgDcDmubQueue || !orgDcDmubExecute || !orgDcDmubWait) dcnMode &= ~(kDcnDmubHook | kDcnDmubDeliver);
 }
 
 static uint32_t wrapFbXgmiConfig(void *self) {
