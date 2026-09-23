@@ -44,3 +44,17 @@ decisive evidence is the host driver's register values after it reads the plug's
 `/sys/class/drm/card*-HDMI-A-*/edid` is non-empty on the host at all. That needs a host reboot
 (the GPU is on vfio-pci) and then `tools/dcn-state-probe.py --regs '^DC_I2C_DDC1|^DC_GPIO_DDC1|^DC_GPIO_AUX_CTRL_5'`
 after `gpu-bind.sh` and before any guest run.
+
+## Root-cause candidate for the 0xFF: I2C engine memory in forced light sleep [I→V pending]
+- The VBIOS `dce_info` v4.4 gives `i2c_engine_refclk_10khz = 2400` (24 MHz): DAL's prescale
+  0x78 = 120 → exactly 100 kHz. The clock is right.
+- Linux's DCN 3.1 init (`hwss/dcn31/dcn31_hwseq.c`): "Power on DIO memory (AFMT HDMI) and set
+  I2C to light sleep" via `dio->mem_pwr_ctrl`, and `dce_i2c_hw.c` clears
+  `DIO_MEM_PWR_CTRL.I2C_LIGHT_SLEEP_FORCE` before a transaction, waits for
+  `DIO_MEM_PWR_STATUS.I2C_MEM_PWR_STATE == 0`, and sets the force again after it. The host
+  driver ran before the handoff, so the engine memory is left in forced light sleep.
+- Apple's DCN 3.0 I2C path never touches `DIO_MEM_PWR_CTRL`: zero accesses in the trace. A
+  sleeping engine memory explains a transaction that "completes" (`SW_DONE` already set) with
+  0xff data. Register indices and fields are identical in both headers (0x539d/0x539e).
+- Candidate 288 (`rgpudcn` bit 32, card metal-136 with `rgpudcn=55`) clears the force, sets
+  `I2C_LIGHT_SLEEP_DIS`, polls the state after `dc_hardware_init`, and logs before/after.
