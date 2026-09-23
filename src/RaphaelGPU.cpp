@@ -35,6 +35,7 @@
 #include <Headers/plugin_start.hpp>
 #include "KiqAddresses.hpp"
 #include "HostMemoryReservation.hpp"
+#include "DmubRingProbe.hpp"
 #include "KiqQueuePreparation.hpp"
 #include "GartAddresses.hpp"
 #include "DiagnosticRecords.hpp"
@@ -1624,6 +1625,7 @@ static uint32_t wrapCosRelMemHnd(void *self, void *handle) {
 static mach_vm_address_t orgPspTmrInit {};
 static mach_vm_address_t orgGmmSetMemoryAttributes {};
 static bool hostReserveEnabled = false, hostReservationReady = false;
+static uint64_t hostReservationLimit = 0;
 static uint32_t wrapGmmSetMemoryAttributes(void *self, uint32_t type, void *attributes);
 
 // Unload any pre-existing TMR before Apple tries to establish one.
@@ -3611,6 +3613,7 @@ static uint32_t wrapGmmSetMemoryAttributes(void *self, uint32_t type, void *attr
     CRLOG("HOSTRESERVE: native tail=%#llx additional=%#llx cursor=%#llx accounted=%#llx %s",
           plan.reserved, plan.additional, *reinterpret_cast<uint64_t *>(o + 0x4c0),
           *reinterpret_cast<uint64_t *>(o + 0x4c8), hostReservationReady ? "ready" : "FAILED");
+    hostReservationLimit = hostReservationReady ? plan.limit : 0;
     return hostReservationReady ? result : 2;
 }
 
@@ -8782,12 +8785,17 @@ static void dcnSurveyDmcub(const char *when) {
     CRLOG("DCN: DMCUB %s inbox1 base=%#x size=%#x wptr=%#x rptr=%#x | outbox1 base=%#x size=%#x "
           "wptr=%#x rptr=%#x | fbMc=%#llx bar=%p", when, inBase, inSize, inW, inR, rd(0x369c),
           rd(0x369d), rd(0x369e), rd(0x369f), fbMc, fb);
-    if (fb == nullptr || fbMc == 0 || inSize == 0 || inSize > 0x100000) return;
+    dcnRingUsable = false;
+    if (fb == nullptr || fbMc == 0 || inSize < 256 || inSize > 0x100000 ||
+        (inSize & 63) || inW >= inSize || inR >= inSize || (inW & 63) || (inR & 63)) return;
     // CWn_BASE/TOP hold the window without the 0x60000000 DMCUB prefix the inbox base carries.
     const uint32_t inOff = inBase & 0x1fffffff;
     for (unsigned cw = 0; cw < 8; cw++) {
         if (inOff < cwBase[cw] || inOff >= cwTop[cw] || cwMc[cw] < fbMc) continue;
         const uint64_t ringBar = cwMc[cw] - fbMc + (inOff - cwBase[cw]);
+        if (uint64_t(inOff) + inSize > uint64_t(cwTop[cw]) + 1 ||
+            !discoveredCapacityValid || ringBar > discoveredVramTotal ||
+            inSize > discoveredVramTotal - ringBar) continue;
         dcnCheckIndirect(ringBar);
         dcnRingBar = ringBar;
         dcnRingSize = inSize;
@@ -8808,6 +8816,25 @@ static void dcnSurveyDmcub(const char *when) {
             RLOG("DCN: DMCUB %s inbox[%#x]%s", when, at, line);
         }
         dcnRingUsable = sane >= 2;
+        // Linux queues into the slot at WPTR before publishing WPTR. When RPTR ==
+        // WPTR nothing is pending: validate that unsubmitted slot, then restore it.
+        // Never publish the probe or touch firmware/reset controls.
+        if (!dcnRingUsable && (dcnMode & kDcnDmubDeliver) && hostReservationReady &&
+            ringBar >= hostReservationLimit && cw == 4 && inW == inR && t0 != t1 &&
+            (rd(0x36a3) & 3) == 3 && rd(0x3696) == inW && rd(0x3697) == inR) {
+            const uint32_t savedIndex = rd(kMmIndex), savedHi = rd(kMmIndexHi);
+            auto read = [](uint64_t off) { return dcnRingRead(off); };
+            auto write = [](uint64_t off, uint32_t value) { dcnRingWrite(off, value); };
+            const auto probe = RaphaelDmubRing::probe(ringBar + inW, read, write);
+            if (dcnRingIndirect) {
+                dcnNativeWrite(dcnRegContext, kMmIndex, savedIndex);
+                dcnNativeWrite(dcnRegContext, kMmIndexHi, savedHi);
+            }
+            const bool stable = rd(0x3696) == inW && rd(0x3697) == inR;
+            dcnRingUsable = probe.matched && probe.restored && stable;
+            CRLOG("DCN: inbox reversible readback matched=%u restored=%u pointers-stable=%u; %s",
+                  probe.matched, probe.restored, stable, dcnRingUsable ? "usable" : "REFUSED");
+        }
         CRLOG("DCN: DMCUB inbox ring %s (%u/4 sane headers, %s)", dcnRingUsable ? "usable" : "UNUSABLE",
               sane, dcnRingIndirect ? "MM_INDEX" : "BAR");
         return;
@@ -8911,7 +8938,8 @@ static void wrapDcDmubQueue(void *dcDmub, const uint32_t *cmd) {
     if (!deliver) return;
     const uint32_t rptr = dcnNativeRead(dcnRegContext, 0x3697);         // DMCUB_INBOX1_RPTR
     if (!dmubPending) dmubWptr = dcnNativeRead(dcnRegContext, 0x3696);  // DMCUB_INBOX1_WPTR
-    if ((dmubWptr + 64) % dcnRingSize == rptr) {
+    if (rptr >= dcnRingSize || dmubWptr >= dcnRingSize || (rptr & 63) ||
+        (dmubWptr & 63) || (dmubWptr + 64) % dcnRingSize == rptr) {
         CRLOG("DCN: DMUB ring full (wptr %#x rptr %#x); delivery disabled", dmubWptr, rptr);
         dmubDeliverDead = true;
         return;
@@ -8926,11 +8954,14 @@ static void wrapDcDmubQueue(void *dcDmub, const uint32_t *cmd) {
     }
     for (unsigned d = 0; d < 16; d++) dcnRingWrite(dcnRingBar + dmubWptr + 4 * d, out[d]);
     __sync_synchronize();
-    const uint32_t back = dcnRingRead(dcnRingBar + dmubWptr);
-    if (back != out[0]) {
-        CRLOG("DCN: DMUB cmd#%u readback %#x != %#x; delivery disabled", dmubCommands, back, out[0]);
-        dmubDeliverDead = true;
-        return;
+    for (unsigned d = 0; d < 16; d++) {
+        const uint32_t back = dcnRingRead(dcnRingBar + dmubWptr + 4 * d);
+        if (back != out[d]) {
+            CRLOG("DCN: DMUB cmd#%u readback word=%u %#x != %#x; delivery disabled",
+                  dmubCommands, d, back, out[d]);
+            dmubDeliverDead = true;
+            return;
+        }
     }
     dmubWptr = (dmubWptr + 64) % dcnRingSize;
     dmubPending = true;

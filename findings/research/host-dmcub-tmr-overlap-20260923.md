@@ -29,7 +29,7 @@ has bounds/overflow and overlap tests. Card metal-148 keeps delivery disabled.
 Expected on this boot: preserved tail 0x7e000000..0x80000000, guest TMR below
 0x7e000000, then usable host ring headers. Firmware code is never loaded, started
 or reset by this change. If prior guest TMR writes destroyed the inbox contents,
-a fresh host boot may still be necessary; the header guard will not be bypassed.
+that hypothesis requires additional evidence; it does not establish a reboot requirement.
 
 ## 300 hardware result
 
@@ -37,8 +37,7 @@ Native reservation ready: tail 32MiB, additional 30MiB, cursor 0x7e000000,
 accounted 32MiB. SETUP_TMR moved to MC 0xf47d600000 / 0xa00000. Inbox raw
 reads changed from 0xffffffff to zero; the sampled old command headers read as zero. Erasure is not established.
 CORE_PROBE_PASS, 419 critical records with no loss, clean guest shutdown and
-authorizing recovery. Fresh host initialization is needed to recreate the inbox
-contents before guarded delivery. This run establishes reservation behavior and
+authorizing recovery. The zero reads alone do not establish whether the inbox is writable. This run establishes reservation behavior and
 removes the access denial; it does not establish HDMI output.
 
 ## Correction: reboot is not established as necessary
@@ -50,3 +49,24 @@ reboot requirement. Same-boot cycles remain admitted by the existing harness.
 The current retained-header check is our diagnostic guard, not a firmware
 requirement that old command bytes be nonzero. Investigate address/access and
 ring validation without relaxing the firmware-load/start/reset prohibition.
+
+## Candidate 302: validate an empty ring without retained commands
+
+Local Linux dmub_cmd.h defines dmub_rb_empty as RPTR == WPTR. Its
+dmub_rb_push_front copies a new 64-byte command at WPTR; dmub_srv.c
+dmub_srv_fb_cmd_execute reads back pending commands before publishing WPTR.
+There is no requirement for the previous command bytes to be nonzero.
+
+302 retains the old-header check and adds a fallback only for an empty, aligned,
+bounded CW4 inbox inside the verified native reservation, with a running timer
+and initialized firmware status. It writes two complementary patterns to the
+unsubmitted slot, reads every word, restores all 64 bytes, and checks restoration
+and unchanged pointers. It never advances WPTR for this probe. Only a complete
+pass enables command delivery. Every delivered command now reads back all 16
+words before publication (previous code checked only its header). Failed checks
+refuse delivery. No firmware load/start/reset or host rebind is introduced.
+
+Hypothesis: old-header contents are an overly restrictive accessibility test.
+Falsification: failed write/readback or restoration; successful readback followed
+by a delivery timeout would instead establish accessible CPU memory without
+proving a working firmware consumer. Candidate 301 was prepared but not launched.
