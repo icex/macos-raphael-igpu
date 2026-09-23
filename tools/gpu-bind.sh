@@ -63,6 +63,24 @@ else
     echo "vbios already present: ${ROM_OUT} ($(stat -c%s "${ROM_OUT}") bytes)"
 fi
 
+
+# While amdgpu still owns the device, record its own DDC/EDID register sequence on the iGPU
+# HDMI connector (root-only tracepoints). Non-fatal; RGPU_DDC_TRACE=off skips it. The guest's
+# EDID read on the same port is NACKed, and this is the reference to diff it against.
+if [[ "${RGPU_DDC_TRACE:-on}" != off && "$(basename "$(readlink -f "${DEVICE_SYSFS}/driver")" 2>/dev/null)" == amdgpu ]]; then
+    conn="$(ls -d /sys/class/drm/card*-HDMI-A-* 2>/dev/null | while read -r c; do
+        [[ "$(readlink -f "$c/device")" == "${DEVICE_SYSFS}" ]] && basename "$c"; done | head -1)"
+    if [[ -n "${conn}" && -x "${VM}/host-ddc-trace.sh" ]]; then
+        trace_out="${VM}/run/host-ddc-trace-$(cat /proc/sys/kernel/random/boot_id | cut -c1-8).txt"
+        if RGPU_OWNER_UID="${OWNER_UID}" SUDO_UID="${OWNER_UID}" "${VM}/host-ddc-trace.sh" "${conn}" "${trace_out}"; then
+            chown "${OWNER}" "${trace_out}"
+        else
+            echo "WARNING: host DDC trace failed (continuing)" >&2
+        fi
+    else
+        echo "host DDC trace skipped: no iGPU HDMI connector under amdgpu or helper missing"
+    fi
+fi
 cur="$(basename "$(readlink -f "${DEVICE_SYSFS}/driver")" 2>/dev/null || echo none)"
 echo "current driver: ${cur}"
 if [[ "${cur}" != vfio-pci ]]; then
