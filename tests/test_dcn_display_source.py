@@ -86,7 +86,11 @@ class DcnDisplaySourceTests(unittest.TestCase):
                      'dcnNativeWrite(dcnRegContext, kMmData, value);'):
             self.assertIn(call, body)
         self.assertEqual(body.count('dcnNativeWrite('), 5)
-        self.assertIn('dcnNativeWrite != nullptr && dcnRingUsable && dcnRingSize >= 0x400', SOURCE)
+        ready = function('static bool dmubDeliverReady() {')
+        for gate in ('dcnNativeWrite != nullptr', 'dcnRingUsable',
+                     'dcnRingSize >= 0x400',
+                     '(!dcnVersionQueryEnabled || dcnFirmwareResponsive)'):
+            self.assertIn(gate, ready)
 
 
     def test_dmub_delivery_is_gated(self):
