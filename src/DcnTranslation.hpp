@@ -147,6 +147,14 @@ static constexpr uint32_t k315DcI2cDdc1Speed = 0x5362;          // DC_I2C_DDC1_S
 static constexpr uint32_t k315MicrosecondTimeBaseDiv = 0x13b;   // MICROSECOND_TIME_BASE_DIV
 static constexpr uint32_t kHostDdc1Speed = 0x9600102;           // prescale 150, threshold 2, timing 1
 
+// DCHUBBUB_ARB_DRAM_STATE_CNTL (3.1.5 index). On this APU the power-management firmware
+// changes DRAM clock / enters self-refresh only when the display hub allows it; with pipes
+// enabled but no timing generator running it never does, and the firmware stalls. Forcing
+// both allow bits keeps it moving (worst case: display underflow, not a hang).
+static constexpr uint32_t k315DchubbubArbDramStateCntl = 0x39bc;
+static constexpr uint32_t kDramStateForceAllow = 0x33;   // SR force value+enable, P-state force value+enable
+inline uint32_t forceDramAllow(uint32_t value) { return value | kDramStateForceAllow; }
+
 // Verbose trace window (DCN 3.0.2 indices): the DC_I2C engine block and the DIO/GPIO pad
 // registers (DDC, HPD, AUX pad control). Every access here is logged, not just the first two.
 inline bool isDdcTraceWindow(uint32_t index302) {

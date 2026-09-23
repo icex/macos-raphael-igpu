@@ -8379,9 +8379,10 @@ static constexpr size_t kOffDcDmubWait = 0x1b0797;     // dc_dmub_srv_wait_idle
 enum : uint32_t {
     kDcnTrace = 1, kDcnTranslate = 2, kDcnPool302 = 4, kDcnWithdrawnDmcubFirmware = 8,
     kDcnDmubGuard = 16, kDcnDioWake = 32, kDcnHostI2cSpeed = 64, kDcnDmcubSurvey = 128,
-    kDcnDmubHook = 256, kDcnDmubDeliver = 512,
+    kDcnDmubHook = 256, kDcnDmubDeliver = 512, kDcnPstateAllow = 1024,
     kDcnAllowed = kDcnTrace | kDcnTranslate | kDcnPool302 | kDcnDmubGuard | kDcnDioWake |
-                  kDcnHostI2cSpeed | kDcnDmcubSurvey | kDcnDmubHook | kDcnDmubDeliver,
+                  kDcnHostI2cSpeed | kDcnDmcubSurvey | kDcnDmubHook | kDcnDmubDeliver |
+                  kDcnPstateAllow,
 };
 static uint32_t dcnMode = 0;
 static uint32_t dcnTraceBudget = 1500;
@@ -8487,6 +8488,9 @@ static void wrapDcnRegWrite(void *context, uint32_t index, uint32_t value) {
             dcnNativeWrite(context, m.index,
                            remapWrite(*remap, value, dcnNativeRead(context, m.index)));
             note = " (fields remapped)";
+        } else if ((dcnMode & kDcnPstateAllow) && m.index == k315DchubbubArbDramStateCntl) {
+            dcnNativeWrite(context, m.index, forceDramAllow(value));
+            note = " (DRAM self-refresh / p-state allow forced)";
         } else if ((dcnMode & kDcnHostI2cSpeed) && m.index == k315DcI2cDdc1Speed &&
                    value != kHostDdc1Speed) {
             dcnNativeWrite(context, m.index, kHostDdc1Speed);
@@ -8691,6 +8695,13 @@ static void wrapDcHardwareInit(void *dc) {
         }
         CRLOG("DCN: DIO I2C memory: CTRL %#x -> %#x, STATUS %#x -> %#x after %u polls",
               ctrl, RaphaelDcn::wakeDioI2c(ctrl), before, status, tries);
+    }
+    if ((dcnMode & kDcnPstateAllow) && dcnNativeRead != nullptr && dcnNativeWrite != nullptr) {
+        const uint32_t before = dcnNativeRead(dcnRegContext, RaphaelDcn::k315DchubbubArbDramStateCntl);
+        dcnNativeWrite(dcnRegContext, RaphaelDcn::k315DchubbubArbDramStateCntl,
+                       RaphaelDcn::forceDramAllow(before));
+        CRLOG("DCN: DRAM_STATE_CNTL %#x -> %#x (self-refresh and p-state change allowed)", before,
+              dcnNativeRead(dcnRegContext, RaphaelDcn::k315DchubbubArbDramStateCntl));
     }
     if (dcnNativeRead != nullptr) {
         CRLOG("DCN: I2C clock: MICROSECOND_TIME_BASE_DIV=%#x DC_I2C_DDC1_SPEED=%#x (host-i2c-speed=%u)",
