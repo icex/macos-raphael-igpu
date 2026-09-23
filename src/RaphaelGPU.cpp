@@ -8537,6 +8537,18 @@ static void *wrapDcCreate(void *init) {
               "(DCN 3.02 pool)", asic[0], family, asic[2], rev, asic[3]);
     }
     void *dc = FunctionCast(wrapDcCreate, orgDcCreate)(init);
+    if (dc != nullptr && dalLogMask != 0) {
+        const auto kernelPtr = [](uint64_t p) { return p >= 0xffffff8000000000ULL; };
+        const auto ctx = *reinterpret_cast<uint64_t *>(reinterpret_cast<uint8_t *>(dc) + 0x308);
+        const auto logger = kernelPtr(ctx) ? *reinterpret_cast<uint64_t *>(ctx + 0x10) : 0;
+        if (kernelPtr(logger)) {
+            auto mask = reinterpret_cast<uint64_t *>(logger + 0x20);
+            CRLOG("DCN: DAL logger %#llx mask %#llx -> %#llx", logger, *mask, dalLogMask);
+            *mask = dalLogMask;
+        } else {
+            CRLOG("DCN: DAL logger not found (ctx %#llx logger %#llx)", ctx, logger);
+        }
+    }
     CRLOG("DCN: dc_create -> %p (translate=%u trace-lines=%u dropped=%u unique=%zu)", dc,
           dcnTranslating(), dcnTraceLines, dcnDropped, dcnAccesses.used());
     return dc;
@@ -8545,6 +8557,8 @@ static void *wrapDcCreate(void *init) {
 
 // Inbox1 ring of the running DMCUB, found by the survey (BAR0 offset and size; 0 = unknown).
 static uint64_t dcnRingBar = 0;
+// rgpudallog=<mask>: dc_context->logger (+0x10) type mask (+0x20), dc_log_type bits (v5.14).
+static uint64_t dalLogMask = 0;
 static uint32_t dcnRingSize = 0;
 
 // Read-only survey of the DMCUB the host driver left running (rgpudcn bit 128). Nothing here
@@ -8702,7 +8716,8 @@ static void wrapDcDmubQueue(void *dcDmub, const uint32_t *cmd) {
     size_t len = 0;
     line[0] = 0;
     for (unsigned d = 0; d < 16; d++) len += snprintf(line + len, sizeof(line) - len, " %08x", cmd[d]);
-    const bool deliver = type == 128 && dmubDeliverReady();
+    // Raphael has four display pipes; DCN 3.02 code also gates a fifth.
+    const bool deliver = type == 128 && !(sub == 3 && (cmd[1] & 0xff) >= 4) && dmubDeliverReady();
     CRLOG("DCN: DMUB cmd#%u type=%u sub=%u bytes=%u %s:%s", dmubCommands, type, sub, bytes,
           deliver ? "deliver" : "log-only", line);
     if (!deliver) return;
@@ -9960,6 +9975,7 @@ static void pluginStart() {
         ((dcn & kDcnPool302) != 0) == ((dcn & kDcnTranslate) != 0)) dcnMode = dcn;
     else if (dcn != 0) CRLOG("DCN: rgpudcn=%#x refused (bit 8 froze the host; bits 2 and 4 must be "
                              "set together)", dcn);
+    PE_parse_boot_argn("rgpudallog", &dalLogMask, sizeof(dalLogMask));
     if (PE_parse_boot_argn("rgpudcntrace", &dcnTrace, sizeof(dcnTrace)) && dcnTrace <= 20000)
         dcnTraceBudget = dcnTrace;
     CRLOG("DCN: rgpudcn=%#x (trace=%u translate=%u pool302=%u dmub-guard=%u) trace-lines=%u",
