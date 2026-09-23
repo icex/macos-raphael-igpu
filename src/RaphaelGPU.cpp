@@ -8851,7 +8851,7 @@ static void wrapDcDmubQueue(void *dcDmub, const uint32_t *cmd) {
     __sync_synchronize();
     const uint32_t back = dcnRingRead(dcnRingBar + dmubWptr);
     if (back != out[0]) {
-        RLOG("DCN: DMUB cmd#%u readback %#x != %#x; delivery disabled", dmubCommands, back, out[0]);
+        CRLOG("DCN: DMUB cmd#%u readback %#x != %#x; delivery disabled", dmubCommands, back, out[0]);
         dmubDeliverDead = true;
         return;
     }
