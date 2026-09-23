@@ -112,3 +112,23 @@ VFIO_GROUP="/dev/vfio/${grp}"
 chown "${OWNER}" "${VFIO_GROUP}"
 echo "now bound to: $(basename "$(readlink -f "${DEVICE_SYSFS}/driver")")"
 echo "iommu group ${grp}: $(ls -l "${VFIO_GROUP}" | awk '{print $3, $1}')"
+
+# Guest LAN NIC: a macvtap child of the host LAN interface, handed to the user like the VFIO
+# group. The launcher attaches it as the guest's second NIC (fixed MAC so the guest keeps its
+# saved network service and address). RGPU_LAN=off skips it; RGPU_LAN_PARENT picks the port.
+if [[ "${RGPU_LAN:-on}" != off ]]; then
+    LAN_PARENT="${RGPU_LAN_PARENT:-enp9s0}"
+    LAN_IF="${RGPU_LAN_IF:-rgpu-lan}"
+    LAN_MAC="${RGPU_LAN_MAC:-52:54:00:52:47:44}"
+    if [[ -d "/sys/class/net/${LAN_PARENT}" ]]; then
+        [[ -d "/sys/class/net/${LAN_IF}" ]] || ip link add link "${LAN_PARENT}" name "${LAN_IF}" type macvtap mode bridge
+        ip link set "${LAN_IF}" address "${LAN_MAC}"
+        ip link set "${LAN_IF}" up
+        lan_node="/dev/tap$(cat "/sys/class/net/${LAN_IF}/ifindex")"
+        for _ in $(seq 1 50); do [[ -c "${lan_node}" ]] && break; sleep 0.1; done
+        chown "${OWNER}" "${lan_node}" && chmod 0600 "${lan_node}"
+        echo "guest LAN: ${LAN_IF} on ${LAN_PARENT}, mac ${LAN_MAC}, ${lan_node} -> ${OWNER}"
+    else
+        echo "WARNING: no ${LAN_PARENT}; guest LAN NIC skipped (set RGPU_LAN_PARENT)" >&2
+    fi
+fi
