@@ -228,3 +228,10 @@ and [earlier](findings/research/status-archives/status-before-night-close-202609
 - Output: `/home/bogdan/macos-vm/run/candidate-290-results`
 - Verdict: `CORE_PROBE_PASS`
 - Boundary: `None`
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-296-results`
+- Verdict: `INVALID`
+- Boundary: `identity_or_route_missing`
