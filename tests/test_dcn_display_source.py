@@ -72,6 +72,21 @@ class DcnDisplaySourceTests(unittest.TestCase):
         self.assertNotIn('dcnNativeWrite', body)
         self.assertNotRegex(body, r'fb\[[^\]]*\]\s*=[^=]')
         self.assertIn('if (!(dcnMode & kDcnDmcubSurvey)', body)
+        # Reading the ring beyond the BAR selects MM_INDEX but never writes the ring.
+        self.assertNotIn('dcnRingWrite', body)
+        self.assertNotIn('dcnFbIndirectWrite', body)
+        self.assertIn('dcnRingUsable = sane >= 2;', body)
+
+
+    def test_indirect_ring_access_touches_only_mm_index_registers(self):
+        start = SOURCE.index('static constexpr uint32_t kMmIndex = 0x0, kMmData = 0x1, kMmIndexHi = 0x6;')
+        body = SOURCE[start:SOURCE.index('\nstatic uint32_t dcnRingRead(', start)]
+        for call in ('dcnNativeWrite(dcnRegContext, kMmIndex, static_cast<uint32_t>(off) | 0x80000000u);',
+                     'dcnNativeWrite(dcnRegContext, kMmIndexHi, static_cast<uint32_t>(off >> 31));',
+                     'dcnNativeWrite(dcnRegContext, kMmData, value);'):
+            self.assertIn(call, body)
+        self.assertEqual(body.count('dcnNativeWrite('), 5)
+        self.assertIn('dcnNativeWrite != nullptr && dcnRingUsable && dcnRingSize >= 0x400', SOURCE)
 
 
     def test_dmub_delivery_is_gated(self):

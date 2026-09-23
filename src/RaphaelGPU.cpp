@@ -8572,9 +8572,34 @@ static void *wrapDcCreate(void *init) {
 }
 
 
-// Inbox1 ring of the running DMCUB, found by the survey (BAR0 offset and size; 0 = unknown).
+// Inbox1 ring of the running DMCUB, found by the survey (framebuffer offset and size; 0 =
+// unknown). dcnRingUsable is set only once the ring is known to be reachable: through the BAR
+// when it fits, otherwise through MM_INDEX/MM_DATA after the host's last commands read back sane.
 static uint64_t dcnRingBar = 0;
 static uint32_t dcnRingSize = 0;
+static bool dcnRingUsable = false, dcnRingIndirect = false;
+
+// Indirect framebuffer access (amdgpu_device_mm_access): MM_INDEX takes the low 31 bits of the
+// VRAM offset with bit 31 set, MM_INDEX_HI the rest, and MM_DATA moves one dword. It reaches the
+// part of the carve-out beyond the BAR, where the host driver placed the DMCUB windows.
+static constexpr uint32_t kMmIndex = 0x0, kMmData = 0x1, kMmIndexHi = 0x6;
+static uint32_t dcnFbIndirectRead(uint64_t off) {
+    dcnNativeWrite(dcnRegContext, kMmIndex, static_cast<uint32_t>(off) | 0x80000000u);
+    dcnNativeWrite(dcnRegContext, kMmIndexHi, static_cast<uint32_t>(off >> 31));
+    return dcnNativeRead(dcnRegContext, kMmData);
+}
+static void dcnFbIndirectWrite(uint64_t off, uint32_t value) {
+    dcnNativeWrite(dcnRegContext, kMmIndex, static_cast<uint32_t>(off) | 0x80000000u);
+    dcnNativeWrite(dcnRegContext, kMmIndexHi, static_cast<uint32_t>(off >> 31));
+    dcnNativeWrite(dcnRegContext, kMmData, value);
+}
+static uint32_t dcnRingRead(uint64_t off) {
+    return dcnRingIndirect ? dcnFbIndirectRead(off) : fbAperture()[off / 4];
+}
+static void dcnRingWrite(uint64_t off, uint32_t value) {
+    if (dcnRingIndirect) dcnFbIndirectWrite(off, value);
+    else fbAperture()[off / 4] = value;
+}
 
 // Read-only survey of the DMCUB the host driver left running (rgpudcn bit 128). Nothing here
 // writes a register or VRAM: it logs every non-zero DMCUB register, whether the firmware timer
@@ -8639,14 +8664,25 @@ static void dcnSurveyDmcub(const char *when) {
         const uint64_t ringBar = cwMc[cw] - fbMc + (inOff - cwBase[cw]);
         dcnRingBar = ringBar;
         dcnRingSize = inSize;
-        if (!visible(ringBar, inSize)) { CRLOG("DCN: DMCUB inbox ring fb+%#llx not visible", ringBar); return; }
+        dcnRingIndirect = !visible(ringBar, inSize);
+        if (dcnRingIndirect)
+            CRLOG("DCN: DMCUB inbox ring fb+%#llx beyond the BAR; reading it through MM_INDEX", ringBar);
+        // The host driver's last commands must read back as DMUB headers (type byte set, not
+        // all-ones); otherwise the path does not reach the ring and delivery stays off.
+        unsigned sane = 0;
         for (unsigned k = 4; k >= 1; k--) {
             const uint32_t at = (inW + inSize - 64 * k) % inSize;
             len = 0; line[0] = 0;
-            for (unsigned d = 0; d < 16; d++)
-                len += snprintf(line + len, sizeof(line) - len, " %08x", fb[(ringBar + at + 4 * d) / 4]);
+            for (unsigned d = 0; d < 16; d++) {
+                const uint32_t v = dcnRingRead(ringBar + at + 4 * d);
+                if (d == 0 && (v & 0xff) != 0 && v != 0xffffffffu) sane++;
+                len += snprintf(line + len, sizeof(line) - len, " %08x", v);
+            }
             CRLOG("DCN: DMCUB %s inbox[%#x]%s", when, at, line);
         }
+        dcnRingUsable = sane >= 2;
+        CRLOG("DCN: DMCUB inbox ring %s (%u/4 sane headers, %s)", dcnRingUsable ? "usable" : "UNUSABLE",
+              sane, dcnRingIndirect ? "MM_INDEX" : "BAR");
         return;
     }
     CRLOG("DCN: DMCUB inbox base %#x is in no mapped window", inBase);
@@ -8724,8 +8760,8 @@ static bool dmubPending = false, dmubDeliverDead = false;
 
 static bool dmubDeliverReady() {
     return (dcnMode & kDcnDmubDeliver) && !dmubDeliverDead && dcnNativeRead != nullptr &&
-           dcnNativeWrite != nullptr && dcnRingBar != 0 && dcnRingSize >= 0x400 &&
-           dcnRingSize <= 0x100000 && fbAperture() != nullptr;
+           dcnNativeWrite != nullptr && dcnRingUsable && dcnRingSize >= 0x400 &&
+           dcnRingSize <= 0x100000 && (dcnRingIndirect || fbAperture() != nullptr);
 }
 
 static void wrapDcDmubQueue(void *dcDmub, const uint32_t *cmd) {
@@ -8746,7 +8782,6 @@ static void wrapDcDmubQueue(void *dcDmub, const uint32_t *cmd) {
     CRLOG("DCN: DMUB cmd#%u type=%u sub=%u bytes=%u %s:%s", dmubCommands, type, sub, bytes,
           deliver ? "deliver" : "log-only", line);
     if (!deliver) return;
-    auto volatile *fb = fbAperture();
     const uint32_t rptr = dcnNativeRead(dcnRegContext, 0x3697);         // DMCUB_INBOX1_RPTR
     if (!dmubPending) dmubWptr = dcnNativeRead(dcnRegContext, 0x3696);  // DMCUB_INBOX1_WPTR
     if ((dmubWptr + 64) % dcnRingSize == rptr) {
@@ -8762,8 +8797,14 @@ static void wrapDcDmubQueue(void *dcDmub, const uint32_t *cmd) {
         out[3] |= 0x0cu << 16;
         CRLOG("DCN: DMUB cmd#%u transmitter connobj_id 0 -> 0x0c", dmubCommands);
     }
-    for (unsigned d = 0; d < 16; d++) fb[(dcnRingBar + dmubWptr + 4 * d) / 4] = out[d];
+    for (unsigned d = 0; d < 16; d++) dcnRingWrite(dcnRingBar + dmubWptr + 4 * d, out[d]);
     __sync_synchronize();
+    const uint32_t back = dcnRingRead(dcnRingBar + dmubWptr);
+    if (back != out[0]) {
+        CRLOG("DCN: DMUB cmd#%u readback %#x != %#x; delivery disabled", dmubCommands, back, out[0]);
+        dmubDeliverDead = true;
+        return;
+    }
     dmubWptr = (dmubWptr + 64) % dcnRingSize;
     dmubPending = true;
 }
