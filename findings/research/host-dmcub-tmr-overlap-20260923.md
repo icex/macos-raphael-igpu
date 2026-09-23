@@ -35,8 +35,18 @@ a fresh host boot may still be necessary; the header guard will not be bypassed.
 
 Native reservation ready: tail 32MiB, additional 30MiB, cursor 0x7e000000,
 accounted 32MiB. SETUP_TMR moved to MC 0xf47d600000 / 0xa00000. Inbox raw
-reads changed from 0xffffffff to zero; old command headers remain erased.
+reads changed from 0xffffffff to zero; the sampled old command headers read as zero. Erasure is not established.
 CORE_PROBE_PASS, 419 critical records with no loss, clean guest shutdown and
 authorizing recovery. Fresh host initialization is needed to recreate the inbox
 contents before guarded delivery. This run establishes reservation behavior and
 removes the access denial; it does not establish HDMI output.
+
+## Correction: reboot is not established as necessary
+
+Candidate 300 has an authorizing recovery receipt and a successful post-run SMU
+probe. The earlier request to reboot inferred erasure from zero reads and the
+previous TMR overlap. Those observations do not establish either erasure or a
+reboot requirement. Same-boot cycles remain admitted by the existing harness.
+The current retained-header check is our diagnostic guard, not a firmware
+requirement that old command bytes be nonzero. Investigate address/access and
+ring validation without relaxing the firmware-load/start/reset prohibition.

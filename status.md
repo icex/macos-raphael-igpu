@@ -16,10 +16,13 @@ boot `dc8add85-5070-419f-959d-6cc094c914be`, MODE2 #221.
   Offscreen Metal probe passes; this does not qualify physical presentation.
 - **Shutdown/recovery:** exited-after-guest-request, recovered,
   authorizes_launch=true. Post-run SMU version probe OK. No guest running.
-- **Next:** fresh host boot and user gpu-bind to recreate host-loaded DMCUB contents,
-  then guarded delivery with the reservation retained. Do not bypass the sane-header
-  check or load/start/reset guest DMCUB firmware. Same-boot reuse is authorized,
-  but does not establish fresh host inbox contents for this experiment.
+- **Next:** same-boot investigation of inbox accessibility and validation, retaining
+  the native tail reservation and existing firmware prohibition. Candidate 300's
+  recovery receipt authorizes another cycle with the harness MODE2/identity checks.
+  Zero inbox reads do not prove erased contents or that reboot is required; the
+  earlier reboot requirement was an unsupported inference and is withdrawn.
+  The retained-header guard currently refuses delivery; establish a source-backed
+  accessibility check before changing that guard.
 
 Evidence: `~/macos-vm/run/candidate-300-results/`,
 `~/macos-vm/run/c300-post-mode2-probe.json`.
@@ -30,7 +33,7 @@ recovery. [Prior status](findings/research/status-archives/status-before-c300-re
 Development uses dev directly in candidate worktrees, with a remote pull before
 each candidate. HTTPS credentials are unavailable after reboot; SSH authentication is verified
 and is being used to deliver dev. Candidate 301 / metal-149 is built for guarded
-delivery after a fresh host boot, with the native tail reservation retained.
+delivery with the native tail reservation retained; not yet launched.
 Main remains unchanged. Host suite: 1005 tests OK, three skipped.
 
 ## Verified progress
