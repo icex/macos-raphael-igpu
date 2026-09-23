@@ -165,3 +165,13 @@ already unresponsive state. No firmware restart or load is attempted.
 populated. It collected no instruction bytes. 307 uses the total already
 validated by native reservation against GFXHUB hardware size, with the same
 window/reserved-tail/overflow checks. No memory-writing behavior changes.
+
+## 307 retry result
+
+After same-boot MODE2/no-queue recovery of an early launchd panic, the unchanged
+307 driver booted in run dccb0fe5349f33e8aae5e0c4b896e117. The CW0 prefix read
+1024 all-ones dwords before PSP TMR unload and after LOAD_TOC/allocation, hash
+34e76dc5. Protected/inaccessible CPU access remains possible; this does not
+establish firmware erasure. GPINT still times out and four inbox headers remain
+sane. Metal probe passed; clean guest-requested shutdown and ordinary native
+recovery both succeeded. No DMCUB firmware restart was attempted.

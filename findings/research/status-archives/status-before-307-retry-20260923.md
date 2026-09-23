@@ -1,35 +1,35 @@
 # Live status — 2026-09-23
 
-## Candidate 307 retry: same-boot recovery/relaunch verified
+## Candidate 307: early kernel panic; fingerprint untested
 
-Run `dccb0fe5349f33e8aae5e0c4b896e117`, metal-155, unchanged driver source
-`6488386`, boot `5074c0e5-b2f6-46da-99b2-299ba322b41e`, MODE2 #230.
+Run `f5dbd9efeff69ca6b5a76084bea2492b`, metal-155, source `6488386`,
+boot `5074c0e5-b2f6-46da-99b2-299ba322b41e`, MODE2 #228.
 
-- **Functional:** Metal probe passed. DMCUB CW0 first 4096 bytes read as all ones
-  before TMR unload and after LOAD_TOC/allocation (FNV1a 34e76dc5). This is not
-  evidence of erased code: protected/inaccessible access remains possible.
-  Four retained inbox headers are sane; GPINT still times out. Delivery disabled.
-  No new user observation of physical output; HDMI remains unresolved.
-- **Capture:** CORE_PROBE_PASS; valid run, no recorded functional boundary.
-- **Shutdown/recovery:** exited-after-guest-request; ordinary native recovery
-  recovered with authorizes_launch=true. No reboot or driver rebind occurred.
-- **Next:** investigate the unresponsive DMCUB using host handoff and firmware
-  state evidence. Do not infer code loss from an all-ones CPU read, and do not
-  load/start/reset DMCUB firmware from the guest.
+- **Functional:** guest panicked at about 10.4 seconds in launchd/kernel event
+  handling, before host reservation or the DMCUB code fingerprint. Cause is
+  unresolved. No new instruction-memory or physical HDMI result.
+- **Capture:** serial includes the early panic and recursive traps; wrapper INVALID,
+  identity_or_route_missing. This run did not reach the Metal probe.
+- **Shutdown/recovery:** forced through identity-bound vm-supervision shutdown
+  (request_sent=true); runner later recorded already-stopped. Not a clean shutdown.
+  Recovery failed: missing XH2 ownership record. No authorizing reuse receipt.
+- **Same-boot cleanup now verified:** new `mode2-noqueue-recover.py` completed
+  MODE2, two stable full queue/SDMA scans, both PSP ring destroys and final scans.
+  Schema-9 receipt reports recovered, authorizes_launch=true, no host faults.
+  No guest lease, VRAM write, DMCUB reset or reboot was needed.
+- **Next:** retry unchanged 307 using the normal harness and this receipt.
+  Recovery is scoped to stopped, halted, queue-free state; active queues still
+  refuse the new path. The original failed run/recovery artifacts are preserved.
 
-The preceding 307 early panic was recovered by the new MODE2/no-queue path:
-full stable queue/SDMA scans, both PSP ring destroys, final scans, no host faults.
-Its schema-9 receipt was consumed by this retry. Original failed receipts remain
-unchanged. The initial retry staging failure (#229, missing retry artifact) did
-not launch QEMU and consumed no ledger entry; the existing attempt-copy helper
-prepared the namespace before #230.
-
-Evidence: `~/macos-vm/run/candidate-307-attempt-noqueue-retry-results/`,
-`~/macos-vm/run/c307-mode2-noqueue-recovery.json`.
-Host regression: 1017 tests OK, three skipped.
-[Recovery procedure](docs/running-an-experiment.md#recovery-when-the-guest-never-published-a-usable-lease).
-[Display source audit](findings/research/host-dmcub-tmr-overlap-20260923.md).
+Regression: 1017 tests OK, three skipped. Evidence for cleanup:
+`~/macos-vm/run/c307-mode2-noqueue-recovery.json` and
+`~/macos-vm/run/c307-mode2-recovery-final-tests.log`.
+305 established GPINT timeout before guest TMR changes on a fresh boot;
+reboot is not an established HDMI fix.
+Evidence: `~/macos-vm/run/candidate-307-results/` and cycle log.
+[Source audit](findings/research/host-dmcub-tmr-overlap-20260923.md).
 Work stays on dev in candidate worktrees; pull remote before each candidate.
+Host suite for 307: 1007 tests OK, three skipped. Main unchanged.
 
 ## Verified progress
 
@@ -83,3 +83,10 @@ passes; hardware encode is Main8. [Roadmap](docs/ROADMAP.md).
 After milestones update current docs, integrate/push dev and synchronize the local
 checkout. Do not push main without new authorization. Prior live entries are [archived](findings/research/status-archives/status-before-display-port-20260917.md)
 and [earlier](findings/research/status-archives/status-before-night-close-20260916.md).
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-307-attempt-noqueue-retry-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
