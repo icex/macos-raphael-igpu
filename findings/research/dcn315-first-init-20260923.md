@@ -82,3 +82,15 @@ prescale from `MICROSECOND_TIME_BASE_DIV`, and the host's value implies a differ
 something the host driver configures that DCN 3.0 code never touches. Candidate 290 (bit 64,
 `rgpudcn=119`) replays the host's speed value on every DDC1 speed write and logs
 `MICROSECOND_TIME_BASE_DIV`.
+
+## Candidate 290 (14:15): the host's bus timing does not help; the engine clock matches [V]
+`MICROSECOND_TIME_BASE_DIV = 0x120218` (time base 24 MHz, XTAL_REF_DIV 2, xtal ref selected):
+Linux's `set_speed` gives prescale (24000/2)/100 = 120, exactly Apple's value, so the 0x96 the
+host left behind was from a slower transaction, not a different clock. With the DDC1 speed
+forced to the host's 0x9600102 the transaction still ends `SW_DONE|SW_STOPPED_ON_NACK|SW_NACK0`.
+Every guest-side register the trace can show now matches the Linux sequence.
+Next evidence must come from the host: `tools/host-ddc-trace.sh` (root, iGPU on amdgpu, i.e.
+after a reboot and before gpu-bind) records the `amdgpu_dc_rreg/wreg` tracepoints while the
+connector is re-detected, and `tools/dcn-trace-decode.py --host-trace` names the registers, so
+the host's DDC read can be diffed against the guest's. Until then the display path stays
+"initialised, no sink"; candidate 290 is a complete VM (audio, LAN, Metal) for daily use.

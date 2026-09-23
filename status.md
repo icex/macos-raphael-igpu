@@ -67,6 +67,15 @@ only right after a login at 1920x1080 Retina with Mac login, and breaks after an
 switch (stale scale until a WindowServer restart); Apple client audio tap fails; client
 resolution never works. Sessions can now last 12 h. Details in the notes.
 
+## Candidates 288–290 — 2026-09-23 afternoon
+
+The EDID read on the HDMI plug is a clean NACK of address 0xa0 by the plug, with the engine,
+pad mode, pull-downs, memory power and bus timing all matching what Linux programs (288: I2C
+memory was awake; 289: full transaction trace; 290: host timing replayed, engine clock 24 MHz).
+Next: `sudo tools/host-ddc-trace.sh` on a fresh host boot (iGPU on amdgpu) and diff the host's
+register sequence against the guest's with `tools/dcn-trace-decode.py --host-trace`.
+[Notes](findings/research/dcn315-first-init-20260923.md).
+
 ## Candidate 287 ran — 2026-09-23 13:30
 
 First launch froze the host in the PSP phase (that boot had been suspended overnight with the
