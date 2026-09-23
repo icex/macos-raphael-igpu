@@ -1533,6 +1533,7 @@ static void substituteCpFirmware(uint8_t *arr, uint32_t count) {
 }
 #endif
 
+static void dcnQueryFirmwareVersion(const char *when);
 static mach_vm_address_t orgPspBufPrep {};
 static uint32_t bufPrepCount = 0;
 // psp_gfx_resp sits at command-buffer +864: status +0, fw_addr_lo +8, fw_addr_hi +12,
@@ -1577,6 +1578,11 @@ static uint32_t wrapPspBufPrep(void *psp, void *desc, uint32_t *slot) {
                 RLOG("   resp cmd_id=%-3u wireType=%-3u status=0x%08x fw=0x%08x%08x "
                      "tmr_size=0x%x%s", prevWireCmd, prevWireType, st, prevCmdBuf[219],
                      prevCmdBuf[218], prevCmdBuf[220], st == 0 ? "" : "   <-- FAILED");
+                if (prevWireCmd == 5 || (prevWireCmd == 6 && bufPrepCount < 24)) {
+                    char phase[64];
+                    snprintf(phase, sizeof(phase), "after PSP wire=%u type=%u", prevWireCmd, prevWireType);
+                    dcnQueryFirmwareVersion(phase);
+                }
                 if (prevWireCmd == 6)
                     RLOG("   LOAD_IP_FW type=%-3u source=0x%llx/0x%x -> tmr=0x%llx",
                          prevWireType, prevRequestAddr, prevRequestSize, fwAddr);
@@ -1627,6 +1633,7 @@ static mach_vm_address_t orgPspTmrInit {};
 static mach_vm_address_t orgGmmSetMemoryAttributes {};
 static bool hostReserveEnabled = false, hostReservationReady = false;
 static bool dcnVersionQueryEnabled = false, displayIdleExitEnabled = false;
+static bool dcnFirmwareResponsive = false;
 static void dcnQueryFirmwareVersion(const char *when);
 static uint64_t hostReservationLimit = 0;
 static uint32_t wrapGmmSetMemoryAttributes(void *self, uint32_t type, void *attributes);
@@ -1653,12 +1660,16 @@ static uint32_t wrapPspTmrInit(void *psp) {
         CRLOG("HOSTRESERVE: refusing PSP TMR init without native host-window reservation");
         return 2;
     }
+    dcnQueryFirmwareVersion("before PSP TMR unload");
     if ((mask & XC) != 0 && hwlibsBase != 0 && psp != nullptr) {
         auto unload = reinterpret_cast<uint32_t (*)(void *)>(hwlibsBase + kOffPspTmrUnload);
         uint32_t u = unload(psp);
         RLOG("XC: psp_tmr_unload before TMR init -> %u", u);
+        dcnQueryFirmwareVersion("after PSP TMR unload");
     }
-    return FunctionCast(wrapPspTmrInit, orgPspTmrInit)(psp);
+    const auto result = FunctionCast(wrapPspTmrInit, orgPspTmrInit)(psp);
+    dcnQueryFirmwareVersion("after PSP LOAD_TOC/allocation");
+    return result;
 }
 
 static uint32_t fwCapCount = 0;
@@ -8855,8 +8866,11 @@ static void dcnLogDmcubState(const char *when) {
 // DCN315 base 0x34c0 + GPINT_DATAIN1 0x1f8 = 0x36b8; SCRATCH7 = 0x36aa.
 // This queries already-running firmware; it never starts, stops, resets or loads it.
 static void dcnQueryFirmwareVersion(const char *when) {
-    if (!dcnVersionQueryEnabled || dcnNativeRead == nullptr || dcnNativeWrite == nullptr) return;
-    auto rd = [](uint32_t index) { return dcnNativeRead(dcnRegContext, index); };
+    if (!dcnVersionQueryEnabled || asicInfo == nullptr) return;
+    dcnFirmwareResponsive = false;
+    // The same MMIO registers are available through audited raw FB access before
+    // DCN installs its CGS context, allowing observation around PSP initialization.
+    auto rd = [](uint32_t index) { return fbRead(asicInfo, index); };
     const uint32_t before = rd(0x36b8), responseBefore = rd(0x36aa);
     const uint32_t cntl = rd(0x36b6), reset = rd(0x36c0);
     if (((before & 0xf0000000u) && before != 0x10010000) || !(cntl & 0x10000) || (reset & 1)) {
@@ -8865,13 +8879,15 @@ static void dcnQueryFirmwareVersion(const char *when) {
         return;
     }
     // status=1, command_code=1 (GET_FW_VERSION), parameter=0.
-    if (!(before & 0xf0000000u)) dcnNativeWrite(dcnRegContext, 0x36b8, 0x10010000);
+    if (!(before & 0xf0000000u)) fbWrite(asicInfo, 0x36b8, 0x10010000);
     uint32_t ack = 0, waited = 0;
     for (; waited < 100000; waited += 10) {
         ack = rd(0x36b8);
         if (ack == 0x00010000) break;
         IODelay(10);
     }
+    const uint32_t response = rd(0x36aa);
+    dcnFirmwareResponsive = ack == 0x00010000 && response != 0 && response != 0xffffffffu;
     CRLOG("DCN: GPINT version %s %s input=%#x->%#x response=%#x->%#x waited=%u us CNTL=%#x CNTL2=%#x",
           when, ack == 0x00010000 ? "ACK" : "TIMEOUT", before, ack,
           responseBefore, rd(0x36aa), waited, cntl, reset);
@@ -8968,7 +8984,8 @@ static bool dmubPending = false, dmubDeliverDead = false;
 
 static bool dmubDeliverReady() {
     return (dcnMode & kDcnDmubDeliver) && !dmubDeliverDead && dcnNativeRead != nullptr &&
-           dcnNativeWrite != nullptr && dcnRingUsable && dcnRingSize >= 0x400 &&
+           dcnNativeWrite != nullptr && (!dcnVersionQueryEnabled || dcnFirmwareResponsive) &&
+           dcnRingUsable && dcnRingSize >= 0x400 &&
            dcnRingSize <= 0x100000 && (dcnRingIndirect || fbAperture() != nullptr);
 }
 
