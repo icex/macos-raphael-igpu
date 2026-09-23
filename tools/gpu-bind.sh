@@ -69,7 +69,7 @@ fi
 # EDID read on the same port is NACKed, and this is the reference to diff it against.
 if [[ "${RGPU_DDC_TRACE:-on}" != off && "$(basename "$(readlink -f "${DEVICE_SYSFS}/driver")" 2>/dev/null)" == amdgpu ]]; then
     conn="$(ls -d /sys/class/drm/card*-HDMI-A-* 2>/dev/null | while read -r c; do
-        [[ "$(readlink -f "$c/device")" == "${DEVICE_SYSFS}" ]] && basename "$c"; done | head -1)"
+        [[ "$(readlink -f "$c/device/device")" == "$(readlink -f "${DEVICE_SYSFS}")" ]] && basename "$c"; done | head -1 || true)"
     if [[ -n "${conn}" && -x "${VM}/host-ddc-trace.sh" ]]; then
         trace_out="${VM}/run/host-ddc-trace-$(cat /proc/sys/kernel/random/boot_id | cut -c1-8).txt"
         if RGPU_OWNER_UID="${OWNER_UID}" SUDO_UID="${OWNER_UID}" "${VM}/host-ddc-trace.sh" "${conn}" "${trace_out}"; then
