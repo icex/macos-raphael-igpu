@@ -103,3 +103,25 @@ without replacing it. No firmware load/start/stop/reset or DMCUB control write.
 Failure/timeout/version mismatch suppresses the wake request as appropriate.
 Unit tests cover mailbox sequence, busy timeout, version timeout/mismatch and
 wake rejection. This tests normal display power state, not firmware restoration.
+
+## 303–304 results and remaining recovery boundary
+
+303 GPINT GET_FW_VERSION timed out; 304 VBIOS SMU version and normal display-idle
+exit both succeeded, but GPINT still timed out. CNTL=0x900c6 has ENABLE=1 and
+PWAIT=0; CNTL2=0, SEC_CNTL=0x2000 has SEC_RESET_STATUS=0. Interrupt enable
+0x800 includes GPINT1, and LS_WAKE_INT_ENABLE=0x900c80 includes that source.
+These observations exclude disabled/reset firmware and the tested normal idle
+exit as sufficient explanations, but do not identify an exact firmware failure.
+
+The local original igpu-vbios.rom has master command table at 0xa470. Table
+indices 4 (digxencodercontrol), 12 (setpixelclock), and 76 (dig1transmittercontrol)
+have zero offsets. enabledisppowergating index13 exists at0xaa44. Thus Linux's
+legacy ATOM route cannot supply all missing display commands on this VBIOS.
+The documented remaining DMCUB recovery resets firmware, prohibited here.
+Host reinitialization was requested after these checks, not from zero inbox bytes.
+
+Before next delivery, audit existing wrapPspTmrInit: it unconditionally unloads
+the old TMR under XC before native LOAD_TOC/setup. Host CW0/1 code/data are in
+the host TMR at fb+0x7e300000; native reservation protects allocation but may
+not preserve PSP TMR ownership. Query before/after that sequence to locate the
+first loss of firmware responsiveness. Do not claim this hypothesis proven.

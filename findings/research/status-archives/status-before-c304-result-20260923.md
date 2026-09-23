@@ -1,34 +1,30 @@
 # Live status — 2026-09-23
 
-## Candidate 304: normal display wake accepted; DMCUB still unresponsive
+## Candidate 303: GPINT version query also times out
 
-Run `f721fecfe53efb0fa0bef789c4e5314f`, metal-152, source `eee7966`,
-boot `dc8add85-5070-419f-959d-6cc094c914be`, MODE2 #225.
+Run `7504daed4a1643f8d93654368fa36208`, metal-151, source `1de97f0`,
+boot `dc8add85-5070-419f-959d-6cc094c914be`, MODE2 #224.
 
-- **Functional:** separate VBIOS SMU GetPmfwVersion succeeded (0x625300), then
-  SetDisplayIdleOptimizations(0) succeeded. GPINT version request still timed out
-  afterward. Inbox delivery disabled; no image/audio established.
-- **Capture:** CORE_PROBE_PASS; final critical count 426.
+- **Functional:** GET_FW_VERSION sent through GPINT before native display init;
+  no acknowledgment in 100ms (0x80000 -> 0x10010000, SCRATCH7 stays zero).
+  After-init query refuses the still-busy channel. CNTL=0x900c6, CNTL2=0.
+  Inbox delivery disabled. Hardware timer progress is not firmware liveness.
+- **Capture:** CORE_PROBE_PASS; final critical count 425. Physical picture remains
+  unconfirmed; no HDMI audio qualification.
 - **Shutdown/recovery:** exited-after-guest-request, recovered,
   authorizes_launch=true. Post-run SMU query succeeds; no guest running.
-- **Blocker:** CPU inbox access works (302); command consumption and independent
-  GPINT are unresponsive (302–304), including after normal display-idle exit.
-  GPINT1 interrupt and wake sources are enabled; firmware reset is deasserted.
-  Existing VBIOS lacks encoder/transmitter/pixel-clock legacy command tables.
-  No source-supported non-reset firmware recovery has been identified. Host
-  reboot/gpu-bind requested for reinitialization under the no-guest-firmware-reset
-  and no-same-boot-amdgpu-rebind rules. This is not a missing recovery receipt:
-  same-boot GPU cycles remain authorized.
-- **Next:** preserve the 32MiB host tail and inspect firmware responsiveness earlier
-  around the existing PSP TMR unload/setup sequence before more delivery. The
-  host firmware code is inside the original host TMR; reservation alone may not
-  preserve PSP ownership. This is a hypothesis to audit, not established causation.
+- **Next:** source-backed normal display-idle exit through the separate Raphael
+  VBIOS SMU mailbox, then observe GPINT acknowledgment. Linux dcn315 clock manager
+  sends SetDisplayIdleOptimizations(0) when entering mission mode. This is distinct
+  from starting/resetting DMCUB, which remains prohibited. Transport/address and
+  protocol validation required before exposure; no reboot requirement inferred.
 
-Evidence: `~/macos-vm/run/candidate-304-results/`,
-`~/macos-vm/run/c304-post-mode2-probe.json`.
-[Source audit](findings/research/host-dmcub-tmr-overlap-20260923.md).
-Development stays on dev in candidate worktrees, pulling remote before each
-candidate. SSH push works. Main unchanged. Host suite: 1007 tests OK, three skipped.
+Evidence: `~/macos-vm/run/candidate-303-results/`,
+`~/macos-vm/run/c303-post-mode2-probe.json`.
+302 proved reversible CPU inbox access and full command readback but timed out
+waiting for consumption. [Source audit](findings/research/host-dmcub-tmr-overlap-20260923.md).
+Development stays on dev in candidate worktrees, with a remote pull before each
+candidate; SSH push works. Main unchanged. Host suite: 1006 tests OK, three skipped.
 
 ## Verified progress
 
