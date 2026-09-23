@@ -8945,7 +8945,10 @@ static void dcnQueryFirmwareVersion(const char *when) {
         return;
     }
     // status=1, command_code=1 (GET_FW_VERSION), parameter=0.
-    if (!(before & 0xf0000000u)) fbWrite(asicInfo, 0x36b8, 0x10010000);
+    // Match dmub_srv_send_gpint_command: each query writes DATAIN1 anew.
+    // The guard above refuses any foreign pending command. Reissuing our own
+    // idempotent version query also tests the post-display-wake interrupt path.
+    fbWrite(asicInfo, 0x36b8, 0x10010000);
     uint32_t ack = 0, waited = 0;
     for (; waited < 100000; waited += 10) {
         ack = rd(0x36b8);
