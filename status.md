@@ -67,6 +67,16 @@ only right after a login at 1920x1080 Retina with Mac login, and breaks after an
 switch (stale scale until a WindowServer restart); Apple client audio tap fails; client
 resolution never works. Sessions can now last 12 h. Details in the notes.
 
+## Candidate 287 ran — 2026-09-23 13:30
+
+First launch froze the host in the PSP phase (that boot had been suspended overnight with the
+iGPU on vfio-pci; the display hook never ran). On the fresh boot the display core initialised on
+hardware for the first time: cgs slots interposed, DCN 3.02 pool, 593 translated accesses and
+34 waits with no panic; DMCUB untouched and still booted from the host driver; HPD sense high on
+the HDMI plug; the EDID read on DDC1 completed but returned 0xFF. Next evidence needs a host
+reboot: the host driver's I2C/pad registers via `dcn-state-probe.py`.
+[Notes](findings/research/dcn315-first-init-20260923.md).
+
 ## Candidate 287 ready — 2026-09-22 22:45
 
 Built and preflighted (1000 tests): the display hook's cgs pointer check now accepts the

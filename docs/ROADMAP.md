@@ -230,8 +230,9 @@ from device enumeration or passing microbenchmarks.
      guest, and that froze the host. Candidate 286 removes it and fences DMCUB off: the strap
      reads absent and DMCUB writes are dropped.
    - **Next.**
-     a. Run metal-134 for DCN 3.02 pool init plus HPD/EDID over DDC1. This needs the root GPU
-        bind and the user's agreement.
+     a. DONE 2026-09-23 (candidate 287/metal-135): DCN 3.02 pool init on hardware, HPD sense on
+        the HDMI plug, EDID read on DDC1 returns 0xFF. Next: host-driver I2C/pad register
+        values after a reboot (`dcn-state-probe.py`), then fix the I2C clock/pad setup.
      b. Resolve DMCUB without any guest-initiated load, start or reset. Raphael's VBIOS has no
         transmitter or pixel-clock tables, so HDMI PHY and PLL exist only in DMCUB firmware.
         Start with a read-only dump of the DMCUB windows under host amdgpu.
