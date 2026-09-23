@@ -145,3 +145,18 @@ registers and the hardware timer do not establish firmware command-loop health.
 
 User observation for candidate 302: Samsung showed **No signal**. This confirms
 the physical-output failure independently of its passing offscreen Metal probe.
+
+## 305 result and 306 code-memory discriminator
+
+Fresh boot5074c0e5: GPINT times out before the guest's TMR unload, despite intact
+inbox command headers. This moves the first observation before guest TMR changes
+but does not distinguish host unbind, MODE2, or earlier guest setup.
+
+306 reads 4096 bytes from physical/MC-translated CW0, requiring a bounded enabled
+window in the reserved tail. It restores MM_INDEX/MM_INDEX_HI and never writes
+MM_DATA. Compare with dmcub-host-code-reference-20260923.json: installed version
+0x05003500, first4096bytes at fileoffset512 (ucode_offset256 + PSPheader256),
+FNV1a6281abc0. A match validates only this prefix, not the whole firmware.
+All-ones may mean denied access, not missing firmware; zeros/mismatch alone
+do not locate when content changed. Same-boot test intentionally examines the
+already unresponsive state. No firmware restart or load is attempted.
