@@ -427,3 +427,9 @@ reduced optional CR2 logging, awaiting reboot after 298 failed recovery.
 below it and inbox reads stop returning access-denied all-ones. Old contents remain
 zero after preceding unreserved runs. Clean capture, guest shutdown and recovery
 pass. Next: fresh host initialization and guarded delivery.
+
+Candidate 302 (2026-09-23) establishes reversible CPU read/write access to the
+reserved host DMCUB inbox on the same host boot. The first command passed full
+readback but firmware did not consume it; HDMI output remains unqualified.
+Capture and guest-request shutdown completed, recovery authorizes reuse.
+See [live status](../status.md).

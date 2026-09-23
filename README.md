@@ -131,3 +131,9 @@ AMD sources for the TOC patterns and remaining SDK/distribution review items.
 Candidate284's streaming work (2026-09-17) ended with CORE_PROBE_PASS, a clean
 guest-request shutdown and authorizing recovery. The user reports stable 4K60 streaming;
 permanent 120Hz is the next step. [Evidence](findings/research/encoder-pipeline-20260917.md).
+
+Candidate 302 (2026-09-23) establishes reversible CPU read/write access to the
+reserved host DMCUB inbox on the same host boot. The first command passed full
+readback but firmware did not consume it; HDMI output remains unqualified.
+Capture and guest-request shutdown completed, recovery authorizes reuse.
+See [live status](status.md).

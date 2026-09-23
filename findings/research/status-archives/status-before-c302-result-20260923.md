@@ -1,32 +1,41 @@
 # Live status — 2026-09-23
 
-## Candidate 302: inbox writable; firmware did not consume command
+## Candidate 300: host DMCUB tail reserved, inbox reads zero
 
-Run `25a177f212dcd95fb62fb6ad46819ff7`, metal-150, source `aa5736a`,
-boot `dc8add85-5070-419f-959d-6cc094c914be`, MODE2 #223.
+Run `120b9e2929247fb4057dfa81e241d71c`, metal-148, source `befcae4`,
+boot `dc8add85-5070-419f-959d-6cc094c914be`, MODE2 #221.
 
-- **Functional:** native host-tail reservation retained. Two complementary patterns
-  in the empty inbox slot read back correctly; all 64 bytes restored and pointers
-  unchanged. All 16 words of the first command passed readback. Firmware RPTR
-  stayed at 0x17c0 after WPTR advanced to 0x1800, timing out at 100ms; delivery
-  disabled itself. Timer advances, CNTL=0x900c6, SCRATCH0=0x43. This proves CPU
-  access, not firmware responsiveness or physical HDMI output.
-- **Capture:** CORE_PROBE_PASS, final critical record count 424. No HDMI picture
-  confirmed. Offscreen probe success is separate from physical presentation.
-- **Shutdown/recovery:** exited-after-guest-request; recovered with
-  authorizes_launch=true. Post-run SMU version query OK. No guest running.
-- **Next:** query running firmware version through Linux's GPINT channel, independent
-  of the inbox. No firmware load/start/reset. Same-boot cycle remains authorized.
+- **Functional:** native reservation increased from 2MiB to 32MiB, with cursor
+  fb+0x7e000000 and correct native accounting. Guest PSP TMR now starts at
+  fb+0x7d600000, size 10MiB, ending exactly below the protected host tail.
+  Inbox reads changed from raw all-ones to raw zero: the access denial is removed,
+  but the old commands are zero. Earlier guest TMR overlap likely erased them.
+  DMCUB timer runs, SCRATCH0=0x43; no firmware load/start/reset was added.
+  Header guard refuses delivery; no HDMI picture claimed.
+- **Capture:** CORE_PROBE_PASS; complete final CR2 count=419, drop=0, trunc=0.
+  Offscreen Metal probe passes; this does not qualify physical presentation.
+- **Shutdown/recovery:** exited-after-guest-request, recovered,
+  authorizes_launch=true. Post-run SMU version probe OK. No guest running.
+- **Next:** same-boot investigation of inbox accessibility and validation, retaining
+  the native tail reservation and existing firmware prohibition. Candidate 300's
+  recovery receipt authorizes another cycle with the harness MODE2/identity checks.
+  Zero inbox reads do not prove erased contents or that reboot is required; the
+  earlier reboot requirement was an unsupported inference and is withdrawn.
+  The retained-header guard currently refuses delivery; establish a source-backed
+  accessibility check before changing that guard.
 
-Evidence: `~/macos-vm/run/candidate-302-results/`,
-`~/macos-vm/run/c302-post-mode2-probe.json`.
-[Source audit](findings/research/host-dmcub-tmr-overlap-20260923.md).
-The first staging attempt stopped at an archive-path mismatch before QEMU; it
-consumed MODE2 #222 but no launch ledger entry. Corrected artifact paths were
-verified by the successful cycle. Candidate 301 was not launched.
+Evidence: `~/macos-vm/run/candidate-300-results/`,
+`~/macos-vm/run/c300-post-mode2-probe.json`.
+[Source audit and interval evidence](findings/research/host-dmcub-tmr-overlap-20260923.md).
+299: Samsung woke with no signal; guest TMR overlapped inbox, clean capture and
+recovery. [Prior status](findings/research/status-archives/status-before-c300-result-20260923.md).
 
-Development uses dev directly in candidate worktrees, pulling remote before each
-candidate. SSH push works; main is unchanged. Host suite: 1006 tests OK, three skipped.
+Development uses dev directly in candidate worktrees, with a remote pull before
+each candidate. HTTPS credentials are unavailable after reboot; SSH authentication is verified
+and is being used to deliver dev. Candidate 301 was not launched. Candidate 302 / metal-150 is built to validate
+an empty inbox by reversible readback, then attempt guarded delivery on this
+authorized host boot. Native reservation and all harness gates remain intact.
+Main remains unchanged. Host suite: 1005 tests OK, three skipped.
 
 ## Verified progress
 
