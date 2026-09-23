@@ -8615,7 +8615,7 @@ static void dcnCheckIndirect(uint64_t ringBar) {
         const uint32_t hi = fbRead(asicInfo, kMmIndexHi);
         const uint32_t raw = fbRead(asicInfo, kMmData);
         const uint32_t cgs = dcnNativeRead(dcnRegContext, kMmData);
-        CRLOG("DCN: indirect-check %s off=%#llx index=%#x hi=%#x raw=%#x cgs=%#x BAR=%#x",
+        RLOG("DCN: indirect-check %s off=%#llx index=%#x hi=%#x raw=%#x cgs=%#x BAR=%#x",
               tag, off, index, hi, raw, cgs, expected);
     };
     auto fb = fbAperture();
@@ -8631,7 +8631,14 @@ static void dcnCheckIndirect(uint64_t ringBar) {
                 }
             }
         }
-        CRLOG("DCN: indirect-check nonzero controls=%u", found);
+        RLOG("DCN: indirect-check nonzero controls=%u", found);
+    }
+    // Stay within discovered VRAM, avoiding the host PSP TMR near the top.
+    const uint64_t boundaries[] = {0x0ffffffc, 0x10000000, 0x10000004,
+                                   0x1ffffffc, 0x20000000, 0x40000000, 0x70000000};
+    for (uint64_t off : boundaries) {
+        if (discoveredCapacityValid && off + 4 <= discoveredVramTotal)
+            sample("boundary", off, 0);
     }
     const uint32_t wptr = fbRead(asicInfo, 0x3696);
     const uint32_t size = fbRead(asicInfo, 0x3695);
@@ -8654,13 +8661,13 @@ static void dcnSurveyDmcub(const char *when) {
     unsigned printed = 0;
     auto emit = [&](uint32_t index, uint32_t value) {
         len += snprintf(line + len, sizeof(line) - len, " %x=%x", index, value);
-        if (++printed % 8 == 0) { CRLOG("DCN: DMCUB %s regs%s", when, line); len = 0; line[0] = 0; }
+        if (++printed % 8 == 0) { RLOG("DCN: DMCUB %s regs%s", when, line); len = 0; line[0] = 0; }
     };
     line[0] = 0;
     if (const uint32_t v = rd(0x363a)) emit(0x363a, v);                  // DMCUB_RBBMIF_SEC_CNTL
     for (uint32_t index = 0x364e; index <= 0x36c0; index++)
         if (const uint32_t v = rd(index)) emit(index, v);
-    if (len) CRLOG("DCN: DMCUB %s regs%s", when, line);
+    if (len) RLOG("DCN: DMCUB %s regs%s", when, line);
 
     const uint32_t t0 = rd(0x36bd);                                      // DMCUB_TIMER_CURRENT
     IODelay(1000);
@@ -8688,7 +8695,7 @@ static void dcnSurveyDmcub(const char *when) {
         if (cwBase[cw] == 0 && cwMc[cw] == 0) continue;
         const bool inFb = fbMc != 0 && cwMc[cw] >= fbMc;
         const uint64_t bar = inFb ? cwMc[cw] - fbMc : 0;
-        CRLOG("DCN: DMCUB %s CW%u dmcub [%#x,%#x) -> MC %#llx fb+%#llx %s", when, cw,
+        RLOG("DCN: DMCUB %s CW%u dmcub [%#x,%#x) -> MC %#llx fb+%#llx %s", when, cw,
               cwBase[cw], cwTop[cw], cwMc[cw], bar,
               !inFb ? "outside FB" : visible(bar, 0x1000) ? "BAR-visible" : "not BAR-visible");
     }
@@ -8721,7 +8728,7 @@ static void dcnSurveyDmcub(const char *when) {
                 if (d == 0 && (v & 0xff) != 0 && v != 0xffffffffu) sane++;
                 len += snprintf(line + len, sizeof(line) - len, " %08x", v);
             }
-            CRLOG("DCN: DMCUB %s inbox[%#x]%s", when, at, line);
+            RLOG("DCN: DMCUB %s inbox[%#x]%s", when, at, line);
         }
         dcnRingUsable = sane >= 2;
         CRLOG("DCN: DMCUB inbox ring %s (%u/4 sane headers, %s)", dcnRingUsable ? "usable" : "UNUSABLE",
@@ -8822,7 +8829,7 @@ static void wrapDcDmubQueue(void *dcDmub, const uint32_t *cmd) {
     const bool extraPipe = sub == 3 && (cmd[1] & 0xff) >= 4;
     const bool extraPll = sub == 2 && ((cmd[2] & 0xff) > 0x17);
     const bool deliver = type == 128 && !extraPipe && !extraPll && dmubDeliverReady();
-    CRLOG("DCN: DMUB cmd#%u type=%u sub=%u bytes=%u %s:%s", dmubCommands, type, sub, bytes,
+    RLOG("DCN: DMUB cmd#%u type=%u sub=%u bytes=%u %s:%s", dmubCommands, type, sub, bytes,
           deliver ? "deliver" : "log-only", line);
     if (!deliver) return;
     const uint32_t rptr = dcnNativeRead(dcnRegContext, 0x3697);         // DMCUB_INBOX1_RPTR
@@ -8838,13 +8845,13 @@ static void wrapDcDmubQueue(void *dcDmub, const uint32_t *cmd) {
     // type A) where Apple's leaves 0; digmode 3 is HDMI.
     if (sub == 1 && ((out[1] >> 16) & 0xff) == 3 && ((out[3] >> 16) & 0xff) == 0) {
         out[3] |= 0x0cu << 16;
-        CRLOG("DCN: DMUB cmd#%u transmitter connobj_id 0 -> 0x0c", dmubCommands);
+        RLOG("DCN: DMUB cmd#%u transmitter connobj_id 0 -> 0x0c", dmubCommands);
     }
     for (unsigned d = 0; d < 16; d++) dcnRingWrite(dcnRingBar + dmubWptr + 4 * d, out[d]);
     __sync_synchronize();
     const uint32_t back = dcnRingRead(dcnRingBar + dmubWptr);
     if (back != out[0]) {
-        CRLOG("DCN: DMUB cmd#%u readback %#x != %#x; delivery disabled", dmubCommands, back, out[0]);
+        RLOG("DCN: DMUB cmd#%u readback %#x != %#x; delivery disabled", dmubCommands, back, out[0]);
         dmubDeliverDead = true;
         return;
     }
