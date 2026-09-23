@@ -233,9 +233,14 @@ from device enumeration or passing microbenchmarks.
      a. DONE 2026-09-23 (candidate 287/metal-135): DCN 3.02 pool init on hardware, HPD sense on
         the HDMI plug, EDID read on DDC1 returns 0xFF. Next: host-driver I2C/pad register
         values after a reboot (`dcn-state-probe.py`), then fix the I2C clock/pad setup.
-     b. Resolve DMCUB without any guest-initiated load, start or reset. Raphael's VBIOS has no
-        transmitter or pixel-clock tables, so HDMI PHY and PLL exist only in DMCUB firmware.
-        Start with a read-only dump of the DMCUB windows under host amdgpu.
+     b. DONE 2026-09-23: EDID reads work (candidate 290, fresh boot) - the dummy adapter and a
+        hot-plugged Samsung both returned valid EDIDs over DDC1. The 287-290 NACKs were the
+        adapter's EEPROM locked by the morning host freeze, not the guest. Sink is detected but
+        no display is published: DAL's link bring-up (DIG/PHY) needs DMUB, and init already logs
+        "Error queuing DMUB command" from the inert dc_dmub_srv. NEXT: attach DAL to the DMCUB
+        firmware the host driver left running (SCRATCH0=0x43, still BOOTED) without loading,
+        starting or resetting it from the guest. Raphael's VBIOS has no transmitter/pixel-clock
+        tables, so HDMI PHY and PLL exist only in DMCUB firmware.
      c. Then:
         - a PMFW clock manager: VBIOSSMC display messages, agreed with the user first, since
           they go to the SMU that also governs the CPU;
