@@ -111,3 +111,30 @@ no flag.
 Read [host-safety.md](host-safety.md) before the first run. The short version: the iGPU must be
 initialised by `amdgpu` during the current boot, must never be cycled back to `amdgpu` within a
 boot, and must have `power/control=on` pinned before anything opens it.
+
+### Recovery when the guest never published a usable lease
+
+If ordinary recovery fails and the guest is confirmed stopped, use the bounded
+MODE2/no-queue path. Inspect first (no reset or PSP commands):
+
+```sh
+python3 -B tools/mode2-noqueue-recover.py --vm-dir ~/macos-vm \
+  --run-dir ~/macos-vm/run/candidate-N-results \
+  --output ~/macos-vm/run/candidate-N-noqueue-inspection.json
+```
+
+Use `--execute` with a new output filename for cleanup. It runs the existing SMU
+MODE2 reset, then requires two complete stable scans of all 64 compute HQDs,
+both graphics pipes, polling/doorbells, and all supported SDMA inputs. GC must
+already be halted and idle, and SDMA halted/idle with every input disabled.
+Only then does it send the existing PSP DESTROY_RINGS and DESTROY_GPCOM_RING
+commands and repeat the scans. It never borrows an older lease or writes guest
+VRAM, queue state, doorbells, or DMCUB controls. A nonzero inactive doorbell range
+alone is not an enabled doorbell: global polling/status and every queue's
+control must independently be disabled.
+
+The schema-9 receipt binds the latest failed run, boot, unchanged ledger,
+original artifacts and recovery sources. Normal admission validates and consumes
+it once; original failed receipts remain unchanged. A reset ACK alone does not
+produce this receipt. Any active queue, inaccessible read, enabled SDMA input,
+PSP timeout, host fault or identity mismatch refuses authorization.

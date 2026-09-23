@@ -2141,6 +2141,10 @@ def validate_reuse_receipt(receipt, boot_id, prior_run_id, vm=None,
                 manifest, manifest_path)
         except Exception:
             return ['retained_kiq_continuation_receipt']
+    if isinstance(receipt, dict) and receipt.get('schema') == 9:
+        if vm is None:
+            return ['mode2_noqueue_receipt']
+        return helper('mode2-noqueue-recover').validate_receipt(receipt, vm, boot_id, prior_run_id)
     if isinstance(receipt, dict) and receipt.get('schema') == 6:
         helper_hashes = (manifest.get('recovery_helpers_sha256')
                          if isinstance(manifest, dict) and
@@ -2878,7 +2882,7 @@ def reserve_boot(directory, boot_id, experiment, recovery=None,
     schema6 = isinstance(recovery, dict) and recovery.get('schema') == 6
     vm = directory.parent.parent
     errors = validate_reuse_receipt(
-        recovery, boot_id, prior, vm if startup or retained else None,
+        recovery, boot_id, prior, vm if startup or retained or recovery.get('schema') == 9 else None,
         experiment if retained else None,
         manifest if retained or schema6 else None,
         manifest_path if retained else None)

@@ -14,17 +14,18 @@ R = _load('vfio-recover'); N = _load('inspect-noqueue')
 
 def sha(data): return hashlib.sha256(data).hexdigest()
 
-def validate_snapshot(e):
+def validate_snapshot(e, expected_mailbox=0x80030000, check_journal=True):
     """Pure validator for the complete selector scan; returns error labels."""
     bad=[]; g=e.get('globals_before',{}); a=e.get('globals_after',{})
     if not e.get('vfio_opened') or e.get('errors'): bad.append('scan_error')
-    if e.get('kernel_faults_before') or e.get('kernel_faults_after'): bad.append('kernel_faults')
-    if e.get('kernel_cursor_before') != e.get('kernel_cursor_after'): bad.append('kernel_cursor')
+    if check_journal:
+        if e.get('kernel_faults_before') or e.get('kernel_faults_after'): bad.append('kernel_faults')
+        if e.get('kernel_cursor_before') != e.get('kernel_cursor_after'): bad.append('kernel_cursor')
     if not isinstance(g,dict) or not isinstance(a,dict): bad.append('globals_malformed')
     if not isinstance(g,dict) or not isinstance(a,dict): return sorted(set(bad))
     if g != a: bad.append('globals_unstable')
     if isinstance(g,dict) and any(type(v) is not int or v == 0xffffffff for v in g.values()): bad.append('global_all_ones')
-    if g.get('c2pmsg_64') != 0x80030000: bad.append('psp_mailbox')
+    if g.get('c2pmsg_64') != expected_mailbox: bad.append('psp_mailbox')
     if (g.get('cp_stat') != 0 or g.get('cpc_busy') != 0 or
         g.get('me_cntl',0) & R.CP_ME_HALT_MASK != R.CP_ME_HALT_MASK or
         g.get('mec_cntl',0) & R.CP_MEC_HALT_MASK != R.CP_MEC_HALT_MASK or

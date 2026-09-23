@@ -86,3 +86,9 @@ it happening, disable sleep inside the guest: `sudo pmset -a sleep 0 displayslee
 
 Crash capture and the exposure timer reduce risk and improve diagnostics. They cannot recover a
 fabric or CPU lockup.
+
+A missing guest ownership lease does not by itself establish a need to reboot.
+`tools/mode2-noqueue-recover.py` provides a separate stopped-device recovery path:
+MODE2, complete stable queue/SDMA inactivity checks, PSP ring teardown, and final
+checks. See [running an experiment](running-an-experiment.md#recovery-when-the-guest-never-published-a-usable-lease).
+It produces a distinct single-use receipt without weakening native lease recovery.
