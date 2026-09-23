@@ -38,3 +38,8 @@ It preserves MASK and does not touch DMCUB enable/reset, firmware bytes, IRQ
 controls, scratch registers or ring pointers. Hypothesis: an unacknowledged
 register-interface timeout prevents mailbox progress. GPINT still timing out
 after a successful ACK rejects the ACK as a sufficient remedy.
+
+308 result: ACK readback c0000000 then80000000, clients cleared from8 to0.
+GPINT still times out. This rejects acknowledgement alone as sufficient, without
+establishing what originally caused the retained PHY timeout. CORE_PROBE_PASS,
+clean shutdown, ordinary recovery authorizes reuse.

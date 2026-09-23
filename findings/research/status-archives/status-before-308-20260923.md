@@ -1,24 +1,35 @@
 # Live status — 2026-09-23
 
-## Candidate 308: timeout acknowledged, GPINT still unresponsive
+## Candidate 307 retry: same-boot recovery/relaunch verified
 
-Run `0b4d8381476cd6a75805f07b976f83c2`, metal-156, source `9868bf9`,
-boot `5074c0e5-b2f6-46da-99b2-299ba322b41e`, MODE2 #231.
+Run `dccb0fe5349f33e8aae5e0c4b896e117`, metal-155, unchanged driver source
+`6488386`, boot `5074c0e5-b2f6-46da-99b2-299ba322b41e`, MODE2 #230.
 
-- **Functional:** RBBMIF ACK succeeded: b000e808 -> c0000000 -> 80000000,
-  clients8 ->0, MASK preserved. GPINT still timed out, including after accepted
-  display idle exit. The ACK alone does not restore mailbox responsiveness.
-  Metal probe passed; physical HDMI remains unresolved.
-- **Capture:** CORE_PROBE_PASS; no reported boundary.
-- **Shutdown/recovery:** clean guest-requested exit, recovered,
-  authorizes_launch=true. Continue on this boot.
-- **Next:** match Linux's fresh GPINT write on every query. Current later checks
-  only poll our already timed-out command, including after display wake.
-  Keep refusing a foreign pending command; GET_FW_VERSION is read-only/idempotent.
+- **Functional:** Metal probe passed. DMCUB CW0 first 4096 bytes read as all ones
+  before TMR unload and after LOAD_TOC/allocation (FNV1a 34e76dc5). This is not
+  evidence of erased code: protected/inaccessible access remains possible.
+  Four retained inbox headers are sane; GPINT still times out. Delivery disabled.
+  No new user observation of physical output; HDMI remains unresolved.
+- **Capture:** CORE_PROBE_PASS; valid run, no recorded functional boundary.
+- **Shutdown/recovery:** exited-after-guest-request; ordinary native recovery
+  recovered with authorizes_launch=true. No reboot or driver rebind occurred.
+- **Next:** investigate the unresponsive DMCUB using host handoff and firmware
+  state evidence. Do not infer code loss from an all-ones CPU read, and do not
+  load/start/reset DMCUB firmware from the guest.
 
-Evidence: `~/macos-vm/run/candidate-308-results/`.
-[Retained timeout audit](findings/research/dmcub-register-timeout-20260923.md).
-Host regression: 1017 tests OK, three skipped. dev only; no firmware restart.
+The preceding 307 early panic was recovered by the new MODE2/no-queue path:
+full stable queue/SDMA scans, both PSP ring destroys, final scans, no host faults.
+Its schema-9 receipt was consumed by this retry. Original failed receipts remain
+unchanged. The initial retry staging failure (#229, missing retry artifact) did
+not launch QEMU and consumed no ledger entry; the existing attempt-copy helper
+prepared the namespace before #230.
+
+Evidence: `~/macos-vm/run/candidate-307-attempt-noqueue-retry-results/`,
+`~/macos-vm/run/c307-mode2-noqueue-recovery.json`.
+Host regression: 1017 tests OK, three skipped.
+[Recovery procedure](docs/running-an-experiment.md#recovery-when-the-guest-never-published-a-usable-lease).
+[Display source audit](findings/research/host-dmcub-tmr-overlap-20260923.md).
+Work stays on dev in candidate worktrees; pull remote before each candidate.
 
 ## Verified progress
 
