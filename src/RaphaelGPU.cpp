@@ -8621,6 +8621,17 @@ static void dcnCheckIndirect(uint64_t ringBar) {
     auto fb = fbAperture();
     if (fb != nullptr && fitsDiscoveredBar(0, 64)) {
         for (unsigned d = 0; d < 4; d++) sample("control", 4 * d, fb[d]);
+        unsigned found = 0;
+        if (fitsDiscoveredBar(0, 0x10000)) {
+            for (unsigned d = 0; d < 0x10000 / 4 && found < 4; d++) {
+                const uint32_t value = fb[d];
+                if (value != 0 && value != 0xffffffffu) {
+                    sample("nonzero-control", 4 * d, value);
+                    found++;
+                }
+            }
+        }
+        CRLOG("DCN: indirect-check nonzero controls=%u", found);
     }
     const uint32_t wptr = fbRead(asicInfo, 0x3696);
     const uint32_t size = fbRead(asicInfo, 0x3695);
