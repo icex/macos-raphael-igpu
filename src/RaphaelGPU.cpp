@@ -8364,7 +8364,8 @@ static constexpr size_t kOffDcCreate       = 0xfea5e;
 static constexpr size_t kOffDcHardwareInit = 0xff053;
 enum : uint32_t {
     kDcnTrace = 1, kDcnTranslate = 2, kDcnPool302 = 4, kDcnWithdrawnDmcubFirmware = 8,
-    kDcnDmubGuard = 16, kDcnAllowed = kDcnTrace | kDcnTranslate | kDcnPool302 | kDcnDmubGuard,
+    kDcnDmubGuard = 16, kDcnDioWake = 32,
+    kDcnAllowed = kDcnTrace | kDcnTranslate | kDcnPool302 | kDcnDmubGuard | kDcnDioWake,
 };
 static uint32_t dcnMode = 0;
 static uint32_t dcnTraceBudget = 1500;
@@ -8559,6 +8560,20 @@ static void wrapDcHardwareInit(void *dc) {
     }
     FunctionCast(wrapDcHardwareInit, orgDcHardwareInit)(dc);
     dcnLogDmcubState("after init_hw");
+    if ((dcnMode & kDcnDioWake) && dcnNativeRead != nullptr && dcnNativeWrite != nullptr) {
+        // Wake the DIO I2C engine memory the host driver left in forced light sleep, and keep
+        // it awake; poll the power state like dce_i2c_hw does before a transaction.
+        const uint32_t ctrl = dcnNativeRead(dcnRegContext, RaphaelDcn::k315DioMemPwrCtrl);
+        const uint32_t before = dcnNativeRead(dcnRegContext, RaphaelDcn::k315DioMemPwrStatus);
+        dcnNativeWrite(dcnRegContext, RaphaelDcn::k315DioMemPwrCtrl, RaphaelDcn::wakeDioI2c(ctrl));
+        uint32_t status = before, tries = 0;
+        while ((status & RaphaelDcn::kDioI2cMemPwrState) != 0 && tries++ < 50) {
+            IODelay(10);
+            status = dcnNativeRead(dcnRegContext, RaphaelDcn::k315DioMemPwrStatus);
+        }
+        CRLOG("DCN: DIO I2C memory: CTRL %#x -> %#x, STATUS %#x -> %#x after %u polls",
+              ctrl, RaphaelDcn::wakeDioI2c(ctrl), before, status, tries);
+    }
     CRLOG("DCN: dc_hardware_init done (trace-lines=%u dropped=%u unique=%zu)", dcnTraceLines,
           dcnDropped, dcnAccesses.used());
 }
@@ -9766,6 +9781,7 @@ static void pluginStart() {
     CRLOG("DCN: rgpudcn=%#x (trace=%u translate=%u pool302=%u dmub-guard=%u) trace-lines=%u",
           dcnMode, (dcnMode & kDcnTrace) != 0, (dcnMode & kDcnTranslate) != 0,
           (dcnMode & kDcnPool302) != 0, (dcnMode & kDcnDmubGuard) != 0, dcnTraceBudget);
+    if (dcnMode & kDcnDioWake) CRLOG("DCN: dio-wake=1 (I2C memory light sleep cleared after init_hw)");
     uint32_t vd120 = 0;
     vd120Enabled = PE_parse_boot_argn("rgpuvd120", &vd120, sizeof(vd120)) && vd120 == 1;
     CRLOG("VD120: rgpuvd120=%u", vd120Enabled);

@@ -32,6 +32,9 @@ int main() {
     assert(isDmcubRegister(dmcubList, 3, 3) && isDmcubRegister(dmcubList, 3, 9) &&
            !isDmcubRegister(dmcubList, 3, 8) && !isDmcubRegister(dmcubList, 0, 3));
     assert(maskDmcubStrap(0x000100ff) == 0xff && maskDmcubStrap(0xf) == 0xf);
+    // DIO I2C memory: clear the forced light sleep, disable light sleep, keep other bits.
+    assert(k315DioMemPwrCtrl == 0x539e && k315DioMemPwrStatus == 0x539d);
+    assert(wakeDioI2c(0x1) == 0x2 && wakeDioI2c(0x0) == 0x2 && wakeDioI2c(0x3f1) == 0x3f2);
     assert(translate(0xffffffff).action == Action::Pass);
     assert(translate(0).action == Action::Pass);
 

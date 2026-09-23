@@ -129,6 +129,16 @@ inline bool isDmcubRegister(uint32_t index) {
 // so dmub_srv_has_hw_support() fails and no DMUB hardware initialization is attempted.
 inline uint32_t maskDmcubStrap(uint32_t value) { return value & ~kDcDmcubEnable; }
 
+// DIO memory power (dcn_3_1_5_offset.h / sh_mask.h, identical in 3.0.2). The host's DCN 3.1
+// driver leaves the I2C engine memory in forced light sleep after its last transaction and
+// Apple's DCN 3.0 code never wakes it, so every DDC read returns 0xff.
+static constexpr uint32_t k315DioMemPwrStatus = 0x539d;      // DIO_MEM_PWR_STATUS
+static constexpr uint32_t k315DioMemPwrCtrl = 0x539e;        // DIO_MEM_PWR_CTRL
+static constexpr uint32_t kDioI2cLightSleepForce = 1u << 0;  // DIO_MEM_PWR_CTRL.I2C_LIGHT_SLEEP_FORCE
+static constexpr uint32_t kDioI2cLightSleepDis = 1u << 1;    // DIO_MEM_PWR_CTRL.I2C_LIGHT_SLEEP_DIS
+static constexpr uint32_t kDioI2cMemPwrState = 1u << 0;      // DIO_MEM_PWR_STATUS.I2C_MEM_PWR_STATE
+inline uint32_t wakeDioI2c(uint32_t ctrl) { return (ctrl & ~kDioI2cLightSleepForce) | kDioI2cLightSleepDis; }
+
 // ---- Navi 2x DAL SMU mailbox ----
 // Apple's dcn30 clock manager messages the dGPU DALSMC mailbox directly (message 0x1628a,
 // argument 0x16273, response 0x16274). Raphael's PMFW has no such mailbox and the same
