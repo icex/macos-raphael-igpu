@@ -16,8 +16,9 @@ class DcnDisplaySourceTests(unittest.TestCase):
     def test_boot_arguments_are_bounded_and_logged(self):
         self.assertIn('PE_parse_boot_argn("rgpudcntrace", &dcnTrace, sizeof(dcnTrace))', SOURCE)
         self.assertIn('PE_parse_boot_argn("rgpuvd120", &vd120, sizeof(vd120)) && vd120 == 1', SOURCE)
-        self.assertIn('kDcnDmubGuard = 16, kDcnDioWake = 32,\n'
-                      '    kDcnAllowed = kDcnTrace | kDcnTranslate | kDcnPool302 | kDcnDmubGuard | kDcnDioWake,', SOURCE)
+        self.assertIn('kDcnDmubGuard = 16, kDcnDioWake = 32, kDcnHostI2cSpeed = 64,\n'
+                      '    kDcnAllowed = kDcnTrace | kDcnTranslate | kDcnPool302 | kDcnDmubGuard | kDcnDioWake |\n'
+                      '                  kDcnHostI2cSpeed,', SOURCE)
 
     def test_withdrawn_dmcub_firmware_and_unpaired_pool_are_refused(self):
         self.assertIn('(dcn & ~kDcnAllowed) == 0 &&\n'

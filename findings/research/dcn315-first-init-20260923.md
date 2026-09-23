@@ -65,3 +65,20 @@ was already 0 and `I2C_MEM_PWR_STATE` 0 (powered; only the DP A–E memories sle
 still returned 0xff. Hypothesis rejected. Note the tracer logs only the first two accesses per
 register, so the I2C transaction (GO write, status polls, data reads) is mostly invisible;
 candidate 289 logs every access in the DC_I2C and DIO/GPIO pad blocks.
+
+## Candidate 289 (13:50): the full transaction — the EDID address is NACKed [V]
+With every DC_I2C access logged (`tools/dcn-trace-decode.py`): arbitration granted
+(`REG_RW_CNTL_STATUS=1`), speed written 0x780202 (prescale 120, timing 2; the host had left
+0x9600102 = prescale 150, timing 1), setup enable + time limit 3, transaction0 START/STOP/
+STOP_ON_NACK count 1, data 0xa0 (index write), `DC_I2C_CONTROL = 1` (GO), then
+`DC_I2C_SW_STATUS = 0x1104` = SW_DONE | SW_STOPPED_ON_NACK | SW_NACK0. Three attempts, all
+NACK; DAL restores the host's speed value and releases the engine. The pad mask has
+CLK/DATA MASK bits 0 (hardware mode), PD_EN set as Linux does, I2C pad mode on. VBIOS: the
+board's only HDMI is path 0 (DDC line 1, HPD pin 1); the other paths are three DisplayPort
+connectors and an unused entry. The host reads the plug's EDID (ddcutil found EDID on the
+iGPU's I2C bus at boot; amdgpu logged a sink on HDMI-A-3), so the NACK is a guest-side
+difference. Remaining suspects: I2C timing (Apple assumes a 12 MHz engine clock; Linux derives
+prescale from `MICROSECOND_TIME_BASE_DIV`, and the host's value implies a different clock) and
+something the host driver configures that DCN 3.0 code never touches. Candidate 290 (bit 64,
+`rgpudcn=119`) replays the host's speed value on every DDC1 speed write and logs
+`MICROSECOND_TIME_BASE_DIV`.

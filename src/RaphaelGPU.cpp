@@ -8364,8 +8364,9 @@ static constexpr size_t kOffDcCreate       = 0xfea5e;
 static constexpr size_t kOffDcHardwareInit = 0xff053;
 enum : uint32_t {
     kDcnTrace = 1, kDcnTranslate = 2, kDcnPool302 = 4, kDcnWithdrawnDmcubFirmware = 8,
-    kDcnDmubGuard = 16, kDcnDioWake = 32,
-    kDcnAllowed = kDcnTrace | kDcnTranslate | kDcnPool302 | kDcnDmubGuard | kDcnDioWake,
+    kDcnDmubGuard = 16, kDcnDioWake = 32, kDcnHostI2cSpeed = 64,
+    kDcnAllowed = kDcnTrace | kDcnTranslate | kDcnPool302 | kDcnDmubGuard | kDcnDioWake |
+                  kDcnHostI2cSpeed,
 };
 static uint32_t dcnMode = 0;
 static uint32_t dcnTraceBudget = 1500;
@@ -8469,6 +8470,10 @@ static void wrapDcnRegWrite(void *context, uint32_t index, uint32_t value) {
             dcnNativeWrite(context, m.index,
                            remapWrite(*remap, value, dcnNativeRead(context, m.index)));
             note = " (fields remapped)";
+        } else if ((dcnMode & kDcnHostI2cSpeed) && m.index == k315DcI2cDdc1Speed &&
+                   value != kHostDdc1Speed) {
+            dcnNativeWrite(context, m.index, kHostDdc1Speed);
+            note = " (DDC1 speed replayed from the host: 0x9600102)";
         } else {
             dcnNativeWrite(context, m.index, value);
         }
@@ -8574,6 +8579,12 @@ static void wrapDcHardwareInit(void *dc) {
         }
         CRLOG("DCN: DIO I2C memory: CTRL %#x -> %#x, STATUS %#x -> %#x after %u polls",
               ctrl, RaphaelDcn::wakeDioI2c(ctrl), before, status, tries);
+    }
+    if (dcnNativeRead != nullptr) {
+        CRLOG("DCN: I2C clock: MICROSECOND_TIME_BASE_DIV=%#x DC_I2C_DDC1_SPEED=%#x (host-i2c-speed=%u)",
+              dcnNativeRead(dcnRegContext, RaphaelDcn::k315MicrosecondTimeBaseDiv),
+              dcnNativeRead(dcnRegContext, RaphaelDcn::k315DcI2cDdc1Speed),
+              (dcnMode & kDcnHostI2cSpeed) != 0);
     }
     CRLOG("DCN: dc_hardware_init done (trace-lines=%u dropped=%u unique=%zu)", dcnTraceLines,
           dcnDropped, dcnAccesses.used());

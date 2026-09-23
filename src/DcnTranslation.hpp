@@ -139,6 +139,14 @@ static constexpr uint32_t kDioI2cLightSleepDis = 1u << 1;    // DIO_MEM_PWR_CTRL
 static constexpr uint32_t kDioI2cMemPwrState = 1u << 0;      // DIO_MEM_PWR_STATUS.I2C_MEM_PWR_STATE
 inline uint32_t wakeDioI2c(uint32_t ctrl) { return (ctrl & ~kDioI2cLightSleepForce) | kDioI2cLightSleepDis; }
 
+// I2C engine speed. The host's DCN 3.1 driver leaves DC_I2C_DDC1_SPEED at prescale 0x96 with
+// the slow start/stop timing; Apple's DCN 3.0 code reprograms 0x78 / fast timing (it assumes a
+// 12 MHz engine clock) and the EDID address is NACKed. Replaying the host value tests whether
+// the bus timing is the difference. MICROSECOND_TIME_BASE_DIV tells the real engine clock.
+static constexpr uint32_t k315DcI2cDdc1Speed = 0x5362;          // DC_I2C_DDC1_SPEED (same in 3.0.2)
+static constexpr uint32_t k315MicrosecondTimeBaseDiv = 0x13b;   // MICROSECOND_TIME_BASE_DIV
+static constexpr uint32_t kHostDdc1Speed = 0x9600102;           // prescale 150, threshold 2, timing 1
+
 // Verbose trace window (DCN 3.0.2 indices): the DC_I2C engine block and the DIO/GPIO pad
 // registers (DDC, HPD, AUX pad control). Every access here is logged, not just the first two.
 inline bool isDdcTraceWindow(uint32_t index302) {
