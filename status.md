@@ -13,13 +13,20 @@ boot `5074c0e5-b2f6-46da-99b2-299ba322b41e`, MODE2 #228.
 - **Shutdown/recovery:** forced through identity-bound vm-supervision shutdown
   (request_sent=true); runner later recorded already-stopped. Not a clean shutdown.
   Recovery failed: missing XH2 ownership record. No authorizing reuse receipt.
-- **Next:** retry the unchanged 307 build after the crash-recovery boot boundary.
-  Current harness cannot authorize reuse without the native lease; MODE2 alone is
-  explicitly insufficient. Do not weaken that gate or reuse an earlier run's lease.
+- **Manual cleanup follow-up:** standalone vfio-recover refused the current run
+  with `guest host-KIQ reservation launch nonce does not match`. Capture-repair
+  proof also refused this run type. SMU version probe and MODE2 reset both
+  succeeded on the same boot; CP_STAT=0, RLC_CNTL=0, PCI config unchanged.
+- **Next:** resolve the missing-lease recovery admission for this early panic.
+  Hardware reboot necessity is NOT established; the earlier reboot request was
+  premature. A successful MODE2 reset is real evidence, but the current harness
+  still requires an additional valid recovery receipt before relaunch.
 
-305 already established GPINT timeout before guest TMR changes on a fresh boot.
-Reboot is not an HDMI remedy; the pending reboot request clears only 307's
-missing crash-recovery authorization. Continue host-unbind/MODE2 source research.
+305 established GPINT timeout before guest TMR changes on a fresh boot.
+Another identical reboot/bind is not an established HDMI fix.
+Manual evidence: `~/macos-vm/run/c307-manual-cleanup.json`,
+`~/macos-vm/run/c307-cleanup-smu-probe.json`,
+`~/macos-vm/run/c307-cleanup-mode2-reset.json`.
 Evidence: `~/macos-vm/run/candidate-307-results/` and cycle log.
 [Source audit](findings/research/host-dmcub-tmr-overlap-20260923.md).
 Work stays on dev in candidate worktrees; pull remote before each candidate.
