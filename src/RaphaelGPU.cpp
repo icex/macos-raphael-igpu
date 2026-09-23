@@ -8381,6 +8381,8 @@ static DcnRegRead dcnNativeRead = nullptr;
 static DcnRegWrite dcnNativeWrite = nullptr;
 static void *dcnRegContext = nullptr;
 static RaphaelDcn::AccessCounter<4096> dcnAccesses;
+// rgpudallog=<mask>: dc_context->logger (+0x10) type mask (+0x20), dc_log_type bits (v5.14).
+static uint64_t dalLogMask = 0;
 static RaphaelDcn::DalMailbox dcnDalMailbox;
 static volatile uint32_t dcnTraceLines = 0;
 static volatile uint32_t dcnDropped = 0;
@@ -8557,8 +8559,6 @@ static void *wrapDcCreate(void *init) {
 
 // Inbox1 ring of the running DMCUB, found by the survey (BAR0 offset and size; 0 = unknown).
 static uint64_t dcnRingBar = 0;
-// rgpudallog=<mask>: dc_context->logger (+0x10) type mask (+0x20), dc_log_type bits (v5.14).
-static uint64_t dalLogMask = 0;
 static uint32_t dcnRingSize = 0;
 
 // Read-only survey of the DMCUB the host driver left running (rgpudcn bit 128). Nothing here
