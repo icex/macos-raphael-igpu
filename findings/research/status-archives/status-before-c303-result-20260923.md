@@ -1,30 +1,32 @@
 # Live status — 2026-09-23
 
-## Candidate 303: GPINT version query also times out
+## Candidate 302: inbox writable; firmware did not consume command
 
-Run `7504daed4a1643f8d93654368fa36208`, metal-151, source `1de97f0`,
-boot `dc8add85-5070-419f-959d-6cc094c914be`, MODE2 #224.
+Run `25a177f212dcd95fb62fb6ad46819ff7`, metal-150, source `aa5736a`,
+boot `dc8add85-5070-419f-959d-6cc094c914be`, MODE2 #223.
 
-- **Functional:** GET_FW_VERSION sent through GPINT before native display init;
-  no acknowledgment in 100ms (0x80000 -> 0x10010000, SCRATCH7 stays zero).
-  After-init query refuses the still-busy channel. CNTL=0x900c6, CNTL2=0.
-  Inbox delivery disabled. Hardware timer progress is not firmware liveness.
-- **Capture:** CORE_PROBE_PASS; final critical count 425. Physical picture remains
-  unconfirmed; no HDMI audio qualification.
-- **Shutdown/recovery:** exited-after-guest-request, recovered,
-  authorizes_launch=true. Post-run SMU query succeeds; no guest running.
-- **Next:** source-backed normal display-idle exit through the separate Raphael
-  VBIOS SMU mailbox, then observe GPINT acknowledgment. Linux dcn315 clock manager
-  sends SetDisplayIdleOptimizations(0) when entering mission mode. This is distinct
-  from starting/resetting DMCUB, which remains prohibited. Transport/address and
-  protocol validation required before exposure; no reboot requirement inferred.
+- **Functional:** native host-tail reservation retained. Two complementary patterns
+  in the empty inbox slot read back correctly; all 64 bytes restored and pointers
+  unchanged. All 16 words of the first command passed readback. Firmware RPTR
+  stayed at 0x17c0 after WPTR advanced to 0x1800, timing out at 100ms; delivery
+  disabled itself. Timer advances, CNTL=0x900c6, SCRATCH0=0x43. This proves CPU
+  access, not firmware responsiveness or physical HDMI output.
+- **Capture:** CORE_PROBE_PASS, final critical record count 424. No HDMI picture
+  confirmed. Offscreen probe success is separate from physical presentation.
+- **Shutdown/recovery:** exited-after-guest-request; recovered with
+  authorizes_launch=true. Post-run SMU version query OK. No guest running.
+- **Next:** query running firmware version through Linux's GPINT channel, independent
+  of the inbox. No firmware load/start/reset. Same-boot cycle remains authorized.
 
-Evidence: `~/macos-vm/run/candidate-303-results/`,
-`~/macos-vm/run/c303-post-mode2-probe.json`.
-302 proved reversible CPU inbox access and full command readback but timed out
-waiting for consumption. [Source audit](findings/research/host-dmcub-tmr-overlap-20260923.md).
-Development stays on dev in candidate worktrees, with a remote pull before each
-candidate; SSH push works. Main unchanged. Host suite: 1006 tests OK, three skipped.
+Evidence: `~/macos-vm/run/candidate-302-results/`,
+`~/macos-vm/run/c302-post-mode2-probe.json`.
+[Source audit](findings/research/host-dmcub-tmr-overlap-20260923.md).
+The first staging attempt stopped at an archive-path mismatch before QEMU; it
+consumed MODE2 #222 but no launch ledger entry. Corrected artifact paths were
+verified by the successful cycle. Candidate 301 was not launched.
+
+Development uses dev directly in candidate worktrees, pulling remote before each
+candidate. SSH push works; main is unchanged. Host suite: 1006 tests OK, three skipped.
 
 ## Verified progress
 
