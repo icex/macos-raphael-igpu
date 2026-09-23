@@ -223,7 +223,7 @@ def configure(version, card_id, attempt=None):
     """Select the exact reviewed candidate/card pair; defaults are 1.0.185."""
     global CANDIDATE_VERSION, CARD_ID, NUMBER, WT, CANDIDATE, DIST, IDENTITIES
     global RUN_ID_FILE, CARD
-    if not re.fullmatch(r"1\.0\.((?:1[0-9]{2}|2[0-5][0-9]|2[67][0-9]|280|281|282|283|284|285|286))", version):
+    if not re.fullmatch(r"1\.0\.((?:1[0-9]{2}|2[0-5][0-9]|2[67][0-9]|280|281|282|283|284|285|286|287))", version):
         raise RuntimeError("candidate version must be in the reviewed 1.0.100–1.0.287 range")
     if not re.fullmatch(r"metal-[0-9]{3}", card_id):
         raise RuntimeError("card id must be metal-NNN")
