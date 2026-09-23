@@ -8910,6 +8910,33 @@ static void dcnQueryFirmwareVersion(const char *when) {
     // The same MMIO registers are available through audited raw FB access before
     // DCN installs its CGS context, allowing observation around PSP initialization.
     auto rd = [](uint32_t index) { return fbRead(asicInfo, index); };
+    // Candidate 308: acknowledge one retained RBBMIF timeout using the exact
+    // pulse in installed DMCUB 0x05003500 at 0x60034255..0x60034271.
+    // This is register-interface ACK only: never touch DMCUB reset/enable,
+    // firmware memory, IRQ enables, ring pointers, or debug scratch controls.
+    static bool timeoutAckAttempted = false;
+    if (!timeoutAckAttempted && hostReservationReady && rd(0x36a4) == 0x05003500 &&
+        (rd(0x36b6) & 0x10000) && !(rd(0x36c0) & 1)) {
+        timeoutAckAttempted = true;
+        const uint32_t status = rd(0x3642), clients = rd(0x3640);
+        const uint32_t address = (status & 0x3fffcu) >> 2;
+        CRLOG("DCN: RBBMIF retained status=%#x clients=%#x address=%#x scratch12=%#x scratch13=%#x scratch14=%#x scratch15=%#x",
+              status, clients, address, rd(0x36af), rd(0x36b0), rd(0x36b1), rd(0x36b2));
+        // Accept only the two recorded timeout targets; refuse concurrent change.
+        if (status != 0xffffffffu && (status & 0xf0000000u) == 0xb0000000u &&
+            (address == 0x5ecf || address == 0x3a02) && clients && clients != 0xffffffffu &&
+            rd(0x3642) == status) {
+            const uint32_t mask = status & 0x80000000u;
+            fbWrite(asicInfo, 0x3642, mask | 0x40000000u);
+            const uint32_t asserted = rd(0x3642);
+            fbWrite(asicInfo, 0x3642, mask);
+            const uint32_t after = rd(0x3642);
+            CRLOG("DCN: RBBMIF timeout ACK before=%#x asserted=%#x after=%#x clients=%#x mask-preserved=%u",
+                  status, asserted, after, rd(0x3640), (after & 0x80000000u) == mask);
+        } else {
+            CRLOG("DCN: RBBMIF timeout ACK refused/no matching retained timeout");
+        }
+    }
     const uint32_t before = rd(0x36b8), responseBefore = rd(0x36aa);
     const uint32_t cntl = rd(0x36b6), reset = rd(0x36c0);
     if (((before & 0xf0000000u) && before != 0x10010000) || !(cntl & 0x10000) || (reset & 1)) {
