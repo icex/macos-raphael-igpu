@@ -8364,7 +8364,9 @@ static constexpr size_t kOffDcCreate       = 0xfea5e;
 static constexpr size_t kOffDcHardwareInit = 0xff053;
 enum : uint32_t {
     kDcnTrace = 1, kDcnTranslate = 2, kDcnPool302 = 4, kDcnWithdrawnDmcubFirmware = 8,
-    kDcnDmubGuard = 16, kDcnAllowed = kDcnTrace | kDcnTranslate | kDcnPool302 | kDcnDmubGuard,
+    kDcnDmubGuard = 16, kDcnDioWake = 32, kDcnHostI2cSpeed = 64,
+    kDcnAllowed = kDcnTrace | kDcnTranslate | kDcnPool302 | kDcnDmubGuard | kDcnDioWake |
+                  kDcnHostI2cSpeed,
 };
 static uint32_t dcnMode = 0;
 static uint32_t dcnTraceBudget = 1500;
@@ -8404,7 +8406,8 @@ static void dcnTraceAccess(char op, uint32_t from, const RaphaelDcn::Mapping &m,
     if (!(dcnMode & kDcnTrace)) return;
     const uint32_t seen = dcnAccesses.note(RaphaelDcn::accessKey(from, op == 'W'));
     const bool dropped = m.action == RaphaelDcn::Action::Drop;
-    if (!(seen == 1 || seen == 2 || (dropped && seen <= 3) || *note)) return;
+    if (!(seen == 1 || seen == 2 || (dropped && seen <= 3) || *note ||
+          RaphaelDcn::isDdcTraceWindow(from))) return;
     if (__sync_add_and_fetch(&dcnTraceLines, 1) > dcnTraceBudget) return;
     uint64_t up1 = 0, up2 = 0;
     dcnCallers(frame, &up1, &up2);
@@ -8467,6 +8470,10 @@ static void wrapDcnRegWrite(void *context, uint32_t index, uint32_t value) {
             dcnNativeWrite(context, m.index,
                            remapWrite(*remap, value, dcnNativeRead(context, m.index)));
             note = " (fields remapped)";
+        } else if ((dcnMode & kDcnHostI2cSpeed) && m.index == k315DcI2cDdc1Speed &&
+                   value != kHostDdc1Speed) {
+            dcnNativeWrite(context, m.index, kHostDdc1Speed);
+            note = " (DDC1 speed replayed from the host: 0x9600102)";
         } else {
             dcnNativeWrite(context, m.index, value);
         }
@@ -8498,7 +8505,13 @@ static void wrapDcnRegWait(void *ctx, uint32_t index, uint32_t shift, uint32_t f
 static void *wrapDcCreate(void *init) {
     if (init != nullptr && (dcnMode & (kDcnTrace | kDcnTranslate)) && dcnNativeRead == nullptr) {
         const auto cgs = *reinterpret_cast<uint64_t **>(reinterpret_cast<uint8_t *>(init) + 0x30);
-        const auto kernelText = [](uint64_t p) { return p >= 0xffffff8000000000ULL; };
+        // Kext text lives in the auxiliary collection at 0xffffff7f8... as well as in the
+        // boot collection at 0xffffff80...; HWLibs' cgs register functions are the former.
+        const auto kernelText = [](uint64_t p) { return p >= 0xffffff7f80000000ULL; };
+        if (cgs != nullptr) {
+            CRLOG("DCN: cgs %p slots ctx=%#llx read=%#llx write=%#llx getProperty=%#llx", cgs,
+                  cgs[5], cgs[8], cgs[9], cgs[10]);
+        }
         if (cgs != nullptr && kernelText(cgs[8]) && kernelText(cgs[9])) {
             dcnRegContext = reinterpret_cast<void *>(cgs[5]);
             dcnNativeRead = reinterpret_cast<DcnRegRead>(cgs[8]);
@@ -8553,6 +8566,26 @@ static void wrapDcHardwareInit(void *dc) {
     }
     FunctionCast(wrapDcHardwareInit, orgDcHardwareInit)(dc);
     dcnLogDmcubState("after init_hw");
+    if ((dcnMode & kDcnDioWake) && dcnNativeRead != nullptr && dcnNativeWrite != nullptr) {
+        // Wake the DIO I2C engine memory the host driver left in forced light sleep, and keep
+        // it awake; poll the power state like dce_i2c_hw does before a transaction.
+        const uint32_t ctrl = dcnNativeRead(dcnRegContext, RaphaelDcn::k315DioMemPwrCtrl);
+        const uint32_t before = dcnNativeRead(dcnRegContext, RaphaelDcn::k315DioMemPwrStatus);
+        dcnNativeWrite(dcnRegContext, RaphaelDcn::k315DioMemPwrCtrl, RaphaelDcn::wakeDioI2c(ctrl));
+        uint32_t status = before, tries = 0;
+        while ((status & RaphaelDcn::kDioI2cMemPwrState) != 0 && tries++ < 50) {
+            IODelay(10);
+            status = dcnNativeRead(dcnRegContext, RaphaelDcn::k315DioMemPwrStatus);
+        }
+        CRLOG("DCN: DIO I2C memory: CTRL %#x -> %#x, STATUS %#x -> %#x after %u polls",
+              ctrl, RaphaelDcn::wakeDioI2c(ctrl), before, status, tries);
+    }
+    if (dcnNativeRead != nullptr) {
+        CRLOG("DCN: I2C clock: MICROSECOND_TIME_BASE_DIV=%#x DC_I2C_DDC1_SPEED=%#x (host-i2c-speed=%u)",
+              dcnNativeRead(dcnRegContext, RaphaelDcn::k315MicrosecondTimeBaseDiv),
+              dcnNativeRead(dcnRegContext, RaphaelDcn::k315DcI2cDdc1Speed),
+              (dcnMode & kDcnHostI2cSpeed) != 0);
+    }
     CRLOG("DCN: dc_hardware_init done (trace-lines=%u dropped=%u unique=%zu)", dcnTraceLines,
           dcnDropped, dcnAccesses.used());
 }
@@ -9760,6 +9793,7 @@ static void pluginStart() {
     CRLOG("DCN: rgpudcn=%#x (trace=%u translate=%u pool302=%u dmub-guard=%u) trace-lines=%u",
           dcnMode, (dcnMode & kDcnTrace) != 0, (dcnMode & kDcnTranslate) != 0,
           (dcnMode & kDcnPool302) != 0, (dcnMode & kDcnDmubGuard) != 0, dcnTraceBudget);
+    if (dcnMode & kDcnDioWake) CRLOG("DCN: dio-wake=1 (I2C memory light sleep cleared after init_hw)");
     uint32_t vd120 = 0;
     vd120Enabled = PE_parse_boot_argn("rgpuvd120", &vd120, sizeof(vd120)) && vd120 == 1;
     CRLOG("VD120: rgpuvd120=%u", vd120Enabled);

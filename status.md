@@ -67,6 +67,34 @@ only right after a login at 1920x1080 Retina with Mac login, and breaks after an
 switch (stale scale until a WindowServer restart); Apple client audio tap fails; client
 resolution never works. Sessions can now last 12 h. Details in the notes.
 
+## Candidates 288–290 — 2026-09-23 afternoon
+
+The EDID read on the HDMI plug is a clean NACK of address 0xa0 by the plug, with the engine,
+pad mode, pull-downs, memory power and bus timing all matching what Linux programs (288: I2C
+memory was awake; 289: full transaction trace; 290: host timing replayed, engine clock 24 MHz).
+Next: `sudo tools/host-ddc-trace.sh` on a fresh host boot (iGPU on amdgpu) and diff the host's
+register sequence against the guest's with `tools/dcn-trace-decode.py --host-trace`.
+[Notes](findings/research/dcn315-first-init-20260923.md).
+
+## Candidate 287 ran — 2026-09-23 13:30
+
+First launch froze the host in the PSP phase (that boot had been suspended overnight with the
+iGPU on vfio-pci; the display hook never ran). On the fresh boot the display core initialised on
+hardware for the first time: cgs slots interposed, DCN 3.02 pool, 593 translated accesses and
+34 waits with no panic; DMCUB untouched and still booted from the host driver; HPD sense high on
+the HDMI plug; the EDID read on DDC1 completed but returned 0xFF. Next evidence needs a host
+reboot: the host driver's I2C/pad registers via `dcn-state-probe.py`.
+[Notes](findings/research/dcn315-first-init-20260923.md).
+
+## Candidate 287 ready — 2026-09-22 22:45
+
+Built and preflighted (1000 tests): the display hook's cgs pointer check now accepts the
+auxiliary kext collection range, which is why metal-134 never interposed the DAL registers.
+Run `run/c287-launch.sh` (card metal-135, rgpudcn=23, AUDIO=usb) once the user's 12-hour test
+session on candidate 286 ends (Wed 09:59 or earlier by stop file). Remote display: the virtual
+display's 1.2 s capture latency is a ScreenCaptureKit metric, not VBL; a permissioned SCKit
+probe is the next measurement. [Notes](findings/research/lan-bridged-screen-sharing-20260922.md).
+
 ## Next session (display and HDMI audio are the user's priority)
 
 1. **Host.** The iGPU is on `amdgpu` in boot `365fcd4e`. A guest run needs the user to run

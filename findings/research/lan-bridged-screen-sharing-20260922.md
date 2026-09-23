@@ -79,3 +79,26 @@ Also: with the legacy VNC password enabled, Apple's iPad app authenticates with 
 (`authProtocol 2`) and runs standard mode (codec 1011); it used RSA/Mac login only when the
 server offered no VNC password... Sequoia refuses the DH method (type 30) that third-party iOS
 VNC apps use, so the VNC password must stay enabled for them.
+
+## 22:45 — where the virtual display's 1.2 s comes from, and where it does not [V]
+- `tools/guest-vbl-probe.swift` (CVDisplayLink on the main display): fallback display = 30 Hz
+  nominal (33.3 ms), callbacks every 33 ms, output lead 49 ms; virtual display = 60 Hz, callbacks
+  every 16.7 ms, output lead 24 ms. Display-link timing is fine on both, so the 1.2 s is not VBL.
+- CoreDisplay `VFBGetVBLTiming` (decompiled, 0x7ff80407ee4b) synthesises VBL from
+  `SLSCurrentRealTime()` with period 1/30 s for the fallback and 1/int(modeTable[cur]+0x24) when
+  the VFB flag +0x308 is set (60 for CGVirtualDisplay). No time-base offset there either.
+- The Screen Sharing agent's "latency" string is `SCStreamMetricCaptureLatencyTime`, a
+  ScreenCaptureKit per-frame metric (capture time minus the frame's display time). ~1.19 s,
+  constant, only on the virtual display. Next: a ScreenCaptureKit probe (needs the Screen
+  Recording permission once) printing that metric and the sample presentation timestamps on
+  both displays, then WindowServer's frame stamping for VFB presents.
+
+## Physical display: why metal-134's hook did not attach [V]
+`wrapDcCreate` reads `dc_init_data.cgs_device` (+0x30 → `AmdDalServices+0x650`, confirmed in
+the decompiled `AmdDalServices::initialize`/`FUN_00065814`) and checked its read/write slots
+(+0x40/+0x48) against `>= 0xffffff8000000000`. In this guest the AMD kexts' code lives in the
+auxiliary collection (`vtable=0xffffff7f99...` in the serial log) while the framebuffer routes
+were at `0xffffff8010...`; HWLibs' cgs register functions fail the check, so translation stayed
+off. Candidate 287 (`8629b9b`, card `metal-135`, launch `run/c287-launch.sh`) accepts
+`>= 0xffffff7f80000000` and logs the raw slots. Not run yet: the GPU is held by the user's
+12-hour test session.

@@ -230,8 +230,9 @@ from device enumeration or passing microbenchmarks.
      guest, and that froze the host. Candidate 286 removes it and fences DMCUB off: the strap
      reads absent and DMCUB writes are dropped.
    - **Next.**
-     a. Run metal-134 for DCN 3.02 pool init plus HPD/EDID over DDC1. This needs the root GPU
-        bind and the user's agreement.
+     a. DONE 2026-09-23 (candidate 287/metal-135): DCN 3.02 pool init on hardware, HPD sense on
+        the HDMI plug, EDID read on DDC1 returns 0xFF. Next: host-driver I2C/pad register
+        values after a reboot (`dcn-state-probe.py`), then fix the I2C clock/pad setup.
      b. Resolve DMCUB without any guest-initiated load, start or reset. Raphael's VBIOS has no
         transmitter or pixel-clock tables, so HDMI PHY and PLL exist only in DMCUB firmware.
         Start with a read-only dump of the DMCUB windows under host amdgpu.
@@ -245,6 +246,11 @@ from device enumeration or passing microbenchmarks.
         metal-134 run; then BlackHole in the guest for Sunshine capture.
      e. HDMI audio on the port: spoof 7b:00.1 as ab28, add the AppleGFXHDA pairing patch, bind
         .1 as root, and update the launcher gates. Only after the display link works.
+     f. Remote display (added 2026-09-22): Apple Screen Sharing "client resolution" needs a
+        display with the client's mode. A CGVirtualDisplay offers it but ScreenCaptureKit reports
+        ~1.2 s capture latency on it in this VM (display-link timing is fine); find why
+        (permissioned SCKit probe, then WindowServer VFB frame stamping). Apple client audio tap
+        fails in coreaudiod (`hasNonTapInputStream == false`): find what input stream it wants.
 1. **Full 4K remote desktop streaming (user priority, updated 2026-09-17).** 4K60 is
    now stable. Three fixes got there: the VCN preset patch (candidate 284, encode 11ms at 4K,
    equal to Linux), a 2GB BIOS UMA carve-out (no allocation failures; host tools detect the
