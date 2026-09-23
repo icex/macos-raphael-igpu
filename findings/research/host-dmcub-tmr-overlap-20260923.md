@@ -84,3 +84,22 @@ or disabled/reset firmware, and never changes firmware execution controls.
 Inbox delivery is disabled for this diagnostic. A GPINT ACK distinguishes a
 responsive processor from an inbox-specific problem; timeout alone does not
 identify the cause. No same-boot reset/restart of DMCUB is attempted.
+
+## Candidate 304: exit display idle through the VBIOS SMU mailbox
+
+Linux dcn315_clk_mgr.c enters mission mode with idle_info=0 through
+dcn315_smu_set_display_idle_optimization. dcn315_smu.c uses message 0x12
+and the separate VBIOS mailbox: message SMN 0x03b1050c (C2PMSG3), parameter
+0x03b10994 (C2PMSG37), response 0x03b10998 (C2PMSG38). The latter two match
+MP1 base 0x16000 + offsets 0x265/0x266 in mp_13_0_5_offset.h. These are not
+the driver mailbox's message IDs or registers.
+
+304 uses the existing identity-checked CGS SMN transport and VCN SMU lock.
+It first queries VBIOS GetPmfwVersion=2 and requires the known 0x625300 firmware
+version, then sends only SetDisplayIdleOptimizations(0). It attempts once, after
+the normal VCN power setup has validated the transport. A successful response
+triggers another GPINT version observation; a pending version query is polled
+without replacing it. No firmware load/start/stop/reset or DMCUB control write.
+Failure/timeout/version mismatch suppresses the wake request as appropriate.
+Unit tests cover mailbox sequence, busy timeout, version timeout/mismatch and
+wake rejection. This tests normal display power state, not firmware restoration.

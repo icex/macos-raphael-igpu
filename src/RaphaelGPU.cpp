@@ -36,6 +36,7 @@
 #include "KiqAddresses.hpp"
 #include "HostMemoryReservation.hpp"
 #include "DmubRingProbe.hpp"
+#include "DisplayIdlePower.hpp"
 #include "KiqQueuePreparation.hpp"
 #include "GartAddresses.hpp"
 #include "DiagnosticRecords.hpp"
@@ -1625,7 +1626,8 @@ static uint32_t wrapCosRelMemHnd(void *self, void *handle) {
 static mach_vm_address_t orgPspTmrInit {};
 static mach_vm_address_t orgGmmSetMemoryAttributes {};
 static bool hostReserveEnabled = false, hostReservationReady = false;
-static bool dcnVersionQueryEnabled = false;
+static bool dcnVersionQueryEnabled = false, displayIdleExitEnabled = false;
+static void dcnQueryFirmwareVersion(const char *when);
 static uint64_t hostReservationLimit = 0;
 static uint32_t wrapGmmSetMemoryAttributes(void *self, uint32_t type, void *attributes);
 
@@ -2777,6 +2779,20 @@ static uint32_t wrapVcnInitialize(void *engine) {
             [&](uint32_t address) { return read(handle, address); },
             [&](uint32_t address, uint32_t value) { write(handle, address, value); },
             []() { IOSleep(1); }, cycleVcn, vcnClockMHz, smuQueryEnabled, gfxClockMHz, dcnClockMHz);
+        static bool idleExitAttempted = false;
+        if (displayIdleExitEnabled && !idleExitAttempted && !power.error) {
+            idleExitAttempted = true;
+            const auto idle = RaphaelDisplayPower::exitIdle(
+                [&](uint32_t address) { return read(handle, address); },
+                [&](uint32_t address, uint32_t value) { write(handle, address, value); },
+                []() { IOSleep(1); }, RaphaelVcnPower::ExpectedVersion);
+            CRLOG("DCN: display-idle exit pre=%#x version-response=%#x version=%#x wake-response=%#x",
+                  idle.pre, idle.versionResponse, idle.version, idle.wakeResponse);
+            if (idle.wakeResponse == 1) {
+                IOSleep(10);
+                dcnQueryFirmwareVersion("after display-idle exit");
+            }
+        }
         IOLockUnlock(vcnSmuLock);
         RLOG("VCNCYCLE: selected=%u down-response=%x active-queues=%u",
              cycleVcn, power.downResponse, queues ? queues[0] : 0xffffffffu);
@@ -8843,13 +8859,13 @@ static void dcnQueryFirmwareVersion(const char *when) {
     auto rd = [](uint32_t index) { return dcnNativeRead(dcnRegContext, index); };
     const uint32_t before = rd(0x36b8), responseBefore = rd(0x36aa);
     const uint32_t cntl = rd(0x36b6), reset = rd(0x36c0);
-    if ((before & 0xf0000000u) || !(cntl & 0x10000) || (reset & 1)) {
+    if (((before & 0xf0000000u) && before != 0x10010000) || !(cntl & 0x10000) || (reset & 1)) {
         CRLOG("DCN: GPINT version %s refused busy/reset/disabled input=%#x CNTL=%#x CNTL2=%#x",
               when, before, cntl, reset);
         return;
     }
     // status=1, command_code=1 (GET_FW_VERSION), parameter=0.
-    dcnNativeWrite(dcnRegContext, 0x36b8, 0x10010000);
+    if (!(before & 0xf0000000u)) dcnNativeWrite(dcnRegContext, 0x36b8, 0x10010000);
     uint32_t ack = 0, waited = 0;
     for (; waited < 100000; waited += 10) {
         ack = rd(0x36b8);
@@ -10256,6 +10272,8 @@ static void pluginStart() {
     hostReserveEnabled = PE_parse_boot_argn("rgpuhostreserve", &hostReserve, sizeof(hostReserve)) && hostReserve == 1;
     uint32_t dcn = 0, dcnTrace = 0;
     // The DCN 3.02 pool and translation are only meaningful, and only safe, together.
+    uint32_t idleExit = 0;
+    displayIdleExitEnabled = PE_parse_boot_argn("rgpudisplaywake", &idleExit, sizeof(idleExit)) && idleExit == 1;
     uint32_t dmubQuery = 0;
     dcnVersionQueryEnabled = PE_parse_boot_argn("rgpudmubquery", &dmubQuery, sizeof(dmubQuery)) && dmubQuery == 1;
     if (PE_parse_boot_argn("rgpudcn", &dcn, sizeof(dcn)) && (dcn & ~kDcnAllowed) == 0 &&
