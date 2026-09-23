@@ -139,6 +139,13 @@ static constexpr uint32_t kDioI2cLightSleepDis = 1u << 1;    // DIO_MEM_PWR_CTRL
 static constexpr uint32_t kDioI2cMemPwrState = 1u << 0;      // DIO_MEM_PWR_STATUS.I2C_MEM_PWR_STATE
 inline uint32_t wakeDioI2c(uint32_t ctrl) { return (ctrl & ~kDioI2cLightSleepForce) | kDioI2cLightSleepDis; }
 
+// Verbose trace window (DCN 3.0.2 indices): the DC_I2C engine block and the DIO/GPIO pad
+// registers (DDC, HPD, AUX pad control). Every access here is logged, not just the first two.
+inline bool isDdcTraceWindow(uint32_t index302) {
+    return (index302 >= 0x5358 && index302 <= 0x5377) || (index302 >= 0x539d && index302 <= 0x53a4) ||
+           (index302 >= 0x5d89 && index302 <= 0x5ddd);
+}
+
 // ---- Navi 2x DAL SMU mailbox ----
 // Apple's dcn30 clock manager messages the dGPU DALSMC mailbox directly (message 0x1628a,
 // argument 0x16273, response 0x16274). Raphael's PMFW has no such mailbox and the same

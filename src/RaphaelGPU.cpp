@@ -8405,7 +8405,8 @@ static void dcnTraceAccess(char op, uint32_t from, const RaphaelDcn::Mapping &m,
     if (!(dcnMode & kDcnTrace)) return;
     const uint32_t seen = dcnAccesses.note(RaphaelDcn::accessKey(from, op == 'W'));
     const bool dropped = m.action == RaphaelDcn::Action::Drop;
-    if (!(seen == 1 || seen == 2 || (dropped && seen <= 3) || *note)) return;
+    if (!(seen == 1 || seen == 2 || (dropped && seen <= 3) || *note ||
+          RaphaelDcn::isDdcTraceWindow(from))) return;
     if (__sync_add_and_fetch(&dcnTraceLines, 1) > dcnTraceBudget) return;
     uint64_t up1 = 0, up2 = 0;
     dcnCallers(frame, &up1, &up2);

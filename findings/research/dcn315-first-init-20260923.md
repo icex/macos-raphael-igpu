@@ -58,3 +58,10 @@ after `gpu-bind.sh` and before any guest run.
   0xff data. Register indices and fields are identical in both headers (0x539d/0x539e).
 - Candidate 288 (`rgpudcn` bit 32, card metal-136 with `rgpudcn=55`) clears the force, sets
   `I2C_LIGHT_SLEEP_DIS`, polls the state after `dc_hardware_init`, and logs before/after.
+
+## Candidate 288 result (13:24): the I2C memory was not asleep [V]
+`DCN: DIO I2C memory: CTRL 0 -> 0x2, STATUS 0xf8 -> 0xf8 after 0 polls`: `I2C_LIGHT_SLEEP_FORCE`
+was already 0 and `I2C_MEM_PWR_STATE` 0 (powered; only the DP A–E memories sleep). The EDID read
+still returned 0xff. Hypothesis rejected. Note the tracer logs only the first two accesses per
+register, so the I2C transaction (GO write, status polls, data reads) is mostly invisible;
+candidate 289 logs every access in the DC_I2C and DIO/GPIO pad blocks.

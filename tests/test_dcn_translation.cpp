@@ -35,6 +35,10 @@ int main() {
     // DIO I2C memory: clear the forced light sleep, disable light sleep, keep other bits.
     assert(k315DioMemPwrCtrl == 0x539e && k315DioMemPwrStatus == 0x539d);
     assert(wakeDioI2c(0x1) == 0x2 && wakeDioI2c(0x0) == 0x2 && wakeDioI2c(0x3f1) == 0x3f2);
+    assert(isDdcTraceWindow(0x5358) && isDdcTraceWindow(0x5372) && isDdcTraceWindow(0x5377) &&
+           isDdcTraceWindow(0x539e) && isDdcTraceWindow(0x5d91) && isDdcTraceWindow(0x5ddd) &&
+           !isDdcTraceWindow(0x5357) && !isDdcTraceWindow(0x5378) && !isDdcTraceWindow(0x5dde) &&
+           !isDdcTraceWindow(0x1b41));
     assert(translate(0xffffffff).action == Action::Pass);
     assert(translate(0).action == Action::Pass);
 
