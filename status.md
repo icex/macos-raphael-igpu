@@ -1,30 +1,33 @@
 # Live status — 2026-09-24
 
-## Candidate312: complete upload verified; security-reset write refused
+## Candidate313: native PSP accepted DMCUB firmware into guest TMR
 
-Run `1210252b328240866116af82d514cd1b`, metal160, source d2a19a9,
-boot5074c0e5-b2f6-46da-99b2-299ba322b41e, MODE2#235.
+Run7524da8a2ca9ad0a1af9d9ba1c9c6e12, metal161, source073d820,
+boot5074c0e5-b2f6-46da-99b2-299ba322b41e, MODE2#236.
 
-- **Functional:** held-reset continuation completed phase4 (every payload word
-  verified immediately and in a full second pass). Phase5 failed register
-  verification before any window changed. Stopped capture retains SEC_CNTL=2000
-  and all original windows, consistent with SEC_RESET bit16 refusing assertion.
-  Exact failing register was not logged; add telemetry before another attempt.
-  DMCUB remains held; HDMI remains blocked.
-- **Capture:** complete serial and phase result. The Metal probe crashed while
-  JSON-encoding an infinite number; wrapper verdict EXECUTION_FAILED. This run
-  does not establish a Metal pass or a GPU execution failure.
+- **Functional:** signed upload fully verified. Native PSP LOAD_IP_FW type51
+  returned0/status0, firmware MCf47d900000 within guest TMRf47d600000/a00000.
+  PSP left processor reset asserted and ENABLE=0, but cleared DMUIF reset;
+  the phase5 check stopped with error7 and restored the held state. No firmware
+  startup or HDMI delivery occurred. Metal core probe passed.
+- **Capture:** CORE_PROBE_PASS; serial includes native request/response and
+  controls. Stopped capture confirms CW0 physical85d900000/3a520 and
+  CW1 physical85d93a600/c5ae0, both wholly within the recorded guest TMR.
+  Complete capture, selectors restored, no new host faults.
 - **Shutdown/recovery:** exited-after-guest-request; recovered,
-  authorizes_launch=true. Stopped capture restored selectors and found no host faults.
-- **Evidence:** `~/macos-vm/run/candidate-312-results/` and
-  `~/macos-vm/run/c312-retained-dmcub-state/capture.json`.
-- **Next:** trace Linux PSP versus direct-load ownership and Apple's native PSP
-  submission before choosing the next firmware-load path. No blind reset retry.
+  authorizes_launch=true. This establishes GC/SDMA/PSP cleanup, not live DMCUB.
+- **Evidence:** `~/macos-vm/run/candidate-313-results/` and
+  `~/macos-vm/run/c313-retained-dmcub-state/capture.json`.
+- **Next:** permit PSP's observed DMUIF deassertion only while processor reset
+  remains asserted and ENABLE=0; reassert DMUIF before programming windows.
+  When held firmware will be reloaded by PSP, retire its prior secure windows
+  from tail reservation so the new TMR does not move downward every cycle.
 
-User explicitly authorized autonomous build tests and iGPU reset/recovery on
-2026-09-24, superseding the earlier per-attempt approval condition. Preserve
-host-safety constraints. No reboot requested. Candidate work stays local;
-dev/origin/dev remain5371959 (remote fetched2026-09-24).1019 host tests passed.
+User authorized autonomous build tests and iGPU reset/recovery on2026-09-24;
+no per-attempt approval needed. Preserve host-safety constraints. No reboot
+requested.1020 host tests OK (3 skipped). All changes local, dev/origin/dev5371959.
+Prior312 upload verified but security-register assertion refused; that direct
+path is superseded by the successful PSP load. FW liveness remains unproven.
 
 ## Verified progress
 
@@ -85,3 +88,10 @@ and [earlier](findings/research/status-archives/status-before-night-close-202609
 - Output: `/home/bogdan/macos-vm/run/candidate-312-results`
 - Verdict: `EXECUTION_FAILED`
 - Boundary: `first_submission`
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-313-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
