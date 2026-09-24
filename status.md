@@ -1,30 +1,46 @@
 # Live status — 2026-09-24
 
-## Candidate314: DMCUB firmware startup and fresh replies verified
+## Candidate315: HDMI commands consumed; Samsung online; run remains active
 
-Run1e061e039b6dd6beacaf3f76494e4ace, metal162, sourceba0b118,
-boot5074c0e5-b2f6-46da-99b2-299ba322b41e, MODE2#237.
+Run909d7c9412f825b8b7079f92b67f39be, metal163, source9886c30,
+boot5074c0e5-b2f6-46da-99b2-299ba322b41e, MODE2#239.
+Service `rgpu-candidate315-hdmi.service`; results
+`~/macos-vm/run/candidate-315-attempt-hdmi-results/`.
 
-- **Functional:** native PSP loaded signed DMCUB into guest TMR, both secure
-  windows passed bounds checks, and nonsecure windows/mailboxes were configured.
-  Startup reached phase8/success1: three fresh version replies05003500,
-  fetch/write faults0/0, selectors restored. No HDMI commands were delivered;
-  physical picture and audio remain unverified.
-- **Capture:** complete serial/critical capture and identity. The optional desktop
-  probe again aborted JSON serialization on an infinite number (EXECUTION_FAILED);
-  no Metal pass is claimed for this run. Preserve the independent firmware result.
-  Firmware scratch15 records3a02 (HUB debug register timeout), despite successful
-  GPINT replies; mailbox command consumption is the next test.
-- **Shutdown/recovery:** exited-after-guest-request; recovered,
-  authorizes_launch=true. No reboot or driver rebind occurred.
-- **Evidence:** `~/macos-vm/run/candidate-314-results/`. Prior313 stopped capture
-  confirms PSP placement inside TMR;314 additionally verifies startup and replies.
-- **Next:** fresh315 branch: safe repeat of PSP initialization, verify the empty
-  inbox and deliver the HDMI VBIOS commands. Fix nonfinite probe serialization
-  so missing timing data cannot discard independent core/readback evidence.
+- **Functional:** prior firmware held before TMR replacement; PSP reload/start
+  again passed three fresh version queries. Empty inbox reversible verification
+  passed.17 HDMI VBIOS commands consumed in10–820us, pointers both440, no timeout.
+  Live OTG0 scanning; DIG0 HDMI/enable/symbol clock on; HPD0 high. Live macOS
+  system_profiler now reports Odyssey G95NC online/main,3840x1080,1920x540 logical,
+  about59Hz,30-bit color. User visual confirmation is pending; do not claim an
+  observed physical picture yet. Core probe passed; offscreen1000frames,
+  736 sampled pixels, zero mismatches. Broader desktop capture is not qualified.
+- **Capture:** probe JSON complete; initial report caught the Samsung before
+  attachment, but later ioreg and system_profiler show it present and online.
+  Native nonfinite-report test passed in a separate GPU-less session.
+- **Shutdown/recovery:** NOT YET RUN. Guest remains available for the physical
+  screen check, supervised to the6000-second deadline. Do not kill its runner.
+  Stop through `candidate-315-attempt-hdmi-results/stop-requested` when appropriate.
+- **Evidence:** `~/macos-vm/run/c315-live-dcn.json` (reads via QEMU's existing
+  MMIO mapping, no new VFIO owner), `c315-live-displays.txt`,
+  `c315-live-display-profile.json`, and the active run's serial/probe.
+  The requested host9231ea43 trace contains relevant OTG activity but no matching
+  DIG0/PHY programming, so it cannot supply a complete PHY comparison.
+- **Next:** obtain the pending Samsung observation. If no picture, continue from
+  this running state and compare timing/encoder/PHY configuration. HDMI audio
+  follows picture: physical audio function7b:00.1 (1002:1640) is still host-owned
+  by snd_hda_intel and is not passed to the guest; no audio binding changed.
 
-1020 host tests OK (3 skipped). The DMCUB startup milestone was integrated and pushed to dev345eded; physical HDMI remains the current goal. User authorized autonomous
-build tests and iGPU reset/recovery, preserving host-safety constraints.
+1020 host tests OK (3 skipped); build/dry-run passed. First315 preparation stopped
+before exposure for the new probe identity; MODE2#238 passed and no launch was
+consumed. Supervised GPU-less compilation24G830 passed-Werror and the nonfinite
+JSON test, then exited-after-guest-request. Current probe source8b4bc8cf71eb3eb9,
+binaryebbde2976f4780a4; full identities in run/guest-identity.json, old one backed up.
+
+The DMCUB startup milestone through314 is integrated/pushed and remote-verified
+at dev345eded.315 remains on its fresh candidate branch pending run completion.
+User explicitly authorized autonomous tests/resets, preserving host safety.
+No reboot, sudo or same-boot amdgpu rebind was used.
 
 ## Verified progress
 
@@ -99,13 +115,3 @@ and [earlier](findings/research/status-archives/status-before-night-close-202609
 - Output: `/home/bogdan/macos-vm/run/candidate-314-results`
 - Verdict: `EXECUTION_FAILED`
 - Boundary: `first_submission`
-
-## Candidate315 preparation
-
-Initial prepare stopped before QEMU/VFIO exposure because the updated probe had
-not yet been built in the guest. MODE2#238 succeeded; no ledger entry consumed.
-A supervised GPU-less24G830 session (no VFIO devices) compiled the probe with
--Werror and passed NONFINITE_JSON_TEST_PASS for Infinity, negative Infinity,
-NaN and an unchanged finite value. Source8b4bc8cf71eb3eb9, binaryebbde2976f4780a4;
-full identities in run/guest-identity.json, prior identity backed up.
-Continue using a fresh315-attempt-hdmi artifact namespace after guest shutdown.
