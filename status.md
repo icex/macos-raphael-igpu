@@ -1,5 +1,48 @@
 # Live status — 2026-09-24
 
+## Candidate316 completed: native1080p120 programmed; capture overflow
+
+Runb8e786fba900fe589729c5d3fdbb537d, MODE2#242, source81c08b6.
+Initial modeset preceded firmware readiness; late reload passed3 queries.
+A subsequent native CG session transaction selected1920x1080 pixel/logical120Hz;
+OTG totals2199/1124 and15 delivered HDMI commands confirm new programming.
+Physical observation was requested but no response yet; do not claim picture.
+Bright paired colors readbackff00ff00, but DPG_CONTROL0 after active modeset:
+the color-only diagnostic did not force an active test pattern. HUBP timeout/
+underflow and zero SURFACE_INUSE persist. Probe passed; final verdictINVALID:
+critical records reached512, dropped147 during inspection. Harness stopped it.
+Guest exited-after-guest-request; ordinary recovery failed for replay loss.
+Separate stopped-device recovery `run/c316-noqueue-recovery.json` recovered,
+schema9 authorizes_launch=true. No reboot, sudo, runner kill or amdgpu rebind.
+Evidence run/c316-color-scanout.json, c316-mode-trigger.txt, candidate-316-results.
+First preparation failed before QEMU for missing card argument, fixed offline;
+MODE2#241 passed with no exposure or ledger consumption.
+
+Next317 uses Linux's force-SR-off policy only after firmware readiness while an
+OTG is requested on, retaining the established startup/idle/P-state safeguard.
+Bound successful repetitive critical summaries; all ordinary serial output and
+critical failure records remain. No merge/push of316 diagnostic-only changes.
+
+## Candidate315-watch completed: black signal; replay loss; same-boot recovered
+
+Run3d5f576073db234cc14c2191991bf3ed, MODE2#240, source9886c30.
+User confirms HDMI signal but black output after wake and manual resolution changes.
+120Hz advertised for native1080p; programmatic mode transactions did not establish
+an active120Hz mode. Latest report4K pixels/1920x1080 logical@60Hz.
+DPG0_CONTROL41 with constant colors; HUBP0 timeout/underflow and SURFACE_INUSE0.
+Core probe passed; final verdictINVALID from CR2 capture loss. Do not claim
+complete capture. Guest exited-after-guest-request; ordinary recovery failed for
+capture loss. Stopped-device MODE2/noqueue recovery completed separately:
+`~/macos-vm/run/c315-watch-noqueue-recovery.json`, schema9, authorizes_launch=true.
+No reboot, host sudo, runner kill or amdgpu rebind.
+
+Candidate316 prepared on fresh fetched devca160d3: bright OPP0 blank-color diagnostic.
+Source81c08b6, metal164.1020 host tests OK (3 skipped), build passed.
+First316 preparation stopped before QEMU: card omitted diagnostic bootarg. Fixed
+and validated offline. MODE2#241 passed; no hardware exposure/ledger entry.
+Diagnostic changes color only, retaining native DPG control/status handshakes.
+This tests downstream display output, not desktop scanout qualification.
+
 ## Candidate315: HDMI commands consumed; Samsung online; clean recovery
 
 Run909d7c9412f825b8b7079f92b67f39be, metal163, source9886c30,
@@ -121,3 +164,10 @@ inspection deadline expired. It was corrected after reading the final receipts.
 Next315-attempt-watch extends interactive hold to5000seconds within the unchanged
 6000-second overall cap; no test/reset approval is requested. Physical-screen
 observation is still pending, not inferred from software state.
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-316-results`
+- Verdict: `INVALID`
+- Boundary: `identity_or_route_missing`
