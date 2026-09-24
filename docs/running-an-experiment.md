@@ -148,3 +148,14 @@ TMR, initializes reserved mailbox windows and requires fresh version replies.
 These arguments alone do not establish HDMI output or a general restart path.
 Use the current candidate card and harness; preserve all recovery checks.
 See [the firmware evidence](../findings/research/dmcub-psp-load-20260924.md).
+
+## Physical-screen observations
+
+Before every physical display test, run `tools/guest-display-awake.sh` **inside
+macOS**, through the existing guest command relay. Keep its assertion output with
+the run. Require `PreventUserIdleDisplaySleep=1` and user activity, then verify
+HDMI enable and the active mode through the existing QEMU mapping. A requested
+mode or online display alone does not prove that an awake stream is active.
+The launchd-owned caffeinate job is bounded to6000seconds and survives relay exit;
+it does not replace the harness deadline or shutdown. Repeat before a later test
+if its assertion has expired. Do not interpret a sleeping display as black output.

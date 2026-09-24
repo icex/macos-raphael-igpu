@@ -8545,6 +8545,8 @@ enum : uint32_t {
 };
 static uint32_t dcnMode = 0;
 static uint32_t dcnNoStutter = 0;
+static uint32_t dcnOutputPattern = 0;
+static rgpu::SuccessRecordBudget dcnPatternRecordBudget {};
 static uint32_t dcnTraceBudget = 1500;
 static mach_vm_address_t orgDcnRegWait = 0, orgDcCreate = 0, orgDcHardwareInit = 0;
 using DcnRegRead = uint32_t (*)(void *, uint32_t);
@@ -8668,6 +8670,16 @@ static void wrapDcnRegWrite(void *context, uint32_t index, uint32_t value) {
             CRLOG("DCN: blocked DMCUB register write %#x = %#x", index, value);
         } else if (m.action == Action::Drop) {
             __sync_add_and_fetch(&dcnDropped, 1);
+        } else if (dcnOutputPattern == 1 && m.index == 0x4d14 && value == 0) {
+            // Native VIDEOMODE requests disable DPG. Diagnostic-only RGB squares,
+            // from Linux opp2_set_disp_pattern_generator: enable, mode0, VESA,
+            // 8-bit color and 64-pixel squares. Native mode geometry is retained.
+            const uint32_t pattern = 0x00661001u;
+            dcnNativeWrite(context, m.index, pattern);
+            const uint32_t back = dcnNativeRead(context, m.index);
+            SAMPLED_CRLOG(dcnPatternRecordBudget, back == pattern,
+                         "DCN: output pattern requested video; RGB squares=%#x readback=%#x",
+                         pattern, back);
         } else if (const FieldRemap *remap = fieldRemap(index)) {
             dcnNativeWrite(context, m.index,
                            remapWrite(*remap, value, dcnNativeRead(context, m.index)));
@@ -10555,6 +10567,7 @@ static void pluginStart() {
     PE_parse_boot_argn("rgpudallog", &dalLogMask, sizeof(dalLogMask));
     PE_parse_boot_argn("rgpuagdp", &agdpPikera, sizeof(agdpPikera));
     PE_parse_boot_argn("rgpudcnnostutter", &dcnNoStutter, sizeof(dcnNoStutter));
+    PE_parse_boot_argn("rgpudcnpattern", &dcnOutputPattern, sizeof(dcnOutputPattern));
     if (PE_parse_boot_argn("rgpudcntrace", &dcnTrace, sizeof(dcnTrace)) && dcnTrace <= 20000)
         dcnTraceBudget = dcnTrace;
     CRLOG("DCN: rgpudcn=%#x (trace=%u translate=%u pool302=%u dmub-guard=%u) trace-lines=%u",
