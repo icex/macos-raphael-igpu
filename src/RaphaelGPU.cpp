@@ -8538,6 +8538,10 @@ enum : uint32_t {
                   kDcnPstateAllow,
 };
 static uint32_t dcnMode = 0;
+// Opt-in visual diagnostic: replace OPP0 solid blank color without changing its
+// enable/mode/status handshake. Linux opp2_set_disp_pattern_generator uses these
+// three 16-bit MSB-aligned color pairs; no memory/firmware/clock state is touched.
+static uint32_t dcnBlankColor = 0;
 static uint32_t dcnTraceBudget = 1500;
 static mach_vm_address_t orgDcnRegWait = 0, orgDcCreate = 0, orgDcHardwareInit = 0;
 using DcnRegRead = uint32_t (*)(void *, uint32_t);
@@ -8637,6 +8641,10 @@ static void wrapDcnRegWrite(void *context, uint32_t index, uint32_t value) {
             CRLOG("DCN: blocked DMCUB register write %#x = %#x", index, value);
         } else if (m.action == Action::Drop) {
             __sync_add_and_fetch(&dcnDropped, 1);
+        } else if (dcnBlankColor == 1 && m.index >= 0x4d17 && m.index <= 0x4d19) {
+            dcnNativeWrite(context, m.index, 0xff00ff00u);
+            CRLOG("DCN: visual blank color reg=%#x requested=%#x readback=%#x",
+                  m.index, value, dcnNativeRead(context, m.index));
         } else if (const FieldRemap *remap = fieldRemap(index)) {
             dcnNativeWrite(context, m.index,
                            remapWrite(*remap, value, dcnNativeRead(context, m.index)));
@@ -10519,6 +10527,9 @@ static void pluginStart() {
                              "set together)", dcn);
     PE_parse_boot_argn("rgpudallog", &dalLogMask, sizeof(dalLogMask));
     PE_parse_boot_argn("rgpuagdp", &agdpPikera, sizeof(agdpPikera));
+    uint32_t blankColor = 0;
+    if (PE_parse_boot_argn("rgpudcncolor", &blankColor, sizeof(blankColor)) &&
+        blankColor == 1 && dcnTranslating()) dcnBlankColor = 1;
     if (PE_parse_boot_argn("rgpudcntrace", &dcnTrace, sizeof(dcnTrace)) && dcnTrace <= 20000)
         dcnTraceBudget = dcnTrace;
     CRLOG("DCN: rgpudcn=%#x (trace=%u translate=%u pool302=%u dmub-guard=%u) trace-lines=%u",

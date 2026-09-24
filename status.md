@@ -1,5 +1,29 @@
 # Live status — 2026-09-24
 
+## Active observation run:315-watch
+
+Run3d5f576073db234cc14c2191991bf3ed, MODE2#240,
+service `rgpu-candidate315-watch.service`, results
+`~/macos-vm/run/candidate-315-attempt-watch-results/`.
+Firmware startup and three replies passed again; HDMI commands are being consumed.
+Interactive-ready is present, with a5000-second inspection window bounded by the
+6000-second supervisor. No timeout/panic seen. Shutdown/recovery remain pending.
+The earlier315-hdmi run below completed cleanly; do not confuse its receipts with
+this active run. Stop only via this run's `stop-requested` file when appropriate.
+User confirms HDMI signal is detected but the Samsung is black (2026-09-24).
+Sent QEMU Shift and mouse events plus guest caffeinate user-activity request.
+QEMU reports the guest was already awake; user confirms still black after input
+and manual VNC resolution changes. Current mode: 3840x2160 pixels,1920x1080
+logical@60Hz. Native1080p60/120 modes are listed. Direct CG mode switch returned
+1000; AppKit session transaction returned0 but current mode remained scaled4K.
+Display sleep is now0. Live QEMU MMIO reads show DPG0_CONTROL=0x41 (enabled
+constant-color bars), HUBP0 timeout/underflow and SURFACE_INUSE=0. This localizes
+a blanking override and a possible independent scanout-fetch problem; not a fix.
+Evidence: run/c315-watch-scanout.json, c315-watch-mode-latest.json and
+c315-watch-120hz-switch.txt.315-watch still active; no recovery receipt yet.
+Build/reset approval is not needed.
+Milestones through the first315 run are pushed/remote-verified on devca160d3.
+
 ## Candidate315: HDMI commands consumed; Samsung online; clean recovery
 
 Run909d7c9412f825b8b7079f92b67f39be, metal163, source9886c30,
