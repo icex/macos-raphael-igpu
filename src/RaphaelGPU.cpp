@@ -8546,6 +8546,7 @@ enum : uint32_t {
 static uint32_t dcnMode = 0;
 static uint32_t dcnNoStutter = 0;
 static uint32_t dcnOutputPattern = 0;
+static uint32_t dcnDetBuffer = 0;
 static rgpu::SuccessRecordBudget dcnPatternRecordBudget {};
 // Opt-in visual diagnostic: replace OPP0 solid blank color without changing its
 // enable/mode/status handshake. Linux opp2_set_disp_pattern_generator uses these
@@ -8653,6 +8654,30 @@ static uint32_t wrapDcnRegRead(void *context, uint32_t index) {
     return value;
 }
 
+// DCN3.15 divides a 1024 KiB return buffer into 64 KiB segments.
+// Native DCN3.02 has fixed DET storage and never allocates these registers.
+// Diagnostic scope: pipe0 only, no existing DET allocations, stable COMPBUF.
+static void dcnAllocateDet0(void *context) {
+    static bool attempted = false;
+    if (dcnDetBuffer != 1 || attempted) return;
+    const uint32_t comp = dcnNativeRead(context, 0x398b);
+    const uint32_t d0 = dcnNativeRead(context, 0x398c);
+    const uint32_t d1 = dcnNativeRead(context, 0x398d);
+    const uint32_t d2 = dcnNativeRead(context, 0x398e);
+    const uint32_t d3 = dcnNativeRead(context, 0x398f);
+    if (!RaphaelDcn::canAllocateDet0(comp, d0, d1, d2, d3)) return;
+    attempted = true;
+    dcnNativeWrite(context, 0x398c, 3); // Linux single-plane DET = 192 KiB.
+    uint32_t back = 0;
+    for (unsigned i = 0; i < 300; ++i) {
+        back = dcnNativeRead(context, 0x398c);
+        if (back == 0xffffffffu || ((back >> 8) & 7) == 3) break;
+        IODelay(100);
+    }
+    CRLOG("DCN: DET0 allocate192KiB before=%#x COMPBUF=%#x after=%#x applied=%u",
+          d0, comp, back, back != 0xffffffffu && ((back >> 8) & 7) == 3);
+}
+
 __attribute__((noinline))
 static void wrapDcnRegWrite(void *context, uint32_t index, uint32_t value) {
     using namespace RaphaelDcn;
@@ -8668,6 +8693,7 @@ static void wrapDcnRegWrite(void *context, uint32_t index, uint32_t value) {
                   "mailbox)", dcnDalMailbox.message(), dcnDalMailbox.argument());
     } else {
         m = translate(index);
+        if (m.index == 0x4d14 && value == 0) dcnAllocateDet0(context);
         if (isDmcubRegister(index)) {
             m = {Action::Drop, index};
             note = " (DMCUB write blocked)";
@@ -10583,6 +10609,7 @@ static void pluginStart() {
     PE_parse_boot_argn("rgpudallog", &dalLogMask, sizeof(dalLogMask));
     PE_parse_boot_argn("rgpuagdp", &agdpPikera, sizeof(agdpPikera));
     PE_parse_boot_argn("rgpudcnnostutter", &dcnNoStutter, sizeof(dcnNoStutter));
+    PE_parse_boot_argn("rgpudcndet", &dcnDetBuffer, sizeof(dcnDetBuffer));
     PE_parse_boot_argn("rgpudcnpattern", &dcnOutputPattern, sizeof(dcnOutputPattern));
     uint32_t blankColor = 0;
     if (PE_parse_boot_argn("rgpudcncolor", &blankColor, sizeof(blankColor)) &&

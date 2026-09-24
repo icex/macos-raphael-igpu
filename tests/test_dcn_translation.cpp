@@ -78,6 +78,16 @@ int main() {
     assert(((ret315 >> 4) & 0x1ff) == 5 && (ret315 & (1u << 15)) && (ret315 & 0xf) == 0xf);
     assert(fieldRemap(0x34c0 + 0x1b41) == nullptr);                        // OTG0_OTG_CONTROL
 
+    assert(canAllocateDet0(0x40d0d, 0, 0, 0, 0));
+    assert(!canAllocateDet0(0x40e0e, 0, 0, 0, 0)); // no room
+    assert(!canAllocateDet0(0x40d0c, 0, 0, 0, 0)); // transition pending
+    assert(!canAllocateDet0(0x80040d0d, 0, 0, 0, 0)); // config error
+    assert(!canAllocateDet0(0xffffffff, 0, 0, 0, 0));
+    assert(!canAllocateDet0(0x40d0d, 0x303, 0, 0, 0));
+    assert(!canAllocateDet0(0x40d0d, 0, 1, 0, 0));
+    assert(!canAllocateDet0(0x40d0d, 0, 0, 0xffffffff, 0));
+    assert(!canAllocateDet0(0x40d0d, 0, 0, 0, 1));
+
     DalMailbox mailbox;
     assert(DalMailbox::owns(0x1628a) && !DalMailbox::owns(0x16265));
     assert(mailbox.read(DalMailbox::kResponse) == DalMailbox::kResultOk);   // ready before a message

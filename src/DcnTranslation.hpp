@@ -103,6 +103,15 @@ inline uint32_t remapRead(const FieldRemap &remap, uint32_t value315) {
     return out;
 }
 
+// Reserve three of sixteen CRB segments only if the requested/current COMPBUF
+// size agrees and leaves room. Reject inaccessible reads, configuration errors,
+// or any other pipe allocation; do not resize a live allocation.
+inline bool canAllocateDet0(uint32_t comp, uint32_t d0, uint32_t d1,
+                            uint32_t d2, uint32_t d3) {
+    return !(comp & 0x80000000u) && (comp & 31u) == ((comp >> 8) & 31u) &&
+           (comp & 31u) <= 13u && d0 == 0 && d1 == 0 && d2 == 0 && d3 == 0;
+}
+
 // ---- DMCUB stays untouched ----
 // The DMCUB microcontroller boots through PSP-owned code/data windows and reaches memory
 // through its own secure memory unit. Starting it from the guest froze the host
