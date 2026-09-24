@@ -1,24 +1,38 @@
-# Live status — 2026-09-23
+# Live status — 2026-09-24
 
-## Candidate 309: fresh GPINT requests still unanswered
+## Candidate 310: DCFCLK restoration accepted, DMCUB still unresponsive
 
-Run `4f5412a582419991778ee5d78dff4dc9`, metal-157, source `781cbb7`,
-boot `5074c0e5-b2f6-46da-99b2-299ba322b41e`, MODE2 #232.
+Run `9ce06c40d7c3535e535d2b136e3fd95c`, metal-158, source `c5f65c5`,
+boot `5074c0e5-b2f6-46da-99b2-299ba322b41e`, MODE2 #233.
 
-- **Functional:** fresh GET_FW_VERSION requests time out, including after accepted
-  display idle exit. Re-polling an old request was not the explanation. Metal
-  probe passed; physical HDMI remains unresolved.
+- **Functional:** SMU accepted SetHardMinDcfclkByFreq(1000 MHz), returning
+  1000 MHz after successful display-idle exit. Fresh GPINT query still timed out.
+  This clock restoration alone does not restore DMCUB. Metal probe passed;
+  physical HDMI remains unresolved.
 - **Capture:** CORE_PROBE_PASS; no reported boundary.
 - **Shutdown/recovery:** exited-after-guest-request; recovered,
   authorizes_launch=true. Same-boot reuse remains available.
-- **Next:** audit firmware interrupt dispatch and retained host handoff state;
-  do not repeat timeout-only variants or restart DMCUB firmware.
+- **Next:** investigate retained firmware execution and host teardown ownership.
+  No DMCUB firmware restart/load is authorized by this result.
 
-Evidence: `~/macos-vm/run/candidate-309-results/`.
+Evidence: `~/macos-vm/run/candidate-310-results/`.
 [Retained timeout audit](findings/research/dmcub-register-timeout-20260923.md).
 Host regression: 1017 tests OK, three skipped.
-User instruction: retain subsequent work locally; hold commits/pushes to dev
-until meaningful progress. Uncommitted runs must preserve build/artifact identity.
+User instruction: no further commits/pushes to dev until meaningful progress.
+310 source/card identities are committed only on the local candidate-310 branch;
+dev and origin/dev remain 5371959. No candidate branch has been pushed.
+
+## Reinitialization review prepared (no hardware run)
+
+The user approved proceeding with the reviewed one-shot firmware-reinitialization
+experiment. Candidate311 is being implemented locally; not yet launched.
+[Review proposal](findings/research/dmcub-reinit-review-20260924.md) and
+[pinned offline manifest](findings/research/dmcub-reinit-review-20260924.json)
+specify one direct-load startup/GPINT test with HDMI command delivery disabled.
+The planner verified firmware metadata, source/capture hashes, layout bounds and
+non-overlap with retained windows; a modified VBIOS was rejected. The reviewed scope is now authorized. Candidate311 adds a default-off loader
+and fake-transport failure tests; hardware execution awaits build and preflight.
+All preparation remains uncommitted locally; dev/origin/dev remain5371959.
 
 ## Verified progress
 
@@ -72,4 +86,3 @@ passes; hardware encode is Main8. [Roadmap](docs/ROADMAP.md).
 After milestones update current docs, integrate/push dev and synchronize the local
 checkout. Do not push main without new authorization. Prior live entries are [archived](findings/research/status-archives/status-before-display-port-20260917.md)
 and [earlier](findings/research/status-archives/status-before-night-close-20260916.md).
-

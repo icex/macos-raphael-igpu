@@ -73,3 +73,29 @@ DMUB buffer in amdgpu_dm_fini. It is a newer reference kernel than the running
 host; these source paths are supporting hypotheses, not a captured handoff.
 Further testing must distinguish that ownership transition from MODE2 and
 early guest initialization; another query-only guest variant will not do so.
+
+## Candidate 310: restore the prior host DCFCLK request
+
+The retained clock-notification command at inbox1cc0 has dispclk480000,
+dppclk472470, dcfclk1000000 and deep-sleep-dcfclk33709 kHz. The final
+notification at1d80 changes dcfclk to1000 kHz. Linux dcn315_update_clocks
+exits idle before restoring hard-min DCFCLK; our previous helper only exited
+idle. Candidate310 adds native VBIOS SMU command7/argument1000 MHz after
+version625300 and a successful command12/argument0.
+
+Run9ce06c40d7c3535e535d2b136e3fd95c, MODE2#233: SMU response1 and returned
+argument1000; subsequent fresh GPINT request still TIMEOUT. Metal probe and
+capture passed; guest-requested shutdown and ordinary recovery succeeded.
+CW4/5/6 in ~/macos-vm/run/c310-retained-dmcub-state remain byte-identical
+to309 and307. Clock restoration alone is not sufficient.
+
+The running host and guest discovery identify MP0/MP1 13.0.5. The local Linux
+reference selects psp_v13_0 with boot_time_tmr=false for13.0.5, so
+psp_skip_tmr returnsfalse for this non-VF device and psp_hw_fini submits
+TMR unload. This is a specific firmware-ownership hypothesis, not proof of
+exact execution on kernel7.2.5 or proof that DMCUB restart is safe.
+
+Per the user's instruction, candidate310 remains a local candidate branch.
+Neither dev nor remote dev was advanced after the instruction to hold delivery
+until progress. Firmware reset/load remains prohibited pending clarification;
+ordinary same-boot cleanup is working and does not itself require a reboot.

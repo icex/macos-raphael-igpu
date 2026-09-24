@@ -37,6 +37,8 @@
 #include "HostMemoryReservation.hpp"
 #include "DmubRingProbe.hpp"
 #include "DisplayIdlePower.hpp"
+#include "DmubReinit.hpp"
+#include "DmubReinitPayload.hpp"
 #include "KiqQueuePreparation.hpp"
 #include "GartAddresses.hpp"
 #include "DiagnosticRecords.hpp"
@@ -1546,6 +1548,8 @@ static uint32_t prevWireCmd = 0;
 static uint32_t prevWireType = 0;
 static uint64_t prevRequestAddr = 0;
 static uint32_t prevRequestSize = 0;
+static bool dcnTmrValid = false;
+static uint64_t dcnTmrAddress = 0, dcnTmrBytes = 0;
 
 // Transcribe every PSP GPCOM command. psp_cmd_km_buf_prep is the single point where Apple
 // marshals its internal command descriptor into a psp_gfx_cmd_resp:
@@ -1574,6 +1578,11 @@ static uint32_t wrapPspBufPrep(void *psp, void *desc, uint32_t *slot) {
                 // address inside TMR. Record it with the submitted source address/size; this
                 // is placement evidence only and never dereferences protected TMR memory.
                 const uint32_t st = prevCmdBuf[216];
+                if (prevWireCmd == 5) {
+                    dcnTmrValid = st == 0;
+                    dcnTmrAddress = prevRequestAddr;
+                    dcnTmrBytes = prevRequestSize;
+                }
                 const uint64_t fwAddr = (static_cast<uint64_t>(prevCmdBuf[219]) << 32) |
                                         prevCmdBuf[218];
                 RLOG("   resp cmd_id=%-3u wireType=%-3u status=0x%08x fw=0x%08x%08x "
@@ -1592,6 +1601,7 @@ static uint32_t wrapPspBufPrep(void *psp, void *desc, uint32_t *slot) {
             // SETUP_TMR (5) carry them in the same places (+0x1c/+0x20 addr, +0x24 size),
             // and since LOAD_TOC is the first failure its arguments are what matter.
             uint32_t wireCmd = b[2];
+            if (wireCmd == 5 || wireCmd == 7) dcnTmrValid = false;
             RLOG("cmd[%02u] wire=%-3u apple=%-2u type=%-3u addr=0x%08x%08x size=0x%-8x",
                  bufPrepCount, wireCmd, dw[0], wireCmd == 6 ? b[10] : 0,
                  b[8], b[7], b[9]);
@@ -1635,6 +1645,8 @@ static mach_vm_address_t orgGmmSetMemoryAttributes {};
 static bool hostReserveEnabled = false, hostReservationReady = false;
 static bool dcnVersionQueryEnabled = false, displayIdleExitEnabled = false;
 static bool dcnFirmwareResponsive = false;
+static bool dcnReinitEnabled = false;
+static void dcnReinitializeOnce();
 static void dcnQueryFirmwareVersion(const char *when);
 static uint64_t hostReservationLimit = 0, hostReservationTotal = 0;
 static uint32_t wrapGmmSetMemoryAttributes(void *self, uint32_t type, void *attributes);
@@ -2807,6 +2819,8 @@ static uint32_t wrapVcnInitialize(void *engine) {
             if (idle.wakeResponse == 1) {
                 IOSleep(10);
                 dcnQueryFirmwareVersion("after display-idle exit and DCFCLK request");
+                if (idle.dcfResponse == 1 && idle.dcfMHz == 1000)
+                    dcnReinitializeOnce();
             }
         }
         IOLockUnlock(vcnSmuLock);
@@ -8964,6 +8978,66 @@ static void dcnQueryFirmwareVersion(const char *when) {
           responseBefore, rd(0x36aa), waited, cntl, reset);
 }
 
+// User-approved candidate311: exactly one Linux direct-load attempt, delivery off.
+static void dcnReinitializeOnce() {
+    static bool attempted = false;
+    if (!dcnReinitEnabled || attempted) return;
+    attempted = true;
+    if (asicInfo == nullptr || dcnNativeRead == nullptr || dcnNativeWrite == nullptr ||
+        dcnRegContext == nullptr || (dcnMode & kDcnDmubDeliver) ||
+        !dcnVersionQueryEnabled || !hostReservationReady) {
+        CRLOG("DMUBREINIT: refused missing transport/reservation or delivery enabled");
+        return;
+    }
+    if (dcnFirmwareResponsive) {
+        CRLOG("DMUBREINIT: skipped already responsive firmware");
+        return;
+    }
+    RaphaelDmubReinit::Inputs in;
+    in.reserved=hostReservationReady; in.limit=hostReservationLimit;
+    in.total=hostReservationTotal; in.tmrValid=dcnTmrValid;
+    in.tmr=dcnTmrAddress; in.tmrBytes=dcnTmrBytes;
+    in.mc=uint64_t(fbRead(asicInfo,kGcFbBase)&0xffffff)<<24;
+    in.physical=uint64_t(fbRead(asicInfo,kGcFbOffset)&0xffffff)<<24;
+    in.code=RaphaelDmubPayload::Code; in.codeBytes=sizeof(RaphaelDmubPayload::Code);
+    in.bios=RaphaelDmubPayload::Bios; in.biosBytes=sizeof(RaphaelDmubPayload::Bios);
+    CRLOG("DMUBREINIT: guard reserved=%u total=%#llx limit=%#llx tmr-valid=%u tmr=%#llx/%#llx mc=%#llx physical=%#llx",
+          in.reserved,in.total,in.limit,in.tmrValid,in.tmr,in.tmrBytes,in.mc,in.physical);
+    const auto savedIndex=fbRead(asicInfo,kMmIndex), savedHi=fbRead(asicInfo,kMmIndexHi);
+    if (savedIndex==0xffffffffu || savedHi==0xffffffffu) {
+        CRLOG("DMUBREINIT: refused inaccessible selectors"); return;
+    }
+    struct Transport {
+        uint32_t read(uint32_t reg) { return fbRead(asicInfo,reg); }
+        void write(uint32_t reg,uint32_t v) { fbWrite(asicInfo,reg,v); }
+        uint32_t memoryRead(uint64_t off) {
+            if (off<RaphaelDmubReinit::Begin || off>=RaphaelDmubReinit::End || (off&3))
+                return 0xffffffffu;
+            return dcnFbIndirectRead(off);
+        }
+        bool memoryWriteRead(uint64_t off,uint32_t v) {
+            if (off<RaphaelDmubReinit::Begin || off>=RaphaelDmubReinit::End || (off&3))
+                return false;
+            dcnFbIndirectWrite(off,v);
+            return dcnFbIndirectRead(off)==v;
+        }
+        void delayUs(unsigned us) { if (us>=1000) IOSleep(us/1000); else IODelay(us); }
+        void phase(unsigned phase) { CRLOG("DMUBREINIT: phase=%u",phase); }
+    } io;
+    const auto result=RaphaelDmubReinit::run(in,io);
+    if (!result.inaccessible) {
+        fbWrite(asicInfo,kMmIndex,savedIndex); fbWrite(asicInfo,kMmIndexHi,savedHi);
+    }
+    const bool selectors = !result.inaccessible && fbRead(asicInfo,kMmIndex)==savedIndex &&
+        fbRead(asicInfo,kMmIndexHi)==savedHi;
+    dcnFirmwareResponsive=result.success && selectors;
+    CRLOG("DMUBREINIT: result success=%u phase=%u error=%u touched=%u held=%u inaccessible=%u stop=%u/%u/%u queries=%u faults=%#x/%#x selectors=%u",
+          result.success,result.phase,result.error,result.touched,result.held,result.inaccessible,
+          result.stopAck,result.stopDone,result.stopWait,result.queries,result.faultFetch,
+          result.faultWrite,selectors);
+    if (result.success && selectors) dcnSurveyDmcub("after direct reinitialization");
+}
+
 // Separate from the read-only survey: only delivery mode may test an unsubmitted slot.
 static void dcnValidateEmptyInbox() {
     if (dcnRingUsable || !dcnRingProbeEligible || !(dcnMode & kDcnDmubDeliver) ||
@@ -10362,6 +10436,8 @@ static void pluginStart() {
     // The DCN 3.02 pool and translation are only meaningful, and only safe, together.
     uint32_t idleExit = 0;
     displayIdleExitEnabled = PE_parse_boot_argn("rgpudisplaywake", &idleExit, sizeof(idleExit)) && idleExit == 1;
+    uint32_t reinit = 0;
+    dcnReinitEnabled = PE_parse_boot_argn("rgpudmubreinit", &reinit, sizeof(reinit)) && reinit == 1;
     uint32_t dmubQuery = 0;
     dcnVersionQueryEnabled = PE_parse_boot_argn("rgpudmubquery", &dmubQuery, sizeof(dmubQuery)) && dmubQuery == 1;
     if (PE_parse_boot_argn("rgpudcn", &dcn, sizeof(dcn)) && (dcn & ~kDcnAllowed) == 0 &&

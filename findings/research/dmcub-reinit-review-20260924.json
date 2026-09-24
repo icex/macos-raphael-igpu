@@ -1,0 +1,144 @@
+{
+  "schema": 1,
+  "review_only": true,
+  "executable": false,
+  "authorization": "Preparation only; hardware reinitialization not approved",
+  "firmware": {
+    "path": "/usr/lib/firmware/amdgpu/dcn_3_1_5_dmcub.bin.zst",
+    "uncompressed_sha256": "c198f520748ed8ac0b8bec04c7d85d2962865c6bbe6c9a6791e661c23750b8d5",
+    "version": "0x5003500",
+    "payload_offset": 512,
+    "payload_bytes": 238880,
+    "payload_sha256": "0dd9a1d0a5f08d0184070f3ea35905b56704786375b92ebc412f87f78e46a42f",
+    "metadata_file_offset": 239324,
+    "psp_header_bytes": 256,
+    "psp_footer_bytes": 256
+  },
+  "vbios": {
+    "path": "/home/bogdan/macos-vm/igpu-vbios.rom",
+    "bytes": 44544,
+    "sha256": "b77d1d7f5d8a402936b60f1e84e89ccfcb0f320c2490ec9f8df11bcbb8742123"
+  },
+  "reference": {
+    "linux_commit": "238650ef6c7c7cca08e032527329424c9fbd70e5",
+    "source_sha256": {
+      "display/dmub/src/dmub_srv.c": "147dafa31989525eb3ee477ea370d295dcb23ece7e9304a14bfa3d28e527b24f",
+      "display/dmub/src/dmub_dcn31.c": "18fcb91f1a9a1955d6cc6a1bae60ffc1de01eb8112ed33e1314f19aaa000bebf",
+      "display/dmub/inc/dmub_cmd.h": "49e149cb2f349037fa269bac7c287c4b2f97d0feb51572841f38f1e29ba236cc",
+      "display/amdgpu_dm/amdgpu_dm_dmub.c": "26e7faeb60c787e2ce81dd8a19d1931a633f9a52a726c5482e6b81f9bae54ccf",
+      "include/asic_reg/dcn/dcn_3_1_5_offset.h": "4cad14579cf368eda79e951c25722c9b53af7b93032136c0628d765160e08d66",
+      "include/asic_reg/dcn/dcn_3_1_5_sh_mask.h": "bc4f1c32980d23be6dda8d97c160b23538c2c182b0f8f71213d5766ce8deda64"
+    },
+    "capture": "/home/bogdan/macos-vm/run/c310-retained-dmcub-state/capture.json",
+    "capture_sha256": "cbbace9f79529f3a34a1b92e99cf0e8fe2012dbe34b6e401bc2156f0add14b9d",
+    "observed_boot": "5074c0e5-b2f6-46da-99b2-299ba322b41e"
+  },
+  "reservation": {
+    "start": "0x7f000000",
+    "end": "0x7f106000",
+    "allowed_end": "0x7f200000",
+    "requires_live_revalidation": true
+  },
+  "retained_windows": [
+    {
+      "cw": 0,
+      "start": "0x7e300000",
+      "end": "0x7e33a520"
+    },
+    {
+      "cw": 1,
+      "start": "0x7e33a600",
+      "end": "0x7e4000e0"
+    },
+    {
+      "cw": 3,
+      "start": "0x7fada600",
+      "end": "0x7fae5401"
+    },
+    {
+      "cw": 4,
+      "start": "0x7fae5400",
+      "end": "0x7fae9401"
+    },
+    {
+      "cw": 5,
+      "start": "0x7fae9400",
+      "end": "0x7faf9441"
+    },
+    {
+      "cw": 6,
+      "start": "0x7faf9500",
+      "end": "0x7fb05d81"
+    }
+  ],
+  "windows": [
+    {
+      "cw": 0,
+      "name": "instructions",
+      "payload_bytes": 238880,
+      "allocation_bytes": 238912,
+      "framebuffer_offset": "0x7f000000",
+      "address_domain": "physical_fb",
+      "register_offset_address": "0x85f000000",
+      "virtual_base": "0x60000000",
+      "top_inclusive_register": "0x8003a53f"
+    },
+    {
+      "cw": 1,
+      "name": "stack_context",
+      "payload_bytes": 655360,
+      "allocation_bytes": 655360,
+      "framebuffer_offset": "0x7f03a600",
+      "address_domain": "physical_fb",
+      "register_offset_address": "0x85f03a600",
+      "virtual_base": "0x61000000",
+      "top_inclusive_register": "0x8109ffff"
+    },
+    {
+      "cw": 3,
+      "name": "vbios",
+      "payload_bytes": 44544,
+      "allocation_bytes": 44544,
+      "framebuffer_offset": "0x7f0da600",
+      "address_domain": "mc",
+      "register_offset_address": "0xf47f0da600",
+      "virtual_base": "0x63000000",
+      "top_inclusive_register": "0x8300ae00"
+    },
+    {
+      "cw": 4,
+      "name": "mailboxes",
+      "payload_bytes": 16384,
+      "allocation_bytes": 16384,
+      "framebuffer_offset": "0x7f0e5500",
+      "address_domain": "mc",
+      "register_offset_address": "0xf47f0e5500",
+      "virtual_base": "0x64000000",
+      "top_inclusive_register": "0x84004000"
+    },
+    {
+      "cw": 5,
+      "name": "trace",
+      "payload_bytes": 65552,
+      "allocation_bytes": 65600,
+      "framebuffer_offset": "0x7f0e9600",
+      "address_domain": "mc",
+      "register_offset_address": "0xf47f0e9600",
+      "virtual_base": "0x65000000",
+      "top_inclusive_register": "0x85010040"
+    },
+    {
+      "cw": 6,
+      "name": "firmware_state",
+      "payload_bytes": 51328,
+      "allocation_bytes": 51328,
+      "framebuffer_offset": "0x7f0f9700",
+      "address_domain": "mc",
+      "register_offset_address": "0xf47f0f9700",
+      "virtual_base": "0x66000000",
+      "top_inclusive_register": "0x8600c880"
+    }
+  ],
+  "boot_options_scratch14": "0x80",
+  "validation": "Offline layout and pinned input checks only; no hardware-safety claim"
+}
