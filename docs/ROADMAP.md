@@ -1,6 +1,6 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-09-24. Latest display experiment: **1.0.323** (HDMI audio confirmed; full HiDPI60 picture; HiDPI120 required); prior streaming baseline: **1.0.284**; broader baseline: **1.0.280**. Full desktop acceleration
+Updated 2026-09-24. Latest display experiment: **1.0.330** (correct-color HiDPI120 and HDMI audio confirmed); prior streaming baseline: **1.0.284**; broader baseline: **1.0.280**. Full desktop acceleration
 is **not qualified**. The reproduced Screen Sharing transparency defect is fixed
 in candidate279 and retained in280. Candidate280 also passes strict capture and
 clean recovery after visual, concurrent-client and codec workloads. The patched-QEMU
@@ -20,13 +20,13 @@ regression and macOS source-build jobs remain required; see [CI setup](releases.
 
 | Milestone | State | Evidence and remaining work |
 |---|---|---|
-| M0 — Experiment identity and supervision | Implemented; maintained | Immutable manifests, loaded-build checks, capture, deadlines and cleanup. Fixed cycle image selection so preparation and admission use the same pinned emulator. Host suite: 1022 tests, OK (3 skipped). |
+| M0 — Experiment identity and supervision | Implemented; maintained | Immutable manifests, loaded-build checks, capture, deadlines and cleanup. Fixed cycle image selection so preparation and admission use the same pinned emulator. Host suite: 1023 tests, OK (3 skipped). |
 | M1 — Controlled starting state | Demonstrated for current workflow | One-way amdgpu→vfio-pci handoff, power/control=on, fresh MODE2 and clean-state receipts. Broad independent-host-boot qualification remains open. |
 | M2 — Native startup failure localization | Completed for original blocker | False second SDMA instance and subsequent channel routing were traced; historical evidence retained. |
 | M3 — Native engine startup repair | Demonstrated | Raphael topology/address adaptations reach native startup and completed Metal work. Preserve these fixes while diagnosing desktop rendering. |
 | M4 — First correct Metal compute | Achieved | Candidate 194 checked 196,608 values and 4,096 rendered pixels; its overall capture remained inconclusive. Current280 desktop Metal baselines complete with verified device/build identity. |
 | M5 — Rendering, memory and synchronization | Partial | Managed-texture copy correction retained; private/managed/IOSurface and multiple-format readback probes pass. Candidate280 passes48 BGRA8 feedback cases across four distinct-seed processes, including two concurrent clients. 32 measured buffer-reclamation rounds return process-local allocation to baseline with134,217,728 correct values. 144 texture recreation cases and32 cross-queue GPU-event rounds pass. Global VRAM/GART counters return near baseline after exit; GPU VA and long-duration qualification remain open. |
-| M6 — Desktop and physical display | Visual fix verified; broader qualification open | Candidate279 fixes the reproduced feedback corruption. Fresh pixel checks, user observation and unobstructed native RFB captures on280 pass; longer desktop qualification remains. Candidate321 gives a full HiDPI60 picture;322 fixes native1080p interleaving. User confirms60Hz and reports120Hz appears to work; HDMI audio works (323); HiDPI120 remains required. |
+| M6 — Desktop and physical display | Visual fix verified; broader qualification open | Candidate279 fixes the reproduced feedback corruption. Fresh pixel checks, user observation and unobstructed native RFB captures on280 pass; longer desktop qualification remains. Candidate321 gives a full HiDPI60 picture;322 fixes native1080p interleaving. User confirms60Hz and reports120Hz appears to work; HDMI audio works (323);330 adds correct-color HiDPI120 and retains audio through tested60↔120 switches. |
 | M7 — Lifecycle and host protection | Partial | Multiple guest-request shutdowns and authorizing recoveries observed on this boot, including eight complete 280 runs with the visual and logging fixes. One supervised QEMU closure/recovery/reset/relaunch/clean-shutdown sequence now passes its scoped checks; closure capture remains INVALID. Fresh-host-boot, guest-panic and repeated lifecycle qualification remain open. |
 | M8 — Performance and release | Not qualified | Correctness first; no release, Metal3 conformance, game-support or full-desktop claim. The current experimental snapshot is published to main at the user’s request; development continues on dev. Publication does not close acceptance gates. |
 
@@ -150,19 +150,20 @@ Passing isolated shaders does not establish correct desktop composition.
 - [x] Confirm the feedback repair on fresh279 and280 guest boots with working Metal
   and hardware H.264/HEVC encode/decode.
 - [x] Map DCN 3.1.5 differences against Apple's DCN 3.02 path (registers, fields, power
-  domains, clock manager, DMUB, VBIOS tables): see the display port plan. Hardware
-  confirmation pending.
+  domains, clock manager, DMUB, VBIOS tables): see the display port plan.
+  Hardware confirmation now covers the Samsung HDMI path; other outputs remain open.
 - [x] Bring up DMCUB through native PSP with verified guest TMR placement and
   fresh firmware replies (candidate314,2026-09-24).
 - [x] Deliver HDMI VBIOS commands and observe firmware consumption (candidate315).
 - [x] Confirm a physically visible hardware test pattern on the Samsung (candidate318).
 - [x] Restore native framebuffer fetch and confirm a visible HiDPI image (candidate320).
 - [x] Restore full HiDPI60 picture and correct native1080p interleaving (321/322).
-- [x] Enable actual HDMI audio; user confirms sound through Samsung audio output (323).
-- [ ] Expose and qualify1080HiDPI120.
+- [x] Enable actual HDMI audio; user confirms sound through Samsung audio output (323 and330).
+- [x] Expose 1080 HiDPI at 120 Hz with correct colors and audible audio (329/330);
+  retain audio through tested 120→60→120 switches. Broader lifecycle coverage remains open.
 - [ ] Qualify modes, reconnection and higher resolutions after first stable output.
 
-Current evidence puts corrupt pixels in the scanout/DisplayStream path before
+The historical pre-279 investigation placed corrupt pixels in the scanout/DisplayStream path before
 remote encoding. A native screenshot can be clean while raw RFB remains corrupt;
 therefore a screenshot alone is insufficient. Plain-alpha windows are clean in
 the targeted comparison; colored native visual-effect panels reproduce diagonal
@@ -170,8 +171,8 @@ artifacts. Native blur, varying-half gradients and offset-viewport replays pass,
 but do not reproduce the complete failing compositor state.
 
 Candidate 278's linear-swizzle change did not fix the defect and is rejected.
-Its direct OpenGL probe hung; do not repeat it without a diagnosis. Use280 as the
-current hardware baseline. Temporary precision, binning, filter-merging and dirty-region
+Its direct OpenGL probe hung; do not repeat it without a diagnosis. Candidate280 is the
+qualified reference for these broader rendering checks. Temporary precision, binning, filter-merging and dirty-region
 controls did not resolve the corruption; their coverage limits are recorded.
 The live validation attempt crashed during CoreDisplay initialization, so it gives
 no validation verdict on the original defect. Candidate279 uses the native expansion path before render-target feedback.
@@ -233,10 +234,10 @@ from device enumeration or passing microbenchmarks.
      The historical fuzziness/interleaving was subsequently fixed in321/322.
      [Evidence](../findings/research/visible-hdmi-pattern-20260924.md).
    - Fetch and native1080p layout now work (320–322). Native120Hz appears to work
-     according to the user; required1080HiDPI120 still lacks a4K120 mode.
+     according to the user;329/330 add confirmed correct-color1080HiDPI120 and audible audio.
    - Verify guest awake assertions and active HDMI before every physical observation.
      Keep native host-safety, capture, shutdown and recovery checks intact.
-   - HDMI audio works on323: function7b:00.1 is paired with the GPU;
+   - HDMI audio works on323 and330: function7b:00.1 is paired with the GPU;
      same-slot pairing, passthrough and audible playback are confirmed through
      the Samsung headphone output (2 channels, 48 kHz).
 1. **Full 4K remote desktop streaming (user priority, updated 2026-09-17).** 4K60 is
@@ -290,22 +291,16 @@ remain available in the archived roadmap and findings.
 Use the user-provided `macos-vm/re/decompiled-24G830` sources, checking inferred
 prototypes against matching disassembly and vtables before implementation. The
 allocation investigation already combines those sources with live native tracing.
-For physical output, the framebuffer `reportCapabilities_LinkInfo` path at +0xe074
-publishes `NONE`, port -1 and connector type 0 when topology/link lookup supplies
-no usable link. This narrows the observed empty-framebuffer properties; it does
-not yet identify the upstream cause. Next trace topology production and DAL link
-creation, distinguishing ATOM connector parsing from DCN initialization failure.
-No broad display patch is justified by the default properties alone.
+Physical HDMI bring-up now has a working Samsung HiDPI120/audio path. The native
+`reportCapabilities_LinkInfo` at +0xe074 omitted FRL signal cases; candidate330
+publishes HDMI audio metadata while preserving the native transport. DCN315 clock
+selection and infoframe SRAM wake were independently required for correct output.
+[Source audit, Linux references and physical evidence](../findings/research/hdmi-hidpi120-20260924.md).
 
-The matching native vtable/assembly audit now traces the boot parser and fixed-link
-selection. Current injected ROM has four paths; no empty-ROM conclusion is valid.
-[Display boot-path analysis](../findings/research/display-boot-path-20260916.md).
-
-The display clock/wait audit distinguishes fallback clock warnings from exhausted
-register polls. Native timeout details are suppressed by a category0-only console
-sink; enabling logger masks alone is insufficient. Next observation is the exact
-wait register/caller plus boot parser/link state, preserving native behavior.
-[Source/native audit](../findings/research/display-clock-wait-20260916.md).
+The earlier [boot-path analysis](../findings/research/display-boot-path-20260916.md)
+and [clock/wait audit](../findings/research/display-clock-wait-20260916.md) remain
+historical evidence. Their proposed first-picture probes are superseded by this
+milestone. Remaining work includes HDCP errors and broader lifecycle/monitor testing.
 
 ## Portability: remove the patched-QEMU dependency
 
@@ -393,7 +388,9 @@ Candidates 321–323 establish a full 1920×1080 logical / 3840×2160 backing
 HDMI picture at 60 Hz, correct native 1920×1080 at 60 Hz, and audible HDMI
 audio through the Samsung headphone output. Native 1080p at 120 Hz is listed
 and the user reports it appears to work; sustained timing is not qualified.
-HiDPI 1080 at 120 Hz still requires a working 3840×2160 at 120 Hz link.
+Candidate330 now provides that HiDPI120 link with correct colors and audible
+HDMI audio. Default audio routing and playback survive tested120→60→120 switches.
+[Evidence and residual log errors](../findings/research/hdmi-hidpi120-20260924.md).
 DisplayPort, HDR, broader monitors and independent-host-boot durability remain open.
 
 [Current setup and scope](hdmi-status.md) ·

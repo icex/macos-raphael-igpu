@@ -26,7 +26,7 @@ and long-duration reliability are still being tested.
 | Memory and synchronization | Buffer/texture reuse, synchronized CPU/GPU texture updates, retained color contents, GPU fences, shared events and cross-process IOSurface transfers pass targeted checks. |
 | Hardware video | H.264 and HEVC Main8 encode/decode work. HEVC Main10 decoding passes short tests; Main10 hardware encoding is unavailable in the current native profile set. |
 | Shutdown and reuse | Repeated clean guest shutdowns and same-host-boot reuse work in the supervised workflow. Crash recovery and independent-host-boot coverage remain incomplete. |
-| Physical HDMI | Full1080HiDPI picture at60Hz; native1080p interleaving fixed and120Hz appears to work. Candidate323 HDMI audio works through Samsung audio output, confirmed by the user. Required1080HiDPI120 is not yet exposed. |
+| Physical HDMI | Correct 1920×1080 HiDPI / 3840×2160 pixels at120Hz on Samsung Odyssey G95NC, with audible HDMI audio (330). Audio selection/playback survives tested HiDPI120→60→120 switches. |
 
 The tested baseline is **macOS Sequoia build 24G830** with a matching driver,
 Lilu, OpenCore configuration and grafted VBIOS. Stock QEMU 10.1.2 now works with
@@ -70,7 +70,9 @@ Host tests and the macOS source build run in GitHub Actions on `dev` and `main`;
   memory reclamation and operation across independently initialized host boots.
 - **Extend physical display support:** Apple's embedded display core is being
   steered onto its DCN 3.02 path with DCN 3.1.5 register translation. Native PSP firmware
-  startup, framebuffer fetch and native1080p layout work; HDMI audio is confirmed working; HiDPI120 remains required. [Port plan](findings/research/display-dcn315-port-20260917.md)
+  startup, framebuffer fetch and native1080p layout work. Samsung HiDPI120 now has
+  correct colors and audible HDMI audio; broader monitors, sleep/hotplug and HDCP
+  remain unqualified. [120Hz evidence](findings/research/hdmi-hidpi120-20260924.md). [Port plan](findings/research/display-dcn315-port-20260917.md)
   · [HDMI audio plan](findings/research/hdmi-audio-passthrough-20260917.md).
 - **Measure and release:** measure performance after correctness, publish a tested
   compatibility matrix, and produce reproducible builds with clear support limits.

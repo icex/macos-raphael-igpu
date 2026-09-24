@@ -1,6 +1,12 @@
 # HDMI audio for the passed-through Raphael iGPU — plan, 2026-09-17
 
-## Update 2026-09-24 — physical HDMI audio works
+## Update 2026-09-24 — HiDPI120 with HDMI audio
+
+Candidate330 adds FRL framebuffer audio metadata. User confirms sound alongside
+correct-color HiDPI120; default routing/playback survive tested 120→60→120 switches.
+[Evidence and remaining scope](hdmi-hidpi120-20260924.md).
+
+## Earlier update 2026-09-24 — physical HDMI audio works
 
 Candidate323 passes the physical audio function with exact paired topology and
 AppleGFXHDA pairing fix. User confirms sound through Samsung audio output.

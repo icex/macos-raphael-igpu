@@ -29,13 +29,14 @@ The runner label is explicitly Intel, as listed in the
 
 ## Checked-in experimental executable
 
-`kext/bin/RaphaelGPU` contains the hardware-tested candidate323 executable
-(HDMI picture and audible Samsung HDMI audio). Its adjacent `build-manifest.json`
+`kext/bin/RaphaelGPU` contains the hardware-tested candidate330 executable
+(correct-color Samsung HiDPI120 picture and audible HDMI audio). Its adjacent `build-manifest.json`
 records the exact source commit, input hashes and executable SHA-256. The current
 source tree and `kext/Info.plist` match that build. Source builds still compile
 from source and never use this binary as a fallback. This executable alone is
 not an installable bundle; use the matching Info.plist, Lilu and tested VM setup.
-HiDPI120 experiments are not included in this published snapshot.
+The matching metal-178 configuration includes the tested FRL fixes. See
+[120Hz evidence and remaining limits](../findings/research/hdmi-hidpi120-20260924.md).
 
 ## Local build
 
@@ -54,9 +55,9 @@ required during compilation.
 
 The release is a research snapshot. Candidate280 has passing Metal compute/render,
 texture, memory, depth/stencil, codec and sampled remote-desktop checks, with the
-reproduced transparency corruption fixed. Candidates 321–323 additionally demonstrate
-correct Samsung HDMI picture and audible HDMI audio; see [scope and setup](hdmi-status.md).
-HiDPI 120 Hz, DisplayPort, full desktop acceptance,
+reproduced transparency corruption fixed. Candidates321–330 additionally demonstrate
+correct Samsung HDMI picture, HiDPI120 and audible HDMI audio; see [scope and setup](hdmi-status.md).
+HDCP, DisplayPort, full desktop acceptance,
 independent-host-boot durability, performance and games remain unqualified.
 See [live status](../status.md) for the hardware-tested executable identity and
 [roadmap](ROADMAP.md) for exact coverage; a newly built artifact is not automatically

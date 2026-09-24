@@ -85,7 +85,7 @@ The accelerated QEMU topology adds `-readconfig raphael-vfio.cfg`, replaces
 `-vga vmware` with `-vga none`, and keeps `-display none`; omit QEMU's VNC console.
 Keep the endpoint directly on `pcie.0` at0x6. Use **guest Screen Sharing on port5900**;
 Samsung HDMI picture and audio now work with the additional
-[candidate 323 configuration](../../docs/hdmi-status.md); DisplayPort is untested. A black QEMU console in this mode
+[candidate330 HiDPI120/audio configuration](../../docs/hdmi-status.md); DisplayPort is untested. A black QEMU console in this mode
 is expected, not evidence that the guest failed to boot.
 
 ## 4. Own launch, shutdown and recovery

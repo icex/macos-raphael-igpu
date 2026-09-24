@@ -1,5 +1,12 @@
 # Physical display: porting Apple's display core to Raphael DCN 3.1.5 — 2026-09-17
 
+## Update 2026-09-24 — Samsung HDMI milestone
+
+Candidate330 now provides correct-color 1080 HiDPI (3840×2160 pixels) at 120 Hz
+and audible HDMI audio. [Current evidence](hdmi-hidpi120-20260924.md) and
+[setup](../../docs/hdmi-status.md) supersede the blockers and proposed runs below.
+The original dated analysis is retained as history.
+
 **Status:** research complete. Candidates 285/286 are built. The first hardware run froze the host
 before the display core ran, and the cause is fenced off in candidate 286
 ([crash analysis](dcn315-dmcub-host-crash-20260917.md)). HDMI output is blocked on DMCUB (see

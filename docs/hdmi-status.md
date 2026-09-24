@@ -8,14 +8,16 @@ Raphael iGPU HDMI port, with macOS Sequoia 24G830.
 | 1920×1080 HiDPI, 3840×2160 backing, 60 Hz | User confirms a full picture (321). |
 | Native 1920×1080, 60 Hz | User confirms correct picture after the HDMI deep-color divider fix (322). |
 | Native 1920×1080, 120 Hz | Listed by macOS; user reports it appears to work. Sustained timing remains unqualified. |
-| 1920×1080 HiDPI, 3840×2160 backing, 120 Hz | Still absent; ongoing mode-validation and link investigation. |
-| HDMI audio | Audible through Samsung headphone/audio output, confirmed by user (323); 2 channels at 48 kHz. |
+| 1920×1080 HiDPI, 3840×2160 backing, 120 Hz | Correct colors confirmed (329), with audible HDMI audio confirmed on330. |
+| HDMI audio | Audible through Samsung headphone/audio output, confirmed by user (323 and330); 2 channels at48kHz. Default routing and playback retained through HiDPI120→60→120. |
 | DisplayPort, HDR, other monitors | Untested. |
 
 The fixes include display-fetch buffer allocation, infoframe memory wake and
-matching the HDMI deep-color pixel divider. These experiments require the exact
+matching the HDMI deep-color pixel divider. FRL additionally needs the native DAL
+clock capability, advertised EDID rate, DCN315 stream-clock selection, VPG5 memory
+wake and FRL-to-HDMI audio metadata mapping. These experiments require the exact
 24G830 driver, matching Lilu, VBIOS graft and the complete candidate configuration;
-the kext alone is insufficient. Use [metal-171](../experiments/metal-171.json)
+the kext alone is insufficient. Use [metal-178](../experiments/metal-178.json)
 and the [supervised cycle](running-an-experiment.md), not a partial list of flags.
 
 HDMI audio uses the separately checked Raphael function `0000:7b:00.1` in its
@@ -28,10 +30,13 @@ all checks and teardown receipts. Never bind either function back to a host
 driver within the same boot.
 
 Select Odyssey G95NC as macOS sound output and listen through the monitor's audio
-output. Verify display-awake assertions before every physical test. Candidate323
-completed its core probe, capture, guest-request shutdown and authorizing GPU
+output. Verify display-awake assertions before every physical test. Candidates323 and330
+completed their core probes, capture, guest-request shutdown and authorizing GPU
 recovery; audio teardown reported DMA disabled and no errors. This does not
 qualify arbitrary guest crashes, repeated host boots or long-duration playback.
 
-[Audio evidence](../findings/research/hdmi-audio-candidate323-20260924.md) ·
+[120Hz and audio evidence](../findings/research/hdmi-hidpi120-20260924.md).
+Repeated HDCP authentication errors remain; protected-content playback is unqualified.
+
+[Earlier audio evidence](../findings/research/hdmi-audio-candidate323-20260924.md) ·
 [Live status](../status.md) · [Roadmap](ROADMAP.md).

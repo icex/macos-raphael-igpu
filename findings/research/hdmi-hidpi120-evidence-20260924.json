@@ -1,0 +1,70 @@
+{
+  "c330-audio120-initial.txt": {
+    "path": "/home/bogdan/macos-vm/run/c330-audio120-initial.txt",
+    "sha256": "753505d267575c4773b34c3e0dadf6fc995acfa06baa4dd7099632e817fa02de"
+  },
+  "c330-audio-mode-switch.txt": {
+    "path": "/home/bogdan/macos-vm/run/c330-audio-mode-switch.txt",
+    "sha256": "3106b39ed4fa74981281724b93623b406122d35348ddd31e0f213586277e43ea"
+  },
+  "c330-errors-review.txt": {
+    "path": "/home/bogdan/macos-vm/run/c330-errors-review.txt",
+    "sha256": "6fd07478b7947bec8f7ebfe944902dfd1e44cc4b5163e78faf5f056f67336c16"
+  },
+  "c330-frl-scanout.txt": {
+    "path": "/home/bogdan/macos-vm/run/c330-frl-scanout.txt",
+    "sha256": "52288c0783f33a341db694a0e0a063dfb65d6d306e6fbaf716f8982e34d57ca1"
+  },
+  "c329-framebuffer-audio.txt": {
+    "path": "/home/bogdan/macos-vm/run/c329-framebuffer-audio.txt",
+    "sha256": "3040a5d9d4fbe30753444f520fb9ad75d82e299c91a6eb6b312b6a256ebc62c7"
+  },
+  "c328-frl-color-scanout.txt": {
+    "path": "/home/bogdan/macos-vm/run/c328-frl-color-scanout.txt",
+    "sha256": "c019a07d389af6a1b357034732732be03668b32714bee266f60043b0ef1c015f"
+  },
+  "c327-link-caps.json": {
+    "path": "/home/bogdan/macos-vm/run/c327-link-caps.json",
+    "sha256": "2b3ca8decae155032877270914af1dbe5627cfe4ee05c64e95fc7c07055e15f7"
+  },
+  "c326-link-caps.json": {
+    "path": "/home/bogdan/macos-vm/run/c326-link-caps.json",
+    "sha256": "fd838202b11023d16cabd3d2efbd1679a937d96f70c076e18587f58f87e10b34"
+  },
+  "candidate-330-results/verdict.json": {
+    "path": "/home/bogdan/macos-vm/run/candidate-330-results/verdict.json",
+    "sha256": "0762070f432c1a8016263cefadf9533f3874c0d57c4ec4ed25acdf1cf01b22a6"
+  },
+  "candidate-330-results/shutdown.json": {
+    "path": "/home/bogdan/macos-vm/run/candidate-330-results/shutdown.json",
+    "sha256": "5878816f255511736ea244bae1b611ed645f8c8b8b5fb8f0b6d21b61efee6ae2"
+  },
+  "candidate-330-results/recovery.json": {
+    "path": "/home/bogdan/macos-vm/run/candidate-330-results/recovery.json",
+    "sha256": "d82576c24221168703a7392dad6ffba92c5dd29f38d1593440eea15751bd6d2b"
+  },
+  "candidate-330-results/hdmi-audio-teardown.json": {
+    "path": "/home/bogdan/macos-vm/run/candidate-330-results/hdmi-audio-teardown.json",
+    "sha256": "5987b43bcfbc8fb6622d085b50cad4f3bab17dbf453f415791947722cdae5c10"
+  },
+  "candidate-330-results/host-kernel-messages.json": {
+    "path": "/home/bogdan/macos-vm/run/candidate-330-results/host-kernel-messages.json",
+    "sha256": "0445a1aea25d4448a3f6514d8a30e65b4ac646bbf4d5a566eb32ec2a63c49bec"
+  },
+  "candidate-330-results/serial.txt": {
+    "path": "/home/bogdan/macos-vm/run/candidate-330-results/serial.txt",
+    "sha256": "443208e50b8ea032713f47450c368d37b0c3fef9e955ce1d46e243447977867a"
+  },
+  "c330-tests.log": {
+    "path": "/home/bogdan/macos-vm/run/c330-tests.log",
+    "sha256": "d33f7865ebfc7fe3ef39bec402065dbd1423285dee9d0836786b3de321911bb2"
+  },
+  "kext/bin/RaphaelGPU": {
+    "path": "kext/bin/RaphaelGPU",
+    "sha256": "20a1e10a123d42e89442e7e0ca096aef180e50c60c575bdbd50b7c1a4bc6235c"
+  },
+  "kext/bin/build-manifest.json": {
+    "path": "kext/bin/build-manifest.json",
+    "sha256": "8c594cf6729422b130a517b2bdba4a73911922be02431926d34ced8a63068db2"
+  }
+}
