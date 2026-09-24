@@ -103,6 +103,9 @@ inline uint32_t remapRead(const FieldRemap &remap, uint32_t value315) {
     return out;
 }
 
+// DCN31 VPG SRAM wake: disable light sleep, clear forced light sleep.
+inline uint32_t wakeVpgMemory(uint32_t value) { return (value & ~0x10u) | 1u; }
+
 // Reserve three of sixteen CRB segments only if the requested/current COMPBUF
 // size agrees and leaves room. Reject inaccessible reads, configuration errors,
 // or any other pipe allocation; do not resize a live allocation.

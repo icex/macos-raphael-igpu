@@ -8547,6 +8547,7 @@ static uint32_t dcnMode = 0;
 static uint32_t dcnNoStutter = 0;
 static uint32_t dcnOutputPattern = 0;
 static uint32_t dcnDetBuffer = 0;
+static uint32_t dcnVpgWake = 0;
 static rgpu::SuccessRecordBudget dcnPatternRecordBudget {};
 // Opt-in visual diagnostic: replace OPP0 solid blank color without changing its
 // enable/mode/status handshake. Linux opp2_set_disp_pattern_generator uses these
@@ -8654,6 +8655,23 @@ static uint32_t wrapDcnRegRead(void *context, uint32_t index) {
     return value;
 }
 
+// Linux dcn31_vpg_poweron: wake the generic-infoframe SRAM before access.
+static void dcnWakeVpg0(void *context) {
+    if (dcnVpgWake != 1) return;
+    const uint32_t before = dcnNativeRead(context, 0x552d);
+    if (before == 0xffffffffu || (before & 0x111u) == 1u) return;
+    dcnNativeWrite(context, 0x552d, RaphaelDcn::wakeVpgMemory(before));
+    uint32_t after = before;
+    for (unsigned i = 0; i < 100; ++i) {
+        after = dcnNativeRead(context, 0x552d);
+        if (after == 0xffffffffu || !(after & 0x100u)) break;
+        IODelay(10);
+    }
+    static rgpu::SuccessRecordBudget records {};
+    SAMPLED_CRLOG(records, after != 0xffffffffu && !(after & 0x100u),
+                 "DCN: VPG0 wake before=%#x after=%#x", before, after);
+}
+
 // DCN3.15 divides a 1024 KiB return buffer into 64 KiB segments.
 // Native DCN3.02 has fixed DET storage and never allocates these registers.
 // Diagnostic scope: pipe0 only, no existing DET allocations, stable COMPBUF.
@@ -8694,6 +8712,12 @@ static void wrapDcnRegWrite(void *context, uint32_t index, uint32_t value) {
     } else {
         m = translate(index);
         if (m.index == 0x4d14 && value == 0) dcnAllocateDet0(context);
+        if (dcnVpgWake == 1 && (m.index == 0x5528 || m.index == 0x5529)) {
+            dcnWakeVpg0(context);
+            static uint32_t packetWord = 0;
+            if (m.index == 0x5528) packetWord = value & 0xffu;
+            else { RLOG("DCN: VPG0 packet word=%u data=%#x", packetWord, value); ++packetWord; }
+        }
         if (isDmcubRegister(index)) {
             m = {Action::Drop, index};
             note = " (DMCUB write blocked)";
@@ -10609,6 +10633,7 @@ static void pluginStart() {
     PE_parse_boot_argn("rgpudallog", &dalLogMask, sizeof(dalLogMask));
     PE_parse_boot_argn("rgpuagdp", &agdpPikera, sizeof(agdpPikera));
     PE_parse_boot_argn("rgpudcnnostutter", &dcnNoStutter, sizeof(dcnNoStutter));
+    PE_parse_boot_argn("rgpuvpgwake", &dcnVpgWake, sizeof(dcnVpgWake));
     PE_parse_boot_argn("rgpudcndet", &dcnDetBuffer, sizeof(dcnDetBuffer));
     PE_parse_boot_argn("rgpudcnpattern", &dcnOutputPattern, sizeof(dcnOutputPattern));
     uint32_t blankColor = 0;

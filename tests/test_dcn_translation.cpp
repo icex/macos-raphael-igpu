@@ -88,6 +88,10 @@ int main() {
     assert(!canAllocateDet0(0x40d0d, 0, 0, 0xffffffff, 0));
     assert(!canAllocateDet0(0x40d0d, 0, 0, 0, 1));
 
+    assert(wakeVpgMemory(0x110) == 0x101);
+    assert(wakeVpgMemory(0xa510) == 0xa501);
+    assert(wakeVpgMemory(1) == 1);
+
     DalMailbox mailbox;
     assert(DalMailbox::owns(0x1628a) && !DalMailbox::owns(0x16265));
     assert(mailbox.read(DalMailbox::kResponse) == DalMailbox::kResultOk);   // ready before a message
