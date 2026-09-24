@@ -154,6 +154,13 @@ static constexpr uint32_t kHostDdc1Speed = 0x9600102;           // prescale 150,
 static constexpr uint32_t k315DchubbubArbDramStateCntl = 0x39bc;
 static constexpr uint32_t kDramStateForceAllow = 0x33;   // SR force value+enable, P-state force value+enable
 inline uint32_t forceDramAllow(uint32_t value) { return value | kDramStateForceAllow; }
+// Linux hubbub1_allow_self_refresh_control(false): SR force-enable=1, value=0.
+// Retain the P-state safeguard, but active scanout must not force SR permission.
+inline uint32_t scanoutDramAllow(uint32_t value, bool active) {
+    const uint32_t guarded = forceDramAllow(value);
+    return active ? guarded & ~1u : guarded;
+}
+
 
 // Verbose trace window (DCN 3.0.2 indices): the DC_I2C engine block and the DIO/GPIO pad
 // registers (DDC, HPD, AUX pad control). Every access here is logged, not just the first two.

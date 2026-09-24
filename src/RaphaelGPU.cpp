@@ -241,6 +241,9 @@ static rgpu::DiagnosticRecords<rgpu::kCriticalRecordCapacity, 512> criticalRecor
 static bool criticalUartEnabled = false;
 static bool criticalUartQuiesceEnabled = false;
 static rgpu::SuccessRecordBudget waitStampRecordBudget {};
+static rgpu::SuccessRecordBudget submissionSummaryRecordBudget {};
+static rgpu::SuccessRecordBudget backingSummaryRecordBudget {};
+static rgpu::SuccessRecordBudget dmubDeliveryRecordBudget {};
 static rgpu::SuccessRecordBudget kiqSubmitRecordBudget {};
 static rgpu::SuccessRecordBudget preClearFaultRecordBudget {};
 static rgpu::SuccessRecordBudget feedbackCowRecordBudget {};
@@ -7709,7 +7712,9 @@ static void publishPendingSubmissionTrace() {
         __atomic_load_n(&submissionTraceRoutesReady, __ATOMIC_ACQUIRE);
     bool settled = dirty && quietPolls >= 10;
     if (summaryRecords < 32 && (initial || publishedNotable || settled)) {
-        CRLOG("SUB: summary process=%llu/%llu/%llu mappings=%llu/%llu/%llu "
+        SAMPLED_CRLOG(submissionSummaryRecordBudget,
+              !(notable[0] || notable[1] || notable[2] || notable[3] || notable[4]),
+              "SUB: summary process=%llu/%llu/%llu mappings=%llu/%llu/%llu "
               "prepare=%llu/%llu/%llu map=%llu/%llu/%llu submit=%llu/%llu/%llu "
               "dropped=%llu/%llu",
               entries[0], exits[0], notable[0], entries[1], exits[1], notable[1],
@@ -7791,7 +7796,8 @@ static void publishPendingSubmissionTrace() {
     const bool periodicBacking = backingDirty && backingDirtyPolls >= 600;
     if (backingSummaryRecords < 32 &&
         (initialBacking || periodicBacking)) {
-        CRLOG("SUB: backing-summary completed=%llu true=%llu false=%llu "
+        SAMPLED_CRLOG(backingSummaryRecordBudget, backingFalse == 0,
+              "SUB: backing-summary completed=%llu true=%llu false=%llu "
               "dropped=%llu state=live", backingCompleted, backingTrue,
               backingFalse, submissionBackingAllocations.failures().dropped());
         ++backingSummaryRecords;
@@ -8538,6 +8544,7 @@ enum : uint32_t {
                   kDcnPstateAllow,
 };
 static uint32_t dcnMode = 0;
+static uint32_t dcnNoStutter = 0;
 static uint32_t dcnTraceBudget = 1500;
 static mach_vm_address_t orgDcnRegWait = 0, orgDcCreate = 0, orgDcHardwareInit = 0;
 using DcnRegRead = uint32_t (*)(void *, uint32_t);
@@ -8554,6 +8561,30 @@ static volatile uint32_t dcnDropped = 0;
 
 static bool dcnTranslating() {
     return (dcnMode & (kDcnTranslate | kDcnPool302)) == (kDcnTranslate | kDcnPool302);
+}
+
+// Keep the established startup/idle safeguard until firmware answers. Once an
+// OTG is requested on, disable forced memory self-refresh during pixel fetch.
+static uint32_t dcnDramPolicy(void *context, uint32_t value) {
+    bool active = false;
+    if (dcnNoStutter == 1 && dcnFirmwareResponsive) {
+        for (uint32_t pipe = 0; pipe < 4; ++pipe)
+            active |= (dcnNativeRead(context, 0x5001 + pipe * 0x80) & 1u) != 0;
+    }
+    return RaphaelDcn::scanoutDramAllow(value, active);
+}
+
+static void dcnRefreshDramPolicy() {
+    if (dcnNoStutter != 1 || !(dcnMode & kDcnPstateAllow) || !dcnNativeRead ||
+        !dcnNativeWrite || !dcnRegContext) return;
+    const auto index = RaphaelDcn::k315DchubbubArbDramStateCntl;
+    const uint32_t before = dcnNativeRead(dcnRegContext, index);
+    const uint32_t after = dcnDramPolicy(dcnRegContext, before);
+    if (after != before) {
+        dcnNativeWrite(dcnRegContext, index, after);
+        CRLOG("DCN: scanout DRAM policy %#x -> %#x readback=%#x firmware-ready=%u",
+              before, after, dcnNativeRead(dcnRegContext, index), dcnFirmwareResponsive);
+    }
 }
 
 // Return addresses one and two frames above the register accessor's caller. Every native
@@ -8642,8 +8673,8 @@ static void wrapDcnRegWrite(void *context, uint32_t index, uint32_t value) {
                            remapWrite(*remap, value, dcnNativeRead(context, m.index)));
             note = " (fields remapped)";
         } else if ((dcnMode & kDcnPstateAllow) && m.index == k315DchubbubArbDramStateCntl) {
-            dcnNativeWrite(context, m.index, forceDramAllow(value));
-            note = " (DRAM self-refresh / p-state allow forced)";
+            dcnNativeWrite(context, m.index, dcnDramPolicy(context, value));
+            note = " (DRAM startup/scanout policy)";
         } else if ((dcnMode & kDcnHostI2cSpeed) && m.index == k315DcI2cDdc1Speed &&
                    value != kHostDdc1Speed) {
             dcnNativeWrite(context, m.index, kHostDdc1Speed);
@@ -8652,6 +8683,9 @@ static void wrapDcnRegWrite(void *context, uint32_t index, uint32_t value) {
             dcnNativeWrite(context, m.index, value);
         }
     }
+    if (dcnTranslating() && m.action != Action::Drop && m.index >= 0x5001 &&
+        m.index <= 0x5181 && ((m.index - 0x5001) % 0x80) == 0)
+        dcnRefreshDramPolicy();
     dcnTraceAccess('W', index, m, value, reinterpret_cast<uint64_t>(__builtin_return_address(0)),
                    __builtin_frame_address(0), note);
 }
@@ -9102,6 +9136,7 @@ static void dcnReinitializeOnce() {
     CRLOG("DMUBREINIT: register=%#x mask=%#x expected=%#x actual=%#x psp=%u",
           result.badRegister,result.badMask,result.expected,result.actual,in.pspLoad);
     if (result.success && selectors) {
+        dcnRefreshDramPolicy();
         dcnSurveyDmcub("after firmware reinitialization");
         dcnValidateEmptyInbox();
     }
@@ -9173,8 +9208,8 @@ static void wrapDcHardwareInit(void *dc) {
     if ((dcnMode & kDcnPstateAllow) && dcnNativeRead != nullptr && dcnNativeWrite != nullptr) {
         const uint32_t before = dcnNativeRead(dcnRegContext, RaphaelDcn::k315DchubbubArbDramStateCntl);
         dcnNativeWrite(dcnRegContext, RaphaelDcn::k315DchubbubArbDramStateCntl,
-                       RaphaelDcn::forceDramAllow(before));
-        CRLOG("DCN: DRAM_STATE_CNTL %#x -> %#x (self-refresh and p-state change allowed)", before,
+                       dcnDramPolicy(dcnRegContext, before));
+        CRLOG("DCN: DRAM_STATE_CNTL %#x -> %#x (startup/scanout policy)", before,
               dcnNativeRead(dcnRegContext, RaphaelDcn::k315DchubbubArbDramStateCntl));
     }
     if (dcnNativeRead != nullptr) {
@@ -9271,7 +9306,7 @@ static void wrapDcDmubWait(void *dcDmub) {
     }
     if (rptr == dmubWptr) {
         dmubDelivered++;
-        CRLOG("DCN: DMUB delivered #%u, firmware consumed to %#x in %u us", dmubDelivered, rptr, waited);
+        SAMPLED_CRLOG(dmubDeliveryRecordBudget, true, "DCN: DMUB delivered #%u, firmware consumed to %#x in %u us", dmubDelivered, rptr, waited);
         return;
     }
     dmubDeliverDead = true;
@@ -10519,6 +10554,7 @@ static void pluginStart() {
                              "set together)", dcn);
     PE_parse_boot_argn("rgpudallog", &dalLogMask, sizeof(dalLogMask));
     PE_parse_boot_argn("rgpuagdp", &agdpPikera, sizeof(agdpPikera));
+    PE_parse_boot_argn("rgpudcnnostutter", &dcnNoStutter, sizeof(dcnNoStutter));
     if (PE_parse_boot_argn("rgpudcntrace", &dcnTrace, sizeof(dcnTrace)) && dcnTrace <= 20000)
         dcnTraceBudget = dcnTrace;
     CRLOG("DCN: rgpudcn=%#x (trace=%u translate=%u pool302=%u dmub-guard=%u) trace-lines=%u",
