@@ -25,6 +25,15 @@ firmware attempt account for the existing held-reset state; do not replay old
 ENABLE/windows as rollback. The reviewed one-shot attempt has ended.
 1019 host tests passed. All candidate changes remain local; dev/origin/dev5371959.
 
+## Candidate312 prepared, not launched
+
+Local branch candidate-312, source d2a19a9, card metal160. Raw MM_DATA reads
+preserve valid ffffffff firmware data. The explicit held-reset continuation
+refuses a running/unexpected DMCUB state and skips initial STOP/reset assertion.
+Exact mismatch telemetry added. Build and dry-run passed;1019 host tests OK.
+The approved one-shot311 attempt is complete;312 awaits approval of continuation.
+No dev commit/push. Current DMCUB remains halted; no reboot is requested.
+
 ## Verified progress
 
 | Area | Evidence and scope |
