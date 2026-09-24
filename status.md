@@ -1,5 +1,19 @@
 # Live status — 2026-09-24
 
+## Candidate317 completed: awake mode tests; clean capture and recovery
+
+Run2721c4fb410589d075ecccbe1046bea5, MODE2#243, source601a89e.
+Firmware passed3 fresh replies. DRAM policy readback1032 with active OTG,
+restores1033 when off. Awake assertion verified (`UserIsActive=1` and
+`PreventUserIdleDisplaySleep=1`); HDMI enabled. Native1080p120 then1080p60
+selected successfully;60Hz disables scrambling. DPG0_CONTROL0, SURFACE_INUSE0,
+HUBP timeout2/underflow1 persisted. AVMUTE status0. Physical60Hz observation
+requested, not yet answered; earlier316 observation confirmed black with signal.
+Core probe passed; final verdictCORE_PROBE_PASS. Critical replay complete with
+no loss. Guest exited-after-guest-request; recovery status=recovered and
+authorizes_launch=true. Stopped through harness for318 output-pattern test.
+Artifacts run/c317-scanout.json, c317-awake-60hz.txt, c317-awake-helper-check.txt.
+
 ## Candidate316 completed: native1080p120 programmed; capture overflow
 
 Runb8e786fba900fe589729c5d3fdbb537d, MODE2#242, source81c08b6.
@@ -171,3 +185,10 @@ observation is still pending, not inferred from software state.
 - Output: `/home/bogdan/macos-vm/run/candidate-316-results`
 - Verdict: `INVALID`
 - Boundary: `identity_or_route_missing`
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-317-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
