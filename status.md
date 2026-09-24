@@ -1,5 +1,15 @@
 # Live status — 2026-09-24
 
+## Candidate319 baseline diagnostic: early boot panic, recovered
+
+Run009f47866783045e30571237b1c44a3a, MODE2#246, source5131613,
+metal167. Kernelmanagerd panicked in OSKext::copyInfo at12.47s, before display
+unblank/allocation diagnostics. No functional display result. Final INVALID,
+missing native lease; supervised forced closure (not clean guest shutdown).
+Separate c319-panic-noqueue-recovery.json reports recovered/authorizes_launch=true.
+Unchanged-build retry follows; all1020 host tests pass (3 skipped). Dev milestone
+c5570b0 was pushed via SSH and remote ref verified; HTTPS token is invalid.
+
 ## Candidate318: user sees HDMI test pattern; clean capture and recovery
 
 Run338d9498eb9e7e029f0f73570450b41f, MODE2#245,
@@ -84,3 +94,10 @@ passes; hardware encode is Main8. [Roadmap](docs/ROADMAP.md).
 After milestones update current docs, integrate/push dev and synchronize the local
 checkout. Do not push main without new authorization. Prior live entries are [archived](findings/research/status-archives/status-before-display-port-20260917.md)
 and [earlier](findings/research/status-archives/status-before-night-close-20260916.md).
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-319-results`
+- Verdict: `INVALID`
+- Boundary: `identity_or_route_missing`
