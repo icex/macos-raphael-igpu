@@ -37,3 +37,13 @@ the requested address. The earlier319 timeout/pending evidence remains valid;
 
 Active artifacts: run/c320-det-scanout.json/txt, c320-awake-check.txt,
 c320-awake-60hz.txt. Final capture/shutdown/recovery are not yet available.
+
+Three temporary AppKit red/cyan/white/black sequences were attempted under console
+UID501. The last used an explicit layer and event dispatch. OTG readbacks changed
+but did not reliably match requested colors; screencapture of that window failed
+(`could not create image from window`). These sequences do NOT qualify color
+accuracy or establish that the full-screen test window reached the physical stream.
+Each helper closed itself and restored the desktop. Sources and logs are under
+run/c320-scanout-colors[-v2/-v3].m, c320-color-sequence[-v2/-v3].txt,
+c320-color-pixels[-v2/-v3].txt. No driver changes followed this inconclusive check.
+The pending Samsung observation refers to candidate320 native1080p60 desktop.

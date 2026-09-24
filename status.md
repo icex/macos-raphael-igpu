@@ -10,6 +10,8 @@ Physical-screen response pending. Core probe passed; run remains active under
 harness1800-second interactive hold /6000-second total cap. Final capture and
 shutdown/recovery pending. 1020 host tests pass (3 skipped).
 SURFACE_INUSE=0 alone is not a failure: Linux checks EARLIEST_INUSE plus flip state.
+Temporary color windows closed themselves; their capture failed and OTG colors
+did not qualify correct rendering. Physical observation is still required.
 
 ## Candidate319 retry: missing live DET allocation confirmed
 
