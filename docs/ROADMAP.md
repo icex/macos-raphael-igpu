@@ -1,6 +1,6 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-09-24. Latest display experiment: **1.0.320** (native HiDPI image visible with pink hue; low-resolution interleaving and refresh modes unresolved); prior streaming baseline: **1.0.284**; broader baseline: **1.0.280**. Full desktop acceleration
+Updated 2026-09-24. Latest display experiment: **1.0.322** (full HiDPI60 picture; native1080p interleaving fixed; HiDPI120 and HDMI audio required); prior streaming baseline: **1.0.284**; broader baseline: **1.0.280**. Full desktop acceleration
 is **not qualified**. The reproduced Screen Sharing transparency defect is fixed
 in candidate279 and retained in280. Candidate280 also passes strict capture and
 clean recovery after visual, concurrent-client and codec workloads. The patched-QEMU
@@ -26,7 +26,7 @@ regression and macOS source-build jobs remain required; see [CI setup](releases.
 | M3 — Native engine startup repair | Demonstrated | Raphael topology/address adaptations reach native startup and completed Metal work. Preserve these fixes while diagnosing desktop rendering. |
 | M4 — First correct Metal compute | Achieved | Candidate 194 checked 196,608 values and 4,096 rendered pixels; its overall capture remained inconclusive. Current280 desktop Metal baselines complete with verified device/build identity. |
 | M5 — Rendering, memory and synchronization | Partial | Managed-texture copy correction retained; private/managed/IOSurface and multiple-format readback probes pass. Candidate280 passes48 BGRA8 feedback cases across four distinct-seed processes, including two concurrent clients. 32 measured buffer-reclamation rounds return process-local allocation to baseline with134,217,728 correct values. 144 texture recreation cases and32 cross-queue GPU-event rounds pass. Global VRAM/GART counters return near baseline after exit; GPU VA and long-duration qualification remain open. |
-| M6 — Desktop and physical display | Visual fix verified; broader qualification open | Candidate279 fixes the reproduced feedback corruption. Fresh pixel checks, user observation and unobstructed native RFB captures on280 pass; longer desktop qualification remains. Candidate320 restores framebuffer fetch and a native HiDPI image; pink hue and low-resolution interleaving prevent usable-output qualification. |
+| M6 — Desktop and physical display | Visual fix verified; broader qualification open | Candidate279 fixes the reproduced feedback corruption. Fresh pixel checks, user observation and unobstructed native RFB captures on280 pass; longer desktop qualification remains. Candidate321 gives a full HiDPI60 picture;322 fixes native1080p interleaving. User confirms60Hz and reports120Hz appears to work; HiDPI120 and HDMI audio remain required. |
 | M7 — Lifecycle and host protection | Partial | Multiple guest-request shutdowns and authorizing recoveries observed on this boot, including eight complete 280 runs with the visual and logging fixes. One supervised QEMU closure/recovery/reset/relaunch/clean-shutdown sequence now passes its scoped checks; closure capture remains INVALID. Fresh-host-boot, guest-panic and repeated lifecycle qualification remain open. |
 | M8 — Performance and release | Not qualified | Correctness first; no release, Metal3 conformance, game-support or full-desktop claim. The current experimental snapshot is published to main at the user’s request; development continues on dev. Publication does not close acceptance gates. |
 
@@ -157,7 +157,8 @@ Passing isolated shaders does not establish correct desktop composition.
 - [x] Deliver HDMI VBIOS commands and observe firmware consumption (candidate315).
 - [x] Confirm a physically visible hardware test pattern on the Samsung (candidate318).
 - [x] Restore native framebuffer fetch and confirm a visible HiDPI image (candidate320).
-- [ ] Correct pink hue/low-resolution interleaving and qualify refresh modes; then enable HDMI audio.
+- [x] Restore full HiDPI60 picture and correct native1080p interleaving (321/322).
+- [ ] Expose and qualify1080HiDPI120, and enable actual HDMI audio.
 - [ ] Qualify modes, reconnection and higher resolutions after first stable output.
 
 Current evidence puts corrupt pixels in the scanout/DisplayStream path before
@@ -230,8 +231,8 @@ from device enumeration or passing microbenchmarks.
    - Candidate318 produces a physically visible RGB test pattern at native1080p60.
      User reports fuzziness/interleaving; correct image quality is not established.
      [Evidence](../findings/research/visible-hdmi-pattern-20260924.md).
-   - Restore HUBP framebuffer fetch and inspect output formatting. Native1080p120
-     mode selection alone produced black output, so120Hz picture is not qualified.
+   - Fetch and native1080p layout now work (320–322). Native120Hz appears to work
+     according to the user; required1080HiDPI120 still lacks a4K120 mode.
    - Verify guest awake assertions and active HDMI before every physical observation.
      Keep native host-safety, capture, shutdown and recovery checks intact.
    - HDMI audio follows usable display output. Function7b:00.1 remains host-owned;

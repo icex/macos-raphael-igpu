@@ -1,23 +1,26 @@
 # Live status — 2026-09-24
 
-## Candidate322: native1080p interleaving fixed; HiDPI120 and HDMI audio required
+## Candidate321: full HiDPI picture; low-resolution interleaving remains
 
-Run0cb060da92bd7d7a2afdb4dd7002f54b, MODE2#250, sourcebd981b1, metal170.
-`rgpuhdmideep=1` matches PHY pixel resync to HDMI deep-color packing. Native
-1920x1080@60: user confirms "Yes, picture is correct". Native1920x1080@120:
-macOS reports120Hz, PHY ratio1 matches10-bit HDMI, user says "I think120hz works too".
-This is physical user observation, not measured frame delivery or color accuracy.
-Candidate321 already gave an almost-perfect1080HiDPI picture at60Hz.
+Run13246b9a0f02e33e0a4bb92d2e55f6d0, MODE2#249, source2242840, metal169.
+VPG0 memory wake0x110→1 before native infoframe writes. User: "I see full picture"
+and "default looks almost perfect, it just needs120hz". Verified awake1080HiDPI
+(3840x2160pixels60Hz). Native AVI packet advertisesYCbCr444. Pixel correctness
+has not been independently measured; no remaining pink complaint on this build.
+Low-resolution1920x1080@60 still interleaved (user confirmed twice). HDMI packs
+10-bit while PHYPLLA resync ratio remains0 (8-bit): HDMI0x11010019, PHY0x103.
+Restored HiDPI before stopping. Core probe passed, finalCORE_PROBE_PASS, complete
+capture; exited-after-guest-request, recovered/authorizes_launch=true. No VM now.
+1020 host tests pass (3 skipped). Next322 aligns PHY deep-color ratio with native
+HDMI packing, then qualifies1080p60 and120Hz. HiDPI120 is a separate4K link mode.
+HDMI audio follows usable video; physical audio function remains host-owned.
 
-Required next: 1920x1080 logical /3840x2160 backing at120Hz, and HDMI audio.
-Samsung EDID advertises4K120 VIC118 and FRL12Gbps x4, but macOS only exposes4K30/60.
-Native1080p120 does not satisfy HiDPI120. Audio7b:00.1 remains host-owned,
-not passed through; existing USB/BlackHole routing is not HDMI audio.
-
-FinalCORE_PROBE_PASS; complete capture; exited-after-guest-request;
-recovered/authorizes_launch=true. No VM running.1020 host tests OK,3 skipped.
-Evidence: [deep-color and audio follow-up](findings/research/hdmi-deepcolor-120-audio-20260924.md).
-Fresh candidates from fetched dev; autonomous tests/resets, no reboot or host sudo.
+Evidence: [VPG/deep-color investigation](findings/research/hdmi-vpg-and-deepcolor-20260924.md),
+run/c321-vpg-scanout.json, c321-native60-scanout.json, c321-awake-check.txt,
+c321-hidpi60.txt, c321-native60.txt, c321-restored-hidpi60.txt, candidate-321-results.
+Native-fetch milestone89b5ab1 is published on dev via working SSH credentials.
+This full-picture improvement is ready for integration; main unchanged. Fresh
+candidate branches, remote dev fetched, autonomous tests/resets; no reboot or sudo.
 
 ## Verified progress
 
@@ -73,3 +76,36 @@ checkout. Do not push main without new authorization. Prior live entries are [ar
 and [earlier](findings/research/status-archives/status-before-night-close-20260916.md).
 
 
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-319-results`
+- Verdict: `INVALID`
+- Boundary: `identity_or_route_missing`
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-319-attempt-fetch-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-320-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-321-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-322-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
