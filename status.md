@@ -23,8 +23,7 @@ boot5074c0e5-b2f6-46da-99b2-299ba322b41e, MODE2#237.
   inbox and deliver the HDMI VBIOS commands. Fix nonfinite probe serialization
   so missing timing data cannot discard independent core/readback evidence.
 
-1020 host tests OK (3 skipped). The DMCUB startup milestone is ready for dev
-integration; physical HDMI remains the current goal. User authorized autonomous
+1020 host tests OK (3 skipped). The DMCUB startup milestone was integrated and pushed to dev345eded; physical HDMI remains the current goal. User authorized autonomous
 build tests and iGPU reset/recovery, preserving host-safety constraints.
 
 ## Verified progress
@@ -100,3 +99,13 @@ and [earlier](findings/research/status-archives/status-before-night-close-202609
 - Output: `/home/bogdan/macos-vm/run/candidate-314-results`
 - Verdict: `EXECUTION_FAILED`
 - Boundary: `first_submission`
+
+## Candidate315 preparation
+
+Initial prepare stopped before QEMU/VFIO exposure because the updated probe had
+not yet been built in the guest. MODE2#238 succeeded; no ledger entry consumed.
+A supervised GPU-less24G830 session (no VFIO devices) compiled the probe with
+-Werror and passed NONFINITE_JSON_TEST_PASS for Infinity, negative Infinity,
+NaN and an unchanged finite value. Source8b4bc8cf71eb3eb9, binaryebbde2976f4780a4;
+full identities in run/guest-identity.json, prior identity backed up.
+Continue using a fresh315-attempt-hdmi artifact namespace after guest shutdown.
