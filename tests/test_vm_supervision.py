@@ -621,9 +621,10 @@ class SupervisionTests(unittest.TestCase):
 
     def test_start_returns_with_separately_owned_launcher_and_preinstalled_cap(self):
         script = self.vm / "macos-vm.sh"
-        script.write_text("#!/bin/sh\n[ -z \"$GPU\" ] || exit 22\nexec sleep 30\n")
+        script.write_text("#!/bin/sh\n[ -z \"$GPU\" ] || exit 22\n[ \"$HDMI_AUDIO\" = off ] || exit 23\nexec sleep 30\n")
         script.chmod(0o700)
         self.env["GPU"] = "must-not-be-inherited"
+        self.env["HDMI_AUDIO"] = "on"
         result = self.run_tool("start", "--vm-dir", str(self.vm), "--max-seconds", "180")
         pid_file = self.vm / "managed.pid"
         if pid_file.exists():

@@ -146,6 +146,11 @@ def preflight(args, pins: dict, worktree: Path, vm: Path) -> dict:
     card = worktree / "experiments" / f"{args.card}.json"
     if not card.is_file():
         raise CycleError(f"card not found: {card}")
+    if json.loads(card.read_text()).get('launch_options', {}).get('HDMI_AUDIO') == 'on':
+        check = subprocess.run([sys.executable, str(worktree/'tools/hdmi-audio.py')],
+                               capture_output=True, text=True, timeout=10)
+        if check.returncode:
+            raise CycleError('HDMI audio preflight: '+check.stdout+check.stderr)
     facts["card_sha256"] = sha_file(card)
     print(f"      card {args.card} sha {facts['card_sha256'][:12]}")
 

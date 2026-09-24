@@ -25,6 +25,7 @@ VCPUS="${VCPUS:-8}"            # vCPUs; host has 8 cores / 16 threads
 RAM_GB="${RAM_GB:-auto}"       # auto = leave 8G for the host, clamp to 8..20
 DISK_BUS="${DISK_BUS:-ahci}"   # ahci (safe) | nvme (faster) | virtio
 AUDIO="${AUDIO:-pa}"           # pa (PipeWire's pulse server) | alsa | none | usb (USB audio class device on pa)
+HDMI_AUDIO="${HDMI_AUDIO:-off}" # on = exact Raphael function1 passthrough
 NVRAM="${NVRAM:-stock}"        # stock (image default) | persist (EFI vars survive reboots)
 BOOTDISK_MODE="${BOOTDISK_MODE:-custom}"  # custom (per-VM serials, working) | stock (image default)
 NIC="${NIC:-vmxnet3}"          # Sequoia ships a vmxnet3 driver; it has no e1000 driver at all
@@ -218,6 +219,8 @@ if [[ "${GDB}" != off ]]; then
 fi
 
 # VFIO passthrough of a host GPU.
+[[ "${HDMI_AUDIO}" == off || "${HDMI_AUDIO}" == on ]] || die "invalid HDMI_AUDIO"
+[[ "${HDMI_AUDIO}" == off || "${GPU}" == 0000:7b:00.0 ]] || die "HDMI_AUDIO requires Raphael GPU"
 GPU_ARGS=()
 if [[ -n "${GPU}" ]]; then
     [[ -e "/sys/bus/pci/devices/${GPU}" ]] || die "no such PCI device: ${GPU}"
@@ -250,6 +253,12 @@ if [[ -n "${GPU}" ]]; then
         [[ -f "${GPU_ROM}" ]] || die "no such rom file: ${GPU_ROM}"
         cp -f "${GPU_ROM}" "${VM_DIR}/run/gpu.rom"
         vf+=",romfile=/run/vm/gpu.rom"
+    fi
+    if [[ "${HDMI_AUDIO}" == on ]]; then
+        python3 "${VM_DIR}/hdmi-audio.py" || die "HDMI audio VFIO admission failed"
+        GPU_ARGS+=(--device /dev/vfio/32)
+        vf+=",multifunction=on"
+        vf+=" -device vfio-pci,host=0000:7b:00.1,bus=pcie.0,addr=0x6.0x1,x-pci-vendor-id=0x1002,x-pci-device-id=0xab28,rombar=0"
     fi
     EXTRA_QEMU="${vf} ${EXTRA_QEMU}"
 fi

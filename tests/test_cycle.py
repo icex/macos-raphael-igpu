@@ -83,7 +83,9 @@ class PreflightGateTest(unittest.TestCase):
         self.pins = {"vm_dir": str(self.vm), "gpu_bdf": "0000:7b:00.0",
                      "image_id": "sha256:" + "0" * 64, "inhibitor_container": "rgpu-inhibit",
                      "lilu": {}}
-        self.power = patch.object(cycle.Path, 'read_text', return_value='on')
+        original_read = Path.read_text
+        self.power = patch.object(cycle.Path, 'read_text', autospec=True,
+            side_effect=lambda path, *a, **kw: 'on' if str(path).endswith('/power/control') else original_read(path, *a, **kw))
         self.power.start()
         self.boot = patch.object(cycle, 'boot_id', return_value='test-boot')
         self.boot.start()

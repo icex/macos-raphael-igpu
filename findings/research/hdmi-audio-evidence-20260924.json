@@ -1,0 +1,16 @@
+{
+  "run_id": "46a4fcd70484cba44f53f30a1516ea81",
+  "root": "/home/bogdan/macos-vm/run",
+  "sha256": {
+    "c323-audio-awake.txt": "ada6d21a2948b0d09c26bb8daf05444673adeff6846774ed276c31873733a7a5",
+    "c323-audio-route-play.txt": "310dfbae3f629a20e395c36348ddd6fcd70ad4016a55ed3b0ea9f91a954f8d4f",
+    "c323-tone-active.txt": "d1930489895ef2cfaaa56feaaae846902c110c0b276a6bcfade6b83183c8f2d5",
+    "c323-display-modes.txt": "5ff45ed03ac9e508a73449eeeed318b4c93776cf58a4e14fb3c82fa403d94c57",
+    "c323-link-caps.json": "36ad7fe651895f95c1f4942a6b65315e179678c173c51977684400a72c71b72f",
+    "c323-audio-bind-quiesce.jsonl": "03954b436640edb03f262762d90ec14caaee0f29a52d31b13bc8d7cebf6f488f",
+    "candidate-323-results/verdict.json": "48172fa22d989615d0282bc2d19af98123b358cb02e6b10a681a4e09d3fef748",
+    "candidate-323-results/shutdown.json": "64cd8259924c32c05f55839bb1312c30c8e8ae0a93a335a7d0dc12e2b4a38216",
+    "candidate-323-results/recovery.json": "ff5e2dc5cf4d492a2febf500055ce2fabfe5f4eb4388a0dee0eb064d4bb490c0",
+    "candidate-323-results/hdmi-audio-teardown.json": "6d2339a33d5bbeb0ad0b049391eebcf852a4b6de31858cabc08c1d45570e75e5"
+  }
+}

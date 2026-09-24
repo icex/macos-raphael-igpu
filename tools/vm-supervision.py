@@ -579,6 +579,7 @@ def launch(vm, name, maximum, gpu_args, critical_enabled=False):
             child = subprocess.Popen([str(vm / "macos-vm.sh"), "run", *gpu_args], cwd=vm,
                                      env=dict(os.environ, NAME=name, GPU="", GPU_ID="", GPU_ROM="",
                                               GPU_SUB="", EXTRA="", SERIAL="on",
+                                              HDMI_AUDIO=os.environ.get("HDMI_AUDIO", "off") if "--gpu" in gpu_args else "off",
                                               CRITICAL_SERIAL="on" if critical_enabled else "off"),
                                      stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
         until = time.monotonic() + 30
@@ -746,6 +747,10 @@ def start_locked(vm, maximum, gpu_args, critical_enabled=False, context=None):
     # A GPUless request cannot inherit hidden passthrough from the manager or
     # caller. GPU options are supplied solely by the validated launcher flags.
     endpoint += [f"--setenv={key}=" for key in ("GPU", "GPU_ID", "GPU_ROM", "GPU_SUB", "EXTRA")]
+    audio_option = os.environ.get("HDMI_AUDIO", "off") if "--gpu" in gpu_args else "off"
+    if audio_option not in ("off", "on"):
+        raise ValueError("invalid HDMI_AUDIO option")
+    endpoint.append(f"--setenv=HDMI_AUDIO={audio_option}")
     stop_command = shlex.join([sys.executable, helper, "cleanup", "--vm-dir", str(vm), "--name", name])
     command = [binary("systemd-run"), "--user", "--quiet", "--collect", f"--unit={name}",
                "--service-type=exec", f"--property=WorkingDirectory={vm}",
