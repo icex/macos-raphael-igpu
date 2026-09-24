@@ -47,3 +47,15 @@ Each helper closed itself and restored the desktop. Sources and logs are under
 run/c320-scanout-colors[-v2/-v3].m, c320-color-sequence[-v2/-v3].txt,
 c320-color-pixels[-v2/-v3].txt. No driver changes followed this inconclusive check.
 The pending Samsung observation refers to candidate320 native1080p60 desktop.
+
+## Final320 physical observation and receipts
+
+User: corrupted/interleaved, pink hue;1080 HiDPI works with pink hue, low-resolution
+1080p interleaved,30Hz black,120Hz not usable. HiDPI capture dimensions3840x2160,
+HDMI8-bit, framebufferARGB2101010; low-resolution1080p had HDMI10-bit andARGB8888.
+VPG0_MEM_PWR=0x110 (forced light sleep and asleep), a DCN31-specific wake missing
+from the older native path. Linux dcn31_vpg.c poweron clears bit4 and sets bit0.
+Candidate321 will do this before native VPG packet access, default-off opt-in.
+
+FinalCORE_PROBE_PASS; complete capture; exited-after-guest-request; recovered,
+authorizes_launch=true. No new120Hz picture or HDMI audio qualification.

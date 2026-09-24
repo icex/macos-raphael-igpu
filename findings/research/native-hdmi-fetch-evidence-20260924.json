@@ -1,0 +1,11 @@
+{
+  "/home/bogdan/macos-vm/run/c320-det-scanout.json": "7e1f483719cb8f1689270799404cc92797dc5d8bcdc7ca8c858716785be661c4",
+  "/home/bogdan/macos-vm/run/c320-user-mode-scanout.json": "e97e733178bbf70d8e3c56e6d2cca6fe343d8802f22fb1d80649c42e34bd0883",
+  "/home/bogdan/macos-vm/run/c320-awake-check.txt": "fcb8674e04ccd22acd10e572f25c1d4f7f8612c9599c31e5e5dc02df4f0de573",
+  "/home/bogdan/macos-vm/run/c320-user-mode-awake.txt": "c1ede2370a32b7eb5007931b8e860b4dfa6d4974551f45eac7257287f6a2f927",
+  "/home/bogdan/macos-vm/run/candidate-320-results/verdict.json": "e4b64964b1abadc15d664f2bc891a5057db0e3128ccf047431ddaf1dd7fab83c",
+  "/home/bogdan/macos-vm/run/candidate-320-results/shutdown.json": "1fa744618a90743029519a5b1c31cdd025aa13515f0a1b64796cc15bca96f289",
+  "/home/bogdan/macos-vm/run/candidate-320-results/recovery.json": "d75d59825db6f0e96dad15261d9ff18b604cdf473445277971423023af7c4ec0",
+  "/home/bogdan/macos-vm/run/candidate-320-results/serial.txt": "2f9699840658ce685df8347887dc6a902282e33de5c7ca0e08d19a0bec0a9fd6",
+  "/home/bogdan/macos-vm/run/candidate-320-results/critical.txt": "c48c09ec3d1b6d0d88cfe6a4dacb120f271acf531f1bb09a79348b05ab08b575"
+}

@@ -1,29 +1,72 @@
 # Live status — 2026-09-24
 
-## Candidate320: native HDMI image visible, incorrect color/layout
+## Candidate320 active: DET allocation applied, physical observation pending
 
 Run309ef9a1e0b27ae7f7fab0b73f04ea45, MODE2#248, source9b5503b, metal168.
-DET0=0x303 assigns missing192KiB; fetch timeout/underflow clear and flips complete.
-User confirms **1080 HiDPI gives an image with pink hue**, low-resolution1080p is
-interleaved/pink,30Hz black,120Hz not visibly usable. HiDPI live capture is3840x2160
-pixels,8-bit HDMI, RGB encoder/FMT; low-resolution capture is1920x1080pixels,
-10-bit HDMI. Correct image quality and120Hz remain unqualified. No test generator.
-Awake assertions verified before tests. Core probe passed, finalCORE_PROBE_PASS,
-complete capture; stop-requested, exited-after-guest-request, recovery authorizes
-same-boot reuse. No GPU VM running after this run.1020 host tests pass (3 skipped).
+Verified awake native1080p60. DET0=0x303 (192KiB); COMPBUF13 unchanged.
+Fetch timeout/underflow cleared; flip pending cleared; EARLIEST_INUSE matches
+requested framebufferf412cc0000. OTG pixel readback nonzero. No test generator.
+Physical-screen response pending. Core probe passed; run remains active under
+harness1800-second interactive hold /6000-second total cap. Final capture and
+shutdown/recovery pending. 1020 host tests pass (3 skipped).
+SURFACE_INUSE=0 alone is not a failure: Linux checks EARLIEST_INUSE plus flip state.
+Temporary color windows closed themselves; their capture failed and OTG colors
+did not qualify correct rendering. Physical observation is still required.
 
-Next: Linux dcn31_vpg_poweron wakes infoframe memory; live VPG0_MEM_PWR=0x110 shows
-it is still forced asleep. Candidate321 will wake it before native packet writes,
-retaining HiDPI to isolate the pink hue. Separately,10-bit low-resolution commands
-have deep_color_ratio=0 and need investigation before120Hz qualification.
-Evidence: [DET investigation](findings/research/dcn315-missing-det-20260924.md),
-run/c320-det-scanout.json and c320-user-mode-scanout.json; complete receipts in
-candidate-320-results. Temporary color-window capture failed and did not qualify
-pixel correctness. HDMI audio remains host-owned; follows usable output.
+## Candidate319 retry: missing live DET allocation confirmed
 
-Dev previously publishedc5570b0 via SSH (HTTPS token invalid). Candidate320 native
-fetch milestone is ready for integration; main untouched. Fresh candidate branches,
-fetch remote dev, autonomous test/reset authorization; no reboot or host sudo.
+Run4d173834d3c6b91425d008e9bc5743eb, MODE2#247, source5131613,
+metal167. Native1920x1080 pixels/logical60Hz, awake assertions verified.
+DET0-3 requested/current=0; COMPBUF requested/current=13 segments. DPG0=0,
+HUBP0 timeout2/underflow1, surface-in-use0. No new physical-screen observation;
+this confirms missing allocation during active native scanout, not its causality.
+Core probe passed, complete capture, finalCORE_PROBE_PASS. Harness stop-requested,
+exited-after-guest-request, recovered/authorizes_launch=true. Next320 allocates
+three unused64KiB segments to DET0 with bounds/stability guards.
+Evidence: run/c319-fetch-scanout.json, c319-awake-check.txt, c319-awake-60hz.txt,
+and candidate-319-attempt-fetch-results receipts. Prior early panic remains archived.
+
+## Candidate319 baseline diagnostic: early boot panic, recovered
+
+Run009f47866783045e30571237b1c44a3a, MODE2#246, source5131613,
+metal167. Kernelmanagerd panicked in OSKext::copyInfo at12.47s, before display
+unblank/allocation diagnostics. No functional display result. Final INVALID,
+missing native lease; supervised forced closure (not clean guest shutdown).
+Separate c319-panic-noqueue-recovery.json reports recovered/authorizes_launch=true.
+Unchanged-build retry follows; all1020 host tests pass (3 skipped). Dev milestone
+c5570b0 was pushed via SSH and remote ref verified; HTTPS token is invalid.
+
+## Candidate318: user sees HDMI test pattern; clean capture and recovery
+
+Run338d9498eb9e7e029f0f73570450b41f, MODE2#245,
+boot5074c0e5-b2f6-46da-99b2-299ba322b41e, source19f6e6e, metal166.
+Results `~/macos-vm/run/candidate-318-attempt-pattern-results/`.
+
+- **Functional:** user confirmed visible patterns on the Samsung via iGPU HDMI,
+  then described fuzziness and interleaving after mode changes. Explicit OPP0
+  RGB generator readback661001, dimensions1920x1080. Native1080p60, HDMI enabled,
+  scrambling off, AVMUTE0. Firmware reload/3 queries passed;14 commands consumed.
+  This demonstrates visible downstream output, not correct pixel layout, desktop
+  scanout, or HDMI audio. HUBP surface-in-use remains0. DCHVM active/prefetch-done.
+- **Awake/capture:** verified UserIsActive=1 and PreventUserIdleDisplaySleep=1
+  using launchd-owned bounded caffeinate. Core probe passed; finalCORE_PROBE_PASS,
+  critical replay complete without loss. Native1080p120 was programmed in316/317
+  but black;317 awake1080p60 was also black. SR1032 alone was not sufficient.
+- **Shutdown/recovery:** stop-requested through harness, exited-after-guest-request,
+  recovered/authorizes_launch=true. No running GPU VM after this run.
+- **Evidence:** [research record](findings/research/visible-hdmi-pattern-20260924.md),
+  run/c318-pattern-scanout.json, c318-awake-check.txt, c318-awake-60hz.txt.
+- **Next:** restore framebuffer fetch and inspect formatting; distinguish expected
+  squares from reported interleaving. Always verify awake assertions before screen
+  tests. HDMI audio follows a usable image; audio function remains host-owned.
+
+1020 host tests OK (3 skipped); build/card validation passed. First318 attempt
+panicked in corecrypto FIPS POST before Raphael loaded, required supervised forced
+closure and separate authorizing noqueue recovery. Retry used the unchanged build.
+User authorizes autonomous tests/resets. Fresh candidate worktrees; fetch remote dev
+before each. No reboot, host sudo or vfio-to-amdgpu rebind used. Candidate316–318 changes are integrated into dev; 1020 integration tests pass
+(3 skipped). This commit is the visible-pattern milestone for publication. Main
+remains untouched.
 
 ## Verified progress
 
