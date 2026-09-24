@@ -179,7 +179,7 @@
   "required_boot_flags": [
     "-liluheadless"
   ],
-  "raphael_source_sha256": "90faf8ee4cf9b1d791783d69903b50f526d360d948cbd6d7bed6431aeabd47dc",
+  "raphael_source_sha256": "4844c53fa4e7d3e76e85538ee2f626e3c775270936e6132a0d1901e3589d2d69",
   "raphael_source_commit": "8b671fa20c3baccb2abbe5c2b7d55c59d4656051",
   "critical_replay_quiesce": {
     "version": 1
