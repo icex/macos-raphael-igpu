@@ -26,7 +26,7 @@ and long-duration reliability are still being tested.
 | Memory and synchronization | Buffer/texture reuse, synchronized CPU/GPU texture updates, retained color contents, GPU fences, shared events and cross-process IOSurface transfers pass targeted checks. |
 | Hardware video | H.264 and HEVC Main8 encode/decode work. HEVC Main10 decoding passes short tests; Main10 hardware encoding is unavailable in the current native profile set. |
 | Shutdown and reuse | Repeated clean guest shutdowns and same-host-boot reuse work in the supervised workflow. Crash recovery and independent-host-boot coverage remain incomplete. |
-| Physical HDMI/DisplayPort | Candidate320 restores framebuffer fetch: the user sees an image in1080 HiDPI (3840x2160pixels), with pink hue. Low-resolution1080p is interleaved; correct color/layout and120Hz remain unqualified. HDMI audio is not yet passed through or tested. |
+| Physical HDMI/DisplayPort | Candidate321 produces a user-confirmed full picture in1080 HiDPI (3840x2160pixels60Hz), described as almost perfect after waking infoframe memory. Low-resolution1080p remains interleaved;120Hz and measured pixel fidelity remain unqualified. HDMI audio is not yet passed through or tested. |
 
 The tested baseline is **macOS Sequoia build 24G830** with a matching driver,
 Lilu, OpenCore configuration and grafted VBIOS. Stock QEMU 10.1.2 now works with

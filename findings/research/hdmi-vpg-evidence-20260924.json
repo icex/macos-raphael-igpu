@@ -1,0 +1,13 @@
+{
+  "/home/bogdan/macos-vm/run/c321-vpg-scanout.json": "4128f6fa05c16fbc59160113a0a127ce5a56d4d344cb0b35879d90e8c598295f",
+  "/home/bogdan/macos-vm/run/c321-native60-scanout.json": "8881b7716c10feb8b47e92a8361d1487c689336756b3f1c5f8c3bcfb4f47a64d",
+  "/home/bogdan/macos-vm/run/c321-awake-check.txt": "4b713980058d7e68a2897f4578aa67d5a1e48bb6ea5409f67d67abc51d2589fb",
+  "/home/bogdan/macos-vm/run/c321-hidpi60.txt": "b83ea4300bd6cdc01156b84991ac67cf9a6df34e96a600901c8dabb49f2449bc",
+  "/home/bogdan/macos-vm/run/c321-native60.txt": "1b12ca6eaff568953d015856fdfa5784ef2b36a7e9a51249b37a0cc47e72df82",
+  "/home/bogdan/macos-vm/run/c321-restored-hidpi60.txt": "b026e9ea45ef8b919cd6a1cf5eacb065862d94db4fc55271533d1a983cc52ccb",
+  "/home/bogdan/macos-vm/run/candidate-321-results/serial.txt": "0776c32dae04d4bf2611e82ba3f32707c89db428f330764ac685fcc1af9e0fe4",
+  "/home/bogdan/macos-vm/run/candidate-321-results/critical.txt": "d21096f8f0ae4919a77821fe4048cec2a3b3740e42bfd7c4cfc4d78c8d17511a",
+  "/home/bogdan/macos-vm/run/candidate-321-results/verdict.json": "17e2bd51ea724e3dcfeaf9c4a2e99947a28024c95d5532b1f9904285d184d16f",
+  "/home/bogdan/macos-vm/run/candidate-321-results/shutdown.json": "a7bc33be8bb97f6544c503051dd8a9193c43ddbf5e84706015556d122fe6b8a0",
+  "/home/bogdan/macos-vm/run/candidate-321-results/recovery.json": "3393ef217ddd11cd768708843b91d5a795e9b1541a2fc7f312dbda2ebe97951e"
+}

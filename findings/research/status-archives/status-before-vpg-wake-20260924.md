@@ -1,26 +1,29 @@
 # Live status — 2026-09-24
 
-## Candidate321: full HiDPI picture; low-resolution interleaving remains
+## Candidate320: native HDMI image visible, incorrect color/layout
 
-Run13246b9a0f02e33e0a4bb92d2e55f6d0, MODE2#249, source2242840, metal169.
-VPG0 memory wake0x110→1 before native infoframe writes. User: "I see full picture"
-and "default looks almost perfect, it just needs120hz". Verified awake1080HiDPI
-(3840x2160pixels60Hz). Native AVI packet advertisesYCbCr444. Pixel correctness
-has not been independently measured; no remaining pink complaint on this build.
-Low-resolution1920x1080@60 still interleaved (user confirmed twice). HDMI packs
-10-bit while PHYPLLA resync ratio remains0 (8-bit): HDMI0x11010019, PHY0x103.
-Restored HiDPI before stopping. Core probe passed, finalCORE_PROBE_PASS, complete
-capture; exited-after-guest-request, recovered/authorizes_launch=true. No VM now.
-1020 host tests pass (3 skipped). Next322 aligns PHY deep-color ratio with native
-HDMI packing, then qualifies1080p60 and120Hz. HiDPI120 is a separate4K link mode.
-HDMI audio follows usable video; physical audio function remains host-owned.
+Run309ef9a1e0b27ae7f7fab0b73f04ea45, MODE2#248, source9b5503b, metal168.
+DET0=0x303 assigns missing192KiB; fetch timeout/underflow clear and flips complete.
+User confirms **1080 HiDPI gives an image with pink hue**, low-resolution1080p is
+interleaved/pink,30Hz black,120Hz not visibly usable. HiDPI live capture is3840x2160
+pixels,8-bit HDMI, RGB encoder/FMT; low-resolution capture is1920x1080pixels,
+10-bit HDMI. Correct image quality and120Hz remain unqualified. No test generator.
+Awake assertions verified before tests. Core probe passed, finalCORE_PROBE_PASS,
+complete capture; stop-requested, exited-after-guest-request, recovery authorizes
+same-boot reuse. No GPU VM running after this run.1020 host tests pass (3 skipped).
 
-Evidence: [VPG/deep-color investigation](findings/research/hdmi-vpg-and-deepcolor-20260924.md),
-run/c321-vpg-scanout.json, c321-native60-scanout.json, c321-awake-check.txt,
-c321-hidpi60.txt, c321-native60.txt, c321-restored-hidpi60.txt, candidate-321-results.
-Native-fetch milestone89b5ab1 is published on dev via working SSH credentials.
-This full-picture improvement is ready for integration; main unchanged. Fresh
-candidate branches, remote dev fetched, autonomous tests/resets; no reboot or sudo.
+Next: Linux dcn31_vpg_poweron wakes infoframe memory; live VPG0_MEM_PWR=0x110 shows
+it is still forced asleep. Candidate321 will wake it before native packet writes,
+retaining HiDPI to isolate the pink hue. Separately,10-bit low-resolution commands
+have deep_color_ratio=0 and need investigation before120Hz qualification.
+Evidence: [DET investigation](findings/research/dcn315-missing-det-20260924.md),
+run/c320-det-scanout.json and c320-user-mode-scanout.json; complete receipts in
+candidate-320-results. Temporary color-window capture failed and did not qualify
+pixel correctness. HDMI audio remains host-owned; follows usable output.
+
+Dev previously publishedc5570b0 via SSH (HTTPS token invalid). Candidate320 native
+fetch milestone is ready for integration; main untouched. Fresh candidate branches,
+fetch remote dev, autonomous test/reset authorization; no reboot or host sudo.
 
 ## Verified progress
 
