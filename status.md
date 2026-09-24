@@ -1,31 +1,24 @@
 # Live status — 2026-09-24
 
-## Published milestone: correct HDMI picture and audible audio
+## Candidate326: missing parsed sink FRL capability
 
-Run46a4fcd70484cba44f53f30a1516ea81, MODE2#251, sourcef83dfd1, metal171.
-Physical audio7b:00.1 now stays on VFIO, power/control=on, reset methods disabled.
-Guest00:06.1 spoofab28 plus gated same-slot AppleGFXHDA pairing publishes
-Odyssey G95NC, HDMI2ch48kHz. GFX BDF0x3000/HDAU BDF0x3001 correct.
-Selected as default/system output, active engine/client observed during stereo
-tone. User listening through Samsung headphone/audio output: "ok audio works now".
-Transient early codec-read assertions precede successful codec/output enumeration.
+Run `ae140e354078862907129ed11b2d7e44`, source `8b671fa`, metal-174.
+4K120 passes the1217MHz range but DC stream validation returns6 (encoder
+validation failure): signal4/TMDS,11880000 in100Hz units, RGB/Y444,8bit.
+No DSC requested. HPO encoder exists. Read-only QEMU memory shows preferred and
+verified FRL rates zero, sink byte0x887 zero, despite captured HF-VSDB advertising
+rate6. Native EDID bridge0x74ada never copies FRL max rate to caps+0x7f;
+detection0x16f799 requires that field before native FRL training.
+Next copy only checksum-validated advertised FRL rate through the bridge,
+preserving native training and bandwidth validation. No HiDPI120 progress yet.
 
-Remaining:1080HiDPI120 (1920logical/3840x2160pixels120Hz) is not in the mode list.
-Current default remains HiDPI60; native1920x1080pixels120 is still listed. User
-reports120 option absent in the desired mode. Original/grafted encoder record
-0x1e0f and live link encoder caps0x3df include FRL capabilities; EDID has4K120.
-Isolated candidates324/325 traced a625MHz BIOS fallback and restored the native
-1217MHz DAL range. The1188MHz timing now passes that range check but still fails
-outer validation; HiDPI120 remains absent. These experiments are not part of the
-published driver milestone. Candidate325 ended with valid CORE_PROBE_PASS,
-authorizing recovery and audio DMA off; no VM remains running.
-
-FinalCORE_PROBE_PASS; complete capture; exited-after-guest-request;
-audio teardown PCI COMMAND2 (DMA off), errors=[]; graphics recovered and
-conditionally authorizes_launch=true. No VM running.1022 host tests OK,3 skipped.
-Setup and limits: [physical HDMI](docs/hdmi-status.md).
-Evidence: [audio experiment](findings/research/hdmi-audio-candidate323-20260924.md).
-Fresh candidates from fetched dev; autonomous tests/resets; no reboot or host sudo.
+Display-awake assertions verified; current HiDPI1080 at60Hz. Final valid
+CORE_PROBE_PASS; guest-request shutdown; recovered/authorizes_launch=true;
+audio errors=[] and DMA off. No reboot/rebind; no VM running.
+1022 host tests OK,3 skipped. Evidence: candidate-326-results receipts,
+c326-link-caps.json and c326-display-modes.txt under ~/macos-vm/run/.
+Initial launch failed at source-digest admission before exposure; corrected
+card uses the canonical source-tree digest. It consumed no GPU ledger entry.
 
 ## Verified progress
 
@@ -87,5 +80,12 @@ and [earlier](findings/research/status-archives/status-before-night-close-202609
 ## One-command GPU test
 
 - Output: `/home/bogdan/macos-vm/run/candidate-323-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-326-results`
 - Verdict: `CORE_PROBE_PASS`
 - Boundary: `None`
