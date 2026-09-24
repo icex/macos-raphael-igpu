@@ -28,8 +28,9 @@ Results `~/macos-vm/run/candidate-318-attempt-pattern-results/`.
 panicked in corecrypto FIPS POST before Raphael loaded, required supervised forced
 closure and separate authorizing noqueue recovery. Retry used the unchanged build.
 User authorizes autonomous tests/resets. Fresh candidate worktrees; fetch remote dev
-before each. No reboot, host sudo or vfio-to-amdgpu rebind used. Dev milestone
-integration/publication is pending; main remains untouched.
+before each. No reboot, host sudo or vfio-to-amdgpu rebind used. Candidate316–318 changes are integrated into dev; 1020 integration tests pass
+(3 skipped). This commit is the visible-pattern milestone for publication. Main
+remains untouched.
 
 ## Verified progress
 
