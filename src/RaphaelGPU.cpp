@@ -9422,6 +9422,47 @@ static void wrapDcDmubWait(void *dcDmub) {
           dcnNativeRead(dcnRegContext, 0x36a3));
 }
 
+// Candidate324: observe mode rejection without overriding native validation.
+static uint32_t hdmiTimingTrace = 0;
+static mach_vm_address_t orgValidateTiming = 0, orgValidateRange = 0, orgLinkDescriptor = 0;
+static volatile int32_t timingRecords = 0, rangeRecords = 0, descriptorRecords = 0;
+static int wrapValidateTiming(void *self, void *input, uint64_t size) {
+    const auto *t = static_cast<const uint8_t *>(input);
+    if (t && size == 0xcc) t += 0x2c;
+    const bool known = t && (size == 0xa0 || size == 0xcc);
+    const uint32_t w = known ? *reinterpret_cast<const uint32_t *>(t + 0x40) : 0;
+    const uint32_t h = known ? *reinterpret_cast<const uint32_t *>(t + 0x50) : 0;
+    const uint64_t clock = known ? *reinterpret_cast<const uint64_t *>(t + 0x28) : 0;
+    const int result = FunctionCast(wrapValidateTiming, orgValidateTiming)(self, input, size);
+    if (known && (w >= 3840 || clock > 600000000ULL) && OSIncrementAtomic(&timingRecords) < 160)
+        CRLOG("HDMITIMING: validate size=%llu %ux%u clock=%lluHz result=%#x enc=%#x bpc=%#x",
+              size, w, h, clock, result, *reinterpret_cast<const uint16_t *>(t + 0x88),
+              *reinterpret_cast<const uint16_t *>(t + 0x8a));
+    return result;
+}
+static bool wrapValidateRange(const uint8_t *timing, const uint8_t *range, uint32_t div) {
+    const bool result = FunctionCast(wrapValidateRange, orgValidateRange)(timing, range, div);
+    if (timing && range) {
+        const uint64_t clock = *reinterpret_cast<const uint64_t *>(timing + 0x28);
+        if (clock > 600000000ULL && OSIncrementAtomic(&rangeRecords) < 80)
+            CRLOG("HDMITIMING: range %ux%u clock=%lluHz max=%lluHz div=%u result=%u",
+                  *reinterpret_cast<const uint32_t *>(timing + 0x40),
+                  *reinterpret_cast<const uint32_t *>(timing + 0x50), clock,
+                  *reinterpret_cast<const uint64_t *>(range + 0x28), div, result);
+    }
+    return result;
+}
+static void wrapLinkDescriptor(void *self, uint8_t *out, const uint8_t *in) {
+    FunctionCast(wrapLinkDescriptor, orgLinkDescriptor)(self, out, in);
+    if (out && in && OSIncrementAtomic(&descriptorRecords) < 16)
+        CRLOG("HDMITIMING: link obj=%#x rawcaps=%#x caps=%#x maxclock=%ukHz bpc=%u",
+              *reinterpret_cast<const uint32_t *>(out),
+              *reinterpret_cast<const uint32_t *>(in + 0x18),
+              *reinterpret_cast<const uint32_t *>(out + 0x18),
+              *reinterpret_cast<const uint32_t *>(out + 0x20),
+              *reinterpret_cast<const uint32_t *>(out + 0x1c));
+}
+
 static void installDcnRoutes(KernelPatcher &patcher, mach_vm_address_t addr, size_t size) {
     if (dcnMode == 0) return;
     struct Target {
@@ -9438,7 +9479,22 @@ static void installDcnRoutes(KernelPatcher &patcher, mach_vm_address_t addr, siz
                                         0x49,0x89,0xf6};
     static const uint8_t dmubExec[]  = {0x55,0x48,0x89,0xe5,0x41,0x56,0x53,0x48,0x89,0xfb,0x48,
                                         0x8b,0x3f,0x4c,0x8b,0x73,0x58};
+    static const uint8_t validateTiming[] = {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,
+        0x41,0x55,0x41,0x54,0x53,0x48,0x81,0xec,0x38,0x02,0x00,0x00};
+    static const uint8_t validateRange[] = {0x55,0x48,0x89,0xe5,0x83,0xfa,0x01,0x83,
+        0xd2,0x00,0x48,0x8b,0x47,0x28};
+    static const uint8_t linkDescriptor[] = {0x55,0x48,0x89,0xe5,0x8b,0x02,0x89,0x06,
+        0x8b,0x42,0x10,0x89,0x46,0x10};
     const Target targets[] = {
+        {0x480aa, validateTiming, sizeof(validateTiming),
+         reinterpret_cast<mach_vm_address_t>(wrapValidateTiming), &orgValidateTiming,
+         "validateDetailedTiming", hdmiTimingTrace != 0},
+        {0x1cf1c, validateRange, sizeof(validateRange),
+         reinterpret_cast<mach_vm_address_t>(wrapValidateRange), &orgValidateRange,
+         "validateTimingRange", hdmiTimingTrace != 0},
+        {0x495d0, linkDescriptor, sizeof(linkDescriptor),
+         reinterpret_cast<mach_vm_address_t>(wrapLinkDescriptor), &orgLinkDescriptor,
+         "translateLinkDescriptor", hdmiTimingTrace != 0},
         {kOffDcnRegWait, regWait, sizeof(regWait),
          reinterpret_cast<mach_vm_address_t>(wrapDcnRegWait), &orgDcnRegWait, "generic_reg_wait",
          (dcnMode & kDcnTrace) != 0},
@@ -10677,6 +10733,7 @@ static void pluginStart() {
     else if (dcn != 0) CRLOG("DCN: rgpudcn=%#x refused (bit 8 froze the host; bits 2 and 4 must be "
                              "set together)", dcn);
     PE_parse_boot_argn("rgpudallog", &dalLogMask, sizeof(dalLogMask));
+    PE_parse_boot_argn("rgpuhdmitrace", &hdmiTimingTrace, sizeof(hdmiTimingTrace));
     PE_parse_boot_argn("rgpuagdp", &agdpPikera, sizeof(agdpPikera));
     PE_parse_boot_argn("rgpuhdmiaudio", &hdmiAudioPairing, sizeof(hdmiAudioPairing));
     PE_parse_boot_argn("rgpudcnnostutter", &dcnNoStutter, sizeof(dcnNoStutter));
