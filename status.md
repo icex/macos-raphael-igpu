@@ -1,33 +1,31 @@
 # Live status — 2026-09-24
 
-## Candidate313: native PSP accepted DMCUB firmware into guest TMR
+## Candidate314: DMCUB firmware startup and fresh replies verified
 
-Run7524da8a2ca9ad0a1af9d9ba1c9c6e12, metal161, source073d820,
-boot5074c0e5-b2f6-46da-99b2-299ba322b41e, MODE2#236.
+Run1e061e039b6dd6beacaf3f76494e4ace, metal162, sourceba0b118,
+boot5074c0e5-b2f6-46da-99b2-299ba322b41e, MODE2#237.
 
-- **Functional:** signed upload fully verified. Native PSP LOAD_IP_FW type51
-  returned0/status0, firmware MCf47d900000 within guest TMRf47d600000/a00000.
-  PSP left processor reset asserted and ENABLE=0, but cleared DMUIF reset;
-  the phase5 check stopped with error7 and restored the held state. No firmware
-  startup or HDMI delivery occurred. Metal core probe passed.
-- **Capture:** CORE_PROBE_PASS; serial includes native request/response and
-  controls. Stopped capture confirms CW0 physical85d900000/3a520 and
-  CW1 physical85d93a600/c5ae0, both wholly within the recorded guest TMR.
-  Complete capture, selectors restored, no new host faults.
+- **Functional:** native PSP loaded signed DMCUB into guest TMR, both secure
+  windows passed bounds checks, and nonsecure windows/mailboxes were configured.
+  Startup reached phase8/success1: three fresh version replies05003500,
+  fetch/write faults0/0, selectors restored. No HDMI commands were delivered;
+  physical picture and audio remain unverified.
+- **Capture:** complete serial/critical capture and identity. The optional desktop
+  probe again aborted JSON serialization on an infinite number (EXECUTION_FAILED);
+  no Metal pass is claimed for this run. Preserve the independent firmware result.
+  Firmware scratch15 records3a02 (HUB debug register timeout), despite successful
+  GPINT replies; mailbox command consumption is the next test.
 - **Shutdown/recovery:** exited-after-guest-request; recovered,
-  authorizes_launch=true. This establishes GC/SDMA/PSP cleanup, not live DMCUB.
-- **Evidence:** `~/macos-vm/run/candidate-313-results/` and
-  `~/macos-vm/run/c313-retained-dmcub-state/capture.json`.
-- **Next:** permit PSP's observed DMUIF deassertion only while processor reset
-  remains asserted and ENABLE=0; reassert DMUIF before programming windows.
-  When held firmware will be reloaded by PSP, retire its prior secure windows
-  from tail reservation so the new TMR does not move downward every cycle.
+  authorizes_launch=true. No reboot or driver rebind occurred.
+- **Evidence:** `~/macos-vm/run/candidate-314-results/`. Prior313 stopped capture
+  confirms PSP placement inside TMR;314 additionally verifies startup and replies.
+- **Next:** fresh315 branch: safe repeat of PSP initialization, verify the empty
+  inbox and deliver the HDMI VBIOS commands. Fix nonfinite probe serialization
+  so missing timing data cannot discard independent core/readback evidence.
 
-User authorized autonomous build tests and iGPU reset/recovery on2026-09-24;
-no per-attempt approval needed. Preserve host-safety constraints. No reboot
-requested.1020 host tests OK (3 skipped). All changes local, dev/origin/dev5371959.
-Prior312 upload verified but security-register assertion refused; that direct
-path is superseded by the successful PSP load. FW liveness remains unproven.
+1020 host tests OK (3 skipped). The DMCUB startup milestone is ready for dev
+integration; physical HDMI remains the current goal. User authorized autonomous
+build tests and iGPU reset/recovery, preserving host-safety constraints.
 
 ## Verified progress
 
@@ -95,3 +93,10 @@ and [earlier](findings/research/status-archives/status-before-night-close-202609
 - Output: `/home/bogdan/macos-vm/run/candidate-313-results`
 - Verdict: `CORE_PROBE_PASS`
 - Boundary: `None`
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-314-results`
+- Verdict: `EXECUTION_FAILED`
+- Boundary: `first_submission`

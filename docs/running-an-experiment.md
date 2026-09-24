@@ -138,3 +138,13 @@ original artifacts and recovery sources. Normal admission validates and consumes
 it once; original failed receipts remain unchanged. A reset ACK alone does not
 produce this receipt. Any active queue, inaccessible read, enabled SDMA input,
 PSP timeout, host fault or identity mismatch refuses authorization.
+
+### Experimental DMCUB PSP reload
+
+Candidate314 verifies the opt-in combination `rgpudmubreinit=1`,
+`rgpudmubresume=1`, `rgpudmubpsp=1` from a checked held-reset state. It loads
+signed firmware using native PSP, verifies placement within the recorded guest
+TMR, initializes reserved mailbox windows and requires fresh version replies.
+These arguments alone do not establish HDMI output or a general restart path.
+Use the current candidate card and harness; preserve all recovery checks.
+See [the firmware evidence](../findings/research/dmcub-psp-load-20260924.md).

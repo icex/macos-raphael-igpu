@@ -1,6 +1,6 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-09-23. Latest display experiment: **1.0.300** (TMR overlap removed; physical HDMI still unverified); prior streaming baseline: **1.0.284**; broader baseline: **1.0.280**. Full desktop acceleration
+Updated 2026-09-24. Latest display experiment: **1.0.314** (DMCUB startup and three fresh replies verified; physical HDMI still unverified); prior streaming baseline: **1.0.284**; broader baseline: **1.0.280**. Full desktop acceleration
 is **not qualified**. The reproduced Screen Sharing transparency defect is fixed
 in candidate279 and retained in280. Candidate280 also passes strict capture and
 clean recovery after visual, concurrent-client and codec workloads. The patched-QEMU
@@ -152,8 +152,9 @@ Passing isolated shaders does not establish correct desktop composition.
 - [x] Map DCN 3.1.5 differences against Apple's DCN 3.02 path (registers, fields, power
   domains, clock manager, DMUB, VBIOS tables): see the display port plan. Hardware
   confirmation pending.
-- [ ] Bring up DMCUB without guest-initiated firmware actions (a guest PSP DMCUB load froze
-  the host), then one changing 1080p60 output.
+- [x] Bring up DMCUB through native PSP with verified guest TMR placement and
+  fresh firmware replies (candidate314,2026-09-24).
+- [ ] Deliver HDMI VBIOS commands and verify one changing1080p60 physical output.
 - [ ] Qualify modes, reconnection and higher resolutions after first stable output.
 
 Current evidence puts corrupt pixels in the scanout/DisplayStream path before
@@ -441,3 +442,13 @@ complete stable stopped-queue/SDMA scans and PSP ring teardown. The new schema-9
 receipt permits one normal harness launch without borrowing an older lease.
 This is a stopped, queue-free recovery result; active-queue recovery and physical
 HDMI output remain separately qualified. Host regression: 1017 tests pass.
+
+## DMCUB firmware startup — 2026-09-24
+
+Candidate314 supersedes the stale-firmware blocker and former blanket prohibition
+on guest firmware actions under explicit user authorization. Native PSP accepts
+the signed payload; secure windows are checked inside the guest TMR. Startup
+returns three fresh05003500 replies with zero fetch/write faults. Clean guest
+shutdown and authorizing recovery follow. The desktop probe has an independent
+nonfinite JSON error; no new Metal or physical-display pass is claimed. Next is
+HDMI mailbox consumption. [Evidence and implementation](../findings/research/dmcub-psp-load-20260924.md).

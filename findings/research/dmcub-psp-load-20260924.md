@@ -50,3 +50,12 @@ and ENABLE=0, reasserting DMUIF before continuing. In explicit held PSP-reload
 mode, reservation validates but retires old secure CW0/1 storage; otherwise each
 cycle would unnecessarily reserve another32MiB below the old TMR. All nonsecure
 windows remain reserved, and the normal running-host reservation is unchanged.
+
+## Candidate314 result
+
+Run1e061e039b6dd6beacaf3f76494e4ace, MODE2#237: success1/phase8, three fresh
+05003500 replies, fault registers0/0, selectors restored. Nonsecure windows
+use the new reserved layout. Firmware scratch15 records a3a02 register timeout,
+but GPINT completes; actual mailbox consumption is untested. Guest-requested
+shutdown and recovery passed. Desktop probe JSON failed on an infinite numeric
+value; this is separate from serial-proven firmware startup. HDMI delivery off.

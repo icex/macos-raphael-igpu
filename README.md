@@ -14,7 +14,7 @@ on **`dev`**; this is not yet a generally supported driver release.
 
 ## Current status
 
-As of **2026-09-16**, candidate **1.0.280** runs an accelerated desktop through
+The qualified remote baseline from **2026-09-16**, candidate **1.0.280**, runs an accelerated desktop through
 macOS Screen Sharing. Native window effects and Safari composition checks pass,
 including the previously affected transparent areas. Broader application coverage
 and long-duration reliability are still being tested.
@@ -26,7 +26,7 @@ and long-duration reliability are still being tested.
 | Memory and synchronization | Buffer/texture reuse, synchronized CPU/GPU texture updates, retained color contents, GPU fences, shared events and cross-process IOSurface transfers pass targeted checks. |
 | Hardware video | H.264 and HEVC Main8 encode/decode work. HEVC Main10 decoding passes short tests; Main10 hardware encoding is unavailable in the current native profile set. |
 | Shutdown and reuse | Repeated clean guest shutdowns and same-host-boot reuse work in the supervised workflow. Crash recovery and independent-host-boot coverage remain incomplete. |
-| Physical HDMI/DisplayPort | No picture yet. Candidate 300 reserves host DMCUB memory and moves the guest PSP TMR away from its inbox, removing an access denial. Earlier overlapping runs erased inbox contents; a fresh host initialization is needed before guarded delivery. Never load/start/reset DMCUB from the guest. HDMI audio follows a verified picture; USB/Moonlight audio retain separate passing evidence. |
+| Physical HDMI/DisplayPort | No picture yet. Candidate314 loads DMCUB through native PSP into the guest TMR, starts it and receives three fresh firmware replies. HDMI command delivery and physical output remain unverified. HDMI audio follows a verified picture; USB/Moonlight audio retain separate passing evidence. |
 
 The tested baseline is **macOS Sequoia build 24G830** with a matching driver,
 Lilu, OpenCore configuration and grafted VBIOS. Stock QEMU 10.1.2 now works with
