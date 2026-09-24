@@ -21,8 +21,9 @@ run/c320-det-scanout.json and c320-user-mode-scanout.json; complete receipts in
 candidate-320-results. Temporary color-window capture failed and did not qualify
 pixel correctness. HDMI audio remains host-owned; follows usable output.
 
-Dev previously publishedc5570b0 via SSH (HTTPS token invalid). Candidate320 native
-fetch milestone is ready for integration; main untouched. Fresh candidate branches,
+Candidate319–320 native-fetch changes are integrated into dev. The1020-test
+integration suite passed (3 skipped); publication uses working SSH credentials
+because the HTTPS token is invalid. Main remains untouched. Fresh candidate branches,
 fetch remote dev, autonomous test/reset authorization; no reboot or host sudo.
 
 ## Verified progress
