@@ -9423,7 +9423,9 @@ static void wrapDcDmubWait(void *dcDmub) {
 }
 
 // Candidate324: observe mode rejection without overriding native validation.
-static uint32_t hdmiTimingTrace = 0;
+static uint32_t hdmiTimingTrace = 0, hdmiNativeClock = 0;
+static mach_vm_address_t orgAsicCapability = 0, baseAsicCapability = 0;
+static volatile int32_t clockRecords = 0;
 static mach_vm_address_t orgValidateTiming = 0, orgValidateRange = 0, orgLinkDescriptor = 0;
 static volatile int32_t timingRecords = 0, rangeRecords = 0, descriptorRecords = 0;
 static int wrapValidateTiming(void *self, void *input, uint64_t size) {
@@ -9434,7 +9436,7 @@ static int wrapValidateTiming(void *self, void *input, uint64_t size) {
     const uint32_t h = known ? *reinterpret_cast<const uint32_t *>(t + 0x50) : 0;
     const uint64_t clock = known ? *reinterpret_cast<const uint64_t *>(t + 0x28) : 0;
     const int result = FunctionCast(wrapValidateTiming, orgValidateTiming)(self, input, size);
-    if (known && (w >= 3840 || clock > 600000000ULL) && OSIncrementAtomic(&timingRecords) < 160)
+    if (known && clock > 600000000ULL && OSIncrementAtomic(&timingRecords) < 4)
         CRLOG("HDMITIMING: validate size=%llu %ux%u clock=%lluHz result=%#x enc=%#x bpc=%#x",
               size, w, h, clock, result, *reinterpret_cast<const uint16_t *>(t + 0x88),
               *reinterpret_cast<const uint16_t *>(t + 0x8a));
@@ -9444,7 +9446,7 @@ static bool wrapValidateRange(const uint8_t *timing, const uint8_t *range, uint3
     const bool result = FunctionCast(wrapValidateRange, orgValidateRange)(timing, range, div);
     if (timing && range) {
         const uint64_t clock = *reinterpret_cast<const uint64_t *>(timing + 0x28);
-        if (clock > 600000000ULL && OSIncrementAtomic(&rangeRecords) < 80)
+        if (clock > 600000000ULL && OSIncrementAtomic(&rangeRecords) < 4)
             CRLOG("HDMITIMING: range %ux%u clock=%lluHz max=%lluHz div=%u result=%u",
                   *reinterpret_cast<const uint32_t *>(timing + 0x40),
                   *reinterpret_cast<const uint32_t *>(timing + 0x50), clock,
@@ -9454,13 +9456,29 @@ static bool wrapValidateRange(const uint8_t *timing, const uint8_t *range, uint3
 }
 static void wrapLinkDescriptor(void *self, uint8_t *out, const uint8_t *in) {
     FunctionCast(wrapLinkDescriptor, orgLinkDescriptor)(self, out, in);
-    if (out && in && OSIncrementAtomic(&descriptorRecords) < 16)
+    if (out && in && OSIncrementAtomic(&descriptorRecords) < 4)
         CRLOG("HDMITIMING: link obj=%#x rawcaps=%#x caps=%#x maxclock=%ukHz bpc=%u",
               *reinterpret_cast<const uint32_t *>(out),
               *reinterpret_cast<const uint32_t *>(in + 0x18),
               *reinterpret_cast<const uint32_t *>(out + 0x18),
               *reinterpret_cast<const uint32_t *>(out + 0x20),
               *reinterpret_cast<const uint32_t *>(out + 0x1c));
+}
+
+static uint64_t wrapAsicCapability(void *self, uint32_t selector) {
+    const auto original = FunctionCast(wrapAsicCapability, orgAsicCapability)(self, selector);
+    if (selector != 13 || !hdmiNativeClock || !baseAsicCapability) return original;
+    // Navi2 falls back to BIOS boot display clock when PowerPlay is unsupported.
+    // The generic getter returns the native DAL capability at caps+0x220 instead.
+    // Use that same reported limit; this does not write a clock or bypass DAL's
+    // downstream link/bandwidth validation. Refuse unexpected units/sentinels.
+    const auto native = FunctionCast(wrapAsicCapability, baseAsicCapability)(self, selector);
+    const auto selected = original == 625000 && native > original && native <= 2400000
+                        ? native : original;
+    if (OSIncrementAtomic(&clockRecords) < 2)
+        CRLOG("HDMITIMING: max pixel clock boot=%llukHz DAL=%llukHz selected=%llukHz",
+              original, native, selected);
+    return selected;
 }
 
 static void installDcnRoutes(KernelPatcher &patcher, mach_vm_address_t addr, size_t size) {
@@ -9485,7 +9503,16 @@ static void installDcnRoutes(KernelPatcher &patcher, mach_vm_address_t addr, siz
         0xd2,0x00,0x48,0x8b,0x47,0x28};
     static const uint8_t linkDescriptor[] = {0x55,0x48,0x89,0xe5,0x8b,0x02,0x89,0x06,
         0x8b,0x42,0x10,0x89,0x46,0x10};
+    static const uint8_t asicCapability[] = {0x55,0x48,0x89,0xe5,0x41,0x56,0x53,
+        0x41,0x89,0xf6,0x48,0x89,0xfb,0x48,0x8b,0x7f,0x20};
+    static const uint8_t baseCapability[] = {0x55,0x48,0x89,0xe5,0x53,0x50,0x83,
+        0xfe,0x12,0x0f,0x87,0x21,0x01,0x00,0x00};
+    if (hdmiNativeClock && entryMatches(addr, size, 0x3bde2, baseCapability, sizeof(baseCapability)))
+        baseAsicCapability = addr + 0x3bde2;
     const Target targets[] = {
+        {0x3aeaa, asicCapability, sizeof(asicCapability),
+         reinterpret_cast<mach_vm_address_t>(wrapAsicCapability), &orgAsicCapability,
+         "Navi2::getCapability", hdmiNativeClock != 0 && baseAsicCapability != 0},
         {0x480aa, validateTiming, sizeof(validateTiming),
          reinterpret_cast<mach_vm_address_t>(wrapValidateTiming), &orgValidateTiming,
          "validateDetailedTiming", hdmiTimingTrace != 0},
@@ -10734,6 +10761,7 @@ static void pluginStart() {
                              "set together)", dcn);
     PE_parse_boot_argn("rgpudallog", &dalLogMask, sizeof(dalLogMask));
     PE_parse_boot_argn("rgpuhdmitrace", &hdmiTimingTrace, sizeof(hdmiTimingTrace));
+    PE_parse_boot_argn("rgpuhdminativeclk", &hdmiNativeClock, sizeof(hdmiNativeClock));
     PE_parse_boot_argn("rgpuagdp", &agdpPikera, sizeof(agdpPikera));
     PE_parse_boot_argn("rgpuhdmiaudio", &hdmiAudioPairing, sizeof(hdmiAudioPairing));
     PE_parse_boot_argn("rgpudcnnostutter", &dcnNoStutter, sizeof(dcnNoStutter));
