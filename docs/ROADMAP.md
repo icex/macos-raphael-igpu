@@ -1,6 +1,6 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-09-24. Latest display experiment: **1.0.315** (HDMI commands consumed and Samsung online in macOS; physical picture still awaiting confirmation); prior streaming baseline: **1.0.284**; broader baseline: **1.0.280**. Full desktop acceleration
+Updated 2026-09-24. Latest display experiment: **1.0.318** (user-confirmed visible HDMI test pattern; desktop fetch and pattern fidelity remain unqualified); prior streaming baseline: **1.0.284**; broader baseline: **1.0.280**. Full desktop acceleration
 is **not qualified**. The reproduced Screen Sharing transparency defect is fixed
 in candidate279 and retained in280. Candidate280 also passes strict capture and
 clean recovery after visual, concurrent-client and codec workloads. The patched-QEMU
@@ -26,7 +26,7 @@ regression and macOS source-build jobs remain required; see [CI setup](releases.
 | M3 — Native engine startup repair | Demonstrated | Raphael topology/address adaptations reach native startup and completed Metal work. Preserve these fixes while diagnosing desktop rendering. |
 | M4 — First correct Metal compute | Achieved | Candidate 194 checked 196,608 values and 4,096 rendered pixels; its overall capture remained inconclusive. Current280 desktop Metal baselines complete with verified device/build identity. |
 | M5 — Rendering, memory and synchronization | Partial | Managed-texture copy correction retained; private/managed/IOSurface and multiple-format readback probes pass. Candidate280 passes48 BGRA8 feedback cases across four distinct-seed processes, including two concurrent clients. 32 measured buffer-reclamation rounds return process-local allocation to baseline with134,217,728 correct values. 144 texture recreation cases and32 cross-queue GPU-event rounds pass. Global VRAM/GART counters return near baseline after exit; GPU VA and long-duration qualification remain open. |
-| M6 — Desktop and physical display | Visual fix verified; broader qualification open | Candidate279 fixes the reproduced feedback corruption. Fresh pixel checks, user observation and unobstructed native RFB captures on280 pass; longer desktop qualification remains. Physical DCN 3.1.5 output is a separate unqualified path. |
+| M6 — Desktop and physical display | Visual fix verified; broader qualification open | Candidate279 fixes the reproduced feedback corruption. Fresh pixel checks, user observation and unobstructed native RFB captures on280 pass; longer desktop qualification remains. Candidate318 produces a visible physical HDMI test pattern, with reported fuzziness/interleaving; desktop scanout and pixel correctness remain unqualified. |
 | M7 — Lifecycle and host protection | Partial | Multiple guest-request shutdowns and authorizing recoveries observed on this boot, including eight complete 280 runs with the visual and logging fixes. One supervised QEMU closure/recovery/reset/relaunch/clean-shutdown sequence now passes its scoped checks; closure capture remains INVALID. Fresh-host-boot, guest-panic and repeated lifecycle qualification remain open. |
 | M8 — Performance and release | Not qualified | Correctness first; no release, Metal3 conformance, game-support or full-desktop claim. The current experimental snapshot is published to main at the user’s request; development continues on dev. Publication does not close acceptance gates. |
 
@@ -155,7 +155,8 @@ Passing isolated shaders does not establish correct desktop composition.
 - [x] Bring up DMCUB through native PSP with verified guest TMR placement and
   fresh firmware replies (candidate314,2026-09-24).
 - [x] Deliver HDMI VBIOS commands and observe firmware consumption (candidate315).
-- [ ] Confirm one changing physical picture on the Samsung; then enable HDMI audio.
+- [x] Confirm a physically visible hardware test pattern on the Samsung (candidate318).
+- [ ] Restore changing desktop pixels and qualify formatting; then enable HDMI audio.
 - [ ] Qualify modes, reconnection and higher resolutions after first stable output.
 
 Current evidence puts corrupt pixels in the scanout/DisplayStream path before
@@ -223,41 +224,17 @@ from device enumeration or passing microbenchmarks.
    [Port plan and evidence](../findings/research/display-dcn315-port-20260917.md),
    [HDMI audio plan](../findings/research/hdmi-audio-passthrough-20260917.md),
    [host freeze analysis](../findings/research/dcn315-dmcub-host-crash-20260917.md).
-   - **What Apple's framebuffer has.** It embeds AMD DC 3.2.145. Raphael's unreadable strap
-     makes it build the DCN 2.0 pool, which fails. The DCN 3.02 pool is the closest match.
-   - **What candidate 285/286 do.** They switch that pool on (`hw_internal_rev` 60), interpose
-     every DAL register access and translate DCN 3.0.2 indices to 3.1.5 (generated from the
-     Linux headers). The Navi DALSMC mailbox is emulated.
-   - **The freeze.** Candidate 285 also registered Raphael's DMCUB firmware for PSP from the
-     guest, and that froze the host. Candidate 286 removes it and fences DMCUB off: the strap
-     reads absent and DMCUB writes are dropped.
-   - **Next.**
-     a. DONE 2026-09-23 (candidate 287/metal-135): DCN 3.02 pool init on hardware, HPD sense on
-        the HDMI plug, EDID read on DDC1 returns 0xFF. Next: host-driver I2C/pad register
-        values after a reboot (`dcn-state-probe.py`), then fix the I2C clock/pad setup.
-     b. DONE 2026-09-23: EDID reads work (candidate 290, fresh boot) - the dummy adapter and a
-        hot-plugged Samsung both returned valid EDIDs over DDC1. The 287-290 NACKs were the
-        adapter's EEPROM locked by the morning host freeze, not the guest. Sink is detected but
-        no display is published: DAL's link bring-up (DIG/PHY) needs DMUB, and init already logs
-        "Error queuing DMUB command" from the inert dc_dmub_srv. NEXT: attach DAL to the DMCUB
-        firmware the host driver left running (SCRATCH0=0x43, still BOOTED) without loading,
-        starting or resetting it from the guest. Raphael's VBIOS has no transmitter/pixel-clock
-        tables, so HDMI PHY and PLL exist only in DMCUB firmware.
-     c. Then:
-        - a PMFW clock manager: VBIOSSMC display messages, agreed with the user first, since
-          they go to the SMU that also governs the CPU;
-        - detile buffer and APU context;
-        - 1080p60 then 2160p60.
-     d. Guest audio for VNC/streaming (added 2026-09-22): launch option `AUDIO=usb` gives the
-        guest a QEMU USB audio device on the host PipeWire sink, no guest kext. Verify in the
-        metal-134 run; then BlackHole in the guest for Sunshine capture.
-     e. HDMI audio on the port: spoof 7b:00.1 as ab28, add the AppleGFXHDA pairing patch, bind
-        .1 as root, and update the launcher gates. Only after the display link works.
-     f. Remote display (added 2026-09-22): Apple Screen Sharing "client resolution" needs a
-        display with the client's mode. A CGVirtualDisplay offers it but ScreenCaptureKit reports
-        ~1.2 s capture latency on it in this VM (display-link timing is fine); find why
-        (permissioned SCKit probe, then WindowServer VFB frame stamping). Apple client audio tap
-        fails in coreaudiod (`hasNonTapInputStream == false`): find what input stream it wants.
+   - DCN3.02 register translation and Samsung EDID reads work. Native PSP DMCUB
+     reload/start and HDMI command delivery are demonstrated (314/315).
+   - Candidate318 produces a physically visible RGB test pattern at native1080p60.
+     User reports fuzziness/interleaving; correct image quality is not established.
+     [Evidence](../findings/research/visible-hdmi-pattern-20260924.md).
+   - Restore HUBP framebuffer fetch and inspect output formatting. Native1080p120
+     mode selection alone produced black output, so120Hz picture is not qualified.
+   - Verify guest awake assertions and active HDMI before every physical observation.
+     Keep native host-safety, capture, shutdown and recovery checks intact.
+   - HDMI audio follows usable display output. Function7b:00.1 remains host-owned;
+     pairing, passthrough and audio playback are not yet tested.
 1. **Full 4K remote desktop streaming (user priority, updated 2026-09-17).** 4K60 is
    now stable. Three fixes got there: the VCN preset patch (candidate 284, encode 11ms at 4K,
    equal to Linux), a 2GB BIOS UMA carve-out (no allocation failures; host tools detect the

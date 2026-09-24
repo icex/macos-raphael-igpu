@@ -1,0 +1,15 @@
+{
+  "run_id": "338d9498eb9e7e029f0f73570450b41f",
+  "files": {
+    "/home/bogdan/macos-vm/run/c318-pattern-scanout.json": "6209a98258c5c33a0bc7a1da146c46197f992e8014a01417e3b2373563f5cdbd",
+    "/home/bogdan/macos-vm/run/c318-pattern-scanout.txt": "1002dd5542898394faacb7f2bfd9710ce7dcfed8124ab99e335a44e07fad6505",
+    "/home/bogdan/macos-vm/run/c318-awake-check.txt": "02c597ab4075368f9ae395311124fbdaf5f5a459e37a485366277a94f1c0a85a",
+    "/home/bogdan/macos-vm/run/c318-awake-60hz.txt": "8f7efaebc635b3aede6d380f7542dc21d0d0a23b406958cda0ef829ee49d1cff",
+    "/home/bogdan/macos-vm/run/candidate-318-attempt-pattern-results/probe.json": "99e4fe0b887e7a87b282e26e64fc61a4dd8bcde292782aae1781165f8672157a",
+    "/home/bogdan/macos-vm/run/candidate-318-attempt-pattern-results/serial.txt": "c1dc7734b8ee15b7a234e88f2de3693ac5ef264fd9bac9d3d7cb8522d1687656",
+    "/home/bogdan/macos-vm/run/candidate-318-attempt-pattern-results/critical.txt": "749f6dc5d1db77ba79ea57c28d9fe5510da41c361fc022e4ad4bc41b49aad046",
+    "/home/bogdan/macos-vm/run/candidate-318-attempt-pattern-results/verdict.json": "447d0696cf93f29692e9d0c938234b60910968c31eda296f4b1ebfca1b8f7bbf",
+    "/home/bogdan/macos-vm/run/candidate-318-attempt-pattern-results/shutdown.json": "fd3f5b155cbf0e4ef89c50cd6278270a3e8a194e646ac4b950435664f2fc64d1",
+    "/home/bogdan/macos-vm/run/candidate-318-attempt-pattern-results/recovery.json": "14070486d2c02787d2b3702ad8372fa720cffc0c0e9085b50aff0e5991c667e5"
+  }
+}
