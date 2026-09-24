@@ -1,24 +1,24 @@
 # Live status — 2026-09-24
 
-## Candidate328: physical HiDPI120 picture, purple tint and missing audio
+## Candidate329: correct-color HiDPI120 picture; FRL audio missing
 
-Run `5c1c6942a4a30387a32362b06c174857`, source `0c379fe`, metal-176.
-Linux DCN31 stream-clock selection changes HDMISTREAMCLK_CNTL from0 to0x10001;
-HPO FIFO error2 clears. Awake CoreGraphics reports1920x1080 logical,
-3840x2160 pixels at120Hz. User: "screen is now at120hz but again purple".
-This is physical120Hz progress, not correct-color or audio qualification.
+Candidate329, source `d8047ef`, metal-177. Awake CoreGraphics reports1920x1080
+logical/3840x2160 pixels at120Hz. User confirms "Correct colors", then "no sound".
+VPG5 packet memory wake0x9936 changes0x110→1 and clears the purple tint.
+DTB HDMI stream source remains0x10001; HPO FIFO has no error.
 
-FRL VPG5_MEM_PWR=0x110 (forced light sleep); existing packet-memory wake covers
-only TMDS VPG0. Next extend the same bounded wake/readback to VPG5 at0x9936
-before its packet access/data registers0x9931/0x9932. Samsung HDMI audio endpoint
-is absent under FRL; retain this separate regression until audible playback.
+Live IOFramebuffer publishes connector-type2048, audio-codec-info00010300,
+but av-signal-type00000000 and display-typeNONE. Native reportCapabilities_LinkInfo
+0xe074 lacks FRL signal100/400 cases; AppleGFXHDA rejects av-signal zero at
+framebufferEventHandler line3063. Candidate330 will preserve the native FRL
+transport while publishing HDMI metadata for the single connected FRL path.
+Require audible playback and mode-switch retention before publishing the120Hz build.
 
-Final valid CORE_PROBE_PASS, guest-request shutdown, graphics recovered and
-authorizes_launch=true; audio DMA off/errors=[].1023 tests OK,3 skipped.
-No VM running, no reboot/rebind. dev/main561c895 retain verified323 binary/docs,
-with successful CI on both branches. FRL work remains isolated.
-Evidence: candidate-328-results receipts, c328-hidpi120.txt,
-c328-frl-scanout.txt and c328-frl-color-scanout.txt under ~/macos-vm/run/.
+Final valid CORE_PROBE_PASS; guest-request shutdown; recovered with
+ authorizes_launch=true; audio DMA off/errors=[].1023 tests OK,3 skipped.
+No VM running, no reboot/rebind. dev/main561c895 still carry verified323 audio.
+Evidence: candidate-329-results receipts, c329-hidpi120.txt,
+c329-framebuffer-audio.txt and c329-frl-color-scanout.txt under ~/macos-vm/run/.
 
 ## Verified progress
 
@@ -101,5 +101,12 @@ and [earlier](findings/research/status-archives/status-before-night-close-202609
 ## One-command GPU test
 
 - Output: `/home/bogdan/macos-vm/run/candidate-328-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-329-results`
 - Verdict: `CORE_PROBE_PASS`
 - Boundary: `None`
