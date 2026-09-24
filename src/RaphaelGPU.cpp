@@ -8706,6 +8706,14 @@ static void wrapDcnRegWrite(void *context, uint32_t index, uint32_t value) {
     if (dcnTranslating() && m.action != Action::Drop && m.index >= 0x5001 &&
         m.index <= 0x5181 && ((m.index - 0x5001) % 0x80) == 0)
         dcnRefreshDramPolicy();
+    if (dcnTranslating() && m.index == 0x4d14 && value == 0) {
+        static rgpu::SuccessRecordBudget detRecords {};
+        SAMPLED_CRLOG(detRecords, true,
+                     "DCN: fetch allocation DET=%#x/%#x/%#x/%#x COMPBUF=%#x",
+                     dcnNativeRead(context, 0x398c), dcnNativeRead(context, 0x398d),
+                     dcnNativeRead(context, 0x398e), dcnNativeRead(context, 0x398f),
+                     dcnNativeRead(context, 0x398b));
+    }
     dcnTraceAccess('W', index, m, value, reinterpret_cast<uint64_t>(__builtin_return_address(0)),
                    __builtin_frame_address(0), note);
 }
