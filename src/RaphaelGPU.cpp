@@ -93,6 +93,10 @@ static const char *pathAgdp[] {
     "AppleGraphicsDevicePolicy.kext/Contents/MacOS/AppleGraphicsDevicePolicy"
 };
 
+static const char *pathGfxHda[] {
+    "/System/Library/Extensions/AppleGFXHDA.kext/Contents/MacOS/AppleGFXHDA"
+};
+
 // sys[0] == SysFlags::Loaded: invoke the callback even if the kext is already loaded.
 // Both of these are prelinked into SystemKernelExtensions.kc, so by the time a Lilu
 // plugin in the auxiliary collection starts, their load event is long past. Their
@@ -102,7 +106,7 @@ static const char *pathAgdp[] {
 // SINGLE call. Registering the kexts and the callback separately (and passing
 // nullptr/0 for the callback-only registration) does not work -- pluginStart
 // stopped executing right there, with no further log output.
-enum { KextHWLibs, KextFB, KextX6000, KextAgdp };
+enum { KextHWLibs, KextFB, KextX6000, KextAgdp, KextGfxHda };
 static KernelPatcher::KextInfo kexts[] {
     {"com.apple.kext.AMDRadeonX6000HWLibs", pathHWLibs, arrsize(pathHWLibs),
      {true}, {}, KernelPatcher::KextInfo::Unloaded},
@@ -112,12 +116,15 @@ static KernelPatcher::KextInfo kexts[] {
      {true}, {}, KernelPatcher::KextInfo::Unloaded},
     {"com.apple.driver.AppleGraphicsDevicePolicy", pathAgdp, arrsize(pathAgdp),
      {true}, {}, KernelPatcher::KextInfo::Unloaded},
+    {"com.apple.driver.AppleGFXHDA", pathGfxHda, arrsize(pathGfxHda),
+     {true}, {}, KernelPatcher::KextInfo::Unloaded},
 };
 
 // rgpuagdp=1: WhateverGreen agdpmod=pikera. AppleGraphicsDevicePolicy looks up "board-id" to
 // pick a per-board policy; renaming the key makes it find none and use the default, which
 // enables the AMD display controller. Without it the controller stays "NOT enabled".
 static uint32_t agdpPikera = 0;
+static uint32_t hdmiAudioPairing = 0;
 
 // ---- the patch table --------------------------------------------------------
 // bit 0 = m1 ... bit 6 = m7, matching milestones.py
@@ -9583,6 +9590,23 @@ static int wrapVideoGetHWInfo(void *self, void *values);
 
 static void processKext(void *, KernelPatcher &patcher, size_t index,
                         mach_vm_address_t addr, size_t sz) {
+    if (kexts[KextGfxHda].loadIndex == index) {
+        if (hdmiAudioPairing) {
+            // 24G830 EG::locateAssociatedGraphicsController compares siblings on
+            // getBusNumber, which aliases every pcie.0 device. Both functions
+            // share a slot: compare getDeviceNumber instead (vtable8e8 ->8f0).
+            // Exact unique instruction sequence; no on-disk Apple modification.
+            static const uint8_t find[] = {0x48, 0x8b, 0x0, 0x4c, 0x89, 0xf7, 0xff, 0x90, 0xe8, 0x8, 0x0, 0x0, 0x4d, 0x89, 0xfd, 0x41, 0x89, 0xc7, 0x48, 0x8b, 0x7d, 0xd0, 0x48, 0x8b, 0x7, 0xff, 0x90, 0xe8, 0x8, 0x0, 0x0, 0x41, 0x38, 0xc7};
+            static const uint8_t repl[] = {0x48, 0x8b, 0x0, 0x4c, 0x89, 0xf7, 0xff, 0x90, 0xf0, 0x8, 0x0, 0x0, 0x4d, 0x89, 0xfd, 0x41, 0x89, 0xc7, 0x48, 0x8b, 0x7d, 0xd0, 0x48, 0x8b, 0x7, 0xff, 0x90, 0xf0, 0x8, 0x0, 0x0, 0x41, 0x38, 0xc7};
+            KernelPatcher::LookupPatch lp {&kexts[KextGfxHda], find, repl, sizeof(find), 1};
+            patcher.applyLookupPatch(&lp);
+            CRLOG("HDMIAUDIO: same-slot GPU pairing %s (error %d)",
+                  patcher.getError() == KernelPatcher::Error::NoError ? "applied" : "FAILED",
+                  static_cast<int>(patcher.getError()));
+            patcher.clearError();
+        }
+        return;
+    }
     if (kexts[KextAgdp].loadIndex == index) {
         if (agdpPikera) {
             static const uint8_t find[] = "board-id";
@@ -10654,6 +10678,7 @@ static void pluginStart() {
                              "set together)", dcn);
     PE_parse_boot_argn("rgpudallog", &dalLogMask, sizeof(dalLogMask));
     PE_parse_boot_argn("rgpuagdp", &agdpPikera, sizeof(agdpPikera));
+    PE_parse_boot_argn("rgpuhdmiaudio", &hdmiAudioPairing, sizeof(hdmiAudioPairing));
     PE_parse_boot_argn("rgpudcnnostutter", &dcnNoStutter, sizeof(dcnNoStutter));
     PE_parse_boot_argn("rgpuhdmideep", &dcnHdmiDeep, sizeof(dcnHdmiDeep));
     PE_parse_boot_argn("rgpuvpgwake", &dcnVpgWake, sizeof(dcnVpgWake));

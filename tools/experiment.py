@@ -362,6 +362,7 @@ def host_snapshot():
         if evidence is not None:
             host['amdgpu_initialized'] = True
             host['amdgpu_initialization_evidence'] = evidence
+    host['hdmi_audio'] = helper('hdmi-audio').snapshot()
     return host
 
 
@@ -396,7 +397,8 @@ def launch_options(data):
     # AUDIO=usb: the launcher swaps the image's HDA codec (no macOS driver) for
     # a QEMU usb-audio device on the host pulse socket. Display-less only.
     contracts = (historical, headless, debugger,
-                 dict(headless, AUDIO='usb'), dict(debugger, AUDIO='usb'))
+                 dict(headless, AUDIO='usb'), dict(debugger, AUDIO='usb'),
+                 dict(debugger, AUDIO='usb', HDMI_AUDIO='on'))
     if type(value) is not dict or value not in contracts:
         raise ValueError('launch options must select the exact historical, no-graphics, or debugger contract')
     return dict(value)
@@ -530,6 +532,8 @@ def current_identity(vm, candidate, requested_diagnostic, run_id=None,
                      'agent-server.py', 'gx', 'gpu-bind.sh']
     if options.get('GENERIC_GRAPHICS') == 'off':
         harness_names.append('vm-entry.sh')
+    if options.get('HDMI_AUDIO') == 'on':
+        harness_names.append('hdmi-audio.py')
     return dict(image, build_id=build['build_id'], source_sha256=build['source_sha256'],
                 coordinator_source_sha256=source_digest,
                 source_commit=command(['git', '-C', str(ROOT), 'rev-parse', 'HEAD']),
@@ -983,6 +987,9 @@ def admit(manifest, host, used_boots, reuse_allowed=False):
                 'device_pinned_awake', 'device_accessible'):
         if host.get(key) is not True:
             errors.append(key)
+    if (manifest.get('launch_options', {}).get('HDMI_AUDIO') == 'on' or
+            host.get('hdmi_audio', {}).get('driver') == 'vfio-pci'):
+        errors.extend(helper('hdmi-audio').errors(host.get('hdmi_audio', {})))
     if host.get('active_vm') is not False: errors.append('active_vm')
     if host.get('reset_methods') != []: errors.append('reset_method')
     if not host.get('boot_id') or host['boot_id'] != manifest.get('boot_id'):
@@ -1894,7 +1901,7 @@ def _validate_recovery_receipt(receipt, boot_id, prior_run_id,
     messages = receipt.get('kernel_messages')
     if (not isinstance(messages, list) or
             any(not isinstance(message, str) for message in messages) or
-            any(re.search(r'vfio-pci 0000:7b:00\.0: (?:resetting|reset done)\b',
+            any(re.search(r'vfio-pci 0000:7b:00\.[01]: (?:resetting|reset done)\b',
                           message, re.I) for message in messages)):
         errors.append('recovery_receipt')
     gc = receipt.get('gc_quiesce')
@@ -2508,7 +2515,7 @@ def reserve_cap_revision(directory, boot_id, experiment, recovery, manifest,
         raise ValueError('cap revision refused: kernel_cursor') from None
     after_position = _journal_cursor_position(cursor_after, boot_id)
     implicit_resets = [message for message in messages if re.search(
-        r'vfio-pci 0000:7b:00\.0: (?:resetting|reset done)\b',
+        r'vfio-pci 0000:7b:00\.[01]: (?:resetting|reset done)\b',
         message, re.I)]
     if after_position is None or after_position < before_position:
         errors.append('kernel_cursor')
@@ -3014,7 +3021,8 @@ def validate_running(manifest, observed):
     if manifest.get('gpu') is False:
         if vfio: errors.append('unexpected_vfio_device')
         return errors
-    if len(vfio) != 1 or 'host='+manifest['vfio_device'] not in vfio[0].split(','):
+    hdmi_audio = manifest.get('launch_options', {}).get('HDMI_AUDIO') == 'on'
+    if len(vfio) != (2 if hdmi_audio else 1) or not vfio or 'host='+manifest['vfio_device'] not in vfio[0].split(','):
         errors.append('vfio_device')
     topology = manifest.get('vfio_guest_address')
     require_fixed = (topology is not None or
@@ -3029,7 +3037,19 @@ def validate_running(manifest, observed):
             pairs = [part.split('=', 1) for part in parts[1:] if '=' in part]
             return ({key: val for key, val in pairs}
                     if len({key for key, _ in pairs}) == len(pairs) else {})
-        vfio_options = options(vfio[0]) if len(vfio) == 1 else {}
+        vfio_options = options(vfio[0]) if vfio else {}
+        if hdmi_audio:
+            audio_options = options(vfio[1]) if len(vfio) == 2 else {}
+            expected_audio = dict(host='0000:7b:00.1', bus='pcie.0', addr='0x6.0x1',
+                                  **{'x-pci-vendor-id':'0x1002', 'x-pci-device-id':'0xab28',
+                                     'rombar':'0'})
+            if audio_options != expected_audio or vfio_options.get('multifunction') != 'on':
+                errors.append('hdmi_audio_topology')
+            audio_occupants = [row for row in observed.get('pci_topology', [])
+                              if row.get('bus', RAPHAEL_GUEST_BUS) == RAPHAEL_GUEST_BUS and
+                              row.get('slot') == 6 and row.get('function', 0) != 0]
+            if audio_occupants != [{'model':'vfio-pci', 'bus':'pcie.0', 'slot':6, 'function':1}]:
+                errors.append('hdmi_audio_address_collision')
         try:
             vfio_slot, _, vfio_function = vfio_options.get('addr', '').partition('.')
             vfio_address = (int(vfio_slot, 16), int(vfio_function or '0', 16))
@@ -3666,6 +3686,14 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
             shutdown_result.get('outcome') != 'STOP_UNCONFIRMED' and
             not (monitor and monitor.error)):
         try:
+            if manifest.get('launch_options', {}).get('HDMI_AUDIO') == 'on':
+                audio_state = helper('hdmi-audio').snapshot()
+                audio_errors = helper('hdmi-audio').errors(audio_state)
+                write_once(output/'hdmi-audio-teardown.json', dict(
+                    run_id=manifest['run_id'], boot_id=manifest['boot_id'],
+                    state=audio_state, errors=audio_errors))
+                if audio_errors:
+                    raise RuntimeError('HDMI audio teardown: '+', '.join(audio_errors))
             recovery_serial = ((vm/'run/critical.log').read_text(errors='replace')
                                if dedicated_critical else
                                (vm/'run/serial.log').read_text(errors='replace'))

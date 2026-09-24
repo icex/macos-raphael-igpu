@@ -1595,6 +1595,7 @@ class ExperimentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             vm = Path(temp); original = vm/'run/original'; original.mkdir(parents=True)
             manifest = {key:'fixture' for key in tool.IDENTITY_FIELDS}
+            manifest['launch_options'] = {'BOOTDISK_MODE':'custom', 'NVRAM':'stock'}
             manifest.update(boot_id=boot, run_id=run, max_seconds=180, gpu=True,
                             source_commit='old', source_sha256='driver-tree',
                             source_clean=True, vfio_device='0000:7b:00.0',
@@ -1731,6 +1732,7 @@ class ExperimentTests(unittest.TestCase):
             boot = '3bca3e47-1f28-4f78-af00-5dbf76b00620'
             run = 'cb1d0aadd8186205d867a23fe175c336'
             old = {key:'fixed' for key in tool.IDENTITY_FIELDS}
+            old['launch_options'] = {'BOOTDISK_MODE':'custom', 'NVRAM':'stock'}
             old.update(boot_id=boot, run_id=run, source_commit='old-commit',
                        source_sha256='driver-tree', candidate_directory='run/candidate-188',
                        harness_sha256={'macos-vm.sh':'old-launcher',
