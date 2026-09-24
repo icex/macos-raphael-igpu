@@ -1,24 +1,27 @@
 # Live status — 2026-09-24
 
-## Candidate326: missing parsed sink FRL capability
+## Candidate327: HiDPI120 exposed, physical FRL output fails
 
-Run `ae140e354078862907129ed11b2d7e44`, source `8b671fa`, metal-174.
-4K120 passes the1217MHz range but DC stream validation returns6 (encoder
-validation failure): signal4/TMDS,11880000 in100Hz units, RGB/Y444,8bit.
-No DSC requested. HPO encoder exists. Read-only QEMU memory shows preferred and
-verified FRL rates zero, sink byte0x887 zero, despite captured HF-VSDB advertising
-rate6. Native EDID bridge0x74ada never copies FRL max rate to caps+0x7f;
-detection0x16f799 requires that field before native FRL training.
-Next copy only checksum-validated advertised FRL rate through the bridge,
-preserving native training and bandwidth validation. No HiDPI120 progress yet.
+Run `5aad581d22f85ce6134b2992f6fef40f`, source `fec91de`, metal-175.
+EDID bridge restores advertised FRL rate6; preferred/verified rate fields become
+6 with4 lanes. These software fields alone do not prove successful training.
+HiDPI1920x1080/3840x2160 at120Hz appears and the second mode request holds in
+CoreGraphics. User reports black/no signal, then no signal at all resolutions
+and refreshes. HDMI audio endpoint disappears. Do not publish this as working120.
 
-Display-awake assertions verified; current HiDPI1080 at60Hz. Final valid
-CORE_PROBE_PASS; guest-request shutdown; recovered/authorizes_launch=true;
-audio errors=[] and DMA off. No reboot/rebind; no VM running.
-1022 host tests OK,3 skipped. Evidence: candidate-326-results receipts,
-c326-link-caps.json and c326-display-modes.txt under ~/macos-vm/run/.
-Initial launch failed at source-digest admission before exposure; corrected
-card uses the canonical source-tree digest. It consumed no GPU ledger entry.
+Readback: HDMI link and stream encoders enabled, stream FIFO reports error2;
+HDMISTREAMCLK0_DTO_PARAM=0. Native302 HDMI_STREAM_ENC_HDMISTREAMCLK_CONTROL
+(0x98d4) is dropped by the translation table; DCN315 moves stream clock control
+to DCCG. Investigate source selection and FIFO before changing timing acceptance.
+FRL rate restoration is necessary for enumeration but insufficient for output.
+
+Final valid CORE_PROBE_PASS, guest-request shutdown, recovered with
+authorizes_launch=true; audio PCI COMMAND2/DMA off, errors=[].1023 tests OK,
+3 skipped. No VM running, no reboot/rebind. Verified323 picture/audio binary,
+manifest and docs are synced on dev/main561c895; CI test/build passed.
+Evidence: candidate-327-results receipts; c327-link-caps.json,
+c327-hidpi120-recheck.txt, c327-hidpi120-audio.txt,
+c327-frl-failure-scanout.txt under ~/macos-vm/run/.
 
 ## Verified progress
 
@@ -87,5 +90,12 @@ and [earlier](findings/research/status-archives/status-before-night-close-202609
 ## One-command GPU test
 
 - Output: `/home/bogdan/macos-vm/run/candidate-326-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-327-results`
 - Verdict: `CORE_PROBE_PASS`
 - Boundary: `None`
