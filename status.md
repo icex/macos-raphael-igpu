@@ -1,38 +1,30 @@
 # Live status — 2026-09-24
 
-## Candidate311: upload verification aborted before firmware startup
+## Candidate312: complete upload verified; security-reset write refused
 
-Run `920fdd826543490727230d76050ec7f7`, metal159, sourcefb69af7,
-boot5074c0e5-b2f6-46da-99b2-299ba322b41e, MODE2#234.
+Run `1210252b328240866116af82d514cd1b`, metal160, source d2a19a9,
+boot5074c0e5-b2f6-46da-99b2-299ba322b41e, MODE2#235.
 
-- **Functional:** reviewed reset completed; upload verification failed in phase4.
-  No new windows were programmed and firmware was never released. DMCUB remains
-  halted (CNTL2=1, DMUIF reset=100, ENABLE=0). Metal core probe passed.
-- **Capture:** CORE_PROBE_PASS; phase/error/selector-restoration result present.
-- **Shutdown/recovery:** exited-after-guest-request; recovered and
-  authorizes_launch=true. This receipt does not claim DMCUB recovery.
-- **Evidence:** `~/macos-vm/run/candidate-311-results/` and stopped read-only
-  `~/macos-vm/run/c311-upload-inspection/`.
-- **Finding:** memory matches the intended upload through fb+7f0dd343, including
-  the VBIOS's first ffffffff word at7f0dd340. The next word is untouched. The CGS
-  read path invokes readValidateReg32/validateHwState and treats ffffffff as a
-  failed register read, replacing/re-reading it. Payload data must use raw
-  hwReadReg32. This explains a false readback failure; exact failure offset was
-  not logged in311, so the diagnosis combines source and retained bytes.
+- **Functional:** held-reset continuation completed phase4 (every payload word
+  verified immediately and in a full second pass). Phase5 failed register
+  verification before any window changed. Stopped capture retains SEC_CNTL=2000
+  and all original windows, consistent with SEC_RESET bit16 refusing assertion.
+  Exact failing register was not logged; add telemetry before another attempt.
+  DMCUB remains held; HDMI remains blocked.
+- **Capture:** complete serial and phase result. The Metal probe crashed while
+  JSON-encoding an infinite number; wrapper verdict EXECUTION_FAILED. This run
+  does not establish a Metal pass or a GPU execution failure.
+- **Shutdown/recovery:** exited-after-guest-request; recovered,
+  authorizes_launch=true. Stopped capture restored selectors and found no host faults.
+- **Evidence:** `~/macos-vm/run/candidate-312-results/` and
+  `~/macos-vm/run/c312-retained-dmcub-state/capture.json`.
+- **Next:** trace Linux PSP versus direct-load ownership and Apple's native PSP
+  submission before choosing the next firmware-load path. No blind reset retry.
 
-Next: raw indirect-memory reads plus exact failure telemetry. Before another
-firmware attempt account for the existing held-reset state; do not replay old
-ENABLE/windows as rollback. The reviewed one-shot attempt has ended.
-1019 host tests passed. All candidate changes remain local; dev/origin/dev5371959.
-
-## Candidate312 prepared, not launched
-
-Local branch candidate-312, source d2a19a9, card metal160. Raw MM_DATA reads
-preserve valid ffffffff firmware data. The explicit held-reset continuation
-refuses a running/unexpected DMCUB state and skips initial STOP/reset assertion.
-Exact mismatch telemetry added. Build and dry-run passed;1019 host tests OK.
-The approved one-shot311 attempt is complete;312 awaits approval of continuation.
-No dev commit/push. Current DMCUB remains halted; no reboot is requested.
+User explicitly authorized autonomous build tests and iGPU reset/recovery on
+2026-09-24, superseding the earlier per-attempt approval condition. Preserve
+host-safety constraints. No reboot requested. Candidate work stays local;
+dev/origin/dev remain5371959 (remote fetched2026-09-24).1019 host tests passed.
 
 ## Verified progress
 
@@ -86,3 +78,10 @@ passes; hardware encode is Main8. [Roadmap](docs/ROADMAP.md).
 After milestones update current docs, integrate/push dev and synchronize the local
 checkout. Do not push main without new authorization. Prior live entries are [archived](findings/research/status-archives/status-before-display-port-20260917.md)
 and [earlier](findings/research/status-archives/status-before-night-close-20260916.md).
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-312-results`
+- Verdict: `EXECUTION_FAILED`
+- Boundary: `first_submission`
