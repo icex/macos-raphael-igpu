@@ -8556,7 +8556,7 @@ static uint32_t dcnNoStutter = 0;
 static uint32_t dcnOutputPattern = 0;
 static uint32_t dcnDetBuffer = 0;
 static uint32_t dcnVpgWake = 0;
-static uint32_t dcnHdmiDeep = 0;
+static uint32_t dcnHdmiDeep = 0, dcnFrlClock = 0;
 static rgpu::SuccessRecordBudget dcnPatternRecordBudget {};
 // Opt-in visual diagnostic: replace OPP0 solid blank color without changing its
 // enable/mode/status handshake. Linux opp2_set_disp_pattern_generator uses these
@@ -8722,6 +8722,21 @@ static void dcnAllocateDet0(void *context) {
           d0, comp, back, back != 0xffffffffu && ((back >> 8) & 7) == 3);
 }
 
+// DCN315 uses DCCG HDMISTREAMCLK_CNTL instead of the DCN302 HPO
+// increment/modulo register. Match Linux dccg31_set_hdmistreamclk: DTBCLK0
+// and DTO bypass while the HPO stream clock is enabled, REFCLK when disabled.
+static void dcnSetFrlStreamClock(void *context, uint32_t streamControl) {
+    if (dcnFrlClock != 1) return;
+    const uint32_t before = dcnNativeRead(context, 0x3519);
+    if (before == 0xffffffffu) return;
+    const uint32_t requested = (before & ~0x10003u) | 0x10000u | (streamControl & 1u);
+    if (requested != before) dcnNativeWrite(context, 0x3519, requested);
+    static volatile int32_t records = 0;
+    if (OSIncrementAtomic(&records) < 4)
+        CRLOG("HDMIFRL: stream-clock control=%#x before=%#x requested=%#x after=%#x",
+              streamControl, before, requested, dcnNativeRead(context, 0x3519));
+}
+
 __attribute__((noinline))
 static void wrapDcnRegWrite(void *context, uint32_t index, uint32_t value) {
     using namespace RaphaelDcn;
@@ -8737,6 +8752,7 @@ static void wrapDcnRegWrite(void *context, uint32_t index, uint32_t value) {
                   "mailbox)", dcnDalMailbox.message(), dcnDalMailbox.argument());
     } else {
         m = translate(index);
+        if (m.index == 0x98d3) dcnSetFrlStreamClock(context, value);
         if (m.index == 0x4d14 && value == 0) {
             dcnAllocateDet0(context);
             dcnSyncHdmiPixelRate(context);
@@ -10828,6 +10844,7 @@ static void pluginStart() {
     PE_parse_boot_argn("rgpuagdp", &agdpPikera, sizeof(agdpPikera));
     PE_parse_boot_argn("rgpuhdmiaudio", &hdmiAudioPairing, sizeof(hdmiAudioPairing));
     PE_parse_boot_argn("rgpudcnnostutter", &dcnNoStutter, sizeof(dcnNoStutter));
+    PE_parse_boot_argn("rgpufrlclock", &dcnFrlClock, sizeof(dcnFrlClock));
     PE_parse_boot_argn("rgpuhdmideep", &dcnHdmiDeep, sizeof(dcnHdmiDeep));
     PE_parse_boot_argn("rgpuvpgwake", &dcnVpgWake, sizeof(dcnVpgWake));
     PE_parse_boot_argn("rgpudcndet", &dcnDetBuffer, sizeof(dcnDetBuffer));
