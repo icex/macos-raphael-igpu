@@ -1,6 +1,6 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-09-24. Latest display experiment: **1.0.314** (DMCUB startup and three fresh replies verified; physical HDMI still unverified); prior streaming baseline: **1.0.284**; broader baseline: **1.0.280**. Full desktop acceleration
+Updated 2026-09-24. Latest display experiment: **1.0.315** (HDMI commands consumed and Samsung online in macOS; physical picture still awaiting confirmation); prior streaming baseline: **1.0.284**; broader baseline: **1.0.280**. Full desktop acceleration
 is **not qualified**. The reproduced Screen Sharing transparency defect is fixed
 in candidate279 and retained in280. Candidate280 also passes strict capture and
 clean recovery after visual, concurrent-client and codec workloads. The patched-QEMU
@@ -154,7 +154,8 @@ Passing isolated shaders does not establish correct desktop composition.
   confirmation pending.
 - [x] Bring up DMCUB through native PSP with verified guest TMR placement and
   fresh firmware replies (candidate314,2026-09-24).
-- [ ] Deliver HDMI VBIOS commands and verify one changing1080p60 physical output.
+- [x] Deliver HDMI VBIOS commands and observe firmware consumption (candidate315).
+- [ ] Confirm one changing physical picture on the Samsung; then enable HDMI audio.
 - [ ] Qualify modes, reconnection and higher resolutions after first stable output.
 
 Current evidence puts corrupt pixels in the scanout/DisplayStream path before
@@ -452,3 +453,10 @@ returns three fresh05003500 replies with zero fetch/write faults. Clean guest
 shutdown and authorizing recovery follow. The desktop probe has an independent
 nonfinite JSON error; no new Metal or physical-display pass is claimed. Next is
 HDMI mailbox consumption. [Evidence and implementation](../findings/research/dmcub-psp-load-20260924.md).
+
+Candidate315 additionally verifies17 consumed HDMI VBIOS commands, scanning OTG0,
+HDMI enable/symbol clock and HPD. After attachment, macOS identifies the Samsung
+Odyssey G95NC as online/main at3840x1080/about59Hz. Physical-screen confirmation
+is pending. The core/offscreen probe, capture, guest-request shutdown and recovery
+passed. A repeat uses a longer inspection window under the6000-second cap.
+HDMI audio PCI function7b:00.1 remains on the host; no audio passthrough claim.

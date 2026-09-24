@@ -79,3 +79,19 @@ Raw MM_DATA reads preserve legitimate ffffffff data.
 The desktop probe now emits null plus explicit nonfinite_numeric_fields paths
 for invalid optional numbers instead of losing the entire report to an exception.
 This changes reporting only; unavailable performance metrics are not zeroes.
+
+## Candidate315 first hardware result
+
+Run909d7c9412f825b8b7079f92b67f39be, MODE2#239: early hold, signed reload,
+startup and three fresh version queries pass again. Reversible empty-inbox
+verification passes.17 type128 commands consumed in10–820us, RPTR=WPTR=440.
+No DMUB timeout or panic. Live read-only QEMU MMIO snapshot shows OTG0 scanning,
+DIG0 HDMI enable/symbol clock on, HPD0 high. Later native system_profiler sees
+Odyssey G95NC online/main at3840x1080/about59Hz. User visual check is pending.
+
+CORE_PROBE_PASS; offscreen1000frames/736sampled pixels with zero mismatches.
+Initial probe caught the physical display before attachment; late ioreg/profile
+resolve that timing difference. Five-minute observation window ended normally:
+exited-after-guest-request and recovery authorizes_launch=true. No screenshot
+or software-online result is being treated as proof of a physical picture.
+Repeat315-watch extends observation to5000seconds within the6000-second cap.
