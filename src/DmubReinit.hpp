@@ -9,7 +9,7 @@ static constexpr Window Windows[] = {
     {5,0x7f0e9600,0x10040}, {6,0x7f0f9700,0xc880}
 };
 struct Inputs {
-    bool reserved=false, tmrValid=false;
+    bool reserved=false, tmrValid=false, resumeHeld=false;
     uint64_t limit=0, total=0, mc=0, physical=0, tmr=0, tmrBytes=0;
     const uint32_t *code=nullptr, *bios=nullptr;
     unsigned codeBytes=0, biosBytes=0;
@@ -17,7 +17,9 @@ struct Inputs {
 struct Result {
     unsigned phase=0, error=0, queries=0;
     bool touched=false, inaccessible=false, held=false, success=false;
-    bool stopAck=false, stopDone=false, stopWait=false;
+    bool stopAck=false, stopDone=false, stopWait=false, resumedHeld=false;
+    uint64_t badOffset=0;
+    uint32_t expected=0, actual=0;
     uint32_t faultFetch=0, faultWrite=0;
 };
 inline bool overlap(uint64_t a,uint64_t n,uint64_t b,uint64_t m) {
@@ -87,17 +89,25 @@ template<class IO> Result run(const Inputs &in, IO &io) {
     }
     const auto pending=rd(0x36b8), control=rd(0x36b6), reset=rd(0x36c0);
     if (r.inaccessible) return r;
-    if (!(control&0x10000) || reset&1 ||
-        ((pending&0xf0000000) && pending!=0x10010000)) {r.error=1;return r;}
-    // The caller already made a fresh baseline query and skips a responsive FW.
-    phase(2);
-    io.write(0x36b8,0x10020000);
-    r.stopAck=poll(0x36b8,0xffffffffu,0x20000);
-    r.stopDone=poll(0x36aa,0xffffffffu,0xdeaddead);
-    r.stopWait=poll(0x36b6,0x100000,0x100000);
+    const auto dmuif=rd(0x3802);
     if (r.inaccessible) return r;
-    phase(3); r.touched=true;
-    if (!(r.held=hold())) return fail();
+    const bool held=(reset&1) && (dmuif&0x100) && !(control&0x10000);
+    if (in.resumeHeld && !held) {r.error=1;return r;}
+    if (held && in.resumeHeld) {
+        r.resumedHeld=true;
+        phase(3); r.touched=true; r.held=true;
+    } else {
+        if (!(control&0x10000) || reset&1 ||
+            ((pending&0xf0000000) && pending!=0x10010000)) {r.error=1;return r;}
+        phase(2);
+        io.write(0x36b8,0x10020000);
+        r.stopAck=poll(0x36b8,0xffffffffu,0x20000);
+        r.stopDone=poll(0x36aa,0xffffffffu,0xdeaddead);
+        r.stopWait=poll(0x36b6,0x100000,0x100000);
+        if (r.inaccessible) return r;
+        phase(3); r.touched=true;
+        if (!(r.held=hold())) return fail();
+    }
     const uint32_t clear[]={0x3697,0x3696,0x369f,0x369e,0x369b,0x369a,0x36a3,0x36b8};
     for (auto reg:clear) if (!wr(reg,0)) return fail();
     phase(4);
@@ -110,10 +120,13 @@ template<class IO> Result run(const Inputs &in, IO &io) {
     };
     for (uint64_t off=Begin;off<End;off+=4) {
         const auto v=expected(off);
-        if (!io.memoryWriteRead(off,v)) {r.error=5;return fail();}
+        const auto back=io.memoryWriteRead(off,v);
+        if (back!=v) {r.badOffset=off;r.expected=v;r.actual=back;r.error=5;return fail();}
     }
-    for (uint64_t off=Begin;off<End;off+=4)
-        if (io.memoryRead(off)!=expected(off)) {r.error=5;return fail();}
+    for (uint64_t off=Begin;off<End;off+=4) {
+        const auto back=io.memoryRead(off), want=expected(off);
+        if (back!=want) {r.badOffset=off;r.expected=want;r.actual=back;r.error=5;return fail();}
+    }
     phase(5);
     if (!rmw(0x368e,0x10000,0x10000)) return fail();
     for (const auto &w:Windows) {

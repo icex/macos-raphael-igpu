@@ -1645,7 +1645,7 @@ static mach_vm_address_t orgGmmSetMemoryAttributes {};
 static bool hostReserveEnabled = false, hostReservationReady = false;
 static bool dcnVersionQueryEnabled = false, displayIdleExitEnabled = false;
 static bool dcnFirmwareResponsive = false;
-static bool dcnReinitEnabled = false;
+static bool dcnReinitEnabled = false, dcnResumeHeldEnabled = false;
 static void dcnReinitializeOnce();
 static void dcnQueryFirmwareVersion(const char *when);
 static uint64_t hostReservationLimit = 0, hostReservationTotal = 0;
@@ -3623,8 +3623,12 @@ static uint32_t wrapGmmSetMemoryAttributes(void *self, uint32_t type, void *attr
     const uint32_t base = fbRead(asicInfo, kGcFbBase) & 0xffffff;
     const uint32_t top = fbRead(asicInfo, kGcFbTop) & 0xffffff;
     const uint64_t physical = uint64_t(fbRead(asicInfo, kGcFbOffset) & 0xffffff) << 24;
+    const uint32_t bootStatus=fbRead(asicInfo,0x36a3);
+    const bool approvedHeld = dcnReinitEnabled && dcnResumeHeldEnabled && bootStatus==0 &&
+        fbRead(asicInfo,0x36a4)==0x05003500 && fbRead(asicInfo,0x36c0)==1 &&
+        fbRead(asicInfo,0x36b6)==0x800c6 && fbRead(asicInfo,0x3802)==0x100;
     if (top < base || total != (uint64_t(top - base) + 1) << 24 ||
-        (fbRead(asicInfo, 0x36a3) & 3) != 3) {
+        ((bootStatus & 3) != 3 && !approvedHeld)) {
         CRLOG("HOSTRESERVE: invalid framebuffer or DMCUB identity");
         return 2;
     }
@@ -8995,6 +8999,7 @@ static void dcnReinitializeOnce() {
     }
     RaphaelDmubReinit::Inputs in;
     in.reserved=hostReservationReady; in.limit=hostReservationLimit;
+    in.resumeHeld=dcnResumeHeldEnabled;
     in.total=hostReservationTotal; in.tmrValid=dcnTmrValid;
     in.tmr=dcnTmrAddress; in.tmrBytes=dcnTmrBytes;
     in.mc=uint64_t(fbRead(asicInfo,kGcFbBase)&0xffffff)<<24;
@@ -9013,13 +9018,17 @@ static void dcnReinitializeOnce() {
         uint32_t memoryRead(uint64_t off) {
             if (off<RaphaelDmubReinit::Begin || off>=RaphaelDmubReinit::End || (off&3))
                 return 0xffffffffu;
-            return dcnFbIndirectRead(off);
+            fbWrite(asicInfo,kMmIndex,uint32_t(off)|0x80000000u);
+            fbWrite(asicInfo,kMmIndexHi,uint32_t(off>>31));
+            return fbRead(asicInfo,kMmData); // Raw data: ffffffff is a valid payload word.
         }
-        bool memoryWriteRead(uint64_t off,uint32_t v) {
+        uint32_t memoryWriteRead(uint64_t off,uint32_t v) {
             if (off<RaphaelDmubReinit::Begin || off>=RaphaelDmubReinit::End || (off&3))
-                return false;
-            dcnFbIndirectWrite(off,v);
-            return dcnFbIndirectRead(off)==v;
+                return 0xffffffffu;
+            fbWrite(asicInfo,kMmIndex,uint32_t(off)|0x80000000u);
+            fbWrite(asicInfo,kMmIndexHi,uint32_t(off>>31));
+            fbWrite(asicInfo,kMmData,v);
+            return memoryRead(off);
         }
         void delayUs(unsigned us) { if (us>=1000) IOSleep(us/1000); else IODelay(us); }
         void phase(unsigned phase) { CRLOG("DMUBREINIT: phase=%u",phase); }
@@ -9035,6 +9044,8 @@ static void dcnReinitializeOnce() {
           result.success,result.phase,result.error,result.touched,result.held,result.inaccessible,
           result.stopAck,result.stopDone,result.stopWait,result.queries,result.faultFetch,
           result.faultWrite,selectors);
+    CRLOG("DMUBREINIT: resumed-held=%u mismatch-offset=%#llx expected=%#x actual=%#x",
+          result.resumedHeld,result.badOffset,result.expected,result.actual);
     if (result.success && selectors) dcnSurveyDmcub("after direct reinitialization");
 }
 
@@ -10438,6 +10449,8 @@ static void pluginStart() {
     displayIdleExitEnabled = PE_parse_boot_argn("rgpudisplaywake", &idleExit, sizeof(idleExit)) && idleExit == 1;
     uint32_t reinit = 0;
     dcnReinitEnabled = PE_parse_boot_argn("rgpudmubreinit", &reinit, sizeof(reinit)) && reinit == 1;
+    uint32_t resumeHeld=0;
+    dcnResumeHeldEnabled = PE_parse_boot_argn("rgpudmubresume", &resumeHeld, sizeof(resumeHeld)) && resumeHeld==1;
     uint32_t dmubQuery = 0;
     dcnVersionQueryEnabled = PE_parse_boot_argn("rgpudmubquery", &dmubQuery, sizeof(dmubQuery)) && dmubQuery == 1;
     if (PE_parse_boot_argn("rgpudcn", &dcn, sizeof(dcn)) && (dcn & ~kDcnAllowed) == 0 &&

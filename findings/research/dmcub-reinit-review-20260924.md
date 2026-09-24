@@ -189,3 +189,22 @@ The latter returns the unmodified register word. A fix must use it for MM_DATA
 and retain strict register-access checks separately. No blind retry was made.
 Metal and capture passed; clean guest shutdown and native recovery succeeded.
 DMCUB itself remains held reset.
+
+## Candidate312 prepared correction (not launched)
+
+Use raw AmdRegisterAccess::hwReadReg32 for MM_DATA instead of CGS validation;
+control-register all-ones checks remain unchanged. Log mismatch offset, expected
+word and actual word for both immediate and full-pass readback. Test data now
+contains valid ffffffff payload words.
+
+Because311 left DMCUB halted,312 has an explicit rgpudmubresume=1 mode. Native
+host reservation accepts only the observed held state (SCRATCH0=0, version05003500,
+CNTL2=1, CNTL=800c6, DMUIF reset100), still requiring valid reserved windows and
+all original address bounds. The loader additionally refuses resume mode unless
+held reset is still present after PSP/SMU initialization. It skips STOP and initial
+reset assertion, rewrites/checks the same fresh allocation, and releases firmware
+once. An unexpectedly running firmware is never reset by resume mode. The
+reviewed post-release failure hold remains unchanged.
+
+The first approved one-shot attempt has completed. This corrected continuation
+is built/tested separately and is not an automatic second hardware attempt.
