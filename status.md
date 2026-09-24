@@ -1,6 +1,6 @@
 # Live status — 2026-09-24
 
-## Candidate323: HDMI audio works;1080HiDPI120 remains required
+## Published milestone: correct HDMI picture and audible audio
 
 Run46a4fcd70484cba44f53f30a1516ea81, MODE2#251, sourcef83dfd1, metal171.
 Physical audio7b:00.1 now stays on VFIO, power/control=on, reset methods disabled.
@@ -14,11 +14,16 @@ Remaining:1080HiDPI120 (1920logical/3840x2160pixels120Hz) is not in the mode lis
 Current default remains HiDPI60; native1920x1080pixels120 is still listed. User
 reports120 option absent in the desired mode. Original/grafted encoder record
 0x1e0f and live link encoder caps0x3df include FRL capabilities; EDID has4K120.
-Next trace the native mode-validation rejection before changing link behavior.
+Isolated candidates324/325 traced a625MHz BIOS fallback and restored the native
+1217MHz DAL range. The1188MHz timing now passes that range check but still fails
+outer validation; HiDPI120 remains absent. These experiments are not part of the
+published driver milestone. Candidate325 ended with valid CORE_PROBE_PASS,
+authorizing recovery and audio DMA off; no VM remains running.
 
 FinalCORE_PROBE_PASS; complete capture; exited-after-guest-request;
 audio teardown PCI COMMAND2 (DMA off), errors=[]; graphics recovered and
 conditionally authorizes_launch=true. No VM running.1022 host tests OK,3 skipped.
+Setup and limits: [physical HDMI](docs/hdmi-status.md).
 Evidence: [audio experiment](findings/research/hdmi-audio-candidate323-20260924.md).
 Fresh candidates from fetched dev; autonomous tests/resets; no reboot or host sudo.
 
@@ -64,7 +69,8 @@ exact OpenCore DSDT ownership patch are required; prior media backups remain ava
    qualification. Existing clean stops do not qualify every failure mode.
 3. Broader applications, render hazards, interprocess synchronization and page-table
    release. Historical direct OpenGL hang and live Metal validation crash remain open.
-4. Physical DCN output, other hypervisors and measured performance/release qualification.
+4. HiDPI1080 at120Hz, DisplayPort, broader monitors, other hypervisors and measured
+   performance/release qualification. Samsung HDMI picture/audio have scoped passes.
 
 StockQEMU10.1.2/OpenCore/VirtualSMC1.3.7 works in this tested setup;
 PerfPowerServices was0.0% CPU on two guest boots. Automatic required-hardware HEVC
