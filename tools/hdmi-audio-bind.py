@@ -95,10 +95,19 @@ def main():
     with (dev/'config').open('rb') as stream:
         config = stream.read(8)
     command = int.from_bytes(config[4:6], 'little')
-    require(len(config) == 8 and command != 0xffff and command & 4 == 0,
-            'audio DMA remains enabled after host driver removal')
+    require(len(config) == 8 and command != 0xffff, 'audio config inaccessible')
+    # The removed ALSA driver stopped streams/CORB/RIRB but leaves PCI COMMAND
+    # BME set. Explicitly prohibit DMA on this now-unowned audio function.
+    before_command = command
+    if command & 4:
+        with (dev/'config').open('r+b', buffering=0) as stream:
+            stream.seek(4)
+            stream.write((command & ~4).to_bytes(2, 'little'))
+            stream.seek(4)
+            command = int.from_bytes(stream.read(2), 'little')
+    require(command == before_command & ~4, 'audio DMA disable readback failed')
     print(json.dumps(dict(phase='bound', device=BDF, driver='vfio-pci',
-                          pci_command=command, power='on', reset_methods=[])), flush=True)
+                          pci_command_before=before_command, pci_command=command, power='on', reset_methods=[])), flush=True)
 
 if __name__ == '__main__':
     main()
