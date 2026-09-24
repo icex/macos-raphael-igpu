@@ -176,5 +176,5 @@
   "critical_replay_quiesce": {
     "version": 1
   },
-  "interactive_hold_seconds": 300
+  "interactive_hold_seconds": 5000
 }

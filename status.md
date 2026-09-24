@@ -1,6 +1,6 @@
 # Live status — 2026-09-24
 
-## Candidate315: HDMI commands consumed; Samsung online; run remains active
+## Candidate315: HDMI commands consumed; Samsung online; clean recovery
 
 Run909d7c9412f825b8b7079f92b67f39be, metal163, source9886c30,
 boot5074c0e5-b2f6-46da-99b2-299ba322b41e, MODE2#239.
@@ -18,9 +18,9 @@ Service `rgpu-candidate315-hdmi.service`; results
 - **Capture:** probe JSON complete; initial report caught the Samsung before
   attachment, but later ioreg and system_profiler show it present and online.
   Native nonfinite-report test passed in a separate GPU-less session.
-- **Shutdown/recovery:** NOT YET RUN. Guest remains available for the physical
-  screen check, supervised to the6000-second deadline. Do not kill its runner.
-  Stop through `candidate-315-attempt-hdmi-results/stop-requested` when appropriate.
+- **Shutdown/recovery:** the300-second interactive inspection window expired;
+  exited-after-guest-request and recovered/authorizes_launch=true. Final verdict
+  CORE_PROBE_PASS. No stop file or forced shutdown was used.
 - **Evidence:** `~/macos-vm/run/c315-live-dcn.json` (reads via QEMU's existing
   MMIO mapping, no new VFIO owner), `c315-live-displays.txt`,
   `c315-live-display-profile.json`, and the active run's serial/probe.
@@ -38,7 +38,7 @@ JSON test, then exited-after-guest-request. Current probe source8b4bc8cf71eb3eb9
 binaryebbde2976f4780a4; full identities in run/guest-identity.json, old one backed up.
 
 The DMCUB startup milestone through314 is integrated/pushed and remote-verified
-at dev345eded.315 remains on its fresh candidate branch pending run completion.
+at dev345eded.315 remains on its fresh candidate branch; next repeat uses a longer screen-check window.
 User explicitly authorized autonomous tests/resets, preserving host safety.
 No reboot, sudo or same-boot amdgpu rebind was used.
 
@@ -115,3 +115,9 @@ and [earlier](findings/research/status-archives/status-before-night-close-202609
 - Output: `/home/bogdan/macos-vm/run/candidate-314-results`
 - Verdict: `EXECUTION_FAILED`
 - Boundary: `first_submission`
+
+The prior status entry briefly described the run as active just as its300-second
+inspection deadline expired. It was corrected after reading the final receipts.
+Next315-attempt-watch extends interactive hold to5000seconds within the unchanged
+6000-second overall cap; no test/reset approval is requested. Physical-screen
+observation is still pending, not inferred from software state.
