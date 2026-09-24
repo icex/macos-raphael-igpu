@@ -1,6 +1,6 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-09-24. Latest display experiment: **1.0.320** (native HiDPI image visible with pink hue; low-resolution interleaving and refresh modes unresolved); prior streaming baseline: **1.0.284**; broader baseline: **1.0.280**. Full desktop acceleration
+Updated 2026-09-24. Latest display experiment: **1.0.321** (full HiDPI picture confirmed after infoframe-memory wake; low-resolution interleaving and120Hz unresolved); prior streaming baseline: **1.0.284**; broader baseline: **1.0.280**. Full desktop acceleration
 is **not qualified**. The reproduced Screen Sharing transparency defect is fixed
 in candidate279 and retained in280. Candidate280 also passes strict capture and
 clean recovery after visual, concurrent-client and codec workloads. The patched-QEMU
@@ -157,7 +157,8 @@ Passing isolated shaders does not establish correct desktop composition.
 - [x] Deliver HDMI VBIOS commands and observe firmware consumption (candidate315).
 - [x] Confirm a physically visible hardware test pattern on the Samsung (candidate318).
 - [x] Restore native framebuffer fetch and confirm a visible HiDPI image (candidate320).
-- [ ] Correct pink hue/low-resolution interleaving and qualify refresh modes; then enable HDMI audio.
+- [x] Wake HDMI infoframe memory; user confirms full HiDPI picture, almost perfect (candidate321).
+- [ ] Correct low-resolution interleaving and qualify120Hz; then enable HDMI audio.
 - [ ] Qualify modes, reconnection and higher resolutions after first stable output.
 
 Current evidence puts corrupt pixels in the scanout/DisplayStream path before
