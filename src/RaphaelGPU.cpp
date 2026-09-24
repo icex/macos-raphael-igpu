@@ -37,6 +37,7 @@
 #include "HostMemoryReservation.hpp"
 #include "DmubRingProbe.hpp"
 #include "DisplayIdlePower.hpp"
+#include "HdmiFrlEdid.hpp"
 #include "DmubReinit.hpp"
 #include "DmubReinitPayload.hpp"
 #include "DmubPspPayload.hpp"
@@ -9423,7 +9424,7 @@ static void wrapDcDmubWait(void *dcDmub) {
 }
 
 // Candidate324: observe mode rejection without overriding native validation.
-static uint32_t hdmiTimingTrace = 0, hdmiNativeClock = 0;
+static uint32_t hdmiTimingTrace = 0, hdmiNativeClock = 0, hdmiFrlCaps = 0;
 static mach_vm_address_t orgAsicCapability = 0, baseAsicCapability = 0;
 static volatile int32_t clockRecords = 0;
 static mach_vm_address_t orgValidateTiming = 0, orgValidateRange = 0, orgLinkDescriptor = 0;
@@ -9511,6 +9512,25 @@ static int wrapDcValidateStream(void *dc, uint8_t *stream) {
     return result;
 }
 
+// The native bridge omits edid_caps.max_frl_rate (caps+0x7f).
+// Detection consumes that byte before selecting/training FRL. Restore only the
+// actual advertised value; never invent a trained rate or bypass validation.
+static mach_vm_address_t orgEdidBridge = 0;
+static volatile int32_t frlCapsRecords = 0;
+static uint32_t wrapEdidBridge(uint8_t *link, const uint32_t *raw, uint8_t *caps) {
+    const auto result = FunctionCast(wrapEdidBridge, orgEdidBridge)(link, raw, caps);
+    if (result == 0 && link && raw && caps && caps[0x7d] && !caps[0x7f]) {
+        const auto *enc = *reinterpret_cast<const uint8_t *const *>(link + 0x158);
+        if (enc && (*reinterpret_cast<const uint32_t *>(enc + 0x28) & 0x40)) {
+            const auto rate = hdmiFrlEdidRate(reinterpret_cast<const uint8_t *>(raw + 1), raw[0]);
+            if (rate) caps[0x7f] = rate;
+            if (OSIncrementAtomic(&frlCapsRecords) < 2)
+                CRLOG("HDMIFRL: EDID bridge bytes=%u advertised=%u sink-rate=%u", raw[0], rate, caps[0x7f]);
+        }
+    }
+    return result;
+}
+
 static void installDcnRoutes(KernelPatcher &patcher, mach_vm_address_t addr, size_t size) {
     if (dcnMode == 0) return;
     struct Target {
@@ -9543,7 +9563,11 @@ static void installDcnRoutes(KernelPatcher &patcher, mach_vm_address_t addr, siz
         0x48,0x83,0xbf,0x48,0x06,0x00,0x00,0x00};
     static const uint8_t dcStream[] = {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x41,0x54,0x53,
         0x48,0x89,0xf3,0x4c,0x8b,0x76,0x08};
+    static const uint8_t edidBridge[] = {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,
+        0x41,0x55,0x41,0x54,0x53,0x48,0x81,0xec,0x28,0x02,0x00,0x00};
     const Target targets[] = {
+        {0x74ada, edidBridge, sizeof(edidBridge), reinterpret_cast<mach_vm_address_t>(wrapEdidBridge),
+         &orgEdidBridge, "DAL EDID capability bridge", hdmiFrlCaps != 0},
         {0x68f3c, dalTiming, sizeof(dalTiming), reinterpret_cast<mach_vm_address_t>(wrapDalTiming),
          &orgDalTiming, "DAL::validateDetailedTiming", hdmiTimingTrace != 0},
         {0xb70a8, dcStream, sizeof(dcStream), reinterpret_cast<mach_vm_address_t>(wrapDcValidateStream),
@@ -10798,6 +10822,7 @@ static void pluginStart() {
     else if (dcn != 0) CRLOG("DCN: rgpudcn=%#x refused (bit 8 froze the host; bits 2 and 4 must be "
                              "set together)", dcn);
     PE_parse_boot_argn("rgpudallog", &dalLogMask, sizeof(dalLogMask));
+    PE_parse_boot_argn("rgpufrlcaps", &hdmiFrlCaps, sizeof(hdmiFrlCaps));
     PE_parse_boot_argn("rgpuhdmitrace", &hdmiTimingTrace, sizeof(hdmiTimingTrace));
     PE_parse_boot_argn("rgpuhdminativeclk", &hdmiNativeClock, sizeof(hdmiNativeClock));
     PE_parse_boot_argn("rgpuagdp", &agdpPikera, sizeof(agdpPikera));
