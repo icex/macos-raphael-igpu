@@ -27,6 +27,16 @@ validate this machine's KDK offsets, physical GPU execution or host stability.
 The runner label is explicitly Intel, as listed in the
 [GitHub runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
 
+## Checked-in experimental executable
+
+`kext/bin/RaphaelGPU` contains the hardware-tested candidate323 executable
+(HDMI picture and audible Samsung HDMI audio). Its adjacent `build-manifest.json`
+records the exact source commit, input hashes and executable SHA-256. The current
+source tree and `kext/Info.plist` match that build. Source builds still compile
+from source and never use this binary as a fallback. This executable alone is
+not an installable bundle; use the matching Info.plist, Lilu and tested VM setup.
+HiDPI120 experiments are not included in this published snapshot.
+
 ## Local build
 
 With the Linux cross-toolchain prepared by `tools/bootstrap-toolchain.sh`:
