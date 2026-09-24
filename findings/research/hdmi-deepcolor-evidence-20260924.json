@@ -1,0 +1,20 @@
+{
+  "run_id": "0cb060da92bd7d7a2afdb4dd7002f54b",
+  "source_commit": "bd981b1",
+  "root": "/home/bogdan/macos-vm/run",
+  "sha256": {
+    "c322-native60.txt": "d00f4cd6dfa1bd76d06be4a370ebe85898b9bbd1633ad8dd2705863ff7a0486e",
+    "c322-native120.txt": "05e3e74ccb678ebd58938f2404f437db6f1035bf0b0147681b5ca82c5d698b4e",
+    "c322-native60-scanout.json": "a6c8cde7ebc8f9fc6b4bfe0c0cc3aa74b0897fc7703e681923c674513558af4a",
+    "c322-native120-scanout.json": "3009d425332aa7f9bb1a89a89c0be395fcb26f94de6bbddc851b602e8f3a14ec",
+    "c322-edid-0.bin": "41d5be40458e7b2b085c71fba1b97b06d116679f4cff95e7b5a9004b1550434a",
+    "c322-edid-decoded.txt": "003592fe3444f2443993f59d635384a231adaf726724761570a257553eaa45c8",
+    "c322-display-modes.m": "2c50138fa6eabb92b52fc74bbd5b4b810200be346447b06c6d3e57d013e99348",
+    "c322-modes-edid.txt": "f87af429f671aca55a0074313133d11721ca248fc4c7896dc28976fc12c1ef5d",
+    "c322-agdc-help.txt": "64e63945cfd610ec92830a6813bfeae693fcaeac1b73e41c6e9476ba044e7350",
+    "candidate-322-results/verdict.json": "5d7856a7e897645117d060f4953867a78067eaa0ccc7f73a28d96dedf2e9c58b",
+    "candidate-322-results/shutdown.json": "bea749d41b9864b9f7b2d41d16306a85b799fe7c0d406d40de553cfe6fb8dfeb",
+    "candidate-322-results/recovery.json": "6f2b1d9224c28ac38f4681bbab324c1e04480dcec5fcd6d3cfe51374eafcb92f",
+    "candidate-322-results/probe.json": "7bee7bf23a60d006c8400ae0799f3b324937ef5881d7f256ff9cfeda796e10c7"
+  }
+}

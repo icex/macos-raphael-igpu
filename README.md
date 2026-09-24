@@ -26,7 +26,7 @@ and long-duration reliability are still being tested.
 | Memory and synchronization | Buffer/texture reuse, synchronized CPU/GPU texture updates, retained color contents, GPU fences, shared events and cross-process IOSurface transfers pass targeted checks. |
 | Hardware video | H.264 and HEVC Main8 encode/decode work. HEVC Main10 decoding passes short tests; Main10 hardware encoding is unavailable in the current native profile set. |
 | Shutdown and reuse | Repeated clean guest shutdowns and same-host-boot reuse work in the supervised workflow. Crash recovery and independent-host-boot coverage remain incomplete. |
-| Physical HDMI/DisplayPort | Candidate321 produces a user-confirmed full picture in1080 HiDPI (3840x2160pixels60Hz), described as almost perfect after waking infoframe memory. Low-resolution1080p remains interleaved;120Hz and measured pixel fidelity remain unqualified. HDMI audio is not yet passed through or tested. |
+| Physical HDMI/DisplayPort | Candidate321 gives a full1080HiDPI picture at60Hz. Candidate322 fixes native1080p interleaving; user confirms60Hz and reports120Hz appears to work. Required1080HiDPI120 is not yet exposed. HDMI audio is not yet passed through or tested. |
 
 The tested baseline is **macOS Sequoia build 24G830** with a matching driver,
 Lilu, OpenCore configuration and grafted VBIOS. Stock QEMU 10.1.2 now works with
@@ -68,7 +68,7 @@ Host tests and the macOS source build run in GitHub Actions on `dev`; see
   memory reclamation and operation across independently initialized host boots.
 - **Enable physical displays and HDMI audio:** Apple's embedded display core is being
   steered onto its DCN 3.02 path with DCN 3.1.5 register translation. Native PSP firmware
-  startup and framebuffer fetch work; HDMI color/layout and refresh modes are next. [Port plan](findings/research/display-dcn315-port-20260917.md)
+  startup, framebuffer fetch and native1080p layout work; HiDPI120 and HDMI audio are required next. [Port plan](findings/research/display-dcn315-port-20260917.md)
   · [HDMI audio plan](findings/research/hdmi-audio-passthrough-20260917.md).
 - **Measure and release:** measure performance after correctness, publish a tested
   compatibility matrix, and produce reproducible builds with clear support limits.
