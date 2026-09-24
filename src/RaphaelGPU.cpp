@@ -9572,7 +9572,7 @@ static uint64_t wrapReportLinkInfo(IOService *framebuffer) {
     if (!descriptor) return result;
     const auto signal = *reinterpret_cast<const uint32_t *>(descriptor + 8);
     if (signal != 0x100 && signal != 0x400) return result;
-    const uint32_t avSignal = 8; // Native TMDS HDMI metadata used by AppleGFXHDA.
+    uint32_t avSignal = 8; // Native TMDS HDMI metadata used by AppleGFXHDA.
     const bool av = framebuffer->setProperty("av-signal-type", &avSignal, sizeof(avSignal));
     const bool display = framebuffer->setProperty("display-type", "LCD");
     if (OSIncrementAtomic(&frlAudioRecords) < 2)
