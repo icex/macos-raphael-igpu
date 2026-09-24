@@ -9436,7 +9436,7 @@ static int wrapValidateTiming(void *self, void *input, uint64_t size) {
     const uint32_t h = known ? *reinterpret_cast<const uint32_t *>(t + 0x50) : 0;
     const uint64_t clock = known ? *reinterpret_cast<const uint64_t *>(t + 0x28) : 0;
     const int result = FunctionCast(wrapValidateTiming, orgValidateTiming)(self, input, size);
-    if (known && clock > 600000000ULL && OSIncrementAtomic(&timingRecords) < 4)
+    if (known && clock > 600000000ULL && OSIncrementAtomic(&timingRecords) < 2)
         CRLOG("HDMITIMING: validate size=%llu %ux%u clock=%lluHz result=%#x enc=%#x bpc=%#x",
               size, w, h, clock, result, *reinterpret_cast<const uint16_t *>(t + 0x88),
               *reinterpret_cast<const uint16_t *>(t + 0x8a));
@@ -9446,7 +9446,7 @@ static bool wrapValidateRange(const uint8_t *timing, const uint8_t *range, uint3
     const bool result = FunctionCast(wrapValidateRange, orgValidateRange)(timing, range, div);
     if (timing && range) {
         const uint64_t clock = *reinterpret_cast<const uint64_t *>(timing + 0x28);
-        if (clock > 600000000ULL && OSIncrementAtomic(&rangeRecords) < 4)
+        if (clock > 600000000ULL && OSIncrementAtomic(&rangeRecords) < 2)
             CRLOG("HDMITIMING: range %ux%u clock=%lluHz max=%lluHz div=%u result=%u",
                   *reinterpret_cast<const uint32_t *>(timing + 0x40),
                   *reinterpret_cast<const uint32_t *>(timing + 0x50), clock,
@@ -9456,7 +9456,7 @@ static bool wrapValidateRange(const uint8_t *timing, const uint8_t *range, uint3
 }
 static void wrapLinkDescriptor(void *self, uint8_t *out, const uint8_t *in) {
     FunctionCast(wrapLinkDescriptor, orgLinkDescriptor)(self, out, in);
-    if (out && in && OSIncrementAtomic(&descriptorRecords) < 4)
+    if (out && in && OSIncrementAtomic(&descriptorRecords) < 2)
         CRLOG("HDMITIMING: link obj=%#x rawcaps=%#x caps=%#x maxclock=%ukHz bpc=%u",
               *reinterpret_cast<const uint32_t *>(out),
               *reinterpret_cast<const uint32_t *>(in + 0x18),
@@ -9479,6 +9479,36 @@ static uint64_t wrapAsicCapability(void *self, uint32_t selector) {
         CRLOG("HDMITIMING: max pixel clock boot=%llukHz DAL=%llukHz selected=%llukHz",
               original, native, selected);
     return selected;
+}
+
+// Candidate326: retain native decisions and identify the rejection layer.
+static mach_vm_address_t orgDalTiming = 0, orgDcValidateStream = 0;
+static volatile int32_t dalTimingRecords = 0, dcStreamRecords = 0;
+static int wrapDalTiming(void *self, const uint32_t *sink, const uint8_t *timing) {
+    const int result = FunctionCast(wrapDalTiming, orgDalTiming)(self, sink, timing);
+    if (timing && *reinterpret_cast<const uint64_t *>(timing + 0x28) > 600000000ULL &&
+        OSIncrementAtomic(&dalTimingRecords) < 4)
+        CRLOG("HDMITIMING: DAL sink=%u.%u result=%#x enc=%u bpc=%u dsc=%u",
+              sink ? sink[0] : 0, sink ? sink[1] : 0, result,
+              *reinterpret_cast<const uint16_t *>(timing + 0x88),
+              *reinterpret_cast<const uint16_t *>(timing + 0x8a),
+              *reinterpret_cast<const uint16_t *>(timing + 0x90));
+    return result;
+}
+static int wrapDcValidateStream(void *dc, uint8_t *stream) {
+    const int result = FunctionCast(wrapDcValidateStream, orgDcValidateStream)(dc, stream);
+    if (stream && *reinterpret_cast<const uint32_t *>(stream + 0x84) > 6000000 &&
+        OSIncrementAtomic(&dcStreamRecords) < 4) {
+        const auto *link = *reinterpret_cast<const uint8_t *const *>(stream + 8);
+        CRLOG("HDMITIMING: DC stream result=%d signal=%#x clk100Hz=%u enc=%u depth=%u linktype=%u hpo=%u",
+              result, *reinterpret_cast<const uint32_t *>(stream + 0x3ec),
+              *reinterpret_cast<const uint32_t *>(stream + 0x84),
+              *reinterpret_cast<const uint32_t *>(stream + 0x9c),
+              *reinterpret_cast<const uint32_t *>(stream + 0x98),
+              link ? *reinterpret_cast<const uint32_t *>(link + 0x1fc) : 0,
+              link && *reinterpret_cast<const uintptr_t *>(link + 0x160) != 0);
+    }
+    return result;
 }
 
 static void installDcnRoutes(KernelPatcher &patcher, mach_vm_address_t addr, size_t size) {
@@ -9509,7 +9539,15 @@ static void installDcnRoutes(KernelPatcher &patcher, mach_vm_address_t addr, siz
         0xfe,0x12,0x0f,0x87,0x21,0x01,0x00,0x00};
     if (hdmiNativeClock && entryMatches(addr, size, 0x3bde2, baseCapability, sizeof(baseCapability)))
         baseAsicCapability = addr + 0x3bde2;
+    static const uint8_t dalTiming[] = {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x41,0x54,0x53,
+        0x48,0x83,0xbf,0x48,0x06,0x00,0x00,0x00};
+    static const uint8_t dcStream[] = {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x41,0x54,0x53,
+        0x48,0x89,0xf3,0x4c,0x8b,0x76,0x08};
     const Target targets[] = {
+        {0x68f3c, dalTiming, sizeof(dalTiming), reinterpret_cast<mach_vm_address_t>(wrapDalTiming),
+         &orgDalTiming, "DAL::validateDetailedTiming", hdmiTimingTrace != 0},
+        {0xb70a8, dcStream, sizeof(dcStream), reinterpret_cast<mach_vm_address_t>(wrapDcValidateStream),
+         &orgDcValidateStream, "dc_validate_stream", hdmiTimingTrace != 0},
         {0x3aeaa, asicCapability, sizeof(asicCapability),
          reinterpret_cast<mach_vm_address_t>(wrapAsicCapability), &orgAsicCapability,
          "Navi2::getCapability", hdmiNativeClock != 0 && baseAsicCapability != 0},
