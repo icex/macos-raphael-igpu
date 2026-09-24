@@ -1,5 +1,18 @@
 # Live status — 2026-09-24
 
+## Candidate318 first attempt: early FIPS panic; same-boot recovered
+
+Run6f4c3b2d2bb525c6c622baaa9560eaa0, MODE2#244, source19f6e6e.
+macOS FIPS Kernel POST Failed(-2074) in corecrypto at uptime0.36seconds;
+only corecrypto listed, no Raphael startup. Display hypothesis untested.
+Pre-identity capture remained pending, so used authenticated vm-supervision
+shutdown on this exact CID/StartedAt; outcome forced. Runner remained intact.
+Artifacts run/c318-panic-supervised-shutdown.json and candidate-318-results.
+Separate stopped-device MODE2/noqueue recovery: c318-panic-noqueue-recovery.json,
+schema9 recovered/authorizes_launch=true. No reboot or host driver rebind.
+Retry same build in isolated attempt-pattern namespace; wake assertion must be
+verified before physical observation.1020 tests OK (3 skipped), build/card valid.
+
 ## Candidate317 completed: awake mode tests; clean capture and recovery
 
 Run2721c4fb410589d075ecccbe1046bea5, MODE2#243, source601a89e.
@@ -7,8 +20,8 @@ Firmware passed3 fresh replies. DRAM policy readback1032 with active OTG,
 restores1033 when off. Awake assertion verified (`UserIsActive=1` and
 `PreventUserIdleDisplaySleep=1`); HDMI enabled. Native1080p120 then1080p60
 selected successfully;60Hz disables scrambling. DPG0_CONTROL0, SURFACE_INUSE0,
-HUBP timeout2/underflow1 persisted. AVMUTE status0. Physical60Hz observation
-requested, not yet answered; earlier316 observation confirmed black with signal.
+HUBP timeout2/underflow1 persisted. AVMUTE status0. User confirmed317 awake60Hz still black with signal; earlier316 observation
+also confirmed black with signal.
 Core probe passed; final verdictCORE_PROBE_PASS. Critical replay complete with
 no loss. Guest exited-after-guest-request; recovery status=recovered and
 authorizes_launch=true. Stopped through harness for318 output-pattern test.
@@ -192,3 +205,10 @@ observation is still pending, not inferred from software state.
 - Output: `/home/bogdan/macos-vm/run/candidate-317-results`
 - Verdict: `CORE_PROBE_PASS`
 - Boundary: `None`
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-318-results`
+- Verdict: `INVALID`
+- Boundary: `identity_or_route_missing`
