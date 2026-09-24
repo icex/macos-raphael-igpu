@@ -59,3 +59,23 @@ use the new reserved layout. Firmware scratch15 records a3a02 register timeout,
 but GPINT completes; actual mailbox consumption is untested. Guest-requested
 shutdown and recovery passed. Desktop probe JSON failed on an infinite numeric
 value; this is separate from serial-proven firmware startup. HDMI delivery off.
+
+## Candidate315: repeatable reload and HDMI delivery
+
+314's firmware is now running. Before allocating/replacing TMR, the opt-in GMM
+path validates windows, requests STOP_FW, then asserts processor/interface reset
+and disables execution with readback. A bounded stop timeout may proceed to the
+already-tested forced hold; inaccessible reads or failed hold refuse init. This
+prevents execution from prior TMR during replacement. Existing owned nonsecure
+windows are accepted only at the exact new layout with their expected sizes.
+
+Firmware startup stays at the tested late VCN/display-wake point. Early DAL
+commands remain log-only while held. After startup, validate the new empty inbox
+with an unpublished reversible slot probe, then permit VBIOS type128 delivery.
+The normal modeset commands occur after this point in314's serial timeline.
+Each ring write remains readback-verified; timeout disables further delivery.
+Raw MM_DATA reads preserve legitimate ffffffff data.
+
+The desktop probe now emits null plus explicit nonfinite_numeric_fields paths
+for invalid optional numbers instead of losing the entire report to an exception.
+This changes reporting only; unavailable performance metrics are not zeroes.

@@ -26,6 +26,35 @@ struct Result {
 inline bool overlap(uint64_t a,uint64_t n,uint64_t b,uint64_t m) {
     return n && m && a<b+m && b<a+n;
 }
+// Hold a previously running image before native GMM allocates/replaces its TMR.
+// Caller validates identity/windows and explicitly selects PSP reload first.
+template<class IO> bool prepareReload(IO &io) {
+    const auto pending=io.read(0x36b8);
+    if (pending==0xffffffffu || ((pending&0xf0000000) && pending!=0x10010000)) return false;
+    io.write(0x36b8,0x10020000);
+    for (unsigned n=0;n<10000;n++) {
+        const auto v=io.read(0x36b8);
+        if (v==0xffffffffu) return false;
+        if (v==0x20000) break;
+        io.delayUs(10);
+    }
+    for (unsigned n=0;n<10000;n++) {
+        const auto v=io.read(0x36aa);
+        if (v==0xffffffffu) return false;
+        if (v==0xdeaddead) break;
+        io.delayUs(10);
+    }
+    auto update=[&](uint32_t reg,uint32_t mask,uint32_t value) {
+        const auto old=io.read(reg);
+        if (old==0xffffffffu) return false;
+        io.write(reg,(old&~mask)|(value&mask));
+        const auto back=io.read(reg);
+        return back!=0xffffffffu && (back&mask)==value;
+    };
+    return update(0x36c0,1,1) && update(0x3802,0x100,0x100) &&
+        update(0x36b6,0x10000,0) && update(0x36a3,0xffffffffu,0) &&
+        update(0x36b8,0xffffffffu,0);
+}
 // Transport exposes register read/write, bounded FB write/read, delayUs and phase.
 // No dynamic allocation, exceptions, firmware registration, or PSP command writes.
 template<class IO> Result run(const Inputs &in, IO &io) {
@@ -90,7 +119,10 @@ template<class IO> Result run(const Inputs &in, IO &io) {
         for (auto base:domains) {
             if (n<=in.total && a>=base && a-base<=in.total-n) {off=a-base;matches++;}
         }
-        if (matches!=1 || overlap(off,n,Begin,End-Begin)) {r.error=1;return r;}
+        const bool ownedWindow=in.pspLoad && in.resumeHeld && w.cw>=3 &&
+            off==w.offset && n==uint64_t(w.bytes)+1;
+        if (matches!=1 || (overlap(off,n,Begin,End-Begin) && !ownedWindow))
+            {r.error=1;return r;}
     }
     const auto pending=rd(0x36b8), control=rd(0x36b6), reset=rd(0x36c0);
     if (r.inaccessible) return r;

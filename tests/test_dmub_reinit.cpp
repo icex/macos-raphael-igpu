@@ -68,6 +68,12 @@ int main() {
     Inputs in; in.reserved=true;in.tmrValid=true;in.limit=0x7e000000;in.total=0x80000000;
     in.mc=0xf400000000;in.physical=0x7e0000000;in.tmr=in.mc+0x7d600000;in.tmrBytes=0xa00000;
     in.code=code.data();in.codeBytes=0x3a520;in.bios=bios.data();in.biosBytes=0xae00;
+    for (unsigned f: {0u,1u}) {
+        IO io(f); const auto held=prepareReload(io);
+        assert(held==(f==0));assert(!io.starts);
+        if (held) assert((io.regs[0x36c0]&1) && (io.regs[0x3802]&0x100) && !(io.regs[0x36b6]&0x10000));
+    }
+    { IO io(0);io.regs[0x36b8]=0x10030000;assert(!prepareReload(io));assert(io.writes.empty()); }
     for (unsigned f=0;f<8;f++) {
         IO io(f);auto r=run(in,io);
         if (!f) {
@@ -99,6 +105,12 @@ int main() {
     { std::vector<uint32_t> signedCode(0x3a720/4,0xffffffffu);
       for (unsigned f: {0u,8u,9u,10u}) {
         IO io(f);auto psp=in;psp.pspLoad=true;psp.signedCode=signedCode.data();psp.signedBytes=0x3a720;
+        psp.resumeHeld=true;io.regs[0x36c0]=1;io.regs[0x3802]=0x100;io.regs[0x36b6]=0x800c6;
+        for (auto w:Windows) if (w.cw>=3) {
+          const uint64_t a=psp.mc+w.offset;
+          io.regs[0x3675+w.cw*2]=uint32_t(a);io.regs[0x3676+w.cw*2]=uint32_t(a>>32);
+          io.regs[0x366d+w.cw]=0x80000000u|(w.cw<<24)|w.bytes;
+        }
         auto r=run(psp,io);
         if (!f) {assert(r.success && io.starts==1 && r.queries==3);}
         else {assert(!r.success && r.held && io.starts==0);}

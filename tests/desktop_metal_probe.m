@@ -72,8 +72,37 @@ static NSString *const kShaderSource =
      "  if (uv.y <= 0.45) return uv.x < 0.5 ? float4(1, 0, 0, 1) : float4(0, 1, 0, 1);\n"
      "  return uv.x < 0.5 ? float4(0, 0, 1, 1) : float4(1, 1, 1, 1); }\n";
 
+// Preserve core/readback evidence when optional driver metrics are not finite.
+// Record each affected JSON path explicitly; null is unavailable, never a zero result.
+static id finiteJSON(id value, NSString *path, NSMutableArray *invalid) {
+    if ([value isKindOfClass:[NSNumber class]] && !isfinite([value doubleValue])) {
+        [invalid addObject:path];
+        return [NSNull null];
+    }
+    if ([value isKindOfClass:[NSDictionary class]]) {
+        NSMutableDictionary *out=[NSMutableDictionary dictionary];
+        for (NSString *key in value)
+            out[key]=finiteJSON(value[key], [path stringByAppendingFormat:@".%@",key], invalid);
+        return out;
+    }
+    if ([value isKindOfClass:[NSArray class]]) {
+        NSMutableArray *out=[NSMutableArray array];
+        NSUInteger i=0;
+        for (id item in value)
+            [out addObject:finiteJSON(item,[path stringByAppendingFormat:@"[%lu]",(unsigned long)i++],invalid)];
+        return out;
+    }
+    return value;
+}
+static NSData *reportJSON(NSDictionary *value) {
+    NSMutableArray *invalid=[NSMutableArray array];
+    NSMutableDictionary *out=finiteJSON(value,@"$",invalid);
+    if (invalid.count) out[@"nonfinite_numeric_fields"]=invalid;
+    return [NSJSONSerialization dataWithJSONObject:out options:0 error:nil];
+}
+
 static void emit(void) {
-    NSData *data = [NSJSONSerialization dataWithJSONObject:report options:0 error:nil];
+    NSData *data = reportJSON(report);
     printf("RGPU_DESKTOP_METAL_RESULT %.*s\n", (int)data.length, (const char *)data.bytes);
     fflush(stdout);
 }
@@ -778,7 +807,7 @@ static int renderChild(NSString *outputPath, unsigned long long expiry) {
     } else {
         result[@"error"] = @"expired";
     }
-    NSData *data = [NSJSONSerialization dataWithJSONObject:result options:0 error:nil];
+    NSData *data = reportJSON(result);
     [data writeToFile:outputPath atomically:NO];
     return 0;
 }
@@ -874,7 +903,7 @@ static int patchChild(NSString *variant, NSString *outputPath, unsigned long lon
     } else {
         result[@"error"] = @"expired";
     }
-    NSData *data = [NSJSONSerialization dataWithJSONObject:result options:0 error:nil];
+    NSData *data = reportJSON(result);
     [data writeToFile:outputPath atomically:NO];
     return 0;
 }
@@ -904,7 +933,7 @@ static NSDictionary *patchChildRun(const char *selfPath, unsigned long long expi
 static int windowChild(NSString *outputPath, unsigned long long expiry) {
     NSMutableDictionary *result = [NSMutableDictionary dictionary];
     void (^save)(void) = ^{
-        NSData *data = [NSJSONSerialization dataWithJSONObject:result options:0 error:nil];
+        NSData *data = reportJSON(result);
         [data writeToFile:outputPath atomically:NO];
     };
     signal(SIGALRM, deadline);

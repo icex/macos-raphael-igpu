@@ -3627,9 +3627,9 @@ static uint32_t wrapGmmSetMemoryAttributes(void *self, uint32_t type, void *attr
     const uint32_t top = fbRead(asicInfo, kGcFbTop) & 0xffffff;
     const uint64_t physical = uint64_t(fbRead(asicInfo, kGcFbOffset) & 0xffffff) << 24;
     const uint32_t bootStatus=fbRead(asicInfo,0x36a3);
-    const bool approvedHeld = dcnReinitEnabled && dcnResumeHeldEnabled && bootStatus==0 &&
+    bool approvedHeld = dcnReinitEnabled && dcnResumeHeldEnabled && bootStatus==0 &&
         fbRead(asicInfo,0x36a4)==0x05003500 && fbRead(asicInfo,0x36c0)==1 &&
-        fbRead(asicInfo,0x36b6)==0x800c6 && fbRead(asicInfo,0x3802)==0x100;
+        (fbRead(asicInfo,0x36b6)&~0x100000u)==0x800c6 && fbRead(asicInfo,0x3802)==0x100;
     if (top < base || total != (uint64_t(top - base) + 1) << 24 ||
         ((bootStatus & 3) != 3 && !approvedHeld)) {
         CRLOG("HOSTRESERVE: invalid framebuffer or DMCUB identity");
@@ -3649,10 +3649,28 @@ static uint32_t wrapGmmSetMemoryAttributes(void *self, uint32_t type, void *attr
     }
     RaphaelHostMemory::Plan plan {};
     if (!RaphaelHostMemory::plan(uint64_t(base) << 24, physical, total, visible,
-                                 existing, windows, 6, plan, approvedHeld && dcnPspLoadEnabled)) {
+                                 existing, windows, 6, plan)) {
         CRLOG("HOSTRESERVE: window range refused total=%#llx visible=%#llx reserved=%#llx",
               total, visible, existing);
         return 2;
+    }
+    if (dcnReinitEnabled && dcnPspLoadEnabled && dcnResumeHeldEnabled) {
+        if (!approvedHeld) {
+            if (fbRead(asicInfo,0x36a4)!=0x05003500 ||
+                !(fbRead(asicInfo,0x36b6)&0x10000) || (fbRead(asicInfo,0x36c0)&1)) return 2;
+            struct EarlyTransport {
+                uint32_t read(uint32_t r) { return fbRead(asicInfo,r); }
+                void write(uint32_t r,uint32_t v) { fbWrite(asicInfo,r,v); }
+                void delayUs(unsigned us) { IODelay(us); }
+            } io;
+            approvedHeld=RaphaelDmubReinit::prepareReload(io);
+            dcnFirmwareResponsive=false;
+            CRLOG("HOSTRESERVE: prior DMCUB held before TMR replacement=%u CNTL=%#x reset=%#x DMUIF=%#x",
+                  approvedHeld,fbRead(asicInfo,0x36b6),fbRead(asicInfo,0x36c0),fbRead(asicInfo,0x3802));
+            if (!approvedHeld) return 2;
+        }
+        if (!RaphaelHostMemory::plan(uint64_t(base)<<24,physical,total,visible,
+                                      existing,windows,6,plan,true)) return 2;
     }
     if (plan.additional) {
         uint64_t input[2] = {(uint64_t(base) << 24) + plan.limit, plan.additional};
@@ -8721,7 +8739,7 @@ static constexpr uint32_t kMmIndex = 0x0, kMmData = 0x1, kMmIndexHi = 0x6;
 static uint32_t dcnFbIndirectRead(uint64_t off) {
     dcnNativeWrite(dcnRegContext, kMmIndex, static_cast<uint32_t>(off) | 0x80000000u);
     dcnNativeWrite(dcnRegContext, kMmIndexHi, static_cast<uint32_t>(off >> 31));
-    return dcnNativeRead(dcnRegContext, kMmData);
+    return fbRead(asicInfo, kMmData);
 }
 static void dcnFbIndirectWrite(uint64_t off, uint32_t value) {
     dcnNativeWrite(dcnRegContext, kMmIndex, static_cast<uint32_t>(off) | 0x80000000u);
@@ -8985,15 +9003,17 @@ static void dcnQueryFirmwareVersion(const char *when) {
           responseBefore, rd(0x36aa), waited, cntl, reset);
 }
 
-// User-approved candidate311: exactly one Linux direct-load attempt, delivery off.
+// Explicit opt-in reinitialization: one attempt per guest; delivery remains gated
+// on successful firmware queries and verified inbox access.
+static void dcnValidateEmptyInbox();
 static void dcnReinitializeOnce() {
     static bool attempted = false;
     if (!dcnReinitEnabled || attempted) return;
     attempted = true;
     if (asicInfo == nullptr || dcnNativeRead == nullptr || dcnNativeWrite == nullptr ||
-        dcnRegContext == nullptr || (dcnMode & kDcnDmubDeliver) ||
+        dcnRegContext == nullptr ||
         !dcnVersionQueryEnabled || !hostReservationReady) {
-        CRLOG("DMUBREINIT: refused missing transport/reservation or delivery enabled");
+        CRLOG("DMUBREINIT: refused missing transport/reservation");
         return;
     }
     if (dcnFirmwareResponsive) {
@@ -9081,7 +9101,10 @@ static void dcnReinitializeOnce() {
           result.resumedHeld,result.badOffset,result.expected,result.actual);
     CRLOG("DMUBREINIT: register=%#x mask=%#x expected=%#x actual=%#x psp=%u",
           result.badRegister,result.badMask,result.expected,result.actual,in.pspLoad);
-    if (result.success && selectors) dcnSurveyDmcub("after direct reinitialization");
+    if (result.success && selectors) {
+        dcnSurveyDmcub("after firmware reinitialization");
+        dcnValidateEmptyInbox();
+    }
 }
 
 // Separate from the read-only survey: only delivery mode may test an unsubmitted slot.
