@@ -1,5 +1,18 @@
 # Live status — 2026-09-24
 
+## Candidate319 retry: missing live DET allocation confirmed
+
+Run4d173834d3c6b91425d008e9bc5743eb, MODE2#247, source5131613,
+metal167. Native1920x1080 pixels/logical60Hz, awake assertions verified.
+DET0-3 requested/current=0; COMPBUF requested/current=13 segments. DPG0=0,
+HUBP0 timeout2/underflow1, surface-in-use0. No new physical-screen observation;
+this confirms missing allocation during active native scanout, not its causality.
+Core probe passed, complete capture, finalCORE_PROBE_PASS. Harness stop-requested,
+exited-after-guest-request, recovered/authorizes_launch=true. Next320 allocates
+three unused64KiB segments to DET0 with bounds/stability guards.
+Evidence: run/c319-fetch-scanout.json, c319-awake-check.txt, c319-awake-60hz.txt,
+and candidate-319-attempt-fetch-results receipts. Prior early panic remains archived.
+
 ## Candidate319 baseline diagnostic: early boot panic, recovered
 
 Run009f47866783045e30571237b1c44a3a, MODE2#246, source5131613,
@@ -101,3 +114,10 @@ and [earlier](findings/research/status-archives/status-before-night-close-202609
 - Output: `/home/bogdan/macos-vm/run/candidate-319-results`
 - Verdict: `INVALID`
 - Boundary: `identity_or_route_missing`
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-319-attempt-fetch-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
