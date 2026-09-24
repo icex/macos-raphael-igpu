@@ -9442,7 +9442,7 @@ static void wrapDcDmubWait(void *dcDmub) {
 }
 
 // Candidate324: observe mode rejection without overriding native validation.
-static uint32_t hdmiTimingTrace = 0, hdmiNativeClock = 0, hdmiFrlCaps = 0;
+static uint32_t hdmiTimingTrace = 0, hdmiNativeClock = 0, hdmiFrlCaps = 0, hdmiFrlAudio = 0;
 static mach_vm_address_t orgAsicCapability = 0, baseAsicCapability = 0;
 static volatile int32_t clockRecords = 0;
 static mach_vm_address_t orgValidateTiming = 0, orgValidateRange = 0, orgLinkDescriptor = 0;
@@ -9549,6 +9549,37 @@ static uint32_t wrapEdidBridge(uint8_t *link, const uint32_t *raw, uint8_t *caps
     return result;
 }
 
+// reportCapabilities_LinkInfo predates FRL: native descriptor signal0x100
+// falls through to av-signal-type=0/display-type=NONE. Publish HDMI metadata
+// only for a single connected native FRL path; never change the link signal.
+static mach_vm_address_t orgReportLinkInfo = 0;
+static volatile int32_t frlAudioRecords = 0;
+static uint64_t wrapReportLinkInfo(IOService *framebuffer) {
+    const auto result = FunctionCast(wrapReportLinkInfo, orgReportLinkInfo)(framebuffer);
+    if (result || !framebuffer) return result;
+    const auto *fb = reinterpret_cast<const uint8_t *>(framebuffer);
+    const auto *path = *reinterpret_cast<const uint8_t *const *>(fb + 0x81c8);
+    auto *controller = *reinterpret_cast<void *const *>(fb + 0x8a40);
+    if (!path || !controller || *reinterpret_cast<const uint32_t *>(path + 0xd0) != 1)
+        return result;
+    using GetLink = void *(*)(void *, uint8_t);
+    const auto *controllerVtable = *reinterpret_cast<const uintptr_t *const *>(controller);
+    auto *link = reinterpret_cast<GetLink>(controllerVtable[0x8e8 / 8])(controller, path[0xec]);
+    if (!link) return result;
+    using GetDescriptor = const uint8_t *(*)(void *);
+    const auto *linkVtable = *reinterpret_cast<const uintptr_t *const *>(link);
+    const auto *descriptor = reinterpret_cast<GetDescriptor>(linkVtable[0x1a8 / 8])(link);
+    if (!descriptor) return result;
+    const auto signal = *reinterpret_cast<const uint32_t *>(descriptor + 8);
+    if (signal != 0x100 && signal != 0x400) return result;
+    const uint32_t avSignal = 8; // Native TMDS HDMI metadata used by AppleGFXHDA.
+    const bool av = framebuffer->setProperty("av-signal-type", &avSignal, sizeof(avSignal));
+    const bool display = framebuffer->setProperty("display-type", "LCD");
+    if (OSIncrementAtomic(&frlAudioRecords) < 2)
+        CRLOG("HDMIFRL: native signal=%#x HDMI audio metadata av=%u display=%u", signal, av, display);
+    return result;
+}
+
 static void installDcnRoutes(KernelPatcher &patcher, mach_vm_address_t addr, size_t size) {
     if (dcnMode == 0) return;
     struct Target {
@@ -9583,7 +9614,11 @@ static void installDcnRoutes(KernelPatcher &patcher, mach_vm_address_t addr, siz
         0x48,0x89,0xf3,0x4c,0x8b,0x76,0x08};
     static const uint8_t edidBridge[] = {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,
         0x41,0x55,0x41,0x54,0x53,0x48,0x81,0xec,0x28,0x02,0x00,0x00};
+    static const uint8_t reportLinkInfo[] = {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,
+        0x41,0x55,0x41,0x54,0x53,0x48,0x83,0xec,0x18,0x48,0x89,0xfb};
     const Target targets[] = {
+        {0xe074, reportLinkInfo, sizeof(reportLinkInfo), reinterpret_cast<mach_vm_address_t>(wrapReportLinkInfo),
+         &orgReportLinkInfo, "reportCapabilities_LinkInfo FRL audio", hdmiFrlAudio != 0},
         {0x74ada, edidBridge, sizeof(edidBridge), reinterpret_cast<mach_vm_address_t>(wrapEdidBridge),
          &orgEdidBridge, "DAL EDID capability bridge", hdmiFrlCaps != 0},
         {0x68f3c, dalTiming, sizeof(dalTiming), reinterpret_cast<mach_vm_address_t>(wrapDalTiming),
@@ -10840,6 +10875,7 @@ static void pluginStart() {
     else if (dcn != 0) CRLOG("DCN: rgpudcn=%#x refused (bit 8 froze the host; bits 2 and 4 must be "
                              "set together)", dcn);
     PE_parse_boot_argn("rgpudallog", &dalLogMask, sizeof(dalLogMask));
+    PE_parse_boot_argn("rgpufrlaudio", &hdmiFrlAudio, sizeof(hdmiFrlAudio));
     PE_parse_boot_argn("rgpufrlcaps", &hdmiFrlCaps, sizeof(hdmiFrlCaps));
     PE_parse_boot_argn("rgpuhdmitrace", &hdmiTimingTrace, sizeof(hdmiTimingTrace));
     PE_parse_boot_argn("rgpuhdminativeclk", &hdmiNativeClock, sizeof(hdmiNativeClock));
