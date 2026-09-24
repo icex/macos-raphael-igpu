@@ -15,6 +15,8 @@ No reboot, host sudo, runner kill or amdgpu rebind.
 
 Candidate316 prepared on fresh fetched devca160d3: bright OPP0 blank-color diagnostic.
 Source81c08b6, metal164.1020 host tests OK (3 skipped), build passed.
+First316 preparation stopped before QEMU: card omitted diagnostic bootarg. Fixed
+and validated offline. MODE2#241 passed; no hardware exposure/ledger entry.
 Diagnostic changes color only, retaining native DPG control/status handshakes.
 This tests downstream display output, not desktop scanout qualification.
 

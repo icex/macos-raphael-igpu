@@ -159,7 +159,8 @@
     "rgpudisplaywake": "1",
     "rgpudmubreinit": "1",
     "rgpudmubresume": "1",
-    "rgpudmubpsp": "1"
+    "rgpudmubpsp": "1",
+    "rgpudcncolor": "1"
   },
   "launch_options": {
     "BOOTDISK_MODE": "custom",
