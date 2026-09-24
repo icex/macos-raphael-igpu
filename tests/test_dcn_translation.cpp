@@ -92,6 +92,13 @@ int main() {
     assert(wakeVpgMemory(0xa510) == 0xa501);
     assert(wakeVpgMemory(1) == 1);
 
+    assert(hdmiPixelResync(0x103, 0x11010019) == 0x113);
+    assert(hdmiPixelResync(0x113, 0x1001f) == 0x103);
+    assert(hdmiPixelResync(0x103, 0x21010019) == 0x123);
+    assert(hdmiPixelResync(0x103, 0x31010019) == 0x133);
+    assert(hdmiPixelResync(0x103, 0x10010019) == 0x103); // depth without enable
+    assert(hdmiPixelResync(0xa5c3, 0x11010019) == 0xa5d3);
+
     DalMailbox mailbox;
     assert(DalMailbox::owns(0x1628a) && !DalMailbox::owns(0x16265));
     assert(mailbox.read(DalMailbox::kResponse) == DalMailbox::kResultOk);   // ready before a message

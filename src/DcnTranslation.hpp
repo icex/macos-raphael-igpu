@@ -103,6 +103,13 @@ inline uint32_t remapRead(const FieldRemap &remap, uint32_t value315) {
     return out;
 }
 
+// Match HDMI packing to the PHY pixel-clock resynchronizer. Linux
+// dce112_program_pixel_clk_resync uses ratios0/1/2/3 for8/10/12/16bpc.
+inline uint32_t hdmiPixelResync(uint32_t phy, uint32_t hdmi) {
+    const uint32_t ratio = (hdmi & (1u << 24)) ? ((hdmi >> 28) & 3u) : 0u;
+    return (phy & ~0x30u) | (ratio << 4);
+}
+
 // DCN31 VPG SRAM wake: disable light sleep, clear forced light sleep.
 inline uint32_t wakeVpgMemory(uint32_t value) { return (value & ~0x10u) | 1u; }
 

@@ -8548,6 +8548,7 @@ static uint32_t dcnNoStutter = 0;
 static uint32_t dcnOutputPattern = 0;
 static uint32_t dcnDetBuffer = 0;
 static uint32_t dcnVpgWake = 0;
+static uint32_t dcnHdmiDeep = 0;
 static rgpu::SuccessRecordBudget dcnPatternRecordBudget {};
 // Opt-in visual diagnostic: replace OPP0 solid blank color without changing its
 // enable/mode/status handshake. Linux opp2_set_disp_pattern_generator uses these
@@ -8655,6 +8656,23 @@ static uint32_t wrapDcnRegRead(void *context, uint32_t index) {
     return value;
 }
 
+// Apple's older clock-source path leaves DMUB deep_color_ratio zero. Match
+// the PHY resync ratio to the native HDMI packing after setup and at unblank.
+static void dcnSyncHdmiPixelRate(void *context) {
+    if (dcnHdmiDeep != 1) return;
+    const uint32_t hdmi = dcnNativeRead(context, 0x5553);
+    const uint32_t before = dcnNativeRead(context, 0x100);
+    if (hdmi == 0xffffffffu || before == 0xffffffffu || !(before & 0x100u)) return;
+    const uint32_t value = RaphaelDcn::hdmiPixelResync(before, hdmi);
+    if (value == before) return;
+    dcnNativeWrite(context, 0x100, value);
+    const uint32_t after = dcnNativeRead(context, 0x100);
+    static rgpu::SuccessRecordBudget records {};
+    SAMPLED_CRLOG(records, after != 0xffffffffu && (after & 0x30u) == (value & 0x30u),
+                 "DCN: HDMI pixel resync HDMI=%#x PHY before=%#x requested=%#x after=%#x",
+                 hdmi, before, value, after);
+}
+
 // Linux dcn31_vpg_poweron: wake the generic-infoframe SRAM before access.
 static void dcnWakeVpg0(void *context) {
     if (dcnVpgWake != 1) return;
@@ -8711,7 +8729,10 @@ static void wrapDcnRegWrite(void *context, uint32_t index, uint32_t value) {
                   "mailbox)", dcnDalMailbox.message(), dcnDalMailbox.argument());
     } else {
         m = translate(index);
-        if (m.index == 0x4d14 && value == 0) dcnAllocateDet0(context);
+        if (m.index == 0x4d14 && value == 0) {
+            dcnAllocateDet0(context);
+            dcnSyncHdmiPixelRate(context);
+        }
         if (dcnVpgWake == 1 && (m.index == 0x5528 || m.index == 0x5529)) {
             dcnWakeVpg0(context);
             static uint32_t packetWord = 0;
@@ -8753,6 +8774,7 @@ static void wrapDcnRegWrite(void *context, uint32_t index, uint32_t value) {
             dcnNativeWrite(context, m.index, value);
         }
     }
+    if (dcnTranslating() && m.index == 0x5553) dcnSyncHdmiPixelRate(context);
     if (dcnTranslating() && m.action != Action::Drop && m.index >= 0x5001 &&
         m.index <= 0x5181 && ((m.index - 0x5001) % 0x80) == 0)
         dcnRefreshDramPolicy();
@@ -10633,6 +10655,7 @@ static void pluginStart() {
     PE_parse_boot_argn("rgpudallog", &dalLogMask, sizeof(dalLogMask));
     PE_parse_boot_argn("rgpuagdp", &agdpPikera, sizeof(agdpPikera));
     PE_parse_boot_argn("rgpudcnnostutter", &dcnNoStutter, sizeof(dcnNoStutter));
+    PE_parse_boot_argn("rgpuhdmideep", &dcnHdmiDeep, sizeof(dcnHdmiDeep));
     PE_parse_boot_argn("rgpuvpgwake", &dcnVpgWake, sizeof(dcnVpgWake));
     PE_parse_boot_argn("rgpudcndet", &dcnDetBuffer, sizeof(dcnDetBuffer));
     PE_parse_boot_argn("rgpudcnpattern", &dcnOutputPattern, sizeof(dcnOutputPattern));
