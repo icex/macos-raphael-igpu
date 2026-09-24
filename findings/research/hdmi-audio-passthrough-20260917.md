@@ -1,5 +1,13 @@
 # HDMI audio for the passed-through Raphael iGPU — plan, 2026-09-17
 
+## Update 2026-09-24 — physical HDMI audio works
+
+Candidate323 passes the physical audio function with exact paired topology and
+AppleGFXHDA pairing fix. User confirms sound through Samsung audio output.
+[Implementation, source audit and evidence](hdmi-audio-candidate323-20260924.md).
+The remote-only priority and old DMCUB prohibition below are historical. Pin
+audio awake before VFIO open, not only after binding; disable DMA after removal.
+
 ## Update 2026-09-22 — guest audio for remote use goes through a USB audio device first
 
 The user's need is audio while using the VM over Screen Sharing/VNC and streaming, not sound on

@@ -1,26 +1,23 @@
 # Live status — 2026-09-24
 
-## Candidate323: HDMI audio works;1080HiDPI120 remains required
+## Candidate322: native1080p interleaving fixed; HiDPI120 and HDMI audio required
 
-Run46a4fcd70484cba44f53f30a1516ea81, MODE2#251, sourcef83dfd1, metal171.
-Physical audio7b:00.1 now stays on VFIO, power/control=on, reset methods disabled.
-Guest00:06.1 spoofab28 plus gated same-slot AppleGFXHDA pairing publishes
-Odyssey G95NC, HDMI2ch48kHz. GFX BDF0x3000/HDAU BDF0x3001 correct.
-Selected as default/system output, active engine/client observed during stereo
-tone. User listening through Samsung headphone/audio output: "ok audio works now".
-Transient early codec-read assertions precede successful codec/output enumeration.
+Run0cb060da92bd7d7a2afdb4dd7002f54b, MODE2#250, sourcebd981b1, metal170.
+`rgpuhdmideep=1` matches PHY pixel resync to HDMI deep-color packing. Native
+1920x1080@60: user confirms "Yes, picture is correct". Native1920x1080@120:
+macOS reports120Hz, PHY ratio1 matches10-bit HDMI, user says "I think120hz works too".
+This is physical user observation, not measured frame delivery or color accuracy.
+Candidate321 already gave an almost-perfect1080HiDPI picture at60Hz.
 
-Remaining:1080HiDPI120 (1920logical/3840x2160pixels120Hz) is not in the mode list.
-Current default remains HiDPI60; native1920x1080pixels120 is still listed. User
-reports120 option absent in the desired mode. Original/grafted encoder record
-0x1e0f and live link encoder caps0x3df include FRL capabilities; EDID has4K120.
-Next trace the native mode-validation rejection before changing link behavior.
+Required next: 1920x1080 logical /3840x2160 backing at120Hz, and HDMI audio.
+Samsung EDID advertises4K120 VIC118 and FRL12Gbps x4, but macOS only exposes4K30/60.
+Native1080p120 does not satisfy HiDPI120. Audio7b:00.1 remains host-owned,
+not passed through; existing USB/BlackHole routing is not HDMI audio.
 
 FinalCORE_PROBE_PASS; complete capture; exited-after-guest-request;
-audio teardown PCI COMMAND2 (DMA off), errors=[]; graphics recovered and
-conditionally authorizes_launch=true. No VM running.1022 host tests OK,3 skipped.
-Evidence: [audio experiment](findings/research/hdmi-audio-candidate323-20260924.md).
-Fresh candidates from fetched dev; autonomous tests/resets; no reboot or host sudo.
+recovered/authorizes_launch=true. No VM running.1020 host tests OK,3 skipped.
+Evidence: [deep-color and audio follow-up](findings/research/hdmi-deepcolor-120-audio-20260924.md).
+Fresh candidates from fetched dev; autonomous tests/resets, no reboot or host sudo.
 
 ## Verified progress
 
@@ -38,7 +35,7 @@ Fresh candidates from fetched dev; autonomous tests/resets; no reboot or host su
 | Native desktop | Three minutes of moving/resizing native material windows; four clean raw RFB captures |
 | Safari | Two-minute transparency/blur/scrolling page; three clean captures plus clean desktop after larger-buffer pressure |
 | Stock QEMU / PerfPowerServices | OpenCore/VirtualSMC fix passes two guest boots,0.0% CPU, latest0.86s; prior patched-QEMU evidence retained separately |
-| Host regression | 1022 tests OK, three skipped |
+| Host regression | 1020 tests OK, three skipped |
 
 Earlier texture recreation (144 cases / 131,031,576 pixels), feedback rendering
 (48 cases / 5,280,000 pixels), and hardware H.264/HEVC encode/decode retain their
