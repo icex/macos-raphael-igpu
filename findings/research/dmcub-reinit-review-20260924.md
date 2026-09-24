@@ -176,3 +176,16 @@ Primary source: Linux commit238650ef6c7c7cca08e032527329424c9fbd70e5,
 Related evidence: [retained timeout audit](dmcub-register-timeout-20260923.md),
 [original285 incident](dcn315-dmcub-host-crash-20260917.md),
 [287 counterexample](dcn315-first-init-20260923.md).
+
+## Candidate311 result
+
+Reset succeeded; upload stopped before window reprogramming/startup. The raw
+stopped-device capture matches the code and initial buffers through the first
+VBIOS all-ones word at fb+7f0dd340. The subsequent word remains untouched.
+The inherited indirect reader used CGS readValidateReg32, whose all-ones sentinel
+handling is unsuitable for arbitrary firmware data. See24G830 Framebuffer
+readValidateReg32 at1ca34, validateHwState at1c77c and raw hwReadReg32 at1c9ba.
+The latter returns the unmodified register word. A fix must use it for MM_DATA
+and retain strict register-access checks separately. No blind retry was made.
+Metal and capture passed; clean guest shutdown and native recovery succeeded.
+DMCUB itself remains held reset.

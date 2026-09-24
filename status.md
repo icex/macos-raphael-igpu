@@ -1,38 +1,29 @@
 # Live status — 2026-09-24
 
-## Candidate 310: DCFCLK restoration accepted, DMCUB still unresponsive
+## Candidate311: upload verification aborted before firmware startup
 
-Run `9ce06c40d7c3535e535d2b136e3fd95c`, metal-158, source `c5f65c5`,
-boot `5074c0e5-b2f6-46da-99b2-299ba322b41e`, MODE2 #233.
+Run `920fdd826543490727230d76050ec7f7`, metal159, sourcefb69af7,
+boot5074c0e5-b2f6-46da-99b2-299ba322b41e, MODE2#234.
 
-- **Functional:** SMU accepted SetHardMinDcfclkByFreq(1000 MHz), returning
-  1000 MHz after successful display-idle exit. Fresh GPINT query still timed out.
-  This clock restoration alone does not restore DMCUB. Metal probe passed;
-  physical HDMI remains unresolved.
-- **Capture:** CORE_PROBE_PASS; no reported boundary.
-- **Shutdown/recovery:** exited-after-guest-request; recovered,
-  authorizes_launch=true. Same-boot reuse remains available.
-- **Next:** investigate retained firmware execution and host teardown ownership.
-  No DMCUB firmware restart/load is authorized by this result.
+- **Functional:** reviewed reset completed; upload verification failed in phase4.
+  No new windows were programmed and firmware was never released. DMCUB remains
+  halted (CNTL2=1, DMUIF reset=100, ENABLE=0). Metal core probe passed.
+- **Capture:** CORE_PROBE_PASS; phase/error/selector-restoration result present.
+- **Shutdown/recovery:** exited-after-guest-request; recovered and
+  authorizes_launch=true. This receipt does not claim DMCUB recovery.
+- **Evidence:** `~/macos-vm/run/candidate-311-results/` and stopped read-only
+  `~/macos-vm/run/c311-upload-inspection/`.
+- **Finding:** memory matches the intended upload through fb+7f0dd343, including
+  the VBIOS's first ffffffff word at7f0dd340. The next word is untouched. The CGS
+  read path invokes readValidateReg32/validateHwState and treats ffffffff as a
+  failed register read, replacing/re-reading it. Payload data must use raw
+  hwReadReg32. This explains a false readback failure; exact failure offset was
+  not logged in311, so the diagnosis combines source and retained bytes.
 
-Evidence: `~/macos-vm/run/candidate-310-results/`.
-[Retained timeout audit](findings/research/dmcub-register-timeout-20260923.md).
-Host regression: 1017 tests OK, three skipped.
-User instruction: no further commits/pushes to dev until meaningful progress.
-310 source/card identities are committed only on the local candidate-310 branch;
-dev and origin/dev remain 5371959. No candidate branch has been pushed.
-
-## Reinitialization review prepared (no hardware run)
-
-The user approved proceeding with the reviewed one-shot firmware-reinitialization
-experiment. Candidate311 is being implemented locally; not yet launched.
-[Review proposal](findings/research/dmcub-reinit-review-20260924.md) and
-[pinned offline manifest](findings/research/dmcub-reinit-review-20260924.json)
-specify one direct-load startup/GPINT test with HDMI command delivery disabled.
-The planner verified firmware metadata, source/capture hashes, layout bounds and
-non-overlap with retained windows; a modified VBIOS was rejected. The reviewed scope is now authorized. Candidate311 adds a default-off loader
-and fake-transport failure tests; hardware execution awaits build and preflight.
-All preparation remains uncommitted locally; dev/origin/dev remain5371959.
+Next: raw indirect-memory reads plus exact failure telemetry. Before another
+firmware attempt account for the existing held-reset state; do not replay old
+ENABLE/windows as rollback. The reviewed one-shot attempt has ended.
+1019 host tests passed. All candidate changes remain local; dev/origin/dev5371959.
 
 ## Verified progress
 
