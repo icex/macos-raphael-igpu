@@ -29,3 +29,14 @@ class DmubReinitTests(unittest.TestCase):
                             for word in re.findall(r'0x([0-9a-f]{8})u', body))
             self.assertEqual(hashlib.sha256(data).hexdigest(), expected)
             self.assertEqual(len(data), {'Code': 238880, 'Bios': 44544}[name])
+
+    def test_signed_payload_matches_linux_file_slice(self):
+        root = pathlib.Path(__file__).resolve().parents[1]
+        text = (root / 'src/DmubPspPayload.hpp').read_text()
+        expected = re.search(r'SHA256 ([0-9a-f]{64})', text).group(1)
+        data = b''.join(int(x,16).to_bytes(4,'little') for x in re.findall(r'0x([0-9a-f]{8})u',text))
+        self.assertEqual(len(data),239392)
+        self.assertEqual(hashlib.sha256(data).hexdigest(),expected)
+        code = (root/'src/DmubReinitPayload.hpp').read_text().split('static const uint32_t Code[] = {')[1].split('};')[0]
+        payload = b''.join(int(x,16).to_bytes(4,'little') for x in re.findall(r'0x([0-9a-f]{8})u',code))
+        self.assertEqual(data[256:-256],payload)

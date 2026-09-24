@@ -39,6 +39,7 @@
 #include "DisplayIdlePower.hpp"
 #include "DmubReinit.hpp"
 #include "DmubReinitPayload.hpp"
+#include "DmubPspPayload.hpp"
 #include "KiqQueuePreparation.hpp"
 #include "GartAddresses.hpp"
 #include "DiagnosticRecords.hpp"
@@ -1544,6 +1545,7 @@ static uint32_t bufPrepCount = 0;
 // by the time command N+1 is marshalled -- carry the previous buffer forward and read it
 // then. Without this we see what Apple asks for but never what the PSP answered.
 static const uint32_t *prevCmdBuf = nullptr;
+static void *dcnPspContext = nullptr;
 static uint32_t prevWireCmd = 0;
 static uint32_t prevWireType = 0;
 static uint64_t prevRequestAddr = 0;
@@ -1565,6 +1567,7 @@ static uint64_t dcnTmrAddress = 0, dcnTmrBytes = 0;
 static uint32_t wrapPspBufPrep(void *psp, void *desc, uint32_t *slot) {
     uint32_t slotIdx = (slot != nullptr) ? *slot : 0xffffffff;
     uint32_t r = FunctionCast(wrapPspBufPrep, orgPspBufPrep)(psp, desc, slot);
+    if (r==0 && psp) dcnPspContext=psp;
     if ((mask & XA) != 0 && bufPrepCount < 64 && desc != nullptr && slotIdx < 0x10) {
         auto dw = static_cast<const uint32_t *>(desc);
         auto buf = reinterpret_cast<const uint32_t *>(
@@ -1645,7 +1648,7 @@ static mach_vm_address_t orgGmmSetMemoryAttributes {};
 static bool hostReserveEnabled = false, hostReservationReady = false;
 static bool dcnVersionQueryEnabled = false, displayIdleExitEnabled = false;
 static bool dcnFirmwareResponsive = false;
-static bool dcnReinitEnabled = false, dcnResumeHeldEnabled = false;
+static bool dcnReinitEnabled = false, dcnResumeHeldEnabled = false, dcnPspLoadEnabled = false;
 static void dcnReinitializeOnce();
 static void dcnQueryFirmwareVersion(const char *when);
 static uint64_t hostReservationLimit = 0, hostReservationTotal = 0;
@@ -9000,6 +9003,9 @@ static void dcnReinitializeOnce() {
     RaphaelDmubReinit::Inputs in;
     in.reserved=hostReservationReady; in.limit=hostReservationLimit;
     in.resumeHeld=dcnResumeHeldEnabled;
+    in.pspLoad=dcnPspLoadEnabled;
+    in.signedCode=RaphaelDmubPspPayload::Signed;
+    in.signedBytes=sizeof(RaphaelDmubPspPayload::Signed);
     in.total=hostReservationTotal; in.tmrValid=dcnTmrValid;
     in.tmr=dcnTmrAddress; in.tmrBytes=dcnTmrBytes;
     in.mc=uint64_t(fbRead(asicInfo,kGcFbBase)&0xffffff)<<24;
@@ -9030,6 +9036,33 @@ static void dcnReinitializeOnce() {
             fbWrite(asicInfo,kMmData,v);
             return memoryRead(off);
         }
+        bool loadPsp(uint64_t address,unsigned bytes) {
+            if (!dcnPspContext || !hwlibsBase || !dcnTmrValid ||
+                address!=0xf47f000000ull || bytes!=0x3a720) return false;
+            auto p=static_cast<const uint8_t *>(dcnPspContext);
+            // Native synchronous submit is safe only with the initialization ring idle.
+            for (unsigned slot=0;slot<16;slot++)
+                if (p[0x774+slot*0x38]) {
+                    CRLOG("DMUBPSP: refused busy GPCOM slot %u",slot);return false;
+                }
+            // Exact 24G830 ABI and firmware mapping, also checked offline.
+            const uint8_t prologue[]={0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56};
+            if (memcmp(reinterpret_cast<const void *>(hwlibsBase+0x5237e),prologue,sizeof(prologue)) ||
+                *reinterpret_cast<const uint32_t *>(hwlibsBase+0x3cddb4+34*4)!=51) return false;
+            uint32_t command[208] {}, response[25] {};
+            command[0]=6;command[1]=uint32_t(address);command[2]=uint32_t(address>>32);
+            command[3]=bytes;command[4]=35; // Apple35 -> PSP GFX_FW_TYPE_DMUB51.
+            response[0]=0xffffffffu;
+            CRLOG("DMUBPSP: submit LOAD_IP_FW type=51 source=%#llx bytes=%#x",address,bytes);
+            auto submit=reinterpret_cast<uint32_t (*)(void *,void *,void *,void *)>(hwlibsBase+0x5237e);
+            const auto result=submit(dcnPspContext,command,response,nullptr);
+            const uint64_t firmware=uint64_t(response[2])|(uint64_t(response[3])<<32);
+            CRLOG("DMUBPSP: returned=%u status=%#x firmware=%#llx tmr=%#llx/%#llx controls=%#x/%#x/%#x",
+                  result,response[0],firmware,dcnTmrAddress,dcnTmrBytes,
+                  fbRead(asicInfo,0x36c0),fbRead(asicInfo,0x3802),fbRead(asicInfo,0x36b6));
+            return result==0 && response[0]==0 && firmware>=dcnTmrAddress &&
+                firmware-dcnTmrAddress<dcnTmrBytes;
+        }
         void delayUs(unsigned us) { if (us>=1000) IOSleep(us/1000); else IODelay(us); }
         void phase(unsigned phase) { CRLOG("DMUBREINIT: phase=%u",phase); }
     } io;
@@ -9046,6 +9079,8 @@ static void dcnReinitializeOnce() {
           result.faultWrite,selectors);
     CRLOG("DMUBREINIT: resumed-held=%u mismatch-offset=%#llx expected=%#x actual=%#x",
           result.resumedHeld,result.badOffset,result.expected,result.actual);
+    CRLOG("DMUBREINIT: register=%#x mask=%#x expected=%#x actual=%#x psp=%u",
+          result.badRegister,result.badMask,result.expected,result.actual,in.pspLoad);
     if (result.success && selectors) dcnSurveyDmcub("after direct reinitialization");
 }
 
@@ -10451,6 +10486,8 @@ static void pluginStart() {
     dcnReinitEnabled = PE_parse_boot_argn("rgpudmubreinit", &reinit, sizeof(reinit)) && reinit == 1;
     uint32_t resumeHeld=0;
     dcnResumeHeldEnabled = PE_parse_boot_argn("rgpudmubresume", &resumeHeld, sizeof(resumeHeld)) && resumeHeld==1;
+    uint32_t pspLoad=0;
+    dcnPspLoadEnabled=PE_parse_boot_argn("rgpudmubpsp",&pspLoad,sizeof(pspLoad)) && pspLoad==1;
     uint32_t dmubQuery = 0;
     dcnVersionQueryEnabled = PE_parse_boot_argn("rgpudmubquery", &dmubQuery, sizeof(dmubQuery)) && dmubQuery == 1;
     if (PE_parse_boot_argn("rgpudcn", &dcn, sizeof(dcn)) && (dcn & ~kDcnAllowed) == 0 &&

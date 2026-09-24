@@ -9,17 +9,18 @@ static constexpr Window Windows[] = {
     {5,0x7f0e9600,0x10040}, {6,0x7f0f9700,0xc880}
 };
 struct Inputs {
-    bool reserved=false, tmrValid=false, resumeHeld=false;
+    bool reserved=false, tmrValid=false, resumeHeld=false, pspLoad=false;
     uint64_t limit=0, total=0, mc=0, physical=0, tmr=0, tmrBytes=0;
     const uint32_t *code=nullptr, *bios=nullptr;
     unsigned codeBytes=0, biosBytes=0;
+    const uint32_t *signedCode=nullptr; unsigned signedBytes=0;
 };
 struct Result {
     unsigned phase=0, error=0, queries=0;
     bool touched=false, inaccessible=false, held=false, success=false;
     bool stopAck=false, stopDone=false, stopWait=false, resumedHeld=false;
     uint64_t badOffset=0;
-    uint32_t expected=0, actual=0;
+    uint32_t expected=0, actual=0, badRegister=0, badMask=0;
     uint32_t faultFetch=0, faultWrite=0;
 };
 inline bool overlap(uint64_t a,uint64_t n,uint64_t b,uint64_t m) {
@@ -39,7 +40,10 @@ template<class IO> Result run(const Inputs &in, IO &io) {
         if (r.inaccessible) return false;
         io.write(reg,value);
         const auto back=rd(reg);
-        if (r.inaccessible || ((back^value)&mask)) { r.error=3; return false; }
+        if (r.inaccessible || ((back^value)&mask)) {
+            if (!r.badRegister) { r.badRegister=reg;r.badMask=mask;r.expected=value;r.actual=back; }
+            r.error=3; return false;
+        }
         return true;
     };
     auto rmw=[&](uint32_t reg,uint32_t mask,uint32_t value) {
@@ -71,7 +75,8 @@ template<class IO> Result run(const Inputs &in, IO &io) {
         in.physical!=0x7e0000000ull || in.tmr<in.mc || !in.tmrBytes ||
         in.tmrBytes>in.total || in.tmr-in.mc>in.total-in.tmrBytes ||
         in.tmr-in.mc+in.tmrBytes>in.limit || !in.code || !in.bios ||
-        in.codeBytes!=0x3a520 || in.biosBytes!=0xae00) {
+        in.codeBytes!=0x3a520 || in.biosBytes!=0xae00 ||
+        (in.pspLoad && (!in.signedCode || in.signedBytes!=0x3a720))) {
         r.error=1; return r;
     }
     for (const auto &w:Windows) {
@@ -113,7 +118,9 @@ template<class IO> Result run(const Inputs &in, IO &io) {
     phase(4);
     // Write each dword once, then compare it immediately and again in a full pass.
     auto expected=[&](uint64_t off) {
-        if (off<Begin+in.codeBytes) return in.code[(off-Begin)/4];
+        if (in.pspLoad) {
+            if (off<Begin+in.signedBytes) return in.signedCode[(off-Begin)/4];
+        } else if (off<Begin+in.codeBytes) return in.code[(off-Begin)/4];
         if (off>=0x7f0da600 && off<0x7f0da600+in.biosBytes)
             return in.bios[(off-0x7f0da600)/4];
         return uint32_t(0);
@@ -128,8 +135,26 @@ template<class IO> Result run(const Inputs &in, IO &io) {
         if (back!=want) {r.badOffset=off;r.expected=want;r.actual=back;r.error=5;return fail();}
     }
     phase(5);
-    if (!rmw(0x368e,0x10000,0x10000)) return fail();
+    if (in.pspLoad) {
+        // PSP owns secure CW0/1 on production Raphael. Never overwrite them directly.
+        if (!io.loadPsp(in.mc+Begin,in.signedBytes)) {r.error=6;return fail();}
+        if (!(rd(0x36c0)&1) || !(rd(0x3802)&0x100) || (rd(0x36b6)&0x10000))
+            {r.error=7;return fail();}
+        uint64_t prior=0, priorSize=0;
+        for (unsigned cw=0;cw<2;cw++) {
+            uint64_t a=rd(0x3675+2*cw);a|=uint64_t(rd(0x3676+2*cw))<<32;
+            const auto b=rd(0x3665+cw)&0x1fffffff, top=rd(0x366d+cw);
+            const uint64_t n=(top&0x1fffffff)>=b ? uint64_t(top&0x1fffffff)-b+1 : 0;
+            const uint64_t tmrPhysical=in.physical+in.tmr-in.mc;
+            if (r.inaccessible || !(top&0x80000000) || b!=(cw<<24) ||
+                n<(cw?0xa0000u:in.codeBytes) || n>in.tmrBytes ||
+                a<tmrPhysical || a-tmrPhysical>in.tmrBytes-n ||
+                overlap(a,n,prior,priorSize)) {r.error=8;return fail();}
+            prior=a;priorSize=n;
+        }
+    } else if (!rmw(0x368e,0x10000,0x10000)) return fail();
     for (const auto &w:Windows) {
+        if (in.pspLoad && w.cw<2) continue;
         const uint64_t addr=(w.cw<2?in.physical:in.mc)+w.offset;
         const uint32_t base=w.cw<<24;
         if (!wr(0x3675+2*w.cw,uint32_t(addr)) ||

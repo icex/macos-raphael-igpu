@@ -45,6 +45,19 @@ struct IO {
         mem[(off-Begin)/4]=value;
         return failure==2 && uploads>=9 ? value^1 : value;
     }
+    bool loadPsp(uint64_t a,unsigned n) {
+        assert(a==0xf47f000000ull && n==0x3a720);
+        if (failure==8) return false;
+        for (unsigned cw=0;cw<2;cw++) {
+            uint64_t addr=0x85d900000ull+cw*0x100000;
+            if (failure==9) addr=0x85f900000ull;
+            regs[0x3675+cw*2]=uint32_t(addr);regs[0x3676+cw*2]=uint32_t(addr>>32);
+            regs[0x3665+cw]=cw<<24;
+            regs[0x366d+cw]=0x80000000u|(cw<<24)|(cw?0xc5adf:0x3a51f);
+        }
+        if (failure==10) regs[0x36c0]=0;
+        return true;
+    }
     void delayUs(unsigned) {}
     void phase(unsigned p) {phaseNow=p;}
 };
@@ -81,6 +94,18 @@ int main() {
     }
     { IO io(0);io.regs[0x36c0]=1;io.regs[0x3802]=0x100;io.regs[0x36b6]=0x800c6;
       auto r=run(in,io);assert(!r.success && io.writes.empty());
+    }
+    { std::vector<uint32_t> signedCode(0x3a720/4,0xffffffffu);
+      for (unsigned f: {0u,8u,9u,10u}) {
+        IO io(f);auto psp=in;psp.pspLoad=true;psp.signedCode=signedCode.data();psp.signedBytes=0x3a720;
+        auto r=run(psp,io);
+        if (!f) {assert(r.success && io.starts==1 && r.queries==3);}
+        else {assert(!r.success && r.held && io.starts==0);}
+        for (auto w:io.writes) {
+          assert(w.first!=0x368e); // No secure-control writes or CW0/1 reprogramming.
+          assert(w.first!=0x3675 && w.first!=0x3676 && w.first!=0x3677 && w.first!=0x3678);
+        }
+      }
     }
     for (unsigned f=0;f<6;f++) {
         auto bad=in; IO io(0);

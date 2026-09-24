@@ -208,3 +208,10 @@ reviewed post-release failure hold remains unchanged.
 
 The first approved one-shot attempt has completed. This corrected continuation
 is built/tested separately and is not an automatic second hardware attempt.
+
+## Authorization and subsequent evidence update
+
+User instruction2026-09-24 authorizes autonomous build tests and iGPU resets,
+superseding the earlier per-attempt approval requirement.312 has now run: full
+upload verified, phase5 register write refused, clean shutdown/recovery.
+See [late PSP load](dmcub-psp-load-20260924.md) for313 and status.md for live state.
