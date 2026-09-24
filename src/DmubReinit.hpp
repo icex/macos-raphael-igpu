@@ -138,8 +138,11 @@ template<class IO> Result run(const Inputs &in, IO &io) {
     if (in.pspLoad) {
         // PSP owns secure CW0/1 on production Raphael. Never overwrite them directly.
         if (!io.loadPsp(in.mc+Begin,in.signedBytes)) {r.error=6;return fail();}
-        if (!(rd(0x36c0)&1) || !(rd(0x3802)&0x100) || (rd(0x36b6)&0x10000))
+        if (!(rd(0x36c0)&1) || (rd(0x36b6)&0x10000))
             {r.error=7;return fail();}
+        // PSP clears DMUIF reset while retaining processor reset and ENABLE=0.
+        // Reassert the interface hold before programming nonsecure windows.
+        if (!rmw(0x3802,0x100,0x100)) return fail();
         uint64_t prior=0, priorSize=0;
         for (unsigned cw=0;cw<2;cw++) {
             uint64_t a=rd(0x3675+2*cw);a|=uint64_t(rd(0x3676+2*cw))<<32;

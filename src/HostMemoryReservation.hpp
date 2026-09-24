@@ -9,9 +9,9 @@ struct Plan { uint64_t limit, reserved, additional; };
 // Preserve the entire 32MiB-aligned tail containing every live host window.
 inline bool plan(uint64_t mcBase, uint64_t physicalBase, uint64_t total,
                  uint64_t visible, uint64_t existing, const Window *windows,
-                 size_t count, Plan &out) {
+                 size_t count, Plan &out, bool reloadHeldSecure=false) {
     if (!mcBase || !physicalBase || !total || !visible || visible > total ||
-        existing > total || !windows || count < 2) return false;
+        existing > total || !windows || count < 2 || (reloadHeldSecure && count!=6)) return false;
     uint64_t lowest = total;
     for (size_t i = 0; i < count; ++i) {
         uint64_t off;
@@ -23,7 +23,9 @@ inline bool plan(uint64_t mcBase, uint64_t physicalBase, uint64_t total,
             off = w.address - physicalBase;
         else return false;
         if (w.bytes > total - off) return false;
-        if (off < lowest) lowest = off;
+        // The caller proves CW0/1 are held and will be replaced through PSP.
+        // Still validate their addresses, but do not preserve obsolete TMR storage.
+        if ((!reloadHeldSecure || i>=2) && off < lowest) lowest = off;
     }
     const uint64_t cap = lowest & ~uint64_t(0x1ffffff);
     if (cap < visible || cap >= total) return false;

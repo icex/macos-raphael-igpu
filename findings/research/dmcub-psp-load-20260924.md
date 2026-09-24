@@ -37,3 +37,16 @@ host identity, ownership, supervision, capture or cleanup checks.
 
 Offline tests cover PSP refusal, out-of-TMR windows, unexpected reset release,
 successful PSP placement and the absence of guest secure-window writes.
+
+## Candidate313 result and314 continuation
+
+PSP returned status0, firmware MCf47d900000; stopped capture confirms CW0
+physical85d900000/3a520 and CW1 physical85d93a600/c5ae0 inside guest TMR.
+PSP cleared DMUIF reset but left CNTL2=1 and ENABLE=0.313 stopped before startup
+and reasserted the interface hold. CORE_PROBE_PASS; clean shutdown/recovery.
+
+314 permits this observed interface state only with processor reset asserted
+and ENABLE=0, reasserting DMUIF before continuing. In explicit held PSP-reload
+mode, reservation validates but retires old secure CW0/1 storage; otherwise each
+cycle would unnecessarily reserve another32MiB below the old TMR. All nonsecure
+windows remain reserved, and the normal running-host reservation is unchanged.

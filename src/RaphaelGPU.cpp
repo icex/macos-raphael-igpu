@@ -3649,7 +3649,7 @@ static uint32_t wrapGmmSetMemoryAttributes(void *self, uint32_t type, void *attr
     }
     RaphaelHostMemory::Plan plan {};
     if (!RaphaelHostMemory::plan(uint64_t(base) << 24, physical, total, visible,
-                                 existing, windows, 6, plan)) {
+                                 existing, windows, 6, plan, approvedHeld && dcnPspLoadEnabled)) {
         CRLOG("HOSTRESERVE: window range refused total=%#llx visible=%#llx reserved=%#llx",
               total, visible, existing);
         return 2;

@@ -55,6 +55,7 @@ struct IO {
             regs[0x3665+cw]=cw<<24;
             regs[0x366d+cw]=0x80000000u|(cw<<24)|(cw?0xc5adf:0x3a51f);
         }
+        regs[0x3802]=0; // Observed PSP behavior in candidate313.
         if (failure==10) regs[0x36c0]=0;
         return true;
     }
