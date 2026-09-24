@@ -1,5 +1,16 @@
 # Live status — 2026-09-24
 
+## Candidate320 active: DET allocation applied, physical observation pending
+
+Run309ef9a1e0b27ae7f7fab0b73f04ea45, MODE2#248, source9b5503b, metal168.
+Verified awake native1080p60. DET0=0x303 (192KiB); COMPBUF13 unchanged.
+Fetch timeout/underflow cleared; flip pending cleared; EARLIEST_INUSE matches
+requested framebufferf412cc0000. OTG pixel readback nonzero. No test generator.
+Physical-screen response pending. Core probe passed; run remains active under
+harness1800-second interactive hold /6000-second total cap. Final capture and
+shutdown/recovery pending. 1020 host tests pass (3 skipped).
+SURFACE_INUSE=0 alone is not a failure: Linux checks EARLIEST_INUSE plus flip state.
+
 ## Candidate319 retry: missing live DET allocation confirmed
 
 Run4d173834d3c6b91425d008e9bc5743eb, MODE2#247, source5131613,

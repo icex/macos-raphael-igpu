@@ -21,3 +21,19 @@ size with bounded30ms poll, and preserves COMPBUF13. Reject any existing DET,
 transitioning/oversized COMPBUF, inaccessible read or config error. Default off.
 The hypothesis is falsified as sufficient if allocation applies but fetch remains stuck.
 Visible318 test pattern bypasses this buffer and therefore does not qualify desktop.
+
+## Candidate320 active observation
+
+Run309ef9a1e0b27ae7f7fab0b73f04ea45, MODE2#248, build2b5618317a2541f9829fbd45bdae89a4,
+source9b5503b. First bounded poll ended with request3/current0; later live read
+confirms DET0=0x303. After verified-awake native1080p60, HUBP0 timeout/underflow
+are clear, FLIP_PENDING=0, and EARLIEST_INUSE matches requested addressf412cc0000.
+OTG pixel readback is nonzero. Physical picture observation is pending.
+
+Correction: SURFACE_INUSE=0 alone does not establish a stuck fetch. Linux
+hubp2_is_flip_pending uses FLIP_PENDING plus SURFACE_EARLIEST_INUSE compared with
+the requested address. The earlier319 timeout/pending evidence remains valid;
+320 clears both. Do not equate nonzero OTG pixels with correct physical desktop.
+
+Active artifacts: run/c320-det-scanout.json/txt, c320-awake-check.txt,
+c320-awake-60hz.txt. Final capture/shutdown/recovery are not yet available.
