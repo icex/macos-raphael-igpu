@@ -20,7 +20,7 @@ regression and macOS source-build jobs remain required; see [CI setup](releases.
 
 | Milestone | State | Evidence and remaining work |
 |---|---|---|
-| M0 — Experiment identity and supervision | Implemented; maintained | Immutable manifests, loaded-build checks, capture, deadlines and cleanup. Fixed cycle image selection so preparation and admission use the same pinned emulator. Host suite: 965 tests, OK (3 skipped). |
+| M0 — Experiment identity and supervision | Implemented; maintained | Immutable manifests, loaded-build checks, capture, deadlines and cleanup. Fixed cycle image selection so preparation and admission use the same pinned emulator. Host suite: 1022 tests, OK (3 skipped). |
 | M1 — Controlled starting state | Demonstrated for current workflow | One-way amdgpu→vfio-pci handoff, power/control=on, fresh MODE2 and clean-state receipts. Broad independent-host-boot qualification remains open. |
 | M2 — Native startup failure localization | Completed for original blocker | False second SDMA instance and subsequent channel routing were traced; historical evidence retained. |
 | M3 — Native engine startup repair | Demonstrated | Raphael topology/address adaptations reach native startup and completed Metal work. Preserve these fixes while diagnosing desktop rendering. |
@@ -230,14 +230,15 @@ from device enumeration or passing microbenchmarks.
    - DCN3.02 register translation and Samsung EDID reads work. Native PSP DMCUB
      reload/start and HDMI command delivery are demonstrated (314/315).
    - Candidate318 produces a physically visible RGB test pattern at native1080p60.
-     User reports fuzziness/interleaving; correct image quality is not established.
+     The historical fuzziness/interleaving was subsequently fixed in321/322.
      [Evidence](../findings/research/visible-hdmi-pattern-20260924.md).
    - Fetch and native1080p layout now work (320–322). Native120Hz appears to work
      according to the user; required1080HiDPI120 still lacks a4K120 mode.
    - Verify guest awake assertions and active HDMI before every physical observation.
      Keep native host-safety, capture, shutdown and recovery checks intact.
    - HDMI audio works on323: function7b:00.1 is paired with the GPU;
-     pairing, passthrough and audio playback are not yet tested.
+     same-slot pairing, passthrough and audible playback are confirmed through
+     the Samsung headphone output (2 channels, 48 kHz).
 1. **Full 4K remote desktop streaming (user priority, updated 2026-09-17).** 4K60 is
    now stable. Three fixes got there: the VCN preset patch (candidate 284, encode 11ms at 4K,
    equal to Linux), a 2GB BIOS UMA carve-out (no allocation failures; host tools detect the
@@ -386,57 +387,14 @@ guest-request shutdown and authorizing recovery. Motion performance remains
 open; the final120FPS-request/60Hz-display trace requires a matching4K60 control.
 [Final evidence](../findings/research/safari-motion-20260916.json).
 
-## HDMI inbox access — 2026-09-23
+## Physical HDMI milestone — 2026-09-24
 
-Candidate 297 detects the Samsung but reads zeros through MM_INDEX for the host-loaded
-DMCUB inbox beyond the BAR. No DMUB commands were delivered. Offscreen Metal checks
-pass, capture remains INVALID, and forced shutdown yielded an authorizing recovery.
-The SMU answered the post-run probe. Next: validate the register-access and address
-path before writing the inbox; then verify physical picture before HDMI audio.
-See [live status](../status.md) for run identity and artifacts.
+Candidates 321–323 establish a full 1920×1080 logical / 3840×2160 backing
+HDMI picture at 60 Hz, correct native 1920×1080 at 60 Hz, and audible HDMI
+audio through the Samsung headphone output. Native 1080p at 120 Hz is listed
+and the user reports it appears to work; sustained timing is not qualified.
+HiDPI 1080 at 120 Hz still requires a working 3840×2160 at 120 Hz link.
+DisplayPort, HDR, broader monitors and independent-host-boot durability remain open.
 
-Candidate 298 distinguishes raw all-ones inbox reads from CGS-generated zeros;
-nonzero BAR controls match both accessors. Clean guest shutdown completed, but
-CR2 producer overflow (512 records, five drops) blocked recovery and reuse.
-Reduce optional diagnostic volume before another launch; preserve loss gates.
-
-Candidate 299 is built/tested but unrun: read-only aperture-boundary checks and
-reduced optional CR2 logging, awaiting reboot after 298 failed recovery.
-
-## Host DMCUB memory preservation — 2026-09-23
-
-300 reserves the host window tail through native GMM accounting; guest TMR moves
-below it and inbox reads stop returning access-denied all-ones. Old contents remain
-zero after preceding unreserved runs. Clean capture, guest shutdown and recovery
-pass. Next: fresh host initialization and guarded delivery.
-
-Candidate 302 (2026-09-23) establishes reversible CPU read/write access to the
-reserved host DMCUB inbox on the same host boot. The first command passed full
-readback but firmware did not consume it; HDMI output remains unqualified.
-Capture and guest-request shutdown completed, recovery authorizes reuse.
-See [live status](../status.md).
-
-### Same-boot recovery without a guest lease (2026-09-23)
-
-Candidate 307's early panic was recovered on the same host boot using MODE2,
-complete stable stopped-queue/SDMA scans and PSP ring teardown. The new schema-9
-receipt permits one normal harness launch without borrowing an older lease.
-This is a stopped, queue-free recovery result; active-queue recovery and physical
-HDMI output remain separately qualified. Host regression: 1017 tests pass.
-
-## DMCUB firmware startup — 2026-09-24
-
-Candidate314 supersedes the stale-firmware blocker and former blanket prohibition
-on guest firmware actions under explicit user authorization. Native PSP accepts
-the signed payload; secure windows are checked inside the guest TMR. Startup
-returns three fresh05003500 replies with zero fetch/write faults. Clean guest
-shutdown and authorizing recovery follow. The desktop probe has an independent
-nonfinite JSON error; no new Metal or physical-display pass is claimed. Next is
-HDMI mailbox consumption. [Evidence and implementation](../findings/research/dmcub-psp-load-20260924.md).
-
-Candidate315 additionally verifies17 consumed HDMI VBIOS commands, scanning OTG0,
-HDMI enable/symbol clock and HPD. After attachment, macOS identifies the Samsung
-Odyssey G95NC as online/main at3840x1080/about59Hz. Physical-screen confirmation
-is pending. The core/offscreen probe, capture, guest-request shutdown and recovery
-passed. A repeat uses a longer inspection window under the6000-second cap.
-Historical315 had no audio passthrough. Candidate323 now passes physical HDMI audio.
+[Current setup and scope](hdmi-status.md) ·
+[Historical bring-up](../findings/research/status-archives/hdmi-bringup-roadmap-20260924.md).

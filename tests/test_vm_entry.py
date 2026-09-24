@@ -194,6 +194,11 @@ class VmEntryTests(unittest.TestCase):
                               "[ \"$1\" = info ] && exit 0\n"
                               "printf '%s\\n' \"$@\" > \"$DOCKER_CAPTURE\"\n")
             docker.chmod(0o700)
+            # The fixture socket represents a responding audio server. Never
+            # query or start the runner's actual PulseAudio/PipeWire services.
+            pactl = bindir / "pactl"
+            pactl.write_text('#!/bin/sh\n[ "$1" = info ]\n')
+            pactl.chmod(0o700)
             env = dict(os.environ, PATH=str(bindir) + os.pathsep + os.environ["PATH"],
                        GENERIC_GRAPHICS="off", AUDIO="pa", GL="off",
                        DOCKER_CAPTURE=str(capture), DISPLAY="", XAUTHORITY="",

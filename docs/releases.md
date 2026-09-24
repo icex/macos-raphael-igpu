@@ -5,7 +5,8 @@ The Linux test job needs full Git history for historical identity regressions an
 `g++-multilib mtools qemu-system-x86 python3-numpy python3-pil` (Ubuntu packages).
 Run `python3 -B -m unittest discover -s tests` from a full checkout. Lilu validation
 and launcher tests create temporary fixtures; they require neither a local Lilu
-build nor access to `/dev/kvm`. The separate software-UART qualification uses QEMU
+build nor access to `/dev/kvm` or a running host audio server. The launcher fixture
+stubs `pactl info` alongside Docker so CI never starts host audio services. The separate software-UART qualification uses QEMU
 software emulation. The macOS job then builds the kext from pinned dependencies.
 After verifying the upstream Lilu archive, it applies
 `build-support/lilu-1.6.8-fileless-headers.patch` to reproduce the existing pinned
@@ -43,7 +44,9 @@ required during compilation.
 
 The release is a research snapshot. Candidate280 has passing Metal compute/render,
 texture, memory, depth/stencil, codec and sampled remote-desktop checks, with the
-reproduced transparency corruption fixed. Full desktop acceptance, physical output,
+reproduced transparency corruption fixed. Candidates 321–323 additionally demonstrate
+correct Samsung HDMI picture and audible HDMI audio; see [scope and setup](hdmi-status.md).
+HiDPI 120 Hz, DisplayPort, full desktop acceptance,
 independent-host-boot durability, performance and games remain unqualified.
 See [live status](../status.md) for the hardware-tested executable identity and
 [roadmap](ROADMAP.md) for exact coverage; a newly built artifact is not automatically
