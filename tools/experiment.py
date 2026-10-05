@@ -487,7 +487,7 @@ def current_identity(vm, candidate, requested_diagnostic, run_id=None,
     if options.get('GENERIC_GRAPHICS') == 'off' and os.environ.get(
             'GENERIC_GRAPHICS', 'off') != 'off':
         raise ValueError('generic graphics launch option changed')
-    if os.environ.get('VM_CONSOLE', 'off') not in ('', options.get('VM_CONSOLE', 'off')):
+    if os.environ.get('VM_CONSOLE', options.get('VM_CONSOLE', 'off')) not in ('', options.get('VM_CONSOLE', 'off')):
         raise ValueError('console launch option changed')
     builder = helper('build-release')
     source_digest = builder.tree_digest(ROOT/'src')
