@@ -960,6 +960,24 @@ class ExperimentTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'changed after'):
                 tool.verify_quiesced_capture(receipt, changed)
 
+    def test_bochs_console_requires_exact_manifest_and_device(self):
+        tool = self.module()
+        manifest = {'image_id':'img', 'gpu':False}
+        observed = {'image_id':'img', 'vfio_args':[], 'serial_args':[],
+                    'pci_topology':[{'model':'usb-audio','bus':'xhci.0'}]}
+        manifest['launch_options'] = dict(BOOTDISK_MODE='custom', NVRAM='stock',
+            GENERIC_GRAPHICS='off', GDB='on', AUDIO='usb', VM_CONSOLE='bochs')
+        self.assertEqual(tool.launch_options(manifest), manifest['launch_options'])
+        observed['graphics_args'] = ['-vga','none','-display','none','-device',
+            'bochs-display,id=rgpu_present,bus=pcie.0,addr=0x7,vgamem=64M',
+            '-vnc','unix:/run/vm/console-vnc.sock']
+        self.assertNotIn('generic_graphics', tool.validate_running(manifest, observed))
+        observed['graphics_args'][-1] = '0.0.0.0:0'
+        self.assertIn('generic_graphics', tool.validate_running(manifest, observed))
+        observed['graphics_args'][-1] = 'unix:/run/vm/console-vnc.sock'
+        manifest['launch_options'].pop('VM_CONSOLE')
+        self.assertIn('generic_graphics', tool.validate_running(manifest, observed))
+
     def test_no_generic_graphics_launch_options_and_running_argv_are_exact(self):
         tool = self.module()
         options = {'BOOTDISK_MODE':'custom', 'NVRAM':'stock',
