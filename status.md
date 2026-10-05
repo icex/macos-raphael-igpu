@@ -1,24 +1,28 @@
 # Live status — 2026-10-05
 
-## Active work: candidate331 VM manager console
+## Candidate332 host hang — investigation and correction
 
-Candidate331 / metal-179 run `c2c09eabaf07b27d5ef169891af56e8e` attached the
-Bochs console bridge and verified exact slot7/local-VNC topology. GPU startup
-was blocked: `rgpuhostreserve=1` was retained with `rgpudcn=0`, so the native
-host-window reservation was absent and PSP TMR initialization was refused.
-No Metal probe or desktop presentation ran. This is a candidate configuration
-failure, not evidence against the console transport.
+User reports a full host hang during candidate332 / metal-180, run
+`dd40f35333452ac3e23f25210704f120`. Boot5074c0e5 ended; current boot is
+`ba51b3c6-9420-4510-af69-38a42b3c79c7`. GPU is now owned by amdgpu; no new
+GPU launch is authorized by old-boot receipts.
 
-Capture verdict: INVALID / recovery_lease_pool_missing. Guest-request shutdown
-succeeded (`c331-requested-shutdown.json`). Ordinary lease recovery could not
-complete; stopped-device MODE2/no-queue recovery then passed with no errors and
-`authorizes_launch=true` (`c331-noqueue-recovery.json`). VM is stopped, same host
-boot5074c0e5; no reboot/rebind. All artifacts are under `~/macos-vm/run/`.
+Preserved evidence: `~/macos-vm/run/candidate-332-host-hang/`. Guest serial ends
+while sending PSP DESTROY_TMR (wire7), before its return, Metal startup or any
+console pixel mapping. Bochs bridge enumeration had completed. Prior-boot
+kernel journal records no panic/fault at the end; no archived pstore file is
+available. This localizes the failure boundary, not the exact hardware cause.
 
-1024 host tests passed (3 skipped), plus the additional exact-console identity
-regression passed in the 131-test experiment suite. Next: candidate332 restores
-the prior headless reservation configuration while retaining the console bridge.
-[Design and qualification sequence](docs/virtual-console.md).
+Candidate331 had refused TMR init after an invalid framebuffer/DMCUB identity.
+Removing host reservation in332 bypassed that protection; that change is rejected.
+The earlier claim that disabling DCN alone explained331 was too strong.
+Next: make console TMR access require checked firmware hold and reservation,
+independent of display enable flags. Never resume332 or label it recovered:
+there are no final capture, shutdown or recovery receipts after the host hang.
+
+Prior331 stopped through guest-request shutdown and then passed the supported
+MODE2/no-queue recovery path. Candidate332 had1025 passing offline tests;
+those checks did not establish firmware-memory safety. [Console design](docs/virtual-console.md).
 
 ## Candidate330: correct HiDPI120 picture and HDMI audio
 
