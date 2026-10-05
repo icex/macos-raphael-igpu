@@ -47,3 +47,18 @@ Offline fault injection covers absent ownership, all-ones reads, running firmwar
 missing processor/interface reset, successful return propagation and state changing
 between calls. These checks prevent the demonstrated configuration bypass; they
 are not hardware validation of333 or universal host-hang protection.
+
+## Validation and next observation
+
+Candidate333 source `d4a4111` built as1.0.333 with debug symbols. The complete
+host suite passed1026 tests (three skipped). The metal-181 profile validates;
+metal-180 is refused explicitly. Build and test logs are
+`~/macos-vm/run/candidate-333-build.log` and `~/macos-vm/run/c333-tests.log`.
+
+No333 GPU exposure has occurred. On bootba51b3c6, amdgpu still owns7b:00.0.
+Read-only fdinfo inspection found allocated VRAM/GTT held by VS Code and Codex
+Desktop (the app-server inherits the same DRM client). These applications must
+release the device before handoff; they were not killed or detached.
+The next discriminating run must capture reservation success, live firmware hold,
+PSP unload return, native Metal startup and independent shutdown/recovery receipts.
+Passing offline checks alone does not establish that the host hang is fixed.

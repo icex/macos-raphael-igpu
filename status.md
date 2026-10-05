@@ -16,8 +16,15 @@ available. This localizes the failure boundary, not the exact hardware cause.
 Candidate331 had refused TMR init after an invalid framebuffer/DMCUB identity.
 Removing host reservation in332 bypassed that protection; that change is rejected.
 The earlier claim that disabling DCN alone explained331 was too strong.
-Next: make console TMR access require checked firmware hold and reservation,
-independent of display enable flags. Never resume332 or label it recovered:
+Candidate333 now requires checked firmware hold and reservation for console TMR
+access, independent of display enable flags. Build1.0.333 succeeds;1026 host tests
+pass (three skipped). Fault injection confirms unsafe states cannot call PSP.
+Hardware validation remains pending: current-boot amdgpu clients include VS Code
+and Codex Desktop/app-server, with allocated iGPU memory. Do not detach them or
+launch until the user closes those applications and the normal VFIO handoff completes.
+No reboot is requested. Card metal-181 is prepared;332 staging is withdrawn.
+See [hang investigation](findings/research/console-tmr-host-hang-20261005.md).
+Never resume332 or label it recovered:
 there are no final capture, shutdown or recovery receipts after the host hang.
 
 Prior331 stopped through guest-request shutdown and then passed the supported
@@ -107,7 +114,7 @@ decode works; explicit GPU-ID selection remains limited. Main10 decode has scope
 passes; hardware encode is Main8. [Roadmap](docs/ROADMAP.md).
 
 
-## One-command GPU test
+## Previous completed harness result (331; predates332 host hang)
 
 - Output: `/home/bogdan/macos-vm/run/candidate-331-attempt-b-results`
 - Verdict: `INVALID`

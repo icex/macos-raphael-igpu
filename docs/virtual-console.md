@@ -2,7 +2,11 @@
 
 The requested target is a macOS desktop in the VM manager's console, with Raphael
 Metal rendering and no physical HDMI connection. Screen Sharing/Moonlight alone
-does not meet that target. Candidate331 begins this work; it is not yet qualified.
+does not meet that target. Candidates331–333 begin this work; it is not yet qualified. Candidate332 hung
+the host during PSP TMR teardown and is withdrawn. Candidate333 restores mandatory
+firmware-memory reservation and checks live DMCUB hold before PSP replacement;
+it builds and passes offline tests, but still requires hardware validation.
+See [failure analysis](../findings/research/console-tmr-host-hang-20261005.md).
 
 ## Architecture under test
 
