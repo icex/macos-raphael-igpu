@@ -2,16 +2,23 @@
 
 ## Active work: candidate331 VM manager console
 
-Fresh branch from fetched dev861ba5e. User requires the accelerated desktop in
-the VM manager console, without physical HDMI. Stock-QEMU Bochs transport passed
-1,094,400 pixel checks offline. The opt-in macOS presentation bridge builds;
-hardware qualification is next. No candidate331 GPU launch yet.
+Candidate331 / metal-179 run `c2c09eabaf07b27d5ef169891af56e8e` attached the
+Bochs console bridge and verified exact slot7/local-VNC topology. GPU startup
+was blocked: `rgpuhostreserve=1` was retained with `rgpudcn=0`, so the native
+host-window reservation was absent and PSP TMR initialization was refused.
+No Metal probe or desktop presentation ran. This is a candidate configuration
+failure, not evidence against the console transport.
+
+Capture verdict: INVALID / recovery_lease_pool_missing. Guest-request shutdown
+succeeded (`c331-requested-shutdown.json`). Ordinary lease recovery could not
+complete; stopped-device MODE2/no-queue recovery then passed with no errors and
+`authorizes_launch=true` (`c331-noqueue-recovery.json`). VM is stopped, same host
+boot5074c0e5; no reboot/rebind. All artifacts are under `~/macos-vm/run/`.
+
+1024 host tests passed (3 skipped), plus the additional exact-console identity
+regression passed in the 131-test experiment suite. Next: candidate332 restores
+the prior headless reservation configuration while retaining the console bridge.
 [Design and qualification sequence](docs/virtual-console.md).
-
-Host rechecked: same boot5074c0e5, VM stopped, GPU vfio-pci/power on/active;
-last330 recovery authorizes reuse. These observations do not substitute for
-fresh cycle preflight and MODE2.
-
 
 ## Candidate330: correct HiDPI120 picture and HDMI audio
 
@@ -94,3 +101,10 @@ StockQEMU10.1.2/OpenCore/VirtualSMC1.3.7 works in this tested setup;
 PerfPowerServices was0.0% CPU on two guest boots. Automatic required-hardware HEVC
 decode works; explicit GPU-ID selection remains limited. Main10 decode has scoped
 passes; hardware encode is Main8. [Roadmap](docs/ROADMAP.md).
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-331-attempt-b-results`
+- Verdict: `INVALID`
+- Boundary: `recovery_lease_pool_missing`
