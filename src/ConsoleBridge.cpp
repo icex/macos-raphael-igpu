@@ -1,5 +1,8 @@
 // Optional presentation-only bridge to QEMU's Bochs display console.
 // Raphael remains the rendering device. No DMA or physical-GPU mappings here.
+#ifndef KERNEL
+#define KERNEL 1
+#endif
 #include <IOKit/IOService.h>
 #include <IOKit/IOUserClient.h>
 #include <IOKit/pci/IOPCIDevice.h>
