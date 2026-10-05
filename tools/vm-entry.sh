@@ -77,6 +77,18 @@ case "${GENERIC_GRAPHICS:-on}" in
     *) echo "unknown GENERIC_GRAPHICS=${GENERIC_GRAPHICS}" >&2; exit 1 ;;
 esac
 
+# Explicit presentation-only console: keep the historical no-adapter contract
+# unchanged unless the manifest selects this exact device and local endpoint.
+case "${VM_CONSOLE:-off}" in
+    off|"") ;;
+    bochs)
+        [[ "${GENERIC_GRAPHICS:-on}" == off && "${EXTRA:-}" != *-vnc* && "${EXTRA:-}" != *-spice* ]] || {
+            echo 'Bochs console requires no generic graphics or injected viewer' >&2; exit 1; }
+        export EXTRA="${EXTRA:-} -device bochs-display,id=rgpu_present,bus=pcie.0,addr=0x7,vgamem=64M -vnc unix:/run/vm/console-vnc.sock"
+        ;;
+    *) echo 'unknown VM_CONSOLE' >&2; exit 1 ;;
+esac
+
 if [[ -n "${LAN_TAP_NODE:-}" ]]; then
     # Bridged LAN NIC: open the macvtap node here and hand it to QEMU by
     # descriptor; the guest gets its own LAN address next to the NAT NIC.

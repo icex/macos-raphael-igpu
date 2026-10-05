@@ -1,4 +1,17 @@
-# Live status — 2026-09-24
+# Live status — 2026-10-05
+
+## Active work: candidate331 VM manager console
+
+Fresh branch from fetched dev861ba5e. User requires the accelerated desktop in
+the VM manager console, without physical HDMI. Stock-QEMU Bochs transport passed
+1,094,400 pixel checks offline. The opt-in macOS presentation bridge builds;
+hardware qualification is next. No candidate331 GPU launch yet.
+[Design and qualification sequence](docs/virtual-console.md).
+
+Host rechecked: same boot5074c0e5, VM stopped, GPU vfio-pci/power on/active;
+last330 recovery authorizes reuse. These observations do not substitute for
+fresh cycle preflight and MODE2.
+
 
 ## Candidate330: correct HiDPI120 picture and HDMI audio
 
@@ -18,7 +31,7 @@ survive the tested HiDPI 120→60→120 switches without rerouting.
 
 The checked-in `kext/bin/RaphaelGPU` and manifest are the exact hardware-tested
 build. README, roadmap, setup and release docs record this milestone for publication
-to dev and main at the user's request. No further hardware runs today.
+to dev and main at the user's request. That end-of-day stop is historical; work resumed on October5.
 
 Logs are not error-free: startup CAIL, DMUB capability-query and early GFXHDA
 assertions remain, as do recurring PSP/HDCP status 4 errors. The FRL audio

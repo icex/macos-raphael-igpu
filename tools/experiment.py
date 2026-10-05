@@ -398,7 +398,8 @@ def launch_options(data):
     # a QEMU usb-audio device on the host pulse socket. Display-less only.
     contracts = (historical, headless, debugger,
                  dict(headless, AUDIO='usb'), dict(debugger, AUDIO='usb'),
-                 dict(debugger, AUDIO='usb', HDMI_AUDIO='on'))
+                 dict(debugger, AUDIO='usb', HDMI_AUDIO='on'),
+                 dict(debugger, AUDIO='usb', VM_CONSOLE='bochs'))
     if type(value) is not dict or value not in contracts:
         raise ValueError('launch options must select the exact historical, no-graphics, or debugger contract')
     return dict(value)
@@ -486,6 +487,8 @@ def current_identity(vm, candidate, requested_diagnostic, run_id=None,
     if options.get('GENERIC_GRAPHICS') == 'off' and os.environ.get(
             'GENERIC_GRAPHICS', 'off') != 'off':
         raise ValueError('generic graphics launch option changed')
+    if os.environ.get('VM_CONSOLE', 'off') not in ('', options.get('VM_CONSOLE', 'off')):
+        raise ValueError('console launch option changed')
     builder = helper('build-release')
     source_digest = builder.tree_digest(ROOT/'src')
     # A reviewed candidate may intentionally keep its already-built driver
@@ -3008,8 +3011,12 @@ def validate_running(manifest, observed):
     if ((dedicated and sorted(serial) != sorted(expected_serial)) or
             (not dedicated and any('rgpu_critical' in value for value in serial))):
         errors.append('critical_uart_topology')
+    expected_graphics = ['-vga', 'none', '-display', 'none']
+    if manifest.get('launch_options', {}).get('VM_CONSOLE') == 'bochs':
+        expected_graphics += ['-device', 'bochs-display,id=rgpu_present,bus=pcie.0,addr=0x7,vgamem=64M',
+                              '-vnc', 'unix:/run/vm/console-vnc.sock']
     if manifest.get('launch_options', {}).get('GENERIC_GRAPHICS') == 'off' and \
-            graphics != ['-vga', 'none', '-display', 'none']:
+            graphics != expected_graphics:
         errors.append('generic_graphics')
     usb_audio = [row for row in observed.get('pci_topology', [])
                  if row.get('model') == 'usb-audio']
@@ -3089,7 +3096,7 @@ for pid in os.listdir('/proc'):
   for index,arg in enumerate(args[:-1]):
    value=args[index+1]
    device=value.split(b',',1)[0]
-   if arg in (b'-vga',b'-display') or (arg==b'-device' and (device in generic or device.startswith(b'qxl') or device.startswith(b'virtio-vga') or device.startswith(b'virtio-gpu'))):
+   if arg in (b'-vga',b'-display',b'-vnc',b'-spice') or (arg==b'-device' and (device in generic or device.startswith(b'qxl') or device.startswith(b'virtio-vga') or device.startswith(b'virtio-gpu'))):
     graphics.extend((arg.decode(),value.decode()))
   topology=[]
   for index,arg in enumerate(args[:-1]):

@@ -37,6 +37,7 @@ GPU_SUB="${GPU_SUB:-}"         # spoof subsystem ids too, as "vendor:device"
 SERIAL="${SERIAL:-on}"         # on = expose a serial port at run/serial.sock
 CRITICAL_SERIAL="${CRITICAL_SERIAL:-off}" # on = dedicated CR2 UART at COM2
 GENERIC_GRAPHICS="${GENERIC_GRAPHICS:-on}" # off = authenticated headless/no-VGA path
+VM_CONSOLE="${VM_CONSOLE:-off}"
 GDB="${GDB:-off}"              # on = gdbstub on 127.0.0.1:1234 | wait = also start halted
 SSH_PORT="${SSH_PORT:-50922}"
 SCREEN_PORT="${SCREEN_PORT:-5900}"
@@ -117,6 +118,8 @@ done
 [[ "${MODE}" == run ]] || [[ -e "${VM_DIR}/BaseSystem.img" ]] || die "missing BaseSystem.img"
 
 case "${GENERIC_GRAPHICS}" in on|off) ;; *) die "unknown generic graphics setting ${GENERIC_GRAPHICS}" ;; esac
+case "${VM_CONSOLE}" in off|bochs) ;; *) die "unknown VM_CONSOLE" ;; esac
+[[ "${VM_CONSOLE}" != bochs || "${GENERIC_GRAPHICS}" == off ]] || die "console requires GENERIC_GRAPHICS=off"
 XAUTH=""
 if [[ "${GENERIC_GRAPHICS}" == on ]]; then
     # The historical QEMU window is an X client and needs Xwayland plus a cookie.
@@ -295,6 +298,7 @@ DOCKER_ARGS=(
     -e "CPU_STRING=${VCPUS},sockets=1,cores=${VCPUS},threads=1"
     -e "EXTRA=${EXTRA_QEMU}"
     -e "GENERIC_GRAPHICS=${GENERIC_GRAPHICS}"
+    -e "VM_CONSOLE=${VM_CONSOLE}"
     "${AUDIO_ARGS[@]}"
     "${GPU_ARGS[@]}"
     "${GDB_ARGS[@]}"

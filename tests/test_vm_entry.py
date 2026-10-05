@@ -50,6 +50,19 @@ class VmEntryTests(unittest.TestCase):
                      "bochs-display", "ramfb")
         self.assertFalse(any(any(token in arg for token in forbidden) for arg in argv))
 
+    def test_presentation_console_is_exact_and_opt_in(self):
+        result, argv = self.run_entry('qemu-system-x86_64 -vga vmware $EXTRA',
+                                      more_env={"VM_CONSOLE": "bochs"})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('bochs-display,id=rgpu_present,bus=pcie.0,addr=0x7,vgamem=64M', argv)
+        self.assertEqual(argv[argv.index('-vnc')+1], 'unix:/run/vm/console-vnc.sock')
+        for mode, extra, console in [('on','-display none','bochs'),
+                                     ('off','-display none -vnc :5','bochs'),
+                                     ('off','-display none','unknown')]:
+            result, _ = self.run_entry('qemu-system-x86_64 -vga vmware $EXTRA',
+                                       mode=mode, extra=extra, more_env={"VM_CONSOLE":console})
+            self.assertNotEqual(result.returncode, 0)
+
     def test_off_refuses_missing_or_multiple_default_vga(self):
         for launch in (
                 'qemu-system-x86_64 -m 2G -display gtk',
