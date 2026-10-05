@@ -35,6 +35,7 @@
 #include <Headers/plugin_start.hpp>
 #include "KiqAddresses.hpp"
 #include "HostMemoryReservation.hpp"
+#include "ConsoleTmrSafety.hpp"
 #include "DmubRingProbe.hpp"
 #include "DisplayIdlePower.hpp"
 #include "HdmiFrlEdid.hpp"
@@ -1657,6 +1658,7 @@ static uint32_t wrapCosRelMemHnd(void *self, void *handle) {
 static mach_vm_address_t orgPspTmrInit {};
 static mach_vm_address_t orgGmmSetMemoryAttributes {};
 static bool hostReserveEnabled = false, hostReservationReady = false;
+static bool consolePresentationEnabled = false;
 static bool dcnVersionQueryEnabled = false, displayIdleExitEnabled = false;
 static bool dcnFirmwareResponsive = false;
 static bool dcnReinitEnabled = false, dcnResumeHeldEnabled = false, dcnPspLoadEnabled = false;
@@ -1682,7 +1684,7 @@ static uint32_t wrapGmmSetMemoryAttributes(void *self, uint32_t type, void *attr
 // owner never did. psp_tmr_unload submits DESTROY_TMR (Apple cmd 7 -> wire 7) and nothing
 // else; psp_tmr_destroy also frees allocations that do not exist yet, so call the unload
 // alone.
-static uint32_t wrapPspTmrInit(void *psp) {
+static uint32_t replacePspTmr(void *psp) {
     if (hostReserveEnabled && !hostReservationReady) {
         CRLOG("HOSTRESERVE: refusing PSP TMR init without native host-window reservation");
         return 2;
@@ -1695,9 +1697,27 @@ static uint32_t wrapPspTmrInit(void *psp) {
         RLOG("XC: psp_tmr_unload before TMR init -> %u", u);
         dcnQueryFirmwareVersion("after PSP TMR unload");
     }
-    const auto result = FunctionCast(wrapPspTmrInit, orgPspTmrInit)(psp);
+    const auto result = reinterpret_cast<uint32_t (*)(void *)>(orgPspTmrInit)(psp);
     dcnFingerprintHostCode("after PSP LOAD_TOC/allocation");
     dcnQueryFirmwareVersion("after PSP LOAD_TOC/allocation");
+    return result;
+}
+
+static uint32_t wrapPspTmrInit(void *psp) {
+    if (!consolePresentationEnabled) return replacePspTmr(psp);
+    // Console output does not remove the firmware-memory ownership dependency.
+    // Refuse even if boot arguments accidentally omit the reservation option.
+    struct TmrState {
+        uint32_t read(uint32_t reg) { return fbRead(asicInfo, reg); }
+    } io;
+    const bool reserved = hostReserveEnabled && hostReservationReady && asicInfo && psp;
+    bool entered = false;
+    uint32_t result = RaphaelConsoleTmr::replace(reserved, io, [&]() {
+        entered = true;
+        CRLOG("CONSOLE: DMCUB held and memory reserved before PSP TMR replacement");
+        return replacePspTmr(psp);
+    });
+    if (!entered) CRLOG("CONSOLE: refusing PSP TMR replacement without reserved memory and live DMCUB reset proof");
     return result;
 }
 
@@ -3638,12 +3658,13 @@ static uint32_t wrapGmmSetMemoryAttributes(void *self, uint32_t type, void *attr
     const uint32_t top = fbRead(asicInfo, kGcFbTop) & 0xffffff;
     const uint64_t physical = uint64_t(fbRead(asicInfo, kGcFbOffset) & 0xffffff) << 24;
     const uint32_t bootStatus=fbRead(asicInfo,0x36a3);
-    bool approvedHeld = dcnReinitEnabled && dcnResumeHeldEnabled && bootStatus==0 &&
+    bool approvedHeld = (consolePresentationEnabled || (dcnReinitEnabled && dcnResumeHeldEnabled)) && bootStatus==0 &&
         fbRead(asicInfo,0x36a4)==0x05003500 && fbRead(asicInfo,0x36c0)==1 &&
         (fbRead(asicInfo,0x36b6)&~0x100000u)==0x800c6 && fbRead(asicInfo,0x3802)==0x100;
     if (top < base || total != (uint64_t(top - base) + 1) << 24 ||
         ((bootStatus & 3) != 3 && !approvedHeld)) {
-        CRLOG("HOSTRESERVE: invalid framebuffer or DMCUB identity");
+        CRLOG("HOSTRESERVE: invalid framebuffer or DMCUB identity total=%#llx base=%#x top=%#x boot=%#x held=%u",
+              total,base,top,bootStatus,approvedHeld);
         return 2;
     }
     RaphaelHostMemory::Window windows[6] {};
@@ -3665,7 +3686,7 @@ static uint32_t wrapGmmSetMemoryAttributes(void *self, uint32_t type, void *attr
               total, visible, existing);
         return 2;
     }
-    if (dcnReinitEnabled && dcnPspLoadEnabled && dcnResumeHeldEnabled) {
+    if (consolePresentationEnabled || (dcnReinitEnabled && dcnPspLoadEnabled && dcnResumeHeldEnabled)) {
         if (!approvedHeld) {
             if (fbRead(asicInfo,0x36a4)!=0x05003500 ||
                 !(fbRead(asicInfo,0x36b6)&0x10000) || (fbRead(asicInfo,0x36c0)&1)) return 2;
@@ -10856,8 +10877,11 @@ static void pluginStart() {
     vcnPresetEnabled = PE_parse_boot_argn("rgpuvcnpreset", &vcnPreset, sizeof(vcnPreset)) &&
         vcnPreset == 1;
     RLOG("VCNPRESET: rgpuvcnpreset=%u", vcnPresetEnabled);
+    uint32_t console = 0;
+    consolePresentationEnabled = PE_parse_boot_argn("rgpuconsole", &console, sizeof(console)) && console == 1;
     uint32_t hostReserve = 0;
-    hostReserveEnabled = PE_parse_boot_argn("rgpuhostreserve", &hostReserve, sizeof(hostReserve)) && hostReserve == 1;
+    hostReserveEnabled = consolePresentationEnabled ||
+        (PE_parse_boot_argn("rgpuhostreserve", &hostReserve, sizeof(hostReserve)) && hostReserve == 1);
     uint32_t dcn = 0, dcnTrace = 0;
     // The DCN 3.02 pool and translation are only meaningful, and only safe, together.
     uint32_t idleExit = 0;

@@ -342,6 +342,8 @@ def validate_card(raw, expected_sha256):
     except (TypeError, ValueError, json.JSONDecodeError) as error:
         raise RuntimeError("candidate card is not valid JSON") from error
     pair = (CANDIDATE_VERSION, CARD_ID)
+    if pair == ("1.0.332", "metal-180"):
+        raise RuntimeError("candidate332 withdrawn: host hang during unguarded PSP TMR teardown")
     requested_diagnostic = SUPPORTED_CARD_DIAGNOSTICS.get(pair)
     if requested_diagnostic is None:
         raise RuntimeError("unsupported candidate card pair")
