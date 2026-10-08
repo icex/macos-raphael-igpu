@@ -1,5 +1,20 @@
 # Live status — 2026-10-08
 
+## Candidate334 stopped safely;335 completes reset-state normalization
+
+Run `d4c79b98dafa97a439151b336f8d908a` refused reservation. Checksummed replay
+shows CNTL=0x90000, CPU reset1, DMUIF reset0x100, boot status0. The enable bit
+was still set;334 correctly refused PSP teardown. Serial text was interleaved,
+so the CR2 reconstruction is the authoritative diagnosis. This supersedes the
+assumption that334 saw the previous0x80000 control value.
+
+Guest-request shutdown succeeded. Standard recovery lacked a pool because native
+initialization was refused; supported no-queue recovery passed with no errors
+and authorizes_launch=true (run/c334-noqueue-recovery.json). Candidate335 follows
+Linux dmub_dcn31_reset's already-reset disable step and verifies the readback.
+Both reset bits must already be set; no running-image stop or firmware start is
+added. Full source build succeeds, focused fault tests pass; hardware run next.
+
 ## Candidate333 completed: Metal reaches QEMU console
 
 Run `a7fa79a29559deb6a80bedfb6ac658b1`, metal-181, same bootba51b3c6,
