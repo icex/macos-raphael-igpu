@@ -16,7 +16,9 @@ on **`dev`**; this is not yet a generally supported driver release.
 
 **VM window (October8):** candidate336 displays the accelerated macOS desktop in
 QEMU's console at1080HiDPI, with working mouse and keyboard input. Native Metal
-readbacks pass. Resize, performance, repeated lifecycle and other VM managers
+readbacks pass. Automatic login startup and a three-minute material-window workload
+pass on a repeat boot, followed by clean shutdown and GPU recovery. Resize,
+performance, broader lifecycle and other VM managers
 remain under qualification. [Evidence and setup](docs/virtual-console.md).
 
 The qualified remote baseline from **2026-09-16**, candidate **1.0.280**, runs an accelerated desktop through

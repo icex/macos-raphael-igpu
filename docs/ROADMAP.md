@@ -228,7 +228,9 @@ from device enumeration or passing microbenchmarks.
 window, without physical HDMI.** Candidate336 shows the full1080HiDPI desktop
 through QEMU's console, with correct mouse mapping and keyboard modifiers.
 Native Metal and WindowServer accelerator ownership pass. The packaged guest
-launcher is installed; login/restart durability, resize and measured performance
+launcher automatically restores the desktop and retained permission on a repeat
+guest boot. A three-minute moving-material workload completed; both336 runs shut
+down cleanly and recovered. Resize, measured performance and broader lifecycle
 remain next. QEMU/libvirt first; VirtualBox needs a separate transport/driver.
 [Implementation and measured scope](virtual-console.md).
 

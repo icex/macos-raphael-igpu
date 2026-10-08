@@ -61,4 +61,18 @@ actual throughput/latency has not been measured. The current transport copies
 pixels through CPU memory. Resize coordination, libvirt/virt-manager lifecycle,
 release signing and independent-host-boot repeatability remain open. VirtualBox
 needs a separate GPU transport because its current Linux PCI passthrough is absent.
-The installed login launcher and same-boot reboot are the next validation step.
+Candidate336 first run shut down through the guest and recovered with
+`authorizes_launch=true` and a valid CORE_PROBE_PASS. Repeat336b, run
+`a4b743f14436d22521c6e627ab20476c`, automatically recreated the virtual display,
+restored main-display layout, retained the packaged Screen Recording consent and
+started capture at login. Its fresh native Metal probe passed. No manual guest
+helper startup was used on that boot. The three-minute material workload completed2,062 event-loop iterations. Sampled
+QEMU captures show rendered material effects, and capture continued through the
+workload. These samples do not prove tear-free output or a delivered frame rate.
+The serial capture contains no new panic or reported VM fault. Repeat shutdown
+was `exited-after-guest-request`; recovery was `recovered`, `authorizes_launch=true`,
+with valid CORE_PROBE_PASS. The VM is stopped. Artifacts include
+`c336-b-material-{1,2}.ppm`, `c336-b-material-result.txt`,
+`c336-b-after-material.ppm` and `candidate-336-attempt-b-results/`.
+
+[Artifact hashes](virtual-console-evidence-20261008.json).

@@ -1,0 +1,134 @@
+{
+  "schema": 1,
+  "boot_id": "ba51b3c6-9420-4510-af69-38a42b3c79c7",
+  "artifacts": [
+    {
+      "path": "/home/bogdan/macos-vm/run/c333-console-pixel-result.json",
+      "sha256": "a51182d0a98fdb2fe3ba4edaf460a45499ebdb256a5200b322a863bea9dfb5fd"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c333-console-metal-guest-result.txt",
+      "sha256": "5ee191b081e5231dcb330da17f27040d0acb0d773470676c366d4a29092a06f0"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c336-desktop-main.ppm",
+      "sha256": "160dd098958f0461eab9078ed4b05169ff95954b31a59ea8f8dad5cd7ff247fb"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c336-qemu-input-menu.png",
+      "sha256": "c29beaa001e82cecf7378636d05be1e731989229cb1a96d58321f65c158557b4"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c336-qemu-keyboard-shift.png",
+      "sha256": "7ed41125b4383b7c5b8d58d91c864afc03eef1667f806013bfe6bff20d8e2d5d"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c336-input-and-capture-result.txt",
+      "sha256": "6e669f47e91c41a34c538f2dda1b993f3b0d13e0d02735ad5946893e23cf2fc1"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c336-packaged-desktop.ppm",
+      "sha256": "4d9d59007ca109e4d33129b65c0c8b14fd278f155b4f796089b2b3f88b9a2780"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c336-packaged-result.txt",
+      "sha256": "4ef64e6d1230de2769763d4de99da7f679aa1b9c4b419dd16e79d618d74f6f0a"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c336-b-autostart.ppm",
+      "sha256": "585832c24cf7e35047ba1f6d5e1b8aed4dd159aa2613ba45920a444b8a182d45"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c336-b-autostart.txt",
+      "sha256": "13249924bec860a4c3cfb9ef8b24a9ee54dc1d5bbd2c25cfdf969101d4d8caad"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-333-attempt-b-results/manifest.json",
+      "sha256": "80e97fb510ca9aa62317ac2df02d207533181d193b3da7deb385ba6e315d724e"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-333-attempt-b-results/probe.json",
+      "sha256": "f937e03171065bfa8fe3739c8b5d565bf13cadc60a589a879478f00ebe5d6aea"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-333-attempt-b-results/running-identity.json",
+      "sha256": "4b66be8e2e7b723a0bc3fcb753867f38ffdcf05fd011332d3c887f55f37256a8"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-333-attempt-b-results/shutdown.json",
+      "sha256": "81239fd79cf38d3f6c7c11373b0fc72f6813a540de580e124dfd5da7e361c68c"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-333-attempt-b-results/recovery.json",
+      "sha256": "d594042b410478a3dba44caab6bf512a6d20d5ac25a18acd0cac0773d6fd5617"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-333-attempt-b-results/verdict.json",
+      "sha256": "d6a634085eba51ce01fe5ec344c3da52b449d2fd2b24e06a9b4c2d2db04db733"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-336-results/manifest.json",
+      "sha256": "5e73f097434b9547cfd221249a11a70cc7f57daed6f072e33b73afbedca748e0"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-336-results/probe.json",
+      "sha256": "c7f7355f32c589f16956f6882d290a92759db0c0fcffff07907688d0c12f5e25"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-336-results/running-identity.json",
+      "sha256": "0c5bcaf3b9487f941ee30ccfd5892a15358afe98e63ca87c41d4bafd5fb33fde"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-336-results/shutdown.json",
+      "sha256": "671043a286fb690eb3581e1e0f623416c893f99dcf4709c8ded5e30b7ab04f86"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-336-results/recovery.json",
+      "sha256": "8295a22d8746736e3c6d5dff8b23c9dc564c2e4b8e07993e752c9057372ca2d2"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-336-results/verdict.json",
+      "sha256": "ca44a21c50f94f17b32d71ba1266582a28026565cbae9cbfdb92d9ebd6a41fc2"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-336-attempt-b-results/manifest.json",
+      "sha256": "753c5954f18fd0aaf834347b1b1fefef92213d249dab6f6d8d5041fd23c4c3e2"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-336-attempt-b-results/probe.json",
+      "sha256": "e327187e0e916d7ed1134a72bcd1774d2d07c1865116678a4b41ee248df48d8d"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-336-attempt-b-results/running-identity.json",
+      "sha256": "0c5bcaf3b9487f941ee30ccfd5892a15358afe98e63ca87c41d4bafd5fb33fde"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c336-b-material-1.ppm",
+      "sha256": "0b8576a9657d384303dddd530f67767f176215dadd7e38eed0af06496c23aa41"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c336-b-material-2.ppm",
+      "sha256": "59020338135625cd5ce30b9916eb9ab9f50c3802a21b090bd5c454dae83ddf25"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c336-b-material-result.txt",
+      "sha256": "676207400dd1f9ccede7f1175c3d93070b9d1f7435c097e426551fa71751b8af"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c336-b-after-material.ppm",
+      "sha256": "2e1c7b62fbb2168eaac133307f5ddce826f7689c018337b37ef699c7d3778e59"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-336-attempt-b-results/shutdown.json",
+      "sha256": "9c50b02ec6b455e1b375d9ad3977955aa7bd01f4446bfa8f90c2a7a74fb0480b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-336-attempt-b-results/recovery.json",
+      "sha256": "91a2c852c4b7b3d3caa0d25417d14662ca62a1f80c3c3aefdc9cc9ed58b71e68"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-336-attempt-b-results/verdict.json",
+      "sha256": "a78aa7fab4f13047d661e615e6dbca6aee7d6957354d23a6a2e2ee78f5332fb4"
+    }
+  ]
+}

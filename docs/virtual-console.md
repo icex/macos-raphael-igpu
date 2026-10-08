@@ -61,10 +61,11 @@ Sources: [QEMU Bochs implementation](https://gitlab.com/qemu-project/qemu/-/blob
 
 ## Window launcher and current hardware evidence (October8)
 
-From the Linux desktop session, open the active supervised VM with:
+Set `RUN_RESULTS` to the active experiment results directory. From the Linux
+desktop session, open that supervised VM with:
 
 ```sh
-python3 tools/console-window.py --state ~/macos-vm/run/candidate-333-attempt-b-results/supervision.json
+python3 tools/console-window.py --state "$RUN_RESULTS/supervision.json"
 ```
 
 This connects TigerVNC to QEMU's presentation socket. It verifies the exact running
@@ -82,13 +83,12 @@ measured frame rate. The viewer connected successfully on the Linux desktop.
 
 The CGVirtualDisplay helper creates1920×1080 logical/3840×2160 backing pixels.
 `console-presenter` additionally requires macOS Screen & System Audio Recording
-permission. The current333 executable is `/private/var/tmp/c333-console-presenter`;
-its denied TCC entry explains the capture error-3801. Enable it in the guest's
-Privacy & Security settings, then restart the presenter. Future packaging must
-provide a stable application identity rather than a new per-experiment path.
+permission. The initial333 executable was denied with-3801. Normal guest settings
+resolved it; the packaged app now uses org.raphaelgpu.console and permission
+survived the next guest boot. See the installer below.
 
-Remaining: desktop capture, selecting the virtual display as the sole desktop,
-mouse/keyboard mapping, resize coordination, performance and repeated cleanup.
+Desktop capture, main-display selection and mouse/keyboard mapping pass on336.
+Remaining: resize coordination, measured performance and broader cleanup coverage.
 VirtualBox support remains a separate unimplemented transport problem.
 
 ## Install the guest console desktop
