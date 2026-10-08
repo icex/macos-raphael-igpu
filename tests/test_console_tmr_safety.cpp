@@ -3,12 +3,27 @@
 #include <map>
 struct IO {
     std::map<uint32_t,uint32_t> regs{{0x36b6,0x800c6},{0x36c0,1},{0x3802,0x100}};
-    unsigned reads=0;
+    unsigned reads=0, writes=0; bool rejectWrite=false;
+    void write(uint32_t reg,uint32_t value) { ++writes; if(!rejectWrite)regs[reg]=value; }
     uint32_t read(uint32_t reg) { ++reads; return regs.at(reg); }
 };
 int main() {
     assert(RaphaelConsoleTmr::held(0x80000,1,0x100)); // observed held state after333
     assert(!RaphaelConsoleTmr::held(0x90000,1,0x100)); // enable must still be clear
+    IO resetEnabled;resetEnabled.regs[0x36b6]=0x90000;
+    assert(RaphaelConsoleTmr::disableWhileReset(resetEnabled));
+    assert(resetEnabled.writes==1 && resetEnabled.regs[0x36b6]==0x80000);
+    assert(RaphaelConsoleTmr::disableWhileReset(resetEnabled) && resetEnabled.writes==1);
+    for(auto reg:{0x36b6,0x36c0,0x3802}) {
+        IO bad;bad.regs[reg]=UINT32_MAX;
+        assert(!RaphaelConsoleTmr::disableWhileReset(bad) && !bad.writes);
+    }
+    for(auto reg:{0x36c0,0x3802}) {
+        IO bad;bad.regs[reg]=0;bad.regs[0x36b6]=0x90000;
+        assert(!RaphaelConsoleTmr::disableWhileReset(bad) && !bad.writes);
+    }
+    IO rejected;rejected.regs[0x36b6]=0x90000;rejected.rejectWrite=true;
+    assert(!RaphaelConsoleTmr::disableWhileReset(rejected));
     IO io; unsigned calls=0;
     auto psp=[&]() { ++calls; return 7u; };
     assert(RaphaelConsoleTmr::replace(false,io,psp)==2);

@@ -3658,6 +3658,14 @@ static uint32_t wrapGmmSetMemoryAttributes(void *self, uint32_t type, void *attr
     const uint32_t top = fbRead(asicInfo, kGcFbTop) & 0xffffff;
     const uint64_t physical = uint64_t(fbRead(asicInfo, kGcFbOffset) & 0xffffff) << 24;
     const uint32_t bootStatus=fbRead(asicInfo,0x36a3);
+    if (consolePresentationEnabled && bootStatus==0 && fbRead(asicInfo,0x36a4)==0x05003500) {
+        struct HeldTransport {
+            uint32_t read(uint32_t r) { return fbRead(asicInfo,r); }
+            void write(uint32_t r,uint32_t v) { fbWrite(asicInfo,r,v); }
+        } io;
+        const bool disabled=RaphaelConsoleTmr::disableWhileReset(io);
+        CRLOG("CONSOLE: normalize already-reset firmware disabled=%u",disabled);
+    }
     const uint32_t heldControl=fbRead(asicInfo,0x36b6), heldReset=fbRead(asicInfo,0x36c0),
         heldInterface=fbRead(asicInfo,0x3802);
     const bool consoleHeld = consolePresentationEnabled &&
