@@ -1,5 +1,20 @@
 # Live status — 2026-10-08
 
+## Candidate335 stopped safely;336 fixes stale mailbox reservation
+
+Run `b5e5917029afd926750be8efab12758d` verified disable under reset:
+CNTL0x80000, CPU reset1, DMUIF0x100, then refused reservation because CW3–6
+pointed into previous guest allocations at MC+0x4a0000..0x4bf600. These ranges
+cannot be preserved as a tail without consuming the visible aperture. They are
+inactive while both resets remain asserted. Candidate336 validates all six
+ranges, preserves secure CW0/1 and retires only stale mailbox ranges in held
+console mode. Running firmware and physical-display reservation rules remain.
+
+Guest-requested shutdown succeeded; ordinary recovery lacked the never-created
+pool, and supported no-queue recovery passed with authorizes_launch=true
+(run/c335-noqueue-recovery.json).336 builds and its reservation fault tests pass;
+the next run verifies native startup on the same host boot.
+
 ## Candidate334 stopped safely;335 completes reset-state normalization
 
 Run `d4c79b98dafa97a439151b336f8d908a` refused reservation. Checksummed replay
