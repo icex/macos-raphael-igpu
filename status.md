@@ -1,99 +1,34 @@
 # Live status — 2026-10-08
 
-## Candidate335 stopped safely;336 fixes stale mailbox reservation
+## Candidate336: accelerated macOS in a QEMU window
 
-Run `b5e5917029afd926750be8efab12758d` verified disable under reset:
-CNTL0x80000, CPU reset1, DMUIF0x100, then refused reservation because CW3–6
-pointed into previous guest allocations at MC+0x4a0000..0x4bf600. These ranges
-cannot be preserved as a tail without consuming the visible aperture. They are
-inactive while both resets remain asserted. Candidate336 validates all six
-ranges, preserves secure CW0/1 and retires only stale mailbox ranges in held
-console mode. Running firmware and physical-display reservation rules remain.
+Run `201412ad0f4bafdc61ad3dde81d38037`, metal-184, host bootba51b3c6.
+Native desktop Metal probe passes with WindowServer accelerator ownership.
+QEMU's own console shows the virtual desktop at1920×1080 logical/3840×2160 pixels,
+including application windows, menu bar and Dock. Mouse clicks and keyboard input
+with Shift pass through QEMU's input path. Display-awake assertions are verified.
 
-Guest-requested shutdown succeeded; ordinary recovery lacked the never-created
-pool, and supported no-queue recovery passed with authorizes_launch=true
-(run/c335-noqueue-recovery.json).336 builds and its reservation fault tests pass;
-the next run verifies native startup on the same host boot.
+Normal System Settings UI granted Screen Recording to the presenter, then the
+packaged org.raphaelgpu.console app. The installed user LaunchAgent creates the
+virtual display, makes it primary, and starts capture on console-enabled profiles.
+Automatic startup across another guest boot is the next test. The helpers remain
+bounded to6000seconds; sustained performance, resize, arbitrary VM managers and
+unlimited daily use are not qualified.
 
-## Candidate334 stopped safely;335 completes reset-state normalization
+Capture artifacts: ~/macos-vm/run/c336-desktop-main.ppm,
+c336-qemu-input-menu.png, c336-qemu-keyboard-shift.png,
+c336-input-and-capture-result.txt and c336-packaged-desktop.ppm.
+The harness reports valid CORE_PROBE_PASS. Shutdown: exited-after-guest-request.
+Recovery: recovered, authorizes_launch=true. Results: candidate-336-results.
 
-Run `d4c79b98dafa97a439151b336f8d908a` refused reservation. Checksummed replay
-shows CNTL=0x90000, CPU reset1, DMUIF reset0x100, boot status0. The enable bit
-was still set;334 correctly refused PSP teardown. Serial text was interleaved,
-so the CR2 reconstruction is the authoritative diagnosis. This supersedes the
-assumption that334 saw the previous0x80000 control value.
+Restart corrections preserve mandatory reservation and immediate pre-PSP DMCUB
+reset/disable proof.335 verifies disable under existing reset;336 retires validated
+stale guest mailbox ranges while retaining secure firmware storage.333c/334/335
+refused safely and recovered through the supported no-queue path. The original
+332 host-hang build remains withdrawn. No host reboot or amdgpu rebind occurred.
 
-Guest-request shutdown succeeded. Standard recovery lacked a pool because native
-initialization was refused; supported no-queue recovery passed with no errors
-and authorizes_launch=true (run/c334-noqueue-recovery.json). Candidate335 follows
-Linux dmub_dcn31_reset's already-reset disable step and verifies the readback.
-Both reset bits must already be set; no running-image stop or firmware start is
-added. Full source build succeeds, focused fault tests pass; hardware run next.
-
-## Candidate333 completed: Metal reaches QEMU console
-
-Run `a7fa79a29559deb6a80bedfb6ac658b1`, metal-181, same bootba51b3c6,
-MODE2#266. DMCUB hold and native memory reservation pass; PSP TMR unload returns0.
-The desktop Metal probe completes with WindowServer accelerator ownership and
-correct readbacks. No host hang observed in this run.
-
-Three GPU-generated1280×720 color-bar phases each verify921,600 pixels. Independent
-QEMU screenshots of phases0/2 each match every pixel; TigerVNC connects to the
-QEMU socket in a normal Linux desktop window. The HiDPI virtual display is online
-and awake assertions are active. Full desktop capture returns ScreenCaptureKit
--3801 because the user has not yet granted the presenter Screen Recording consent.
-The guest settings page is open. No permission database was changed.
-
-Capture evidence: `~/macos-vm/run/c333-console-pixel-result.json`, screenshots
-`c333-metal-console-{1,2}.ppm`, guest log `c333-console-metal-guest-result.txt`.
-Harness verdict: valid CORE_PROBE_PASS. Guest-requested shutdown succeeded
-(exited-after-guest-request); recovery is recovered, authorizes_launch=true.
-The same-boot333 repeat (3da6358496f88270394a1cfa724fea9d, MODE2#267)
-refused safely at held-firmware identity: the old literal control value0x800c6
-did not match the observed0x80000 state. No PSP teardown or Metal startup occurred.
-Guest-request shutdown succeeded; standard recovery lacked the never-created
-lease pool. Bounded no-queue recovery passed with authorizes_launch=true
-(run/c333-c-noqueue-recovery.json). Candidate334 uses the required reset/disable
-bits for this console-only identity check and is built for the next cycle. Do not infer full desktop/input/performance
-qualification from the synthetic presentation pass. Candidate334 contains the
-window launcher and helper improvements; the running kext remains333.
-
-## Candidate332 host hang — investigation and correction
-
-User reports a full host hang during candidate332 / metal-180, run
-`dd40f35333452ac3e23f25210704f120`. Boot5074c0e5 ended; current boot is
-`ba51b3c6-9420-4510-af69-38a42b3c79c7`. GPU is now owned by amdgpu; no new
-GPU launch is authorized by old-boot receipts.
-
-Preserved evidence: `~/macos-vm/run/candidate-332-host-hang/`. Guest serial ends
-while sending PSP DESTROY_TMR (wire7), before its return, Metal startup or any
-console pixel mapping. Bochs bridge enumeration had completed. Prior-boot
-kernel journal records no panic/fault at the end; no archived pstore file is
-available. This localizes the failure boundary, not the exact hardware cause.
-
-Candidate331 had refused TMR init after an invalid framebuffer/DMCUB identity.
-Removing host reservation in332 bypassed that protection; that change is rejected.
-The earlier claim that disabling DCN alone explained331 was too strong.
-Candidate333 now requires checked firmware hold and reservation for console TMR
-access, independent of display enable flags. Build1.0.333 succeeds;1026 host tests
-pass (three skipped). Fault injection confirms unsafe states cannot call PSP.
-Hardware validation remains pending. On October8 the user handed the GPU to
-VFIO. MODE2#264/#265 passed. Staging first refused an old-boot332 launch marker;
-it was archived after matching its supervision/boot identity and verifying no
-container/service survived. The next attempt (db5abf15b3ff977293f11bcad37863c0)
-refused before QEMU exposure because boot-time kernel messages had rotated away.
-The retained journal contains a complete Raphael system-resume sequence.
-The harness now recognizes that bounded sequence (PSP/SMU/DMCUB/GFX/KIQ/SDMA/JPEG,
-then suspend exit), rejects partial/wrong-device/failed resumes, and retains all
-independent device/recovery admission checks. The isolated333 retry launched successfully (see above).
-No reboot is requested. Card metal-181 is prepared;332 staging is withdrawn.
-See [hang investigation](findings/research/console-tmr-host-hang-20261005.md).
-Never resume332 or label it recovered:
-there are no final capture, shutdown or recovery receipts after the host hang.
-
-Prior331 stopped through guest-request shutdown and then passed the supported
-MODE2/no-queue recovery path. Candidate332 had1025 passing offline tests;
-those checks did not establish firmware-memory safety. [Console design](docs/virtual-console.md).
+[Console setup](docs/virtual-console.md) ·
+[Prior investigation status](findings/research/status-archives/status-before-console-desktop-20261008.md).
 
 ## Candidate330: correct HiDPI120 picture and HDMI audio
 
@@ -142,7 +77,7 @@ remain open; the tested picture/audio path has no remaining observed blocker.
 | Native desktop | Three minutes of moving/resizing native material windows; four clean raw RFB captures |
 | Safari | Two-minute transparency/blur/scrolling page; three clean captures plus clean desktop after larger-buffer pressure |
 | Stock QEMU / PerfPowerServices | OpenCore/VirtualSMC fix passes two guest boots,0.0% CPU, latest0.86s; prior patched-QEMU evidence retained separately |
-| Host regression | 1023 tests OK, three skipped |
+| Host regression | 1028 tests OK, three skipped |
 
 Earlier texture recreation (144 cases / 131,031,576 pixels), feedback rendering
 (48 cases / 5,280,000 pixels), and hardware H.264/HEVC encode/decode retain their
@@ -178,15 +113,3 @@ decode works; explicit GPU-ID selection remains limited. Main10 decode has scope
 passes; hardware encode is Main8. [Roadmap](docs/ROADMAP.md).
 
 
-## Previous completed harness result (331; predates332 host hang)
-
-- Output: `/home/bogdan/macos-vm/run/candidate-331-attempt-b-results`
-- Verdict: `INVALID`
-- Boundary: `recovery_lease_pool_missing`
-
-
-## One-command GPU test
-
-- Output: `/home/bogdan/macos-vm/run/candidate-333-results`
-- Verdict: `INVALID`
-- Boundary: `identity_or_route_missing`
