@@ -11,7 +11,12 @@ with Shift pass through QEMU's input path. Display-awake assertions are verified
 Normal System Settings UI granted Screen Recording to the presenter, then the
 packaged org.raphaelgpu.console app. The installed user LaunchAgent creates the
 virtual display, makes it primary, and starts capture on console-enabled profiles.
-Automatic startup across another guest boot is the next test. The helpers remain
+Repeat run `a4b743f14436d22521c6e627ab20476c` automatically restored the desktop
+and retained capture permission at login. A three-minute material-window workload
+completed 2,062 event-loop iterations; sampled QEMU captures show rendered effects
+and capture continued. This does not measure delivered frame rate or prove tear-free output.
+Both336 runs shut down through the guest and recovered with authorizing receipts.
+Latest results: `candidate-336-attempt-b-results`; VM stopped. The helpers remain
 bounded to6000seconds; sustained performance, resize, arbitrary VM managers and
 unlimited daily use are not qualified.
 
@@ -46,9 +51,9 @@ survive the tested HiDPI 120→60→120 switches without rerouting.
 - Host kernel capture: networking/firewall messages only; no recorded GPU/host fault.
 - Final state: VM stopped; both functions remain on vfio-pci. No reboot or rebind.
 
-The checked-in `kext/bin/RaphaelGPU` and manifest are the exact hardware-tested
-build. README, roadmap, setup and release docs record this milestone for publication
-to dev and main at the user's request. That end-of-day stop is historical; work resumed on October5.
+The September publication on main contains the tested330 build. The current dev
+binary is336, tested on the console path; its physical HDMI path has not been
+independently rerun. That end-of-day stop is historical; work resumed on October5.
 
 Logs are not error-free: startup CAIL, DMUB capability-query and early GFXHDA
 assertions remain, as do recurring PSP/HDCP status 4 errors. The FRL audio
@@ -97,7 +102,9 @@ exact OpenCore DSDT ownership patch are required; prior media backups remain ava
 
 ## Remaining roadmap
 
-1. Sustained4K remote delivery and input latency; preserve crisp Retina60Hz,
+1. QEMU console resize, measured frame pacing/input latency, and supervised
+   libvirt/virt-manager integration. Automatic guest-login startup passes one repeat.
+   Sustained4K remote delivery and input latency; preserve crisp Retina60Hz,
    then qualify login persistence. Remote90/120Hz delivery remains unproven;
    physical Samsung HiDPI120 now works.
 2. Guest-crash/command-channel failure, repeated lifecycle and independent-host-boot
@@ -111,5 +118,3 @@ StockQEMU10.1.2/OpenCore/VirtualSMC1.3.7 works in this tested setup;
 PerfPowerServices was0.0% CPU on two guest boots. Automatic required-hardware HEVC
 decode works; explicit GPU-ID selection remains limited. Main10 decode has scoped
 passes; hardware encode is Main8. [Roadmap](docs/ROADMAP.md).
-
-
