@@ -30,14 +30,27 @@ static SCStreamConfiguration *configuration(size_t w, size_t h, unsigned fps) {
 @property mach_vm_size_t length;
 @property NSUInteger frames, width, height, targetWidth, targetHeight, reportFrames;
 @property double reportTime, copySeconds, maxCopySeconds;
-@property BOOL stopping, updating;
+@property BOOL stopping, updating, running;
+@property NSUInteger dropped;
+@property(strong) dispatch_queue_t processingQueue;
+@property(strong) dispatch_semaphore_t copying;
 @end
 @implementation ConsoleOutput
 - (void)stream:(SCStream *)stream didStopWithError:(NSError *)error {
     fprintf(stderr,"capture stopped: %s\n",error.description.UTF8String); exit(5);
 }
 - (void)stream:(SCStream *)stream didOutputSampleBuffer:(CMSampleBufferRef)sample ofType:(SCStreamOutputType)type {
-    if(self.stopping || self.updating || type!=SCStreamOutputTypeScreen || !CMSampleBufferIsValid(sample))return;
+    if(type!=SCStreamOutputTypeScreen || !CMSampleBufferIsValid(sample))return;
+    // Keep at most one copy queued/running. Slow mappings must not accumulate
+    // retained frames ahead of mode changes and shutdown on the control queue.
+    if(dispatch_semaphore_wait(self.copying,DISPATCH_TIME_NOW)) { self.dropped++;return; }
+    CFRetain(sample);
+    dispatch_async(self.processingQueue,^{
+        [self presentSample:sample];CFRelease(sample);dispatch_semaphore_signal(self.copying);
+    });
+}
+- (void)presentSample:(CMSampleBufferRef)sample {
+    if(self.stopping || self.updating)return;
     NSArray *attachments=(__bridge NSArray *)CMSampleBufferGetSampleAttachmentsArray(sample, false);
     if(!attachments.count || [attachments[0][SCStreamFrameInfoStatus] integerValue]!=SCFrameStatusComplete)return;
     CVPixelBufferRef image=CMSampleBufferGetImageBuffer(sample);
@@ -50,6 +63,7 @@ static SCStreamConfiguration *configuration(size_t w, size_t h, unsigned fps) {
     size_t stride=CVPixelBufferGetBytesPerRow(image);
     if(src && stride>=w*4) {
         for(size_t y=0;y<h;y++)memcpy((void *)(self.address+y*w*4),src+y*stride,w*4);
+        _mm_sfence(); // publish write-combined stores before the mode or frame count
         if(w!=self.width || h!=self.height) {
             uint64_t dims[]={w,h};
             kern_return_t kr=IOConnectCallScalarMethod(self.connection,0,dims,2,NULL,NULL);
@@ -58,13 +72,12 @@ static SCStreamConfiguration *configuration(size_t w, size_t h, unsigned fps) {
             printf("CONSOLE mode=%zux%zu\n",w,h);
         }
         double end=now(),duration=end-begin;
-        _mm_sfence(); // complete write-combined stores before reporting the frame
         self.frames++;self.reportFrames++;self.copySeconds+=duration;
         if(duration>self.maxCopySeconds)self.maxCopySeconds=duration;
         if(self.frames==1 || end-self.reportTime>=5) {
-            printf("CONSOLE frames=%lu size=%zux%zu elapsed=%.3f copied_fps=%.2f copy_avg_ms=%.3f copy_max_ms=%.3f\n",
+            printf("CONSOLE frames=%lu size=%zux%zu elapsed=%.3f copied_fps=%.2f copy_avg_ms=%.3f copy_max_ms=%.3f dropped=%lu\n",
                 (unsigned long)self.frames,w,h,end-self.reportTime,
-                self.reportFrames/(end-self.reportTime),1000*self.copySeconds/self.reportFrames,1000*self.maxCopySeconds);
+                self.reportFrames/(end-self.reportTime),1000*self.copySeconds/self.reportFrames,1000*self.maxCopySeconds,(unsigned long)self.dropped);
             self.reportTime=end;self.reportFrames=0;self.copySeconds=0;self.maxCopySeconds=0;fflush(stdout);
         }
     }
@@ -106,11 +119,13 @@ int main(int argc,const char **argv) { @autoreleasepool {
     if(CGDisplayRegisterReconfigurationCallback(displayChanged,NULL)!=kCGErrorSuccess)return 4;
     __block SCStream *capture;
     dispatch_queue_t queue=dispatch_queue_create("org.raphaelgpu.console",DISPATCH_QUEUE_SERIAL);
+    out.processingQueue=queue;out.copying=dispatch_semaphore_create(1);
+    dispatch_queue_t captureQueue=dispatch_queue_create("org.raphaelgpu.console.capture",DISPATCH_QUEUE_SERIAL);
     dispatch_source_t timer=dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER,0,0,queue);
     dispatch_source_set_timer(timer,dispatch_time(DISPATCH_TIME_NOW,NSEC_PER_SEC),NSEC_PER_SEC/2,NSEC_PER_SEC/20);
     __block NSUInteger polls=0;
     dispatch_source_set_event_handler(timer,^{
-        if(!capture || out.stopping || out.updating)return;
+        if(!out.running || out.stopping || out.updating)return;
         size_t w,h;
         if(!mode(did,length,&w,&h)) { fprintf(stderr,"console display disappeared or unsupported mode\n");exit(4); }
         if(++polls%20==1) {printf("CONSOLE mode_poll=%zux%zu\n",w,h);fflush(stdout);}
@@ -142,9 +157,10 @@ int main(int argc,const char **argv) { @autoreleasepool {
             SCContentFilter *filter=[[SCContentFilter alloc] initWithDisplay:display excludingWindows:@[]];
             capture=[[SCStream alloc] initWithFilter:filter configuration:configuration(w,h,fps) delegate:out];
             NSError *addError=nil;
-            if(![capture addStreamOutput:out type:SCStreamOutputTypeScreen sampleHandlerQueue:queue error:&addError])exit(4);
+            if(![capture addStreamOutput:out type:SCStreamOutputTypeScreen sampleHandlerQueue:captureQueue error:&addError])exit(4);
             [capture startCaptureWithCompletionHandler:^(NSError *startError){
                 if(startError) { fprintf(stderr,"capture start: %s\n",startError.description.UTF8String);exit(4); }
+                dispatch_async(queue,^{out.running=YES;});
                 printf("CONSOLE started display=%u size=%zux%zu requested_fps=%u\n",did,w,h,fps);fflush(stdout);
             }];
         });

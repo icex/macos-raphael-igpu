@@ -21,6 +21,7 @@ app,agent,support=map(Path,sys.argv[1:])
  NSScreenCaptureUsageDescription='Show the accelerated macOS desktop in the virtual machine console.')))
 agent.write_bytes(plistlib.dumps(dict(Label='org.raphaelgpu.console',
  ProgramArguments=['/bin/bash',str(support/'start-console.sh')],RunAtLoad=True,
+ EnvironmentVariables={'RGPU_CONSOLE_CACHE':'wc'},
  StandardOutPath=str(support/'launcher.log'),StandardErrorPath=str(support/'launcher.log'))))
 PY
 codesign --force --deep --sign - "$app"

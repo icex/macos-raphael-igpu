@@ -27,6 +27,7 @@ int main(void) { @autoreleasepool {
     const char *cache=getenv("RGPU_CONSOLE_CACHE");
     IOOptionBits options=kIOMapAnywhere;
     if(cache&&!strcmp(cache,"wc"))options|=kIOMapWriteCombineCache;
+    else if(cache&&!strcmp(cache,"uncached"))options|=kIOMapInhibitCache;
     else if(cache&&strcmp(cache,"default"))return 2;
     kr=IOConnectMapMemory64(client,0,mach_task_self(),&address,&size,options);
     if(kr||size<bytes){IOServiceClose(client);return 3;}
