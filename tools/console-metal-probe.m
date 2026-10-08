@@ -4,6 +4,8 @@
 #import <IOKit/IOKitLib.h>
 #include <unistd.h>
 #include <string.h>
+#include <time.h>
+#include <emmintrin.h>
 int main(void) { @autoreleasepool {
     id<MTLDevice> gpu=MTLCreateSystemDefaultDevice();
     if(!gpu)return 2;
@@ -22,7 +24,11 @@ int main(void) { @autoreleasepool {
     kern_return_t kr=IOServiceOpen(service,mach_task_self(),0,&client);IOObjectRelease(service);
     if(kr)return 3;
     mach_vm_address_t address=0;mach_vm_size_t size=0;
-    kr=IOConnectMapMemory64(client,0,mach_task_self(),&address,&size,kIOMapAnywhere);
+    const char *cache=getenv("RGPU_CONSOLE_CACHE");
+    IOOptionBits options=kIOMapAnywhere;
+    if(cache&&!strcmp(cache,"wc"))options|=kIOMapWriteCombineCache;
+    else if(cache&&strcmp(cache,"default"))return 2;
+    kr=IOConnectMapMemory64(client,0,mach_task_self(),&address,&size,options);
     if(kr||size<bytes){IOServiceClose(client);return 3;}
     uint64_t dims[]={1280,720};
     kr=IOConnectCallScalarMethod(client,0,dims,2,NULL,NULL);
@@ -39,7 +45,11 @@ int main(void) { @autoreleasepool {
         const uint32_t *actual=pixels.contents;
         for(unsigned i=0;i<1280*720;i++)if(actual[i]!=colors[((i%1280)*3/1280+phase)%3]){result=5;break;}
         if(result)break;
-        memcpy((void *)address,actual,bytes);
+        struct timespec before,after;clock_gettime(CLOCK_MONOTONIC,&before);
+        memcpy((void *)address,actual,bytes);_mm_sfence();
+        clock_gettime(CLOCK_MONOTONIC,&after);
+        printf("CONSOLE_COPY cache=%s phase=%u bytes=%lu ms=%.3f\n",cache?cache:"default",phase,(unsigned long)bytes,
+            1000*(after.tv_sec-before.tv_sec)+(after.tv_nsec-before.tv_nsec)/1e6);
         printf("CONSOLE_METAL phase=%u verified_pixels=921600 device=%s registry=%llu\n",phase,gpu.name.UTF8String,gpu.registryID);fflush(stdout);
         sleep(15);
     }
