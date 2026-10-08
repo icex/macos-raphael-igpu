@@ -21,7 +21,15 @@ int main(int argc,const char **argv) { @autoreleasepool {
         CGDisplayModeRef m=(CGDisplayModeRef)CFArrayGetValueAtIndex(modes,i);
         if(CGDisplayModeGetWidth(m)==w&&CGDisplayModeGetHeight(m)==h&&
            CGDisplayModeGetPixelWidth(m)==w*scale&&CGDisplayModeGetPixelHeight(m)==h*scale) {
-            result=CGDisplaySetDisplayMode(target,m,NULL);break;
+            CGDisplayConfigRef config=NULL;
+            result=CGBeginDisplayConfiguration(&config);
+            if(!result)result=CGConfigureDisplayWithDisplayMode(config,target,m,NULL);
+            if(!result)result=CGConfigureDisplayOrigin(config,target,0,0);
+            for(unsigned j=0;j<n&&!result;j++)if(ids[j]!=target)
+                result=CGConfigureDisplayMirrorOfDisplay(config,ids[j],target);
+            if(!result)result=CGCompleteDisplayConfiguration(config,kCGConfigureForSession);
+            else if(config)CGCancelDisplayConfiguration(config);
+            break;
         }
     }
     if(modes)CFRelease(modes);
