@@ -18,7 +18,13 @@ Capture evidence: `~/macos-vm/run/c333-console-pixel-result.json`, screenshots
 `c333-metal-console-{1,2}.ppm`, guest log `c333-console-metal-guest-result.txt`.
 Harness verdict: valid CORE_PROBE_PASS. Guest-requested shutdown succeeded
 (exited-after-guest-request); recovery is recovered, authorizes_launch=true.
-A same-boot repeat (attempt c) is in progress. Do not infer full desktop/input/performance
+The same-boot333 repeat (3da6358496f88270394a1cfa724fea9d, MODE2#267)
+refused safely at held-firmware identity: the old literal control value0x800c6
+did not match the observed0x80000 state. No PSP teardown or Metal startup occurred.
+Guest-request shutdown succeeded; standard recovery lacked the never-created
+lease pool. Bounded no-queue recovery passed with authorizes_launch=true
+(run/c333-c-noqueue-recovery.json). Candidate334 uses the required reset/disable
+bits for this console-only identity check and is built for the next cycle. Do not infer full desktop/input/performance
 qualification from the synthetic presentation pass. Candidate334 contains the
 window launcher and helper improvements; the running kext remains333.
 
