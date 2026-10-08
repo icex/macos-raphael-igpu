@@ -3658,9 +3658,17 @@ static uint32_t wrapGmmSetMemoryAttributes(void *self, uint32_t type, void *attr
     const uint32_t top = fbRead(asicInfo, kGcFbTop) & 0xffffff;
     const uint64_t physical = uint64_t(fbRead(asicInfo, kGcFbOffset) & 0xffffff) << 24;
     const uint32_t bootStatus=fbRead(asicInfo,0x36a3);
-    bool approvedHeld = (consolePresentationEnabled || (dcnReinitEnabled && dcnResumeHeldEnabled)) && bootStatus==0 &&
-        fbRead(asicInfo,0x36a4)==0x05003500 && fbRead(asicInfo,0x36c0)==1 &&
-        (fbRead(asicInfo,0x36b6)&~0x100000u)==0x800c6 && fbRead(asicInfo,0x3802)==0x100;
+    const uint32_t heldControl=fbRead(asicInfo,0x36b6), heldReset=fbRead(asicInfo,0x36c0),
+        heldInterface=fbRead(asicInfo,0x3802);
+    const bool consoleHeld = consolePresentationEnabled &&
+        RaphaelConsoleTmr::held(heldControl,heldReset,heldInterface);
+    const bool displayHeld = dcnReinitEnabled && dcnResumeHeldEnabled && heldReset==1 &&
+        (heldControl&~0x100000u)==0x800c6 && heldInterface==0x100;
+    bool approvedHeld = (consoleHeld || displayHeld) && bootStatus==0 &&
+        fbRead(asicInfo,0x36a4)==0x05003500;
+    if (consolePresentationEnabled)
+        CRLOG("CONSOLE: reservation firmware state CNTL=%#x reset=%#x DMUIF=%#x held=%u",
+              heldControl,heldReset,heldInterface,approvedHeld);
     if (top < base || total != (uint64_t(top - base) + 1) << 24 ||
         ((bootStatus & 3) != 3 && !approvedHeld)) {
         CRLOG("HOSTRESERVE: invalid framebuffer or DMCUB identity total=%#llx base=%#x top=%#x boot=%#x held=%u",

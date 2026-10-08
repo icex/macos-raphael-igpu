@@ -7,6 +7,8 @@ struct IO {
     uint32_t read(uint32_t reg) { ++reads; return regs.at(reg); }
 };
 int main() {
+    assert(RaphaelConsoleTmr::held(0x80000,1,0x100)); // observed held state after333
+    assert(!RaphaelConsoleTmr::held(0x90000,1,0x100)); // enable must still be clear
     IO io; unsigned calls=0;
     auto psp=[&]() { ++calls; return 7u; };
     assert(RaphaelConsoleTmr::replace(false,io,psp)==2);
