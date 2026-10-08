@@ -1,5 +1,25 @@
 # Live status — 2026-10-08
 
+## Candidate333 live: Metal reaches QEMU console
+
+Run `a7fa79a29559deb6a80bedfb6ac658b1`, metal-181, same bootba51b3c6,
+MODE2#266. DMCUB hold and native memory reservation pass; PSP TMR unload returns0.
+The desktop Metal probe completes with WindowServer accelerator ownership and
+correct readbacks. No host hang observed in this run.
+
+Three GPU-generated1280×720 color-bar phases each verify921,600 pixels. Independent
+QEMU screenshots of phases0/2 each match every pixel; TigerVNC connects to the
+QEMU socket in a normal Linux desktop window. The HiDPI virtual display is online
+and awake assertions are active. Full desktop capture returns ScreenCaptureKit
+-3801 because the user has not yet granted the presenter Screen Recording consent.
+The guest settings page is open. No permission database was changed.
+
+Capture evidence: `~/macos-vm/run/c333-console-pixel-result.json`, screenshots
+`c333-metal-console-{1,2}.ppm`, guest log `c333-console-metal-guest-result.txt`.
+Shutdown/recovery have not yet run. Do not infer full desktop/input/performance
+qualification from the synthetic presentation pass. Candidate334 contains the
+window launcher and helper improvements; the running kext remains333.
+
 ## Candidate332 host hang — investigation and correction
 
 User reports a full host hang during candidate332 / metal-180, run
@@ -27,7 +47,7 @@ refused before QEMU exposure because boot-time kernel messages had rotated away.
 The retained journal contains a complete Raphael system-resume sequence.
 The harness now recognizes that bounded sequence (PSP/SMU/DMCUB/GFX/KIQ/SDMA/JPEG,
 then suspend exit), rejects partial/wrong-device/failed resumes, and retains all
-independent device/recovery admission checks. Candidate333 retry is next.
+independent device/recovery admission checks. The isolated333 retry launched successfully (see above).
 No reboot is requested. Card metal-181 is prepared;332 staging is withdrawn.
 See [hang investigation](findings/research/console-tmr-host-hang-20261005.md).
 Never resume332 or label it recovered:

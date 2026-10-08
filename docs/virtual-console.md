@@ -5,7 +5,9 @@ Metal rendering and no physical HDMI connection. Screen Sharing/Moonlight alone
 does not meet that target. Candidates331–333 begin this work; it is not yet qualified. Candidate332 hung
 the host during PSP TMR teardown and is withdrawn. Candidate333 restores mandatory
 firmware-memory reservation and checks live DMCUB hold before PSP replacement;
-it builds and passes offline tests, but still requires hardware validation.
+candidate333 now passes PSP teardown and the native desktop Metal probe. A
+Metal-generated1280×720 pattern reaches QEMU exactly; full desktop capture is
+waiting for the guest Screen Recording consent. Cleanup qualification is pending.
 See [failure analysis](../findings/research/console-tmr-host-hang-20261005.md).
 
 ## Architecture under test
@@ -56,3 +58,35 @@ configuration option or its existing Radeon patch alone.
 Sources: [QEMU Bochs implementation](https://gitlab.com/qemu-project/qemu/-/blob/v10.1.2/hw/display/bochs-display.c),
 [libvirt domain format](https://libvirt.org/formatdomain.html),
 [VirtualBox PCI passthrough removal](https://forum.virtualbox.org/wiki/Changelog-6.1).
+
+## Window launcher and current hardware evidence (October8)
+
+From the Linux desktop session, open the active supervised VM with:
+
+```sh
+python3 tools/console-window.py --state ~/macos-vm/run/candidate-333-attempt-b-results/supervision.json
+```
+
+This connects TigerVNC to QEMU's presentation socket. It verifies the exact running
+container/start time and console selection. Closing the viewer disconnects the
+window only; the experiment supervisor still owns shutdown and recovery.
+Automatic remote resize is disabled until guest mode/capture changes can be
+coordinated. This is QEMU's VM console, not macOS Screen Sharing.
+
+`tools/console-metal-probe.m` generates three1280×720 color-bar phases on Raphael,
+checks921,600 pixels per phase, then copies the verified buffer into Bochs VRAM.
+Candidate333 run `a7fa79a29559deb6a80bedfb6ac658b1` completed all three phases.
+Independent QEMU screenshots of phases0 and2 each match all921,600 pixels.
+This demonstrates Metal-to-console presentation, not a captured desktop or
+measured frame rate. The viewer connected successfully on the Linux desktop.
+
+The CGVirtualDisplay helper creates1920×1080 logical/3840×2160 backing pixels.
+`console-presenter` additionally requires macOS Screen & System Audio Recording
+permission. The current333 executable is `/private/var/tmp/c333-console-presenter`;
+its denied TCC entry explains the capture error-3801. Enable it in the guest's
+Privacy & Security settings, then restart the presenter. Future packaging must
+provide a stable application identity rather than a new per-experiment path.
+
+Remaining: desktop capture, selecting the virtual display as the sole desktop,
+mouse/keyboard mapping, resize coordination, performance and repeated cleanup.
+VirtualBox support remains a separate unimplemented transport problem.

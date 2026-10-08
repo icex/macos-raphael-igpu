@@ -224,6 +224,14 @@ from device enumeration or passing microbenchmarks.
 
 ## Next work, in order
 
+**Current user priority (October8): an accelerated macOS desktop in a VM-manager
+window, without physical HDMI.** Candidate333 crosses the former PSP hang boundary
+and presents exact GPU-generated1280×720 patterns through the stock QEMU console.
+Full desktop presentation is pending Screen Recording consent, display selection,
+input/resize testing and cleanup qualification. QEMU/libvirt first; VirtualBox's
+missing passthrough is a separate transport/driver task, not a configuration fix.
+[Implementation and measured scope](virtual-console.md).
+
 0. **Physical display and HDMI audio (user priority, 2026-09-17).**
    [Port plan and evidence](../findings/research/display-dcn315-port-20260917.md),
    [HDMI audio plan](../findings/research/hdmi-audio-passthrough-20260917.md),

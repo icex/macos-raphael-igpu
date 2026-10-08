@@ -15,10 +15,11 @@
 @property NSUInteger frames;
 @property NSUInteger width;
 @property NSUInteger height;
+@property BOOL stopping;
 @end
 @implementation ConsoleOutput
 - (void)stream:(SCStream *)stream didOutputSampleBuffer:(CMSampleBufferRef)sample ofType:(SCStreamOutputType)type {
-    if(type!=SCStreamOutputTypeScreen || !CMSampleBufferIsValid(sample))return;
+    if(self.stopping || type!=SCStreamOutputTypeScreen || !CMSampleBufferIsValid(sample))return;
     NSArray *attachments=(__bridge NSArray *)CMSampleBufferGetSampleAttachmentsArray(sample, false);
     if(!attachments.count || [attachments[0][SCStreamFrameInfoStatus] integerValue]!=SCFrameStatusComplete)return;
     CVPixelBufferRef image=CMSampleBufferGetImageBuffer(sample);
@@ -55,6 +56,7 @@ int main(int argc,const char **argv) { @autoreleasepool {
     if(kr) { fprintf(stderr,"console map: %x\n",kr);IOServiceClose(out.connection);return 3; }
     out.address=address;out.length=length;
     __block SCStream *capture;
+    dispatch_queue_t outputQueue=dispatch_queue_create("org.raphaelgpu.console",DISPATCH_QUEUE_SERIAL);
     [SCShareableContent getShareableContentExcludingDesktopWindows:NO onScreenWindowsOnly:NO completionHandler:^(SCShareableContent *content,NSError *error) {
         SCDisplay *display=nil;
         for(SCDisplay *item in content.displays)if(item.displayID==did)display=item;
@@ -73,18 +75,30 @@ int main(int argc,const char **argv) { @autoreleasepool {
         SCContentFilter *filter=[[SCContentFilter alloc] initWithDisplay:display excludingWindows:@[]];
         capture=[[SCStream alloc] initWithFilter:filter configuration:config delegate:nil];
         NSError *addError=nil;
-        if(![capture addStreamOutput:out type:SCStreamOutputTypeScreen sampleHandlerQueue:dispatch_queue_create("org.raphaelgpu.console",DISPATCH_QUEUE_SERIAL) error:&addError])exit(4);
+        if(![capture addStreamOutput:out type:SCStreamOutputTypeScreen sampleHandlerQueue:outputQueue error:&addError])exit(4);
         [capture startCaptureWithCompletionHandler:^(NSError *startError){
             if(startError) { fprintf(stderr,"capture start: %s\n",startError.description.UTF8String);exit(4); }
             printf("CONSOLE started display=%u size=%lux%lu requested_fps=%u\n",did,(unsigned long)out.width,(unsigned long)out.height,fps);fflush(stdout);
         }];
     }];
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)seconds*NSEC_PER_SEC),dispatch_get_main_queue(),^{
+        out.stopping=YES;
+        if(!capture) {
+            fprintf(stderr,"capture startup exceeded deadline\n");
+            IOConnectUnmapMemory64(out.connection,0,mach_task_self(),address);
+            IOServiceClose(out.connection);exit(5);
+        }
         [capture stopCaptureWithCompletionHandler:^(NSError *error){
+            dispatch_sync(outputQueue,^{}); // finish any already-running copy before unmap
             printf("CONSOLE completed frames=%lu\n",(unsigned long)out.frames);fflush(stdout);
             IOConnectUnmapMemory64(out.connection,0,mach_task_self(),address);IOServiceClose(out.connection);
             exit(error || !out.frames ? 5 : 0);
         }];
+    });
+    // A missing stop callback must not keep the helper alive beyond its budget.
+    // Process exit releases the mapping/client without racing an explicit unmap.
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,((int64_t)seconds+2)*NSEC_PER_SEC),dispatch_get_main_queue(),^{
+        fprintf(stderr,"capture stop exceeded deadline\n");exit(5);
     });
     [[NSRunLoop currentRunLoop] run];
     return 0;
