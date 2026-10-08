@@ -71,8 +71,8 @@ python3 tools/console-window.py --state "$RUN_RESULTS/supervision.json"
 This connects TigerVNC to QEMU's presentation socket. It verifies the exact running
 container/start time and console selection. Closing the viewer disconnects the
 window only; the experiment supervisor still owns shutdown and recovery.
-Automatic remote resize is disabled until guest mode/capture changes can be
-coordinated. This is QEMU's VM console, not macOS Screen Sharing.
+The presenter follows guest mode changes. Automatic host-window resize requests
+remain disabled until they can be coordinated with macOS mode selection. This is QEMU's VM console, not macOS Screen Sharing.
 
 `tools/console-metal-probe.m` generates three1280×720 color-bar phases on Raphael,
 checks921,600 pixels per phase, then copies the verified buffer into Bochs VRAM.
@@ -123,3 +123,29 @@ The host still launches and owns the VM through the experiment harness. Installi
 these guest helpers does not transfer lifecycle ownership to a GUI, reset the GPU,
 or permit concurrent VM-manager launches. A full libvirt lifecycle integration
 remains required before managing this VM directly through virt-manager.
+
+## Candidate338 helper follow-up
+
+The presenter now subscribes to display changes, updates ScreenCaptureKit output
+size, and programs the console only after a complete frame matches that size.
+Guest native1080p and1080HiDPI transitions have observed matching QEMU frame sizes.
+This is guest-driven mode following, not automatic resizing when a host window
+is dragged. A720HiDPI request settled to native720p and remains unqualified.
+
+The installer selects `RGPU_CONSOLE_CACHE=wc` for the Bochs framebuffer only.
+`default` remains available for comparison. Sampled4K lock/copy times fell from
+about86ms to12–15ms. The reported `copied_fps` counts ScreenCaptureKit frames copied
+to console memory, not viewer delivery or display refresh. Static content and
+other capture clients affect it. A later final-helper workload measured only
+8–9 copied fps; overall throughput is unresolved. Current single-buffer copies are not atomic
+frame presentation and may tear; frame pacing and end-to-end latency remain open.
+
+When replacing this ad-hoc-signed executable, stale capture consent may still
+appear enabled. If necessary, reset only this app's permission with
+`tccutil reset ScreenCapture org.raphaelgpu.console`, then add the new
+`~/Applications/Raphael Console.app` in Screen & System Audio Recording.
+An unchanged installed app retained consent across the tested guest boot.
+
+Sources: [Apple mode-selection lifetime](https://developer.apple.com/documentation/coregraphics/cgdisplaysetdisplaymode(_:_:_:)),
+[ScreenCaptureKit configuration updates](https://developer.apple.com/documentation/screencapturekit/scstream/updateconfiguration(_:completionhandler:)),
+and [XNU user-mapping options](https://github.com/apple-oss-distributions/xnu/blob/xnu-11417.140.69/iokit/Kernel/IOUserClient.cpp#L2047).
