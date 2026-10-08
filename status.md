@@ -1,5 +1,21 @@
 # Live status — 2026-10-08
 
+## Candidate333 completed: Metal-to-console pass
+
+Run `a7fa79a29559deb6a80bedfb6ac658b1` / metal-181 / MODE2#266:
+DMCUB hold/reservation passed, PSP unload returned0, native desktop Metal probe
+passed with WindowServer accelerator ownership. Three generated1280×720 Metal
+frames verified921,600 pixels each; independent QEMU captures of phases0/2 match
+all1,843,200 pixels. The QEMU console window connected on the Linux desktop.
+Full desktop capture remains blocked by the presenter's denied Screen Recording
+permission (-3801); no TCC database was modified. Virtual display and awake
+assertions worked. This is a presentation milestone, not full desktop qualification.
+
+The harness reports valid `CORE_PROBE_PASS`. Guest-requested shutdown succeeded
+(`exited-after-guest-request`), recovery reports `recovered` and
+`authorizes_launch=true`. Results: `~/macos-vm/run/candidate-333-attempt-b-results`.
+Next: repeat333 on the same host boot and qualify desktop capture after consent.
+
 ## Candidate332 host hang — investigation and correction
 
 User reports a full host hang during candidate332 / metal-180, run
@@ -132,3 +148,10 @@ passes; hardware encode is Main8. [Roadmap](docs/ROADMAP.md).
 - Output: `/home/bogdan/macos-vm/run/candidate-333-results`
 - Verdict: `INVALID`
 - Boundary: `identity_or_route_missing`
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-333-attempt-b-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
