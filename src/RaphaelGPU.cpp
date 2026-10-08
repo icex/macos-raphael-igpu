@@ -3697,7 +3697,8 @@ static uint32_t wrapGmmSetMemoryAttributes(void *self, uint32_t type, void *attr
     }
     RaphaelHostMemory::Plan plan {};
     if (!RaphaelHostMemory::plan(uint64_t(base) << 24, physical, total, visible,
-                                 existing, windows, 6, plan)) {
+                                 existing, windows, 6, plan, false,
+                                 consolePresentationEnabled && approvedHeld)) {
         CRLOG("HOSTRESERVE: window range refused total=%#llx visible=%#llx reserved=%#llx",
               total, visible, existing);
         return 2;
@@ -3718,7 +3719,8 @@ static uint32_t wrapGmmSetMemoryAttributes(void *self, uint32_t type, void *attr
             if (!approvedHeld) return 2;
         }
         if (!RaphaelHostMemory::plan(uint64_t(base)<<24,physical,total,visible,
-                                      existing,windows,6,plan,true)) return 2;
+                                      existing,windows,6,plan,!consolePresentationEnabled,
+                                      consolePresentationEnabled && approvedHeld)) return 2;
     }
     if (plan.additional) {
         uint64_t input[2] = {(uint64_t(base) << 24) + plan.limit, plan.additional};

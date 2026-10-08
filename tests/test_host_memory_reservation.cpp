@@ -13,6 +13,18 @@ int main() {
     assert(held.limit==0x7e000000);
     retired[0]={UINT64_MAX-4,8};
     assert(!plan(mc,phys,total,0x10000000,0x200000,retired,6,held,true));
+    Window console[]={{phys+0x7e300000,0x3a520},{phys+0x7e33a600,0xc5ae0},
+        {mc+0x4a0000,0xb601},{mc+0x4ab600,0x4001},
+        {mc+0x4af600,0x10001},{mc+0x4bf600,0x10001}};
+    assert(!plan(mc,phys,total,0x10000000,0x200000,console,6,held));
+    assert(plan(mc,phys,total,0x10000000,0x200000,console,6,held,false,true));
+    assert(held.limit==0x7e000000 && held.reserved==0x2000000);
+    assert(!plan(mc,phys,total,0x10000000,0x200000,console,6,held,true,true));
+    assert(!plan(mc,phys,total,0x10000000,0x200000,console,2,held,false,true));
+    console[5]={mc+total-1,2};
+    assert(!plan(mc,phys,total,0x10000000,0x200000,console,6,held,false,true));
+    console[5]={UINT64_MAX-4,8};
+    assert(!plan(mc,phys,total,0x10000000,0x200000,console,6,held,false,true));
     Window w[]={{phys+0x7e300000,0x3a520},{mc+0x7fae5400,0x4000}};
     Plan p{};
     assert(plan(mc,phys,total,0x10000000,0x200000,w,2,p));
