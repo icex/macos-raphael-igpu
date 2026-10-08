@@ -1,4 +1,4 @@
-# Live status — 2026-10-05
+# Live status — 2026-10-08
 
 ## Candidate332 host hang — investigation and correction
 
@@ -19,9 +19,15 @@ The earlier claim that disabling DCN alone explained331 was too strong.
 Candidate333 now requires checked firmware hold and reservation for console TMR
 access, independent of display enable flags. Build1.0.333 succeeds;1026 host tests
 pass (three skipped). Fault injection confirms unsafe states cannot call PSP.
-Hardware validation remains pending: current-boot amdgpu clients include VS Code
-and Codex Desktop/app-server, with allocated iGPU memory. Do not detach them or
-launch until the user closes those applications and the normal VFIO handoff completes.
+Hardware validation remains pending. On October8 the user handed the GPU to
+VFIO. MODE2#264/#265 passed. Staging first refused an old-boot332 launch marker;
+it was archived after matching its supervision/boot identity and verifying no
+container/service survived. The next attempt (db5abf15b3ff977293f11bcad37863c0)
+refused before QEMU exposure because boot-time kernel messages had rotated away.
+The retained journal contains a complete Raphael system-resume sequence.
+The harness now recognizes that bounded sequence (PSP/SMU/DMCUB/GFX/KIQ/SDMA/JPEG,
+then suspend exit), rejects partial/wrong-device/failed resumes, and retains all
+independent device/recovery admission checks. Candidate333 retry is next.
 No reboot is requested. Card metal-181 is prepared;332 staging is withdrawn.
 See [hang investigation](findings/research/console-tmr-host-hang-20261005.md).
 Never resume332 or label it recovered:
@@ -119,3 +125,10 @@ passes; hardware encode is Main8. [Roadmap](docs/ROADMAP.md).
 - Output: `/home/bogdan/macos-vm/run/candidate-331-attempt-b-results`
 - Verdict: `INVALID`
 - Boundary: `recovery_lease_pool_missing`
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-333-results`
+- Verdict: `INVALID`
+- Boundary: `identity_or_route_missing`

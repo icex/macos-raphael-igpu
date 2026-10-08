@@ -62,3 +62,17 @@ release the device before handoff; they were not killed or detached.
 The next discriminating run must capture reservation success, live firmware hold,
 PSP unload return, native Metal startup and independent shutdown/recovery receipts.
 Passing offline checks alone does not establish that the host hang is fixed.
+
+
+October8 follow-up: the user handed7b:00.0 to VFIO. The first333 cycle stopped
+before staging on332's stale launch marker; it was archived under the preserved
+crash directory after matching the old-boot supervision identity and absence of
+its service/container. MODE2#264/#265 passed. The second attempt refused before
+QEMU on missing boot-time initialization journal lines (journal begins October7).
+Current-boot logs retain several complete amdgpu system-resume sequences.
+The initialization parser now accepts the exact ordered Raphael resume sequence,
+with all subsystem markers and PM completion, and rejects device failures and
+partial/latest-incomplete resumes. This proves prior initialization only.
+Source audit: local Linux `amdgpu_device.c:4678` resume calls IP resume and reports
+`amdgpu_device_ip_resume failed` on failure. Regression fixtures cover missing
+markers, wrong GPU, failures, reverse order and a later incomplete resume.

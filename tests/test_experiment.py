@@ -1439,6 +1439,27 @@ class ExperimentTests(unittest.TestCase):
         self.assertEqual(published, ['capture'])
         self.assertIn('capture failed', monitor.error)
 
+    def test_complete_raphael_resume_proves_initialization_after_journal_rotation(self):
+        check = self.module().amdgpu_initialized
+        rows = [
+            'amdgpu 0000:7b:00.0: PSP is resuming...',
+            'amdgpu 0000:7b:00.0: SMU is resumed successfully!',
+            'amdgpu 0000:7b:00.0: [drm] DMUB hardware initialized: version=0x05003500',
+            'amdgpu 0000:7b:00.0: ring gfx_0.0.0 uses VM inv eng 0 on hub 0',
+            'amdgpu 0000:7b:00.0: ring kiq_0.2.1.0 uses VM inv eng 12 on hub 0',
+            'amdgpu 0000:7b:00.0: ring sdma0 uses VM inv eng 13 on hub 0',
+            'amdgpu 0000:7b:00.0: ring jpeg_dec uses VM inv eng 5 on hub 8',
+            'PM: suspend exit',
+        ]
+        journal = '\n'.join(rows)
+        self.assertTrue(check(journal))
+        for index in range(len(rows)):
+            self.assertFalse(check('\n'.join(rows[:index]+rows[index+1:])))
+        self.assertFalse(check(journal.replace('7b:00.0', '03:00.0')))
+        self.assertFalse(check(journal+'\namdgpu 0000:7b:00.0: amdgpu_device_ip_resume failed (-22).'))
+        self.assertFalse(check(journal+'\n'+rows[0]))
+        self.assertFalse(check('\n'.join(reversed(rows))))
+
     def test_failed_amdgpu_probe_is_not_completed_initialization(self):
         check = getattr(self.module(), 'amdgpu_initialized', None)
         self.assertIsNotNone(check)

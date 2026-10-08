@@ -264,7 +264,33 @@ def plist(data):
 def amdgpu_initialized(journal):
     completed = re.search(r'Initialized amdgpu [^\n]+ for 0000:7b:00\.0\b', journal)
     failed = re.search(r'amdgpu 0000:7b:00\.0[^\n]*(?:probe.*failed|Fatal error|hw_init.*failed)', journal, re.I)
-    return bool(completed) and not failed
+    # Boot journals can rotate while the machine remains up for several days.
+    # A complete, device-specific system-resume sequence also demonstrates that
+    # amdgpu initialized this device. Never infer this from SMU or one ring alone.
+    resumed = False
+    starts = list(re.finditer(r'amdgpu 0000:7b:00\.0: PSP is resuming\.\.\.', journal))
+    if starts:
+        tail = journal[starts[-1].start():]
+        markers = [
+            r'amdgpu 0000:7b:00\.0: SMU is resumed successfully!',
+            r'amdgpu 0000:7b:00\.0: \[drm\] DMUB hardware initialized: version=0x05003500',
+            r'amdgpu 0000:7b:00\.0: ring gfx_0\.0\.0 uses VM inv eng 0 on hub 0',
+            r'amdgpu 0000:7b:00\.0: ring kiq_0\.2\.1\.0 uses VM inv eng 12 on hub 0',
+            r'amdgpu 0000:7b:00\.0: ring sdma0 uses VM inv eng 13 on hub 0',
+            r'amdgpu 0000:7b:00\.0: ring jpeg_dec uses VM inv eng 5 on hub 8',
+            r'PM: suspend exit',
+        ]
+        for marker in markers:
+            match = re.search(marker, tail)
+            if not match:
+                break
+            tail = tail[match.end():]
+        else:
+            resumed = True
+    resume_failed = re.search(
+        r'(?:amdgpu 0000:7b:00\.0[^\n]*(?:failed|Fatal error)|'
+        r'(?:device |pci )?0000:7b:00\.0[^\n]*error)', journal, re.I)
+    return (bool(completed) and not failed) or (resumed and not resume_failed)
 
 
 def retained_amdgpu_initialization(host, journal, evidence_path=None):
