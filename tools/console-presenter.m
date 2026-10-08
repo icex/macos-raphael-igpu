@@ -8,6 +8,11 @@
 #include <time.h>
 #include <stdio.h>
 #include <string.h>
+#include <emmintrin.h>
+
+static void displayChanged(CGDirectDisplayID display, CGDisplayChangeSummaryFlags flags, void *context) {
+    printf("CONSOLE display_change=%u flags=0x%x\n",display,flags);fflush(stdout);
+}
 
 static double now(void) {
     struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t);
@@ -53,6 +58,7 @@ static SCStreamConfiguration *configuration(size_t w, size_t h, unsigned fps) {
             printf("CONSOLE mode=%zux%zu\n",w,h);
         }
         double end=now(),duration=end-begin;
+        _mm_sfence(); // complete write-combined stores before reporting the frame
         self.frames++;self.reportFrames++;self.copySeconds+=duration;
         if(duration>self.maxCopySeconds)self.maxCopySeconds=duration;
         if(self.frames==1 || end-self.reportTime>=5) {
@@ -88,18 +94,26 @@ int main(int argc,const char **argv) { @autoreleasepool {
     IOObjectRelease(service);
     if(kr) { fprintf(stderr,"console open: %x\n",kr);return 3; }
     out.connection=connection;
+    const char *cache=getenv("RGPU_CONSOLE_CACHE");
+    IOOptionBits mapOptions=kIOMapAnywhere;
+    if(cache && !strcmp(cache,"wc"))mapOptions|=kIOMapWriteCombineCache;
+    else if(cache && strcmp(cache,"default"))return 2;
+    printf("CONSOLE cache=%s\n",cache?cache:"default");fflush(stdout);
     mach_vm_address_t address=0;mach_vm_size_t length=0;
-    kr=IOConnectMapMemory64(connection,0,mach_task_self(),&address,&length,kIOMapAnywhere);
+    kr=IOConnectMapMemory64(connection,0,mach_task_self(),&address,&length,mapOptions);
     if(kr) { fprintf(stderr,"console map: %x\n",kr);IOServiceClose(connection);return 3; }
     out.address=address;out.length=length;
+    if(CGDisplayRegisterReconfigurationCallback(displayChanged,NULL)!=kCGErrorSuccess)return 4;
     __block SCStream *capture;
     dispatch_queue_t queue=dispatch_queue_create("org.raphaelgpu.console",DISPATCH_QUEUE_SERIAL);
     dispatch_source_t timer=dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER,0,0,queue);
     dispatch_source_set_timer(timer,dispatch_time(DISPATCH_TIME_NOW,NSEC_PER_SEC),NSEC_PER_SEC/2,NSEC_PER_SEC/20);
+    __block NSUInteger polls=0;
     dispatch_source_set_event_handler(timer,^{
         if(!capture || out.stopping || out.updating)return;
         size_t w,h;
         if(!mode(did,length,&w,&h)) { fprintf(stderr,"console display disappeared or unsupported mode\n");exit(4); }
+        if(++polls%20==1) {printf("CONSOLE mode_poll=%zux%zu\n",w,h);fflush(stdout);}
         if(w==out.targetWidth && h==out.targetHeight)return;
         out.updating=YES;
         [capture updateConfiguration:configuration(w,h,fps) completionHandler:^(NSError *error){
