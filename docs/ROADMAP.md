@@ -225,12 +225,11 @@ from device enumeration or passing microbenchmarks.
 ## Next work, in order
 
 **Current user priority (October8): an accelerated macOS desktop in a VM-manager
-window, without physical HDMI.** Candidate333 crosses the former PSP hang boundary
-and presents exact GPU-generated1280×720 patterns through the stock QEMU console.
-Full desktop presentation is pending Screen Recording consent, display selection,
-input/resize testing and repeated lifecycle qualification. One clean guest shutdown
-and authorizing recovery passed. QEMU/libvirt first; VirtualBox's
-missing passthrough is a separate transport/driver task, not a configuration fix.
+window, without physical HDMI.** Candidate336 shows the full1080HiDPI desktop
+through QEMU's console, with correct mouse mapping and keyboard modifiers.
+Native Metal and WindowServer accelerator ownership pass. The packaged guest
+launcher is installed; login/restart durability, resize and measured performance
+remain next. QEMU/libvirt first; VirtualBox needs a separate transport/driver.
 [Implementation and measured scope](virtual-console.md).
 
 0. **Physical display and HDMI audio (user priority, 2026-09-17).**

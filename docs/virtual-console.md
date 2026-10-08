@@ -2,14 +2,13 @@
 
 The requested target is a macOS desktop in the VM manager's console, with Raphael
 Metal rendering and no physical HDMI connection. Screen Sharing/Moonlight alone
-does not meet that target. Candidates331–333 begin this work; it is not yet qualified. Candidate332 hung
-the host during PSP TMR teardown and is withdrawn. Candidate333 restores mandatory
-firmware-memory reservation and checks live DMCUB hold before PSP replacement;
-candidate333 now passes PSP teardown and the native desktop Metal probe. A
-Metal-generated1280×720 pattern reaches QEMU exactly; full desktop capture is
-waiting for the guest Screen Recording consent. Guest-request shutdown and authorizing recovery passed once; repeated lifecycle
-qualification remains pending.
-See [failure analysis](../findings/research/console-tmr-host-hang-20261005.md).
+does not meet that target. Candidate336 now presents the accelerated desktop through QEMU's console at
+1920×1080 logical /3840×2160 backing pixels. Native Metal readbacks and
+WindowServer accelerator ownership pass. QEMU-console mouse clicks and keyboard
+input (including Shift) work. This is a scoped QEMU result: sustained frame rate,
+automatic resize, other frontends and VirtualBox are not qualified.
+[Run evidence and limitations](../findings/research/virtual-console-20261008.md).
+Candidate332's unsafe TMR experiment remains withdrawn.
 
 ## Architecture under test
 
@@ -91,3 +90,36 @@ provide a stable application identity rather than a new per-experiment path.
 Remaining: desktop capture, selecting the virtual display as the sole desktop,
 mouse/keyboard mapping, resize coordination, performance and repeated cleanup.
 VirtualBox support remains a separate unimplemented transport problem.
+
+## Install the guest console desktop
+
+Copy these files into one directory in the macOS guest: `install-console-desktop.sh`,
+`console-presenter.m`, `console-display-layout.m`, and `virtual-display-server.m`.
+With Command Line Tools installed, run as the logged-in user:
+
+```sh
+bash install-console-desktop.sh
+launchctl bootstrap gui/$(id -u) "$HOME/Library/LaunchAgents/org.raphaelgpu.console.plist"
+```
+
+Enable **Raphael Console** in Privacy & Security → Screen & System Audio Recording.
+If the initial start exited before consent, restart it with:
+
+```sh
+launchctl kickstart gui/$(id -u)/org.raphaelgpu.console
+```
+
+The installer builds an ad-hoc-signed app under `~/Applications` and a user
+LaunchAgent. It runs only when the Bochs `RaphaelConsole` service exists, creates
+the virtual display, mirrors the other guest displays to it for correct absolute
+input mapping, and starts the presenter. This session-only layout resets when
+its virtual display disappears. The launcher holds display-awake assertions.
+Each presentation session is bounded to6000seconds for experimentation; this
+is not yet an unlimited daily-use service. Logs are under
+`~/Library/Application Support/RaphaelGPU/console/`. Ad-hoc app rebuilds may need
+renewed macOS consent; release signing remains future work.
+
+The host still launches and owns the VM through the experiment harness. Installing
+these guest helpers does not transfer lifecycle ownership to a GUI, reset the GPU,
+or permit concurrent VM-manager launches. A full libvirt lifecycle integration
+remains required before managing this VM directly through virt-manager.

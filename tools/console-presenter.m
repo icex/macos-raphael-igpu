@@ -40,9 +40,10 @@
 
 int main(int argc,const char **argv) { @autoreleasepool {
     [NSApplication sharedApplication];
-    if(argc!=4) { fprintf(stderr,"usage: console-presenter DISPLAY_ID FPS SECONDS\n");return 2; }
-    unsigned did=(unsigned)strtoul(argv[1],NULL,10),fps=(unsigned)strtoul(argv[2],NULL,10),seconds=(unsigned)strtoul(argv[3],NULL,10);
-    if(!did || (fps!=30&&fps!=60&&fps!=120) || !seconds || seconds>6000)return 2;
+    if(argc!=4) { fprintf(stderr,"usage: console-presenter DISPLAY_ID|auto FPS SECONDS\n");return 2; }
+    const bool autoDisplay=!strcmp(argv[1],"auto");
+    __block unsigned did=(unsigned)strtoul(argv[1],NULL,10),fps=(unsigned)strtoul(argv[2],NULL,10),seconds=(unsigned)strtoul(argv[3],NULL,10);
+    if((!did && !autoDisplay) || (fps!=30&&fps!=60&&fps!=120) || !seconds || seconds>6000)return 2;
     io_service_t service=IOServiceGetMatchingService(kIOMainPortDefault,IOServiceMatching("RaphaelConsole"));
     if(!service) { fprintf(stderr,"console device absent\n");return 3; }
     ConsoleOutput *out=[ConsoleOutput new];
@@ -59,7 +60,12 @@ int main(int argc,const char **argv) { @autoreleasepool {
     dispatch_queue_t outputQueue=dispatch_queue_create("org.raphaelgpu.console",DISPATCH_QUEUE_SERIAL);
     [SCShareableContent getShareableContentExcludingDesktopWindows:NO onScreenWindowsOnly:NO completionHandler:^(SCShareableContent *content,NSError *error) {
         SCDisplay *display=nil;
-        for(SCDisplay *item in content.displays)if(item.displayID==did)display=item;
+        for(SCDisplay *item in content.displays) {
+            bool match=autoDisplay ? (CGDisplayVendorNumber(item.displayID)==0x5250 &&
+                CGDisplayModelNumber(item.displayID)==0x3453) : item.displayID==did;
+            if(match) { if(display){fprintf(stderr,"ambiguous console display\n");exit(4);} display=item; }
+        }
+        if(display)did=display.displayID;
         if(error || !display) { fprintf(stderr,"capture unavailable: %s\n",error.description.UTF8String);exit(4); }
         CGDisplayModeRef mode=CGDisplayCopyDisplayMode(did);
         if(!mode)exit(4);
