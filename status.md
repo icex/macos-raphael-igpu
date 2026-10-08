@@ -1,5 +1,24 @@
 # Live status — 2026-10-08
 
+## Candidate338 helpers on336: mode following and faster copies, throughput open
+
+Run `0e5cca1002e71c3b3f100166e6c2bd3f`, metal-184, same host bootba51b3c6.
+The unchanged336 kext presents native1080p and1080HiDPI while the new presenter
+follows guest backing-size changes. QEMU keyboard input including Shift passes
+at native1080p. Explicit write combining passes independent GPU color-bar
+readbacks and1,843,200 QEMU pixel comparisons; isolated copies are much faster.
+
+The final bounded presenter and corrected launcher complete an uninterrupted
+three-minute material test (1,525 event-loop iterations), but late-session copied
+rates are only8–9fps. Earlier helper tests were faster; overall throughput is not
+qualified. A720HiDPI request settled to native720p. Fresh-guest repetition is next.
+
+Capture: valid CORE_PROBE_PASS; sampled desktop images and exact synthetic
+pixels retained. Shutdown: exited-after-guest-request. Recovery: recovered,
+authorizes_launch=true. Results: `candidate-336-attempt-c-results`; VM stopped.
+Final helper result/hashes: `~/macos-vm/run/c338-final-result.txt`.
+No host reboot or amdgpu rebind. Driver binary remains1.0.336.
+
 ## Candidate336: accelerated macOS in a QEMU window
 
 Run `201412ad0f4bafdc61ad3dde81d38037`, metal-184, host bootba51b3c6.
