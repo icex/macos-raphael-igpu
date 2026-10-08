@@ -40,8 +40,9 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 143' TERM INT
 caffeinate -dimsu -t 6000 & awake=$!
+: >"$support/display.log" # clear previous readiness before the child can start
 "$app/Contents/Helpers/virtual-display-server" --serve >"$support/display.log" 2>&1 & vd=$!
-for ((i=0;i<30;i++)); do
+for ((i=0;i<200;i++)); do
  grep -q '"phase":"serving"' "$support/display.log" && break
  kill -0 "$vd" 2>/dev/null || exit 3
  sleep .1
