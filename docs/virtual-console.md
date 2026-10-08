@@ -7,7 +7,8 @@ the host during PSP TMR teardown and is withdrawn. Candidate333 restores mandato
 firmware-memory reservation and checks live DMCUB hold before PSP replacement;
 candidate333 now passes PSP teardown and the native desktop Metal probe. A
 Metal-generated1280×720 pattern reaches QEMU exactly; full desktop capture is
-waiting for the guest Screen Recording consent. Cleanup qualification is pending.
+waiting for the guest Screen Recording consent. Guest-request shutdown and authorizing recovery passed once; repeated lifecycle
+qualification remains pending.
 See [failure analysis](../findings/research/console-tmr-host-hang-20261005.md).
 
 ## Architecture under test

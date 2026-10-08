@@ -228,7 +228,8 @@ from device enumeration or passing microbenchmarks.
 window, without physical HDMI.** Candidate333 crosses the former PSP hang boundary
 and presents exact GPU-generated1280×720 patterns through the stock QEMU console.
 Full desktop presentation is pending Screen Recording consent, display selection,
-input/resize testing and cleanup qualification. QEMU/libvirt first; VirtualBox's
+input/resize testing and repeated lifecycle qualification. One clean guest shutdown
+and authorizing recovery passed. QEMU/libvirt first; VirtualBox's
 missing passthrough is a separate transport/driver task, not a configuration fix.
 [Implementation and measured scope](virtual-console.md).
 

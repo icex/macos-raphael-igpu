@@ -1,6 +1,6 @@
 # Live status — 2026-10-08
 
-## Candidate333 live: Metal reaches QEMU console
+## Candidate333 completed: Metal reaches QEMU console
 
 Run `a7fa79a29559deb6a80bedfb6ac658b1`, metal-181, same bootba51b3c6,
 MODE2#266. DMCUB hold and native memory reservation pass; PSP TMR unload returns0.
@@ -16,7 +16,9 @@ The guest settings page is open. No permission database was changed.
 
 Capture evidence: `~/macos-vm/run/c333-console-pixel-result.json`, screenshots
 `c333-metal-console-{1,2}.ppm`, guest log `c333-console-metal-guest-result.txt`.
-Shutdown/recovery have not yet run. Do not infer full desktop/input/performance
+Harness verdict: valid CORE_PROBE_PASS. Guest-requested shutdown succeeded
+(exited-after-guest-request); recovery is recovered, authorizes_launch=true.
+A same-boot repeat (attempt c) is in progress. Do not infer full desktop/input/performance
 qualification from the synthetic presentation pass. Candidate334 contains the
 window launcher and helper improvements; the running kext remains333.
 
