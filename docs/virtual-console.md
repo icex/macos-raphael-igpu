@@ -137,7 +137,8 @@ The installer selects `RGPU_CONSOLE_CACHE=wc` for the Bochs framebuffer only.
 about86ms to12–15ms. The reported `copied_fps` counts ScreenCaptureKit frames copied
 to console memory, not viewer delivery or display refresh. Static content and
 other capture clients affect it. A later final-helper workload measured only
-8–9 copied fps; overall throughput is unresolved. Current single-buffer copies are not atomic
+8–9 copied fps; a fresh guest repeat reaches10–16 copied fps during moving content.
+Overall throughput is unresolved. Current single-buffer copies are not atomic
 frame presentation and may tear; frame pacing and end-to-end latency remain open.
 
 When replacing this ad-hoc-signed executable, stale capture consent may still

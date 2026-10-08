@@ -1,0 +1,39 @@
+{
+  "scope": "Candidate338 guest helper mode following and cache mapping; viewer throughput unqualified",
+  "driver": "1.0.336",
+  "presenter_source_commit": "607e68c",
+  "launcher_source_commit": "9afbc39",
+  "guest_presenter_sha256": "3deb9ea3880084ebadd9708686ef625f8568e65bb90299ca6b19c080ecbab59b",
+  "guest_launcher_sha256": "b62f81ea7d7a1b173bbe64be9974f87847ac16b23e8ea77bf5e2648a9666834e",
+  "artifact_root": "/home/bogdan/macos-vm/run",
+  "artifacts": {
+    "c338-fresh-start.txt": "60de9063ba7aecbb0b677f5840e73b11381b5cb40d4d68f9fc300e5d02fecff0",
+    "c338-fresh-result.txt": "dc7ff2591f731f2e4c5428bb0349a076be47dfdf558cbc2b88c29e7dcf623ff4",
+    "c338-fresh-material1.ppm": "c6a2219cde70751a01b0c0ed7d8df36cd7f4013dda391927d6c7d20ea5f7c90e",
+    "c338-fresh-material2.ppm": "f61a0df66f70913ee7ec1db7b1aa1377b561f5f94a21e638faf32444a52f5a70",
+    "c338-wc-pixel-result.json": "397292d6215830a5746ea7c10ae3c48d1a7dfd236d6ef8616f729242e7ddb988",
+    "c338-uncached-pixel-result.json": "397292d6215830a5746ea7c10ae3c48d1a7dfd236d6ef8616f729242e7ddb988",
+    "c338-final-result.txt": "144b9f9cfa747594e41df3acb1c1e17f8314277285685283c23e34c028545e43",
+    "c338-final-after.ppm": "1bb834a250115375f8a6884ac9c3c553eacd322f98b802021933be6bb8a06a7a",
+    "c338-final-host-tests.log": "fc9afdcc81433f475208e2fa4bb288e292a49e7b0524c624fb331deb17566946",
+    "c336-d-native-recovery-retry.json": "613e2db5870ea884f4eb275295e161c361b60d2bcd3a49fa9f80eb6e2290c9f4",
+    "c336-d-native-recovery-replay.json": "09477edae4c2e973e1eade2ee507d8075bd2cfa3a6073613cdc942a309605f53",
+    "c336-d-recovery-retry.json": "94377fe46e7c1f9d72beef0905b6d4b19ad0863eda553f1b295c88922719c6b2",
+    "candidate-336-attempt-c-results/manifest.json": "b7d372b0eeaf5e99ee2a10ad0cb8d2c8d589a3932439cf28a01d2de73dd21d13",
+    "candidate-336-attempt-c-results/verdict.json": "d005a7ffb2a71fd187ccb35c9ca30b60502118ae32471bf408190427de608cfa",
+    "candidate-336-attempt-c-results/recovery.json": "4a24318b1d860082e2de3015598447195bdd4b411e1ba13db701f0e83e37c19c",
+    "candidate-336-attempt-c-results/shutdown.json": "e2723a9f513e43c03b4b1e44a7438b87ce80677f4d6f0eaa9e2acff13579e0ab",
+    "candidate-336-attempt-c-results/probe.json": "4829da53cdc6aa41024d3be8ec4b326ab9336c6acf8f57e451354ad50a291a0b",
+    "candidate-336-attempt-d-results/manifest.json": "56dc37d0d3bf87a60cb25ea0a23b6dfbdded56a67a321ec0884d98f2cb29acaa",
+    "candidate-336-attempt-d-results/verdict.json": "4ddd444134becc2e9bfb9a1c5a7ff054f8bf1bbff9fbfa13402cc8dec8bc5492",
+    "candidate-336-attempt-d-results/recovery.json": "0a98db077176ed7b466708cd1ec31e7106850e334debe5aa2596c2802eda639a",
+    "candidate-336-attempt-d-results/shutdown.json": "6a03acf5552d79a376785df33ed65ccc9c356085a19a31abd178fb9f18bf3207",
+    "candidate-336-attempt-d-results/probe.json": "f3aa2f296606b1ed425e3f905ec2a48d96d4b7de2e43f31d15238298469296a9"
+  },
+  "sources": {
+    "tools/console-presenter.m": "5ad8eeaf3e27e6d50ecd06ab020ca76088da62475685d0abfb9a22b3e34747a5",
+    "tools/install-console-desktop.sh": "4a1c6a417306598fd310f14be2c08a7c89f89f3eb0b2a0073e9ea33d22df08b1",
+    "tests/console_resize_probe.m": "c7a87d2c593b5b372ff2642211578192332168c98b7654eabf09241695460db6",
+    "tools/console-metal-probe.m": "ec2d5d44efc584f0b0350492341c478853c25f6143e4ae2cd05d216190b07a60"
+  }
+}

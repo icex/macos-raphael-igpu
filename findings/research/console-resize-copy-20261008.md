@@ -28,7 +28,7 @@ with authorizes_launch=true. No host reboot or driver rebind occurred.
   the final presenter/launcher completes1,525 event-loop iterations; capture
   continues, but sampled copied rates are only8–9fps with roughly18–22ms lock/copy
   times. That slower result prevents an overall throughput qualification. A fresh
-  guest boot is the next discriminator; neither the bounded queue nor accumulated
+  guest repeat is recorded below; neither the bounded queue nor accumulated
   session state is established as its cause.
 - Independent Metal color bars validate all921,600 GPU pixels in each of three
   phases. QEMU phases0 and2 each match921,600 expected pixels under write
@@ -99,3 +99,32 @@ Under `~/macos-vm/run/`: `c338-{wc,uncached}-pixel-result.json`,
 `c338-final-result.txt`/`c338-final-after.ppm`. The latter records the final
 presenter and launcher hashes. Intermediate source revisions and comparisons
 are retained separately; do not attach an early21–24fps rate to the final test.
+
+## Fresh guest repeat and cleanup
+
+Run `89af08fc3479528d08a7ef7bea0d0956` (336d, unchanged driver, same boot)
+automatically restores the final app, virtual display and awake assertions without
+renewing consent. The uninterrupted180-second material test completes2,061 event
+iterations. Its36 active five-second samples (copied_fps greater than5, excluding
+idle samples) range10.12–16.09 with median11.095. Fresh startup improves on the
+late336c samples but does not establish smooth delivery or identify the bottleneck.
+The installed presenter SHA256 is
+`3deb9ea3880084ebadd9708686ef625f8568e65bb90299ca6b19c080ecbab59b`;
+the launcher SHA256 is
+`b62f81ea7d7a1b173bbe64be9974f87847ac16b23e8ea77bf5e2648a9666834e`.
+
+Capture is valid CORE_PROBE_PASS and shutdown is exited-after-guest-request.
+Automatic recovery refused `active_vm` because the independent software-only
+libvirt QEMU was still running. Stopping that test clears the condition. A first
+standalone legacy recovery CLI attempt refused its nonce check: it was the wrong
+route for this native schema3 lease. The harness's existing `recover_v2` path then
+succeeds, with recovered/authorizes_launch=true, and registers the immutable
+receipt for this exact latest run. Original refusals are preserved, not replaced.
+No reboot or driver rebind was needed. Stop software QEMUs before hardware
+admission or cleanup; do not relax the active-VM check.
+
+Artifacts: `c338-fresh-start.txt`, `c338-fresh-result.txt`,
+`c338-fresh-material{1,2}.ppm`, `candidate-336-attempt-d-results/`, and
+`c336-d-native-recovery-retry.json`/`c336-d-native-recovery-replay.json` under run.
+[Selected artifact hashes](console-resize-copy-evidence-20261008.json).
+Host regression after final helper changes:1028 tests pass,3 skipped.
