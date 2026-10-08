@@ -1,23 +1,29 @@
 # Live status — 2026-10-08
 
-## Candidate338 helpers on336: mode following and faster copies, throughput open
+## Candidate338 helpers on336: console mode following; throughput open
 
-Run `0e5cca1002e71c3b3f100166e6c2bd3f`, metal-184, same host bootba51b3c6.
-The unchanged336 kext presents native1080p and1080HiDPI while the new presenter
-follows guest backing-size changes. QEMU keyboard input including Shift passes
-at native1080p. Explicit write combining passes independent GPU color-bar
-readbacks and1,843,200 QEMU pixel comparisons; isolated copies are much faster.
+Latest run `89af08fc3479528d08a7ef7bea0d0956` (metal-184, same host bootba51b3c6)
+automatically restores the approved presenter, virtual display and awake assertion.
+An uninterrupted three-minute moving-material test completes2,061 event iterations.
+Active five-second samples report10.12–16.09 copied fps (median11.095); these are
+ScreenCaptureKit-to-memory counts, not viewer fps. Full-rate delivery is unqualified.
 
-The final bounded presenter and corrected launcher complete an uninterrupted
-three-minute material test (1,525 event-loop iterations), but late-session copied
-rates are only8–9fps. Earlier helper tests were faster; overall throughput is not
-qualified. A720HiDPI request settled to native720p. Fresh-guest repetition is next.
+The preceding336c run verifies native1080p/1080HiDPI mode following and QEMU
+keyboard input with Shift. Explicit write combining passes independent GPU color
+bars and1,843,200 QEMU pixel comparisons. Isolated memory copies improve, but a
+late-session workload fell to8–9 copied fps; its cause remains unresolved.
+A720HiDPI request settled to native720p and is not qualified as HiDPI.
 
-Capture: valid CORE_PROBE_PASS; sampled desktop images and exact synthetic
-pixels retained. Shutdown: exited-after-guest-request. Recovery: recovered,
-authorizes_launch=true. Results: `candidate-336-attempt-c-results`; VM stopped.
-Final helper result/hashes: `~/macos-vm/run/c338-final-result.txt`.
-No host reboot or amdgpu rebind. Driver binary remains1.0.336.
+Capture: valid CORE_PROBE_PASS. Shutdown: exited-after-guest-request.
+Automatic recovery refused because the separate software-only libvirt test QEMU
+was still active. After stopping it, the ordinary native-lease recovery path
+succeeds: recovered, authorizes_launch=true. Original refusal remains unchanged.
+Retry receipt: `~/macos-vm/run/c336-d-native-recovery-retry.json` (also registered
+under run/vfio-recovery for the exact latest run). A generic legacy CLI attempt
+before the correct native retry refused its nonce check and is not GPU-failure evidence.
+Results: `candidate-336-attempt-d-results`; hardware VM stopped. No reboot/rebind.
+
+[Helper tests and limits](findings/research/console-resize-copy-20261008.md).
 
 ## Candidate336: accelerated macOS in a QEMU window
 
