@@ -14,17 +14,14 @@ on **`dev`**; this is not yet a generally supported driver release.
 
 ## Current status
 
-**VM window (October9):** candidate340 renders the native Metal desktop through
-QEMU's SPICE console at1080HiDPI, with verified keyboard and mouse input. A
-three-minute moving-material workload, clean guest shutdown and native GPU recovery
-pass; a same-boot repeat restores the desktop and recovers cleanly. The guarded console initialization now handles the observed empty firmware
-state after host resume. Candidate338 helpers follow guest native1080p/HiDPI
-mode changes. Smooth delivery, measured viewer fps and full libvirt/VM-manager
-lifecycle integration remain open. Software-only GNOME Boxes console transport
-passes. Candidate341 adds isolated TAP handoff and container-local lifecycle
-checks: software guest poweroff and manager Force Off each retain the correct
-reason and exit the container. Native configuration/provenance checks are
-implemented, with launcher integration and software controller handoff checks. Live qualification remains; this is not yet a libvirt-managed accelerated macOS result.
+**VM window (October9):** candidate341 renders the native Metal desktop inside
+virt-manager at1080HiDPI, with verified keyboard/mouse input and bridged LAN
+traffic. A three-minute moving-material workload completes; capture and native
+GPU recovery pass. Closing the viewer leaves the VM running. One lifecycle race
+remains: serial EOF stops the container before the libvirt controller saves its
+terminal receipt. Measured console frame delivery, automatic window resize and
+broader lifecycle qualification remain open. The virtual Display adapter's56MB
+framebuffer is separate from the native renderer's2GB reported VRAM.
 [Evidence and setup](docs/virtual-console.md).
 
 The qualified remote baseline from **2026-09-16**, candidate **1.0.280**, runs an accelerated desktop through

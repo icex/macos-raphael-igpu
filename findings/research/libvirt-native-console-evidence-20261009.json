@@ -1,0 +1,93 @@
+{
+  "run_id": "d37215940a6999e73b2de61e7ac573da",
+  "candidate": "1.0.341",
+  "card": "metal-187",
+  "boot_id": "ba51b3c6-9420-4510-af69-38a42b3c79c7",
+  "build_id": "4c5bd0ae76eb44b7af7d4797c4b0615b",
+  "functional": {
+    "native_metal": true,
+    "windowserver_accelerator_client": true,
+    "virt_manager_rendered": true,
+    "manager_input": {
+      "passed": true,
+      "text": "RGPU341",
+      "clicks": 1,
+      "mouse": [
+        299.98046875,
+        129.5074462890625
+      ]
+    },
+    "display_pixels": [
+      3840,
+      2160
+    ],
+    "logical_pixels": [
+      1920,
+      1080
+    ],
+    "endurance_seconds": 180,
+    "appkit_event_iterations": 2386,
+    "viewer_fps": null,
+    "bridged_lan_ping": {
+      "sent": 3,
+      "received": 3,
+      "interface": "en2"
+    },
+    "manager_xml_unchanged": true,
+    "closing_viewer_leaves_guest_running": true
+  },
+  "capture": {
+    "valid": true,
+    "verdict": "CORE_PROBE_PASS",
+    "earliest_failure": null,
+    "critical_acceptance": "terminal-prefix"
+  },
+  "shutdown": {
+    "cid": "c5327ea7f2fc2bae8481e0ac4fe0507c40ea2e3408cc56f65198ef9d324393e5",
+    "outcome": "exited-after-guest-request",
+    "guest_boot_uuid": "6578F5B1-DEEB-4948-AAA1-C7A1D2FAC56F",
+    "request_id": "fcdd49c350e74bc585289836f4b7f791"
+  },
+  "recovery": {
+    "status": "recovered",
+    "authorizes_launch": true
+  },
+  "libvirt_terminal_receipt": false,
+  "limitations": [
+    "Critical serial EOF stop guard terminated the container before libvirt terminal receipt; native natural-exit ordering remains unqualified.",
+    "Manager global capabilities warning traced offline to launcher PATH shim; next candidate fixes discovery.",
+    "Initial automated XTest attempt delivered no pointer or text; user-authorized existing uinput access succeeded.",
+    "Event iterations and nominal refresh do not measure viewer frame delivery.",
+    "No VirtualBox transport or independent-host-boot qualification."
+  ],
+  "artifacts": {
+    "candidate-341-attempt-d-results/manifest.json": "43290873689136026cf6afaa11fbec3f868bb322098c43c1ec24fe959c41c11d",
+    "candidate-341-attempt-d-results/probe.json": "a966ce137c0aaed10d8590afa5f7255ce0983a2a124150a710a0720ae676214a",
+    "candidate-341-attempt-d-results/running-identity.json": "c76f3a94f0d81556ab083223bf3427f3b362bc3fee493653c8352d47e1da0465",
+    "candidate-341-attempt-d-results/verdict.json": "35c2f5cf5ea15c529a3441d00894e936ec4e4359c85037cb95bbe3cdefc6f296",
+    "candidate-341-attempt-d-results/shutdown.json": "c54ff3655e46af71d7cbc1cdca97376834ff8399a29f892ba5f5cf4d2e624371",
+    "candidate-341-attempt-d-results/recovery.json": "cc381685a83858966f5f166e8af89e9fc9768166d875c5afea1bd40a08294b9c",
+    "candidate-341-attempt-d-results/critical-quiesce.json": "6f8c48e89d7a76c429025e661ebb1084a2e2b94bac9b972823927b35383f932d",
+    "candidate-341-attempt-d-results/capture-sha256.json": "1cb32ee99ab5329aea2cef2c6f4ad9e507e70e2560783d23d5d137d2ce1ab060",
+    "candidate-341-attempt-d-results/host-after.json": "fa69aca6500c99e19669e8f1cd91904c35bb3bdb1f52fa1100081820eef30379",
+    "c341d-virt-manager.png": "a45e442dff47ebb466ce54caa204951bb1c0fe39aeeb6a4278cd9b6c9e499796",
+    "c341d-manager-uinput.png": "d63fb35f0788089e2d62d83ee6770458513f9140a5064e7c178b19a4c9442464",
+    "c341d-manager-input-qualified.txt": "07af67844373586ee611442c21dbe95fcfb144c89e2b7c42153eefd5ce298dad",
+    "c341d-manager-input-first-result.json": "60f5729f106b62e5fce19c295e2b2b37620e68f5dc06fb1bbbcee4086e0fb365",
+    "c341d-manager-uinput.json": "1d25e5d44ea136df3f7b7c0f1d03f02f9574f48952aff9642bb4fbb10252c945",
+    "c341d-manager-before.xml": "1fd29ade9e9ee1d00c6bb02b8dc7fd8b2f5cf4621cd7590fb41a0cc24819bf74",
+    "c341d-manager-final.xml": "1fd29ade9e9ee1d00c6bb02b8dc7fd8b2f5cf4621cd7590fb41a0cc24819bf74",
+    "c341d-manager-close-identity.txt": "4a331be9cb0dd8b666943f27b768e9dfe41d8ef432463bc2c90d112bdefd014c",
+    "c341d-manager-close-domain.txt": "62998ad6158cfbab1a91b02d515ae50b4485a49d6c3c9ee08eef1b912e71801d",
+    "c341d-material-final.txt": "a384b43e0617098266a9a8b81aa3b8c5dce52dbd6e6701faa8ba74e76feeb3a3",
+    "c341d-lan-traffic.txt": "769f9025a70a031f54e79f8cd146ecf0cb50c19fd663fb994542f130bfded292",
+    "c341d-displays-profiler.txt": "68751cfdf3054d74d491f5f59fd2ecc1d9b14727c4f33413368ae173042fe3a8",
+    "c341d-spice-reconnected.png": "390dd48f6ddc15adfb963e31e77a23ab17d78249081b2bab7c6138f757a42f87",
+    "c341d-qemu-limits.txt": "f3fd26aa12ca9d0d6b7f61ab4ed615a2d4f3550a3b382175842ace0dbf30a423",
+    "libvirt-d37215940a6999e73b2de61e7ac573da/admission.json": "4259b30102cef606674c7dbfc21ea1d0bee1cc39058492d180938609713fdc66",
+    "libvirt-d37215940a6999e73b2de61e7ac573da/paused.json": "cfa4d340f5a1862e4161d0a457b373153e5406bed6952ce3897a21a15894397f",
+    "libvirt-d37215940a6999e73b2de61e7ac573da/resume.json": "b46668dee2f20013799df560160260998b5c05c40fbcb835268f43a09efe7491",
+    "libvirt-d37215940a6999e73b2de61e7ac573da/running.json": "f0bc73fe53c55cf64c34e5a506122e85afec2d15a5479475c9a81a67f1ed515b",
+    "libvirt-d37215940a6999e73b2de61e7ac573da/events.jsonl": "38158e50bd08c3256b30bc5b18ab1453f677b67e19df362c9103a8f91b0f4fdc"
+  }
+}

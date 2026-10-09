@@ -1,6 +1,6 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-10-09. Current console build: **1.0.340** (native SPICE desktop, input and repeated clean recovery). Physical display baseline: **1.0.330** (correct-color HiDPI120 and HDMI audio confirmed); prior streaming baseline: **1.0.284**; broader baseline: **1.0.280**. Full desktop acceleration
+Updated 2026-10-09. Current console build: **1.0.341** (native virt-manager desktop/input and GPU recovery; controller exit ordering remains open). Physical display baseline: **1.0.330** (correct-color HiDPI120 and HDMI audio confirmed); prior streaming baseline: **1.0.284**; broader baseline: **1.0.280**. Full desktop acceleration
 is **not qualified**. The reproduced Screen Sharing transparency defect is fixed
 in candidate279 and retained in280. Candidate280 also passes strict capture and
 clean recovery after visual, concurrent-client and codec workloads. The patched-QEMU
@@ -225,25 +225,22 @@ from device enumeration or passing microbenchmarks.
 ## Next work, in order
 
 **Current user priority (October9): an accelerated macOS desktop in a VM-manager
-window, without physical HDMI.** Candidate340 passes native desktop Metal and
-WindowServer ownership through QEMU SPICE at1080HiDPI. Keyboard modifiers and
-mouse positioning pass. A three-minute material workload completes; normal guest
-shutdown and native recovery succeed. Its guarded empty-firmware path handles
-the observed post-resume state without reboot or rebind. Both host sleep and
-idle blocking are now required during runs, with a session blocker across builds.
-Candidate338 helpers follow native1080p/HiDPI guest modes. Copied-frame counts do
-not qualify viewer throughput. Software-only Boxes transport works, but full
-libvirt-managed macOS launch/input/shutdown/recovery remains the next integration
-milestone. Candidate341 now verifies isolated TAP handoff and container-local
-software guest shutdown/manager Force Off through natural container exit.
-Full native argv comparison and source-based macvtap provenance checks are
-implemented. Supervised launcher wiring and real software controller handoff
-checks now pass; live inherited-macvtap transfer and accelerated macOS lifecycle
-remain unqualified. [Handoff scope](../findings/research/libvirt-entry-handoff-20261009.md). [Verifier scope](../findings/research/libvirt-native-profile-20261009.md).
-[Lifecycle evidence](../findings/research/libvirt-local-lifecycle-20261009.md).
-Host-window-driven resize and measured performance remain open.
-VirtualBox requires a separate transport/driver.
-[Implementation and measured scope](virtual-console.md).
+window, without physical HDMI.** Candidate341d passes native Metal/WindowServer
+ownership,3840×2160 console pixels, actual virt-manager keyboard/mouse input,
+bridged LAN traffic and a180-second moving-material workload. Domain XML remains
+unchanged; disconnecting/reconnecting viewers preserves the guest. Capture passes,
+outer shutdown records guest-request exit and native recovery authorizes reuse.
+The libvirt terminal receipt is missing because the critical serial EOF guard
+stops the container first; full native lifecycle qualification remains open.
+Candidate342's separate PATH discovery fix passes isolated daemon tests.
+
+Next: repair and qualify bounded controller exit ordering, then measure actual
+manager-buffer frame delivery with visible tokens. Event-loop/copy counts and
+nominal refresh are not viewer fps. Host-window resize, repeated crash recovery,
+independent host boots and broader desktop coverage follow. Both host sleep and
+idle blocking remain required during development. VirtualBox requires a separate
+transport/driver. [Native evidence](../findings/research/libvirt-native-console-20261009.md)
+· [Implementation and measured scope](virtual-console.md).
 
 0. **Physical display and HDMI audio (user priority, 2026-09-17).**
    [Port plan and evidence](../findings/research/display-dcn315-port-20260917.md),
