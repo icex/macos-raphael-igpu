@@ -1285,6 +1285,16 @@ class EmptyFirmwareConsoleCardTests(unittest.TestCase):
             raw=json.dumps(changed).encode()
             with self.assertRaises(RuntimeError):tool.validate_card(raw,hashlib.sha256(raw).hexdigest())
 
+    def test_candidate353_requires_same_refresh_profile_but_no_full_refresh_override(self):
+        tool=load_tool();tool.configure('1.0.353','metal-196')
+        card=json.loads((ROOT/'experiments/metal-196.json').read_text())
+        self.assertNotIn('CONSOLE_FULL_REFRESH',card['launch_options'])
+        raw=json.dumps(card).encode();tool.validate_card(raw,hashlib.sha256(raw).hexdigest())
+        for key,value in [('CONSOLE_FULL_REFRESH','on'),('CONSOLE_FULL_REFRESH','off'),('CONSOLE_FULL_REFRESH',True),('CONSOLE_REFRESH','default'),('VM_MANAGER','direct')]:
+            changed=copy.deepcopy(card);changed['launch_options'][key]=value
+            raw=json.dumps(changed).encode()
+            with self.assertRaises(RuntimeError):tool.validate_card(raw,hashlib.sha256(raw).hexdigest())
+
     def test_candidate352_refresh_contract_is_exact(self):
         tool=load_tool();tool.configure('1.0.352','metal-195')
         card=json.loads((ROOT/'experiments/metal-195.json').read_text())
