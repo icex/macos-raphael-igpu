@@ -263,12 +263,13 @@ typedef struct {
 }
 @end
 
-static BOOL mode(CGDirectDisplayID did, mach_vm_size_t length, size_t *w, size_t *h) {
+static BOOL mode(CGDirectDisplayID did, mach_vm_size_t length, size_t *w, size_t *h, BOOL snapshot) {
     if(!CGDisplayIsOnline(did))return NO;
     CGDisplayModeRef m=CGDisplayCopyDisplayMode(did);
     if(!m)return NO;
     *w=CGDisplayModeGetPixelWidth(m);*h=CGDisplayModeGetPixelHeight(m);CFRelease(m);
-    return *w>=320 && *h>=200 && *w<=4096 && *h<=2304 && *w*(*h)*4<=length;
+    return *w>=320 && *h>=200 && *w<=(snapshot?3840:4096) &&
+        *h<=(snapshot?2160:2304) && *w*(*h)*4<=length;
 }
 int main(int argc,const char **argv) { @autoreleasepool {
     [NSApplication sharedApplication];
@@ -333,7 +334,7 @@ int main(int argc,const char **argv) { @autoreleasepool {
         [out pollToken];
         if(!out.running || out.stopping || out.updating)return;
         size_t w,h;
-        if(!mode(did,length,&w,&h)) { fprintf(stderr,"console display disappeared or unsupported mode\n");exit(4); }
+        if(!mode(did,length,&w,&h,snapshot)) { fprintf(stderr,"console display disappeared or unsupported mode\n");exit(4); }
         if(++polls%20==1) {printf("CONSOLE mode_poll=%zux%zu\n",w,h);fflush(stdout);}
         if(w==out.targetWidth && h==out.targetHeight)return;
         out.updating=YES;
@@ -358,7 +359,7 @@ int main(int argc,const char **argv) { @autoreleasepool {
             }
             if(error || !display) { fprintf(stderr,"capture unavailable: %s\n",error.description.UTF8String);exit(4); }
             did=display.displayID;size_t w,h;
-            if(!mode(did,length,&w,&h))exit(4);
+            if(!mode(did,length,&w,&h,snapshot))exit(4);
             out.targetWidth=w;out.targetHeight=h;out.reportTime=now();
             SCContentFilter *filter=[[SCContentFilter alloc] initWithDisplay:display excludingWindows:@[]];
             capture=[[SCStream alloc] initWithFilter:filter configuration:configuration(w,h,fps) delegate:out];
