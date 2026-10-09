@@ -797,5 +797,11 @@ mode control and USB-tablet input coexist with the resize agent connected under
 explicit `agent-mouse=off`. This is an existing-user qualification, not a clean-user
 installer or adaptive-DPI release. The checked-in binary statement above remains
 its own provenance record until the tested386 bundle is explicitly delivered.
-Final386 restoration/reconnect/cleanup review is pending.
+Final386 reconnect-input/cleanup review is pending.
 [Evidence](../findings/research/console-installed-resize-native-20261009.md).
+
+Current installed-resize admission is **even physical640..3840 ×480..2160**,
+with fixed HiDPI2. Actual386 host GDK1 requests with odd pixel dimensions are
+refused. Adaptive DPI selection and an explicit odd-size policy remain open.
+Candidate386's independent audio restoration checks all pass; reconnect surfaces
+1502×960→1440×960 match, while reconnect input and final cleanup await review.

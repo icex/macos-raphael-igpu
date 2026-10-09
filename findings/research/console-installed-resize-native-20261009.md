@@ -2,8 +2,7 @@
 
 Run `e5d5d205577125364146f54224bbd3f6`, metal213, build
 `ded62ba27d244bf892d516099cc7335d`, source `17e9077`.
-This report covers completed functional observations; independent audio restoration,
-final reconnect and shutdown/recovery remain pending at this revision.
+This report covers completed functional observations; reconnect input and shutdown/recovery remain pending at this revision.
 
 ## Installed startup and unchanged consent-bearing application
 
@@ -36,7 +35,8 @@ geometry changes even though final geometry is restored. This prevents final-mod
 agreement from hiding disruptive changes during the input test.
 
 `c386-audio-result.txt` passes isolated VM USB/QEMU/Pulse sample delivery. Independent
-route restoration is pending here; endpoint audibility and A/V synchronization are
+`c386-audio-restored-independent.json` confirms sink, volume, mute, defaults and
+owned-module removal all restored; endpoint audibility and A/V synchronization are
 not established by spectral capture.
 
 ## Limits and remaining work
@@ -46,5 +46,17 @@ UI physically large despite exact pixel-size agreement; adaptive DPI policy is a
 separate unimplemented feature. Candidate385's eleven-size bounded LRU control is
 prior evidence, not a repeated386 stress test. Broader crash/restart lifecycle,
 first-user installation, other VM managers, VirtualBox, universal60Hz, and complete
-frame integrity remain open. Final reconnect, audio-restoration and cleanup results
+frame integrity remain open. Final reconnect-input and cleanup results
 must be added before delivery is called complete.
+
+## Geometry boundary and reconnect surface check
+
+Accepted requests are even physical widths640..3840 and heights480..2160.
+The holder uses fixed HiDPI2; an odd physical viewport request is refused, not
+a promise of literal any-size resizing. Both current manager sessions report
+GDK1. Adaptive guest-DPI selection and a defined odd-size policy remain concrete
+roadmap work.
+
+`c386-reconnect-manager-events.jsonl` records actual GDK1 viewports1502×960 then
+1440×960 with matching settled pixbuf dimensions. This qualifies reconnect resize
+for those requests; its new input result remains pending separately.
