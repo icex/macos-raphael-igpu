@@ -113,12 +113,48 @@ its owned fixture; the final independent mode remained1402×960, logical701×480
 origin0. Prior candidate361 input qualification remains separate and cannot be
 reused as proof of this new arbitrary-size transition.
 
+## Native eviction, audio, and input isolation controls
+
+`c385-manager-resize-lru.jsonl` has eleven completed surface records matching
+all requested sizes:1402,1404,1406,1408,1410,1412,1414,1416,1418,1402,1440 pixels
+wide, each960 high. `c385-lru-modeaudit.log` independently enumerates the mode
+table: at most eight dynamic geometries, oldest2468×1484 evicted, then1402×960
+evicted and successfully re-added. The agent's geometry mode results succeed;
+count0 monitor requests remain explicit unsupported refusals and are not failed
+valid-geometry applications. This qualifies the bounded eviction/revisit behavior
+for that sequence, not all resize rates or all window managers.
+
+`c385-audio-resize-result.txt` passes the isolated VM USB/QEMU/Pulse probe at
+48kHz, peaks997.14 and1498.57Hz, with the opposite channel silent in the individual
+channel phases. `c385-audio-restored-independent.json` independently confirms
+sink, volume, mute, defaults, and removal of the owned module. This proves sample
+delivery and restoration, not endpoint audibility or HDMI audio.
+
+The input diagnosis now has a stronger control than the earlier inconclusive
+attempt. `c385-continuous-input.jsonl` records actual GTK motion/buttons over
+five targets, while the guest fixture remained at step0 with the resize agent
+running. Root then stopped **only** exact resize-agent PID2744
+(`c385-agent-stop-control.txt`). With the same viewer, holder2668 and
+presenter2745, `c385-agent-off-input-result.txt` records five target hits, zero
+misses and exact text `RGPU82ACD141`. This supports the agent-connected path as
+the cause of missing pointer delivery in this configuration, rather than a
+coordinate mapping failure inferred solely from tool reports.
+
+The input fixture's overall `passed` remains **false**: it recorded one startup
+screen notification with the same720×480 logical size and backing scale2.
+Preserve that verdict. The narrower five-hit/text result is valid evidence, not
+a replacement full-fixture pass. Source inspection identifies SPICE's default
+agent-mouse diversion of type1 messages, for which this resize-only guest agent
+has no mouse handler. An explicit `agent-mouse=off` profile is being prepared for
+the next candidate; it has not been qualified by stopping the current agent.
+
 ## Remaining acceptance
 
-The single new-mode and actual-manager controls above pass their narrow checks.
-Next exercise more than
-eight distinct dynamic sizes, revisit an evicted size, preserve the active mode,
-and verify unchanged holder/presenter identity. Repeat actual corner/center input
-and a text token after resize. Finally qualify reconnect and a subsequent guest
-boot with installed startup, default application audio, and clean recovery.
-No persistent arbitrary-resize milestone is claimed yet.
+The new-mode, settled manager surfaces, bounded LRU eviction/revisit, and isolated
+audio controls above pass their narrow checks. Candidate385's packaged resize
+agent is **not yet fully usable alongside pointer input**. Next qualify the
+explicit mouse-routing correction with the agent still running, including actual
+manager corner/center input and text after non-table resize. Then qualify a
+subsequent guest boot with installed startup, reconnect, resize, audio, and clean
+recovery. Current-run shutdown/recovery is pending in this draft; no complete
+persistent arbitrary-resize milestone is claimed.
