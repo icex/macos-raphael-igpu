@@ -1295,6 +1295,26 @@ class EmptyFirmwareConsoleCardTests(unittest.TestCase):
             raw=json.dumps(changed).encode()
             with self.assertRaises(RuntimeError):tool.validate_card(raw,hashlib.sha256(raw).hexdigest())
 
+    def test_candidate364_preserves_exact_361_profile_before_build_card(self):
+        tool=load_tool();tool.configure('1.0.364','metal-202')
+        # Synthetic admission input only: no real364 card until build provenance exists.
+        card=json.loads((ROOT/'experiments/metal-201.json').read_text())
+        card.update(id='metal-202',candidate_version='1.0.364')
+        raw=json.dumps(card).encode();tool.validate_card(raw,hashlib.sha256(raw).hexdigest())
+        for key,value in [('CONSOLE_FULL_REFRESH','off'),('CONSOLE_FULL_REFRESH',True),
+                          ('VM_MANAGER','direct'),('VM_CONSOLE','bochs'),
+                          ('CONSOLE_REFRESH','default'),('CONSOLE_REFRESH','120'),('AUDIO','intel-hda')]:
+            changed=copy.deepcopy(card);changed['launch_options'][key]=value
+            raw=json.dumps(changed).encode()
+            with self.assertRaises(RuntimeError):tool.validate_card(raw,hashlib.sha256(raw).hexdigest())
+        for key in ('CONSOLE_FULL_REFRESH','CONSOLE_REFRESH','VM_MANAGER'):
+            changed=copy.deepcopy(card);del changed['launch_options'][key]
+            raw=json.dumps(changed).encode()
+            with self.assertRaises(RuntimeError):tool.validate_card(raw,hashlib.sha256(raw).hexdigest())
+        tool.configure('1.0.364','metal-201')
+        with self.assertRaisesRegex(RuntimeError,'unsupported candidate card pair'):
+            tool.validate_card(raw,hashlib.sha256(raw).hexdigest())
+
     def test_candidate356_refresh_contract_is_exact(self):
         tool=load_tool();tool.configure('1.0.356','metal-199')
         card=json.loads((ROOT/'experiments/metal-199.json').read_text())
