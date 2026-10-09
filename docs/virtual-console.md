@@ -441,7 +441,7 @@ this does not repeat364's pending-worker branch exercise.
 [Exact artifacts and scope](../findings/research/console-cadence-native-20261009.md).
 
 
-## Pending source-token diagnostic (367; offline only)
+## Capture-source token diagnostic (368 native result)
 
 An opt-in `RGPU_CONSOLE_TOKEN_NONCE` (exact16hex) checks the two matching token
 regions directly in each processed, readonly-locked ScreenCaptureKit source
@@ -451,9 +451,14 @@ No full-frame copy or transport change is introduced. Busy-dropped callbacks,
 upstream uncaptured frames, destination correctness and scanout are outside scope.
 An invalid source sample does not stop or change ordinary presentation.
 
-This diagnostic is prepared and tested offline only: no native source-validity
-or performance result is established. A changed presenter still needs normal
-compilation/signing and possibly consent renewal. It is intended to distinguish
-source validity from downstream VRAM/QEMU/SPICE partial-token observations before
-any snapshot-doorbell or buffer-lifetime changes.
-[Timing, error categories and native plan](../findings/research/console-source-token-plan-20261009.md).
+Candidate368 compiles and installs this diagnostic natively; changed ad-hoc signing
+requires normal Screen Recording renewal. Complete 30-second windows have 1,742/1,742
+HiDPI and 1,738/1,738 native valid processed source samples. The manager still sees
+633/1,065 and 35/1,116 invalid samples inside intervals bracketed by valid interior
+source IDs. Corrupted manager IDs are not trusted; clocks are not synchronized.
+This narrows beyond the checked source regions, without identifying one downstream
+stage, proving source stability after checking, or establishing whole-frame atomicity.
+Both runs restore the original LaunchAgent and ordinary capture; final manager
+desktop, guest shutdown and recovery pass. Audio/input are not rerun.
+[Native result and limitations](../findings/research/console-source-token-native-20261009.md)
+· [Timing and error categories](../findings/research/console-source-token-plan-20261009.md).

@@ -39,7 +39,10 @@ the identical reinstall retained consent. Candidate366 confirms automatic startu
 and unchanged consent on the next guest boot. Fresh-user and console-only first
 setup remain open. Its paced source reaches60 draw calls/s, but repeated HiDPI
 manager samples vary24.9–35.3 valid updates/s with partial tokens; this does not
-qualify60Hz output or a stable speedup. Stock QEMU stays the default; performance results use a separately pinned
+qualify60Hz output or a stable speedup. Candidate368 checks actual capture-source
+tokens: all 1,742 HiDPI and 1,738 native samples are valid, while the console still
+contains partial tokens. Investigation now targets copying and framebuffer/QEMU/SPICE
+ownership; no single stage is identified. Stock QEMU stays the default; performance results use a separately pinned
 experimental image. Automatic resize, other managers and VirtualBox remain
 unqualified. The virtual Display
 adapter's56MB framebuffer is separate from the native renderer's2GB VRAM.
@@ -48,6 +51,7 @@ adapter's56MB framebuffer is separate from the native renderer's2GB VRAM.
 · [Default audio and continuous input evidence](findings/research/console-default-audio-input-20261009.md)
 · [Installer and shutdown evidence](findings/research/console-install-native-20261009.md)
 · [Guest-boot persistence and cadence](findings/research/console-cadence-native-20261009.md)
+· [Capture-source isolation](findings/research/console-source-token-native-20261009.md)
 · [Setup and limits](docs/virtual-console.md).
 
 The qualified remote baseline from **2026-09-16**, candidate **1.0.280**, runs an accelerated desktop through
