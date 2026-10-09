@@ -49,3 +49,11 @@ Its opt-in diagnostic passes bounded source-validity windows at native and HiDPI
 resolutions; normal copying remains the default. Changing the signed app required
 ordinary consent renewal again. Both diagnostic cases restore the original agent
 and ordinary capture. This is not fresh-user or unattended deployment qualification.
+
+
+Candidate370's changed presenter also required normal consent renewal; ordinary
+capture succeeded before its one-shot snapshot mode was enabled. Snapshot mode
+must not be left in the ordinary login agent: an armed lease cannot be reacquired
+in the same QEMU device lifetime. The native test restored the exact original
+agent and verified ordinary fallback startup. See
+[the snapshot setup and limits](virtual-console.md#immutable-snapshots-and-single-rectangle-native-experiment-370).
