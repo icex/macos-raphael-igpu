@@ -31,5 +31,12 @@ Original controlled artifacts:
 - `run/c357-quiesce-timing25/timing.json` and `vm/run/critical.log` (25% CPU)
 - `run/dev-353-final-ci-failure.log` and `...-attempt2.log`
 
-Modified positive/negative pair passes at ordinary scheduling; quarter-CPU
-recheck and hosted validation are recorded in the delivery artifacts.
+The modified positive/negative pair passes at ordinary scheduling: the fresh
+ACK arrives after 2.193s. Under CPUQuota25%, it arrives after 16.077s and both
+tests pass; the negative boundary remains 2s. Retained `result.json` files in
+`run/c357-default-uart-evidence` and `run/c357-quarter-cpu-uart-evidence` confirm
+that QEMU and both collectors stopped in every case. Logs are
+`run/c357-uart-validation-fixed.log` and `run/c357-uart-quarter-cpu.log`.
+These controls establish software protocol completion under slower scheduling,
+not a hardware UART latency guarantee. Hosted validation is recorded separately
+in the dev delivery receipt.
