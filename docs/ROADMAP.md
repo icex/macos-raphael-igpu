@@ -230,17 +230,19 @@ ownership,3840×2160 console pixels, actual virt-manager keyboard/mouse input,
 bridged LAN traffic and a180-second moving-material workload. Domain XML remains
 unchanged; disconnecting/reconnecting viewers preserves the guest. Capture passes,
 outer shutdown records guest-request exit and native recovery authorizes reuse.
-The libvirt terminal receipt is missing because the critical serial EOF guard
-stops the container first; full native lifecycle qualification remains open.
-Candidate342's separate PATH discovery fix passes isolated daemon tests.
+Candidate343 now preserves the native controller terminal receipt on guest
+shutdown, with both EOF hooks recording natural container exit and authorizing
+GPU recovery. It omits unused container SSH; strict process visibility and
+immediate stop for live-QEMU capture loss remain unchanged. One native shutdown
+passes; crash and independent-boot coverage remain open.
+[Native terminal evidence](../findings/research/libvirt-native-terminal-20261009.md).
 
 Candidate342 verifies the PATH fix and measures895/555 distinct tokens over30s
 at native1080p/HiDPI respectively (29.82/18.50 updates/s in the sampled manager
 buffer). Eight/18 partially invalid token samples keep atomic presentation open.
-Both EOF handlers still refuse grace, leaving no native controller terminal
-receipt despite valid outer shutdown/capture/GPU recovery. Next: identify that
-refusal, then qualify the corrected lifecycle; separately isolate QEMU refresh
-scheduling and live-framebuffer write tearing before performance changes.
+The missing controller terminal receipt in342 is superseded by343’s native
+shutdown pass. Next isolate QEMU refresh scheduling and live-framebuffer write
+tearing before performance changes.
 [Measured evidence](../findings/research/console-cadence-20261009.md).
 
 Host-window resize, repeated crash recovery, independent host boots and broader
