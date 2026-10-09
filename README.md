@@ -14,12 +14,13 @@ on **`dev`**; this is not yet a generally supported driver release.
 
 ## Current status
 
-**VM window (October9):** candidates341–342 render the native Metal desktop inside
+**VM window (October9):** candidates341–343 render the native Metal desktop inside
 virt-manager, with verified keyboard/mouse input and bridged LAN traffic on341.
 Candidate342 measures about30 distinct manager-buffer updates/s at native1080p
 and18.5/s at1080HiDPI, with occasional partial token updates. These are sampled
-console delivery rates, not GPU fps. Capture and GPU recovery pass; the controller
-terminal-receipt race remains unresolved. Automatic window resize, atomic
+console delivery rates, not GPU fps. Candidate343 also retains the native controller
+terminal receipt on guest shutdown, with valid capture and authorizing GPU
+recovery. Automatic window resize, atomic
 presentation and broader lifecycle/performance qualification remain open.
 The virtual Display adapter's56MB framebuffer is separate from the native
 renderer's2GB reported VRAM. [Evidence and setup](docs/virtual-console.md).

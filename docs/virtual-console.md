@@ -2,13 +2,13 @@
 
 The requested target is a macOS desktop in the VM manager's console, with Raphael
 Metal rendering and no physical HDMI connection. Screen Sharing/Moonlight alone
-does not meet that target. Candidate341 now presents the accelerated desktop inside
+does not meet that target. Candidates341–343 present the accelerated desktop inside
 virt-manager at1920×1080 logical/3840×2160 pixels. Native Metal/WindowServer
 ownership, real manager mouse/keyboard input and bridged LAN traffic pass.
-Capture and native GPU recovery pass; a serial EOF/controller terminal-receipt
-race still prevents claiming complete manager lifecycle qualification. Sustained
-frame delivery, automatic resize, other frontends and VirtualBox remain open.
-[Current run evidence](../findings/research/libvirt-native-console-20261009.md).
+Candidate343 also preserves the native guest-shutdown terminal receipt with
+valid capture and authorizing GPU recovery. Crash/independent-boot coverage,
+sustained frame delivery, automatic resize, other frontends and VirtualBox
+remain open. [Current run evidence](../findings/research/libvirt-native-terminal-20261009.md).
 Candidate332's unsafe TMR experiment remains withdrawn.
 
 ## Architecture under test
@@ -49,8 +49,8 @@ remain required. No existing hashed design contract is changed.
 ## Hypervisor boundaries
 
 QEMU and libvirt can expose a physical PCI device and a separate console device.
-Candidate341 tests native accelerated macOS through virt-manager; controller exit
-ordering still needs repair and a complete terminal receipt.
+Candidates341–343 test native accelerated macOS through virt-manager, including
+a native guest-shutdown terminal receipt on343. Broader lifecycle coverage remains open.
 VirtualBox7.2.18 is installed on this host, but upstream removed Linux PCI
 passthrough in6.1; its normal macOS virtual display is not a Raphael GPU.
 Supporting VirtualBox would require a different GPU transport/driver or restoring
@@ -193,8 +193,8 @@ and after connection is identical. LAN packets reach the gateway through en2.
 
 The outer harness records valid capture, guest-request exit and authorizing GPU
 recovery. However, critical serial EOF invokes its container stop guard before
-libvirt persists terminal.json. This remaining ordering race is not a natural
-controller-exit pass. A global capabilities warning also exposes inherited PATH
+libvirt persists terminal.json. This historical result is not a natural
+controller-exit pass; candidate343 below supersedes the missing-receipt blocker. A global capabilities warning also exposes inherited PATH
 shim contamination; candidate342 fixes that discovery in isolated daemon tests.
 GNOME Boxes has only software-pattern evidence and may rewrite imported domains;
 do not substitute that for a native Boxes qualification.
@@ -220,7 +220,18 @@ These are sampled lower bounds, not GPU fps, complete delivered-frame accounting
 host scanout or absolute latency. Invalid cell/checksum samples demonstrate that
 complete atomic tokens are not guaranteed. Both60-second guest fixtures finish
 and normal desktop rendering returns. The native capabilities warning is fixed;
-controller EOF grace still refuses and loses terminal.json, while outer capture,
+on342 controller EOF grace refuses and loses terminal.json, while outer capture,
 guest-request exit and GPU recovery pass. A failed automatic storage-pool setup
 is also retained in the manager logs; it does not rewrite the guest domain.
 [Raw outcome, limits and next tests](../findings/research/console-cadence-20261009.md).
+
+## Native terminal receipt (candidate343)
+
+Candidate343 closes the missing receipt case on one native guest shutdown.
+Omitting unused container SSH allows strict exited-QEMU inspection to complete;
+both EOF handlers record natural-container-exit and the actual controller writes
+its bound guest-shutdown terminal.json. Capture and authorizing GPU recovery
+pass. Guest SSH still answers through QEMU's independent forwarded port.
+No process-visibility check, original deadline or live-QEMU immediate-stop path
+is relaxed. Native crash/forced-closure and independent-boot coverage remain open.
+[Result and exact artifacts](../findings/research/libvirt-native-terminal-20261009.md).

@@ -39,3 +39,5 @@ A separate no-SSH pair `/home/bogdan/macos-vm/run/c342-capture-exit-af8a307b`, e
 Twenty focused guard/diagnostic tests and thirteen entry tests pass. Full suite:1135 tests pass,3 skipped (`/home/bogdan/macos-vm/run/c343-offline-tests.log`). This full run preceded the root's final343 version/card preparation; rerun the final integrated suite before launch.
 
 Next: the hardware owner must run candidate343 through the existing harness and verify actual native controller terminal receipt, strict capture and authorizing GPU recovery together. The software reproduction strongly explains342's gap but cannot reconstruct its hidden refusal or establish native success. No GPU launch, build, staging or host sudo was performed in this investigation.
+
+Native follow-up: [candidate343 passes guest shutdown with the actual terminal receipt](libvirt-native-terminal-20261009.md). This supersedes the prospective native gate above; the software results remain independently scoped.
