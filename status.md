@@ -20,7 +20,7 @@ No reboot/rebind. [Evidence](findings/research/console-default-audio-input-20261
 · [Hashed artifacts](findings/research/console-default-audio-input-evidence-20261009.json).
 
 1241 host tests pass,8skip. Checked-in kext/manifest match tested361 build
-1ab964d9844d4dd5aa4acd20b139d2c3; milestone delivery pending.358 milestone is on
+1ab964d9844d4dd5aa4acd20b139d2c3; reviewed milestone ready for dev, hosted validation pending.358 milestone is on
 dev121a4ac, hosted37935096265 test/build green; main unchanged. Next optimized
 console helper package/install provenance and rollback, then clean-user first-use
 and second-boot qualification. Broader performance/desktop/codecs and VirtualBox open.
