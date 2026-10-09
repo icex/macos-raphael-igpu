@@ -31,5 +31,8 @@
   push `dev`. A candidate-branch push alone does not complete delivery.
 - Preserve unrelated `dev` changes, run appropriate checks and verify the remote
   ref after a normal non-force push. Keep `main` publication explicitly user-directed.
+- After every push, wait for hosted CI test and build jobs to pass for that exact
+  commit. Fix failures before calling the milestone delivered; local tests alone
+  do not satisfy this requirement. Verify any applicable release/deployment jobs too.
 - Give the user a 2–3-line brief for each experiment iteration, separating
   functional output, capture quality and shutdown/recovery results.
