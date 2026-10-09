@@ -52,8 +52,10 @@ static BOOL topology(NSArray *rows,NSArray *before,CGDirectDisplayID target) {
         if([a[@"display"] unsignedIntValue]!=target){if(![a isEqual:b])return NO;continue;}
         NSArray *frame=a[@"frame"];
         if(!identity(a)||[frame[0] doubleValue]!=0||[frame[1] doubleValue]!=0||
-           [a[@"in_mirror_set"] boolValue]||[a[@"mirrors"] unsignedIntValue]!=kCGNullDirectDisplay)return NO;
-        for(NSString *key in @[@"active",@"main",@"rotation"])
+           [a[@"mirrors"] unsignedIntValue]!=kCGNullDirectDisplay)return NO;
+        // The installed layout uses Raphael as the mirror SOURCE. Membership
+        // is allowed only unchanged; a mirrored destination remains refused.
+        for(NSString *key in @[@"active",@"main",@"rotation",@"in_mirror_set"])
             if(![a[key] isEqual:b[key]])return NO;
     }
     return YES;
