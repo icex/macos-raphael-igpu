@@ -22,14 +22,22 @@ static bool number(const char *s,unsigned *value) {
 }
 int main(int argc,char **argv) {@autoreleasepool {
  signal(SIGALRM,expired);alarm(5);
- bool apply=argc==4&&!strcmp(argv[1],"--set");unsigned w=0,h=0;
- if(!(argc==2&&!strcmp(argv[1],"--list")) && !apply)return 2;
+ bool apply=argc==4&&!strcmp(argv[1],"--set");
+ bool current=argc==2&&!strcmp(argv[1],"--current");unsigned w=0,h=0;
+ if(!(argc==2&&!strcmp(argv[1],"--list")) && !apply && !current)return 2;
  if(apply&&(!number(argv[2],&w)||!number(argv[3],&h)||w<320||h<200||h>2160))return 2;
  CGDirectDisplayID ids[64],target=0;uint32_t n=0;
  if(CGGetOnlineDisplayList(64,ids,&n)!=kCGErrorSuccess||n>=64)return 3;
  for(unsigned i=0;i<n;i++)if(CGDisplayVendorNumber(ids[i])==0x5250&&CGDisplayModelNumber(ids[i])==0x3453){if(target)return 3;target=ids[i];}
  if(!target)return 3;
  CGRect beforeBounds=CGDisplayBounds(target);
+ if(current){
+  CGDisplayModeRef m=CGDisplayCopyDisplayMode(target);if(!m)return 3;
+  NSMutableDictionary *actual=[info(m) mutableCopy];
+  actual[@"origin_x"]=@(beforeBounds.origin.x);actual[@"origin_y"]=@(beforeBounds.origin.y);
+  emit(@{@"display":@(target),@"actual":actual,@"scope":@"independent current mode read only"});
+  CFRelease(m);return 0;
+ }
  if(apply&&(beforeBounds.origin.x!=0||beforeBounds.origin.y!=0)){emit(@{@"passed":@NO,@"reason":@"target-origin-not-zero"});return 4;}
  CFArrayRef modes=CGDisplayCopyAllDisplayModes(target,(__bridge CFDictionaryRef)@{(id)kCGDisplayShowDuplicateLowResolutionModes:@YES});
  if(!modes)return 3;
