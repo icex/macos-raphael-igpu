@@ -4,7 +4,7 @@ Run `3d0e4869c7f1c49af50497f440996a5b`, build
 `c1591507f28f48e7a42b8ce3e92f6c51`, executable SHA256
 `7bbd044587498bae26e1daf182a36c9d2147ddfb59c99e9108dd80128d48dad9`.
 This report covers stable functional artifacts only. The completed cadence window is recorded below;
-shutdown/recovery is still pending. Root owns all native operations.
+shutdown/recovery completed as recorded below. Root owns all native operations.
 
 ## Initial failure and source-grounded correction
 
@@ -56,7 +56,7 @@ initial4K selected, then exact1440×900 physical/logical preparation.
 
 The policy is explicit1x/2x per holder, not inferred from advisory SPICE mm or
 host GDK scale. Preference changes take effect at the next owned restart.
-Measured cadence and final cleanup must be added separately after completion;
+Measured cadence and final cleanup is recorded below;
 no universal60Hz, full-frame integrity, new guest-boot preference persistence,
 first-user setup, or VirtualBox qualification is claimed here.
 
@@ -77,4 +77,23 @@ frame integrity or end-to-end latency. There is no source CRC window or snapshot
 counter qualification in this case. Guest and manager clocks are not subtracted.
 Root viewed the restored ordinary desktop in `c390-post-workload-desktop.png`.
 Final state, decoded logs and seal checks are retained separately; final shutdown
-receipts remain pending.
+receipts are recorded below.
+
+## Completed lifecycle and retained allocation errors
+
+Harness shutdown is exited-after-guest-request; recovery is recovered with
+authorizes_launch:true. Private libvirt terminal records guest-shutdown and
+process_exited:true. Docker events contain container die(exit0)/destroy only,
+without container kill/stop. Both capture hooks report natural-container-exit
+after about0.4326s, no shutdown-event wait; critical transport is receive reset
+and console is clean EOF.
+
+Replay accepts snapshot18 with367 records as a terminal prefix, retaining one
+corrupt line14464 and incomplete snapshot14 (896 chunks, no END). This run does
+not have the zero-corrupt/incomplete capture result of candidate388.
+
+The retained serial log also contains eight AMD `Failed to allocate` messages
+for size60293120 near lines3646–3653, reporting about77–81MB free and fixed-free
+1883172864. Their relationship to tested resize, mode ordering, or cadence is not
+established. Successful functional probes do not make the run error-free; root
+will investigate this separately after preference persistence qualification.
