@@ -45,5 +45,5 @@ suite1367tests/8skip passes (54.641s), run/c384-host-tests-idempotent.log.
 Remaining: persistent packaged agent, arbitrary viewport mode creation, input
 coordinates after automatic resize, broader lifecycle and performance/corruption
 qualification. Existing381 performance evidence remains valid only for its
-measured workloads. Dev447131e hosted37963569176 test/build green;383/384 delivery
-and hosted CI pending. Main unchanged. Do not call this completed roadmap work.
+measured workloads. Dev c6d7ef13cb16a90d0bbf45c95fd9ca2ec3e63b3c delivers383/384 with
+hosted37968448791 test/build green; release skipped. Main unchanged. Do not call this completed roadmap work.
