@@ -11,6 +11,15 @@
 #include <IOKit/pci/IOPCIDevice.h>
 #include <IOKit/IOLib.h>
 #include <pexpert/pexpert.h>
+#include <kern/clock.h>
+#include "ConsoleTiming.hpp"
+
+static uint64_t consoleTimeNS() {
+    uint64_t absolute = 0, ns = 0;
+    clock_get_uptime(&absolute);
+    absolutetime_to_nanoseconds(absolute, &ns);
+    return ns;
+}
 
 // The slot follows the descriptor, including any retained userspace aliases.
 // Client close is not proof that its mapping has disappeared. 128 MiB payload
@@ -78,6 +87,9 @@ class RaphaelConsole : public IOService {
     uint32_t snapshotSequence = 0;
     bool snapshotLeased = false; // Never regrant: mappings may outlive client close.
     bool snapshotAvailable = false;
+    bool timingEnabled = false; // Immutable after start; default off.
+    ConsoleTiming timing;
+    void recordTiming(uint32_t w, uint32_t h, const uint64_t (&t)[8]);
 public:
     bool start(IOService *provider) override;
     // Multiple connections may retain retired private mappings, but only one
@@ -159,6 +171,8 @@ bool RaphaelConsole::start(IOService *provider) {
     uint32_t enabled = 0;
     if (!PE_parse_boot_argn("rgpuconsole", &enabled, sizeof(enabled)) || enabled != 1)
         return false;
+    uint32_t diagnostic = 0;
+    timingEnabled = PE_parse_boot_argn("rgpuconsoletiming", &diagnostic, sizeof(diagnostic)) && diagnostic == 1;
     pci = OSDynamicCast(IOPCIDevice, provider);
     if (!pci || pci->configRead32(0) != 0x11111234 ||
         (pci->configRead32(8) >> 8) != 0x038000 || !IOService::start(provider))
@@ -276,7 +290,10 @@ IOReturn RaphaelConsole::snapshotCommit(IOUserClient *owner, uint64_t w,
     if (w < 320 || h < 200 || w > 3840 || h > 2160 ||
         !sequence || sequence > UINT32_MAX || w*h*4 > snapshotBytes)
         return kIOReturnBadArgument;
+    uint64_t t[8] = {};
+    if (timingEnabled) t[0] = consoleTimeNS();
     IOLockLock(lock);
+    if (timingEnabled) t[1] = consoleTimeNS();
     if (isInactive() || !registers || owner != snapshotOwner || !snapshotBuffer ||
             !stagingMap || snapshotPoisoned) {
         IOLockUnlock(lock); return kIOReturnNotReady;
@@ -285,25 +302,49 @@ IOReturn RaphaelConsole::snapshotCommit(IOUserClient *owner, uint64_t w,
         IOLockUnlock(lock); return kIOReturnBadArgument;
     }
     auto *r = reinterpret_cast<volatile uint32_t *>(registers->getVirtualAddress()+0x700);
+    if (timingEnabled) t[2] = consoleTimeNS();
     if (r[2] != 1 || r[3] != 0 || r[7] != snapshotSequence ||
             (snapshotRestartable && r[13] != snapshotEpoch)) {
         snapshotPoisoned = true; retireLocked();
         IOLockUnlock(lock); return kIOReturnIOError;
     }
+    if (timingEnabled) t[3] = consoleTimeNS();
     // Cooperating caller fences and stops touching this private buffer until ACK.
     // Kernel serialization prevents close/new-owner handoff during the copy.
     memcpy(reinterpret_cast<void *>(stagingMap->getVirtualAddress()),
            snapshotBuffer->getBytesNoCopy(), static_cast<size_t>(w*h*4));
     __asm__ volatile("sfence" ::: "memory");
+    if (timingEnabled) t[4] = consoleTimeNS();
     if (snapshotRestartable) { r[12] = snapshotEpoch; OSSynchronizeIO(); }
     r[4] = static_cast<uint32_t>(w); r[5] = static_cast<uint32_t>(h);
-    OSSynchronizeIO(); r[6] = static_cast<uint32_t>(sequence); OSSynchronizeIO();
+    OSSynchronizeIO();
+    if (timingEnabled) t[5] = consoleTimeNS();
+    r[6] = static_cast<uint32_t>(sequence); OSSynchronizeIO();
+    if (timingEnabled) t[6] = consoleTimeNS();
     bool ok = r[2] == 1 && r[3] == 0 && r[7] == sequence &&
         (!snapshotRestartable || r[13] == snapshotEpoch);
+    if (timingEnabled) t[7] = consoleTimeNS();
     if (ok) { snapshotSequence = sequence; *ack = sequence; }
     else { snapshotPoisoned = true; retireLocked(); }
+    if (ok && timingEnabled) recordTiming(w, h, t);
     IOLockUnlock(lock);
     return ok ? kIOReturnSuccess : kIOReturnIOError;
+}
+// Called under provider lock. Reporting cost is deliberately outside measured stages.
+void RaphaelConsole::recordTiming(uint32_t w, uint32_t h, const uint64_t (&t)[8]) {
+    for (unsigned i = 1; i < 8; ++i) if (t[i] < t[i-1]) return;
+    const uint64_t ns[5] = {t[1]-t[0], t[4]-t[3], t[5]-t[4], t[6]-t[5],
+                           (t[3]-t[2]) + (t[7]-t[6])};
+    if (!timing.record(t[7], w, h, ns)) return;
+    for (const auto &b : timing.buckets) if (b.count) {
+        IOLog("RaphaelConsole: timing window=%u elapsed_ns=%llu geometry=%ux%u count=%llu "
+              "lock_ns=%llu/%llu copy_fence_ns=%llu/%llu geometry_mmio_ns=%llu/%llu "
+              "doorbell_ns=%llu/%llu ack_checks_ns=%llu/%llu dropped_geometry=%llu saturated=%u\n",
+              timing.reports+1, t[7]-timing.started, b.width, b.height, b.count,
+              b.total[0], b.maximum[0], b.total[1], b.maximum[1], b.total[2], b.maximum[2],
+              b.total[3], b.maximum[3], b.total[4], b.maximum[4], timing.dropped, timing.saturated);
+    }
+    timing.clearWindow(t[7]);
 }
 void RaphaelConsole::snapshotClose(IOUserClient *owner, bool finalClose) {
     IOLockLock(lock);
