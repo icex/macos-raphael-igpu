@@ -14,6 +14,16 @@ class NoQueueTests(unittest.TestCase):
         gr=[[0,0,0,0],[1,0,0,0]]; x={'hqd':rows,'graphics':gr,'globals':dict(g)}
         return {'vfio_opened':True,'errors':[],'kernel_faults_before':[],'kernel_faults_after':[],'kernel_cursor_before':'x','kernel_cursor_after':'x','globals_before':g,'globals_after':dict(g),'passes':[x,{'hqd':list(rows),'graphics':list(gr),'globals':dict(g)}],'selector_final':0}
     def test_positive(self): self.assertEqual(nq.validate_snapshot(self.base()),[])
+    def test_exact_current_and_legacy_teardown_replies_only(self):
+        for response,accepted in [(0x80030000,True),(0x800c0000,True),
+                                  (0x80000000,False),(0x800c0001,False),
+                                  (0x000c0000,False),(0x80010000,False)]:
+            evidence=self.base()
+            for state in [evidence['globals_before'],evidence['globals_after']]+[x['globals'] for x in evidence['passes']]:
+                state['c2pmsg_64']=response
+            self.assertEqual('psp_mailbox' not in nq.validate_snapshot(evidence),accepted)
+        evidence=self.base()
+        self.assertIn('psp_mailbox',nq.validate_snapshot(evidence,expected_mailbox=0x800c0000))
     def test_rejects_queue_psp_sdma_poll_and_allones(self):
         for key, value in [('c2pmsg_64',0),('pq_status',1),('sdma0_page_rb_cntl',1),('cp_stat',0xffffffff)]:
             e=self.base(); e['globals_before'][key]=value; e['globals_after'][key]=value

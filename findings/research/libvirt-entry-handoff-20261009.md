@@ -64,3 +64,14 @@ The cycle wrapper forwards the explicit prior evidence so this path remains unde
 the normal experiment locks and supervised lifecycle. No manual ledger deletion,
 synthetic recovery receipt, reboot or rebind is used. Live qualification of this
 retry still remains required.
+
+Attempt341b (47b605e5a87721e18092c98e48376ea8) performed the full stopped
+scan but refused before new reservation or guest launch: the schema8 validator
+expected only0x80030000. The observed0x800c0000 is the exact final successful
+DESTROY_GPCOM_RING reply, confirmed in340c's recovery commands and in the current
+`vfio-recover.py` two-command teardown. The corrected default allows exactly
+READY_FLAG|DESTROY_RINGS or READY_FLAG|DESTROY_GPCOM_RING; generic ready, busy,
+error-bit and other-command replies still refuse. Explicit mailbox expectations
+used by the separate MODE2 recovery validator remain exact. Both retained scan
+passes are complete, inactive and identical; journal cursor and host gates pass.
+Offline replay now validates, but no stale proof is reused for a new launch.

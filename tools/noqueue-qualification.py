@@ -27,7 +27,7 @@ def ledger_rows(ledger, boot_id):
         raise ValueError('duplicate ledger run identity')
     return rows
 
-def validate_snapshot(e, expected_mailbox=0x80030000, check_journal=True):
+def validate_snapshot(e, expected_mailbox=None, check_journal=True):
     """Pure validator for the complete selector scan; returns error labels."""
     bad=[]; g=e.get('globals_before',{}); a=e.get('globals_after',{})
     if not e.get('vfio_opened') or e.get('errors'): bad.append('scan_error')
@@ -38,7 +38,12 @@ def validate_snapshot(e, expected_mailbox=0x80030000, check_journal=True):
     if not isinstance(g,dict) or not isinstance(a,dict): return sorted(set(bad))
     if g != a: bad.append('globals_unstable')
     if isinstance(g,dict) and any(type(v) is not int or v == 0xffffffff for v in g.values()): bad.append('global_all_ones')
-    if g.get('c2pmsg_64') != expected_mailbox: bad.append('psp_mailbox')
+    # Native recovery now destroys GPCOM after DESTROY_RINGS. Accept only these
+    # exact successful teardown replies; a generic READY response is insufficient.
+    accepted_mailboxes = ({R.DESTROY_RINGS | R.READY_FLAG,
+                           R.DESTROY_GPCOM_RING | R.READY_FLAG}
+                          if expected_mailbox is None else {expected_mailbox})
+    if g.get('c2pmsg_64') not in accepted_mailboxes: bad.append('psp_mailbox')
     if (g.get('cp_stat') != 0 or g.get('cpc_busy') != 0 or
         g.get('me_cntl',0) & R.CP_ME_HALT_MASK != R.CP_ME_HALT_MASK or
         g.get('mec_cntl',0) & R.CP_MEC_HALT_MASK != R.CP_MEC_HALT_MASK or

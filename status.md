@@ -21,6 +21,14 @@ also pass. Full suite before this run:1,095 tests,3 skipped;76 staging tests pas
 This remains **unqualified for libvirt-managed accelerated macOS**. Native driver
 source is unchanged from340. [Handoff evidence](findings/research/libvirt-entry-handoff-20261009.md).
 
+Attempt341b, run47b605e5a87721e18092c98e48376ea8, MODE2#280: refused
+before new reservation/guest launch. Both complete queue scans are identical and
+inactive; host/journal checks pass. The sole scan error is legacy PSP mailbox
+expectation0x80030000 versus observed0x800c0000. The latter exactly matches the
+confirmed final DESTROY_GPCOM_RING reply in340c's native recovery. Validator now
+accepts only these two exact successful teardown replies; replaying the retained
+scan passes, but fresh live admission remains required. No guest/QEMU is running. Full suite after the mailbox compatibility fix:1,103 tests pass,3 skipped.
+
 ## Candidate340: native accelerated SPICE desktop after host resume
 
 Run `892ec42661ae367e299f60d55c9da9ee`, metal-186, build1.0.340,
@@ -146,5 +154,12 @@ passes; hardware encode is Main8. [Roadmap](docs/ROADMAP.md).
 ## One-command GPU test
 
 - Output: `/home/bogdan/macos-vm/run/candidate-341-results`
+- Verdict: `INVALID`
+- Boundary: `identity_or_route_missing`
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-341-attempt-b-results`
 - Verdict: `INVALID`
 - Boundary: `identity_or_route_missing`
