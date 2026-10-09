@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Software-only Bochs/SPICE cadence control; no OS, KVM, GPU or network.
 
-A single offscreen SpiceDisplay owns the sole client connection. Qtest writes
+A single SpiceDisplay owns the sole client connection (offscreen by default).
+An optional visible window measures viewport/scaling effects. Qtest writes
 are producer transactions, not guest GPU frames. Raw samples and acknowledgements
 are retained. --split deliberately exposes mismatched duplicate tokens.
 """
 import argparse
+import base64
 import importlib.util
 import json
 import os
@@ -43,6 +45,19 @@ def band(token,nonce,sequence,second=None,width=640,scale=1):
     return raw
 
 
+def compact_band_commands(raw,base,width,scale):
+    """Write both complete tokens, preserving framebuffer stride; no ACK here.
+
+    Qtest still receives every token pixel. Batching narrow rows avoids spending
+    the cadence window parsing megabytes of unused full-width band padding.
+    """
+    left=16*scale;length=304*scale*4;stride=width*4
+    if len(raw)!=96*scale*stride:raise ValueError('token band geometry mismatch')
+    return [f'b64write {base+(64*scale+y)*stride+left*4:#x} {length:#x} '+
+            base64.b64encode(raw[y*stride+left*4:y*stride+left*4+length]).decode('ascii')
+            for y in range(96*scale)]
+
+
 def event_control_passed(mode,split,invalidations,unique,invalid_after_start,errors,qemu_exit):
     """A positive token test and deliberate-corruption control have opposite oracles."""
     if errors or qemu_exit!=0 or invalidations<=1:return False
@@ -58,16 +73,22 @@ def main():
     p.add_argument('--output',type=Path,required=True);p.add_argument('--seconds',type=int,default=15)
     p.add_argument('--rate',type=int,choices=(60,));p.add_argument('--split',action='store_true')
     p.add_argument('--snapshot',action='store_true',help='isolated experimental staging/ACK producer')
+    p.add_argument('--compact-band',action='store_true',help='batch narrow token rows through qtest b64write')
+    p.add_argument('--damage',choices=['localized','full-field'],default='localized',help='full-field fills staging before writing intact tokens and ACK')
     p.add_argument('--roi-extension',type=Path,help='optional paired observer control, no extra connection')
     p.add_argument('--event-observer',choices=['roi','count-only'],help='exercise production EventObserver synchronously; timer only bounds duration')
     p.add_argument('--manager-wrapper-control',action='store_true',help='also compare actual manager selection function on this isolated widget')
     p.add_argument('--width',type=int,default=640);p.add_argument('--height',type=int,default=480)
     p.add_argument('--scale',type=int,choices=(1,2),default=1)
     p.add_argument('--interval-ms',type=int,default=8)
+    p.add_argument('--windowed',action='store_true',help='visible GTK window control; default is offscreen')
+    p.add_argument('--viewport',nargs=2,type=int,metavar=('WIDTH','HEIGHT'),help='requested logical widget allocation for paired visible/offscreen controls')
     args=p.parse_args()
     if not 1<=args.seconds<=30:p.error('seconds must be 1..30')
     if not 8<=args.interval_ms<=1000:p.error('interval must be8..1000ms')
     if not 320*args.scale<=args.width<=3840 or not 160*args.scale<=args.height<=2160:p.error('unsupported geometry')
+    if args.damage=='full-field' and not args.snapshot:p.error('full-field control requires snapshot staging')
+    if args.viewport and not (320<=args.viewport[0]<=1920 and 200<=args.viewport[1]<=1200):p.error('viewport outside bounded control sizes')
     roi=None
     if args.roi_extension:
         import sys
@@ -117,6 +138,11 @@ def main():
             reply=qt.file.readline().decode().strip()
             if not reply.startswith('OK'):raise RuntimeError(reply)
             return reply
+        def batch(commands):
+            qt.socket.sendall(('\n'.join(commands)+'\n').encode())
+            for _ in commands:
+                reply=qt.file.readline().decode().strip()
+                if not reply.startswith('OK'):raise RuntimeError(reply)
         def pci(off,value):test(f'outl 0xcf8 {0x80001000+off:#x}');test(f'outl 0xcfc {value:#x}')
         qmp('qmp_capabilities');qmp('cont');qmp('stop');pci(0x10,0xe0000000);pci(0x18,0xf0000000);pci(4,2)
         for i,v in [(4,0),(1,args.width),(2,args.height),(3,32),(6,args.width),(8,0),(9,0)]:test(f'writew {0xf0000500+i*2:#x} {v:#x}')
@@ -128,10 +154,17 @@ def main():
             test('writel 0xf0000708 1')
             test(f'writel 0xf0000710 {args.width}')
             test(f'writel 0xf0000714 {args.height}')
-        def write(raw):
-            nonlocal snapshot_sequence
+        last_background=0
+        def write(raw,sequence=0):
+            nonlocal snapshot_sequence,last_background
             base=0xd0000000 if args.snapshot else 0xe0000000
-            test(f'write {base+64*args.scale*args.width*4:#x} {len(raw):#x} 0x{raw.hex()}')
+            if args.damage=='full-field':
+                # B/G/R all change on every transaction, in a small intensity
+                # range. This offscreen synthetic load is not the guest gradient.
+                last_background=24+sequence%32
+                test(f'memset {base:#x} {args.width*args.height*4:#x} {last_background}')
+            if args.compact_band:batch(compact_band_commands(raw,base,args.width,args.scale))
+            else:test(f'write {base+64*args.scale*args.width*4:#x} {len(raw):#x} 0x{raw.hex()}')
             if args.snapshot:
                 snapshot_sequence+=1
                 test(f'writel 0xf0000718 {snapshot_sequence}')
@@ -146,7 +179,26 @@ def main():
         if not Gtk.init_check()[0]:raise RuntimeError('GTK backend unavailable')
         session=SpiceClientGLib.Session();session.set_property('unix-path',str(root/'spice'))
         display=SpiceClientGtk.Display.new(session,0)
-        window=Gtk.OffscreenWindow();window.add(display);window.show_all()
+        display.set_property('scaling',True);display.set_property('resize-guest',False)
+        window=Gtk.Window() if args.windowed else Gtk.OffscreenWindow()
+        window.set_title('Raphael software display test — no guest or GPU')
+        if args.viewport:
+            display.set_size_request(*args.viewport);window.set_default_size(*args.viewport);window.set_resizable(False)
+        window.add(display)
+        draw_timing=dict(started=0,completed=0,total_seconds=0.,max_seconds=0.,pending=None,reentrant=0)
+        def draw_begin(widget,context):
+            if draw_timing['pending'] is not None:draw_timing['reentrant']+=1
+            draw_timing['pending']=time.monotonic();draw_timing['started']+=1
+            return False
+        def draw_end(widget,context):
+            if draw_timing['pending'] is not None:
+                elapsed=time.monotonic()-draw_timing['pending'];draw_timing['completed']+=1
+                draw_timing['total_seconds']+=elapsed;draw_timing['max_seconds']=max(draw_timing['max_seconds'],elapsed)
+                draw_timing['pending']=None
+            return False
+        GObject.Object.connect(display,'draw',draw_begin)
+        GObject.Object.connect_after(display,'draw',draw_end)
+        window.show_all()
         events=(root/'display-events.jsonl').open('w')
         counts={'mark':0,'invalidate':0}
         def event(kind,*values):
@@ -172,9 +224,9 @@ def main():
                 while not stop.is_set() and time.monotonic()-start<args.seconds:
                     sequence+=1;t0=time.monotonic()
                     if args.split:
-                        write(band(token,nonce,sequence,sequence-1,width=args.width,scale=args.scale));stop.wait(.020)
-                    write(band(token,nonce,sequence,width=args.width,scale=args.scale));t1=time.monotonic()
-                    producer.write(json.dumps(dict(sequence=sequence,start=t0,ack=t1,split=args.split))+'\n');producer.flush()
+                        write(band(token,nonce,sequence,sequence-1,width=args.width,scale=args.scale),sequence);stop.wait(.020)
+                    write(band(token,nonce,sequence,width=args.width,scale=args.scale),sequence);t1=time.monotonic()
+                    producer.write(json.dumps(dict(sequence=sequence,start=t0,ack=t1,split=args.split,damage=args.damage,background=last_background))+'\n');producer.flush()
                     stop.wait(max(0,start+sequence/60-time.monotonic()))
             except Exception as error:producer_error.append(repr(error));stop.set()
         def event_failure(error):
@@ -275,20 +327,34 @@ def main():
         if worker:worker.join(timeout=15)
         if worker and worker.is_alive():raise RuntimeError('producer did not stop')
         if event_control:event_control.close()
+        allocation=display.get_allocation()
+        widget_geometry=dict(width=allocation.width,height=allocation.height,gdk_scale=display.get_scale_factor(),
+                             scaling=display.get_property('scaling'),resize_guest=display.get_property('resize-guest'),
+                             monitor_id=display.get_property('monitor-id'),windowed=args.windowed,requested=args.viewport)
         session.disconnect();window.destroy();stream.close();producer.close();events.close()
         if started is None or producer_error:raise RuntimeError(f'no complete measurement: {producer_error}')
         snapshot_counters=None
         if args.snapshot:
             snapshot_counters={name:int(test(f'readl {0xf0000700+offset:#x}').split()[1],0) for name,offset in [('ack',0x1c),('published_seq',0x20),('pending_replaced',0x24),('published_count',0x28),('pending_seq',0x2c)]}
+        background_readback=None
+        if args.damage=='full-field':
+            points=[0,(args.width-1)*4]
+            if args.height>160*args.scale:points.append((args.width*args.height-1)*4)
+            values=[int(test(f'readl {0xd0000000+off:#x}').split()[1],0) for off in points]
+            expected=int.from_bytes(bytes([last_background])*4,'little')
+            background_readback=dict(offsets=points,values=values,expected=expected,passed=all(v==expected for v in values))
+            if not background_readback['passed']:raise RuntimeError('full-field staging readback mismatch')
         qmp('quit');process.wait(timeout=10)
         rows=[json.loads(x) for x in (root/'producer.jsonl').read_text().splitlines()]
         stats=dict(seconds=args.seconds,interval_ms=args.interval_ms,unique=unique,unique_per_second=unique/args.seconds,
                    valid=valid,invalid_after_start=invalid,last_sequence=last,producer_count=len(rows),
                    producer_per_second=(len(rows)-1)/(rows[-1]['ack']-rows[0]['ack']) if len(rows)>1 else None,
                    qemu_exit=process.returncode,split=args.split,snapshot=args.snapshot,snapshot_counters=snapshot_counters,explicit_rate=args.rate,display_events=counts,
+                   damage=args.damage,compact_band=args.compact_band,background_readback=background_readback,
+                   widget_geometry=widget_geometry,widget_draw_timing=draw_timing,
                    width=args.width,height=args.height,scale=args.scale,paired_observers=roi is not None and not args.event_observer,roi_bounds_refused=bounds_refused,
                    manager_wrapper_control=manager is not None,roi_extension=extension_identity,
-                   scope='TCG qtest producer and offscreen SpiceDisplay buffer only; no guest OS/GPU/manager/scanout FPS')
+                   scope='TCG qtest producer and controlled SpiceDisplay buffer only; no guest OS/GPU/manager/scanout FPS')
         if args.event_observer:
             stats.update(event_observer=args.event_observer,**event_control.summary())
             stats['passed']=event_control_passed(args.event_observer,args.split,event_control.invalidations,

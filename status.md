@@ -29,9 +29,8 @@ authorizes_launch=true. Cycle stopped; host awake,vfio-pci/on.
 374 forced-stop D-state race remains unresolved;377 diagnostics not exercised.
 
 1311 host tests pass,8skip; exact build/identity/dry-run pass. Delivery suite
-1311pass/8skip; current docs and tested379 kext updated.379 dev integration and
-exact-commit hosted CI are pending. Prior dev50ca04f hosted37955017465 test/build
-green, release skipped. Main unchanged. Every future push requires exact-commit
+1311pass/8skip; current docs and tested379 kext delivered to dev5cee25d. Remote
+ref verified; hosted37959795782 test/build green, release skipped. Main unchanged. Every future push requires exact-commit
 hosted CI test/build success and applicable release/deployment checks.
 [Evidence](findings/research/console-event-native-20261009.md) ·
 [Hashes](findings/research/console-event-native-evidence-20261009.json).
