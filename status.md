@@ -17,8 +17,8 @@ Recovery recovered/authorizes_launch=true. VM/cycle stopped; host remains awake.
 No reboot/rebind. [Evidence](findings/research/console-install-native-20261009.md)
 · [Hashed artifacts](findings/research/console-install-native-evidence-20261009.json).
 
-1262 host tests pass,8skip; stage88 pass.Checked-in kext/manifest now match
-tested364 build05847d6e7a254574b30d83649750e407; milestone delivery pending. Dev810976f includes361 docs/tests/binary;
+1262 host tests pass,8skip; stage88 pass. Checked-in kext/manifest now match
+tested364 build05847d6e7a254574b30d83649750e407; reviewed milestone ready for dev, hosted validation pending. Dev810976f includes361 docs/tests/binary;
 hosted37936724965 test/build green. Main unchanged. Next guest-boot persistence,
 prepared source-cadence A/B, clean-user/bootstrap and consent-loss presentation.
 Broader desktop/codecs/performance, managers and VirtualBox remain open.
