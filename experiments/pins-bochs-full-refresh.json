@@ -1,5 +1,5 @@
 {
-  "_comment": "Experimental opt-in full-refresh Bochs image; use only with exact CONSOLE_FULL_REFRESH=on SPICE60 profile. Default pins untouched.",
+  "_comment": "Same diagnostic image for controlled SPICE60 A/B: candidate352 requires CONSOLE_FULL_REFRESH=on; candidate353 OFF baseline requires CONSOLE_FULL_REFRESH absent and x-debug-full-refresh flag absent (default false). Default pins untouched.",
   "schema": 1,
   "vm_dir": "/home/bogdan/macos-vm",
   "gpu_bdf": "0000:7b:00.0",
