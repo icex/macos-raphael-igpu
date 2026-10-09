@@ -1,50 +1,39 @@
-# Live status — 2026-10-09
+# Live status —2026-10-10
 
-## Candidate396: fresh snapshot desktop and clean supervised completion
+## Candidate397: stage timings measured; no optimization claimed
 
-Run `3048b197864060d823c97e47ecd64438`, metal219, version1.0.396,
-MODE2 #316, host boot `ba51b3c6-9420-4510-af69-38a42b3c79c7`.
-Launch0932ba8, build sourceba39a0f, build IDea436cef094b48a7bda10a964918b5a9.
-Executable SHA2567bb2002bb3e59277f09504af4d34f74a35c6022683681f627e864e718b696e0c.
-Driver source matches395; this run exercises lifecycle diagnostics/reporting.
+Run `beb488f101c8ed33f8460d4a5ce6ce5e`, metal220, version1.0.397.
+Build ID `997d0d87122748708e34a1fa05c70f08`, executable SHA256
+`7a9bae3f74471c1b26b4f7d15144283776ef7c9a7ef7203f984075d4b99b599b`.
+Manifest source9d5bb8b, built-from19b77a0. Opt-in stage timing only;
+private staging ownership/cache/commit behavior remains the qualified395 design.
 
-Installed sealed presenter autostarts snapshot1 at4K with advancing ACKs, then
-actual virt-manager resizes to1440×900 and shows the macOS desktop. Display-awake
-assertions hold. Viewer closure leaves the same VM alive. This short run does not
-repeat395 input/audio/motion or establish a new performance result.
+Actual manager4K source,1440×900/GDK1 viewport:4160 unique token IDs/100.023s,
+zero invalid/duplicate samples. Localized phases~51/s, full-field~27/s;
+phase5 short53-sample tail is not qualified. Normal desktop returned and was
+visually verified. No new audio/input/full-frame/60Hz qualification.
 
-Shutdown is exited-after-guest-request with private_terminal_verified=true. Both
-capture hooks report natural-container-exit, Docker dies0 without kill events, and
-recovery is recovered/authorizes_launch=true. Critical replay retains365 records
-with no corrupt lines or incomplete snapshots. CORE_PROBE_PASS remains scoped.
-The R/PF_EXITING refusal did not occur: new bounded fd/task diagnostics were not
-exercised, and the earlier capture-exit race is not declared fixed. Reporting now
-also recognizes395's bound deferred-wait/private-terminal completion; offline
-replay preserves392's forced-abort classification and original artifact hashes.
+61 kernel metric rows have intact numeric stages/counts/dropped;24 trailing
+saturated flags are truncated. Motion windows37..58 contain5227 commits:
+copy+fence1.549ms, geometry0.236ms, doorbell6.872ms, ACK checks1.316ms means.
+Windows are not phase-aligned; the dominant doorbell interval is not solely
+attributed to memcpy or a specific host routine. This is a measured discriminator,
+not a performance gain/regression or implemented optimization.
 
-Evidence: run/candidate-396-results; c396-state.txt; c396-post-resize.txt;
-c396-manager-events.jsonl; c396-desktop.png; c396-viewer-close-alive.json;
-c396-docker-events.jsonl; c396-shutdown-reconciliation-replay.json.
-Full integrated host suite1457 tests,8 skipped,OK50.999s. No VM remains running.
-Host awake blocker active; GPU remainsvfio-pci withpower/control=on.
+CORE_PROBE_PASS, earliest failure null. CR2 replay snapshot18/365 records retains
+one malformed line and incomplete snapshot7/76chunks/noEND. Shutdown is
+exited-after-guest-request with private_terminal_verified=true. Both capture hooks
+natural-container-exit/deferred/shutdown_event_wait=true~1.660s; console EOF,
+critical recv-reset. Private guest-shutdown/process-exited and Docker exit0/no
+container kills independently support natural completion. Recovery recovered,
+authorizes_launch=true. GPU cycle ended; root owns subsequent software/native work.
 
-Last delivered milestone: devc1f64d055fb1161f55281972912d0cf4c4178f2f,
-hosted test/build PASS run37988921669, release skipped, exact tested395kext/bin.
-395 qualifies private staging isolation, explicit retired unmap/capacity recovery,
-installed restart, odd resizing, corrected input fixture and stereo sample delivery.
-Measured1440×900 tokens~58/s;4K localized~50/s,full-field~26/s, no post-start token
-errors. Whole-frame motion,4K60, endpoint audibility/A-Vsync, crash races and
-first-user setup remain open.396 changes are candidate-only; main unchanged.
+Evidence: findings/research/console-snapshot-timing-native-20261009.md and its
+26-artifact hash manifest, run/candidate-397-results, c397-fourk-analysis.json,
+c397-kernel-timing-analysis.json. Capture imperfections remain explicit.
 
-VirtualBox7.2.18 guarded diskless configuration reaches its real pci-vfio backend
-and fails at the deliberately impossible path (errno20), then is confirmed powered
-off and unregistered. Setuid hardening refused the traced attempt; no successful
-syscall trace or actual GPU/DMA/reset/acceleration qualification is claimed.
-Pinned source audit identifies unresolved DMA/reset/identity/ROM requirements;
-VBoxVGA requires its own presentation adapter. Evidence: run/c396-vbox-dispatch.
-
-Next:397 opt-in bounded stage timings distinguish private-RAM→WC copy/fence,
-geometry MMIO, doorbell/host work and ACK checks. Preserve all existing gates and
-sealed capture app. Source and build are prepared; native timing qualification
-remains outstanding. Continue VBox software boot/presentation investigation
-separately, with no physical passthrough inferred from configuration dispatch.
+Last delivered dev: c1f64d055fb1161f55281972912d0cf4c4178f2f (tested395),
+hosted37988921669 test/build green; main unchanged.396/397 remain candidate work.
+Next discriminate doorbell/host snapshot work before optimizing.398 separately
+prepares independent VBox disks/controller; no VirtualBox macOS boot, physical
+passthrough or accelerated rendering qualification is claimed.
