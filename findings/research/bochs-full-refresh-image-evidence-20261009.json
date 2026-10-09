@@ -1,0 +1,193 @@
+{
+  "base_image": "sha256:3a3c82c79bc4e73531f819ccdfa4053b3084efd7c1f645678dbf8b4b3a24369c",
+  "container": "rgpu-c352-qemu-build",
+  "network": "none",
+  "devices": [],
+  "cap_drop": [
+    "ALL"
+  ],
+  "user": "1000:1000",
+  "no_new_privileges": true,
+  "sha256": {
+    "/home/bogdan/macos-vm/run/c352-qemu-full-refresh/refresh.patch": "68170966dec625104c7cd1573600bd3d63216c258cfdd69bd8d776f3b385d18c",
+    "/home/bogdan/macos-vm/run/c352-qemu-full-refresh/bochs.patch": "d2e2dd79e8698f7570a4e2f30c09233c02f7f04519dd876e979b2ae6e2a07b3d",
+    "/home/bogdan/macos-vm/run/c352-qemu-full-refresh/build.sh": "5c4225fe37a2abc0690177ea247b90ed588e1a3413b88ae768690e4af1c46120",
+    "/home/bogdan/macos-vm/run/c352-qemu-full-refresh/Dockerfile": "702c2ef31d5cad8f9e69f7c55d614f63e686343462aa6847b7f7716eebd9aed9",
+    "/home/bogdan/macos-vm/run/research/qemu-smc-20260916/qemu-10.1.2.tar.xz": "9d75f331c1a5cb9b6eb8fd9f64f563ec2eab346c822cb97f8b35cd82d3f11479"
+  },
+  "image_id": "sha256:945eea905d337c7a3725ceab5d34175040e938a4eef97730ca14d43b92396196",
+  "image_tag": "rgpu-qemu-full-refresh:c352",
+  "qemu_sha256": "8f40c08f85a36f3f921f78d373b3981a3625ffa3bb9da932af6c32a81de273d2",
+  "results": {
+    "default": {
+      "schema": 1,
+      "passed": true,
+      "scope": "software console transport only",
+      "qemu": "QEMU emulator version 10.1.2",
+      "pci_identity": "0x11111234",
+      "frames": [
+        {
+          "width": 640,
+          "height": 480,
+          "phase": 0,
+          "pixels_checked": 307200,
+          "sha256": "ede46fa1ab933d2976a50000e6ed3ab794ebda341607e327339c678ad6d603c4"
+        },
+        {
+          "width": 640,
+          "height": 480,
+          "phase": 1,
+          "pixels_checked": 307200,
+          "sha256": "64423cd57ec967773d7f1346822ec7413dab6e664204331c5386de67a0e0d250"
+        },
+        {
+          "width": 800,
+          "height": 600,
+          "phase": 2,
+          "pixels_checked": 480000,
+          "sha256": "f338e3f8084fee97049f52feb9a0afec87998e31f6da979ef7bb38bcb4991d4c"
+        }
+      ],
+      "physical_gpu_opened": false,
+      "full_refresh": null,
+      "property_value": null,
+      "static_repeat_checked": true,
+      "qemu_exit_code": 0
+    },
+    "off": {
+      "schema": 1,
+      "passed": true,
+      "scope": "software console transport only",
+      "qemu": "QEMU emulator version 10.1.2",
+      "pci_identity": "0x11111234",
+      "frames": [
+        {
+          "width": 640,
+          "height": 480,
+          "phase": 0,
+          "pixels_checked": 307200,
+          "sha256": "ede46fa1ab933d2976a50000e6ed3ab794ebda341607e327339c678ad6d603c4"
+        },
+        {
+          "width": 640,
+          "height": 480,
+          "phase": 1,
+          "pixels_checked": 307200,
+          "sha256": "64423cd57ec967773d7f1346822ec7413dab6e664204331c5386de67a0e0d250"
+        },
+        {
+          "width": 800,
+          "height": 600,
+          "phase": 2,
+          "pixels_checked": 480000,
+          "sha256": "f338e3f8084fee97049f52feb9a0afec87998e31f6da979ef7bb38bcb4991d4c"
+        }
+      ],
+      "physical_gpu_opened": false,
+      "full_refresh": "off",
+      "property_value": false,
+      "static_repeat_checked": true,
+      "qemu_exit_code": 0
+    },
+    "on": {
+      "schema": 1,
+      "passed": true,
+      "scope": "software console transport only",
+      "qemu": "QEMU emulator version 10.1.2",
+      "pci_identity": "0x11111234",
+      "frames": [
+        {
+          "width": 640,
+          "height": 480,
+          "phase": 0,
+          "pixels_checked": 307200,
+          "sha256": "ede46fa1ab933d2976a50000e6ed3ab794ebda341607e327339c678ad6d603c4"
+        },
+        {
+          "width": 640,
+          "height": 480,
+          "phase": 1,
+          "pixels_checked": 307200,
+          "sha256": "64423cd57ec967773d7f1346822ec7413dab6e664204331c5386de67a0e0d250"
+        },
+        {
+          "width": 800,
+          "height": 600,
+          "phase": 2,
+          "pixels_checked": 480000,
+          "sha256": "f338e3f8084fee97049f52feb9a0afec87998e31f6da979ef7bb38bcb4991d4c"
+        }
+      ],
+      "physical_gpu_opened": false,
+      "full_refresh": "on",
+      "property_value": true,
+      "static_repeat_checked": true,
+      "qemu_exit_code": 0
+    }
+  },
+  "containers": {
+    "/rgpu-c352-qemu-build": {
+      "id": "3e5cf4b97b49faa93bcbd8c6281ff5ea693787310573bf5573e21b8183b426fc",
+      "exit_code": 0,
+      "running": false,
+      "network": "none",
+      "devices": [],
+      "privileged": false
+    },
+    "/rgpu-c352-image-pixels-default": {
+      "id": "59452e94d8e699a2394abb7791037b97d54193301d2b28465389d32a3a20fa7f",
+      "exit_code": 0,
+      "running": false,
+      "network": "none",
+      "devices": [],
+      "privileged": false
+    },
+    "/rgpu-c352-image-pixels-off": {
+      "id": "b788af7ed2976ff4b5371b5bbf3a4ec1d302ec0e218f9e881a2537d0e5cfe4eb",
+      "exit_code": 0,
+      "running": false,
+      "network": "none",
+      "devices": [],
+      "privileged": false
+    },
+    "/rgpu-c352-image-pixels-on": {
+      "id": "93c79627d755428ffa4ca54587ce35a8bdebba5970c24367c427b2709be7de39",
+      "exit_code": 0,
+      "running": false,
+      "network": "none",
+      "devices": [],
+      "privileged": false
+    },
+    "/rgpu-c352-image-capabilities": {
+      "id": "c303790addd06bc20afbbbed57dbd684668ba0fa5894c7e266bc97742f71ad1f",
+      "exit_code": 0,
+      "running": false,
+      "network": "none",
+      "devices": [],
+      "privileged": false
+    }
+  },
+  "artifacts_sha256": {
+    "refresh.patch": "68170966dec625104c7cd1573600bd3d63216c258cfdd69bd8d776f3b385d18c",
+    "bochs.patch": "d2e2dd79e8698f7570a4e2f30c09233c02f7f04519dd876e979b2ae6e2a07b3d",
+    "build.sh": "5c4225fe37a2abc0690177ea247b90ed588e1a3413b88ae768690e4af1c46120",
+    "Dockerfile": "702c2ef31d5cad8f9e69f7c55d614f63e686343462aa6847b7f7716eebd9aed9",
+    ".dockerignore": "caffd0667a458b879e6cf148bde62738eb0a2cc6d02fd9e65d3523d6210d97e6",
+    "build.log": "1eeb917cdf3c9cda465e420b2805f8e7b5c007b8ca417ad84d55b9807c665dd1",
+    "inputs.json": "1d639334d3a068973d68b34cd8cb96c4d1d0b9166b33bcbfe0fc0491516b338d",
+    "build-container-inspect.json": "186169aeced482f63be05ac7cecc0d4444ea2c6cb7934bb31dc9051915b61e18",
+    "image-build.log": "ab29da627f18b2e5d6e41c25776f2a9933172f65fc2cdec546c7f3785b265cca",
+    "image-inspect.json": "d21bb9e9905d87efa3bc9e8826bf3bd51e08fd2f349a100e370a24863bbfccce",
+    "image-pixels-default.log": "7fab4eadaf03ebb70e99f927063f2bfc7a20afd4ffe5403be0504c1b1f9e3f99",
+    "image-pixels-default.json": "5d6c095ffbeae7f0176e17f06b29d1cd9af76527e878cfcb99bafd0d6b5736b1",
+    "image-pixels-default-inspect.json": "2cd978869b0faa3fa87452d7464def84c7eb9b52ed0683e59714d521e9b71bab",
+    "image-pixels-off.log": "758b353ea8178aa687dffb0d517c27d005cd056dc1629d9b089991d7a5e96ab5",
+    "image-pixels-off.json": "251f5fb48efab89cc0546d7c183d9df2ac27dbc62dfa392f2b5e58b66775c674",
+    "image-pixels-off-inspect.json": "89348a6b095f33031edcf87098a132dbd2fa7be8493900e8c002644c8f2c2f64",
+    "image-pixels-on.log": "23994f83236dad3a17f93eae4fac1a717ff67fda520ab7079fd9dc026061a8e9",
+    "image-pixels-on.json": "1ba643d0cf2c306d92d42683fae2b06cf2a2036e3f2e39654b198848cd34001b",
+    "image-pixels-on-inspect.json": "7c85ce54392dd24946be002afaba9455662152d62f2e233598078d91fb342e9f",
+    "image-capabilities.txt": "b33ebf0a7c4cc3b863ab5293377a497defa770a66db762507aa9ce96956bd221",
+    "image-capabilities-inspect.json": "13047f2a8a6507d86445e2c2ab0da5d7e835aefe7377eb9494a3fb28b8a9fd93"
+  }
+}
