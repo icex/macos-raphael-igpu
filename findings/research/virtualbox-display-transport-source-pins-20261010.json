@@ -1,0 +1,26 @@
+[
+  {
+    "url": "https://raw.githubusercontent.com/VirtualBox/virtualbox/14841851fa211c7faf615978ba385d59947236c6/src/VBox/Devices/Graphics/DevVGA.cpp",
+    "path": "/home/bogdan/macos-vm/run/c405-vbox-display-source/DevVGA.cpp",
+    "sha256": "131c03acd816f193b6d62844a788fd58ae16df06801f22e9286419b9a1af5972",
+    "bytes": 281038
+  },
+  {
+    "url": "https://raw.githubusercontent.com/VirtualBox/virtualbox/14841851fa211c7faf615978ba385d59947236c6/src/VBox/Devices/Graphics/DevVGA.h",
+    "path": "/home/bogdan/macos-vm/run/c405-vbox-display-source/DevVGA.h",
+    "sha256": "8dcabe08d3e916233b89d34476bd2bce447939582acff7717bb12cb03d4d2fb0",
+    "bytes": 30523
+  },
+  {
+    "url": "https://raw.githubusercontent.com/VirtualBox/virtualbox/14841851fa211c7faf615978ba385d59947236c6/include/VBox/Graphics/VBoxVideo.h",
+    "path": "/home/bogdan/macos-vm/run/c405-vbox-display-source/VBoxVideo.h",
+    "sha256": "66eeec46c000bf149823be1a453268cadcd306e612a364d82d91bc9410eda914",
+    "bytes": 31542
+  },
+  {
+    "url": "https://raw.githubusercontent.com/VirtualBox/virtualbox/14841851fa211c7faf615978ba385d59947236c6/src/VBox/Main/src-client/DisplayImpl.cpp",
+    "path": "/home/bogdan/macos-vm/run/c405-vbox-display-source/DisplayImpl.cpp",
+    "sha256": "d955d4d908683bc8aed45e71511c51ab08ac1fd4cdd17fb9e9f80ac9742164d0",
+    "bytes": 143804
+  }
+]
