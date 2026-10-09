@@ -1,30 +1,31 @@
 # Live status — 2026-10-09
 
-## Candidate350: copy timing localized; zombie terminal receipt still blocked
+## Candidate351: destination write cost localized; normal desktop restored
 
-Run `1c54d03f095e5c8617423c7ebb17445b`, metal-193, build1.0.350,
-MODE2#288, bootba51b3c6. Native Metal/WindowServer/display checks pass.
-Normal Settings UI permission renewal succeeds for348's signed timing presenter;
-no user keyboard intervention needed, no TCC DB/policy bypass. Real SCK timing
-now works: selected steady HiDPI windows average3.446ms lock +16.074ms row copy;
-native0.735+4.054ms. ROI moving samples48.482/16.267updates/s, both fixtures finish
-and manager desktop returns. These are not GPU fps or a performance improvement.
+Run `60b6600fc4514bab8b734e41b70ace39`, metal-194, build1.0.351,
+MODE2#289, bootba51b3c6. Native Metal/WindowServer/display checks pass.
+Actual SCK source→RAM is cheap; both direct and RAM→console HiDPI writes
+remain around15–17ms. Native second writes are often cheaper regardless of
+order. All32 full-byte comparisons pass across O0/O2 of identical source;
+compiler optimization does not eliminate the slow writes. No speedup claimed.
 
-Synthetic RAM copies pass. First1080p console attempt has54,537 bad pixels;
-subsequent4K and1080p repeat pass all cases plus full independent QEMU pixel checks.
-First mismatch unexplained; removing the VD with presenter is a topology confound.
-Next retain VD independently and compare actual SCK→RAM/RAM→WC/directWC phases.
+Normal Settings UI renews capture permission without user intervention.
+Both moving fixtures finish; diagnostic flag removed, approved O2 presenter
+returns to normal capture and actual virt-manager desktop. Display awake.
+352's separate software KVM test establishes dirty-log rearming first-write
+cost, not yet Bochs-specific causality. Next: opt-in full-refresh Bochs test,
+preserving default behavior and migration tracking; quantify CPU/bandwidth.
 
-Capture CORE_PROBE_PASS, earliest_failure=null. Outer shutdown:
-exited-after-guest-request. Native terminal absent: both hooks reject original
-PID112 stateZ and immediately stop container; failed completion predicate unknown.
-Add precise refusal diagnostics before altering wait behavior. GPU recovery:
-recovered, authorizes_launch=true. VM/cycle stopped, host sleep:idle blocker active.
-No reboot/rebind needed.347/348 reaped-process passes do not qualify zombie race.
+Capture CORE_PROBE_PASS, earliest_failure=null. Shutdown:
+exited-after-guest-request; real guest-shutdown terminal process_exited=true.
+Both EOF hooks use already-reaped natural exit (~0.455s), so350's zombie
+refusal remains unresolved and new predicate diagnostics were not exercised.
+Recovery recovered, authorizes_launch=true. VM/cycle stopped, host awake.
+No reboot/rebind needed.1181 host tests pass,8skip; kext/manifest match351.
 
-1178 tests pass,8 skipped. Kext/manifest match350; candidate remains local.
-Dev277ff81 hosted test/build green; main unchanged. Broader desktop, lifecycle,
-automatic resize, atomic presentation and VirtualBox qualification remain open.
-[Evidence](findings/research/console-source-copy-20261009.md) ·
-[Hashes](findings/research/console-source-copy-evidence-20261009.json) ·
-[Previous status](findings/research/status-archives/status-before-350-20261009.md).
+Candidate changes remain local. Dev277ff81 hosted test/build green; main
+unchanged. General desktop, lifecycle, automatic resize, atomic presentation
+and VirtualBox qualification remain open.
+[Evidence](findings/research/console-dirty-write-20261009.md) ·
+[Raw samples and receipts](findings/research/console-dirty-write-evidence-20261009.json) ·
+[Previous status](findings/research/status-archives/status-before-351-20261009.md).
