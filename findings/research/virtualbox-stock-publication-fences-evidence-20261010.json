@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "upstream_commit": "14841851fa211c7faf615978ba385d59947236c6",
+  "scope": "Official release source audit only, no runtime qualification",
+  "sources": [
+    {
+      "path": "/home/bogdan/macos-vm/run/c408-display-source/DevVGA-SVGA.cpp",
+      "sha256": "2a313031402508aefab3cae755ef9c387f5c50ae88d2b57aae11c89e90de38d3",
+      "bytes": 397399
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c408-display-source/DevVGA-SVGA3d.cpp",
+      "sha256": "4003afdf2fe8c5df6f92d90666d1326d72564b961aad7a9a432d554a68b16d5a",
+      "bytes": 91313
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c408-display-source/DevVGA-SVGA-cmd.cpp",
+      "sha256": "4307f113dcebd1b15308a69ecadab9f63b180b46644703a5756709eaad0532e5",
+      "bytes": 343719
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c408-display-source/DevVGA_VBVA.cpp",
+      "sha256": "f30ea182b89d4771d2519b59366ecde5b29c2a757061500a7d88e9db0dcd0027",
+      "bytes": 76387
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c408-display-source/UIFrameBuffer.cpp",
+      "sha256": "e3fb56958bff4c4577adbd6d5ece658b8e672356e0643fcbf4526765a2416a80",
+      "bytes": 59323
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c408-display-source/DevVGA-SVGA-internal.h",
+      "sha256": "77ba4c1d2bb4a365b756923dc629a2742b5552f0b7d5f711f2c9887eefdaf467",
+      "bytes": 16787
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c405-vbox-display-source/DisplayImpl.cpp",
+      "sha256": "d955d4d908683bc8aed45e71511c51ab08ac1fd4cdd17fb9e9f80ac9742164d0",
+      "bytes": 143804
+    }
+  ]
+}
