@@ -60,7 +60,9 @@ and external launcher selection are implemented but not natively qualified. The
 host device oracle passes legacy/restart full-pixel controls. The compatible runtime
 image passes restart15/legacy11 full-pixel checks and all182 dependency hashes
 match the retained base. Full host suite:1,453 tests,8 skipped,OK (55.906s);
-dry-run clean, next MODE2 #313. No394 hardware run has occurred. First native discriminator:
+dry-run clean, next MODE2 #313. The first launch passed MODE2 #313 but staging refused a noncanonical
+archive path before QEMU/VFIO exposure. Artifact paths are corrected; no394 guest
+run or GPU ledger entry was consumed. The refusal log is retained. First native discriminator:
 retained old mappings must not alter a fresh owner, and released mappings must
 return bounded allocation capacity. Then qualify installed presenter restart.
 Qualify installed immutable capture and implement restart-safe ownership before
