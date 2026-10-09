@@ -57,8 +57,10 @@ gates are unchanged. Replay: run/c393-shutdown-reconciliation-replay.json.
 
 Candidate394 preparation: private per-owner staging, explicit QEMU restart epochs
 and external launcher selection are implemented but not natively qualified. The
-host device oracle passes legacy/restart full-pixel controls. A compatible runtime
-image is building; no394 hardware run has occurred. First native discriminator:
+host device oracle passes legacy/restart full-pixel controls. The compatible runtime
+image passes restart15/legacy11 full-pixel checks and all182 dependency hashes
+match the retained base. Full host suite:1,453 tests,8 skipped,OK (55.906s);
+dry-run clean, next MODE2 #313. No394 hardware run has occurred. First native discriminator:
 retained old mappings must not alter a fresh owner, and released mappings must
 return bounded allocation capacity. Then qualify installed presenter restart.
 Qualify installed immutable capture and implement restart-safe ownership before
