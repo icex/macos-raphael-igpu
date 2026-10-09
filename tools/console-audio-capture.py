@@ -52,15 +52,38 @@ def select_stream(snapshot,identity):
     return stream
 
 
+def parse_modules_short(text):
+    """pactl short records have multiline arguments; IDs are not JSON ordinals."""
+    require(isinstance(text,str) and len(text)<=1048576,'invalid module inventory size')
+    if not text:return []
+    starts=list(re.finditer(r'(?m)^([0-9]+)\t([^\t\r\n]+)\t',text))
+    require(starts and starts[0].start()==0,'malformed module inventory header')
+    rows=[];seen=set()
+    for n,match in enumerate(starts):
+        end=starts[n+1].start() if n+1<len(starts) else len(text)
+        record=text[match.end():end]
+        if record.endswith('\n'):record=record[:-1]
+        require('\t' in record,'malformed module inventory fields')
+        argument,usage=record.rsplit('\t',1)
+        require(usage=='' or usage=='n/a' or re.fullmatch('[0-9]+',usage),'malformed module usage')
+        index=int(match[1]);name=match[2]
+        require(index<2**32 and index not in seen,'invalid or duplicate module ID')
+        require(re.fullmatch('[A-Za-z0-9_.-]+',name),'malformed module name')
+        # A numeric record-looking line inside an argument is ambiguous and
+        # will split into a malformed record above; never guess an ID.
+        seen.add(index);rows.append(dict(index=index,name=name,argument=argument))
+    return rows
+
+
 class Backend:
     def command(self,args):
-        return subprocess.check_output(args,text=True,timeout=2).strip()
+        return subprocess.check_output(args,text=True,timeout=2).rstrip("\n")
     def pulse(self,*args):return self.command(['pactl',*map(str,args)])
     def snapshot(self):
         return dict(inputs=json.loads(self.pulse('-f','json','list','sink-inputs')),
                     sinks=json.loads(self.pulse('-f','json','list','sinks')),
                     clients=json.loads(self.pulse('-f','json','list','clients')),
-                    modules=json.loads(self.pulse('-f','json','list','modules')),
+                    modules=parse_modules_short(self.pulse('list','short','modules')),
                     defaults=[self.pulse('get-default-sink'),self.pulse('get-default-source')])
     def verify_vm(self,identity):
         cid=identity['cid'];i=identity['identity']

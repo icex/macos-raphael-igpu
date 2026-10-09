@@ -103,3 +103,32 @@ class AudioAnalysisTests(unittest.TestCase):
     def test_swapped_leaking_silent_or_noisy_capture_fails(self):
         for kind in ['swapped','leak','silent','noise']:
             with self.subTest(kind=kind),self.assertRaises(RuntimeError):tool.analyze(self.fixture(kind))
+
+
+class ModuleInventoryTests(unittest.TestCase):
+    def test_realistic_multiline_and_empty_arguments(self):
+        value='1\tlibpipewire-module-rt\t{\n nice.level = -11\n\t}\t\n536870912\tmodule-always-sink\t\t\n'
+        self.assertEqual(tool.parse_modules_short(value),[
+            dict(index=1,name='libpipewire-module-rt',argument='{\n nice.level = -11\n\t}'),
+            dict(index=536870912,name='module-always-sink',argument='')])
+    def test_owned_module_id_is_not_position_or_object_id(self):
+        self.assertEqual(tool.parse_modules_short('536870919\tmodule-null-sink\tsink_name=rgpu_audio_abc format=s16le\t0')[0]['index'],536870919)
+    def test_same_name_distinct_id_is_preserved_for_ownership_checks(self):
+        rows=tool.parse_modules_short('12\tmodule-null-sink\tsink_name=x\t\n13\tmodule-null-sink\tsink_name=x\t')
+        with self.assertRaisesRegex(RuntimeError,'ambiguous'):
+            tool.unique(rows,lambda m:m['argument']=='sink_name=x','owned module')
+    def test_malformed_and_duplicate_refuse(self):
+        for value in ('x\tmodule-null-sink\t\t','1\tmodule-null-sink\t',
+                      '1\tmodule-null-sink\t\t\n1\tmodule-null-sink\t\t',
+                      '4294967296\tmodule-null-sink\t\t',
+                      '1\tmodule-null-sink\t\tbad',
+                      '1\tmodule-null-sink\t{\n2\tmodule-fake\tx\t\n}\t'):
+            with self.subTest(value=value),self.assertRaises(RuntimeError):tool.parse_modules_short(value)
+    def test_backend_uses_short_inventory_with_trailing_tabs(self):
+        class ReadOnly(tool.Backend):
+            def command(self,args):
+                if args==['pactl','list','short','modules']:return '9\tmodule-null-sink\tsink_name=x\t'
+                if args[1:3]==['-f','json']:return '[]'
+                if args[1] in ('get-default-sink','get-default-source'):return 'default'
+                raise AssertionError(args)
+        self.assertEqual(ReadOnly().snapshot()['modules'][0]['index'],9)
