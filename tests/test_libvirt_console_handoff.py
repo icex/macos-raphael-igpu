@@ -72,11 +72,12 @@ class RefreshAdmissionTests(unittest.TestCase):
     def test_snapshot_admission_exact_profile_and_no_side_effect_on_refusal(self):
         base=dict(VM_MANAGER='libvirt',VM_CONSOLE='bochs-spice',GENERIC_GRAPHICS='off',
                   CONSOLE_REFRESH='60',CONSOLE_FULL_REFRESH='on',CONSOLE_SNAPSHOT='on')
-        cases=[({},True),({'CONSOLE_SNAPSHOT':'restart'},True),({'CONSOLE_SNAPSHOT':'restart-timing'},True),({'CONSOLE_SNAPSHOT':'off'},True),({'CONSOLE_SNAPSHOT':True},False),
+        cases=[({},True),({'CONSOLE_SNAPSHOT':'restart'},True),({'CONSOLE_SNAPSHOT':'restart-timing'},True),({'CONSOLE_SNAPSHOT':'restart-timing-pool'},True),({'CONSOLE_SNAPSHOT':'off'},True),({'CONSOLE_SNAPSHOT':True},False),
                ({'VM_CONSOLE':'bochs'},False),({'GENERIC_GRAPHICS':'on'},False),
                ({'CONSOLE_FULL_REFRESH':'off'},False),({'CONSOLE_REFRESH':'default'},False)]
         cases += [(dict(change,CONSOLE_SNAPSHOT='restart'),ok) for change,ok in cases if 'CONSOLE_SNAPSHOT' not in change]
         cases += [(dict(change,CONSOLE_SNAPSHOT='restart-timing'),ok) for change,ok in cases if 'CONSOLE_SNAPSHOT' not in change]
+        cases += [(dict(change,CONSOLE_SNAPSHOT='restart-timing-pool'),ok) for change,ok in cases if 'CONSOLE_SNAPSHOT' not in change]
         for change,ok in cases:
             with self.subTest(change=change),tempfile.TemporaryDirectory() as tmp:
                 manifest=dict(run_id='a'*32,boot_id='boot',image_id='image',max_seconds=120,

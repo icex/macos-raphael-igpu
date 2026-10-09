@@ -1,9 +1,10 @@
-# Candidate402 private backing pool draft
+# Candidate402 private backing pool experiment
 
-Unbuilt/unqualified implementation for review, after candidate399's host timing
-extension. Default-off `x-debug-snapshot-pool`; requires snapshot support and
+Software-qualified implementation for a bounded native experiment, after
+candidate399's host timing extension. Default-off `x-debug-snapshot-pool`; requires snapshot support and
 CONFIG_PIXMAN. No guest ABI, BAR, epoch, copy/ACK order, migration behavior or
-presenter identity change. No harness allowance or new runtime image yet.
+presenter identity change. The exact optional harness profile is `restart-timing-pool`; all historical
+profiles remain unchanged.
 
 The extension replaces only the fresh-surface allocation choice when opted in.
 It obtains a new Pixman wrapper over one of three32MiB private RAM blocks; each
@@ -30,28 +31,25 @@ Geometry changes create new wrappers with exact packed width*4 stride over the
 same capacity; full active payload copy precedes publication. Old wrappers remain
 immutable until final reference release, even across RETIRE/ARM epochs.
 
-Software tests are drafted, not run yet: production header extracted from the
-patch, linked to actual GLib/Pixman, exercises retained image references, capacity
-exhaustion, odd geometry reuse, pixel preservation, closed-pool refusal, delayed
-final unref on another thread after device-owner close, and idle cleanup. They
-qualify the backing/reference policy, not an actual QEMU DisplaySurface teardown
-or arbitrary listeners. The existing actual device oracle gains `--pool` for
-full-pixel restart, stale epochs, writes after ACK, pending retirement, geometry
-and migration controls plus missing-prerequisite refusal. A separate native/QEMU
-unrealize test and actual surface-wrapper retention proof remain required before
-claiming full teardown qualification. No host timing improvement is yet measured.
+Software qualification now passes: actual production header linked to GLib/Pixman,
+retained references, capacity exhaustion, odd geometry reuse, pixel preservation,
+closed-pool refusal, delayed final unref on another thread, allocation failure and
+counter saturation. The actual image QMP/qtest oracle verifies full pixels after
+ACK overwrites and stale epochs, pending retirement, geometry changes and migration
+refusal. It also unrealizes the real device with one published front surface and a
+second pending snapshot. This does not simulate every possible display listener.
+No native host timing improvement is yet measured.
 
 Source premise and external-FD caveat are pinned in
 `console-snapshot-recycling-design-20261010.md` and its source manifest. Unlike
 recycling ordinary memfd images, pooled private RAM has no exported handle whose
 lifetime could escape in-process image-reference tracking.
 
-The additional bounded `tests/console_snapshot_pool_surface.py` witness is also
-prepared, not executed. It validates source hashes, extracts the exact pinned
-QEMU surface create/free and Pixman-unref wrappers, and runs an ASan/UBSan case
-retaining a listener image across actual wrapper destruction and pool-owner close.
-Only trace calls are stubbed; its scope is the non-GL Linux wrapper/reference
-path, not full QEMU device-unrealize or external-FD consumers.
+The source-pinned `tests/console_snapshot_pool_surface.py` witness passes under
+ASan/UBSan. It extracts the exact QEMU surface create/free and Pixman unref wrappers,
+retains an extra image reference across wrapper destruction and pool-owner close,
+and verifies every payload byte before final release. Only trace calls are stubbed;
+its scope is the non-GL Linux wrapper/reference path, not external FD consumers.
 
 ## Reviewed implementation checks and bounded counters
 
@@ -77,3 +75,24 @@ if close overlaps an in-flight allocation.
 
 Tests check real outcome counts, deterministic backing-allocation failure with
 reservation rollback, and saturation, in addition to lifetime/pixel/cap controls.
+
+## Exact runtime results
+
+The isolated runtime image is
+`sha256:6d91e1ff4192f9c0fe693a171a2a2bbdb7b9d2a96b184e17a38776a2119c2bfa`;
+QEMU executable SHA256 is
+`d492aea82778470aff201ffeeb8ab45977192e721e8a100e444253f6bff24164`.
+All 182 runtime dependency hashes match candidate399. The eight ordered patches,
+archive and build script are pinned in `run/c402-qemu-runtime/inputs.json`.
+Default pool-off restart, legacy, host-timing, and pool-on restart oracles pass.
+The pool window records seven attempts, three created backing blocks, four reused
+leases, seven successes, zero fallbacks, three slots and 100663296 bytes.
+Forced capacity and allocation fallbacks are qualified by production-header tests;
+this short actual-device run did not force a fallback. No per-frame telemetry.
+
+The exact no-Pixman Bochs translation unit also compiles in a separate configured
+build; this is not a linked no-Pixman runtime test. The initially incorrect Ninja
+target name and its failure remain preserved beside the successful correct target.
+All software containers exited and were removed; no physical devices were exposed.
+Artifact hashes and explicit scopes are retained in
+`console-snapshot-pool-software-evidence-20261010.json`.

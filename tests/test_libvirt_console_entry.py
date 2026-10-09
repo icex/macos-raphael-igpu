@@ -71,12 +71,12 @@ class RefreshPlanBindingTests(unittest.TestCase):
                 with self.assertRaises(ValueError):mod.validate_plan_refresh(plan,admission)
 
     def test_snapshot_binds_both_directions_and_historical_default(self):
-        for setting in ('on','restart','restart-timing'):
-            suffix=(',x-debug-snapshot-restart=on' if setting in ('restart','restart-timing') else '') + (',x-debug-snapshot-timing=on' if setting=='restart-timing' else '')
+        for setting in ('on','restart','restart-timing','restart-timing-pool'):
+            suffix=(',x-debug-snapshot-restart=on' if setting in ('restart','restart-timing','restart-timing-pool') else '') + (',x-debug-snapshot-timing=on' if setting in ('restart-timing','restart-timing-pool') else '') + (',x-debug-snapshot-pool=on' if setting=='restart-timing-pool' else '')
             plan=self.plan('60');plan['native_argv'][-1]+=',x-debug-full-refresh=on,x-debug-snapshot=on'+suffix
             admitted={'console_refresh':'60','console_full_refresh':'on','console_snapshot':setting}
             mod.validate_plan_refresh(plan,admitted)
-            for value in ('off',None,True,'on' if setting in ('restart','restart-timing') else 'restart'):
+            for value in ('off',None,True,'on' if setting in ('restart','restart-timing','restart-timing-pool') else 'restart'):
                 bad=dict(admitted,console_snapshot=value)
                 with self.assertRaises(ValueError):mod.validate_plan_refresh(plan,bad)
             bare=self.plan('60');bare['native_argv'][-1]+=',x-debug-full-refresh=on'

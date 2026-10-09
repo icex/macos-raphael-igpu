@@ -1,0 +1,73 @@
+{
+  "schema": 1,
+  "scope": "Isolated software TCG/qtest, no KVM, GPU, guest disks or native qualification",
+  "image": "sha256:6d91e1ff4192f9c0fe693a171a2a2bbdb7b9d2a96b184e17a38776a2119c2bfa",
+  "binary_sha256": "d492aea82778470aff201ffeeb8ab45977192e721e8a100e444253f6bff24164",
+  "runtime_build_source_commit": "ae7c31a16807969f9c66e69c4ad3dcc4d6f96722",
+  "unchanged_dependency_count": 182,
+  "cases": {
+    "restart": {
+      "passed": true,
+      "full_pixel_checks": 15,
+      "qemu_exit_code": 0,
+      "pool_rows": [],
+      "unrealized_with_front_and_pending": false
+    },
+    "legacy": {
+      "passed": true,
+      "full_pixel_checks": 11,
+      "qemu_exit_code": 0,
+      "pool_rows": [],
+      "unrealized_with_front_and_pending": false
+    },
+    "timing": {
+      "passed": true,
+      "full_pixel_checks": 15,
+      "qemu_exit_code": 0,
+      "pool_rows": [],
+      "unrealized_with_front_and_pending": false
+    },
+    "pool": {
+      "passed": true,
+      "full_pixel_checks": 16,
+      "qemu_exit_code": 0,
+      "pool_rows": [
+        "bochs-snapshot-pool window=1 end_us=96266351865 attempts=7 created=3 reused=4 success=7 fallback=0 allocation_failed=0 capacity_failed=0 closed_failed=0 invalid_failed=0 slots=3 bytes=100663296 saturated=0"
+      ],
+      "unrealized_with_front_and_pending": true
+    }
+  },
+  "artifacts": {
+    "/home/bogdan/macos-vm/run/c402-qemu-runtime/inputs.json": "06cf1ac08440b8a3b0e2c169d81955db02506fdacad6fb6037817f151e21e8fe",
+    "/home/bogdan/macos-vm/run/c402-qemu-runtime/build.sh": "2335ae3780f4f2ea5837b54de71ea7c8e2825048f94b458f7fa47a07333bf8a8",
+    "/home/bogdan/macos-vm/run/c402-qemu-runtime/build.log": "f1e599f0f546bbc4d48a7ed9ab0817e2acabe52a08cdcb228d6d0cb8d235de6d",
+    "/home/bogdan/macos-vm/run/c402-qemu-runtime/Dockerfile": "702c2ef31d5cad8f9e69f7c55d614f63e686343462aa6847b7f7716eebd9aed9",
+    "/home/bogdan/macos-vm/run/c402-qemu-runtime/image-inspect.json": "bfbc54c59387bf80618367fe2cdde957ad6de5bab96fdec03111931496b2cc65",
+    "/home/bogdan/macos-vm/run/c402-qemu-runtime/image-build.log": "43c2485a940af95f4be84c55c7999f381319cf2ef5abff120cf33dd98040c673",
+    "/home/bogdan/macos-vm/run/c402-qemu-runtime/build-cleanup.json": "397210ce434ecb8efd688868798e76d0b288da99f75cb55e486890b813d7322b",
+    "/home/bogdan/macos-vm/run/c402-qemu-runtime/nopixman-build.log": "6a40e51719cf852b29dad074440ac6284ac08de9031757bae61d88bda994c934",
+    "/home/bogdan/macos-vm/run/c402-qemu-runtime/nopixman-object.log": "f374143e85005d830250b1435093ef361075ecc5ae71c7c29d142e61b5ace8ad",
+    "/home/bogdan/macos-vm/run/c402-qemu-runtime/nopixman-object.sh": "d2aea4fffa5dbeec51e69207636c0c89f1df62d69c87a1172cec1deebcb5309d",
+    "/home/bogdan/macos-vm/run/c402-qemu-runtime/nopixman-cleanup.json": "9e5f8656bf2626e580ebaf90c716c7616907a53d84f87b06e311ea349906e16e",
+    "/home/bogdan/macos-vm/run/c402-image-validation/metadata.json": "71b3c079e662716ef80d7c752ed5ac815e05ec06cbc9b25cca3418f3ef8a0898",
+    "/home/bogdan/macos-vm/run/c402-image-validation/run.py": "ab36be4d067fc03d9c25249bd6dbb3f62ffa678c523d610143b080994889dbd8",
+    "/home/bogdan/macos-vm/run/c402-image-validation/check.py": "896682ac6bda3cae7becb2aaabf9c9b9068c68ccb85eba15c4a12a16e4f52c97",
+    "/home/bogdan/macos-vm/run/c402-image-validation/docker-argv.json": "0266beb0944122c71a93d087681b3ce82f36ad6731675b5db3753d7b6b3a837c",
+    "/home/bogdan/macos-vm/run/c402-image-validation/cleanup.json": "c9a6b8f60a386541ce40bedaf8a5a6d8543361d7784813c44eaaad46122b2252",
+    "/home/bogdan/macos-vm/run/c402-image-validation/ordinary.json": "5d6c095ffbeae7f0176e17f06b29d1cd9af76527e878cfcb99bafd0d6b5736b1",
+    "/home/bogdan/macos-vm/run/c402-image-validation/restart/result.json": "ccf881a515f70ee2c74aa8542cab801838c865802dea894bfb5f2de26685a0d7",
+    "/home/bogdan/macos-vm/run/c402-image-validation/legacy/result.json": "e833f098d1d6ca20494b71c7fa467d8f11f2e857f77b17fc5a0d843f5ee2cbc0",
+    "/home/bogdan/macos-vm/run/c402-image-validation/timing/result.json": "37421a04e4d81a40524e50f6183202394219f2cd1addcabdbd172fb20d3e6015",
+    "/home/bogdan/macos-vm/run/c402-image-validation/pool/result.json": "b97547299e5cbd4fbd1167fd2f69732e537bde8c1d7e5376949ec3d1534e8377",
+    "/home/bogdan/macos-vm/run/c402-surface-lifetime-stats/result.json": "c0241ead1ddccc52bb7bcd649c0ffe72af6e09a5b9c3355e6bd3d5fbab4539da"
+  },
+  "no_pixman_scope": "Actual configure --disable-pixman --disable-spice --disable-vnc and bochs-display translation unit compiled; not full linked no-Pixman runtime. Initial wrong libcommon target rejected and retained; correct libsystem target passed.",
+  "delayed_reference_scope": "Exact source-pinned DisplaySurface wrappers with ASan/UBSan and retained Pixman reference after pool owner close. Not an external display listener integration test.",
+  "cleanup": {
+    "cid": "e8757f81918509a948f6dfc76385ae5ac1c29e1137891d6357118f0b94ce4b92",
+    "image": "sha256:6d91e1ff4192f9c0fe693a171a2a2bbdb7b9d2a96b184e17a38776a2119c2bfa",
+    "forced_stop": false,
+    "exit_code": 0,
+    "removed": true
+  }
+}

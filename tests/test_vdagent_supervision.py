@@ -34,7 +34,7 @@ class VdagentSupervisionTests(unittest.TestCase):
                         return ''
                     raise AssertionError('unexpected external command: ' + argv[0])
 
-                env = {'GENERIC_GRAPHICS': 'off', 'CONSOLE_SNAPSHOT': 'restart-timing',
+                env = {'GENERIC_GRAPHICS': 'off', 'CONSOLE_SNAPSHOT': 'restart-timing-pool',
                        'EXTRA': 'must-not-forward', 'GPU': 'must-not-forward'}
                 if value is not None:
                     env['CONSOLE_VDAGENT'] = value
@@ -62,7 +62,7 @@ class VdagentSupervisionTests(unittest.TestCase):
                         key, setting = arg[len('--setenv='):].split('=', 1)
                         managed_env[key] = setting
                 self.assertEqual(managed_env['CONSOLE_VDAGENT'], value or '')
-                self.assertIn('--setenv=CONSOLE_SNAPSHOT=restart-timing', command)
+                self.assertIn('--setenv=CONSOLE_SNAPSHOT=restart-timing-pool', command)
                 for key in ('GPU', 'GPU_ID', 'GPU_ROM', 'GPU_SUB', 'EXTRA'):
                     self.assertIn('--setenv=' + key + '=', command)
                 self.assertIn('--property=RuntimeMaxSec=180s', command)

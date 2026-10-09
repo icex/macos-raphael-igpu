@@ -78,7 +78,8 @@ def build_plan(argv, run_id):
     require(len(bochs) == 1 and bochs[0] in (BOCHS, BOCHS+',x-debug-full-refresh=on',
             BOCHS+',x-debug-full-refresh=on,x-debug-snapshot=on',
             BOCHS+',x-debug-full-refresh=on,x-debug-snapshot=on,x-debug-snapshot-restart=on',
-            BOCHS+',x-debug-full-refresh=on,x-debug-snapshot=on,x-debug-snapshot-restart=on,x-debug-snapshot-timing=on'),
+            BOCHS+',x-debug-full-refresh=on,x-debug-snapshot=on,x-debug-snapshot-restart=on,x-debug-snapshot-timing=on',
+            BOCHS+',x-debug-full-refresh=on,x-debug-snapshot=on,x-debug-snapshot-restart=on,x-debug-snapshot-timing=on,x-debug-snapshot-pool=on'),
             'unreviewed Bochs full refresh profile')
     require(bochs[0] == BOCHS or spice.removesuffix(',agent-mouse=off') == SPICE+',max-refresh-rate=60',
             'full refresh requires explicit SPICE60')
