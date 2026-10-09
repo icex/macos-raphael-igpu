@@ -33,6 +33,11 @@ review. Old files and transaction results remain in the printed staging director
 These multiple paths are not a globally atomic update. Other programs do not honor
 the installer lock; external launch/edit races remain a limit. No TCC settings are
 written and the agent is not started. Host fault-injection tests cover transaction
-logic; macOS filesystem/signing behavior, clean-user login, second-boot consent,
-input/default-audio and update recovery still need native qualification. Sessions remain bounded to6000seconds. This is an experimental
+logic. Candidate364 additionally passes16 tests in disposable macOS directories,
+actual existing-user build/sign/publication, active refusal and identical reinstall.
+The first changed ad-hoc binary needs ordinary consent renewal; identical reinstall
+retains consent. Desktop/default audio pass; input is not rerun. This does not
+qualify power-loss recovery of the installed app, clean-user login or second-boot
+consent. See [native evidence](../findings/research/console-install-native-20261009.md).
+Sessions remain bounded to6000seconds. This is an experimental
 source package, not an unattended daily-use product.

@@ -1,6 +1,6 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-10-09. Current console audio/input: **1.0.361** (ordinary afplay default USB output and continuous pointer entry into a resized window pass; endpoint audibility, stationary-pointer resize and native pending-worker wait remain open). Performance comparison: **1.0.352 ON / 1.0.353 OFF** (same-image HiDPI delivery and copy-cost improvement; atomic presentation remains open). Physical display baseline: **1.0.330** (correct-color HiDPI120 and HDMI audio confirmed); prior streaming baseline: **1.0.284**; broader baseline: **1.0.280**. Full desktop acceleration
+Updated 2026-10-09. Current installation/lifecycle: **1.0.364** (existing-user package/reinstall and one native bounded shutdown-wait pass; clean-user and second-boot qualification open). Console audio/input: **1.0.361** (ordinary afplay default USB output and continuous pointer entry into a resized window pass; endpoint audibility, stationary-pointer resize remain open). Performance comparison: **1.0.352 ON / 1.0.353 OFF** (same-image HiDPI delivery and copy-cost improvement; atomic presentation remains open). Physical display baseline: **1.0.330** (correct-color HiDPI120 and HDMI audio confirmed); prior streaming baseline: **1.0.284**; broader baseline: **1.0.280**. Full desktop acceleration
 is **not qualified**. The reproduced Screen Sharing transparency defect is fixed
 in candidate279 and retained in280. Candidate280 also passes strict capture and
 clean recovery after visual, concurrent-client and codec workloads. The patched-QEMU
@@ -20,14 +20,14 @@ regression and macOS source-build jobs remain required; see [CI setup](releases.
 
 | Milestone | State | Evidence and remaining work |
 |---|---|---|
-| M0 — Experiment identity and supervision | Implemented; maintained | Immutable manifests, loaded-build checks, capture, deadlines and cleanup. Fixed cycle image selection so preparation and admission use the same pinned emulator. Pre356 host suite: 1224 tests, OK (8 skipped); staging suite: 87 pass. |
+| M0 — Experiment identity and supervision | Implemented; maintained | Immutable manifests, loaded-build checks, capture, deadlines and cleanup. Fixed cycle image selection so preparation and admission use the same pinned emulator. Pre364 host suite: 1262 tests, OK (8 skipped); staging suite: 88 pass. |
 | M1 — Controlled starting state | Demonstrated for current workflow | One-way amdgpu→vfio-pci handoff, power/control=on, fresh MODE2 and clean-state receipts. Broad independent-host-boot qualification remains open. |
 | M2 — Native startup failure localization | Completed for original blocker | False second SDMA instance and subsequent channel routing were traced; historical evidence retained. |
 | M3 — Native engine startup repair | Demonstrated | Raphael topology/address adaptations reach native startup and completed Metal work. Preserve these fixes while diagnosing desktop rendering. |
 | M4 — First correct Metal compute | Achieved | Candidate 194 checked 196,608 values and 4,096 rendered pixels; its overall capture remained inconclusive. Current280 desktop Metal baselines complete with verified device/build identity. |
 | M5 — Rendering, memory and synchronization | Partial | Managed-texture copy correction retained; private/managed/IOSurface and multiple-format readback probes pass. Candidate280 passes48 BGRA8 feedback cases across four distinct-seed processes, including two concurrent clients. 32 measured buffer-reclamation rounds return process-local allocation to baseline with134,217,728 correct values. 144 texture recreation cases and32 cross-queue GPU-event rounds pass. Global VRAM/GART counters return near baseline after exit; GPU VA and long-duration qualification remain open. |
 | M6 — Desktop and physical display | Visual fix verified; broader qualification open | Candidate279 fixes the reproduced feedback corruption. Fresh pixel checks, user observation and unobstructed native RFB captures on280 pass; longer desktop qualification remains. Candidate321 gives a full HiDPI60 picture;322 fixes native1080p interleaving. User confirms60Hz and reports120Hz appears to work; HDMI audio works (323);330 adds correct-color HiDPI120 and retains audio through tested60↔120 switches. |
-| M7 — Lifecycle and host protection | Partial | Multiple guest-request shutdowns and authorizing recoveries observed on recorded host boots, including eight complete 280 runs with the visual and logging fixes on their recorded September16 host boot. One supervised QEMU closure/recovery/reset/relaunch/clean-shutdown sequence now passes its scoped checks; closure capture remains INVALID. Candidate356 native reset shutdown preserves a genuine controller terminal and recovery; its pending-worker wait remains native-unexercised. Fresh-host-boot, guest-panic and repeated lifecycle qualification remain open. |
+| M7 — Lifecycle and host protection | Partial | Multiple guest-request shutdowns and authorizing recoveries observed on recorded host boots, including eight complete 280 runs with the visual and logging fixes on their recorded September16 host boot. One supervised QEMU closure/recovery/reset/relaunch/clean-shutdown sequence now passes its scoped checks; closure capture remains INVALID. Candidate356 native reset shutdown preserves a genuine controller terminal and recovery; candidate364 subsequently exercises both bounded shutdown-wait hooks before genuine terminal/recovery. Fresh-host-boot, guest-panic and repeated lifecycle qualification remain open. |
 | M8 — Performance and release | Not qualified | Correctness first; no release, Metal3 conformance, game-support or full-desktop claim. The current experimental snapshot is published to main at the user’s request; development continues on dev. Publication does not close acceptance gates. |
 
 ## Blocker revalidation — 2026-09-16
@@ -273,7 +273,9 @@ zombie leader with another task and loses the controller terminal receipt.
 Candidate356 subsequently records a real guest-shutdown/process-exited terminal
 after distinct critical recv-reset104 and console clean EOF, with natural
 container exit and authorizing recovery. Its hooks find the original process
-already reaped: the event-bound pending-worker wait remains native-unexercised.
+already reaped; candidate364 later exercises the bounded event-wait branch in both
+hooks and records natural exit, genuine terminal and recovery. This is one positive
+case, without separately retained initial task IDs.
 Normal and fullscreen input pass; the small-window transition retains two missed
 clicks. Candidate358 then verifies explicit-device USB audio through QEMU into isolated
 Pulse capture, with correct stereo frequency/channel/silence and exact restoration.
@@ -289,6 +291,14 @@ qualify optimized helper installation and clean-user/second-boot behavior.
 [Native358 audio/input result](../findings/research/console-audio-native-20261009.md). Default pins remain stock.
 [Native356 result](../findings/research/libvirt-reset-native-20261009.md).
 [Paired result and limits](../findings/research/bochs-full-refresh-paired-20261009.md).
+
+Candidate364 also verifies existing-user optimized source-package installation,
+strict signing, active-session refusal and identical reinstall. The changed ad-hoc
+app requires normal consent renewal; identical rebuild retains consent. Sixteen
+transaction tests pass in macOS disposable directories, not a power-loss test of
+the installed app. Default audio and visible desktop pass; input is not rerun.
+Fresh-user/second-boot qualification and permission-loss presentation remain open.
+[Installer/lifecycle result](../findings/research/console-install-native-20261009.md).
 
 Host-window resize, repeated crash recovery, independent host boots and broader
 desktop coverage follow. Both host sleep and idle blocking remain required during
