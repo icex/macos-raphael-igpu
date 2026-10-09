@@ -22,6 +22,7 @@ host awake. No reboot/rebind. [Evidence](findings/research/console-audio-native-
 1236 pre-run host tests pass,8skip; staging87 pass. Delivery tree1241 tests pass,
 8skip. Audio inventory parser repair17focused
 checks pass. Checked-in kext/manifest now match exact tested358
-build0594131c7f974cc0bfd5f2e0513961a3; audio delivery review pending.356 lifecycle
+build0594131c7f974cc0bfd5f2e0513961a3; reviewed audio delivery is integrated for
+dev, with its hosted validation pending.356 lifecycle
 milestone is on devc24ff71; hosted37934370047 test/build green. Main unchanged. Broader
 installation durability, desktop/codec/performance and VirtualBox remain open.
