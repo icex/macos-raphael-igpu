@@ -29,7 +29,12 @@ def main():
     cadence=importlib.util.module_from_spec(spec);spec.loader.exec_module(cadence)
     import gi
     gi.require_version('Gtk','3.0');gi.require_version('SpiceClientGtk','3.0')
-    from gi.repository import Gtk,GLib,SpiceClientGtk
+    from gi.repository import Gtk,GLib,Gio,SpiceClientGtk
+    # The manager synchronizes this preference after connecting its channels.
+    # Store it only in this diagnostic's isolated keyfile settings directory.
+    settings=Gio.Settings.new('org.virt-manager.virt-manager.console')
+    if not settings.set_int('resize-guest',1):raise RuntimeError('resize preference refused')
+    Gio.Settings.sync()
     stream=a.output.open('x');began=time.monotonic();control=None;ready_at=None;phase=0;done=False
     sizes=[(1280,720),(1920,1080)]
     def record(**row):
@@ -55,6 +60,7 @@ def main():
                 record(event='request',phase=phase,viewport=sizes[phase])
             if control.display is not display:raise RuntimeError('display replaced')
             if not control.check():return True
+            if control.metadata['resize_guest'] is not True:raise RuntimeError('manager disabled resize-guest')
             if ready_at is None:
                 ready_at=time.monotonic();record(event='viewport-ready',phase=phase,**control.metadata)
             if time.monotonic()-ready_at>=10:
