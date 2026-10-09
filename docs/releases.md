@@ -29,19 +29,20 @@ The runner label is explicitly Intel, as listed in the
 
 ## Checked-in experimental executable
 
-`kext/bin/RaphaelGPU` contains the hardware-tested candidate340 executable
-(QEMU SPICE desktop, native Metal, mouse/keyboard input and native recovery). Its
+`kext/bin/RaphaelGPU` contains the hardware-tested candidate341 executable
+(native virt-manager desktop, Metal, mouse/keyboard input and GPU recovery;
+controller terminal-receipt ordering remains open). Its
 adjacent `build-manifest.json` records the exact source commit, input hashes and
 executable SHA-256. The source tree and `kext/Info.plist` match that driver build;
 subsequent user-space helper changes have separate history. Source builds never
 use this binary as a fallback. The executable alone is not an installable bundle:
 use the matching Info.plist, Lilu and tested VM setup. The matching console card
-is metal-186. [Console setup and scope](virtual-console.md).
+is metal-187. [Console setup and scope](virtual-console.md).
 
 Candidate330 remains the independently tested Samsung HDMI HiDPI120/audio
-baseline, available on `main` at861ba5e. Candidate340's changes are console-specific,
+baseline, available on `main` at861ba5e. Candidate341's changes are console-specific,
 but its physical HDMI behavior has not been independently rerun. Do not relabel
-330's hardware evidence as a340 HDMI test.
+330's hardware evidence as a341 HDMI test.
 
 ## Local build
 

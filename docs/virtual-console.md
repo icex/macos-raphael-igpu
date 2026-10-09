@@ -2,12 +2,13 @@
 
 The requested target is a macOS desktop in the VM manager's console, with Raphael
 Metal rendering and no physical HDMI connection. Screen Sharing/Moonlight alone
-does not meet that target. Candidate336 now presents the accelerated desktop through QEMU's console at
-1920×1080 logical /3840×2160 backing pixels. Native Metal readbacks and
-WindowServer accelerator ownership pass. QEMU-console mouse clicks and keyboard
-input (including Shift) work. This is a scoped QEMU result: sustained frame rate,
-automatic resize, other frontends and VirtualBox are not qualified.
-[Run evidence and limitations](../findings/research/virtual-console-20261008.md).
+does not meet that target. Candidate341 now presents the accelerated desktop inside
+virt-manager at1920×1080 logical/3840×2160 pixels. Native Metal/WindowServer
+ownership, real manager mouse/keyboard input and bridged LAN traffic pass.
+Capture and native GPU recovery pass; a serial EOF/controller terminal-receipt
+race still prevents claiming complete manager lifecycle qualification. Sustained
+frame delivery, automatic resize, other frontends and VirtualBox remain open.
+[Current run evidence](../findings/research/libvirt-native-console-20261009.md).
 Candidate332's unsafe TMR experiment remains withdrawn.
 
 ## Architecture under test
@@ -48,7 +49,8 @@ remain required. No existing hashed design contract is changed.
 ## Hypervisor boundaries
 
 QEMU and libvirt can expose a physical PCI device and a separate console device.
-Their configuration support is not yet a tested macOS lifecycle result.
+Candidate341 tests native accelerated macOS through virt-manager; controller exit
+ordering still needs repair and a complete terminal receipt.
 VirtualBox7.2.18 is installed on this host, but upstream removed Linux PCI
 passthrough in6.1; its normal macOS virtual display is not a Raphael GPU.
 Supporting VirtualBox would require a different GPU transport/driver or restoring
@@ -180,10 +182,26 @@ the established guarded path or refuse. See
 [driver evidence](../findings/research/console-empty-firmware-20261009.md) and
 [input/capture artifact hashes](../findings/research/console-spice-native-evidence-20261009.json).
 
-GNOME Boxes rendered independent software-only color patterns through a private
-container-local libvirt session. This does not yet qualify managing the accelerated
-macOS VM through Boxes or virt-manager. Candidate341 now integrates manifest-bound
-launch identity, paused network handoff and the harness resume permit. Real software
-controller tests pass for valid resume/poweroff and rejected identity cleanup.
-The native macOS capture/network/recovery cycle remains unqualified.
-[Handoff evidence](../findings/research/libvirt-entry-handoff-20261009.md).
+## Native virt-manager result (October9)
+
+Candidate341d launches one transient native macOS domain through a private libvirt
+session, paused until the host verifies identity, inherited macvtap and capture
+readiness. The actual virt-manager5.1.0 console renders the accelerated desktop.
+Exact keyboard text and field-local mouse coordinates pass through the manager;
+closing its window leaves the same container/domain running. Domain XML before
+and after connection is identical. LAN packets reach the gateway through en2.
+
+The outer harness records valid capture, guest-request exit and authorizing GPU
+recovery. However, critical serial EOF invokes its container stop guard before
+libvirt persists terminal.json. This remaining ordering race is not a natural
+controller-exit pass. A global capabilities warning also exposes inherited PATH
+shim contamination; candidate342 fixes that discovery in isolated daemon tests.
+GNOME Boxes has only software-pattern evidence and may rewrite imported domains;
+do not substitute that for a native Boxes qualification.
+
+System Information shows two devices: AMD Radeon Navi23 reports2GB and performs
+native Metal work; QEMU's1234:1111 Display reports56MB of presentation framebuffer.
+That56MB is not the renderer's memory limit. System Information's console mode
+metadata can differ from the presenter's measured3840×2160 pixels; neither proves
+refresh-rate delivery. The180-second workload's2,386 iterations are AppKit events,
+not viewer frames. [Evidence and limits](../findings/research/libvirt-native-console-20261009.md).
