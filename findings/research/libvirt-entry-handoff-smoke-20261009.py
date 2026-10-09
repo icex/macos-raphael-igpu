@@ -26,7 +26,10 @@ def plan(argv,run_id):
     old=result['run_id']
     result['xml']=result['xml'].replace(old,run_id).replace('vmxnet3,id=lan,',
         'vmxnet3,id=lan0,mac=52:54:00:12:34:56,')
-    result.update(run_id=run_id,domain_name='rgpu-'+run_id)
+    # Synthetic default-refresh intent for the TCG lifecycle-only fixture.
+    # Its actual XML/device verification remains the separate software profile.
+    result.update(run_id=run_id,domain_name='rgpu-'+run_id,
+                  native_argv=['-spice',entry.native.configuration.planner.SPICE])
     root=ET.fromstring(result['xml'])
     ET.SubElement(ET.SubElement(root,'features'),'acpi')
     cmd=root.find('{http://libvirt.org/schemas/domain/qemu/1.0}commandline')

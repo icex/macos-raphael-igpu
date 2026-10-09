@@ -87,6 +87,16 @@ class ExitedIdentityTests(unittest.TestCase):
     def test_absent_exact_process_and_bound_receipts_pass(self):self.assertTrue(self.inspect()['exited'])
     def test_live_pinned_process_refuses(self):
         with self.assertRaisesRegex(ValueError,'original-pid-present'):self.inspect(dict(start_ticks=43))
+    def test_exact_completed_zombie_can_finish_bound_exit_proof(self):
+        original=entry.Path.read_text
+        def read(path,*a,**kw):
+            if str(path)=='/proc/42/stat':return '42 (qemu-system-x86) Z 1'
+            return original(path,*a,**kw)
+        with patch.object(entry.Path,'read_text',new=read),patch.object(entry,'completed_original_zombie',return_value=True) as check:
+            result=self.inspect(dict(start_ticks=43))
+        self.assertTrue(result['exited']);self.assertTrue(result['completed_zombie'])
+        self.assertEqual(check.call_count,2)
+
     def test_forged_pid_only_in_running_refuses(self):
         self.running['identity']=dict(self.identity,pid=999);self.save()
         with self.assertRaisesRegex(ValueError,'binding'):self.inspect()
@@ -159,12 +169,12 @@ class EntryRefusalDiagnosticsTests(unittest.TestCase):
     setUp=ExitedIdentityTests.setUp
     save=ExitedIdentityTests.save
     inspect=ExitedIdentityTests.inspect
-    def test_live_zombie_is_still_refused_with_state(self):
+    def test_zombie_without_completed_process_proof_is_refused_with_state(self):
         original=entry.Path.read_text
         def read(path,*a,**kw):
             if str(path)=='/proc/42/stat':return '42 (qemu-system-x86) Z 1'
             return original(path,*a,**kw)
-        with patch.object(entry.Path,'read_text',new=read):
+        with patch.object(entry.Path,'read_text',new=read),patch.object(entry,'completed_original_zombie',return_value=False):
             with self.assertRaises(entry.ExitProofRefusal) as caught:self.inspect(dict(start_ticks=43))
         self.assertEqual(caught.exception.report,dict(stage='original-process',code='original-pid-present',pid=42,state='Z'))
     def test_permission_exception_text_is_never_returned(self):

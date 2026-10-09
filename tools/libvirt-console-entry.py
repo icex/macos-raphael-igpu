@@ -133,6 +133,29 @@ def exit_check(stage,**details):
         raise ExitProofRefusal(stage,code,**details) from None
 
 
+def completed_original_zombie(identity):
+    """Only a stable, exact, sole-thread zombie with no descriptors is complete.
+
+    A zombie group leader alone is insufficient: surviving threads can retain
+    the shared file table and VFIO ownership. Unknown proc visibility refuses.
+    """
+    pid=identity['pid'];root=Path(f'/proc/{pid}')
+    def state():
+        fields=(root/'stat').read_text().rsplit(')',1)[1].split()
+        return int(fields[19]),fields[0]
+    expected=(identity['start_ticks'],'Z')
+    try:
+        if state()!=expected:return False
+        if {p.name for p in (root/'task').iterdir()}!={str(pid)}:return False
+        if any((root/'fd').iterdir()):return False
+        return state()==expected
+    except FileNotFoundError:
+        # Reaping during the check is also completion, but a reused PID is not.
+        try:root.stat()
+        except FileNotFoundError:return True
+        return False
+
+
 def inspect_exited():
     """Read-only proof; refusal diagnostics never expose argv, paths or exception text."""
     with exit_check('admission'):
@@ -162,6 +185,7 @@ def inspect_exited():
                         'exited running/paused/permit binding changed')
     with exit_check('namespace'):
         handoff.require(native.local.namespace_identity()==scope,'exited PID namespace changed')
+    completed_zombie=False
     with exit_check('original-process',pid=identity['pid']):
         current=native.local.process(identity['pid'])
         if current is not None and current['start_ticks']==identity['start_ticks']:
@@ -170,15 +194,22 @@ def inspect_exited():
                 raw=Path(f"/proc/{identity['pid']}/stat").read_text().rsplit(')',1)[1].split()[0]
                 if raw in tuple('RSDTtZXIPKW'):state=raw
             except (OSError,IndexError):pass
-            raise ExitProofRefusal('original-process','original-pid-present',pid=identity['pid'],state=state)
-    # Keep the same conservative scan: any live original/other QEMU or unknown
-    # process visibility still refuses; this change only classifies the refusal.
+            completed_zombie=state=='Z' and completed_original_zombie(identity)
+            if not completed_zombie:
+                raise ExitProofRefusal('original-process','original-pid-present',pid=identity['pid'],state=state)
+    # Only the exact completed zombie can be skipped. Other QEMU processes and
+    # unknown visibility retain immediate refusal.
     with exit_check('proc-list'):
         paths=list(Path('/proc').iterdir())
     for path in paths:
         if not path.name.isdigit():continue
         pid=int(path.name)
         try:
+            if completed_zombie and pid==identity['pid']:
+                with exit_check('original-process',pid=pid):
+                    if not completed_original_zombie(identity):
+                        raise ExitProofRefusal('original-process','original-pid-present',pid=pid,state='Z')
+                continue
             with exit_check('proc-scan',pid=pid,operation='comm'):
                 comm=(path/'comm').read_text().strip()
             if comm.startswith('qemu-system'):
@@ -190,7 +221,11 @@ def inspect_exited():
             if executable.startswith('qemu-system'):
                 raise ExitProofRefusal('proc-scan','other-qemu',pid=pid)
         except FileNotFoundError:continue
-    return dict(exited=True,run_id=admission['run_id'],admission_sha256=expected,
+    if completed_zombie:
+        with exit_check('original-process',pid=identity['pid']):
+            if not completed_original_zombie(identity):
+                raise ExitProofRefusal('original-process','original-pid-present',pid=identity['pid'],state='Z')
+    return dict(exited=True,completed_zombie=completed_zombie,run_id=admission['run_id'],admission_sha256=expected,
                 identity=identity,scope=scope,plan_sha256=paused['plan_sha256'],
                 cid=permit['cid'],started_at=permit['started_at'],
                 deadline_epoch=admission['deadline_epoch'])

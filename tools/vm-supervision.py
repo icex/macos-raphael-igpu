@@ -231,6 +231,7 @@ def capture_exit(vm,cid,started_at,deadline,run_id,admission_digest):
             raise RuntimeError('capture exit proof mismatch')
         until=min(until,time.monotonic()+observed['deadline_epoch']-time.time())
         result['deferred']=True
+        result['completed_original_zombie']=observed.get('completed_zombie') is True
         stage='exit-wait'
         while time.monotonic()<until and time.time()<deadline:
             if not running():result['outcome']='natural-container-exit';return result

@@ -1,0 +1,47 @@
+{
+  "scope": "Software process/lifecycle proof only; native347 not launched",
+  "kernel_reference_commit": "238650ef6c7c7cca08e032527329424c9fbd70e5",
+  "running_host_kernel": "7.2.5-1-cachyos-bore",
+  "files": [
+    {
+      "path": "/home/bogdan/macos-vm/run/c347-linux-exit.c",
+      "sha256": "9bcdeeebc4cbb80873677140f007f343baa4340e90ae6b46921b36e20ce6d802"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c347-zombie-tests.log",
+      "sha256": "cf0917b0e658d1423cb749717aee5187c945668fb0266a7ca8bc7a02bf70407b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c347-capture-exit-smoke.log",
+      "sha256": "cb481f825fdb3e8468086c9a8382d6da26979f23b813cc324e58a7c452141c37"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c342-capture-exit-2edb8dba/result.json",
+      "sha256": "68f4e0c1f85c64001772f973b6f571e47354bf5a0309110aa23fc00912388b1b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c347-zombie-qemu-1032f320/argv.json",
+      "sha256": "429fc44ddb19a1ea103d5f9c0586cf2adcf2405fcaff97ad8fe9f8e5c722f89a"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c347-zombie-qemu-1032f320/qemu.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c347-zombie-qemu-1032f320/result.json",
+      "sha256": "020e1d140c6b1804a04b265e4f28fdafc1c2276385b4aeeafacf6020d37ca7eb"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c347-zombie-qemu-1032f320/stdout.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c347-zombie-qemu-1032f320/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c347-zombie-qemu-1032f320/container.json",
+      "sha256": "65a24d3c8f65c517b484419f5c88f18e1c2b5f3655b5446f15741c1a07ee28b8"
+    }
+  ]
+}
