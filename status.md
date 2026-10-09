@@ -43,11 +43,21 @@ c392-stationary-{base,fixed}-{libraries.json,manager-events.jsonl,final.txt};
 c392-audio-result.txt; c392-audio-restored-independent.json; c392-final-state.txt;
 c392-post-input-desktop.png; c392-viewer-close-alive.json; c392-docker-events.jsonl.
 The candidate 393 integration worktree contains current docs, the isolated client
-patch, and hashed native reports. Full pre-run suite: 1,442 tests, 8 skipped, OK.
-Published dev remains c8fc5d5 with hosted test/build green (37975249900); main unchanged.
+patch, and hashed native reports. Full integration suite: 1,449 tests, 8 skipped,
+OK (54.621 seconds); run/candidate-393-host-tests.log.
+The integration includes the exact tested 392 binary in kext/bin. Hosted CI for
+this delivery is pending; previously published dev c8fc5d5 passed test/build
+(37975249900). Main remains unchanged.
 
-Next: correct shutdown outcome reconciliation without relaxing capture aborts;
-deliver current docs and the exact tested 392 binary to dev, then verify hosted CI.
+Shutdown reporting now reconciles the temporal exit observation with bound capture
+and private completion receipts after cleanup. Archived 390 remains a verified
+private guest completion even after Docker removes the container; archived 392
+reports capture-abort-after-request. This fixes reporting, not the underlying
+capture-exit race. Original artifacts remain unchanged; abort timing and recovery
+gates are unchanged. Replay: run/c393-shutdown-reconciliation-replay.json.
+
+Next: deliver current docs, reporting fix and exact tested 392 binary to dev,
+then verify hosted CI.
 Qualify installed immutable capture and implement restart-safe ownership before
 claiming atomic production output. Sustained 60 Hz/full-frame integrity, broader
 crash/independent-host-boot coverage, first-user setup and portability remain open.
