@@ -3872,6 +3872,8 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
     (output/'events.jsonl').write_text(''.join(json.dumps(e)+'\n' for e in events))
     if probe is not None and not (output/'probe.json').exists():
         write_once(output/'probe.json', probe)
+    if state:
+        shutdown_result = guest_shutdown.reconcile_exit(vm, state, shutdown_result)
     write_once(output/'shutdown.json', shutdown_result)
     write_once(output/'host-after.json', host_snapshot())
     write_once(output/'host-kernel-messages.json', host_messages)

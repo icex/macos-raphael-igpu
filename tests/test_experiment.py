@@ -2647,7 +2647,8 @@ class ExperimentTests(unittest.TestCase):
                     'ManagedStopUnconfirmed',(RuntimeError,),{}),
                 stop_exact=lambda cid:None)
             shutdown = SimpleNamespace(shutdown=lambda *args, **kwargs:{
-                'cid':'c'*64, 'outcome':'forced'})
+                'cid':'c'*64, 'outcome':'forced'},
+                reconcile_exit=lambda vm, state, result: result)
             original_helper = tool.helper
             def helpers(name):
                 return {
@@ -3676,7 +3677,7 @@ class ExperimentTests(unittest.TestCase):
             globals_lease_evidence = lease_evidence
             recovery = SimpleNamespace(
                 recover=recover, parse_v2_lease_records=parse_v2_lease_records)
-            guest_shutdown = SimpleNamespace(shutdown=shutdown)
+            guest_shutdown = SimpleNamespace(shutdown=shutdown, reconcile_exit=lambda vm, state, result: result)
             original_helper = tool.helper
 
             def helpers(name):
@@ -3865,7 +3866,7 @@ class ExperimentTests(unittest.TestCase):
             supervisor = SimpleNamespace(start_locked=start, verify=verify,
                 ManagedStopUnconfirmed=StopUnconfirmed,
                 stop_exact=lambda cid:calls.append(('stop',cid)))
-            guest_shutdown = SimpleNamespace(shutdown=shutdown)
+            guest_shutdown = SimpleNamespace(shutdown=shutdown, reconcile_exit=lambda vm, state, result: result)
             lease_evidence = object()
             def parse_v2_lease_records(records, prior):
                 calls.append(('parse-v2', prior, tuple(records)))
