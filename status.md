@@ -1,54 +1,55 @@
 # Live status — 2026-10-09
 
-## Candidate390: installed native-scale console resize and 4K selection work
+## Candidate 392: persistent native-scale console; resize-click fix verified
 
-Run `3d0e4869c7f1c49af50497f440996a5b`, metal215,1.0.390,MODE2#311,
-bootba51b3c6. Sourcee147551,launch07d79d0,buildc1591507f28f48e7a42b8ce3e92f6c51;
-executable7bbd044587498bae26e1daf182a36c9d2147ddfb59c99e9108dd80128d48dad9.
-External support adds fixed per-holder1x/2x preference and EOF-framed v2 control.
-Initial1x4K selection failed because public mode enumeration filtered modes larger
-than the first/native entry. Read-only raw inventory and decoded SkyLight support
-this diagnosis. Installed support from3914826f69 orders the existing largest mode
-first; public3840x2160 physical/logical selection and startup now pass. No private
-mode mutation ran. Final payload5ed647ae17f902d25daf30021a29b50e64e2f27660dc85d8d84c668dd3697633;
-holder2970,agent3023,presenter3024. Capture app/receipt/signature unchanged.
+Run `e068279ba75991d9c288c0d141103dda`, metal-216, version 1.0.392, MODE2 #312,
+host boot `ba51b3c6-9420-4510-af69-38a42b3c79c7`. Build source `743ee57`, launch
+`9cdc4bb`, build ID `ee4fdfb5aa6045e9bb6b83c1ea6756a3`; executable SHA256
+`45266d3217ce755cdc61a3d3a19784a9f0377cdb6da57e39718cfe74812def34`.
 
-Actual manager automatic1x viewports1235x743,1237x745,1441x961,1235x743 settle to
-matching surfaces. Five-target input/exactkeyboardtoken passes with0misses and
-0geometrychanges. Stereo48kHz997/1498 sample capture and independent route/volume/
-mute/defaults/module restoration pass. Endpoint audibility/A-Vsync unqualified.
-Fragmented v2 request passes; malformed suffix,no-EOF and policy mismatch controls
-refuse without mode mutation. Owned2x restart supports legacy2000x1000 physical /
-1000x500 logical; odd2x client refusal and mismatched1x status2 preservegeometry.
-Owned1x restart restores4Kstartup. Preference preserved across support reinstall;
-freshguestboot persistence of this newpolicy remains next.
+A fresh guest boot retains installed scale 1 and selects 3840×2160 physical/logical
+without rewriting preferences, reinstalling helpers, changing the sealed capture
+app or requesting new consent. Payload `5ed647ae17f902d25daf30021a29b50e64e2f27660dc85d8d84c668dd3697633`;
+holder 643, resize agent 710, presenter 711 remain unchanged through viewer tests.
+Ordinary presenter; experimental immutable-snapshot lease remains unarmed.
+Guest display awake assertions hold. Default stereo sample delivery and independent
+audio route/volume/mute/defaults/module restoration pass; endpoint audibility and
+A/V synchronization remain unqualified.
 
-Ordinary presenter,snapshotUNARMED:110s mixedsource completes6600draws. Actual
-1440x900/GDK1 manager observer completes100.006s,5795distinct+1duplicate valid
-samples,13startupinvalid and0poststartupinvalid. Firstfive localized/fullfield
-phases measure57.9–58.0 distinct intervals/s; final10ssourcephase unobserved.
-Normaldesktop returns and screenshot inspected. This is token sampling, not
-fullframe integrity, universal60Hz, absolute latency or scanout qualification.
+Automatic 1440×900 → 1000×760 resize exposes a stock spice-gtk 0.42 bug: clicking
+without pointer motion delivers stale guest coordinates. One attempt positioned
+too late and was discarded; the controlled retry proves no motion across resize.
+A same-configuration isolated unpatched library reproduces the failure (about
+154×68 pixels wrong). The minimal CLIENT-mode position-before-button patch passes:
+0.892/0.852-pixel axis errors, exactly one click, exact RGPU341 text. Actual loaded
+libraries are pinned through /proc maps and hashes. System libraries are unchanged;
+this qualifies the isolated client patch, not every manager or relative-input mode.
+Normal desktop returns. Closing the owned viewer leaves the exact guest alive.
 
-Guest-requestshutdown passes; private terminalguest-shutdown/process_exitedtrue.
-Docker die0/destroy, no containerkill/stop. Bothcapturehooks natural-container-exit,
-~0.433s,no shutdown-eventwait/zombie;consoleEOF,criticalRST. Terminal-prefix
-snapshot18(367records) accepted, but replay retains1corruptline and incomplete
-snapshot14(896chunks,noend). Recoveryrecovered/authorizes_launch=true. Host remains
-awake,vfio-pci,power/control=on. Serial retains8largeallocationfailures(size60293120,
-free77–81MB,fixedfree1883172864); relationship to tested behavior unlocalized.
-Do not claim error-free capture or driver operation.
+**Shutdown was forced, despite the outer observer's misleading label.** Both
+capture hooks see original QEMU PID 113 still in state R when serial closes and
+invoke immediate-stop. Docker records SIGTERM/SIGKILL, stop, exit 137 and destroy;
+private terminal.json is absent. Original shutdown.json says
+exited-after-guest-request; retain that artifact as a reporting discrepancy, not
+proof of clean shutdown. No capture/host-safety gate was bypassed. Recovery reports
+recovered/authorizes_launch=true. Replay accepts terminal-prefix snapshot 18 with
+383 records, retaining one invalid-chunk line and incomplete snapshot 7 (415 chunks).
+Captured serial has no panic marker or AMD large-allocation failure message; this
+does not resolve candidate 390's rate-limited allocation errors.
 
-Evidence: run/candidate-390-results; c390-v2-four-k.txt; c390-native-framing-results.txt;
-c390-v2-auto-manager-events.jsonl;c390-input-v2-final.txt;c390-v2-audio-result.txt;
-c390-v2-audio-restored-independent.json;c390-scale2-check.txt;c390-scale1-restore.txt;
-c390-matched-1x-analysis.json;c390-matched1x-source.txt;c390-matched1x-presenter.txt;
-c390-post-workload-desktop.png;c390-final-state.txt;c390-final-seal.txt;
-c390-viewer-close-alive.json;c390-docker-events.jsonl. Functional/report manifests
-are in candidate391 and will be merged for delivery. Full pre390suite1442/8skip
-passed. Delivered devc8fc5d5 remains hostedtest/build green(run37975249900),mainunchanged.
+Evidence: run/candidate-392-results; c392-persistence.txt;
+c392-stationary-analysis.json; c392-stationary-ab-analysis.json;
+c392-stationary-{base,fixed}-{libraries.json,manager-events.jsonl,final.txt};
+c392-audio-result.txt; c392-audio-restored-independent.json; c392-final-state.txt;
+c392-post-input-desktop.png; c392-viewer-close-alive.json; c392-docker-events.jsonl.
+The candidate 393 integration worktree contains current docs, the isolated client
+patch, and hashed native reports. Full pre-run suite: 1,442 tests, 8 skipped, OK.
+Published dev remains c8fc5d5 with hosted test/build green (37975249900); main unchanged.
 
-Next:392 freshguestboot installedscale1 persistence/4K, reconnect and stationary
-pointer resize, then milestone docs/testedbinary/hostsuite/dev+exacthostedCI.
-Investigate retainedallocation failures; sustained/fullframe performance,
-crash/forced-stop/independenthostboots and othermanagers/VirtualBox remain open.
+Next: correct shutdown outcome reconciliation without relaxing capture aborts;
+deliver current docs and the exact tested 392 binary to dev, then verify hosted CI.
+Qualify installed immutable capture and implement restart-safe ownership before
+claiming atomic production output. Sustained 60 Hz/full-frame integrity, broader
+crash/independent-host-boot coverage, first-user setup and portability remain open.
+VirtualBox GPU transport is unimplemented. Host keep-awake remains active; GPU
+stays vfio-pci with power/control=on. No new run before this status is committed.
