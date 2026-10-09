@@ -1,0 +1,395 @@
+{
+  "scope": "software only; no native exposure",
+  "artifacts": [
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/analysis.json",
+      "bytes": 6139,
+      "sha256": "ff6946a69f6687e7074b7869bc3174a88747e478fc4f47d5843d16dba4b44a0f"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/configure.log",
+      "bytes": 28970,
+      "sha256": "530c0e6027183623c8da3207bc7ce08f28f256d201918d10c9c6db8a6695e354"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/build.log",
+      "bytes": 135775,
+      "sha256": "def86346907e94ef84096346934087d7de548860b21f255d8fe08a3e9760f0e9"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/build-control.log",
+      "bytes": 571,
+      "sha256": "995362d014376be7fdeac147c257e997bc5650022fb5fc14fe93a100c8066d07"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/qemu-changed-bbox",
+      "bytes": 83845560,
+      "sha256": "ee0cb8cd35615ffbcc978073669c7dfcb2e00b04dda2d9a244a7eeeebbfdc526"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/qemu-full-bbox",
+      "bytes": 83837328,
+      "sha256": "e92ecaff014fff470957f1747e622118d2e70cb2b2c2c254fe718404a8d96892"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/qemu-changed-wrapper",
+      "bytes": 149,
+      "sha256": "77198217c824beaea93c65ad32e6137e1477a7c57e6651028571e65324da6009"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/legacy-pixels.json",
+      "bytes": 873,
+      "sha256": "5d6c095ffbeae7f0176e17f06b29d1cd9af76527e878cfcb99bafd0d6b5736b1"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-bbox-focused-tests.log",
+      "bytes": 103,
+      "sha256": "106a1692fd4aeaf858c2320aa51f5ed47c85431544b1a7b64747b26eaab2e3e7"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/full-640/argv.json",
+      "bytes": 832,
+      "sha256": "bbc24d74042d222e86b39f15ec7d1a86fc4f976ec1717d6797f80b01793ba183"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/full-640/cleanup.json",
+      "bytes": 45,
+      "sha256": "b3bc71bbe1cd24e27917d873c0764faa784faf7ae7f7fab7e5c8c8136d3afd7b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/full-640/display-events.jsonl",
+      "bytes": 69242,
+      "sha256": "e54e1909c863b3ec941385faca6a609033ab7844c492ffc4416ba8a2e8527dc2"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/full-640/idle-rom.bin",
+      "bytes": 65536,
+      "sha256": "9712316cb30fd8aab7369e66d6395d4406866b6c7087b105e17dc08f24496e7b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/full-640/producer.jsonl",
+      "bytes": 75289,
+      "sha256": "1ed38ac79b645b946a3f342525700a60721e1a9c9004a5efb6a5793a82b6e3c1"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/full-640/qemu.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/full-640/result.json",
+      "bytes": 790,
+      "sha256": "5e0025dc903005bc6474ab9cc534c866c5ca6ea75aa96bdaf3c8d0b8e0a71c53"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/full-640/samples.jsonl",
+      "bytes": 311592,
+      "sha256": "f1a1a630658c0c181bc2df3000ea8342ddb796891755b6a6821b5e09a99101ff"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/changed-640/argv.json",
+      "bytes": 847,
+      "sha256": "36a4e43028928f7c3ce42294c3bfa8d574ea8c94c5aafb921c7412465321cbeb"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/changed-640/cleanup.json",
+      "bytes": 45,
+      "sha256": "67341261da766b265443b5fb1ae5921ab92cbeeea1ff7b77dea4dd31d4f45d93"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/changed-640/display-events.jsonl",
+      "bytes": 71048,
+      "sha256": "3a90bd372ac2981e05764437622350d64b8c1045e4f618ffc218f16dcfc55ff8"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/changed-640/idle-rom.bin",
+      "bytes": 65536,
+      "sha256": "9712316cb30fd8aab7369e66d6395d4406866b6c7087b105e17dc08f24496e7b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/changed-640/producer.jsonl",
+      "bytes": 75270,
+      "sha256": "7b34d1c20a358de934ae79a1ff29a9466820895ce57c8dc322f0144ca6f847f2"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/changed-640/qemu.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/changed-640/result.json",
+      "bytes": 805,
+      "sha256": "25dcaee9a1b5dac0b1e297d112b6111c6e118bb174b52c0d44e511be0ce9ceb2"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/changed-640/samples.jsonl",
+      "bytes": 311391,
+      "sha256": "8390facff352b5940318b20652fead5a08e434b3070258fe4ccc9ac6545f00d4"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/full-4k/argv.json",
+      "bytes": 828,
+      "sha256": "80dc9a8e9e1d8165958a4cd06b4e61fc5ce33d4da46de7b18894d7e078c91ec2"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/full-4k/cleanup.json",
+      "bytes": 45,
+      "sha256": "616685b75ce2f8b87cc1c8c216b516d7e9de7858e4f67ea9266afec5770b7a65"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/full-4k/display-events.jsonl",
+      "bytes": 7948,
+      "sha256": "fa0bea4e099516e9ea12e5f1ab77c4109016b5137682baca2d7ae5e85db200e2"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/full-4k/idle-rom.bin",
+      "bytes": 65536,
+      "sha256": "9712316cb30fd8aab7369e66d6395d4406866b6c7087b105e17dc08f24496e7b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/full-4k/producer.jsonl",
+      "bytes": 8275,
+      "sha256": "c5a8473b4375377686dd257a06b86466e7f31730f810b16cab3f8834bd5fa19e"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/full-4k/qemu.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/full-4k/result.json",
+      "bytes": 808,
+      "sha256": "8b2b8a7ddde5db43dab2fe28a7053862bad5fb0432ff4b625c7c51a60c9d9379"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/full-4k/samples.jsonl",
+      "bytes": 279644,
+      "sha256": "fd5a3f332831763419b63f62d2612b8c10321b4d5d53e18912a3f79faaaf7d35"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/changed-4k/argv.json",
+      "bytes": 843,
+      "sha256": "a80b2cad2996260721235caba01ef1043f4d91676cf4dc5a2a8a7ac485e2eaa5"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/changed-4k/cleanup.json",
+      "bytes": 45,
+      "sha256": "27dd80fc181b50e19991474ad94f9a7fa798fa146899a547f2e22ca4e1ca74f6"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/changed-4k/display-events.jsonl",
+      "bytes": 8109,
+      "sha256": "2a2b6f164f375bf3c78407a0af91cbfec1a1d82e75fc8b8e254948c1e08fdc3a"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/changed-4k/idle-rom.bin",
+      "bytes": 65536,
+      "sha256": "9712316cb30fd8aab7369e66d6395d4406866b6c7087b105e17dc08f24496e7b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/changed-4k/producer.jsonl",
+      "bytes": 8433,
+      "sha256": "5e2679db4211b6d6a6ad039796aabc6ebe2baa3360a02fb6448820efed8ef9b0"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/changed-4k/qemu.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/changed-4k/result.json",
+      "bytes": 795,
+      "sha256": "d35754996a7f54ec3b3374f5b1753f7e31555fbc1080d8aa43f05371d98befb1"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/changed-4k/samples.jsonl",
+      "bytes": 312410,
+      "sha256": "44fe82763b89926c6e4a3ad56ab2b346f46f1845abceb93dcb6a278985fe9008"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/changed-split/argv.json",
+      "bytes": 855,
+      "sha256": "8a59ff9ca538aed6113559ad69fc655a51fcc20a093581667b9df14a5b0d6030"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/changed-split/cleanup.json",
+      "bytes": 45,
+      "sha256": "133b28e3c2c138b6f403484007c02fb4ac6e5261019447c074d3f8c1f3467f7c"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/changed-split/display-events.jsonl",
+      "bytes": 17442,
+      "sha256": "55e31551c5eb8180fc736b10b6d869b273f2beebbffb5ef24db6dd5cc8bdb8f7"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/changed-split/idle-rom.bin",
+      "bytes": 65536,
+      "sha256": "9712316cb30fd8aab7369e66d6395d4406866b6c7087b105e17dc08f24496e7b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/changed-split/producer.jsonl",
+      "bytes": 15618,
+      "sha256": "c860e8e16a8dc7887968b489eb40bbc41744caad7e6bb1f53f6a86216b00df82"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/changed-split/qemu.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/changed-split/result.json",
+      "bytes": 792,
+      "sha256": "32d01b495eca2dbf5d05c481fcdd387f09c7b0325f92f4c5f3c1fb05bcea0de7"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/changed-split/samples.jsonl",
+      "bytes": 72371,
+      "sha256": "0eb93701638761e67d4156e8185cfc89b837ff329aa00593fed0d1d8e34e871b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/spice-pixels/argv.json",
+      "bytes": 858,
+      "sha256": "9d24099347c1fa3ad23abd5c2070119a99fb11c01a306f9dda3de28fcbe9763a"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/spice-pixels/cleanup.json",
+      "bytes": 48,
+      "sha256": "9412b7cc3025ba61391fabf587819fc64740e37d494a26c760f5a87ac9c7538d"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/spice-pixels/events.json",
+      "bytes": 693,
+      "sha256": "a3592f899ff103de06014d60c81674894c18b8a34d2f1ed5e33767f920f8ba5f"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/spice-pixels/idle-rom.bin",
+      "bytes": 65536,
+      "sha256": "9712316cb30fd8aab7369e66d6395d4406866b6c7087b105e17dc08f24496e7b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/spice-pixels/qemu.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/spice-pixels/result.json",
+      "bytes": 3016,
+      "sha256": "49add6785b27462002286e9790ee76ff660935bfac38dcbaca1d395fb0057949"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/qmp-pixels/ack-overwrite-1.ppm",
+      "bytes": 921615,
+      "sha256": "7f40eddb9d6826ecaee0e8c7e536be25d8997bd7aec4cc8123551387a4563c5b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/qmp-pixels/ack-overwrite-2.ppm",
+      "bytes": 6220817,
+      "sha256": "a7d0a5d01a79e2f12657839fafd265cce66f14e3fd7ff280e573cf3f89da2e64"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/qmp-pixels/ack-overwrite-3.ppm",
+      "bytes": 24883217,
+      "sha256": "c3ea0d0b4e17fafa89b9100c620a746fa74fe95817a8c7b9c786a0aafe5b2a38"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/qmp-pixels/ack-overwrite-4.ppm",
+      "bytes": 1440015,
+      "sha256": "8c3e44c1d87792ff6de888556d6051765ceac9c4fcdb3d4a7ce7eda3c8332714"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/qmp-pixels/argv.json",
+      "bytes": 547,
+      "sha256": "212f4446186b2e550067a1271f0b209ecffe891b8de6aabb9de508890999cb9f"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/qmp-pixels/immutable-repeat-1.ppm",
+      "bytes": 921615,
+      "sha256": "7f40eddb9d6826ecaee0e8c7e536be25d8997bd7aec4cc8123551387a4563c5b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/qmp-pixels/immutable-repeat-2.ppm",
+      "bytes": 6220817,
+      "sha256": "a7d0a5d01a79e2f12657839fafd265cce66f14e3fd7ff280e573cf3f89da2e64"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/qmp-pixels/immutable-repeat-3.ppm",
+      "bytes": 24883217,
+      "sha256": "c3ea0d0b4e17fafa89b9100c620a746fa74fe95817a8c7b9c786a0aafe5b2a38"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/qmp-pixels/immutable-repeat-4.ppm",
+      "bytes": 1440015,
+      "sha256": "8c3e44c1d87792ff6de888556d6051765ceac9c4fcdb3d4a7ce7eda3c8332714"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/qmp-pixels/latest-completed-pending.ppm",
+      "bytes": 921615,
+      "sha256": "0b0050ae82fdeba4a44040c734fa50612cf0e44ab4d3aa1754e07a0c0fed5ae9"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/qmp-pixels/legacy-after-disarm.ppm",
+      "bytes": 921615,
+      "sha256": "37efd8aea2a1b77a639f409caad1a4ce372be010947bc016eb9c107ec322b41b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/qmp-pixels/legacy-before-arm.ppm",
+      "bytes": 921615,
+      "sha256": "094a131f64d7783fd55e982feaf71b9a2de3e8b5248d48eb5ba518a6d862423b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/qmp-pixels/qemu.log",
+      "bytes": 7012,
+      "sha256": "9175600b3d50ea08d3465818294309adf476559ffa5ff9fe03d0046f3456b34a"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/qmp-pixels/result.json",
+      "bytes": 3119,
+      "sha256": "c5e197d4056ae99015ab485861ee732fcc31ca7d781f6a0ac07cf971f83dbe98"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/migration/default/argv.json",
+      "bytes": 423,
+      "sha256": "1691e4d4eb57a13dcb73054961da8bc2a0eb599e8ced098f616ba75e2bcf7f6f"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/migration/default/migration.bin",
+      "bytes": 422658,
+      "sha256": "77f69d0a07f5313eda8f2742d47b49ca5a158e117d8f528bdda69a8f64ab9c39"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/migration/default/qemu.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/migration/on/argv.json",
+      "bytes": 438,
+      "sha256": "c6762ae6bfdf8869601e32db42eb8c466eb74e85dff19c29d5324138a67fd78a"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/migration/on/migration.bin",
+      "bytes": 415418,
+      "sha256": "c8e6f3b225d443ea75e512961e8eebc2b32c5f289ec2d2b50057e92980a0d5ad"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/migration/on/qemu.log",
+      "bytes": 100,
+      "sha256": "524781dd90244879f1e6ec4fda710d2f78de9b1a2846e06449500767436e1051"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-changed-bbox/migration/result.json",
+      "bytes": 856,
+      "sha256": "8dbb66ae7eab4071d1829a782027528601b799ca7c0dc7cd037648ff331fce79"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/worktrees/candidate-372/tools/spice-snapshot-pixels.py",
+      "bytes": 7045,
+      "sha256": "af8b9d0b29a19db7edfb8243d59cbe01809d2cf646461bc422d2f5c256ad0858"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/worktrees/candidate-372/findings/research/patches/qemu-10.1.2-spice-changed-single-bbox-research.patch",
+      "bytes": 5169,
+      "sha256": "71d2cc18a8ca64ce7266beb4908785157c5f8ceb4813d5a995c2374cdb2788b9"
+    }
+  ]
+}
