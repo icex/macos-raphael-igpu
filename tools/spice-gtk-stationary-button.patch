@@ -1,0 +1,19 @@
+--- a/src/spice-widget.c
++++ b/src/spice-widget.c
+@@ -2265,6 +2265,16 @@
+     if (!d->inputs)
+         return true;
+ 
++    /* A stationary pointer can outlive a geometry change without a motion
++     * event. Refresh the absolute position before the button transition, using
++     * the event's pre-transition state. Relative/server mouse mode is unchanged.
++     * The channel button API flushes any pending absolute position first. */
++    if (d->mouse_mode == SPICE_MOUSE_MODE_CLIENT &&
++        (button->type == GDK_BUTTON_PRESS || button->type == GDK_BUTTON_RELEASE)) {
++        spice_inputs_channel_position(d->inputs, x, y, get_display_id(display),
++                                      button_mask_gdk_to_spice(button->state));
++    }
++
+     switch (button->type) {
+     case GDK_BUTTON_PRESS:
+         spice_inputs_channel_button_press(d->inputs,
