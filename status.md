@@ -31,5 +31,5 @@ lifecycle, broader apps/codecs, other managers and VirtualBox remain open.
 Candidate374/metal-206 is built for changed-pixel single-rectangle comparison and
 bounded witness137 teardown fix.1285 host tests pass,8skip. Native launch pending
 exact image/provenance and dry-run checks. Existing370 presenter will be hash-
-verified; no reinstall required. Snapshot regrant refusal tested only after
+verified; no reinstall required. Snapshot regrant refusal will be tested only after
 measurements and orderly owner exit, then ordinary agent restoration.
