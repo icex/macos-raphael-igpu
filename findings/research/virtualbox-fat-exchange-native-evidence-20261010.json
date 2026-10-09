@@ -1,0 +1,117 @@
+{
+  "schema": 1,
+  "uuid": "f9c1de4d-ca93-4a04-a830-a122143c2745",
+  "scope": "Software VMSVGA registry/FAT exchange and independently natural shutdown; original controller VBoxCallError retained; no GPU acceleration",
+  "artifacts": [
+    {
+      "path": "/home/bogdan/macos-vm/run/c410-vbox-boot-g/scope.json",
+      "bytes": 726,
+      "sha256": "5f8a3d1e14af399c99c229c2615ea682b038fcb18bda90741feaa01941bfd4e9"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c410-vbox-boot-g/result.json",
+      "bytes": 322,
+      "sha256": "6bdd8cfc5e42ec1a413145a5686dc9598fabcd18df889d551842e12a96f03d8e"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c410-vbox-boot-g/stopped.json",
+      "bytes": 69,
+      "sha256": "ced23c4cb619eff2c4c4c456647c8d4d1a72b2a357dfca5da9d3ce31442f75df"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c410-vbox-boot-g/root-final-verification.json",
+      "bytes": 148,
+      "sha256": "28c2d42a64efb738ccfb0c480ebad1c1d10186f9ea0d31e48f2835204abc9353"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c410-vbox-boot-g/errors-selected.txt",
+      "bytes": 721,
+      "sha256": "d661ba148cf7e696caf0e6ada8db12aaca2e07a891d58473a712a28141d0a0a1"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c410-vbox-boot-g/shutdown-selected.txt",
+      "bytes": 198,
+      "sha256": "c91a6982607fa16e3cae746be202119c5cd2eaeb609cac292bd3dccb685e790b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c410-vbox-boot-g/inventory-status.png",
+      "bytes": 255722,
+      "sha256": "41dac54261822974691b361f06425605889a0d1e01381ab0ab4ad0587e18165c"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c410-vbox-boot-g/awake-removed.png",
+      "bytes": 256871,
+      "sha256": "04164a39dfb648f9694523d3ad0f06185776a5204cec461855d526acf80dd27a"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c410-vbox-boot-g/desktop.png",
+      "bytes": 166073,
+      "sha256": "95bfc7f337ef4288eab49349bf1c94413ddd5198ba778072c5f51bb155444116"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c410-vbox-boot-g/root-acpi-request.json",
+      "bytes": 118,
+      "sha256": "ae99ca9a44e4e2d9231662c1d788ca10a52651e6b80d261410463a7ee52b09ad"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c410-vbox-boot-g/uart1.log",
+      "bytes": 169987,
+      "sha256": "f6dfbaaf74563ccf9fe8cda0b4f763be1dbbb256cbb056de03f9917ae18ce273"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c410-vbox-boot-g/uart2.log",
+      "bytes": 1667,
+      "sha256": "3522aac3ba25e622936f0b2fae4373e19f02fb2e5adb69642c57b8e787b96814"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c410-extracted/verified-summary.json",
+      "bytes": 4894,
+      "sha256": "4556c49338ccfebf39f27810ab9e1e5f396d0a40b21ba089a13e3fb5b1100ecf"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c410-extracted/out/receipt.json",
+      "bytes": 1942,
+      "sha256": "d6ae9578869008d3763d863292afa969c39384cce629587ea9a3fa4fd98123f6"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c410-extracted/out/c410-ioreg.plist",
+      "bytes": 2166786,
+      "sha256": "79b8239b1c6480afd91edbf6c575eed1c05c7a39b46497a26bf431cee48bc5c9"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c410-extracted/out/c410-framebuffer.txt",
+      "bytes": 6043,
+      "sha256": "6aee290cbcd49984051767eba9cb174a9b95a1751419bf2310032c8c73eec51f"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c410-extracted/out/c410-ioreg.plist.inventory.json",
+      "bytes": 3542,
+      "sha256": "d49503c843a28e4f66ea595ac1c4a213b0894751fd8992404073694d9322eed2"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c410-extracted/out/c410-os.txt",
+      "bytes": 66,
+      "sha256": "31fd674ddb951680692d7b68cafdeab5baa6b3e82aae843269dad73b53f25fc5"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c410-extracted/out/c410-cpus.txt",
+      "bytes": 11,
+      "sha256": "df65218202ed27dabcefe76de7d94955d6f2398595eb0dcca98adf529a5bf604"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c410-extract-stopped.py",
+      "bytes": 2903,
+      "sha256": "131d268d22db2269ca659db3ca3a9cfcca9a01031ed67846a3149b5bc9c08430"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-410-host-tests.log",
+      "bytes": 14003,
+      "sha256": "1259a5850713dd08988face2328f9a3e9da21a322abc1c02a48fdb1fe9b8e9ff"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c410-exchange/preparation.json",
+      "bytes": 1141,
+      "sha256": "a5b29248cbebff761bca1e923a5e73f142fb400b659a9f2d464d61e5ef42e007"
+    }
+  ]
+}
