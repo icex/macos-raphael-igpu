@@ -47,6 +47,8 @@ typedef struct {
 @property NSUInteger frames, width, height, targetWidth, targetHeight, reportFrames;
 @property double reportTime, copySeconds, maxCopySeconds;
 @property BOOL stopping, updating, running;
+@property BOOL snapshot, snapshotArmed;
+@property uint64_t snapshotSequence;
 @property(strong) dispatch_queue_t processingQueue;
 @property(strong) dispatch_semaphore_t copying;
 @end
@@ -145,6 +147,9 @@ typedef struct {
 }
 - (void)presentSample:(CMSampleBufferRef)sample callbackTime:(double)callbackTime {
     double workerTime=now();
+    // Capture callbacks can precede start completion. Control and copies share
+    // this queue; never write before staging is armed and mapped.
+    if(self.snapshot && !self.snapshotArmed)return;
     if(self.stopping || self.updating){if(tokenWindow.enabled)[self tokenUnavailable];return;}
     NSArray *attachments=(__bridge NSArray *)CMSampleBufferGetSampleAttachmentsArray(sample, false);
     if(!attachments.count || [attachments[0][SCStreamFrameInfoStatus] integerValue]!=SCFrameStatusComplete){if(tokenWindow.enabled)[self tokenUnavailable];return;}
@@ -171,10 +176,23 @@ typedef struct {
         fenced=now();
         changed=(w!=self.width || h!=self.height);
         modeBegin=now();
-        if(changed) {
+        if(self.snapshot) {
+            uint64_t request[]={w,h,self.snapshotSequence+1},ack=0;
+            uint32_t count=1;
+            kern_return_t kr=IOConnectCallScalarMethod(self.connection,2,request,3,&ack,&count);
+            if(kr || count!=1 || ack!=request[2]) {
+                fprintf(stderr,"snapshot commit failed: %x sequence=%llu ack=%llu count=%u\n",
+                    kr,(unsigned long long)request[2],(unsigned long long)ack,count);
+                // Never retry or reuse staging after an ambiguous ACK.
+                exit(4);
+            }
+            self.snapshotSequence=ack;
+        } else if(changed) {
             uint64_t dims[]={w,h};
             kern_return_t kr=IOConnectCallScalarMethod(self.connection,0,dims,2,NULL,NULL);
             if(kr) { fprintf(stderr,"console mode: %x\n",kr);exit(4); }
+        }
+        if(changed) {
             self.width=w;self.height=h;
             printf("CONSOLE mode=%zux%zu\n",w,h);
         }
@@ -191,6 +209,8 @@ typedef struct {
     double unlocked=now();
     if(!copied)return;
     if(self.frames==1 || end-self.reportTime>=5) {
+        if(self.snapshot)printf("CONSOLE_SNAPSHOT acknowledged=%llu scope=host-copy-not-delivery\n",
+            (unsigned long long)self.snapshotSequence);
         printf("CONSOLE frames=%lu size=%zux%zu elapsed=%.3f copied_fps=%.2f copy_avg_ms=%.3f copy_max_ms=%.3f dropped=%lu\n",
             (unsigned long)self.frames,w,h,end-self.reportTime,
             self.reportFrames/(end-self.reportTime),1000*self.copySeconds/self.reportFrames,1000*self.maxCopySeconds,(unsigned long)__atomic_load_n(&droppedCount,__ATOMIC_RELAXED));
@@ -234,9 +254,11 @@ typedef struct {
            timing.width,timing.height,end-timing.start,
            (unsigned long long)timing.frames,(unsigned long long)timing.bytes,
            timing.strideMin,timing.strideMax,(unsigned long long)timing.transitions);
-    for(unsigned i=0;i<TimingCount;i++)
-        printf(" %s_avg_ms=%.3f %s_max_ms=%.3f",names[i],
-               timing.frames?1000*timing.sum[i]/timing.frames:0,names[i],1000*timing.maximum[i]);
+    for(unsigned i=0;i<TimingCount;i++) {
+        const char *name=(self.snapshot && i==TimingMode)?"snapshot_commit":names[i];
+        printf(" %s_avg_ms=%.3f %s_max_ms=%.3f",name,
+               timing.frames?1000*timing.sum[i]/timing.frames:0,name,1000*timing.maximum[i]);
+    }
     printf("\n");fflush(stdout);memset(&timing,0,sizeof(timing));
 }
 @end
@@ -258,11 +280,24 @@ int main(int argc,const char **argv) { @autoreleasepool {
     const char *tokenNonce=getenv("RGPU_CONSOLE_TOKEN_NONCE");
     uint8_t tokenNonceCheck[8];
     if(tokenNonce&&!rg_token_nonce(tokenNonce,tokenNonceCheck)){fprintf(stderr,"invalid RGPU_CONSOLE_TOKEN_NONCE (exact16hex required)\n");return 2;}
+    const char *snapshotSetting=getenv("RGPU_CONSOLE_SNAPSHOT");
+    if(snapshotSetting&&strcmp(snapshotSetting,"0")&&strcmp(snapshotSetting,"1"))return 2;
+    const bool snapshot=snapshotSetting&&!strcmp(snapshotSetting,"1");
     io_service_t service=IOServiceGetMatchingService(kIOMainPortDefault,IOServiceMatching("RaphaelConsole"));
     if(!service) { fprintf(stderr,"console device absent\n");return 3; }
     const char *sourceDiagnostic=getenv("RGPU_CONSOLE_SOURCE_DIAGNOSTIC");
     if(sourceDiagnostic&&strcmp(sourceDiagnostic,"0")&&strcmp(sourceDiagnostic,"1"))return 2;
+    if(snapshot && sourceDiagnostic && !strcmp(sourceDiagnostic,"1"))return 2;
+    if(snapshot) {
+        CFTypeRef property=IORegistryEntryCreateCFProperty(service,CFSTR("SnapshotProtocol"),kCFAllocatorDefault,0);
+        int protocol=0;
+        bool supported=property&&CFGetTypeID(property)==CFNumberGetTypeID()&&
+            CFNumberGetValue((CFNumberRef)property,kCFNumberIntType,&protocol)&&protocol==1;
+        if(property)CFRelease(property);
+        if(!supported){fprintf(stderr,"snapshot protocol unavailable\n");IOObjectRelease(service);return 3;}
+    }
     ConsoleOutput *out=[ConsoleOutput new];
+    out.snapshot=snapshot;
     if(![out configureToken:tokenNonce]){fprintf(stderr,"invalid RGPU_CONSOLE_TOKEN_NONCE (exact16hex required)\n");return 2;}
     if(sourceDiagnostic&&!strcmp(sourceDiagnostic,"1")) {
         if(![out enableSourceDiagnostic])return 3;
@@ -278,9 +313,13 @@ int main(int argc,const char **argv) { @autoreleasepool {
     if(cache && !strcmp(cache,"wc"))mapOptions|=kIOMapWriteCombineCache;
     else if(cache && strcmp(cache,"default"))return 2;
     printf("CONSOLE cache=%s\n",cache?cache:"default");fflush(stdout);
-    mach_vm_address_t address=0;mach_vm_size_t length=0;
-    kr=IOConnectMapMemory64(connection,0,mach_task_self(),&address,&length,mapOptions);
-    if(kr) { fprintf(stderr,"console map: %x\n",kr);IOServiceClose(connection);return 3; }
+    __block mach_vm_address_t address=0;
+    __block mach_vm_size_t length=snapshot?32u*1024u*1024u:0;
+    const uint32_t memoryType=snapshot?1:0;
+    if(!snapshot) {
+        kr=IOConnectMapMemory64(connection,0,mach_task_self(),&address,&length,mapOptions);
+        if(kr) { fprintf(stderr,"console map: %x\n",kr);IOServiceClose(connection);return 3; }
+    }
     out.address=address;out.length=length;
     if(CGDisplayRegisterReconfigurationCallback(displayChanged,NULL)!=kCGErrorSuccess)return 4;
     __block SCStream *capture;
@@ -327,8 +366,25 @@ int main(int argc,const char **argv) { @autoreleasepool {
             if(![capture addStreamOutput:out type:SCStreamOutputTypeScreen sampleHandlerQueue:captureQueue error:&addError])exit(4);
             [capture startCaptureWithCompletionHandler:^(NSError *startError){
                 if(startError) { fprintf(stderr,"capture start: %s\n",startError.description.UTF8String);exit(4); }
-                dispatch_async(queue,^{out.running=YES;[out armToken];});
-                printf("CONSOLE started display=%u size=%zux%zu requested_fps=%u\n",did,w,h,fps);fflush(stdout);
+                dispatch_async(queue,^{
+                    if(out.stopping)return;
+                    if(snapshot) {
+                        // TCC/content/start failures must not consume the one-shot
+                        // staging lease. Queued samples are ignored until ready.
+                        kern_return_t armed=IOConnectCallScalarMethod(connection,1,NULL,0,NULL,NULL);
+                        if(armed){fprintf(stderr,"snapshot arm: %x\n",armed);exit(4);}
+                        kern_return_t mapped=IOConnectMapMemory64(connection,memoryType,mach_task_self(),&address,&length,mapOptions);
+                        if(mapped || !address || length!=32u*1024u*1024u) {
+                            fprintf(stderr,"snapshot staging map: %x bytes=%llu\n",mapped,(unsigned long long)length);
+                            IOConnectCallScalarMethod(connection,3,NULL,0,NULL,NULL);
+                            IOServiceClose(connection);exit(4);
+                        }
+                        out.address=address;out.length=length;out.snapshotArmed=YES;
+                        printf("CONSOLE_SNAPSHOT armed=1 bytes=%llu lease=one-shot\n",(unsigned long long)length);
+                    }
+                    out.running=YES;[out armToken];
+                    printf("CONSOLE started display=%u size=%zux%zu requested_fps=%u\n",did,w,h,fps);fflush(stdout);
+                });
             }];
         });
     }];
@@ -338,7 +394,9 @@ int main(int argc,const char **argv) { @autoreleasepool {
         [capture stopCaptureWithCompletionHandler:^(NSError *error){
             dispatch_async(queue,^{
                 printf("CONSOLE completed frames=%lu\n",(unsigned long)out.frames);fflush(stdout);
-                IOConnectUnmapMemory64(connection,0,mach_task_self(),address);IOServiceClose(connection);
+                if(address)IOConnectUnmapMemory64(connection,memoryType,mach_task_self(),address);
+                if(out.snapshotArmed)IOConnectCallScalarMethod(connection,3,NULL,0,NULL,NULL);
+                IOServiceClose(connection);
                 exit(error || !out.frames ? 5 : 0);
             });
         }];
