@@ -1,5 +1,16 @@
 # Live status — 2026-10-09
 
+## Candidate341: libvirt planning and isolated emulator checks
+
+No new GPU run. The complete transient-domain planner preserves the native
+peripheral/storage order and single CPU definition in libvirt11.9 conversion.
+A separate KVM CPU-only test verifies the expected CPU properties and preserves
+native zero hardware UUID. All test domains and containers are stopped; the
+host sleep:idle blocker stays active. Full host suite:1,038 pass,3 skipped.
+Runtime paused-launch/descriptor-injection/identity/cleanup integration is next;
+full libvirt-managed accelerated macOS remains unqualified.
+[Evidence and remaining boundary](findings/research/libvirt-console-plan-20261009.md).
+
 ## Candidate340: native accelerated SPICE desktop after host resume
 
 Run `892ec42661ae367e299f60d55c9da9ee`, metal-186, build1.0.340,
