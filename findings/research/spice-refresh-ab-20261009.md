@@ -58,8 +58,22 @@ A deliberately split producer writes mismatched duplicate IDs, waits20ms, then
 writes the matching pair. Five-second original/patched60 cases each show558
 invalid samples and62 valid samples, at~38.25 producer writes/s. That verifies
 negative detection; these synthetic mismatches are not native driver evidence.
-The next discriminator is one test-only full dirty-rectangle bitmap instead of
-32px chunks, keeping the producer and patched60 listener fixed.
+That discriminator is now complete: a separate **research-only** patch makes
+one dirty-bounding-rectangle bitmap instead of 32px chunks, retaining patched60,
+compression off and the serialized producer. Fifteen seconds yields 900 unique
+IDs (60.000/s), 900 invalidations, one MARK and **zero invalid samples out of
+1,861**; producer cadence is59.998/s and QEMU exits0 normally. Its median producer
+transaction cost and sampler cost are recorded alongside the 32px control.
+The matching 32px case produced27 invalid samples and8,147 invalidations.
+
+This supports intermediate region application as the explanation for sampled
+partial tokens in this controlled software pipeline. It neither proves native
+source-buffer atomicity nor justifies a production single-rectangle change:
+larger dirty snapshots may increase bandwidth/copy cost, especially at4K.
+The diagnostic patch is separate from the explicit-refresh patch and not used
+in any production image. To reproduce, apply it after the explicit-refresh
+patch, rebuild the same target, and run the same `--rate 60 --seconds 15` smoke.
+No timed runs overlapped the parent's native-compatible build.
 
 ## Reproduction and provenance
 

@@ -522,6 +522,37 @@
         "result.json": "56acbcf958a5a10aba8cf2aecb41a0a4ca717176befe3ec4c7ae074a492d9b4e",
         "cleanup.json": "5b3ea7ce96fd30940897ec7049a72563ddae477593878688a6119f2fe83e3260"
       }
+    },
+    "off-single-rectangle60": {
+      "seconds": 15,
+      "unique": 900,
+      "unique_per_second": 60.0,
+      "valid": 1861,
+      "invalid_after_start": 0,
+      "last_sequence": 899,
+      "producer_count": 900,
+      "producer_per_second": 59.99826267723809,
+      "qemu_exit": 0,
+      "split": false,
+      "explicit_rate": 60,
+      "display_events": {
+        "mark": 1,
+        "invalidate": 900
+      },
+      "scope": "TCG qtest producer and offscreen SpiceDisplay buffer only; no guest OS/GPU/manager/scanout FPS",
+      "sample_median_ms": 0.8990240021375939,
+      "producer_median_ms": 3.154511003231164,
+      "files": {
+        "argv.json": "83ea20dc3289295ec35f03b35271c31b94e1d980a54af8f80ebfcef8c5cd739a",
+        "idle-rom.bin": "9712316cb30fd8aab7369e66d6395d4406866b6c7087b105e17dc08f24496e7b",
+        "qemu.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "display-events.jsonl": "84f1916d353ba84b19c5b4353b691ee006411937cfe2d8c997bab21c01b6a194",
+        "samples.jsonl": "761d80ad671e7529eca1de3735cb3e8c4bebbd69d9a92b0248ec5103c6461907",
+        "producer.jsonl": "4152c0efc9d6788dc9dc33bac806381e660a730f5f4ecea66657715099847f0d",
+        "first.png": "c1683215bd11e5095e3f0561ee98cf89d26bde07cda4d61a05c7e4222bd3ae44",
+        "result.json": "5c9a0c20af490bda70021aac20fcf7e1c6fcfad2a606b57793f1a268618dfd3a",
+        "cleanup.json": "0ead822a6e5e081da1b423076f667127ca2dece0b4df1740618ee9803a331ddd"
+      }
     }
   },
   "provenance": {
@@ -532,7 +563,9 @@
     "/home/bogdan/macos-vm/run/c344-spice-refresh/build-original/build.log": "d05baee91b3f85db29971e11562c13f9dd7958d265d58469e8595e8777b946a7",
     "/home/bogdan/macos-vm/run/c344-spice-refresh/build-patched.log": "218b84e669b6aef9d972d35758a12b63e55b5a4f920fdc1d5d0571b96b1c6869",
     "/home/bogdan/macos-vm/run/c344-spice-refresh/host-tests.log": "f2f945d7b6b68436e1de4c3e414bf0ee2c5227004c2bda2923b86c2f7b37dcaa",
-    "/home/bogdan/macos-vm/run/c344-spice-refresh/negative-option.json": "db1b67d3593b4012627666f33b5b5741d665ba23310d221693b7c96849c35433"
+    "/home/bogdan/macos-vm/run/c344-spice-refresh/negative-option.json": "db1b67d3593b4012627666f33b5b5741d665ba23310d221693b7c96849c35433",
+    "/home/bogdan/macos-vm/run/c344-spice-refresh/qemu-single-rectangle": "cb5b0610f8bf28bc3afb9df53e2280be7cbd4b548877183c9d081ef5f63ef820",
+    "/home/bogdan/macos-vm/run/c344-spice-refresh/build-single-rectangle.log": "1781bd6f730ab617d4b54b40aef6cf7184de5afb11355fc17d5964aed70c1b5d"
   },
   "negative_option": [
     {
@@ -644,6 +677,11 @@
     },
     "off-patched-explicit60": {
       "pid": 595744,
+      "exit": 0,
+      "stopped": true
+    },
+    "off-single-rectangle60": {
+      "pid": 596136,
       "exit": 0,
       "stopped": true
     }
