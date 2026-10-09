@@ -72,5 +72,6 @@ binary and unchanged canonical manifest are the exact tested candidate402 build
 7bebb5596f5aa31cf1cfff6c4e95b185b74b254ba62c9e01ac403317a19b1bd5.
 Published dev remains84159a9d33ab22e385e56f4861b0e6dae069cbf4 with hosted test/build
 passed (Actions37993406232), until root publishes and verifies the new exact
-commit. Main is unchanged. Integrated407 checks are pending; 406's suite above is
-historical evidence, not a claim about this merged tree.
+commit. Main is unchanged. Integrated407 host suite: Ran 1476 tests in 56.442s  OK (skipped=8).
+Log: `run/candidate-407-host-tests.log`; native402/406 artifact manifests
+independently reverified (44 and 15 hashes).
