@@ -1,6 +1,14 @@
 # Accelerated desktop in a VM manager console
 
-Candidate383 verifies an optional standard SPICE agent channel with live
+Candidate386 adds installed external resize helpers, next-guest-boot persistence,
+and actual manager non-table resize with five-target/text input while the agent
+remains connected. Explicit `agent-mouse=off` retains USB-tablet routing. The
+capture application and consent identity remain unchanged. Fixed HiDPI2 can make
+UI large on GDK1 hosts; adaptive DPI policy remains open. Final386 restoration,
+reconnect and cleanup are pending review.
+[Native386 evidence](../findings/research/console-installed-resize-native-20261009.md).
+
+Earlier candidate383 verifies an optional standard SPICE agent channel with live
 AppleVirtIOConsole attachment on x86_64 macOS. A bounded guest agent follows real
 virt-manager monitor requests between existing2560×1440 and3840×2160 HiDPI modes.
 Independent guest mode, presenter resizing, monitor-map and viewer pixel-area
@@ -24,8 +32,7 @@ localized and full-field phases. Holding the3840×2160 source fixed and expandin
 to a1920×1080 scale-2 window improves full-field observations from14.4 to34.5–34.9/s.
 Whole-window GTK draw wall time also falls, but is not a per-phase/GPU measurement.
 These381 modes and window sizes were selected explicitly. Candidate383 adds the
-bounded existing-mode path above; persistent arbitrary-window resizing remains
-open. Unmatched smaller windows can still incur scaling.
+bounded existing-mode path above; installed arbitrary resize is qualified narrowly in386 as described above. Unmatched smaller windows can still incur scaling.
 
 Three windows contain14,160 valid token samples with no post-start errors;
 379's rare malformed tokens remain unresolved. This is not universal60Hz or
@@ -50,7 +57,7 @@ Normal/fullscreen input pass. Candidate361 also passes continuous pointer entry
 into1000×760; earlier enter-without-motion failures remain distinct.
 Candidate370 has zero invalid tokens after startup in three native/HiDPI manager
 windows using immutable snapshots plus a single SPICE rectangle. Full-frame
-atomicity, sustained60Hz, persistent arbitrary resize, other frontends and VirtualBox remain
+atomicity, sustained60Hz, adaptive DPI policy, other frontends and VirtualBox remain
 unqualified. Candidate374 improves HiDPI observed cadence to52.6/51.2 IDs/s
 without token failures after startup, but its capture guard force-stops during
 shutdown; recovery and actual process completion must be assessed separately.
@@ -125,7 +132,7 @@ container/start time and console selection. Closing the viewer disconnects the
 window only; the experiment supervisor still owns shutdown and recovery.
 The presenter follows guest mode changes. Default profiles still omit the agent
 transport. Candidate383's optional SPICE path coordinates bounded existing-mode
-requests without restarting the presenter; persistent arbitrary-window resize
+requests without restarting the presenter; broader arbitrary-window resize coverage
 remains unfinished. This is QEMU's VM console, not macOS Screen Sharing.
 
 `tools/console-metal-probe.m` generates three1280×720 color-bar phases on Raphael,

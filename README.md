@@ -14,15 +14,14 @@ on **`dev`**; this is not yet a generally supported driver release.
 
 ## Current status
 
-**VM window (October 9, candidate 383):** native Metal rendering, bridged LAN,
-and previously qualified keyboard/mouse input work in virt-manager without HDMI.
-The virtual adapter's 56 MB framebuffer is separate from the renderer's 2 GB VRAM.
-
-The optional standard SPICE agent channel now attaches to Apple's x86_64 console
-driver. A bounded guest agent follows actual virt-manager requests between existing
-2560×1440 and 3840×2160 HiDPI modes, with independent guest, presenter and viewer
-geometry checks. Redundant requests avoid reconfiguration. This is not yet an
-installed persistent agent or support for arbitrary window sizes.
+**VM window (October 9, candidate386):** native Metal rendering works in
+virt-manager without HDMI. Installed resize helpers now survive a guest reboot
+without changing the consent-bearing capture application. Actual manager requests
+create bounded non-table modes in place; candidate385 exercised eleven sizes and
+LRU eviction. Candidate386 keeps the resize agent connected while five input
+targets and exact text pass, using explicit USB-tablet routing (`agent-mouse=off`).
+The virtual adapter's56 MB framebuffer remains separate from the renderer's2 GB.
+[Installed resize evidence](findings/research/console-installed-resize-native-20261009.md).
 
 Candidate381 showed that matching guest pixels to the window's physical pixels avoids costly viewer
 scaling. At 2560×1440 into a 1280×720 window on a scale-2 host, mixed-motion
@@ -38,9 +37,10 @@ retains the private guest-shutdown/process-exit terminal, Docker exit0 without
 kill/stop, both natural-container-exit capture receipts and authorizing recovery.
 Candidate381's ordinary fallback and retired-buffer refusal remain prior evidence.
 Existing-user capture consent is retained. Fresh-user setup, crash/restart
-lifecycle, persistent arbitrary-window resizing, stationary-pointer resize, other
-frontends and VirtualBox remain unqualified. Input was last qualified in361;
-audio endpoint audibility and A/V sync remain open.
+lifecycle, adaptive DPI policy, stationary-pointer resize, other
+frontends and VirtualBox remain unqualified. Fixed HiDPI2 makes UI large on GDK1 hosts;
+audio endpoint audibility and A/V sync remain open. Candidate386 audio sample
+delivery passes; final restoration/reconnect/cleanup are pending review.
 
 Stock QEMU remains the default; snapshot experiments use separately pinned images.
 [Current agent transport and bounded resize evidence](findings/research/console-vdagent-native-20261009.md)

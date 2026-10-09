@@ -788,3 +788,14 @@ linux-gfx_v10_0.c (Linux v6.12; see THIRD_PARTY_NOTICES.md)
  *
  */
 ```
+
+## Installed resize helper qualification (candidate386)
+
+The external support payload introduced in385 starts on the next guest boot in386
+without changing the signed capture application, its receipt, or CDHash. Dynamic
+mode control and USB-tablet input coexist with the resize agent connected under
+explicit `agent-mouse=off`. This is an existing-user qualification, not a clean-user
+installer or adaptive-DPI release. The checked-in binary statement above remains
+its own provenance record until the tested386 bundle is explicitly delivered.
+Final386 restoration/reconnect/cleanup review is pending.
+[Evidence](../findings/research/console-installed-resize-native-20261009.md).
