@@ -1240,6 +1240,18 @@ class EmptyFirmwareConsoleCardTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 tool.validate_card(raw,hashlib.sha256(raw).hexdigest())
 
+    def test_candidate343_preserves_libvirt_console_contract(self):
+        tool=load_tool();tool.configure('1.0.343','metal-189')
+        card=json.loads((ROOT/'experiments/metal-189.json').read_text())
+        raw=json.dumps(card).encode();tool.validate_card(raw,hashlib.sha256(raw).hexdigest())
+        for section,key,value in [('launch_options','VM_MANAGER','direct'),
+                                  ('launch_options','VM_CONSOLE','bochs'),
+                                  ('functional_boot_arguments','rgpuconsolecold','0')]:
+            changed=copy.deepcopy(card);changed[section][key]=value
+            raw=json.dumps(changed).encode()
+            with self.assertRaises(RuntimeError):
+                tool.validate_card(raw,hashlib.sha256(raw).hexdigest())
+
     def test_cold_firmware_opt_in_and_spice_topology_are_exact(self):
         tool=load_tool();tool.configure('1.0.340','metal-186')
         card=json.loads((ROOT/'experiments/metal-186.json').read_text())
