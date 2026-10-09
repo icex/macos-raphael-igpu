@@ -47,6 +47,15 @@ class CaptureExitTests(unittest.TestCase):
     def test_original_deadline_shortens_grace(self):
         self.proof['deadline_epoch']=101;self.live=[True]
         result,stop=self.invoke();self.assertTrue(result['deferred']);self.assertLessEqual(self.clock,1.001);stop.assert_called_once_with(CID)
+    def test_evidence_persistence_happens_only_after_immediate_stop(self):
+        self.proof['exited']=False;order=[]
+        with patch.object(sup,'run',side_effect=self.command),patch.object(sup,'binary',side_effect=lambda x:x),\
+             patch.object(sup,'stop_exact',side_effect=lambda cid:order.append('stop')),\
+             patch.object(sup,'_durable_json',side_effect=lambda *a:order.append('receipt')),\
+             patch.object(sup.time,'monotonic',return_value=0),patch.object(sup.time,'time',return_value=100):
+            sup.capture_exit(self.vm,CID,START,110,RUN,ADMIT)
+        self.assertEqual(order,['stop','receipt'])
+
     def test_probe_failure_stops_without_grace(self):
         original=self.command
         def command(args,**kw):

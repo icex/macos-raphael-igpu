@@ -211,12 +211,15 @@ def capture_exit(vm,cid,started_at,deadline,run_id,admission_digest):
     except Exception as error:
         result['outcome']='immediate-stop';result['error_type']=type(error).__name__
     finally:
-        # Best-effort separate host observation; never synthesize terminal.json.
-        result['elapsed_seconds']=time.monotonic()-began
         try:
-            _durable_json(Path(vm)/'run'/f'capture-exit-{cid}-{os.getpid()}.json',result)
-        except Exception:pass
-    stop_exact(cid)
+            if result.get('outcome') not in ('already-stopped','natural-container-exit'):
+                stop_exact(cid) # Never let evidence IO delay the capture-fatal stop.
+        finally:
+            # Best-effort separate host observation; never synthesize terminal.json.
+            result['elapsed_seconds']=time.monotonic()-began
+            try:
+                _durable_json(Path(vm)/'run'/f'capture-exit-{cid}-{os.getpid()}.json',result)
+            except Exception:pass
     return result
 
 
