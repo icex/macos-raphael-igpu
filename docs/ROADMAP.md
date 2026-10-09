@@ -237,8 +237,9 @@ libvirt-managed macOS launch/input/shutdown/recovery remains the next integratio
 milestone. Candidate341 now verifies isolated TAP handoff and container-local
 software guest shutdown/manager Force Off through natural container exit.
 Full native argv comparison and source-based macvtap provenance checks are
-implemented; live inherited-macvtap verification and supervised launcher wiring
-remain. [Verifier scope](../findings/research/libvirt-native-profile-20261009.md).
+implemented. Supervised launcher wiring and real software controller handoff
+checks now pass; live inherited-macvtap transfer and accelerated macOS lifecycle
+remain unqualified. [Handoff scope](../findings/research/libvirt-entry-handoff-20261009.md). [Verifier scope](../findings/research/libvirt-native-profile-20261009.md).
 [Lifecycle evidence](../findings/research/libvirt-local-lifecycle-20261009.md).
 Host-window-driven resize and measured performance remain open.
 VirtualBox requires a separate transport/driver.

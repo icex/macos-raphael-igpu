@@ -410,6 +410,8 @@ def required_identity(data):
     if ('critical_replay_transport' in data and
             not data.get('critical_transport_validator_sha256')):
         missing.append('critical_transport_validator_sha256')
+    if data.get('launch_options', {}).get('VM_MANAGER') == 'libvirt' and not data.get('libvirt_network'):
+        missing.append('libvirt_network')
     return missing
 
 
@@ -426,7 +428,8 @@ def launch_options(data):
                  dict(headless, AUDIO='usb'), dict(debugger, AUDIO='usb'),
                  dict(debugger, AUDIO='usb', HDMI_AUDIO='on'),
                  dict(debugger, AUDIO='usb', VM_CONSOLE='bochs'),
-                 dict(debugger, AUDIO='usb', VM_CONSOLE='bochs-spice'))
+                 dict(debugger, AUDIO='usb', VM_CONSOLE='bochs-spice'),
+                 dict(debugger, AUDIO='usb', VM_CONSOLE='bochs-spice', VM_MANAGER='libvirt'))
     if type(value) is not dict or value not in contracts:
         raise ValueError('launch options must select the exact historical, no-graphics, or debugger contract')
     return dict(value)
@@ -516,6 +519,8 @@ def current_identity(vm, candidate, requested_diagnostic, run_id=None,
         raise ValueError('generic graphics launch option changed')
     if os.environ.get('VM_CONSOLE', options.get('VM_CONSOLE', 'off')) not in ('', options.get('VM_CONSOLE', 'off')):
         raise ValueError('console launch option changed')
+    if os.environ.get('VM_MANAGER', options.get('VM_MANAGER', 'direct')) not in ('', options.get('VM_MANAGER', 'direct')):
+        raise ValueError('VM manager launch option changed')
     builder = helper('build-release')
     source_digest = builder.tree_digest(ROOT/'src')
     # A reviewed candidate may intentionally keep its already-built driver
@@ -564,6 +569,12 @@ def current_identity(vm, candidate, requested_diagnostic, run_id=None,
         harness_names.append('vm-entry.sh')
     if options.get('HDMI_AUDIO') == 'on':
         harness_names.append('hdmi-audio.py')
+    extra_identity = {}
+    if options.get('VM_MANAGER') == 'libvirt':
+        harness_names.extend(helper('libvirt-console-handoff').MODULES)
+        interface = os.environ.get('LAN_IF', 'rgpu-lan')
+        guest_mac = os.environ.get('LAN_MAC') or (Path('/sys/class/net')/interface/'address').read_text().strip()
+        extra_identity['libvirt_network'] = helper('libvirt-console-network').capture_host(interface, guest_mac)
     return dict(image, build_id=build['build_id'], source_sha256=build['source_sha256'],
                 coordinator_source_sha256=source_digest,
                 source_commit=command(['git', '-C', str(ROOT), 'rev-parse', 'HEAD']),
@@ -584,7 +595,7 @@ def current_identity(vm, candidate, requested_diagnostic, run_id=None,
                 recovery_helpers_sha256=(
                     helper('vfio-recover').current_recovery_helpers_sha256(
                         recovery_lease_schema)
-                    if run_id is not None else None))
+                    if run_id is not None else None), **extra_identity)
 
 
 def prepare(vm, spec, output, gpu=True, run_id=None, attempt=None):
@@ -3046,6 +3057,14 @@ def validate_running(manifest, observed):
             expected_graphics += ['-spice', 'unix=on,addr=/run/vm/console-spice.sock,disable-ticketing=on,image-compression=off,gl=off']
         else:
             expected_graphics += ['-vnc', 'unix:/run/vm/console-vnc.sock']
+    if manifest.get('launch_options', {}).get('VM_MANAGER') == 'libvirt':
+        expected_graphics = ['-spice', 'unix=on,addr=/run/vm/console-spice.sock,disable-ticketing=on,image-compression=off,seamless-migration=on',
+                             '-vga', 'none', '-display', 'none', '-device',
+                             'bochs-display,id=rgpu_present,bus=pcie.0,addr=0x7,vgamem=64M']
+        proof = observed.get('libvirt', {})
+        if (proof.get('verified') is not True or proof.get('run_id') != manifest.get('run_id') or
+                proof.get('argv_sha256') != observed.get('argv_sha256') or proof.get('cid') != observed.get('cid')):
+            errors.append('libvirt_running_identity')
     if manifest.get('launch_options', {}).get('GENERIC_GRAPHICS') == 'off' and \
             graphics != expected_graphics:
         errors.append('generic_graphics')
@@ -3105,7 +3124,7 @@ def validate_running(manifest, observed):
     return errors
 
 
-def running_identity(cid):
+def running_identity(cid, manifest=None):
     # Never print complete argv: Apple's SMC argument contains a key. Only PCI
     # device model/location summaries, passthrough options, and an argv digest
     # are retained.
@@ -3151,6 +3170,10 @@ print(json.dumps(rows[0]))
 '''
     data = json.loads(command(['docker', 'exec', cid, 'python3', '-c', script]))
     data['image_id'] = command(['docker', 'inspect', '--format', '{{.Image}}', cid])
+    if (manifest or {}).get('launch_options', {}).get('VM_MANAGER') == 'libvirt':
+        data['cid'] = cid
+        data['libvirt'] = json.loads(command(['docker','exec',cid,'python3','-B',
+            '/run/rgpu-tools/libvirt-console-entry.py','inspect-running']))
     return data
 
 
@@ -3588,6 +3611,17 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                 # Lock already held. start_locked creates its durable reservation
                 # before invoking systemd, and owns all cleanup on partial launch.
                 launch_env = dict(manifest['launch_options'], IMAGE=manifest['image_id'])
+                if manifest['launch_options'].get('VM_MANAGER') == 'libvirt':
+                    bridge = helper('libvirt-console-handoff')
+                    topology = helper('libvirt-console-network').capture_host(
+                        manifest['libvirt_network']['name'], manifest['libvirt_network']['mac'])
+                    if topology != manifest['libvirt_network']:
+                        raise ValueError('libvirt host network changed before launch')
+                    _, admission_digest = bridge.prepare(
+                        vm/'run', manifest, (output/'manifest.json').read_bytes(), topology,
+                        {name:manifest['harness_sha256'][name] for name in bridge.MODULES})
+                    launch_env.update(RGPU_LIBVIRT_RUN_ID=manifest['run_id'],
+                                      RGPU_LIBVIRT_ADMISSION_SHA256=admission_digest)
                 old_env = {k:os.environ.get(k) for k in launch_env}
                 os.environ.update(launch_env)
                 gpu_args = [] if manifest.get('gpu') is False else [
@@ -3611,7 +3645,10 @@ def run_one(vm, manifest_path, output, resume_prelaunch=None, prelaunch_proof=No
                         else: os.environ[key] = value
                 state['launch_deadline_epoch'] = launch_requested+manifest['max_seconds']
                 write_once(output/'supervision.json', state)
-            running = running_identity(state['cid']); write_once(output/'running-identity.json', running)
+            running = (running_identity(state['cid'], manifest)
+                       if manifest['launch_options'].get('VM_MANAGER') == 'libvirt'
+                       else running_identity(state['cid']))
+            write_once(output/'running-identity.json', running)
             errors = validate_running(manifest, running)
             if errors: raise ValueError('running identity mismatch: '+','.join(errors))
             running_validated = True

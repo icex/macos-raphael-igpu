@@ -182,5 +182,8 @@ the established guarded path or refuse. See
 
 GNOME Boxes rendered independent software-only color patterns through a private
 container-local libvirt session. This does not yet qualify managing the accelerated
-macOS VM through Boxes or virt-manager. Work remains on preserving launch identity,
-network descriptors and the harness's single-owner cleanup protocol.
+macOS VM through Boxes or virt-manager. Candidate341 now integrates manifest-bound
+launch identity, paused network handoff and the harness resume permit. Real software
+controller tests pass for valid resume/poweroff and rejected identity cleanup.
+The native macOS capture/network/recovery cycle remains unqualified.
+[Handoff evidence](../findings/research/libvirt-entry-handoff-20261009.md).

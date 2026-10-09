@@ -38,6 +38,13 @@ class VmEntryTests(unittest.TestCase):
                                     capture_output=True, timeout=5)
             return result, capture.read_text().splitlines() if capture.exists() else []
 
+    def test_libvirt_or_unknown_manager_cannot_fall_through_to_qemu(self):
+        for manager in ['libvirt','unknown']:
+            result,argv=self.run_entry('exec qemu-system-x86_64 -vga vmware $EXTRA',
+                                       more_env={'VM_MANAGER':manager,'VM_CONSOLE':'bochs-spice'})
+            self.assertNotEqual(result.returncode,0)
+            self.assertEqual(argv,[])
+
     def test_off_replaces_single_default_and_forces_headless_argv(self):
         result, argv = self.run_entry(
             'qemu-system-x86_64 -m 2G -vga vmware $EXTRA')

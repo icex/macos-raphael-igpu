@@ -10,14 +10,13 @@ guest poweroff and independent libvirt Force Off, checks QEMU exit, retains the
 distinct reasons and exits each container naturally with status0. Docker init
 reaping and a real shutdown-observation race were fixed during those tests.
 All test containers are stopped; the host sleep:idle blocker stays active.
-Full host suite:1,077 tests pass,3 skipped.
+The host regression suite remains required before the next cycle.
 
 The complete argv verifier matches fresh libvirt conversion; macvtap
 provenance checks follow Linux source and a read-only host snapshot. Two further
 software dual-NIC shutdown runs pass after fixing the process-reaping race.
-Manifest binding and vm-entry/harness integration remain next. The inherited
-host macvtap checks still require an admitted live transfer. This is not yet a libvirt-managed accelerated macOS pass. The native
-GPU launch path is unchanged. [Plan](findings/research/libvirt-console-plan-20261009.md) ·
+Manifest binding and vm-entry/harness integration are implemented. Real container-controller tests pass for valid resume followed by software guest poweroff and for rejecting a replaced process in the permit; both containers are stopped. Host release ordering and injected capture/identity failures are covered separately. [Handoff evidence](findings/research/libvirt-entry-handoff-20261009.md). The inherited
+host macvtap checks still require an admitted live transfer. This is not yet a libvirt-managed accelerated macOS pass. The existing direct GPU profile remains available; the new libvirt profile has not yet exposed the GPU. [Plan](findings/research/libvirt-console-plan-20261009.md) ·
 [TAP](findings/research/libvirt-runtime-tap-20261009.md) ·
 [Local lifecycle](findings/research/libvirt-local-lifecycle-20261009.md) ·
 [Native verifier](findings/research/libvirt-native-profile-20261009.md).

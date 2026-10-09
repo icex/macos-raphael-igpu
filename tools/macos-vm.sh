@@ -38,6 +38,7 @@ SERIAL="${SERIAL:-on}"         # on = expose a serial port at run/serial.sock
 CRITICAL_SERIAL="${CRITICAL_SERIAL:-off}" # on = dedicated CR2 UART at COM2
 GENERIC_GRAPHICS="${GENERIC_GRAPHICS:-on}" # off = authenticated headless/no-VGA path
 VM_CONSOLE="${VM_CONSOLE:-off}"
+VM_MANAGER="${VM_MANAGER:-direct}"
 GDB="${GDB:-off}"              # on = gdbstub on 127.0.0.1:1234 | wait = also start halted
 SSH_PORT="${SSH_PORT:-50922}"
 SCREEN_PORT="${SCREEN_PORT:-5900}"
@@ -119,6 +120,16 @@ done
 
 case "${GENERIC_GRAPHICS}" in on|off) ;; *) die "unknown generic graphics setting ${GENERIC_GRAPHICS}" ;; esac
 case "${VM_CONSOLE}" in off|bochs|bochs-spice) ;; *) die "unknown VM_CONSOLE" ;; esac
+case "${VM_MANAGER}" in
+    direct) ;;
+    libvirt)
+        [[ "${VM_CONSOLE}" == bochs-spice && "${GENERIC_GRAPHICS}" == off &&
+           "${AUDIO}" == usb && "${HDMI_AUDIO}" == off && "${GDB}" == on ]] || die "unreviewed libvirt profile"
+        [[ "${RGPU_LIBVIRT_RUN_ID:-}" =~ ^[0-9a-f]{32}$ &&
+           "${RGPU_LIBVIRT_ADMISSION_SHA256:-}" =~ ^[0-9a-f]{64}$ ]] || die "libvirt requires harness admission"
+        ;;
+    *) die "unknown VM_MANAGER" ;;
+esac
 [[ "${VM_CONSOLE}" == off || "${GENERIC_GRAPHICS}" == off ]] || die "console requires GENERIC_GRAPHICS=off"
 XAUTH=""
 if [[ "${GENERIC_GRAPHICS}" == on ]]; then
@@ -303,6 +314,18 @@ DOCKER_ARGS=(
     "${GPU_ARGS[@]}"
     "${GDB_ARGS[@]}"
 )
+
+if [[ "${VM_MANAGER}" == libvirt ]]; then
+    [[ -n "${LAN_TAP_NODE:-${lan_node:-}}" ]] || die "libvirt requires admitted LAN descriptor"
+    DOCKER_ARGS+=(--init -e VM_MANAGER=libvirt
+        -e "RGPU_LIBVIRT_RUN_ID=${RGPU_LIBVIRT_RUN_ID}"
+        -e "RGPU_LIBVIRT_ADMISSION_SHA256=${RGPU_LIBVIRT_ADMISSION_SHA256}")
+    for module in plan runtime local verify network native handoff entry; do
+        controller="libvirt-console-${module}.py"
+        [[ -r "${VM_DIR}/${controller}" ]] || die "missing libvirt controller module"
+        DOCKER_ARGS+=(-v "${VM_DIR}/${controller}:/run/rgpu-tools/${controller}:ro")
+    done
+fi
 
 if [[ "${GENERIC_GRAPHICS}" == on ]]; then
     # X11 clients use MIT-SHM; without host IPC the window dies on startup.

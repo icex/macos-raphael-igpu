@@ -103,6 +103,26 @@ if [[ -n "${LAN_TAP_NODE:-}" ]]; then
     export EXTRA="${EXTRA:-} -netdev tap,id=lan0,fd=3 -device vmxnet3,netdev=lan0,id=lan0,mac=${LAN_MAC}"
 fi
 
+case "${VM_MANAGER:-direct}" in
+    direct|"") ;;
+    libvirt)
+        [[ "${VM_CONSOLE:-}" == bochs-spice && "${GENERIC_GRAPHICS:-}" == off &&
+           "${AUDIO_DRIVER:-}" == usb && -n "${LAN_TAP_NODE:-}" ]] || {
+            echo 'libvirt requires exact admitted native console profile' >&2; exit 1; }
+        [[ $(grep -Ec '^exec qemu-system-x86_64 ' "${LAUNCH}") -eq 1 ]] || {
+            echo 'unreviewed native launcher invocation' >&2; exit 1; }
+        python3 -B /run/rgpu-tools/libvirt-console-entry.py preflight
+        mkdir -m700 /tmp/rgpu-qemu-shim
+        cat > /tmp/rgpu-qemu-shim/qemu-system-x86_64 <<'SHIM'
+#!/bin/sh
+exec python3 -B /run/rgpu-tools/libvirt-console-entry.py launch "$@"
+SHIM
+        chmod 700 /tmp/rgpu-qemu-shim/qemu-system-x86_64
+        export PATH="/tmp/rgpu-qemu-shim:${PATH}"
+        ;;
+    *) echo 'unknown VM_MANAGER' >&2; exit 1 ;;
+esac
+
 ./enable-ssh.sh >/dev/null 2>&1 || true
 echo "QEMU graphics policy: GENERIC_GRAPHICS=${GENERIC_GRAPHICS:-on}"
 exec bash "${LAUNCH}"

@@ -21,6 +21,7 @@ import sys
 import time
 import fcntl
 import hashlib
+import importlib.util
 
 CID_PATTERN = re.compile(r"[0-9a-f]{64}")
 DOCKER_ENV = ("DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_CONFIG", "DOCKER_TLS_VERIFY",
@@ -562,6 +563,52 @@ def cleanup(vm, name):
     (vm / 'run/launch-pending' / name).unlink(missing_ok=True)
 
 
+
+def release_libvirt(vm,state):
+    """Publish one resume permit after exact-CID capture/timer verification."""
+    path=Path(__file__).with_name('libvirt-console-handoff.py')
+    spec=importlib.util.spec_from_file_location('libvirt_handoff',path)
+    bridge=importlib.util.module_from_spec(spec);spec.loader.exec_module(bridge)
+    directory=bridge.run_directory(vm/'run',os.environ['RGPU_LIBVIRT_RUN_ID'])
+    admission=json.loads((directory/'admission.json').read_text())
+    expected=os.environ['RGPU_LIBVIRT_ADMISSION_SHA256']
+    bridge.validate_admission(admission,admission['run_id'],expected,vm,
+                              Path('/proc/sys/kernel/random/boot_id').read_text().strip())
+    until=min(time.time()+30,admission['deadline_epoch'],state['deadline_epoch'])
+    while not (directory/'paused.json').is_file():
+        verify(state)
+        if time.time()>=until:raise RuntimeError('paused libvirt identity not published before deadline')
+        time.sleep(.1)
+    paused=json.loads((directory/'paused.json').read_text())
+    verify(state)
+    if run([binary('docker'),'inspect','--format','{{.Image}}',state['cid']]).strip()!=admission['image_id']:
+        raise RuntimeError('libvirt container image differs from admission')
+    observed=json.loads(run([binary('docker'),'exec',state['cid'],'python3','-B',
+                             '/run/rgpu-tools/libvirt-console-entry.py','inspect-paused'],
+                            timeout=max(.1,min(20,until-time.time()))))
+    # Recheck live host topology immediately before authorizing guest execution.
+    spec=importlib.util.spec_from_file_location('libvirt_network',path.with_name('libvirt-console-network.py'))
+    network=importlib.util.module_from_spec(spec);spec.loader.exec_module(network)
+    if network.capture_host(admission['network']['name'],admission['network']['mac'])!=admission['network']:
+        raise RuntimeError('host macvtap changed during launch')
+    verify(state)
+    if time.time()>=until:
+        raise RuntimeError('libvirt handoff deadline elapsed before resume permit')
+    permit=bridge.permit(admission,expected,paused,observed,state)
+    bridge.write_once(directory/'resume.json',permit)
+    while not (directory/'running.json').is_file():
+        verify(state)
+        if time.time()>=until:raise RuntimeError('libvirt controller did not observe resume')
+        time.sleep(.1)
+    running=json.loads((directory/'running.json').read_text())
+    if (running['cid']!=state['cid'] or running['started_at']!=state['started_at'] or
+            running['run_id']!=admission['run_id'] or running['identity']!=paused['identity'] or
+            running['scope']!=paused['scope'] or running['plan_sha256']!=paused['plan_sha256']):
+        raise RuntimeError('resumed domain identity mismatch')
+    state['libvirt_run_id']=admission['run_id']
+    state['libvirt_plan_sha256']=paused['plan_sha256']
+
+
 def launch(vm, name, maximum, gpu_args, critical_enabled=False):
     """Foreground lifetime of a user service, with cleanup also in ExecStopPost."""
     vm = vm.resolve()
@@ -633,6 +680,8 @@ def launch(vm, name, maximum, gpu_args, critical_enabled=False):
                     raise RuntimeError('container command and permit servers did not become ready')
                 time.sleep(2)
         verify(state)
+        if os.environ.get("VM_MANAGER") == "libvirt":
+            release_libvirt(vm,state)
         state["launch_unit"] = name + ".service"
         ready = vm / "run" / (name + ".json")
         temporary = ready.with_suffix(".tmp")
@@ -742,7 +791,8 @@ def start_locked(vm, maximum, gpu_args, critical_enabled=False, context=None):
     env_keys = DOCKER_ENV + ("PATH", "DISPLAY", "XAUTHORITY", "XDG_RUNTIME_DIR", "IMAGE",
                            "VCPUS", "RAM_GB", "DISK_BUS", "AUDIO", "NVRAM", "BOOTDISK_MODE",
                            "NIC", "GL", "GDB", "SSH_PORT", "SCREEN_PORT")
-    env_keys += ("GENERIC_GRAPHICS", "VM_CONSOLE")
+    env_keys += ("GENERIC_GRAPHICS", "VM_CONSOLE", "VM_MANAGER",
+                 "RGPU_LIBVIRT_RUN_ID", "RGPU_LIBVIRT_ADMISSION_SHA256")
     endpoint = [f"--setenv={key}={os.environ.get(key, '')}" for key in env_keys]
     # A GPUless request cannot inherit hidden passthrough from the manager or
     # caller. GPU options are supplied solely by the validated launcher flags.
