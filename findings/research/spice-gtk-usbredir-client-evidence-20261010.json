@@ -1,0 +1,90 @@
+{
+  "scope": "isolated client build, no native USB qualification",
+  "source_identical_to_393_patched": true,
+  "source_files_compared": 355,
+  "tests_passed": 13,
+  "config": {
+    "usbredir": true,
+    "polkit": true,
+    "libcap_ng": true,
+    "introspection": false
+  },
+  "installation": "only libraries copied, no install script",
+  "artifacts": [
+    {
+      "path": "/home/bogdan/macos-vm/run/c424-spice-gtk/configure.log",
+      "bytes": 9173,
+      "sha256": "1f37eee7fdce4a8b70c6a42d6141c0e26b9c13f512c218c3b2e71c226f8c457d"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c424-spice-gtk/build.log",
+      "bytes": 13030,
+      "sha256": "bfed2759f3c50ae4b7ed9ea891d5243fe5c745f9cfb8f6c8debbd7a4978a0777"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c424-spice-gtk/test.log",
+      "bytes": 933,
+      "sha256": "28720bc175a520d4cf575a796853798b8a8f08f31646a55f1238dec033b72aa2"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c424-spice-gtk/build/config.h",
+      "bytes": 1222,
+      "sha256": "94c231f6d519877e47dd0681cd0521658f31cfa91aa333d0caf7b76c8b25ced0"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c424-spice-gtk/native.ini",
+      "bytes": 178,
+      "sha256": "7f123b69cf5bbfe567882d8177bbffc40e9e8d3bc605b8f9c049da0bf812f8f5"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c424-spice-gtk/spice-gtk-0.42/src/spice-widget.c",
+      "bytes": 118994,
+      "sha256": "2ad6e77ebb68c1efd4c19a2f5f3031ec72726b36288a00a1add4b5888044d85f"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c424-spice-gtk/spice-gtk-0.42/src/usb-acl-helper.c",
+      "bytes": 8661,
+      "sha256": "2f6a5e7da60565ef3070cfa9e05779018ae86b66028f240b16f177e323efcb0d"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c424-spice-gtk/spice-gtk-0.42/src/spice-client-glib-usb-acl-helper.c",
+      "bytes": 9713,
+      "sha256": "af5dd6b030c1448ced06e885d558db480bb066801963cfc89bb20ba29b696ca1"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/worktrees/candidate-424/tools/spice-gtk-stationary-button.patch",
+      "bytes": 857,
+      "sha256": "d37383de7e71f0662ffd54fa16b1f0ed959aa393c37031517074363962799fd6"
+    },
+    {
+      "path": "/usr/lib/spice-client-glib-usb-acl-helper",
+      "bytes": 18472,
+      "sha256": "1ff2ef004ed24419fd7ea0a31f334f01562a7962f27a190bd320b0fa347d3e26"
+    },
+    {
+      "path": "/usr/share/polkit-1/actions/org.spice-space.lowlevelusbaccess.policy",
+      "bytes": 703,
+      "sha256": "5b4a053f4815c3f58faf9ef5d41d96e62d4931f1bf332a33cc40764ce4a0e729"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c424-spice-gtk/prefix/lib/libspice-client-glib-2.0.so.8.8.2",
+      "bytes": 5792176,
+      "sha256": "be48c620184c1025585880ab5f09cf681f6ec83f085c15b4d95740248a60606d"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c424-spice-gtk/libspice-client-glib-2.0.so.8.8.2.ldd.txt",
+      "bytes": 2936,
+      "sha256": "951976fed5387529d08831ab0a480b218912a7ea6024ddafb3ca64b7a8e33caf"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c424-spice-gtk/prefix/lib/libspice-client-gtk-3.0.so.5.1.1",
+      "bytes": 724344,
+      "sha256": "d77c0ed01390facbcd6a4aa1ed9f6afb5ae8cec81c694d62825fd448dc9ec935"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c424-spice-gtk/libspice-client-gtk-3.0.so.5.1.1.ldd.txt",
+      "bytes": 6765,
+      "sha256": "277ad2497234e98d2f3bfa1a5d5a7aa8e9b8f307125069d9606ce581e9a57b1d"
+    }
+  ]
+}
