@@ -1,30 +1,49 @@
 # Live status — 2026-10-09
 
-## Candidate382: pre-guest topology abort; same-boot recovery completed
+## Candidate383: SPICE agent transport and bounded existing-mode resize pass
 
-Run a41f7d1abac0b52f450eb624a55b307d, metal210,1.0.382,MODE2#306,
-bootba51b3c6. VFIO exposure occurred; ledger entry is retained.
-The manifest requested CONSOLE_VDAGENT=on, but observed QEMU agent_args was empty.
-Identity validation aborted before guest output. Serial/critical captures are
-empty, so no driver attachment, desktop, sound or port-open result exists.
-Outer shutdown forced-after-abort; private terminal absent. This was not a clean
-guest shutdown. Normal lease recovery failed because no producer was ready.
+Run c23d74d98b192d4a33a08376d9a64811, metal211,1.0.383,MODE2#307,
+bootba51b3c6. Source777bf28; build42a989b30403424e97098f562d46651e.
+The previously omitted CONSOLE_VDAGENT option now crosses the actual systemd
+launch boundary. Observed PCI virtio-console topology matches the manifest;
+AppleVirtIOConsole exposes /dev/tty.com.redhat.spice.0. Exclusive second-open
+refusal and real bidirectional SPICE capability exchange pass.
 
-Cause: tools/vm-supervision.py start_locked forwards launch options through an
-explicit systemd --setenv list; CONSOLE_VDAGENT was omitted. Launcher/container/
-profile checks alone did not cover this boundary. The supervisor test double
-inherited the parent environment and masked the missing explicit forwarding.
-Next candidate must test the actual start_locked systemd command before exposure.
+Candidate384 diagnostic sources ran against this same383 VM. Actual virt-manager
+window changes selected existing2560x1440 and3840x2160 HiDPI modes through standard
+SPICE monitor requests. Final40s diagnostic ended39.028s, exit0,7requests,
+5verified applications; no helper timeout, no remaining tty holder. Settled
+manager pixbuf and monitor maps match both sizes. Independent post-agent macOS
+mode and presenter poll remain3840x2160. Correct desktop screenshot retained.
 
-Stopped-device inspection found stable inactive queues. Supported MODE2/no-queue
-recovery then completed: schema9,recovered,authorizes_launch=true, no kernel
-faults, post-teardown queue errors empty. Original failed lease receipt retained.
-Evidence: run/candidate-382-results, candidate-382-noqueue-inspection.json and
-candidate-382-noqueue-recovery.json. No reboot or amdgpu rebind required; host
-awake, vfio-pci, power/control=on. Commit this result before the next cycle.
+Early helper used application-scoped CGDisplaySetDisplayMode and mode drifted;
+session-scoped transaction fixes persistence. Duplicate exact modes now skip
+reconfiguration. Initial launchctl submit diagnostics restarted; removed and
+replaced by explicit KeepAlive=false one-shot jobs. Invalid GI primary dimensions
+are excluded: enum field was declared pointer in installed typelib. These
+failures and source/hash boundaries are retained in the research report.
 
-1332 host tests pass,8skip; build/identity/dry-run and isolated TCG topology pass.
-These checks did not qualify real systemd propagation. Guest probe remains unrun.
-Last verified milestone remains381: pixel-matched1440p about57.5 observed IDs/s;
-same4K source34.5–34.9 instead of14.4, audio retry/fallback/natural recovery pass.
-Dev447131e has hosted37963569176 test/build green; main unchanged.
+Audio sample delivery passes. First route restoration failed and required an
+explicit identity-guarded retry; revised bounded reconciliation passes native
+capture and restores route, volume, mute, defaults and removes owned module.
+This proves samples, not endpoint audibility or A/V synchronization.
+
+Viewer closure leaves exact VM alive. Harness stop then exits after guest request;
+private terminal guest-shutdown/process_exited=true, Docker die exit0, no kill/stop
+events. Both captures record natural-container-exit, deferred0.432s,
+shutdown_event_wait=true, zombie=false; console EOF, critical recv-reset.
+Producer quiesce snapshot18 accepted terminal-prefix. Recovery recovered,
+authorizes_launch=true. CORE_PROBE_PASS is separate from desktop qualification.
+Host remains awake, vfio-pci, power/control=on. No reboot or amdgpu rebind.
+
+Evidence: run/candidate-383-results, c383-monitor-idempotent-complete.txt,
+c383-manager-resize-idempotent.jsonl, c383-resize-session.png,
+c383-audio-reconciliation*, c383-docker-events.jsonl. Candidate384 report contains
+full experiment history. Native383 prelaunch1333tests/8skip; latest diagnostic
+suite result is in run/c384-host-tests-idempotent.log.
+
+Remaining: persistent packaged agent, arbitrary viewport mode creation, input
+coordinates after automatic resize, broader lifecycle and performance/corruption
+qualification. Existing381 performance evidence remains valid only for its
+measured workloads. Dev447131e hosted37963569176 test/build green;383/384 delivery
+and hosted CI pending. Main unchanged. Do not call this completed roadmap work.
