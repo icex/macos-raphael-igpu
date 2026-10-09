@@ -18,8 +18,9 @@ Recovery recovered/authorizes_launch=true; VM/cycle stopped, host awake.
 No reboot/rebind needed. [Evidence](findings/research/libvirt-reset-native-20261009.md)
 · [Hashed receipts](findings/research/libvirt-reset-native-evidence-20261009.json).
 
-1224 host tests pass,8skip; stage87 pass before exposure. Checked-in kext remains353;
-356 build separately pinned.353 HiDPI milestone and CI timing correction are on
+1224 host tests pass,8skip (also rechecked for359 delivery); stage87 pass before
+exposure. Checked-in kext and manifest match the tested356 bundle
+(SHA72361929…); delivery remains pending.353 HiDPI milestone and CI correction are on
 devdefc0f4, hosted37930517553 test/build green.354–356 lifecycle work local pending
 delivery review. Main unchanged. Next: resize transition discrimination and console
 USB audio qualification. Installation durability, broader desktop/codec workloads
