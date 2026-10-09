@@ -1,48 +1,31 @@
 # Live status — 2026-10-10
 
-## Candidate 410: software registry exchange complete, stopped
+## Candidate 415: virtio network verified, root relay refused, stopped
 
-Boot G UUID `f9c1de4d-ca93-4a04-a830-a122143c2745`, source `89db9fb`, uses stock
-VMSVGA, eight CPUs and RealTSCOffset; no GPU/VFIO. Root verified the desktop,
-`C410_STATUS0` and awake assertions, then removed the owned awake job before shutdown.
-The FAT exchange returned nine fresh files with valid receipt/hash checks. Original
-409 `/tmp` artifacts were absent; they were not recovered.
+BootH UUID `189cb4d1-ca4e-48bc-86a2-557ff9ba798d`, source `797a550`,
+reached the VMSVGA desktop with eight CPUs and RealTSCOffset. AppleVirtIONetwork
+is active; en3 has 10.0.2.15/24. The existing system agent LaunchDaemon is running,
+but the bounded relay returned HTTP403: hardened VBox denies /proc/PID/exe access.
+No fixed root command or nonce response succeeded. Exact process evidence is
+retained for a narrow ownership-check fix; no gate was bypassed during this run.
 
-Fresh GFX0 is `15ad:0405`, class `030000`, at PCI `0:2.0`. BAR0 is I/O base
-`0x6030`, length `0x10`; BAR1 is memory base `0xe0000000`, length 64 MiB;
-BAR2 is memory base `0xe4400000`, length 2 MiB. Active `Display_boot` /
-`IONDRVFramebuffer` and two framebuffer user clients remain attached.
-`IOFBMemorySize=8294400` corresponds to 1920×1080×4. This is attachment/resource
-evidence, not exclusive ownership or accelerated presentation.
+Root verified awake assertions before network checks. The owned job was removed;
+pgrep showed no caffeinate, but cleared assertion bits were not observed. Natural
+shutdown reached S5 at 286.889 s, OFF at 286.895 s and termination at 286.939 s,
+before the 300 s cap. Original poweroff/unregister succeeded once without errors.
+Independent later UUID absence and closed listener passed. No GPU/VFIO exposure.
 
-The original controller result retains `error_type=VBoxCallError`: a main-loop
-state query lost its direct console during natural exit. A 0×0 screenshot refusal
-is also retained. Independent events prove S5 at 202.287588 s, OFF at 202.291376 s
-and TERMINATED at 202.343239 s, before the 300 s deadline. The exact UUID was absent
-about 80 s before the deadline. Unregister succeeded once, `exchange_closed=true`,
-with no `cleanup_error`. No controller fix or receipt rewrite was made in 410.
+Evidence: [native relay report](findings/research/virtualbox-root-relay-native-20261010.md)
+and companion manifest. Host suite: 1491 passed, eight skipped. Next iteration
+must preserve exact VM/process binding while accommodating hardened proc access.
+Framebuffer suppression, exclusive transport ownership and VBox Metal remain
+unqualified. Host work-awake inhibitor remains active; no native VM remains from415.
 
-Evidence: [native report](findings/research/virtualbox-fat-exchange-native-20261010.md)
-and its 22-artifact hash manifest. The 410 suite passed 1486 tests, with 8 skipped.
-[Prior 409 status](findings/research/status-archives/status-before-candidate410-20261010.md)
-is archived.
+## Delivery and parallel work
 
-## Remaining work and delivery
-
-Root owns the next software test; no VM is active from 410. The next implementation
-must preserve bounded exact-identity handling of the transient main-loop read,
-and establish explicit boot-framebuffer ownership before transport writes.
-VirtualBox acceleration, FIFO publication and exclusive aperture ownership remain
-unimplemented/unqualified. PerfPowerServices CPU use and sustained stability remain
-open. QEMU 402 pool progress and imperfect CR2 capture remain separately recorded.
-
-The last verified published baseline, dev
-`59422dae6683550b7027dd8fe53fb7801f33bbcd`, has hosted test/build success
-(Actions `37995939729`). The checked-in binary is the exact tested 402 executable
-with its canonical manifest. Candidate 414 integrates 410 results, 412 ownership
-analysis and 411/413 experimental DMA patches. Host VBox is
-unchanged; no patch was deployed.
-
-The integrated 414 suite passed 1487 tests in 56.379 s, with 8 skipped. All 22
-native 410 artifact hashes and the exact 402 binary/manifest were reverified.
-Main is unchanged; this status grants no launch admission.
+Published dev is `0ecc1715950ea6db3c256fb4930191830bd9ef1b`, integrating the
+409/410 software console results and experimental 411/413 DMA patches plus 412
+Apple-source ownership analysis. Hosted CI run37998445036 is still being watched.
+The exact tested candidate402 kext/manifest remain checked in. Main unchanged.
+An isolated baseline VBox build is underway in candidate416; installed binaries
+and kernel modules are unchanged. That build is not yet qualified or deployed.

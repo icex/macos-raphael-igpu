@@ -1,0 +1,65 @@
+{
+  "scope": "native software run, root command refused",
+  "artifacts": [
+    {
+      "path": "/home/bogdan/macos-vm/run/c415-vbox-boot-h/scope.json",
+      "sha256": "c904b102c5ed0e786cbd4f5f8d5473bf1c7a5c12b42b805d5b5bd794f8b57d0e"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c415-vbox-boot-h/relay-scope.json",
+      "sha256": "ff2f54d02839ddc5833b1b689f0cad73c8472a893ea360864b2ab624a14d58cb"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c415-vbox-boot-h/result.json",
+      "sha256": "505e7273ea33562e8c2c007ed3efe9f8df9b0d2d2db3e3dcd8ec2bfdfe74dd9d"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c415-vbox-boot-h/stopped.json",
+      "sha256": "4856568af9c18ab27637c64b2efcfa493c857679e61cb68a1a9580999d744402"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c415-vbox-boot-h/process-readback.json",
+      "sha256": "fbfe6c52b3945c9389e8ab07b3c2ef23e517824e1c0480f42640c5324e1ea0c3"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c415-vbox-boot-h/root-final-verification.json",
+      "sha256": "3d5e43e10ee158daad4cda0ea0efb53870b61f94d107f5ef822db67ba9723b4d"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c415-vbox-boot-h/root-acpi-request.json",
+      "sha256": "663758729be51851bc2a11d02760f20e53b0ad13442944f2d2d6eafe5cf5e9cd"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c415-vbox-boot-h/shutdown-selected.txt",
+      "sha256": "b7460fc6da7c533afd37de9a61fcd26676831bc278c1d78b6c9e95ab682be70f"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c415-vbox-boot-h/network.png",
+      "sha256": "18b836a8b5cc4247672439381e5a9261401a4435425793f217a6fe48fa30fc08"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c415-vbox-boot-h/agent-awake.png",
+      "sha256": "a46de6b7950662e24be09bcb3f25c20ac3489068f74c4cfa3248cc97d142d8a4"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c415-vbox-boot-h/awake-removed.png",
+      "sha256": "906d97cd8cf2c470d45fd553dea51b157b2ed3020da81b9e20725bbc7d405985"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c415-vbox-boot-h/shutdown-dialog.png",
+      "sha256": "dedfce0ec7069d0b371f771260bbd517c0e13d1847885feddd857500b56f74c4"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c415-vbox-boot-h/uart1.log",
+      "sha256": "4a67e60887498a5c1787f93512bc9674116659ef1edd5934fac9e61d5b7ce45f"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c415-vbox-boot-h/uart2.log",
+      "sha256": "d36323167871876553bcac975ee188d9699b9bd51b3dd8abe346c11b1b6c0f66"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c415-full-suite.log",
+      "sha256": "85e2ee18a696e73fe9792384651a65f6e6d8529380488c690d63f775695b18a7"
+    }
+  ]
+}
