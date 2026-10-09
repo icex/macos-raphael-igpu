@@ -35,3 +35,11 @@ choosing a writer takeover experiment. Retain screenshots/serial even on failure
 
 Focused tests: 3 inventory/CLI tests and 13 existing controller tests pass. No
 full suite or native guest compilation/execution performed for this preparation.
+
+Final integrated validation after merging dev59422da: 1479 tests passed with
+8 skips; log `run/c409-final-full-suite.log`. The standalone name/class substring
+filter is explicitly heuristic: an IOFramebuffer subclass with neither name nor
+class containing Framebuffer can be missed. Root must also capture the read-only
+conformance query `ioreg -r -c IOFramebuffer` to cross-check actual subclass
+attachment. An empty heuristic result is not evidence that no framebuffer owns
+the display; no ownership-absence conclusion is permitted from this helper.
