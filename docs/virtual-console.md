@@ -8,13 +8,14 @@ comparison improves sampled1080HiDPI delivery from22–24 to32–35updates/s wit
 opt-in Bochs full-refresh property; native1080p does not improve uniformly.
 Candidate356 completes native reset shutdown with a real controller terminal
 and authorizing recovery; the pending-worker wait remains native-unexercised.
-Normal/fullscreen input pass, but the small-window transition retains two misses.
+Normal/fullscreen input pass. Candidate361 also passes continuous pointer entry
+into1000×760; earlier enter-without-motion failures remain distinct.
 Partial-region samples, automatic resize, other frontends and VirtualBox remain
 open. This is not qualified60Hz delivery.
 [Current paired evidence](../findings/research/bochs-full-refresh-paired-20261009.md).
-Candidate358 verifies explicit-device USB audio through QEMU/Pulse with isolated
-stereo capture and exact route restoration; default applications and endpoint
-audibility remain unqualified. Candidate332's unsafe TMR experiment remains withdrawn.
+Candidate361 verifies ordinary afplay default USB audio through QEMU/Pulse with
+isolated stereo capture and exact route restoration; endpoint audibility, other
+applications and A/V synchronization remain unqualified. Candidate332's unsafe TMR experiment remains withdrawn.
 
 ## Architecture under test
 
@@ -351,3 +352,29 @@ Capture is CORE_PROBE_PASS; genuine guest-shutdown/process-exited terminal and
 authorizing GPU recovery both pass. No pending-worker native qualification or
 broader crash-lifecycle result is inferred from this run.
 [Identity and hashed evidence](../findings/research/console-audio-native-20261009.md).
+
+
+## Default application audio and continuous entry (361)
+
+Ordinary `/usr/bin/afplay`, without device selection or a custom HAL callback,
+plays a bounded stereo WAV through the existing default QEMU USB output. Isolated
+VM-only Pulse capture passes997.11Hz left/1498.53Hz right, both-channel phase,
+silence and clipping checks. Guest default/system output stay unchanged; exact
+host route, volume/mute/defaults and owned sink/module removal are independently
+verified. The guest's device label `Audio Output - Disabled` does not describe
+this measured behavior. Endpoint audibility, other applications and A/V sync
+remain unqualified; SPICE audio remains off and HDMI330 is separate.
+
+After a real virt-manager resize1288×909→1000×760, continuous relative pointer
+entry produces GTK motion before the first guest click. Five targets and exact
+keyboard token pass with zero misses and no guest mode changes (1080HiDPI).
+This is a positive control for continuous entry, not a fix for358's enter/button
+without motion. Stationary-pointer resize, all input backends and automatic guest
+resolution following remain open. No driver/viewer patch was applied.
+
+CORE_PROBE_PASS, genuine guest-shutdown/process-exited terminal and authorizing
+recovery pass. Both hooks complete naturally in about0.394s, preserving critical
+recv-reset versus console clean EOF. They find completed process state; the
+pending-worker event wait remains native-unexercised. Next qualification is
+reproducible optimized helper installation, first use/second boot and rollback.
+[Exact identities and hashed artifacts](../findings/research/console-default-audio-input-20261009.md).
