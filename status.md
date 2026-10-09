@@ -23,7 +23,7 @@ host remains awake, vfio-pci/power-on. No reboot/rebind.
 [Hashes](findings/research/console-changed-bbox-native-evidence-20261009.json).
 
 1285 host tests pass,8skip, including delivery checks. Candidate374 docs and
-hardware-tested kext are integrated into dev; hosted validation pending. Prior370
+hardware-tested kext are integrated into dev; hosted37951815825 test/build green. Prior370
 hosted37948929898 test/build green. Main unchanged. Next: bounded read-only D-state
 refusal diagnostics without weakening gates, corrected regrant positive/negative
 control, and sustained localized/full-field workload. Broader apps/codecs,
