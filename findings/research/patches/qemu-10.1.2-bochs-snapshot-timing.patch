@@ -1,0 +1,217 @@
+--- a/hw/display/bochs-display.c
++++ b/hw/display/bochs-display.c
+@@ -13,6 +13,7 @@
+ #include "migration/vmstate.h"
+ #include "hw/display/bochs-vbe.h"
+ #include "hw/display/edid.h"
++#include "bochs-snapshot-timing.h"
+ 
+ #include "qapi/error.h"
+ 
+@@ -45,6 +46,8 @@
+     DisplaySurface   *snapshot_pending;
+     bool             x_debug_snapshot;
+     bool             x_debug_snapshot_restart;
++    bool             x_debug_snapshot_timing;
++    BochsSnapshotTiming snapshot_timing;
+     uint32_t         snapshot_requested_epoch, snapshot_active_epoch;
+     uint32_t         snapshot_state, snapshot_width, snapshot_height;
+     uint32_t         snapshot_ack, snapshot_error;
+@@ -104,11 +107,58 @@
+     }
+ }
+ 
++/* Successful commits only; stage order is allocation, copy, pending free.
++ * Copy includes first-touch faults. Dispatch/BQL wait precedes these samples. */
++static void bochs_snapshot_timing_record(BochsDisplayState *s, uint32_t w,
++                                        uint32_t h, bool pending,
++                                        const int64_t t[4])
++{
++    BochsSnapshotTiming *stats = &s->snapshot_timing;
++    uint64_t us[BST_STAGES];
++    unsigned i;
++    for (i = 0; i < BST_STAGES; i++) {
++        if (t[i] < 0 || t[i + 1] < t[i]) {
++            return;
++        }
++        us[i] = t[i + 1] - t[i];
++    }
++    if (!stats->begun) {
++        stats->started = t[0];
++        stats->begun = true;
++    }
++    if (!bst_record(stats, t[3], w, h, pending, us)) {
++        return;
++    }
++    for (i = 0; i < BST_SLOTS; i++) {
++        BochsSnapshotTimingBucket *b = &stats->buckets[i];
++        if (!b->count) {
++            continue;
++        }
++        fprintf(stderr, "bochs-snapshot-timing window=%u start_us=%" PRIu64
++                " end_us=%" PRIu64 " geometry=%ux%u commits=%" PRIu64
++                " alloc_calls=%" PRIu64 " copy_calls=%" PRIu64
++                " free_calls=%" PRIu64 " pending_present=%" PRIu64
++                " pending_null=%" PRIu64
++                " alloc_us=%" PRIu64 "/%" PRIu64
++                " copy_us=%" PRIu64 "/%" PRIu64
++                " free_us=%" PRIu64 "/%" PRIu64
++                " dropped_geometry=%" PRIu64 " saturated=%u\n",
++                stats->windows + 1, stats->started, (uint64_t)t[3],
++                b->width, b->height, b->count, b->count, b->count, b->count,
++                b->pending_present, b->count - b->pending_present,
++                b->total[0], b->maximum[0], b->total[1], b->maximum[1],
++                b->total[2], b->maximum[2], stats->dropped, stats->saturated);
++    }
++    bst_clear(stats, t[3]);
++}
++
+ static void bochs_snapshot_write(void *opaque, hwaddr addr, uint64_t val,
+                                  unsigned size)
+ {
+     BochsDisplayState *s = opaque;
+     DisplaySurface *fresh;
++    int64_t timing[4] = { 0 };
++    bool timed, pending;
+     uint32_t w = s->snapshot_width, h = s->snapshot_height;
+ 
+     /* Default MMIO dispatch is under BQL; gfx_update runs under the same lock.
+@@ -168,17 +218,35 @@
+         s->snapshot_error = 4;
+         return;
+     }
++    timed = s->x_debug_snapshot_timing &&
++            s->snapshot_timing.windows < BST_WINDOWS;
++    pending = s->snapshot_pending != NULL;
++    if (timed) {
++        timing[0] = g_get_monotonic_time();
++    }
+     fresh = qemu_create_displaysurface(w, h);
++    if (timed) {
++        timing[1] = g_get_monotonic_time();
++    }
+     memcpy(surface_data(fresh), memory_region_get_ram_ptr(&s->staging),
+            (size_t)w * h * 4);
++    if (timed) {
++        timing[2] = g_get_monotonic_time();
++    }
+     /* Completed snapshots are immutable. Latest pending may replace an older
+      * unpublished snapshot; the console/listeners retain the published one. */
+     if (s->snapshot_pending) { s->snapshot_replaced++; }
+     qemu_free_displaysurface(s->snapshot_pending);
++    if (timed) {
++        timing[3] = g_get_monotonic_time();
++    }
+     s->snapshot_pending = fresh;
+     s->snapshot_pending_seq = val;
+     s->snapshot_error = 0;
+     s->snapshot_ack = val;
++    if (timed) {
++        bochs_snapshot_timing_record(s, w, h, pending, timing);
++    }
+ }
+ 
+ static const MemoryRegionOps bochs_snapshot_ops = {
+@@ -417,6 +485,10 @@
+         error_setg(errp, "bochs-display: snapshot restart requires snapshot");
+         return;
+     }
++    if (s->x_debug_snapshot_timing && !s->x_debug_snapshot) {
++        error_setg(errp, "bochs-display: snapshot timing requires snapshot");
++        return;
++    }
+     if (s->vgamem < 4 * MiB) {
+         error_setg(errp, "bochs-display: video memory too small");
+         return;
+@@ -518,6 +590,8 @@
+     DEFINE_PROP_BOOL("x-debug-snapshot", BochsDisplayState, x_debug_snapshot, false),
+     DEFINE_PROP_BOOL("x-debug-snapshot-restart", BochsDisplayState,
+                      x_debug_snapshot_restart, false),
++    DEFINE_PROP_BOOL("x-debug-snapshot-timing", BochsDisplayState,
++                     x_debug_snapshot_timing, false),
+     DEFINE_EDID_PROPERTIES(BochsDisplayState, edid_info),
+ };
+ 
+--- /dev/null
++++ b/hw/display/bochs-snapshot-timing.h
+@@ -0,0 +1,80 @@
++/* Bounded diagnostic policy. Access serialized by the device's BQL. */
++#ifndef BOCHS_SNAPSHOT_TIMING_H
++#define BOCHS_SNAPSHOT_TIMING_H
++#include <stdint.h>
++#include <stdbool.h>
++#include <string.h>
++#define BST_SLOTS 8
++#define BST_STAGES 3
++#define BST_WINDOWS 128
++#define BST_PERIOD_US 5000000ULL
++typedef struct BochsSnapshotTimingBucket {
++    uint32_t width, height;
++    uint64_t count, pending_present;
++    uint64_t total[BST_STAGES], maximum[BST_STAGES];
++} BochsSnapshotTimingBucket;
++typedef struct BochsSnapshotTiming {
++    BochsSnapshotTimingBucket buckets[BST_SLOTS];
++    uint64_t started, dropped;
++    unsigned windows;
++    bool begun, saturated;
++} BochsSnapshotTiming;
++static inline void bst_add(BochsSnapshotTiming *s, uint64_t *v, uint64_t n)
++{
++    if (UINT64_MAX - *v < n) {
++        *v = UINT64_MAX;
++        s->saturated = true;
++    } else {
++        *v += n;
++    }
++}
++static inline bool bst_record(BochsSnapshotTiming *s, uint64_t now,
++                             uint32_t w, uint32_t h, bool pending,
++                             const uint64_t us[BST_STAGES])
++{
++    BochsSnapshotTimingBucket *b = NULL;
++    unsigned i;
++    if (s->windows >= BST_WINDOWS) {
++        return false;
++    }
++    if (!s->begun) {
++        s->begun = true;
++        s->started = now;
++    }
++    for (i = 0; i < BST_SLOTS; i++) {
++        if (!s->buckets[i].count ||
++            (s->buckets[i].width == w && s->buckets[i].height == h)) {
++            b = &s->buckets[i];
++            break;
++        }
++    }
++    if (!b) {
++        bst_add(s, &s->dropped, 1);
++    } else {
++        b->width = w;
++        b->height = h;
++        bst_add(s, &b->count, 1);
++        if (pending) {
++            bst_add(s, &b->pending_present, 1);
++        }
++        for (i = 0; i < BST_STAGES; i++) {
++            bst_add(s, &b->total[i], us[i]);
++            if (us[i] > b->maximum[i]) {
++                b->maximum[i] = us[i];
++            }
++        }
++    }
++    return now >= s->started && now - s->started >= BST_PERIOD_US;
++}
++static inline void bst_clear(BochsSnapshotTiming *s, uint64_t now)
++{
++    memset(s->buckets, 0, sizeof(s->buckets));
++    s->started = now;
++    s->begun = true;
++    s->dropped = 0;
++    s->saturated = false;
++    if (s->windows < BST_WINDOWS) {
++        s->windows++;
++    }
++}
++#endif
