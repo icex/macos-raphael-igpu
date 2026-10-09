@@ -1,0 +1,122 @@
+{
+  "schema": 1,
+  "run_id": "3d0e4869c7f1c49af50497f440996a5b",
+  "scope": "Stable functional evidence only; active cadence and lifecycle excluded",
+  "artifacts": [
+    {
+      "path": "/home/bogdan/macos-vm/run/c390-deep-build-check.json",
+      "bytes": 392,
+      "sha256": "bbf24479e0ace119c638e018dfb529f3aa294388e9868652a673e08f446cf552"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c390-stage-native.txt",
+      "bytes": 1405,
+      "sha256": "1573387e13f5a66a83e77cf43cb92ffd048db583c3b8fad79443a5f3411a9df5"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c390-install-native.txt",
+      "bytes": 839,
+      "sha256": "adcc2d5264410289dd684556be7ebe735572cea7b7327ffeb15875b46fbe3e3f"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c390-installed-state.txt",
+      "bytes": 3085,
+      "sha256": "58ca8bae52c378593f8118df46f465da11bd0d384d0a2e96e3e60dcb9524b4bd"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c390-first-four-k.txt",
+      "bytes": 8753,
+      "sha256": "77b1a25ccb5fd1834c68269dfb60ffb09fa839a6b4a95c3a1e2381216214daa4"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c390-odd-direct.txt",
+      "bytes": 9058,
+      "sha256": "72b21a83a1beb9c90eaef3f9862d69b9f02a61e9c9625a90df7db5c232e438dd"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c390-native-framing-results.txt",
+      "bytes": 68009,
+      "sha256": "f025600d277c0e6aecc356f5737e90924e245cea2d254235bcde08ec593df098"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c390-raw-modes.txt",
+      "bytes": 34939,
+      "sha256": "c7610df701b14c984df04d2d028366e792b78a064cb60bbb4a436dd98cc6e19b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c390-pre-reorder-logs.txt",
+      "bytes": 8680,
+      "sha256": "2c12723051144642355514297836457dfaa7f3d806a7598c33ec611918c1004a"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c390-stage-native-v2.txt",
+      "bytes": 1411,
+      "sha256": "396a4d23609ae7c89e42ac094a2376a3e135733e20902ddb3d4100608aaa7c95"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c390-install-native-v2.txt",
+      "bytes": 1195,
+      "sha256": "f0634bff44dfe98f928bc0d560353656febf3dd5d534254e582b6ddb279290fb"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c390-v2-four-k.txt",
+      "bytes": 1772,
+      "sha256": "6d4174d1a50beeac132f79b54f10b76ce26c313c2739903b3526db28e2fd9f63"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c390-v2-auto-manager-events.jsonl",
+      "bytes": 23794,
+      "sha256": "469d21ea8eefd621b17ec31d0a1b86d2a82c63d0e8d9bff49511c32c4e64e6e5"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c390-input-v2-final.txt",
+      "bytes": 2992,
+      "sha256": "480d07e3600a3bff97f81a9024a4ad136dbac1551bbb371a9a0d73b2bea46247"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c390-input-v2-injection.jsonl",
+      "bytes": 1031,
+      "sha256": "7366f1f9ad71a136998f4026e48a88e28a6206f9735081673b8c716ac315774f"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c390-v2-audio-result.txt",
+      "bytes": 627,
+      "sha256": "17d5e8bc09f4ed6f400fac7197ed81cd8d9664acef4ea3993d2f78c43a1faec5"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c390-v2-audio-restored-independent.json",
+      "bytes": 99,
+      "sha256": "b8f254659d9904b96789868fa8f77ce466562297fc1d4b49f1d53b4466a0cf49"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c390-scale2-restart.txt",
+      "bytes": 161,
+      "sha256": "af1edfbee2b7bc0fee235c979e1810db47e81cb23aacd55bf3c1deeddbd01dc0"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c390-scale2-check.txt",
+      "bytes": 1805,
+      "sha256": "7b36ec27cc48ab3ee8fb27115c9b621f00cd2ce7d4d9b7b4e26450cfa7790834"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c390-scale1-restore.txt",
+      "bytes": 165,
+      "sha256": "7a75cb25dfc15c625ef35556554301f353997e7f4fa32ce7fa5450f9f56818fa"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c390-matched1x-prep.txt",
+      "bytes": 1093,
+      "sha256": "1ab7a7d3368e63a32aac574294e565193b805860e1251b576d5c4856f618768e"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c390-console-addon-manifest.json",
+      "bytes": 1385,
+      "sha256": "5e4782009d9317070cfa66d0298c3276f20c190f55fa3f131620cb65a2cb4b66"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c390-console-addon-v2-manifest.json",
+      "bytes": 1385,
+      "sha256": "3b0d78b02814506ed9725f95aa0a9d71b33549f5024f50cfd59c0dd1a604bccf"
+    }
+  ]
+}
