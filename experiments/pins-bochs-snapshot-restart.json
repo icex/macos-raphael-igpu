@@ -1,0 +1,16 @@
+{
+  "_comment": "Candidate394: same compatible base plus explicit restartable snapshot epoch extension; requires CONSOLE_SNAPSHOT=restart and private guest staging. Migration remains refused.",
+  "schema": 1,
+  "vm_dir": "/home/bogdan/macos-vm",
+  "gpu_bdf": "0000:7b:00.0",
+  "gpu_id": "0x73ff",
+  "gpu_rom": "run/gpu-patched.rom",
+  "inhibitor_container": "rgpu-inhibit",
+  "image_id": "sha256:2fc501c44cb60dd5cd7c85b1c4462d2fbcb621415acc356327ba8c7443050467",
+  "lilu": {
+    "bundle": "run/headless-lilu-verified-1df50f512b55/Lilu.kext",
+    "executable_sha256": "1df50f512b55b4f6ec873a18ff4b0db78b11b7fe9022ee195e50466e8573b7f2",
+    "info_sha256": "6714fee51444238c0540814729767485572441435bcf36a158571cf78317a669",
+    "build_manifest_sha256": "52918857d61ac640980c53fd597aac22e0fcb8cdd50de2a09e3dfe1eeeb54f76"
+  }
+}
