@@ -35,6 +35,16 @@ def dependency_check():
     handoff.require(version.startswith('QEMU emulator version 10.1.2'),'unreviewed QEMU runtime')
 
 
+def start_daemon(deadline):
+    # The native launcher reached us through a PATH shim named like QEMU.
+    # libvirt discovers emulator capabilities through PATH too: never let it
+    # probe that controller shim. Keep private session XDG and other environment.
+    environment=dict(os.environ)
+    environment['PATH']='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+    subprocess.run(['libvirtd','--daemon'],env=environment,check=True,
+                   timeout=min(10,max(.1,deadline-time.monotonic())))
+
+
 def context():
     run_id=os.environ['RGPU_LIBVIRT_RUN_ID'];expected=os.environ['RGPU_LIBVIRT_ADMISSION_SHA256']
     directory=handoff.run_directory('/run/vm',run_id)
@@ -108,7 +118,7 @@ def launch(argv):
     def stop(signum,frame):stopped.append(signum)
     signal.signal(signal.SIGTERM,stop);signal.signal(signal.SIGINT,stop)
     backend=owner=None
-    subprocess.run(['libvirtd','--daemon'],check=True,timeout=min(10,max(.1,deadline-time.monotonic())))
+    start_daemon(deadline)
     daemon_pid=int((directory/'runtime/libvirt/libvirtd.pid').read_text())
     daemon=native.local.process(daemon_pid)
     handoff.require(daemon is not None,'libvirt daemon ownership missing')
