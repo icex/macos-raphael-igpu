@@ -1,26 +1,25 @@
 # Live status — 2026-10-09
 
-## Candidate356: native socket-reset shutdown completes; viewport transition open
+## Candidate358: explicit console stereo audio passes; first-entry input remains open
 
-Run `684122f412ad335d91c07cdfece852dd`, metal-199, build1.0.356,
-MODE2#295, bootba51b3c6. Native Metal/WindowServer/display pass; awake HiDPI
-desktop visible in actual virt-manager. Normal1288x909 and fullscreen1920x1080
-pass five target clicks and exact keyboard token, no guest mode changes.
-Small1000x760 records two initial clicks at stale center, then all targets and
-token delivered; retain as failed, investigate pointer motion/enter after resize.
-Viewer close preserves exact VM; reopening displays desktop.
+Run775fc7e86900090204edd78ae20f34a4, metal-200, build1.0.358,
+MODE2#296, bootba51b3c6. Exact QEMU USB HAL output delivers expected stereo tones
+through VM-only Pulse capture; frequencies/channel separation/silence pass.
+Original stream route, volume/mute/defaults restored and owned sink/module removed,
+independently verified. Default-application output and endpoint audibility untested.
 
-Critical final bytes/hash match quiesce ACK. Critical recv-reset104 and console
-cleanEOF are distinct. Both hooks observe natural container exit~0.373s, real
-terminal guest-shutdown/process_exited=true. CORE_PROBE_PASS, earliest_failure=null.
-New pending-worker shutdown-event wait not exercised by native hooks.
-Recovery recovered/authorizes_launch=true; VM/cycle stopped, host awake.
-No reboot/rebind needed. [Evidence](findings/research/libvirt-reset-native-20261009.md)
-· [Hashed receipts](findings/research/libvirt-reset-native-evidence-20261009.json).
+Read-only GTK trace shows enter+button without motion after resize clicks at prior
+guest position. Real motion restores mapping; subsequent five targets+token pass
+at1000x760 and1080HiDPI without guest mode changes. Initial click opens Apple menu
+outside fixture: fixture passed=true is not full transition qualification.
+Next test continuous real pointer motion and default-application audio output.
 
-1224 host tests pass,8skip; stage87 pass before exposure. Checked-in kext remains353;
-356 build separately pinned.353 HiDPI milestone and CI timing correction are on
-devdefc0f4, hosted37930517553 test/build green.354–356 lifecycle work local pending
-delivery review. Main unchanged. Next: resize transition discrimination and console
-USB audio qualification. Installation durability, broader desktop/codec workloads
-and VirtualBox remain open.
+CORE_PROBE_PASS, earliest_failure=null; genuine terminal guest-shutdown with
+process_exited=true. Recovery recovered/authorizes_launch=true. VM/cycle stopped;
+host awake. No reboot/rebind. [Evidence](findings/research/console-audio-native-20261009.md)
+· [Hashed artifacts](findings/research/console-audio-native-evidence-20261009.json).
+
+1236 host tests pass,8skip; staging87 pass. Audio inventory parser repair17focused
+checks pass. Checked-in kext remains tested356;358 separately pinned.356 lifecycle
+milestone is on devc24ff71; hosted37934370047 pending. Main unchanged. Broader
+installation durability, desktop/codec/performance and VirtualBox remain open.
