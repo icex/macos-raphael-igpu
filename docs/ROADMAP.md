@@ -236,7 +236,9 @@ not qualify viewer throughput. Software-only Boxes transport works, but full
 libvirt-managed macOS launch/input/shutdown/recovery remains the next integration
 milestone. Candidate341 now verifies isolated TAP handoff and container-local
 software guest shutdown/manager Force Off through natural container exit.
-Full native argv/TAP provenance checks and supervised launcher wiring remain.
+Full native argv comparison and source-based macvtap provenance checks are
+implemented; live inherited-macvtap verification and supervised launcher wiring
+remain. [Verifier scope](../findings/research/libvirt-native-profile-20261009.md).
 [Lifecycle evidence](../findings/research/libvirt-local-lifecycle-20261009.md).
 Host-window-driven resize and measured performance remain open.
 VirtualBox requires a separate transport/driver.

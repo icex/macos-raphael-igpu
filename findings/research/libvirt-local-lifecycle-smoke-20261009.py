@@ -23,14 +23,15 @@ def module(name,path):
 runtime=module('runtime',ROOT/'tools/libvirt-console-runtime.py')
 local=module('local',ROOT/'tools/libvirt-console-local.py')
 fixture=module('fixture',ROOT/'findings/research/libvirt-runtime-failure-smoke-20261009.py')
+network=module('network',ROOT/'tools/libvirt-console-network.py')
 
 class TestBackend(local.LocalBackend):
     def network_attached(self,name,hub):
         report=self.qmp(name,'human-monitor-command',{'command-line':'info network'}).replace('\r','')
-        match=re.fullmatch(r'hub 0\n \\ rgpu_lan_attachment: rgpu_lan_backend: index=0,type=tap,fd=(\d+)\n \\ lan0: lan: index=0,type=nic,model=vmxnet3,macaddr=52:54:00:12:34:56\n',report)
-        if match is None:return False
+        (RUN/'network.txt').write_text(report)
+        fd=network.verify_network_report(report,'52:54:00:12:34:56',hub)
         state=self.snapshot(name)
-        info=Path(f'/proc/{state["pid"]}/fdinfo/{match[1]}').read_text()
+        info=Path(f'/proc/{state["pid"]}/fdinfo/{fd}').read_text()
         return re.search(r'^iff:\s+rgpu_tap$',info,re.M) is not None
 
 
@@ -49,8 +50,11 @@ def main():
     subprocess.run(['libvirtd','--daemon'],check=True,timeout=10)
     backend=TestBackend('qemu:///session',RUN/'events.jsonl')
     plan=fixture.plan()
+    plan['xml']=plan['xml'].replace('vmxnet3,id=lan,','vmxnet3,id=lan0,')
     root=ET.fromstring(plan['xml']);ET.SubElement(ET.SubElement(root,'features'),'acpi');cmd=root.find('{http://libvirt.org/schemas/domain/qemu/1.0}commandline')
-    for value in ['-device','ich9-ahci,id=sata','-drive',
+    for value in ['-netdev','user,id=net0',
+                  '-device','vmxnet3,id=net0,netdev=net0,bus=pcie.0,addr=0x8,mac=52:54:00:12:34:57',
+                  '-device','ich9-ahci,id=sata','-drive',
                   'file=/run/rgpu-libvirt/boot.img,format=raw,if=none,id=testboot,snapshot=on',
                   '-device','ide-hd,drive=testboot,bus=sata.0,bootindex=1',
                   '-chardev','socket,id=testserial,path=/run/rgpu-libvirt/guest.sock,server=on,wait=off',

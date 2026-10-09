@@ -124,11 +124,13 @@ class LocalBackend:
             return self._snapshot(name)
         except (self.lv.libvirtError, MissingProcess) as error:
             identity=self.known_identity
-            if identity is None or identity['name']!=name or not self.process_gone(identity):
+            if identity is None or identity['name']!=name:
                 raise
             until=time.monotonic()+0.5
-            while name in self.domains() and time.monotonic()<until:time.sleep(0.02)
-            if name not in self.domains():raise DomainExited(name) from error
+            while time.monotonic()<until:
+                if name not in self.domains() and self.process_gone(identity):
+                    raise DomainExited(name) from error
+                time.sleep(0.02)
             raise
 
     def _snapshot(self,name):
@@ -140,7 +142,7 @@ class LocalBackend:
         proc=selected[0]
         result=dict(name=root.findtext('name'),uuid=root.findtext('uuid'),
                     run_id=root.find('metadata/{urn:raphaelgpu:experiment}run').get('id'),
-                    persistent=bool(domain.isPersistent()),**proc,
+                    persistent=bool(domain.isPersistent()),domain_id=domain.ID(),**proc,
                     **self.qmp(name,'query-status',{}))
         identity={k:result[k] for k in ('name','uuid','run_id','pid','start_ticks')}
         if self.attempt and all(identity[k]==v for k,v in self.attempt.items()):

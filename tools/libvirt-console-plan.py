@@ -155,7 +155,7 @@ def build_plan(argv, run_id):
     for value in retained:
         element(cmd, '{'+NS+'}arg', value=value)
     ET.indent(root)
-    return {'schema': 1, 'run_id': run_id, 'domain_name': 'rgpu-'+run_id,
+    return {'schema': 1, 'native_argv': list(argv), 'run_id': run_id, 'domain_name': 'rgpu-'+run_id,
             'uuid': '00000000-0000-0000-0000-000000000000', 'xml': ET.tostring(root, encoding='unicode'),
             'required_launch': 'transient-paused', 'required_lan_fd': 3,
             'lan_hub': 0, 'resume_allowed': False,

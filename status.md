@@ -10,13 +10,17 @@ guest poweroff and independent libvirt Force Off, checks QEMU exit, retains the
 distinct reasons and exits each container naturally with status0. Docker init
 reaping and a real shutdown-observation race were fixed during those tests.
 All test containers are stopped; the host sleep:idle blocker stays active.
-Full host suite:1,063 tests pass,3 skipped.
+Full host suite:1,077 tests pass,3 skipped.
 
-Production TAP provenance/full-argv verification and vm-entry/harness integration
-remain next. This is not yet a libvirt-managed accelerated macOS pass. The native
+The complete argv verifier matches fresh libvirt conversion; macvtap
+provenance checks follow Linux source and a read-only host snapshot. Two further
+software dual-NIC shutdown runs pass after fixing the process-reaping race.
+Manifest binding and vm-entry/harness integration remain next. The inherited
+host macvtap checks still require an admitted live transfer. This is not yet a libvirt-managed accelerated macOS pass. The native
 GPU launch path is unchanged. [Plan](findings/research/libvirt-console-plan-20261009.md) ·
 [TAP](findings/research/libvirt-runtime-tap-20261009.md) ·
-[Local lifecycle](findings/research/libvirt-local-lifecycle-20261009.md).
+[Local lifecycle](findings/research/libvirt-local-lifecycle-20261009.md) ·
+[Native verifier](findings/research/libvirt-native-profile-20261009.md).
 
 ## Candidate340: native accelerated SPICE desktop after host resume
 

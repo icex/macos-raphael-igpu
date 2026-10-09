@@ -1,0 +1,123 @@
+{
+  "converted_profile": {
+    "passed": true,
+    "converted_argv_sha256": "b3b0093c6a72d1496a11acc3e483c68f133143dc06e21d24e764a13f8803f258",
+    "plan_sha256": "52cf2bac1bad4378ca6672580e799fddff0bec2a762ef24aafb3e2ae36b5b6c7",
+    "scope": "Complete libvirt11.9 conversion matches independent verifier after projecting inactive domain-id and monitor path to runtime fields. No domain created or VFIO opened; not live native configuration proof."
+  },
+  "host_network_snapshot": {
+    "schema": 1,
+    "kind": "macvtap",
+    "mode": "bridge",
+    "name": "rgpu-lan",
+    "ifindex": 6,
+    "mac": "62:a0:86:89:74:18",
+    "lower": {
+      "name": "enp9s0",
+      "ifindex": 2,
+      "address": "34:5a:60:50:e9:3e"
+    },
+    "netns": {
+      "device": 5,
+      "inode": 4026531833
+    },
+    "node": "/dev/tap6",
+    "character": {
+      "major": 511,
+      "minor": 1
+    }
+  },
+  "prior_kvm_cpu_data_rechecked": true,
+  "prior_kvm_cpu_data_sha256": "2df56434d1ff6950c85df30a587e0c1bfb7301cdf08f7545a6842f1b1956ded2",
+  "network_descriptor_scope": "Host interface/devnode stat only; no host macvtap FD opened in this step.",
+  "software_repeats": [
+    {
+      "result": {
+        "passed": true,
+        "reason": "guest-shutdown",
+        "identity": {
+          "name": "rgpu-9b98b144be62e5d3de275c1a14759751",
+          "uuid": "00000000-0000-0000-0000-000000000000",
+          "run_id": "9b98b144be62e5d3de275c1a14759751",
+          "pid": 45,
+          "start_ticks": 32757350
+        },
+        "scope": {
+          "kind": "pid-namespace",
+          "device": 5,
+          "inode": 4026533266,
+          "init_start_ticks": 32757313
+        },
+        "process_exited": true,
+        "phases": [
+          "creating-paused",
+          "paused-identity",
+          "network-ready",
+          "running",
+          "stopped"
+        ]
+      },
+      "host": {
+        "cid": "cee91253d1a97d2b5b4e51eed1b46593575f1bc4380314aae659497bbe0680a7",
+        "state": {
+          "Status": "exited",
+          "Running": false,
+          "Paused": false,
+          "Restarting": false,
+          "OOMKilled": false,
+          "Dead": false,
+          "Pid": 0,
+          "ExitCode": 0,
+          "Error": "",
+          "StartedAt": "2026-10-09T07:59:09.500316169Z",
+          "FinishedAt": "2026-10-09T07:59:10.275200434Z"
+        }
+      },
+      "network": "hub 0\n \\ rgpu_lan_attachment: rgpu_lan_backend: index=0,type=tap,fd=18\n \\ lan0: lan0: index=0,type=nic,model=vmxnet3,macaddr=52:54:00:12:34:56\nnet0: index=0,type=nic,model=vmxnet3,macaddr=52:54:00:12:34:57\n \\ net0: index=0,type=user,net=10.0.2.0,restrict=off\n"
+    },
+    {
+      "result": {
+        "passed": true,
+        "reason": "guest-shutdown",
+        "identity": {
+          "name": "rgpu-ac8732ff658658bc4f5b6fd24606b4be",
+          "uuid": "00000000-0000-0000-0000-000000000000",
+          "run_id": "ac8732ff658658bc4f5b6fd24606b4be",
+          "pid": 45,
+          "start_ticks": 32757445
+        },
+        "scope": {
+          "kind": "pid-namespace",
+          "device": 5,
+          "inode": 4026533266,
+          "init_start_ticks": 32757407
+        },
+        "process_exited": true,
+        "phases": [
+          "creating-paused",
+          "paused-identity",
+          "network-ready",
+          "running",
+          "stopped"
+        ]
+      },
+      "host": {
+        "cid": "ac2147645b82fab14f77ce0e39bba825c81f769e4578e57809eedc2da0143fa7",
+        "state": {
+          "Status": "exited",
+          "Running": false,
+          "Paused": false,
+          "Restarting": false,
+          "OOMKilled": false,
+          "Dead": false,
+          "Pid": 0,
+          "ExitCode": 0,
+          "Error": "",
+          "StartedAt": "2026-10-09T07:59:10.438956482Z",
+          "FinishedAt": "2026-10-09T07:59:11.211617574Z"
+        }
+      },
+      "network": "hub 0\n \\ rgpu_lan_attachment: rgpu_lan_backend: index=0,type=tap,fd=18\n \\ lan0: lan0: index=0,type=nic,model=vmxnet3,macaddr=52:54:00:12:34:56\nnet0: index=0,type=nic,model=vmxnet3,macaddr=52:54:00:12:34:57\n \\ net0: index=0,type=user,net=10.0.2.0,restrict=off\n"
+    }
+  ]
+}

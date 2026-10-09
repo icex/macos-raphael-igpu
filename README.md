@@ -23,8 +23,8 @@ mode changes. Smooth delivery, measured viewer fps and full libvirt/VM-manager
 lifecycle integration remain open. Software-only GNOME Boxes console transport
 passes. Candidate341 adds isolated TAP handoff and container-local lifecycle
 checks: software guest poweroff and manager Force Off each retain the correct
-reason and exit the container. Full native configuration validation and launcher
-integration remain; this is not yet a libvirt-managed accelerated macOS result.
+reason and exit the container. Native configuration/provenance checks are
+implemented; their live qualification and launcher integration remain; this is not yet a libvirt-managed accelerated macOS result.
 [Evidence and setup](docs/virtual-console.md).
 
 The qualified remote baseline from **2026-09-16**, candidate **1.0.280**, runs an accelerated desktop through
