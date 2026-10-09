@@ -52,6 +52,35 @@ class MonitorTests(unittest.TestCase):
             result=subprocess.CompletedProcess([],code,json.dumps(dict(passed=passed,actual=dict(pixel_width=w,pixel_height=1440,origin_x=0,origin_y=0))),'')
             with patch.object(m.subprocess,'run',return_value=result):
                 self.assertFalse(m.apply_mode(Path('/helper'),m.configuration(config()),5)['passed'])
+    def test_late_select_wakeup_does_not_start_io_or_application(self):
+        now=[0.];rows=[]
+        def select_late(*args):now[0]=10.1;return ([99],[99],[])
+        with patch.object(m.select,'select',side_effect=select_late), \
+             patch.object(m.os,'read') as read,patch.object(m.os,'write') as write, \
+             patch.object(m,'apply_mode') as apply:
+            result=m.serve(99,10,True,True,Path('/helper'),rows.append,clock=lambda:now[0])
+        self.assertFalse(read.called);self.assertFalse(write.called);self.assertFalse(apply.called)
+        self.assertEqual(result['reason'],'bounded-deadline')
+        self.assertEqual(result['transmitted_bytes'],0)
+    def test_main_reserves_cleanup_time_without_extending_alarm(self):
+        import sys
+        from types import SimpleNamespace
+        elapsed=[0.];budget=[];alarms=[];records=[]
+        def serve(fd,seconds,*args):
+            budget.append(seconds);elapsed[0]=29.4
+            return {'event':'finish','reason':'bounded-deadline'}
+        with patch.object(sys,'argv',['agent','--seconds','30']), \
+             patch.object(m.os,'geteuid',return_value=501),patch.object(m.os,'getuid',return_value=501), \
+             patch.object(m.transport,'identity',return_value=(1,2,3)), \
+             patch.object(m.os,'lstat'),patch.object(m.os,'fstat'),patch.object(m.os,'open',return_value=99), \
+             patch.object(m.os,'close') as close,patch.object(m.fcntl,'ioctl'), \
+             patch.object(m.signal,'signal'),patch.object(m.signal,'setitimer',side_effect=lambda which,seconds:alarms.append(seconds)), \
+             patch.object(m.time,'monotonic',side_effect=lambda:elapsed[0]),patch.object(m,'serve',side_effect=serve), \
+             patch('builtins.print',side_effect=lambda value,**kw:records.append(value)):
+            m.main()
+        self.assertEqual(budget,[29.]);self.assertEqual(alarms,[30,0]);close.assert_called_once_with(99)
+        import json
+        self.assertEqual(json.loads(records[-1])['cleanup_margin_seconds'],1.)
     def test_success_reply_requires_verified_application(self):
         now=[0.];writes=[];rows=[]
         def write(fd,data):

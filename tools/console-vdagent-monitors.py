@@ -103,6 +103,8 @@ def serve(fd,seconds,enabled,apply,helper,record,clock=time.monotonic):
     while clock()<deadline:
         try:r,w,_=select.select([fd],[fd] if pending else [],[],min(.1,max(0,deadline-clock())))
         except InterruptedError:continue
+        # A delayed select wakeup must not start new I/O or a mode application.
+        if clock()>=deadline:break
         if w:
             try:n=os.write(fd,pending)
             except (BlockingIOError,InterruptedError):n=0
@@ -157,6 +159,7 @@ def main():
     helper=a.apply_existing.resolve(strict=True) if a.apply_existing else None
     if helper and (not helper.is_file() or not os.access(helper,os.X_OK)):raise ValueError('helper not executable file')
     def expired(sig,frame):raise TimeoutError('whole-agent deadline')
+    cleanup_margin=min(1.,a.seconds/2)
     began=time.monotonic()
     signal.signal(signal.SIGALRM,expired);signal.setitimer(signal.ITIMER_REAL,a.seconds)
     before=transport.identity(os.lstat(transport.DEVICE))
@@ -166,10 +169,12 @@ def main():
         if transport.identity(os.fstat(fd))!=before or transport.identity(os.lstat(transport.DEVICE))!=before:raise ValueError('device identity changed')
         fcntl.ioctl(fd,termios.TIOCEXCL)
         record(dict(event='start',seconds=a.seconds,euid=os.geteuid(),device_identity=before,apply=bool(helper),observe=a.observe_monitors))
-        outcome=serve(fd,max(0,a.seconds-(time.monotonic()-began)-.1),bool(helper or a.observe_monitors),bool(helper),helper,record)
+        outcome=serve(fd,max(0,a.seconds-(time.monotonic()-began)-cleanup_margin),bool(helper or a.observe_monitors),bool(helper),helper,record)
         if transport.identity(os.fstat(fd))!=before or transport.identity(os.lstat(transport.DEVICE))!=before:raise ValueError('final device identity changed')
     finally:os.close(fd)
-    signal.setitimer(signal.ITIMER_REAL,0);record(outcome)
+    outcome.update(cleanup_margin_seconds=cleanup_margin,total_elapsed_seconds=time.monotonic()-began)
+    record(outcome)
+    signal.setitimer(signal.ITIMER_REAL,0)
 
 if __name__=='__main__':
     try:main()
