@@ -185,9 +185,9 @@ def stop_exact(cid, by_name=False):
 
 
 def capture_exit(vm,cid,started_at,deadline,run_id,admission_digest,channel=None):
-    """Allow only an already-exited, identity-bound libvirt QEMU to flush receipts.
+    """Allow an exited QEMU or a narrowly qualified guest-shutdown overlap.
 
-    Every unknown/alive/error path retains the original immediate exact-CID stop.
+    Unknown, ordinarily live or unobserved paths retain immediate exact-CID stop.
     No signal is sent during the at-most-two-second natural-container-exit window.
     """
     full_cid(cid)

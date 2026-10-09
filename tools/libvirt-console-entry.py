@@ -260,8 +260,8 @@ def inspect_exited(eof_monotonic=None):
                     shutdown_wait=True
                 else:
                     raise ExitProofRefusal('original-process','original-pid-present',pid=identity['pid'],state=state,**completion)
-    # Only the exact completed zombie can be skipped. Other QEMU processes and
-    # unknown visibility retain immediate refusal.
+    # Only the exact original completed/pending zombie is skipped here and
+    # rechecked below. Other QEMU and unknown visibility retain refusal.
     with exit_check('proc-list'):
         paths=list(Path('/proc').iterdir())
     for path in paths:
