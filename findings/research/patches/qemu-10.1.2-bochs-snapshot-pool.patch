@@ -21,7 +21,31 @@
      BochsSnapshotTiming snapshot_timing;
      uint32_t         snapshot_requested_epoch, snapshot_active_epoch;
      uint32_t         snapshot_state, snapshot_width, snapshot_height;
-@@ -224,7 +231,23 @@
+@@ -149,6 +156,23 @@
+                 b->total[0], b->maximum[0], b->total[1], b->maximum[1],
+                 b->total[2], b->maximum[2], stats->dropped, stats->saturated);
+     }
++#ifdef CONFIG_PIXMAN
++    if (s->snapshot_pool) {
++        unsigned slots;
++        size_t bytes;
++        BochsSnapshotPoolStats pool = bsp_stats(s->snapshot_pool, &slots, &bytes);
++        fprintf(stderr, "bochs-snapshot-pool window=%u end_us=%" PRIu64
++                " attempts=%" PRIu64 " created=%" PRIu64 " reused=%" PRIu64
++                " success=%" PRIu64 " fallback=%" PRIu64
++                " allocation_failed=%" PRIu64 " capacity_failed=%" PRIu64
++                " closed_failed=%" PRIu64 " invalid_failed=%" PRIu64
++                " slots=%u bytes=%zu saturated=%u\n",
++                stats->windows + 1, (uint64_t)t[3], pool.attempts, pool.created,
++                pool.reused, pool.success, pool.fallback, pool.allocation_failed,
++                pool.capacity_failed, pool.closed_failed, pool.invalid_failed,
++                slots, bytes, pool.saturated);
++    }
++#endif
+     bst_clear(stats, t[3]);
+ }
+ 
+@@ -224,7 +248,23 @@
      if (timed) {
          timing[0] = g_get_monotonic_time();
      }
@@ -46,7 +70,7 @@
      if (timed) {
          timing[1] = g_get_monotonic_time();
      }
-@@ -489,6 +512,16 @@
+@@ -489,6 +529,16 @@
          error_setg(errp, "bochs-display: snapshot timing requires snapshot");
          return;
      }
@@ -63,7 +87,7 @@
      if (s->vgamem < 4 * MiB) {
          error_setg(errp, "bochs-display: video memory too small");
          return;
-@@ -499,6 +532,11 @@
+@@ -499,6 +549,11 @@
      }
      s->vgamem = pow2ceil(s->vgamem);
  
@@ -75,7 +99,7 @@
      s->con = graphic_console_init(DEVICE(dev), 0, &bochs_display_gfx_ops, s);
  
      memory_region_init_ram(&s->vram, obj, "bochs-display-vram", s->vgamem,
-@@ -576,6 +614,14 @@
+@@ -576,6 +631,14 @@
  static void bochs_display_exit(PCIDevice *dev)
  {
      BochsDisplayState *s = BOCHS_DISPLAY(dev);
@@ -90,7 +114,7 @@
  
      qemu_free_displaysurface(s->snapshot_pending);
      s->snapshot_pending = NULL;
-@@ -592,6 +638,8 @@
+@@ -592,6 +655,8 @@
                       x_debug_snapshot_restart, false),
      DEFINE_PROP_BOOL("x-debug-snapshot-timing", BochsDisplayState,
                       x_debug_snapshot_timing, false),
@@ -101,7 +125,7 @@
  
 --- /dev/null
 +++ b/hw/display/bochs-snapshot-pool.h
-@@ -0,0 +1,140 @@
+@@ -0,0 +1,207 @@
 +/* Host-private snapshot backing. Never export an FD or share_handle.
 + * Each image lease owns a distinct Pixman wrapper. Only its FINAL destroy
 + * callback returns the externally-owned backing. Callbacks never touch devices,
@@ -121,14 +145,41 @@
 +    struct BochsSnapshotBlock *next;
 +    uint8_t *data;
 +} BochsSnapshotBlock;
++typedef struct BochsSnapshotPoolStats {
++    uint64_t attempts, created, reused, success, fallback;
++    uint64_t allocation_failed, capacity_failed, closed_failed, invalid_failed;
++    bool saturated;
++} BochsSnapshotPoolStats;
++enum BspOutcome { BSP_NEW, BSP_REUSED, BSP_ALLOC_FAILED, BSP_CAPACITY,
++                  BSP_CLOSED, BSP_INVALID };
 +struct BochsSnapshotPool {
 +    GMutex mutex;
++    BochsSnapshotPoolStats stats;
 +    gint refs; /* One device ref plus one per reserved/live/idle block. */
 +    unsigned slots;
 +    size_t bytes;
 +    bool closed;
 +    BochsSnapshotBlock *idle;
 +};
++static inline void bsp_count(BochsSnapshotPoolStats *s, uint64_t *value)
++{
++    if (*value == UINT64_MAX) {
++        s->saturated = true;
++    } else {
++        ++*value;
++    }
++}
++static inline BochsSnapshotPoolStats bsp_stats(BochsSnapshotPool *p,
++                                               unsigned *slots, size_t *bytes)
++{
++    BochsSnapshotPoolStats result;
++    g_mutex_lock(&p->mutex);
++    result = p->stats;
++    *slots = p->slots;
++    *bytes = p->bytes;
++    g_mutex_unlock(&p->mutex);
++    return result;
++}
 +static inline BochsSnapshotPool *bsp_new(void)
 +{
 +    BochsSnapshotPool *p = g_new0(BochsSnapshotPool, 1);
@@ -172,20 +223,25 @@
 +        bsp_unreserve(p);
 +    }
 +}
-+static inline pixman_image_t *bsp_image(BochsSnapshotPool *p,
-+                                      uint32_t w, uint32_t h)
++static inline pixman_image_t *bsp_take(BochsSnapshotPool *p,
++                                     uint32_t w, uint32_t h, enum BspOutcome *outcome)
 +{
 +    BochsSnapshotBlock *b;
 +    pixman_image_t *image;
++    bool reused;
++    *outcome = BSP_ALLOC_FAILED;
 +    if (!w || !h || w > 3840 || h > 2160 || (uint64_t)w * h * 4 > BSP_BYTES) {
++        *outcome = BSP_INVALID;
 +        return NULL;
 +    }
 +    g_mutex_lock(&p->mutex);
 +    if (p->closed) {
++        *outcome = BSP_CLOSED;
 +        g_mutex_unlock(&p->mutex);
 +        return NULL;
 +    }
 +    b = p->idle;
++    reused = b != NULL;
 +    if (b) {
 +        p->idle = b->next;
 +        b->next = NULL;
@@ -193,6 +249,7 @@
 +    } else {
 +        if (p->slots >= BSP_SLOTS || p->bytes > BSP_SLOTS * (size_t)BSP_BYTES - BSP_BYTES) {
 +            g_mutex_unlock(&p->mutex);
++            *outcome = BSP_CAPACITY;
 +            return NULL; /* Caller uses existing fresh surface allocation. */
 +        }
 +        p->slots++;
@@ -212,6 +269,11 @@
 +            return NULL;
 +        }
 +    }
++    if (!reused) {
++        g_mutex_lock(&p->mutex);
++        bsp_count(&p->stats, &p->stats.created);
++        g_mutex_unlock(&p->mutex);
++    }
 +    image = pixman_image_create_bits(PIXMAN_x8r8g8b8, w, h,
 +                                     (uint32_t *)b->data, w * 4);
 +    if (!image) {
@@ -219,6 +281,35 @@
 +        return NULL;
 +    }
 +    pixman_image_set_destroy_function(image, bsp_return, b);
++    *outcome = reused ? BSP_REUSED : BSP_NEW;
++    return image;
++}
++/* One completed outcome per request. A temporary ref covers failure cleanup
++ * even if the device owner closes while a reserved block is being allocated. */
++static inline pixman_image_t *bsp_image(BochsSnapshotPool *p, uint32_t w, uint32_t h)
++{
++    enum BspOutcome outcome;
++    pixman_image_t *image;
++    g_atomic_int_inc(&p->refs);
++    image = bsp_take(p, w, h, &outcome);
++    g_mutex_lock(&p->mutex);
++    bsp_count(&p->stats, &p->stats.attempts);
++    if (image) {
++        bsp_count(&p->stats, &p->stats.success);
++        if (outcome == BSP_REUSED) {
++            bsp_count(&p->stats, &p->stats.reused);
++        }
++    } else {
++        bsp_count(&p->stats, &p->stats.fallback);
++        switch (outcome) {
++        case BSP_CAPACITY: bsp_count(&p->stats, &p->stats.capacity_failed); break;
++        case BSP_CLOSED: bsp_count(&p->stats, &p->stats.closed_failed); break;
++        case BSP_INVALID: bsp_count(&p->stats, &p->stats.invalid_failed); break;
++        default: bsp_count(&p->stats, &p->stats.allocation_failed); break;
++        }
++    }
++    g_mutex_unlock(&p->mutex);
++    bsp_unref(p);
 +    return image;
 +}
 +/* Caller detaches its pointer and drops the sole device ref exactly once.

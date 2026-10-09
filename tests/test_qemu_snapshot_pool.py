@@ -22,6 +22,14 @@ class SnapshotPoolTests(unittest.TestCase):
         added = patch.split('+++ b/hw/display/bochs-snapshot-pool.h\n', 1)[1]
         header = '\n'.join(line[1:] for line in added.splitlines() if line.startswith('+'))+'\n'
         source = r'''
+#include <glib.h>
+#include <stdbool.h>
+static bool fail_backing;
+static gpointer controlled_malloc(gsize bytes) {
+    if (fail_backing) return NULL;
+    return g_try_malloc(bytes);
+}
+#define g_try_malloc controlled_malloc
 #include "bochs-snapshot-pool.h"
 #include <assert.h>
 #include <string.h>
@@ -69,13 +77,26 @@ int main(void) {
     check(a, 0x31); check(c, 0x53); check(d, 0x64);
     pixman_image_unref(c); pixman_image_unref(d);
     assert(p->slots==1 && p->bytes==BSP_BYTES);
+    assert(p->stats.attempts==8 && p->stats.created==3 && p->stats.reused==1);
+    assert(p->stats.success==4 && p->stats.fallback==4);
+    assert(p->stats.capacity_failed==1 && p->stats.closed_failed==1);
+    assert(p->stats.invalid_failed==2 && !p->stats.allocation_failed);
     GThread *thread=g_thread_new("late-listener", delayed_unref, a);
     g_thread_join(thread);
     assert(!p->slots && !p->bytes && !p->idle);
     bsp_unref(p); // Frees independent pool after final observer.
     p=bsp_new();
+    fail_backing=true;
+    assert(!bsp_image(p, 640, 480));
+    fail_backing=false;
+    assert(!p->slots && !p->bytes && p->stats.allocation_failed==1);
+    assert(p->stats.attempts==1 && p->stats.fallback==1 && !p->stats.created);
     a=bsp_image(p, 640, 480); assert(a);
     pixman_image_unref(a); assert(p->idle);
+    assert(p->stats.success==1 && p->stats.created==1 && p->stats.attempts==2);
+    p->stats.attempts=UINT64_MAX;
+    assert(!bsp_image(p, 0, 0));
+    assert(p->stats.saturated && p->stats.attempts==UINT64_MAX);
     bsp_close(p); // Idle close, no outstanding image.
     return 0;
 }

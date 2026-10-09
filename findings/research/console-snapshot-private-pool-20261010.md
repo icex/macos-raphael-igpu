@@ -52,3 +52,28 @@ QEMU surface create/free and Pixman-unref wrappers, and runs an ASan/UBSan case
 retaining a listener image across actual wrapper destruction and pool-owner close.
 Only trace calls are stubbed; its scope is the non-GL Linux wrapper/reference
 path, not full QEMU device-unrealize or external-FD consumers.
+
+## Reviewed implementation checks and bounded counters
+
+Production-header tests and the exact surface-wrapper ASan/UBSan witness now pass.
+The witness output is retained in `run/c402-surface-lifetime-stats` (earlier
+pre-counter run separately retained). No QEMU device/unrealize result is claimed
+by those tests. Real-image software qualification follows separately.
+
+When host timing is enabled, a separate `bochs-snapshot-pool` line is emitted only
+at the existing timing-window boundary, at most128 times. Counts are cumulative
+for the pool lifetime, saturated uint64 with an explicit flag. `attempts` counts
+completed private-pool requests; `success` counts returned images; `fallback`
+counts requests returning NULL to the original fresh allocator. `created` counts
+successfully allocated private backing blocks, even if the subsequent Pixman
+wrapper allocation fails; `reused` counts successful image leases from idle blocks.
+Fallback reasons partition into capacity, closed, invalid geometry and allocation
+failure. Allocation failure includes block metadata, payload or Pixman-wrapper
+failure; it does not report failure of the subsequent original QEMU fallback,
+whose existing error-abort semantics remain unchanged. Slot/byte snapshots and
+counters are read under the pool mutex. Saturated counters must not be used for
+conservation/rate claims. A temporary request reference protects failure accounting
+if close overlaps an in-flight allocation.
+
+Tests check real outcome counts, deterministic backing-allocation failure with
+reservation rollback, and saturation, in addition to lifetime/pixel/cap controls.
