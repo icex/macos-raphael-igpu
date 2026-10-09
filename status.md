@@ -20,7 +20,8 @@ Cycle stopped; host remains awake. No reboot/rebind.
 
 1268 host tests pass,8skip. Dev a815827 delivers366 persistence/docs/tested binary;
 hosted37942471484 test/build green. Checked-in kext/manifest match tested368
-buildb0d4f6d56caa4d23a0aa439e0613aa83; milestone delivery pending. Main unchanged.
+buildb0d4f6d56caa4d23a0aa439e0613aa83. Milestone integrated into dev; hosted
+validation pending. Main unchanged.
 Next: exclusive staging plus acknowledged immutable host snapshot software proof,
 then native comparison. Fresh-user bootstrap, performance/atomicity, broader
 applications/codecs, other managers and VirtualBox remain open.
