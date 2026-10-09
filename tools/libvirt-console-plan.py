@@ -143,6 +143,9 @@ def build_plan(argv, run_id):
     element(dev, 'audio', id='1', type='none')
     element(dev, 'watchdog', model='itco', action='none')
     cmd = element(root, '{'+NS+'}commandline')
+    # libvirt sanitizes the QEMU environment. The existing PulseAudio socket is
+    # mounted here; keep this separate from the controller's private session dir.
+    element(cmd, '{'+NS+'}env', name='XDG_RUNTIME_DIR', value='/xdgrt')
     retained = []
     for option, value in rows:
         if option in OWNED or (option == '-monitor' and value == 'stdio'):

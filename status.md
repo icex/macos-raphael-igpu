@@ -29,6 +29,19 @@ confirmed final DESTROY_GPCOM_RING reply in340c's native recovery. Validator now
 accepts only these two exact successful teardown replies; replaying the retained
 scan passes, but fresh live admission remains required. No guest/QEMU is running. Full suite after the mailbox compatibility fix:1,103 tests pass,3 skipped.
 
+Attempt341c, run338f66a03870da58236551ec1f9d0ae1, MODE2#281: fresh
+schema8 scan passes and authorizes. Libvirt then attempts QEMU creation but QEMU
+exits during PulseAudio initialization with `XDG_RUNTIME_DIR not set`. No paused
+or resume receipt is published; no macOS boot/serial evidence. The transient
+creation outcome remains cleanup-unproven at the controller boundary; the outer
+launcher/container has stopped. Do not infer no VFIO exposure from missing boot
+output. Next retry must obtain its own complete stopped scan using341c evidence.
+
+The planner now explicitly sets only QEMU's XDG_RUNTIME_DIR to the existing
+mounted `/xdgrt` PulseAudio path; the libvirt controller keeps its private runtime
+directory. Both native and independent paused inspection check the actual QEMU
+environment value. The isolated paired test reproduces the original failure without the variable and passes paused USB-audio/SPICE creation with it, then destroys QEMU and exits0. Full host suite:1,104 tests pass,3 skipped. [Evidence](findings/research/libvirt-audio-env-20261009.md).
+
 ## Candidate340: native accelerated SPICE desktop after host resume
 
 Run `892ec42661ae367e299f60d55c9da9ee`, metal-186, build1.0.340,
@@ -161,5 +174,12 @@ passes; hardware encode is Main8. [Roadmap](docs/ROADMAP.md).
 ## One-command GPU test
 
 - Output: `/home/bogdan/macos-vm/run/candidate-341-attempt-b-results`
+- Verdict: `INVALID`
+- Boundary: `identity_or_route_missing`
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-341-attempt-c-results`
 - Verdict: `INVALID`
 - Boundary: `identity_or_route_missing`

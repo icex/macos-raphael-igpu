@@ -63,6 +63,7 @@ def inspect_domain(paused=True):
     backend=native.local.LocalBackend('qemu:///session',directory/'inspection-events.jsonl')
     try:
         state=backend.snapshot(plan['domain_name'])
+        state['audio_runtime_dir']=native.audio_environment(state['pid'])
         state['kvm']=backend.qmp(plan['domain_name'],'query-kvm',{})
         state['cpus']=backend.qmp(plan['domain_name'],'query-cpus-fast',{})
         state['cpu_properties']={cpu['qom-path']:{prop:backend.qmp(plan['domain_name'],'qom-get',

@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "artifact_directory": "/home/bogdan/macos-vm/run/c341-audio-env-53238684",
+  "scope": "Paired paused TCG PulseAudio initialization only; no guest OS, playback, KVM, VFIO or host NIC.",
+  "artifacts": {
+    "missing-env.xml": "cdfaf2810d76875619dd15c96d02e63833a862de4fc1f2535c91534f838bc068",
+    "missing-env.stdout": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "missing-env.stderr": "4bf1512840d51dad991ea0c8792b576595bba2f6474449c7fd357f391ab17588",
+    "explicit-env.xml": "874288c199f89cdc3bdd03edca76e2c468faf65ebf6cf6b8f01f05ca92bd7fd7",
+    "explicit-env.stdout": "f6ef3681fe3d275a3edab726ca25083fc850484a946751203c4d54ce6038815c",
+    "explicit-env.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "result.json": "877711092b16829246310cadfb6d98a0cdbcb585a6910b26d76e1626ad11ebcf",
+    "container.stdout": "4d4a4c1f1afc01760a3b8ffa96d5eb8887bc43f5eb7ec44e2a4bd7b5cb5d46e3",
+    "container.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "container.json": "a2a48fb0eb4bb8c0b73d56bcd11ad2fd234d0300370f8c1ff1a63384ff6ef0b3"
+  },
+  "result": {
+    "passed": true,
+    "cases": [
+      {
+        "case": "missing-env",
+        "refused": true,
+        "expected_error": "XDG_RUNTIME_DIR not set",
+        "domain_absent": true,
+        "qemu_absent": true
+      },
+      {
+        "case": "explicit-env",
+        "initialized": true,
+        "status": {
+          "status": "prelaunch",
+          "running": false
+        },
+        "identity": {
+          "pid": 53,
+          "start_ticks": 33012827
+        },
+        "qemu_runtime": "/xdgrt",
+        "controller_runtime": "/run/rgpu-study/runtime",
+        "qemu_absent_after_destroy": true,
+        "domain_absent": true
+      }
+    ],
+    "scope": "PulseAudio backend initialization with USB audio and SPICE; TCG paused, no guest OS, playback, KVM, VFIO or host NIC."
+  },
+  "container": {
+    "cid": "df83d88f81490fb3a1aff70429fb5e7bfc7f4c56546cbce7528615edea70f7f6",
+    "image": "sha256:3a3c82c79bc4e73531f819ccdfa4053b3084efd7c1f645678dbf8b4b3a24369c",
+    "started_at": "2026-10-09T08:41:44.257114532Z",
+    "finished_at": "2026-10-09T08:41:44.916558282Z",
+    "exit_code": 0,
+    "running": false,
+    "name": "rgpu-c341-audio-env-53238684"
+  }
+}

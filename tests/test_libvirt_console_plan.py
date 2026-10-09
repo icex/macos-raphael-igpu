@@ -49,6 +49,8 @@ class LibvirtConsolePlanTests(unittest.TestCase):
     def test_single_cpu_owner_and_preserved_native_devices(self):
         argv = native_fixture(); result = plan.build_plan(argv, '1'*32)
         root = ET.fromstring(result['xml'])
+        self.assertEqual([n.attrib for n in root.findall('./{'+plan.NS+'}commandline/{'+plan.NS+'}env')],
+                         [dict(name='XDG_RUNTIME_DIR',value='/xdgrt')])
         args = [n.attrib['value'] for n in root.findall('./{'+plan.NS+'}commandline/{'+plan.NS+'}arg')]
         self.assertNotIn('-cpu', args)
         self.assertEqual(root.find('cpu/model').text, 'Haswell-noTSX')

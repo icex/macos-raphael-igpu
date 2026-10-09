@@ -13,6 +13,13 @@ def module(name):
 
 local=module('local');network=module('network');configuration=module('verify')
 
+def audio_environment(pid):
+    rows=Path(f'/proc/{pid}/environ').read_bytes().split(b'\0')
+    values=[row.split(b'=',1)[1] for row in rows if row.startswith(b'XDG_RUNTIME_DIR=')]
+    if values!=[b'/xdgrt']:
+        raise ValueError('QEMU audio runtime directory differs from mounted PulseAudio path')
+    return '/xdgrt'
+
 
 class NativeBackend(local.LocalBackend):
     def __init__(self,uri,event_path,plan,network_receipt,inherited_fd):
@@ -30,6 +37,7 @@ class NativeBackend(local.LocalBackend):
 
     def _snapshot(self,name):
         state=super()._snapshot(name)
+        state['audio_runtime_dir']=audio_environment(state['pid'])
         key=(state['pid'],state['start_ticks'],state['running'])
         if self.cpu_cache is not None and self.cpu_cache[0]==key and time.monotonic()<self.cpu_cache[1]:
             state.update(copy.deepcopy(self.cpu_cache[2]))
@@ -56,6 +64,8 @@ class NativeBackend(local.LocalBackend):
 
 
 def verify(plan,state):
+    if state.get('audio_runtime_dir')!='/xdgrt':
+        raise ValueError('QEMU audio environment was not verified')
     configuration.verify(plan,state)
     configuration.verify_cpu_observations(plan,state['kvm'],state['cpus'],state['cpu_properties'])
     return True
