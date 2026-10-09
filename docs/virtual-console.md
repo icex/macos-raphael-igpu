@@ -235,3 +235,14 @@ pass. Guest SSH still answers through QEMU's independent forwarded port.
 No process-visibility check, original deadline or live-QEMU immediate-stop path
 is relaxed. Native crash/forced-closure and independent-boot coverage remain open.
 [Result and exact artifacts](../findings/research/libvirt-native-terminal-20261009.md).
+
+## Experimental refresh result (candidate345)
+
+An opt-in QEMU nongl refresh patch increases sampled actual-manager delivery to
+49.993updates/s at1080p and22.529 at1080HiDPI. Full-pixbuf observation costs
+2.257/5.330ms and incomplete token samples remain; these rates are not GPU fps.
+The normal desktop returns and capture/GPU recovery pass. Native terminal.json
+is lost when the strict exit checker encounters QEMU already in stateZ. That
+reaping timing remains a lifecycle blocker despite343's successful shutdown.
+Default pins remain stock; use `experiments/pins-spice60.json` for this experiment.
+[Results, exact artifacts and limits](../findings/research/native-refresh-20261009.md).

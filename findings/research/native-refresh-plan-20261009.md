@@ -1,6 +1,6 @@
 # Candidate345: native explicit SPICE refresh experiment
 
-Status: prepared for testing; this document alone records no native result.
+Status: executed. See [native outcome and zombie-state refusal](native-refresh-20261009.md). This document records the pre-run hypothesis and method.
 
 Candidate343 is the delivered stock-QEMU baseline with a visible native Metal
 virt-manager desktop and retained native guest-shutdown receipt. Candidate342
@@ -44,3 +44,5 @@ Close the viewer, verify the same guest is alive, and request harness shutdown.
 Require valid capture, actual libvirt terminal receipt and authorizing GPU recovery.
 Keep partial-region sampling distinct from source-copy races and final host scanout.
 This experiment cannot qualify every application, crash path or independent boot.
+
+For future reruns select `--pins experiments/pins-spice60.json`; default pins remain stock.

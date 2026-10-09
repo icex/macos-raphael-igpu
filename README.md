@@ -14,16 +14,15 @@ on **`dev`**; this is not yet a generally supported driver release.
 
 ## Current status
 
-**VM window (October9):** candidates341–343 render the native Metal desktop inside
-virt-manager, with verified keyboard/mouse input and bridged LAN traffic on341.
-Candidate342 measures about30 distinct manager-buffer updates/s at native1080p
-and18.5/s at1080HiDPI, with occasional partial token updates. These are sampled
-console delivery rates, not GPU fps. Candidate343 also retains the native controller
-terminal receipt on guest shutdown, with valid capture and authorizing GPU
-recovery. Automatic window resize, atomic
-presentation and broader lifecycle/performance qualification remain open.
-The virtual Display adapter's56MB framebuffer is separate from the native
-renderer's2GB reported VRAM. [Evidence and setup](docs/virtual-console.md).
+**VM window (October9):** native Metal rendering, keyboard/mouse input and
+bridged LAN work in virt-manager. Candidate343 retains a native guest-shutdown
+receipt. Experimental345 raises sampled console delivery from29.8 to50.0updates/s
+at1080p and18.5 to22.5 atHiDPI, using an opt-in QEMU refresh patch. These are not
+GPU fps. Incomplete region samples remain, and345 exposes a zombie-process
+terminal-receipt race despite valid capture and authorizing GPU recovery.
+Stock QEMU remains the default. Automatic resize and broader qualification remain
+open. The virtual Display adapter's56MB framebuffer is separate from the native
+renderer's2GB VRAM. [Evidence and setup](docs/virtual-console.md).
 
 The qualified remote baseline from **2026-09-16**, candidate **1.0.280**, runs an accelerated desktop through
 macOS Screen Sharing. Native window effects and Safari composition checks pass,

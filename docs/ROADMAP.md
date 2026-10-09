@@ -245,6 +245,14 @@ shutdown pass. Next isolate QEMU refresh scheduling and live-framebuffer write
 tearing before performance changes.
 [Measured evidence](../findings/research/console-cadence-20261009.md).
 
+Candidate345's opt-in QEMU refresh image improves sampled native1080p/HiDPI
+delivery to49.993/22.529updates/s, with35/113 intermediate invalid token samples.
+Capture and GPU recovery pass, but original QEMU stateZ causes immediate cleanup
+before terminal.json. Next resolve that completed-process boundary in software,
+and qualify a smaller observer before further performance claims. Default image
+pins stay stock; the refresh image has separate opt-in pins.
+[Native refresh evidence](../findings/research/native-refresh-20261009.md).
+
 Host-window resize, repeated crash recovery, independent host boots and broader
 desktop coverage follow. Both host sleep and idle blocking remain required during
 development. VirtualBox requires a separate transport/driver.

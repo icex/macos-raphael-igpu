@@ -1,28 +1,29 @@
 # Live status — 2026-10-09
 
-## Candidate343: native guest shutdown now retains the terminal receipt
+## Candidate345: faster sampled console; native exit receipt blocked by zombie state
 
-Run `6b0f22ab5a91cb3a3cf51404e4f0459b`, metal-189, build1.0.343,
-MODE2#284 on bootba51b3c6. Native Metal/WindowServer ownership passes and the
-awake macOS desktop is visible in actual virt-manager. Guest SSH service still
-answers; closing the viewer leaves the same container running.
+Run `e5c19e2555990ca2df1d9ac171c73fac`, metal-190, build1.0.345,
+MODE2#285 on bootba51b3c6. Native Metal/WindowServer ownership and paused explicit
+refresh admission pass. Actual virt-manager renders1080p and1080HiDPI awake.
+Thirty-second samples observe1500/676 distinct tokens,49.993/22.529updates/s,
+versus342's29.823/18.496. These are sampled console rates, not GPU fps or scanout.
+After-first invalid tokens35/113 and median sampler cost2.257/5.330ms remain.
+Both60-second fixtures complete and the normal desktop returns.
 
-Capture: valid CORE_PROBE_PASS, no earliest failure. Both EOF handlers record
-natural-container-exit after about0.454seconds. Native libvirt terminal.json
-records guest-shutdown/process_exited=true for the exact run and QEMU identity.
-Outer shutdown: exited-after-guest-request. GPU recovery: recovered,
-authorizes_launch=true. VM/container and cycle stopped; host sleep:idle blocker
-remains active. No reboot/rebind. Omitting the unused container SSH daemon fixes
-this native missing-receipt case without weakening process visibility or the
-immediate stop when QEMU is still alive.
+Capture: valid CORE_PROBE_PASS, no earliest failure. Outer shutdown:
+exited-after-guest-request. GPU recovery: recovered, authorizes_launch=true.
+VM and cycle stopped; host sleep:idle blocker remains active. No reboot/rebind.
+**Native terminal receipt absent:** both EOF handlers see original QEMU PID113
+in stateZ and immediately stop the container.343's earlier natural-exit pass
+remains valid but did not cover this reaping timing. Next: source-audit and
+software-test a strict completed-process proof; separately qualify a small-region
+observer to reduce sampling overhead. Atomic presentation and broader lifecycle
+remain open.
 
-This is one native guest-shutdown pass, not crash/independent-boot qualification.
-Next: isolated software A/B of QEMU nongl SPICE refresh, separately measuring
-partial token updates. Candidate342's sampled manager-buffer delivery remains
-29.82updates/s at1080p and18.50 at1080HiDPI; these are not GPU fps. Atomic
-presentation, host-window resize and broader lifecycle/performance remain open.
-
-Full host suite:1136 tests pass,3 skipped. Checked-in executable/manifest match343.
-[Native evidence](findings/research/libvirt-native-terminal-20261009.md) ·
-[Artifact hashes](findings/research/libvirt-native-terminal-evidence-20261009.json) ·
-[Previous status](findings/research/status-archives/status-before-343-20261009.md).
+1157 host tests pass,3 skipped. Candidate kext/manifest match345. Explicit
+`experiments/pins-spice60.json` selects the experimental refresh image; default
+pins remain stock. Candidate343 is delivered ondev29b462e, hosted tests/build
+green.345 remains local pending the lifecycle follow-up.
+[Evidence](findings/research/native-refresh-20261009.md) ·
+[Hashes](findings/research/native-refresh-evidence-20261009.json) ·
+[Previous status](findings/research/status-archives/status-before-345-20261009.md).
