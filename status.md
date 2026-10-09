@@ -21,8 +21,8 @@ Next354 adds early shutdown-event and bounded task-state diagnostics; no new gra
 
 Initial353 metadata failure occurred before QEMU/VFIO (MODE2#291, no ledger
 launch); expanded identity was repaired and deep-validated before retry.
-1189 host tests pass,8skip; kext/manifest match353. Milestone delivery to dev
-pending; main unchanged. General desktop, lifecycle, window resize/input,
+1189 host tests pass,8skip; kext/manifest match353. Milestone integrated into dev; push and hosted test/build CI verification
+are in progress. Main remains unchanged. General desktop, lifecycle, window resize/input,
 console audio/install durability and VirtualBox qualification remain open.
 [Evidence](findings/research/bochs-full-refresh-paired-20261009.md) ·
 [Paired data/receipts](findings/research/bochs-full-refresh-paired-evidence-20261009.json) ·
