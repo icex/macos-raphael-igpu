@@ -24,13 +24,14 @@ python3 -B tools/vbox-clone-boot.py --execute \
 ```
 
 `tools/vbox-display-inventory.py` reads ioreg XML only. Output allows only relevant
-VMware/VBox display PCI IDs, reg/assigned-addresses/IODeviceMemory and framebuffer
-ancestry; arbitrary properties are excluded. A compressed keyboard command is in
+VMware/VBox display PCI IDs, reg/assigned-addresses/IODeviceMemory and all framebuffer
+services, including those outside PCI ancestry, with an explicit matching-PCI-ancestor
+flag; arbitrary properties are excluded. A compressed keyboard command is in
 `run/c409-inventory-command.txt`, under 2 KiB, writing `/tmp/c409-display-inventory.json`.
 Driver ancestry is not exclusive ownership proof. No register writes, mappings,
 FIFO submission, IOSurface import or snapshot ACK is implemented. If the guest
 boots, preserve actual PCI/device memory and attached framebuffer evidence before
 choosing a writer takeover experiment. Retain screenshots/serial even on failure.
 
-Focused tests: 2 inventory/CLI tests and 13 existing controller tests pass. No
+Focused tests: 3 inventory/CLI tests and 13 existing controller tests pass. No
 full suite or native guest compilation/execution performed for this preparation.

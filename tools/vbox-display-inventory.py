@@ -19,8 +19,8 @@ def inventory(nodes):
         num=lambda v:int.from_bytes(v[:4],'little') if isinstance(v,bytes) else v
         pci=num(vid) in (0x15ad,0x80ee) and isinstance(num(cc),int) and num(cc)>>16==3
         fb='Framebuffer' in str(cls) or 'Framebuffer' in str(name)
-        if pci or (selected and fb):
-            out.append(dict(ancestry=(path+[ident])[-12:],properties={k:safe(n[k]) for k in keys if k in n}))
+        if pci or fb:
+            out.append(dict(matching_pci_ancestor=selected,ancestry=(path+[ident])[-12:],properties={k:safe(n[k]) for k in keys if k in n}))
         for child in n.get('IORegistryEntryChildren',[]):walk(child,path+[ident],selected or pci)
     for n in nodes:walk(n,[],False)
     return out
