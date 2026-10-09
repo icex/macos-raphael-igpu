@@ -17,6 +17,8 @@ ET.register_namespace('qemu', NS)
 CPU = 'Haswell-noTSX,kvm=on,vendor=GenuineIntel,+invtsc,vmware-cpuid-freq=on'
 SPICE = 'unix=on,addr=/run/vm/console-spice.sock,disable-ticketing=on,image-compression=off,gl=off'
 VFIO = 'vfio-pci,host=0000:7b:00.0,bus=pcie.0,addr=0x6,x-pci-vendor-id=0x1002,x-pci-device-id=0x73ff,romfile=/run/vm/gpu.rom'
+USBREDIR_CHARS = [f'spicevmc,id=rgpu_usbredir{i},name=usbredir' for i in range(2)]
+USBREDIR_DEVICES = [f'usb-redir,id=rgpu_usbredir_dev{i},chardev=rgpu_usbredir{i},bus=xhci.0' for i in range(2)]
 BOCHS = 'bochs-display,id=rgpu_present,bus=pcie.0,addr=0x7,vgamem=64M'
 PAIR_OPTIONS = {'-m', '-cpu', '-machine', '-smp', '-device', '-drive', '-smbios',
                 '-audiodev', '-netdev', '-monitor', '-boot', '-vga', '-display',
@@ -72,6 +74,7 @@ def build_plan(argv, run_id):
     agent_devices = ['virtio-serial-pci,id=rgpu_agent_serial,bus=pcie.0,addr=0x10,max_ports=2',
                      'virtserialport,id=rgpu_agent_port,bus=rgpu_agent_serial.0,nr=1,chardev=rgpu_vdagent,name=com.redhat.spice.0']
     agent_char = 'spicevmc,id=rgpu_vdagent,name=vdagent'
+    usbredir = any(d.split(',')[0] == 'usb-redir' for d in devices) or any('usbredir' in c for c in values(rows, '-chardev'))
     agent = any(d.split(',')[0].startswith(('virtio-serial', 'virtserialport', 'virtconsole')) for d in devices) or agent_char in values(rows, '-chardev')
     require(spice.endswith(',agent-mouse=off') == agent, 'agent mouse routing must match agent topology')
     bochs = [d for d in devices if d.split(',')[0] == 'bochs-display']
@@ -89,6 +92,7 @@ def build_plan(argv, run_id):
                 VFIO, bochs[0], 'isa-serial,chardev=rgpu_console,index=0',
                 'isa-serial,chardev=rgpu_critical,index=1']
     if agent: expected += agent_devices
+    if usbredir: expected += USBREDIR_DEVICES
     for device in expected:
         require(devices.count(device) == 1, 'missing or duplicate reviewed device')
     extras = [d for d in devices if d not in expected]
@@ -102,6 +106,7 @@ def build_plan(argv, run_id):
                       'usb-audio', 'ich9-ahci', 'ide-hd', 'ide-hd', 'vmxnet3',
                       'vfio-pci', 'isa-serial', 'isa-serial', 'bochs-display', 'vmxnet3']
     if agent: ordered_models += ['virtio-serial-pci', 'virtserialport']
+    if usbredir: ordered_models += ['usb-redir', 'usb-redir']
     require([d.split(',')[0] for d in devices] == ordered_models,
             'device order would change automatic PCI assignment')
     require('netdev=net0,' in devices[8] and 'netdev=lan0,' in devices[13] and
@@ -110,7 +115,7 @@ def build_plan(argv, run_id):
     require(sorted(values(rows, '-chardev')) == sorted([
         'socket,id=rgpu_console,path=/run/vm/serial.sock,server=on,wait=off',
         'socket,id=rgpu_critical,path=/run/vm/critical.sock,server=on,wait=off',
-        'socket,id=mon1,path=/run/vm/monitor.sock,server=on,wait=off'] + ([agent_char] if agent else [])), 'invalid capture channels')
+        'socket,id=mon1,path=/run/vm/monitor.sock,server=on,wait=off'] + ([agent_char] if agent else []) + (USBREDIR_CHARS if usbredir else [])), 'invalid capture channels')
     require(sorted(values(rows, '-netdev')) == sorted([
         'user,id=net0,hostfwd=tcp::10022-:22,hostfwd=tcp::5900-:5900,',
         'tap,id=lan0,fd=3']), 'unreviewed network backends')

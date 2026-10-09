@@ -62,6 +62,10 @@ def validate_plan_refresh(plan,admission):
     expected=handoff.validate_refresh(admission.get('console_refresh','default'))
     planner=native.configuration.planner
     spice=planner.one(planner.pairs(plan['native_argv']),'-spice')
+    usbredir=handoff.validate_usbredir(admission.get('console_usbredir','off'))
+    rows=planner.pairs(plan['native_argv'])
+    selected=[d for d in planner.values(rows,'-device') if d.split(',')[0]=='usb-redir']
+    handoff.require(selected==(planner.USBREDIR_DEVICES if usbredir=='on' else []), 'USB redirection differs from admission')
     vdagent=handoff.validate_vdagent(admission.get('console_vdagent','off'))
     wanted=planner.SPICE+(',max-refresh-rate=60' if expected=='60' else '')
     if vdagent=='on':wanted+=',agent-mouse=off'

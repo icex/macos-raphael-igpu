@@ -374,6 +374,17 @@ def exact_hex(value, digits, label):
     return value
 
 
+def validate_usbredir_card_option(pair, card_launch):
+    """Consume only the explicitly reviewed candidate USB redirection option."""
+    value = card_launch.pop("CONSOLE_USBREDIR", "off")
+    expected = "on" if pair == ("1.0.421", "metal-223") else "off"
+    if type(value) is not str or value != expected:
+        raise RuntimeError("candidate USB redirection contract mismatch")
+    if value == "on" and any(card_launch.get(k) != v for k, v in {
+            "VM_MANAGER":"libvirt", "VM_CONSOLE":"bochs-spice", "GENERIC_GRAPHICS":"off"}.items()):
+        raise RuntimeError("USB redirection requires native libvirt SPICE")
+
+
 def validate_card(raw, expected_sha256):
     exact_hex(expected_sha256, 64, "card digest")
     if sha_bytes(raw) != expected_sha256:
@@ -1004,6 +1015,7 @@ def validate_card(raw, expected_sha256):
     CANDIDATE203_FUNCTIONAL[("1.0.402", "metal-222")] = dict(CANDIDATE203_FUNCTIONAL[("1.0.399", "metal-221")])
     if pair in CANDIDATE203_FUNCTIONAL:
         card_launch = dict(card.get("launch_options") or {})
+        validate_usbredir_card_option(pair, card_launch)
         vdagent = card_launch.pop("CONSOLE_VDAGENT", "off")
         if pair in (("1.0.382", "metal-210"), ("1.0.383", "metal-211"), ("1.0.385", "metal-212"), ("1.0.386", "metal-213"), ("1.0.388", "metal-214"), ("1.0.390", "metal-215"), ("1.0.392", "metal-216"), ("1.0.394", "metal-217"), ("1.0.395", "metal-218"), ("1.0.396", "metal-219"), ("1.0.397", "metal-220"), ("1.0.399", "metal-221"), ("1.0.402", "metal-222")) and vdagent != "on":
             raise RuntimeError("candidate requires reviewed vdagent transport")
