@@ -92,8 +92,9 @@ Replay accepts snapshot18 with367 records as a terminal prefix, retaining one
 corrupt line14464 and incomplete snapshot14 (896 chunks, no END). This run does
 not have the zero-corrupt/incomplete capture result of candidate388.
 
-The retained serial log also contains eight AMD `Failed to allocate` messages
-for size60293120 near lines3646–3653, reporting about77–81MB free and fixed-free
-1883172864. Their relationship to tested resize, mode ordering, or cadence is not
+The retained serial log contains eight logged AMD `Failed to allocate` messages
+for size60293120, reporting about77–81MB free and fixed-free1883172864. The
+active `rgpualloclog=1` policy emits the first eight failures and then every
+1024th; the total underlying failure count is unknown. Their relationship to tested resize, mode ordering, or cadence is not
 established. Successful functional probes do not make the run error-free; root
 will investigate this separately after preference persistence qualification.
