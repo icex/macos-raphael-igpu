@@ -12,7 +12,9 @@ Normal/fullscreen input pass, but the small-window transition retains two misses
 Partial-region samples, automatic resize, other frontends and VirtualBox remain
 open. This is not qualified60Hz delivery.
 [Current paired evidence](../findings/research/bochs-full-refresh-paired-20261009.md).
-Candidate332's unsafe TMR experiment remains withdrawn.
+Candidate358 verifies explicit-device USB audio through QEMU/Pulse with isolated
+stereo capture and exact route restoration; default applications and endpoint
+audibility remain unqualified. Candidate332's unsafe TMR experiment remains withdrawn.
 
 ## Architecture under test
 
@@ -318,5 +320,34 @@ The guest stays at1920×1080 logical with backing scale2 throughout. This proves
 neither automatic guest-mode resize nor a repaired coordinate transition. The
 small-window cause remains undetermined; automation motion/enter and viewer state
 need discrimination. Closing the viewer preserves the exact VM and reopening
-shows the desktop. Console USB audio and other-manager qualification remain open.
+shows the desktop. Console USB audio was still unqualified in356; the scoped358
+result follows below. Other-manager qualification remains open.
 [Run identity, artifacts and limits](../findings/research/libvirt-reset-native-20261009.md).
+
+
+## Explicit console audio and first pointer entry (358)
+
+The exact QEMU USB HAL device delivers a bounded stereo tone through QEMU's
+Pulse output. An owned null sink captures only that VM stream; measured left
+997.14Hz and right1498.57Hz, channel separation and silence pass. The original
+stream route, volume/mute and defaults are restored, and the owned sink/module
+are removed; a separate read-only verification confirms restoration. SPICE audio
+remains disabled. This proves explicit-device sample delivery, not ordinary
+application default output, endpoint audibility or the separate330 HDMI path.
+
+The first host controller attempt failed before mutation because Pulse JSON
+module entries lacked indices. The corrected inventory parser uses authoritative
+short-list IDs, preserving multiline arguments and refusing malformed/ambiguous
+records. The successful host tool is separately identified as547c6b3.
+
+The1000×760 input fixture later passes all five targets and its token, but an
+earlier enter+button without motion opens the guest Apple menu outside the
+fixture. Its passed=true result therefore does **not** qualify the full resize
+transition. Actual motion restores correct coordinate mapping. Stock spice-gtk0.42
+source supports this event-order mechanism; continuous pointer entry and
+resize under a stationary pointer remain separate discriminators.
+
+Capture is CORE_PROBE_PASS; genuine guest-shutdown/process-exited terminal and
+authorizing GPU recovery both pass. No pending-worker native qualification or
+broader crash-lifecycle result is inferred from this run.
+[Identity and hashed evidence](../findings/research/console-audio-native-20261009.md).

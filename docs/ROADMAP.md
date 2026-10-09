@@ -1,6 +1,6 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-10-09. Current console lifecycle/input: **1.0.356** (native reset shutdown terminal and normal/fullscreen input pass; small-window transition and native pending-worker wait remain open). Performance comparison: **1.0.352 ON / 1.0.353 OFF** (same-image HiDPI delivery and copy-cost improvement; atomic presentation remains open). Physical display baseline: **1.0.330** (correct-color HiDPI120 and HDMI audio confirmed); prior streaming baseline: **1.0.284**; broader baseline: **1.0.280**. Full desktop acceleration
+Updated 2026-10-09. Current console audio: **1.0.358** (explicit USB HAL device to QEMU/Pulse stereo capture passes; default applications and audibility unqualified). Console lifecycle/input: **1.0.356** (native reset shutdown terminal and normal/fullscreen input pass; small-window transition and native pending-worker wait remain open). Performance comparison: **1.0.352 ON / 1.0.353 OFF** (same-image HiDPI delivery and copy-cost improvement; atomic presentation remains open). Physical display baseline: **1.0.330** (correct-color HiDPI120 and HDMI audio confirmed); prior streaming baseline: **1.0.284**; broader baseline: **1.0.280**. Full desktop acceleration
 is **not qualified**. The reproduced Screen Sharing transparency defect is fixed
 in candidate279 and retained in280. Candidate280 also passes strict capture and
 clean recovery after visual, concurrent-client and codec workloads. The patched-QEMU
@@ -275,8 +275,13 @@ after distinct critical recv-reset104 and console clean EOF, with natural
 container exit and authorizing recovery. Its hooks find the original process
 already reaped: the event-bound pending-worker wait remains native-unexercised.
 Normal and fullscreen input pass; the small-window transition retains two missed
-clicks. Next discriminate pointer motion/enter behavior after resize and qualify
-console USB audio. Default pins remain stock.
+clicks. Candidate358 then verifies explicit-device USB audio through QEMU into isolated
+Pulse capture, with correct stereo frequency/channel/silence and exact restoration.
+Default-application output and endpoint audibility remain unqualified. Its GTK
+trace confirms an initial enter+button without motion still misclicks outside the
+fixture; later five-target success does not qualify the transition. Next test
+continuous pointer motion and default-application audio.
+[Native358 audio/input result](../findings/research/console-audio-native-20261009.md). Default pins remain stock.
 [Native356 result](../findings/research/libvirt-reset-native-20261009.md).
 [Paired result and limits](../findings/research/bochs-full-refresh-paired-20261009.md).
 

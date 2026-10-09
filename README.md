@@ -25,12 +25,16 @@ remain open. Candidate356 now preserves a real guest-shutdown terminal after
 a serial socket reset, with valid capture and authorizing GPU recovery. The new
 pending-worker wait is not yet exercised by native hooks. Normal and fullscreen
 virt-manager input pass; a small-window transition retains two failed clicks.
+Candidate358 verifies explicit macOS USB audio → QEMU → isolated Pulse capture:
+stereo frequencies, channel order and silence pass, with the original route
+restored. Default-application sound and endpoint audibility remain unqualified.
 Stock QEMU stays the default; performance results use a separately pinned
 experimental image. Automatic resize, other managers and VirtualBox remain
 unqualified. The virtual Display
 adapter's56MB framebuffer is separate from the native renderer's2GB VRAM.
 [Paired evidence](findings/research/bochs-full-refresh-paired-20261009.md)
 · [Native356 lifecycle/input evidence](findings/research/libvirt-reset-native-20261009.md)
+· [Console audio and input evidence](findings/research/console-audio-native-20261009.md)
 · [Setup and limits](docs/virtual-console.md).
 
 The qualified remote baseline from **2026-09-16**, candidate **1.0.280**, runs an accelerated desktop through
