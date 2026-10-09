@@ -283,7 +283,7 @@ def configure(version, card_id, attempt=None):
     """Select the exact reviewed candidate/card pair; defaults are 1.0.185."""
     global CANDIDATE_VERSION, CARD_ID, NUMBER, WT, CANDIDATE, DIST, IDENTITIES
     global RUN_ID_FILE, CARD
-    if not re.fullmatch(r"1\.0\.((?:1[0-9]{2}|2[0-5][0-9]|2[67][0-9]|280|281|282|283|284|285|286|287|288|289|290|291|292|293|294|295|296|297|298|299|300|301|302|303|304|305|306|307|308|309|310|311|312|313|314|315|316|317|318|319|320|321|322|323|324|325|326|327|328|329|330|331|332|333|334|335|336|340|341|342|343|345|347|350|351|352))", version):
+    if not re.fullmatch(r"1\.0\.((?:1[0-9]{2}|2[0-5][0-9]|2[67][0-9]|280|281|282|283|284|285|286|287|288|289|290|291|292|293|294|295|296|297|298|299|300|301|302|303|304|305|306|307|308|309|310|311|312|313|314|315|316|317|318|319|320|321|322|323|324|325|326|327|328|329|330|331|332|333|334|335|336|340|341|342|343|345|347|350|351|352|353))", version):
         raise RuntimeError("candidate version must be in the reviewed candidate set through 1.0.353")
     if not re.fullmatch(r"metal-[0-9]{3}", card_id):
         raise RuntimeError("card id must be metal-NNN")
