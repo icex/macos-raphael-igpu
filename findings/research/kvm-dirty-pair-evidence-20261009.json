@@ -1,0 +1,40 @@
+{
+  "kernel": "7.2.5-1-cachyos-bore",
+  "machine": "x86_64",
+  "rows": 48,
+  "summary": [
+    {
+      "bytes": 8294400,
+      "logging": 0,
+      "pairs": 10,
+      "first_ms_median": 0.27459350000000005,
+      "second_ms_median": 0.27420900000000004
+    },
+    {
+      "bytes": 8294400,
+      "logging": 1,
+      "pairs": 10,
+      "first_ms_median": 3.4519545000000003,
+      "second_ms_median": 0.29870399999999997
+    },
+    {
+      "bytes": 33177600,
+      "logging": 0,
+      "pairs": 10,
+      "first_ms_median": 1.0909245,
+      "second_ms_median": 1.0953149999999998
+    },
+    {
+      "bytes": 33177600,
+      "logging": 1,
+      "pairs": 10,
+      "first_ms_median": 14.4070145,
+      "second_ms_median": 1.11753
+    }
+  ],
+  "artifacts": {
+    "probe": "2305deeffe5bd5cb08f4eacec90ba3cb029cc07128681e900347ff7dd9b1bcb5",
+    "output.txt": "460b1a40009cbb30a0df6860230fe43ea0cd7536e5b6c727f8cce89c70085f5c",
+    "error.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}
