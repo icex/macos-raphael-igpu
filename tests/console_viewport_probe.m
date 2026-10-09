@@ -4,6 +4,9 @@
 #include <signal.h>
 #include <unistd.h>
 #include <ctype.h>
+#include <math.h>
+#include <stdlib.h>
+#include <string.h>
 
 static void expired(int signalNumber) { (void)signalNumber; _exit(124); }
 static BOOL saveJSON(NSString *path, NSDictionary *value) {
@@ -11,6 +14,12 @@ static BOOL saveJSON(NSString *path, NSDictionary *value) {
     NSData *data=[NSJSONSerialization dataWithJSONObject:value options:NSJSONWritingPrettyPrinted error:&error];
     return data && [data writeToFile:path options:NSDataWritingAtomic error:&error];
 }
+@interface ViewportWindow : NSWindow
+@end
+@implementation ViewportWindow
+- (BOOL)canBecomeKeyWindow { return YES; }
+- (BOOL)canBecomeMainWindow { return YES; }
+@end
 @interface ViewportView : NSView
 @property NSUInteger step;
 @property(copy) NSString *token;
@@ -18,6 +27,7 @@ static BOOL saveJSON(NSString *path, NSDictionary *value) {
 @end
 @implementation ViewportView
 - (BOOL)isFlipped { return YES; }
+- (BOOL)acceptsFirstMouse:(NSEvent *)event { (void)event; return YES; }
 - (void)drawRect:(NSRect)dirty {
     (void)dirty;
     [[NSColor colorWithCalibratedWhite:0.16 alpha:1] setFill]; NSRectFill(self.bounds);
@@ -51,7 +61,7 @@ int main(int argc,const char **argv) { @autoreleasepool {
     NSRect frame=screen.frame;
     if(frame.size.width<640 || frame.size.height<480) return 3;
     NSString *token=[@"RGPU" stringByAppendingString:[[NSString stringWithUTF8String:argv[2]] uppercaseString]];
-    NSWindow *window=[[NSWindow alloc] initWithContentRect:frame styleMask:NSWindowStyleMaskBorderless
+    ViewportWindow *window=[[ViewportWindow alloc] initWithContentRect:frame styleMask:NSWindowStyleMaskBorderless
                                                   backing:NSBackingStoreBuffered defer:NO];
     window.level=NSFloatingWindowLevel;window.title=@"Raphael viewport input qualification";
     ViewportView *view=[[ViewportView alloc] initWithFrame:NSMakeRect(0,0,frame.size.width,frame.size.height)];
