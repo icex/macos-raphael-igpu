@@ -996,7 +996,7 @@ def start_locked(vm, maximum, gpu_args, critical_enabled=False, context=None):
     env_keys = DOCKER_ENV + ("PATH", "DISPLAY", "XAUTHORITY", "XDG_RUNTIME_DIR", "IMAGE",
                            "VCPUS", "RAM_GB", "DISK_BUS", "AUDIO", "NVRAM", "BOOTDISK_MODE",
                            "NIC", "GL", "GDB", "SSH_PORT", "SCREEN_PORT")
-    env_keys += ("GENERIC_GRAPHICS", "VM_CONSOLE", "VM_MANAGER", "CONSOLE_REFRESH", "CONSOLE_FULL_REFRESH",
+    env_keys += ("GENERIC_GRAPHICS", "VM_CONSOLE", "VM_MANAGER", "CONSOLE_REFRESH", "CONSOLE_FULL_REFRESH", "CONSOLE_SNAPSHOT",
                  "RGPU_LIBVIRT_RUN_ID", "RGPU_LIBVIRT_ADMISSION_SHA256")
     endpoint = [f"--setenv={key}={os.environ.get(key, '')}" for key in env_keys]
     # A GPUless request cannot inherit hidden passthrough from the manager or

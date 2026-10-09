@@ -60,6 +60,16 @@ class RefreshPlanBindingTests(unittest.TestCase):
         spice=mod.native.configuration.planner.SPICE
         if refresh=='60':spice+=',max-refresh-rate=60'
         return {'native_argv':['-spice',spice,'-device',mod.native.configuration.planner.BOCHS]}
+    def test_snapshot_binds_both_directions_and_historical_default(self):
+        plan=self.plan('60');plan['native_argv'][-1]+=',x-debug-full-refresh=on,x-debug-snapshot=on'
+        admitted={'console_refresh':'60','console_full_refresh':'on','console_snapshot':'on'}
+        mod.validate_plan_refresh(plan,admitted)
+        for value in ('off',None,True):
+            bad=dict(admitted,console_snapshot=value)
+            with self.assertRaises(ValueError):mod.validate_plan_refresh(plan,bad)
+        bare=self.plan('60');bare['native_argv'][-1]+=',x-debug-full-refresh=on'
+        with self.assertRaises(ValueError):mod.validate_plan_refresh(bare,admitted)
+
     def test_full_refresh_is_bound_to_admission_in_both_directions(self):
         plan=self.plan('60');plan['native_argv'][-1]+=',x-debug-full-refresh=on'
         admitted={'console_refresh':'60','console_full_refresh':'on'}

@@ -673,6 +673,7 @@ class SupervisionTests(unittest.TestCase):
         self.env["GENERIC_GRAPHICS"] = "off"
         self.env["CONSOLE_REFRESH"] = "60"
         self.env["CONSOLE_FULL_REFRESH"] = "on"
+        self.env["CONSOLE_SNAPSHOT"] = "on"
         self.fixture["logind_inhibited"] = True
         self.save()
         script = self.vm / "macos-vm.sh"
@@ -684,6 +685,7 @@ class SupervisionTests(unittest.TestCase):
         self.assertIn("--setenv=GENERIC_GRAPHICS=off", launch)
         self.assertIn("--setenv=CONSOLE_REFRESH=60", launch)
         self.assertIn("--setenv=CONSOLE_FULL_REFRESH=on", launch)
+        self.assertIn("--setenv=CONSOLE_SNAPSHOT=on", launch)
         self.assertIn("--setenv=EXTRA=", launch)
 
     def test_start_archives_stopped_familiar_container_before_systemd(self):
