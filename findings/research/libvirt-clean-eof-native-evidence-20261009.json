@@ -1,0 +1,1400 @@
+{
+  "run_id": "a2e32b7d73a2dc3062421e39b457025c",
+  "candidate": 355,
+  "build_id": "602598df6baf4a098ff51331b0fa62cb",
+  "shutdown_observations": [
+    {
+      "phase": "libvirt-lifecycle-observed",
+      "name": "rgpu-a2e32b7d73a2dc3062421e39b457025c",
+      "uuid": "00000000-0000-0000-0000-000000000000",
+      "event": 6,
+      "detail": 1,
+      "observed_epoch": 1791549050.0291774,
+      "observed_monotonic": 64042.101029024,
+      "identity_bound": true,
+      "identity": {
+        "name": "rgpu-a2e32b7d73a2dc3062421e39b457025c",
+        "uuid": "00000000-0000-0000-0000-000000000000",
+        "run_id": "a2e32b7d73a2dc3062421e39b457025c",
+        "pid": 113,
+        "start_ticks": 34372808
+      },
+      "scope": {
+        "kind": "pid-namespace",
+        "device": 5,
+        "inode": 4026533263,
+        "init_start_ticks": 34372723
+      },
+      "guest_shutdown": true
+    }
+  ],
+  "zombie_task_observations": [
+    {
+      "event": "tasks",
+      "monotonic": 64042.142912709,
+      "epoch": 1791549050.0710626,
+      "tasks": [
+        {
+          "host_tid": 840718,
+          "namespace_tids": [
+            840718,
+            113
+          ],
+          "state": "Z",
+          "start_ticks": 34372808,
+          "comm": "qemu-system-x86",
+          "wchan": "0"
+        },
+        {
+          "host_tid": 840720,
+          "namespace_tids": [
+            840720,
+            115
+          ],
+          "state": "D",
+          "start_ticks": 34372811,
+          "comm": "qemu-system-x86",
+          "wchan": "synchronize_rcu"
+        }
+      ]
+    },
+    {
+      "event": "tasks",
+      "monotonic": 64042.193279558,
+      "epoch": 1791549050.1214297,
+      "tasks": [
+        {
+          "host_tid": 840718,
+          "namespace_tids": [
+            840718,
+            113
+          ],
+          "state": "Z",
+          "start_ticks": 34372808,
+          "comm": "qemu-system-x86",
+          "wchan": "0"
+        },
+        {
+          "host_tid": 840720,
+          "namespace_tids": [
+            840720,
+            115
+          ],
+          "state": "R",
+          "start_ticks": 34372811,
+          "comm": "qemu-system-x86",
+          "wchan": "0"
+        }
+      ]
+    }
+  ],
+  "terminal_present": false,
+  "critical_capture_matches_quiesce": true,
+  "critical_quiesce": {
+    "schema": 1,
+    "meaning": "producer emitted a fresh caught-up snapshot after the host request, acknowledged it, and stopped replay",
+    "build_id": "602598df6baf4a098ff51331b0fa62cb",
+    "run_id": "a2e32b7d73a2dc3062421e39b457025c",
+    "cid": "fdef71796f861938b604f69ca2256511d3bcee251cce9e6b11fb5affc6d44193",
+    "requested_epoch": 1791549035.6034026,
+    "acknowledged_epoch": 1791549038.6534443,
+    "request_sha256": "47672dee3e1fd7d5a435d3b87502015e1599f8844dc3b2d92f57d1938209bff7",
+    "snapshot": 10,
+    "record_count": 365,
+    "capture_acceptance": "terminal-prefix",
+    "critical_capture": {
+      "byte_length": 1653696,
+      "sha256": "e422aad9e3181e4ecd49d73ee6d4923626c5366ac2323ae117c2d6aae9d7eef9"
+    }
+  },
+  "console_eof": {
+    "schema": 1,
+    "cid": "fdef71796f861938b604f69ca2256511d3bcee251cce9e6b11fb5affc6d44193",
+    "channel": "console",
+    "started_at": "2026-10-09T12:28:23.602731397Z",
+    "run_id": "a2e32b7d73a2dc3062421e39b457025c",
+    "admission_sha256": "ba3884272656858101406a54d129408eadec4c9f0d459638371cf61a42043a78",
+    "eof_monotonic": 64042.102483156,
+    "eof_epoch": 1791549050.0306334,
+    "published_monotonic": 64042.102552226
+  },
+  "capture": {
+    "valid": true,
+    "verdict": "CORE_PROBE_PASS",
+    "earliest_failure": null,
+    "evidence": [
+      "BUILD: identity=602598df6baf4a098ff51331b0fa62cb",
+      "DCN: rgpudcn=0 (trace=0 translate=0 pool302=0 dmub-guard=0) trace-lines=1500",
+      "VD120: rgpuvd120=0",
+      "VCNDPM: capability alignment enabled=1 lock=1",
+      "HY: HWLibs hybrid trace route=ok entries-match=1 (max 8 calls)",
+      "HY: SDMA selector trace route=ok entries-match=1 (max 8 hybrid calls)",
+      "HOSTRESERVE: native reservation route ready",
+      "VCNQ: raw-wptr guard=1 patched=1 submit-route=1",
+      "VCNDPM: video HWInfo route entry=1 routed=1",
+      "ALLOCLOG: guarded=1 installed=1 first=8 every=1024 original=0xffffff7f88ef9114 target=0xffffff7f88ef9114 resolved=0xffffff8008d94da0 expected=0xffffff8008d94da0 reachable=1",
+      "VCNCTX: route VideoNewContext entry=1 routed=1",
+      "VCNCTX: route CreateContext entry=1 routed=1",
+      "VCNCTX: route RequestCap entry=1 routed=1",
+      "VCNCTX: route StartEngine entry=1 routed=1",
+      "VCNCTX: route SendPM entry=1 routed=1",
+      "VM: route AMDGFX10VMM::prepareVMInvalidateRequest -> ok (org=0xffffff800c21f8a7)",
+      "VM: route AMDHWVMContext::updateContiguousPTEsWithDMAUsingAddr -> ok (entry=1 org=0xffffff800c21f8bb)",
+      "VM: route AMDGFX10HIQHWChannel::fillMapProcessPacket -> ok (entry=1 org=0xffffff800c21f8cf)",
+      "SUB: route processCommandBuffer -> ok (org=0xffffff800c21f9d5)",
+      "SUB: route BatchPrepareMappings -> ok (org=0xffffff800c21f9e9)",
+      "SUB: route BatchPrepare -> ok (org=0xffffff800c21f9fd)",
+      "SUB: route batchMemoryMapPrepare -> ok (org=0xffffff800c21fa11)",
+      "SUB: route submitBuffer -> ok (org=0xffffff800c21fa25)",
+      "SUB: route AMDAccelVidMemory::allocPhysical -> ok (org=0xffffff800c21fa39)",
+      "SUB: route AMDAccelMemoryMap::commitIntoGPUPageTable -> ok (org=0xffffff800c21fa4d)",
+      "SUB: routes=ok count=7 entries-match=1 capture=armed",
+      "SD: route AMDHardware::initializeHWEngines -> ok (org=0xffffff800c21fa9d)",
+      "SD: route AMDHardware::stopHWEngines -> ok (org=0xffffff800c21fab1)",
+      "SD: route AMDHardware::powerOffHWEngines -> ok (org=0xffffff800c21fac5)",
+      "SD: route AMDHardware::powerOff -> ok (org=0xffffff800c21fad9)",
+      "SD: route AMDHardware::getHWChannel -> ok (org=0xffffff800c21faed)",
+      "SD: route AMDGFX10SDMAChannel::commitIndirectCommandBuffer -> ok (org=0xffffff800c21fb01)",
+      "SD: topology routes=ok count=7 entries-match=1",
+      "SUB: summary process=0/0/0 mappings=0/0/0 prepare=0/0/0 map=0/0/0 submit=0/0/0 dropped=0/0",
+      "SUB: map-phase-summary total=0 capacity=0 va=0 backing-pte=0 unknown=0 dropped=0/0/0/0",
+      "SUB: backing-summary completed=0 true=0 false=0 dropped=0 state=live",
+      "CONSOLE: empty firmware reset hold=1",
+      "CONSOLE: reservation firmware state CNTL=0x80000 reset=0x1 DMUIF=0x100 held=1",
+      "HOSTRESERVE: native tail=0x200000 additional=0 cursor=0x7fe00000 accounted=0x200000 ready",
+      "CONSOLE: DMCUB held and memory reserved before PSP TMR replacement",
+      "VM: entry-gate init marked=1 aperture=1 mode=5",
+      "SD: topology applied: discovered=1 kept=SDMA0 removed=SDMA1 before initialize",
+      "SD: AMDHardware::initializeHWEngines -> 1 (topology-applied=1)",
+      "SD: channel engine remap 2 -> 1 ring=0",
+      "SD: channel engine remap 2 -> 1 ring=0",
+      "SD: channel engine remap 2 -> 1 ring=0",
+      "SD: channel engine remap 2 -> 1 ring=0",
+      "SD: channel engine remap 2 -> 1 ring=0",
+      "SD: channel engine remap 2 -> 1 ring=0",
+      "SD: channel engine remap 2 -> 1 ring=1",
+      "SD: channel engine remap 2 -> 1 ring=0",
+      "XV: setMemoryAllocationsEnabled(0) entry: m_0x20=0 m_0x28=0 m_0x30=0 nest(0x3c)=0  [caller x6+0x707d4]",
+      "SD: channel engine remap 2 -> 1 ring=1",
+      "SD: channel engine remap 2 -> 1 ring=0",
+      "SD: channel engine remap 2 -> 1 ring=0",
+      "SD: channel engine remap 2 -> 1 ring=0",
+      "SD: channel engine remap 2 -> 1 ring=0",
+      "SD: channel engine remap 2 -> 1 ring=0",
+      "SD: channel engine remap 2 -> 1 ring=0",
+      "SD: channel engine remap 2 -> 1 ring=1",
+      "MH: prepared hub=1 vmid=0 reprogram=0 root=0 native=0 repaired=0 root-reg=0/0 req=0x1aa29 ack=0x1aa2a mask=0x1",
+      "MH: prepared hub=1 vmid=0 reprogram=0 root=0 native=0 repaired=0 root-reg=0/0 req=0x1aa29 ack=0x1aa2a mask=0x1",
+      "MH: prepared hub=1 vmid=0 reprogram=0 root=0 native=0 repaired=0 root-reg=0/0 req=0x1aa29 ack=0x1aa2a mask=0x1",
+      "MH: prepared hub=1 vmid=0 reprogram=0 root=0 native=0 repaired=0 root-reg=0/0 req=0x1aa29 ack=0x1aa2a mask=0x1",
+      "MH: prepared hub=1 vmid=0 reprogram=0 root=0 native=0 repaired=0 root-reg=0/0 req=0x1aa29 ack=0x1aa2a mask=0x1",
+      "MH: prepared hub=1 vmid=0 reprogram=0 root=0 native=0 repaired=0 root-reg=0/0 req=0x1aa29 ack=0x1aa2a mask=0x1",
+      "MH: prepared hub=1 vmid=0 reprogram=0 root=0 native=0 repaired=0 root-reg=0/0 req=0x1aa29 ack=0x1aa2a mask=0x1",
+      "MH: prepared hub=1 vmid=0 reprogram=0 root=0 native=0 repaired=0 root-reg=0/0 req=0x1aa29 ack=0x1aa2a mask=0x1",
+      "SUB: commit seq=1 map=0xffffff99b4ca4e80 thread=0xffffff94e7136b30 result=1",
+      "SUB: commit seq=2 map=0xffffff99b4ca2000 thread=0xffffff94e7136b30 result=1",
+      "SUB: commit seq=3 map=0xffffff99b4c9f180 thread=0xffffff94e7136b30 result=1",
+      "SUB: commit seq=4 map=0xffffff99b4c9f300 thread=0xffffff94e7136b30 result=1",
+      "SUB: commit seq=5 map=0xffffff99b4c9f480 thread=0xffffff94e7136b30 result=1",
+      "SUB: commit seq=6 map=0xffffff99b4c9fd80 thread=0xffffff94e7136b30 result=1",
+      "SUB: commit seq=7 map=0xffffff99b4c9ff00 thread=0xffffff94e7136b30 result=1",
+      "SUB: commit seq=8 map=0xffffff99b4ca0080 thread=0xffffff94e7136b30 result=1",
+      "SUB: commit seq=9 map=0xffffff99b4ca0200 thread=0xffffff94e7136b30 result=1",
+      "SUB: commit seq=10 map=0xffffff99b4ca0380 thread=0xffffff94e7136b30 result=1",
+      "SUB: commit-summary calls=10 failures=0 dropped=0 state=live",
+      "XJ: AMDGraphicsAccelerator::powerUpHW entry",
+      "XH2 OWNED nonce=30dca2737d2be3a2_5c0257b4391e4262 gen=1 lease=0xfaf2000-0xfb07000 scratch=0xfaf3000-0xfb06004 checksum=0xc0bbc5352a61cdcf",
+      "XV2 VMM phase=early enable=1 base=0xf47b000000 arena=0 pool0=0 pool1=0",
+      "SUB: commit seq=11 map=0xffffff99b4c9ac80 thread=0xffffff94e78c8598 result=1",
+      "SUB: commit seq=12 map=0xffffff99b4c9ae00 thread=0xffffff94e78c8598 result=1",
+      "SUB: commit seq=13 map=0xffffff99b4c9af80 thread=0xffffff94e78c8598 result=1",
+      "SUB: commit seq=14 map=0xffffff99b4c9b100 thread=0xffffff94e78c8598 result=1",
+      "SUB: commit seq=15 map=0xffffff99b4c9b580 thread=0xffffff94e78c8598 result=1",
+      "SUB: commit seq=16 map=0xffffff99b4c9b700 thread=0xffffff94e78c8598 result=1",
+      "SUB: commit seq=17 map=0xffffff99b4c9b880 thread=0xffffff94e78c8598 result=1",
+      "SUB: commit seq=18 map=0xffffff99b4c9ba00 thread=0xffffff94e78c8598 result=1",
+      "SUB: commit seq=19 map=0xffffff99b4c9bb80 thread=0xffffff94e78c8598 result=1",
+      "SUB: commit seq=20 map=0xffffff99b4c9bd00 thread=0xffffff94e78c8598 result=1",
+      "SUB: commit seq=21 map=0xffffff99b4c9be80 thread=0xffffff94e78c8598 result=1",
+      "SUB: commit seq=22 map=0xffffff99b4c99000 thread=0xffffff94e78c8598 result=1",
+      "SUB: commit seq=23 map=0xffffff99b4c99180 thread=0xffffff94e78c8598 result=1",
+      "SUB: commit seq=24 map=0xffffff99b4c99300 thread=0xffffff94e78c8598 result=1",
+      "SUB: commit seq=25 map=0xffffff99b4c99480 thread=0xffffff94e78c8598 result=1",
+      "SUB: commit seq=26 map=0xffffff99b4c99600 thread=0xffffff94e78c8598 result=1",
+      "SUB: commit seq=27 map=0xffffff99b4c99780 thread=0xffffff94e78c8598 result=1",
+      "SUB: commit seq=28 map=0xffffff99b4c99900 thread=0xffffff94e78c8598 result=1",
+      "SUB: commit seq=29 map=0xffffff99b4c99a80 thread=0xffffff94e78c8598 result=1",
+      "SUB: commit seq=30 map=0xffffff99b4c99c00 thread=0xffffff94e78c8598 result=1",
+      "SUB: commit seq=31 map=0xffffff99b4c99d80 thread=0xffffff94e78c8598 result=1",
+      "SUB: commit seq=32 map=0xffffff99b4c99f00 thread=0xffffff94e78c8598 result=1",
+      "SUB: commit-summary calls=138 failures=0 dropped=106 state=live",
+      "HY: createHybridEngine enter: engine=12 available=1",
+      "HY: createHybridEngine exit: engine=12 valid=1 available-before=1 status=0",
+      "XJ:   waitForHwStamp(1) -> 1 caller=x6+0x5c75f",
+      "XJ:   submitKIQFrame -> 1 caller=x6+0x68291",
+      "HY: createHybridEngine enter: engine=13 available=1",
+      "HY: createHybridEngine exit: engine=13 valid=1 available-before=1 status=0",
+      "XJ:   waitForHwStamp(2) -> 1 caller=x6+0x5c75f",
+      "XJ:   submitKIQFrame -> 1 caller=x6+0x77581e72",
+      "XJ:   waitForHwStamp(3) -> 1 caller=x6+0x5c75f",
+      "XJ:   submitKIQFrame -> 1 caller=x6+0x77581e72",
+      "XJ:   waitForHwStamp(1) -> 1 caller=x6+0x5a5f0",
+      "XJ: AMDHardware::powerUpHWEngines -> 1",
+      "HY: createHybridEngine enter: engine=10 available=1",
+      "HY: SDMA select index=0 queue-type=0 found=1 counts=1,0,0,0 queues=1,1,2502106792 occupied=0 callback=0x62c9f",
+      "HY: createHybridEngine exit: engine=10 valid=1 available-before=1 status=0",
+      "HY: createHybridEngine enter: engine=11 available=1",
+      "HY: SDMA select index=0 queue-type=1 found=1 counts=1,0,0,0 queues=1,1,2502106792 occupied=1 callback=0x62c9f",
+      "HY: createHybridEngine exit: engine=11 valid=1 available-before=1 status=0",
+      "SD: one-instance start -> 1 (SDMA0=0xffffff94e84f1900 SDMA1=0)",
+      "XJ: AMDHardware::startHWEngines -> 1",
+      "XH2 POOL state=ACTIVE nonce=30dca2737d2be3a2_5c0257b4391e4262 gen=1 lease=0xfaf2000-0xfb07000 pool0=0x80000000->0x7ffeb000 pool1=0x80000000->0x7ffeb000 reason=0 checksum=0xc0badc35386489c5",
+      "XH3 LIFETIME state=VALID nonce=30dca2737d2be3a2_5c0257b4391e4262 checksum=0x359b46ebb48f7ac5",
+      "XV: setMemoryAllocationsEnabled(1) entry: m_0x20=0xffffff94e7166000 m_0x28=0xffffff8b4efd1f80 m_0x30=0xffffff8b4be5c800 nest(0x3c)=0  [caller x6+0x707d4]",
+      "XV2 VMM phase=native enable=1 base=0xf47b000000 arena=0xffffff99b40eaa80 pool0=0xffffff8b4efd3c80 pool1=0xffffff8b4efd3d00",
+      "XJ: AMDGraphicsAccelerator::powerUpHW -> 1",
+      "SUB: trace seq=139 kind=submit-buffer phase=entry subject=0xffffff94e711fa00 object=0xffffff8682eb4c00 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=140 kind=submit-buffer phase=exit subject=0xffffff94e711fa00 object=0xffffff8682eb4c00 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "XJ:   waitForHwStamp(1) -> 1 caller=x6+0x73f86",
+      "SUB: summary process=0/0/0 mappings=0/0/0 prepare=0/0/0 map=0/0/0 submit=1/1/0 dropped=0/0",
+      "FBEXPAND: COW pid=167 addr=0x7ffb16a14ac3 p=0 w=0 r=0 v=0",
+      "VM: prepared hub=0 vmid=2 start=0 end=0xffffffffffffffff root=0xf47b000000 flags=0xff reprogram=1 alternate=1 info=00000000,00000002,00000000,00000000,ffffffff,ffffffff,7b000000,000000f4,000000ff,00000001 words=000028cb,5b000000,000028cc,00000008,000028eb,00400000,000028ec,00000000,0000290b,023fffff,0000290c,00000000,000028af,ffffffff,000028b0,0000001f,00002885,00990004,00002897,00000004,00000004",
+      "VM: root-repair seq=1 vmid=2 original=0xf47b000000 native=0x85b000000 repaired=1 reason=repaired prepared-match=1",
+      "VM: state seq=1 phase=prepared vmid=2 ctl=0x3b root=0x85b000000 start=0x400000000 end=0x23ffffffff requested=0xf47b000000 native=0x85b000000 prepared=0x85b000000 repaired=1 reason=repaired prepared-match=1 live-match=1",
+      "VM: context-snapshot vmid=2 root=0x85b000000 ctl=0x3b start=0x400000000 end=0x23ffffffff",
+      "VM: fault seq=1 phase=prepared cntl=0x1ffc status=0 addr=0 | invalidate-order=0x10f eng0-sem=unread req=0x2f80001 ack=0x1 bit2=0/0 prepared-mask=0x4/0x4",
+      "VM: invalidate-live seq=1 phase=prepared reg=0x2885 kind=req engine=6 value=0x990002 bit2=0",
+      "VM: invalidate-live seq=1 phase=prepared reg=0x2897 kind=ack engine=6 value=0x2 bit2=0",
+      "SD: runtime seq=1 phase=prepared cntl=0x400c3 ucode=0x6842122f f32=0 status=0x46deed57/0x3ff/0x398c/0x7f00000 utcl-cntl=0xd0000f93 page=0x10cede0 rd=0x1891555 wr=0x51851555",
+      "SD: xnack seq=1 phase=prepared rd=0x69578/0x2121320 wr=0x375d69/0x3fffe00",
+      "SD: page seq=1 phase=prepared status=0x2 context=0xd ib-cntl=0x20101 rptr=0x40 offset=0 base=0x4_00180160 size=0",
+      "SD: submit vmid=2 flags=0 entries=1 valid=1 IB0=0x400100000 IB1=0 seq=0",
+      "VM: correlate-submit order=2 thread=0xffffff94e7137598 hint=1 result=0 reason=no-same-thread retained=1 same-thread=0 earlier=0 in-range=0",
+      "SD: submit vmid=2 flags=0 entries=1 valid=1 IB0=0x400180000 IB1=0 seq=0",
+      "VM: correlate-submit order=3 thread=0xffffff94e7137598 hint=1 result=0 reason=no-same-thread retained=1 same-thread=0 earlier=0 in-range=0",
+      "SD: submit vmid=2 flags=0 entries=1 valid=1 IB0=0x400180040 IB1=0 seq=0",
+      "VM: correlate-submit order=4 thread=0xffffff94e7137598 hint=1 result=0 reason=no-same-thread retained=1 same-thread=0 earlier=0 in-range=0",
+      "SD: submit vmid=2 flags=0 entries=1 valid=1 IB0=0x400180080 IB1=0 seq=1",
+      "VM: correlate-submit order=5 thread=0xffffff94e78c8598 hint=1 result=1 reason=matched retained=1 same-thread=1 earlier=1 in-range=1",
+      "VM: state seq=1 phase=dispatch+0ms vmid=2 ctl=0x3b root=0x85b000000 start=0x400000000 end=0x23ffffffff requested=0xf47b000000 native=0x85b000000 prepared=0x85b000000 repaired=1 reason=repaired prepared-match=1 live-match=1",
+      "VM: context-snapshot vmid=2 root=0x85b000000 ctl=0x3b start=0x400000000 end=0x23ffffffff",
+      "VM: fault seq=1 phase=dispatch+0ms cntl=0x1ffc status=0 addr=0 | invalidate-order=0x10f eng0-sem=unread req=0x2f80001 ack=0x1 bit2=0/0 prepared-mask=0x4/0x4",
+      "VM: invalidate-live seq=1 phase=dispatch+0ms reg=0x2885 kind=req engine=6 value=0x990002 bit2=0",
+      "VM: invalidate-live seq=1 phase=dispatch+0ms reg=0x2897 kind=ack engine=6 value=0x2 bit2=0",
+      "SD: runtime seq=1 phase=dispatch+0ms cntl=0x400c3 ucode=0x6842122f f32=0 status=0x46feed57/0x203ff/0x38d8/0x7f00000 utcl-cntl=0xd0000f93 page=0x10cede0 rd=0x1891555 wr=0x51851555",
+      "SD: xnack seq=1 phase=dispatch+0ms rd=0x150f87/0x2565720 wr=0x375d69/0x1696a00",
+      "SD: page seq=1 phase=dispatch+0ms status=0x2 context=0xd ib-cntl=0x20101 rptr=0x40 offset=0 base=0x4_00180220 size=0",
+      "VM: walk seq=1 va=0x400100000 root=0x85b000000 valid=0 complete=0 count=0",
+      "VM: walk seq=1 va=0x4000c0000 root=0x85b000000 valid=0 complete=0 count=0",
+      "VM: walk seq=1 va=0x400200000 root=0x85b000000 valid=0 complete=0 count=0",
+      "VM: walk seq=1 va=0x400180080 root=0x85b000000 valid=0 complete=0 count=0",
+      "VM: state seq=1 phase=dispatch+1ms vmid=2 ctl=0x3b root=0x85b000000 start=0x400000000 end=0x23ffffffff requested=0xf47b000000 native=0x85b000000 prepared=0x85b000000 repaired=1 reason=repaired prepared-match=1 live-match=1",
+      "VM: context-snapshot vmid=2 root=0x85b000000 ctl=0x3b start=0x400000000 end=0x23ffffffff",
+      "VM: fault seq=1 phase=dispatch+1ms cntl=0x1ffc status=0 addr=0 | invalidate-order=0x10f eng0-sem=unread req=0x2f80001 ack=0x1 bit2=0/0 prepared-mask=0x4/0x4",
+      "VM: invalidate-live seq=1 phase=dispatch+1ms reg=0x2885 kind=req engine=6 value=0x990002 bit2=0",
+      "VM: invalidate-live seq=1 phase=dispatch+1ms reg=0x2897 kind=ack engine=6 value=0x2 bit2=0",
+      "SD: runtime seq=1 phase=dispatch+1ms cntl=0x400c3 ucode=0x6842122f f32=0 status=0x46deed57/0x3ff/0x3980/0x7f00000 utcl-cntl=0xd0000f93 page=0x10cede0 rd=0x1891555 wr=0x51851555",
+      "SD: xnack seq=1 phase=dispatch+1ms rd=0x4b89b4/0x18d8f20 wr=0x375d69/0x505200",
+      "SD: page seq=1 phase=dispatch+1ms status=0x2 context=0xd ib-cntl=0x20101 rptr=0x40 offset=0 base=0x4_00180400 size=0",
+      "VM: state seq=1 phase=dispatch+10ms vmid=2 ctl=0x3b root=0x85b000000 start=0x400000000 end=0x23ffffffff requested=0xf47b000000 native=0x85b000000 prepared=0x85b000000 repaired=1 reason=repaired prepared-match=1 live-match=1",
+      "VM: context-snapshot vmid=2 root=0x85b000000 ctl=0x3b start=0x400000000 end=0x23ffffffff",
+      "VM: fault seq=1 phase=dispatch+10ms cntl=0x1ffc status=0 addr=0 | invalidate-order=0x10f eng0-sem=unread req=0x2f80001 ack=0x1 bit2=0/0 prepared-mask=0x4/0x4",
+      "VM: invalidate-live seq=1 phase=dispatch+10ms reg=0x2885 kind=req engine=6 value=0x990002 bit2=0",
+      "VM: invalidate-live seq=1 phase=dispatch+10ms reg=0x2897 kind=ack engine=6 value=0x2 bit2=0",
+      "SD: runtime seq=1 phase=dispatch+10ms cntl=0x400c3 ucode=0x6842122f f32=0 status=0x46deed57/0x3ff/0x3268/0x7f00000 utcl-cntl=0xd0000f93 page=0x10cede0 rd=0x1891555 wr=0x51851555",
+      "SD: xnack seq=1 phase=dispatch+10ms rd=0x4b89b4/0x18d8f20 wr=0x375d69/0x505200",
+      "SD: page seq=1 phase=dispatch+10ms status=0x2 context=0xd ib-cntl=0x20101 rptr=0x40 offset=0 base=0x4_00180400 size=0",
+      "VM: state seq=1 phase=dispatch+100ms vmid=2 ctl=0x3b root=0x85b000000 start=0x400000000 end=0x23ffffffff requested=0xf47b000000 native=0x85b000000 prepared=0x85b000000 repaired=1 reason=repaired prepared-match=1 live-match=1",
+      "VM: context-snapshot vmid=2 root=0x85b000000 ctl=0x3b start=0x400000000 end=0x23ffffffff",
+      "VM: fault seq=1 phase=dispatch+100ms cntl=0x1ffc status=0 addr=0 | invalidate-order=0x10f eng0-sem=unread req=0x2f80001 ack=0x1 bit2=0/0 prepared-mask=0x4/0x4",
+      "VM: invalidate-live seq=1 phase=dispatch+100ms reg=0x2885 kind=req engine=6 value=0x990002 bit2=0",
+      "VM: invalidate-live seq=1 phase=dispatch+100ms reg=0x2897 kind=ack engine=6 value=0x2 bit2=0",
+      "SD: runtime seq=1 phase=dispatch+100ms cntl=0x400c3 ucode=0x6842122f f32=0 status=0x46deed57/0x3ff/0x3e90/0x7f00000 utcl-cntl=0xd0000f93 page=0x10cede0 rd=0x1891555 wr=0x51851555",
+      "SD: xnack seq=1 phase=dispatch+100ms rd=0x4b89b4/0x18d8f20 wr=0x375d69/0x505200",
+      "SD: page seq=1 phase=dispatch+100ms status=0x2 context=0xd ib-cntl=0x20101 rptr=0x40 offset=0 base=0x4_00180400 size=0",
+      "SD: submit vmid=2 flags=0 entries=1 valid=1 IB0=0x400100020 IB1=0 seq=0",
+      "VM: correlate-submit order=6 thread=0xffffff94e7137598 hint=1 result=0 reason=no-same-thread retained=1 same-thread=0 earlier=0 in-range=0",
+      "SD: submit vmid=2 flags=0 entries=1 valid=1 IB0=0x4001800c0 IB1=0 seq=0",
+      "VM: correlate-submit order=7 thread=0xffffff94e7137598 hint=1 result=0 reason=no-same-thread retained=1 same-thread=0 earlier=0 in-range=0",
+      "SD: submit vmid=2 flags=0 entries=1 valid=1 IB0=0x400180100 IB1=0 seq=0",
+      "VM: correlate-submit order=8 thread=0xffffff94e7137598 hint=1 result=0 reason=no-same-thread retained=1 same-thread=0 earlier=0 in-range=0",
+      "SD: submit vmid=2 flags=0 entries=1 valid=1 IB0=0x400180160 IB1=0 seq=0",
+      "VM: correlate-submit order=9 thread=0xffffff94e7137598 hint=1 result=0 reason=no-same-thread retained=1 same-thread=0 earlier=0 in-range=0",
+      "VM: entry-update mode=5 route=1 inactive=0 converted=167 physical=0 outside=0 system=1508 invalid-template=0 invalid-aperture=0 empty=0 overflow=0 span=0 zero=0 omitted-child=119 omitted-eligible=32 omitted-control=1500",
+      "VM: entry-update-sample bucket=child caller=x6+0x55a72 producer=child domain=converted destination=0xf47b000000 count=1 source=0xf47b001000 result=0x85b001000 template=0x2000000000000001 increment=0x0 constructed=0x200000085b001001 state=returned",
+      "VM: entry-update-sample bucket=child caller=x6+0x55a72 producer=child domain=converted destination=0xf47b001070 count=1 source=0xf47b009700 result=0x85b009700 template=0x100000000000001 increment=0x0 constructed=0x10000085b009701 state=returned",
+      "VM: entry-update-sample bucket=child caller=x6+0x55a72 producer=child domain=converted destination=0xf47b001058 count=1 source=0xf47b009580 result=0x85b009580 template=0x100000000000001 increment=0x0 constructed=0x10000085b009581 state=returned",
+      "VM: entry-update-sample bucket=child caller=x6+0x55a72 producer=child domain=converted destination=0xf47b001018 count=1 source=0xf47b009180 result=0x85b009180 template=0x100000000000001 increment=0x0 constructed=0x10000085b009181 state=returned",
+      "VM: entry-update-sample bucket=child caller=x6+0x55a72 producer=child domain=converted destination=0xf47b001078 count=1 source=0xf47b009780 result=0x85b009780 template=0x100000000000001 increment=0x0 constructed=0x10000085b009781 state=returned",
+      "VM: entry-update-sample bucket=child caller=x6+0x55a72 producer=child domain=converted destination=0xf47b001080 count=1 source=0xf47b009800 result=0x85b009800 template=0x100000000000001 increment=0x0 constructed=0x10000085b009801 state=returned",
+      "VM: entry-update-sample bucket=child caller=x6+0x55a72 producer=child domain=converted destination=0xf47b001088 count=1 source=0xf47b009880 result=0x85b009880 template=0x100000000000001 increment=0x0 constructed=0x10000085b009881 state=returned",
+      "VM: entry-update-sample bucket=child caller=x6+0x55a72 producer=child domain=converted destination=0xf47b001090 count=1 source=0xf47b009900 result=0x85b009900 template=0x100000000000001 increment=0x0 constructed=0x10000085b009901 state=returned",
+      "VM: entry-update-sample bucket=eligible caller=x6+0x559dc producer=leaf domain=converted destination=0xf47b001060 count=1 source=0xf410001000 result=0x7f0001000 template=0x271 increment=0x10000 constructed=0x7f0001271 state=returned",
+      "VM: entry-update-sample bucket=eligible caller=x6+0x559dc producer=leaf domain=converted destination=0xf47b009580 count=8 source=0xf410011000 result=0x7f0011000 template=0x1f1 increment=0x1000 constructed=0x7f00111f1 state=returned",
+      "VM: entry-update-sample bucket=eligible caller=x6+0x559dc producer=leaf domain=converted destination=0xf47b0091c0 count=8 source=0xf410019000 result=0x7f0019000 template=0x1f1 increment=0x1000 constructed=0x7f00191f1 state=returned",
+      "VM: entry-update-sample bucket=eligible caller=x6+0x559dc producer=leaf domain=converted destination=0xf47b009018 count=1 source=0xf410000000 result=0x7f0000000 template=0x71 increment=0x1000 constructed=0x7f0000071 state=returned",
+      "VM: entry-update-sample bucket=eligible caller=x6+0x559dc producer=leaf domain=converted destination=0xf47b001140 count=1 source=0xf40a700000 result=0x7ea700000 template=0x271 increment=0x10000 constructed=0x7ea700271 state=returned",
+      "VM: entry-update-sample bucket=eligible caller=x6+0x559dc producer=leaf domain=converted destination=0xf47b00a480 count=8 source=0xf40a710000 result=0x7ea710000 template=0x1f1 increment=0x1000 constructed=0x7ea7101f1 state=returned",
+      "VM: entry-update-sample bucket=eligible caller=x6+0x559dc producer=leaf domain=converted destination=0xf47b00a4c0 count=2 source=0xf40a718000 result=0x7ea718000 template=0xf1 increment=0x1000 constructed=0x7ea7180f1 state=returned",
+      "VM: entry-update-sample bucket=eligible caller=x6+0x559dc producer=leaf domain=converted destination=0xf47b009140 count=8 source=0xf410021000 result=0x7f0021000 template=0x1f1 increment=0x1000 constructed=0x7f00211f1 state=returned",
+      "VM: entry-update-sample bucket=control caller=x6+0x559dc producer=leaf domain=system destination=0xf47b009700 count=1 source=0x32cdbb000 result=0x32cdbb000 template=0x3000000000077 increment=0x1000 constructed=0x300032cdbb077 state=returned",
+      "VM: entry-update-sample bucket=control caller=x6+0x559dc producer=leaf domain=system destination=0xf47b009708 count=1 source=0x32d22e000 result=0x32d22e000 template=0x3000000000077 increment=0x1000 constructed=0x300032d22e077 state=returned",
+      "VM: entry-update-sample bucket=control caller=x6+0x559dc producer=leaf domain=system destination=0xf47b009710 count=1 source=0x32d22d000 result=0x32d22d000 template=0x3000000000077 increment=0x1000 constructed=0x300032d22d077 state=returned",
+      "VM: entry-update-sample bucket=control caller=x6+0x559dc producer=leaf domain=system destination=0xf47b009718 count=1 source=0x32d22c000 result=0x32d22c000 template=0x3000000000077 increment=0x1000 constructed=0x300032d22c077 state=returned",
+      "VM: entry-update-sample bucket=control caller=x6+0x559dc producer=leaf domain=system destination=0xf47b009720 count=1 source=0x32d66b000 result=0x32d66b000 template=0x3000000000077 increment=0x1000 constructed=0x300032d66b077 state=returned",
+      "VM: entry-update-sample bucket=control caller=x6+0x559dc producer=leaf domain=system destination=0xf47b009728 count=1 source=0x32d66a000 result=0x32d66a000 template=0x3000000000077 increment=0x1000 constructed=0x300032d66a077 state=returned",
+      "VM: entry-update-sample bucket=control caller=x6+0x559dc producer=leaf domain=system destination=0xf47b009730 count=1 source=0x32d669000 result=0x32d669000 template=0x3000000000077 increment=0x1000 constructed=0x300032d669077 state=returned",
+      "VM: entry-update-sample bucket=control caller=x6+0x559dc producer=leaf domain=system destination=0xf47b009738 count=1 source=0x32d668000 result=0x32d668000 template=0x3000000000077 increment=0x1000 constructed=0x300032d668077 state=returned",
+      "SUB: trace seq=143 kind=process-command-buffer phase=entry subject=0xffffff8b4be54800 object=0 thread=0xffffff94e78c8598 requested=2 result=1 before=0",
+      "SUB: trace seq=144 kind=resource-batch phase=entry subject=0xffffff8b4f6b3000 object=0xffffff8b4efd3200 thread=0xffffff94e78c8598 requested=16 result=0 before=0",
+      "FBEXPAND: COW pid=128 addr=0x7ffb16a14ac3 p=0 w=0 r=0 v=0",
+      "SUB: trace seq=145 kind=mapping-batch phase=entry subject=0xffffff8b4f6b3000 object=0xfffffffe8973f470 thread=0xffffff94e78c8598 requested=3 result=0 before=0",
+      "SUB: trace seq=146 kind=memory-map phase=entry subject=0xffffff8b4f6b3000 object=0xffffff99b40e7d80 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=149 kind=memory-map phase=exit subject=0xffffff8b4f6b3000 object=0xffffff99b40e7d80 thread=0xffffff94e78c8598 requested=0 result=1 before=0",
+      "SUB: trace seq=151 kind=memory-map phase=entry subject=0xffffff8b4f6b3000 object=0xffffff99b40e8200 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=153 kind=memory-map phase=exit subject=0xffffff8b4f6b3000 object=0xffffff99b40e8200 thread=0xffffff94e78c8598 requested=0 result=1 before=0",
+      "SUB: trace seq=155 kind=memory-map phase=entry subject=0xffffff8b4f6b3000 object=0xffffff99b40e7a80 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=158 kind=memory-map phase=exit subject=0xffffff8b4f6b3000 object=0xffffff99b40e7a80 thread=0xffffff94e78c8598 requested=0 result=1 before=0",
+      "SUB: trace seq=160 kind=memory-map phase=entry subject=0xffffff8b4f6b3000 object=0xffffff99b40e8380 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=162 kind=memory-map phase=exit subject=0xffffff8b4f6b3000 object=0xffffff99b40e8380 thread=0xffffff94e78c8598 requested=0 result=1 before=0",
+      "SUB: trace seq=164 kind=memory-map phase=entry subject=0xffffff8b4f6b3000 object=0xffffff99b40e9100 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=167 kind=memory-map phase=exit subject=0xffffff8b4f6b3000 object=0xffffff99b40e9100 thread=0xffffff94e78c8598 requested=0 result=1 before=0",
+      "SUB: trace seq=169 kind=memory-map phase=entry subject=0xffffff8b4f6b3000 object=0xffffff99b40e8500 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=171 kind=memory-map phase=exit subject=0xffffff8b4f6b3000 object=0xffffff99b40e8500 thread=0xffffff94e78c8598 requested=0 result=1 before=0",
+      "SUB: trace seq=173 kind=submit-buffer phase=entry subject=0xffffff94e711fa00 object=0xffffff8682eb4100 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=174 kind=submit-buffer phase=exit subject=0xffffff94e711fa00 object=0xffffff8682eb4100 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=175 kind=mapping-batch phase=exit subject=0xffffff8b4f6b3000 object=0xfffffffe8973f470 thread=0xffffff94e78c8598 requested=3 result=3 before=0",
+      "SUB: trace seq=176 kind=submit-buffer phase=entry subject=0xffffff94e711fa00 object=0xffffff8682eb4300 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=177 kind=submit-buffer phase=exit subject=0xffffff94e711fa00 object=0xffffff8682eb4300 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=179 kind=submit-buffer phase=entry subject=0xffffff94e7118e00 object=0xffffff8682eb4100 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=180 kind=submit-buffer phase=entry subject=0xffffff94e711fa00 object=0xffffff8682eb4300 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=181 kind=submit-buffer phase=exit subject=0xffffff94e711fa00 object=0xffffff8682eb4300 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=182 kind=submit-buffer phase=exit subject=0xffffff94e7118e00 object=0xffffff8682eb4100 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=183 kind=submit-buffer phase=entry subject=0xffffff94e711fa00 object=0xffffff8682eb4100 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=184 kind=submit-buffer phase=exit subject=0xffffff94e711fa00 object=0xffffff8682eb4100 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=186 kind=submit-buffer phase=entry subject=0xffffff94e7121200 object=0xffffff8682eb4300 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=187 kind=submit-buffer phase=exit subject=0xffffff94e7121200 object=0xffffff8682eb4300 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=188 kind=submit-buffer phase=entry subject=0xffffff94e711fa00 object=0xffffff8682eb4100 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=189 kind=submit-buffer phase=exit subject=0xffffff94e711fa00 object=0xffffff8682eb4100 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=191 kind=submit-buffer phase=entry subject=0xffffff94e711fa00 object=0xffffff8682eb4300 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=192 kind=submit-buffer phase=exit subject=0xffffff94e711fa00 object=0xffffff8682eb4300 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=194 kind=submit-buffer phase=entry subject=0xffffff94e711fa00 object=0xffffff8682eb4100 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=195 kind=submit-buffer phase=exit subject=0xffffff94e711fa00 object=0xffffff8682eb4100 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=197 kind=submit-buffer phase=entry subject=0xffffff94e7118800 object=0xffffff8682eb4300 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=198 kind=submit-buffer phase=exit subject=0xffffff94e7118800 object=0xffffff8682eb4300 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=199 kind=submit-buffer phase=entry subject=0xffffff94e7118800 object=0xffffff8682eb4100 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=200 kind=submit-buffer phase=exit subject=0xffffff94e7118800 object=0xffffff8682eb4100 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=201 kind=resource-batch phase=exit subject=0xffffff8b4f6b3000 object=0xffffff8b4efd3200 thread=0xffffff94e78c8598 requested=16 result=1 before=0",
+      "SUB: trace seq=202 kind=resource-batch phase=entry subject=0xffffff8b4f6b3000 object=0xffffff86832d7180 thread=0xffffff94e78c8598 requested=8 result=0 before=0",
+      "SUB: trace seq=203 kind=mapping-batch phase=entry subject=0xffffff8b4f6b3000 object=0xfffffffe8973f470 thread=0xffffff94e78c8598 requested=4 result=0 before=0",
+      "SUB: trace seq=204 kind=memory-map phase=entry subject=0xffffff8b4f6b3000 object=0xffffff99b40e7f00 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=206 kind=memory-map phase=exit subject=0xffffff8b4f6b3000 object=0xffffff99b40e7f00 thread=0xffffff94e78c8598 requested=0 result=1 before=0",
+      "SUB: trace seq=208 kind=memory-map phase=entry subject=0xffffff8b4f6b3000 object=0xffffff99b40ea000 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=211 kind=memory-map phase=exit subject=0xffffff8b4f6b3000 object=0xffffff99b40ea000 thread=0xffffff94e78c8598 requested=0 result=1 before=0",
+      "SUB: trace seq=213 kind=memory-map phase=entry subject=0xffffff8b4f6b3000 object=0xffffff99b40e8c80 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=215 kind=memory-map phase=exit subject=0xffffff8b4f6b3000 object=0xffffff99b40e8c80 thread=0xffffff94e78c8598 requested=0 result=1 before=0",
+      "SUB: trace seq=217 kind=memory-map phase=entry subject=0xffffff8b4f6b3000 object=0xffffff99b40e7780 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=219 kind=submit-buffer phase=entry subject=0xffffff94e711fa00 object=0xffffff8682eb4300 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=220 kind=submit-buffer phase=exit subject=0xffffff94e711fa00 object=0xffffff8682eb4300 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=222 kind=memory-map phase=exit subject=0xffffff8b4f6b3000 object=0xffffff99b40e7780 thread=0xffffff94e78c8598 requested=0 result=1 before=0",
+      "SUB: trace seq=224 kind=memory-map phase=entry subject=0xffffff8b4f6b3000 object=0xffffff99b40ea180 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=226 kind=memory-map phase=exit subject=0xffffff8b4f6b3000 object=0xffffff99b40ea180 thread=0xffffff94e78c8598 requested=0 result=1 before=0",
+      "SUB: trace seq=228 kind=submit-buffer phase=entry subject=0xffffff94e711fa00 object=0xffffff8682eb4100 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=229 kind=submit-buffer phase=exit subject=0xffffff94e711fa00 object=0xffffff8682eb4100 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=230 kind=mapping-batch phase=exit subject=0xffffff8b4f6b3000 object=0xfffffffe8973f470 thread=0xffffff94e78c8598 requested=4 result=4 before=0",
+      "SUB: trace seq=231 kind=submit-buffer phase=entry subject=0xffffff94e7121200 object=0xffffff8682eb4300 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=232 kind=submit-buffer phase=exit subject=0xffffff94e7121200 object=0xffffff8682eb4300 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=233 kind=submit-buffer phase=entry subject=0xffffff94e711fa00 object=0xffffff8682eb4100 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=234 kind=submit-buffer phase=exit subject=0xffffff94e711fa00 object=0xffffff8682eb4100 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=236 kind=submit-buffer phase=entry subject=0xffffff94e711fa00 object=0xffffff8682eb4300 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: trace seq=237 kind=submit-buffer phase=exit subject=0xffffff94e711fa00 object=0xffffff8682eb4300 thread=0xffffff94e78c8598 requested=0 result=0 before=0",
+      "SUB: commit-summary calls=194 failures=0 dropped=162 state=live",
+      "SUB: commit-summary calls=195 failures=0 dropped=163 state=live",
+      "SUB: summary process=32/32/0 mappings=38/38/0 prepare=128/128/0 map=201/201/0 submit=192/192/0 dropped=1118/0",
+      "SUB: commit-summary calls=197 failures=0 dropped=165 state=live",
+      "SUB: commit-summary calls=198 failures=0 dropped=166 state=live",
+      "SUB: commit-summary calls=199 failures=0 dropped=167 state=live",
+      "SUB: commit-summary calls=200 failures=0 dropped=168 state=live",
+      "SUB: commit-summary calls=204 failures=0 dropped=172 state=live",
+      "VM: entry-update mode=5 route=1 inactive=0 converted=229 physical=0 outside=0 system=1953 invalid-template=12 invalid-aperture=0 empty=0 overflow=0 span=0 zero=0 omitted-child=158 omitted-eligible=55 omitted-control=1957",
+      "SUB: commit-summary calls=214 failures=0 dropped=182 state=live",
+      "VM: map-process-root input=0xf47b000000 native=0xf47b000000 final=0x85b000000 pasid=1 header=0xc00ea100 return-valid=1 repaired=1 reason=12",
+      "SUB: summary process=58/58/0 mappings=70/70/0 prepare=230/230/0 map=354/354/0 submit=328/328/0 dropped=2016/0",
+      "FBEXPAND: COW pid=406 addr=0x7ffb16a14ac3 p=0 w=0 r=0 v=0",
+      "FBEXPAND: COW pid=441 addr=0x7ffb16a14ac3 p=0 w=0 r=0 v=0",
+      "SUB: commit-summary calls=216 failures=0 dropped=184 state=live",
+      "XJ:   waitForHwStamp(2) -> 1 caller=x6+0x8f96b",
+      "VM: map-process-root input=0xf47b000000 native=0xf47b000000 final=0x85b000000 pasid=1 header=0xc00ea100 return-valid=1 repaired=1 reason=12",
+      "SUB: commit-summary calls=252 failures=0 dropped=220 state=live",
+      "SUB: commit-summary calls=256 failures=0 dropped=224 state=live",
+      "SUB: commit-summary calls=259 failures=0 dropped=227 state=live",
+      "SUB: commit-summary calls=260 failures=0 dropped=228 state=live",
+      "VCNDPM: COW pid=495 addr=0x7ffb162f15f6 p=0 w=0 r=0 v=0",
+      "VCNPRESET: COW target=preset-value pid=495 addr=0x7ffb16301458 p=0 w=0 r=0 v=0",
+      "VCNPRESET: COW target=hevc-gate pid=495 addr=0x7ffb16301d74 p=0 w=0 r=0 v=0",
+      "VCNPRESET: COW target=avc-gate pid=495 addr=0x7ffb1630188c p=0 w=0 r=0 v=0",
+      "SUB: commit-summary calls=265 failures=0 dropped=233 state=live",
+      "SUB: commit-summary calls=267 failures=0 dropped=235 state=live",
+      "SUB: commit-summary calls=269 failures=0 dropped=237 state=live",
+      "SUB: commit-summary calls=278 failures=0 dropped=246 state=live",
+      "VM: entry-update mode=5 route=1 inactive=0 converted=817 physical=0 outside=0 system=8730 invalid-template=33 invalid-aperture=0 empty=0 overflow=0 span=0 zero=0 omitted-child=624 omitted-eligible=177 omitted-control=8755",
+      "SUB: commit-summary calls=350 failures=0 dropped=318 state=live",
+      "SUB: commit-summary calls=365 failures=0 dropped=333 state=live",
+      "SUB: commit-summary calls=368 failures=0 dropped=336 state=live",
+      "SUB: commit-summary calls=370 failures=0 dropped=338 state=live",
+      "SUB: commit-summary calls=372 failures=0 dropped=340 state=live",
+      "SUB: commit-summary calls=375 failures=0 dropped=343 state=live",
+      "SUB: commit-summary calls=377 failures=0 dropped=345 state=live",
+      "SUB: commit-summary calls=378 failures=0 dropped=346 state=live",
+      "SUB: commit-summary calls=381 failures=0 dropped=349 state=live",
+      "SUB: commit-summary calls=383 failures=0 dropped=351 state=live",
+      "SUB: commit-summary calls=403 failures=0 dropped=371 state=live",
+      "SUB: commit-summary calls=412 failures=0 dropped=380 state=live",
+      "SUB: commit-summary calls=426 failures=0 dropped=394 state=live",
+      "SUB: backing-summary completed=242 true=242 false=0 dropped=0 state=live",
+      "VCNDPM: COW pid=607 addr=0x7ffb162f15f6 p=0 w=0 r=0 v=0",
+      "VCNPRESET: COW target=preset-value pid=607 addr=0x7ffb16301458 p=0 w=0 r=0 v=0",
+      "VCNCTX: video new begin n=1 codec=6 channel=10 width=1920 height=1088 scheduler=0 client=0 pm=0x600001bc0e20",
+      "VCNCTX: video new end n=1 result=00000000 id=1",
+      "VCNCTX: video new begin n=2 codec=6 channel=10 width=1920 height=1088 scheduler=0 client=0 pm=0x600001bc5820",
+      "VCNCTX: video new end n=2 result=00000000 id=2",
+      "XJ:   waitForHwStamp(3) -> 1 caller=x6+0x8f96b",
+      "XJ:   waitForHwStamp(4) -> 1 caller=x6+0x8f96b",
+      "VM: map-process-root input=0xf47b000000 native=0xf47b000000 final=0x85b000000 pasid=1 header=0xc00ea100 return-valid=1 repaired=1 reason=12",
+      "VM: map-process-root input=0xf47b03f000 native=0xf47b03f000 final=0x85b03f000 pasid=2 header=0xc00ea100 return-valid=1 repaired=1 reason=12",
+      "VM: map-process-root input=0xf47b000000 native=0xf47b000000 final=0x85b000000 pasid=1 header=0xc00ea100 return-valid=1 repaired=1 reason=12",
+      "VM: map-process-root input=0xf47b03f000 native=0xf47b03f000 final=0x85b03f000 pasid=2 header=0xc00ea100 return-valid=1 repaired=1 reason=12",
+      "VM: map-process-root input=0xf47b000000 native=0xf47b000000 final=0x85b000000 pasid=1 header=0xc00ea100 return-valid=1 repaired=1 reason=12",
+      "VM: map-process-root input=0xf47b04e000 native=0xf47b04e000 final=0x85b04e000 pasid=3 header=0xc00ea100 return-valid=1 repaired=1 reason=12",
+      "VM: map-process-summary retained=8 dropped=5",
+      "VCNCTX: video new begin n=3 codec=7 channel=10 width=1920 height=1088 scheduler=0 client=0 pm=0x600001bd98a0",
+      "VCNCTX: video new end n=3 result=00000000 id=3",
+      "VM: map-process-summary retained=8 dropped=8",
+      "VM: entry-update mode=5 route=1 inactive=0 converted=2012 physical=0 outside=0 system=13823 invalid-template=604 invalid-aperture=0 empty=0 overflow=0 span=0 zero=0 omitted-child=1166 omitted-eligible=830 omitted-control=14419",
+      "VCNCTX: video new begin n=4 codec=7 channel=10 width=1920 height=1088 scheduler=0 client=0 pm=0x600001bc5260",
+      "VCNCTX: video new end n=4 result=00000000 id=4",
+      "VM: map-process-summary retained=8 dropped=11",
+      "VCNCTX: video new begin n=5 codec=7 channel=10 width=1920 height=1088 scheduler=0 client=0 pm=0x600001bd3920",
+      "VCNCTX: video new end n=5 result=00000000 id=5",
+      "VCNCTX: video new begin n=6 codec=7 channel=10 width=1920 height=1088 scheduler=0 client=0 pm=0x600001bd3aa0",
+      "VCNCTX: video new end n=6 result=00000000 id=6",
+      "VM: map-process-summary retained=8 dropped=14",
+      "VM: map-process-summary retained=8 dropped=20",
+      "VM: entry-update mode=5 route=1 inactive=0 converted=3736 physical=0 outside=0 system=29988 invalid-template=1892 invalid-aperture=0 empty=0 overflow=0 span=0 zero=0 omitted-child=2317 omitted-eligible=1403 omitted-control=31872",
+      "VM: map-process-summary retained=8 dropped=27",
+      "VM: map-process-summary retained=8 dropped=30",
+      "SUB: backing-summary completed=700 true=700 false=0 dropped=0 state=live",
+      "VM: entry-update mode=5 route=1 inactive=0 converted=6343 physical=0 outside=0 system=62700 invalid-template=2777 invalid-aperture=0 empty=0 overflow=0 span=0 zero=0 omitted-child=4475 omitted-eligible=1852 omitted-control=65469",
+      "VM: map-process-summary retained=8 dropped=32",
+      "VM: entry-update mode=5 route=1 inactive=0 converted=10133 physical=0 outside=0 system=115798 invalid-template=5936 invalid-aperture=0 empty=0 overflow=0 span=0 zero=0 omitted-child=7976 omitted-eligible=2141 omitted-control=121726",
+      "SUB: backing-summary completed=1136 true=1136 false=0 dropped=0 state=live",
+      "capture_tolerance",
+      "fb_aperture"
+    ],
+    "next_action": "qualify memory, lifecycle and desktop; core probe alone is insufficient",
+    "probe_summary": {
+      "passed": true,
+      "completed_command_buffers": 1,
+      "values_checked": 1,
+      "exits": [
+        "0"
+      ],
+      "transport_exit": 0,
+      "display_on_device": true,
+      "windowserver_accelerator_client": true,
+      "displays": [
+        {
+          "id": 4128836,
+          "builtin": 0,
+          "serial": 877854721,
+          "width": 1920,
+          "main": 1,
+          "same_device": true,
+          "mode_count": 21,
+          "metal_device": "AMD Radeon Navi23",
+          "vendor": 21072,
+          "height": 1080,
+          "mode_pixels": [
+            3840,
+            2160
+          ],
+          "model": 13395,
+          "refresh_hz": 60
+        }
+      ],
+      "offscreen_fps": 1637.368310376013,
+      "offscreen_frames": 1000,
+      "offscreen_pixels_checked": 736,
+      "offscreen_pixel_mismatches": 0,
+      "offscreen_failed_command_buffers": 0,
+      "window_pattern_ok": 0,
+      "window_frames_changed": 0,
+      "window_child_ready": true,
+      "window_present_fps": 0,
+      "window_presented_frames": 0,
+      "window_submitted_frames": 242,
+      "window_drawable_wrong": 0,
+      "readback_mismatches": [
+        [
+          64,
+          64,
+          "private->shared-buffer",
+          0
+        ],
+        [
+          64,
+          64,
+          "private->managed-buffer+sync",
+          0
+        ],
+        [
+          64,
+          64,
+          "private->managed-texture+sync",
+          0
+        ],
+        [
+          64,
+          64,
+          "render-into-managed-texture+sync",
+          0
+        ],
+        [
+          64,
+          64,
+          "upload managed-texture->private",
+          0
+        ],
+        [
+          64,
+          64,
+          "upload shared-buffer->private",
+          0
+        ],
+        [
+          1280,
+          1024,
+          "private->shared-buffer",
+          0
+        ],
+        [
+          1280,
+          1024,
+          "private->managed-buffer+sync",
+          0
+        ],
+        [
+          1280,
+          1024,
+          "private->managed-texture+sync",
+          0
+        ],
+        [
+          1280,
+          1024,
+          "render-into-managed-texture+sync",
+          0
+        ],
+        [
+          1280,
+          1024,
+          "upload managed-texture->private",
+          0
+        ],
+        [
+          1280,
+          1024,
+          "upload shared-buffer->private",
+          0
+        ],
+        [
+          1920,
+          1080,
+          "private->shared-buffer",
+          0
+        ],
+        [
+          1920,
+          1080,
+          "private->managed-buffer+sync",
+          0
+        ],
+        [
+          1920,
+          1080,
+          "private->managed-texture+sync",
+          0
+        ],
+        [
+          1920,
+          1080,
+          "render-into-managed-texture+sync",
+          0
+        ],
+        [
+          1920,
+          1080,
+          "upload managed-texture->private",
+          0
+        ],
+        [
+          1920,
+          1080,
+          "upload shared-buffer->private",
+          0
+        ],
+        [
+          2048,
+          2048,
+          "private->shared-buffer",
+          0
+        ],
+        [
+          2048,
+          2048,
+          "private->managed-buffer+sync",
+          0
+        ],
+        [
+          2048,
+          2048,
+          "private->managed-texture+sync",
+          0
+        ],
+        [
+          2048,
+          2048,
+          "render-into-managed-texture+sync",
+          0
+        ],
+        [
+          2048,
+          2048,
+          "upload managed-texture->private",
+          0
+        ],
+        [
+          2048,
+          2048,
+          "upload shared-buffer->private",
+          0
+        ]
+      ]
+    },
+    "warm_reuse": "recovered",
+    "critical_producer_quiesce": {
+      "schema": 1,
+      "meaning": "producer emitted a fresh caught-up snapshot after the host request, acknowledged it, and stopped replay",
+      "build_id": "602598df6baf4a098ff51331b0fa62cb",
+      "run_id": "a2e32b7d73a2dc3062421e39b457025c",
+      "cid": "fdef71796f861938b604f69ca2256511d3bcee251cce9e6b11fb5affc6d44193",
+      "requested_epoch": 1791549035.6034026,
+      "acknowledged_epoch": 1791549038.6534443,
+      "request_sha256": "47672dee3e1fd7d5a435d3b87502015e1599f8844dc3b2d92f57d1938209bff7",
+      "snapshot": 10,
+      "record_count": 365,
+      "capture_acceptance": "terminal-prefix",
+      "critical_capture": {
+        "byte_length": 1653696,
+        "sha256": "e422aad9e3181e4ecd49d73ee6d4923626c5366ac2323ae117c2d6aae9d7eef9"
+      }
+    },
+    "functional_boundary": null,
+    "termination_reason": null
+  },
+  "shutdown": {
+    "cid": "fdef71796f861938b604f69ca2256511d3bcee251cce9e6b11fb5affc6d44193",
+    "outcome": "exited-after-guest-request",
+    "guest_boot_uuid": "64E67328-8C51-4DE9-9D42-30116C9689C0",
+    "request_id": "6302acf577ad4a35b0361f1d0341cefb"
+  },
+  "recovery": {
+    "schema": 6,
+    "status": "recovered",
+    "authorizes_launch": true,
+    "boot_id": "ba51b3c6-9420-4510-af69-38a42b3c79c7",
+    "prior_run_id": "a2e32b7d73a2dc3062421e39b457025c",
+    "device": "0000:7b:00.0",
+    "iommu_group": "31",
+    "driver": "vfio-pci",
+    "pci_command_before": 3,
+    "pci_command_after": 3,
+    "reset_methods_before": [],
+    "reset_methods_after": [],
+    "bar5": {
+      "index": 5,
+      "size": 524288,
+      "offset": 5497558138880,
+      "read": true,
+      "write": true,
+      "mmap": true,
+      "regions": {
+        "0": {
+          "index": 0,
+          "size": 268435456,
+          "offset": 0,
+          "read": true,
+          "write": true,
+          "mmap": true
+        },
+        "2": {
+          "index": 2,
+          "size": 2097152,
+          "offset": 2199023255552,
+          "read": true,
+          "write": true,
+          "mmap": true
+        },
+        "5": {
+          "index": 5,
+          "size": 524288,
+          "offset": 5497558138880,
+          "read": true,
+          "write": true,
+          "mmap": true
+        }
+      }
+    },
+    "gc_quiesce": {
+      "status": "quiesced",
+      "active_before": 2,
+      "dequeued": 2,
+      "dequeue_timeouts": 0,
+      "forced_inactive": 0,
+      "queues": [
+        {
+          "me": 2,
+          "pipe": 0,
+          "queue": 0,
+          "selector": 8,
+          "polls": 1
+        },
+        {
+          "me": 2,
+          "pipe": 1,
+          "queue": 0,
+          "selector": 9,
+          "polls": 1
+        }
+      ],
+      "cp_me_before": 0,
+      "cp_me_after": 352321536,
+      "cp_mec_before": 1342177280,
+      "cp_mec_after": 1342177280,
+      "cp_stat_after": 0,
+      "cp_cpc_busy_after": 0,
+      "pq_wptr_poll_after": 0,
+      "pq_status_after": 0,
+      "doorbell_range_lower_after": 0,
+      "doorbell_range_upper_after": 0,
+      "graphics_pipe_guard": {
+        "policy": "x6000-24G830-single-legacy-gfx-pipe-v1",
+        "reservation_before": {
+          "schema": 3,
+          "state": 1145984847,
+          "lease_start": 263135232,
+          "lease_end": 263221248,
+          "scratch_start": 263139328,
+          "scratch_end": 263217156,
+          "run_id": "a2e32b7d73a2dc3062421e39b457025c",
+          "checksum": 13887910708062047695,
+          "immutable": true,
+          "pool_readback": "committed",
+          "pool_status": {
+            "state": 1448362817,
+            "pool0_before": 2147483648,
+            "pool0_after": 2147397632,
+            "pool1_before": 2147483648,
+            "pool1_after": 2147397632,
+            "reason": 0,
+            "checksum": 13887654522087836101
+          },
+          "lease_version": 2,
+          "lifetime_version": 3,
+          "lifetime_status": {
+            "magic": 3696694755578627922,
+            "version": 3,
+            "state": 1145848150,
+            "lease_offset": 263135232,
+            "lease_end": 263221248,
+            "nonce_lo": 3520867625601852322,
+            "nonce_hi": 6629958033006805602,
+            "generation": 1,
+            "ownership_checksum": 13887910708062047695,
+            "pool_checksum": 13887654522087836101,
+            "reason": 0,
+            "checksum": 3862759083560893125
+          },
+          "lifetime_readbacks": {
+            "authenticated": "524750554b4c4d330300000056414c440020af0f000000000070b00f00000000a2e32b7d73a2dc3062421e39b457025c0100000000000000cfcd612a35c5bbc0c589643835dcbac00000000000000000c57a8fb4eb469b35",
+            "pre_scratch": null
+          }
+        },
+        "reservation_after": {
+          "schema": 3,
+          "state": 1145984847,
+          "lease_start": 263135232,
+          "lease_end": 263221248,
+          "scratch_start": 263139328,
+          "scratch_end": 263217156,
+          "run_id": "a2e32b7d73a2dc3062421e39b457025c",
+          "checksum": 13887910708062047695,
+          "immutable": true,
+          "pool_readback": "committed",
+          "pool_status": {
+            "state": 1448362817,
+            "pool0_before": 2147483648,
+            "pool0_after": 2147397632,
+            "pool1_before": 2147483648,
+            "pool1_after": 2147397632,
+            "reason": 0,
+            "checksum": 13887654522087836101
+          },
+          "lease_version": 2,
+          "lifetime_version": 3,
+          "lifetime_status": {
+            "magic": 3696694755578627922,
+            "version": 3,
+            "state": 1145848150,
+            "lease_offset": 263135232,
+            "lease_end": 263221248,
+            "nonce_lo": 3520867625601852322,
+            "nonce_hi": 6629958033006805602,
+            "generation": 1,
+            "ownership_checksum": 13887910708062047695,
+            "pool_checksum": 13887654522087836101,
+            "reason": 0,
+            "checksum": 3862759083560893125
+          },
+          "lifetime_readbacks": {
+            "authenticated": "524750554b4c4d330300000056414c440020af0f000000000070b00f00000000a2e32b7d73a2dc3062421e39b457025c0100000000000000cfcd612a35c5bbc0c589643835dcbac00000000000000000c57a8fb4eb469b35",
+            "pre_scratch": null
+          }
+        },
+        "reservation_unchanged": true,
+        "pipe1_supported_state": true,
+        "snapshot": {
+          "pipes": [
+            {
+              "intended_pipe": 0,
+              "selector": 0,
+              "rb0_active": 1,
+              "rb1_active": 0,
+              "active": 1,
+              "doorbell_control": 3221226496,
+              "doorbell_offset": 1024,
+              "doorbell_status": 3221225472,
+              "wptr": 931328,
+              "wptr_hi": 0,
+              "base": 4290767360,
+              "base_hi": 0,
+              "cntl": 10489360
+            },
+            {
+              "intended_pipe": 1,
+              "selector": 1,
+              "rb0_active": 1,
+              "rb1_active": 0,
+              "active": 0,
+              "doorbell_control": 0,
+              "doorbell_offset": 0,
+              "doorbell_status": 0,
+              "wptr": 0,
+              "wptr_hi": 0,
+              "base": 4275878623,
+              "base_hi": 0,
+              "cntl": 10485760
+            }
+          ],
+          "final_default": {
+            "value": 0,
+            "completed": true
+          }
+        }
+      },
+      "graphics_pipes_before": {
+        "pipes": [
+          {
+            "intended_pipe": 0,
+            "selector": 0,
+            "rb0_active": 1,
+            "rb1_active": 0,
+            "active": 1,
+            "doorbell_control": 3221226496,
+            "doorbell_offset": 1024,
+            "doorbell_status": 3221225472,
+            "wptr": 931328,
+            "wptr_hi": 0,
+            "base": 4290767360,
+            "base_hi": 0,
+            "cntl": 10489360
+          },
+          {
+            "intended_pipe": 1,
+            "selector": 1,
+            "rb0_active": 1,
+            "rb1_active": 0,
+            "active": 0,
+            "doorbell_control": 0,
+            "doorbell_offset": 0,
+            "doorbell_status": 0,
+            "wptr": 0,
+            "wptr_hi": 0,
+            "base": 4275878623,
+            "base_hi": 0,
+            "cntl": 10485760
+          }
+        ],
+        "final_default": {
+          "value": 0,
+          "completed": true
+        }
+      },
+      "graphics_pipes_after_retirement": {
+        "pipes": [
+          {
+            "intended_pipe": 0,
+            "selector": 0,
+            "rb0_active": 0,
+            "rb1_active": 0,
+            "active": 0,
+            "doorbell_control": 1024,
+            "doorbell_offset": 1024,
+            "doorbell_status": 0,
+            "wptr": 0,
+            "wptr_hi": 0,
+            "base": 4290767360,
+            "base_hi": 0,
+            "cntl": 10489360
+          },
+          {
+            "intended_pipe": 1,
+            "selector": 1,
+            "rb0_active": 0,
+            "rb1_active": 0,
+            "active": 0,
+            "doorbell_control": 0,
+            "doorbell_offset": 0,
+            "doorbell_status": 0,
+            "wptr": 0,
+            "wptr_hi": 0,
+            "base": 4275878623,
+            "base_hi": 0,
+            "cntl": 10485760
+          }
+        ],
+        "final_default": {
+          "value": 0,
+          "completed": true
+        }
+      },
+      "graphics_pipes_final": {
+        "pipes": [
+          {
+            "intended_pipe": 0,
+            "selector": 0,
+            "rb0_active": 0,
+            "rb1_active": 0,
+            "active": 0,
+            "doorbell_control": 0,
+            "doorbell_offset": 0,
+            "doorbell_status": 0,
+            "wptr": 0,
+            "wptr_hi": 0,
+            "base": 0,
+            "base_hi": 0,
+            "cntl": 0
+          },
+          {
+            "intended_pipe": 1,
+            "selector": 1,
+            "rb0_active": 0,
+            "rb1_active": 0,
+            "active": 0,
+            "doorbell_control": 0,
+            "doorbell_offset": 0,
+            "doorbell_status": 0,
+            "wptr": 0,
+            "wptr_hi": 0,
+            "base": 4275878623,
+            "base_hi": 0,
+            "cntl": 10485760
+          }
+        ],
+        "final_default": {
+          "value": 0,
+          "completed": true
+        }
+      },
+      "graphics_pipe_proof_complete": true,
+      "gfx_rb_active_before": 1,
+      "gfx_rb_active_after": 0,
+      "gfx_rb_doorbell_before": 3221226496,
+      "gfx_rb_doorbell_after": 0,
+      "gfx_rb_wptr_before": 931328,
+      "gfx_rb_wptr_hi_before": 0,
+      "gfx_rb_wptr_after": 0,
+      "gfx_rb_wptr_hi_after": 0,
+      "gfx_rb_base_before": 4290767360,
+      "gfx_rb_base_after": 0,
+      "gfx_rb_base_hi_before": 0,
+      "gfx_rb_base_hi_after": 0,
+      "gfx_rb_cntl_before": 10489360,
+      "gfx_rb_cntl_after": 0,
+      "gfx_ring_clean": true,
+      "gfx_was_stale": true,
+      "gfx_needs_unmap": true,
+      "gfx_retirement_confirmed": true,
+      "host_kiq": {
+        "status": "retired",
+        "selector": 9,
+        "packet_dwords": 256,
+        "rptr_after": 256,
+        "fence_sequence": 3468087547,
+        "fence_after": 3468087547,
+        "gfx_active_after_unmap": 0,
+        "graphics_pipes_after_unmap": {
+          "pipes": [
+            {
+              "intended_pipe": 0,
+              "selector": 0,
+              "rb0_active": 0,
+              "rb1_active": 0,
+              "active": 0,
+              "doorbell_control": 1024,
+              "doorbell_offset": 1024,
+              "doorbell_status": 0,
+              "wptr": 0,
+              "wptr_hi": 0,
+              "base": 4290767360,
+              "base_hi": 0,
+              "cntl": 10489360
+            },
+            {
+              "intended_pipe": 1,
+              "selector": 1,
+              "rb0_active": 0,
+              "rb1_active": 0,
+              "active": 0,
+              "doorbell_control": 0,
+              "doorbell_offset": 0,
+              "doorbell_status": 0,
+              "wptr": 0,
+              "wptr_hi": 0,
+              "base": 4275878623,
+              "base_hi": 0,
+              "cntl": 10485760
+            }
+          ],
+          "final_default": {
+            "value": 0,
+            "completed": true
+          }
+        },
+        "gfx_doorbell_offset": 1024,
+        "addresses": {
+          "ring": 1048235159552,
+          "mqd": 1048235225088,
+          "rptr": 1048235229184,
+          "wptr": 1048235229192,
+          "eop": 1048235233280,
+          "fence": 1048235237376
+        },
+        "gart": {
+          "control": 22369281,
+          "root": 34089189377,
+          "start_page": 268171776,
+          "end_page": 268434944,
+          "physical_fb": 33822867456,
+          "bar_offset": 266321920,
+          "size": 2105352,
+          "active": true
+        },
+        "reservation": {
+          "schema": 3,
+          "state": 1145984847,
+          "lease_start": 263135232,
+          "lease_end": 263221248,
+          "scratch_start": 263139328,
+          "scratch_end": 263217156,
+          "run_id": "a2e32b7d73a2dc3062421e39b457025c",
+          "checksum": 13887910708062047695,
+          "immutable": true,
+          "pool_readback": "committed",
+          "pool_status": {
+            "state": 1448362817,
+            "pool0_before": 2147483648,
+            "pool0_after": 2147397632,
+            "pool1_before": 2147483648,
+            "pool1_after": 2147397632,
+            "reason": 0,
+            "checksum": 13887654522087836101
+          },
+          "lease_version": 2,
+          "lifetime_version": 3,
+          "lifetime_status": {
+            "magic": 3696694755578627922,
+            "version": 3,
+            "state": 1145848150,
+            "lease_offset": 263135232,
+            "lease_end": 263221248,
+            "nonce_lo": 3520867625601852322,
+            "nonce_hi": 6629958033006805602,
+            "generation": 1,
+            "ownership_checksum": 13887910708062047695,
+            "pool_checksum": 13887654522087836101,
+            "reason": 0,
+            "checksum": 3862759083560893125
+          },
+          "lifetime_readbacks": {
+            "authenticated": "524750554b4c4d330300000056414c440020af0f000000000070b00f00000000a2e32b7d73a2dc3062421e39b457025c0100000000000000cfcd612a35c5bbc0c589643835dcbac00000000000000000c57a8fb4eb469b35",
+            "pre_scratch": "524750554b4c4d330300000056414c440020af0f000000000070b00f00000000a2e32b7d73a2dc3062421e39b457025c0100000000000000cfcd612a35c5bbc0c589643835dcbac00000000000000000c57a8fb4eb469b35"
+          }
+        },
+        "hdp_flush": {
+          "remap": 14428,
+          "posted_read": 2048
+        },
+        "cleanup_confirmed": true,
+        "cleanup": {
+          "mec_cntl": 1342177280,
+          "hqd_active": 0,
+          "hqd_doorbell": 0,
+          "hqd_rptr": 0,
+          "hqd_wptr_lo": 0,
+          "hqd_wptr_hi": 0,
+          "pq_status": 0,
+          "doorbell_range_lower": 0,
+          "doorbell_range_upper": 0,
+          "wptr_poll_cntl": 0
+        },
+        "gfx_active_before_scrub": 0,
+        "final_gate": {
+          "active_after": 0,
+          "cp_stat_after": 0,
+          "cp_cpc_busy_after": 0,
+          "pq_wptr_poll_after": 0,
+          "pq_status_after": 0,
+          "doorbell_range_lower_after": 0,
+          "doorbell_range_upper_after": 0,
+          "gfx_ring_clean": true,
+          "gfx_retirement_confirmed": true,
+          "graphics_pipe_proof_complete": true
+        }
+      },
+      "reservation": {
+        "schema": 3,
+        "state": 1145984847,
+        "lease_start": 263135232,
+        "lease_end": 263221248,
+        "scratch_start": 263139328,
+        "scratch_end": 263217156,
+        "run_id": "a2e32b7d73a2dc3062421e39b457025c",
+        "checksum": 13887910708062047695,
+        "immutable": true,
+        "pool_readback": "committed",
+        "pool_status": {
+          "state": 1448362817,
+          "pool0_before": 2147483648,
+          "pool0_after": 2147397632,
+          "pool1_before": 2147483648,
+          "pool1_after": 2147397632,
+          "reason": 0,
+          "checksum": 13887654522087836101
+        },
+        "lease_version": 2,
+        "lifetime_version": 3,
+        "lifetime_status": {
+          "magic": 3696694755578627922,
+          "version": 3,
+          "state": 1145848150,
+          "lease_offset": 263135232,
+          "lease_end": 263221248,
+          "nonce_lo": 3520867625601852322,
+          "nonce_hi": 6629958033006805602,
+          "generation": 1,
+          "ownership_checksum": 13887910708062047695,
+          "pool_checksum": 13887654522087836101,
+          "reason": 0,
+          "checksum": 3862759083560893125
+        },
+        "lifetime_readbacks": {
+          "authenticated": "524750554b4c4d330300000056414c440020af0f000000000070b00f00000000a2e32b7d73a2dc3062421e39b457025c0100000000000000cfcd612a35c5bbc0c589643835dcbac00000000000000000c57a8fb4eb469b35",
+          "pre_scratch": "524750554b4c4d330300000056414c440020af0f000000000070b00f00000000a2e32b7d73a2dc3062421e39b457025c0100000000000000cfcd612a35c5bbc0c589643835dcbac00000000000000000c57a8fb4eb469b35"
+        }
+      },
+      "sdma0_cntl_before": 262339,
+      "sdma0_cntl_after": 195,
+      "sdma0_rb_before": 2156134433,
+      "sdma0_rb_after": 2156134432,
+      "sdma0_ib_before": 65793,
+      "sdma0_ib_after": 65792,
+      "sdma0_page_ib_before": 2147483905,
+      "sdma0_page_ib_after": 2147483904,
+      "sdma0_page_rb_before": 2156134433,
+      "sdma0_page_rb_after": 2156134432,
+      "sdma0_rlc_inputs": [
+        {
+          "index": 0,
+          "rb_before": 2147942400,
+          "ib_before": 256,
+          "rb_after": 2147942400,
+          "ib_after": 256
+        },
+        {
+          "index": 1,
+          "rb_before": 2147942400,
+          "ib_before": 256,
+          "rb_after": 2147942400,
+          "ib_after": 256
+        }
+      ],
+      "sdma0_status_before": 1189014871,
+      "sdma0_status_after": 1189014871,
+      "sdma0_shutdown_trace": [
+        {
+          "step": "disable-page-ib",
+          "register": 19720,
+          "before": 2147483905,
+          "written": 2147483904,
+          "readback": 2147483904
+        },
+        {
+          "step": "disable-page-rb",
+          "register": 19680,
+          "before": 2156134433,
+          "written": 2156134432,
+          "readback": 2156134432
+        }
+      ],
+      "sdma0_before": 0,
+      "sdma0_after": 1,
+      "active_after": 0
+    },
+    "commands": [
+      {
+        "label": "destroy all rings",
+        "command": 196608,
+        "before": 2147549184,
+        "response": 2147680256,
+        "polls": 7,
+        "confirmed": true
+      },
+      {
+        "label": "destroy GPCOM ring",
+        "command": 786432,
+        "before": 2147680256,
+        "response": 2148270080,
+        "polls": 1,
+        "confirmed": true
+      }
+    ],
+    "kernel_cursor_before": "s=98f6cb2295dc45898ee97031451ba7c8;i=e7e43;b=ba51b3c694204510af6938a42b3c79c7;m=ee9392b33;t=65d6784bdc688;x=565d54c3ccc84f75",
+    "kernel_cursor_after": "s=98f6cb2295dc45898ee97031451ba7c8;i=e7e43;b=ba51b3c694204510af6938a42b3c79c7;m=ee9392b33;t=65d6784bdc688;x=565d54c3ccc84f75",
+    "kernel_messages": [],
+    "expected_config_memsize": 2048,
+    "recovery_helpers_sha256": {
+      "tools/vfio-recover.py": "cf3c3dbcfa93abe85d575d49536b948e25ef532c56858a29fb77800afeea3abe",
+      "tools/recovery_lease_v2.py": "445544dd52f30cf32838472d2d248d69ea1cd3e703c8f580ecef6491238aa7d2",
+      "tools/kiq-recovery-proof.py": "16af9cd9b5e807a44e0e28d6b6005840b9d720c50df2ce757b820dd5d3de0398",
+      "tools/critical-replay.py": "8e0332d763be3fb6e31d5877ad78711c8673e8f5aeae56ba4989248947554b61",
+      "tools/recovery_lifetime_v3.py": "61ab64bec086d0c358a05b57f893bc6267b94d9b6f431bed100de13a9d0fbcea"
+    },
+    "recovery_lease_schema": 3,
+    "recovery_id": "5bdc551559c3478798443c2f09ea0c11",
+    "created_epoch": 1791549050.5847018
+  },
+  "capture_exit": [
+    {
+      "channel": "console",
+      "cid": "fdef71796f861938b604f69ca2256511d3bcee251cce9e6b11fb5affc6d44193",
+      "command_exit_code": 127,
+      "deferred": false,
+      "elapsed_seconds": 0.31207136799639557,
+      "eof_monotonic": 64042.102483156,
+      "error_type": "CommandFailure",
+      "outcome": "immediate-stop",
+      "refusal_code": "command-failed",
+      "refusal_stage": "docker-exec",
+      "run_id": "a2e32b7d73a2dc3062421e39b457025c",
+      "started_at": "2026-10-09T12:28:23.602731397Z"
+    },
+    {
+      "cid": "fdef71796f861938b604f69ca2256511d3bcee251cce9e6b11fb5affc6d44193",
+      "deferred": false,
+      "elapsed_seconds": 0.31228236799506703,
+      "error_type": "FileNotFoundError",
+      "outcome": "immediate-stop",
+      "refusal_code": "refused",
+      "refusal_stage": "clean-eof",
+      "run_id": "a2e32b7d73a2dc3062421e39b457025c",
+      "started_at": "2026-10-09T12:28:23.602731397Z"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "c355-desktop-and-viewport-build.txt",
+      "sha256": "a141e7d7b7cfeee5885d3e23be7d44492962e55130ec1a423e783816443ad926"
+    },
+    {
+      "path": "c355-desktop.png",
+      "sha256": "45d8f4dae6de07e9dc58aa6f79f8ae987e17f33002cdee1db08a4b6f3a144a4a"
+    },
+    {
+      "path": "c355-viewer-close-alive.json",
+      "sha256": "d03a25235f809919dfb7f851423aefe9a77553b5f81ed40fdc42c2ad7c3b90b0"
+    },
+    {
+      "path": "c355-task-watch.py",
+      "sha256": "8962423a8fb7492f0d414a9645fc075367b900d47a02808cd0e8c772422c7c75"
+    },
+    {
+      "path": "c355-task-watch.jsonl",
+      "sha256": "43b9b9ca4bc4fe022afa5c9a06294676e605bf4ec88c855697229f8dd57d24a2"
+    },
+    {
+      "path": "c355-critical-collector-journal.txt",
+      "sha256": "637c0a06ba35a6a09ffe0353452c2b0c6cb11876e310c9760b17132d527d3a75"
+    },
+    {
+      "path": "c355-console-collector-journal.txt",
+      "sha256": "a9476c9c50e841de217b710267e5e695e16fae602f11e228fe8f07af84c9ab73"
+    },
+    {
+      "path": "candidate-355-build-identities.json",
+      "sha256": "118b950a567af452b2c72440e0c4888d0c7ea57e03246c4796d961cc2b0106a7"
+    },
+    {
+      "path": "candidate-355-build-validation.log",
+      "sha256": "6c8f29028f1d2c02ba1a5391e5caa14f9575bbbccad2b6b4de9fa9975e57698f"
+    },
+    {
+      "path": "candidate-355-results/verdict.json",
+      "sha256": "476443b30b47d4490b736dbfa8521a7773c854539328d50c21cf82161ee0356a"
+    },
+    {
+      "path": "candidate-355-results/shutdown.json",
+      "sha256": "9081c80f0938ca06ace1ed6bc5b2eb0792f84d71fbf8e09be6b0e7b75aeb8c4d"
+    },
+    {
+      "path": "candidate-355-results/recovery.json",
+      "sha256": "bd2cc9a0994d74ab0cb94e078e9a63cc59fd0848b60842c28d97e4fba78186c9"
+    },
+    {
+      "path": "candidate-355-results/running-identity.json",
+      "sha256": "902b925560a8c86d46e0115d87b3e8348fd8510d7cd6868bd31c078be6dfcd13"
+    },
+    {
+      "path": "candidate-355-results/critical-quiesce.json",
+      "sha256": "765cdef0d6fa99c83f4d7b55035b43d93453ddb301be77b8b73d2d09791afae3"
+    },
+    {
+      "path": "libvirt-a2e32b7d73a2dc3062421e39b457025c/events.jsonl",
+      "sha256": "0a07c10fffa2d4a4d81ff9250ce5db2806b747577946262194fa0393850353b1"
+    },
+    {
+      "path": "capture-eof-fdef71796f861938b604f69ca2256511d3bcee251cce9e6b11fb5affc6d44193-console.json",
+      "sha256": "4bc31520ebb778b0e637cf4c86090bd02d142eea7ffc767a5379a02070c6c67a"
+    }
+  ]
+}
