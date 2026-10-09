@@ -10,7 +10,7 @@ guest poweroff and independent libvirt Force Off, checks QEMU exit, retains the
 distinct reasons and exits each container naturally with status0. Docker init
 reaping and a real shutdown-observation race were fixed during those tests.
 All test containers are stopped; the host sleep:idle blocker stays active.
-The host regression suite remains required before the next cycle.
+Host suite:1,095 tests pass,3 skipped;76 staging tests pass after adding the exact341/metal-187 contract. Build1.0.341 is prepared frome2f11b5; no341 GPU launch yet.
 
 The complete argv verifier matches fresh libvirt conversion; macvtap
 provenance checks follow Linux source and a read-only host snapshot. Two further
