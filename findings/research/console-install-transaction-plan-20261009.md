@@ -9,7 +9,7 @@ outside the signed bundle, after strict signature verification. No signing polic
 or app identifier changes; ad-hoc code changes can still require ordinary TCC
 renewal. Linux tests cannot qualify macOS compilation, signing or consent.
 
-## Transaction proposal — not implemented yet
+## Transaction implementation — candidate364, native qualification pending
 
 1. Preflight architecture, CLT/SDK, manifest and destination ownership. Refuse an
    active console LaunchAgent/presenter/virtual-display session rather than stop it.
@@ -45,3 +45,15 @@ Primary references checked2026-10-09:
 - https://docs.oracle.com/en/virtualization/virtualbox/7.2/user/vboxmanage.html (PCI Passthrough Settings)
 - https://docs.oracle.com/en/virtualization/virtualbox/7.2/user/guestadditions.html (Hardware-Accelerated Graphics)
 - https://docs.oracle.com/en/virtualization/virtualbox/6.1/relnotes/ChangeLog.html (6.1 removal)
+
+Candidate364 implements the transaction coordinator in `tools/console-install-transaction.py`.
+It stages compilation/signing/provenance, synchronizes outputs before journaling,
+uses a live advisory lock, refuses loaded/running helpers, rechecks before publication,
+and retains recovery evidence. Exclusive rename refuses an existing destination;
+no overwrite fallback is permitted. The macOS primitive/flag comes from Apple's
+[XNU stdio header](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/sys/stdio.h)
+(`renamex_np`, `RENAME_EXCL=0x4`); Linux host tests exercise renameat2's analogous
+no-replace operation. This does not prove macOS filesystem behavior. Multiple
+paths cannot be published globally atomically and unrelated external processes do
+not honor the lock. Do not claim power-failure, clean-user or first-login qualification
+from software exception/interruption tests.

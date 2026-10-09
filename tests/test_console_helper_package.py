@@ -47,3 +47,23 @@ class PackageTests(unittest.TestCase):
             (extracted/'console-presenter.m').write_text('tampered')
             bad=subprocess.run([sys.executable,'-c',verifier,str(extracted)],capture_output=True,text=True)
             self.assertNotEqual(bad.returncode,0);self.assertIn('hash mismatch',bad.stderr)
+
+    def test_receipt_payload_produces_parseable_hash_bound_json(self):
+        from unittest.mock import patch
+        import sys
+        script=(ROOT/'tools/install-console-desktop.sh').read_text()
+        receipt=script.split("<<'PYRECEIPT'\n",1)[1].split('\nPYRECEIPT',1)[0]
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);app=root/'app';support=root/'support';support.mkdir()
+            for name in ('MacOS/console-presenter','Helpers/virtual-display-server','Helpers/console-display-layout'):
+                binary=app/'Contents'/name;binary.parent.mkdir(parents=True,exist_ok=True);binary.write_bytes(name.encode())
+            def command(args,**kwargs):
+                if args[0]=='codesign':return 'CDHash=0123456789\ndesignated => identifier org.raphaelgpu.console'
+                return 'mock compiler/sdk'
+            with patch.object(sys,'argv',['receipt',str(app),str(ROOT/'tools'),str(support)]), patch('subprocess.check_output',side_effect=command):
+                exec(compile(receipt,'installed receipt','exec'),{})
+            value=json.loads((support/'build-provenance.json').read_text())
+            self.assertEqual(value['optimization'],'-O2')
+            self.assertEqual(value['sources']['console-install-transaction.py'],hashlib.sha256((ROOT/'tools/console-install-transaction.py').read_bytes()).hexdigest())
+            for name,digest in value['binaries'].items():
+                self.assertEqual(digest,hashlib.sha256((app/'Contents'/name).read_bytes()).hexdigest())

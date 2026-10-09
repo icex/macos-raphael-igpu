@@ -10,7 +10,7 @@ import zipfile
 ROOT=Path(__file__).resolve().parents[1]
 FILES=('tools/install-console-desktop.sh','tools/console-presenter.m',
        'tools/console-display-layout.m','tools/virtual-display-server.m',
-       'docs/console-helper-install.md')
+       'docs/console-helper-install.md','tools/console-install-transaction.py')
 
 
 def package(root,output):

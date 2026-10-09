@@ -1,6 +1,6 @@
 # Console helper source package
 
-This artifact supplies the four exact guest helper files together. It is not a
+This artifact supplies the installer, transaction coordinator and three exact guest helper sources together. It is not a
 kext installer or a prequalified clean-guest deployment. The manifest identifies
 source commit, whether the packaging tree was clean, and each input's byte count
 and SHA256. Keep the package and its manifest with the installed build receipt.
@@ -20,8 +20,19 @@ verification, `build-provenance.json` under the console support directory record
 actual compiler/SDK, binary hashes, CDHash and designated requirement. It does not
 establish consent or runtime success.
 
-The current installer writes the final app directly. Do not install over a
-running presentation session. Atomic replacement/rollback and clean-user login,
-second-boot consent persistence, input/default-audio checks are still pending
-qualification. Sessions remain bounded to6000seconds. This is an experimental
+The installer refuses a loaded console LaunchAgent or running helpers. Boot out
+that agent through the normal guest lifecycle before an update; installation never
+stops it. It holds a per-user installer lock, builds and verifies all outputs in a
+private staging directory, then publishes the app, launcher, receipt and LaunchAgent
+using exclusive renames. Existing unrelated logs are retained. Failed publication
+attempts restoration; an interrupted process retains a journal and refuses another
+installation until `bash install-console-desktop.sh --recover` restores the previous
+files. Observed concurrent edits prevent restoration and retain evidence for manual
+review. Old files and transaction results remain in the printed staging directory.
+
+These multiple paths are not a globally atomic update. Other programs do not honor
+the installer lock; external launch/edit races remain a limit. No TCC settings are
+written and the agent is not started. Host fault-injection tests cover transaction
+logic; macOS filesystem/signing behavior, clean-user login, second-boot consent,
+input/default-audio and update recovery still need native qualification. Sessions remain bounded to6000seconds. This is an experimental
 source package, not an unattended daily-use product.
