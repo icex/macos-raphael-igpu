@@ -91,3 +91,30 @@ No Raphael attachment, PCI enumeration, DMA, interrupts, reset, macOS boot,
 Metal acceleration or VirtualBox console adaptation is qualified by this result.
 The earlier proposed acceptance included a syscall trace which remains unfulfilled;
 its absence is recorded, not silently replaced by the configuration result.
+
+## Pinned passthrough prerequisites (not implemented)
+
+All line references below are to
+[`DevPciVfio.cpp` at14841851fa211c7faf615978ba385d59947236c6](https://github.com/VirtualBox/virtualbox/blob/14841851fa211c7faf615978ba385d59947236c6/src/VBox/Devices/Bus/DevPciVfio.cpp),
+already hashed in the source manifest:
+
+- Lines2052–2081 map host addresses into guest-physical IOVAs with read/write
+  permissions through legacy VFIO or IOMMUFD. Lines2093 onward scan guest4K
+  addresses using`PDMDevHlpPhysGCPhys2CCPtr`; the upstream TODO explicitly warns
+  that mappings may include non-RAM. Failures at2117–2119 and2140–2142 are logged
+  at those call sites rather than returned immediately. Complete construction,
+  partial-failure and teardown behavior needs a fail-closed audit before Raphael.
+- Lines2638–2649 issue`VFIO_DEVICE_RESET` for every opened function during reset,
+  without a capability-flag check there. This is not our reviewed MODE2/recovery
+  sequence. Lines2666–2673 begin IOMMUFD detach in destruction; legacy handling and
+  cleanup ordering need independent verification.
+- Config-space table1973–1993 initializes vendor/device/subsystem IDs from the
+  physical device and marks guest writes invalid. No reviewed QEMU-style identity
+  override is provided by the admitted configuration fields.
+- ROM setup996–1027 queries the VFIO ROM region and reads it with`pread`. No
+  reviewed external ROM-file override matches the current QEMU launch contract.
+
+These are source findings, not hardware failures or proof that integration is
+impossible. The next code prerequisite for passthrough is audited DMA/reset and
+identity/ROM adaptation, not an immediate real-device attachment. A software-only
+VBoxVGA presentation test can proceed independently of that physical-GPU work.
