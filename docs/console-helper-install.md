@@ -142,11 +142,11 @@ snapshots retained separately. Pooling is not enabled by this installer on stock
 
 ## Actual VirtualBox software-boot scope
 
-Candidate 403 reaches a software desktop with eight vCPUs and RealTSCOffset;
-clock mode and frequency changed together. Candidate 401's earlier one-vCPU
-keyboard and awake checks remain separately scoped. Neither qualifies this
-accelerated helper package or a GPU transport on VirtualBox. New eight-vCPU input,
-orderly shutdown and long-term clock stability remain open. Before controlled
-shutdown, stop only the test's owned awake job and verify that it no longer blocks
-Terminal closure.
-[403 result](../findings/research/virtualbox-eight-cpu-real-tsc-native-20261010.md).
+Candidate 406 qualifies an eight-vCPU macOS 24G830 software-desktop sequence with
+RealTSCOffset, keyboard input, awake assertions, removal of the owned awake job,
+and natural guest shutdown before the controller deadline. Unregister succeeds
+on its first attempt. The earlier 401/403 forced-shutdown receipts remain intact.
+PerfPowerServices still uses roughly one CPU core. Long-term stability and this
+accelerated helper package remain unqualified on VirtualBox; no GPU transport is
+provided by the software boot result.
+[406 result](../findings/research/virtualbox-eight-cpu-qualified-native-20261010.md).

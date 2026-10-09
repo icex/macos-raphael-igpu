@@ -28,14 +28,16 @@ two incomplete snapshots: function passes, capture is imperfect. Independent nat
 shutdown and authorizing recovery pass.
 [402 native evidence](findings/research/console-snapshot-private-pool-native-20261010.md).
 
-**Actual VirtualBox:** candidate 403 reaches the macOS software desktop with eight
-vCPUs using RealTSCOffset, following the earlier emulated-clock panic. Clock mode
-and frequency changed together; this is not an isolated causal test or long-term
-stability proof. New input and graceful shutdown were not qualified in 403; its
-forced poweroff and later unregister remain recorded. No Raphael passthrough,
-Metal acceleration or atomic console adapter is implemented for VirtualBox.
-[Eight-vCPU evidence](findings/research/virtualbox-eight-cpu-real-tsc-native-20261010.md) ·
-[Display-adapter boundaries](findings/research/virtualbox-display-transport-adapter-20261010.md).
+**Actual VirtualBox, candidate 406:** the eight-vCPU macOS 24G830 software desktop
+passes keyboard-marker and awake checks with RealTSCOffset. After removing the
+owned awake job, the guest reaches natural S5/poweroff at about 264.4 seconds,
+before the 300-second deadline; unregister succeeds on its first attempt. Earlier
+forced shutdowns remain recorded. Initial interaction was slow, and PerfPowerServices still consumes roughly one
+CPU core. This bounded success does not qualify long-term stability, Raphael
+passthrough, Metal acceleration or an atomic VirtualBox presentation adapter.
+[406 evidence](findings/research/virtualbox-eight-cpu-qualified-native-20261010.md) ·
+[Display-adapter audit](findings/research/virtualbox-display-transport-adapter-20261010.md) ·
+[Stock fence limits](findings/research/virtualbox-stock-publication-fences-20261010.md).
 
 Earlier candidate 395 supplies the private-buffer ownership and restart baseline;
 candidate 399 supplies the fresh-backing timing comparison. Their original capture

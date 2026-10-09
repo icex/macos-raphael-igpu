@@ -45,11 +45,13 @@ and recovery pass. This is a bounded experimental milestone, not a generally
 qualified release or sustained 4K60 claim.
 [402 native evidence](../findings/research/console-snapshot-private-pool-native-20261010.md).
 
-Candidate 403 separately reaches an eight-vCPU VirtualBox software desktop with
-RealTSCOffset; it does not use this driver for accelerated VBox graphics. New input
-and natural shutdown qualification remain open. Main's physical 330 baseline is
-unchanged. Exact-commit publication checks are tracked in
-[GitHub Actions](https://github.com/icex/macos-raphael-igpu/actions).
+Candidate 406 separately qualifies an eight-vCPU VirtualBox software desktop with
+RealTSCOffset, keyboard/awake checks and natural shutdown before its deadline,
+followed by first-attempt unregister. Initial interaction was slow; PerfPowerServices remains near one CPU core;
+this does not qualify Raphael acceleration or long-term stability in VirtualBox.
+[406 evidence](../findings/research/virtualbox-eight-cpu-qualified-native-20261010.md).
+Main's physical 330 baseline is unchanged. Exact-commit publication checks are
+tracked in [GitHub Actions](https://github.com/icex/macos-raphael-igpu/actions).
 
 ### Historical console qualifications
 

@@ -15,14 +15,16 @@ two corrupt lines and two incomplete snapshots. Independent natural shutdown and
 recoverable cleanup do not erase those capture defects.
 [402 evidence](../findings/research/console-snapshot-private-pool-native-20261010.md).
 
-**VirtualBox 403** reaches a software desktop with eight vCPUs and RealTSCOffset;
-the coupled clock-mode/frequency change avoids the prior panic in this bounded
-observation. New input, orderly shutdown and long-term stability are still open;
-403 used deadline poweroff and later unregister. Raphael acceleration and atomic
-window presentation are unimplemented. The separate 405 source audit defines
-VBoxVGA's register, ownership and transport requirements.
-[403 result](../findings/research/virtualbox-eight-cpu-real-tsc-native-20261010.md) ·
-[Adapter audit](../findings/research/virtualbox-display-transport-adapter-20261010.md).
+**VirtualBox 406** qualifies a bounded eight-vCPU software-desktop sequence with
+RealTSCOffset: macOS 24G830 keyboard marker, awake assertions, owned awake-job
+removal, natural S5/poweroff at about 264.4 seconds before the 300-second deadline,
+and first-attempt unregister. Initial interaction was slow; PerfPowerServices remains near one CPU core;
+long-term stability and Raphael acceleration remain open. Earlier forced cleanup
+receipts are preserved. Stock publication/fence audits do not establish an
+immutable pixel lease or an accelerated VirtualBox console adapter.
+[406 result](../findings/research/virtualbox-eight-cpu-qualified-native-20261010.md) ·
+[Adapter audit](../findings/research/virtualbox-display-transport-adapter-20261010.md) ·
+[Stock fence audit](../findings/research/virtualbox-stock-publication-fences-20261010.md).
 
 Existing scale preference, odd1× resize, connected-agent input/audio and fresh-boot
 1×4K startup remain qualified in their recorded scopes. The isolated client
