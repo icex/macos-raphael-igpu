@@ -10,7 +10,7 @@ spec=importlib.util.spec_from_file_location('display_control',Path(__file__).res
 control=importlib.util.module_from_spec(spec);spec.loader.exec_module(control)
 
 class ControlTests(unittest.TestCase):
-    def exchange(self,reply):
+    def exchange(self,reply,*,scale=2,width=2468,height=1484):
         with tempfile.TemporaryDirectory() as temporary:
             directory=Path(temporary).resolve();endpoint=directory/'control.sock'
             errors=[]
@@ -20,18 +20,21 @@ class ControlTests(unittest.TestCase):
                     try:
                         with listener.accept()[0] as peer:
                             peer.settimeout(3);data=bytearray()
-                            while len(data)<20:
-                                chunk=peer.recv(20-len(data))
+                            size=20 if scale==2 else 24
+                            while len(data)<size:
+                                chunk=peer.recv(min(3,size-len(data)))
                                 if not chunk:raise EOFError('missing request')
                                 data.extend(chunk)
-                            magic,version,sequence,w,h=control.REQUEST.unpack(data)
-                            self.assertEqual((magic,version,w,h),(control.MAGIC,1,2468,1484))
+                            values=(control.REQUEST if scale==2 else control.REQUEST_V2).unpack(data)
+                            magic,version,sequence,w,h=values[:5]
+                            self.assertEqual((magic,version,w,h),(control.MAGIC,1 if scale==2 else 2,width,height))
+                            if scale==1:self.assertEqual(values[5],1)
                             response=reply(sequence)
                             # Split the wire reply to exercise partial reads.
                             peer.sendall(response[:7]);peer.sendall(response[7:])
                     except Exception as error:errors.append(error)
                 thread=threading.Thread(target=serve);thread.start()
-                try:return control.request(directory,2468,1484)
+                try:return control.request(directory,width,height,scale=scale)
                 finally:
                     thread.join(timeout=4)
                     self.assertFalse(thread.is_alive())
@@ -44,6 +47,38 @@ class ControlTests(unittest.TestCase):
         row=self.exchange(lambda seq:self.response(seq))
         self.assertTrue(row['passed']);self.assertTrue(row['dynamic_mode_added'])
         self.assertEqual((row['pixel_width'],row['pixel_height']),(2468,1484))
+
+    def test_v2_odd_one_x_real_socket_exchange(self):
+        row=self.exchange(lambda seq:control.REPLY.pack(control.MAGIC,2,seq,0,123,1235,743,1235,743,3),
+                          scale=1,width=1235,height=743)
+        self.assertTrue(row['passed'])
+        self.assertEqual((row['width'],row['height']),(1235,743))
+
+    def test_v2_refusal_can_report_unchanged_old_geometry(self):
+        row=self.exchange(lambda seq:control.REPLY.pack(control.MAGIC,2,seq,2,123,1920,1080,960,540,0),
+                          scale=1,width=1235,height=743)
+        self.assertFalse(row['passed'])
+        self.assertEqual(row['status'],2)
+
+    def test_exact_logical_dimensions_required_for_both_versions(self):
+        for scale,pw,ph,lw,lh in [(2,2468,1484,2468,1484),(2,2468,1484,1234,741),
+                                 (1,1235,743,617,371),(1,1235,743,1235,742)]:
+            with self.subTest(scale=scale,lw=lw,lh=lh),self.assertRaisesRegex(ValueError,'geometry'):
+                self.exchange(lambda seq:control.REPLY.pack(control.MAGIC,1 if scale==2 else 2,seq,0,123,pw,ph,lw,lh,0),
+                              scale=scale,width=pw,height=ph)
+
+    def test_reply_version_must_match_request(self):
+        for scale,reply_version in [(1,1),(2,2),(1,3)]:
+            with self.subTest(scale=scale,version=reply_version),self.assertRaisesRegex(ValueError,'identity'):
+                self.exchange(lambda seq:control.REPLY.pack(control.MAGIC,reply_version,seq,0,123,2468,1484,2468//scale,1484//scale,0),scale=scale)
+
+    def test_scale_and_geometry_admission(self):
+        control.geometry(1235,743,scale=1)
+        for scale in (0,3,True,1.0,'1'):
+            with self.subTest(scale=scale),self.assertRaises(ValueError):control.geometry(1235,743,scale=scale)
+        for w,h in [(639,743),(1235,479),(3841,743),(1235,2161)]:
+            with self.subTest(w=w,h=h),self.assertRaises(ValueError):control.geometry(w,h,scale=1)
+        with self.assertRaises(ValueError):control.geometry(1235,743,scale=2)
 
     def test_refusal_is_not_success(self):
         row=self.exchange(lambda seq:self.response(seq,status=2))

@@ -25,6 +25,8 @@ class Protocol(unittest.TestCase):
         source = pathlib.Path(cls.tmp.name) / 'probe.c'
         source.write_text('#include "console-display-control.h"\n'
                           'int settle(double*s,int identity,int ready,int expired,double now){return rg_settle(s,identity,ready,expired,now); }\n'
+                          'size_t size_for(unsigned v){return rg_request_size(v); }\n'
+                          'unsigned scale_for(const unsigned char*p,size_t n){return rg_validate(p,n)?0:rg_request_scale(p); }\n'
                           'unsigned check(const unsigned char*p,size_t n){return rg_validate(p,n);}\n'
                           'void encode(unsigned char*p,unsigned v){rg_write32(p,v);}\n'
                           'int insert(RGModes*m,unsigned w,unsigned h,unsigned cw,unsigned ch){return rg_insert(m,(RGGeometry){w,h},(RGGeometry){cw,ch});}\n'
@@ -34,6 +36,9 @@ class Protocol(unittest.TestCase):
                         '-I', str(ROOT / 'tools'), str(source), '-o', str(library)], check=True)
         cls.lib = ctypes.CDLL(str(library))
         cls.lib.settle.argtypes = [ctypes.POINTER(ctypes.c_double), ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_double]
+        cls.lib.scale_for.argtypes = [ctypes.c_char_p, ctypes.c_size_t]
+        cls.lib.size_for.argtypes = [ctypes.c_uint]
+        cls.lib.size_for.restype = ctypes.c_size_t
         cls.lib.check.argtypes = [ctypes.c_char_p, ctypes.c_size_t]
         cls.lib.check.restype = ctypes.c_uint
         cls.lib.encode.argtypes = [ctypes.c_void_p, ctypes.c_uint]
@@ -64,6 +69,24 @@ class Protocol(unittest.TestCase):
         self.assertEqual(self.check(data + b'x'), 1)
         for kw in [{'magic': 0}, {'version': 2}, {'sequence': 0}]:
             self.assertEqual(self.check(self.request(**kw)), 1)
+
+    def test_v2_scale_and_version_specific_framing(self):
+        self.assertEqual([self.lib.size_for(v) for v in (0,1,2,3,0xffffffff)],[0,20,24,0,0])
+        for scale,w,h,expected in [(1,1235,743,0),(2,2468,1484,0),(2,1235,743,2),
+                                   (0,2468,1484,2),(3,2468,1484,2),(0xffffffff,2468,1484,2),
+                                   (1,639,743,2),(1,1235,2161,2)]:
+            data=self.request(w,h,version=2)+struct.pack('<I',scale)
+            with self.subTest(scale=scale,w=w,h=h):
+                self.assertEqual(self.check(data),expected)
+                self.assertEqual(self.lib.scale_for(data,len(data)),scale if expected==0 else 0)
+        valid=self.request(1235,743,version=2)+struct.pack('<I',1)
+        for length in range(24):self.assertEqual(self.check(valid[:length]),1)
+        self.assertEqual(self.check(valid+b'x'),1)
+        for kw in ({'magic':0},{'version':3},{'sequence':0}):
+            self.assertEqual(self.check(self.request(**({'version':2}|kw))+struct.pack('<I',1)),1)
+        legacy=self.request()
+        self.assertEqual(self.lib.scale_for(legacy,len(legacy)),2)
+        self.assertEqual(self.check(legacy+struct.pack('<I',2)),1)
 
     def test_lru_keeps_current_across_many_resizes(self):
         modes = Modes()
