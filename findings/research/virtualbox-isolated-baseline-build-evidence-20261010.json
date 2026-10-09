@@ -1,0 +1,66 @@
+{
+  "scope": "VirtualBox 7.2.18 full isolated baseline compile; no runtime",
+  "build_exit_code": 0,
+  "artifacts": [
+    {
+      "path": "/home/bogdan/macos-vm/run/c416-build/input-provenance.json",
+      "bytes": 3509,
+      "sha256": "5313dbdd8106c890d1bd33887a8a41bc5182cd01c2ba50e59916ca0a1df4ecf4"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c416-build/build-result.json",
+      "bytes": 7209,
+      "sha256": "e8d4f14a8c893bb6d5260104880c01f1a467eaa717132abeee18e3c04e73be34"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c416-build/configure-1.log",
+      "bytes": 1642,
+      "sha256": "f82b487eb0062f84b80288cbbd660871b09fefba3bcc164b69a796d245ac2e7d"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c416-build/configure-2.log",
+      "bytes": 2385,
+      "sha256": "4ef6422c2f65cba7b608450473f51fa1cd526ea42be053bbe79cea9bf732947b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c416-build/build-1.log",
+      "bytes": 1296114,
+      "sha256": "f16fe5440045e6c0ccf06ecd3a6d255d8504bcc339ea864ea8ef6116ffe31de8"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c416-build/build-baseline.sh",
+      "bytes": 258,
+      "sha256": "033e3334d6ad9dd245e902dd539067caa21cb28279210a50accedc528214f9f7"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c416-build/VBoxDD.so.ldd.txt",
+      "bytes": 2668,
+      "sha256": "9946dd4c54481d7d1a580deb4795342a05efaaa6a7c53ebfa5fb3304f6072c66"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c416-build/VBoxHeadless.ldd.txt",
+      "bytes": 2453,
+      "sha256": "19b3b5e1d76d4b94aac20d4b15b26d686fd1509c2c8f3079b6a6e0e91c839971"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c416-build/VBoxManage.ldd.txt",
+      "bytes": 2583,
+      "sha256": "840d79d97d68d7b082df83cae85fda124d995325addcf780bc1c70a2936ad0a2"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c416-build/VBoxSVC.ldd.txt",
+      "bytes": 2789,
+      "sha256": "d437ae40b2a7fd56a4582775062294db2507726769b6456cd55dc8ffdd841cd9"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c416-build/VBoxVMM.so.ldd.txt",
+      "bytes": 2288,
+      "sha256": "f0ac0486905e34a9dee0949f19b802585500bdcccaae8e17b4f61112c4beffdb"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c416-build/components-VBoxC.so.ldd.txt",
+      "bytes": 2826,
+      "sha256": "d628aedb38bf6de7304f49a796ff63b2410124a9ba742aa197904ba1f6c5db9f"
+    }
+  ]
+}
