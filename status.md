@@ -1,31 +1,26 @@
 # Live status — 2026-10-09
 
-## Candidate355: desktop passes; critical socket reset prevents terminal receipt
+## Candidate356: native socket-reset shutdown completes; viewport transition open
 
-Run `a2e32b7d73a2dc3062421e39b457025c`, metal-198, build1.0.355,
-MODE2#294, bootba51b3c6. Native Metal/WindowServer/display pass; normal awake
-HiDPI desktop visible in virt-manager. Viewer closure leaves exact VM alive.
-Future356 viewport fixture compiles, not yet executed.
+Run `684122f412ad335d91c07cdfece852dd`, metal-199, build1.0.356,
+MODE2#295, bootba51b3c6. Native Metal/WindowServer/display pass; awake HiDPI
+desktop visible in actual virt-manager. Normal1288x909 and fullscreen1920x1080
+pass five target clicks and exact keyboard token, no guest mode changes.
+Small1000x760 records two initial clicks at stale center, then all targets and
+token delivered; retain as failed, investigate pointer motion/enter after resize.
+Viewer close preserves exact VM; reopening displays desktop.
 
-Capture CORE_PROBE_PASS, earliest_failure=null. Critical bytes exactly match
-quiesce ACK, then guest shutdown is observed; console EOF follows1.454ms later.
-Critical collector ends with ConnectionResetError104 and no clean EOF marker.
-Its hook force-stops the container; the console hook's exec races that stop.
-Terminal absent; outer exited-after-guest-request is not clean completion.
-New shutdown-event wait is not exercised. GPU recovery recovered/authorizes_launch=true.
-VM/cycle stopped; host awake. No reboot/rebind needed.
+Critical final bytes/hash match quiesce ACK. Critical recv-reset104 and console
+cleanEOF are distinct. Both hooks observe natural container exit~0.373s, real
+terminal guest-shutdown/process_exited=true. CORE_PROBE_PASS, earliest_failure=null.
+New pending-worker shutdown-event wait not exercised by native hooks.
+Recovery recovered/authorizes_launch=true; VM/cycle stopped, host awake.
+No reboot/rebind needed. [Evidence](findings/research/libvirt-reset-native-20261009.md)
+· [Hashed receipts](findings/research/libvirt-reset-native-evidence-20261009.json).
 
-Next investigate unread reverse-token socket reset and preserve the old positive
-completed-process proof on error-end without mislabeling RST as clean EOF. Keep
-live capture loss fatal and the absolute wait/deadline bounds intact.356 viewport
-fixture is prepared separately; no next native launch until a reviewed correction.
-
-1214 host tests pass,8skip. Checked-in kext remains353 with matching manifest;
-355 build is separately pinned. HiDPI milestone is on dev; CI-only357 fix handles
-slow software UART completion and retains failure artifacts. Devdefc0f4 hosted
-test/build37930517553 both pass; retained positive ACK took8.652s versus old8s limit.
-Main unchanged. General desktop, resize/input, console audio/install durability
+1224 host tests pass,8skip; stage87 pass before exposure. Checked-in kext remains353;
+356 build separately pinned.353 HiDPI milestone and CI timing correction are on
+devdefc0f4, hosted37930517553 test/build green.354–356 lifecycle work local pending
+delivery review. Main unchanged. Next: resize transition discrimination and console
+USB audio qualification. Installation durability, broader desktop/codec workloads
 and VirtualBox remain open.
-[Evidence](findings/research/libvirt-clean-eof-native-20261009.md) ·
-[Receipts](findings/research/libvirt-clean-eof-native-evidence-20261009.json) ·
-[Previous status](findings/research/status-archives/status-before-355-20261009.md).
