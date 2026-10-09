@@ -1,36 +1,37 @@
 # Live status — 2026-10-09
 
-## Candidate341d: accelerated desktop and input in virt-manager
+## Candidate342: measured manager delivery; terminal receipt still missing
 
-Run `d37215940a6999e73b2de61e7ac573da`, metal-187, build1.0.341,
-MODE2#282 on bootba51b3c6. Native libvirt paused launch, exact QEMU identity,
-macvtap FD transfer and supervised resume pass. Native Metal and WindowServer
-accelerator ownership pass. The actual virt-manager console renders3840×2160
-pixels/1920×1080 logical; keyboard receives RGPU341 and one correctly positioned
-mouse click. Bridged en2 reaches the LAN gateway with3/3 replies. A180-second
-moving-material workload completes2,386 event iterations (not viewer fps).
-Closing/reopening viewers retains the same VM; domain XML is unchanged.
+Run `00bad24a728429d67f21519fb472a563`, metal-188, build1.0.342,
+MODE2#283 on bootba51b3c6. Native Metal and WindowServer ownership pass. Actual
+virt-manager renders native1080p and1080HiDPI; domain XML stays unchanged and
+closing the viewer leaves the original container running. Libvirt now advertises
+x86_64 correctly, verifying the daemon PATH fix on the native profile.
 
-Capture: valid CORE_PROBE_PASS, no earliest failure, accepted terminal-prefix
-critical capture with a fresh quiesce acknowledgement. Outer shutdown records
-exited-after-guest-request; native GPU recovery records authorizes_launch=true.
-The VM/container is stopped and the development sleep:idle inhibitor remains active.
-No reboot or rebind was needed.
+Thirty-second in-process manager-buffer samples observe895 unique tokens at
+1920×1080 (29.82/s) and555 at3840×2160 (18.50/s). This is a sampled delivery
+lower bound, not GPU fps or host scanout. Median sample cost is2.24/5.28ms.
+Eight native and18HiDPI samples after the first valid token fail cell/checksum
+validation: complete atomic presentation remains open. Both60-second guest
+fixtures finish (3,028/1,993 AppKit draws), and the normal desktop returns.
 
-**Remaining lifecycle defect:** critical serial EOF invokes the exact-container
-stop guard before libvirt saves terminal.json. Its receipt is absent; do not claim
-natural native-controller exit or complete manager lifecycle qualification.
-The guard remains required. Next iteration must preserve capture-fatal cleanup
-while allowing a bounded, identity-checked controller teardown. A separate manager
-capabilities warning is reproduced by the inherited QEMU launcher PATH shim;
-candidate342 has an offline-tested daemon discovery fix.
+Capture: valid CORE_PROBE_PASS, no earliest failure. Outer shutdown:
+exited-after-guest-request. GPU recovery: recovered, authorizes_launch=true.
+VM/container stopped; host sleep:idle blocker remains active; no reboot/rebind.
+**The libvirt terminal receipt is still absent.** Both EOF handlers record
+RuntimeError/immediate-stop, deferred=false. Software S5 testing did not transfer
+to this native result. Retained plan/receipt/module hashes match; the exact refusal
+stage was not captured. Candidate343 investigates safe refusal diagnostics and
+the production-only root SSH daemon before changing any admission criteria.
 
-Driver source is unchanged from340; checked-in executable/manifest now match341.
-Host suite before this run:1,104 tests pass,3 skipped. Measured console frame
-delivery, host-window resize, broader lifecycle/desktop coverage and VirtualBox
-remain open. The56MB Display adapter is presentation-only; macOS independently
-reports2GB for AMD Radeon Navi23, the native renderer.
+Performance follow-up: QEMU's nongl SPICE refresh uses its30ms default plus work;
+that is a source-supported limiting candidate, not a completed causal A/B.
+The presenter writes the live framebuffer row-by-row without an atomic frame
+commit. Test cadence and partial-frame behavior independently in software first.
+A nonfatal manager default-pool creation attempt also needs explicit private
+configuration; it did not change domain XML.
 
-[Run evidence](findings/research/libvirt-native-console-20261009.md) ·
-[Artifact hashes](findings/research/libvirt-native-console-evidence-20261009.json) ·
-[Previous status and failed341 attempts](findings/research/status-archives/status-before-341d-20261009.md).
+Full host suite:1,128 tests pass,3 skipped. Checked-in executable/manifest match342.
+[Evidence](findings/research/console-cadence-20261009.md) ·
+[Artifact hashes](findings/research/console-cadence-evidence-20261009.json) ·
+[Previous status](findings/research/status-archives/status-before-342-20261009.md).

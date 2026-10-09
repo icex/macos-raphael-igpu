@@ -26,7 +26,7 @@ local users can open its exclusive client. Userspace maps only the presentation
 VRAM; mode-setting accepts bounded geometry, not arbitrary register writes.
 The physical Raphael BARs are never exposed through this client.
 
-The harness selects `VM_CONSOLE=bochs` alongside `GENERIC_GRAPHICS=off`: the exact
+The VNC profile selects `VM_CONSOLE=bochs` alongside `GENERIC_GRAPHICS=off`: the exact
 Bochs device at guest slot7 and Unix socket `/run/vm/console-vnc.sock` are verified
 in the running argv. Existing no-console experiments retain their exact contracts.
 Slot6 remains Raphael. All GPU ownership, deadlines, capture and recovery checks
@@ -162,7 +162,7 @@ Candidate340 renders the native accelerated1080HiDPI desktop through the exact
 python3 tools/console-spice-window.py --state "$RUN_RESULTS/supervision.json"
 ```
 
-This requires GTK3 and the SpiceClientGLib/SpiceClientGtk2.0 introspection bindings.
+This requires GTK3 and the SpiceClientGLib2.0 and SpiceClientGtk3.0 introspection bindings.
 The only display endpoint is a user-owned local Unix socket; network SPICE, GL,
 clipboard sharing, USB redirection and guest resize are disabled. Existing USB
 sound uses the established PulseAudio path; SPICE audio is disabled. The viewer
@@ -205,3 +205,22 @@ That56MB is not the renderer's memory limit. System Information's console mode
 metadata can differ from the presenter's measured3840×2160 pixels; neither proves
 refresh-rate delivery. The180-second workload's2,386 iterations are AppKit events,
 not viewer frames. [Evidence and limits](../findings/research/libvirt-native-console-20261009.md).
+
+## Measured manager-buffer delivery (candidate342)
+
+The in-process sampler reads the actual virt-manager SpiceDisplay buffer; it
+opens no second SPICE connection. Fixed-mode30-second observations:
+
+| Mode | Unique valid tokens | Sampled updates/s | Median sample cost | Invalid token samples after first valid |
+|---|---:|---:|---:|---:|
+| Native1920×1080 |895|29.82|2.24ms|8|
+| 1080HiDPI /3840×2160 |555|18.50|5.28ms|18|
+
+These are sampled lower bounds, not GPU fps, complete delivered-frame accounting,
+host scanout or absolute latency. Invalid cell/checksum samples demonstrate that
+complete atomic tokens are not guaranteed. Both60-second guest fixtures finish
+and normal desktop rendering returns. The native capabilities warning is fixed;
+controller EOF grace still refuses and loses terminal.json, while outer capture,
+guest-request exit and GPU recovery pass. A failed automatic storage-pool setup
+is also retained in the manager logs; it does not rewrite the guest domain.
+[Raw outcome, limits and next tests](../findings/research/console-cadence-20261009.md).
