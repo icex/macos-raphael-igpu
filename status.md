@@ -1,27 +1,28 @@
 # Live status — 2026-10-09
 
-## Candidate368: source tokens intact; partial tokens arise downstream
+## Candidate370: snapshot console tokens pass; performance remains open
 
-Run177c406a3d3e1c39bdf5327649c5dbd7, metal-204, build1.0.368,
-MODE2#300, bootba51b3c6. Reviewed diagnostic presenter compiled/installed natively;
-normal Screen Recording renewal required after changed ad-hoc signature.
-HiDPI1742/1742 and native1738/1738 processed source tokens valid in complete30s
-windows, while bracketed manager samples contain633/1065 and35/1116 invalids.
-This narrows beyond the checked source regions; it does not identify a single
-framebuffer/QEMU/SPICE stage, prove source stability after checking or60Hz output.
+Run5059bb80d8140ba8234bc31fb7fda4fc, metal-205, build1.0.370,
+MODE2#301, bootba51b3c6. Native opt-in immutable QEMU snapshots plus single-rectangle
+SPICE updates: HiDPI389/389, native851/851, HiDPI-repeat384/384 manager samples
+valid after connection startup. Correct desktop screenshot; default USB audio
+capture and independently checked routing restoration pass. Input not rerun.
+First source window1284 decoded valid,17 unavailable; no decoded corruption.
+HiDPI14.24/14.31 distinct IDs/s and native41.01 are observer lower bounds, not
+scanout/GPU FPS or60Hz qualification. Combined changes do not isolate one cause.
 
-Original LaunchAgent restored after both cases; normal capture, awake assertions
-and actual-manager desktop pass. Input/audio not rerun. CORE_PROBE_PASS, earliest
-failure null; genuine guest-shutdown/process_exited. Both capture exits natural
-~0.415s, shutdown_event_wait=false. Recovery recovered/authorizes_launch=true.
-Cycle stopped; host remains awake. No reboot/rebind.
-[Evidence](findings/research/console-source-token-native-20261009.md) ·
-[Hashes](findings/research/console-source-token-native-evidence-20261009.json).
+Normal Screen Recording consent renewal and orderly BAR0 fallback startup pass;
+original LaunchAgent restored exactly. One-shot lease must not be rearmed within
+the same device lifetime; crash/re-ARM refusal and explicit retirement not tested.
+CORE_PROBE_PASS, earliest_failure=null; genuine guest-shutdown/process_exited,
+exited-after-guest-request. Both capture hooks instead report immediate-stop,
+CommandFailure137 at exit-wait~0.384s; do not claim natural capture exit. Recovery
+recovered/authorizes_launch=true. Cycle stopped; host remains awake. No reboot/rebind.
+[Evidence](findings/research/console-snapshot-native-20261009.md) ·
+[Hashes](findings/research/console-snapshot-native-evidence-20261009.json).
 
-1268 host tests pass,8skip. Dev a815827 delivers366 persistence/docs/tested binary;
-hosted37942471484 test/build green. Checked-in kext/manifest match tested368
-buildb0d4f6d56caa4d23a0aa439e0613aa83. Milestone integrated into dev; hosted
-validation pending. Main unchanged.
-Next: exclusive staging plus acknowledged immutable host snapshot software proof,
-then native comparison. Fresh-user bootstrap, performance/atomicity, broader
-applications/codecs, other managers and VirtualBox remain open.
+1274 pre-run host tests pass,8skip. Dev c42380a delivers368, hosted37944403991
+test/build green.370 delivery pending; main unchanged. Next: investigate capture
+wait-witness race and test single changed-pixel rectangle in software before next
+native comparison. Fresh-user bootstrap, sustained performance, repeated crash
+lifecycle, broader apps/codecs, other managers and VirtualBox remain open.
