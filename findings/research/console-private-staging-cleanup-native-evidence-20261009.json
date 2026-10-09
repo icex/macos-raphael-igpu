@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "run_id": "074a0b4c757c6c21ae093b604a98763d",
-  "scope": "395 completed native ownership fixture only; live performance and lifecycle pending",
+  "scope": "395 native ownership fixture and completed mixed-motion observations; final lifecycle pending",
   "artifacts": [
     {
       "path": "/home/bogdan/macos-vm/run/c395-native-final.txt",
@@ -62,6 +62,61 @@
       "path": "/home/bogdan/macos-vm/run/candidate-395-results/running-identity.json",
       "bytes": 3029,
       "sha256": "49415635098cc158716a9183a7bb1eaf60055c6bd1aa4477575bc74369b66d29"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c395-post-motion-desktop.png",
+      "bytes": 727893,
+      "sha256": "eba44bbab6f6bf933b68f9035631ff44475a7371cbc1489c5e7081cf02d496d6"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c395-matched-1x-analysis.json",
+      "bytes": 11056,
+      "sha256": "19161b060034358a113318add56ed39e838562afaa51315b2f81fd342e5bbdcd"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c395-matched-1x-cadence.jsonl",
+      "bytes": 2845239,
+      "sha256": "539265bfd69a73737a30656819fe161325ca0c421db89f1d40b395db06017dd0"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c395-matched-1x-cadence.jsonl.summary.json",
+      "bytes": 1787,
+      "sha256": "83a9dc8b57b7c721044d008c2dd14e56d6698615d8808037ddcc142176b69ba7"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c395-matched1x-source.txt",
+      "bytes": 159333,
+      "sha256": "e537f61e6567189a6306560ada91321a98360c407e93fccf5e1165530c3dc583"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c395-matched1x-presenter.txt",
+      "bytes": 18360,
+      "sha256": "c88bf72e7995a8ad9cb683e550f18a54e1a226432cc3b260ad53ed459eb761ea"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c395-fourk-analysis.json",
+      "bytes": 11078,
+      "sha256": "9231a4fba01147caf825966cbaaecddae44463c4766670c905bb688cd4d7e642"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c395-fourk-cadence.jsonl",
+      "bytes": 1990678,
+      "sha256": "d048d476954cd2e3763fdbb77f6cf8068bdfe0d78ea5171ca5087bf7e5f8f6e8"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c395-fourk-cadence.jsonl.summary.json",
+      "bytes": 1787,
+      "sha256": "e0d2ef9ec8552807f695181b016ac1a42085b7184fa19218c7be49fa31b3c3b6"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c395-fourk-source.txt",
+      "bytes": 159268,
+      "sha256": "0bda48a7df68018b862b51802b2ced725694db6e426891d720246b5ed0f10447"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c395-fourk-presenter.txt",
+      "bytes": 37861,
+      "sha256": "f2573fe5a81ace0abcede2c358c9811dacafe858e69792268ac29ed246466831"
     }
   ]
 }
