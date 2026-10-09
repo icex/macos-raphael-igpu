@@ -14,11 +14,17 @@ on **`dev`**; this is not yet a generally supported driver release.
 
 ## Current status
 
-**VM window (October 9, candidate 381):** native Metal rendering, bridged LAN,
+**VM window (October 9, candidate 383):** native Metal rendering, bridged LAN,
 and previously qualified keyboard/mouse input work in virt-manager without HDMI.
 The virtual adapter's 56 MB framebuffer is separate from the renderer's 2 GB VRAM.
 
-Matching guest pixels to the window's physical pixels avoids costly viewer
+The optional standard SPICE agent channel now attaches to Apple's x86_64 console
+driver. A bounded guest agent follows actual virt-manager requests between existing
+2560×1440 and 3840×2160 HiDPI modes, with independent guest, presenter and viewer
+geometry checks. Redundant requests avoid reconfiguration. This is not yet an
+installed persistent agent or support for arbitrary window sizes.
+
+Candidate381 showed that matching guest pixels to the window's physical pixels avoids costly viewer
 scaling. At 2560×1440 into a 1280×720 window on a scale-2 host, mixed-motion
 observations reach about 57.5 distinct IDs/s. With the same 3840×2160 source,
 matching a 1920×1080 scale-2 window raises full-field observations from about
@@ -26,18 +32,19 @@ matching a 1920×1080 scale-2 window raises full-field observations from about
 Three windows have 14,160 valid token samples and no post-start errors, but
 candidate379's rare errors and general full-frame integrity remain unresolved.
 
-Stereo sample capture passes after a retained route-refusal/retry; ordinary
-desktop fallback and retired-buffer access refusal pass. The guest-shutdown
-terminal and authorizing recovery are retained. Capture helpers report the
-container stopped during their bounded shutdown wait; independent Docker exit0
-events without kill/stop corroborate natural exit. Terminal capture remains partial.
-Existing-user consent is retained; fresh-user
-setup, crash/restart lifecycle, automatic and stationary-pointer resize, other
+Candidate383's guarded stereo capture and independent route restoration pass;
+its initial cleanup refusal and explicit retry remain recorded. Candidate383 also
+retains the private guest-shutdown/process-exit terminal, Docker exit0 without
+kill/stop, both natural-container-exit capture receipts and authorizing recovery.
+Candidate381's ordinary fallback and retired-buffer refusal remain prior evidence.
+Existing-user capture consent is retained. Fresh-user setup, crash/restart
+lifecycle, persistent arbitrary-window resizing, stationary-pointer resize, other
 frontends and VirtualBox remain unqualified. Input was last qualified in361;
 audio endpoint audibility and A/V sync remain open.
 
 Stock QEMU remains the default; snapshot experiments use separately pinned images.
-[Current viewport, audio and lifecycle evidence](findings/research/console-viewport-native-20261009.md)
+[Current agent transport and bounded resize evidence](findings/research/console-vdagent-native-20261009.md)
+· [Prior viewport, audio and lifecycle evidence](findings/research/console-viewport-native-20261009.md)
 · [Prior mixed-motion evidence](findings/research/console-mixed-motion-native-20261009.md)
 · [Input/audio evidence](findings/research/console-default-audio-input-20261009.md)
 · [Setup and limits](docs/virtual-console.md).

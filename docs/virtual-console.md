@@ -1,13 +1,31 @@
 # Accelerated desktop in a VM manager console
 
+Candidate383 verifies an optional standard SPICE agent channel with live
+AppleVirtIOConsole attachment on x86_64 macOS. A bounded guest agent follows real
+virt-manager monitor requests between existing2560×1440 and3840×2160 HiDPI modes.
+Independent guest mode, presenter resizing, monitor-map and viewer pixel-area
+checks agree after settling. Duplicate exact-mode requests avoid reconfiguration;
+the final agent exits normally and releases its port. This does not install a
+persistent agent or create arbitrary resolutions. No new input qualification is
+claimed, and invalid GI primary metadata is excluded from geometry evidence.
+
+Guarded USB/QEMU/Pulse stereo capture and independent route restoration pass.
+The initial audio cleanup refusal and explicit retry are preserved separately.
+The private guest-shutdown/process-exit terminal and Docker exit0 without kill/stop
+corroborate natural exit. Both capture hooks report natural-container-exit after a
+bounded shutdown wait; recovery authorizes the next run. Critical transport ended
+with a receive reset and quiesce retained a terminal prefix, not a complete tail.
+[Candidate383 transport, resize and audio evidence](../findings/research/console-vdagent-native-20261009.md).
+
 Candidate381 demonstrates a useful configuration improvement: match guest pixels
 to the actual SpiceDisplay allocation multiplied by the host's GDK scale.
 2560×1440 into a1280×720 scale-2 window reaches about57.5 observed IDs/s across
 localized and full-field phases. Holding the3840×2160 source fixed and expanding
 to a1920×1080 scale-2 window improves full-field observations from14.4 to34.5–34.9/s.
 Whole-window GTK draw wall time also falls, but is not a per-phase/GPU measurement.
-Automatic guest resizing is not implemented or qualified: these modes and window
-sizes are selected explicitly. Arbitrary smaller windows can still incur scaling.
+These381 modes and window sizes were selected explicitly. Candidate383 adds the
+bounded existing-mode path above; persistent arbitrary-window resizing remains
+open. Unmatched smaller windows can still incur scaling.
 
 Three windows contain14,160 valid token samples with no post-start errors;
 379's rare malformed tokens remain unresolved. This is not universal60Hz or
@@ -32,7 +50,7 @@ Normal/fullscreen input pass. Candidate361 also passes continuous pointer entry
 into1000×760; earlier enter-without-motion failures remain distinct.
 Candidate370 has zero invalid tokens after startup in three native/HiDPI manager
 windows using immutable snapshots plus a single SPICE rectangle. Full-frame
-atomicity, sustained60Hz, automatic resize, other frontends and VirtualBox remain
+atomicity, sustained60Hz, persistent arbitrary resize, other frontends and VirtualBox remain
 unqualified. Candidate374 improves HiDPI observed cadence to52.6/51.2 IDs/s
 without token failures after startup, but its capture guard force-stops during
 shutdown; recovery and actual process completion must be assessed separately.
@@ -105,8 +123,10 @@ python3 tools/console-window.py --state "$RUN_RESULTS/supervision.json"
 This connects TigerVNC to QEMU's presentation socket. It verifies the exact running
 container/start time and console selection. Closing the viewer disconnects the
 window only; the experiment supervisor still owns shutdown and recovery.
-The presenter follows guest mode changes. Automatic host-window resize requests
-remain disabled until they can be coordinated with macOS mode selection. This is QEMU's VM console, not macOS Screen Sharing.
+The presenter follows guest mode changes. Default profiles still omit the agent
+transport. Candidate383's optional SPICE path coordinates bounded existing-mode
+requests without restarting the presenter; persistent arbitrary-window resize
+remains unfinished. This is QEMU's VM console, not macOS Screen Sharing.
 
 `tools/console-metal-probe.m` generates three1280×720 color-bar phases on Raphael,
 checks921,600 pixels per phase, then copies the verified buffer into Bochs VRAM.
@@ -197,7 +217,11 @@ python3 tools/console-spice-window.py --state "$RUN_RESULTS/supervision.json"
 
 This requires GTK3 and the SpiceClientGLib2.0 and SpiceClientGtk3.0 introspection bindings.
 The only display endpoint is a user-owned local Unix socket; network SPICE, GL,
-clipboard sharing, USB redirection and guest resize are disabled. Existing USB
+clipboard sharing and USB redirection remain disabled. Guest resize is absent
+from default profiles; the optional `CONSOLE_VDAGENT=on` native libvirt/SPICE
+profile exposes only the dedicated standard agent channel. It preserves capture
+UARTs and does not itself install or start a guest agent. Candidate383's bounded
+agent test is described above. Existing USB
 sound uses the established PulseAudio path; SPICE audio is disabled. The viewer
 focuses its display widget. Closing it leaves the VM under harness ownership.
 
