@@ -1,0 +1,84 @@
+{
+  "schema": 1,
+  "run_id": "f5fd1fe85aeb7a340b0ac52a4d78157a",
+  "cid": "fa67fdb18e4703b6d08e8791dfc54b801490f36afdf34f9460caab14643602b0",
+  "observed_epoch": 1791559539.4664824,
+  "private_terminal_present": false,
+  "artifacts": [
+    {
+      "path": "/home/bogdan/macos-vm/run/c374-capture-d-refusal-docker-events.txt",
+      "sha256": "68564eb78837604c20ad3ec4ecaecee9c607085153b36a1c6ac1f95658ad1310",
+      "command": [
+        "docker",
+        "events",
+        "--since",
+        "1791559260",
+        "--until",
+        "1791559264",
+        "--filter",
+        "container=fa67fdb18e4703b6d08e8791dfc54b801490f36afdf34f9460caab14643602b0",
+        "--format",
+        "{{.TimeNano}} {{.Action}} exit={{index .Actor.Attributes \"exitCode\"}} signal={{index .Actor.Attributes \"signal\"}}"
+      ]
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c374-capture-d-refusal-docker-journal.txt",
+      "sha256": "84c8343e5ef8ddf02a1d314699591f85d891d4beb10fe0299072e4c59948c729",
+      "command": [
+        "journalctl",
+        "-u",
+        "docker.service",
+        "--since",
+        "@1791559260",
+        "--until",
+        "@1791559264",
+        "--no-pager",
+        "-o",
+        "short-monotonic"
+      ]
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c374-capture-d-refusal-capture-journal.txt",
+      "sha256": "840266a87fa7c59073650efabd4ab2ff59ffced1df6499c2089d70163d1ac401",
+      "command": [
+        "journalctl",
+        "--user",
+        "-u",
+        "rgpu-serial-fa67fdb18e4703b6d08e8791dfc54b801490f36afdf34f9460caab14643602b0.service",
+        "-u",
+        "rgpu-critical-fa67fdb18e4703b6d08e8791dfc54b801490f36afdf34f9460caab14643602b0.service",
+        "--since",
+        "@1791559260",
+        "--until",
+        "@1791559264",
+        "--no-pager",
+        "-o",
+        "short-monotonic"
+      ]
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/libvirt-f5fd1fe85aeb7a340b0ac52a4d78157a/events.jsonl",
+      "sha256": "c8684507fc17d03c632837cdf2c6fe37eeae19ac76da42f91776526e820c2976"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-374-results/shutdown.json",
+      "sha256": "57024686a796b4d800ee932e987f34dbabc8d4b5dc271c314a844e557f123ca7"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/capture-exit-fa67fdb18e4703b6d08e8791dfc54b801490f36afdf34f9460caab14643602b0-1169025.json",
+      "sha256": "c70b5d6857d373a04d7f74a7db66f6a2b3c4726f3e656824359065ff3e3991db"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/capture-exit-fa67fdb18e4703b6d08e8791dfc54b801490f36afdf34f9460caab14643602b0-1169023.json",
+      "sha256": "896b0f15ec82629eba396ee8d0eb94a9b3b720ac94c97e8d85c16b6d5969ddcd"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c370-qemu-snapshot/qemu-10.1.2/system/main.c",
+      "sha256": "5209f230ab4a0d0794d3a2669b2a6d8154349283d8560eb8670044877122c242"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c370-qemu-snapshot/qemu-10.1.2/system/runstate.c",
+      "sha256": "3203dd09228fb6540a58732d9ed7b0f4cce1f8fb7b35117294bdb7feb23141e5"
+    }
+  ]
+}
