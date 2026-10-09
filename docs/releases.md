@@ -29,38 +29,26 @@ The runner label is explicitly Intel, as listed in the
 
 ## Checked-in experimental executable
 
-`kext/bin/RaphaelGPU` contains the hardware-tested candidate386 executable,
-build `ded62ba27d244bf892d516099cc7335d`, from clean source
-`17e907790afba76b50976da674ae75a6a411cc72`. Card213 qualifies installed external
-resize helpers after a guest reboot, bounded even-size mode control, and actual
-manager USB-tablet input while the agent remains connected (`agent-mouse=off`).
-The ordinary presenter was used; snapshot ownership remained **unarmed**.
-The sealed capture application stayed unchanged. Audio sample delivery and
-independent route restoration pass. Natural guest shutdown retains the genuine
-controller terminal and authorizing recovery, with the partial critical capture
-tail explicitly preserved. Earlier356 normal/fullscreen
-and361 continuous pointer entry at1000×760 pass; input is not rerun in381. Missing-motion/stationary-pointer
-transitions remain open. Candidate364 adds existing-user package/reinstall and
-one native bounded shutdown-wait pass. Candidate366 verifies existing-user next
-guest-boot startup/consent; clean-user and console-only first setup remain open.
-The352 ON/353 OFF performance comparison remains separate.366 paced source
-reaches60 draw calls/s, but HiDPI manager samples vary with partial tokens; neither
-60Hz output nor stable speedup is qualified. Candidate368 then validates actual
-locked capture-source tokens while manager partial tokens persist, narrowing
-investigation downstream without identifying one stage or qualifying atomicity.
-Ordinary afplay default USB → QEMU → Pulse stereo capture and route restoration
-pass; endpoint audibility, other applications and A/V sync are unqualified.
-Candidate381 adds explicit viewport matching: mixed2560×1440 observations reach
-57.5 IDs/s at a1280×720 scale-2 viewport; same4K source full-field observations
-improve14.4→34.5–34.9/s with a1920×1080 scale-2 viewport. Three windows have14,160
-valid samples,22 startup invalids and no post-start invalids. This does not close
-379's rare errors or qualify universal60Hz/full-frame integrity. Audio retry and
-independent restoration, ordinary fallback and retired-access refusal pass. The
-real guest-shutdown terminal and recovery survive; capture receipts report
-container-stopped-during-shutdown-wait, with witness137 rather than a guest137 exit.
-Independent Docker exit0/no-kill events corroborate natural exit; partial terminal
-capture remains documented.
-[Current viewport evidence](../findings/research/console-viewport-native-20261009.md).
+`kext/bin/RaphaelGPU` contains the exact hardware-tested candidate399 executable,
+build `f868a8dae9664e469b2011390547c5ca`, from clean source
+`b7e17c09679eb3e78e1be9895d2d5be550a06391`, SHA256
+`d8257d14791c7f1cee6050c250a4327cb35bde75e0bf0036c1bbc470b939ceaa`.
+The matching archive build manifest is copied unchanged. Card221 runs opt-in
+snapshot timing with the installed restartable private-buffer presenter. Hostcopy
+including firsttouch averages6.834ms; this is diagnostic evidence, not optimization.
+The100-second4K observation has4036unique token IDs, no invalid/duplicates; natural
+private-terminal/Docker completion and recovery pass. The late screenshot captured
+the wrong host window and is not returned-desktop proof. Input/audio qualification
+remains separately scoped to395 and preceding recorded runs.
+[399 native evidence](../findings/research/console-host-snapshot-timing-native-20261010.md).
+
+Candidate401 separately boots a software-only VirtualBox macOS desktop with1vCPU
+and keyboard/awake checks. It does not use this driver for accelerated VBox graphics;
+eight-vCPU timekeeping and graceful GUI shutdown remain open. Original forced
+poweroff/late-unregister receipts are retained. Main's physical330 baseline is
+unchanged; this delivery is prepared fordev and requires root review/push/hostedCI.
+
+### Historical console qualifications
 
 Candidate379 adds synchronous same-channel event observation and a bounded QEMU
 trace: full-field HiDPI bitmap-creation entries are38–39/s while client updates
