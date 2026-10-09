@@ -21,6 +21,12 @@ CHAR='spicevmc,id=rgpu_vdagent,name=vdagent'
 PORT='virtserialport,id=rgpu_agent_port,bus=rgpu_agent_serial.0,nr=1,chardev=rgpu_vdagent,name=com.redhat.spice.0'
 AGENT=['-device',CONTROLLER,'-chardev',CHAR,'-device',PORT]
 
+def agent_fixture(refresh=False):
+ argv=native_fixture()
+ index=argv.index(plan.SPICE)
+ argv[index]+=(',max-refresh-rate=60' if refresh else '')+',agent-mouse=off'
+ return argv+AGENT
+
 def experiment():
  spec=importlib.util.spec_from_file_location('vdagent_experiment',ROOT/'tools/experiment.py')
  m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m);return m
@@ -43,11 +49,12 @@ class VdagentTests(unittest.TestCase):
 
  def test_plan_preserves_default_and_existing_device_order(self):
   baseline=native_fixture();before=plan.build_plan(baseline,'1'*32)
-  after=plan.build_plan(baseline+AGENT,'1'*32)
+  after=plan.build_plan(agent_fixture(),'1'*32)
   root=ET.fromstring(after['xml']);args=[n.attrib['value'] for n in root.findall('./{'+plan.NS+'}commandline/{'+plan.NS+'}arg')]
   start=args.index(CONTROLLER)-1
   self.assertEqual(args[start:start+6],AGENT)
-  self.assertEqual(after['native_argv'][:-6],before['native_argv'])
+  without=list(after['native_argv'][:-6]);without[without.index(plan.SPICE+',agent-mouse=off')]=plan.SPICE
+  self.assertEqual(without,before['native_argv'])
   for name in ('console','critical'):
    self.assertEqual(sum('isa-serial,chardev=rgpu_'+name in x for x in args),1)
   self.assertEqual(plan.build_plan(baseline,'1'*32),before)
@@ -57,13 +64,14 @@ class VdagentTests(unittest.TestCase):
   for old,new in [('addr=0x10','addr=0x7'),('nr=1','nr=0'),('max_ports=2','max_ports=16'),('com.redhat.spice.0','other'),('chardev=rgpu_vdagent','chardev=rgpu_console'),('name=vdagent','name=usbredir')]:
    cases.append([x.replace(old,new) for x in AGENT])
   for agent in cases:
-   with self.subTest(agent=agent),self.assertRaises(ValueError):plan.build_plan(native_fixture()+agent,'1'*32)
+   with self.subTest(agent=agent),self.assertRaises(ValueError):plan.build_plan(agent_fixture()[:-6]+agent,'1'*32)
 
  def test_private_argv_verification_binds_channel(self):
-  baseline,state=fixture();new=plan.build_plan(native_fixture()+AGENT,'1'*32)
+  baseline,state=fixture();new=plan.build_plan(agent_fixture(),'1'*32)
   # Custom arguments precede CPU-global suffix in the reviewed libvirt command.
   index=state['argv'].index('-global',state['argv'].index(CONTROLLER) if CONTROLLER in state['argv'] else state['argv'].index('hubport,id=lan0,hubid=0'))
   state['argv'][index:index]=AGENT
+  index=state['argv'].index('-sandbox');state['argv'][index:index]=['-spice','agent-mouse=off']
   self.assertTrue(verify.verify(new,state))
   with self.assertRaises(ValueError):verify.verify(baseline,state)
   state['argv'][state['argv'].index(PORT)]=PORT.replace('nr=1','nr=0')
@@ -78,10 +86,32 @@ class VdagentTests(unittest.TestCase):
   obs['agent_args']=AGENT
   self.assertIn('vdagent_topology',m.validate_running(manifest,obs))
   opts['CONSOLE_VDAGENT']='on'
+  self.assertIn('generic_graphics',m.validate_running(manifest,obs))
+  obs['graphics_args']+=['-spice','agent-mouse=off']
   self.assertEqual(m.validate_running(manifest,obs),[])
   obs['agent_args']=AGENT[:-2]
   self.assertIn('vdagent_topology',m.validate_running(manifest,obs))
   self.assertEqual(obs['serial_args'],[])
+
+ def test_agent_mouse_route_exact_profile_and_reject_unsafe_variants(self):
+  for refresh in (False,True):
+   argv=agent_fixture(refresh);new=plan.build_plan(argv,'1'*32)
+   root=ET.fromstring(new['xml']);args=[n.attrib['value'] for n in root.findall('./{'+plan.NS+'}commandline/{'+plan.NS+'}arg')]
+   self.assertEqual(args[-2:],['-spice',('max-refresh-rate=60,' if refresh else '')+'agent-mouse=off'])
+   for replacement in ('','agent-mouse=on','agent-mouse=off,agent-mouse=off','agent-mouse=off,port=5905'):
+    bad=[x.replace(',agent-mouse=off',(','+replacement if replacement else '')) for x in argv]
+    with self.subTest(refresh=refresh,replacement=replacement),self.assertRaises(ValueError):plan.build_plan(bad,'1'*32)
+  with self.assertRaises(ValueError):plan.build_plan(agent_fixture()[:-6],'1'*32)
+
+ def test_entry_console_builder_binds_agent_mouse_only_when_enabled(self):
+  source=(ROOT/'tools/vm-entry.sh').read_text()
+  start=source.index('case "${VM_CONSOLE:-none}"') if 'case "${VM_CONSOLE:-none}"' in source else source.index('case "${VM_CONSOLE:-off}"')
+  end=source.index('if [[ -n "${LAN_TAP_NODE:-}"')
+  for value in ('off','on'):
+   env=dict(os.environ,VM_CONSOLE='bochs-spice',VM_MANAGER='libvirt',GENERIC_GRAPHICS='off',CONSOLE_VDAGENT=value,CONSOLE_REFRESH='60',CONSOLE_FULL_REFRESH='off',CONSOLE_SNAPSHOT='off',EXTRA='')
+   result=subprocess.run(['bash','-c',source[start:end]+'\nprintf "%s" "$EXTRA"'],env=env,text=True,capture_output=True,check=True,timeout=3)
+   self.assertEqual('agent-mouse=off' in result.stdout,value=='on')
+   self.assertEqual(result.stdout.count('agent-mouse='),int(value=='on'))
 
  def test_proc_observer_collects_agent_and_capture_independently(self):
   m=experiment()

@@ -53,6 +53,22 @@ class HandoffTests(unittest.TestCase):
         with self.assertRaises(ValueError):mod.run_directory(self.root,'../other')
 
 class RefreshAdmissionTests(unittest.TestCase):
+    def test_vdagent_admission_exact_profile_and_hash_binding(self):
+        base=dict(VM_MANAGER='libvirt',VM_CONSOLE='bochs-spice',GENERIC_GRAPHICS='off',CONSOLE_VDAGENT='on')
+        for change,ok in [({},True),({'CONSOLE_VDAGENT':'off'},True),({'CONSOLE_VDAGENT':True},False),
+                          ({'VM_CONSOLE':'bochs'},False),({'GENERIC_GRAPHICS':'on'},False)]:
+            with self.subTest(change=change),tempfile.TemporaryDirectory() as tmp:
+                manifest=dict(run_id='a'*32,boot_id='boot',image_id='image',max_seconds=120,launch_options=dict(base,**change))
+                if ok:
+                    path,digest=mod.prepare(tmp,manifest,b'manifest',{},dict.fromkeys(mod.MODULES,'hash'))
+                    data=json.loads((path/'admission.json').read_text())
+                    self.assertEqual(data['console_vdagent'],manifest['launch_options']['CONSOLE_VDAGENT'])
+                    data['console_vdagent']='off' if data['console_vdagent']=='on' else 'on'
+                    self.assertNotEqual(mod.digest(data),digest)
+                else:
+                    with self.assertRaises(ValueError):mod.prepare(tmp,manifest,b'manifest',{},dict.fromkeys(mod.MODULES,'hash'))
+                    self.assertEqual(list(Path(tmp).iterdir()),[])
+
     def test_snapshot_admission_exact_profile_and_no_side_effect_on_refusal(self):
         base=dict(VM_MANAGER='libvirt',VM_CONSOLE='bochs-spice',GENERIC_GRAPHICS='off',
                   CONSOLE_REFRESH='60',CONSOLE_FULL_REFRESH='on',CONSOLE_SNAPSHOT='on')

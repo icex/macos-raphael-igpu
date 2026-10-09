@@ -60,7 +60,7 @@ def build_plan(argv, run_id):
     require(match is not None and int(match[1]) <= 64, 'unreviewed CPU topology')
     cores = match[1]
     spice = one(rows, '-spice')
-    require(spice in (SPICE, SPICE+',max-refresh-rate=60') and one(rows, '-vga') == 'none' and
+    require(spice in (SPICE, SPICE+',max-refresh-rate=60', SPICE+',agent-mouse=off', SPICE+',max-refresh-rate=60,agent-mouse=off') and one(rows, '-vga') == 'none' and
             one(rows, '-display') == 'none', 'unreviewed console profile')
     require(one(rows, '-audiodev') == 'pa,id=hda', 'unreviewed audio backend')
     require(one(rows, '-smbios') == 'type=2' and one(rows, '-boot') == 'menu=on', 'unreviewed boot profile')
@@ -73,11 +73,12 @@ def build_plan(argv, run_id):
                      'virtserialport,id=rgpu_agent_port,bus=rgpu_agent_serial.0,nr=1,chardev=rgpu_vdagent,name=com.redhat.spice.0']
     agent_char = 'spicevmc,id=rgpu_vdagent,name=vdagent'
     agent = any(d.split(',')[0].startswith(('virtio-serial', 'virtserialport', 'virtconsole')) for d in devices) or agent_char in values(rows, '-chardev')
+    require(spice.endswith(',agent-mouse=off') == agent, 'agent mouse routing must match agent topology')
     bochs = [d for d in devices if d.split(',')[0] == 'bochs-display']
     require(len(bochs) == 1 and bochs[0] in (BOCHS, BOCHS+',x-debug-full-refresh=on',
             BOCHS+',x-debug-full-refresh=on,x-debug-snapshot=on'),
             'unreviewed Bochs full refresh profile')
-    require(bochs[0] == BOCHS or spice == SPICE+',max-refresh-rate=60',
+    require(bochs[0] == BOCHS or spice.removesuffix(',agent-mouse=off') == SPICE+',max-refresh-rate=60',
             'full refresh requires explicit SPICE60')
     expected = ['qemu-xhci,id=xhci', 'usb-kbd,bus=xhci.0', 'usb-tablet,bus=xhci.0',
                 'usb-audio,audiodev=hda,bus=xhci.0', 'ich9-ahci,id=sata',
@@ -171,7 +172,7 @@ def build_plan(argv, run_id):
     if spice != SPICE:
         # QEMU's spice option group merges this exact supplemental option into
         # libvirt's owned socket configuration; no second server is created.
-        retained.extend(['-spice', 'max-refresh-rate=60'])
+        retained.extend(['-spice', spice[len(SPICE)+1:]])
     for value in retained:
         element(cmd, '{'+NS+'}arg', value=value)
     ET.indent(root)

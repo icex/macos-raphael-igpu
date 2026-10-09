@@ -110,6 +110,9 @@ case "${VM_CONSOLE:-off}" in
         if [[ "${VM_CONSOLE}" == bochs-spice ]]; then
             export EXTRA="${EXTRA} -spice unix=on,addr=/run/vm/console-spice.sock,disable-ticketing=on,image-compression=off,gl=off"
             if [[ "${CONSOLE_REFRESH:-default}" == 60 ]]; then export EXTRA="${EXTRA},max-refresh-rate=60"; fi
+            # SPICE routes mouse to any attached agent regardless of capabilities.
+            # Our resize-only agent leaves input on the existing USB tablet.
+            if [[ "${CONSOLE_VDAGENT:-off}" == on ]]; then export EXTRA="${EXTRA},agent-mouse=off"; fi
         else
             export EXTRA="${EXTRA} -vnc unix:/run/vm/console-vnc.sock"
         fi

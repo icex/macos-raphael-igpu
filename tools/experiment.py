@@ -3104,8 +3104,13 @@ def validate_running(manifest, observed):
             expected_graphics[-1] += ',x-debug-full-refresh=on'
         if manifest['launch_options'].get('CONSOLE_SNAPSHOT') == 'on':
             expected_graphics[-1] += ',x-debug-snapshot=on'
+        supplements=[]
         if manifest['launch_options'].get('CONSOLE_REFRESH') == '60':
-            expected_graphics += ['-spice', 'max-refresh-rate=60']
+            supplements.append('max-refresh-rate=60')
+        if manifest['launch_options'].get('CONSOLE_VDAGENT') == 'on':
+            supplements.append('agent-mouse=off')
+        if supplements:
+            expected_graphics += ['-spice', ','.join(supplements)]
         proof = observed.get('libvirt', {})
         if (proof.get('verified') is not True or proof.get('run_id') != manifest.get('run_id') or
                 proof.get('argv_sha256') != observed.get('argv_sha256') or proof.get('cid') != observed.get('cid')):

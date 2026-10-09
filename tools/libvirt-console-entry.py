@@ -62,7 +62,9 @@ def validate_plan_refresh(plan,admission):
     expected=handoff.validate_refresh(admission.get('console_refresh','default'))
     planner=native.configuration.planner
     spice=planner.one(planner.pairs(plan['native_argv']),'-spice')
+    vdagent=handoff.validate_vdagent(admission.get('console_vdagent','off'))
     wanted=planner.SPICE+(',max-refresh-rate=60' if expected=='60' else '')
+    if vdagent=='on':wanted+=',agent-mouse=off'
     handoff.require(spice==wanted,'plan console refresh differs from admission')
     full=handoff.validate_full_refresh(admission.get('console_full_refresh','off'))
     bochs=[d for d in planner.values(planner.pairs(plan['native_argv']),'-device')
