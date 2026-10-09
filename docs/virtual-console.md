@@ -16,7 +16,9 @@ open. This is not qualified60Hz delivery.
 [Current paired evidence](../findings/research/bochs-full-refresh-paired-20261009.md).
 Candidate361 verifies ordinary afplay default USB audio through QEMU/Pulse with
 isolated stereo capture and exact route restoration; endpoint audibility, other
-applications and A/V synchronization remain unqualified. Candidate332's unsafe TMR experiment remains withdrawn.
+applications and A/V synchronization remain unqualified. Candidate366 retains existing-user startup and consent on the next guest boot;
+its paced source reaches60 draw calls/s without qualified60Hz output.
+Candidate332's unsafe TMR experiment remains withdrawn.
 
 ## Architecture under test
 
@@ -396,7 +398,8 @@ renewal restores actual capture; the transient stale/corrupt framebuffer during
 permission failure remains a user-facing limitation. Identical-package reinstall
 produces the same complete app, three binaries and CDHash, and restarts without
 renewal. Correct desktop and default afplay stereo/restoration pass. Input is not
-rerun. Fresh-user, next guest boot and unattended deployment remain unqualified.
+rerun. Next guest boot was unqualified in364;366 supplies the scoped result below.
+Fresh-user and unattended deployment remain unqualified.
 
 Both native capture receipts record shutdown_event_wait=true, then natural exit
 in about0.411s. Bound guest SHUTDOWN precedes the distinct recv-reset/clean-EOF
@@ -405,6 +408,37 @@ recovery authorize reuse. This supersedes the earlier native-unexercised limit:
 one positive branch exercise, with initial task IDs not separately retained,
 is not universal race closure or repeated lifecycle qualification.
 [Exact run and50 hashed artifacts](../findings/research/console-install-native-20261009.md).
+
+
+## Next guest boot and source-cadence ABBA (366)
+
+The existing installed console app automatically starts on the next guest boot,
+with unchanged presenter hash and fresh3840×2160 capture without another consent
+change. Awake assertions and final actual-manager desktop screenshot pass. This is
+existing-user guest-boot persistence, not independent host boot, fresh-user consent
+or console-only setup. Audio and input are not rerun.
+
+At1080HiDPI, installed presenter/full-refreshON/SPICE60 and the manager ROI observer
+stay constant. Four70s source runs each supply a30s analyzed observer interval:
+
+| Source order | Draw calls/s | Valid unique manager IDs/s | Invalid/samples |
+| --- | ---: | ---: | ---: |
+| Baseline A |33.063|23.633|336/1816|
+| Prerendered B |60.000|35.300|442/1550|
+| Prerendered C |60.001|24.900|959/1756|
+| Baseline D |53.647|25.967|826/1784|
+
+Pre-rendering/display-link pacing changes source supply, but repeat variation and
+partial tokens prevent a stable speedup or60Hz claim. DRAW records drawing calls,
+not completed composition; manager sampling is a buffer-region lower bound, not
+GPU FPS or scanout. Presenter tail timing is not aligned to this analyzed window.
+Next inspect actual readonly SCK source nonce/CRC before normal VRAM writes to
+separate source validity from downstream candidates.
+
+Capture CORE_PROBE_PASS, genuine guest-shutdown terminal and authorizing recovery
+pass. Both hooks finish naturally about0.451s with shutdown_event_wait=false;
+this does not repeat364's pending-worker branch exercise.
+[Exact artifacts and scope](../findings/research/console-cadence-native-20261009.md).
 
 
 ## Pending source-token diagnostic (367; offline only)

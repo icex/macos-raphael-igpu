@@ -37,7 +37,9 @@ logic. Candidate364 additionally passes16 tests in disposable macOS directories,
 actual existing-user build/sign/publication, active refusal and identical reinstall.
 The first changed ad-hoc binary needs ordinary consent renewal; identical reinstall
 retains consent. Desktop/default audio pass; input is not rerun. This does not
-qualify power-loss recovery of the installed app, clean-user login or second-boot
-consent. See [native evidence](../findings/research/console-install-native-20261009.md).
+qualify power-loss recovery of the installed app or clean-user login. Candidate366
+subsequently verifies automatic startup and unchanged consent on the next guest
+boot for that same installed app; it does not qualify independent host boot or
+console-only first setup. [Persistence evidence](../findings/research/console-cadence-native-20261009.md). See [native evidence](../findings/research/console-install-native-20261009.md).
 Sessions remain bounded to6000seconds. This is an experimental
 source package, not an unattended daily-use product.

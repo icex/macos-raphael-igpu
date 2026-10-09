@@ -29,14 +29,17 @@ The runner label is explicitly Intel, as listed in the
 
 ## Checked-in experimental executable
 
-`kext/bin/RaphaelGPU` contains the hardware-tested candidate364 executable,
-build `05847d6e7a254574b30d83649750e407`, from clean source
-`01a25e7bee442d709a770fc2ee46a8c7551608ff`. Native reset shutdown preserves a
+`kext/bin/RaphaelGPU` contains the hardware-tested candidate366 executable,
+build `65c6d6549d144f319d2a7e84f905d202`, from clean source
+`fcfea4ecda0be1ec84797166c8c7d479d4eda760`. Native reset shutdown preserves a
 real controller terminal and authorizing recovery. Earlier356 normal/fullscreen
-and361 continuous pointer entry at1000×760 pass; input is not rerun in364. Missing-motion/stationary-pointer
+and361 continuous pointer entry at1000×760 pass; input is not rerun in366. Missing-motion/stationary-pointer
 transitions remain open. Candidate364 adds existing-user package/reinstall and
-one native bounded shutdown-wait pass; clean-user/second-boot coverage remains open.
-Performance numbers remain the separately measured352 ON/353 OFF comparison, not a364 rerun.
+one native bounded shutdown-wait pass. Candidate366 verifies existing-user next
+guest-boot startup/consent; clean-user and console-only first setup remain open.
+The352 ON/353 OFF performance comparison remains separate.366 paced source
+reaches60 draw calls/s, but HiDPI manager samples vary with partial tokens; neither
+60Hz output nor stable speedup is qualified.
 Ordinary afplay default USB → QEMU → Pulse stereo capture and route restoration
 pass; endpoint audibility, other applications and A/V sync are unqualified.
 These results do not qualify60Hz, all VM managers or VirtualBox.
@@ -45,17 +48,18 @@ The adjacent `build-manifest.json` records input hashes and executable SHA-256.
 The source tree and `kext/Info.plist` match that driver build; subsequent user-space
 helper changes have separate history. Source builds never use this binary as a
 fallback. The executable alone is not an installable bundle: use the matching
-Info.plist, Lilu and tested VM setup. The matching console card is metal-202 with
+Info.plist, Lilu and tested VM setup. The matching console card is metal-203 with
 `--pins experiments/pins-bochs-full-refresh.json`, explicit SPICE60 and
 `CONSOLE_FULL_REFRESH=on`. Do not interchange exact launch contracts.
 [Console setup and scope](virtual-console.md)
 · [Native356 evidence](../findings/research/libvirt-reset-native-20261009.md)
 · [Native361 audio/input evidence](../findings/research/console-default-audio-input-20261009.md)
-· [Native364 installer/lifecycle evidence](../findings/research/console-install-native-20261009.md).
+· [Native364 installer/lifecycle evidence](../findings/research/console-install-native-20261009.md)
+· [Native366 persistence/cadence evidence](../findings/research/console-cadence-native-20261009.md).
 
 Candidate330 remains the independently tested Samsung HDMI HiDPI120/audio
-baseline, available on `main` at861ba5e. Candidate364's physical HDMI behavior
-has not been independently rerun. Do not relabel330's evidence as a364 HDMI test.
+baseline, available on `main` at861ba5e. Candidate366's physical HDMI behavior
+has not been independently rerun. Do not relabel330's evidence as a366 HDMI test.
 
 ## Local build
 
