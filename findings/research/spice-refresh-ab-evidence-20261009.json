@@ -1,0 +1,651 @@
+{
+  "scope": "Software-only; no native/GPU/KVM/production change",
+  "root": "/home/bogdan/macos-vm/run/c344-spice-refresh",
+  "results": {
+    "final-original-default": {
+      "seconds": 15,
+      "unique": 500,
+      "unique_per_second": 33.333333333333336,
+      "valid": 1852,
+      "invalid_after_start": 10,
+      "last_sequence": 898,
+      "producer_count": 900,
+      "producer_per_second": 60.00150140307082,
+      "qemu_exit": 0,
+      "split": false,
+      "explicit_rate": null,
+      "display_events": {
+        "mark": 1,
+        "invalidate": 5009
+      },
+      "scope": "TCG qtest producer and offscreen SpiceDisplay buffer only; no guest OS/GPU/manager/scanout FPS",
+      "error_categories": {
+        "checksum mismatch": 10
+      },
+      "sample_median_ms": 0.7850830006645992,
+      "producer_median_ms": 2.921319999586558,
+      "files": {
+        "argv.json": "d2810b1e0def59b9a1700b27396897240d5d13764cc67e439cd561984eec7d6f",
+        "idle-rom.bin": "9712316cb30fd8aab7369e66d6395d4406866b6c7087b105e17dc08f24496e7b",
+        "qemu.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "display-events.jsonl": "42964c8f5ae0ac6d2772b341bc027bd5c4205bd6a206a3fc6a0d18da6ee98b05",
+        "samples.jsonl": "903a1a80671325efa2903b37fb3ef7cec9a0a65d97cd67d285db04a30ad69170",
+        "producer.jsonl": "192961ee76ab0a1de21973e05c172a06eeeebbe1217bcdecb8e07dadc343346b",
+        "first.png": "c1683215bd11e5095e3f0561ee98cf89d26bde07cda4d61a05c7e4222bd3ae44",
+        "result.json": "3aec6008346417d2af3d577227bd1792fc5136eaadea0e6ea49f4050671df971",
+        "cleanup.json": "da28c181b8aa0d2377529231aa3ff58a12c16616167c074d54c42e2716b83e8f"
+      }
+    },
+    "final-original-explicit60": {
+      "seconds": 15,
+      "unique": 500,
+      "unique_per_second": 33.333333333333336,
+      "valid": 1840,
+      "invalid_after_start": 21,
+      "last_sequence": 899,
+      "producer_count": 900,
+      "producer_per_second": 59.99980572611582,
+      "qemu_exit": 0,
+      "split": false,
+      "explicit_rate": 60,
+      "display_events": {
+        "mark": 1,
+        "invalidate": 5005
+      },
+      "scope": "TCG qtest producer and offscreen SpiceDisplay buffer only; no guest OS/GPU/manager/scanout FPS",
+      "error_categories": {
+        "checksum mismatch": 21
+      },
+      "sample_median_ms": 0.789273006375879,
+      "producer_median_ms": 3.004165497259237,
+      "files": {
+        "argv.json": "0c1f48cd54b1d4428e30f0c495b78682b0c9696784018fdd1aeeb1efad994ede",
+        "idle-rom.bin": "9712316cb30fd8aab7369e66d6395d4406866b6c7087b105e17dc08f24496e7b",
+        "qemu.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "display-events.jsonl": "024fabe8993a8cf6441649a73cc8bc9e393be5735d8e911c85a9336e718c16d0",
+        "samples.jsonl": "6dbf666a12a21ffd5f7fec72e9fbb74e9bafe96b5c4f51801b2c73cba682e6d2",
+        "producer.jsonl": "2c45ed7182f34aa4aeda037e41f39b26e5f2805a50b17f70e48125485fd98d27",
+        "first.png": "c1683215bd11e5095e3f0561ee98cf89d26bde07cda4d61a05c7e4222bd3ae44",
+        "result.json": "0f30f5c8a330bcc88909f5c16624c8e6016e4a77f6af97992d7e4cc833379adc",
+        "cleanup.json": "0b5de030b94c1df1356f268c88e61a25e1b8750c767eeaad4985d062aec4b5d2"
+      }
+    },
+    "final-patched-default": {
+      "seconds": 15,
+      "unique": 500,
+      "unique_per_second": 33.333333333333336,
+      "valid": 1852,
+      "invalid_after_start": 9,
+      "last_sequence": 898,
+      "producer_count": 900,
+      "producer_per_second": 60.000648725163614,
+      "qemu_exit": 0,
+      "split": false,
+      "explicit_rate": null,
+      "display_events": {
+        "mark": 1,
+        "invalidate": 5005
+      },
+      "scope": "TCG qtest producer and offscreen SpiceDisplay buffer only; no guest OS/GPU/manager/scanout FPS",
+      "error_categories": {
+        "checksum mismatch": 9
+      },
+      "sample_median_ms": 0.8840329974191263,
+      "producer_median_ms": 3.0488605007121805,
+      "files": {
+        "argv.json": "ec34779cfddee6d19a2da72a6ce691f7a616808770d2fcf8316d6e5a559a2f48",
+        "idle-rom.bin": "9712316cb30fd8aab7369e66d6395d4406866b6c7087b105e17dc08f24496e7b",
+        "qemu.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "display-events.jsonl": "0564046d5dc6bb7182f0d543aaac402def4b039366ed37e646266b80de4ab960",
+        "samples.jsonl": "71bcb16c8d92fc73347620b1b4274dd439ac4dcfbd65781f304aeb3dc09b5c65",
+        "producer.jsonl": "e6ea079cb96b9e5fac464b9ea2988faa2c664f9fe0b7f6527fa02b9a3ca951ab",
+        "first.png": "c1683215bd11e5095e3f0561ee98cf89d26bde07cda4d61a05c7e4222bd3ae44",
+        "result.json": "a0f0ae8eae857f7b6a14d253fa825d9d3e115c13a79e149114f28ecfe5bb4241",
+        "cleanup.json": "bd4aa5325521a58594944084b71e34b0adb98099419b980d632e260535656cd5"
+      }
+    },
+    "final-patched-explicit60": {
+      "seconds": 15,
+      "unique": 900,
+      "unique_per_second": 60.0,
+      "valid": 1841,
+      "invalid_after_start": 20,
+      "last_sequence": 899,
+      "producer_count": 900,
+      "producer_per_second": 60.00054890425525,
+      "qemu_exit": 0,
+      "split": false,
+      "explicit_rate": 60,
+      "display_events": {
+        "mark": 1,
+        "invalidate": 8165
+      },
+      "scope": "TCG qtest producer and offscreen SpiceDisplay buffer only; no guest OS/GPU/manager/scanout FPS",
+      "error_categories": {
+        "checksum mismatch": 20
+      },
+      "sample_median_ms": 0.7858830067561939,
+      "producer_median_ms": 3.0121905001578853,
+      "files": {
+        "argv.json": "0d52798208f8571003729c4a5b31fc37128d2a2c2c787e85bacdb54e5f041cf4",
+        "idle-rom.bin": "9712316cb30fd8aab7369e66d6395d4406866b6c7087b105e17dc08f24496e7b",
+        "qemu.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "display-events.jsonl": "97e51f5102b2cfdd7740147ce3a58de4edf52225729503b5c34fbcbd46fe781c",
+        "samples.jsonl": "e72bb991387f4ee9b7c762ae46bd8512683421ae6f7fc672d4f29beacf0fc498",
+        "producer.jsonl": "5505b4c4d406b3b6942941ce9fbb9e11ba5092e6232f7f37c36031f02829bfde",
+        "first.png": "c1683215bd11e5095e3f0561ee98cf89d26bde07cda4d61a05c7e4222bd3ae44",
+        "result.json": "ecba3f0a6ca94fb857eb6b8bd9d9658f4e82981b0bc65b359b45616b755a8f7e",
+        "cleanup.json": "ea845d4874c0b0536a1b0d4b27e4ce17c3ab8c5a8dc6aba905938ccde179f1af"
+      }
+    },
+    "mark-patched60-v2": {
+      "seconds": 5,
+      "unique": 299,
+      "unique_per_second": 59.8,
+      "valid": 613,
+      "invalid_after_start": 7,
+      "last_sequence": 298,
+      "producer_count": 300,
+      "producer_per_second": 60.001086417034564,
+      "qemu_exit": 0,
+      "split": false,
+      "explicit_rate": 60,
+      "display_events": {
+        "mark": 1,
+        "invalidate": 2711
+      },
+      "scope": "TCG qtest producer and offscreen SpiceDisplay buffer only; no guest OS/GPU/manager/scanout FPS",
+      "error_categories": {
+        "checksum mismatch": 7
+      },
+      "sample_median_ms": 0.9170285011350643,
+      "producer_median_ms": 3.0186059993866365,
+      "files": {
+        "argv.json": "c29f12aa0eb738e57c54bf99f6e19c42816905b27e0e042553c741c5bc74de51",
+        "idle-rom.bin": "9712316cb30fd8aab7369e66d6395d4406866b6c7087b105e17dc08f24496e7b",
+        "qemu.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "display-events.jsonl": "e9aab5aecaf0eb0d99c2817b5bbcf7b2857bb1c2cab70b279532fafcad7c8892",
+        "samples.jsonl": "89f3653c93a9e19e8624f8d836124ee083786c36c9fcdfdd4136b92255c23d96",
+        "producer.jsonl": "462d235b40b5f859cd2ff53bb60fbb37e22889427d9309b2d5a5a9d6b21f5d7d",
+        "first.png": "c1683215bd11e5095e3f0561ee98cf89d26bde07cda4d61a05c7e4222bd3ae44",
+        "result.json": "6707f6fb7521c5f73f8c65b2661ce6e256da754366654f5e5f135119aa5e9dfc",
+        "cleanup.json": "abf3e42e1976a198587bc46994b56ffa2d2ab76d60999c7a52c733bb97afd716"
+      }
+    },
+    "off-original-default": {
+      "seconds": 15,
+      "unique": 500,
+      "unique_per_second": 33.333333333333336,
+      "valid": 1853,
+      "invalid_after_start": 7,
+      "last_sequence": 898,
+      "producer_count": 900,
+      "producer_per_second": 59.99953327836738,
+      "qemu_exit": 0,
+      "split": false,
+      "explicit_rate": null,
+      "display_events": {
+        "mark": 1,
+        "invalidate": 5007
+      },
+      "scope": "TCG qtest producer and offscreen SpiceDisplay buffer only; no guest OS/GPU/manager/scanout FPS",
+      "error_categories": {
+        "checksum mismatch": 7
+      },
+      "sample_median_ms": 0.9043140016729012,
+      "producer_median_ms": 3.0947714985813946,
+      "files": {
+        "argv.json": "93d6433b9f5554cbf688f5dd7f8232775ba3f31de0c3b35078b2aff190128d77",
+        "idle-rom.bin": "9712316cb30fd8aab7369e66d6395d4406866b6c7087b105e17dc08f24496e7b",
+        "qemu.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "display-events.jsonl": "dce28fb53fd9c196029e2b3e1c9a4de22cc5e5d83d738374279812af2e2f2e85",
+        "samples.jsonl": "7078b0cf7111e5678dd8e8d41a4e593c58415713cc9d6afc2c661250268009f3",
+        "producer.jsonl": "282dfa799a3fe9a761a17a2b6a364f386c8b1c99908ed333f36cf808c51b4925",
+        "first.png": "c1683215bd11e5095e3f0561ee98cf89d26bde07cda4d61a05c7e4222bd3ae44",
+        "result.json": "829ced3e69ccf42bce5683068f60c55a5c7904c5478b7eb76c96eaee4defdc1b",
+        "cleanup.json": "61ff888cca777961d7db96f66b687f58a8c2c15b8c50208c3a15592b5ff7e856"
+      }
+    },
+    "off-original-explicit60": {
+      "seconds": 15,
+      "unique": 500,
+      "unique_per_second": 33.333333333333336,
+      "valid": 1851,
+      "invalid_after_start": 10,
+      "last_sequence": 898,
+      "producer_count": 900,
+      "producer_per_second": 59.9996284107651,
+      "qemu_exit": 0,
+      "split": false,
+      "explicit_rate": 60,
+      "display_events": {
+        "mark": 1,
+        "invalidate": 5009
+      },
+      "scope": "TCG qtest producer and offscreen SpiceDisplay buffer only; no guest OS/GPU/manager/scanout FPS",
+      "error_categories": {
+        "checksum mismatch": 10
+      },
+      "sample_median_ms": 0.8987730034277774,
+      "producer_median_ms": 3.111515998170944,
+      "files": {
+        "argv.json": "84af02715c0c30445a6567df153614a8ac1c48aa51a74c3dbbe55539cea86fcf",
+        "idle-rom.bin": "9712316cb30fd8aab7369e66d6395d4406866b6c7087b105e17dc08f24496e7b",
+        "qemu.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "display-events.jsonl": "98ed6e0d15dfe7b0f28145079e04017c8001420c6ebe555c1572557d02bc3236",
+        "samples.jsonl": "7376c4c46e3aaa72cf5169604a55b96cdd79e6de4019fc99c3b938bf575a66c6",
+        "producer.jsonl": "f9c8b9ef68e23b12aa6ce84e7856f31463df37286efe638e8dd14629449e1754",
+        "first.png": "c1683215bd11e5095e3f0561ee98cf89d26bde07cda4d61a05c7e4222bd3ae44",
+        "result.json": "4a3590df2f48930ff260ac255ad3f5d8fdbb75dad65401de8e447e8daa160072",
+        "cleanup.json": "792c94d7a3d952ad57551172d4b9be00b6441ab083e9bec9b3a2e37644126ad8"
+      }
+    },
+    "off-patched-default": {
+      "seconds": 15,
+      "unique": 500,
+      "unique_per_second": 33.333333333333336,
+      "valid": 1855,
+      "invalid_after_start": 6,
+      "last_sequence": 898,
+      "producer_count": 900,
+      "producer_per_second": 60.00257326676943,
+      "qemu_exit": 0,
+      "split": false,
+      "explicit_rate": null,
+      "display_events": {
+        "mark": 1,
+        "invalidate": 5003
+      },
+      "scope": "TCG qtest producer and offscreen SpiceDisplay buffer only; no guest OS/GPU/manager/scanout FPS",
+      "error_categories": {
+        "checksum mismatch": 6
+      },
+      "sample_median_ms": 0.8944729997892864,
+      "producer_median_ms": 3.1235710011969786,
+      "files": {
+        "argv.json": "19329b09ef8eb9a2311435bd16d0f16c88001163a138d7b93e716cea9e147dd9",
+        "idle-rom.bin": "9712316cb30fd8aab7369e66d6395d4406866b6c7087b105e17dc08f24496e7b",
+        "qemu.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "display-events.jsonl": "791c4196f81de5880af939d5f95c6bfe4d09890868c7e2da4ede0baec821a519",
+        "samples.jsonl": "03da560ac7c3784f0345f8aaa740e192d8b81499e773d74676a51b014d370457",
+        "producer.jsonl": "c7bb6c2492e4b14cc82c6e47e9e16a675f256459bb93b8966109ef2e426b05de",
+        "first.png": "c1683215bd11e5095e3f0561ee98cf89d26bde07cda4d61a05c7e4222bd3ae44",
+        "result.json": "3319d02ca066ea8c0e3e17532e59614285e952f3d3800509f06df84427686850",
+        "cleanup.json": "61fa463473af0d6128afba7f83df322c0dc9cc65612a3ce8bd9f934f482a7e43"
+      }
+    },
+    "off-patched-explicit60": {
+      "seconds": 15,
+      "unique": 899,
+      "unique_per_second": 59.93333333333333,
+      "valid": 1834,
+      "invalid_after_start": 27,
+      "last_sequence": 899,
+      "producer_count": 900,
+      "producer_per_second": 60.00451081605543,
+      "qemu_exit": 0,
+      "split": false,
+      "explicit_rate": 60,
+      "display_events": {
+        "mark": 1,
+        "invalidate": 8147
+      },
+      "scope": "TCG qtest producer and offscreen SpiceDisplay buffer only; no guest OS/GPU/manager/scanout FPS",
+      "error_categories": {
+        "checksum mismatch": 25,
+        "torn duplicate tokens": 2
+      },
+      "sample_median_ms": 0.8795530011411756,
+      "producer_median_ms": 3.1390660005854443,
+      "files": {
+        "argv.json": "ef6c9bd89970088136898ad54eb34cc167974b3d8f62ba9e35f980c9769a7801",
+        "idle-rom.bin": "9712316cb30fd8aab7369e66d6395d4406866b6c7087b105e17dc08f24496e7b",
+        "qemu.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "display-events.jsonl": "7044a2eefa48fe337621acd83dc639f9acbb8141e883e650d1b63fcf135ecced",
+        "samples.jsonl": "06ee95cc90306efd0200c7bb7710fa942a37100bce6def00448df4a08dfe1331",
+        "producer.jsonl": "da1be7d4a3e352abc77418398fcf50abb4e4390b292d566aee0318721dcabd49",
+        "first.png": "c1683215bd11e5095e3f0561ee98cf89d26bde07cda4d61a05c7e4222bd3ae44",
+        "result.json": "6756a9d9d881febb00b6919bf47407d7164b56a1472a4855a587db02ddcd202c",
+        "cleanup.json": "bc06462eeafcfacbb31dd91478ecc915976fa2d27a5651b7a0c8cc4d0f65bbc0"
+      }
+    },
+    "original-default": {
+      "seconds": 15,
+      "unique": 500,
+      "unique_per_second": 33.333333333333336,
+      "valid": 1853,
+      "invalid_after_start": 8,
+      "last_sequence": 898,
+      "producer_count": 900,
+      "producer_per_second": 59.99972521726577,
+      "qemu_exit": 0,
+      "split": false,
+      "explicit_rate": null,
+      "scope": "TCG qtest producer and offscreen SpiceDisplay buffer only; no guest OS/GPU/manager/scanout FPS",
+      "error_categories": {
+        "checksum mismatch": 8
+      },
+      "sample_median_ms": 0.8993330047815107,
+      "producer_median_ms": 3.195006000169087,
+      "files": {
+        "argv.json": "143cd6980ead0b71d088d35c2880627f415475d47b629551bfae4c0fb224f73c",
+        "idle-rom.bin": "9712316cb30fd8aab7369e66d6395d4406866b6c7087b105e17dc08f24496e7b",
+        "qemu.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "samples.jsonl": "85f1f01559a80e0d9f34a8b1c44902713679939e65453e59f826b7a379d713ab",
+        "producer.jsonl": "b0eac8bbf7aed9ec94c5442cb2ee22533720ffd1f18bb4866206592a8c863ea7",
+        "first.png": "c1683215bd11e5095e3f0561ee98cf89d26bde07cda4d61a05c7e4222bd3ae44",
+        "result.json": "469b17c47222f6f294df2e74c228ff1c34078a129d297fde9def5d3b1525f18f",
+        "cleanup.json": "3d3c3f4b8dfec9a2e061f7c10992a28ecdd94bf51bb044c61ddedfb03baa8b59"
+      }
+    },
+    "original-explicit60": {
+      "seconds": 15,
+      "unique": 501,
+      "unique_per_second": 33.4,
+      "valid": 1854,
+      "invalid_after_start": 6,
+      "last_sequence": 899,
+      "producer_count": 900,
+      "producer_per_second": 60.000531788932825,
+      "qemu_exit": 0,
+      "split": false,
+      "explicit_rate": 60,
+      "scope": "TCG qtest producer and offscreen SpiceDisplay buffer only; no guest OS/GPU/manager/scanout FPS",
+      "error_categories": {
+        "checksum mismatch": 6
+      },
+      "sample_median_ms": 0.9194029989885166,
+      "producer_median_ms": 3.094430998316966,
+      "files": {
+        "argv.json": "c5fee685d6288cef38dd3b0c04f24b51a8ccd9fb922debec7266c007e9beab2d",
+        "idle-rom.bin": "9712316cb30fd8aab7369e66d6395d4406866b6c7087b105e17dc08f24496e7b",
+        "qemu.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "samples.jsonl": "2a132c091a6aa8f1141569db643f0b6178a17a5f2d211a7f570b2e2cbd67ecec",
+        "producer.jsonl": "19a989153f4595e1984a9877ffb9ecfaa6a859168c68c8c99b87af31b4ab267d",
+        "first.png": "c1683215bd11e5095e3f0561ee98cf89d26bde07cda4d61a05c7e4222bd3ae44",
+        "result.json": "661d9c93cac84348305b29fd088293697a3d94cadd6e1ecd1389023a8155c7e6",
+        "cleanup.json": "eb8d893a882279bfafba90047eccb72481e72deb2c0b775a9fed92862d936d2c"
+      }
+    },
+    "patched-default": {
+      "seconds": 15,
+      "unique": 500,
+      "unique_per_second": 33.333333333333336,
+      "valid": 1855,
+      "invalid_after_start": 6,
+      "last_sequence": 898,
+      "producer_count": 900,
+      "producer_per_second": 60.00071934923214,
+      "qemu_exit": 0,
+      "split": false,
+      "explicit_rate": null,
+      "scope": "TCG qtest producer and offscreen SpiceDisplay buffer only; no guest OS/GPU/manager/scanout FPS",
+      "error_categories": {
+        "checksum mismatch": 6
+      },
+      "sample_median_ms": 0.8906330040190369,
+      "producer_median_ms": 3.0646059967693873,
+      "files": {
+        "argv.json": "9e94cd11f32c28d49929765d28049d195148840b2f9509a9bec644b2fbd703aa",
+        "idle-rom.bin": "9712316cb30fd8aab7369e66d6395d4406866b6c7087b105e17dc08f24496e7b",
+        "qemu.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "samples.jsonl": "23c54f280702b7e253fcf409fdac20a220c2c56ff055a64fc81e19051db62c78",
+        "producer.jsonl": "7138da267c5b631056aa8ab2cddbe57fa6b5e54b9302328289907dd34279da2c",
+        "first.png": "c1683215bd11e5095e3f0561ee98cf89d26bde07cda4d61a05c7e4222bd3ae44",
+        "result.json": "9b9242d59ee98adcb041aa1eff5254c42261f3731031ee048cf50e8110f31848",
+        "cleanup.json": "04516f89ce372dad29aa8e8aea1b07928504cf7f610e5a71db458ff004f55b61"
+      }
+    },
+    "patched-explicit60": {
+      "seconds": 15,
+      "unique": 898,
+      "unique_per_second": 59.86666666666667,
+      "valid": 1846,
+      "invalid_after_start": 15,
+      "last_sequence": 899,
+      "producer_count": 900,
+      "producer_per_second": 59.99942933666929,
+      "qemu_exit": 0,
+      "split": false,
+      "explicit_rate": 60,
+      "scope": "TCG qtest producer and offscreen SpiceDisplay buffer only; no guest OS/GPU/manager/scanout FPS",
+      "error_categories": {
+        "checksum mismatch": 14,
+        "torn duplicate tokens": 1
+      },
+      "sample_median_ms": 0.869053001224529,
+      "producer_median_ms": 3.1195359988487326,
+      "files": {
+        "argv.json": "7913c23072860cab50409ab474d183374e5aee037c09971c768d8c0f70eb8678",
+        "idle-rom.bin": "9712316cb30fd8aab7369e66d6395d4406866b6c7087b105e17dc08f24496e7b",
+        "qemu.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "samples.jsonl": "60d99934a625559d59ec1dc33cf4ff21cfab69f0deb00ef41e40fa0cdfa9334a",
+        "producer.jsonl": "503c27716547ff3016f1a0b5baec108ae4a7d3b3e1cd0208fc971100e541aa6c",
+        "first.png": "c1683215bd11e5095e3f0561ee98cf89d26bde07cda4d61a05c7e4222bd3ae44",
+        "result.json": "dc87bec671ab6deba3600074e3a8e8ae6fe742292d11edaacb9822176d675748",
+        "cleanup.json": "b142d39b76d20cdcce784c18f7253d47df0b3b231c201162a3bd3780f529f0bf"
+      }
+    },
+    "pilot4": {
+      "seconds": 3,
+      "unique": 101,
+      "unique_per_second": 33.666666666666664,
+      "valid": 372,
+      "invalid_after_start": 0,
+      "last_sequence": 179,
+      "producer_count": 180,
+      "producer_per_second": 60.00850885790252,
+      "qemu_exit": 0,
+      "split": false,
+      "explicit_rate": null,
+      "scope": "TCG qtest producer and offscreen SpiceDisplay buffer only; no guest OS/GPU/manager/scanout FPS",
+      "error_categories": {},
+      "sample_median_ms": 0.9106085053645074,
+      "producer_median_ms": 3.1858965012361296,
+      "files": {
+        "argv.json": "64e704274a345b29104398f8142c9bde43c009e2016560a1727d9163bdce7959",
+        "idle-rom.bin": "9712316cb30fd8aab7369e66d6395d4406866b6c7087b105e17dc08f24496e7b",
+        "qemu.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "samples.jsonl": "85f5e912e220aee290889669802d3bc9a0a4a68069d1507e0b4906954c5f91bc",
+        "producer.jsonl": "7452cc0fac10dc84e0b9c4c1970e6c6b0ad5fa3ec06b0dce160409e6361cb67a",
+        "first.png": "c1683215bd11e5095e3f0561ee98cf89d26bde07cda4d61a05c7e4222bd3ae44",
+        "result.json": "5e2753a92bcb77345593f1bafe7ce6e8b4c716f77c5af255deaf8f1648b608c8",
+        "cleanup.json": "bab0f3d293c384def16aff96409875673f1f75832f76894a85706ae61b97f9a4"
+      }
+    },
+    "split-original": {
+      "seconds": 5,
+      "unique": 17,
+      "unique_per_second": 3.4,
+      "valid": 62,
+      "invalid_after_start": 558,
+      "last_sequence": 185,
+      "producer_count": 191,
+      "producer_per_second": 38.24457159533509,
+      "qemu_exit": 0,
+      "split": true,
+      "explicit_rate": null,
+      "display_events": {
+        "mark": 1,
+        "invalidate": 1537
+      },
+      "scope": "TCG qtest producer and offscreen SpiceDisplay buffer only; no guest OS/GPU/manager/scanout FPS",
+      "error_categories": {
+        "torn duplicate tokens": 554,
+        "checksum mismatch": 4
+      },
+      "sample_median_ms": 0.9005285028251819,
+      "producer_median_ms": 26.137291999475565,
+      "files": {
+        "argv.json": "5d79a29ff92417d37966e887b1583ad2b8d5a99f13916680e84793d4729be8d5",
+        "idle-rom.bin": "9712316cb30fd8aab7369e66d6395d4406866b6c7087b105e17dc08f24496e7b",
+        "qemu.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "display-events.jsonl": "dbdb179b96c7631d192e1ac05cb655304558c80aec79de84674cd3444c365985",
+        "samples.jsonl": "67408d7a45b9ba58deca4a649efd9fb51b38ecb538f71c7616a2a0588def147e",
+        "producer.jsonl": "88a3db28c7fa21243c9288f410d45a7a990f884cfe984d4cb4262b693fd73f67",
+        "first.png": "c1683215bd11e5095e3f0561ee98cf89d26bde07cda4d61a05c7e4222bd3ae44",
+        "result.json": "a6fac68527d55175cadedb82f4fb85a687a1c0e500f2a6ef38912fe2915aaec0",
+        "cleanup.json": "23d3a57ad63e339f32eda4a5b397cb2f95097c75d02047a806cf08dac72252e3"
+      }
+    },
+    "split-patched60": {
+      "seconds": 5,
+      "unique": 32,
+      "unique_per_second": 6.4,
+      "valid": 62,
+      "invalid_after_start": 558,
+      "last_sequence": 190,
+      "producer_count": 191,
+      "producer_per_second": 38.24640560432853,
+      "qemu_exit": 0,
+      "split": true,
+      "explicit_rate": 60,
+      "display_events": {
+        "mark": 1,
+        "invalidate": 1725
+      },
+      "scope": "TCG qtest producer and offscreen SpiceDisplay buffer only; no guest OS/GPU/manager/scanout FPS",
+      "error_categories": {
+        "torn duplicate tokens": 556,
+        "checksum mismatch": 2
+      },
+      "sample_median_ms": 0.9100134993786924,
+      "producer_median_ms": 26.083551994815934,
+      "files": {
+        "argv.json": "7db3dedf63bc7cde24a38b6dd7674d227ffeb3eb87c495e2f8cb700f522b5963",
+        "idle-rom.bin": "9712316cb30fd8aab7369e66d6395d4406866b6c7087b105e17dc08f24496e7b",
+        "qemu.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "display-events.jsonl": "363572fc2109adc8a43b75bc7cf5c05b4bd2229c7b5cd48adcbe5dcfd520633e",
+        "samples.jsonl": "4202fec405aca826bf1282b2b8a0283fd96b4ae55e721c05adecfd8afcc92775",
+        "producer.jsonl": "fa94f2399db3c9d8343b907a26e1e617e6f493730f58029625e60b120b2b733a",
+        "first.png": "c1683215bd11e5095e3f0561ee98cf89d26bde07cda4d61a05c7e4222bd3ae44",
+        "result.json": "56acbcf958a5a10aba8cf2aecb41a0a4ca717176befe3ec4c7ae074a492d9b4e",
+        "cleanup.json": "5b3ea7ce96fd30940897ec7049a72563ddae477593878688a6119f2fe83e3260"
+      }
+    }
+  },
+  "provenance": {
+    "/home/bogdan/macos-vm/run/c344-spice-refresh/qemu-original": "9f43e4cc6de91befb915d7c370e87a3303e4217bbbea249926e9d221c8f52cc5",
+    "/home/bogdan/macos-vm/run/c344-spice-refresh/qemu-patched": "1a20d747865436534378d065d199fb0337dfa1225d4852cac2588b788972d451",
+    "/home/bogdan/macos-vm/run/research/qemu-smc-20260916/qemu-10.1.2.tar.xz": "9d75f331c1a5cb9b6eb8fd9f64f563ec2eab346c822cb97f8b35cd82d3f11479",
+    "/home/bogdan/macos-vm/run/c344-spice-refresh/build-original/configure.log": "64e0251264e303261e2e77a6bd07f05f418815424cfec76ca91bb95372c3cfd2",
+    "/home/bogdan/macos-vm/run/c344-spice-refresh/build-original/build.log": "d05baee91b3f85db29971e11562c13f9dd7958d265d58469e8595e8777b946a7",
+    "/home/bogdan/macos-vm/run/c344-spice-refresh/build-patched.log": "218b84e669b6aef9d972d35758a12b63e55b5a4f920fdc1d5d0571b96b1c6869",
+    "/home/bogdan/macos-vm/run/c344-spice-refresh/host-tests.log": "f2f945d7b6b68436e1de4c3e414bf0ee2c5227004c2bda2923b86c2f7b37dcaa",
+    "/home/bogdan/macos-vm/run/c344-spice-refresh/negative-option.json": "db1b67d3593b4012627666f33b5b5741d665ba23310d221693b7c96849c35433"
+  },
+  "negative_option": [
+    {
+      "binary": "qemu-original",
+      "exit": 1,
+      "stderr": "qemu-original: max refresh rate/fps is invalid\n"
+    },
+    {
+      "binary": "qemu-patched",
+      "exit": 1,
+      "stderr": "qemu-patched: max refresh rate/fps is invalid\n"
+    }
+  ],
+  "cleanup": {
+    "pilot": {
+      "pid": 588037,
+      "exit": 0,
+      "stopped": true
+    },
+    "pilot2": {
+      "pid": 588566,
+      "exit": 0,
+      "stopped": true
+    },
+    "pilot3": {
+      "pid": 590431,
+      "exit": 0,
+      "stopped": true
+    },
+    "pilot4": {
+      "pid": 590924,
+      "exit": 0,
+      "stopped": true
+    },
+    "original-default": {
+      "pid": 591047,
+      "exit": 0,
+      "stopped": true
+    },
+    "original-explicit60": {
+      "pid": 591154,
+      "exit": 0,
+      "stopped": true
+    },
+    "patched-default": {
+      "pid": 591242,
+      "exit": 0,
+      "stopped": true
+    },
+    "patched-explicit60": {
+      "pid": 591382,
+      "exit": 0,
+      "stopped": true
+    },
+    "mark-patched60": {
+      "pid": 591819,
+      "exit": 0,
+      "stopped": true
+    },
+    "mark-patched60-v2": {
+      "pid": 592006,
+      "exit": 0,
+      "stopped": true
+    },
+    "split-original": {
+      "pid": 592050,
+      "exit": 0,
+      "stopped": true
+    },
+    "split-patched60": {
+      "pid": 592135,
+      "exit": 0,
+      "stopped": true
+    },
+    "final-original-default": {
+      "pid": 592277,
+      "exit": 0,
+      "stopped": true
+    },
+    "final-original-explicit60": {
+      "pid": 592809,
+      "exit": 0,
+      "stopped": true
+    },
+    "final-patched-default": {
+      "pid": 594300,
+      "exit": 0,
+      "stopped": true
+    },
+    "final-patched-explicit60": {
+      "pid": 594746,
+      "exit": 0,
+      "stopped": true
+    },
+    "off-original-default": {
+      "pid": 595321,
+      "exit": 0,
+      "stopped": true
+    },
+    "off-original-explicit60": {
+      "pid": 595411,
+      "exit": 0,
+      "stopped": true
+    },
+    "off-patched-default": {
+      "pid": 595619,
+      "exit": 0,
+      "stopped": true
+    },
+    "off-patched-explicit60": {
+      "pid": 595744,
+      "exit": 0,
+      "stopped": true
+    }
+  }
+}
