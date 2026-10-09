@@ -1,6 +1,6 @@
 # Candidate 383: native SPICE agent transport and bounded existing-mode resizing
 
-Final idempotent-agent run passes; VM lifecycle receipts remain pending. Candidate384
+Final idempotent-agent run and scoped VM lifecycle pass. Candidate384
 contains the offline diagnostic helpers exercised inside the root-owned383 VM;
 this is not a separate384 hardware launch or an installed persistent resize agent.
 
@@ -131,9 +131,18 @@ Scope is USB/QEMU/Pulse sample delivery, not endpoint audibility or physical HDM
 
 ## Remaining boundaries
 
-Final idempotent-agent result and post-agent holder scan pass. Ordinary desktop
-close and VM terminal/capture/recovery receipts remain pending. No permanent installer,
+Final idempotent-agent result and post-agent holder scan pass. The root-owned
+harness shutdown follows a guest request, and the private controller terminal
+records guest-shutdown/process_exited=true. Docker history records die exit0,
+without kill/stop actions. Both capture receipts are natural-container-exit,
+deferred approximately0.432seconds with shutdown_event_wait=true and
+completed_original_zombie=false. Quiesce18 terminal-prefix capture remains a
+specific capture-tolerance boundary, not a perfect-log claim. Recovery is recovered
+and authorizes_launch=true. The evidence manifest retains actual artifact hashes;
+these receipts qualify this shutdown, not arbitrary crash/restart behavior. No permanent installer,
 login-agent integration, arbitrary resolution creation, multi-monitor placement,
 stationary-pointer resize or new input/60Hz qualification is claimed. Physical330
 HDMI evidence is separate. Hosted CI for dev447131e is green; that does not qualify
 these later candidate384 edits or this run's broader desktop acceptance.
+
+[Retained artifact digest manifest](console-vdagent-native-evidence-20261009.json).
