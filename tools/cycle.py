@@ -156,8 +156,9 @@ def preflight(args, pins: dict, worktree: Path, vm: Path) -> dict:
 
     suffix = f"-attempt-{args.attempt}" if args.attempt else ""
     identities = vm / "run" / f"candidate-{args.candidate}{suffix}-build-identities.json"
-    if not identities.is_file():
-        identities = vm / "run" / f"candidate-{args.candidate}-build-identities.json"
+    if args.attempt and not identities.is_file():
+        raise CycleError(f"attempt build identities not prepared: {identities}; "
+                         "prepare the isolated attempt copy before starting a cycle")
     if not identities.is_file():
         raise CycleError(f"build identities not found: {identities}")
     facts["identities"] = str(identities)

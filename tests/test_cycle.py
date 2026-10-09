@@ -151,6 +151,10 @@ class PreflightGateTest(unittest.TestCase):
             cycle.preflight(make_args(), self.pins, self.worktree, self.vm)
         self.assertIn("identities", str(caught.exception))
 
+    def test_missing_attempt_identity_cannot_fall_back_to_base(self):
+        with self.assertRaisesRegex(cycle.CycleError, "attempt build identities not prepared"):
+            cycle.preflight(make_args(attempt="missing"), self.pins, self.worktree, self.vm)
+
     def test_attempt_namespace_identities_are_preferred(self):
         scoped = self.vm / "run" / "candidate-231-attempt-retry1-build-identities.json"
         scoped.write_text('{"scoped": true}', encoding="utf-8")
