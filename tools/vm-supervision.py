@@ -193,7 +193,8 @@ def capture_exit(vm,cid,started_at,deadline,run_id,admission_digest,channel=None
     full_cid(cid)
     began=time.monotonic();until=began+2
     stage='container-inspect'
-    result=dict(cid=cid,started_at=started_at,run_id=run_id,deferred=False)
+    result=dict(cid=cid,started_at=started_at,run_id=run_id,deferred=False,
+                budget_origin='legacy-hook-completion-only')
     def running():
         remaining=min(.5,until-time.monotonic(),deadline-time.time())
         if remaining<=0:raise RuntimeError('capture exit budget expired')
@@ -204,29 +205,45 @@ def capture_exit(vm,cid,started_at,deadline,run_id,admission_digest,channel=None
         return info['Running']
     eof=None
     try:
-        if channel is not None:
-            stage='clean-eof'
-            if channel not in ('console','critical'):raise ValueError('invalid EOF channel')
-            path=Path(vm)/'run'/f'capture-eof-{cid}-{channel}.json'
-            fd=os.open(path,os.O_RDONLY|os.O_NONBLOCK|os.O_NOFOLLOW)
-            try:
-                metadata=os.fstat(fd)
-                if not stat.S_ISREG(metadata.st_mode) or metadata.st_size>4096:raise ValueError('invalid EOF file')
-                payload=os.read(fd,4097)
-                if len(payload)>4096:raise ValueError('oversized EOF file')
-                eof=json.loads(payload)
-            finally:os.close(fd)
-            expected=dict(schema=1,cid=cid,started_at=started_at,run_id=run_id,
-                          admission_sha256=admission_digest,channel=channel)
-            if type(eof.get('schema')) is not int or any(eof.get(k)!=v for k,v in expected.items()):raise ValueError('EOF identity mismatch')
-            for field in ('eof_monotonic','eof_epoch','published_monotonic'):
-                if type(eof.get(field)) not in (int,float) or not math.isfinite(eof[field]):
-                    raise ValueError('invalid EOF timestamp')
-            if not (0<eof['eof_monotonic']<=eof['published_monotonic']<=began<eof['eof_monotonic']+2):
-                raise ValueError('stale or future EOF')
-            if not 0<=time.time()-eof['eof_epoch']<2:raise ValueError('invalid EOF epoch')
-            until=eof['eof_monotonic']+2
-            result['eof_monotonic']=eof['eof_monotonic'];result['channel']=channel
+        try:
+            if channel is not None:
+                stage='clean-eof'
+                if channel not in ('console','critical'):raise ValueError('invalid EOF channel')
+                path=Path(vm)/'run'/f'capture-eof-{cid}-{channel}.json'
+                reset_path=Path(vm)/'run'/f'capture-reset-{cid}-{channel}.json'
+                if os.path.lexists(path) and os.path.lexists(reset_path):raise ValueError('conflicting transport observations')
+                is_reset=not os.path.lexists(path) and os.path.lexists(reset_path)
+                if is_reset:path=reset_path
+                fd=os.open(path,os.O_RDONLY|os.O_NONBLOCK|os.O_NOFOLLOW)
+                try:
+                    metadata=os.fstat(fd)
+                    if not stat.S_ISREG(metadata.st_mode) or metadata.st_size>4096:raise ValueError('invalid EOF file')
+                    payload=os.read(fd,4097)
+                    if len(payload)>4096:raise ValueError('oversized EOF file')
+                    eof=json.loads(payload)
+                finally:os.close(fd)
+                if is_reset:
+                    if (eof.get('kind')!='recv-reset' or eof.get('operation')!='recv' or
+                        type(eof.get('errno')) is not int or eof['errno']!=104):raise ValueError('invalid reset observation')
+                    eof['eof_monotonic']=eof.get('reset_monotonic');eof['eof_epoch']=eof.get('reset_epoch')
+                elif eof.get('kind','clean-eof')!='clean-eof':raise ValueError('invalid clean EOF kind')
+                expected=dict(schema=1,cid=cid,started_at=started_at,run_id=run_id,
+                              admission_sha256=admission_digest,channel=channel)
+                if type(eof.get('schema')) is not int or any(eof.get(k)!=v for k,v in expected.items()):raise ValueError('EOF identity mismatch')
+                for field in ('eof_monotonic','eof_epoch','published_monotonic'):
+                    if type(eof.get(field)) not in (int,float) or not math.isfinite(eof[field]):
+                        raise ValueError('invalid EOF timestamp')
+                if not (0<eof['eof_monotonic']<=eof['published_monotonic']<=began<eof['eof_monotonic']+2):
+                    raise ValueError('stale or future EOF')
+                if not 0<=time.time()-eof['eof_epoch']<2:raise ValueError('invalid EOF epoch')
+                until=eof['eof_monotonic']+2
+                result['transport_end_monotonic']=eof['eof_monotonic'];result['channel']=channel
+                result['transport_end_kind']='recv-reset' if is_reset else 'clean-eof'
+                result['budget_origin']='transport-observation'
+        except Exception as marker_error:
+            eof=None;until=began+2
+            result['observation_error']=type(marker_error).__name__
+            result['budget_origin']='legacy-hook-completion-only'
         if not running():result['outcome']='already-stopped';return result
         budget=min(1,until-time.monotonic(),deadline-time.time())
         if budget<=0:raise RuntimeError('capture exit budget expired')
@@ -268,7 +285,7 @@ def capture_exit(vm,cid,started_at,deadline,run_id,admission_digest,channel=None
                 result['proof_refusal']=safe
             raise RuntimeError('capture exit proof refused')
         waiting=(eof is not None and observed.get('shutdown_wait') is True and
-                 observed.get('exited') is False and observed.get('eof_monotonic')==eof['eof_monotonic'] and
+                 observed.get('exited') is False and observed.get('transport_end_monotonic')==eof['eof_monotonic'] and
                  type(observed.get('shutdown_observed_monotonic')) in (int,float) and
                  math.isfinite(observed['shutdown_observed_monotonic']) and
                  0<=eof['eof_monotonic']-observed['shutdown_observed_monotonic']<=2)
@@ -310,7 +327,7 @@ def capture_exit(vm,cid,started_at,deadline,run_id,admission_digest,channel=None
                 waiting=False
                 result['completed_original_zombie']=next_observed.get('completed_zombie') is True
             elif not (next_observed.get('shutdown_wait') is True and
-                      next_observed.get('eof_monotonic')==eof['eof_monotonic'] and
+                      next_observed.get('transport_end_monotonic')==eof['eof_monotonic'] and
                       next_observed.get('shutdown_observed_monotonic')==observed['shutdown_observed_monotonic']):
                 raise RuntimeError('shutdown wait no longer eligible')
         if waiting:
@@ -682,9 +699,11 @@ def arm(vm, cid, maximum, critical_enabled=False):
         if os.environ.get('VM_MANAGER')=='libvirt':
             eof_path=vm/'run'/f'capture-eof-{cid}-{channel}.json'
             eof_path.unlink(missing_ok=True)
+            reset_path=vm/'run'/f'capture-reset-{cid}-{channel}.json'
+            reset_path.unlink(missing_ok=True)
             channel_stop=stop_command+' --channel '+channel
             if not critical_enabled:explicit.append(f'--setenv=VM_SERIAL_CHANNEL={channel}')
-            explicit += [f'--setenv=VM_SERIAL_EOF={eof_path}',
+            explicit += [f'--setenv=VM_SERIAL_EOF={eof_path}',f'--setenv=VM_SERIAL_RESET={reset_path}',
                          f'--setenv=VM_SERIAL_STARTED_AT={started_at}',
                          f'--setenv=VM_SERIAL_RUN_ID={run_id}',
                          f'--setenv=VM_SERIAL_ADMISSION_SHA256={admission_digest}']

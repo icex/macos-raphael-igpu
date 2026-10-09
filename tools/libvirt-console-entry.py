@@ -182,7 +182,10 @@ def completed_original_zombie(identity, diagnostic=None):
 
 
 def guest_shutdown_before_eof(directory, identity, scope, eof_monotonic):
-    """Observation eligibility only; never a process-completion proof."""
+    """Eligibility before a recv transport boundary; never completion proof.
+
+    The historical parameter name also covers separately classified recv reset.
+    """
     handoff.require(type(eof_monotonic) in (int, float) and math.isfinite(eof_monotonic)
                     and 0 < eof_monotonic <= time.monotonic() < eof_monotonic + 2,
                     'invalid or expired EOF boundary')
@@ -302,7 +305,7 @@ def inspect_exited(eof_monotonic=None):
         with exit_check('shutdown-event'):
             shutdown_observed=guest_shutdown_before_eof(directory,identity,scope,eof_monotonic)
     return dict(exited=not shutdown_wait,shutdown_wait=shutdown_wait,
-                shutdown_observed_monotonic=shutdown_observed,eof_monotonic=eof_monotonic,
+                shutdown_observed_monotonic=shutdown_observed,transport_end_monotonic=eof_monotonic,
                 completed_zombie=completed_zombie,run_id=admission['run_id'],admission_sha256=expected,
                 identity=identity,scope=scope,plan_sha256=paused['plan_sha256'],
                 cid=permit['cid'],started_at=permit['started_at'],

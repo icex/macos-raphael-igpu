@@ -56,13 +56,21 @@ class ShutdownWaitHostTests(unittest.TestCase):
         self.eof=dict(schema=1,cid=CID,started_at=START,run_id=RUN,admission_sha256=ADMIT,
                       channel='console',eof_monotonic=9.7,published_monotonic=9.9,eof_epoch=109.7)
         self.proof['deadline_epoch']=120
-        self.waiting=dict(self.proof,exited=False,shutdown_wait=True,eof_monotonic=9.7,shutdown_observed_monotonic=9.6)
+        self.waiting=dict(self.proof,exited=False,shutdown_wait=True,transport_end_monotonic=9.7,shutdown_observed_monotonic=9.6)
     def invoke_channel(self, write=True):
         if write:(self.vm/'run'/f'capture-eof-{CID}-console.json').write_text(json.dumps(self.eof))
         def sleep(seconds):self.clock+=seconds
         with patch.object(sup,'run',side_effect=self.command),patch.object(sup,'binary',side_effect=lambda x:x),patch.object(sup,'stop_exact') as stop,patch.object(sup.time,'monotonic',side_effect=lambda:self.clock),patch.object(sup.time,'time',side_effect=lambda:100+self.clock),patch.object(sup.time,'sleep',side_effect=sleep):
             result=sup.capture_exit(self.vm,CID,START,120,RUN,ADMIT,'console')
         return result,stop
+    def test_missing_marker_preserves_independent_completed_process(self):
+        result,stop=self.invoke_channel(False);stop.assert_not_called()
+        self.assertEqual(result['outcome'],'natural-container-exit')
+        self.assertEqual(result['budget_origin'],'legacy-hook-completion-only')
+    def test_malformed_marker_preserves_independent_completed_process(self):
+        (self.vm/'run'/f'capture-eof-{CID}-console.json').write_text('{')
+        result,stop=self.invoke_channel(False);stop.assert_not_called()
+        self.assertEqual(result['budget_origin'],'legacy-hook-completion-only')
     def test_wait_then_completion_retains_original_eof_budget(self):
         complete=self.proof;self.proof=self.waiting
         original=self.command
@@ -77,16 +85,19 @@ class ShutdownWaitHostTests(unittest.TestCase):
         result,stop=self.invoke_channel();stop.assert_called_once_with(CID)
         self.assertEqual(result['outcome'],'shutdown-wait-expired');self.assertLessEqual(self.clock,11.70001)
     def test_missing_eof_is_immediate(self):
+        self.proof={'exited':False}
         result,stop=self.invoke_channel(False);stop.assert_called_once_with(CID)
-        self.assertFalse(result['deferred']);self.assertEqual(len(self.calls),0)
+        self.assertFalse(result['deferred']);self.assertEqual(len(self.calls),2)
     def test_malformed_oversized_and_symlink_eof_refuse(self):
+        self.proof={'exited':False};self.live=[True]
         marker=self.vm/'run'/f'capture-eof-{CID}-console.json'
         for data in ('{','x'*4097,'[]'):
             marker.write_text(data);self.calls=[]
             result,stop=self.invoke_channel(False);stop.assert_called_once_with(CID);self.assertFalse(result['deferred'])
         marker.unlink();target=self.vm/'valid.json';target.write_text(json.dumps(self.eof));marker.symlink_to(target)
         result,stop=self.invoke_channel(False);stop.assert_called_once_with(CID);self.assertFalse(result['deferred'])
-    def test_invalid_eof_refuses_before_docker(self):
+    def test_invalid_eof_cannot_authorize_worker_wait(self):
+        self.proof={'exited':False};self.live=[True]
         for field,bad in [('cid','x'),('channel','critical'),('run_id','x'),('started_at','x'),
                           ('admission_sha256','x'),('eof_monotonic',float('nan')),
                           ('published_monotonic',float('inf')),('eof_monotonic',7),
@@ -94,7 +105,7 @@ class ShutdownWaitHostTests(unittest.TestCase):
             with self.subTest(field=field,bad=bad):
                 old=self.eof[field];self.eof[field]=bad;self.calls=[]
                 result,stop=self.invoke_channel();stop.assert_called_once_with(CID)
-                self.assertEqual(self.calls,[]);self.eof[field]=old
+                self.assertEqual(len(self.calls),2);self.eof[field]=old
     def test_event_after_eof_cannot_authorize_wait(self):
         self.proof=dict(self.waiting,shutdown_observed_monotonic=9.8)
         result,stop=self.invoke_channel();stop.assert_called_once_with(CID);self.assertFalse(result['deferred'])

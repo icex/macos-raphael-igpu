@@ -11,8 +11,9 @@ p = os.environ.get("VM_SERIAL_SOCKET", os.environ.get(
 output = os.environ.get("VM_SERIAL_OUTPUT", os.path.join(VM, "run", "serial.log"))
 cid = os.environ.get("VM_SERIAL_CID")
 eof_output = os.environ.get("VM_SERIAL_EOF")
+reset_output = os.environ.get("VM_SERIAL_RESET")
 eof_identity = None
-if eof_output:
+if eof_output or reset_output:
     eof_identity = dict(schema=1, cid=cid, channel=channel,
         started_at=os.environ.get("VM_SERIAL_STARTED_AT"),
         run_id=os.environ.get("VM_SERIAL_RUN_ID"),
@@ -74,6 +75,8 @@ with open(output, "ab", buffering=0) as f:
     sync_thread.start()
     capture_error = None
     clean_eof = None
+    recv_reset = None
+    operation = None
     last_control_sent = None
     def send_quiesce_if_requested():
         if control is None or not os.path.exists(control):
@@ -116,12 +119,15 @@ with open(output, "ab", buffering=0) as f:
                 if sync["error"] is not None:
                     break
             try:
+                operation = "send-control"
                 last_control_sent = send_quiesce_if_requested()
+                operation = "recv"
                 d = s.recv(65536)
                 if not d:
                     if eof_output:
                         clean_eof = dict(eof_monotonic=time.monotonic(), eof_epoch=time.time())
                     break
+                operation = "write"
                 view = memoryview(d)
                 while view:
                     written = f.write(view)
@@ -134,6 +140,10 @@ with open(output, "ab", buffering=0) as f:
             except socket.timeout:
                 continue
             except Exception as error:
+                if (reset_output and operation == "recv" and
+                    isinstance(error, ConnectionResetError) and error.errno == 104):
+                    recv_reset = dict(reset_monotonic=time.monotonic(), reset_epoch=time.time(),
+                                      kind="recv-reset", operation="recv", errno=104)
                 capture_error = error
                 break
     finally:
@@ -145,27 +155,32 @@ with open(output, "ab", buffering=0) as f:
         sys.exit("serial log fsync did not finish within 10 seconds")
     if sync["error"] is not None:
         sys.exit("serial log fsync failed")
-    if capture_error is not None:
-        sys.exit("serial capture failed: " + type(capture_error).__name__ +
-                 " errno=" + str(getattr(capture_error, "errno", None)))
 
-# Publish only after a real recv EOF and successful final log synchronization.
-# Signal/error paths never create a usable clean-EOF observation.
-if eof_output and clean_eof is not None:
-    value = dict(eof_identity, **clean_eof, published_monotonic=time.monotonic())
-    temporary = eof_output + "." + str(os.getpid()) + ".tmp"
+# Publish distinct observations only after successful final log synchronization.
+# A recv reset stays a failure and never produces the clean-EOF marker.
+if recv_reset is not None:
+    destination, observation = reset_output, recv_reset
+else:
+    destination, observation = eof_output, clean_eof
+if destination and observation is not None:
+    value = dict(eof_identity, **observation, published_monotonic=time.monotonic())
+    temporary = destination + "." + str(os.getpid()) + ".tmp"
     with open(temporary, "x") as marker:
         json.dump(value, marker); marker.flush(); os.fsync(marker.fileno())
     published = False
     try:
-        os.link(temporary, eof_output) # Never overwrite an unexpected prior observation.
+        os.link(temporary, destination) # Never overwrite an unexpected prior observation.
         published = True
         os.unlink(temporary)
-        directory_fd = os.open(os.path.dirname(eof_output) or ".", os.O_RDONLY | os.O_DIRECTORY)
+        directory_fd = os.open(os.path.dirname(destination) or ".", os.O_RDONLY | os.O_DIRECTORY)
         try: os.fsync(directory_fd)
         finally: os.close(directory_fd)
     except BaseException:
         if published:
-            try: os.unlink(eof_output)
+            try: os.unlink(destination)
             except FileNotFoundError: pass
         raise
+
+if capture_error is not None:
+    sys.exit("serial capture failed: " + type(capture_error).__name__ +
+                 " errno=" + str(getattr(capture_error, "errno", None)))
