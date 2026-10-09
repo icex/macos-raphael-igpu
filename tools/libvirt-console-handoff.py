@@ -53,7 +53,7 @@ def validate_full_refresh(value):
 
 
 def validate_snapshot(value):
-    require(type(value) is str and value in ("off", "on", "restart", "restart-timing"),
+    require(type(value) is str and value in ("off", "on", "restart", "restart-timing", "restart-timing-pool"),
             "invalid admitted console snapshot")
     return value
 

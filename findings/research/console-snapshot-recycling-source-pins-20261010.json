@@ -8,7 +8,9 @@
     "util/memfd.c": "0e1e5d0f022727c39cebc651789601334e233b585fef490f84283fde72001c67",
     "ui/spice-display.c": "031c70bec287dac0001d598e2babfd7827b07f27c0fe6b019ed93d1daa5047d6",
     "ui/vnc.c": "8798a7637f09be23894d8e2aef123aaaf25ed02f3e04f98e6825cc60056edc56",
-    "ui/dbus-listener.c": "3b4086c6a02c71be5651c08b0c2cc92774cb3e5069a64dbcf22d5ed317b66404"
+    "ui/dbus-listener.c": "3b4086c6a02c71be5651c08b0c2cc92774cb3e5069a64dbcf22d5ed317b66404",
+    "include/ui/surface.h": "57715d0b4217b60cb33616f2489e615b6161bf916b7e47d774f17d58ba62b149",
+    "include/ui/qemu-pixman.h": "bc2adaa3315d50a23c47eef5b1986c5536d309cdb52934988020478ac563dcee"
   },
   "runtime_pixman_sha256": "97d04f1a534e26e26cf993a350b13ddc33fa4f9741444b08c27bc04582c70fd8",
   "limit": "Local host pixman differs from runtime; host disassembly is not claimed as runtime proof."

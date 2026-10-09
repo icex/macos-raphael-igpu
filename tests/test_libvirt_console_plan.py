@@ -48,8 +48,8 @@ class LibvirtConsolePlanTests(unittest.TestCase):
             with self.subTest(extra=extra),self.assertRaises(ValueError):plan.build_plan(bad,'1'*32)
 
     def test_snapshot_exact_property_and_profile(self):
-        for setting in ('on','restart','restart-timing'):
-            suffix=(',x-debug-snapshot-restart=on' if setting in ('restart','restart-timing') else '') + (',x-debug-snapshot-timing=on' if setting=='restart-timing' else '')
+        for setting in ('on','restart','restart-timing','restart-timing-pool'):
+            suffix=(',x-debug-snapshot-restart=on' if setting in ('restart','restart-timing','restart-timing-pool') else '') + (',x-debug-snapshot-timing=on' if setting in ('restart-timing','restart-timing-pool') else '') + (',x-debug-snapshot-pool=on' if setting=='restart-timing-pool' else '')
             argv=native_fixture();argv[argv.index(plan.SPICE)]+=",max-refresh-rate=60"
             idx=argv.index(plan.BOCHS)
             argv[idx]+=",x-debug-full-refresh=on,x-debug-snapshot=on"+suffix

@@ -22,13 +22,56 @@ Host suite: 1474 tests passed, 8 skipped, 56.685 seconds. Evidence:
 `findings/research/virtualbox-eight-cpu-qualified-native-20261010.md` and companion
 manifest. Prior status is archived as `status-before-candidate406-20261010.md`.
 
-## Parallel accelerated-console milestone and remaining work
+## Candidate 402: private snapshot pool tested and stopped
 
-Root completed candidate 402's native pool performance/regression cycle with
-verified natural shutdown and authorizing recovery; its exact report/status lives
-on candidate 402 commit 00721a2 pending reviewed integration. Smaller snapshot cost
-does not yet qualify full-field 4K at 60 Hz. Actual VBox accelerated transport,
-first-user console-only setup and sustained desktop qualification remain open.
-Both native runs are stopped; root owns any later launch. No new launch admission
-is granted by this status. Dev milestone integration is handled separately; main
-remains unchanged.
+Run `92b1f812226bb5f8594dbcbde467ef3d`, build
+`582b7a9276a54795ad3ff711d4130474`, source
+`c9a3a5d0d66e9dbd9e789df709068afc14bc6bea`, launch `5f39b75`.
+The opt-in private host pool lowers measured host snapshot copy from 399's
+6.834 ms to 1.948 ms and guest doorbell from 6.983 ms to 1.969 ms.
+Selected host windows contain 5677 reused successes, zero fallback/new blocks;
+three blocks occupy 96 MiB. Host and guest timing windows are independent.
+
+Actual-manager 4K mixed workload: 4402 unique tokens in 100.007 seconds, zero
+invalid/duplicate samples. Localized phases reach about 57 IDs/s; full-field
+phases remain about 25 IDs/s versus 399's 26.4. This single comparison does not
+qualify 4K at 60 Hz or a uniform throughput gain. The short final phase is excluded.
+Root viewed both motion and returned desktop screenshots.
+
+Native isolation/cleanup passes: all 481401 controlled-frame pixels match before
+and after stale mapping writes, retained unmap/remap succeeds, old calls/WC aliases
+and excess retained buffers refuse, and all cleanup returns succeed. Unchanged
+sealed app restart resumes ACKs; actual-manager odd resize reaches 1235×743.
+Input passes five targets, exact text, zero misses/geometry changes. Audio sample
+delivery passes separated 997/1498 Hz channels; independent route restoration
+passes. Endpoint audibility is not claimed.
+
+Shutdown is verified: private guest-shutdown/process-exited terminal, both capture
+hooks natural-container-exit with deferred event waits (~0.618 s), Docker die 0
+without kill events, and recovered/authorizes_launch=true. Original reconciliation
+retains the unavailable stopped-container-inspection note. CR2 snapshot 18 has
+330 records under terminal-prefix tolerance, two corrupt lines and incomplete
+snapshots 7/14; logs are not claimed perfect. The GPU cycle is stopped.
+
+Evidence: [native pool report](findings/research/console-snapshot-private-pool-native-20261010.md)
+and its hashed manifest. Prior status is archived under
+`findings/research/status-archives/status-before-candidate402-20261010.md`.
+
+## Remaining work and delivery
+
+Both native runs are stopped. Full-field 4K delivery remains about 25 decoded
+IDs/s despite lower snapshot copy cost; sustained 4K60 and whole-frame dynamic
+integrity remain unqualified. VirtualBox PerfPowerServices CPU use, sustained SMP
+stability, first-user console setup and actual accelerated VBox transport remain
+open. The 405/408 source audits are integrated; no VBox presentation adapter is
+implemented. Root owns later launches; this document grants no admission.
+
+Candidate407 integrates these milestones locally for review. The checked-in
+binary and unchanged canonical manifest are the exact tested candidate402 build
+582b7a9276a54795ad3ff711d4130474, executable SHA256
+7bebb5596f5aa31cf1cfff6c4e95b185b74b254ba62c9e01ac403317a19b1bd5.
+Published dev remains84159a9d33ab22e385e56f4861b0e6dae069cbf4 with hosted test/build
+passed (Actions37993406232), until root publishes and verifies the new exact
+commit. Main is unchanged. Integrated407 host suite: Ran 1476 tests in 56.442s  OK (skipped=8).
+Log: `run/candidate-407-host-tests.log`; native402/406 artifact manifests
+independently reverified (44 and 15 hashes).

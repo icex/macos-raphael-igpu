@@ -1048,8 +1048,8 @@ class ExperimentTests(unittest.TestCase):
             tool.launch_options({'launch_options':dict(historical,CONSOLE_SNAPSHOT='on')})
 
     def test_libvirt_snapshot_requires_exact_manifest_and_observed_device(self):
-        for setting in ('on','restart','restart-timing'):
-            suffix=(',x-debug-snapshot-restart=on' if setting in ('restart','restart-timing') else '') + (',x-debug-snapshot-timing=on' if setting=='restart-timing' else '')
+        for setting in ('on','restart','restart-timing','restart-timing-pool'):
+            suffix=(',x-debug-snapshot-restart=on' if setting in ('restart','restart-timing','restart-timing-pool') else '') + (',x-debug-snapshot-timing=on' if setting in ('restart-timing','restart-timing-pool') else '') + (',x-debug-snapshot-pool=on' if setting=='restart-timing-pool' else '')
             tool=self.module()
             options=dict(BOOTDISK_MODE='custom',NVRAM='stock',GENERIC_GRAPHICS='off',
                          GDB='on',AUDIO='usb',VM_CONSOLE='bochs-spice',VM_MANAGER='libvirt',CONSOLE_REFRESH='60',CONSOLE_FULL_REFRESH='on',CONSOLE_SNAPSHOT=setting)
@@ -1064,7 +1064,7 @@ class ExperimentTests(unittest.TestCase):
                           libvirt=dict(verified=True,run_id='a'*32,cid='c'*64,argv_sha256='d'*64))
             self.assertEqual(tool.validate_running(manifest,observed),[])
             exact_device=observed['graphics_args'][7]
-            if setting in ('restart','restart-timing'):
+            if setting in ('restart','restart-timing','restart-timing-pool'):
                 observed['graphics_args'][7]=exact_device.replace(',x-debug-snapshot-restart=on','')
                 self.assertIn('generic_graphics',tool.validate_running(manifest,observed))
                 observed['graphics_args'][7]=exact_device

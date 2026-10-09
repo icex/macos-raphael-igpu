@@ -1,35 +1,35 @@
 # Accelerated desktop in a VM manager console
 
-**October 10 update:** actual VirtualBox 7.2.18 boots macOS build 24G830 to a desktop
-with one vCPU; Terminal keyboard input and awake assertions pass. Eight vCPUs
-reached userspace but panicked on non-monotonic scheduler time. The comparison with one vCPU retains the same emulated TSC mode/frequency. This is **software display,
-not Raphael passthrough or Metal acceleration**. Shutdown hit a Terminal background job
-confirmation and deadline poweroff; GUI unlock delayed unregister, which later passed.
-[Actual VBox evidence](../findings/research/virtualbox-single-cpu-native-20261010.md).
+**October 10 update, candidate 402:** a bounded private host-buffer pool reduces
+measured 4K snapshot copy cost from 6.834 to 1.948 ms in the recorded comparison.
+Localized motion reaches about 57 decoded token IDs/s; full-field motion remains
+about 25 IDs/s and does not improve. The 100-second actual-manager observation has
+4402 unique IDs and zero invalid or duplicate samples. These are sampled pipeline
+updates, not GPU FPS, whole-frame integrity or sustained 4K60 qualification.
 
-Candidate 399 measures host snapshot copy/first-touch at 6.834 ms versus allocation
-0.02058 ms and pending free 0.09521 ms. Its 100-second 4K token observation has 4036 unique
-IDs and no invalid/duplicate samples; no optimization or 60 Hz gain is claimed.
-Natural completion/recovery pass. Its late wrong-window screenshot is excluded,
-so 399 does not add returned-desktop visual qualification.
-[Host timing evidence](../findings/research/console-host-snapshot-timing-native-20261010.md).
+Full-pixel stale-writer isolation, retained-map cleanup, owned presenter restart,
+odd-size resize, five-target/text input and stereo sample delivery/restoration
+pass. The sealed capture app is unchanged. Serial capture retains two corrupt lines and
+two incomplete snapshots: function passes, capture is imperfect. Independent natural
+shutdown and authorizing recovery pass.
+[402 native evidence](../findings/research/console-snapshot-private-pool-native-20261010.md).
 
-Current qualification (candidate395): installed immutable snapshot capture
-now survives helper restarts with the sealed capture app unchanged. Private staging
-isolates retired writers: before/after host screenshots match all481401 test pixels.
-Explicit retired-buffer unmap/remap, the four-buffer limit and capacity recovery
-pass; this fixes394's cleanup failure. Corrected fullscreen input passes five
-targets/exact text with the agent active; stereo delivery and independent restoration
-pass. Two earlier mispositioned/occluded fixture attempts remain recorded.
-Automatic odd-size resize and persistent
-1×/2× policy retain the earlier installed-helper qualification.
+**Actual VirtualBox, candidate 406:** the eight-vCPU macOS 24G830 software desktop
+passes keyboard-marker and awake checks with RealTSCOffset. After removing the
+owned awake job, the guest reaches natural S5/poweroff at about 264.4 seconds,
+before the 300-second deadline; unregister succeeds on its first attempt. Earlier
+forced shutdowns remain recorded. Initial interaction was slow, and PerfPowerServices still consumes roughly one
+CPU core. This bounded success does not qualify long-term stability, Raphael
+passthrough, Metal acceleration or an atomic VirtualBox presentation adapter.
+[406 evidence](../findings/research/virtualbox-eight-cpu-qualified-native-20261010.md) ·
+[Display-adapter audit](../findings/research/virtualbox-display-transport-adapter-20261010.md) ·
+[Stock fence limits](../findings/research/virtualbox-stock-publication-fences-20261010.md).
 
-Two100-second actual-manager observations contain5793 unique tokens at1440×900
-(57.92 IDs/s) and4041 at4K (40.40 IDs/s overall), with zero post-start token errors.
-4K localized motion is about50 IDs/s; full-field motion about26. Sustained4K60Hz
-and full-frame dynamic integrity remain open. These are sampled pipeline updates,
-not GPU FPS or scanout; no matched full4K ordinary-copy regression is claimed.
-[Native ownership and motion evidence](../findings/research/console-private-staging-cleanup-native-20261009.md).
+Earlier candidate 395 supplies the private-buffer ownership and restart baseline;
+candidate 399 supplies the fresh-backing timing comparison. Their original capture
+and lifecycle limitations remain in the linked reports.
+[395 baseline](../findings/research/console-private-staging-cleanup-native-20261009.md) ·
+[399 timing](../findings/research/console-host-snapshot-timing-native-20261010.md).
 
 Candidate392 retains next-guest-boot1×4K startup, input/audio evidence and a scoped
 stationary-pointer fix in an isolated spice-gtk client. System client libraries

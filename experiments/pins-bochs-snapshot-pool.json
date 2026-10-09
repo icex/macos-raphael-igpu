@@ -1,0 +1,16 @@
+{
+  "_comment": "Candidate402: exact399 QEMU plus bounded private snapshot backing pool; restart-timing-pool opt-in; epoch/ACK and migration refusal unchanged.",
+  "schema": 1,
+  "vm_dir": "/home/bogdan/macos-vm",
+  "gpu_bdf": "0000:7b:00.0",
+  "gpu_id": "0x73ff",
+  "gpu_rom": "run/gpu-patched.rom",
+  "inhibitor_container": "rgpu-inhibit",
+  "image_id": "sha256:6d91e1ff4192f9c0fe693a171a2a2bbdb7b9d2a96b184e17a38776a2119c2bfa",
+  "lilu": {
+    "bundle": "run/headless-lilu-verified-1df50f512b55/Lilu.kext",
+    "executable_sha256": "1df50f512b55b4f6ec873a18ff4b0db78b11b7fe9022ee195e50466e8573b7f2",
+    "info_sha256": "6714fee51444238c0540814729767485572441435bcf36a158571cf78317a669",
+    "build_manifest_sha256": "52918857d61ac640980c53fd597aac22e0fcb8cdd50de2a09e3dfe1eeeb54f76"
+  }
+}

@@ -11,7 +11,7 @@ import subprocess
 import time
 
 
-def run(qemu, out, bios, restart=False, timing=False):
+def run(qemu, out, bios, restart=False, timing=False, pool=False):
     out.mkdir(parents=True, exist_ok=False)
     spec = importlib.util.spec_from_file_location('console_smoke', Path(__file__).with_name('qemu-console-smoke.py'))
     smoke = importlib.util.module_from_spec(spec); spec.loader.exec_module(smoke)
@@ -19,7 +19,8 @@ def run(qemu, out, bios, restart=False, timing=False):
                '-m', '128M', '-vga', 'none', '-display', 'none',
                '-device', 'bochs-display,id=console,addr=02.0,vgamem=64M,x-debug-snapshot=on'+
                (',x-debug-snapshot-restart=on' if restart else '')+
-               (',x-debug-snapshot-timing=on' if timing else ''),
+               (',x-debug-snapshot-timing=on' if timing else '')+
+               (',x-debug-snapshot-pool=on' if pool else ''),
                '-qtest', f'unix:{out}/qt,server=on,wait=off',
                '-qmp', f'unix:{out}/qm,server=on,wait=off']
     if restart:
@@ -36,6 +37,13 @@ def run(qemu, out, bios, restart=False, timing=False):
             text=True, capture_output=True, timeout=10)
         (out/'missing-timing-prerequisite.txt').write_text(refused.stderr)
         assert refused.returncode != 0 and 'snapshot timing requires snapshot' in refused.stderr
+    if pool:
+        refused = subprocess.run([str(qemu), '-L', str(bios), '-machine', 'q35,accel=tcg',
+            '-nodefaults', '-S', '-m', '128M', '-vga', 'none', '-display', 'none',
+            '-device', 'bochs-display,x-debug-snapshot-pool=on'],
+            text=True, capture_output=True, timeout=10)
+        (out/'missing-pool-prerequisite.txt').write_text(refused.stderr)
+        assert refused.returncode != 0 and 'snapshot pool requires snapshot' in refused.stderr
     (out/'argv.json').write_text(json.dumps(command, indent=2)+'\n')
     with (out/'qemu.log').open('w') as log:
         process = subprocess.Popen(command, stdout=log, stderr=log)
@@ -173,6 +181,19 @@ def run(qemu, out, bios, restart=False, timing=False):
                 if migration.get('status') in ('failed','completed'):break
                 time.sleep(.02)
             assert migration.get('status')=='failed' and 'pre-save failed: bochs-display' in migration.get('error-desc','')
+            unrealized_with_front_and_pending = False
+            if pool and restart:
+                reg(0x30,3);reg(8,1)
+                assert reg(8)==1 and reg(0x34)==3
+                fill(0xd0000000,801*601*4,137);commit(1,801,601)
+                image('pooled-front-before-unrealize',801,601,137)
+                fill(0xd0000000,801*601*4,138);commit(2,801,601)
+                assert reg(0x2c)==2 and reg(0x20)==1
+                qmp('qom-set', {'path':'/machine/peripheral/console',
+                                'property':'realized','value':False})
+                assert qmp('qom-get', {'path':'/machine/peripheral/console',
+                                      'property':'realized'}) is False
+                unrealized_with_front_and_pending = True
             qmp('quit');process.wait(timeout=10)
             assert process.returncode==0
             timing_rows = [line for line in (out/'qemu.log').read_text().splitlines()
@@ -188,7 +209,25 @@ def run(qemu, out, bios, restart=False, timing=False):
                     assert int(fields['end_us'])-int(fields['start_us'])>=5000000
             else:
                 assert not timing_rows, 'default-off timing unexpectedly logged'
-            result=dict(passed=True, host_timing_enabled=timing, host_timing_rows=timing_rows,scope='serialized qtest staging ownership and immutable QEMU full pixels; no guest fences, SPICE delivery, or native qualification',
+            pool_rows = [line for line in (out/'qemu.log').read_text().splitlines()
+                         if line.startswith('bochs-snapshot-pool ')]
+            if pool and timing:
+                assert pool_rows, 'enabled pool timing emitted no bounded window'
+                for line in pool_rows:
+                    fields={k:int(v) for k,v in
+                            (token.split('=',1) for token in line.split()[1:])}
+                    assert fields['saturated']==0
+                    assert fields['attempts']==fields['success']+fields['fallback']
+                    assert fields['fallback']==sum(fields[k] for k in
+                        ('allocation_failed','capacity_failed','closed_failed','invalid_failed'))
+                    assert fields['success']>0 and fields['reused']>0
+                    assert fields['created']<=3 and fields['slots']<=3
+                    assert fields['bytes']<=96*1024*1024
+            else:
+                assert not pool_rows, 'default-off pool timing unexpectedly logged'
+            result=dict(passed=True, private_pool_enabled=pool,
+                        pool_rows=pool_rows,
+                        unrealized_with_front_and_pending=unrealized_with_front_and_pending, host_timing_enabled=timing, host_timing_rows=timing_rows,scope='serialized qtest staging ownership and immutable QEMU full pixels; no guest fences, SPICE delivery, or native qualification',
                         checks=checks,counters=counters,migration=migration,commit_roundtrip_timings=timings,qemu_exit_code=process.returncode,
                         qemu_sha256=hashlib.sha256(qemu.read_bytes()).hexdigest(),
                         no_kvm=True,no_physical_gpu=True,one_shot_rearm_refused=not restart,
@@ -211,5 +250,6 @@ if __name__=='__main__':
     parser.add_argument('--bios-dir',type=Path,required=True)
     parser.add_argument('--restart',action='store_true')
     parser.add_argument('--timing',action='store_true')
+    parser.add_argument('--pool',action='store_true')
     args=parser.parse_args()
-    print(json.dumps(run(args.qemu.resolve(),args.output.resolve(),args.bios_dir.resolve(),restart=args.restart,timing=args.timing),indent=2))
+    print(json.dumps(run(args.qemu.resolve(),args.output.resolve(),args.bios_dir.resolve(),restart=args.restart,timing=args.timing,pool=args.pool),indent=2))
