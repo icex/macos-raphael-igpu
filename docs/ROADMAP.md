@@ -3,7 +3,7 @@
 Updated 2026-10-10. Current accelerated-console experiment: **402**. The bounded
 private host-buffer pool lowers measured snapshot copy cost from 6.834 to 1.948 ms.
 Localized motion reaches about 57 decoded IDs/s, while full-field motion stays
-about 25/s: sustained 4K60 and whole-frame dynamic integrity remain open. The
+about 25/s: sustained 4K at 60 Hz and whole-frame dynamic integrity remain open. The
 100-second manager observation has 4402 unique IDs and zero invalid/duplicate
 samples; these are pipeline samples, not GPU FPS. One sequential trial per
 configuration does not establish a universal performance gain.
@@ -16,18 +16,18 @@ recoverable cleanup do not erase those capture defects.
 [402 evidence](../findings/research/console-snapshot-private-pool-native-20261010.md).
 
 **VirtualBox 410** now returns fresh registry evidence over a bounded FAT exchange
-disk. Stock VMSVGA GFX0 at0:2.0 has64MiB framebuffer/2MiB FIFO memory and an active
+disk. Stock VMSVGA GFX0 at `0:2.0` has 64 MiB framebuffer / 2 MiB FIFO memory and an active
 Display_boot/IONDRVFramebuffer with user clients. Nine returned file hashes pass;
-original409 temporary files were absent. Independent natural S5/OFF, unregister
+original 409 temporary files were absent. Independent natural S5/OFF, unregister
 and medium closure pass, while the controller's transient state-query error and
-0×0 screenshot refusal remain recorded.406's earlier eight-vCPU input/natural
+0×0 screenshot refusal remain recorded. 406's earlier eight-vCPU input/natural
 shutdown remains scoped; PerfPowerServices CPU use and sustained stability stay open.
 [410 result](../findings/research/virtualbox-fat-exchange-native-20261010.md).
 
-Next: qualify early boot-framebuffer suppression using the inspected24G830
+Next: qualify early boot-framebuffer suppression using the inspected 24G830
 AAPL,iokit-ignore-ndrv property and read-only inventory. This candidate has not
 run; it must not claim exclusive aperture ownership or write FIFO/registers.
-Separate411/413 VFIO DMA transaction patches have extracted-function tests, but
+Separate 411/413 VFIO DMA transaction patches have extracted-function tests, but
 are not deployed or full-VBox-build qualified. Authoritative RAM coverage/lifetime,
 reset policy and complete passthrough safety remain blockers. Stock FIFO fences
 do not establish immutable frame publication. No VBox Raphael acceleration or
@@ -36,14 +36,14 @@ production display adapter exists.
 [DMA readiness and lease limits](../findings/research/virtualbox-dma-ram-lease-20261010.md) ·
 [Stock fence audit](../findings/research/virtualbox-stock-publication-fences-20261010.md).
 
-Existing scale preference, odd1× resize, connected-agent input/audio and fresh-boot
-1×4K startup remain qualified in their recorded scopes. The isolated client
+Existing scale preference, odd 1× resize, connected-agent input/audio and fresh-boot
+1× 4K startup remain qualified in their recorded scopes. The isolated client
 stationary-pointer fix is not installed system-wide. Fresh-user setup, broader
 crash/host-boot coverage and other frontends remain open. GPU-native virtual display
 transport is unimplemented. VirtualBox 7.2.18 has a VFIO backend with observed configuration dispatch;
 Raphael safety and accelerated-console integration remain unqualified.
 
-Physical baseline remains **330**, user-confirmed correct-color HiDPI120/HDMI audio.
+Physical baseline remains **330**, user-confirmed correct-color HiDPI 120 Hz/HDMI audio.
 Full desktop acceleration is **not qualified**. Detailed historical milestones and
 limits remain below. [395 evidence](../findings/research/console-private-staging-cleanup-native-20261009.md)
 · [VirtualBox source audit](../findings/research/virtualbox-vfio-configuration-design-20261009.md).
@@ -67,7 +67,7 @@ regression and macOS source-build jobs remain required; see [CI setup](releases.
 | M3 — Native engine startup repair | Demonstrated | Raphael topology/address adaptations reach native startup and completed Metal work. Preserve these fixes while diagnosing desktop rendering. |
 | M4 — First correct Metal compute | Achieved | Candidate 194 checked 196,608 values and 4,096 rendered pixels; its overall capture remained inconclusive. Current280 desktop Metal baselines complete with verified device/build identity. |
 | M5 — Rendering, memory and synchronization | Partial | Managed-texture copy correction retained; private/managed/IOSurface and multiple-format readback probes pass. Candidate280 passes48 BGRA8 feedback cases across four distinct-seed processes, including two concurrent clients. 32 measured buffer-reclamation rounds return process-local allocation to baseline with134,217,728 correct values. 144 texture recreation cases and32 cross-queue GPU-event rounds pass. Global VRAM/GART counters return near baseline after exit; GPU VA and long-duration qualification remain open. |
-| M6 — Desktop and physical display | Visual fix verified; broader qualification open | Candidate279 fixes the reproduced feedback corruption. Fresh pixel checks, user observation and unobstructed native RFB captures on280 pass; longer desktop qualification remains. Candidate321 gives a full HiDPI60 picture;322 fixes native1080p interleaving. User confirms60Hz and reports120Hz appears to work; HDMI audio works (323);330 adds correct-color HiDPI120 and retains audio through tested60↔120 switches. |
+| M6 — Desktop and physical display | Visual fix verified; broader qualification open | Candidate279 fixes the reproduced feedback corruption. Fresh pixel checks, user observation and unobstructed native RFB captures on280 pass; longer desktop qualification remains. Candidate321 gives a full HiDPI60 picture;322 fixes native1080p interleaving. User confirms60Hz and reports120Hz appears to work; HDMI audio works (323);330 adds correct-color HiDPI 120 Hz and retains audio through tested60↔120 switches. |
 | M7 — Lifecycle and host protection | Partial | Multiple guest-request shutdowns and authorizing recoveries observed on recorded host boots, including eight complete 280 runs with the visual and logging fixes on their recorded September16 host boot. One supervised QEMU closure/recovery/reset/relaunch/clean-shutdown sequence now passes its scoped checks; closure capture remains INVALID. Candidate356 native reset shutdown preserves a genuine controller terminal and recovery; candidate364 subsequently exercises both bounded shutdown-wait hooks before genuine terminal/recovery. Fresh-host-boot, guest-panic and repeated lifecycle qualification remain open. |
 | M8 — Performance and release | Not qualified | Correctness first; no release, Metal3 conformance, game-support or full-desktop claim. The current experimental snapshot is published to main at the user’s request; development continues on dev. Publication does not close acceptance gates. |
 
@@ -452,13 +452,13 @@ development. VirtualBox requires separately qualified rendering access and conso
      The historical fuzziness/interleaving was subsequently fixed in321/322.
      [Evidence](../findings/research/visible-hdmi-pattern-20260924.md).
    - Fetch and native1080p layout now work (320–322). Native120Hz appears to work
-     according to the user;329/330 add confirmed correct-color1080HiDPI120 and audible audio.
+     according to the user;329/330 add confirmed correct-color1080HiDPI 120 Hz and audible audio.
    - Verify guest awake assertions and active HDMI before every physical observation.
      Keep native host-safety, capture, shutdown and recovery checks intact.
    - HDMI audio works on323 and330: function7b:00.1 is paired with the GPU;
      same-slot pairing, passthrough and audible playback are confirmed through
      the Samsung headphone output (2 channels, 48 kHz).
-1. **Full 4K remote desktop streaming (user priority, updated 2026-09-17).** 4K60 is
+1. **Full 4K remote desktop streaming (user priority, updated 2026-09-17).** 4K at 60 Hz is
    now stable. Three fixes got there: the VCN preset patch (candidate 284, encode 11ms at 4K,
    equal to Linux), a 2GB BIOS UMA carve-out (no allocation failures; host tools detect the
    carve-out automatically), and Sunshine ScreenCaptureKit capture with session-range NV12
@@ -509,7 +509,7 @@ remain available in the archived roadmap and findings.
 Use the user-provided `macos-vm/re/decompiled-24G830` sources, checking inferred
 prototypes against matching disassembly and vtables before implementation. The
 allocation investigation already combines those sources with live native tracing.
-Physical HDMI bring-up now has a working Samsung HiDPI120/audio path. The native
+Physical HDMI bring-up now has a working Samsung HiDPI 120 Hz/audio path. The native
 `reportCapabilities_LinkInfo` at +0xe074 omitted FRL signal cases; candidate330
 publishes HDMI audio metadata while preserving the native transport. DCN315 clock
 selection and infoframe SRAM wake were independently required for correct output.
@@ -597,7 +597,7 @@ Cargo license metadata differ; resolve applicable terms before considering sourc
 
 Candidate282's streaming investigation ended with valid capture, a clean
 guest-request shutdown and authorizing recovery. Motion performance remains
-open; the final120FPS-request/60Hz-display trace requires a matching4K60 control.
+open; the final120FPS-request/60Hz-display trace requires a matching4K at 60 Hz control.
 [Final evidence](../findings/research/safari-motion-20260916.json).
 
 ## Physical HDMI milestone — 2026-09-24
@@ -606,7 +606,7 @@ Candidates 321–323 establish a full 1920×1080 logical / 3840×2160 backing
 HDMI picture at 60 Hz, correct native 1920×1080 at 60 Hz, and audible HDMI
 audio through the Samsung headphone output. Native 1080p at 120 Hz is listed
 and the user reports it appears to work; sustained timing is not qualified.
-Candidate330 now provides that HiDPI120 link with correct colors and audible
+Candidate330 now provides that HiDPI 120 Hz link with correct colors and audible
 HDMI audio. Default audio routing and playback survive tested120→60→120 switches.
 [Evidence and residual log errors](../findings/research/hdmi-hidpi120-20260924.md).
 DisplayPort, HDR, broader monitors and independent-host-boot durability remain open.

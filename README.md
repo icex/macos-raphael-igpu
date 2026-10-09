@@ -19,7 +19,7 @@ measured 4K snapshot copy cost from 6.834 to 1.948 ms in the recorded comparison
 Localized motion reaches about 57 decoded token IDs/s; full-field motion remains
 about 25 IDs/s and does not improve. The 100-second actual-manager observation has
 4402 unique IDs and zero invalid or duplicate samples. These are sampled pipeline
-updates, not GPU FPS, whole-frame integrity or sustained 4K60 qualification.
+updates, not GPU FPS, whole-frame integrity or sustained 4K at 60 Hz qualification.
 
 Full-pixel stale-writer isolation, retained-map cleanup, owned presenter restart,
 odd-size resize, five-target/text input and stereo sample delivery/restoration
@@ -29,22 +29,22 @@ shutdown and authorizing recovery pass.
 [402 native evidence](findings/research/console-snapshot-private-pool-native-20261010.md).
 
 **Actual VirtualBox, candidate 410:** a small FAT exchange disk now returns fresh
-macOS registry evidence from the stock VMSVGA software desktop. GFX0 is15ad:0405
-atPCI0:2.0, with64MiB framebuffer memory and2MiB FIFO memory. Display_boot /
+macOS registry evidence from the stock VMSVGA software desktop. GFX0 is `15ad:0405`
+at PCI `0:2.0`, with 64 MiB framebuffer memory and 2 MiB FIFO memory. Display_boot /
 IONDRVFramebuffer and its user clients are still attached; this is not exclusive
 ownership or accelerated presentation. Nine returned file hashes verify. Original
 409 temporary files were absent and were not recovered.
 
 Root verified input/awake state and removed the owned awake job before shutdown.
 Independent S5/OFF evidence and medium closure prove natural completion, but the
-original controller retains a transient state-query VBoxCallError and a0×0
-screenshot refusal. These errors are not erased by successful cleanup. Earlier406
+original controller retains a transient state-query VBoxCallError and a 0×0
+screenshot refusal. These errors are not erased by successful cleanup. Earlier 406
 qualified eight-vCPU software input and natural shutdown; slow interaction and
 PerfPowerServices CPU use remain open.
 [410 evidence](findings/research/virtualbox-fat-exchange-native-20261010.md).
 
 The next boot-framebuffer discriminator is **read-only and not yet run**: an early
-loader property can suppress IONDRVFramebuffer matching in the inspected24G830
+loader property can suppress IONDRVFramebuffer matching in the inspected 24G830
 sources, then inventory must establish the resulting attachment state. It is not
 a live takeover or an exclusive memory lease. Separately, experimental VFIO DMA
 rollback/readiness patches pass extracted-function tests but are **not deployed**;
@@ -60,7 +60,7 @@ and lifecycle limitations remain in the linked reports.
 [395 baseline](findings/research/console-private-staging-cleanup-native-20261009.md) ·
 [399 timing](findings/research/console-host-snapshot-timing-native-20261010.md).
 
-Candidate392 retains next-guest-boot1×4K startup, input/audio evidence and a scoped
+Candidate392 retains next-guest-boot1× 4K startup, input/audio evidence and a scoped
 stationary-pointer fix in an isolated spice-gtk client. System client libraries
 are unchanged. Candidate394 verifies installed snapshot startup plus two helper
 restarts and audio delivery, but ends in forced capture-abort teardown.395 has
@@ -98,7 +98,7 @@ and long-duration reliability are still being tested.
 | Memory and synchronization | Buffer/texture reuse, synchronized CPU/GPU texture updates, retained color contents, GPU fences, shared events and cross-process IOSurface transfers pass targeted checks. |
 | Hardware video | H.264 and HEVC Main8 encode/decode work. HEVC Main10 decoding passes short tests; Main10 hardware encoding is unavailable in the current native profile set. |
 | Shutdown and reuse | Repeated clean guest shutdowns and same-host-boot reuse work in the supervised workflow. Crash recovery and independent-host-boot coverage remain incomplete. |
-| Physical HDMI | Correct 1920×1080 HiDPI / 3840×2160 pixels at120Hz on Samsung Odyssey G95NC, with audible HDMI audio (330). Audio selection/playback survives tested HiDPI120→60→120 switches. |
+| Physical HDMI | Correct 1920×1080 HiDPI / 3840×2160 pixels at120Hz on Samsung Odyssey G95NC, with audible HDMI audio (330). Audio selection/playback survives tested HiDPI 120 Hz→60→120 switches. |
 
 The tested baseline is **macOS Sequoia build 24G830** with a matching driver,
 Lilu, OpenCore configuration and grafted VBIOS. Stock QEMU 10.1.2 now works with
@@ -126,7 +126,7 @@ Host tests and the macOS source build run in GitHub Actions on `dev` and `main`;
   proven modes.
 - **Qualify remote streaming:** Sunshine offers hardware H.264 and HEVC Main8. With the
   VCN preset fix (candidate 284; 4K encode 11ms, equal to Linux), a 2GB BIOS UMA
-  carve-out and ScreenCaptureKit capture, the user reports stable 4K60 streaming in Moonlight
+  carve-out and ScreenCaptureKit capture, the user reports stable 4K at 60 Hz streaming in Moonlight
   with no stutter. True 120Hz needs a CoreDisplay patch: macOS virtual displays vsync at a
   hardcoded 60Hz, a live memory patch proved 120Hz, and the permanent patch is designed but
   not built. 4K encoding tops out at ~66–83fps; 1440p/1080p should reach 120fps.
@@ -142,7 +142,7 @@ Host tests and the macOS source build run in GitHub Actions on `dev` and `main`;
   memory reclamation and operation across independently initialized host boots.
 - **Extend physical display support:** Apple's embedded display core is being
   steered onto its DCN 3.02 path with DCN 3.1.5 register translation. Native PSP firmware
-  startup, framebuffer fetch and native1080p layout work. Samsung HiDPI120 now has
+  startup, framebuffer fetch and native1080p layout work. Samsung HiDPI 120 Hz now has
   correct colors and audible HDMI audio; broader monitors, sleep/hotplug and HDCP
   remain unqualified. [120Hz evidence](findings/research/hdmi-hidpi120-20260924.md). [Port plan](findings/research/display-dcn315-port-20260917.md)
   · [HDMI audio plan](findings/research/hdmi-audio-passthrough-20260917.md).
@@ -205,7 +205,7 @@ retain their own terms; see [third-party notices](THIRD_PARTY_NOTICES.md). The
 AMD sources for the TOC patterns and remaining SDK/distribution review items.
 
 Candidate284's streaming work (2026-09-17) ended with CORE_PROBE_PASS, a clean
-guest-request shutdown and authorizing recovery. The user reports stable 4K60 streaming;
+guest-request shutdown and authorizing recovery. The user reports stable 4K at 60 Hz streaming;
 permanent 120Hz is the next step. [Evidence](findings/research/encoder-pipeline-20260917.md).
 
 Candidate 302 (2026-09-23) establishes reversible CPU read/write access to the

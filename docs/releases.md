@@ -42,7 +42,7 @@ Measured host copy drops from 6.834 to 1.948 ms; localized delivery reaches abou
 stale-owner, restart, odd-resize, input and audio regressions pass. Serial capture
 still has two corrupt lines and two incomplete snapshots; independent natural shutdown
 and recovery pass. This is a bounded experimental milestone, not a generally
-qualified release or sustained 4K60 claim.
+qualified release or sustained 4K at 60 Hz claim.
 [402 native evidence](../findings/research/console-snapshot-private-pool-native-20261010.md).
 
 Candidate 410 separately returns verified stock-VMSVGA registry evidence over a
