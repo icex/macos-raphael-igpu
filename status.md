@@ -6,13 +6,17 @@ No new GPU run. The complete transient-domain planner preserves the native
 peripheral/storage order and single CPU definition in libvirt11.9 conversion.
 A separate KVM CPU-only test verifies the expected CPU properties and preserves
 native zero hardware UUID. All test domains and containers are stopped; the
-host sleep:idle blocker stays active. Full host suite:1,038 pass,3 skipped.
+host sleep:idle blocker stays active. Full host suite:1,057 pass,3 skipped.
 A transaction core now stops owned software QEMU processes after invalid TAP
 setup and injected lost observations, without attempting resume. This is
-failure-path evidence; valid TAP and production backend integration are next;
+failure-path evidence. A separate isolated TCG test now attaches a real TAP,
+verifies backend/hub/NIC and QEMU fdinfo before resume, captures an exact injected
+frame, and proves process exit after external libvirt Force Off. Both test
+containers stopped; production backend/lifecycle integration remains next;
 full libvirt-managed accelerated macOS remains unqualified.
 [Plan](findings/research/libvirt-console-plan-20261009.md) ·
-[Runtime failure tests](findings/research/libvirt-runtime-failure-20261009.md).
+[Runtime failure tests](findings/research/libvirt-runtime-failure-20261009.md) ·
+[TAP and stop test](findings/research/libvirt-runtime-tap-20261009.md).
 
 ## Candidate340: native accelerated SPICE desktop after host resume
 

@@ -1,0 +1,29 @@
+{
+  "passed": true,
+  "container": {
+    "cid": "d9397963c5abc378a4c96eb5e254f438da490c38f8004a11cdf72f6129a75f13",
+    "started_at": "2026-10-09T07:29:38.652817263Z"
+  },
+  "identity": {
+    "name": "rgpu-8ae93ffa324f50c2312b4435ff6e60cd",
+    "uuid": "00000000-0000-0000-0000-000000000000",
+    "run_id": "8ae93ffa324f50c2312b4435ff6e60cd",
+    "pid": 423528,
+    "start_ticks": 32590234
+  },
+  "phases": [
+    "creating-paused",
+    "paused-identity",
+    "network-ready",
+    "running",
+    "stopped"
+  ],
+  "tap_frame_exact": true,
+  "packet_sha256": "bab5d41cb070d6d71b2674bcd35036055132103281d041296aad7fcff9bb1dd6",
+  "domain_absent": true,
+  "process_exited": true,
+  "duplicate_stop_safe": true,
+  "scope": "Isolated TCG TAP injection, backend packet capture and external libvirt destroy; no guest OS, host NIC, KVM or VFIO.",
+  "network_report": "hub 0\n \\ rgpu_lan_attachment: rgpu_lan_backend: index=0,type=tap,fd=14\n \\ lan0: lan: index=0,type=nic,model=vmxnet3,macaddr=52:54:00:12:34:56\n",
+  "qemu_tap_fdinfo": "pos:\t90\nflags:\t02104002\nmnt_id:\t1200\nino:\t12\niff:\trgpu_tap\n"
+}
