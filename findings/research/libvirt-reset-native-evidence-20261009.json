@@ -1,0 +1,381 @@
+{
+  "run_id": "684122f412ad335d91c07cdfece852dd",
+  "candidate": 356,
+  "run_commit": "97940f369d324503b69b920e9ab3bf2c62313f97",
+  "build_id": "3f0b17ede8914d26b68a55bb3a56042e",
+  "mode2": 295,
+  "artifacts": [
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-356-results/running-identity.json",
+      "bytes": 2467,
+      "sha256": "a647e6fd6a954a661fdaa60c8eb0a22e66c3a27e2f7e60e717515f102e3a4e3f"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-356-results/verdict.json",
+      "bytes": 46810,
+      "sha256": "fd857e84cc3772fc1b4a07ad6c69e3d8947ddee1bddccd09553523c76ae49349"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-356-results/probe.json",
+      "bytes": 553152,
+      "sha256": "d67db2a222306e023e425cffa37e15241ee109c6e42e3a604f0bbdc9eb14086f"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-356-results/critical-quiesce.json",
+      "bytes": 708,
+      "sha256": "bd7fbbd94ca4d2b777854ff6c146bf0c41c96b72d64043a8d23469737ec932f7"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-356-results/critical.txt",
+      "bytes": 2440973,
+      "sha256": "86123781426612e5db3cc2b8b00e536f967e1dad7e34ba7deba5b20ba5b49b1a"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-356-results/shutdown.json",
+      "bytes": 236,
+      "sha256": "24e1afb122c057e2c817b3f920dc0447d48cae25d49e7718ddf57623b1e495ac"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-356-results/recovery.json",
+      "bytes": 17575,
+      "sha256": "f23eee458d1277182a88b1b27f4c297fa2ae57e8417947cb3424f373a9f50094"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-356-results/vm-launch.log",
+      "bytes": 2592,
+      "sha256": "e5a99f0f830fddf424562fb65dbfabba11837a651774d1e4316caba68710b108"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/libvirt-684122f412ad335d91c07cdfece852dd/terminal.json",
+      "bytes": 516,
+      "sha256": "53db90545ab188681a499a06cefc8415429a872f4fb7301cc0679ff108519ffb"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/libvirt-684122f412ad335d91c07cdfece852dd/events.jsonl",
+      "bytes": 4696,
+      "sha256": "da9450153c482b6744c3e28384e2fd1e6e54486bd9a79752661ddd7939befcdb"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c356-task-watch.jsonl",
+      "bytes": 294143,
+      "sha256": "72fe369367fae56c9ddc50614369e6911b941b4247e09c8eef080f9e07382cc3"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c356-viewer-close-alive.json",
+      "bytes": 204,
+      "sha256": "ea4aedb4b69e2603369a435fb44c0e9845eb74b8c3a636547106de0799f1d08d"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c356-final-awake.txt",
+      "bytes": 1560,
+      "sha256": "11ff48afc7867363f8904559ea5a0ebe221ab186aac0d50d41187af45628232e"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c356-viewport-normal-result.json",
+      "bytes": 1260,
+      "sha256": "cb07cbc92c258ea320781fe4a942da80ed6637a4ec3858bae1be8436554120d5"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c356-viewport-small-result.json",
+      "bytes": 1601,
+      "sha256": "08b196e491a557ae8de11fd25ba1585b19f203c492e080e918c3acebeff6c921"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c356-viewport-fullscreen-result.json",
+      "bytes": 1256,
+      "sha256": "467ae93e8e8c18a9e4f0cea8c0bffa8668b4f15df78553d11bfd61e998caf14b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c356-viewport-fullscreen.png",
+      "bytes": 126988,
+      "sha256": "b1233abd24b3c3f7d73df22a84d9b97260d89c44e729814ab3511d1f9eb09f2c"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c356-reopened-desktop.png",
+      "bytes": 538859,
+      "sha256": "530d905ed06da93dfd689c3cc2964f907869128f7369cb03402bb8604038de7e"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/capture-eof-6d3bb5bb9ff385a4464154e18b1045e5633df3937ffc8d7c4de503e4d8d59e7e-console.json",
+      "bytes": 399,
+      "sha256": "4bae41b82d5c0134d0efe241b57d9535af1ba71fb38da910e8c0a2e5137d34f5"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/capture-reset-6d3bb5bb9ff385a4464154e18b1045e5633df3937ffc8d7c4de503e4d8d59e7e-critical.json",
+      "bytes": 461,
+      "sha256": "410197dbec1db4f846bee6ebf228ed188b3608a6ca3e5ed1f81517a7378256da"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/capture-exit-6d3bb5bb9ff385a4464154e18b1045e5633df3937ffc8d7c4de503e4d8d59e7e-884039.json",
+      "bytes": 474,
+      "sha256": "8a16d9890a0546eb01c692137375f7d162cb933708a98f61a2b5c7061b28d812"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/capture-exit-6d3bb5bb9ff385a4464154e18b1045e5633df3937ffc8d7c4de503e4d8d59e7e-884037.json",
+      "bytes": 476,
+      "sha256": "39f4973792898cbc361a721bc8e273d016377c0566d7592b8e2e6ec6c1a0bd9e"
+    }
+  ],
+  "viewport": {
+    "normal": {
+      "target_hits": 5,
+      "passed": true,
+      "missed": 0,
+      "scope": "Guest input observations only. Host artifacts must prove actual manager resize/input path.",
+      "token": "RGPU9E27178C",
+      "timed_out": false,
+      "text": "RGPU9E27178C",
+      "clicks": [
+        {
+          "point_top_left": [
+            152.4609375,
+            86.484375
+          ],
+          "hit": true,
+          "uptime": 284.29503761800004,
+          "step": 0
+        },
+        {
+          "point_top_left": [
+            1764.931640625,
+            102.996826171875
+          ],
+          "hit": true,
+          "uptime": 291.274477892,
+          "step": 1
+        },
+        {
+          "point_top_left": [
+            1764.931640625,
+            991.9830322265625
+          ],
+          "hit": true,
+          "uptime": 298.02779655,
+          "step": 2
+        },
+        {
+          "point_top_left": [
+            152.4609375,
+            991.9830322265625
+          ],
+          "hit": true,
+          "uptime": 302.61022790600003,
+          "step": 3
+        },
+        {
+          "point_top_left": [
+            959.4140625,
+            538.978271484375
+          ],
+          "hit": true,
+          "uptime": 308.732020426,
+          "step": 4
+        }
+      ],
+      "elapsed": 86.90996484699997,
+      "complete": true,
+      "logical_size": [
+        1920,
+        1080
+      ],
+      "screen_changes": [],
+      "backing_scale": 2
+    },
+    "small": {
+      "target_hits": 5,
+      "passed": false,
+      "missed": 2,
+      "scope": "Guest input observations only. Host artifacts must prove actual manager resize/input path.",
+      "token": "RGPUB013D5C7",
+      "timed_out": false,
+      "text": "RGPUB013D5C7",
+      "clicks": [
+        {
+          "point_top_left": [
+            959.4140625,
+            538.978271484375
+          ],
+          "hit": false,
+          "uptime": 372.553444608,
+          "step": 0
+        },
+        {
+          "point_top_left": [
+            959.4140625,
+            538.978271484375
+          ],
+          "hit": false,
+          "uptime": 387.92267974500004,
+          "step": 0
+        },
+        {
+          "point_top_left": [
+            152.98828125,
+            86.484375
+          ],
+          "hit": true,
+          "uptime": 442.51029070600003,
+          "step": 0
+        },
+        {
+          "point_top_left": [
+            1764.931640625,
+            101.97509765625
+          ],
+          "hit": true,
+          "uptime": 456.446854044,
+          "step": 1
+        },
+        {
+          "point_top_left": [
+            1764.931640625,
+            991.9830322265625
+          ],
+          "hit": true,
+          "uptime": 467.19366078800005,
+          "step": 2
+        },
+        {
+          "point_top_left": [
+            152.4609375,
+            991.9830322265625
+          ],
+          "hit": true,
+          "uptime": 472.7786891,
+          "step": 3
+        },
+        {
+          "point_top_left": [
+            959.4140625,
+            538.978271484375
+          ],
+          "hit": true,
+          "uptime": 482.408862309,
+          "step": 4
+        }
+      ],
+      "elapsed": 126.30536040700002,
+      "complete": true,
+      "logical_size": [
+        1920,
+        1080
+      ],
+      "screen_changes": [],
+      "backing_scale": 2
+    },
+    "fullscreen": {
+      "target_hits": 5,
+      "passed": true,
+      "missed": 0,
+      "scope": "Guest input observations only. Host artifacts must prove actual manager resize/input path.",
+      "token": "RGPUB414DB48",
+      "timed_out": false,
+      "text": "RGPUB414DB48",
+      "clicks": [
+        {
+          "point_top_left": [
+            152.4609375,
+            85.49560546875
+          ],
+          "hit": true,
+          "uptime": 509.170959324,
+          "step": 0
+        },
+        {
+          "point_top_left": [
+            1765.458984375,
+            102.469482421875
+          ],
+          "hit": true,
+          "uptime": 515.628479606,
+          "step": 1
+        },
+        {
+          "point_top_left": [
+            1765.458984375,
+            992.9718017578125
+          ],
+          "hit": true,
+          "uptime": 523.485161413,
+          "step": 2
+        },
+        {
+          "point_top_left": [
+            152.4609375,
+            992.9718017578125
+          ],
+          "hit": true,
+          "uptime": 528.9586058770001,
+          "step": 3
+        },
+        {
+          "point_top_left": [
+            959.4140625,
+            539.47265625
+          ],
+          "hit": true,
+          "uptime": 542.588475045,
+          "step": 4
+        }
+      ],
+      "elapsed": 46.10409005900004,
+      "complete": true,
+      "logical_size": [
+        1920,
+        1080
+      ],
+      "screen_changes": [],
+      "backing_scale": 2
+    }
+  },
+  "terminal": {
+    "cid": "6d3bb5bb9ff385a4464154e18b1045e5633df3937ffc8d7c4de503e4d8d59e7e",
+    "identity": {
+      "name": "rgpu-684122f412ad335d91c07cdfece852dd",
+      "pid": 113,
+      "run_id": "684122f412ad335d91c07cdfece852dd",
+      "start_ticks": 34467646,
+      "uuid": "00000000-0000-0000-0000-000000000000"
+    },
+    "process_exited": true,
+    "reason": "guest-shutdown",
+    "run_id": "684122f412ad335d91c07cdfece852dd",
+    "scope": {
+      "device": 5,
+      "init_start_ticks": 34467562,
+      "inode": 4026533263,
+      "kind": "pid-namespace"
+    },
+    "started_at": "2026-10-09T12:44:11.991929963Z"
+  },
+  "capture_exit": [
+    {
+      "budget_origin": "transport-observation",
+      "channel": "console",
+      "cid": "6d3bb5bb9ff385a4464154e18b1045e5633df3937ffc8d7c4de503e4d8d59e7e",
+      "completed_original_zombie": false,
+      "deferred": true,
+      "elapsed_seconds": 0.37295612700108904,
+      "outcome": "natural-container-exit",
+      "run_id": "684122f412ad335d91c07cdfece852dd",
+      "shutdown_event_wait": false,
+      "started_at": "2026-10-09T12:44:11.991929963Z",
+      "transport_end_kind": "clean-eof",
+      "transport_end_monotonic": 65481.183277487
+    },
+    {
+      "budget_origin": "transport-observation",
+      "channel": "critical",
+      "cid": "6d3bb5bb9ff385a4464154e18b1045e5633df3937ffc8d7c4de503e4d8d59e7e",
+      "completed_original_zombie": false,
+      "deferred": true,
+      "elapsed_seconds": 0.37305084800027544,
+      "outcome": "natural-container-exit",
+      "run_id": "684122f412ad335d91c07cdfece852dd",
+      "shutdown_event_wait": false,
+      "started_at": "2026-10-09T12:44:11.991929963Z",
+      "transport_end_kind": "recv-reset",
+      "transport_end_monotonic": 65481.183253967
+    }
+  ]
+}
