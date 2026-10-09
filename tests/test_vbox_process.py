@@ -1,3 +1,4 @@
+import errno
 import importlib.util
 import os
 from pathlib import Path
@@ -30,6 +31,8 @@ class ProcessIdentityTests(unittest.TestCase):
             guarded=self.read()
         self.assertEqual(guarded['evidence'],'owned-session-log-and-process')
         self.assertEqual(guarded['pid'],123);self.assertEqual(guarded['starttime'],'456')
+        with patch.object(M.os,'readlink',side_effect=PermissionError(errno.EPERM,'not EACCES')):
+            with self.assertRaises(PermissionError):self.read()
         with patch.object(M.os,'readlink',side_effect=FileNotFoundError()):
             with self.assertRaises(FileNotFoundError):self.read()
     def test_log_binding_and_argv_refusals(self):
@@ -56,5 +59,13 @@ class ProcessIdentityTests(unittest.TestCase):
         self.assertNotEqual(first,self.read())
         body=self.log.read_text();self.log.unlink();other=self.root/'other-log';other.write_text(body);self.log.symlink_to(other)
         with self.assertRaises(ValueError):self.read()
+
+    def test_log_replacement_between_stat_and_open_refuses(self):
+        other=self.root/'replacement';other.write_bytes(self.log.read_bytes())
+        real_open=os.open
+        def substitute(path, flags, *args, **kw):
+            return real_open(other if Path(path)==self.log else path, flags, *args, **kw)
+        with patch.object(M.os,'open',side_effect=substitute):
+            with self.assertRaises(ValueError):self.read()
 
 if __name__=='__main__':unittest.main()

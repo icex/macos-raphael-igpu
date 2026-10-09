@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Bind a hardened VBox process to its owned VM log; no executable-proof claim on EACCES."""
+import errno
 import os
 from pathlib import Path
 import re
@@ -12,7 +13,12 @@ def process_identity(home, name, ident, proc_root=Path('/proc'),
     ls = log.lstat()
     if not stat.S_ISREG(ls.st_mode) or ls.st_uid != os.getuid():
         raise ValueError('unowned VM log')
-    with log.open('rb') as stream:
+    fd = os.open(log, os.O_RDONLY | os.O_NOFOLLOW)
+    with os.fdopen(fd, 'rb') as stream:
+        opened = os.fstat(stream.fileno())
+        if ((opened.st_dev, opened.st_ino) != (ls.st_dev, ls.st_ino) or
+                not stat.S_ISREG(opened.st_mode) or opened.st_uid != os.getuid()):
+            raise ValueError('VM log changed before open')
         header = stream.read(65536)
     pids = re.findall(rb'^\d\d:\d\d:\d\d\.\d+ Process ID: ([1-9][0-9]*)\r?$', header, re.M)
     if len(pids) != 1:
@@ -44,7 +50,9 @@ def process_identity(home, name, ident, proc_root=Path('/proc'),
         actual = Path(os.readlink(proc / 'exe'))
         if actual != program:
             raise ValueError('executable link differs')
-    except PermissionError:
+    except PermissionError as exc:
+        if exc.errno != errno.EACCES:
+            raise
         # Hardened VBox sets non-dumpable. Require its owned log PID and all
         # session/process checks; do not pretend argv proves the executable.
         evidence = 'owned-session-log-and-process'

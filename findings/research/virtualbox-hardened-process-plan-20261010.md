@@ -2,12 +2,13 @@
 
 Candidate 415 refused its fixed root probe because /proc/PID/exe was inaccessible.
 This change preserves the exact owned UUID/config/running check and pins PID plus
-start time, but obtains the PID from the private owned VM's VBox.log header.
+start time, but obtains the PID from the private owned VM's VBox.log header. The opened log must match its recorded
+inode/device/owner, and symlinks are refused.
 The process must have the current user's real/effective/saved/filesystem UIDs,
 the exact --startvm UUID, and an expected installed executable command path.
 That installed file must be a regular root-owned file without group/world writes.
 
-A readable kernel executable link must match. Only PermissionError uses the
+A readable kernel executable link must match. Only EACCES uses the
 explicitly labelled owned-session/log/process evidence instead; missing or
 mismatched links refuse. This alternative does not prove the executable through
 the kernel and is not authentication against a malicious process of the same UID.
@@ -28,5 +29,5 @@ inspection of build, network and framebuffer contents. A passing process check
 alone does not prove the guest command ran. The same GUI remains available for
 awake checks and normal guest shutdown; no remote shutdown command was added.
 
-Integrated host validation: 1495 tests passed, eight skipped, in 61.971 seconds;
-log run/c417-full-suite.log. Native result remains pending.
+Final integrated host validation: 1496 tests ran, eight skipped, in 56.577 seconds;
+all remaining tests passed. Log run/c417-final-full-suite.log. Native result remains pending.
