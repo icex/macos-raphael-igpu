@@ -1,28 +1,30 @@
 # Live status — 2026-10-09
 
-## Candidate354: clean shutdown with transient zombie/vCPU overlap observed
+## Candidate355: desktop passes; critical socket reset prevents terminal receipt
 
-Run `0bb9177e80b4d9db4494927fd22d0796`, metal-197, build1.0.354,
-MODE2#293, bootba51b3c6. Native Metal/WindowServer/display pass; normal HiDPI
-desktop visible in actual virt-manager, viewer closure leaves VM alive. Same
-approved O2 presenter, full refresh ON; no guest TCC changes or performance claim.
+Run `a2e32b7d73a2dc3062421e39b457025c`, metal-198, build1.0.355,
+MODE2#294, bootba51b3c6. Native Metal/WindowServer/display pass; normal awake
+HiDPI desktop visible in virt-manager. Viewer closure leaves exact VM alive.
+Future356 viewport fixture compiles, not yet executed.
 
-Capture CORE_PROBE_PASS, earliest_failure=null. Actual controller terminal:
-guest-shutdown/process_exited=true. Both EOF hooks see QEMU already reaped and
-allow natural exit (~0.445s). GPU recovery recovered/authorizes_launch=true.
-VM/cycle stopped; host sleep:idle inhibitor retained. No reboot/rebind needed.
+Capture CORE_PROBE_PASS, earliest_failure=null. Critical bytes exactly match
+quiesce ACK, then guest shutdown is observed; console EOF follows1.454ms later.
+Critical collector ends with ConnectionResetError104 and no clean EOF marker.
+Its hook force-stops the container; the console hook's exec races that stop.
+Terminal absent; outer exited-after-guest-request is not clean completion.
+New shutdown-event wait is not exercised. GPU recovery recovered/authorizes_launch=true.
+VM/cycle stopped; host awake. No reboot/rebind needed.
 
-New diagnostic records bound SHUTDOWN_GUEST; independent task sampling catches
-leader113Z plus CPU0/KVM thread120R before disappearance~0.120s after event.
-This demonstrates transient shutdown overlap, not safety of arbitrary workers.
-Exact native EOF timestamp is absent; no event-to-EOF timing claim.352/353's
-terminal-receipt race remains open. Next355 tests a conservative guest-event-bound
-wait in software first, preserving actual completion proof and absolute2s/deadline.
+Next investigate unread reverse-token socket reset and preserve the old positive
+completed-process proof on error-end without mislabeling RST as clean EOF. Keep
+live capture loss fatal and the absolute wait/deadline bounds intact.356 viewport
+fixture is prepared separately; no next native launch until a reviewed correction.
 
-1196 host tests pass,8skip. Checked-in kext remains353 with matching manifest;
-354 build is separately pinned/staged.352/353 measured HiDPI copy/delivery milestone
-is being integrated into dev with hosted CI; main unchanged. General desktop,
-window resize/input, console audio/install durability and VirtualBox remain open.
-[Evidence](findings/research/libvirt-shutdown-native-20261009.md) ·
-[Receipts/tasks](findings/research/libvirt-shutdown-native-evidence-20261009.json) ·
-[Previous status](findings/research/status-archives/status-before-354-20261009.md).
+1214 host tests pass,8skip. Checked-in kext remains353 with matching manifest;
+355 build is separately pinned. HiDPI milestone is on dev; CI-only357 fix handles
+slow software UART completion and retains failure artifacts, hosted checks pending.
+Main unchanged. General desktop, resize/input, console audio/install durability
+and VirtualBox remain open.
+[Evidence](findings/research/libvirt-clean-eof-native-20261009.md) ·
+[Receipts](findings/research/libvirt-clean-eof-native-evidence-20261009.json) ·
+[Previous status](findings/research/status-archives/status-before-355-20261009.md).
