@@ -1,0 +1,450 @@
+{
+  "scope": "Software-only paired observer control; no native connection or hardware",
+  "results": {
+    "/home/bogdan/macos-vm/run/c346-roi-controls/hidpi": {
+      "seconds": 10,
+      "unique": 68,
+      "unique_per_second": 6.8,
+      "valid": 1212,
+      "invalid_after_start": 23,
+      "last_sequence": 67,
+      "producer_count": 68,
+      "producer_per_second": 6.779043961718047,
+      "qemu_exit": 0,
+      "split": false,
+      "explicit_rate": 60,
+      "display_events": {
+        "mark": 1,
+        "invalidate": 1057
+      },
+      "width": 3840,
+      "height": 2160,
+      "scale": 2,
+      "paired_observers": true,
+      "scope": "TCG qtest producer and offscreen SpiceDisplay buffer only; no guest OS/GPU/manager/scanout FPS",
+      "observer_disagreements": 0,
+      "paired_samples": 1235,
+      "passed": true,
+      "median_ms": {
+        "full_snapshot_seconds": 3.6020689949509688,
+        "roi_snapshot_seconds": 0.07022000500001013,
+        "full_total_seconds": 4.088669003976975,
+        "roi_total_seconds": 0.5589909997070208
+      },
+      "orders": {
+        "full": {
+          "full_snapshot_seconds": 3.7888184997427743,
+          "roi_snapshot_seconds": 0.06415500320144929
+        },
+        "roi": {
+          "full_snapshot_seconds": 3.478517995972652,
+          "roi_snapshot_seconds": 0.11124999582534656
+        }
+      },
+      "error_categories": {
+        "checksum mismatch": 23
+      },
+      "files": {
+        "argv.json": "4d12c3d4632d64d5d9bfc052a0065ffcaabbbb724adc39412b48b9fc9e0e4b76",
+        "idle-rom.bin": "9712316cb30fd8aab7369e66d6395d4406866b6c7087b105e17dc08f24496e7b",
+        "qemu.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "display-events.jsonl": "8fb7c1d13c948d93d193a5b0f5c8bf3afb99b3dbd9e066503d7e9e0b3f10b2a4",
+        "samples.jsonl": "26b5869ba4f3cdd17c13c2125ad0e3414ef6926a961bf23aeadf644d62e17eda",
+        "producer.jsonl": "def6ee2aa5b516c5a522818986ce263f3ed305c48e5cd300aa4cafe646d1af82",
+        "result.json": "a8fc77311bfc6de7fd4420675ea1fae3b8ac1b1a2074000d6a97fe72f1f82e92",
+        "cleanup.json": "252f2f4a7a49b58671bd8481c75c016b25a1807a8c77da8afaa047d8ac0178c2"
+      }
+    },
+    "/home/bogdan/macos-vm/run/c346-roi-controls/native": {
+      "seconds": 10,
+      "unique": 598,
+      "unique_per_second": 59.8,
+      "valid": 1231,
+      "invalid_after_start": 9,
+      "last_sequence": 598,
+      "producer_count": 600,
+      "producer_per_second": 60.01036602434148,
+      "qemu_exit": 0,
+      "split": false,
+      "explicit_rate": 60,
+      "display_events": {
+        "mark": 1,
+        "invalidate": 5425
+      },
+      "width": 1920,
+      "height": 1080,
+      "scale": 1,
+      "paired_observers": true,
+      "scope": "TCG qtest producer and offscreen SpiceDisplay buffer only; no guest OS/GPU/manager/scanout FPS",
+      "observer_disagreements": 0,
+      "paired_samples": 1240,
+      "passed": true,
+      "median_ms": {
+        "full_snapshot_seconds": 0.8806770019873511,
+        "roi_snapshot_seconds": 0.02032499833148904,
+        "full_total_seconds": 1.361078000627458,
+        "roi_total_seconds": 0.4964359977748245
+      },
+      "orders": {
+        "full": {
+          "full_snapshot_seconds": 1.1054774950025603,
+          "roi_snapshot_seconds": 0.018704999092733487
+        },
+        "roi": {
+          "full_snapshot_seconds": 0.8646419992146548,
+          "roi_snapshot_seconds": 0.03544499850249849
+        }
+      },
+      "error_categories": {
+        "torn duplicate tokens": 2,
+        "checksum mismatch": 7
+      },
+      "files": {
+        "argv.json": "7ce23bb8d5392669c0081f0ca9e0c8934bf708698eda0ea984e7034bd1cbde9e",
+        "idle-rom.bin": "9712316cb30fd8aab7369e66d6395d4406866b6c7087b105e17dc08f24496e7b",
+        "qemu.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "display-events.jsonl": "c06ad9a1742dc6506c0669d141240cdd169d2f3ca1ad90c54f004acc61b58e9e",
+        "samples.jsonl": "fa4b93bea781302e7ee2e416ce37154fe32fd93c479bc3b12519760b212b5c69",
+        "producer.jsonl": "fdc34bf1579b54e2ead126c78d4f658f107eeaa551e042ab0d88d10ab24a8176",
+        "result.json": "7e3ece4485a97167935508f26067bad3c2dd15acffa54ada73d41a893cc26672",
+        "cleanup.json": "222fb6a7b7c494c5c40385fb5969a210f43ab487d32d92bb6640da7335ab36e9"
+      }
+    },
+    "/home/bogdan/macos-vm/run/c346-roi-controls/split": {
+      "seconds": 10,
+      "unique": 77,
+      "unique_per_second": 7.7,
+      "valid": 151,
+      "invalid_after_start": 1090,
+      "last_sequence": 375,
+      "producer_count": 377,
+      "producer_per_second": 37.67139656364838,
+      "qemu_exit": 0,
+      "split": true,
+      "explicit_rate": 60,
+      "display_events": {
+        "mark": 1,
+        "invalidate": 3415
+      },
+      "width": 640,
+      "height": 480,
+      "scale": 1,
+      "paired_observers": true,
+      "scope": "TCG qtest producer and offscreen SpiceDisplay buffer only; no guest OS/GPU/manager/scanout FPS",
+      "observer_disagreements": 0,
+      "paired_samples": 1241,
+      "passed": true,
+      "median_ms": {
+        "full_snapshot_seconds": 0.1939209978445433,
+        "roi_snapshot_seconds": 0.021460000425577164,
+        "full_total_seconds": 0.687822001054883,
+        "roi_total_seconds": 0.5079319962533191
+      },
+      "orders": {
+        "full": {
+          "full_snapshot_seconds": 0.26801100466400385,
+          "roi_snapshot_seconds": 0.018279999494552612
+        },
+        "roi": {
+          "full_snapshot_seconds": 0.14145500244922005,
+          "roi_snapshot_seconds": 0.034845001209760085
+        }
+      },
+      "error_categories": {
+        "torn duplicate tokens": 1083,
+        "checksum mismatch": 7
+      },
+      "files": {
+        "argv.json": "1922de403b65f6998eae33579fbab4a8fcda40865916e0554b0ec003f6f96904",
+        "idle-rom.bin": "9712316cb30fd8aab7369e66d6395d4406866b6c7087b105e17dc08f24496e7b",
+        "qemu.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "display-events.jsonl": "95dd0861181b74333bdfe942c0cb706ad5a14063d816ad8d79625ed8dea6a1a4",
+        "samples.jsonl": "2412ee031752c6ed0c60770391166b1d39547611ea3677c8387725cf152e916f",
+        "producer.jsonl": "9a13e0a3c10079de5fa82d995788c8028cb440b75638a752ba8242a0bf2e181f",
+        "result.json": "c24ba4f8e88032033fed30bc57da4b16b523e819f368544cc4c01190d49f2cce",
+        "cleanup.json": "94dc9d67ea892f99e78bc6ae6f4f1faed64076cba58a2c48c1490a7513a77bb8"
+      }
+    },
+    "/home/bogdan/macos-vm/run/c346-roi-final/bounds": {
+      "seconds": 5,
+      "unique": 300,
+      "unique_per_second": 60.0,
+      "valid": 614,
+      "invalid_after_start": 7,
+      "last_sequence": 299,
+      "producer_count": 300,
+      "producer_per_second": 59.99877728110625,
+      "qemu_exit": 0,
+      "split": false,
+      "explicit_rate": 60,
+      "display_events": {
+        "mark": 1,
+        "invalidate": 2721
+      },
+      "width": 320,
+      "height": 160,
+      "scale": 1,
+      "paired_observers": true,
+      "roi_bounds_refused": true,
+      "scope": "TCG qtest producer and offscreen SpiceDisplay buffer only; no guest OS/GPU/manager/scanout FPS",
+      "observer_disagreements": 0,
+      "paired_samples": 621,
+      "passed": true,
+      "median_ms": {
+        "full_snapshot_seconds": 0.04138000076636672,
+        "roi_snapshot_seconds": 0.02175100235035643,
+        "full_total_seconds": 0.562901004741434,
+        "roi_total_seconds": 0.5115009989822283
+      },
+      "orders": {
+        "full": {
+          "full_snapshot_seconds": 0.05638999573420733,
+          "roi_snapshot_seconds": 0.018320002709515393
+        },
+        "roi": {
+          "full_snapshot_seconds": 0.032550498872296885,
+          "roi_snapshot_seconds": 0.03379049667273648
+        }
+      },
+      "error_categories": {
+        "checksum mismatch": 5,
+        "torn duplicate tokens": 2
+      },
+      "files": {
+        "argv.json": "02d481c71cebdaca07fe4da495cacf53a1dfd0dce0caa80a300fefac612764db",
+        "idle-rom.bin": "9712316cb30fd8aab7369e66d6395d4406866b6c7087b105e17dc08f24496e7b",
+        "qemu.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "display-events.jsonl": "5b9a21ebba5686d1564b9da929910dc39aa627f5c17abb7b49c48c343c644ad2",
+        "samples.jsonl": "489114422c984279bbb695201b710d68a2e612c64d23cdd8d7c94862c15fd893",
+        "producer.jsonl": "e748ce8de731297aaec019ff3e8b894f0ced9b267a88d7be61f3a4c625623c51",
+        "result.json": "d7e0c4f43204471c4344d23a3858e6189e937e90b11d1dc38ffe01f70687a348",
+        "cleanup.json": "1504ebb1a3acf0e1449f99125f05fd7bf90b4d1bbaba4fae9410277acf80965c"
+      }
+    },
+    "/home/bogdan/macos-vm/run/c346-roi-final/hidpi": {
+      "seconds": 5,
+      "unique": 34,
+      "unique_per_second": 6.8,
+      "valid": 600,
+      "invalid_after_start": 16,
+      "last_sequence": 33,
+      "producer_count": 34,
+      "producer_per_second": 6.712157430911511,
+      "qemu_exit": 0,
+      "split": false,
+      "explicit_rate": 60,
+      "display_events": {
+        "mark": 1,
+        "invalidate": 521
+      },
+      "width": 3840,
+      "height": 2160,
+      "scale": 2,
+      "paired_observers": true,
+      "roi_bounds_refused": false,
+      "scope": "TCG qtest producer and offscreen SpiceDisplay buffer only; no guest OS/GPU/manager/scanout FPS",
+      "observer_disagreements": 0,
+      "paired_samples": 616,
+      "passed": true,
+      "median_ms": {
+        "full_snapshot_seconds": 3.541502999723889,
+        "roi_snapshot_seconds": 0.07679999907850288,
+        "full_total_seconds": 4.022819997771876,
+        "roi_total_seconds": 0.5615009977191221
+      },
+      "orders": {
+        "full": {
+          "full_snapshot_seconds": 3.779234000830911,
+          "roi_snapshot_seconds": 0.06981050319154747
+        },
+        "roi": {
+          "full_snapshot_seconds": 3.453568999248091,
+          "roi_snapshot_seconds": 0.11115499728475697
+        }
+      },
+      "error_categories": {
+        "checksum mismatch": 16
+      },
+      "files": {
+        "argv.json": "d098d9f9233fa3ceb1aa14f9d87e8a075ba6b5cb81045811c393a9e60d79c10c",
+        "idle-rom.bin": "9712316cb30fd8aab7369e66d6395d4406866b6c7087b105e17dc08f24496e7b",
+        "qemu.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "display-events.jsonl": "53e82d4fa8c5f9e9845a05c7aff6ee60851bc50837d420c99b2c24b08c809d0e",
+        "samples.jsonl": "91e80216d600ae8a7ed12aadbf7e3e3195e74d123f0c0ce7a3db3b6d81b87492",
+        "producer.jsonl": "0dfabc5a3ca4998b6e1aa25a223421dfc302b56119c64a6511b2f757cec73661",
+        "result.json": "c3a334b97e8da8bf427647acbce23a879f737ab3a70c8a896013562bae5463ae",
+        "cleanup.json": "039262790e6cac8d4dc7d1b4a4eefe98e805303669890d5224d3801c25a06840"
+      }
+    },
+    "/home/bogdan/macos-vm/run/c346-roi-final/native": {
+      "seconds": 5,
+      "unique": 300,
+      "unique_per_second": 60.0,
+      "valid": 615,
+      "invalid_after_start": 5,
+      "last_sequence": 299,
+      "producer_count": 300,
+      "producer_per_second": 60.01526761110953,
+      "qemu_exit": 0,
+      "split": false,
+      "explicit_rate": 60,
+      "display_events": {
+        "mark": 1,
+        "invalidate": 2721
+      },
+      "width": 1920,
+      "height": 1080,
+      "scale": 1,
+      "paired_observers": true,
+      "roi_bounds_refused": false,
+      "scope": "TCG qtest producer and offscreen SpiceDisplay buffer only; no guest OS/GPU/manager/scanout FPS",
+      "observer_disagreements": 0,
+      "paired_samples": 620,
+      "passed": true,
+      "median_ms": {
+        "full_snapshot_seconds": 0.8780370008025784,
+        "roi_snapshot_seconds": 0.02043500353465788,
+        "full_total_seconds": 1.3576185010606423,
+        "roi_total_seconds": 0.5003110018151347
+      },
+      "orders": {
+        "full": {
+          "full_snapshot_seconds": 1.099617496947758,
+          "roi_snapshot_seconds": 0.01881500065792352
+        },
+        "roi": {
+          "full_snapshot_seconds": 0.8589370008849073,
+          "roi_snapshot_seconds": 0.036130000808043405
+        }
+      },
+      "error_categories": {
+        "checksum mismatch": 5
+      },
+      "files": {
+        "argv.json": "553427444433ecdb170f9b9cb593e92869fec77d01c33ac3532e26b6f2ffe81a",
+        "idle-rom.bin": "9712316cb30fd8aab7369e66d6395d4406866b6c7087b105e17dc08f24496e7b",
+        "qemu.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "display-events.jsonl": "b1539e7b861e5ed65ea9369ca9badfb70ee22f776a007b4682a300857cc02e3c",
+        "samples.jsonl": "4a0c17915cd60f144ac4484a7bd44d8b3e6b32cc31e8dc8750698fe29eda5834",
+        "producer.jsonl": "d33a440d3b5939cf483fbfd4acf7471875a19864dbe36001924c04ae18071fef",
+        "result.json": "3d96d1a174a5dc70b0e4d9f0efad35798f1dcf14be01a091b626c8031686b47e",
+        "cleanup.json": "a0f012890f77d29fb0748c6c3aa3b1d23e36ef78b7a98ed557ecb2f5105463ee"
+      }
+    },
+    "/home/bogdan/macos-vm/run/c346-roi-final/split": {
+      "seconds": 5,
+      "unique": 37,
+      "unique_per_second": 7.4,
+      "valid": 75,
+      "invalid_after_start": 546,
+      "last_sequence": 185,
+      "producer_count": 188,
+      "producer_per_second": 37.545877418034905,
+      "qemu_exit": 0,
+      "split": true,
+      "explicit_rate": 60,
+      "display_events": {
+        "mark": 1,
+        "invalidate": 1693
+      },
+      "width": 640,
+      "height": 480,
+      "scale": 1,
+      "paired_observers": true,
+      "roi_bounds_refused": false,
+      "scope": "TCG qtest producer and offscreen SpiceDisplay buffer only; no guest OS/GPU/manager/scanout FPS",
+      "observer_disagreements": 0,
+      "paired_samples": 621,
+      "passed": true,
+      "median_ms": {
+        "full_snapshot_seconds": 0.1923710005939938,
+        "roi_snapshot_seconds": 0.02097999822581187,
+        "full_total_seconds": 0.6902910026838072,
+        "roi_total_seconds": 0.5058809983893298
+      },
+      "orders": {
+        "full": {
+          "full_snapshot_seconds": 0.2674000061233528,
+          "roi_snapshot_seconds": 0.01837000309024006
+        },
+        "roi": {
+          "full_snapshot_seconds": 0.14251000175136141,
+          "roi_snapshot_seconds": 0.03311499676783569
+        }
+      },
+      "error_categories": {
+        "torn duplicate tokens": 542,
+        "checksum mismatch": 4
+      },
+      "files": {
+        "argv.json": "f5d5378817ffae6ed0677be9823f8a5b775677e36ccd6a9bdf8a252640a11ba3",
+        "idle-rom.bin": "9712316cb30fd8aab7369e66d6395d4406866b6c7087b105e17dc08f24496e7b",
+        "qemu.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "display-events.jsonl": "897c503cf23ca6fc1f7b0a5835c52d0770797fd51297533aaa9d64f4f2c8b503",
+        "samples.jsonl": "e871f29ebc08fb4dd3325abe0b34f46b403e8e75648b92ee547d93dbf73477c2",
+        "producer.jsonl": "67fabee2b998e6dcb0a9a3ebb43e50d51a4af5980e06687e10ec202466469030",
+        "result.json": "74a424b7efe5ee521a800e3e58e03c00d1d3bf725a1b04f51faa1a9bf493194f",
+        "cleanup.json": "2a1c3bae3cca79c4f1647d5a799b4042f85eba9e645f57779dcada020aacbdfd"
+      }
+    }
+  },
+  "provenance": {
+    "/home/bogdan/macos-vm/run/worktrees/candidate-346/tools/console-token-roi.c": "f6b411f8b174358959f3d46fe3b099b0c8f8ca3e453d6668620782d26831311c",
+    "/home/bogdan/macos-vm/run/worktrees/candidate-346/tools/build-console-token-roi.py": "67987f0947609621ffce94d4bcea5c82c76144da03cfda3bb34f41c5cae96492",
+    "/home/bogdan/macos-vm/run/worktrees/candidate-346/tools/spice-refresh-smoke.py": "4cec46eeed4e737d35bb1858bb72f48bf2bd4fd01fe3adb9524d91c14535fe25",
+    "/home/bogdan/macos-vm/run/worktrees/candidate-346/tests/test_console_token_roi.py": "787310746e27d9071739d74feee440e2a7b865af1d89f9d8e8188ac5250fb79a",
+    "/home/bogdan/macos-vm/run/c346-roi-final/host-tests.log": "dec9d1451936015847f53e4bbd818bb555bf5ac9118a9417ac985fa1874bef30",
+    "/home/bogdan/macos-vm/run/c346-roi-final/roi-guard-tests.log": "8b603ac756a364f0c7a896dee5162eb7269ce08d72b9a2b808d8e97e0ac91bb5",
+    "/home/bogdan/macos-vm/run/c346-roi-extension-v2/command.json": "25c24f0f3f99356b335b78c22406543046a1cc402201312f42bec4390c8ef805",
+    "/home/bogdan/macos-vm/run/c346-roi-extension-v2/console_token_roi.cpython-314-x86_64-linux-gnu.so": "6f4bf86deb3e3aca9d5ca1fc32d5effb0ba40fd62e148e06c5e5ec17e7d5cdf4",
+    "/home/bogdan/macos-vm/run/c346-roi-extension-v3/command.json": "082e954e815f5a466f679a4a9971e471fa54880e42f97b38d7f7f82678db9d09",
+    "/home/bogdan/macos-vm/run/c346-roi-extension-v3/console_token_roi.cpython-314-x86_64-linux-gnu.so": "eef02417a5e190031c827e481bf9c0512d401e7af66cc2ecef6eca9956df8d8c"
+  },
+  "cleanup": {
+    "/home/bogdan/macos-vm/run/c346-roi-controls/native": {
+      "pid": 624491,
+      "exit": 0,
+      "stopped": true
+    },
+    "/home/bogdan/macos-vm/run/c346-roi-controls/hidpi": {
+      "pid": 624553,
+      "exit": 0,
+      "stopped": true
+    },
+    "/home/bogdan/macos-vm/run/c346-roi-controls/split": {
+      "pid": 624638,
+      "exit": 0,
+      "stopped": true
+    },
+    "/home/bogdan/macos-vm/run/c346-roi-final/native": {
+      "pid": 624953,
+      "exit": 0,
+      "stopped": true
+    },
+    "/home/bogdan/macos-vm/run/c346-roi-final/hidpi": {
+      "pid": 624983,
+      "exit": 0,
+      "stopped": true
+    },
+    "/home/bogdan/macos-vm/run/c346-roi-final/split": {
+      "pid": 625009,
+      "exit": 0,
+      "stopped": true
+    },
+    "/home/bogdan/macos-vm/run/c346-roi-final/bounds": {
+      "pid": 625039,
+      "exit": 0,
+      "stopped": true
+    },
+    "/home/bogdan/macos-vm/run/c346-roi-pilot": {
+      "pid": 621693,
+      "exit": 0,
+      "stopped": true
+    }
+  },
+  "validation": {
+    "host_tests": 1162,
+    "host_skipped": 8,
+    "optional_real_extension_tests": 5
+  }
+}

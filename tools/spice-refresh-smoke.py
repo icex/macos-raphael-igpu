@@ -21,9 +21,9 @@ def load(name, filename):
     module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module);return module
 
 
-def band(token,nonce,sequence,second=None):
+def band(token,nonce,sequence,second=None,width=640,scale=1):
     # Full-width 96-row band starts at framebuffer y64. Two bordered tokens.
-    width=640;raw=bytearray(width*96*4)
+    raw=bytearray(width*96*scale*4)
     for left,seq in [(16,sequence),(176,sequence if second is None else second)]:
         packet=token.packet(nonce,seq)
         for row in range(12):
@@ -33,9 +33,13 @@ def band(token,nonce,sequence,second=None):
                     bit=(row-1)*16+col-1
                     value=255 if (packet[bit//8]>>(7-bit%8))&1 else 0
                     pixel=bytes((value,value,value,0))
-                line=pixel*8
-                for y in range(row*8,row*8+8):
-                    off=(y*width+left+col*8)*4;raw[off:off+32]=line
+                line=pixel*(8*scale)
+                for y in range(row*8*scale,(row*8+8)*scale):
+                    off=(y*width+(left+col*8)*scale)*4;raw[off:off+32*scale]=line
+    # Unused corner pixels validate B/G/R channel conversion independently of
+    # the decoder's grayscale and magenta colors. Never touches sampled points.
+    for left in (16,176):
+        off=left*scale*4;raw[off:off+4]=bytes((191,73,17,0))
     return raw
 
 
@@ -44,8 +48,17 @@ def main():
     p.add_argument('--qemu',type=Path,required=True);p.add_argument('--bios-dir',type=Path,required=True)
     p.add_argument('--output',type=Path,required=True);p.add_argument('--seconds',type=int,default=15)
     p.add_argument('--rate',type=int,choices=(60,));p.add_argument('--split',action='store_true')
+    p.add_argument('--roi-extension',type=Path,help='optional paired observer control, no extra connection')
+    p.add_argument('--width',type=int,default=640);p.add_argument('--height',type=int,default=480)
+    p.add_argument('--scale',type=int,choices=(1,2),default=1)
     args=p.parse_args()
     if not 1<=args.seconds<=30:p.error('seconds must be 1..30')
+    if not 320*args.scale<=args.width<=3840 or not 160*args.scale<=args.height<=2160:p.error('unsupported geometry')
+    roi=None
+    if args.roi_extension:
+        import sys
+        sys.path.insert(0,str(args.roi_extension.resolve()))
+        import console_token_roi as roi
     args.output.mkdir(parents=True,exist_ok=False)
     token=load('token','console-token.py');smoke=load('smoke','qemu-console-smoke.py')
     nonce='0344034403440344';root=args.output.resolve()
@@ -81,9 +94,9 @@ def main():
             return reply
         def pci(off,value):test(f'outl 0xcf8 {0x80001000+off:#x}');test(f'outl 0xcfc {value:#x}')
         qmp('qmp_capabilities');qmp('cont');qmp('stop');pci(0x10,0xe0000000);pci(0x18,0xf0000000);pci(4,2)
-        for i,v in [(4,0),(1,640),(2,480),(3,32),(6,640),(8,0),(9,0)]:test(f'writew {0xf0000500+i*2:#x} {v:#x}')
-        def write(raw):test(f'write {0xe0000000+64*640*4:#x} {len(raw):#x} 0x{raw.hex()}')
-        write(band(token,nonce,0));test('writew 0xf0000508 0x41')
+        for i,v in [(4,0),(1,args.width),(2,args.height),(3,32),(6,args.width),(8,0),(9,0)]:test(f'writew {0xf0000500+i*2:#x} {v:#x}')
+        def write(raw):test(f'write {0xe0000000+64*args.scale*args.width*4:#x} {len(raw):#x} 0x{raw.hex()}')
+        write(band(token,nonce,0,width=args.width,scale=args.scale));test('writew 0xf0000508 0x41')
         import gi
         gi.require_version('Gtk','3.0');gi.require_version('SpiceClientGtk','3.0');gi.require_version('SpiceClientGLib','2.0')
         from gi.repository import Gtk,GLib,GObject,SpiceClientGtk,SpiceClientGLib
@@ -103,33 +116,73 @@ def main():
         GObject.Object.connect(session,'channel-new',channel_new)
         session.connect()
         stream=(root/'samples.jsonl').open('w');producer=(root/'producer.jsonl').open('w')
-        began=time.monotonic();started=None;tracker=token.SequenceTracker();unique=invalid=valid=0;last=None
+        began=time.monotonic();started=None;tracker=token.SequenceTracker();unique=invalid=valid=0;last=None;bounds_refused=False
         def produce():
             try:
                 start=time.monotonic();sequence=0
                 while not stop.is_set() and time.monotonic()-start<args.seconds:
                     sequence+=1;t0=time.monotonic()
                     if args.split:
-                        write(band(token,nonce,sequence,sequence-1));stop.wait(.020)
-                    write(band(token,nonce,sequence));t1=time.monotonic()
+                        write(band(token,nonce,sequence,sequence-1,width=args.width,scale=args.scale));stop.wait(.020)
+                    write(band(token,nonce,sequence,width=args.width,scale=args.scale));t1=time.monotonic()
                     producer.write(json.dumps(dict(sequence=sequence,start=t0,ack=t1,split=args.split))+'\n');producer.flush()
                     stop.wait(max(0,start+sequence/60-time.monotonic()))
             except Exception as error:producer_error.append(repr(error));stop.set()
         def poll():
-            nonlocal started,worker,unique,invalid,valid,last
+            nonlocal started,worker,unique,invalid,valid,last,bounds_refused
             now=time.monotonic();sample={'time':now}
             if started is not None and now-started>=args.seconds:
                 Gtk.main_quit();return False
             if now-began>args.seconds+15 or producer_error:
                 Gtk.main_quit();return False
             try:
-                pix=display.get_pixbuf()
-                if pix is None:raise ValueError('no-pixbuf')
-                if not (root/'first.png').exists():pix.savev(str(root/'first.png'),'png',[],[])
-                sample.update(width=pix.get_width(),height=pix.get_height(),channels=pix.get_n_channels())
-                sequence=token.decode(pix.get_pixels(),pix.get_width(),pix.get_height(),pix.get_rowstride(),pix.get_n_channels(),nonce)
+                def full_snapshot():
+                    pix=display.get_pixbuf()
+                    if pix is None:raise ValueError('no-pixbuf')
+                    return dict(pixels=pix.get_pixels(),width=pix.get_width(),height=pix.get_height(),stride=pix.get_rowstride(),channels=pix.get_n_channels())
+                if roi:
+                    results={};snapshots={}
+                    order=('roi','full') if (valid+invalid)%2 else ('full','roi')
+                    sample['order']=order
+                    for observer in order:
+                        begin=time.monotonic()
+                        try:
+                            snap=roi.snapshot(display,args.scale) if observer=='roi' else full_snapshot()
+                            sample[observer+'_snapshot_seconds']=time.monotonic()-begin
+                            snapshots[observer]=snap
+                            try:
+                                seq=token.decode(snap['pixels'],snap['width'],snap['height'],snap['stride'],snap['channels'],nonce,args.scale)
+                                results[observer]=dict(valid=True,sequence=seq)
+                            except ValueError as error:results[observer]=dict(valid=False,error=str(error))
+                        except (ValueError,RuntimeError) as error:results[observer]=dict(valid=False,error=str(error))
+                        sample[observer+'_total_seconds']=time.monotonic()-begin
+                    sample['observers']=results
+                    # Ignore unlike startup availability until both have buffers.
+                    if 'roi_snapshot_seconds' in sample and 'full_snapshot_seconds' in sample:
+                        full=snapshots['full'];small=snapshots['roi'];pixels_equal=True
+                        for y in range(64*args.scale,160*args.scale):
+                            for left in (16*args.scale,176*args.scale):
+                                length=144*args.scale*3
+                                a=y*full['stride']+left*3;b=y*small['stride']+left*3
+                                if full['pixels'][a:a+length]!=small['pixels'][b:b+length]:pixels_equal=False
+                        sample['roi_pixels_equal']=pixels_equal
+                        sample['equivalent']=results['roi']==results['full'] and pixels_equal
+                        if not sample['equivalent']:raise RuntimeError('observer disagreement')
+                    if not results['full']['valid']:raise ValueError(results['full']['error'])
+                    if not results['roi']['valid']:raise ValueError(results['roi']['error'])
+                    sequence=results['full']['sequence']
+                else:
+                    snap=full_snapshot()
+                    sequence=token.decode(snap['pixels'],snap['width'],snap['height'],snap['stride'],snap['channels'],nonce,args.scale)
+                sample.update(width=args.width,height=args.height,channels=3)
                 result=tracker.observe(sequence)
                 if started is None:
+                    if roi and args.width==320 and args.height==160 and args.scale==1:
+                        try:roi.snapshot(display,2)
+                        except ValueError as error:
+                            if str(error)!='token ROI outside primary':raise
+                            bounds_refused=True
+                        else:raise RuntimeError('out-of-bounds ROI was accepted')
                     started=now;worker=threading.Thread(target=produce);worker.start()
                 valid+=1;unique+=int(result['unique']);last=sequence
                 sample.update(valid=True,sequence=sequence,**result)
@@ -149,8 +202,15 @@ def main():
                    valid=valid,invalid_after_start=invalid,last_sequence=last,producer_count=len(rows),
                    producer_per_second=(len(rows)-1)/(rows[-1]['ack']-rows[0]['ack']) if len(rows)>1 else None,
                    qemu_exit=process.returncode,split=args.split,explicit_rate=args.rate,display_events=counts,
+                   width=args.width,height=args.height,scale=args.scale,paired_observers=roi is not None,roi_bounds_refused=bounds_refused,
                    scope='TCG qtest producer and offscreen SpiceDisplay buffer only; no guest OS/GPU/manager/scanout FPS')
+        if roi:
+            samples=[json.loads(line) for line in (root/'samples.jsonl').read_text().splitlines()]
+            stats['observer_disagreements']=sum(row.get('equivalent') is False for row in samples)
+            stats['paired_samples']=sum('equivalent' in row for row in samples)
+            stats['passed']=stats['observer_disagreements']==0 and stats['paired_samples']>0
         (root/'result.json').write_text(json.dumps(stats,indent=2)+'\n');print(json.dumps(stats))
+        if roi and not stats['passed']:raise RuntimeError('paired observer qualification failed')
     finally:
         signal.alarm(0)
         stop.set()
