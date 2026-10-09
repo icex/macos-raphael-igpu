@@ -10,6 +10,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <sys/stat.h>
+#include <sys/file.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <time.h>
+#include <unistd.h>
+#include "console-display-control.h"
 @interface CGVirtualDisplayMode : NSObject
 - (instancetype)initWithWidth:(unsigned int)width height:(unsigned int)height refreshRate:(double)refreshRate;
 @end
@@ -89,6 +98,135 @@ static bool selectMode(CGDirectDisplayID did,unsigned w,unsigned h) {
     }
     if(modes)CFRelease(modes);return ok;
 }
+
+static double controlNow(void) {struct timespec t;clock_gettime(CLOCK_MONOTONIC,&t);return t.tv_sec+t.tv_nsec/1e9;}
+static bool controlTarget(CGDirectDisplayID did) {
+ return CGDisplayIsOnline(did)&&CGDisplayVendorNumber(did)==0x5250&&CGDisplayModelNumber(did)==0x3453&&
+  CGDisplayBounds(did).origin.x==0&&CGDisplayBounds(did).origin.y==0;
+}
+static CGDisplayModeRef controlMode(CGDirectDisplayID did,unsigned w,unsigned h) {
+ CFArrayRef all=CGDisplayCopyAllDisplayModes(did,(__bridge CFDictionaryRef)@{(id)kCGDisplayShowDuplicateLowResolutionModes:@YES});
+ CGDisplayModeRef result=NULL;
+ if(all)for(CFIndex i=0;i<CFArrayGetCount(all);i++){
+  CGDisplayModeRef m=(CGDisplayModeRef)CFArrayGetValueAtIndex(all,i);
+  if(CGDisplayModeGetPixelWidth(m)==w&&CGDisplayModeGetPixelHeight(m)==h&&CGDisplayModeGetWidth(m)*2==w&&CGDisplayModeGetHeight(m)*2==h){result=CGDisplayModeRetain(m);break;}
+ }
+ if(all)CFRelease(all);return result;
+}
+@interface RGDisplayControl : NSObject {
+ int listener,peer,lockFD;double expires;
+ uint8_t request[RG_CONTROL_REQUEST+1],reply[RG_CONTROL_REPLY];size_t received,sent;
+ bool replying,waitingMode;unsigned additions,requestFlags;
+ CGDirectDisplayID originalID;
+}
+@property(strong) CGVirtualDisplay *display;
+@property(strong) NSMutableArray *modes;
+@property(copy) NSString *socketPath;
+- (BOOL)start:(NSString *)directory display:(CGVirtualDisplay *)display modes:(NSMutableArray *)modes;
+- (void)tick;
+@end
+@implementation RGDisplayControl
+- (BOOL)start:(NSString *)directory display:(CGVirtualDisplay *)display modes:(NSMutableArray *)modes {
+ listener=peer=lockFD=-1;
+ if(!directory.isAbsolutePath||![directory.stringByStandardizingPath isEqual:directory])return NO;
+ // Validate every ancestor: never traverse a symbolic link or writable foreign directory.
+ NSString *part=@"/";struct stat st;
+ for(NSString *component in directory.pathComponents){
+  if([component isEqual:@"/"])continue;part=[part stringByAppendingPathComponent:component];
+  if(lstat(part.fileSystemRepresentation,&st)<0){
+   if(![part isEqual:directory]||errno!=ENOENT||mkdir(part.fileSystemRepresentation,0700))return NO;
+   if(lstat(part.fileSystemRepresentation,&st))return NO;
+  }
+  if(!S_ISDIR(st.st_mode)||(st.st_uid!=0&&st.st_uid!=getuid())||(st.st_mode&0022))return NO;
+ }
+ if(st.st_uid!=getuid()||(st.st_mode&0777)!=0700)return NO;
+ NSString *lock=[directory stringByAppendingPathComponent:@"owner.lock"];
+ lockFD=open(lock.fileSystemRepresentation,O_RDWR|O_CREAT|O_NOFOLLOW|O_CLOEXEC,0600);
+ if(lockFD<0||fstat(lockFD,&st)||!S_ISREG(st.st_mode)||st.st_uid!=getuid()||st.st_nlink!=1||(st.st_mode&0777)!=0600||flock(lockFD,LOCK_EX|LOCK_NB))return NO;
+ self.socketPath=[directory stringByAppendingPathComponent:@"control.sock"];
+ struct sockaddr_un addr={0};addr.sun_family=AF_UNIX;
+ if(strlen(self.socketPath.fileSystemRepresentation)>=sizeof(addr.sun_path))return NO;
+ strcpy(addr.sun_path,self.socketPath.fileSystemRepresentation);
+ // The lifetime lock excludes another conforming holder. Reclaim only a
+ // refused, same-owner socket with stable inode identity; never a live endpoint.
+ if(lstat(addr.sun_path,&st)==0){
+  if(!S_ISSOCK(st.st_mode)||st.st_uid!=getuid()||(st.st_mode&0777)!=0600)return NO;
+  int probe=socket(AF_UNIX,SOCK_STREAM,0);if(probe<0)return NO;
+  if(fcntl(probe,F_SETFL,O_NONBLOCK)){close(probe);return NO;}
+  int connected=connect(probe,(struct sockaddr *)&addr,sizeof(addr));int saved=errno;close(probe);
+  if(connected==0||saved!=ECONNREFUSED)return NO;
+  struct stat again;if(lstat(addr.sun_path,&again)||again.st_dev!=st.st_dev||again.st_ino!=st.st_ino||!S_ISSOCK(again.st_mode)||again.st_uid!=getuid())return NO;
+  if(unlink(addr.sun_path))return NO;
+ }else if(errno!=ENOENT)return NO;
+ listener=socket(AF_UNIX,SOCK_STREAM,0);if(listener<0)return NO;
+ if(fcntl(listener,F_SETFL,O_NONBLOCK)||fcntl(listener,F_SETFD,FD_CLOEXEC))return NO;
+ mode_t old=umask(077);int bound=bind(listener,(struct sockaddr *)&addr,sizeof(addr));umask(old);
+ if(bound||chmod(addr.sun_path,0600)||listen(listener,1))return NO;
+ self.display=display;self.modes=[modes mutableCopy];originalID=display.displayID;
+ return YES;
+}
+- (void)closePeer {if(peer>=0)close(peer);peer=-1;received=sent=0;replying=false;waitingMode=false;requestFlags=0;}
+- (void)respond {
+ unsigned status=rg_validate(request,received),flags=requestFlags;
+ unsigned w=received>=20?rg_read32(request+12):0,h=received>=20?rg_read32(request+16):0;
+ CGDisplayModeRef chosen=NULL;
+ if(!status&&!controlTarget(originalID))status=4;
+ if(!status){
+  chosen=controlMode(originalID,w,h);
+  if(!chosen&&waitingMode)return;
+  if(!chosen){
+   if(additions>=8)status=5;
+   else {
+    NSMutableArray *candidate=[self.modes mutableCopy];
+    [candidate addObject:[[CGVirtualDisplayMode alloc] initWithWidth:w/2 height:h/2 refreshRate:60]];
+    CGVirtualDisplaySettings *settings=[CGVirtualDisplaySettings new];settings.hiDPI=1;settings.rotation=0;settings.modes=candidate;
+    if(![self.display applySettings:settings])status=3;
+    else {self.modes=candidate;additions++;requestFlags=flags|2;waitingMode=true;return;}
+   }
+  }
+ }
+ if(!status&&(self.display.displayID!=originalID||!controlTarget(originalID)))status=4;
+ if(!status){
+  CGDisplayModeRef current=CGDisplayCopyDisplayMode(originalID);
+  bool same=current&&CGDisplayModeGetIODisplayModeID(current)==CGDisplayModeGetIODisplayModeID(chosen)&&CGDisplayModeGetPixelWidth(current)==w&&CGDisplayModeGetPixelHeight(current)==h;
+  if(current)CFRelease(current);
+  if(!same){
+   CGDisplayConfigRef config=NULL;CGError e=CGBeginDisplayConfiguration(&config);
+   if(!e){e=CGConfigureDisplayWithDisplayMode(config,originalID,chosen,NULL);if(!e)e=CGCompleteDisplayConfiguration(config,kCGConfigureForSession);else CGCancelDisplayConfiguration(config);}
+   if(e)status=3;else flags|=1;
+  }
+ }
+ CGDisplayModeRef actual=CGDisplayCopyDisplayMode(originalID);
+ if(!status&&(!actual||self.display.displayID!=originalID||!controlTarget(originalID)||CGDisplayModeGetPixelWidth(actual)!=w||CGDisplayModeGetPixelHeight(actual)!=h))status=4;
+ uint32_t values[10]={RG_CONTROL_MAGIC,1,received>=12?rg_read32(request+8):0,status,originalID,
+  actual?(uint32_t)CGDisplayModeGetPixelWidth(actual):0,actual?(uint32_t)CGDisplayModeGetPixelHeight(actual):0,
+  actual?(uint32_t)CGDisplayModeGetWidth(actual):0,actual?(uint32_t)CGDisplayModeGetHeight(actual):0,flags};
+ for(unsigned i=0;i<10;i++)rg_write32(reply+4*i,values[i]);
+ if(actual)CFRelease(actual);if(chosen)CFRelease(chosen);replying=true;
+ emit(@{@"phase":@"control-result",@"sequence":@(values[2]),@"status":@(status),@"display":@(originalID),@"pixel_width":@(values[5]),@"pixel_height":@(values[6]),@"flags":@(flags)});
+}
+- (void)tick {
+ if(peer<0){
+  peer=accept(listener,NULL,NULL);if(peer<0)return;
+  uid_t uid;gid_t gid;int yes=1;
+  if(getpeereid(peer,&uid,&gid)||uid!=getuid()||fcntl(peer,F_SETFL,O_NONBLOCK)||fcntl(peer,F_SETFD,FD_CLOEXEC)||setsockopt(peer,SOL_SOCKET,SO_NOSIGPIPE,&yes,sizeof(yes))){[self closePeer];return;}
+  expires=controlNow()+2.;received=sent=0;replying=false;waitingMode=false;requestFlags=0;
+ }
+ if(controlNow()>=expires){[self closePeer];return;}
+ if(waitingMode&&!replying)[self respond];
+ if(!replying&&!waitingMode){
+  ssize_t n=read(peer,request+received,sizeof(request)-received);
+  if(n==0){[self closePeer];return;}
+  if(n<0){if(errno!=EAGAIN&&errno!=EWOULDBLOCK&&errno!=EINTR)[self closePeer];return;}
+  received+=(size_t)n;if(received>=RG_CONTROL_REQUEST)[self respond];
+ }
+ if(replying){
+  ssize_t n=write(peer,reply+sent,sizeof(reply)-sent);
+  if(n<0){if(errno!=EAGAIN&&errno!=EWOULDBLOCK&&errno!=EINTR)[self closePeer];return;}
+  sent+=(size_t)n;if(sent==sizeof(reply))[self closePeer];
+ }
+}
+@end
 int main(int argc,const char **argv) { @autoreleasepool {
     [NSApplication sharedApplication];
     if(argc<2)return 2;
@@ -97,6 +235,9 @@ int main(int argc,const char **argv) { @autoreleasepool {
     if(!abi()){emit(@{@"error":@"virtual display ABI is unsupported"});return 2;}
     NSMutableArray *modes=[NSMutableArray new];NSMutableArray *names=[NSMutableArray new];
     unsigned initialW=1920,initialH=1080;
+    NSString *controlDir=nil;
+    if(argc==4&&!strcmp(argv[2],"--control-dir"))controlDir=@(argv[3]);
+    else if(argc!=2&&!(argc==4&&!strcmp(argv[2],"--modes")))return 2;
     if(argc>=4&&!strcmp(argv[2],"--modes")) {
         for(NSString *item in [@(argv[3]) componentsSeparatedByString:@","]) {
             NSArray *wh=[item componentsSeparatedByString:@"x"];if(wh.count!=2)continue;
@@ -125,6 +266,13 @@ int main(int argc,const char **argv) { @autoreleasepool {
     bool selected=applied&&selectMode(display.displayID,initialW,initialH);
     emit(@{@"phase":@"serving",@"applied":@(applied),@"display":@(display.displayID),@"initial_selected":@(selected),
            @"modes":names,@"displays":inventory()});
+    RGDisplayControl *control=nil;
+    if(controlDir){
+        control=[RGDisplayControl new];
+        if(![control start:controlDir display:display modes:modes]){emit(@{@"error":@"control endpoint refused"});return 4;}
+        [NSTimer scheduledTimerWithTimeInterval:0.02 repeats:YES block:^(NSTimer *timer){(void)timer;[control tick];}];
+        emit(@{@"phase":@"control-ready",@"display":@(display.displayID),@"socket":control.socketPath});
+    }
     signal(SIGTERM,exit);
     [[NSRunLoop currentRunLoop] run];   // hold the display until killed
     return 0;
