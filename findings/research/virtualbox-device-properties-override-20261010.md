@@ -6,9 +6,9 @@ AttemptA is preserved under `run/c398-vbox-boot-a`, including its writable disks
 
 Pinned official VirtualBox7.2.18 commit14841851fa211c7faf615978ba385d59947236c6, VBoxAppleSim.c:114–145 defines Apple device-property GUID91BD12FE-F6C3-44FB-A5B7-5122AB303AE0 and its first placeholder operation calls DebugAssert before returning EFI_UNSUPPORTED. OpenCore's DevicePathPropertyDatabase.h:66–68 defines the same GUID; its first operation is GetProperty (line180).
 
-Pinned OpenCore1.0.6 reference commit64e3b5811ee17804cc04236618dc968ca57378a6: OpenCoreUefi.c:398 passes UEFI.ProtocolOverrides.DeviceProperties to OcDevicePathPropertyInstallProtocol. OcDevicePropertyLib.c:805–820 uninstalls the existing instances when true; false locates and returns the firmware implementation. Lines984–995 install OpenCore's full implementation. Configuration.tex:9102–9110 documents replacement for VM compatibility and warns that firmware-provided entries are discarded. Existing configured DeviceProperties.Add entries therefore remain intact; blindly removing them is not the intervention.
+Pinned OpenCore1.0.5 reference commite8437f737708c7151b243d967f9ceca54193d97e: OpenCoreUefi.c:398 passes UEFI.ProtocolOverrides.DeviceProperties to OcDevicePathPropertyInstallProtocol. OcDevicePropertyLib.c:805–820 uninstalls the existing instances when true; false locates and returns the firmware implementation. Lines984–995 install OpenCore's full implementation. Configuration.tex:9085–9093 documents replacement for VM compatibility and warns that firmware-provided entries are discarded. Existing configured DeviceProperties.Add entries therefore remain intact; blindly removing them is not the intervention.
 
-The installed626688-byte OpenCore.efi contains a REL-XXX-YYYY-MM-DD template but no resolved release string was recovered with ASCII/UTF16 scans. Its hash is retained. This source reference explains the supported setting, but exact installed-source equivalence is not asserted. Native bootB is the discriminator.
+The installed626688-byte OpenCore.efi contains only a REL-XXX-YYYY-MM-DD template in the initial string scan. BootB picker screenshot `screen-001.png`, visually inspected by the hardware owner, independently identifies **REL-105-2025-07-07**. The source reference is therefore updated to official1.0.5; prior1.0.6 reference artifacts remain retained. Release alignment is not a byte-for-byte build provenance proof.
 
 ## Prepared independent bootB
 
@@ -17,3 +17,7 @@ The installed626688-byte OpenCore.efi contains a REL-XXX-YYYY-MM-DD template but
 `boot-b-preparation.json` retains safe configuration/loader hashes and exact checks. No VM registration or start was performed by this agent. Root owns execution. Success at this boundary means no recurring placeholder assertion and progression beyond it; it does not establish macOS desktop, acceleration or fix unrelated CPU/SMC/storage behavior.
 
 The controller now treats observed gurumeditation as functional_failure=firmware-or-vm-guru, promptly leaves observation for owned cleanup and returns nonzero. That state alone does not identify EFI as the cause; the separate assertion evidence does. AttemptA's original result is not rewritten. Eight focused existing controller/preparation tests pass; this new observed-state branch still requires runtime execution.
+
+## BootB progress (live, completion pending)
+
+The root-owned attempt progressed past the previous VBox firmware placeholder assertion to the OpenCore picker and EXITBS/HANDOFFXNU, then kernel APFS and USB-tablet initialization. The hardware owner reports AHCI timeouts probing empty ports0/1 with disks on2/4; boot completion is still pending. This demonstrates the targeted protocol-boundary improvement, not a macOS desktop or acceleration result. No lifecycle completion is asserted while the attempt is live.

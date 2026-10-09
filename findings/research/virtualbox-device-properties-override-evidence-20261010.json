@@ -1,7 +1,7 @@
 {
-  "opencore_reference_tag": "1.0.6",
-  "opencore_reference_commit": "64e3b5811ee17804cc04236618dc968ca57378a6",
-  "installed_opencore_version": "not identified; do not claim exact source/binary match",
+  "opencore_reference_tag": "1.0.5",
+  "opencore_reference_commit": "e8437f737708c7151b243d967f9ceca54193d97e",
+  "installed_opencore_version": "REL-105-2025-07-07 visibly observed by hardware owner in bootB picker; build/source byte equivalence not established",
   "artifacts": [
     {
       "path": "/home/bogdan/macos-vm/run/c400-source/Docs_Configuration.tex",
@@ -47,6 +47,35 @@
     {
       "path": "/home/bogdan/macos-vm/run/c398-vbox-clones/OpenCore-inspect.efi",
       "sha256": "a78f699080543456c29551134b78f1bb59f69ec38bc94b59b3c04bb5f28bdd12"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c400-source/1.0.5_Docs_Configuration.tex",
+      "upstream_path": "Docs/Configuration.tex",
+      "url": "https://raw.githubusercontent.com/acidanthera/OpenCorePkg/e8437f737708c7151b243d967f9ceca54193d97e/Docs/Configuration.tex",
+      "sha256": "666015ec98718c80513f7b4329cc6762b92967ec70c29aca95de12b594eb2171"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c400-source/1.0.5_Library_OcMainLib_OpenCoreUefi.c",
+      "upstream_path": "Library/OcMainLib/OpenCoreUefi.c",
+      "url": "https://raw.githubusercontent.com/acidanthera/OpenCorePkg/e8437f737708c7151b243d967f9ceca54193d97e/Library/OcMainLib/OpenCoreUefi.c",
+      "sha256": "e5b116d0c61975fcc477e536736429a531343db2133d2a1b200731f24dfd172a"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c400-source/1.0.5_Library_OcDevicePropertyLib_OcDevicePropertyLib.c",
+      "upstream_path": "Library/OcDevicePropertyLib/OcDevicePropertyLib.c",
+      "url": "https://raw.githubusercontent.com/acidanthera/OpenCorePkg/e8437f737708c7151b243d967f9ceca54193d97e/Library/OcDevicePropertyLib/OcDevicePropertyLib.c",
+      "sha256": "65c03bfdc958159d243d72e9ddd434f186eaa373c22dce0047c90104743b057c"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c400-source/1.0.5_Include_Apple_Protocol_DevicePathPropertyDatabase.h",
+      "upstream_path": "Include/Apple/Protocol/DevicePathPropertyDatabase.h",
+      "url": "https://raw.githubusercontent.com/acidanthera/OpenCorePkg/e8437f737708c7151b243d967f9ceca54193d97e/Include/Apple/Protocol/DevicePathPropertyDatabase.h",
+      "sha256": "101422c9ae59ca447a0dbb8ed352d7d5d9a2aad82a97e79605413fb6eb30967c"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c400-vbox-boot-b/screen-001.png",
+      "sha256": "66cf90c8c260b96d6600d580835ea812d99da8bb1e3317330d3ba07796fb9477"
     }
-  ]
+  ],
+  "prior_reference_tag": "1.0.6"
 }
