@@ -73,7 +73,9 @@ def holders(allow_self=False):
 def reply(success,port=1):return monitors.packet(3,struct.pack('<II',2,1 if success else 2),port)
 
 class Handler:
-    def __init__(self,apply,record,clock=time.monotonic):
+    def __init__(self,apply,record,clock=time.monotonic,*,scale=2):
+        if type(scale) is not int or scale not in (1,2):raise ValueError("unsupported guest scale")
+        self.scale=scale
         self.apply=apply;self.record=record;self.clock=clock
         self.messages=Budget(64,16,clock);self.last_apply=-float('inf')
         self.requests=0;self.applied=0;self.failures=0;self.pending=None
@@ -94,7 +96,7 @@ class Handler:
         config=row.get('configuration')
         if row['port']!=1 or config is None:
             return self.refuse(row,self.requests,'unsupported monitor request')
-        try:control.geometry(config['width'],config['height'])
+        try:control.geometry(config['width'],config['height'],scale=self.scale)
         except ValueError:return self.refuse(row,self.requests,'unsupported geometry')
         if remaining<6:return self.refuse(row,self.requests,'session ending')
         response=b''
@@ -111,7 +113,8 @@ class Handler:
         try:
             result=self.apply(config['width'],config['height'],min(5,remaining-1))
             success=result.get('passed') is True
-            if success and (result.get('pixel_width'),result.get('pixel_height'))!=(config['width'],config['height']):
+            if success and ((result.get('pixel_width'),result.get('pixel_height'))!=(config['width'],config['height']) or
+                            (result.get('width'),result.get('height'))!=(config['width']//self.scale,config['height']//self.scale)):
                 raise ValueError('holder geometry mismatch')
             error=None if success else 'holder refused'
             self.record(dict(event='mode-result',request=number,configuration=config,result=result))
@@ -121,9 +124,9 @@ class Handler:
         self.applied+=1
         return reply(True,row['port'])
 
-def serve(fd,seconds,apply,record,clock=time.monotonic):
+def serve(fd,seconds,apply,record,clock=time.monotonic,*,scale=2):
     deadline=clock()+seconds;parser=monitors.MonitorParser();pending=bytearray(monitors.capabilities(1,True))
-    handler=Handler(apply,record,clock);rx_budget=Budget(65536,16384,clock);tx_budget=Budget(8192,4096,clock)
+    handler=Handler(apply,record,clock,scale=scale);rx_budget=Budget(65536,16384,clock);tx_budget=Budget(8192,4096,clock)
     rx=tx=0;traffic=False
     while clock()<deadline:
         response=handler.flush(deadline-clock());tx_budget.consume(len(response));pending.extend(response)
@@ -162,6 +165,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--control-dir',type=Path,required=True)
     parser.add_argument('--seconds',type=int,required=True)
+    parser.add_argument('--guest-scale',type=int,choices=(1,2),default=2)
     args=parser.parse_args()
     if not 1<=args.seconds<=6000:parser.error('session must be1..6000seconds')
     if os.geteuid()==0 or os.getuid()!=os.geteuid():raise ValueError('ordinary user required')
@@ -183,9 +187,9 @@ def main():
         fd=os.open(DEVICE,os.O_RDWR|os.O_NONBLOCK|os.O_NOCTTY|os.O_CLOEXEC|os.O_NOFOLLOW)
         if monitors.transport.identity(os.fstat(fd))!=before or monitors.transport.identity(os.lstat(DEVICE))!=before:raise ValueError('agent device replaced')
         fcntl.ioctl(fd,termios.TIOCEXCL);holders(allow_self=True)
-        record(dict(event='start',seconds=args.seconds,euid=os.geteuid(),device_identity=before))
+        record(dict(event='start',seconds=args.seconds,euid=os.geteuid(),device_identity=before,guest_scale=args.guest_scale))
         outcome=serve(fd,max(0,args.seconds-(time.monotonic()-began)-min(1,args.seconds/2)),
-                      lambda w,h,timeout:control.request(directory,w,h,timeout),record)
+                      lambda w,h,timeout:control.request(directory,w,h,timeout,scale=args.guest_scale),record,scale=args.guest_scale)
         record(outcome)
     except StopSession as reason:record(dict(event='finish',reason='signal',signal=str(reason)))
     finally:

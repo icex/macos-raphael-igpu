@@ -28,7 +28,7 @@ class AgentWireTests(unittest.TestCase):
         disconnect=agent.monitors.packet(13,b'',port=2)
         def verified(width,height,timeout):
             calls.append((width,height,clock[0]))
-            return dict(passed=True,pixel_width=width,pixel_height=height,display=123)
+            return dict(passed=True,pixel_width=width,pixel_height=height,width=width//2,height=height//2,display=123)
         def bounded_wait(readable,writable,exceptional,timeout):
             waits[0]+=1
             if waits[0]>1100:raise AssertionError('unbounded serve loop')

@@ -23,7 +23,8 @@ spec=importlib.util.spec_from_file_location('console_install_transaction',SOURCE
 base=importlib.util.module_from_spec(spec);spec.loader.exec_module(base)
 SOURCES=('virtual-display-server.m','console-display-control.h','console-vdagent-agent.py',
          'console-display-control.py','console-vdagent-monitors.py','console-vdagent-handshake.py',
-         'console-support-launcher.sh','console-support-install.py','console-install-transaction.py')
+         'console-support-launcher.sh','console-support-install.py','console-install-transaction.py',
+         'console-preferences.py')
 INFO=dict(CFBundleIdentifier='org.raphaelgpu.console',CFBundleName='Raphael Console',
           CFBundleExecutable='console-presenter',CFBundlePackageType='APPL',
           CFBundleShortVersionString='0.1.0',CFBundleVersion='1',LSUIElement=True,

@@ -24,10 +24,13 @@ cleanup() {
 }
 trap cleanup EXIT
 trap 'exit 143' TERM INT
+guest_scale=$(/usr/bin/python3 -B "$payload/console-preferences.py" --support-dir "$support" --read-scale)
+case "$guest_scale" in 1|2) ;; *) exit 3 ;; esac
+printf '{"event":"scale-policy","guest_scale":%s,"scope":"fixed for this holder lifetime"}\n' "$guest_scale"
 start=$SECONDS
 caffeinate -dimsu -t 6000 & awake=$!
 : >"$support/display.log"
-"$payload/virtual-display-server" --serve --control-dir "$support/control" >"$support/display.log" 2>&1 & vd=$!
+"$payload/virtual-display-server" --serve --control-dir "$support/control" --guest-scale "$guest_scale" >"$support/display.log" 2>&1 & vd=$!
 for ((i=0;i<200;i++)); do
  if grep -q '"phase":"serving"' "$support/display.log" && [[ -S "$support/control/control.sock" ]]; then break; fi
  kill -0 "$vd" 2>/dev/null || exit 3
@@ -40,7 +43,7 @@ remaining=$((6000-SECONDS+start))
 # Absence of the optional channel is supported. The agent validates identity and
 # exclusive ownership; this launcher never takes over another port holder.
 if [[ -c /dev/tty.com.redhat.spice.0 && ! -L /dev/tty.com.redhat.spice.0 ]]; then
- /usr/bin/python3 -B "$payload/console-vdagent-agent.py" --control-dir "$support/control" --seconds "$remaining" >"$support/vdagent.log" 2>&1 & resize=$!
+ /usr/bin/python3 -B "$payload/console-vdagent-agent.py" --control-dir "$support/control" --seconds "$remaining" --guest-scale "$guest_scale" >"$support/vdagent.log" 2>&1 & resize=$!
 fi
 remaining=$((6000-SECONDS+start))
 ((remaining>0)) || exit 3

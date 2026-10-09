@@ -22,7 +22,7 @@ class SessionAgentTests(unittest.TestCase):
         self.clock=Clock();self.records=[];self.calls=[]
         def verified(w,h,timeout):
             self.calls.append((w,h,timeout))
-            return dict(passed=True,pixel_width=w,pixel_height=h,display=123)
+            return dict(passed=True,pixel_width=w,pixel_height=h,width=w//2,height=h//2,display=123)
         return agent.Handler(apply or verified,self.records.append,self.clock)
 
     def process(self,handler,request,remaining):
@@ -49,6 +49,23 @@ class SessionAgentTests(unittest.TestCase):
         handler=self.handler(lambda *args:dict(passed=True,pixel_width=3840,pixel_height=2160))
         self.assertFalse(self.success(self.process(handler,row(),100)))
         self.assertEqual(handler.applied,0)
+
+    def test_one_x_accepts_odd_geometry_and_requires_matching_logical_reply(self):
+        calls=[];records=[]
+        def apply(w,h,timeout):
+            calls.append((w,h));return dict(passed=True,pixel_width=w,pixel_height=h,width=w,height=h)
+        handler=agent.Handler(apply,records.append,scale=1)
+        self.assertTrue(self.success(self.process(handler,row(1235,743),100)))
+        self.assertEqual(calls,[(1235,743)])
+        wrong=agent.Handler(lambda w,h,t:dict(passed=True,pixel_width=w,pixel_height=h,width=w//2,height=h//2),records.append,scale=1)
+        self.assertFalse(self.success(self.process(wrong,row(1235,743),100)))
+        self.assertEqual(wrong.applied,0)
+
+    def test_two_x_refuses_physical_only_success_or_wrong_logical_scale(self):
+        for logical in [{},{'width':2468,'height':1484}]:
+            handler=self.handler(lambda *args:dict(passed=True,pixel_width=2468,pixel_height=1484,**logical))
+            self.assertFalse(self.success(self.process(handler,row(),100)))
+            self.assertEqual(handler.applied,0)
 
     def test_holder_loss_refuses_without_touching_presenter(self):
         def missing(*args):raise ConnectionRefusedError()
