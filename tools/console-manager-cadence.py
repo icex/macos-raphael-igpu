@@ -54,6 +54,64 @@ def stale_bound(previous_maximum,last_unique,now):
     return previous_maximum if last_unique is None else max(previous_maximum,now-last_unique)
 
 
+class ViewportControl:
+    """Logical-pixel request for one discovered widget, bounded asynchronous settle."""
+    def __init__(self, display, size, clock=time.monotonic):
+        self.display=display;self.size=tuple(size);self.clock=clock
+        self.began=clock();self.next_adjust=self.began;self.attempts=0
+        self.stable_since=None;self.ready=False;self.metadata=None
+        self.window=display.get_toplevel()
+        if self.window is display or not callable(getattr(self.window,'resize',None)):
+            raise RuntimeError('viewport lacks owned top-level window')
+        display.set_size_request(*self.size)
+
+    def observe(self):
+        d=self.display
+        return dict(width=d.get_allocated_width(),height=d.get_allocated_height(),
+                    gdk_scale=d.get_scale_factor(),scaling=d.get_property('scaling'),
+                    resize_guest=d.get_property('resize-guest'),monitor_id=d.get_property('monitor-id'))
+
+    def check(self):
+        now=self.clock();state=self.observe()
+        exact=(state['width'],state['height'])==self.size
+        if self.ready:
+            if state!=self.metadata:raise RuntimeError('requested viewport geometry/properties changed')
+            return True
+        if now-self.began>=5:raise RuntimeError('requested viewport did not settle within 5 seconds')
+        if exact:
+            if self.stable_since is None:self.stable_since=now
+            if now-self.stable_since>=.25:
+                self.ready=True;self.metadata=state;return True
+        else:
+            self.stable_since=None
+            if now>=self.next_adjust and self.attempts<4:
+                width,height=self.window.get_size()
+                self.window.resize(max(1,width+self.size[0]-state['width']),
+                                   max(1,height+self.size[1]-state['height']))
+                self.attempts+=1;self.next_adjust=now+.5
+        return False
+
+
+class DrawTiming:
+    """Wall time between handlers around widget draw; includes descendants/scheduling."""
+    def __init__(self,clock=time.monotonic):
+        self.clock=clock;self.started=0;self.completed=0;self.pending=None
+        self.total=0.;self.maximum=0.;self.reentrant=0
+    def begin(self,*unused):
+        if self.pending is not None:self.reentrant+=1
+        self.pending=self.clock();self.started+=1
+        return False
+    def end(self,*unused):
+        if self.pending is not None:
+            elapsed=self.clock()-self.pending;self.total+=elapsed;self.maximum=max(self.maximum,elapsed)
+            self.completed+=1;self.pending=None
+        return False
+    def summary(self):
+        return dict(started=self.started,completed=self.completed,total_seconds=self.total,
+                    max_seconds=self.maximum,in_progress=self.pending is not None,reentrant=self.reentrant,
+                    scope='widget draw wall time including descendants/scheduling; not GPU or scanout time')
+
+
 class EventObserver:
     """Synchronous existing-channel observer; never dispatches nested GLib work.
 
@@ -125,6 +183,7 @@ def matching_display_channel(display, display_channel_type):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--viewport',nargs=2,type=int,metavar=('WIDTH','HEIGHT'),help='require exact logical SpiceDisplay allocation; bounded owned-window resize')
     parser.add_argument('--event-observer',choices=['roi','count-only'],help='optional existing-channel invalidation observer; count-only never decodes and starts its window at attachment')
     parser.add_argument('--roi-extension',type=Path,help='optional explicit console_token_roi native extension file; default remains full pixbuf')
     parser.add_argument('--manager-prefix',type=Path,required=True,help='extracted package root/usr')
@@ -138,6 +197,7 @@ def main():
     if len(args.nonce)!=16 or any(c not in '0123456789abcdefABCDEF' for c in args.nonce):parser.error('nonce needs16 hex digits')
     if not 1<=args.seconds<=120 or not 8<=args.interval_ms<=1000 or not 1<=args.wait_seconds<=120:parser.error('bounded duration/interval required')
     if args.event_observer=='roi' and args.roi_extension is None:parser.error('event ROI observer requires explicit ROI extension')
+    if args.viewport and not (320<=args.viewport[0]<=1920 and 200<=args.viewport[1]<=1200):parser.error('viewport outside bounded sizes')
     prefix=args.manager_prefix.resolve()
     # Native typelib dependencies require the dynamic loader paths at exec time.
     if os.environ.get('RGPU_CADENCE_PREFIX')!=str(prefix):
@@ -163,20 +223,31 @@ def main():
     tracker=token.SequenceTracker();began=time.monotonic();first=None;last_unique=None
     unique=0;invalid=0;duplicates=0;max_stale=0.;max_sample=0.;finished=False
     event_observer=None;last_heartbeat=None;max_heartbeat_gap=0.
+    viewport=None;draw_timing=None;draw_handlers=[]
     def record(data):stream.write(json.dumps(data)+'\n');stream.flush()
     record(dict(event='start',nonce=args.nonce,seconds=args.seconds,interval_ms=args.interval_ms,
                 observer=observer,event_observer=args.event_observer,roi_extension=extension_identity,
-                window_start='attachment' if args.event_observer=='count-only' else 'first-valid-token',
+                requested_viewport=args.viewport,window_start='attachment' if args.event_observer=='count-only' else 'first-valid-token',
                 scope='sampled decoded manager buffer only; no host scanout or absolute latency'))
     def finish(reason):
         nonlocal finished
         if finished:return
+        if reason=='completed' and viewport is not None:
+            try:viewport.check()
+            except Exception as error:
+                record(dict(event='sampler-error',error_type=type(error).__name__,error=str(error)))
+                reason='sampler-error'
         finished=True
         elapsed=0 if first is None else time.monotonic()-first
         summary=dict(reason=reason,nonce=args.nonce,observer=observer,roi_extension=extension_identity,unique=unique,duplicates=duplicates,invalid=invalid,
                      elapsed=elapsed,sampled_unique_per_second=unique/elapsed if elapsed else None,
                      max_observed_stale_seconds=stale_bound(max_stale,last_unique,time.monotonic()),max_sampling_seconds=max_sample,
                      scope='Sampling lower bound; observer work may reduce measured throughput. No GPU FPS, host scanout, or absolute latency claim.')
+        if args.viewport:
+            summary.update(requested_viewport=args.viewport,widget_geometry=viewport.metadata if viewport else None,
+                           widget_draw_timing=draw_timing.summary() if draw_timing else None)
+            for obj,handler in draw_handlers:GObject.Object.disconnect(obj,handler)
+            draw_handlers.clear()
         if args.event_observer:
             summary.update(event_observer=args.event_observer,max_heartbeat_gap_seconds=max_heartbeat_gap,
                            **(event_observer.summary() if event_observer else {}))
@@ -190,6 +261,19 @@ def main():
                 for child in widget.get_children():visit(child)
         for window in Gtk.Window.list_toplevels():visit(window)
         return found
+    def prepare_viewport(display):
+        nonlocal viewport,draw_timing
+        if not args.viewport:return True
+        if viewport is None:
+            viewport=ViewportControl(display,args.viewport)
+        if viewport.display is not display:raise RuntimeError('viewport display replaced')
+        if not viewport.check():return False
+        if draw_timing is None:
+            draw_timing=DrawTiming()
+            draw_handlers.append((display,GObject.Object.connect(display,'draw',draw_timing.begin)))
+            draw_handlers.append((display,GObject.Object.connect_after(display,'draw',draw_timing.end)))
+            record(dict(event='viewport-ready',host_monotonic=time.monotonic(),**viewport.metadata))
+        return True
     def poll(display=None,trigger='timer'):
         nonlocal first,last_unique,unique,invalid,duplicates,max_stale,max_sample
         now=time.monotonic()
@@ -201,8 +285,16 @@ def main():
         try:
             if display is None:
                 candidates=displays()
-                if len(candidates)!=1:raise ValueError('need exactly one manager SpiceDisplay')
+                if len(candidates)!=1:
+                    if viewport is not None:
+                        event_failure(RuntimeError('viewport display disappeared/ambiguous'));return False
+                    raise ValueError('need exactly one manager SpiceDisplay')
                 display=candidates[0]
+            if args.viewport:
+                try:
+                    if not prepare_viewport(display):return True
+                except Exception as error:
+                    event_failure(error);return False
             decoded=sample_display(display,token,args.nonce,roi)
             sequence=decoded['sequence']
             state=tracker.observe(sequence)
@@ -236,6 +328,9 @@ def main():
         if first is None and now-began>=args.wait_seconds:finish('no-valid-token');return False
         try:
             found=displays()
+            if args.viewport and len(found)==1:
+                if not prepare_viewport(found[0]):return True
+            if args.viewport and viewport and len(found)!=1:raise RuntimeError('viewport display disappeared/ambiguous')
             if event_observer:
                 if len(found)!=1 or found[0] is not event_observer.display:
                     raise RuntimeError('observed manager display replaced/disappeared')
