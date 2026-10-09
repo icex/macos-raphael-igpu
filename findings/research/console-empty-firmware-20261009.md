@@ -66,10 +66,20 @@ with moving material, keyboard modifiers and correctly positioned mouse input.
 
 Capture is valid CORE_PROBE_PASS; clean guest-request shutdown and ordinary native
 recovery succeed, authorizes_launch=true. This is one post-resume successful run,
-not general suspend/resume or crash qualification. The repeated same-boot run is
-next. See console-spice-native-evidence-20261009.json for immutable artifact hashes
+not general suspend/resume or crash qualification. The repeated same-boot run is recorded below. See console-spice-native-evidence-20261009.json for immutable artifact hashes
 and input/workload limitations. No DMCUB start or firmware load was added.
 
 The tightened sleep-inhibition harness and focused viewer pass the full host
 suite:1,033 tests,3 skipped. The first run exposed an obsolete idle-only test
 expectation; it was corrected to assert rejection of idle-only inhibition.
+
+## Same-boot repeat
+
+Attempt340b refused before QEMU/VFIO exposure because the journal rotated past
+initialization. The existing retained-evidence mechanism was refreshed with the
+hash-pinned340 same-boot host-before snapshot; no admission rule was removed.
+Attempt340c, run23ac0eeacee8dffe827be1a645e6416c, MODE2#278, repeats the exact
+f5f8285a85f2437285c0aa6a5daa29e1 build. Native desktop Metal and automatic presenter
+startup pass. SPICE again shows3840×2160 desktop pixels. Capture is valid
+CORE_PROBE_PASS; guest-request shutdown and native recovery succeed again.
+These two same-boot runs do not qualify arbitrary host sleep or guest crashes.

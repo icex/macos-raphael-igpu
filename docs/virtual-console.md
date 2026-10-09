@@ -150,3 +150,37 @@ An unchanged installed app retained consent across the tested guest boot.
 Sources: [Apple mode-selection lifetime](https://developer.apple.com/documentation/coregraphics/cgdisplaysetdisplaymode(_:_:_:)),
 [ScreenCaptureKit configuration updates](https://developer.apple.com/documentation/screencapturekit/scstream/updateconfiguration(_:completionhandler:)),
 and [XNU user-mapping options](https://github.com/apple-oss-distributions/xnu/blob/xnu-11417.140.69/iokit/Kernel/IOUserClient.cpp#L2047).
+
+## SPICE and post-resume initialization (October9)
+
+Candidate340 renders the native accelerated1080HiDPI desktop through the exact
+`VM_CONSOLE=bochs-spice` profile. Use the supervised SPICE viewer:
+
+```sh
+python3 tools/console-spice-window.py --state "$RUN_RESULTS/supervision.json"
+```
+
+This requires GTK3 and the SpiceClientGLib/SpiceClientGtk2.0 introspection bindings.
+The only display endpoint is a user-owned local Unix socket; network SPICE, GL,
+clipboard sharing, USB redirection and guest resize are disabled. Existing USB
+sound uses the established PulseAudio path; SPICE audio is disabled. The viewer
+focuses its display widget. Closing it leaves the VM under harness ownership.
+
+Native Metal/WindowServer ownership,3840×2160 desktop output, keyboard modifiers
+and mouse coordinates pass. A180-second moving-material workload completes2,066
+event iterations. These are functional observations, not60fps console delivery.
+Clean guest shutdown and ordinary native recovery succeed on two340 runs.
+The repeat automatically restores the approved presenter and HiDPI desktop.
+
+The `rgpuconsolecold=1` opt-in handles only reset-held, entirely empty executable
+firmware windows with validated memory ranges and successful native allocator
+accounting. It retains immediate pre-PSP checks and does not start DMCUB. This
+is not general host suspend/resume qualification. Other firmware states retain
+the established guarded path or refuse. See
+[driver evidence](../findings/research/console-empty-firmware-20261009.md) and
+[input/capture artifact hashes](../findings/research/console-spice-native-evidence-20261009.json).
+
+GNOME Boxes rendered independent software-only color patterns through a private
+container-local libvirt session. This does not yet qualify managing the accelerated
+macOS VM through Boxes or virt-manager. Work remains on preserving launch identity,
+network descriptors and the harness's single-owner cleanup protocol.

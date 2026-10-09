@@ -14,13 +14,15 @@ on **`dev`**; this is not yet a generally supported driver release.
 
 ## Current status
 
-**VM window (October8):** candidate336 displays the accelerated macOS desktop in
-QEMU's console at1080HiDPI, with working mouse and keyboard input. Native Metal
-readbacks pass. Automatic login startup and a three-minute material-window workload
-pass on repeat boots, followed by clean shutdown and GPU recovery. Candidate338
-helpers follow guest native1080p/1080HiDPI changes and validate write-combined
-console copies. Fresh moving-content samples reach10–16 copied fps, not measured
-viewer fps; smooth delivery, broader lifecycle and other VM managers remain open. [Evidence and setup](docs/virtual-console.md).
+**VM window (October9):** candidate340 renders the native Metal desktop through
+QEMU's SPICE console at1080HiDPI, with verified keyboard and mouse input. A
+three-minute moving-material workload, clean guest shutdown and native GPU recovery
+pass; a same-boot repeat restores the desktop and recovers cleanly. The guarded console initialization now handles the observed empty firmware
+state after host resume. Candidate338 helpers follow guest native1080p/HiDPI
+mode changes. Smooth delivery, measured viewer fps and full libvirt/VM-manager
+lifecycle integration remain open. Software-only GNOME Boxes console transport
+passes; that is not yet a libvirt-managed accelerated macOS result.
+[Evidence and setup](docs/virtual-console.md).
 
 The qualified remote baseline from **2026-09-16**, candidate **1.0.280**, runs an accelerated desktop through
 macOS Screen Sharing. Native window effects and Safari composition checks pass,

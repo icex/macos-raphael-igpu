@@ -224,17 +224,18 @@ from device enumeration or passing microbenchmarks.
 
 ## Next work, in order
 
-**Current user priority (October8): an accelerated macOS desktop in a VM-manager
-window, without physical HDMI.** Candidate336 shows the full1080HiDPI desktop
-through QEMU's console, with correct mouse mapping and keyboard modifiers.
-Native Metal and WindowServer accelerator ownership pass. The packaged guest
-launcher automatically restores the desktop and retained permission on a repeat
-guest boot. Candidate338 helpers follow native1080p/1080HiDPI guest modes and
-pass independent write-combined pixel checks. A fresh three-minute workload
-completes with10–16 copied fps; this does not qualify viewer throughput. Guest
-shutdown and native recovery pass, including a retry after stopping an unrelated
-software QEMU. Host-window-driven resize, measured performance and broader lifecycle
-remain next. QEMU/libvirt first; VirtualBox needs a separate transport/driver.
+**Current user priority (October9): an accelerated macOS desktop in a VM-manager
+window, without physical HDMI.** Candidate340 passes native desktop Metal and
+WindowServer ownership through QEMU SPICE at1080HiDPI. Keyboard modifiers and
+mouse positioning pass. A three-minute material workload completes; normal guest
+shutdown and native recovery succeed. Its guarded empty-firmware path handles
+the observed post-resume state without reboot or rebind. Both host sleep and
+idle blocking are now required during runs, with a session blocker across builds.
+Candidate338 helpers follow native1080p/HiDPI guest modes. Copied-frame counts do
+not qualify viewer throughput. Software-only Boxes transport works, but full
+libvirt-managed macOS launch/input/shutdown/recovery remains the next integration
+milestone. Host-window-driven resize and measured performance remain open.
+VirtualBox requires a separate transport/driver.
 [Implementation and measured scope](virtual-console.md).
 
 0. **Physical display and HDMI audio (user priority, 2026-09-17).**

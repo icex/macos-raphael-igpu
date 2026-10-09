@@ -15,7 +15,15 @@
     "c341-keyboard-timed.png": "8768f271c5254cb4690ee89758835ec04079b67b06f0fb2573361b22ed64662a",
     "c340-mouse-result.txt": "235357dc13f3e955dfd3f99a24dc46b7c5ea9acfbdce86d451ef9d149450504a",
     "c340-mouse-input.png": "7f42a747b30071f9f54cb600a25aba8233e55fe161c20c54eaa4b05f374ee5c7",
-    "c340-input-final-and-awake.txt": "c66bceeaedf3ccd3722aaaff3aac6e5dba2d8b36d49f09c4ec5c61067090889b"
+    "c340-input-final-and-awake.txt": "c66bceeaedf3ccd3722aaaff3aac6e5dba2d8b36d49f09c4ec5c61067090889b",
+    "c340-c-awake-presenter.txt": "4ad1e7bda596ec139546736aa540fedd31b84c4261c68b6d447cbc62727d2c6b",
+    "c340-c-presenter-log.txt": "8c5f925facdd671c233224d521bbbbe5ab8578b972c1842050b9768207470f79",
+    "c340-c-spice-native-desktop.png": "55919841146699a93589877220e5eaa06de9dc00370f9fd372525a44bc4f3f4a",
+    "candidate-340-attempt-c-results/verdict.json": "1f5763dec3cfdb98cd6a1b9cef92c8455c7700b0ac6e53472c0bdb9de815cf25",
+    "candidate-340-attempt-c-results/shutdown.json": "3acf9ca7b177a40ea5097b48b833a0855423035813762e6f351728e2573d9177",
+    "candidate-340-attempt-c-results/recovery.json": "feaf0c96c6bdbc923070ee969c88234a64bc85c8f1347fad0965d2c3f5e7649e",
+    "candidate-340-attempt-c-results/probe.json": "ef1669a03843b9c1353e9b4e62edbe09abe2521c01f554f75308a2d5277fd96a",
+    "candidate-340-attempt-c-results/capture-sha256.json": "136ae108445b49d834f807b98c4017f3387c2e347ccac452357470975136a076"
   },
   "scope": {
     "native_desktop_metal": true,
@@ -39,5 +47,17 @@
     "Mouse test was manually unloaded after its click log, before its45-second text completion; keyboard pass is the separate completed test",
     "Initial input trials were confounded by focus and expired viewer/probe lifetimes",
     "launchctl submit unexpectedly restarted the material app; only its first completed180-second interval is counted; owned job/processes subsequently removed"
-  ]
+  ],
+  "repeat": {
+    "run_id": "23ac0eeacee8dffe827be1a645e6416c",
+    "mode2_index": 278,
+    "automatic_presenter": true,
+    "native_desktop_metal": true,
+    "final_shutdown_recovery": {
+      "verdict": "CORE_PROBE_PASS",
+      "shutdown": "exited-after-guest-request",
+      "recovery": "recovered",
+      "authorizes_launch": true
+    }
+  }
 }
