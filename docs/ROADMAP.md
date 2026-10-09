@@ -1,6 +1,15 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-10-09. Current console qualification: **395**. Installed immutable
+Updated 2026-10-10. Current accelerated-console functional qualification: **395**;
+**399** adds stage timing and clean completion, **401** adds actual VirtualBox
+software desktop/input with one vCPU. No VBox Metal acceleration is implemented.
+VBox boot with eight vCPUs panics on scheduler time; shutdown with one vCPU required deadline
+poweroff after a Terminal job confirmation, followed by delayed GUI unlock and
+verified unregister. SMP timekeeping and graceful software shutdown remain open.
+[VBox result](../findings/research/virtualbox-single-cpu-native-20261010.md) ·
+[399 timing](../findings/research/console-host-snapshot-timing-native-20261010.md).
+
+Current installed console scope: **395**. Installed immutable
 capture has private retired-writer isolation, explicit unmap/remap and bounded
 capacity recovery. Corrected five-target/text input with the agent active and
 stereo delivery/restoration pass; earlier fixture errors remain retained. Actual-manager100-second mixed-motion observations reach
@@ -15,7 +24,7 @@ Existing scale preference, odd1× resize, connected-agent input/audio and fresh-
 stationary-pointer fix is not installed system-wide. Fresh-user setup, broader
 crash/host-boot coverage and other frontends remain open. GPU-native virtual display
 transport is unimplemented. VirtualBox7.2.18 has a VFIO backend, but its configuration
-path and Raphael/console integration are unqualified, requiring a separate audit
+dispatch is observed, but Raphael/accelerated-console integration remains unqualified, requiring a separate audit
 and implementation—not an assumption that QEMU success transfers.
 
 Physical baseline remains **330**, user-confirmed correct-color HiDPI120/HDMI audio.

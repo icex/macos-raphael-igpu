@@ -1,0 +1,85 @@
+{
+  "uuid": "1a0740c7-3655-481e-a5f5-e7dac76dee1e",
+  "artifacts": [
+    {
+      "path": "/home/bogdan/macos-vm/run/c401-vbox-boot-c/scope.json",
+      "bytes": 375,
+      "sha256": "fdcb89ecc5e75d8a02dcce157eee4906046eed5f4bdcbb3c7f87c00c83714761"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c401-vbox-boot-c/result.json",
+      "bytes": 181,
+      "sha256": "f50892c985860ea63403f7f87732108f18bef86075df44303c931c77e25c2006"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c401-vbox-boot-c/root-cleanup-reconciliation.json",
+      "bytes": 318,
+      "sha256": "9f4d90956ef3f0630580d7231eb46827a6941e78a90b57f98be02dcb36738e99"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c401-vbox-boot-c/stopped.json",
+      "bytes": 69,
+      "sha256": "9b34c83f982dcc34025a2e7759b85011ee9a6671227c4b65f36473c05e89e4fb"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c401-vbox-boot-c/tsc-observation.json",
+      "bytes": 238,
+      "sha256": "e6a7f841033c3813381242733bde808fe89d5da12513526b6167b7a444dc42c8"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c401-vbox-boot-c/tsc-selected.txt",
+      "bytes": 68,
+      "sha256": "179ebe0d803773322db633dceb6a77aa2defd9497d21d5777ba908916e346dec"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c401-vbox-boot-c/input-awake.png",
+      "bytes": 256813,
+      "sha256": "cddc35f039a0f620ff9ff7e642dd5845ca71dea414dc95e766ae92e55a61e95d"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c401-vbox-boot-c/terminal-before.png",
+      "bytes": 215568,
+      "sha256": "aea7c9094279a6486e18eea72ddb7ad0b368d187f37b7e5235bdc7f5a3f97248"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c401-vbox-boot-c/screen-046.png",
+      "bytes": 271651,
+      "sha256": "b04a44d3598acda3aa7850ab31a110b287d5ce32ece9d27b48aa4073ed4f85ef"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c401-vbox-boot-c/keyboard-command.json",
+      "bytes": 319,
+      "sha256": "2e13a4572a66d51f64012e957103209294d7197625375e3032513e1a365d1229"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c401-vbox-boot-c/wake-input.json",
+      "bytes": 197,
+      "sha256": "52bc6931d2eb1089b1ccfbbfd3d238723bcaf3edf4d542db0cacf1edd385934a"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c401-vbox-boot-c/guest-shutdown-request.json",
+      "bytes": 201,
+      "sha256": "f5a11b50be20b9b1b73e7054e80bf647c9f65d01ac296a34723cb8cfa8498822"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c401-vbox-boot-c/acpi-shutdown-request.json",
+      "bytes": 117,
+      "sha256": "9cebb2332c03fc41fc9dc270f3e20a7b4b3abb816aeb60edeac12f2f2a64b2af"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c401-vbox-boot-c/shutdown-dialog-confirmed.json",
+      "bytes": 185,
+      "sha256": "40cf461a2c040c84b1ccd3469f92e4126be15062fd69bbc2b15d47585e2ba7bb"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c401-vbox-boot-c/uart1.log",
+      "bytes": 132527,
+      "sha256": "578d2a6626d090ef3d9082c44df3a189be435451f2e18eddd2bf9fa58c84d94a"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c401-vbox-boot-c/uart2.log",
+      "bytes": 1528,
+      "sha256": "ec6273f3d544760d34375d9de81916c13e4c93169ea1109ce4f4a9996fd609bb"
+    }
+  ]
+}

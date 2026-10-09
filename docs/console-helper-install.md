@@ -131,3 +131,13 @@ its restart limitation is not waived.395 retains private guest-shutdown/Docker
 exit0 evidence despite an original unverified reporting classification.394
 capture-abort teardown is not a clean shutdown. See
 [qualification evidence](../findings/research/console-private-staging-cleanup-native-20261009.md).
+
+## Actual VirtualBox software-boot scope
+
+Candidate 401 uses a separate cloned guest with native VBox EFI/SMC and one vCPU,
+reaching a software desktop and verified keyboard input. This does not qualify
+this accelerated capture/helper package on VBox or provide a VBox GPU transport.
+Scheduler timekeeping with eight vCPUs timekeeping, normal guest shutdown without Terminal job
+confirmation, and acceleration remain open. Before a controlled shutdown, stop
+only the test's owned awake job and confirm it no longer blocks Terminal closure.
+[Actual result](../findings/research/virtualbox-single-cpu-native-20261010.md).

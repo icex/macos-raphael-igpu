@@ -1,5 +1,19 @@
 # Accelerated desktop in a VM manager console
 
+**October 10 update:** actual VirtualBox 7.2.18 boots macOS build 24G830 to a desktop
+with one vCPU; Terminal keyboard input and awake assertions pass. Eight vCPUs
+reached userspace but panicked on non-monotonic scheduler time. The comparison with one vCPU retains the same emulated TSC mode/frequency. This is **software display,
+not Raphael passthrough or Metal acceleration**. Shutdown hit a Terminal background job
+confirmation and deadline poweroff; GUI unlock delayed unregister, which later passed.
+[Actual VBox evidence](../findings/research/virtualbox-single-cpu-native-20261010.md).
+
+Candidate 399 measures host snapshot copy/first-touch at 6.834 ms versus allocation
+0.02058 ms and pending free 0.09521 ms. Its 100-second 4K token observation has 4036 unique
+IDs and no invalid/duplicate samples; no optimization or 60 Hz gain is claimed.
+Natural completion/recovery pass. Its late wrong-window screenshot is excluded,
+so 399 does not add returned-desktop visual qualification.
+[Host timing evidence](../findings/research/console-host-snapshot-timing-native-20261010.md).
+
 Current qualification (candidate395): installed immutable snapshot capture
 now survives helper restarts with the sealed capture app unchanged. Private staging
 isolates retired writers: before/after host screenshots match all481401 test pixels.
@@ -28,8 +42,9 @@ receipt variant. Witness exit137 is not container exit137.
 
 GPU-native virtual display transport is **not implemented**: Metal renders on
 Raphael, while presentation captures/copies into a separate virtual framebuffer.
-VirtualBox7.2.18 contains a Linux VFIO backend, but its release configuration path,
-Raphael safety/acceleration and separate console transport remain unqualified.
+VirtualBox7.2.18 has a configuration-dispatch-tested Linux VFIO backend and the
+software desktop above; Raphael safety/acceleration and a separate accelerated
+console transport remain unqualified.
 It is not supported by a configuration switch or by a VirtualBox-styled QEMU window.
 [VirtualBox source audit](../findings/research/virtualbox-vfio-configuration-design-20261009.md).
 Fresh-user installation, automatic DPI choice, broader crash/host-boot coverage,
@@ -84,7 +99,7 @@ Normal/fullscreen input pass. Candidate361 also passes continuous pointer entry
 into1000×760; earlier enter-without-motion failures remain distinct.
 Candidate370 has zero invalid tokens after startup in three native/HiDPI manager
 windows using immutable snapshots plus a single SPICE rectangle. Full-frame
-atomicity, sustained60Hz, adaptive DPI policy, other frontends and VirtualBox remain
+atomicity, sustained60Hz, adaptive DPI policy, other frontends and VirtualBox acceleration remain
 unqualified. Candidate374 improves HiDPI observed cadence to52.6/51.2 IDs/s
 without token failures after startup, but its capture guard force-stops during
 shutdown; recovery and actual process completion must be assessed separately.
@@ -180,7 +195,9 @@ survived the next guest boot. See the installer below.
 
 Desktop capture, main-display selection and mouse/keyboard mapping pass on336.
 Remaining: resize coordination, measured performance and broader cleanup coverage.
-VirtualBox support remains a separate unimplemented transport problem.
+VirtualBox now has a software-only1CPU desktop/input proof. Its accelerated GPU
+transport remains separate and unimplemented; that software boot does not qualify
+the Raphael rendering or snapshot presentation paths.
 
 ## Install the guest console desktop
 
