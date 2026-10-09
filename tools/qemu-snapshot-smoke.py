@@ -181,6 +181,19 @@ def run(qemu, out, bios, restart=False, timing=False, pool=False):
                 if migration.get('status') in ('failed','completed'):break
                 time.sleep(.02)
             assert migration.get('status')=='failed' and 'pre-save failed: bochs-display' in migration.get('error-desc','')
+            unrealized_with_front_and_pending = False
+            if pool and restart:
+                reg(0x30,3);reg(8,1)
+                assert reg(8)==1 and reg(0x34)==3
+                fill(0xd0000000,801*601*4,137);commit(1,801,601)
+                image('pooled-front-before-unrealize',801,601,137)
+                fill(0xd0000000,801*601*4,138);commit(2,801,601)
+                assert reg(0x2c)==2 and reg(0x20)==1
+                qmp('qom-set', {'path':'/machine/peripheral/console',
+                                'property':'realized','value':False})
+                assert qmp('qom-get', {'path':'/machine/peripheral/console',
+                                      'property':'realized'}) is False
+                unrealized_with_front_and_pending = True
             qmp('quit');process.wait(timeout=10)
             assert process.returncode==0
             timing_rows = [line for line in (out/'qemu.log').read_text().splitlines()
@@ -196,7 +209,25 @@ def run(qemu, out, bios, restart=False, timing=False, pool=False):
                     assert int(fields['end_us'])-int(fields['start_us'])>=5000000
             else:
                 assert not timing_rows, 'default-off timing unexpectedly logged'
-            result=dict(passed=True, private_pool_enabled=pool, host_timing_enabled=timing, host_timing_rows=timing_rows,scope='serialized qtest staging ownership and immutable QEMU full pixels; no guest fences, SPICE delivery, or native qualification',
+            pool_rows = [line for line in (out/'qemu.log').read_text().splitlines()
+                         if line.startswith('bochs-snapshot-pool ')]
+            if pool and timing:
+                assert pool_rows, 'enabled pool timing emitted no bounded window'
+                for line in pool_rows:
+                    fields={k:int(v) for k,v in
+                            (token.split('=',1) for token in line.split()[1:])}
+                    assert fields['saturated']==0
+                    assert fields['attempts']==fields['success']+fields['fallback']
+                    assert fields['fallback']==sum(fields[k] for k in
+                        ('allocation_failed','capacity_failed','closed_failed','invalid_failed'))
+                    assert fields['success']>0 and fields['reused']>0
+                    assert fields['created']<=3 and fields['slots']<=3
+                    assert fields['bytes']<=96*1024*1024
+            else:
+                assert not pool_rows, 'default-off pool timing unexpectedly logged'
+            result=dict(passed=True, private_pool_enabled=pool,
+                        pool_rows=pool_rows,
+                        unrealized_with_front_and_pending=unrealized_with_front_and_pending, host_timing_enabled=timing, host_timing_rows=timing_rows,scope='serialized qtest staging ownership and immutable QEMU full pixels; no guest fences, SPICE delivery, or native qualification',
                         checks=checks,counters=counters,migration=migration,commit_roundtrip_timings=timings,qemu_exit_code=process.returncode,
                         qemu_sha256=hashlib.sha256(qemu.read_bytes()).hexdigest(),
                         no_kvm=True,no_physical_gpu=True,one_shot_rearm_refused=not restart,
