@@ -19,5 +19,9 @@
       "path": "/home/bogdan/macos-vm/run/c401-source/bootB-timing-selected.json",
       "sha256": "b75f42c7916df5c1e676178d7d9dec66bd5b1c7111dd091b15b03d92fcc38704"
     }
-  ]
+  ],
+  "preparation": {
+    "path": "/home/bogdan/macos-vm/run/c398-vbox-clones/boot-c-preparation.json",
+    "sha256": "74cd0fcc381f8fa30684f6f78de9bdd974c8f6d45b8582b6b9f36cdb63c4cf5e"
+  }
 }

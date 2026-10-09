@@ -143,6 +143,7 @@ def main():
     ap.add_argument('--smc-key-file', type=Path)
     ap.add_argument('--output', type=Path)
     ap.add_argument('--seconds', type=int, default=240)
+    ap.add_argument('--cpus', type=int, choices=(1, 8), default=8)
     ap.add_argument('--watchdog', nargs=3, metavar=('HOME', 'UUID', 'DEADLINE'))
     a = ap.parse_args()
     if a.derive_smc_key:
@@ -175,7 +176,8 @@ def main():
     ident = str(uuid.uuid4()); name = 'rgpu-c398-' + ident[:8]
     deadline = time.monotonic() + a.seconds
     scope = {'uuid': ident, 'name': name, 'deadline_monotonic': deadline,
-             'loader': str(a.loader.resolve()), 'disk': str(a.disk.resolve()), 'gpu': False}
+             'loader': str(a.loader.resolve()), 'disk': str(a.disk.resolve()), 'gpu': False,
+             'cpus': a.cpus, 'cpu_profile': 'Intel Core i7-6700K', 'tsc_override': None}
     (home / 'scope.json').write_text(json.dumps(scope, indent=2) + '\n')
     registered = False
     guard = None
@@ -186,7 +188,7 @@ def main():
         config_key(config, key); del key
         registered = True  # reconcile even an ambiguous registration failure
         call(home, ['registervm', str(config)])
-        call(home, ['modifyvm', ident, '--memory', '8192', '--cpus', '8', '--cpu-profile', 'Intel Core i7-6700K',
+        call(home, ['modifyvm', ident, '--memory', '8192', '--cpus', str(a.cpus), '--cpu-profile', 'Intel Core i7-6700K',
                     '--firmware', 'efi64', '--chipset', 'ich9', '--ioapic', 'on', '--graphicscontroller', 'vboxvga',
                     '--vram', '64', '--accelerate-3d', 'off', '--nic1', 'none', '--audio-enabled', 'off',
                     '--usb-xhci', 'on', '--mouse', 'usbtablet', '--keyboard', 'usb',
