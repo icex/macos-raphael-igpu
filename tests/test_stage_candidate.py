@@ -1379,6 +1379,24 @@ class EmptyFirmwareConsoleCardTests(unittest.TestCase):
             raw=json.dumps(changed).encode()
             with self.assertRaises(RuntimeError):tool.validate_card(raw,hashlib.sha256(raw).hexdigest())
 
+    def test_candidate399_timing_contract_is_exact(self):
+        tool=load_tool();tool.configure('1.0.399','metal-221')
+        card=json.loads((ROOT/'experiments/metal-219.json').read_text())
+        card.update(id='metal-221',candidate_version='1.0.399')
+        card['functional_boot_arguments']['rgpuconsoletiming']='1'
+        card['launch_options']['CONSOLE_SNAPSHOT']='restart-timing'
+        raw=json.dumps(card).encode();tool.validate_card(raw,hashlib.sha256(raw).hexdigest())
+        for value in [None, '0', True]:
+            changed=copy.deepcopy(card)
+            if value is None: changed['functional_boot_arguments'].pop('rgpuconsoletiming')
+            else: changed['functional_boot_arguments']['rgpuconsoletiming']=value
+            raw=json.dumps(changed).encode()
+            with self.assertRaises(RuntimeError):tool.validate_card(raw,hashlib.sha256(raw).hexdigest())
+        for key,value in [('CONSOLE_SNAPSHOT','restart'),('CONSOLE_SNAPSHOT','on'),('CONSOLE_VDAGENT','off'),('CONSOLE_FULL_REFRESH','off')]:
+            changed=copy.deepcopy(card);changed['launch_options'][key]=value
+            raw=json.dumps(changed).encode()
+            with self.assertRaises(RuntimeError):tool.validate_card(raw,hashlib.sha256(raw).hexdigest())
+
     def test_candidate352_refresh_contract_is_exact(self):
         tool=load_tool();tool.configure('1.0.352','metal-195')
         card=json.loads((ROOT/'experiments/metal-195.json').read_text())

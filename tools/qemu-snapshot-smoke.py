@@ -11,14 +11,15 @@ import subprocess
 import time
 
 
-def run(qemu, out, bios, restart=False):
+def run(qemu, out, bios, restart=False, timing=False):
     out.mkdir(parents=True, exist_ok=False)
     spec = importlib.util.spec_from_file_location('console_smoke', Path(__file__).with_name('qemu-console-smoke.py'))
     smoke = importlib.util.module_from_spec(spec); spec.loader.exec_module(smoke)
     command = [str(qemu), '-L', str(bios), '-machine', 'q35,accel=tcg', '-nodefaults', '-S',
                '-m', '128M', '-vga', 'none', '-display', 'none',
                '-device', 'bochs-display,id=console,addr=02.0,vgamem=64M,x-debug-snapshot=on'+
-               (',x-debug-snapshot-restart=on' if restart else ''),
+               (',x-debug-snapshot-restart=on' if restart else '')+
+               (',x-debug-snapshot-timing=on' if timing else ''),
                '-qtest', f'unix:{out}/qt,server=on,wait=off',
                '-qmp', f'unix:{out}/qm,server=on,wait=off']
     if restart:
@@ -28,6 +29,13 @@ def run(qemu, out, bios, restart=False):
             text=True, capture_output=True, timeout=10)
         (out/'missing-snapshot-prerequisite.txt').write_text(refused.stderr)
         assert refused.returncode != 0 and 'snapshot restart requires snapshot' in refused.stderr
+    if timing:
+        refused = subprocess.run([str(qemu), '-L', str(bios), '-machine', 'q35,accel=tcg',
+            '-nodefaults', '-S', '-m', '128M', '-vga', 'none', '-display', 'none',
+            '-device', 'bochs-display,x-debug-snapshot-timing=on'],
+            text=True, capture_output=True, timeout=10)
+        (out/'missing-timing-prerequisite.txt').write_text(refused.stderr)
+        assert refused.returncode != 0 and 'snapshot timing requires snapshot' in refused.stderr
     (out/'argv.json').write_text(json.dumps(command, indent=2)+'\n')
     with (out/'qemu.log').open('w') as log:
         process = subprocess.Popen(command, stdout=log, stderr=log)
@@ -114,6 +122,8 @@ def run(qemu, out, bios, restart=False):
             image('latest-completed-pending',640,480,92)
             counters=dict(last_published_sequence=reg(0x20),pending_replaced=reg(0x24),published=reg(0x28),pending_sequence=reg(0x2c))
             assert counters==dict(last_published_sequence=seq,pending_replaced=1,published=5,pending_sequence=0)
+            if timing:
+                time.sleep(5.05)  # Cross the bounded host-report window, no guest VM.
             if restart:
                 assert reg(0x34)==1
                 reg(0x34,9);assert reg(0x34)==1 and reg(0x0c)==2
@@ -165,7 +175,20 @@ def run(qemu, out, bios, restart=False):
             assert migration.get('status')=='failed' and 'pre-save failed: bochs-display' in migration.get('error-desc','')
             qmp('quit');process.wait(timeout=10)
             assert process.returncode==0
-            result=dict(passed=True,scope='serialized qtest staging ownership and immutable QEMU full pixels; no guest fences, SPICE delivery, or native qualification',
+            timing_rows = [line for line in (out/'qemu.log').read_text().splitlines()
+                           if line.startswith('bochs-snapshot-timing ')]
+            if timing:
+                assert timing_rows, 'enabled timing emitted no bounded window'
+                for line in timing_rows:
+                    fields=dict(token.split('=',1) for token in line.split()[1:])
+                    n=int(fields['commits'])
+                    assert all(int(fields[k])==n for k in ('alloc_calls','copy_calls','free_calls'))
+                    assert int(fields['pending_null'])+int(fields['pending_present'])==n
+                    assert fields['saturated']=='0' and fields['dropped_geometry']=='0'
+                    assert int(fields['end_us'])-int(fields['start_us'])>=5000000
+            else:
+                assert not timing_rows, 'default-off timing unexpectedly logged'
+            result=dict(passed=True, host_timing_enabled=timing, host_timing_rows=timing_rows,scope='serialized qtest staging ownership and immutable QEMU full pixels; no guest fences, SPICE delivery, or native qualification',
                         checks=checks,counters=counters,migration=migration,commit_roundtrip_timings=timings,qemu_exit_code=process.returncode,
                         qemu_sha256=hashlib.sha256(qemu.read_bytes()).hexdigest(),
                         no_kvm=True,no_physical_gpu=True,one_shot_rearm_refused=not restart,
@@ -187,5 +210,6 @@ if __name__=='__main__':
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--bios-dir',type=Path,required=True)
     parser.add_argument('--restart',action='store_true')
+    parser.add_argument('--timing',action='store_true')
     args=parser.parse_args()
-    print(json.dumps(run(args.qemu.resolve(),args.output.resolve(),args.bios_dir.resolve(),restart=args.restart),indent=2))
+    print(json.dumps(run(args.qemu.resolve(),args.output.resolve(),args.bios_dir.resolve(),restart=args.restart,timing=args.timing),indent=2))
