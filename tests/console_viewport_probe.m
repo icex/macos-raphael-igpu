@@ -77,13 +77,16 @@ int main(int argc,const char **argv) { @autoreleasepool {
     field.placeholderString=@"Keyboard check after five targets";field.hidden=YES;
     [view addSubview:field];
     [window makeKeyAndOrderFront:nil];[NSApp activateIgnoringOtherApps:YES];
-    NSMutableArray *clicks=[NSMutableArray array];__block NSUInteger missed=0;
+    NSMutableArray *clicks=[NSMutableArray array];
+    NSMutableArray *screenChanges=[NSMutableArray array];
+    __block NSString *lastText=@"";__block NSUInteger missed=0;
     __block BOOL finished=NO;double started=NSProcessInfo.processInfo.systemUptime;
     void (^publish)(void)=^{
         NSPoint p=view.step<5 ? view.targets[view.step].pointValue : NSMakePoint(width*.5,height*.5+68);
         NSDictionary *state=@{@"token":token,@"step":@(view.step),@"missed":@(missed),
             @"logical_size":@[@(width),@(height)],@"backing_scale":@(screen.backingScaleFactor),
-            @"target_top_left":@[@(p.x),@(p.y)],@"uptime":@(NSProcessInfo.processInfo.systemUptime)};
+            @"target_top_left":@[@(p.x),@(p.y)],@"text":field.stringValue,
+            @"screen_changes":screenChanges,@"uptime":@(NSProcessInfo.processInfo.systemUptime)};
         if(!saveJSON(ready,state)) _exit(5);
     };
     id monitor=[NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskLeftMouseDown
@@ -101,18 +104,28 @@ int main(int argc,const char **argv) { @autoreleasepool {
             if(view.step==5) { field.hidden=NO;[window makeFirstResponder:field]; }
             [view setNeedsDisplay:YES];publish();return event;
         }];
+    id screenObserver=[NSNotificationCenter.defaultCenter
+        addObserverForName:NSApplicationDidChangeScreenParametersNotification object:nil queue:NSOperationQueue.mainQueue
+        usingBlock:^(NSNotification *notification) {
+            (void)notification;NSScreen *now=NSScreen.mainScreen;
+            [screenChanges addObject:@{@"uptime":@(NSProcessInfo.processInfo.systemUptime),
+                @"logical_size":@[@(now.frame.size.width),@(now.frame.size.height)],
+                @"backing_scale":@(now.backingScaleFactor)}];publish();
+        }];
     publish();
     NSTimer *timer=[NSTimer scheduledTimerWithTimeInterval:.1 repeats:YES block:^(NSTimer *tick) {
+        if(![lastText isEqualToString:field.stringValue]) { lastText=[field.stringValue copy];publish(); }
         BOOL complete=view.step==5 && [field.stringValue isEqualToString:token];
         BOOL timedOut=NSProcessInfo.processInfo.systemUptime-started>=duration;
         if(!complete && !timedOut) return;
-        finished=YES;[tick invalidate];BOOL passed=complete && missed==0;
+        finished=YES;[tick invalidate];BOOL passed=complete && missed==0 && screenChanges.count==0;
         NSDictionary *value=@{@"passed":@(passed),@"complete":@(complete),@"timed_out":@(timedOut),
             @"token":token,@"text":field.stringValue,@"target_hits":@(view.step),@"missed":@(missed),
-            @"clicks":clicks,@"logical_size":@[@(width),@(height)],
+            @"clicks":clicks,@"screen_changes":screenChanges,@"logical_size":@[@(width),@(height)],
             @"backing_scale":@(screen.backingScaleFactor),@"elapsed":@(NSProcessInfo.processInfo.systemUptime-started),
             @"scope":@"Guest input observations only. Host artifacts must prove actual manager resize/input path."};
-        BOOL saved=saveJSON(result,value);[NSEvent removeMonitor:monitor];[window orderOut:nil];
+        BOOL saved=saveJSON(result,value);[NSEvent removeMonitor:monitor];[NSNotificationCenter.defaultCenter removeObserver:screenObserver];
+        [window orderOut:nil];
         alarm(0);exit(!saved?5:passed?0:3);
     }];
     (void)timer;[NSApp run];return 0;

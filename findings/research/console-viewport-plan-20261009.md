@@ -12,7 +12,8 @@ current main screen, without changing modes. A fresh eight-hex nonce identifies
 one attempt. It requests five cyan targets: four near corners, then center, and
 an exact nonce-bearing keyboard string. Every received mouse point, expected step,
 miss and timestamp is retained; completion requires all five targets, no misses,
-and exact keyboard text. Atomic ready/result files are exclusive per attempt.
+exact keyboard text and no guest screen-parameter changes. Ready snapshots also
+retain partial keyboard text to verify input as it lands. Atomic ready/result files are exclusive per attempt.
 Duration is bounded to10–600seconds with an independent alarm, and no successful
 result follows timeout. Run as the logged-in user using a bounded LaunchAgent;
 boot it out afterward and verify the normal presenter desktop remains visible.
@@ -22,7 +23,8 @@ Qualification sequence, not yet run:
 1. Compile the fixture in the guest and retain source/executable hashes. Verify
    mode and display-awake assertions. Open the actual manager on the admitted run.
 2. At an ordinary window size, click targets using the visible host screenshot,
-   then type the fresh token into the focused fixture. Record actual host window
+   then type the fresh token into the focused fixture using actual key events.
+   Do not use clipboard-based type_text: SPICE clipboard sharing is disabled. Record actual host window
    and decoded-surface geometry, guest ready/result, and screenshots.
 3. Resize the manager smaller, repeat with a fresh nonce; then fullscreen and
    repeat. Assert guest logical/backing mode remains unchanged unless a separate
