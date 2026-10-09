@@ -61,8 +61,9 @@ Subsequent display observations never reached2468×1484: the owned display's
 origin temporarily moved to x960, then fell back to1280×720. The display ID
 remained4128836. This is a concrete failure of initial dynamic mode application,
 not evidence that an error response can be treated as successful resize.
-Asynchronous settings/layout settlement is the next discriminator; its fix is
-in progress and not qualified by these artifacts.
+Asynchronous settings/layout settlement was the next discriminator. The v3
+results below supersede this initial failure for the tested single request,
+while preserving this failed attempt.
 
 `c385-resize-final-state.txt` contains delayed output from a previous observer
 whose35-second duration exceeded its30-second GX timeout. Its filename must not
@@ -76,10 +77,46 @@ Root visually inspected `c385-resize-desktop.png`: readable Settings application
 but large UI under actual GDK1. It establishes a visible desktop at that point,
 not pointer-coordinate correctness, arbitrary resize reliability, or60Hz.
 
+## V3: bounded asynchronous settlement
+
+Source `0e76973` passed the full host suite (1422 tests, eight skipped,
+55.302 seconds, root receipt). `c385-stage-guest-v3.txt` records native compile
+and ABI success. `c385-install-v3.txt` records successful addon installation,
+bootstrap, and the same unchanged capture application/receipt/signature hashes
+above. Earlier diagnostic log lines embedded before the install boundary are
+not results from the new holder.
+
+`c385-newmode-v3-observation.txt` now records a **single**2468×1484 request
+returning status0, changed:true, dynamic_mode_added:true, exact physical2468×1484
+and logical1234×742 at display4128836. The observation retains transient origin
+and fallback behavior before settlement; its later samples confirm the requested
+geometry at origin0. Holder2668 and presenter2745 are this installed version's
+processes; they differ from the earlier holder/presenter because installation
+restarted the owning launcher. The claim is stable ownership during the request,
+not unchanged process IDs across upgrades.
+
+The actual manager's `c385-manager-resize-v3.jsonl` requests a new1402×960
+viewport and records matching settled monitor map and pixbuf1402×960. Root's
+agent/input-preparation review confirms first-request success and subsequent
+idempotent success. These are additional bounded native results, not yet the
+more-than-eight-size eviction qualification.
+
+## Post-resize input attempt is inconclusive
+
+The input fixture retained `step:0` and `missed:0` in
+`c385-input-inconclusive.txt`. ComputerUse reported a successful uinput click,
+and a relative evdev movement/click was also attempted, but neither established
+receipt in the guest fixture. The scroll tool failed because ydotool was absent
+before producing input. Zero recorded misses with zero progress is **not** a
+passing mapping test or proof of a guest input defect. Root explicitly stopped
+its owned fixture; the final independent mode remained1402×960, logical701×480,
+origin0. Prior candidate361 input qualification remains separate and cannot be
+reused as proof of this new arbitrary-size transition.
+
 ## Remaining acceptance
 
-Require a single new non-table request to settle successfully with exact
-independent CG readback and manager surface agreement. Then exercise more than
+The single new-mode and actual-manager controls above pass their narrow checks.
+Next exercise more than
 eight distinct dynamic sizes, revisit an evicted size, preserve the active mode,
 and verify unchanged holder/presenter identity. Repeat actual corner/center input
 and a text token after resize. Finally qualify reconnect and a subsequent guest
