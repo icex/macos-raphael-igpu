@@ -103,7 +103,7 @@ public:
     IOReturn snapshotArm(RaphaelConsoleClient *owner);
     IOReturn snapshotCommit(IOUserClient *owner, uint64_t w, uint64_t h,
                             uint64_t sequence, uint64_t *ack);
-    void snapshotClose(IOUserClient *owner);
+    void snapshotClose(IOUserClient *owner, bool finalClose = false);
     void retireLocked();
 };
 class RaphaelConsoleClient : public IOUserClient {
@@ -111,6 +111,7 @@ class RaphaelConsoleClient : public IOUserClient {
     RaphaelConsole *console = nullptr;
     friend class RaphaelConsole;
     bool snapshotAttempted = false;
+    RaphaelConsoleBuffer *privateBuffer = nullptr; // Retained through RETIRE for unmap lookup.
 public:
     bool start(IOService *provider) override {
         console = OSDynamicCast(RaphaelConsole, provider);
@@ -118,11 +119,11 @@ public:
         return console->open(this);
     }
     IOReturn clientClose() override {
-        if (console && console->isOpen(this)) { console->snapshotClose(this); console->close(this); }
+        if (console && console->isOpen(this)) { console->snapshotClose(this, true); console->close(this); }
         terminate(); return kIOReturnSuccess;
     }
     void stop(IOService *provider) override {
-        if (console && console->isOpen(this)) { console->snapshotClose(this); console->close(this); }
+        if (console && console->isOpen(this)) { console->snapshotClose(this, true); console->close(this); }
         console = nullptr; IOUserClient::stop(provider);
     }
     IOReturn clientMemoryForType(UInt32 type, IOOptionBits *options,
@@ -213,7 +214,9 @@ IOReturn RaphaelConsole::memory(IOUserClient *owner, UInt32 type,
     *memory = nullptr;
     if (!isInactive()) {
         if (!type) *memory = pixels;
-        else if (owner == snapshotOwner) *memory = snapshotBuffer;
+        else *memory = static_cast<RaphaelConsoleClient *>(owner)->privateBuffer;
+        // Apple's unmap path asks clientMemoryForType again. Retired owners
+        // must still resolve their own descriptor, never the active owner's.
     }
     if (*memory) (*memory)->retain();
     *options = 0;
@@ -259,6 +262,7 @@ IOReturn RaphaelConsole::snapshotArm(RaphaelConsoleClient *owner) {
         (!snapshotRestartable || r[13] == snapshotEpoch);
     if (ok) {
         snapshotOwner = owner; snapshotBuffer = fresh; snapshotSequence = 0;
+        fresh->retain(); owner->privateBuffer = fresh;
     } else {
         snapshotPoisoned = true; // Never infer a safe new epoch after ambiguous ARM.
         r[2] = 2; OSSynchronizeIO(); fresh->release();
@@ -301,11 +305,17 @@ IOReturn RaphaelConsole::snapshotCommit(IOUserClient *owner, uint64_t w,
     IOLockUnlock(lock);
     return ok ? kIOReturnSuccess : kIOReturnIOError;
 }
-void RaphaelConsole::snapshotClose(IOUserClient *owner) {
+void RaphaelConsole::snapshotClose(IOUserClient *owner, bool finalClose) {
     IOLockLock(lock);
     // Also excludes a concurrent ARM still allocating before client close.
     static_cast<RaphaelConsoleClient *>(owner)->snapshotAttempted = true;
     if (owner == snapshotOwner && snapshotOwner) retireLocked();
+    auto *client = static_cast<RaphaelConsoleClient *>(owner);
+    if (finalClose && client->privateBuffer) {
+        auto *retired = client->privateBuffer;
+        client->privateBuffer = nullptr;
+        retired->release();
+    }
     IOLockUnlock(lock);
 }
 IOReturn RaphaelConsole::newUserClient(task_t task, void *securityID, UInt32 type,

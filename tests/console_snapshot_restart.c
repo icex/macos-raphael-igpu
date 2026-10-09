@@ -35,15 +35,23 @@ static kern_return_t retire(struct owner *o) {
     kern_return_t r=IOConnectCallScalarMethod(o->connection,3,NULL,0,NULL,NULL);
     if(r==KERN_SUCCESS)o->armed=0; return r;
 }
-static int cleanup(struct owner *o) {
+static int cleanup(struct owner *o, int index) {
     int ok=1;
-    if(o->armed && retire(o)!=KERN_SUCCESS)ok=0;
+    if(o->armed) {
+        kern_return_t r=retire(o);
+        printf("{\"cleanup\":\"retire\",\"owner\":%d,\"ioreturn\":%u}\n",index,(unsigned)r);
+        if(r!=KERN_SUCCESS)ok=0;
+    }
     if(o->address) {
-        if(IOConnectUnmapMemory64(o->connection,1,mach_task_self(),o->address)!=KERN_SUCCESS)ok=0;
+        kern_return_t r=IOConnectUnmapMemory64(o->connection,1,mach_task_self(),o->address);
+        printf("{\"cleanup\":\"unmap\",\"owner\":%d,\"ioreturn\":%u}\n",index,(unsigned)r);
+        if(r!=KERN_SUCCESS)ok=0;
         else o->address=0;
     }
     if(o->connection) {
-        if(IOServiceClose(o->connection)!=KERN_SUCCESS)ok=0;
+        kern_return_t r=IOServiceClose(o->connection);
+        printf("{\"cleanup\":\"close\",\"owner\":%d,\"ioreturn\":%u}\n",index,(unsigned)r);
+        if(r!=KERN_SUCCESS)ok=0;
         else o->connection=0;
     }
     return ok;
@@ -98,6 +106,17 @@ int main(int argc,char **argv) {
     uint32_t *p=(void *)(uintptr_t)o[1].address;
     for(unsigned y=0;y<HEIGHT;y++)for(unsigned x=0;x<WIDTH;x++)p[y*WIDTH+x]=pixel(x,y);
     memset((void *)(uintptr_t)o[0].address,0xa5,BYTES);fence();
+    r=IOConnectUnmapMemory64(o[0].connection,1,mach_task_self(),o[0].address);
+    printf("{\"check\":\"retired-A-unmap\",\"ioreturn\":%u}\n",(unsigned)r);
+    CHECK(r==KERN_SUCCESS,"retired-A-unmap");o[0].address=0;
+    MAP(0);
+    {
+        const volatile uint32_t *retired=(void *)(uintptr_t)o[0].address;
+        size_t bad=0;
+        for(size_t i=0;i<BYTES/4;i++)bad+=retired[i]!=0xa5a5a5a5u;
+        printf("{\"check\":\"retired-A-remap-own-RAM\",\"mismatches\":%zu}\n",bad);
+        CHECK(bad==0,"retired-A-remap-own-RAM");
+    }
     CHECK(mismatches(&o[1])==0,"stale-A-isolated-before-commit");
     CHECK((r=commit(&o[1],1,&ack))==KERN_SUCCESS && ack==1,"B-commit-ACK");
     printf("{\"phase\":\"published-before-stale-write\",\"width\":801,\"height\":601,\"ack\":%llu,\"mismatches\":0,\"hold_seconds\":%u}\n",(unsigned long long)ack,seconds/2);
@@ -109,12 +128,12 @@ int main(int argc,char **argv) {
     CHECK((r=retire(&o[1]))==KERN_SUCCESS,"retire-B");
     for(int i=2;i<4;i++){OPEN(i);ARM(i);MAP(i);CHECK((r=retire(&o[i]))==KERN_SUCCESS,"retire-cap-owner");}
     OPEN(4);r=arm(&o[4]);printf("{\"check\":\"four-retained-cap\",\"ioreturn\":%u}\n",(unsigned)r);CHECK(r!=KERN_SUCCESS,"four-retained-cap-refused");
-    CHECK(cleanup(&o[4]),"close-cap-refusal");
-    CHECK(cleanup(&o[0]),"release-A-capacity");
+    CHECK(cleanup(&o[4],4),"close-cap-refusal");
+    CHECK(cleanup(&o[0],0),"release-A-capacity");
     OPEN(5);ARM(5);MAP(5);CHECK(zero_buffer(&o[5]),"recovered-slot-zero");
     passed=1;step="complete";
 done:
-    for(int i=5;i>=0;i--)if(!cleanup(&o[i]))clean=0;
+    for(int i=5;i>=0;i--)if(!cleanup(&o[i],i))clean=0;
     if(service)IOObjectRelease(service);alarm(0);
     printf("{\"phase\":\"result\",\"passed\":%s,\"step\":\"%s\",\"last_ioreturn\":%u,\"cleanup_ok\":%s,\"interrupted\":%s,\"retained_slot_limit\":4,\"scope\":\"private-staging-and-host-ACK-not-manager-delivery\"}\n",passed&&clean&&!interrupted?"true":"false",step,(unsigned)r,clean?"true":"false",interrupted?"true":"false");
     return passed&&clean&&!interrupted?0:1;

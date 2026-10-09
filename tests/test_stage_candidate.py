@@ -1343,19 +1343,20 @@ class EmptyFirmwareConsoleCardTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):tool.validate_card(raw,hashlib.sha256(raw).hexdigest())
 
     def test_candidate394_restart_contract_is_exact_and_does_not_change392(self):
-        tool=load_tool();tool.configure('1.0.394','metal-217')
-        card=json.loads((ROOT/'experiments/metal-216.json').read_text())
-        card.update(id='metal-217',candidate_version='1.0.394')
-        card['launch_options']['CONSOLE_SNAPSHOT']='restart'
-        raw=json.dumps(card).encode();tool.validate_card(raw,hashlib.sha256(raw).hexdigest())
-        for key,value in [('CONSOLE_SNAPSHOT','on'),('CONSOLE_SNAPSHOT','off'),
-                          ('CONSOLE_SNAPSHOT',True),('CONSOLE_FULL_REFRESH','off'),
-                          ('VM_MANAGER','direct'),('VM_CONSOLE','bochs'),
-                          ('CONSOLE_REFRESH','default'),('CONSOLE_VDAGENT','off')]:
-            changed=copy.deepcopy(card);changed['launch_options'][key]=value
-            raw=json.dumps(changed).encode()
-            with self.subTest(key=key,value=value),self.assertRaises(RuntimeError):
-                tool.validate_card(raw,hashlib.sha256(raw).hexdigest())
+        for version,card_id in [('1.0.394','metal-217'),('1.0.395','metal-218')]:
+            tool=load_tool();tool.configure(version,card_id)
+            card=json.loads((ROOT/'experiments/metal-216.json').read_text())
+            card.update(id=card_id,candidate_version=version)
+            card['launch_options']['CONSOLE_SNAPSHOT']='restart'
+            raw=json.dumps(card).encode();tool.validate_card(raw,hashlib.sha256(raw).hexdigest())
+            for key,value in [('CONSOLE_SNAPSHOT','on'),('CONSOLE_SNAPSHOT','off'),
+                              ('CONSOLE_SNAPSHOT',True),('CONSOLE_FULL_REFRESH','off'),
+                              ('VM_MANAGER','direct'),('VM_CONSOLE','bochs'),
+                              ('CONSOLE_REFRESH','default'),('CONSOLE_VDAGENT','off')]:
+                changed=copy.deepcopy(card);changed['launch_options'][key]=value
+                raw=json.dumps(changed).encode()
+                with self.subTest(key=key,value=value),self.assertRaises(RuntimeError):
+                    tool.validate_card(raw,hashlib.sha256(raw).hexdigest())
         tool.configure('1.0.392','metal-216')
         card.update(id='metal-216',candidate_version='1.0.392')
         raw=json.dumps(card).encode()
