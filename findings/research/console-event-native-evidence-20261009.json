@@ -1,0 +1,616 @@
+{
+  "schema": 1,
+  "run_id": "13d30f59db11f72dea720cee7f5f84fd",
+  "experiment": "metal-208",
+  "version": "1.0.379",
+  "build_id": "c3e4e8d6f3be4fe7b2d94fb49b52adb6",
+  "built_from_commit": "ce106d9e72b92fb8a91c506c40f98990db7d3e76",
+  "coordinator_commit": "c964bde354b8132f599c98911bf37cc9968fb7ca",
+  "executable_sha256": "df0079ea0adde6d818b744cccd984e18f65d7322fc67dc234b3d4bd92606ef7b",
+  "image_id": "sha256:96748992f5baee3b6884bc68445ceed04b6ebe2b00c6c9cbe360ad835ec2e890",
+  "boot_id": "ba51b3c6-9420-4510-af69-38a42b3c79c7",
+  "guest_build": "24G830",
+  "scope": "Three native synchronous event observations; three post-start token validation failures retained. Stage gap located downstream of QXL creation entry, not isolated to server. Audio/retirement/desktop evidence included. Final private guest shutdown, both natural capture exits and authorizing recovery verified. No delivery claim.",
+  "shutdown_review": "independently-read-final-receipts",
+  "artifacts": [
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-activate-snapshot.py",
+      "bytes": 2581,
+      "sha256": "914f53ee2953c00eb74592fcbc4e71ddabe0eebb9430ee2229f6a3459d1c82d9"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-activation.txt",
+      "bytes": 8723,
+      "sha256": "e22c164a1895c7fcc04433934f0256a2dc09372f4897f73b1b7d5edcb5b79612"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-analyze-event-counters.py",
+      "bytes": 9618,
+      "sha256": "860b2a88aeccc6d993584a6a0493563eaaae792f944b3771c62c3d51bca41952"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-analyze-phases.py",
+      "bytes": 6856,
+      "sha256": "42ce4e09f6f9d710bba164a336f8b2ec104d866a25a636cfde634a5321b2c60a"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-analyze-trace-event-counters.py",
+      "bytes": 9613,
+      "sha256": "4ac3babebe5e059daf5cd661566d561fd5e5cd08468d3043a87805c0c2f6c342"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-analyze-trace-stages.py",
+      "bytes": 5491,
+      "sha256": "fd3a2dec9c67cc346e92135bbcef6191c0fa45f9b664168b2d3131e02a0e98fe"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-audio-controller.py",
+      "bytes": 1689,
+      "sha256": "e648cde078626c125dd7ea1f502d0aed9aba36bf7aef3b3bfa4829bea85fd196"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-audio-default/analysis.txt",
+      "bytes": 489,
+      "sha256": "0577199434bb31038f77631d045ec06bfa2651f90baf37a11e4a25e3c3244ae7"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-audio-default/capture.pcm",
+      "bytes": 3538944,
+      "sha256": "f02b1e7c04cc71c52ba8a14244def3ca2a4f5ba392f2e643ec18b0fc063c40d4"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-audio-default/capture.wav",
+      "bytes": 3538988,
+      "sha256": "26a0a67caf2ad5bac2157353c3a5aeeae3e98979ce2cb8683da988adb48db130"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-audio-default/guest-tone.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-audio-default/ready.json",
+      "bytes": 128,
+      "sha256": "fe78a17735931edaf4d6003120f317e05a7701b7de210ef2ea8751d3ddc8d099"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-audio-default/recorder.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-audio-default/route.json",
+      "bytes": 2147,
+      "sha256": "577f698b2ac977ca89a0309474945c55f7a787616141796f65f6e897a9b51655"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-audio-default-controller.log",
+      "bytes": 90,
+      "sha256": "e376c8e8f266a17285267b087f86842ae4981e904657c8c3222fca1ce09b0894"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-audio-default-result.txt",
+      "bytes": 634,
+      "sha256": "3d1282ab657e9d7cc3bb5803ae4191e54e47e39f464899dc833c597f21c386f7"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-audio-restored-independent.json",
+      "bytes": 99,
+      "sha256": "b8f254659d9904b96789868fa8f77ce466562297fc1d4b49f1d53b4466a0cf49"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-cases.json",
+      "bytes": 585,
+      "sha256": "dcce9fb8010e696dd0ccfa17ee43f1f2f61a36e944f65ca77a1ac80be550f0f0"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-critical-capture-journal.txt",
+      "bytes": 1111,
+      "sha256": "73753af57f20ad9ab0a340e8b256d257d94de58ffe50901a8eb45b3cfd94cd2a"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-desktop-manager.log",
+      "bytes": 57355,
+      "sha256": "b18c32e4f72b4dd663117ffd4f0dadca2aac9d21c0d61d95b5558764cb31ef72"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-desktop-manager.png",
+      "bytes": 369278,
+      "sha256": "f647190e8a708703ede56a9950123ffae1692f89860af2f518d64482c540e7c0"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-desktop-viewer.sh",
+      "bytes": 314,
+      "sha256": "e254644654fc484795226d8832622b1f742777ca54a191fff6339627bdd87d5f"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-dry-run.log",
+      "bytes": 885,
+      "sha256": "a872e104498bf2703068b4981c4cdae9c118a4b5c2ed1e93b4cabe47660c678d"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-event-counter-analysis-all.json",
+      "bytes": 66670,
+      "sha256": "502b2114b2ec2d23f6adef459a0d1c649deeaa2412cf2016bdf2d3e59ae0100a"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-extract-spice-trace.py",
+      "bytes": 4658,
+      "sha256": "7d1aa472f8c743f82db3c4246eff995aa7c4e61e05695f6ef2cb27953ff28894"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-guest-display-awake.sh",
+      "bytes": 773,
+      "sha256": "6f0739f14900a0b0441691ae802c7ea8fc72b7afe30dad3f3e83eac3ee06d274"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-hidpi-counter-controller.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-hidpi-event-counter-analysis.json",
+      "bytes": 34482,
+      "sha256": "1a37180493fcf5784c1dc04a95cf9f4cc5525bae0ce98387eeb64979f52440ab"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-hidpi-events-cadence.jsonl",
+      "bytes": 1829807,
+      "sha256": "41509004c62b871e4d9e8fa8e0eab05518cb2e8afe091c6fe6f6a5cae3b5331e"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-hidpi-events-cadence.jsonl.summary.json",
+      "bytes": 1286,
+      "sha256": "1358bffa1a157d7ff505f85c4116029335c27f222186c32183d1382e2f1b429a"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-hidpi-events-controller.txt",
+      "bytes": 2048,
+      "sha256": "ba8a7c8ff26edfbc55a192cc326ba92489e565983e832da012f6d4ef861b8bd1"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-hidpi-events-counters.jsonl",
+      "bytes": 92580,
+      "sha256": "c7cbcb56d609abc9ffbdf23ebac7b836acd8aac60b95ff9002b320a218ce7e20"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-hidpi-events-fixture-cleanup.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-hidpi-events-manager.log",
+      "bytes": 56491,
+      "sha256": "d7a37779953d046ba5c3b11adb144c0e203e8a4b56c94178ca4658d9c8f6a459"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-hidpi-events-source-and-presenter.txt",
+      "bytes": 178598,
+      "sha256": "b309c8556aabce283c910cb0110dd87ac17ebbe2fff24be6cd69bf7169acaf8b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-hidpi-events-start.txt",
+      "bytes": 21,
+      "sha256": "7e7dfd91a3ed958b4b07d59f2cdc9590145802cc17278775a91fb75d4de53767"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-hidpi-events.plist",
+      "bytes": 668,
+      "sha256": "d7139aca895a302f4e298ecdc6835786e3eb22e16ff2274e0ee5eca68c7bee6c"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-hidpi-phase-analysis.json",
+      "bytes": 11021,
+      "sha256": "70d3dff0a19e3ca1cf2add7c116b8acc6c470956ab6bac6c247b5085e8a272e5"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-hidpi-trace-cadence.jsonl",
+      "bytes": 1840683,
+      "sha256": "1f1418109b407fb2af4edcb5a50a4ea6066a5fe4c59708716526c3c98008cb17"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-hidpi-trace-cadence.jsonl.summary.json",
+      "bytes": 1285,
+      "sha256": "3c38f5526a4a45c247330ffb656213f2fdf92d62e79be36611a983418d800aec"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-hidpi-trace-controller.log",
+      "bytes": 2044,
+      "sha256": "181b9449cbad6d7e02b8d9acc6abff27264c7aa08b3d17d8a30cb2da60b73011"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-hidpi-trace-counters.jsonl",
+      "bytes": 93132,
+      "sha256": "f029b551c1adade2b28b468adae1fd7279509baf9cb6ab27e5d7f6adf4d3d035"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-hidpi-trace-final.json",
+      "bytes": 1002210,
+      "sha256": "1465138d461bbb47697d2ffc843cc031c9157267d35fa8c05608b49a6523c5f9"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-hidpi-trace-fixture-cleanup.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-hidpi-trace-manager.log",
+      "bytes": 56617,
+      "sha256": "78171babfb4aa019e5a6ccadb3c7f6fcf583b97c557d046d4c5d3b4fcbe83df7"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-hidpi-trace-mode.txt",
+      "bytes": 3274,
+      "sha256": "e8e46069a5295afdb11176a1a5e14ac1ea5388d9c607c24708e2ee5d1f1fdc6b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-hidpi-trace-partial.json",
+      "bytes": 856688,
+      "sha256": "60122f696e81429ddc0150d408975151565e7a04f7cbb94c75739dba814021b4"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-hidpi-trace-source-and-presenter.txt",
+      "bytes": 267630,
+      "sha256": "ad33d1da8c5cbc15abaaedc081dedf360b672ad2ac943e269fad59c492b1eb77"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-hidpi-trace-start.txt",
+      "bytes": 21,
+      "sha256": "7e7dfd91a3ed958b4b07d59f2cdc9590145802cc17278775a91fb75d4de53767"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-hidpi-trace-window.jsonl",
+      "bytes": 2777,
+      "sha256": "05ad0e573b2780076c5a21d441371c91185ed8c98d577fdc62fe8d9f652c6413"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-hidpi-trace.plist",
+      "bytes": 665,
+      "sha256": "b0ead288f0a937ea0087ba4c8b7178a32dea17139d73d29a1cebc31eefa4746d"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-host-final.json",
+      "bytes": 171,
+      "sha256": "2d4a91d34785c5dc3a51403db34ee167996f37f5259fa9776b026279333994b9"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-host-tests.log",
+      "bytes": 13183,
+      "sha256": "4610b4824d93438818fcf5f04281a43ba36f3ba1c5ebad5db56fdd605b0bdd1f"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-launch.sh",
+      "bytes": 277,
+      "sha256": "d063d74a4e4de6b13b8fb2eb1f7a84d74a462b26e503adc113fb864477af9386"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-native-counter-controller.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-native-events-cadence.jsonl",
+      "bytes": 2598011,
+      "sha256": "2eb2bf6088b01ec72a1ae89aec774918fb7d1e6349d515863898797b580070ff"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-native-events-cadence.jsonl.summary.json",
+      "bytes": 1276,
+      "sha256": "13446468dd31970c67fbf4c90842c8da5804a69775c1589f7b8cb2daae337141"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-native-events-controller.txt",
+      "bytes": 2041,
+      "sha256": "97ee7fd592d0d622e392356de48573c4265e05b49f2958b35823204da7c5a2ee"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-native-events-counters.jsonl",
+      "bytes": 92751,
+      "sha256": "be12b6352bea883ca4bbe54f00ec451a033c83922b693fc2dec872f74189bdd2"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-native-events-fixture-cleanup.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-native-events-manager.log",
+      "bytes": 56617,
+      "sha256": "c81bcecccb42d750db65981a1dd95bb93a5b1febe743bda80078bcb4b82e6710"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-native-events-source-and-presenter.txt",
+      "bytes": 212860,
+      "sha256": "acdcc63625d5f63ff2c55a8b03bdff6813b106358b0c1e1dfb87d97f137b3a5f"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-native-events-start.txt",
+      "bytes": 21,
+      "sha256": "7e7dfd91a3ed958b4b07d59f2cdc9590145802cc17278775a91fb75d4de53767"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-native-events.plist",
+      "bytes": 671,
+      "sha256": "7f1cf23b07b48e7c796ac41771d35be1e47d623757120ebf98ad376fb0b1b090"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-native-mode.txt",
+      "bytes": 3522,
+      "sha256": "78057bc0a19070e45fa0cedff39d39a7515dae8a12f8e7057f93a6f144703ffa"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-normal-fallback.txt",
+      "bytes": 4004,
+      "sha256": "2565f91133f2157e0bd60bc369252f8d8bd423fc577e9e3e7271ca42ab55bd2f"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-restore-normal.py",
+      "bytes": 1751,
+      "sha256": "fb14871ca9b418906e410e8b81f332e0e8b8dd8af4416d2355403e0acbbefab4"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-run-events-template.py",
+      "bytes": 2736,
+      "sha256": "a5bb18f2079b465f42e4c4d7c490b108ad80ac5eba432d7eac6a4e8c1eff533d"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-run-events.py",
+      "bytes": 2754,
+      "sha256": "16b40611b1b640ed693e6aa1593ac646fea1fe3c4d42cae65a8841416d1b92c2"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-run-trace-case.py",
+      "bytes": 2760,
+      "sha256": "a38c6ca55635517199b89dbf8b537ae88ef1320f2e0efae8574a31c23f5a2d08"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-serial-capture-journal.txt",
+      "bytes": 793,
+      "sha256": "97ce14f969d1d59c6547776f796c5b9a4ae7dc8a58eddde675eb316469cd6496"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-setup.sh",
+      "bytes": 870,
+      "sha256": "a9fce48b03c61cea86a27f6a58ba0c28902c382241aabf1dfc31859df6e37778"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-snapshot-counter-reader.py",
+      "bytes": 6033,
+      "sha256": "01d8a90b70baf7360122380888580285f90e7291e0f3ce4d2da24ab6beddfc83"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-source-case.json",
+      "bytes": 253,
+      "sha256": "b6125c1fc1fd973dfa8c6d513d623d4f9ab24f6f67cdbbc87c88d2e010b19a5e"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-spice-package.txt",
+      "bytes": 15,
+      "sha256": "405a9f4c18ec8dc5f7cad870fd54dcac6a881ba9c2f1b91a98a65cb68baebd95"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-spice-trace-window.py",
+      "bytes": 5674,
+      "sha256": "7c81a25095b7950e1677445c056fa3c3caa15e79ec98dd4a37ac5a6ccc78863c"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-trace-cases.json",
+      "bytes": 291,
+      "sha256": "79a47f75534a48cff5a8b87fec84da6dbfc61f71d4ea64d4bc0cb68173ecde09"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-trace-query.jsonl",
+      "bytes": 1206,
+      "sha256": "9bd86c8f16be5053a4c51a28a769a262bf86547b9bb7e71ba870753b15537e2f"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-trace-stage-analysis.json",
+      "bytes": 43504,
+      "sha256": "8571f4526f7d6586ef95b2629f99570ab842aa3314d8315133d2de876b6592a9"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c379-viewer-close-vm-alive.json",
+      "bytes": 750,
+      "sha256": "a373e853271823d46285d93f1d44975fd7f18d083946867b7a545c120f776e11"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-379/RaphaelGPU.kext/Contents/Info.plist",
+      "bytes": 2240,
+      "sha256": "796fc02282601fa9f41eb3a7d7a611f7937954e97481b334f37fe10533010aee"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-379/RaphaelGPU.kext/Contents/MacOS/RaphaelGPU",
+      "bytes": 2920736,
+      "sha256": "df0079ea0adde6d818b744cccd984e18f65d7322fc67dc234b3d4bd92606ef7b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-379/build-manifest.json",
+      "bytes": 2221,
+      "sha256": "68b23db6c23349d6b923de67d71c9231bd491e6bc1bef8d2057a80fafd6d739f"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-379-dist/RaphaelGPU-1.0.379-experimental.zip",
+      "bytes": 1163378,
+      "sha256": "9566b10ddc61a55b2015415393a42fae6bde7de2b551cc60434ef1708952f0b4"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-379-dist/SHA256SUMS",
+      "bytes": 102,
+      "sha256": "5f6e4e2e0e4ef0979f01a1d78f59e016323eaceacea2fb4903b2d49ced47de1f"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-379-results/agent-server-events.jsonl",
+      "bytes": 95339,
+      "sha256": "c5d4a468e0ec4d6e8cb87409640896f96a4f7defc917c84976d86ff94a90aab3"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-379-results/capture-sha256.json",
+      "bytes": 173,
+      "sha256": "e61d95f638df584579690b68699a20eb9b802e2f836b89f7f89c7e986638f551"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-379-results/critical-quiesce.json",
+      "bytes": 707,
+      "sha256": "0080e652b18e53c6767f3bd4147f5f16e2fe3669366d78edd36a29b1c8469d20"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-379-results/critical.txt",
+      "bytes": 2271239,
+      "sha256": "8078e9f8a87859f55c07c11df6e54fae2d17e4e757c212300efcc1f9ad013e01"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-379-results/events.jsonl",
+      "bytes": 98928,
+      "sha256": "50ab091bb0f0a5096e92b0b84c0a4950a9c04091329332b8d360fe42ba1f766e"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-379-results/host-after.json",
+      "bytes": 1041,
+      "sha256": "fa69aca6500c99e19669e8f1cd91904c35bb3bdb1f52fa1100081820eef30379"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-379-results/host-before.json",
+      "bytes": 1041,
+      "sha256": "fa69aca6500c99e19669e8f1cd91904c35bb3bdb1f52fa1100081820eef30379"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-379-results/host-kernel-messages.json",
+      "bytes": 12704,
+      "sha256": "44305204aa1360792c036d858e877bf09ff8b0626364769c15c6db44812125c4"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-379-results/interactive-ready.json",
+      "bytes": 172,
+      "sha256": "a4adc97234cda7da4f1ed8ba15882a7c030dc451631821d8b2980ca6bf865bc2"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-379-results/manifest.json",
+      "bytes": 12828,
+      "sha256": "075aba22ed66f1ff67b46249c3cec0e0f2f978af6f864996c48026afd7272926"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-379-results/probe.json",
+      "bytes": 553251,
+      "sha256": "2fc42555d9f4c516321eecbb8666fdf8d6c976cbc9933a5e2d17e892a5158932"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-379-results/recovery-replay.json",
+      "bytes": 485,
+      "sha256": "655e77e8b2f85bc85a223193d6bb4a87c78855106de9b76d4299b94c458a5323"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-379-results/recovery.json",
+      "bytes": 17574,
+      "sha256": "8661db8556dbf35bd33c5535ea05b5dadb7f58c5f65882b1a692325ccfa94ba8"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-379-results/running-identity.json",
+      "bytes": 2487,
+      "sha256": "95778842c958b845143068227e31a2e1977ceb0e87bbc00bca0dff643d05c327"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-379-results/serial.txt",
+      "bytes": 385942,
+      "sha256": "9d7c28f8ee3f1998d12a4c49cf7d675e0f4e9a6657b7a9d67130515b0165e85d"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-379-results/shutdown.json",
+      "bytes": 236,
+      "sha256": "af7c1cc2cf2efbe32c703b6c717f1a49e4e63658779f3109fcfb25c2338370c0"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-379-results/stop-requested",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-379-results/supervision.json",
+      "bytes": 1084,
+      "sha256": "616d2040c35e858b53c492c6941b6098797931c852add3e411993249ed11156d"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-379-results/verdict.json",
+      "bytes": 47313,
+      "sha256": "3450c41ad5363c25f6dfc542de76f2c514ba48bc0410c11492d6e7659096ba3b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-379-results/vm-launch.log",
+      "bytes": 2651,
+      "sha256": "fdaffa64f7e4d1615ad8a6867564e9bcd2aa6d379f56ad0c2be2195c8b111a6b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-379-results/wrapper-result.json",
+      "bytes": 47460,
+      "sha256": "9fd35408e1dbf27c7daa6fb6a3d69adb3da247e6ca2e828dbbcee9f587a1233b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-379-results/wrapper-stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-379-results/wrapper-stdout.txt",
+      "bytes": 47313,
+      "sha256": "3450c41ad5363c25f6dfc542de76f2c514ba48bc0410c11492d6e7659096ba3b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/capture-exit-cf6a44fffe96a4facd4d2a68c6a7ab5bdf2886b5f9611987f45fc13d8c0fe524-1324713.json",
+      "bytes": 474,
+      "sha256": "1f0a49427558fb5375dbc087f484413ea6243bbdfa7877df715da8b56cbbdc47"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/capture-exit-cf6a44fffe96a4facd4d2a68c6a7ab5bdf2886b5f9611987f45fc13d8c0fe524-1324715.json",
+      "bytes": 476,
+      "sha256": "464113a21e2c96a6a1e28c9c7b597e391eb6fe51b8798236e97c2e83cfeb5d5d"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/libvirt-13d30f59db11f72dea720cee7f5f84fd/admission.json",
+      "bytes": 1498,
+      "sha256": "4ad245726e2d1999a8c9a7b445b36ef46ecf2e98c10f10d3b4f30cdd0813ca31"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/libvirt-13d30f59db11f72dea720cee7f5f84fd/events.jsonl",
+      "bytes": 4695,
+      "sha256": "7d6c2f90f32bf912615f4129ef5a3eecde9925e10aac9f54f32958e2a50c181e"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/libvirt-13d30f59db11f72dea720cee7f5f84fd/paused.json",
+      "bytes": 539,
+      "sha256": "29d79e297f2f9f9fb5a02a45bf8f4f91b141ca99de9ca60105101890a293afd6"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/libvirt-13d30f59db11f72dea720cee7f5f84fd/resume.json",
+      "bytes": 938,
+      "sha256": "69ddde5d9fd71e4ea3595d953db785c6a02934710ab815b4601948e83ba91e08"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/libvirt-13d30f59db11f72dea720cee7f5f84fd/running.json",
+      "bytes": 547,
+      "sha256": "3f753372d16cd175bb436448e4972d6df9e87e5f8350975ffc4155bb4348d78d"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/libvirt-13d30f59db11f72dea720cee7f5f84fd/terminal.json",
+      "bytes": 516,
+      "sha256": "c49cffd72e9ff84d35d15d9528281222fc7cb475cbc7375910b0c8aa4b7e96b6"
+    }
+  ],
+  "shutdown": {
+    "verdict": "CORE_PROBE_PASS",
+    "earliest_failure": null,
+    "terminal": "guest-shutdown",
+    "process_exited": true,
+    "capture_outcomes": [
+      "natural-container-exit",
+      "natural-container-exit"
+    ],
+    "capture_deferred": true,
+    "shutdown_event_wait": false,
+    "completed_original_zombie": false,
+    "transport_ends": {
+      "console": "clean-eof",
+      "critical": "recv-reset"
+    },
+    "recovery": "recovered",
+    "authorizes_launch": true
+  }
+}

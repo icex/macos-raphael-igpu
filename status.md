@@ -1,28 +1,36 @@
 # Live status — 2026-10-09
 
-## Candidate376: mixed-motion integrity and orderly retirement pass; performance open
+## Candidate379: event measurements localize slowdown; rare HiDPI errors remain
 
-Run35c4167dbec05e9d295b5f77b97a669c, metal207,1.0.376,MODE2#303,
+Run13d30f59db11f72dea720cee7f5f84fd,metal208,1.0.379,MODE2#304,
 bootba51b3c6. Same374 changed-bbox image and installed370 presenter/consent.
-Three110s mixed-motion fixtures;300s actual-manager observation. All14265 sampled
-tokens after startup valid; startup53/17/34 invalid retained separately.
-HiDPI localized~52 distinct IDs/s, full-field~18; native~58/~44. These are sampled
-lower bounds. Source CRC checker timed out before fixture: no source CRC claim.
-Instrumented interiors show QEMU publishing~39/s during full-field HiDPI while
-manager timer callbacks fall~20/s: observer limit prevents exact delivery claim.
-Next discriminator: same-channel synchronous invalidation/ROI observations.
+Three110s mixed fixtures;300s synchronous actual-manager ROI observation.
+HiDPI3723 valid/1 post-start invalid; native5285/0; traced HiDPI3736/2.
+Startup invalids1/1/10 retained separately. This is not corruption-free qualification.
+First30s source window:1566 valid,9 unavailable,0 decoded errors; none of the
+three malformed manager observations covered by that source diagnostic.
+Native observer stalled~983ms before ROI decoding; cause unresolved.
 
-Readable desktop screenshot, stereo USB/QEMU/Pulse capture retry and independent
-route restoration pass; first audio route attempt refused and restored. Input
-not rerun. Corrected retired-buffer control passes: BAR0 mapping works, ARM and
-staging regrant denied. Original agent and awake ordinary3840x2160 capture restored.
-CORE_PROBE_PASS/earliest_failure=null. Private guest-shutdown/process_exited=true;
-both captures natural-container-exit via bounded shutdown wait(~0.469s).
-Recovery recovered/authorizes_launch=true. Cycle stopped; host awake,vfio-pci/on.
+Traced full-field interiors: QEMU publications39.39/37.94 per second,
+bitmap-creation entries39.39/38.01, client invalidations14.40/14.54.
+Localized~50–51 creation/client events match. The main measured gap is after
+bitmap-creation entry; pre-create queue gating and timer sampling alone do not
+explain it. Trace restored disabled. Next: software-only SPICE server
+consumption/coalescing/send measurements; do not disable backpressure blindly.
+
+Readable ordinary desktop screenshot; default stereo USB/QEMU/Pulse capture and
+independent route restoration pass. BAR0 positive mapping and retired ARM/staging
+regrant refusal pass; original agent and awake3840x2160 capture restored.
+Input not rerun; endpoint audibility/A-V sync unqualified.
+CORE_PROBE_PASS/earliest_failure=null; private guest-shutdown/process_exited=true.
+Both captures natural-container-exit(~0.397s), shutdown_event_wait=false;
+console clean EOF, critical recv-reset retained. Recovery recovered,
+authorizes_launch=true. Cycle stopped; host awake,vfio-pci/on.
 374 forced-stop D-state race remains unresolved;377 diagnostics not exercised.
 
-1298 host tests pass,8skip; build/identity/dry-run pass.376 milestone includes
-updated docs and the tested kext; delivery suite1298pass/8skip, hosted37955017465 test/build green. 376 dev50ca04f published and verified; previous374 hosted also green. Main unchanged. Broader crash/restart, fullframe/performance,
-fresh-user setup, input edge cases, apps/codecs and VirtualBox remain open.
-[Evidence](findings/research/console-mixed-motion-native-20261009.md) ·
-[Hashes](findings/research/console-mixed-motion-native-evidence-20261009.json).
+1311 host tests pass,8skip; exact build/identity/dry-run pass.379 remains candidate
+only. Dev50ca04f (376 milestone) remote verified; hosted37955017465 test/build
+green, release skipped. Main unchanged. Every future push requires exact-commit
+hosted CI test/build success and applicable release/deployment checks.
+[Evidence](findings/research/console-event-native-20261009.md) ·
+[Hashes](findings/research/console-event-native-evidence-20261009.json).
