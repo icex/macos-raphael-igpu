@@ -5,13 +5,13 @@
   "lilu_archive_sha256": "cf658a77e21575f99e0629df3aad282c2c51824d203f4e0b2260c769913815cd",
   "sdk_tree_sha256": "39036632f485a027f8b75fe5a8cfb18fab79d5c7531adae9dc165096e7e14666",
   "lilu_resources_sha256": "a30b171d2fcf0cbf835ab85b82d9a9857f36d582bf5b317e14033a096ffba38c",
-  "version": "1.0.392",
-  "source_commit": "743ee5765f2f92ac7402089c08140dfc9a2553c6",
+  "version": "1.0.395",
+  "source_commit": "0736b7798df292c93b465c1097896b6ceaff4837",
   "source_clean": true,
-  "build_id": "ee4fdfb5aa6045e9bb6b83c1ea6756a3",
-  "source_sha256": "c41dcfced5d24ec1335950e7bb1ce2a22797b6d7646a1ed9d71d674df795c062",
-  "info_sha256": "4892ee129dfb0329a2b97c908078844117eae9ecfb2732cfacb61616b0109fcd",
-  "executable_sha256": "45266d3217ce755cdc61a3d3a19784a9f0377cdb6da57e39718cfe74812def34",
+  "build_id": "3e40b3c359bc4250870e118a5fdb7e9d",
+  "source_sha256": "bb02494b9f4f6ec236683ef95bcdec9456934eef40559705667467362e83c610",
+  "info_sha256": "7daf785a11a1c4f54ef24847b5811dc897aa9f07b40fc6530e62d484f20404c0",
+  "executable_sha256": "6a4b164ecabd1165ceac95707c87d858f421c70d6cc0d935b6838ecb7e495e62",
   "metal_execution_verified": false,
   "verified_playable_games": 0,
   "debug_symbols": {
@@ -24,17 +24,17 @@
     "private_build_script_sha256": "b8b43364538cd42b195d5a99562391883d62fb009121ffa50848d0d70975da37",
     "canonical_inputs_before": {
       "build_script_sha256": "e8b8367052f16a8c81f5d0f3143959ae24ff8cd30eac00e1712b94bda76fb3d2",
-      "tracked_source_sha256": "c41dcfced5d24ec1335950e7bb1ce2a22797b6d7646a1ed9d71d674df795c062",
+      "tracked_source_sha256": "bb02494b9f4f6ec236683ef95bcdec9456934eef40559705667467362e83c610",
       "inputs_sha256": "a73cbdf5221015f32c35d47e9c6938761d74afb110d1200518a3ef6b29f05cc2"
     },
-    "executable_uuid": "243cff54b4fb38e4b1efc788372dd035",
-    "executable_sha256": "45266d3217ce755cdc61a3d3a19784a9f0377cdb6da57e39718cfe74812def34",
-    "dsym_uuid": "243cff54b4fb38e4b1efc788372dd035",
-    "dsym_dwarf_sha256": "82ebc355a67f17eff304d62214955ce92af88c562675f7e91bf069b755dda353",
-    "debug_source_sha256": "27d4e4c8832cbecdc9137b4f0cf1fb05cd5a84e91950ecf96e233b97f3d07c85",
+    "executable_uuid": "0a4c5624198034308fe9493063de3171",
+    "executable_sha256": "6a4b164ecabd1165ceac95707c87d858f421c70d6cc0d935b6838ecb7e495e62",
+    "dsym_uuid": "0a4c5624198034308fe9493063de3171",
+    "dsym_dwarf_sha256": "76bc5b4b76ee48da0f979945b57d7ae47c0c8ab739d79a5daf16a07fd18cce94",
+    "debug_source_sha256": "379252d5e99d6b3319fb19fd074c96a68872a607a5ba3bbb3bc80fecb1d29de1",
     "canonical_inputs_after": {
       "build_script_sha256": "e8b8367052f16a8c81f5d0f3143959ae24ff8cd30eac00e1712b94bda76fb3d2",
-      "tracked_source_sha256": "c41dcfced5d24ec1335950e7bb1ce2a22797b6d7646a1ed9d71d674df795c062",
+      "tracked_source_sha256": "bb02494b9f4f6ec236683ef95bcdec9456934eef40559705667467362e83c610",
       "inputs_sha256": "a73cbdf5221015f32c35d47e9c6938761d74afb110d1200518a3ef6b29f05cc2"
     }
   }
