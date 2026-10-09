@@ -14,6 +14,19 @@ R = _load('vfio-recover'); N = _load('inspect-noqueue')
 
 def sha(data): return hashlib.sha256(data).hexdigest()
 
+def ledger_rows(ledger, boot_id):
+    """Validate audit history; legacy max_launches is not an admission cap."""
+    if not isinstance(ledger, dict) or ledger.get('boot_id') != boot_id:
+        raise ValueError('ledger boot identity')
+    rows = ledger.get('launches')
+    if (not isinstance(rows, list) or not rows or
+            any(not isinstance(row, dict) or type(row.get('run_id')) is not str or
+                not row['run_id'] for row in rows)):
+        raise ValueError('ledger launch history')
+    if len({row['run_id'] for row in rows}) != len(rows):
+        raise ValueError('duplicate ledger run identity')
+    return rows
+
 def validate_snapshot(e, expected_mailbox=0x80030000, check_journal=True):
     """Pure validator for the complete selector scan; returns error labels."""
     bad=[]; g=e.get('globals_before',{}); a=e.get('globals_after',{})
@@ -60,10 +73,9 @@ def validate_proof(proof, boot_id, run_id, ledger_raw, manifest_sha256):
     if proof.get('boot_id') != boot_id or proof.get('run_id') != run_id: errors.append('identity')
     rows = []
     try:
-        ledger=json.loads(ledger_raw); rows=ledger['launches']; cap=ledger['max_launches']
-        if ledger.get('boot_id') != boot_id or not isinstance(rows,list) or not rows or rows[-1].get('run_id') != proof.get('prior_run_id'): errors.append('prior_run')
-        if any(isinstance(r,dict) and r.get('run_id') == run_id for r in rows): errors.append('run_id_reused')
-        if type(cap) is not int or cap <= 0 or len(rows) >= min(cap,3): errors.append('cap')
+        rows=ledger_rows(json.loads(ledger_raw), boot_id)
+        if rows[-1]['run_id'] != proof.get('prior_run_id'): errors.append('prior_run')
+        if any(r['run_id'] == run_id for r in rows): errors.append('run_id_reused')
     except Exception: errors.append('ledger_malformed')
     if proof.get('prior_run_id') is None or proof.get('prior_run_id') == run_id: errors.append('prior_run')
     if proof.get('ledger_preimage_sha256') != sha(ledger_raw): errors.append('ledger_sha256')
@@ -99,11 +111,11 @@ def authorize(vm, prior_output, manifest, manifest_path, recovery, R, N):
         if v.get('verdict') not in ('INVALID','WRAPPER_FAILURE') or v.get('earliest_failure') not in ('identity_or_route_missing','launcher'): errors.append('prior_failure')
     except Exception: errors.append('prior_verdict')
     ledger_path=vm/'run/used-gpu-boots'/(manifest['boot_id']+'.json')
+    rows=[]
     try:
-        ledger_raw=ledger_path.read_bytes(); ledger=json.loads(ledger_raw); rows=ledger['launches']
-        if not rows or rows[-1].get('run_id') != recovery.get('run_id'): errors.append('prior_run_latest')
-        if ledger.get('boot_id') != manifest['boot_id'] or len(rows)>=ledger.get('max_launches',0): errors.append('ledger')
-    except Exception: ledger_raw=b''; ledger={}; errors.append('ledger')
+        ledger_raw=ledger_path.read_bytes(); rows=ledger_rows(json.loads(ledger_raw), manifest['boot_id'])
+        if rows[-1]['run_id'] != recovery.get('run_id'): errors.append('prior_run_latest')
+    except Exception: ledger_raw=b''; rows=[]; errors.append('ledger')
     host=R.host_state(); errors += ['host_'+x for x in R.validate_host_state(host, manifest['boot_id'])]
     pci=Path('/sys/bus/pci/devices/0000:7b:00.0'); power=(pci/'power/control').read_text().strip(); runtime=(pci/'power/runtime_status').read_text().strip()
     if power!='on': errors.append('power_control')

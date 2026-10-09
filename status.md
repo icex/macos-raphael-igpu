@@ -1,25 +1,25 @@
 # Live status — 2026-10-09
 
-## Candidate341: libvirt planning, network handoff and local lifecycle
+## Candidate341: first libvirt launch refused before QEMU
 
-No new GPU run. The complete transient-domain planner preserves native
-peripheral/storage order, one CPU definition and the zero hardware UUID.
-Isolated software tests prove a real TAP handoff before resume and exact backend
-packet capture. The new container-local backend now observes actual software
-guest poweroff and independent libvirt Force Off, checks QEMU exit, retains the
-distinct reasons and exits each container naturally with status0. Docker init
-reaping and a real shutdown-observation race were fixed during those tests.
-All test containers are stopped; the host sleep:idle blocker stays active.
-Host suite:1,095 tests pass,3 skipped;76 staging tests pass after adding the exact341/metal-187 contract. Build1.0.341 is prepared frome2f11b5; no341 GPU launch yet.
+Run `38ca74a82e750f36f3f70fc6859951d3`, metal-187, build1.0.341,
+MODE2#279 on bootba51b3c6. The planner refused the real uppercase NAT MAC
+address before starting libvirtd or creating QEMU. No guest execution or serial
+capture occurred. The launcher/container stopped; no ordinary GPU recovery
+receipt was produced. Artifacts: `run/candidate-341-results/`, including preserved
+`launcher.log`. The ledger contains a launch reservation; same-boot admission
+must reconcile that reservation or obtain supported stopped-device recovery
+before another launch. No reboot or rebind has been requested.
 
-The complete argv verifier matches fresh libvirt conversion; macvtap
-provenance checks follow Linux source and a read-only host snapshot. Two further
-software dual-NIC shutdown runs pass after fixing the process-reaping race.
-Manifest binding and vm-entry/harness integration are implemented. Real container-controller tests pass for valid resume followed by software guest poweroff and for rejecting a replaced process in the permit; both containers are stopped. Host release ordering and injected capture/identity failures are covered separately. [Handoff evidence](findings/research/libvirt-entry-handoff-20261009.md). The inherited
-host macvtap checks still require an admitted live transfer. This is not yet a libvirt-managed accelerated macOS pass. The existing direct GPU profile remains available; the new libvirt profile has not yet exposed the GPU. [Plan](findings/research/libvirt-console-plan-20261009.md) ·
-[TAP](findings/research/libvirt-runtime-tap-20261009.md) ·
-[Local lifecycle](findings/research/libvirt-local-lifecycle-20261009.md) ·
-[Native verifier](findings/research/libvirt-native-profile-20261009.md).
+The parser now accepts hexadecimal MAC case while preserving exact native argv.
+The actual failed launch command parses successfully offline (14devices,8vCPUs,
+12000MiB). The schema8 empty-capture qualification now follows the current
+no-count ledger policy while preserving complete stopped-device scans and hashes;
+cycle forwards the prior evidence explicitly. Full regression suite after these fixes:1,102 tests pass,3 skipped. This is not yet a recovery pass. Earlier real software controller tests passed valid
+resume/poweroff and wrong-process permit cleanup; host release ordering tests
+also pass. Full suite before this run:1,095 tests,3 skipped;76 staging tests pass.
+This remains **unqualified for libvirt-managed accelerated macOS**. Native driver
+source is unchanged from340. [Handoff evidence](findings/research/libvirt-entry-handoff-20261009.md).
 
 ## Candidate340: native accelerated SPICE desktop after host resume
 
@@ -141,3 +141,10 @@ StockQEMU10.1.2/OpenCore/VirtualSMC1.3.7 works in this tested setup;
 PerfPowerServices was0.0% CPU on two guest boots. Automatic required-hardware HEVC
 decode works; explicit GPU-ID selection remains limited. Main10 decode has scoped
 passes; hardware encode is Main8. [Roadmap](docs/ROADMAP.md).
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-341-results`
+- Verdict: `INVALID`
+- Boundary: `identity_or_route_missing`

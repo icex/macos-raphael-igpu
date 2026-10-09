@@ -90,7 +90,16 @@ def launch(argv):
     handoff.require(os.getppid()==1 and Path('/proc/1/comm').read_text().strip() in ('docker-init','tini'),
                     'libvirt profile requires container init reaping')
     deadline=time.monotonic()+admission['deadline_epoch']-time.time()
-    plan=native.configuration.planner.build_plan(argv,admission['run_id'])
+    # Private evidence preserves fully expanded launcher input without printing
+    # AppleSMC or machine identity in diagnostics. Planning is still pure.
+    handoff.write_once(directory/'native-argv.json',argv)
+    try:
+        plan=native.configuration.planner.build_plan(argv,admission['run_id'])
+    except Exception as error:
+        handoff.write_once(directory/'planning-failure.json',dict(
+            run_id=admission['run_id'],phase='before-libvirtd-and-qemu',
+            error_type=type(error).__name__,error=str(error)))
+        raise
     handoff.write_once(directory/'plan.json',plan)
     os.environ['XDG_RUNTIME_DIR']=str(directory/'runtime')
     (directory/'runtime').mkdir(mode=0o700)

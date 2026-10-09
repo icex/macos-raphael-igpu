@@ -80,7 +80,7 @@ def build_plan(argv, run_id):
     require(sum(bool(re.fullmatch(r'isa-applesmc,osk=[A-Za-z0-9 ()]{64}', d)) for d in extras) == 1,
             'invalid AppleSMC configuration')
     for net in ('net0', 'lan0'):
-        require(sum(bool(re.fullmatch(r'vmxnet3,netdev='+net+',id='+net+r',mac=(?:[0-9a-f]{2}:){5}[0-9a-f]{2}', d))
+        require(sum(bool(re.fullmatch(r'vmxnet3,netdev='+net+',id='+net+r',mac=(?:[0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}', d))
                     for d in extras) == 1, 'invalid network device')
     ordered_models = ['qemu-xhci', 'usb-kbd', 'usb-tablet', 'isa-applesmc',
                       'usb-audio', 'ich9-ahci', 'ide-hd', 'ide-hd', 'vmxnet3',

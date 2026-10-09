@@ -36,6 +36,16 @@ def native_fixture():
 
 
 class LibvirtConsolePlanTests(unittest.TestCase):
+    def test_uppercase_native_nat_mac_is_preserved_exactly(self):
+        argv=native_fixture()
+        index=argv.index('vmxnet3,netdev=net0,id=net0,mac=52:54:00:00:00:01')
+        argv[index]='vmxnet3,netdev=net0,id=net0,mac=B0:E5:EF:61:72:21'
+        result=plan.build_plan(argv,'1'*32)
+        self.assertEqual(result['native_argv'],argv)
+        self.assertIn(argv[index],result['xml'])
+        argv[index]=argv[index].replace('B0:','G0:')
+        with self.assertRaises(ValueError):plan.build_plan(argv,'1'*32)
+
     def test_single_cpu_owner_and_preserved_native_devices(self):
         argv = native_fixture(); result = plan.build_plan(argv, '1'*32)
         root = ET.fromstring(result['xml'])

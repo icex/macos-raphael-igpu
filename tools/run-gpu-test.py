@@ -47,6 +47,8 @@ def run(args: argparse.Namespace) -> int:
     if not (worktree / "tools" / "experiment.py").is_file(): raise SystemExit(f"missing experiment runner: {worktree}")
     if output.exists(): raise SystemExit(f"output already exists: {output}")
     command = build_command(vm, manifest, output, worktree)
+    if getattr(args, 'noqueue_reuse', None):
+        command += ['--noqueue-reuse', str(Path(args.noqueue_reuse).resolve())]
     if args.dry_run:
         print(json.dumps({"dry_run": True, "command": command}, indent=2)); return 0
     identity = manifest_identity(manifest)
@@ -81,6 +83,8 @@ def main() -> int:
     parser.add_argument("--vm-dir", required=True)
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--output", required=True)
+    parser.add_argument("--noqueue-reuse", type=Path,
+                        help="prior empty-capture failure; requires fresh stopped-queue proof")
     parser.add_argument("--worktree", default=str(ROOT), help="clean candidate worktree containing tools/experiment.py")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--status-path", default=str(default_status_path()))

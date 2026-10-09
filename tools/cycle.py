@@ -246,6 +246,8 @@ def prepare_and_run(args, facts: dict, worktree: Path, vm: Path, run_id: str) ->
     runner = [sys.executable, "-B", "tools/run-gpu-test.py", "--vm-dir", str(vm),
               "--manifest", str(manifest), "--output", str(results),
               "--worktree", str(worktree), "--status-path", str(worktree / "status.md")]
+    if getattr(args, 'noqueue_reuse', None):
+        runner += ['--noqueue-reuse', str(Path(args.noqueue_reuse).resolve())]
     result = run_step("gpu run", runner, cwd=worktree, allow_failure=True,
                       log=vm / "run" / f"candidate-{args.candidate}{suffix}-run.log",
                       env={"IMAGE": facts["image_id"]})
@@ -267,6 +269,8 @@ def main() -> int:
     parser.add_argument("--candidate", required=True, help="candidate number, e.g. 231")
     parser.add_argument("--card", required=True, help="experiment card id, e.g. metal-079")
     parser.add_argument("--attempt", help="isolated retry namespace")
+    parser.add_argument("--noqueue-reuse", type=Path,
+                        help="prior empty-capture failure for the existing fresh stopped-queue qualification; not an override")
     parser.add_argument("--pins", default=str(ROOT / "experiments" / "pins.json"))
     parser.add_argument("--worktree", help="candidate worktree (default: VM run/worktrees/candidate-N)")
     parser.add_argument("--skip-tests", action="store_true", help="skip the host regression suite")

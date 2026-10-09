@@ -46,3 +46,21 @@ retained16MiB software boot image from the earlier lifecycle fixture. The
 [container adapter](libvirt-entry-handoff-smoke-20261009.py) documents every
 substitution. Raw result, controller events and container logs remain in each
 run directory. These tests deliberately do not use or consume GPU ledger entries.
+
+## First native launch refusal
+
+Run38ca74a82e750f36f3f70fc6859951d3 reached the container entry but its pure
+planner rejected an uppercase NAT MAC. The traceback precedes libvirtd and
+QEMU creation; no guest UART captures exist. The launcher stopped and produced
+INVALID; its reservation remains in the ledger. The corrected parser preserves
+MAC spelling and accepts the complete actual expanded launch command offline.
+No driver regression can be inferred from this pre-QEMU failure.
+
+The ordinary recovery tool cannot operate on a missing guest lease. The existing
+schema8 empty-capture stopped-queue qualification had an obsolete three-launch
+limit; it now follows the current audit-only count policy, preserving latest-run,
+unique identity, exact manifest/ledger/helper hashes and the full hardware scan.
+The cycle wrapper forwards the explicit prior evidence so this path remains under
+the normal experiment locks and supervised lifecycle. No manual ledger deletion,
+synthetic recovery receipt, reboot or rebind is used. Live qualification of this
+retry still remains required.

@@ -107,7 +107,7 @@ class NoQueueIntegrationTests(unittest.TestCase):
             self.assertEqual(value["launches"][-1]["run_id"], "next")
             self.assertEqual(len(value["launches"]), 2)
 
-    def test_stale_duplicate_and_exhausted_proof_refuse_without_mutation(self):
+    def test_stale_and_duplicate_refuse_but_count_does_not_replace_proof(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); manifest = root / "manifest.json"; manifest.write_text("{}")
             ledger = root / "boot-A.json"
@@ -116,22 +116,27 @@ class NoQueueIntegrationTests(unittest.TestCase):
                                           "launches": [{"run_id": "prior"}]}))
             stale = self.proof(ledger.read_bytes(), manifest)
             ledger.write_text(ledger.read_text().replace("prior", "changed"))
+            before=ledger.read_bytes()
             with self.assertRaises(ValueError):
                 self.experiment.reserve_boot(root, "boot-A", "next", manifest_path=manifest,
                                              noqueue_proof=stale)
+            self.assertEqual(ledger.read_bytes(),before)
             duplicate = self.proof(ledger.read_bytes(), manifest, run="changed", prior="changed")
             with self.assertRaises(ValueError):
                 self.experiment.reserve_boot(root, "boot-A", "changed", manifest_path=manifest,
                                              noqueue_proof=duplicate)
-            # reserve_boot itself no longer enforces a launch-count ceiling (that
-            # generic admission requirement is gone); noqueue-qualification.py's own
-            # proof validator still bounds its own scheme independently, via "cap".
+            self.assertEqual(ledger.read_bytes(),before)
+            # Both ordinary and empty-capture qualification use live evidence;
+            # historical count must not replace the complete stopped-scan proof.
             ledger.write_text(json.dumps({"schema": 2, "boot_id": "boot-A", "max_launches": 3,
                                           "launches": [{"run_id": str(i)} for i in range(3)]}))
-            with self.assertRaisesRegex(ValueError, "cap"):
-                self.experiment.reserve_boot(root, "boot-A", "fresh", manifest_path=manifest,
-                                             noqueue_proof=self.proof(ledger.read_bytes(), manifest,
-                                                                       run="fresh", prior="2"))
+            prior=json.loads(ledger.read_text())['launches']
+            self.experiment.reserve_boot(root, "boot-A", "fresh", manifest_path=manifest,
+                                         noqueue_proof=self.proof(ledger.read_bytes(), manifest,
+                                                                   run="fresh", prior="2"))
+            actual=json.loads(ledger.read_text())['launches']
+            self.assertEqual(actual[:-1],prior)
+            self.assertEqual(actual[-1]['run_id'],'fresh')
 
     def test_noqueue_run_requires_proof_before_launch(self):
         with tempfile.TemporaryDirectory() as directory:

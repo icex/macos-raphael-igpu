@@ -114,6 +114,16 @@ boot, and must have `power/control=on` pinned before anything opens it.
 
 ### Recovery when the guest never published a usable lease
 
+A launcher failure with completely empty serial and critical captures can also
+use the existing schema8 stopped-queue qualification via
+`tools/cycle.py --candidate N --card metal-NNN --attempt retry --noqueue-reuse PRIOR_RESULTS`.
+This names prior evidence, not an admission override: the experiment checks the
+latest failed run and unchanged ledger, performs a fresh complete stable queue
+scan under its locks, and binds the proof to the new manifest before reservation.
+Normal receipt-based reuse still needs no option. Historical ledger launch counts
+do not replace these checks. This path does not reconstruct or fabricate a missing
+guest ownership lease or claim the failed guest ran successfully.
+
 If ordinary recovery fails and the guest is confirmed stopped, use the bounded
 MODE2/no-queue path. Inspect first (no reset or PSP commands):
 

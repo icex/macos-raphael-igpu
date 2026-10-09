@@ -10,6 +10,18 @@ spec = importlib.util.spec_from_file_location("run_gpu_test", ROOT / "tools/run-
 mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
 
 class RunGpuTestTests(unittest.TestCase):
+    def test_noqueue_evidence_path_is_forwarded_without_bypassing_experiment(self):
+        with tempfile.TemporaryDirectory() as d:
+            vm=Path(d);(vm/'manifest').write_text('{}')
+            args=type('A',(),dict(vm_dir=str(vm),manifest=str(vm/'manifest'),
+                output=str(vm/'out'),dry_run=True,worktree=str(ROOT),noqueue_reuse=vm/'prior'))
+            with patch('builtins.print') as output:
+                self.assertEqual(mod.run(args),0)
+            command=json.loads(output.call_args.args[0])['command']
+            self.assertEqual(command[-2:],['--noqueue-reuse',str(vm/'prior')])
+            self.assertIn(str(ROOT/'tools/experiment.py'),command)
+            self.assertEqual(command[:3],['systemd-inhibit','--what=sleep:idle','--mode=block'])
+
     def test_command_blocks_sleep_and_idle(self):
         cmd = mod.build_command(Path('/vm'), Path('/m'), Path('/o'), Path('/wt'))
         self.assertEqual(cmd[:3], ['systemd-inhibit', '--what=sleep:idle', '--mode=block'])

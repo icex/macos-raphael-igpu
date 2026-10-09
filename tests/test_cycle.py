@@ -28,6 +28,16 @@ def make_args(**overrides):
 
 
 class PinsTest(unittest.TestCase):
+    def test_noqueue_path_reaches_only_supervised_run_after_prepare(self):
+        args=make_args(noqueue_reuse=Path('/prior'))
+        with patch.object(cycle,'run_step',return_value=subprocess.CompletedProcess([],0,'{"verdict":"INVALID"}')) as run:
+            cycle.prepare_and_run(args,{'image_id':'image'},Path('/wt'),Path('/vm'),'r')
+        self.assertEqual(run.call_count,2)
+        prepare,launch=[call.args[1] for call in run.call_args_list]
+        self.assertNotIn('--noqueue-reuse',prepare)
+        self.assertIn('tools/run-gpu-test.py',launch)
+        self.assertEqual(launch[-2:],['--noqueue-reuse','/prior'])
+
     def test_repository_pins_are_valid(self):
         pins = cycle.load_pins(ROOT / "experiments" / "pins.json")
         self.assertEqual(pins["schema"], 1)
