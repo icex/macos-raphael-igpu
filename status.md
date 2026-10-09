@@ -44,6 +44,8 @@ c386-audio-result.txt; c386-audio-restored-independent.json;
 c386-final-state.txt; c386-final-capture-identity-user.txt;
 c386-viewer-close-alive.json; c386-docker-events.jsonl.
 Mouse-routing host suite1426tests/8skip passed; staging88tests passed.
+Final delivery suite1426tests/8skip passed; tested386 executable and matching
+build-manifest are in kext/bin. Hosted delivery CI remains pending.
 
 Next: deliver the verified385/386 support and tested386 binary with updated docs
 and green exact-commit hosted CI. Resize currently accepts even physical
