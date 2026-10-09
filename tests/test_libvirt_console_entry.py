@@ -53,3 +53,45 @@ class DaemonEnvironmentTests(unittest.TestCase):
              patch.object(mod.subprocess,'run') as run:
             mod.start_daemon(500)
             self.assertEqual(run.call_args.kwargs['timeout'],10)
+
+
+class RefreshPlanBindingTests(unittest.TestCase):
+    def plan(self,refresh='default'):
+        spice=mod.native.configuration.planner.SPICE
+        if refresh=='60':spice+=',max-refresh-rate=60'
+        return {'native_argv':['-spice',spice]}
+    def test_exact_and_historical_default_bindings(self):
+        for admission,refresh in [({},'default'),({'console_refresh':'default'},'default'),({'console_refresh':'60'},'60')]:
+            mod.validate_plan_refresh(self.plan(refresh),admission)
+        for admission,refresh in [({},'60'),({'console_refresh':'default'},'60'),({'console_refresh':'60'},'default')]:
+            with self.assertRaisesRegex(ValueError,'differs from admission'):mod.validate_plan_refresh(self.plan(refresh),admission)
+    def test_mismatch_refuses_before_daemon_or_domain_creation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory=Path(tmp);admission={'run_id':'a'*32,'deadline_epoch':mod.time.time()+120,'console_refresh':'60'}
+            with patch.object(mod,'context',return_value=(directory,admission,'digest')), \
+                 patch.object(mod,'dependency_check'),patch.object(mod.os,'getppid',return_value=1), \
+                 patch.object(mod.Path,'read_text',return_value='docker-init'), \
+                 patch.object(mod.native.configuration.planner,'build_plan',return_value=self.plan()), \
+                 patch.object(mod,'start_daemon') as daemon,patch.object(mod.native,'NativeBackend') as backend:
+                with self.assertRaisesRegex(ValueError,'differs from admission'):mod.launch([])
+                daemon.assert_not_called();backend.assert_not_called()
+            failure=json.loads((directory/'planning-failure.json').read_text())
+            self.assertEqual(failure['phase'],'before-libvirtd-and-qemu')
+    def test_independent_paused_and_running_inspection_refuse_mismatch(self):
+        for paused in (True,False):
+            with self.subTest(paused=paused),tempfile.TemporaryDirectory() as tmp:
+                directory=Path(tmp);(directory/'plan.json').write_text(json.dumps(self.plan()))
+                with patch.object(mod,'context',return_value=(directory,{'console_refresh':'60'},'digest')), \
+                     patch.dict(os.environ,{},clear=False),patch.object(mod.native.local,'LocalBackend') as backend:
+                    with self.assertRaisesRegex(ValueError,'differs from admission'):mod.inspect_domain(paused)
+                    backend.assert_not_called()
+    def test_exited_proof_refuses_mismatch_before_process_observation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory=Path(tmp)
+            for name,value in [('plan',self.plan()),('paused',{}),('resume',{}),('running',{})]:
+                (directory/(name+'.json')).write_text(json.dumps(value))
+            with patch.object(mod,'context',return_value=(directory,{'console_refresh':'60'},'digest')), \
+                 patch.object(mod.handoff,'validate_permit'),patch.object(mod.native.local,'process') as process:
+                result=mod.inspect_exited_report()
+                self.assertEqual(result,{'exited':False,'refusal':{'stage':'plan-binding','code':'validation-refused'}})
+                process.assert_not_called()

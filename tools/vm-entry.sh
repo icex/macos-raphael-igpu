@@ -79,6 +79,11 @@ esac
 
 # Explicit presentation-only console: keep the historical no-adapter contract
 # unchanged unless the manifest selects this exact device and local endpoint.
+case "${CONSOLE_REFRESH:-default}" in
+    default) ;;
+    60) [[ "${VM_MANAGER:-direct}" == libvirt && "${VM_CONSOLE:-off}" == bochs-spice ]] || { echo "explicit refresh requires libvirt SPICE" >&2; exit 1; } ;;
+    *) echo "unknown CONSOLE_REFRESH" >&2; exit 1 ;;
+esac
 case "${VM_CONSOLE:-off}" in
     off|"") ;;
     bochs|bochs-spice)
@@ -87,6 +92,7 @@ case "${VM_CONSOLE:-off}" in
         export EXTRA="${EXTRA:-} -device bochs-display,id=rgpu_present,bus=pcie.0,addr=0x7,vgamem=64M"
         if [[ "${VM_CONSOLE}" == bochs-spice ]]; then
             export EXTRA="${EXTRA} -spice unix=on,addr=/run/vm/console-spice.sock,disable-ticketing=on,image-compression=off,gl=off"
+            if [[ "${CONSOLE_REFRESH:-default}" == 60 ]]; then export EXTRA="${EXTRA},max-refresh-rate=60"; fi
         else
             export EXTRA="${EXTRA} -vnc unix:/run/vm/console-vnc.sock"
         fi

@@ -1252,6 +1252,15 @@ class EmptyFirmwareConsoleCardTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 tool.validate_card(raw,hashlib.sha256(raw).hexdigest())
 
+    def test_candidate345_refresh_contract_is_exact(self):
+        tool=load_tool();tool.configure('1.0.345','metal-190')
+        card=json.loads((ROOT/'experiments/metal-190.json').read_text())
+        raw=json.dumps(card).encode();tool.validate_card(raw,hashlib.sha256(raw).hexdigest())
+        for key,value in [('VM_MANAGER','direct'),('VM_CONSOLE','bochs'),('CONSOLE_REFRESH','default'),('CONSOLE_REFRESH','120')]:
+            changed=copy.deepcopy(card);changed['launch_options'][key]=value
+            raw=json.dumps(changed).encode()
+            with self.assertRaises(RuntimeError):tool.validate_card(raw,hashlib.sha256(raw).hexdigest())
+
     def test_cold_firmware_opt_in_and_spice_topology_are_exact(self):
         tool=load_tool();tool.configure('1.0.340','metal-186')
         card=json.loads((ROOT/'experiments/metal-186.json').read_text())

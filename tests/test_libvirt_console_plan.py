@@ -36,6 +36,17 @@ def native_fixture():
 
 
 class LibvirtConsolePlanTests(unittest.TestCase):
+    def test_refresh_is_an_exact_supplement_to_owned_spice_server(self):
+        argv=native_fixture();argv[argv.index(plan.SPICE)]+=",max-refresh-rate=60"
+        result=plan.build_plan(argv,'1'*32);root=ET.fromstring(result['xml'])
+        args=[n.attrib['value'] for n in root.findall('./{'+plan.NS+'}commandline/{'+plan.NS+'}arg')]
+        self.assertEqual(args[-2:],['-spice','max-refresh-rate=60'])
+        self.assertEqual(len(root.findall('./devices/graphics')),1)
+        for extra in ('max-refresh-rate=120','max-refresh-rate=0','max-refresh-rate=60,port=5905',
+                      'max-refresh-rate=60,max-refresh-rate=60'):
+            bad=native_fixture();bad[bad.index(plan.SPICE)]+=','+extra
+            with self.subTest(extra=extra),self.assertRaises(ValueError):plan.build_plan(bad,'1'*32)
+
     def test_uppercase_native_nat_mac_is_preserved_exactly(self):
         argv=native_fixture()
         index=argv.index('vmxnet3,netdev=net0,id=net0,mac=52:54:00:00:00:01')

@@ -671,6 +671,7 @@ class SupervisionTests(unittest.TestCase):
 
     def test_graphics_policy_is_explicitly_forwarded_without_extra(self):
         self.env["GENERIC_GRAPHICS"] = "off"
+        self.env["CONSOLE_REFRESH"] = "60"
         self.fixture["logind_inhibited"] = True
         self.save()
         script = self.vm / "macos-vm.sh"
@@ -680,6 +681,7 @@ class SupervisionTests(unittest.TestCase):
         launch = next(args for cmd, args in self.calls() if cmd == "systemd-run"
                       and any(a.startswith("--unit=rgpu-launch-") for a in args))
         self.assertIn("--setenv=GENERIC_GRAPHICS=off", launch)
+        self.assertIn("--setenv=CONSOLE_REFRESH=60", launch)
         self.assertIn("--setenv=EXTRA=", launch)
 
     def test_start_archives_stopped_familiar_container_before_systemd(self):

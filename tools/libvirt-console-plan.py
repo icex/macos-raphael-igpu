@@ -59,7 +59,8 @@ def build_plan(argv, run_id):
     match = re.fullmatch(r'([1-9][0-9]*),sockets=1,cores=\1,threads=1', one(rows, '-smp'))
     require(match is not None and int(match[1]) <= 64, 'unreviewed CPU topology')
     cores = match[1]
-    require(one(rows, '-spice') == SPICE and one(rows, '-vga') == 'none' and
+    spice = one(rows, '-spice')
+    require(spice in (SPICE, SPICE+',max-refresh-rate=60') and one(rows, '-vga') == 'none' and
             one(rows, '-display') == 'none', 'unreviewed console profile')
     require(one(rows, '-audiodev') == 'pa,id=hda', 'unreviewed audio backend')
     require(one(rows, '-smbios') == 'type=2' and one(rows, '-boot') == 'menu=on', 'unreviewed boot profile')
@@ -155,6 +156,10 @@ def build_plan(argv, run_id):
         retained.extend([option, value])
     for prop in ('kvm', 'vmware-cpuid-freq'):
         retained.extend(['-global', 'Haswell-noTSX-x86_64-cpu.'+prop+'=on'])
+    if spice != SPICE:
+        # QEMU's spice option group merges this exact supplemental option into
+        # libvirt's owned socket configuration; no second server is created.
+        retained.extend(['-spice', 'max-refresh-rate=60'])
     for value in retained:
         element(cmd, '{'+NS+'}arg', value=value)
     ET.indent(root)

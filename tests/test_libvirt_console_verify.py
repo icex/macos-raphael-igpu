@@ -35,6 +35,19 @@ def fixture():
 
 
 class VerifyTests(unittest.TestCase):
+    def test_explicit_refresh_is_required_exactly_once_and_bound_to_plan(self):
+        baseline,state=fixture();native=native_fixture()
+        native[native.index(mod.planner.SPICE)]+=",max-refresh-rate=60"
+        plan=mod.planner.build_plan(native,'1'*32)
+        marker=state['argv'].index('-sandbox');state['argv'][marker:marker]=['-spice','max-refresh-rate=60']
+        self.assertTrue(mod.verify(plan,state))
+        with self.assertRaises(ValueError):mod.verify(baseline,state)
+        for replacement in ('max-refresh-rate=30','max-refresh-rate=60,port=5905'):
+            altered=copy.deepcopy(state);altered['argv'][marker+1]=replacement
+            with self.assertRaises(ValueError):mod.verify(plan,altered)
+        altered=copy.deepcopy(state);del altered['argv'][marker:marker+2]
+        with self.assertRaises(ValueError):mod.verify(plan,altered)
+
     def test_complete_profile(self):
         plan,state=fixture();self.assertTrue(mod.verify(plan,state))
     def test_rejects_changes_to_every_observed_argument(self):

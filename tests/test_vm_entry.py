@@ -53,6 +53,18 @@ class VmEntryTests(unittest.TestCase):
                 self.assertEqual(result.returncode,0,result.stderr)
                 self.assertEqual(marker.exists(),expected)
 
+    def test_console_refresh_shell_selector_preserves_endpoint_and_refuses_other_profiles(self):
+        source=ENTRY.read_text();block=source[source.index('# Explicit presentation-only console:'):source.index('if [[ -n "${LAN_TAP_NODE:-}" ]]')]
+        for rate,manager,accepted in [('default','direct',True),('60','libvirt',True),('60','direct',False),('120','libvirt',False)]:
+            env=dict(os.environ,CONSOLE_REFRESH=rate,VM_MANAGER=manager,VM_CONSOLE='bochs-spice',GENERIC_GRAPHICS='off',EXTRA='-display none')
+            result=subprocess.run(['bash','-c',block+'\nprintf "%s" "$EXTRA"'],env=env,capture_output=True,text=True,timeout=3)
+            with self.subTest(rate=rate,manager=manager):
+                self.assertEqual(result.returncode==0,accepted,result.stderr)
+                if accepted:
+                    spice=result.stdout.split(' -spice ',1)[1]
+                    expected='unix=on,addr=/run/vm/console-spice.sock,disable-ticketing=on,image-compression=off,gl=off'
+                    self.assertEqual(spice,expected+(',max-refresh-rate=60' if rate=='60' else ''))
+
     def test_libvirt_or_unknown_manager_cannot_fall_through_to_qemu(self):
         for manager in ['libvirt','unknown']:
             result,argv=self.run_entry('exec qemu-system-x86_64 -vga vmware $EXTRA',

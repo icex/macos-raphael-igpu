@@ -1,0 +1,155 @@
+{
+  "root": "/home/bogdan/macos-vm/run/c345-refresh-argv-4d9d2508",
+  "result": {
+    "passed": true,
+    "cases": [
+      {
+        "refresh": "default",
+        "verified": true,
+        "spice": [
+          "unix=on,addr=/run/vm/console-spice.sock,disable-ticketing=on,image-compression=off,seamless-migration=on"
+        ],
+        "monitor_projection": 1,
+        "private_path_projection": 1,
+        "accelerator_projection": "tcg to kvm (no KVM exposed)",
+        "argv_count": 109
+      },
+      {
+        "refresh": "60",
+        "verified": true,
+        "spice": [
+          "unix=on,addr=/run/vm/console-spice.sock,disable-ticketing=on,image-compression=off,seamless-migration=on",
+          "max-refresh-rate=60"
+        ],
+        "monitor_projection": 1,
+        "private_path_projection": 1,
+        "accelerator_projection": "tcg to kvm (no KVM exposed)",
+        "argv_count": 111
+      }
+    ],
+    "domains": [],
+    "scope": "domxml conversion only; no QEMU domain created, no KVM/VFIO"
+  },
+  "container": {
+    "cid": "6165523d99f5ea01a2f1424db9c996df5ae0ebaed42a1ac20b6125ff32fd6ee5",
+    "image": "sha256:6a18a413394dfca0f3882b9df722fb9f85b1126b368ffb51eb06f2bc217ffc74",
+    "exit": 0,
+    "running": false,
+    "devices": [],
+    "network": "none",
+    "started_at": "2026-10-09T10:07:03.165503854Z",
+    "finished_at": "2026-10-09T10:07:03.569449113Z"
+  },
+  "files": {
+    "default-production.xml": "2149fd6301dbf920da5e5f8443be11ae585090c31170786d3cfe4e56740937a8",
+    "default.xml": "29e245b46ddabf440271e345bb66d4e06db9adc7f5a3b584dcdef08631603bc4",
+    "default-native.txt": "c79fa974903dc8373c1f8bfefa9fcb18ebfbff482951278dc586f278dd7d3da9",
+    "default-error.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "60-production.xml": "0ce8e7086fa1a69b94929dab3ece7c43c2ff3787b46d9b0eea3daeac9000c023",
+    "60.xml": "efb63d2fb845f6c969a9fe956afb2c4c878b75f4bfe9c321a5c84f11b81bb89e",
+    "60-native.txt": "451fd2b658728806426ba5dfea73dacaa163d291b68e54950ec65f38a5e35e1c",
+    "60-error.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "result.json": "f5c652885f0ea7ab4d108997f40a300c50accecd7fd741fd14e75509ff53c880",
+    "stdout.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "container.json": "e1c0c2299f5130ad97204232ead027833b10e68a61360489a06ecca5020196fe"
+  },
+  "failed_attempts": {
+    "c345-refresh-argv-bc52f2ea": {
+      "cid": "43a5d3bf62574f7fc2aaac0a8f26bee4deff73bb14a50165c628b1e3013b9a67",
+      "image": "sha256:6a18a413394dfca0f3882b9df722fb9f85b1126b368ffb51eb06f2bc217ffc74",
+      "exit": 1,
+      "running": false,
+      "devices": [],
+      "network": "none",
+      "started_at": "2026-10-09T10:06:24.691148021Z",
+      "finished_at": "2026-10-09T10:06:25.073302032Z"
+    },
+    "c345-refresh-argv-9f1de68d": {
+      "cid": "8164ec1fb4a1b8b66a8ca6144a097b8f83ec33571137009dda47e4f668b40059",
+      "image": "sha256:6a18a413394dfca0f3882b9df722fb9f85b1126b368ffb51eb06f2bc217ffc74",
+      "exit": 1,
+      "running": false,
+      "devices": [],
+      "network": "none",
+      "started_at": "2026-10-09T10:06:34.812821624Z",
+      "finished_at": "2026-10-09T10:06:35.197926056Z"
+    },
+    "c345-refresh-argv-3625db06": {
+      "cid": "991f6ecf675c3ad85d4691c2ea49f31368d6763ca68fbcd9d05c5c45f46423e9",
+      "image": "sha256:6a18a413394dfca0f3882b9df722fb9f85b1126b368ffb51eb06f2bc217ffc74",
+      "exit": 1,
+      "running": false,
+      "devices": [],
+      "network": "none",
+      "started_at": "2026-10-09T10:06:57.148217824Z",
+      "finished_at": "2026-10-09T10:06:57.233442647Z"
+    }
+  },
+  "runtime_merged_option": {
+    "root": "/home/bogdan/macos-vm/run/c345-refresh-argv-4a5460a9",
+    "result": {
+      "passed": true,
+      "spice": {
+        "migrated": false,
+        "enabled": true,
+        "auth": "none",
+        "compiled-version": "0.16.0",
+        "host": "/run/vm/console-spice.sock",
+        "channels": [],
+        "mouse-mode": "server"
+      },
+      "kvm": {
+        "enabled": false,
+        "present": true
+      },
+      "status": {
+        "status": "prelaunch",
+        "running": false
+      },
+      "cpus": [],
+      "spice_socket_count": 1,
+      "unix_socket_rows": [
+        "0000000000000000: 00000002 00000000 00010000 0001 01 2206583 /run/vm/console-spice.sock"
+      ],
+      "qemu_exit": 0,
+      "observed_argv": [
+        "/usr/sbin/qemu-system-x86_64",
+        "-machine",
+        "none,accel=tcg",
+        "-S",
+        "-nodefaults",
+        "-display",
+        "none",
+        "-nic",
+        "none",
+        "-spice",
+        "unix=on,addr=/run/vm/console-spice.sock,disable-ticketing=on,image-compression=off,seamless-migration=on",
+        "-spice",
+        "max-refresh-rate=60",
+        "-qmp",
+        "unix:/run/study/qmp.sock,server=on,wait=off"
+      ],
+      "scope": "Merged SPICE startup only; machine none, paused TCG, no CPU/device/guest rendering"
+    },
+    "container": {
+      "cid": "5a08b77fd557b3a74020b4911b71cecdd1df0138f848f953e59f750a9c59c64a",
+      "image": "sha256:6a18a413394dfca0f3882b9df722fb9f85b1126b368ffb51eb06f2bc217ffc74",
+      "exit": 0,
+      "running": false,
+      "devices": [],
+      "network": "none",
+      "started_at": "2026-10-09T10:08:47.259289978Z",
+      "finished_at": "2026-10-09T10:08:47.367232863Z"
+    },
+    "files": {
+      "argv.json": "a68ac5db2ef038fecba48f481c7ee57d391f4952e8de5426c098d3cef9858f7d",
+      "qemu.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "result.json": "76a02b8050daa453427b6a08c6493d03970285255cc99a60ff3dafc37ba5a546",
+      "qemu-cleanup.json": "2ee5965d439ba6faf50935171cd38e1865ee274e9be66636aae3ce827ce2f912",
+      "stdout.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "container.json": "a4ce7a3a3d5ea831c581204a0a6a6320eacf6fdaf92b6eddee73afe26d25e65b"
+    }
+  }
+}

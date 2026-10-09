@@ -55,6 +55,14 @@ def context():
     return directory,admission,expected
 
 
+def validate_plan_refresh(plan,admission):
+    expected=handoff.validate_refresh(admission.get('console_refresh','default'))
+    planner=native.configuration.planner
+    spice=planner.one(planner.pairs(plan['native_argv']),'-spice')
+    wanted=planner.SPICE+(',max-refresh-rate=60' if expected=='60' else '')
+    handoff.require(spice==wanted,'plan console refresh differs from admission')
+
+
 def paused_observation(backend,plan,state):
     native.verify(plan,state)
     handoff.require(state['running'] is False and state['status'] in ('paused','prelaunch'),
@@ -69,6 +77,7 @@ def inspect_domain(paused=True):
     directory,admission,_=context()
     os.environ['XDG_RUNTIME_DIR']=str(directory/'runtime')
     plan=json.loads((directory/'plan.json').read_text())
+    validate_plan_refresh(plan,admission)
     # Inspection never adopts, creates, resumes or destroys. Local snapshot reads
     # the independently addressed private domain in this exact docker exec CID.
     backend=native.local.LocalBackend('qemu:///session',directory/'inspection-events.jsonl')
@@ -136,6 +145,7 @@ def inspect_exited():
     with exit_check('permit-binding'):
         handoff.validate_permit(permit,admission,expected,paused)
     with exit_check('plan-binding'):
+        validate_plan_refresh(plan,admission)
         identity=paused['identity'];scope=paused['scope']
         handoff.require(paused['paused'] is True and paused['run_id']==admission['run_id'] and
                         plan['run_id']==admission['run_id'] and
@@ -202,6 +212,7 @@ def launch(argv):
     handoff.write_once(directory/'native-argv.json',argv)
     try:
         plan=native.configuration.planner.build_plan(argv,admission['run_id'])
+        validate_plan_refresh(plan,admission)
     except Exception as error:
         handoff.write_once(directory/'planning-failure.json',dict(
             run_id=admission['run_id'],phase='before-libvirtd-and-qemu',

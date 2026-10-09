@@ -68,7 +68,8 @@ class ExitedIdentityTests(unittest.TestCase):
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup);self.path=Path(self.tmp.name)
         self.scope=dict(kind='pid-namespace',device=1,inode=2,init_start_ticks=3)
         self.identity=dict(name='rgpu-'+RUN,uuid='zero',run_id=RUN,pid=42,start_ticks=43)
-        self.plan=dict(domain_name=self.identity['name'],uuid='zero',run_id=RUN)
+        self.plan=dict(domain_name=self.identity['name'],uuid='zero',run_id=RUN,
+                       native_argv=['-spice',entry.native.configuration.planner.SPICE])
         self.admission=dict(schema=1,run_id=RUN,manifest_sha256='d'*64,deadline_epoch=200)
         digest=entry.runtime.digest(self.plan)
         self.paused=dict(paused=True,run_id=RUN,identity=self.identity,scope=self.scope,plan_sha256=digest)

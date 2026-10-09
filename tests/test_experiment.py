@@ -998,6 +998,26 @@ class ExperimentTests(unittest.TestCase):
         options['VM_CONSOLE'] = 'bochs'
         self.assertIn('generic_graphics', tool.validate_running(manifest, observed))
 
+    def test_libvirt_refresh_requires_exact_manifest_and_observed_option(self):
+        tool=self.module()
+        options=dict(BOOTDISK_MODE='custom',NVRAM='stock',GENERIC_GRAPHICS='off',
+                     GDB='on',AUDIO='usb',VM_CONSOLE='bochs-spice',VM_MANAGER='libvirt',CONSOLE_REFRESH='60')
+        manifest=dict(image_id='img',gpu=False,run_id='a'*32,launch_options=options)
+        self.assertEqual(tool.launch_options(manifest),options)
+        observed=dict(image_id='img',vfio_args=[],serial_args=[],
+                      pci_topology=[{'model':'usb-audio','bus':'xhci.0'}],
+                      graphics_args=['-spice','unix=on,addr=/run/vm/console-spice.sock,disable-ticketing=on,image-compression=off,seamless-migration=on',
+                                     '-vga','none','-display','none','-device',
+                                     'bochs-display,id=rgpu_present,bus=pcie.0,addr=0x7,vgamem=64M',
+                                     '-spice','max-refresh-rate=60'],cid='c'*64,argv_sha256='d'*64,
+                      libvirt=dict(verified=True,run_id='a'*32,cid='c'*64,argv_sha256='d'*64))
+        self.assertEqual(tool.validate_running(manifest,observed),[])
+        observed['graphics_args']=observed['graphics_args'][:-2]
+        self.assertIn('generic_graphics',tool.validate_running(manifest,observed))
+        for value in ('120',60,'default','60,port=5905'):
+            options['CONSOLE_REFRESH']=value
+            with self.subTest(value=value),self.assertRaises(ValueError):tool.launch_options(manifest)
+
     def test_libvirt_exact_profile_requires_matching_running_proof(self):
         tool=self.module()
         options=dict(BOOTDISK_MODE='custom',NVRAM='stock',GENERIC_GRAPHICS='off',

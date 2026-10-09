@@ -52,4 +52,33 @@ class HandoffTests(unittest.TestCase):
     def test_run_directory_refuses_path_escape(self):
         with self.assertRaises(ValueError):mod.run_directory(self.root,'../other')
 
+class RefreshAdmissionTests(unittest.TestCase):
+    def test_new_receipt_binds_default_and_explicit_refresh(self):
+        for value in (None,'60'):
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as tmp:
+                options={'VM_MANAGER':'libvirt'}
+                if value is not None:options['CONSOLE_REFRESH']=value
+                manifest=dict(run_id='a'*32,boot_id='boot',image_id='image',max_seconds=120,launch_options=options)
+                path,_=mod.prepare(tmp,manifest,b'manifest',{},dict.fromkeys(mod.MODULES,'hash'))
+                self.assertEqual(json.loads((path/'admission.json').read_text())['console_refresh'],value or 'default')
+    def test_invalid_requested_refresh_cannot_publish_admission(self):
+        for value in ('30','120',60,True,None,''):
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as tmp:
+                manifest=dict(launch_options={'VM_MANAGER':'libvirt','CONSOLE_REFRESH':value})
+                with self.assertRaisesRegex(ValueError,'refresh'):mod.prepare(tmp,manifest,b'',{}, {})
+                self.assertEqual(list(Path(tmp).iterdir()),[])
+    def test_historical_receipt_is_default_and_unknown_values_refuse(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);hashes={}
+            for name in mod.MODULES:
+                (root/name).write_text(name);hashes[name]=mod.sha(name.encode())
+            old=dict(schema=1,run_id='a'*32,boot_id='boot',manifest_sha256='b'*64,deadline_epoch=200,modules_sha256=hashes)
+            self.assertTrue(mod.validate_admission(old,'a'*32,mod.digest(old),root,'boot',100))
+            for value in ('default','60'):
+                item=dict(old,console_refresh=value)
+                self.assertTrue(mod.validate_admission(item,'a'*32,mod.digest(item),root,'boot',100))
+            for value in ('30',60,None):
+                item=dict(old,console_refresh=value)
+                with self.assertRaisesRegex(ValueError,'refresh'):mod.validate_admission(item,'a'*32,mod.digest(item),root,'boot',100)
+
 if __name__=='__main__':unittest.main()

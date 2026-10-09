@@ -39,6 +39,7 @@ CRITICAL_SERIAL="${CRITICAL_SERIAL:-off}" # on = dedicated CR2 UART at COM2
 GENERIC_GRAPHICS="${GENERIC_GRAPHICS:-on}" # off = authenticated headless/no-VGA path
 VM_CONSOLE="${VM_CONSOLE:-off}"
 VM_MANAGER="${VM_MANAGER:-direct}"
+CONSOLE_REFRESH="${CONSOLE_REFRESH:-default}"
 GDB="${GDB:-off}"              # on = gdbstub on 127.0.0.1:1234 | wait = also start halted
 SSH_PORT="${SSH_PORT:-50922}"
 SCREEN_PORT="${SCREEN_PORT:-5900}"
@@ -120,6 +121,8 @@ done
 
 case "${GENERIC_GRAPHICS}" in on|off) ;; *) die "unknown generic graphics setting ${GENERIC_GRAPHICS}" ;; esac
 case "${VM_CONSOLE}" in off|bochs|bochs-spice) ;; *) die "unknown VM_CONSOLE" ;; esac
+case "${CONSOLE_REFRESH}" in default|60) ;; *) die "unknown CONSOLE_REFRESH" ;; esac
+[[ "${CONSOLE_REFRESH}" == default || "${VM_MANAGER}" == libvirt ]] || die "explicit refresh requires libvirt profile"
 case "${VM_MANAGER}" in
     direct) ;;
     libvirt)
@@ -310,6 +313,7 @@ DOCKER_ARGS=(
     -e "EXTRA=${EXTRA_QEMU}"
     -e "GENERIC_GRAPHICS=${GENERIC_GRAPHICS}"
     -e "VM_CONSOLE=${VM_CONSOLE}"
+    -e "CONSOLE_REFRESH=${CONSOLE_REFRESH}"
     "${AUDIO_ARGS[@]}"
     "${GPU_ARGS[@]}"
     "${GDB_ARGS[@]}"

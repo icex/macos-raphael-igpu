@@ -1,0 +1,36 @@
+{
+  "base_image": "sha256:3a3c82c79bc4e73531f819ccdfa4053b3084efd7c1f645678dbf8b4b3a24369c",
+  "archive_sha256": "9d75f331c1a5cb9b6eb8fd9f64f563ec2eab346c822cb97f8b35cd82d3f11479",
+  "patch_sha256": "68170966dec625104c7cd1573600bd3d63216c258cfdd69bd8d776f3b385d18c",
+  "build_script_sha256": "8564a76eab9ec347b3877676b3bddeac542a807cf1a89a26f9690a7523cc5571",
+  "skipped_archive_symlink": "roms/edk2/EmulatorPkg/Unix/Host/X11IncludeHack -> /opt/X11/include",
+  "qemu_sha256": "40548a3ebf7f56134dae95d99850418a9b5d010e0ba3c4ac5427db65d561dfe6",
+  "build_log_sha256": "2348608b1cdc93c457cca09782babfa84f33c9afcb13e0eda98fe126c0d367bd",
+  "image_id": "sha256:6a18a413394dfca0f3882b9df722fb9f85b1126b368ffb51eb06f2bc217ffc74",
+  "files": [
+    {
+      "path": "/home/bogdan/macos-vm/run/c345-qemu-refresh/build.sh",
+      "sha256": "8564a76eab9ec347b3877676b3bddeac542a807cf1a89a26f9690a7523cc5571"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c345-qemu-refresh/inputs.json",
+      "sha256": "aa3abb678c3d310c03fec71d2caa0b7b94b3f95c3be0c9589feb62b6670d79da"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c345-qemu-refresh/build-receipt.json",
+      "sha256": "bc6fb52ba0c5767550c6c7460ea930ddfad5e43a3ec9fb0583e666bd4cf3f4af"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c345-qemu-refresh/Dockerfile",
+      "sha256": "702c2ef31d5cad8f9e69f7c55d614f63e686343462aa6847b7f7716eebd9aed9"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c345-qemu-refresh/build.log",
+      "sha256": "2348608b1cdc93c457cca09782babfa84f33c9afcb13e0eda98fe126c0d367bd"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c345-qemu-refresh/image-build.log",
+      "sha256": "2aa7908cef3b52ddfa491c5c1248f018e77f81e7a811cb8b91400521f9b0fdef"
+    }
+  ]
+}
