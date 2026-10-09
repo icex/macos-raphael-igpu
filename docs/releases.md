@@ -29,21 +29,24 @@ The runner label is explicitly Intel, as listed in the
 
 ## Checked-in experimental executable
 
-`kext/bin/RaphaelGPU` contains the hardware-tested candidate347 executable
-(native virt-manager desktop, Metal, paired observer measurements and genuine
-controller shutdown receipt; capture/GPU recovery pass. The native zombie-state
-branch still needs coverage). Its
+`kext/bin/RaphaelGPU` contains the hardware-tested candidate353 executable
+(the OFF baseline of the same-image352/353 console comparison). Opt-in352 ON
+improves sampled HiDPI delivery and row-copy cost; native1080p has no uniform
+gain. Partial-region delivery and the controller shutdown-receipt race remain
+open. These results do not qualify60Hz, all VM managers or VirtualBox. Its
 adjacent `build-manifest.json` records the exact source commit, input hashes and
 executable SHA-256. The source tree and `kext/Info.plist` match that driver build;
 subsequent user-space helper changes have separate history. Source builds never
 use this binary as a fallback. The executable alone is not an installable bundle:
 use the matching Info.plist, Lilu and tested VM setup. The matching console card
-is metal-191 with `--pins experiments/pins-spice60.json`. [Console setup and scope](virtual-console.md).
+is metal-196 with `--pins experiments/pins-bochs-full-refresh.json` and the full-refresh
+option absent (OFF). Card metal-195 selects ON; do not interchange their exact
+launch contracts. [Console setup and scope](virtual-console.md).
 
 Candidate330 remains the independently tested Samsung HDMI HiDPI120/audio
-baseline, available on `main` at861ba5e. Candidate347's changes are console-specific,
+baseline, available on `main` at861ba5e. Candidate353's changes are console-specific,
 but its physical HDMI behavior has not been independently rerun. Do not relabel
-330's hardware evidence as a347 HDMI test.
+330's hardware evidence as a353 HDMI test.
 
 ## Local build
 

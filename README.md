@@ -15,15 +15,18 @@ on **`dev`**; this is not yet a generally supported driver release.
 ## Current status
 
 **VM window (October9):** native Metal rendering, keyboard/mouse input and
-bridged LAN work in virt-manager. Candidate347 preserves a native guest-shutdown
-receipt, valid capture and authorizing GPU recovery. Fresh full/ROI observer
-comparisons measure30.5/30.3 sampled updates/s at1080p and19.7/25.2 atHiDPI;
-these are not GPU fps. Lower observer cost helps the HiDPI measurement, while
-partial-region samples and run-to-run variation remain. The native zombie-exit
-race branch still needs coverage. Stock QEMU remains the default; these samples
-use the opt-in refresh image. Automatic resize and broader qualification remain
-open. The virtual Display adapter's56MB framebuffer is separate from the native
-renderer's2GB VRAM. [Evidence and setup](docs/virtual-console.md).
+bridged LAN work in virt-manager. A same-image OFF/ON comparison (353/352)
+raises sampled 1080 HiDPI delivery from 22–24 to 32–35 updates/s with the opt-in
+Bochs full-refresh setting; guest row-copy time falls from about16 to1.5ms.
+Native1080p delivery does not improve uniformly. The QEMU process uses less CPU
+in all four comparisons; whole-host CPU was not measured. These are sampled
+region updates, not GPU fps or qualified60Hz delivery. Partial token samples
+and the controller shutdown-receipt race remain open. Stock QEMU stays the
+default; this result uses a separately pinned experimental image. Automatic
+resize, other managers and VirtualBox remain unqualified. The virtual Display
+adapter's56MB framebuffer is separate from the native renderer's2GB VRAM.
+[Paired evidence](findings/research/bochs-full-refresh-paired-20261009.md)
+· [Setup and limits](docs/virtual-console.md).
 
 The qualified remote baseline from **2026-09-16**, candidate **1.0.280**, runs an accelerated desktop through
 macOS Screen Sharing. Native window effects and Safari composition checks pass,

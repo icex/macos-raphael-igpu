@@ -1,6 +1,6 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-10-09. Current console build: **1.0.347** (paired observer measurements and native clean exit; atomic presentation and race-specific lifecycle coverage remain open). Physical display baseline: **1.0.330** (correct-color HiDPI120 and HDMI audio confirmed); prior streaming baseline: **1.0.284**; broader baseline: **1.0.280**. Full desktop acceleration
+Updated 2026-10-09. Current console comparison: **1.0.352 ON / 1.0.353 OFF** (same-image HiDPI delivery and copy-cost improvement; atomic presentation and controller shutdown-receipt race remain open). Physical display baseline: **1.0.330** (correct-color HiDPI120 and HDMI audio confirmed); prior streaming baseline: **1.0.284**; broader baseline: **1.0.280**. Full desktop acceleration
 is **not qualified**. The reproduced Screen Sharing transparency defect is fixed
 in candidate279 and retained in280. Candidate280 also passes strict capture and
 clean recovery after visual, concurrent-client and codec workloads. The patched-QEMU
@@ -258,9 +258,22 @@ Both hooks see QEMU already reaped; the completed-zombie branch is not exercised
 Fresh paired full/ROI measurements:30.497/30.323updates/s native and19.664/25.198
 HiDPI; sampling cost drops2.228→1.363ms and5.222→1.452ms respectively. All fixtures
 finish and the normal desktop returns. Partial samples persist;345's50updates/s
-native result is not reproduced. Next isolate the guest presenter's approximately
-20ms HiDPI buffer-lock/copy interval before optimizing it.
+native result is not reproduced in347. Later351–353 measurements below separate
+the guest presenter's lock/copy costs and compare display dirty tracking.
 [Paired native evidence](../findings/research/console-roi-native-20261009.md).
+
+The same-image353 OFF versus352 ON comparison uses the same O2 presenter,
+explicitSPICE60 and matched30-second full/ROI observations. HiDPI sampled delivery
+rises23.531→31.758 (full) and22.363→34.882 (ROI) updates/s; row copy falls about
+16→1.5ms. Native1080p changes49.918→44.186 and49.188→50.084 respectively, so there
+is no uniform native gain. QEMU process CPU is lower in all four ON cases;
+whole-host CPU and completed-frame60Hz delivery are not qualified. Partial-region
+samples remain.352/353 capture/recovery pass while the strict EOF proof sees a
+zombie leader with another task and loses the controller terminal receipt.
+Next persist observed guest-shutdown events and bounded task states without
+loosening live capture-loss or completion rules; then qualify viewport resizing,
+input coordinates and console audio. Default pins remain stock.
+[Paired result and limits](../findings/research/bochs-full-refresh-paired-20261009.md).
 
 Host-window resize, repeated crash recovery, independent host boots and broader
 desktop coverage follow. Both host sleep and idle blocking remain required during

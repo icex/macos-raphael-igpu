@@ -2,13 +2,13 @@
 
 The requested target is a macOS desktop in the VM manager's console, with Raphael
 Metal rendering and no physical HDMI connection. Screen Sharing/Moonlight alone
-does not meet that target. Candidates341–347 present the accelerated desktop inside
-virt-manager at1920×1080 logical/3840×2160 pixels. Native Metal/WindowServer
-ownership, real manager mouse/keyboard input and bridged LAN traffic pass.
-Candidates343 and347 preserve the native guest-shutdown terminal receipt with
-valid capture and authorizing GPU recovery. Crash/independent-boot coverage,
-sustained frame delivery, automatic resize, other frontends and VirtualBox
-remain open. [Current run evidence](../findings/research/console-roi-native-20261009.md).
+does not meet that target. Native Metal/WindowServer ownership, real virt-manager
+mouse/keyboard input and bridged LAN traffic pass. The same-image353 OFF/352 ON
+comparison improves sampled1080HiDPI delivery from22–24 to32–35updates/s with an
+opt-in Bochs full-refresh property; native1080p does not improve uniformly.
+The controller shutdown-receipt race, partial-region samples, automatic resize,
+other frontends and VirtualBox remain open. This is not qualified60Hz delivery.
+[Current paired evidence](../findings/research/bochs-full-refresh-paired-20261009.md).
 Candidate332's unsafe TMR experiment remains withdrawn.
 
 ## Architecture under test
@@ -260,5 +260,35 @@ The normal desktop returns and actual controller guest-shutdown/process-exit
 receipt, natural container exit, valid capture and authorizing GPU recovery pass.
 The new completed-zombie path is software-tested but not exercised in this run:
 both native hooks observe QEMU already reaped. Broader lifecycle remains open.
-Next split guest buffer-lock/copy timing; its combined HiDPI interval is about20ms.
+The subsequent351–353 experiments split that combined HiDPI lock/copy interval.
 [Full results and artifacts](../findings/research/console-roi-native-20261009.md).
+
+## Same-image full-refresh OFF/ON comparison (353/352)
+
+The same experimental QEMU image, approved O2 presenter, explicitSPICE60 and
+30-second actual virt-manager sampling protocol are used with the diagnostic
+Bochs property absent (OFF,353) or on (352). Default image pins remain unchanged.
+
+| Case | OFF updates/s | ON updates/s | OFF / ON QEMU CPU cores |
+|---|---:|---:|---:|
+| Native1080p, full observer |49.918|44.186|0.956 /0.751|
+| Native1080p, ROI observer |49.188|50.084|0.689 /0.515|
+| 1080HiDPI, full observer |23.531|31.758|0.803 /0.465|
+| 1080HiDPI, ROI observer |22.363|34.882|0.725 /0.453|
+
+Selected steady guest row-copy windows fall from about16ms to1.5ms atHiDPI.
+These windows are not precisely aligned with the viewer sampling interval.
+Full refresh disables only Bochs VGA dirty tracking and updates the whole surface
+at each existing refresh; migration logging remains intact. It can increase
+static display work, so measured QEMU-process savings do not establish total
+host CPU savings. The whole QEMU process includes vCPU and display threads;
+manager CPU is excluded. This is one sequential same-host-boot comparison,
+not independent repeats. Producer draw cadence varies and does not sustain60/s.
+
+Updates count valid sampled token regions, not complete frames, GPU fps or
+scanout. Invalid token samples remain in every case.352 and353 have valid capture and
+authorizing recovery, but strict EOF inspection catches an original zombie with
+a remaining task and the native controller terminal receipt is missing. Earlier
+343/347 clean shutdowns do not close this race. Broader crash/reconnect, resize,
+console audio and other-manager qualification remain separate.
+[Exact artifacts, copy timings and lifecycle scope](../findings/research/bochs-full-refresh-paired-20261009.md).
