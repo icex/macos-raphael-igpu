@@ -31,7 +31,7 @@ class AgentWireTests(unittest.TestCase):
             return dict(passed=True,pixel_width=width,pixel_height=height,display=123)
         def bounded_wait(readable,writable,exceptional,timeout):
             waits[0]+=1
-            if waits[0]>600:raise AssertionError('unbounded serve loop')
+            if waits[0]>1100:raise AssertionError('unbounded serve loop')
             clock[0]+=.01
             if waits[0]==2:
                 # Exactly one5-byte real write has completed. An output frame
@@ -62,11 +62,11 @@ class AgentWireTests(unittest.TestCase):
             with patch.object(agent.select,'select',side_effect=bounded_wait),patch.object(agent.os,'write',side_effect=short_write):
                 if partial_incoming:
                     with self.assertRaisesRegex(ValueError,'disconnected with incomplete message'):
-                        (serve or agent.serve)(local.fileno(),5,verified,records.append,clock=lambda:clock[0])
+                        (serve or agent.serve)(local.fileno(),10,verified,records.append,clock=lambda:clock[0])
                     self.assertEqual(calls,[])
                     self.assertFalse(any(r.get('event')=='mode-result' for r in records))
                     return None
-                result=(serve or agent.serve)(local.fileno(),5,verified,records.append,clock=lambda:clock[0])
+                result=(serve or agent.serve)(local.fileno(),10,verified,records.append,clock=lambda:clock[0])
             return bytes(wire),calls,records,result,writes
         finally:
             local.close();peer.close()

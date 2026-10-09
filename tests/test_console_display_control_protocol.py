@@ -24,6 +24,7 @@ class Protocol(unittest.TestCase):
         cls.tmp = tempfile.TemporaryDirectory()
         source = pathlib.Path(cls.tmp.name) / 'probe.c'
         source.write_text('#include "console-display-control.h"\n'
+                          'int settle(double*s,int identity,int ready,int expired,double now){return rg_settle(s,identity,ready,expired,now); }\n'
                           'unsigned check(const unsigned char*p,size_t n){return rg_validate(p,n);}\n'
                           'void encode(unsigned char*p,unsigned v){rg_write32(p,v);}\n'
                           'int insert(RGModes*m,unsigned w,unsigned h,unsigned cw,unsigned ch){return rg_insert(m,(RGGeometry){w,h},(RGGeometry){cw,ch});}\n'
@@ -32,6 +33,7 @@ class Protocol(unittest.TestCase):
         subprocess.run([compiler, '-shared', '-fPIC', '-Wall', '-Wextra', '-Werror',
                         '-I', str(ROOT / 'tools'), str(source), '-o', str(library)], check=True)
         cls.lib = ctypes.CDLL(str(library))
+        cls.lib.settle.argtypes = [ctypes.POINTER(ctypes.c_double), ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_double]
         cls.lib.check.argtypes = [ctypes.c_char_p, ctypes.c_size_t]
         cls.lib.check.restype = ctypes.c_uint
         cls.lib.encode.argtypes = [ctypes.c_void_p, ctypes.c_uint]
@@ -97,6 +99,26 @@ class Protocol(unittest.TestCase):
         before = bytes(candidate)
         self.assertEqual(self.lib.insert(ctypes.byref(candidate), 2600, 1600, 0, 0), 0)
         self.assertEqual(bytes(candidate), before)
+
+    def test_settle_transient_readiness_and_exact_deadline(self):
+        since = ctypes.c_double(-1)
+        def sample(now, ready=True, identity=True, expired=False):
+            return self.lib.settle(ctypes.byref(since), identity, ready, expired, now)
+        self.assertEqual(sample(0), 0)
+        self.assertEqual(sample(.1), 0)
+        self.assertEqual(sample(.15, ready=False), 0)
+        self.assertEqual(sample(2.1), 0)
+        self.assertEqual(sample(2.29), 0)
+        self.assertEqual(sample(2.31), 1)
+        self.assertEqual(sample(2.4, identity=False), -1)
+        self.assertEqual(sample(2.5), 0)
+        self.assertEqual(sample(2.8, expired=True), -1)
+
+    def test_settle_never_accepts_persistent_foreign_placement(self):
+        since = ctypes.c_double(-1)
+        for index in range(450):
+            self.assertEqual(self.lib.settle(ctypes.byref(since), 1, 0, 0, index / 100), 0)
+        self.assertEqual(self.lib.settle(ctypes.byref(since), 1, 0, 1, 4.5), -1)
 
     def test_reply_integer_encoding(self):
         for value in [0, 1, 0x52475044, 0x80000001, 0xffffffff]:

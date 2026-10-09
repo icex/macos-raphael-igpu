@@ -96,7 +96,7 @@ class Handler:
             return self.refuse(row,self.requests,'unsupported monitor request')
         try:control.geometry(config['width'],config['height'])
         except ValueError:return self.refuse(row,self.requests,'unsupported geometry')
-        if remaining<3:return self.refuse(row,self.requests,'session ending')
+        if remaining<6:return self.refuse(row,self.requests,'session ending')
         response=b''
         if self.pending:
             previous,number=self.pending;response=self.refuse(previous,number,'superseded')
@@ -104,12 +104,12 @@ class Handler:
         return response
     def flush(self,remaining):
         if not self.pending:return b''
-        if remaining>=3 and self.clock()-self.last_apply<.25:return b''
+        if remaining>=6 and self.clock()-self.last_apply<.25:return b''
         row,number=self.pending;self.pending=None
-        if remaining<3:return self.refuse(row,number,'session ending')
+        if remaining<6:return self.refuse(row,number,'session ending')
         config=row['configuration'];self.last_apply=self.clock();success=False
         try:
-            result=self.apply(config['width'],config['height'],min(2,remaining-1))
+            result=self.apply(config['width'],config['height'],min(5,remaining-1))
             success=result.get('passed') is True
             if success and (result.get('pixel_width'),result.get('pixel_height'))!=(config['width'],config['height']):
                 raise ValueError('holder geometry mismatch')

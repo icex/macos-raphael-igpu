@@ -100,9 +100,11 @@ static bool selectMode(CGDirectDisplayID did,unsigned w,unsigned h) {
 }
 
 static double controlNow(void) {struct timespec t;clock_gettime(CLOCK_MONOTONIC,&t);return t.tv_sec+t.tv_nsec/1e9;}
+static bool controlIdentity(CGDirectDisplayID did) {
+ return CGDisplayIsOnline(did)&&CGDisplayVendorNumber(did)==0x5250&&CGDisplayModelNumber(did)==0x3453;
+}
 static bool controlTarget(CGDirectDisplayID did) {
- return CGDisplayIsOnline(did)&&CGDisplayVendorNumber(did)==0x5250&&CGDisplayModelNumber(did)==0x3453&&
-  CGDisplayBounds(did).origin.x==0&&CGDisplayBounds(did).origin.y==0;
+ return controlIdentity(did)&&CGDisplayBounds(did).origin.x==0&&CGDisplayBounds(did).origin.y==0;
 }
 static CGDisplayModeRef controlMode(CGDirectDisplayID did,unsigned w,unsigned h) {
  CFArrayRef all=CGDisplayCopyAllDisplayModes(did,(__bridge CFDictionaryRef)@{(id)kCGDisplayShowDuplicateLowResolutionModes:@YES});
@@ -116,7 +118,7 @@ static CGDisplayModeRef controlMode(CGDirectDisplayID did,unsigned w,unsigned h)
 @interface RGDisplayControl : NSObject {
  int listener,peer,lockFD;double expires;
  uint8_t request[RG_CONTROL_REQUEST+1],reply[RG_CONTROL_REPLY];size_t received,sent;
- bool replying,waitingMode,tableUncertain;unsigned requestFlags;
+ bool replying,waitingMode,waitingVerify,tableUncertain;unsigned requestFlags;double stable;
  RGModes dynamicModes;
  CGDirectDisplayID originalID;
 }
@@ -167,16 +169,31 @@ static CGDisplayModeRef controlMode(CGDirectDisplayID did,unsigned w,unsigned h)
  self.display=display;self.modes=[modes mutableCopy];self.baseModes=[modes copy];originalID=display.displayID;
  return YES;
 }
-- (void)closePeer {if(peer>=0)close(peer);peer=-1;received=sent=0;replying=false;waitingMode=false;requestFlags=0;}
+- (void)closePeer {if(peer>=0)close(peer);peer=-1;received=sent=0;replying=false;waitingMode=waitingVerify=false;requestFlags=0;stable=-1;}
 - (void)respond {
  unsigned status=rg_validate(request,received),flags=requestFlags;
  unsigned w=received>=20?rg_read32(request+12):0,h=received>=20?rg_read32(request+16):0;
  CGDisplayModeRef chosen=NULL;
- if(!status&&!controlTarget(originalID))status=4;
- if(!status){
+ bool identity=self.display.displayID==originalID&&controlIdentity(originalID);
+ if(!status&&(!identity||controlNow()>=expires-.25))status=4;
+ if(!status&&!waitingMode&&!waitingVerify&&!controlTarget(originalID))status=4;
+ if(!status&&waitingVerify){
+  CGDisplayModeRef observed=CGDisplayCopyDisplayMode(originalID);
+  bool ready=controlTarget(originalID)&&observed&&CGDisplayModeGetPixelWidth(observed)==w&&CGDisplayModeGetPixelHeight(observed)==h&&CGDisplayModeGetWidth(observed)*2==w&&CGDisplayModeGetHeight(observed)*2==h;
+  if(observed)CFRelease(observed);
+  int settled=rg_settle(&stable,identity,ready,controlNow()>=expires-.25,controlNow());
+  if(!settled)return;
+  if(settled<0)status=4;
+ }
+
+ if(!status&&!waitingVerify){
   chosen=controlMode(originalID,w,h);
-  if(!chosen&&waitingMode)return;
-  if(!chosen){
+  if(waitingMode){
+   int settled=rg_settle(&stable,identity,chosen&&controlTarget(originalID),controlNow()>=expires-.25,controlNow());
+   if(settled<=0){if(chosen)CGDisplayModeRelease(chosen);chosen=NULL;if(!settled)return;status=4;}
+   else {waitingMode=false;stable=-1;}
+  }
+  if(!status&&!chosen){
    if(tableUncertain)status=3;
    else {
     // Preserve the actual active geometry, not the last requested geometry.
@@ -201,14 +218,15 @@ static CGDisplayModeRef controlMode(CGDirectDisplayID did,unsigned w,unsigned h)
       tableUncertain=!restored;status=3;
       emit(@{@"phase":@"control-table-restore",@"restored":@(restored)});
      }else {
-      self.modes=candidate;dynamicModes=candidatePolicy;requestFlags=flags|2;waitingMode=true;return;
+      self.modes=candidate;dynamicModes=candidatePolicy;requestFlags=flags|2;waitingMode=true;stable=-1;
+      emit(@{@"phase":@"control-table-wait",@"display":@(originalID),@"pixel_width":@(w),@"pixel_height":@(h)});return;
      }
     }
    }
   }
  }
  if(!status&&(self.display.displayID!=originalID||!controlTarget(originalID)))status=4;
- if(!status){
+ if(!status&&!waitingVerify){
   CGDisplayModeRef current=CGDisplayCopyDisplayMode(originalID);
   bool same=current&&CGDisplayModeGetIODisplayModeID(current)==CGDisplayModeGetIODisplayModeID(chosen)&&CGDisplayModeGetPixelWidth(current)==w&&CGDisplayModeGetPixelHeight(current)==h;
   if(current)CFRelease(current);
@@ -216,6 +234,12 @@ static CGDisplayModeRef controlMode(CGDirectDisplayID did,unsigned w,unsigned h)
    CGDisplayConfigRef config=NULL;CGError e=CGBeginDisplayConfiguration(&config);
    if(!e){e=CGConfigureDisplayWithDisplayMode(config,originalID,chosen,NULL);if(!e)e=CGCompleteDisplayConfiguration(config,kCGConfigureForSession);else CGCancelDisplayConfiguration(config);}
    if(e)status=3;else flags|=1;
+  }
+  if(!status){
+   requestFlags=flags;waitingVerify=true;stable=-1;
+   emit(@{@"phase":@"control-verify-wait",@"display":@(originalID),@"pixel_width":@(w),@"pixel_height":@(h)});
+   if(chosen)CGDisplayModeRelease(chosen);
+   return;
   }
  }
  CGDisplayModeRef actual=CGDisplayCopyDisplayMode(originalID);
@@ -233,11 +257,11 @@ static CGDisplayModeRef controlMode(CGDirectDisplayID did,unsigned w,unsigned h)
   peer=accept(listener,NULL,NULL);if(peer<0)return;
   uid_t uid;gid_t gid;int yes=1;
   if(getpeereid(peer,&uid,&gid)||uid!=getuid()||fcntl(peer,F_SETFL,O_NONBLOCK)||fcntl(peer,F_SETFD,FD_CLOEXEC)||setsockopt(peer,SOL_SOCKET,SO_NOSIGPIPE,&yes,sizeof(yes))){[self closePeer];return;}
-  expires=controlNow()+2.;received=sent=0;replying=false;waitingMode=false;requestFlags=0;
+  expires=controlNow()+4.75;received=sent=0;replying=false;waitingMode=waitingVerify=false;requestFlags=0;stable=-1;
  }
  if(controlNow()>=expires){[self closePeer];return;}
- if(waitingMode&&!replying)[self respond];
- if(!replying&&!waitingMode){
+ if((waitingMode||waitingVerify)&&!replying)[self respond];
+ if(!replying&&!waitingMode&&!waitingVerify){
   ssize_t n=read(peer,request+received,sizeof(request)-received);
   if(n==0){[self closePeer];return;}
   if(n<0){if(errno!=EAGAIN&&errno!=EWOULDBLOCK&&errno!=EINTR)[self closePeer];return;}

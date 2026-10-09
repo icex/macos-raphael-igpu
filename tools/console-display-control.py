@@ -50,7 +50,7 @@ def decode(data,sequence,width,height):
                 pixel_width=pw,pixel_height=ph,width=lw,height=lh,
                 changed=bool(flags&1),dynamic_mode_added=bool(flags&2))
 
-def request(directory,width,height,timeout=2):
+def request(directory,width,height,timeout=5):
     geometry(width,height)
     if not 0<timeout<=5:raise ValueError('bounded control timeout required')
     directory=Path(directory)

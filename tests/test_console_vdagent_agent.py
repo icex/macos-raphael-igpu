@@ -57,8 +57,13 @@ class SessionAgentTests(unittest.TestCase):
         self.assertEqual(self.records[-1]['reason'],'ConnectionRefusedError')
 
     def test_deadline_does_not_start_operation(self):
-        handler=self.handler();self.assertFalse(self.success(self.process(handler,row(),2.9)))
+        handler=self.handler();self.assertFalse(self.success(self.process(handler,row(),5.9)))
         self.assertEqual(self.calls,[])
+
+    def test_ipc_has_five_seconds_and_session_cleanup_margin(self):
+        handler=self.handler()
+        self.assertTrue(self.success(self.process(handler,row(),6)))
+        self.assertEqual(self.calls,[(2468,1484,5)])
 
     def test_burst_budget_refills(self):
         clock=Clock();budget=agent.Budget(10,2,clock);budget.consume(10)

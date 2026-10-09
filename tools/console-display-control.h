@@ -13,6 +13,14 @@ static unsigned rg_validate(const uint8_t *p,size_t n) {
  uint32_t w=rg_read32(p+12),h=rg_read32(p+16);
  return w<640||w>3840||h<480||h>2160||(w&1)||(h&1)?2:0;
 }
+/* Read-only asynchronous settle policy. Identity loss/deadline always refuse;
+ * readiness must hold across observations spanning 200 ms. No layout mutation is permitted. */
+static inline int rg_settle(double *since,int identity,int ready,int expired,double now) {
+ if(!identity||expired){*since=-1;return -1;}
+ if(!ready){*since=-1;return 0;}
+ if(*since<0)*since=now;
+ return now-*since>=.2?1:0;
+}
 /* Oldest first. Operate on a copy until the display accepts the candidate. */
 #define RG_DYNAMIC_LIMIT 8u
 typedef struct { uint32_t w,h; } RGGeometry;
