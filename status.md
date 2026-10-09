@@ -1,16 +1,28 @@
 # Live status — 2026-10-09
 
-## Candidate339 harness: local SPICE experiment prepared
+## Candidate339 SPICE transport: desktop visible; native init refused after resume
 
-The software-only libvirt/Boxes console visibly renders an independent pattern.
-QMP verifies1,094,400 pixels; this does not qualify accelerated macOS in Boxes.
-Metal-185 selects local SPICE with the unchanged336 driver and338 guest helpers.
-Hardware testing has not yet started. Host regression:1031 tests OK,3 skipped.
+Run `74b5d9f71656c2d3492fd0972bc7c2a1`, metal-185, unchanged336 driver,
+339 harness, same bootba51b3c6. SPICE client captures the3840×2160 desktop and
+awake assertions pass. This does not establish accelerated output: HOSTRESERVE
+refuses DMCUB boot=0, CNTL=0, processor reset=1, interface control=0. Native PSP
+TMR replacement remains correctly blocked. No native Metal probe runs.
+The attempted moving-material workload did not start (nohup console-detach error).
 
-The host resumed October9 at08:35 EEST on the same boot after KDE idle suspend.
-No hardware guest was running. A verified user-owned sleep:idle block now spans
-ongoing development. The previous native recovery remains registered; the next
-cycle must still perform ordinary admission and MODE2 checks.
+Capture is complete but verdict INVALID/recovery_lease_pool_missing; native
+ownership was never published. Explicit identity-bound guest shutdown returns
+exited-after-guest-request (`c339-explicit-guest-shutdown.json`); the runner then
+records already-stopped. Ordinary lease recovery refuses the missing record.
+Supported no-queue recovery succeeds with authorizes_launch=true, no kernel
+faults (`c336-e-noqueue-recovery.json`). VM stopped; no reboot or rebind.
+Results: `candidate-336-attempt-e-results`; images `c339-guest-spice-desktop.png`.
+
+The first preparation failed after MODE2#274 because the attempt artifact copy
+was absent, before QEMU/VFIO exposure; no launch was recorded. The corrected
+attempt uses MODE2#275. The host had resumed from KDE suspend at08:35 EEST.
+A verified session-wide sleep:idle inhibitor now spans development. Next: inspect
+the stopped firmware/windows and source-supported handling of post-suspend state;
+do not relax memory reservation or the immediate pre-PSP held-reset proof.
 [Investigation](findings/research/console-spice-manager-20261009.md).
 
 ## Candidate338 helpers on336: console mode following; throughput open
@@ -156,3 +168,10 @@ StockQEMU10.1.2/OpenCore/VirtualSMC1.3.7 works in this tested setup;
 PerfPowerServices was0.0% CPU on two guest boots. Automatic required-hardware HEVC
 decode works; explicit GPU-ID selection remains limited. Main10 decode has scoped
 passes; hardware encode is Main8. [Roadmap](docs/ROADMAP.md).
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-336-attempt-e-results`
+- Verdict: `INVALID`
+- Boundary: `recovery_lease_pool_missing`
