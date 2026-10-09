@@ -31,12 +31,23 @@ def surface_metadata(display,cadence,spice):
                 primary=None,
                 scope='existing-channel monitor metadata only; primary unavailable; no pixel or pointer access')
 
-def main():
+def parse_args(argv=None):
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--manager-prefix',type=Path,required=True)
     p.add_argument('--output',type=Path,required=True)
+    p.add_argument('--viewport',type=int,nargs=2,action='append',metavar=('WIDTH','HEIGHT'))
     p.add_argument('manager_args',nargs=argparse.REMAINDER)
-    a=p.parse_args();prefix=a.manager_prefix.resolve()
+    a=p.parse_args(argv)
+    if a.viewport is None:a.viewport=[(1280,720),(1920,1080)]
+    if not 1<=len(a.viewport)<=12:p.error('need 1..12 viewports')
+    if any(not (320<=w<=1920 and 200<=h<=1080) for w,h in a.viewport):
+        p.error('viewport must be 320..1920 by 200..1080 logical pixels')
+    a.viewport=[tuple(size) for size in a.viewport]
+    a.deadline_seconds=min(180,25+10*len(a.viewport))
+    return a
+
+def main():
+    a=parse_args();prefix=a.manager_prefix.resolve()
     if os.environ.get('RGPU_RESIZE_PREFIX')!=str(prefix):
         env=dict(os.environ,RGPU_RESIZE_PREFIX=str(prefix))
         for key,leaf in [('LD_LIBRARY_PATH','lib'),('GI_TYPELIB_PATH','lib/girepository-1.0')]:
@@ -59,14 +70,15 @@ def main():
     if not settings.set_int('resize-guest',1):raise RuntimeError('resize preference refused')
     Gio.Settings.sync()
     stream=a.output.open('x');began=time.monotonic();control=None;ready_at=None;phase=0;done=False
-    sizes=[(1280,720),(1920,1080)]
+    sizes=a.viewport
     def record(**row):
         stream.write(json.dumps(dict(monotonic=time.monotonic(),**row))+'\n');stream.flush()
+    record(event='configuration',requested_viewports=sizes,phase_seconds=10,deadline_seconds=a.deadline_seconds)
     def poll():
         nonlocal control,ready_at,phase,done
         if done:return False
         try:
-            if time.monotonic()-began>45:raise RuntimeError('diagnostic deadline')
+            if time.monotonic()-began>a.deadline_seconds:raise RuntimeError('diagnostic deadline')
             found=[]
             def visit(widget):
                 if isinstance(widget,SpiceClientGtk.Display):found.append(widget)
