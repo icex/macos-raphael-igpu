@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "reason": "The kernel journal has rotated past boot. Candidate 230 repeat captured successful amdgpu initialization on this exact boot before launch 40. This record proves initialization only, not recovery or launch authority.",
-  "snapshot": "/home/bogdan/macos-vm/run/candidate-230-attempt-repeat-results/host-before.json",
-  "snapshot_sha256": "65a797408ef6c06a2edcdb45d8422876009e5883437138c3ec2e4c50d9603af6"
+  "reason": "The kernel journal rotated past the device initialization during this boot. Candidate340 captured successful initialization before its verified native Metal run. This pins only that historical fact; live identity and recovery remain mandatory.",
+  "snapshot": "/home/bogdan/macos-vm/run/candidate-340-results/host-before.json",
+  "snapshot_sha256": "cdfb5fd8351417a5374a4a92c1b44ccfea3d762f95c6b7aa15c25ca1408e77e1"
 }

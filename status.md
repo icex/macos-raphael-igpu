@@ -20,6 +20,12 @@ full VM-manager lifecycle integration remains unqualified.
 [Evidence](findings/research/console-spice-native-evidence-20261009.json) ·
 [Driver scope](findings/research/console-empty-firmware-20261009.md).
 
+Repeat attempt340b (run62832a3704054a540c0ff3871558e237, MODE2#277)
+was refused before QEMU/VFIO exposure because the live journal rotated past the
+amdgpu initialization record. No GPU ledger entry or recovery receipt was consumed.
+The existing retained-evidence mechanism now pins340's same-boot host-before
+snapshot; no gate is removed. Next: retry namespace340c.
+
 Earlier console runs and the post-suspend refusal are preserved in
 [the October9 archive](findings/research/status-archives/status-pre340-repeat-20261009.md).
 
@@ -106,3 +112,10 @@ StockQEMU10.1.2/OpenCore/VirtualSMC1.3.7 works in this tested setup;
 PerfPowerServices was0.0% CPU on two guest boots. Automatic required-hardware HEVC
 decode works; explicit GPU-ID selection remains limited. Main10 decode has scoped
 passes; hardware encode is Main8. [Roadmap](docs/ROADMAP.md).
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-340-attempt-b-results`
+- Verdict: `INVALID`
+- Boundary: `identity_or_route_missing`
