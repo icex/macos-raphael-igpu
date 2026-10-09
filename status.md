@@ -1,39 +1,35 @@
 # Live status —2026-10-10
 
-## Candidate397: stage timings measured; no optimization claimed
+## Candidate399: host copy timing isolated; no optimization
 
-Run `beb488f101c8ed33f8460d4a5ce6ce5e`, metal220, version1.0.397.
-Build ID `997d0d87122748708e34a1fa05c70f08`, executable SHA256
-`7a9bae3f74471c1b26b4f7d15144283776ef7c9a7ef7203f984075d4b99b599b`.
-Manifest source9d5bb8b, built-from19b77a0. Opt-in stage timing only;
-private staging ownership/cache/commit behavior remains the qualified395 design.
+Run1849f3959a4a38e15836c9364554f76f, launchfd6dc6f,
+buildf868a8dae9664e469b2011390547c5ca, built-fromb7e17c0.
+Strict host/guest analyses accept20steady4K windows8..27 and4691commits each.
+Host means: allocation0.02058ms, copy including first-touch6.834ms,
+pending-free0.09521ms (339occupied/4691calls). Guest copy1.556ms,
+doorbell6.983ms, ACK1.468ms. Independent clocks/windows are not phase-aligned.
+This identifies measured cost, not an optimization/performance gain.
 
-Actual manager4K source,1440×900/GDK1 viewport:4160 unique token IDs/100.023s,
-zero invalid/duplicate samples. Localized phases~51/s, full-field~27/s;
-phase5 short53-sample tail is not qualified. Normal desktop returned and was
-visually verified. No new audio/input/full-frame/60Hz qualification.
+Actual manager4036unique tokens/100.006s,0invalid/duplicates; phase5short tail
+notqualified. TOKEN_DONE retained. c399-desktop.png is the WRONG focused host
+window and excluded as desktop proof; observer RuntimeMax180 expired beforelate
+capture. No399post-workload desktop-return visual qualification ornewinput/audio.
 
-61 kernel metric rows have intact numeric stages/counts/dropped;24 trailing
-saturated flags are truncated. Motion windows37..58 contain5227 commits:
-copy+fence1.549ms, geometry0.236ms, doorbell6.872ms, ACK checks1.316ms means.
-Windows are not phase-aligned; the dominant doorbell interval is not solely
-attributed to memcpy or a specific host routine. This is a measured discriminator,
-not a performance gain/regression or implemented optimization.
+Shutdown exited-after-guest-request/private_terminal_verified=true. Private
+terminal guest-shutdown/process_exitedtrue. Both capture receipts exactly
+container-stopped-during-shutdown-wait/deferred/eventwaittrue~0.588s, consoleEOF,
+criticalrecv-reset. Independent Docker die0/destroy/noKill supports naturalexit.
+Recovery recovered/authorizes_launch=true. CR2snapshot18/365 records,
+0corrupt/0incomplete with terminal-prefix tolerance. NoGPUcycle remainsactive
+from399; root owns subsequent software/hardware operations.
 
-CORE_PROBE_PASS, earliest failure null. CR2 replay snapshot18/365 records retains
-one malformed line and incomplete snapshot7/76chunks/noEND. Shutdown is
-exited-after-guest-request with private_terminal_verified=true. Both capture hooks
-natural-container-exit/deferred/shutdown_event_wait=true~1.660s; console EOF,
-critical recv-reset. Private guest-shutdown/process-exited and Docker exit0/no
-container kills independently support natural completion. Recovery recovered,
-authorizes_launch=true. GPU cycle ended; root owns subsequent software/native work.
+Evidence: findings/research/console-host-snapshot-timing-native-20261010.md
+and26-artifact manifest; run/candidate-399-results,c399-timing-analysis.json.
+PrivateQEMUlog stays0600outsidegit/hash-only. Earlier397normaldesktop screenshot
+is historical; do not substitute it for399missingvisualproof.
 
-Evidence: findings/research/console-snapshot-timing-native-20261009.md and its
-26-artifact hash manifest, run/candidate-397-results, c397-fourk-analysis.json,
-c397-kernel-timing-analysis.json. Capture imperfections remain explicit.
-
-Last delivered dev: c1f64d055fb1161f55281972912d0cf4c4178f2f (tested395),
-hosted37988921669 test/build green; main unchanged.396/397 remain candidate work.
-Next discriminate doorbell/host snapshot work before optimizing.398 separately
-prepares independent VBox disks/controller; no VirtualBox macOS boot, physical
-passthrough or accelerated rendering qualification is claimed.
+Last delivereddev c1f64d0/tested395 hostedCIgreen; mainunchanged.
+Next separate host copy/first-touch/ownership cost before optimizing. TrueVBox
+bootB separately reacheduserspace thenmonotonic-timepanic;401singleCPU test
+rootowned, noVBoxaccelerationclaim. Preserve naturalcompletion andforcedabort
+asdistinct outcomes in every furthercycle.
