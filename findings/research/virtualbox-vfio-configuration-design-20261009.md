@@ -1,7 +1,7 @@
 # VirtualBox7.2.18: backend presence is not Raphael qualification
 
-Read-only audit; no VirtualBox VM was created/started and no VFIO/device descriptor
-was opened. The companion Python script only checks filesystem metadata and emits
+Initial read-only audit (before the root-owned discriminator below): no VirtualBox
+VM was created/started by this audit and no VFIO/device descriptor was opened. The companion Python script only checks filesystem metadata and emits
 a proposed configuration. Current QEMU native ownership remains with root.
 
 ## Exact release boundary
@@ -77,7 +77,7 @@ fails with20 (`VERR_PATH_NOT_FOUND`). Retained`VBox.log` contains the actual CFG
 values. This establishes installed backend configuration dispatch; the VM never
 boots. Machine state is verified poweroff, then the owned VM is unregistered,
 with files retained in`run/c396-vbox-dispatch` and pinned by the accompanying
-13-artifact evidence manifest. The wrapper's exit-untraced.json returncode0 is
+12-artifact evidence manifest. The wrapper's exit-untraced.json returncode0 is
 not guest success: the retained application log explicitly reports startup failure.
 
 The attempted traced start fails earlier in VirtualBox hardening with effective
