@@ -1,0 +1,19 @@
+{
+  "passed": true,
+  "scope": "pristine archive extraction only; no build or VM",
+  "python": "3.14.7 (main, Aug 13 2026, 07:40:04) [GCC 16.2.1 20260810]",
+  "archive": "/home/bogdan/macos-vm/run/research/qemu-smc-20260916/qemu-10.1.2.tar.xz",
+  "archive_sha256": "9d75f331c1a5cb9b6eb8fd9f64f563ec2eab346c822cb97f8b35cd82d3f11479",
+  "destination": "/home/bogdan/macos-vm/run/c344-spice-refresh/extraction-filter-check",
+  "seconds": 7.496426965997671,
+  "skipped_link": {
+    "name": "qemu-10.1.2/roms/edk2/EmulatorPkg/Unix/Host/X11IncludeHack",
+    "target": "/opt/X11/include"
+  },
+  "files": {
+    "configure": "8e9fdfda61fbc10ed0ceef0fa87eba72830b770edee75d224befdf0c3edb63bd",
+    "ui/spice-core.c": "dcbddbe5755a6edeb9c68773b36c674897cd58b0ac62f8d2629b133e990d6c04",
+    "ui/spice-display.c": "f63dea0feed37fef74f021fa271c9446d891ef8f9c65a2bea83cd13424fae8ed",
+    "include/ui/spice-display.h": "59040dc7a41c88e71dcf8eb861ea376ace4ee26cfea42bd3571501f0a45391d7"
+  }
+}

@@ -115,3 +115,19 @@ these timer-sampled intermediate token failures.
 
 Validation: full host suite1,139 tests pass,3 skipped; focused3 producer tests
 pass. A new bounded alarm also protects the standalone smoke acquisition/cleanup.
+
+### Reproduction correction: upstream archive symlink
+
+The initial measurement build used system tar. The later Python reproduction
+helper failed with Python3.14's `AbsoluteLinkError` before configure: upstream
+ships `qemu-10.1.2/roms/edk2/EmulatorPkg/Unix/Host/X11IncludeHack` as an absolute
+symlink to `/opt/X11/include`. This unused EDK2 macOS-host emulator shortcut is
+now skipped **only** when both its exact archive path, symlink type and target
+match. Every other member still passes `tarfile.data_filter`; altered shortcut
+identity, other absolute links and traversal remain errors.
+
+Extraction of the actual retained pristine archive now passes on Python3.14.7
+in7.50s. The configure/source hashes match the measured source baseline; no
+rebuild or VM launch was needed. Six extraction tests cover the permitted skip,
+regular/relative file preservation and rejection cases; all nine refresh
+helper tests pass. See `spice-refresh-extraction-evidence-20261009.json`.
