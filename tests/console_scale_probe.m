@@ -44,12 +44,31 @@ static BOOL identity(NSDictionary *row) {
     return [row[@"online"] boolValue]&&[row[@"vendor"] unsignedIntValue]==0x5250&&
         [row[@"model"] unsignedIntValue]==0x3453&&[row[@"serial"] unsignedIntValue]==0x34530001;
 }
-static BOOL topology(NSArray *rows,NSArray *before,CGDirectDisplayID target) {
+static BOOL topology(NSArray *rows,NSArray *before,CGDirectDisplayID target,
+                     BOOL postconfigure,NSMutableArray *allowedMirrorChanges) {
     if(!rows||rows.count!=before.count)return NO;
+    NSMutableArray *changes=[NSMutableArray array];
     for(NSUInteger i=0;i<rows.count;i++) {
         NSDictionary *a=rows[i],*b=before[i];
         if([a[@"display"] unsignedIntValue]!=[b[@"display"] unsignedIntValue])return NO;
-        if([a[@"display"] unsignedIntValue]!=target){if(![a isEqual:b])return NO;continue;}
+        if([a[@"display"] unsignedIntValue]!=target){
+            // Only an existing destination of this exact source may adapt its
+            // mode/frame size after our configuration. Never permit rewiring,
+            // origin movement, identity changes, or unrelated display changes.
+            BOOL destination=postconfigure&&[a[@"mirrors"] unsignedIntValue]==target&&
+                [b[@"mirrors"] unsignedIntValue]==target;
+            if(destination){
+                NSMutableDictionary *fixedA=[a mutableCopy],*fixedB=[b mutableCopy];
+                [fixedA removeObjectForKey:@"mode"];[fixedB removeObjectForKey:@"mode"];
+                NSArray *af=a[@"frame"],*bf=b[@"frame"];
+                fixedA[@"frame"]=@[af[0],af[1]];fixedB[@"frame"]=@[bf[0],bf[1]];
+                if(![fixedA isEqual:fixedB])return NO;
+                if(![a isEqual:b])[changes addObject:@{@"display":a[@"display"],
+                    @"before_mode":b[@"mode"],@"after_mode":a[@"mode"],
+                    @"before_frame":bf,@"after_frame":af}];
+            }else if(![a isEqual:b])return NO;
+            continue;
+        }
         NSArray *frame=a[@"frame"];
         if(!identity(a)||[frame[0] doubleValue]!=0||[frame[1] doubleValue]!=0||
            [a[@"mirrors"] unsignedIntValue]!=kCGNullDirectDisplay)return NO;
@@ -58,6 +77,7 @@ static BOOL topology(NSArray *rows,NSArray *before,CGDirectDisplayID target) {
         for(NSString *key in @[@"active",@"main",@"rotation",@"in_mirror_set"])
             if(![a[key] isEqual:b[key]])return NO;
     }
+    [allowedMirrorChanges addObjectsFromArray:changes];
     return YES;
 }
 static BOOL exact(CGDisplayModeRef m,const unsigned *g) {
@@ -104,7 +124,7 @@ int main(int argc,const char **argv) { @autoreleasepool {
         result[@"modes"]=all;if(modes)CFRelease(modes);
         if(select&&chosen){
             NSArray *preconfigure=inventory();result[@"preconfigure_displays"]=preconfigure?:@[];
-            if(!topology(preconfigure,before,target))reason=@"identity or topology refused before configure";
+            if(!topology(preconfigure,before,target,NO,nil))reason=@"identity or topology refused before configure";
             else {
                 CGDisplayConfigRef config=NULL;CGError e=CGBeginDisplayConfiguration(&config);
                 if(!e){e=CGConfigureDisplayWithDisplayMode(config,target,chosen,NULL);
@@ -114,8 +134,10 @@ int main(int argc,const char **argv) { @autoreleasepool {
                     double deadline=now()+4,stable=-1;NSMutableArray *samples=[NSMutableArray array];reason=@"settle deadline";
                     while(now()<deadline){
                         NSArray *observed=inventory();CGDisplayModeRef current=CGDisplayCopyDisplayMode(target);
-                        BOOL ready=topology(observed,before,target)&&exact(current,g);
-                        [samples addObject:@{@"uptime":@(now()),@"ready":@(ready),@"target":displayRow(target)}];
+                        NSMutableArray *adaptations=[NSMutableArray array];
+                        BOOL ready=topology(observed,before,target,YES,adaptations)&&exact(current,g);
+                        [samples addObject:@{@"uptime":@(now()),@"ready":@(ready),@"target":displayRow(target),
+                            @"allowed_mirror_mode_changes":adaptations}];
                         if(current)CGDisplayModeRelease(current);
                         if(!ready)stable=-1;else if(stable<0)stable=now();
                         if(ready&&now()-stable>=.2){passed=YES;reason=@"exact mode settled";break;}
@@ -138,9 +160,13 @@ int main(int argc,const char **argv) { @autoreleasepool {
         }else {passed=NO;reason=@"final modes unavailable or exceeds bound";}
         result[@"after_modes"]=rows;if(modes)CFRelease(modes);
     }
-    if(passed&&select){
+    if(select){
+        NSMutableArray *adaptations=[NSMutableArray array];
+        BOOL finalTopology=topology(after,before,target,YES,adaptations);
+        result[@"final_topology_valid"]=@(finalTopology);
+        result[@"allowed_mirror_mode_changes"]=adaptations;
         CGDisplayModeRef final=CGDisplayCopyDisplayMode(target);
-        if(!topology(after,before,target)||!exact(final,g)){passed=NO;reason=@"final readback changed";}
+        if(passed&&(!finalTopology||!exact(final,g))){passed=NO;reason=@"final readback changed";}
         if(final)CGDisplayModeRelease(final);
     }
     result[@"passed"]=@(passed);result[@"reason"]=reason;result[@"target_display"]=@(target);
