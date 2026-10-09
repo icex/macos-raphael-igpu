@@ -3,6 +3,9 @@ import importlib.util
 from pathlib import Path
 import tempfile
 import json
+import concurrent.futures
+import threading
+import time
 from unittest.mock import patch
 import unittest
 import xml.etree.ElementTree as ET
@@ -62,6 +65,35 @@ class CloneTests(unittest.TestCase):
             with patch.object(BOOT,'call',return_value=raw) as call:
                 self.assertEqual(BOOT.stop(home,'id'),'poweroff')
                 self.assertTrue(all(c.args[1][0]=='showvminfo' for c in call.call_args_list))
+    def test_concurrent_stop_issues_one_poweroff(self):
+        with tempfile.TemporaryDirectory() as d:
+            home=Path(d);scope=home/'scope.json'
+            scope.write_text(json.dumps({'uuid':'id','name':'owned'}));scope.chmod(0o600)
+            lock=threading.Lock(); current=['running']; commands=[]
+            def call(home,args,timeout=15):
+                with lock:
+                    commands.append(args[0])
+                    if args[0]=='controlvm':
+                        time.sleep(.02);current[0]='poweroff';return ''
+                    return f'UUID="id"\nCfgFile="{home}/vms/owned/owned.vbox"\nVMState="{current[0]}"\n'
+            with patch.object(BOOT,'call',side_effect=call):
+                with concurrent.futures.ThreadPoolExecutor(2) as pool:
+                    results=list(pool.map(lambda _:BOOT.stop(home,'id'),range(2)))
+            self.assertEqual(results,['poweroff','poweroff'])
+            self.assertEqual(commands.count('controlvm'),1)
+            with patch.object(BOOT,'call',side_effect=AssertionError('unregistered VM must not be queried')):
+                self.assertEqual(BOOT.stop(home,'id'),'poweroff')
+    def test_secret_extraction_exact_and_no_overwrite(self):
+        with tempfile.TemporaryDirectory() as d:
+            source=Path(d)/'argv.json'; dest=Path(d)/'key'
+            source.write_text(json.dumps(['qemu','-device','isa-applesmc,osk='+'x'*64]))
+            result=BOOT.derive_key(source,dest)
+            self.assertEqual(dest.read_bytes(),b'x'*64)
+            self.assertEqual(dest.stat().st_mode&0o777,0o600)
+            self.assertEqual(set(result),{'source_sha256','key_bytes'})
+            with self.assertRaises(FileExistsError):BOOT.derive_key(source,dest)
+            source.write_text(json.dumps(['-device','isa-applesmc,osk='+'x'*64]*2))
+            with self.assertRaises(ValueError):BOOT.derive_key(source,Path(d)/'other')
     def test_bad_key_and_public_keyfile_refused(self):
         with tempfile.TemporaryDirectory() as d:
             p=Path(d)/'key';p.write_bytes(b'x'*64);p.chmod(0o644)

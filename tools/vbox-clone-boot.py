@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Bounded software-only VBox boot; requires explicit --execute. Never uses VFIO."""
 import argparse
+import fcntl
+import hashlib
+import re
 import json
 import os
 from pathlib import Path
@@ -63,15 +66,55 @@ def state(home, ident):
 
 
 def stop(home, ident):
-    current = state(home, ident)
-    if current not in ('poweroff', 'aborted'):
-        call(home, ['controlvm', ident, 'poweroff'])
-    for _ in range(30):
+    # Separate descriptors make flock serialize controller and watchdog callers.
+    with (home / 'cleanup.lock').open('a') as lock:
+        os.chmod(home / 'cleanup.lock', 0o600)
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        scope = json.loads(private_file(home / 'scope.json'))
+        if scope['uuid'] != ident:
+            raise RuntimeError('cleanup scope mismatch')
+        proof = home / 'stopped.json'
+        if proof.exists():
+            previous = json.loads(private_file(proof))
+            if previous.get('uuid') != ident or previous.get('state') not in ('poweroff', 'aborted'):
+                raise RuntimeError('invalid previous stopped proof')
+            return previous['state']
         current = state(home, ident)
-        if current in ('poweroff', 'aborted'):
-            return current
-        time.sleep(.2)
-    raise RuntimeError('owned VM stop unproven')
+        if current not in ('poweroff', 'aborted'):
+            call(home, ['controlvm', ident, 'poweroff'])
+        for _ in range(30):
+            current = state(home, ident)
+            if current in ('poweroff', 'aborted'):
+                with proof.open('x') as f:
+                    os.chmod(proof, 0o600)
+                    json.dump({'uuid': ident, 'state': current}, f)
+                return current
+            time.sleep(.2)
+        raise RuntimeError('owned VM stop unproven')
+
+
+def derive_key(source, destination):
+    # Archived reviewed QEMU argv, never an arbitrary executable/shell expansion.
+    st = source.lstat()
+    if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid() or st.st_size > 131072:
+        raise ValueError('invalid bounded argv artifact')
+    raw = source.read_bytes()
+    args = json.loads(raw)
+    if not isinstance(args, list) or not all(isinstance(v, str) for v in args):
+        raise ValueError('expected argv list')
+    found = []
+    for i, arg in enumerate(args):
+        if arg.startswith('isa-applesmc'):
+            match = re.fullmatch(r'isa-applesmc,osk=([A-Za-z0-9 ()]{64})', arg)
+            if i == 0 or args[i-1] != '-device' or not match:
+                raise ValueError('unexpected SMC device encoding')
+            found.append(match.group(1).encode('ascii'))
+    if len(found) != 1:
+        raise ValueError('SMC device must be unique')
+    fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'wb') as f:
+        f.write(found[0]); f.flush(); os.fsync(f.fileno())
+    return {'source_sha256': hashlib.sha256(raw).hexdigest(), 'key_bytes': 64}
 
 
 def watchdog(home, ident, deadline):
@@ -94,6 +137,7 @@ def watchdog(home, ident, deadline):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--execute', action='store_true')
+    ap.add_argument('--derive-smc-key', nargs=2, type=Path, metavar=('PRIVATE_ARGV', 'NEW_PRIVATE_KEY'))
     ap.add_argument('--loader', type=Path)
     ap.add_argument('--disk', type=Path)
     ap.add_argument('--smc-key-file', type=Path)
@@ -101,6 +145,10 @@ def main():
     ap.add_argument('--seconds', type=int, default=240)
     ap.add_argument('--watchdog', nargs=3, metavar=('HOME', 'UUID', 'DEADLINE'))
     a = ap.parse_args()
+    if a.derive_smc_key:
+        if a.execute or a.watchdog:
+            ap.error('key extraction is standalone')
+        print(json.dumps(derive_key(*a.derive_smc_key))); return
     if a.watchdog:
         watchdog(Path(a.watchdog[0]), a.watchdog[1], float(a.watchdog[2])); return
     if not a.execute or not all((a.loader, a.disk, a.smc_key_file, a.output)) or not 30 <= a.seconds <= 300:
@@ -112,6 +160,10 @@ def main():
             raise ValueError('independent owned regular derivative required')
         if p.parent.resolve() != Path('/home/bogdan/macos-vm/run/c398-vbox-clones') or not p.name.endswith('-boot.vdi'):
             raise ValueError('only named398 writable derivatives permitted')
+    if a.loader.resolve() == a.disk.resolve():
+        raise ValueError('loader and system disk must differ')
+    lease_fd = os.open(a.loader.parent / 'boot-controller.lock', os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    fcntl.flock(lease_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     if a.smc_key_file.lstat().st_size > 66:
         raise ValueError('oversized key file')
     key = private_file(a.smc_key_file).rstrip(b'\r\n')
@@ -145,7 +197,7 @@ def main():
             call(home, ['storageattach', ident, '--storagectl', 'SATA', '--port', port, '--device', '0', '--type', 'hdd', '--medium', str(disk.resolve())])
         if time.monotonic() >= deadline - 20:
             raise RuntimeError('setup exhausted deadline')
-        guard = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), '--watchdog', str(home), ident, str(deadline)], start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        guard = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), '--watchdog', str(home), ident, str(deadline)], start_new_session=True, pass_fds=(lease_fd,), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         until = time.monotonic() + 3
         while not (home / 'watchdog-ready').exists() and time.monotonic() < until:
             time.sleep(.05)
@@ -173,6 +225,7 @@ def main():
         if registered:
             try:
                 result['final_state'] = stop(home, ident)
+                (home / 'finished').write_text('VM stop independently verified\n')
                 call(home, ['unregistervm', ident])
                 result['unregistered'] = True
                 (home / 'finished').write_text('stopped and unregistered\n')
