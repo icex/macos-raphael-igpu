@@ -1,0 +1,308 @@
+{
+  "run_id": "1c54d03f095e5c8617423c7ebb17445b",
+  "cadence": {
+    "roi-native": {
+      "reason": "completed",
+      "nonce": "0d89dce12bbaa4a3",
+      "observer": "roi",
+      "roi_extension": {
+        "path": "/home/bogdan/macos-vm/run/c347-roi-extension/console_token_roi.cpython-314-x86_64-linux-gnu.so",
+        "sha256": "eef02417a5e190031c827e481bf9c0512d401e7af66cc2ecef6eca9956df8d8c",
+        "python_cache_tag": "cpython-314"
+      },
+      "unique": 1455,
+      "duplicates": 389,
+      "invalid": 223,
+      "elapsed": 30.010874956002226,
+      "sampled_unique_per_second": 48.48242519197187,
+      "max_observed_stale_seconds": 0.06452992899721721,
+      "max_sampling_seconds": 0.005939063004916534,
+      "scope": "Sampling lower bound; observer work may reduce measured throughput. No GPU FPS, host scanout, or absolute latency claim.",
+      "invalid_after_first_valid": 17,
+      "median_sampling_ms": 1.3706680038012564
+    },
+    "roi-hidpi": {
+      "reason": "completed",
+      "nonce": "fdfe95db3c607da4",
+      "observer": "roi",
+      "roi_extension": {
+        "path": "/home/bogdan/macos-vm/run/c347-roi-extension/console_token_roi.cpython-314-x86_64-linux-gnu.so",
+        "sha256": "eef02417a5e190031c827e481bf9c0512d401e7af66cc2ecef6eca9956df8d8c",
+        "python_cache_tag": "cpython-314"
+      },
+      "unique": 488,
+      "duplicates": 1363,
+      "invalid": 189,
+      "elapsed": 30.00021642199863,
+      "sampled_unique_per_second": 16.26654931869619,
+      "max_observed_stale_seconds": 0.12849421099963365,
+      "max_sampling_seconds": 0.0024704129973542877,
+      "scope": "Sampling lower bound; observer work may reduce measured throughput. No GPU FPS, host scanout, or absolute latency claim.",
+      "invalid_after_first_valid": 15,
+      "median_sampling_ms": 1.4308379977592267
+    }
+  },
+  "terminal_receipt_present": false,
+  "artifacts": [
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-ram-copy.txt",
+      "sha256": "45d26ba74543a0d2c75126d13060052672baa89406b8ab275b205ea0eb2f3eaa"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-copy-native-start.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-copy-native-progress.txt",
+      "sha256": "059e83108068216ad246e09463f6da4d95a13493c97541b60133b44fae946656"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-copy-native-monitor.txt",
+      "sha256": "970de3e213d011f871d648daddf946e1ea9d3a9746b73bb4fa67668c282d01be"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-copy-native.ppm",
+      "sha256": "a1434ce95ec976ffd8336728494707fba9793f5ef376c128651ef73677d598d7"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-copy-native-final.txt",
+      "sha256": "f1b12b589ccf3b6e7e2430506b6b84fc8688959d391268ef439dfd0a70f1f6d6"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-copy-hidpi-progress.txt",
+      "sha256": "2f77fe093d8dacc40034f02c744a65deff7997fdeeded30374c6af24da1ed8c3"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-copy-hidpi-monitor.txt",
+      "sha256": "619ec430e69c79b29c8348788da356c6eb9990d9f1b1baebfb536d0d2adb999d"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-copy-hidpi.ppm",
+      "sha256": "17eb9ac95bc6767bd9fb6ed2af82d4939626a2f3fe2c1218813406c772e26591"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-hidpi-final-native-repeat.txt",
+      "sha256": "ccd44130d3e92acaf391d924fe10a61b3ca53525e89890222870d92727dabcc6"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-qemu-pattern-analysis.json",
+      "sha256": "7927feb572a48f489decac4524ecc6f50069960863490f25f6bdd379d55a36f9"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-native-repeat.txt",
+      "sha256": "9c015e145ec67a0647e97e5c2de400b1d46b888133a911f7a96194c3c064978a"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-copy-native-repeat.ppm",
+      "sha256": "e910713a090a0580b6832dc1cc4cc1df6a544f4087782fb2d852c9514efd9d7e"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-restore-approved.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-settings.png",
+      "sha256": "6b3f38884c02b78937241e52f65b8944169107575e0e15b2a359594b269e41a4"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-settings-prepare.txt",
+      "sha256": "5b6991c0d50c1ffb85e3528a061e50760d02a33c5dfd41cab2dbbe743f79989c"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-settings-capture.log",
+      "sha256": "0254c7cdf3f53e0d254e1a1263cfb7c6de65fb6e9c9cbb0cd60e5e8e2a380512"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-permission-renewal.txt",
+      "sha256": "48d68a50f031ce686a525bcb06cc576b5b5e2e1532df6d1418fdcd25675722b6"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-settings-renewal-capture.log",
+      "sha256": "0254c7cdf3f53e0d254e1a1263cfb7c6de65fb6e9c9cbb0cd60e5e8e2a380512"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-settings-plus.log",
+      "sha256": "0254c7cdf3f53e0d254e1a1263cfb7c6de65fb6e9c9cbb0cd60e5e8e2a380512"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-settings-auth.log",
+      "sha256": "0254c7cdf3f53e0d254e1a1263cfb7c6de65fb6e9c9cbb0cd60e5e8e2a380512"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-settings-add.log",
+      "sha256": "0254c7cdf3f53e0d254e1a1263cfb7c6de65fb6e9c9cbb0cd60e5e8e2a380512"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-permission-enabled.png",
+      "sha256": "6b3f38884c02b78937241e52f65b8944169107575e0e15b2a359594b269e41a4"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-timing-restart.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-timing-live.txt",
+      "sha256": "0335f9620c812d4adbbbfe7f7f583f86bc679b528c98cf67e8da033862d83636"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-timing-restart-state.txt",
+      "sha256": "5936606ee2fa6b405bde01e707441250bc8f7e6505fbc3bf94654c6a89375f33"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-timing-live-verified.txt",
+      "sha256": "e8e029cabbc9980753811720de423916d51dbec5d21f356ad323168f9016a7c2"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-paired-nonces.json",
+      "sha256": "8d122f6f666abcf8906bb01e3e017ab1f7aa196521f551ce5b7087727ac7b24b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-timing-measure.log",
+      "sha256": "97821b41c1248a068be7594b09a1052e7d3fb10fbca0277798462099808195a6"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-roi-native-mode.txt",
+      "sha256": "dbe80b8b96329cbcdc4d0d3981e38c6fda927054c94a0e6c26e0c9413668f2f8"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-roi-native-manager.log",
+      "sha256": "4ec68a760e3172c16eef7ffee01216b1f1e064652b5800561bf10d8b7fbc2c9b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-roi-native-fixture-start.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-roi-native-cadence.jsonl.summary.json",
+      "sha256": "9dc7049b0e6f9541e0ab0495d745e0176cdca3a8271aea85a2295e2006965e81"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-copy-analysis.json",
+      "sha256": "2d47765e3bd61f6831cb1f1ae5f731c4b6ecfea4da37af976f21fc0305deaa4a"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-roi-native-token.log",
+      "sha256": "4e94c7079fbd314a52076fe4cbf0e00bf618fcfd48b37dd8bd1b551795f6f4e2"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-roi-hidpi-mode.txt",
+      "sha256": "712cb700ae8b4284358d61472830e40db2745a8a096644ac5b0a290ed4f3290d"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-roi-hidpi-manager.log",
+      "sha256": "12cbcd5ccc36fa1ad97f195eafebfba9ae6bcc15ba2fb198cfdce3181b08efb6"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-roi-hidpi-fixture-start.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-roi-hidpi-cadence.jsonl.summary.json",
+      "sha256": "ef78f86d4e1d587924596176b7ceb80abae280f986d5d17533be5a83845fcc83"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-roi-hidpi-token.log",
+      "sha256": "63089e2c18cc90ca011d6e5ac1a281e4e15bbac8c08e8a9aecaf6dea1c6ce51c"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-presenter-timing-final.txt",
+      "sha256": "54d408e294b9f34fd63face66f123ca6223c0952547672ca52985bddf7c8ef91"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-final-manager.log",
+      "sha256": "6961ec8d91e4710aef684a902b5a38329c2387f17961fcb0aadf01c4309f568d"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-phase-analysis.json",
+      "sha256": "317a16143cdaba19f584a303aa1d3d5491a005bfd4d0b2a52b25c958c80b7e05"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-final-desktop.png",
+      "sha256": "74b40ee290ce8786354592b0c3178c567422a0b28bacc6dd115ef6030bc05109"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-viewer-close.txt",
+      "sha256": "f8c22ac33414d7340064d1558bd4143f3aa823124fd16336dcfd8261d60de141"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c350-cadence-analysis.json",
+      "sha256": "037495892d1319f0d1156aaa24675692ff4c1b538f9c78e2672ffa6139500926"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-350-results/manifest.json",
+      "sha256": "fa343033da85a31533e0caea5a8c35c43fec9173a17f5a5650d542dab7866c70"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-350-results/host-before.json",
+      "sha256": "fa69aca6500c99e19669e8f1cd91904c35bb3bdb1f52fa1100081820eef30379"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-350-results/supervision.json",
+      "sha256": "0b4b675588cb5b9fedc756c9d0478c72771576b963c616d93edbd1b622862560"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-350-results/running-identity.json",
+      "sha256": "f8771d8022e0cf0abae59eba2e84e917acf3cf2422b83fc28e9f51266d30539f"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-350-results/probe.json",
+      "sha256": "0deeace1dcc1c8c167476e89c4e85f00c733575475cf7fb2f5726ebb9ed622dd"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-350-results/interactive-ready.json",
+      "sha256": "b82908c69afd0acf2c0bb095e33837a49afe0ab7b3da9ef77a5828b53dcaa884"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-350-results/critical-quiesce.json",
+      "sha256": "5fe33d3d12290fc28e4343853dbb89af5153fbf1ac1567890b898ddae585f4df"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-350-results/capture-sha256.json",
+      "sha256": "25a9808ad7d91755b73d1146bcdfbdc4c8363fe0fa066e6589fc8a573a1458b8"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-350-results/shutdown.json",
+      "sha256": "3b8877a2febdd76689e0906e651f0d1006fa25a09c44f074ab41848eff28e0e3"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-350-results/host-after.json",
+      "sha256": "fa69aca6500c99e19669e8f1cd91904c35bb3bdb1f52fa1100081820eef30379"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-350-results/host-kernel-messages.json",
+      "sha256": "decfdaf8b93d419aa0586969e15afab924bf58b8d9cfb577f9b4a60969c996e8"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-350-results/recovery.json",
+      "sha256": "6a7ed7091652858cd259480e91e682a444ce3e0db0fc35cd8dd103cd44eb5e7d"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-350-results/recovery-replay.json",
+      "sha256": "379eb750930a0faeccd9530615890f643c64c1f3a9459dc9f808e70b584bbbee"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-350-results/verdict.json",
+      "sha256": "54f0b85ec1f356a1ed301d1b026bbb4f18a4566e921547cea4a4592677e98a76"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-350-results/wrapper-result.json",
+      "sha256": "82b51dc6470487c4e65c9e016ccb0c3d93a2525b17109c165649b815d1ea3fd4"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/capture-exit-6d1fb39dcc8b711c0cb97d5abc440a433ebbc43ff5f9c10b7793e05971a594f6-704617.json",
+      "sha256": "48549b3310fcbf57695121182f017ab98db4ed73678cf9222563827e008ffd86"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/capture-exit-6d1fb39dcc8b711c0cb97d5abc440a433ebbc43ff5f9c10b7793e05971a594f6-704615.json",
+      "sha256": "23eab23cb5aa0a63ea592b32a8230d66c54949778e1dc8b34824c2eab23ab4b6"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-350-build-identities.json",
+      "sha256": "282af65559803436b5d772076f0ce53de74a273262d01fed726b3c59b513dcf0"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-350-host-tests.log",
+      "sha256": "06ff9682006b5c4c4ed35ac87aa2b8aa1cd12d0785d11430fd8a2c6a30943391"
+    }
+  ]
+}
