@@ -307,11 +307,24 @@ def capture_exit(vm,cid,started_at,deadline,run_id,admission_digest,channel=None
             try:
                 next_observed=json.loads(run([binary('docker'),'exec',cid,'python3','-B',
                     '/run/rgpu-tools/libvirt-console-entry.py','inspect-exited',str(eof['eof_monotonic'])],timeout=budget))
-            except CommandFailure:
+            except CommandFailure as witness_error:
+                if witness_error.returncode == 137:
+                    result['witness_exit_code']=137
                 if not running():
                     # Container lifetime is proven over, but this is deliberately
                     # not a process-completion proof or synthesized terminal.
                     result['outcome']='container-stopped-during-shutdown-wait';return result
+                if witness_error.returncode == 137:
+                    # PID-namespace teardown can kill docker-exec witnesses before
+                    # Docker publishes Running=false. Only this already-bound
+                    # shutdown wait admits polling; never renew the EOF/deadline
+                    # budget or infer QEMU completion from the killed witness.
+                    while time.monotonic()<until and time.time()<deadline:
+                        time.sleep(min(.05,max(0,until-time.monotonic()),
+                                       max(0,deadline-time.time())))
+                        if time.monotonic()>=until or time.time()>=deadline:break
+                        if not running():
+                            result['outcome']='container-stopped-during-shutdown-wait';return result
                 raise
             if next_observed.get('exited') is False and isinstance(next_observed.get('refusal'),dict):
                 refusal=next_observed['refusal']
