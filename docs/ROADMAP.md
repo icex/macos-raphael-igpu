@@ -1,6 +1,6 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-10-09. Current console build: **1.0.341** (native virt-manager desktop/input and GPU recovery; controller exit ordering remains open). Physical display baseline: **1.0.330** (correct-color HiDPI120 and HDMI audio confirmed); prior streaming baseline: **1.0.284**; broader baseline: **1.0.280**. Full desktop acceleration
+Updated 2026-10-09. Current console build: **1.0.342** (native manager delivery measured; atomic presentation and controller exit ordering remain open). Physical display baseline: **1.0.330** (correct-color HiDPI120 and HDMI audio confirmed); prior streaming baseline: **1.0.284**; broader baseline: **1.0.280**. Full desktop acceleration
 is **not qualified**. The reproduced Screen Sharing transparency defect is fixed
 in candidate279 and retained in280. Candidate280 also passes strict capture and
 clean recovery after visual, concurrent-client and codec workloads. The patched-QEMU
@@ -20,14 +20,14 @@ regression and macOS source-build jobs remain required; see [CI setup](releases.
 
 | Milestone | State | Evidence and remaining work |
 |---|---|---|
-| M0 — Experiment identity and supervision | Implemented; maintained | Immutable manifests, loaded-build checks, capture, deadlines and cleanup. Fixed cycle image selection so preparation and admission use the same pinned emulator. Host suite: 1033 tests, OK (3 skipped). |
+| M0 — Experiment identity and supervision | Implemented; maintained | Immutable manifests, loaded-build checks, capture, deadlines and cleanup. Fixed cycle image selection so preparation and admission use the same pinned emulator. Host suite: 1128 tests, OK (3 skipped). |
 | M1 — Controlled starting state | Demonstrated for current workflow | One-way amdgpu→vfio-pci handoff, power/control=on, fresh MODE2 and clean-state receipts. Broad independent-host-boot qualification remains open. |
 | M2 — Native startup failure localization | Completed for original blocker | False second SDMA instance and subsequent channel routing were traced; historical evidence retained. |
 | M3 — Native engine startup repair | Demonstrated | Raphael topology/address adaptations reach native startup and completed Metal work. Preserve these fixes while diagnosing desktop rendering. |
 | M4 — First correct Metal compute | Achieved | Candidate 194 checked 196,608 values and 4,096 rendered pixels; its overall capture remained inconclusive. Current280 desktop Metal baselines complete with verified device/build identity. |
 | M5 — Rendering, memory and synchronization | Partial | Managed-texture copy correction retained; private/managed/IOSurface and multiple-format readback probes pass. Candidate280 passes48 BGRA8 feedback cases across four distinct-seed processes, including two concurrent clients. 32 measured buffer-reclamation rounds return process-local allocation to baseline with134,217,728 correct values. 144 texture recreation cases and32 cross-queue GPU-event rounds pass. Global VRAM/GART counters return near baseline after exit; GPU VA and long-duration qualification remain open. |
 | M6 — Desktop and physical display | Visual fix verified; broader qualification open | Candidate279 fixes the reproduced feedback corruption. Fresh pixel checks, user observation and unobstructed native RFB captures on280 pass; longer desktop qualification remains. Candidate321 gives a full HiDPI60 picture;322 fixes native1080p interleaving. User confirms60Hz and reports120Hz appears to work; HDMI audio works (323);330 adds correct-color HiDPI120 and retains audio through tested60↔120 switches. |
-| M7 — Lifecycle and host protection | Partial | Multiple guest-request shutdowns and authorizing recoveries observed on this boot, including eight complete 280 runs with the visual and logging fixes. One supervised QEMU closure/recovery/reset/relaunch/clean-shutdown sequence now passes its scoped checks; closure capture remains INVALID. Fresh-host-boot, guest-panic and repeated lifecycle qualification remain open. |
+| M7 — Lifecycle and host protection | Partial | Multiple guest-request shutdowns and authorizing recoveries observed on recorded host boots, including eight complete 280 runs with the visual and logging fixes on their recorded September16 host boot. One supervised QEMU closure/recovery/reset/relaunch/clean-shutdown sequence now passes its scoped checks; closure capture remains INVALID. Fresh-host-boot, guest-panic and repeated lifecycle qualification remain open. |
 | M8 — Performance and release | Not qualified | Correctness first; no release, Metal3 conformance, game-support or full-desktop claim. The current experimental snapshot is published to main at the user’s request; development continues on dev. Publication does not close acceptance gates. |
 
 ## Blocker revalidation — 2026-09-16
@@ -234,13 +234,19 @@ The libvirt terminal receipt is missing because the critical serial EOF guard
 stops the container first; full native lifecycle qualification remains open.
 Candidate342's separate PATH discovery fix passes isolated daemon tests.
 
-Next: repair and qualify bounded controller exit ordering, then measure actual
-manager-buffer frame delivery with visible tokens. Event-loop/copy counts and
-nominal refresh are not viewer fps. Host-window resize, repeated crash recovery,
-independent host boots and broader desktop coverage follow. Both host sleep and
-idle blocking remain required during development. VirtualBox requires a separate
-transport/driver. [Native evidence](../findings/research/libvirt-native-console-20261009.md)
-· [Implementation and measured scope](virtual-console.md).
+Candidate342 verifies the PATH fix and measures895/555 distinct tokens over30s
+at native1080p/HiDPI respectively (29.82/18.50 updates/s in the sampled manager
+buffer). Eight/18 partially invalid token samples keep atomic presentation open.
+Both EOF handlers still refuse grace, leaving no native controller terminal
+receipt despite valid outer shutdown/capture/GPU recovery. Next: identify that
+refusal, then qualify the corrected lifecycle; separately isolate QEMU refresh
+scheduling and live-framebuffer write tearing before performance changes.
+[Measured evidence](../findings/research/console-cadence-20261009.md).
+
+Host-window resize, repeated crash recovery, independent host boots and broader
+desktop coverage follow. Both host sleep and idle blocking remain required during
+development. VirtualBox requires a separate transport/driver.
+[Implementation and measured scope](virtual-console.md).
 
 0. **Physical display and HDMI audio (user priority, 2026-09-17).**
    [Port plan and evidence](../findings/research/display-dcn315-port-20260917.md),
