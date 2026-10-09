@@ -1,6 +1,6 @@
 # Console helper source package
 
-This artifact supplies the installer, transaction coordinator and three exact guest helper sources together. It is not a
+This artifact supplies the installer, transaction coordinator and three exact guest helper sources and the shared source-token header together. It is not a
 kext installer or a prequalified clean-guest deployment. The manifest identifies
 source commit, whether the packaging tree was clean, and each input's byte count
 and SHA256. Keep the package and its manifest with the installed build receipt.

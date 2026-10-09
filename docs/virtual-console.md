@@ -405,3 +405,21 @@ recovery authorize reuse. This supersedes the earlier native-unexercised limit:
 one positive branch exercise, with initial task IDs not separately retained,
 is not universal race closure or repeated lifecycle qualification.
 [Exact run and50 hashed artifacts](../findings/research/console-install-native-20261009.md).
+
+
+## Pending source-token diagnostic (367; offline only)
+
+An opt-in `RGPU_CONSOLE_TOKEN_NONCE` (exact16hex) checks the two matching token
+regions directly in each processed, readonly-locked ScreenCaptureKit source
+before normal framebuffer copying. It waits up to60s for the first valid token,
+then counts a fixed30s window, including invalid and duplicate processed samples.
+No full-frame copy or transport change is introduced. Busy-dropped callbacks,
+upstream uncaptured frames, destination correctness and scanout are outside scope.
+An invalid source sample does not stop or change ordinary presentation.
+
+This diagnostic is prepared and tested offline only: no native source-validity
+or performance result is established. A changed presenter still needs normal
+compilation/signing and possibly consent renewal. It is intended to distinguish
+source validity from downstream VRAM/QEMU/SPICE partial-token observations before
+any snapshot-doorbell or buffer-lifetime changes.
+[Timing, error categories and native plan](../findings/research/console-source-token-plan-20261009.md).

@@ -22,8 +22,8 @@ rg_token_observe(&s,69,RG_T_VALID,5,2);assert(s.started&&s.start==69&&s.processe
 rg_token_observe(&s,70,RG_T_VALID,5,2);rg_token_observe(&s,71,RG_T_CRC,0,2);
 rg_token_observe(&s,72,RG_T_UNAVAILABLE,0,0);rg_token_observe(&s,73,RG_T_VALID,8,2);
 rg_token_observe(&s,74,RG_T_VALID,7,2);assert(s.processed==6&&s.valid==3&&s.invalid==3&&s.unique==2&&s.duplicates==1&&s.skipped==2);
-rg_token_observe(&s,99,RG_T_VALID,9,2);assert(s.done&&s.processed==6);
-RGTokenWindow never={0};never.enabled=never.armed=1;never.armedAt=10;rg_token_poll(&never,70);assert(never.done&&!never.started);
+rg_token_observe(&s,99,RG_T_VALID,9,2);assert(s.done&&s.processed==6&&s.end==99);
+RGTokenWindow never={0};never.enabled=never.armed=1;never.armedAt=10;rg_token_poll(&never,74);assert(never.done&&!never.started&&never.end==70);
 RGTokenWindow off={0};rg_token_observe(&off,100,RG_T_VALID,2,1);assert(!off.started&&!off.processed);
 return 1;}
 ''')

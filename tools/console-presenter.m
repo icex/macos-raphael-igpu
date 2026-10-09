@@ -64,7 +64,8 @@ typedef struct {
     rg_token_poll(&tokenWindow,now());
     if(tokenWindow.enabled&&tokenWindow.done&&!tokenWindow.reported){
         tokenWindow.reported=1;
-        printf("CONSOLE_SOURCE_TOKEN done=1 started=%d armed_at=%.9f start=%.9f end=%.9f waiting=%llu processed=%llu valid=%llu invalid=%llu unique=%llu duplicates=%llu skipped_ids=%llu scale=%u check_total_ms=%.3f check_max_ms=%.3f",
+        printf("CONSOLE_SOURCE_TOKEN done=1 outcome=%s reported_at=%.9f last_sequence=%u started=%d armed_at=%.9f start=%.9f end=%.9f waiting=%llu processed=%llu valid=%llu invalid=%llu unique=%llu duplicates=%llu skipped_ids=%llu scale=%u check_total_ms=%.3f check_max_ms=%.3f",
+          tokenWindow.interrupted?"interrupted":(tokenWindow.started?"complete-window":"no-valid-timeout"),now(),tokenWindow.last,
           tokenWindow.started,tokenWindow.armedAt,tokenWindow.start,tokenWindow.end,
           (unsigned long long)tokenWindow.waiting,(unsigned long long)tokenWindow.processed,
           (unsigned long long)tokenWindow.valid,(unsigned long long)tokenWindow.invalid,
@@ -90,7 +91,7 @@ typedef struct {
     [self pollToken];
 }
 - (void)finishToken {
-    if(tokenWindow.enabled&&!tokenWindow.done){printf("CONSOLE_SOURCE_TOKEN interrupted=presenter-stop\n");tokenWindow.done=1;tokenWindow.end=now();}
+    if(tokenWindow.enabled&&!tokenWindow.done){printf("CONSOLE_SOURCE_TOKEN interrupted=presenter-stop\n");tokenWindow.interrupted=1;tokenWindow.done=1;tokenWindow.end=now();}
     [self pollToken];
 }
 

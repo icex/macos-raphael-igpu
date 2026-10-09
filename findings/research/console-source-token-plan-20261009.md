@@ -28,7 +28,10 @@ making performance claims.
 A processing-queue timer checks deadlines even with no arriving samples. It prints
 one summary when60s expires with no valid token or30s expires after start; first
 sample at/after deadline is excluded. Summary completion may be delayed by an
-occupied serial queue; it never extends the counted window. Normal presenter
+occupied serial queue; it never extends the counted window. `end` records the
+exact fixed deadline and `reported_at` records later summary publication. Structured
+outcome distinguishes complete-window/no-valid-timeout/interrupted, and the last
+accepted ID is retained. Normal presenter
 shutdown prints an interrupted marker and partial summary; fatal capture failure,
 forced kill or process crash may leave no summary and is not a passing window.
 No per-sample logs: configured/start/final summary only (plus interrupted if needed).

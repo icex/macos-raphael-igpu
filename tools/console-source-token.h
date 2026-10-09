@@ -43,14 +43,14 @@ static int rg_token_decode(const uint8_t *p,size_t w,size_t h,size_t stride,
  if(ids[0]!=ids[1])return RG_T_DUPLICATES;*sequence=ids[0];return RG_T_VALID;
 }
 typedef struct {
- int enabled,armed,started,done,reported,haveLast;unsigned scale;
+ int enabled,armed,started,done,reported,haveLast,interrupted;unsigned scale;
  uint8_t nonce[8];uint32_t last;
  double armedAt,start,end,checkSeconds,checkMax;
  uint64_t waiting,processed,valid,invalid,duplicates,unique,skipped,errors[RG_T_RESULTS];
 } RGTokenWindow;
 // Expiration is polled even if no frames arrive. End excludes sample at deadline.
 static void rg_token_poll(RGTokenWindow *s,double now){
- if(s->enabled&&s->armed&&!s->done&&now>=(s->started?s->start+30:s->armedAt+60)){s->done=1;s->end=now;}
+ if(s->enabled&&s->armed&&!s->done&&now>=(s->started?s->start+30:s->armedAt+60)){s->done=1;s->end=s->started?s->start+30:s->armedAt+60;}
 }
 static void rg_token_observe(RGTokenWindow *s,double now,int result,uint32_t sequence,unsigned scale){
  rg_token_poll(s,now);if(!s->enabled||!s->armed||s->done)return;
