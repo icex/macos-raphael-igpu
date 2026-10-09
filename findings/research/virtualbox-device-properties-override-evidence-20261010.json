@@ -1,0 +1,111 @@
+{
+  "opencore_reference_tag": "1.0.5",
+  "opencore_reference_commit": "e8437f737708c7151b243d967f9ceca54193d97e",
+  "installed_opencore_version": "REL-105-2025-07-07 visibly observed by hardware owner in bootB picker; build/source byte equivalence not established",
+  "artifacts": [
+    {
+      "path": "/home/bogdan/macos-vm/run/c400-source/Docs_Configuration.tex",
+      "upstream_path": "Docs/Configuration.tex",
+      "url": "https://raw.githubusercontent.com/acidanthera/OpenCorePkg/64e3b5811ee17804cc04236618dc968ca57378a6/Docs/Configuration.tex",
+      "sha256": "f5365899ce0852e9d11866030d5bf4015e8b8bbefb781c1a009aa5309eb817c9"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c400-source/Library_OcMainLib_OpenCoreUefi.c",
+      "upstream_path": "Library/OcMainLib/OpenCoreUefi.c",
+      "url": "https://raw.githubusercontent.com/acidanthera/OpenCorePkg/64e3b5811ee17804cc04236618dc968ca57378a6/Library/OcMainLib/OpenCoreUefi.c",
+      "sha256": "e5b116d0c61975fcc477e536736429a531343db2133d2a1b200731f24dfd172a"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c400-source/Library_OcDevicePropertyLib_OcDevicePropertyLib.c",
+      "upstream_path": "Library/OcDevicePropertyLib/OcDevicePropertyLib.c",
+      "url": "https://raw.githubusercontent.com/acidanthera/OpenCorePkg/64e3b5811ee17804cc04236618dc968ca57378a6/Library/OcDevicePropertyLib/OcDevicePropertyLib.c",
+      "sha256": "65c03bfdc958159d243d72e9ddd434f186eaa373c22dce0047c90104743b057c"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c400-source/Include_Apple_Protocol_DevicePathPropertyDatabase.h",
+      "upstream_path": "Include/Apple/Protocol/DevicePathPropertyDatabase.h",
+      "url": "https://raw.githubusercontent.com/acidanthera/OpenCorePkg/64e3b5811ee17804cc04236618dc968ca57378a6/Include/Apple/Protocol/DevicePathPropertyDatabase.h",
+      "sha256": "101422c9ae59ca447a0dbb8ed352d7d5d9a2aad82a97e79605413fb6eb30967c"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c398-VBoxAppleSim.c",
+      "url": "https://raw.githubusercontent.com/VirtualBox/virtualbox/14841851fa211c7faf615978ba385d59947236c6/src/VBox/Devices/EFI/Firmware/VBoxPkg/VBoxAppleSim/VBoxAppleSim.c",
+      "sha256": "a74d9c995832380e31b736e4831b045eb69a3cf24eb5262b439ee1c66d318638"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c398-vbox-boot-a/result.json",
+      "sha256": "1a5bd6b5502f972edf05e3aa63feb430856b9c437b095df1dc761f409fb5bcd8"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c398-vbox-boot-a/stopped.json",
+      "sha256": "bbc0736d54001e0fe8b921fb3523f19e0ed5526ca314aa4f9a3d662f4ff6b76e"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c398-vbox-clones/boot-b-preparation.json",
+      "sha256": "c6a9ec70690c222ddf4520079c2e95227f0bd49d85728f7c6c246f4524de058f"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c398-vbox-clones/OpenCore-inspect.efi",
+      "sha256": "a78f699080543456c29551134b78f1bb59f69ec38bc94b59b3c04bb5f28bdd12"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c400-source/1.0.5_Docs_Configuration.tex",
+      "upstream_path": "Docs/Configuration.tex",
+      "url": "https://raw.githubusercontent.com/acidanthera/OpenCorePkg/e8437f737708c7151b243d967f9ceca54193d97e/Docs/Configuration.tex",
+      "sha256": "666015ec98718c80513f7b4329cc6762b92967ec70c29aca95de12b594eb2171"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c400-source/1.0.5_Library_OcMainLib_OpenCoreUefi.c",
+      "upstream_path": "Library/OcMainLib/OpenCoreUefi.c",
+      "url": "https://raw.githubusercontent.com/acidanthera/OpenCorePkg/e8437f737708c7151b243d967f9ceca54193d97e/Library/OcMainLib/OpenCoreUefi.c",
+      "sha256": "e5b116d0c61975fcc477e536736429a531343db2133d2a1b200731f24dfd172a"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c400-source/1.0.5_Library_OcDevicePropertyLib_OcDevicePropertyLib.c",
+      "upstream_path": "Library/OcDevicePropertyLib/OcDevicePropertyLib.c",
+      "url": "https://raw.githubusercontent.com/acidanthera/OpenCorePkg/e8437f737708c7151b243d967f9ceca54193d97e/Library/OcDevicePropertyLib/OcDevicePropertyLib.c",
+      "sha256": "65c03bfdc958159d243d72e9ddd434f186eaa373c22dce0047c90104743b057c"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c400-source/1.0.5_Include_Apple_Protocol_DevicePathPropertyDatabase.h",
+      "upstream_path": "Include/Apple/Protocol/DevicePathPropertyDatabase.h",
+      "url": "https://raw.githubusercontent.com/acidanthera/OpenCorePkg/e8437f737708c7151b243d967f9ceca54193d97e/Include/Apple/Protocol/DevicePathPropertyDatabase.h",
+      "sha256": "101422c9ae59ca447a0dbb8ed352d7d5d9a2aad82a97e79605413fb6eb30967c"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c400-vbox-boot-b/screen-001.png",
+      "sha256": "66cf90c8c260b96d6600d580835ea812d99da8bb1e3317330d3ba07796fb9477"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c400-vbox-boot-b/result.json",
+      "bytes": 170,
+      "sha256": "1ca2db133c956ceef3bbf1648f64de360e38380e63822485c01e1812528398f2"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c400-vbox-boot-b/stopped.json",
+      "bytes": 69,
+      "sha256": "0349aa6d61b788d4353f5502aef5b719584bd0bd626e72605c8f9dbfe39e4488"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c400-vbox-boot-b/scope.json",
+      "bytes": 297,
+      "sha256": "1500fc9c940547d0da3c64542d07cd88a1e4d3fbd3fd26cb4325a8556cfa784d"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c400-vbox-boot-b/uart1.log",
+      "bytes": 91571,
+      "sha256": "9934dc384a3de9131c8ad0f213df0eeffa776269df2f72bb7526c49c0bc9d8ad"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c400-vbox-boot-b/uart2.log",
+      "bytes": 1528,
+      "sha256": "7424c1850e6a6c5a200d82413e6afd04e0ca53457ba876a1ec27af31946b6116"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c400-vbox-boot-b/screen-015.png",
+      "bytes": 20458,
+      "sha256": "91ce6c49327ac8dc1ab4be0f0f8e73b5ecba2c34fecaa77bb9f5239e3edeb80e"
+    }
+  ],
+  "prior_reference_tag": "1.0.6"
+}

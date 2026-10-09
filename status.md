@@ -1,35 +1,47 @@
 # Live status —2026-10-10
 
-## Candidate399: host copy timing isolated; no optimization
+## Candidate401: true VirtualBox desktop/input, software-only singleCPU
 
-Run1849f3959a4a38e15836c9364554f76f, launchfd6dc6f,
-buildf868a8dae9664e469b2011390547c5ca, built-fromb7e17c0.
-Strict host/guest analyses accept20steady4K windows8..27 and4691commits each.
-Host means: allocation0.02058ms, copy including first-touch6.834ms,
-pending-free0.09521ms (339occupied/4691calls). Guest copy1.556ms,
-doorbell6.983ms, ACK1.468ms. Independent clocks/windows are not phase-aligned.
-This identifies measured cost, not an optimization/performance gain.
+BootC UUID1a0740c7-3655-481e-a5f5-e7dac76dee1e reaches actualmacOS desktop;
+rootviewed Terminal VBOX401_INPUT_OK, hw.ncpu1/build24G830/awake assertions.
+SamebootBloader, only8→1vCPU; actualTSCstillVirtTSCEmulated4294967295Hz.
+No monotonicpanic through~238s; SMPcontribution supported, rootcause notproved.
+NoRaphael/VFIO/Metal acceleration or sustaineddesktop performance qualification.
 
-Actual manager4036unique tokens/100.006s,0invalid/duplicates; phase5short tail
-notqualified. TOKEN_DONE retained. c399-desktop.png is the WRONG focused host
-window and excluded as desktop proof; observer RuntimeMax180 expired beforelate
-capture. No399post-workload desktop-return visual qualification ornewinput/audio.
+Cleanup was NOTnatural: sudo-n shutdownrefused; ACPIconfirmation thenTerminal
+backgroundcaffeinate confirmation blockedshutdown. Controllerdeadlinepoweroff
+~237.8s; immediateunregister GUIlocked(originalcleanup_error retained).
+Rootlater verifiedexactUUID/configpoweredoff, unregistersuccess,listabsent;
+root-cleanup-reconciliation.json explicitlypreserves originalresult. SoftwareVM
+stopped/unregistered, not a guestshutdown or GPUrecovery pass.
 
-Shutdown exited-after-guest-request/private_terminal_verified=true. Private
-terminal guest-shutdown/process_exitedtrue. Both capture receipts exactly
-container-stopped-during-shutdown-wait/deferred/eventwaittrue~0.588s, consoleEOF,
-criticalrecv-reset. Independent Docker die0/destroy/noKill supports naturalexit.
-Recovery recovered/authorizes_launch=true. CR2snapshot18/365 records,
-0corrupt/0incomplete with terminal-prefix tolerance. NoGPUcycle remainsactive
-from399; root owns subsequent software/hardware operations.
+Evidence findings/research/virtualbox-single-cpu-native-20261010.md +16hashes.
+Next403 sourceauditSMPclock beforepatch; boundedunregister unlockretry and
+stop/disown onlyownedawakejob before graphicalshutdown. Root owns launches.
 
-Evidence: findings/research/console-host-snapshot-timing-native-20261010.md
-and26-artifact manifest; run/candidate-399-results,c399-timing-analysis.json.
-PrivateQEMUlog stays0600outsidegit/hash-only. Earlier397normaldesktop screenshot
-is historical; do not substitute it for399missingvisualproof.
+## Candidate399: accelerated-console timing result
 
-Last delivereddev c1f64d0/tested395 hostedCIgreen; mainunchanged.
-Next separate host copy/first-touch/ownership cost before optimizing. TrueVBox
-bootB separately reacheduserspace thenmonotonic-timepanic;401singleCPU test
-rootowned, noVBoxaccelerationclaim. Preserve naturalcompletion andforcedabort
-asdistinct outcomes in every furthercycle.
+QEMU run1849f3959a4a38e15836c9364554f76f ended with verified privateguest
+shutdown/process-exited, Docker0/noKill and authorizing GPUrecovery. Capture
+receipts say container-stopped-during-shutdown-wait/deferred/eventwaittrue;
+CR2snapshot18/365 records has0corrupt/0incomplete underterminal-prefix tolerance.
+4K manager4036unique/100.006s,0invalid/duplicates; shortphase5 excluded.
+Host snapshotcopy6.834ms includingfirsttouch dominatesallocation0.02058ms and
+pending-free0.09521ms; guestdoorbell6.983ms. Nooptimizationgain is claimed.
+The latec399-desktop.png was the wronghostwindow and is excluded fromvisualproof.
+
+Both399GPUcycle and401softwareVM are stopped; noactiveVM is implied by this
+integration status. Root owns future launches. Source/evidence reports remain
+findings/research/console-host-snapshot-timing-native-20261010.md and
+findings/research/virtualbox-single-cpu-native-20261010.md.
+
+## Delivery preparation
+
+Candidate404 integrates399instrumentation/testedbinary and401trueVBoxsoftware
+boot/input evidence. Checked-in executable is exacttested399 build
+f868a8dae9664e469b2011390547c5ca, sourceb7e17c09679eb3e78e1be9895d2d5be550a06391,
+SHAd8257d14791c7f1cee6050c250a4327cb35bde75e0bf0036c1bbc470b939ceaa.
+Integratedhostsuite pending. Rootreview/devpush/hostedCI pending; lastcompleted
+delivery remains c1f64d0/tested395 hostedCIgreen. Main unchanged.
+TrueVBoxMetal/GPUtransport,SMPtimekeeping,gracefulGUIshutdown,4K60 andfresh-user
+console-only installation remain open. Softwaredesktop is not acceleration.

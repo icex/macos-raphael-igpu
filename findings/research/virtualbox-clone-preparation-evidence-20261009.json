@@ -1,0 +1,54 @@
+{
+  "scope": "offline clones only; no VM registration or start",
+  "artifacts": [
+    {
+      "path": "/home/bogdan/macos-vm/run/c398-vbox-clones/snapshot.json",
+      "sha256": "1a5fb186800c9c957a93ed757ee756d711eac397fa0bd7d5cd27f29b3ca4dfd8",
+      "bytes": 707
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c398-vbox-clones/conversion.json",
+      "sha256": "c5ac0d45b2227504ebbd33cc9cb20acb689e26cf4eadd37c38d445076ed7f2c5",
+      "bytes": 1040
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c398-vbox-clones/convert.py",
+      "sha256": "2ef1d493096eab5b0fe50bbdd1391ce1657da777650ecd09d5bcf211daa7ff13",
+      "bytes": 1212
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c398-vbox-clones/loader-audit.json",
+      "sha256": "61ab688c558eb1432eec1e2a4310ad4c07a98c43a97aa4336334c09ded2a9191",
+      "bytes": 6411
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c398-vbox-clones/cpu-profiles.txt",
+      "sha256": "6a09714c7c06b9ea212170c3b394f896ef8e28d28a81cd45d767a30618da3fcb",
+      "bytes": 1189
+    }
+  ],
+  "conversions": [
+    {
+      "source": "/home/bogdan/macos-vm/run/c398-vbox-clones/OpenCore.qcow2",
+      "destination": "/home/bogdan/macos-vm/run/c398-vbox-clones/OpenCore.vdi",
+      "virtual_size": 402653184,
+      "source_sha256": "e2096ca91889bf3220e63a5036ce28974fa06e8691d1cc6a1ba555ee297d73e0",
+      "destination_sha256": "423f4baf9c0f32e011552009d3dc1a8e74d57ce480b02c2d56a49a8178003c6a",
+      "compare_returncode": 0,
+      "compare_output": "Images are identical.",
+      "source_unchanged": true,
+      "seconds": 0.0324300459906226
+    },
+    {
+      "source": "/home/bogdan/macos-vm/run/c398-vbox-clones/mac_hdd_ng.img",
+      "destination": "/home/bogdan/macos-vm/run/c398-vbox-clones/mac_hdd_ng.vdi",
+      "virtual_size": 274877906944,
+      "source_sha256": "f5e7870ca602fa1afeab2d66a1dc3190b4b2a1a2827c380822d87c58c436a8bb",
+      "destination_sha256": "cbaea0ba25f3cd03be2df13336caae8d465275b085d8ba103f81e39e0e775753",
+      "compare_returncode": 0,
+      "compare_output": "Images are identical.",
+      "source_unchanged": true,
+      "seconds": 156.48650806199294
+    }
+  ]
+}
