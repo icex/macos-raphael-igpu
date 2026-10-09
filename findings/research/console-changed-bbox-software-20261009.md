@@ -88,3 +88,38 @@ Next is a separately built/pinned compatible experimental container image and
 parent-owned native qualification against370. A source-backed expected reduction
 is not a measured native gain. No optimization of snapshot memory reuse is part
 of this change.
+
+## Compatible experimental image
+
+Built separately inside pinned base
+`sha256:3a3c82c79bc4e73531f819ccdfa4053b3084efd7c1f645678dbf8b4b3a24369c`,
+from verified QEMU10.1.2 archive with the audited370 patch chain followed by the
+changed-bbox patch. This is not the host-linked binary above.
+
+- tag `rgpu-qemu-diff-bbox:c372`
+- image `sha256:96748992f5baee3b6884bc68445ceed04b6ebe2b00c6c9cbe360ad835ec2e890`
+- QEMU executable `41721260e6ed2eda552131b47c72f7324790184f967c72b4860cfac8db846a57`
+
+Original base layers/config are preserved with exactly one added executable COPY
+layer. All182 resolved ELF library/loader hashes match the immutable base.
+QEMU module loading is disabled in this build, so the changed internal display
+structure is compiled consistently and does not load old binary QEMU modules.
+Feature inspection confirms10.1.2, snapshot/full-refresh defaults off, and
+explicit SPICE refresh support. Actual paused TCG SPICE startup succeeds.
+
+Inside this image, snapshot ACK/overwrite/resize, default colored legacy pixels
+and migration controls pass. Additionally, the same8-phase full-RGB offscreen
+client oracle runs against QEMU in this exact container, using only its owned
+shared Unix socket directory. Black initialization, geometry changes,4K colored
+pixels and unchanged-frame suppression all pass. The client's `qemu_sha256`
+field identifies its small Docker wrapper; the receipt separately binds that
+wrapper, exact image ID and executable digest. Five owned build/check containers
+are stopped with exit0, network none and no passed devices. Host GTK client uses
+no live native VM connection.
+
+[Image build/test hashes](console-changed-bbox-image-evidence-20261009.json).
+Detailed recipe, dependency hashes, ELF headers, feature output, exact commands
+and receipts: `run/c372-qemu-changed-bbox/build-receipt.json`. These image/software
+results still do not qualify native cadence or all-manager behavior. Parent's
+merged next-candidate host suite reports1285 passing tests with8 skips; no
+production helpers were staged by this coordinator.
