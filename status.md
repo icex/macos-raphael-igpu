@@ -20,8 +20,8 @@ No reboot/rebind needed. [Evidence](findings/research/libvirt-reset-native-20261
 
 1224 host tests pass,8skip (also rechecked for359 delivery); stage87 pass before
 exposure. Checked-in kext and manifest match the tested356 bundle
-(SHA72361929…); delivery remains pending.353 HiDPI milestone and CI correction are on
-devdefc0f4, hosted37930517553 test/build green.354–356 lifecycle work local pending
-delivery review. Main unchanged. Next: resize transition discrimination and console
+(SHA72361929…).354–356 lifecycle work is integrated for dev delivery; hosted
+validation of this delivery is pending. Prior353 milestone and CI correction
+defc0f4 passed hosted37930517553 test/build. Main unchanged. Next: resize transition discrimination and console
 USB audio qualification. Installation durability, broader desktop/codec workloads
 and VirtualBox remain open.
