@@ -42,6 +42,12 @@ def config_key(path, key):
     path.chmod(0o600)
 
 
+class VBoxCallError(RuntimeError):
+    def __init__(self, locked=False):
+        super().__init__('VBoxManage command failed; private log retained')
+        self.locked = locked
+
+
 def call(home, args, timeout=15):
     env = dict(os.environ, VBOX_USER_HOME=str(home / 'config'))
     p = subprocess.run(['VBoxManage', *args], env=env, capture_output=True, timeout=timeout)
@@ -49,12 +55,13 @@ def call(home, args, timeout=15):
     with (home / 'commands-private.log').open('ab') as f:
         f.write(p.stdout + p.stderr)
     if p.returncode:
-        raise RuntimeError('VBoxManage command failed; private log retained')
+        raise VBoxCallError(b'while it is locked' in p.stderr and
+                            b'VBOX_E_INVALID_OBJECT_STATE' in p.stderr)
     return p.stdout.decode(errors='replace')
 
 
-def state(home, ident):
-    raw = call(home, ['showvminfo', ident, '--machinereadable'])
+def state(home, ident, timeout=15):
+    raw = call(home, ['showvminfo', ident, '--machinereadable'], timeout=timeout)
     fields = dict(line.split('=', 1) for line in raw.splitlines() if '=' in line)
     if fields.get('UUID', '').strip('"') != ident:
         raise RuntimeError('machine identity mismatch')
@@ -63,6 +70,25 @@ def state(home, ident):
     if fields.get('CfgFile', '').strip('"') != str(expected):
         raise RuntimeError('machine config binding mismatch')
     return fields.get('VMState', '').strip('"')
+
+
+def unregister_stopped(home, ident):
+    # Poweroff completion can precede GUI session unlock. Never retry a foreign,
+    # running or otherwise failed machine, and never force-unlock its session.
+    deadline = time.monotonic() + 15
+    attempts = 0
+    while time.monotonic() < deadline:
+        if state(home, ident, timeout=max(.01, min(2, deadline-time.monotonic()))) not in ('poweroff', 'aborted'):
+            raise RuntimeError('unregister requires owned stopped machine')
+        attempts += 1
+        try:
+            call(home, ['unregistervm', ident], timeout=max(.01, min(2, deadline-time.monotonic())))
+            return attempts
+        except VBoxCallError as exc:
+            if not exc.locked:
+                raise
+            time.sleep(min(.1, max(0, deadline-time.monotonic())))
+    raise RuntimeError('owned stopped GUI session did not unlock within15seconds')
 
 
 def stop(home, ident):
@@ -144,6 +170,7 @@ def main():
     ap.add_argument('--output', type=Path)
     ap.add_argument('--seconds', type=int, default=240)
     ap.add_argument('--cpus', type=int, choices=(1, 8), default=8)
+    ap.add_argument('--tsc-mode', choices=('auto', 'RealTSCOffset'), default='auto')
     ap.add_argument('--watchdog', nargs=3, metavar=('HOME', 'UUID', 'DEADLINE'))
     a = ap.parse_args()
     if a.derive_smc_key:
@@ -177,7 +204,8 @@ def main():
     deadline = time.monotonic() + a.seconds
     scope = {'uuid': ident, 'name': name, 'deadline_monotonic': deadline,
              'loader': str(a.loader.resolve()), 'disk': str(a.disk.resolve()), 'gpu': False,
-             'cpus': a.cpus, 'cpu_profile': 'Intel Core i7-6700K', 'tsc_override': None}
+             'cpus': a.cpus, 'cpu_profile': 'Intel Core i7-6700K',
+             'tsc_override': None if a.tsc_mode == 'auto' else a.tsc_mode}
     (home / 'scope.json').write_text(json.dumps(scope, indent=2) + '\n')
     registered = False
     guard = None
@@ -188,6 +216,8 @@ def main():
         config_key(config, key); del key
         registered = True  # reconcile even an ambiguous registration failure
         call(home, ['registervm', str(config)])
+        if a.tsc_mode != 'auto':
+            call(home, ['setextradata', ident, 'VBoxInternal/TM/TSCMode', a.tsc_mode])
         call(home, ['modifyvm', ident, '--memory', '8192', '--cpus', str(a.cpus), '--cpu-profile', 'Intel Core i7-6700K',
                     '--firmware', 'efi64', '--chipset', 'ich9', '--ioapic', 'on', '--graphicscontroller', 'vboxvga',
                     '--vram', '64', '--accelerate-3d', 'off', '--nic1', 'none', '--audio-enabled', 'off',
@@ -231,7 +261,7 @@ def main():
             try:
                 result['final_state'] = stop(home, ident)
                 (home / 'finished').write_text('VM stop independently verified\n')
-                call(home, ['unregistervm', ident])
+                result['unregister_attempts'] = unregister_stopped(home, ident)
                 result['unregistered'] = True
                 (home / 'finished').write_text('stopped and unregistered\n')
             except Exception as e:

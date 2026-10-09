@@ -100,4 +100,32 @@ class CloneTests(unittest.TestCase):
             with self.assertRaises(ValueError):BOOT.private_file(p)
             with self.assertRaises(ValueError):BOOT.config_key(p,b'short')
 
+    def test_unregister_waits_only_for_owned_stopped_session(self):
+        with patch.object(BOOT, 'state', return_value='poweroff') as state, \
+             patch.object(BOOT, 'call', side_effect=[BOOT.VBoxCallError(locked=True), '']) as call, \
+             patch.object(BOOT.time, 'sleep'):
+            self.assertEqual(BOOT.unregister_stopped(Path('/unused'), 'id'), 2)
+            self.assertEqual(state.call_count, 2)
+            self.assertTrue(all(c.args[1] == ['unregistervm', 'id'] for c in call.call_args_list))
+
+    def test_unregister_refuses_changed_state_or_other_error(self):
+        with patch.object(BOOT, 'state', side_effect=['poweroff', 'running']), \
+             patch.object(BOOT, 'call', side_effect=BOOT.VBoxCallError(locked=True)) as call, \
+             patch.object(BOOT.time, 'sleep'):
+            with self.assertRaises(RuntimeError):
+                BOOT.unregister_stopped(Path('/unused'), 'id')
+            self.assertEqual(call.call_count, 1)
+        with patch.object(BOOT, 'state', return_value='poweroff'), \
+             patch.object(BOOT, 'call', side_effect=BOOT.VBoxCallError()) as call:
+            with self.assertRaises(BOOT.VBoxCallError):
+                BOOT.unregister_stopped(Path('/unused'), 'id')
+            self.assertEqual(call.call_count, 1)
+
+    def test_unregister_timeout_does_not_report_success(self):
+        with patch.object(BOOT.time, 'monotonic', side_effect=[0, 16]), \
+             patch.object(BOOT, 'call') as call:
+            with self.assertRaises(RuntimeError):
+                BOOT.unregister_stopped(Path('/unused'), 'id')
+            call.assert_not_called()
+
 if __name__=='__main__':unittest.main()
