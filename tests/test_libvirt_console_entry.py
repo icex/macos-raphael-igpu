@@ -71,14 +71,16 @@ class RefreshPlanBindingTests(unittest.TestCase):
                 with self.assertRaises(ValueError):mod.validate_plan_refresh(plan,admission)
 
     def test_snapshot_binds_both_directions_and_historical_default(self):
-        plan=self.plan('60');plan['native_argv'][-1]+=',x-debug-full-refresh=on,x-debug-snapshot=on'
-        admitted={'console_refresh':'60','console_full_refresh':'on','console_snapshot':'on'}
-        mod.validate_plan_refresh(plan,admitted)
-        for value in ('off',None,True):
-            bad=dict(admitted,console_snapshot=value)
-            with self.assertRaises(ValueError):mod.validate_plan_refresh(plan,bad)
-        bare=self.plan('60');bare['native_argv'][-1]+=',x-debug-full-refresh=on'
-        with self.assertRaises(ValueError):mod.validate_plan_refresh(bare,admitted)
+        for setting in ('on','restart'):
+            suffix=',x-debug-snapshot-restart=on' if setting=='restart' else ''
+            plan=self.plan('60');plan['native_argv'][-1]+=',x-debug-full-refresh=on,x-debug-snapshot=on'+suffix
+            admitted={'console_refresh':'60','console_full_refresh':'on','console_snapshot':setting}
+            mod.validate_plan_refresh(plan,admitted)
+            for value in ('off',None,True,'on' if setting=='restart' else 'restart'):
+                bad=dict(admitted,console_snapshot=value)
+                with self.assertRaises(ValueError):mod.validate_plan_refresh(plan,bad)
+            bare=self.plan('60');bare['native_argv'][-1]+=',x-debug-full-refresh=on'
+            with self.assertRaises(ValueError):mod.validate_plan_refresh(bare,admitted)
 
     def test_full_refresh_is_bound_to_admission_in_both_directions(self):
         plan=self.plan('60');plan['native_argv'][-1]+=',x-debug-full-refresh=on'

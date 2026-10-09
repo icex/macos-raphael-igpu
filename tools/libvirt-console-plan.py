@@ -76,7 +76,8 @@ def build_plan(argv, run_id):
     require(spice.endswith(',agent-mouse=off') == agent, 'agent mouse routing must match agent topology')
     bochs = [d for d in devices if d.split(',')[0] == 'bochs-display']
     require(len(bochs) == 1 and bochs[0] in (BOCHS, BOCHS+',x-debug-full-refresh=on',
-            BOCHS+',x-debug-full-refresh=on,x-debug-snapshot=on'),
+            BOCHS+',x-debug-full-refresh=on,x-debug-snapshot=on',
+            BOCHS+',x-debug-full-refresh=on,x-debug-snapshot=on,x-debug-snapshot-restart=on'),
             'unreviewed Bochs full refresh profile')
     require(bochs[0] == BOCHS or spice.removesuffix(',agent-mouse=off') == SPICE+',max-refresh-rate=60',
             'full refresh requires explicit SPICE60')

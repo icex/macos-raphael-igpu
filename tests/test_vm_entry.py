@@ -64,14 +64,17 @@ class VmEntryTests(unittest.TestCase):
     def test_snapshot_shell_selector_exact_native_profile(self):
         source=ENTRY.read_text();block=source[source.index('# Explicit presentation-only console:'):source.index('if [[ -n "${LAN_TAP_NODE:-}" ]]')]
         base=dict(os.environ,CONSOLE_SNAPSHOT='on',CONSOLE_FULL_REFRESH='on',CONSOLE_REFRESH='60',VM_MANAGER='libvirt',VM_CONSOLE='bochs-spice',GENERIC_GRAPHICS='off',EXTRA='-display none')
-        cases=[({},True),({'CONSOLE_SNAPSHOT':'off'},True),({'CONSOLE_SNAPSHOT':'yes'},False),
+        cases=[({},True),({'CONSOLE_SNAPSHOT':'restart'},True),({'CONSOLE_SNAPSHOT':'off'},True),({'CONSOLE_SNAPSHOT':'yes'},False),
                ({'CONSOLE_FULL_REFRESH':'off'},False),({'CONSOLE_REFRESH':'default'},False),
                ({'VM_MANAGER':'direct'},False),({'VM_CONSOLE':'bochs'},False),({'GENERIC_GRAPHICS':'on'},False)]
+        cases += [(dict(changes,CONSOLE_SNAPSHOT='restart'),ok) for changes,ok in cases if 'CONSOLE_SNAPSHOT' not in changes]
         for changes,ok in cases:
             env=dict(base,**changes)
             result=subprocess.run(['bash','-c',block+'\nprintf "%s" "$EXTRA"'],env=env,capture_output=True,text=True,timeout=3)
             self.assertEqual(result.returncode==0,ok,result.stderr)
-            if ok:self.assertEqual(',x-debug-snapshot=on' in result.stdout,env['CONSOLE_SNAPSHOT']=='on')
+            if ok:
+                self.assertEqual(',x-debug-snapshot=on' in result.stdout,env['CONSOLE_SNAPSHOT'] in ('on','restart'))
+                self.assertEqual(',x-debug-snapshot-restart=on' in result.stdout,env['CONSOLE_SNAPSHOT']=='restart')
 
     def test_console_refresh_shell_selector_preserves_endpoint_and_refuses_other_profiles(self):
         source=ENTRY.read_text();block=source[source.index('# Explicit presentation-only console:'):source.index('if [[ -n "${LAN_TAP_NODE:-}" ]]')]

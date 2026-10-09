@@ -439,8 +439,8 @@ def launch_options(data):
                 'VM_MANAGER':'libvirt', 'VM_CONSOLE':'bochs-spice', 'GENERIC_GRAPHICS':'off'}.items()))):
         raise ValueError('vdagent requires native libvirt SPICE')
     snapshot = checked.pop('CONSOLE_SNAPSHOT', 'off') if checked is not None else None
-    if (type(snapshot) is not str or snapshot not in ('off', 'on') or
-            (snapshot == 'on' and checked != contracts[-1]) or checked not in contracts):
+    if (type(snapshot) is not str or snapshot not in ('off', 'on', 'restart') or
+            (snapshot in ('on', 'restart') and checked != contracts[-1]) or checked not in contracts):
         raise ValueError('launch options must select the exact historical, no-graphics, or debugger contract')
     return dict(value)
 
@@ -540,9 +540,9 @@ def current_identity(vm, candidate, requested_diagnostic, run_id=None,
     if os.environ.get('CONSOLE_VDAGENT', vdagent) not in ('', vdagent):
         raise ValueError('CONSOLE_VDAGENT environment differs from manifest')
     snapshot = options.get('CONSOLE_SNAPSHOT', 'off')
-    if type(snapshot) is not str or snapshot not in ('off', 'on'):
+    if type(snapshot) is not str or snapshot not in ('off', 'on', 'restart'):
         raise ValueError('invalid CONSOLE_SNAPSHOT')
-    if snapshot == 'on' and any(options.get(k) != v for k, v in {
+    if snapshot in ('on', 'restart') and any(options.get(k) != v for k, v in {
             'VM_MANAGER': 'libvirt', 'VM_CONSOLE': 'bochs-spice', 'CONSOLE_REFRESH': '60',
             'CONSOLE_FULL_REFRESH': 'on', 'GENERIC_GRAPHICS': 'off'}.items()):
         raise ValueError('snapshot requires native libvirt SPICE60 full refresh')
@@ -3102,8 +3102,10 @@ def validate_running(manifest, observed):
                              'bochs-display,id=rgpu_present,bus=pcie.0,addr=0x7,vgamem=64M']
         if manifest['launch_options'].get('CONSOLE_FULL_REFRESH') == 'on':
             expected_graphics[-1] += ',x-debug-full-refresh=on'
-        if manifest['launch_options'].get('CONSOLE_SNAPSHOT') == 'on':
+        if manifest['launch_options'].get('CONSOLE_SNAPSHOT') in ('on', 'restart'):
             expected_graphics[-1] += ',x-debug-snapshot=on'
+        if manifest['launch_options'].get('CONSOLE_SNAPSHOT') == 'restart':
+            expected_graphics[-1] += ',x-debug-snapshot-restart=on'
         supplements=[]
         if manifest['launch_options'].get('CONSOLE_REFRESH') == '60':
             supplements.append('max-refresh-rate=60')

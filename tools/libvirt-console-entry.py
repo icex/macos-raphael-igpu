@@ -73,7 +73,8 @@ def validate_plan_refresh(plan,admission):
     handoff.require(snapshot == 'off' or (full == 'on' and expected == '60'),
                     'snapshot requires explicit SPICE60 full refresh')
     wanted_bochs=planner.BOCHS+(',x-debug-full-refresh=on' if full=='on' else '')
-    if snapshot=='on': wanted_bochs+=',x-debug-snapshot=on'
+    if snapshot in ('on','restart'): wanted_bochs+=',x-debug-snapshot=on'
+    if snapshot=='restart': wanted_bochs+=',x-debug-snapshot-restart=on'
     handoff.require(bochs==[wanted_bochs], 'plan console full refresh differs from admission')
 
 
