@@ -1,12 +1,17 @@
 # Accelerated desktop in a VM manager console
 
-Current376 evidence extends token integrity to330seconds of mixed workloads:
-all14265 post-startup manager samples valid. Native1080p and HiDPI ordinary
-desktops, audio retry/restoration and clean shutdown pass. Full-screen motion is
-slower, and timer-observer slowdown prevents an exact delivery-rate conclusion.
-Snapshot retirement denies staging reuse while ordinary fallback works. This is
-still an experimental one-shot snapshot lease, not a production restart design.
-[Current evidence and limits](../findings/research/console-mixed-motion-native-20261009.md).
+Current candidate379 uses synchronous client invalidation observations rather
+than timer sampling alone. Full-field HiDPI QEMU publications and bitmap-creation
+entries are about38–39/s, versus14–15 client updates/s. The main measured gap is
+after creation entry; server consumption, coalescing, transport and client drawing
+remain separate stages. Three rare HiDPI token errors are unresolved. The earlier
+376 clean sampled windows remain narrower evidence, not proof of full integrity.
+
+Default stereo sample capture, ordinary desktop fallback, retired staging-access
+refusal and natural shutdown/recovery pass. Snapshot ownership remains a one-shot
+experimental lease, not a qualified production restart design. Existing consent
+is retained; clean-user setup and broader lifecycle remain open.
+[Current evidence and limits](../findings/research/console-event-native-20261009.md).
 
 The requested target is a macOS desktop in the VM manager's console, with Raphael
 Metal rendering and no physical HDMI connection. Screen Sharing/Moonlight alone

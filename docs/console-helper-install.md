@@ -67,3 +67,10 @@ exit, native positive/negative controls verify ordinary BAR0 mapping and deny
 snapshot regrant. The original login agent is restored byte-for-byte and ordinary
 awake3840x2160 capture restarts. This does not qualify client-crash cleanup or
 rearming snapshot mode within the same VM lifetime.
+
+Candidate379 again retains the installed370 presenter binary and consent. After
+snapshot-owner retirement, legacy BAR0 mapping succeeds while ARM and staging
+regrant are denied; the original agent resumes fresh, awake3840×2160 capture.
+Default stereo delivery and independent audio-route restoration pass. This does
+not qualify fresh-user consent setup or snapshot-owner restart in the same VM.
+[Evidence](../findings/research/console-event-native-20261009.md).

@@ -1,6 +1,6 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-10-09. Current console experiment: **1.0.376** (three110s mixed workloads,14265 valid post-startup samples; ordinary fallback, retired-access refusal, audio retry and clean shutdown pass; full-field performance and broader lifecycle open). Prior console experiment: **1.0.374** (HiDPI52.6/51.2 and native57.9 sampled updates/s,3553 intact samples; forced capture teardown and sustained qualification open). Prior snapshot experiment: **1.0.370** (immutable snapshots plus one SPICE rectangle; three native/HiDPI token windows without post-startup corruption;60Hz and broader lifecycle unqualified). Prior diagnostic: **1.0.368** (native/HiDPI capture-source tokens intact while manager samples remain partial; downstream stage unlocalized). Persistence/cadence: **1.0.366** (existing-user next guest boot retains startup/consent; paced source60 draw calls/s does not produce qualified60Hz output). Installer/lifecycle: **1.0.364** (package/reinstall and one bounded shutdown-wait pass; clean-user qualification open). Console audio/input: **1.0.361** (ordinary afplay default USB output and continuous pointer entry into a resized window pass; endpoint audibility, stationary-pointer resize remain open). Performance comparison: **1.0.352 ON / 1.0.353 OFF** (same-image HiDPI delivery and copy-cost improvement; atomic presentation remains open). Physical display baseline: **1.0.330** (correct-color HiDPI120 and HDMI audio confirmed); prior streaming baseline: **1.0.284**; broader baseline: **1.0.280**. Full desktop acceleration
+Updated 2026-10-09. Current console experiment: **1.0.379** (synchronous viewer measurements locate the main HiDPI slowdown after bitmap-creation entry; three rare HiDPI token errors remain; audio, ordinary fallback and natural shutdown/recovery pass). Prior console experiment: **1.0.376** (three110s mixed workloads,14265 valid post-startup samples; ordinary fallback, retired-access refusal, audio retry and clean shutdown pass; full-field performance and broader lifecycle open). Prior console experiment: **1.0.374** (HiDPI52.6/51.2 and native57.9 sampled updates/s,3553 intact samples; forced capture teardown and sustained qualification open). Prior snapshot experiment: **1.0.370** (immutable snapshots plus one SPICE rectangle; three native/HiDPI token windows without post-startup corruption;60Hz and broader lifecycle unqualified). Prior diagnostic: **1.0.368** (native/HiDPI capture-source tokens intact while manager samples remain partial; downstream stage unlocalized). Persistence/cadence: **1.0.366** (existing-user next guest boot retains startup/consent; paced source60 draw calls/s does not produce qualified60Hz output). Installer/lifecycle: **1.0.364** (package/reinstall and one bounded shutdown-wait pass; clean-user qualification open). Console audio/input: **1.0.361** (ordinary afplay default USB output and continuous pointer entry into a resized window pass; endpoint audibility, stationary-pointer resize remain open). Performance comparison: **1.0.352 ON / 1.0.353 OFF** (same-image HiDPI delivery and copy-cost improvement; atomic presentation remains open). Physical display baseline: **1.0.330** (correct-color HiDPI120 and HDMI audio confirmed); prior streaming baseline: **1.0.284**; broader baseline: **1.0.280**. Full desktop acceleration
 is **not qualified**. The reproduced Screen Sharing transparency defect is fixed
 in candidate279 and retained in280. Candidate280 also passes strict capture and
 clean recovery after visual, concurrent-client and codec workloads. The patched-QEMU
@@ -20,7 +20,7 @@ regression and macOS source-build jobs remain required; see [CI setup](releases.
 
 | Milestone | State | Evidence and remaining work |
 |---|---|---|
-| M0 — Experiment identity and supervision | Implemented; maintained | Immutable manifests, loaded-build checks, capture, deadlines and cleanup. Fixed cycle image selection so preparation and admission use the same pinned emulator. Pre376 host suite: 1298 tests, OK (8 skipped); staging suite: 88 pass. |
+| M0 — Experiment identity and supervision | Implemented; maintained | Immutable manifests, loaded-build checks, capture, deadlines and cleanup. Fixed cycle image selection so preparation and admission use the same pinned emulator. Pre379 host suite: 1311 tests, OK (8 skipped); staging suite: 88 pass. |
 | M1 — Controlled starting state | Demonstrated for current workflow | One-way amdgpu→vfio-pci handoff, power/control=on, fresh MODE2 and clean-state receipts. Broad independent-host-boot qualification remains open. |
 | M2 — Native startup failure localization | Completed for original blocker | False second SDMA instance and subsequent channel routing were traced; historical evidence retained. |
 | M3 — Native engine startup repair | Demonstrated | Raphael topology/address adaptations reach native startup and completed Metal work. Preserve these fixes while diagnosing desktop rendering. |
@@ -330,6 +330,18 @@ container teardown and take immediate-stop; natural capture exit is not claimed.
 Next: bounded witness-exit race fix, software-qualified changed-pixel single
 rectangle and native comparison, then one-shot crash/re-ARM lifecycle checks.
 [Snapshot evidence](../findings/research/console-snapshot-native-20261009.md).
+
+Candidate379 adds synchronous same-channel invalidation observations and a bounded
+QEMU bitmap-creation trace. In full-field HiDPI interiors, publications and creation
+entries both reach about38–39/s, but client invalidations are14–15/s. This rejects
+pre-create queue gating and timer sampling alone as the dominant explanation.
+Three post-start HiDPI token errors remain, with no source-check overlap covering
+them; native1080p has none in this window. One native observer callback stalls
+before ROI decoding. Default audio, ordinary fallback, retired-access refusal,
+natural shutdown and authorizing recovery pass. Next: software-only server
+consumption/coalescing/send measurements, then native comparison; retain source
+integrity and viewer rendering cost as separate questions.
+[Current evidence](../findings/research/console-event-native-20261009.md).
 
 Candidate376 extends this to three110s alternating localized/full-field workloads:
 14265 manager samples valid after startup, with lower sampled rates during

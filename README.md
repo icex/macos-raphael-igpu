@@ -14,27 +14,27 @@ on **`dev`**; this is not yet a generally supported driver release.
 
 ## Current status
 
-**VM window (October9, candidate376):** native Metal rendering, bridged LAN and
-keyboard/mouse input work in virt-manager without a physical HDMI connection.
-The experimental immutable-snapshot/changed-rectangle path now has14,265 valid
-post-startup token samples across three110-second mixed-motion workloads.
-Observed HiDPI cadence is about52 distinct updates/s for small changes and18 for
-full-screen motion; native1080p is about58/44. These are sampled lower bounds:
-the viewer's timer observer itself slows during full-screen motion. QEMU counters
-show about39 surface publications/s there; neither metric proves scanout or60Hz.
+**VM window (October 9, candidate 379):** native Metal rendering, bridged LAN,
+and keyboard/mouse input work in virt-manager without physical HDMI. The virtual
+display adapter's 56 MB framebuffer is separate from the native renderer's 2 GB VRAM.
+
+A synchronous viewer observer now locates the main full-screen HiDPI slowdown
+after QEMU bitmap creation: about 38–39 creation entries/s versus 14–15 client
+updates/s. Small changes reach about 50–51 distinct IDs/s; native 1080p is faster.
+These are measured pipeline events, not scanout FPS. Three rare malformed HiDPI
+token samples remain unresolved; earlier clean timer-sampled windows do not
+establish corruption-free output or stable 60 Hz.
 
 Ordinary desktop fallback, retired-buffer access refusal, stereo USB/QEMU/Pulse
-sample capture and clean guest shutdown pass in376. Both capture hooks record
-natural exit and GPU recovery authorizes same-boot reuse.374's forced-stop race
-remains unresolved. Existing-user startup/consent is retained; fresh-user setup,
-crash/restart lifecycle, automatic resize, stationary-pointer resize, other
-frontends and VirtualBox remain unqualified. Input was last qualified in361;
-audio endpoint audibility and A/V sync remain open. The virtual Display adapter's
-56MB framebuffer is separate from the native renderer's2GB VRAM.
+sample capture and natural guest shutdown/recovery pass in 379. The earlier 374
+forced-stop race remains open. Existing-user startup/consent is retained;
+fresh-user setup, crash/restart lifecycle, automatic and stationary-pointer
+resize, other frontends and VirtualBox remain unqualified. Input was last
+qualified in 361; audio endpoint audibility and A/V sync remain open.
 
 Stock QEMU remains the default; snapshot experiments use separately pinned images.
-[Current mixed-motion and lifecycle evidence](findings/research/console-mixed-motion-native-20261009.md)
-· [Changed-rectangle comparison](findings/research/console-changed-bbox-native-20261009.md)
+[Current event, audio and lifecycle evidence](findings/research/console-event-native-20261009.md)
+· [Prior mixed-motion evidence](findings/research/console-mixed-motion-native-20261009.md)
 · [Input/audio evidence](findings/research/console-default-audio-input-20261009.md)
 · [Setup and limits](docs/virtual-console.md).
 

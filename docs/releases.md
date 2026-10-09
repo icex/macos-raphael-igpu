@@ -29,11 +29,11 @@ The runner label is explicitly Intel, as listed in the
 
 ## Checked-in experimental executable
 
-`kext/bin/RaphaelGPU` contains the hardware-tested candidate376 executable,
-build `579c3e28ca99490b831d2c06bfa38fdc`, from clean source
-`09e0e647aed19fcc3054594090256f26a5863343`. Native guest shutdown preserves a
+`kext/bin/RaphaelGPU` contains the hardware-tested candidate379 executable,
+build `c3e4e8d6f3be4fe7b2d94fb49b52adb6`, from clean source
+`ce106d9e72b92fb8a91c506c40f98990db7d3e76`. Native guest shutdown preserves a
 real controller terminal and authorizing recovery. Earlier356 normal/fullscreen
-and361 continuous pointer entry at1000×760 pass; input is not rerun in376. Missing-motion/stationary-pointer
+and361 continuous pointer entry at1000×760 pass; input is not rerun in379. Missing-motion/stationary-pointer
 transitions remain open. Candidate364 adds existing-user package/reinstall and
 one native bounded shutdown-wait pass. Candidate366 verifies existing-user next
 guest-boot startup/consent; clean-user and console-only first setup remain open.
@@ -44,13 +44,21 @@ locked capture-source tokens while manager partial tokens persist, narrowing
 investigation downstream without identifying one stage or qualifying atomicity.
 Ordinary afplay default USB → QEMU → Pulse stereo capture and route restoration
 pass; endpoint audibility, other applications and A/V sync are unqualified.
+Candidate379 adds synchronous same-channel event observation and a bounded QEMU
+trace: full-field HiDPI bitmap-creation entries are38–39/s while client updates
+remain14–15/s. Three rare post-start HiDPI token errors remain unresolved; native
+1080p has none in this window. This is diagnostic progress, not a corruption or
+performance fix. Default stereo capture, ordinary fallback, retired-access
+refusal, natural guest exit and recovery pass.
+[Current evidence](../findings/research/console-event-native-20261009.md).
+
 Candidate376 retains14,265 valid post-startup manager token samples across330s
 of mixed workloads and300s observation. Full-screen HiDPI performance remains
 limited and timer sampling itself slows; do not equate sampled rates with FPS.
 Source CRC timed out before the fixtures. Retired-buffer access-refusal controls,
 ordinary fallback, stereo sample-capture retry and natural shutdown/recovery pass.
 The first audio-route attempt failed safely and restored;374's forced-stop race
-remains unresolved. [Current evidence](../findings/research/console-mixed-motion-native-20261009.md).
+remains unresolved. [Prior mixed-motion evidence](../findings/research/console-mixed-motion-native-20261009.md).
 
 Candidate370 adds opt-in immutable host snapshots and one SPICE update rectangle:
 three native/HiDPI token windows have no invalid samples after startup, with audio
@@ -67,7 +75,7 @@ The adjacent `build-manifest.json` records input hashes and executable SHA-256.
 The source tree and `kext/Info.plist` match that driver build; subsequent user-space
 helper changes have separate history. Source builds never use this binary as a
 fallback. The executable alone is not an installable bundle: use the matching
-Info.plist, Lilu and tested VM setup. The matching snapshot card is metal-206 with
+Info.plist, Lilu and tested VM setup. The matching snapshot card is metal-208 with
 `--pins experiments/pins-bochs-snapshot-changed.json`, explicit SPICE60,
 `CONSOLE_FULL_REFRESH=on` and `CONSOLE_SNAPSHOT=on`. The presenter separately
 requires `RGPU_CONSOLE_SNAPSHOT=1`; ordinary BAR0 remains default. Do not interchange exact launch contracts.
@@ -80,8 +88,8 @@ requires `RGPU_CONSOLE_SNAPSHOT=1`; ordinary BAR0 remains default. Do not interc
 · [Native374 comparison](../findings/research/console-changed-bbox-native-20261009.md).
 
 Candidate330 remains the independently tested Samsung HDMI HiDPI120/audio
-baseline, available on `main` at861ba5e. Candidate376's physical HDMI behavior
-has not been independently rerun. Do not relabel330's evidence as a376 HDMI test.
+baseline, available on `main` at861ba5e. Candidate379's physical HDMI behavior
+has not been independently rerun. Do not relabel330's evidence as a379 HDMI test.
 
 ## Local build
 
