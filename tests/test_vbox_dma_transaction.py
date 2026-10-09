@@ -24,6 +24,9 @@ class DmaTransactionTests(unittest.TestCase):
 #include <linux/vfio.h>
 #include <linux/iommufd.h>
 #define VINF_SUCCESS 0
+#define VERR_PGM_INVALID_GC_PHYSICAL_ADDRESS -90
+#define VERR_PGM_PHYS_PAGE_RESERVED -91
+#define VERR_NOT_FOUND -92
 #define VERR_NO_MEMORY -10
 #define VERR_INVALID_STATE -11
 #define VERR_IO_GEN_FAILURE -12
@@ -38,6 +41,7 @@ using PPDMDEVINS=void*;
 using PGMPAGEMAPLOCK=int;
 struct VFIOPCI {bool fVfioLegacy=true,fGuestRamMapped=false,fGuestRamMapFailed=false;int iInstance=0;struct {int iFdVfioContainer=1;}VfioGroup;struct {int iFdIommu=2;unsigned idIommuHwpt=3;}IommuFd;};
 using PVFIOPCI=VFIOPCI*;
+int pageError=0;uint64_t errorAt=8;bool allHoles=false;
 int failMap=0,failAlloc=0,unmapMode=0,mapCalls=0,allocCalls=0,live=0,locks=0;
 std::vector<uint64_t> undo;
 void* RTMemAlloc(size_t n){if(++allocCalls==failAlloc)return nullptr;++live;return malloc(n);}
@@ -52,15 +56,18 @@ int fakeIoctl(int,unsigned long op,void*p){
 #define ioctl fakeIoctl
 int pciVfioMapRegion(PVFIOPCI,RTGCPHYS,uintptr_t,size_t){return ++mapCalls==failMap?-77:0;}
 uint64_t PDMDevHlpMMPhysGetRamSizeAbove4GB(PPDMDEVINS){return 0;}
-int PDMDevHlpPhysGCPhys2CCPtr(PPDMDEVINS,uint64_t a,int,void**p,int*){if(a==8)return -1;*p=(void*)(uintptr_t)(a>=12?0x9000+(a-12)*2:0x1000+a);++locks;return 0;}
+int PDMDevHlpPhysGCPhys2CCPtr(PPDMDEVINS,uint64_t a,int,void**p,int*){if(allHoles)return VERR_PGM_INVALID_GC_PHYSICAL_ADDRESS;if(pageError&&a==errorAt)return pageError;if(a==8)return VERR_PGM_INVALID_GC_PHYSICAL_ADDRESS;*p=(void*)(uintptr_t)(a>=12?0x9000+(a-12)*2:0x1000+a);++locks;return 0;}
 void PDMDevHlpPhysReleasePageMappingLock(PPDMDEVINS,int*){--locks;}
 '''
   bme='int physicalWrites=0; int bme(PVFIOPCI pThis,unsigned u32Value){PPDMDEVINS pDevIns=nullptr;int rc=0;'+guard+'++physicalWrites;return rc;}\n'
   main=r'''
-void reset(){failMap=failAlloc=unmapMode=mapCalls=allocCalls=live=locks=0;undo.clear();}
+void reset(){pageError=0;errorAt=8;allHoles=false;failMap=failAlloc=unmapMode=mapCalls=allocCalls=live=locks=0;undo.clear();}
 int main(){
  reset();VFIOPCI bad;failMap=2;assert(bme(&bad,4)==-77&&physicalWrites==0);assert(bme(&bad,4)==VERR_INVALID_STATE&&physicalWrites==0);assert(bme(&bad,0)==0&&physicalWrites==1);
  reset();VFIOPCI good;assert(bme(&good,4)==0&&physicalWrites==2);
+ reset();VFIOPCI empty;allHoles=true;assert(bme(&empty,4)==VERR_NOT_FOUND);assert(!empty.fGuestRamMapped&&empty.fGuestRamMapFailed&&mapCalls==0);
+ for(int e:{VERR_PGM_PHYS_PAGE_RESERVED,-98}){reset();VFIOPCI p;pageError=e;int writes=physicalWrites;assert(bme(&p,4)==e);assert(physicalWrites==writes&&!p.fGuestRamMapped&&p.fGuestRamMapFailed&&live==0&&locks==0);}
+ reset();VFIOPCI partial;pageError=VERR_PGM_PHYS_PAGE_RESERVED;errorAt=16;assert(bme(&partial,4)==pageError);assert(undo.size()==1&&undo[0]==0&&!partial.fGuestRamMapped&&live==0&&locks==0);
  for(bool legacy:{true,false}) {
   reset();VFIOPCI p;p.fVfioLegacy=legacy;assert(pciVfioIommuGuestRamMap(&p,nullptr)==0);assert(p.fGuestRamMapped&&!p.fGuestRamMapFailed);assert(mapCalls==3&&undo.empty()&&live==0&&locks==0);assert(pciVfioIommuGuestRamMap(&p,nullptr)==0&&mapCalls==3);
   for(int fail:{1,2,3})for(int mode:{0,1,2}) {

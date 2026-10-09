@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "upstream_commit": "14841851fa211c7faf615978ba385d59947236c6",
+  "scope": "Source audit and extracted-production false-readiness fault tests; no hardware or full VBox build",
+  "sources": [
+    {
+      "path": "/home/bogdan/macos-vm/run/c413-source/PGMR3Phys.cpp",
+      "bytes": 258002,
+      "sha256": "09ca62609c1be5fdc65a0bd7b67f95f332e8bec1ed1d180b00741699d6cc67eb"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c413-source/PGMAllPhys.cpp",
+      "bytes": 222209,
+      "sha256": "b96b279e9593a2ac8dcd3d631669a70fb488d235cb69bbf5dff5e686194b2e9c"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c413-source/pgm.h",
+      "bytes": 77231,
+      "sha256": "ad0c9260e439a6038e20ab597ec9a4443a2927e63db145dd53b018b7c3c025ec"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/worktrees/candidate-413/findings/research/patches/virtualbox-7.2.18-vfio-dma-transaction.patch",
+      "bytes": 12177,
+      "sha256": "602c74238a7f74a4f789bb690c5bb58e9701d8f57f0b9955367075eb779b92c2"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/worktrees/candidate-413/tests/test_vbox_dma_transaction.py",
+      "bytes": 5671,
+      "sha256": "a72df9802e0d5119af2c58bbdc87ad630d3b597a72866ac63b0fba148a559bfe"
+    }
+  ]
+}

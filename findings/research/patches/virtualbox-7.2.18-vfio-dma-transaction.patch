@@ -43,7 +43,7 @@
      int rcLnx = syscall(LNX_SYSCALL_EVENTFD2, uValInit, fFlags);
      if (RT_UNLIKELY(rcLnx == -1))
          return RTErrConvertFromErrno(errno);
-@@ -2073,111 +2075,155 @@
+@@ -2073,111 +2075,163 @@
          Map.size       = sizeof(Map);
          Map.flags      = IOMMU_IOAS_MAP_FIXED_IOVA | IOMMU_IOAS_MAP_WRITEABLE | IOMMU_IOAS_MAP_READABLE;
          Map.ioas_id    = pThis->IommuFd.idIommuHwpt;
@@ -206,6 +206,12 @@
 +            cbMapping += _4K;
 +            PDMDevHlpPhysReleasePageMappingLock(pDevIns, &Lock);
 +        }
++        else if (rcPage != VERR_PGM_INVALID_GC_PHYSICAL_ADDRESS)
++        {
++            /* Reserved/handler-backed pages and unexpected errors are not holes. */
++            rc = rcPage;
++            break;
++        }
 +        else if (cbMapping)
 +        {
 +            rc = pciVfioMapRecorded(pThis, GCPhysStart, uPtrMapping, cbMapping, &pHead);
@@ -221,6 +227,8 @@
 +    }
 +    if (RT_SUCCESS(rc) && cbMapping)
 +        rc = pciVfioMapRecorded(pThis, GCPhysStart, uPtrMapping, cbMapping, &pHead);
++    if (RT_SUCCESS(rc) && !pHead)
++        rc = VERR_NOT_FOUND; /* Empty discovery is never DMA readiness. */
 +    if (RT_FAILURE(rc))
 +        pThis->fGuestRamMapFailed = true;
 +    while (pHead)
@@ -261,7 +269,7 @@
              uint16_t u16;
              int rc = pciVfioCfgSpaceReadU16(pFun, uAddress, &u16);
              if (RT_FAILURE(rc)) return rc;
-@@ -2332,42 +2378,45 @@
+@@ -2332,42 +2386,45 @@
              LogRel(("VFIO#%d.%u: Invalid PCI config write at offset %#x, ignoring\n",
                      pThis->iInstance, pFun->uPciFun, uAddress));
              break;
