@@ -4,6 +4,7 @@
 #import <CoreVideo/CoreVideo.h>
 #import <dispatch/dispatch.h>
 #include "console_cadence_band.h"
+#include "console_cadence_phase.h"
 #include <stdint.h>
 #include <ctype.h>
 #include <string.h>
@@ -11,7 +12,9 @@
 #include <signal.h>
 #include <unistd.h>
 static uint8_t nonce[8];
-static BOOL paced=NO;
+static BOOL paced=NO,mixed=NO;
+static double mixedEpoch=0,mixedDuration=0;
+static unsigned mixedLastPhase=UINT32_MAX;
 static CGImageRef *bands=NULL;
 static uint32_t bandCount=0;
 static int pending=0;
@@ -39,7 +42,17 @@ static void expired(int s){(void)s;_exit(124);}
 @implementation TokenView
 -(BOOL)isFlipped{return YES;}
 -(void)drawRect:(NSRect)dirty{(void)dirty;
- [[NSColor colorWithCalibratedWhite:.12 alpha:1]setFill];NSRectFill(self.bounds);
+ RGPUMixedPhase phase={0};
+ if(mixed){
+  if(!rgpu_mixed_phase(NSProcessInfo.processInfo.systemUptime-mixedEpoch,mixedDuration,&phase))return;
+  if(phase.full){
+   NSGradient *gradient=[[NSGradient alloc]
+     initWithStartingColor:[NSColor colorWithCalibratedWhite:phase.low alpha:1]
+     endingColor:[NSColor colorWithCalibratedWhite:phase.high alpha:1]];
+   if(!gradient){fprintf(stderr,"mixed gradient allocation failed\n");exit(7);}
+   [gradient drawInRect:self.bounds angle:phase.angle];
+  }else{[[NSColor colorWithCalibratedWhite:.12 alpha:1]setFill];NSRectFill(self.bounds);}
+ }else{[[NSColor colorWithCalibratedWhite:.12 alpha:1]setFill];NSRectFill(self.bounds);}
  if(paced){
   uint32_t seq=self.sequence+1;if(seq>bandCount){fprintf(stderr,"token pool exhausted\n");exit(6);}
   CGContextRef context=NSGraphicsContext.currentContext.CGContext;
@@ -48,6 +61,15 @@ static void expired(int s){(void)s;_exit(124);}
   CGContextTranslateCTM(context,16,64+96);CGContextScaleCTM(context,8,-8);
   CGContextDrawImage(context,CGRectMake(0,0,RGPU_BAND_W,RGPU_BAND_H),bands[seq-1]);
   CGContextRestoreGState(context);self.sequence=seq;
+  if(mixed){
+   double completed=NSProcessInfo.processInfo.systemUptime;
+   if(phase.index!=mixedLastPhase){
+    printf("MIXED_PHASE index=%u kind=%s scheduled_start=%.9f scheduled_end=%.9f first_completed_draw=%u first_completed_time=%.9f\n",
+      phase.index,phase.full?"full-field":"localized",mixedEpoch+phase.start,mixedEpoch+phase.end,seq,completed);
+    mixedLastPhase=phase.index;
+   }
+   printf("DRAW %u %.9f\n",seq,completed);fflush(stdout);return;
+  }
   printf("DRAW %u %.9f\n",seq,NSProcessInfo.processInfo.systemUptime);fflush(stdout);return;
  }
  uint8_t data[20]={'R','G','P','T'};memcpy(data+4,nonce,8);uint32_t seq=++self.sequence;
@@ -75,8 +97,8 @@ static CVReturn tickLink(CVDisplayLinkRef link,const CVTimeStamp *a,const CVTime
 }
 int main(int argc,const char **argv){@autoreleasepool{
  if(argc!=4||strlen(argv[1])!=16)return 2;
- if(strcmp(argv[3],"baseline")&&strcmp(argv[3],"prerendered"))return 2;
- paced=!strcmp(argv[3],"prerendered");
+ int sourceMode=rgpu_source_mode(argv[3]);if(sourceMode==RGPU_SOURCE_INVALID)return 2;
+ mixed=sourceMode==RGPU_SOURCE_MIXED;paced=sourceMode!=RGPU_SOURCE_BASELINE;
  for(int i=0;i<16;i++)if(!isxdigit((unsigned char)argv[1][i]))return 2;
  for(int i=0;i<8;i++){char pair[]={argv[1][i*2],argv[1][i*2+1],0};nonce[i]=(uint8_t)strtoul(pair,NULL,16);}
  char *end=NULL;long seconds=strtol(argv[2],&end,10);if(*end||seconds<1||seconds>120)return 2;
@@ -87,6 +109,16 @@ int main(int argc,const char **argv){@autoreleasepool{
  NSWindow *window=[[NSWindow alloc]initWithContentRect:screen.frame styleMask:NSWindowStyleMaskBorderless backing:NSBackingStoreBuffered defer:NO];
  window.level=NSFloatingWindowLevel;window.title=@"Raphael visible cadence token";
  TokenView *view=[[TokenView alloc]initWithFrame:NSMakeRect(0,0,screen.frame.size.width,screen.frame.size.height)];window.contentView=view;
+ if(mixed){
+  mixedDuration=seconds;mixedEpoch=NSProcessInfo.processInfo.systemUptime;
+  printf("MIXED_BEGIN epoch=%.9f duration=%ld phase_seconds=20 range_white=0.085..0.155 scope=scheduled-background-not-presentation\n",mixedEpoch,seconds);
+  for(unsigned i=0;i*20.0<seconds;i++){
+   RGPUMixedPhase phase;rgpu_mixed_phase(i*20.0,seconds,&phase);
+   printf("MIXED_PLAN index=%u kind=%s scheduled_start=%.9f scheduled_end=%.9f\n",
+     phase.index,phase.full?"full-field":"localized",mixedEpoch+phase.start,mixedEpoch+phase.end);
+  }
+  fflush(stdout);
+ }
  [window makeKeyAndOrderFront:nil];[NSApp activateIgnoringOtherApps:YES];
  printf("TOKEN nonce=%s duration=%ld logical=%.0fx%.0f scale=%.1f\n",argv[1],seconds,screen.frame.size.width,screen.frame.size.height,screen.backingScaleFactor);fflush(stdout);
  printf("SOURCE_MODE %s scope=drawRect-return-not-presentation band_bytes=%lu\n",argv[3],(unsigned long)bandCount*RGPU_BAND_BYTES);fflush(stdout);
@@ -100,10 +132,10 @@ int main(int argc,const char **argv){@autoreleasepool{
   printf("DISPLAY_LINK display=%u nominal_value=%lld nominal_scale=%d flags=%lld\n",display,
      (long long)nominal.timeValue,nominal.timeScale,(long long)nominal.flags);fflush(stdout);
  }else tick=[NSTimer scheduledTimerWithTimeInterval:1.0/60 repeats:YES block:^(NSTimer*t){(void)t;[view setNeedsDisplay:YES];}];
- double until=NSProcessInfo.processInfo.systemUptime+seconds;
+ double until=mixed?mixedEpoch+seconds:NSProcessInfo.processInfo.systemUptime+seconds;
  while(NSProcessInfo.processInfo.systemUptime<until){@autoreleasepool{
   NSEvent *event=[NSApp nextEventMatchingMask:NSEventMaskAny untilDate:[NSDate dateWithTimeIntervalSinceNow:.01] inMode:NSDefaultRunLoopMode dequeue:YES];if(event)[NSApp sendEvent:event];[NSApp updateWindows];
  }}
  [tick invalidate];if(link){CVDisplayLinkStop(link);CVDisplayLinkRelease(link);}
- [window orderOut:nil];printf("TOKEN_DONE draws=%u\n",view.sequence);printf("SOURCE_DONE requests=%llu coalesced=%llu scope=requests-not-frames\n",(unsigned long long)__atomic_load_n(&requests,__ATOMIC_RELAXED),(unsigned long long)__atomic_load_n(&coalesced,__ATOMIC_RELAXED));fflush(stdout);alarm(0);return 0;
+ [window orderOut:nil];if(mixed)printf("MIXED_END time=%.9f draws=%u scope=drawRect-return-not-presentation\n",NSProcessInfo.processInfo.systemUptime,view.sequence);printf("TOKEN_DONE draws=%u\n",view.sequence);printf("SOURCE_DONE requests=%llu coalesced=%llu scope=requests-not-frames\n",(unsigned long long)__atomic_load_n(&requests,__ATOMIC_RELAXED),(unsigned long long)__atomic_load_n(&coalesced,__ATOMIC_RELAXED));fflush(stdout);alarm(0);return 0;
 }}
