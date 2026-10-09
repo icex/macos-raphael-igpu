@@ -1,26 +1,30 @@
-# Live status —2026-10-10
+# Live status — 2026-10-10
 
-## Candidate401: true VirtualBox desktop/input, software-only singleCPU
+## Candidate403: eight-vCPU VirtualBox software desktop
 
-BootC UUID1a0740c7-3655-481e-a5f5-e7dac76dee1e reaches actualmacOS desktop;
-rootviewed Terminal VBOX401_INPUT_OK, hw.ncpu1/build24G830/awake assertions.
-SamebootBloader, only8→1vCPU; actualTSCstillVirtTSCEmulated4294967295Hz.
-No monotonicpanic through~238s; SMPcontribution supported, rootcause notproved.
-NoRaphael/VFIO/Metal acceleration or sustaineddesktop performance qualification.
+BootD UUID `13212bff-697a-473d-b257-da83e7e463b9` reaches the actual macOS
+desktop using RealTSCOffset at4699997773Hz. Root/report author viewed
+screen-040.png. No retained UART panic/monotonicity marker. This couples clock
+mode and frequency compared with400's eight-CPU emulated-clock panic; no exact
+root-cause or sustained-stability claim.401 separately proved one-CPU input/awake.
+No new403 input, awake or graceful-shutdown checks occurred. No physical GPU,
+Raphael passthrough, Metal or accelerated VBox transport is qualified.
 
-Cleanup was NOTnatural: sudo-n shutdownrefused; ACPIconfirmation thenTerminal
-backgroundcaffeinate confirmation blockedshutdown. Controllerdeadlinepoweroff
-~237.8s; immediateunregister GUIlocked(originalcleanup_error retained).
-Rootlater verifiedexactUUID/configpoweredoff, unregistersuccess,listabsent;
-root-cleanup-reconciliation.json explicitlypreserves originalresult. SoftwareVM
-stopped/unregistered, not a guestshutdown or GPUrecovery pass.
+Controller deadline poweroff was followed by original cleanup_error=VBoxCallError.
+After expected unregister-lock retries, showvminfo lost its direct console during
+GUI teardown (VBOX_E_VM_ERROR0x80bb0003). Root later verified exact UUID/config
+poweroff, unregistered it and confirmed list absence. Original result is intact;
+cleanup is finally proven but was not natural guest shutdown.
 
-Evidence findings/research/virtualbox-single-cpu-native-20261010.md +16hashes.
-Next403 sourceauditSMPclock beforepatch; boundedunregister unlockretry and
-stop/disown onlyownedawakejob before graphicalshutdown. Root owns launches.
+A bounded controller correction retries only the exact transient state-query
+error after an earlier full stopped identity observation, and requires fresh
+identity/stopped proof before another unregister. Thirteen focused tests pass;
+native qualification remains pending. No timeout or ownership gate is relaxed.
+Evidence: findings/research/virtualbox-eight-cpu-real-tsc-native-20261010.md
+and its ten-artifact hash manifest.
 
-QEMU acceleratedconsole remains a separate qualifiedpath.399 measuredhostcopy
-6.834ms includingfirsttouch/nooptimizationgain; naturalprivateguestterminal,
-Docker0/recoveryverified, missinglatepostworkloaddesktop screenshot retained.
-Lastdelivereddevc1f64d0/tested395 hostedCIgreen; mainunchanged. Latercandidate
-work is not yetmilestonedelivery and trueVBoxacceleration remainsunimplemented.
+Both403 software VM and preceding399 GPU cycle are stopped; root owns later402
+work independently. Dev milestone84159a9 was pushed and hosted test/build passed
+run37993406232 (release skipped), exact tested399 binary. Main remains unchanged.
+Next qualify eight-CPU input/awake and graceful shutdown, then resume source-led
+VBox acceleration work separately from the QEMU accelerated-console path.

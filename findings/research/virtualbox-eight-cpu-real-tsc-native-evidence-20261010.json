@@ -1,0 +1,56 @@
+{
+  "uuid": "13212bff-697a-473d-b257-da83e7e463b9",
+  "private_commands_hash_only": true,
+  "artifacts": [
+    {
+      "path": "/home/bogdan/macos-vm/run/c403-vbox-boot-d/scope.json",
+      "bytes": 386,
+      "sha256": "36478c35e04d1070ad0c254e5ce631a62b6a731a98b1a49ec75dab49d13423b2"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c403-vbox-boot-d/result.json",
+      "bytes": 182,
+      "sha256": "0b48ba0db876bd8c14e3d2caa6eeedce6f70eeae93c56e9c4fbe2f2620f937b2"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c403-vbox-boot-d/stopped.json",
+      "bytes": 69,
+      "sha256": "cfe8b8c074132e529ae43a530c2c91d7b0c8ed27bbb8b07d0ae8994127f0b6c7"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c403-vbox-boot-d/root-cleanup-reconciliation.json",
+      "bytes": 229,
+      "sha256": "492a7db9bf9d1f3f3d021b9ee0849adee421ae85367ce9d5acadac310f723edf"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c403-vbox-boot-d/tsc-selected.txt",
+      "bytes": 838,
+      "sha256": "d1b9debb0eccd42f527f048eb72b39a2e55138683bfd0c49720e1c4b74a282d5"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c403-vbox-boot-d/uart1.log",
+      "bytes": 138012,
+      "sha256": "8758d60eed9781baeec3679d969eb1eb9a04e3a68863cbde2fdd224cdc1fe073"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c403-vbox-boot-d/uart2.log",
+      "bytes": 1528,
+      "sha256": "7424c1850e6a6c5a200d82413e6afd04e0ca53457ba876a1ec27af31946b6116"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c403-vbox-boot-d/screen-040.png",
+      "bytes": 226700,
+      "sha256": "cc8ee1468e6a15897a18e30dc9553ee7301a234ad0bc46597b39ce4514efb0d0"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c403-vbox-boot-d/commands-private.log",
+      "bytes": 210811,
+      "sha256": "666470331ba0c33f15d07e5cdd5a8e0894b156bd9666dacd05fb827035835ef5"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c403-cleanup-selected-errors.json",
+      "bytes": 1304,
+      "sha256": "ee2af8f0b5beb47c3275e301cc22493a39f6794a7203ecca3d0b07be49104294"
+    }
+  ]
+}

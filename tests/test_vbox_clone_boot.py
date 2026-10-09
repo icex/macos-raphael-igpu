@@ -121,6 +121,33 @@ class CloneTests(unittest.TestCase):
                 BOOT.unregister_stopped(Path('/unused'), 'id')
             self.assertEqual(call.call_count, 1)
 
+    def test_unregister_query_transition_requires_prior_and_fresh_stopped_proof(self):
+        transient=BOOT.VBoxCallError(console_unavailable=True)
+        with patch.object(BOOT,'state',side_effect=['poweroff',transient,'poweroff']) as state, \
+             patch.object(BOOT,'call',side_effect=[BOOT.VBoxCallError(locked=True),'']) as call, \
+             patch.object(BOOT.time,'sleep'):
+            self.assertEqual(BOOT.unregister_stopped(Path('/unused'),'id'),2)
+            self.assertEqual(state.call_count,3)
+            self.assertEqual(call.call_count,2)
+        with patch.object(BOOT,'state',side_effect=transient), patch.object(BOOT,'call') as call:
+            with self.assertRaises(BOOT.VBoxCallError):BOOT.unregister_stopped(Path('/unused'),'id')
+            call.assert_not_called()
+        with patch.object(BOOT,'state',side_effect=['poweroff',transient,'running']), \
+             patch.object(BOOT,'call',side_effect=BOOT.VBoxCallError(locked=True)) as call, \
+             patch.object(BOOT.time,'sleep'):
+            with self.assertRaises(RuntimeError):BOOT.unregister_stopped(Path('/unused'),'id')
+            self.assertEqual(call.call_count,1)
+    def test_console_query_error_classification_is_exact_and_read_only(self):
+        diagnostic=(b'Failed to get a console object from the direct session (VBOX_E_INVALID_OBJECT_STATE)\n'
+                    b'Details: code VBOX_E_VM_ERROR (0x80bb0003)\n'
+                    b'Context: LockMachine(a->session, LockType_Shared)')
+        with tempfile.TemporaryDirectory() as d:
+            for command,stderr,expected in [('showvminfo',diagnostic,True),('unregistervm',diagnostic,False),
+                    ('showvminfo',b'other VBOX_E_VM_ERROR (0x80bb0003)',False)]:
+                result=type('Result',(),{'returncode':1,'stdout':b'','stderr':stderr})()
+                with patch.object(BOOT.subprocess,'run',return_value=result):
+                    with self.assertRaises(BOOT.VBoxCallError) as err:BOOT.call(Path(d),[command,'id'])
+                    self.assertEqual(err.exception.console_unavailable,expected)
     def test_unregister_timeout_does_not_report_success(self):
         with patch.object(BOOT.time, 'monotonic', side_effect=[0, 16]), \
              patch.object(BOOT, 'call') as call:

@@ -43,9 +43,10 @@ def config_key(path, key):
 
 
 class VBoxCallError(RuntimeError):
-    def __init__(self, locked=False):
+    def __init__(self, locked=False, console_unavailable=False):
         super().__init__('VBoxManage command failed; private log retained')
         self.locked = locked
+        self.console_unavailable = console_unavailable
 
 
 def call(home, args, timeout=15):
@@ -55,8 +56,13 @@ def call(home, args, timeout=15):
     with (home / 'commands-private.log').open('ab') as f:
         f.write(p.stdout + p.stderr)
     if p.returncode:
-        raise VBoxCallError(b'while it is locked' in p.stderr and
-                            b'VBOX_E_INVALID_OBJECT_STATE' in p.stderr)
+        raise VBoxCallError(
+            locked=(args[0] == 'unregistervm' and b'while it is locked' in p.stderr and
+                    b'VBOX_E_INVALID_OBJECT_STATE' in p.stderr),
+            console_unavailable=(args[0] == 'showvminfo' and
+                b'Failed to get a console object from the direct session (VBOX_E_INVALID_OBJECT_STATE)' in p.stderr and
+                b'code VBOX_E_VM_ERROR (0x80bb0003)' in p.stderr and
+                b'LockMachine(a->session, LockType_Shared)' in p.stderr))
     return p.stdout.decode(errors='replace')
 
 
@@ -77,9 +83,20 @@ def unregister_stopped(home, ident):
     # running or otherwise failed machine, and never force-unlock its session.
     deadline = time.monotonic() + 15
     attempts = 0
+    owned_stopped_observed = False
     while time.monotonic() < deadline:
-        if state(home, ident, timeout=max(.01, min(2, deadline-time.monotonic()))) not in ('poweroff', 'aborted'):
+        try:
+            current = state(home, ident, timeout=max(.01, min(2, deadline-time.monotonic())))
+        except VBoxCallError as exc:
+            if not owned_stopped_observed or not exc.console_unavailable:
+                raise
+            # GUI unlock can temporarily break this read; no unregister is issued
+            # until another full UUID/config/stopped observation succeeds.
+            time.sleep(min(.1, max(0, deadline-time.monotonic())))
+            continue
+        if current not in ('poweroff', 'aborted'):
             raise RuntimeError('unregister requires owned stopped machine')
+        owned_stopped_observed = True
         attempts += 1
         try:
             call(home, ['unregistervm', ident], timeout=max(.01, min(2, deadline-time.monotonic())))
