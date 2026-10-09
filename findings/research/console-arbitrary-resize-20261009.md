@@ -1,11 +1,11 @@
-# Candidate385: arbitrary resize investigation (in-progress draft)
+# Candidate385: arbitrary resize investigation (completed run; input regression open)
 
 This is a partial native investigation, not an arbitrary-resize or persistence
 qualification. Root owns live run `01813fa6d947219cf4c4e04f8e7592a4`.
 The source/card was frozen at `2acb02a`, driver build source `41307cc`, build ID
 `399fe6c3c07d4d65abecf0da412d5cf8`. Later user-space fixes are distinct from that
-kernel build. Shutdown, recovery, final audio/input, and next-boot results are
-pending in this draft.
+kernel build. Shutdown and recovery completed below. Next-boot persistence and the
+agent-connected pointer correction remain native-untested in this report.
 
 ## Additive installation and ownership
 
@@ -156,5 +156,34 @@ agent is **not yet fully usable alongside pointer input**. Next qualify the
 explicit mouse-routing correction with the agent still running, including actual
 manager corner/center input and text after non-table resize. Then qualify a
 subsequent guest boot with installed startup, reconnect, resize, audio, and clean
-recovery. Current-run shutdown/recovery is pending in this draft; no complete
-persistent arbitrary-resize milestone is claimed.
+recovery. No complete persistent arbitrary-resize milestone is claimed; candidate386
+qualification remains separate and native-untested in this report.
+
+## Routing source and completed cleanup
+
+Pinned QEMU10.1.2 `ui/spice-core.c:817–818` calls
+`spice_server_set_agent_mouse(...qemu_opt_get_bool(...,"agent-mouse",1))`.
+Pinned spice-server0.16.0 `server/reds.cpp:3497` also defaults agent_mouse true;
+`server/inputs-channel.cpp:295–307,319–347` routes absolute motion and buttons
+to the connected agent when enabled, otherwise using the tablet path.
+`server/reds.cpp:930–937` emits `VD_AGENT_MOUSE_STATE` (type1).
+The bounded resize agent implements capability/monitor messages, not mouse
+injection. These exact source files are included by hash in the evidence manifest.
+The native same-viewer agent-off control above corroborates this routing issue;
+a source-supported configuration change alone is not its native qualification.
+
+Viewer closure left the exact VM alive. Harness shutdown recorded
+`exited-after-guest-request`; private libvirt terminal records guest-shutdown and
+process_exited:true. `c385-docker-events.jsonl` records die(exit0)/destroy without
+kill or stop. Both capture hooks report natural-container-exit, deferred about
+0.382s, shutdown_event_wait:false and completed_original_zombie:false. The
+critical transport boundary is recv-reset; console is clean EOF. Those distinct
+transport outcomes are retained and reset is not relabeled clean EOF.
+
+Recovery is recovered with authorizes_launch:true. CORE_PROBE_PASS is separate
+from the functional limitations above. Critical snapshot18 was accepted as a
+terminal prefix, retaining one malformed transport line and incomplete snapshot7
+with398 valid chunks and no END. Thus successful cleanup does not imply perfect
+capture. The companion evidence manifest retains the relevant source, native
+observations, decoded results, and lifecycle receipts, excluding duplicate bulk
+transfer archives and unrelated runs.

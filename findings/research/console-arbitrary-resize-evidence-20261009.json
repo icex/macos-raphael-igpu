@@ -1,0 +1,262 @@
+{
+  "schema": 1,
+  "run_id": "01813fa6d947219cf4c4e04f8e7592a4",
+  "scope": "Candidate385 bounded arbitrary-resize investigation; candidate386 native qualification excluded",
+  "artifacts": [
+    {
+      "path": "/home/bogdan/macos-vm/run/c372-qemu-changed-bbox/qemu-10.1.2/ui/spice-core.c",
+      "bytes": 29759,
+      "sha256": "e35aba3fd3195ff048ccd57ba74d48b98f1121bb77f314cce6ad6541adf04611"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c380-server-study/spice-0.16.0/server/inputs-channel.cpp",
+      "bytes": 18973,
+      "sha256": "51392a0702f95f033fd2e78df2cff31a00877f3c003976b97e2df1716c6a5078"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c380-server-study/spice-0.16.0/server/reds.cpp",
+      "bytes": 153081,
+      "sha256": "653077f856abeede98edf53c0580e785aef5a5026e8f8772a7196d6233a966c6"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c385-agent-off-input-result.txt",
+      "bytes": 2832,
+      "sha256": "9c600f99bdf0a18cd9ea4d4496457b9822fd0ac07f1fbb7ab66aef8c26beb56c"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c385-agent-reconnect.txt",
+      "bytes": 3950,
+      "sha256": "b86b2af06dcfaf2657ba4e6a88be3dd56ab08192b7617716a3ee97d0032834d4"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c385-agent-stop-control.txt",
+      "bytes": 131,
+      "sha256": "b74957c4ffb24b6a22ff09d8a9d11d4210b0271f0aa7942dfea2f632f1fe5f81"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c385-audio-resize-result.txt",
+      "bytes": 631,
+      "sha256": "e1cc8f0c43da4d00cbe3383993d5642e3b1cecdfb96e920b7a041adb5ffb170d"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c385-audio-restored-independent.json",
+      "bytes": 99,
+      "sha256": "b8f254659d9904b96789868fa8f77ce466562297fc1d4b49f1d53b4466a0cf49"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c385-baseline-before-addon.txt",
+      "bytes": 1602,
+      "sha256": "dfa7d90cd94c80de4b3b305a2e068aedacec108a682fc156e4d741e0ac912ba8"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c385-console-addon-v3-manifest.json",
+      "bytes": 1287,
+      "sha256": "4ee5a97d8ae3304da26e9a34be1a9c2d5aaca367ffd5312ccb41ddf25b04f2a6"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c385-continuous-input.jsonl",
+      "bytes": 1017,
+      "sha256": "88170f32cfa91635aba96c4bd315c9b2ef7e45745fcdcb14e245152f503d3e7b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c385-docker-events.jsonl",
+      "bytes": 443811,
+      "sha256": "1d2a2aca9cb4d86890182e08643291cc3e0d0c9eef120aa24345131914d87d5b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c385-final-capture-identity.txt",
+      "bytes": 331,
+      "sha256": "21dcde114503482fd428dd9b98c403c3dfa83c93ee41319a72f640373611e473"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c385-final-display.log",
+      "bytes": 7533,
+      "sha256": "ba2d5f1fc1cb86ee6843cc6e88bf68a8f05ccc9528a452330b01dab9e21728eb"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c385-final-files-transfer.txt",
+      "bytes": 17514,
+      "sha256": "74f5c79feb2ad189b0bb617300f8d3c036e59de605644dc63e86a393b0b3f120"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c385-final-functional.txt",
+      "bytes": 1515,
+      "sha256": "6db8172c816fd2c7315c54dadb41e0654bc99a4d2e6e6a39e8f71c58ac4a7c9a"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c385-final-input2.log",
+      "bytes": 1391,
+      "sha256": "b6b84291d09afd17e40be5fece1038fca81156bc0abf6e446459cd7310306653"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c385-final-launcher.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c385-final-modeaudit.log",
+      "bytes": 383653,
+      "sha256": "a421afdceef76b8b12f720878a5e861fc51749e0c3f24e882c5485983d242574"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c385-final-modeauditerr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c385-final-presenter.log",
+      "bytes": 54970,
+      "sha256": "dffa9e29b25b5e8ca2faf6d3ed02668d6ec0d6f000a61d79eb5bc16a7457e6ab"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c385-final-vdagent.log",
+      "bytes": 12062,
+      "sha256": "c620ddc6b2b1823020b0c0ab68151eca601fcf0bb8655cb6c4e0ba137c08af31"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c385-input-inconclusive.txt",
+      "bytes": 684,
+      "sha256": "6633ec84f0a3d14657e2b39f92c760c003738084d4bb45a675e4b5aa30b4a101"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c385-install-v2.txt",
+      "bytes": 878,
+      "sha256": "9c8418d203c04ee5b5c1403cbd505ebe93f14568128d5b5cacaaad00ff4e3a34"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c385-install-v3.txt",
+      "bytes": 8586,
+      "sha256": "648140fd8272d8d88092bdc4f4681187d0055dff5c2b39a9aeab1a555981d117"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c385-inventory-probe-v2.txt",
+      "bytes": 367,
+      "sha256": "c560d5968dcf78dca8c1b7088df136f33a9785334f99a347da074636b6efc84b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c385-lru-modeaudit.log",
+      "bytes": 364168,
+      "sha256": "0d42ca1be5ddd77cdfeea68eac9a96c229f5d9cc202adcba9505c687a3113e22"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c385-manager-resize-2x.jsonl",
+      "bytes": 3658,
+      "sha256": "bce2e4242763ce805c94d444fa133476e1a5d7f2a644b5a5163d2c300043f84a"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c385-manager-resize-lru.jsonl",
+      "bytes": 12920,
+      "sha256": "8d5734cfe4df4c0b2bbfb75a5a257ceb8a9ddb6b487e56a6668a26140de08811"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c385-manager-resize-v3.jsonl",
+      "bytes": 1337,
+      "sha256": "72584011f17cb0208dd08eef100184a1ae51ae5df12b9f2022784aed213e75b2"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c385-manager-resize.jsonl",
+      "bytes": 3658,
+      "sha256": "708d24c9b24f77af35cfa92a9f0c0e8c19a9a4f850a80469cdc636ed12279837"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c385-newmode-observation.txt",
+      "bytes": 25108,
+      "sha256": "25936dc18e657578131eb8462d2f34fba9a91dcffbb91bc0ff2f81869d0ba85e"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c385-newmode-v3-observation.txt",
+      "bytes": 25913,
+      "sha256": "754f5d335140fae28d170849c10514a763f0d869d3f0d54405956cfb34464ea3"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c385-resize-desktop.png",
+      "bytes": 325025,
+      "sha256": "3a016ba23672dd635d2e1a00ae8769e39785d24c3e224720ac9b69f2d76637d1"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c385-resize-final-state.txt",
+      "bytes": 8216,
+      "sha256": "40b5b6370b8aa41e539b5da24f68fd8120890d077159001272ce809393fee325"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c385-resize-fresh-current.txt",
+      "bytes": 1432,
+      "sha256": "6af3998e7a1390aa4b401edeeaded4ca8c9461f7931e1416b7c5da390cc2a8a1"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c385-stage-guest-v3.txt",
+      "bytes": 1300,
+      "sha256": "a60795bbbe19edc346b8b9d1b19af5e28d8b989b0c742ab3b5bb9d99f3a2eb6f"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c385-viewer-close-alive.json",
+      "bytes": 740,
+      "sha256": "bad86438d599f409cb3d3879296e56c77cf14d21a68332186cec513f7e9067b9"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-385-results/capture-exit-2b13bf5a34295959ec48e279b02f4a25b50c53b2e3f2515f6dd1676530d110ab-1559156.json",
+      "bytes": 475,
+      "sha256": "af06b290fed537083fe06c7016610b7f065b0afbda4e39fa974c4ff5b3e70092"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-385-results/capture-exit-2b13bf5a34295959ec48e279b02f4a25b50c53b2e3f2515f6dd1676530d110ab-1559158.json",
+      "bytes": 474,
+      "sha256": "e20b4cf6d72ab46ff49e2cf95b126090e704c7fc9949c6d61c67e43461add125"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-385-results/critical-quiesce.json",
+      "bytes": 708,
+      "sha256": "defdc3812f252e3f1c832e4342fc769e169ab21aed420ba48ffbfef010475a46"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-385-results/events.jsonl",
+      "bytes": 98935,
+      "sha256": "90fe92b3d62e119a9f7f7e45fee7b7b728b336dba3706a9296cf2d897e39cbae"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-385-results/manifest.json",
+      "bytes": 12816,
+      "sha256": "00fe81e819488e1b7f435d5f2fa32ea122d2bef38efa12533610a6e654ff85a4"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-385-results/probe.json",
+      "bytes": 553210,
+      "sha256": "820923a930c65e12a587f96adae744aafddd5adb652fc89cb0adccde97624fec"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-385-results/recovery.json",
+      "bytes": 17592,
+      "sha256": "6045592db9a144b2ac7ddc78f3ea2a63ce318c669636c9f92fef2de85a2d5a91"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-385-results/running-identity.json",
+      "bytes": 2985,
+      "sha256": "0e63720a8cf1ca6038644c0d68e683cffce75c9fb291dee661d3610f6312771b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-385-results/shutdown.json",
+      "bytes": 236,
+      "sha256": "6b855ccf43601c09834f6841ce066ab209f243b406e097523d2af4aeb510ffd9"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-385-results/verdict.json",
+      "bytes": 47309,
+      "sha256": "1159a5ca6fe8da99f256967b7114b3c2e7dbd348017176cbe5f3f39705b5e818"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-385-results/vm-launch.log",
+      "bytes": 2855,
+      "sha256": "fc9e016fbf74f81be605a4cc79962c23c8e77c42b896bc68f038cd4ca7059817"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/libvirt-01813fa6d947219cf4c4e04f8e7592a4/events.jsonl",
+      "bytes": 4697,
+      "sha256": "6f4a210bce6e9c855b7c2362d431aac47294b847ab7a21fcfd0df36a7e274947"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/libvirt-01813fa6d947219cf4c4e04f8e7592a4/terminal.json",
+      "bytes": 516,
+      "sha256": "d033065cc4687d9e7bb067fb79fe3ab127701f4d17309b18f090a18c956c599f"
+    }
+  ]
+}
