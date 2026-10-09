@@ -47,6 +47,17 @@ class LibvirtConsolePlanTests(unittest.TestCase):
             bad=native_fixture();bad[bad.index(plan.SPICE)]+=','+extra
             with self.subTest(extra=extra),self.assertRaises(ValueError):plan.build_plan(bad,'1'*32)
 
+    def test_full_refresh_exact_property_and_profile(self):
+        argv=native_fixture();argv[argv.index(plan.SPICE)]+=",max-refresh-rate=60"
+        idx=argv.index(plan.BOCHS);argv[idx]+=",x-debug-full-refresh=on"
+        result=plan.build_plan(argv,'1'*32)
+        self.assertIn(argv[idx],result['xml'])
+        for value in [plan.BOCHS+',x-debug-full-refresh=off',argv[idx]+',vgamem=128M',argv[idx]+',x-debug-full-refresh=on']:
+            bad=list(argv);bad[idx]=value
+            with self.assertRaises(ValueError):plan.build_plan(bad,'1'*32)
+        argv[argv.index(plan.SPICE+',max-refresh-rate=60')]=plan.SPICE
+        with self.assertRaises(ValueError):plan.build_plan(argv,'1'*32)
+
     def test_uppercase_native_nat_mac_is_preserved_exactly(self):
         argv=native_fixture()
         index=argv.index('vmxnet3,netdev=net0,id=net0,mac=52:54:00:00:00:01')

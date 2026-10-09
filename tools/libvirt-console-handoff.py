@@ -46,15 +46,23 @@ def validate_refresh(value):
     return value
 
 
+def validate_full_refresh(value):
+    require(type(value) is str and value in ("off", "on"),
+            "invalid admitted console full refresh")
+    return value
+
+
 def prepare(base,manifest,manifest_bytes,network,modules,now=None):
     require(manifest['launch_options'].get('VM_MANAGER')=='libvirt','wrong manager profile')
     refresh=validate_refresh(manifest['launch_options'].get('CONSOLE_REFRESH','default'))
+    full=validate_full_refresh(manifest['launch_options'].get('CONSOLE_FULL_REFRESH','off'))
+    require(full == 'off' or refresh == '60', 'full refresh requires explicit SPICE60')
     require(type(manifest['max_seconds']) is int and 0<manifest['max_seconds']<=6000,'invalid launch bound')
     require(set(modules)==set(MODULES),'incomplete controller module identity')
     directory=run_directory(base,manifest['run_id']);directory.mkdir(mode=0o700)
     now=time.time() if now is None else now
     data=dict(schema=1,run_id=manifest['run_id'],boot_id=manifest['boot_id'],
-              manifest_sha256=sha(manifest_bytes),image_id=manifest['image_id'],console_refresh=refresh,
+              manifest_sha256=sha(manifest_bytes),image_id=manifest['image_id'],console_refresh=refresh,console_full_refresh=full,
               deadline_epoch=math.floor(now+manifest['max_seconds']),network=network,
               modules_sha256=modules)
     write_once(directory/'admission.json',data)
@@ -67,6 +75,8 @@ def validate_admission(data,run_id,expected_digest,modules_dir,boot_id,now=None)
     require(data['boot_id']==boot_id,'admission host boot changed')
     # Historical receipts predate this field and admit the unchanged default only.
     validate_refresh(data.get('console_refresh','default'))
+    full=validate_full_refresh(data.get('console_full_refresh','off'))
+    require(full == 'off' or data.get('console_refresh') == '60', 'full refresh requires explicit SPICE60')
     require(type(data['manifest_sha256']) is str and re.fullmatch('[0-9a-f]{64}',data['manifest_sha256']),
             'missing admitted manifest digest')
     now=time.time() if now is None else now

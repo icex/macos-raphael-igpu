@@ -69,10 +69,15 @@ def build_plan(argv, run_id):
             'unreviewed HMP monitor profile')
     require(one(rows, '-gdb') == 'tcp:0.0.0.0:1234', 'unreviewed debugger profile')
     devices = values(rows, '-device')
+    bochs = [d for d in devices if d.split(',')[0] == 'bochs-display']
+    require(len(bochs) == 1 and bochs[0] in (BOCHS, BOCHS+',x-debug-full-refresh=on'),
+            'unreviewed Bochs full refresh profile')
+    require(bochs[0] == BOCHS or spice == SPICE+',max-refresh-rate=60',
+            'full refresh requires explicit SPICE60')
     expected = ['qemu-xhci,id=xhci', 'usb-kbd,bus=xhci.0', 'usb-tablet,bus=xhci.0',
                 'usb-audio,audiodev=hda,bus=xhci.0', 'ich9-ahci,id=sata',
                 'ide-hd,bus=sata.2,drive=OpenCoreBoot', 'ide-hd,bus=sata.4,drive=MacHDD',
-                VFIO, BOCHS, 'isa-serial,chardev=rgpu_console,index=0',
+                VFIO, bochs[0], 'isa-serial,chardev=rgpu_console,index=0',
                 'isa-serial,chardev=rgpu_critical,index=1']
     for device in expected:
         require(devices.count(device) == 1, 'missing or duplicate reviewed device')

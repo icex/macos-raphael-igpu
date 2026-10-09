@@ -61,6 +61,11 @@ def validate_plan_refresh(plan,admission):
     spice=planner.one(planner.pairs(plan['native_argv']),'-spice')
     wanted=planner.SPICE+(',max-refresh-rate=60' if expected=='60' else '')
     handoff.require(spice==wanted,'plan console refresh differs from admission')
+    full=handoff.validate_full_refresh(admission.get('console_full_refresh','off'))
+    bochs=[d for d in planner.values(planner.pairs(plan['native_argv']),'-device')
+           if d.split(',')[0]=='bochs-display']
+    wanted_bochs=planner.BOCHS+(',x-debug-full-refresh=on' if full=='on' else '')
+    handoff.require(bochs==[wanted_bochs], 'plan console full refresh differs from admission')
 
 
 def paused_observation(backend,plan,state):

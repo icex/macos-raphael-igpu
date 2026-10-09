@@ -79,6 +79,11 @@ esac
 
 # Explicit presentation-only console: keep the historical no-adapter contract
 # unchanged unless the manifest selects this exact device and local endpoint.
+case "${CONSOLE_FULL_REFRESH:-off}" in
+    off) ;;
+    on) [[ "${VM_MANAGER:-direct}" == libvirt && "${VM_CONSOLE:-off}" == bochs-spice && "${CONSOLE_REFRESH:-default}" == 60 ]] || { echo "full refresh requires libvirt SPICE60" >&2; exit 1; } ;;
+    *) echo "unknown CONSOLE_FULL_REFRESH" >&2; exit 1 ;;
+esac
 case "${CONSOLE_REFRESH:-default}" in
     default) ;;
     60) [[ "${VM_MANAGER:-direct}" == libvirt && "${VM_CONSOLE:-off}" == bochs-spice ]] || { echo "explicit refresh requires libvirt SPICE" >&2; exit 1; } ;;
@@ -90,6 +95,7 @@ case "${VM_CONSOLE:-off}" in
         [[ "${GENERIC_GRAPHICS:-on}" == off && "${EXTRA:-}" != *-vnc* && "${EXTRA:-}" != *-spice* ]] || {
             echo 'Bochs console requires no generic graphics or injected viewer' >&2; exit 1; }
         export EXTRA="${EXTRA:-} -device bochs-display,id=rgpu_present,bus=pcie.0,addr=0x7,vgamem=64M"
+        if [[ "${CONSOLE_FULL_REFRESH:-off}" == on ]]; then export EXTRA="${EXTRA},x-debug-full-refresh=on"; fi
         if [[ "${VM_CONSOLE}" == bochs-spice ]]; then
             export EXTRA="${EXTRA} -spice unix=on,addr=/run/vm/console-spice.sock,disable-ticketing=on,image-compression=off,gl=off"
             if [[ "${CONSOLE_REFRESH:-default}" == 60 ]]; then export EXTRA="${EXTRA},max-refresh-rate=60"; fi

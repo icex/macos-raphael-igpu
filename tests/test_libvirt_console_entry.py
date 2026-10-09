@@ -59,7 +59,14 @@ class RefreshPlanBindingTests(unittest.TestCase):
     def plan(self,refresh='default'):
         spice=mod.native.configuration.planner.SPICE
         if refresh=='60':spice+=',max-refresh-rate=60'
-        return {'native_argv':['-spice',spice]}
+        return {'native_argv':['-spice',spice,'-device',mod.native.configuration.planner.BOCHS]}
+    def test_full_refresh_is_bound_to_admission_in_both_directions(self):
+        plan=self.plan('60');plan['native_argv'][-1]+=',x-debug-full-refresh=on'
+        admitted={'console_refresh':'60','console_full_refresh':'on'}
+        mod.validate_plan_refresh(plan,admitted)
+        for p,a in [(plan,{'console_refresh':'60'}),(self.plan('60'),admitted)]:
+            with self.assertRaisesRegex(ValueError,'full refresh differs'):mod.validate_plan_refresh(p,a)
+
     def test_exact_and_historical_default_bindings(self):
         for admission,refresh in [({},'default'),({'console_refresh':'default'},'default'),({'console_refresh':'60'},'60')]:
             mod.validate_plan_refresh(self.plan(refresh),admission)

@@ -430,7 +430,8 @@ def launch_options(data):
                  dict(debugger, AUDIO='usb', VM_CONSOLE='bochs'),
                  dict(debugger, AUDIO='usb', VM_CONSOLE='bochs-spice'),
                  dict(debugger, AUDIO='usb', VM_CONSOLE='bochs-spice', VM_MANAGER='libvirt'),
-                 dict(debugger, AUDIO='usb', VM_CONSOLE='bochs-spice', VM_MANAGER='libvirt', CONSOLE_REFRESH='60'))
+                 dict(debugger, AUDIO='usb', VM_CONSOLE='bochs-spice', VM_MANAGER='libvirt', CONSOLE_REFRESH='60'),
+                 dict(debugger, AUDIO='usb', VM_CONSOLE='bochs-spice', VM_MANAGER='libvirt', CONSOLE_REFRESH='60', CONSOLE_FULL_REFRESH='on'))
     if type(value) is not dict or value not in contracts:
         raise ValueError('launch options must select the exact historical, no-graphics, or debugger contract')
     return dict(value)
@@ -522,6 +523,8 @@ def current_identity(vm, candidate, requested_diagnostic, run_id=None,
         raise ValueError('console launch option changed')
     if os.environ.get('CONSOLE_REFRESH', options.get('CONSOLE_REFRESH', 'default')) not in ('', options.get('CONSOLE_REFRESH', 'default')):
         raise ValueError('CONSOLE_REFRESH environment differs from manifest')
+    if os.environ.get('CONSOLE_FULL_REFRESH', options.get('CONSOLE_FULL_REFRESH', 'off')) not in ('', options.get('CONSOLE_FULL_REFRESH', 'off')):
+        raise ValueError('CONSOLE_FULL_REFRESH environment differs from manifest')
     if os.environ.get('VM_MANAGER', options.get('VM_MANAGER', 'direct')) not in ('', options.get('VM_MANAGER', 'direct')):
         raise ValueError('VM manager launch option changed')
     builder = helper('build-release')
@@ -3064,6 +3067,8 @@ def validate_running(manifest, observed):
         expected_graphics = ['-spice', 'unix=on,addr=/run/vm/console-spice.sock,disable-ticketing=on,image-compression=off,seamless-migration=on',
                              '-vga', 'none', '-display', 'none', '-device',
                              'bochs-display,id=rgpu_present,bus=pcie.0,addr=0x7,vgamem=64M']
+        if manifest['launch_options'].get('CONSOLE_FULL_REFRESH') == 'on':
+            expected_graphics[-1] += ',x-debug-full-refresh=on'
         if manifest['launch_options'].get('CONSOLE_REFRESH') == '60':
             expected_graphics += ['-spice', 'max-refresh-rate=60']
         proof = observed.get('libvirt', {})

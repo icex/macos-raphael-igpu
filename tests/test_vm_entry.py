@@ -53,6 +53,14 @@ class VmEntryTests(unittest.TestCase):
                 self.assertEqual(result.returncode,0,result.stderr)
                 self.assertEqual(marker.exists(),expected)
 
+    def test_full_refresh_shell_only_accepts_explicit_libvirt_spice60(self):
+        source=ENTRY.read_text();block=source[source.index('# Explicit presentation-only console:'):source.index('if [[ -n "${LAN_TAP_NODE:-}" ]]')]
+        for full,rate,manager,ok in [('on','60','libvirt',True),('off','60','libvirt',True),('on','default','libvirt',False),('on','60','direct',False),('yes','60','libvirt',False)]:
+            env=dict(os.environ,CONSOLE_FULL_REFRESH=full,CONSOLE_REFRESH=rate,VM_MANAGER=manager,VM_CONSOLE='bochs-spice',GENERIC_GRAPHICS='off',EXTRA='-display none')
+            result=subprocess.run(['bash','-c',block+'\nprintf "%s" "$EXTRA"'],env=env,capture_output=True,text=True,timeout=3)
+            self.assertEqual(result.returncode==0,ok,result.stderr)
+            if ok:self.assertEqual(',x-debug-full-refresh=on' in result.stdout,full=='on')
+
     def test_console_refresh_shell_selector_preserves_endpoint_and_refuses_other_profiles(self):
         source=ENTRY.read_text();block=source[source.index('# Explicit presentation-only console:'):source.index('if [[ -n "${LAN_TAP_NODE:-}" ]]')]
         for rate,manager,accepted in [('default','direct',True),('60','libvirt',True),('60','direct',False),('120','libvirt',False)]:

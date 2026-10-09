@@ -61,6 +61,27 @@ class RefreshAdmissionTests(unittest.TestCase):
                 manifest=dict(run_id='a'*32,boot_id='boot',image_id='image',max_seconds=120,launch_options=options)
                 path,_=mod.prepare(tmp,manifest,b'manifest',{},dict.fromkeys(mod.MODULES,'hash'))
                 self.assertEqual(json.loads((path/'admission.json').read_text())['console_refresh'],value or 'default')
+    def test_full_refresh_receipt_binds_and_rejects_invalid_values(self):
+        for value in ('off','on',True,'yes'):
+            with self.subTest(value=value),tempfile.TemporaryDirectory() as tmp:
+                manifest=dict(run_id='a'*32,boot_id='boot',image_id='image',max_seconds=120,
+                              launch_options={'VM_MANAGER':'libvirt','CONSOLE_REFRESH':'60','CONSOLE_FULL_REFRESH':value})
+                if value in ('off','on'):
+                    path,_=mod.prepare(tmp,manifest,b'manifest',{},dict.fromkeys(mod.MODULES,'hash'))
+                    self.assertEqual(json.loads((path/'admission.json').read_text())['console_full_refresh'],value)
+                else:
+                    with self.assertRaises(ValueError):mod.prepare(tmp,manifest,b'manifest',{},dict.fromkeys(mod.MODULES,'hash'))
+                    self.assertEqual(list(Path(tmp).iterdir()),[])
+
+    def test_full_refresh_cannot_use_historical_refresh_or_unknown_admission(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest=dict(launch_options={'VM_MANAGER':'libvirt','CONSOLE_FULL_REFRESH':'on'})
+            with self.assertRaisesRegex(ValueError,'requires explicit'):mod.prepare(tmp,manifest,b'',{}, {})
+            self.assertEqual(list(Path(tmp).iterdir()),[])
+            for value in (None,True,'yes',60):
+                data=dict(schema=1,run_id='a'*32,boot_id='boot',console_full_refresh=value)
+                with self.assertRaisesRegex(ValueError,'invalid admitted console full'):mod.validate_admission(data,'a'*32,mod.digest(data),tmp,'boot')
+
     def test_invalid_requested_refresh_cannot_publish_admission(self):
         for value in ('30','120',60,True,None,''):
             with self.subTest(value=value), tempfile.TemporaryDirectory() as tmp:
