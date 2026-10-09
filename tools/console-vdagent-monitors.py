@@ -66,10 +66,22 @@ class MonitorParser:
     The second bounded assembly preserves the zero-feature parser's deliberate
     no-feature-payload API. Unknown payload bytes never leave this class.
     """
-    def __init__(self):
-        self.validator=transport.Parser();self.wire=bytearray();self.ports={1:bytearray(),2:bytearray()}
+    def __init__(self, *, clipboard_limit=0):
+        self.clipboard_limit=clipboard_limit
+        self.validator=transport.Parser(clipboard_limit=clipboard_limit);self.wire=bytearray();self.ports={1:bytearray(),2:bytearray()}
     def feed(self,data):
-        validated=self.validator.feed(data);self.wire.extend(data);rows=[]
+        validated=self.validator.feed(data)
+        if self.clipboard_limit:
+            # The opt-in parser bounds/discards large clipboard messages while
+            # retaining only admitted payloads. Do not assemble a second copy.
+            for row in validated:
+                if row['type']==2:
+                    payload=row.pop('clipboard_payload')
+                    row['configuration_header']=configuration_header(payload)
+                    try:row['configuration']=configuration(payload)
+                    except ValueError as error:row['configuration_error']=str(error)
+            return validated
+        self.wire.extend(data);rows=[]
         while len(self.wire)>=8:
             port,size=transport.CHUNK.unpack_from(self.wire)
             if len(self.wire)<8+size:break

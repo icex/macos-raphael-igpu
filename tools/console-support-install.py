@@ -24,7 +24,7 @@ base=importlib.util.module_from_spec(spec);spec.loader.exec_module(base)
 SOURCES=('virtual-display-server.m','console-display-control.h','console-vdagent-agent.py',
          'console-display-control.py','console-vdagent-monitors.py','console-vdagent-handshake.py',
          'console-support-launcher.sh','console-support-install.py','console-install-transaction.py',
-         'console-preferences.py')
+         'console-preferences.py','console-vdagent-clipboard.py','console-clipboard.m')
 INFO=dict(CFBundleIdentifier='org.raphaelgpu.console',CFBundleName='Raphael Console',
           CFBundleExecutable='console-presenter',CFBundlePackageType='APPL',
           CFBundleShortVersionString='0.1.0',CFBundleVersion='1',LSUIElement=True,
@@ -81,7 +81,7 @@ class SupportTransaction(base.Transaction):
         self.holder_active(app)
         if self.holder_active is base.refuse_active:
             processes=self.run(['/bin/ps','-axo','command='])
-            for name in ('console-vdagent-agent.py','console-vdagent-monitors.py'):
+            for name in ('console-vdagent-agent.py','console-vdagent-monitors.py','console-clipboard'):
                 require(not any(name in row for row in processes.splitlines()),'resize helper still running: '+name)
         if self.capture:
             require(base.digest(self.app)==self.capture['app'] and
@@ -155,6 +155,9 @@ def build_payload(source,payload,capture,run=command):
     run(['xcrun','clang','-O2','-fobjc-arc','-fblocks',str(source/'virtual-display-server.m'),
          '-framework','AppKit','-framework','CoreGraphics','-o',str(payload/'virtual-display-server')])
     (payload/'virtual-display-server').chmod(0o700)
+    run(['xcrun','clang','-O2','-fobjc-arc',str(source/'console-clipboard.m'),
+         '-framework','AppKit','-o',str(payload/'console-clipboard')])
+    (payload/'console-clipboard').chmod(0o700)
     require(all(sha(source/name)==digest for name,digest in hashes.items()),'addon source changed during build')
     receipt=dict(schema=1,kind='console-support-addon-build',capture=capture,sources=hashes,
                  binaries={p.name:sha(p) for p in payload.iterdir()},

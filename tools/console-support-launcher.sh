@@ -37,6 +37,10 @@ trap 'exit 143' TERM INT
 guest_scale=$(/usr/bin/python3 -B "$payload/console-preferences.py" --support-dir "$support" --read-scale)
 case "$guest_scale" in 1|2) ;; *) exit 3 ;; esac
 printf '{"event":"scale-policy","guest_scale":%s,"scope":"fixed for this holder lifetime"}\n' "$guest_scale"
+clipboard=$(/usr/bin/python3 -B "$payload/console-preferences.py" --support-dir "$support" --read-clipboard)
+clipboard_args=()
+case "$clipboard" in on) clipboard_args=(--clipboard-text) ;; off) ;; *) exit 3 ;; esac
+printf '{"event":"clipboard-policy","text":"%s","scope":"explicit persistent preference"}\n' "$clipboard"
 start=$SECONDS
 caffeinate -dimsu -t 6000 & awake=$!
 : >"$support/display.log"
@@ -53,7 +57,7 @@ remaining=$((6000-SECONDS+start))
 # Absence of the optional channel is supported. The agent validates identity and
 # exclusive ownership; this launcher never takes over another port holder.
 if [[ -c /dev/tty.com.redhat.spice.0 && ! -L /dev/tty.com.redhat.spice.0 ]]; then
- /usr/bin/python3 -B "$payload/console-vdagent-agent.py" --control-dir "$support/control" --seconds "$remaining" --guest-scale "$guest_scale" >"$support/vdagent.log" 2>&1 & resize=$!
+ /usr/bin/python3 -B "$payload/console-vdagent-agent.py" --control-dir "$support/control" --seconds "$remaining" --guest-scale "$guest_scale" "${clipboard_args[@]}" >"$support/vdagent.log" 2>&1 & resize=$!
 fi
 remaining=$((6000-SECONDS+start))
 ((remaining>0)) || exit 3
