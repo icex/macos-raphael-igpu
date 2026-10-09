@@ -35,8 +35,11 @@ pass, with the original route restored. Endpoint audibility, other applications
 and A/V synchronization remain unqualified.
 Candidate364 also passes existing-user packaged O2 installation and identical
 reinstallation. The first changed ad-hoc binary required normal consent renewal;
-the identical reinstall retained consent. Fresh-user and second-boot qualification
-remain open. Stock QEMU stays the default; performance results use a separately pinned
+the identical reinstall retained consent. Candidate366 confirms automatic startup
+and unchanged consent on the next guest boot. Fresh-user and console-only first
+setup remain open. Its paced source reaches60 draw calls/s, but repeated HiDPI
+manager samples vary24.9–35.3 valid updates/s with partial tokens; this does not
+qualify60Hz output or a stable speedup. Stock QEMU stays the default; performance results use a separately pinned
 experimental image. Automatic resize, other managers and VirtualBox remain
 unqualified. The virtual Display
 adapter's56MB framebuffer is separate from the native renderer's2GB VRAM.
@@ -44,6 +47,7 @@ adapter's56MB framebuffer is separate from the native renderer's2GB VRAM.
 · [Native356 lifecycle/input evidence](findings/research/libvirt-reset-native-20261009.md)
 · [Default audio and continuous input evidence](findings/research/console-default-audio-input-20261009.md)
 · [Installer and shutdown evidence](findings/research/console-install-native-20261009.md)
+· [Guest-boot persistence and cadence](findings/research/console-cadence-native-20261009.md)
 · [Setup and limits](docs/virtual-console.md).
 
 The qualified remote baseline from **2026-09-16**, candidate **1.0.280**, runs an accelerated desktop through
