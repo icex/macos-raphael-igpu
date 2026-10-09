@@ -22,8 +22,9 @@ host remains awake, vfio-pci/power-on. No reboot/rebind.
 [Evidence](findings/research/console-changed-bbox-native-20261009.md) ·
 [Hashes](findings/research/console-changed-bbox-native-evidence-20261009.json).
 
-1285 host tests pass,8skip. Dev5ec383d delivers370; hosted37948929898 test/build
-green.374 delivery pending, main unchanged. Next: bounded read-only D-state
+1285 host tests pass,8skip, including delivery checks. Candidate374 docs and
+hardware-tested kext are integrated into dev; hosted validation pending. Prior370
+hosted37948929898 test/build green. Main unchanged. Next: bounded read-only D-state
 refusal diagnostics without weakening gates, corrected regrant positive/negative
 control, and sustained localized/full-field workload. Broader apps/codecs,
 fresh-user bootstrap, crash lifecycle, other managers and VirtualBox remain open.

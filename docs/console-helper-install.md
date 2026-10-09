@@ -57,3 +57,7 @@ must not be left in the ordinary login agent: an armed lease cannot be reacquire
 in the same QEMU device lifetime. The native test restored the exact original
 agent and verified ordinary fallback startup. See
 [the snapshot setup and limits](virtual-console.md#immutable-snapshots-and-single-rectangle-native-experiment-370).
+
+Candidate374 reuses the exact installed370 presenter executable and retains
+startup/consent on the next guest boot without reinstalling. This remains an
+existing-user result, not fresh-user or console-only first setup qualification.

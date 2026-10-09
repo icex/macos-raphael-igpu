@@ -49,7 +49,12 @@ desktop, audio capture and ordinary-presenter fallback pass. This is a scoped
 corruption improvement, not full-frame atomicity or60Hz qualification; capture
 wait helpers hit a documented exit race despite completed guest shutdown and
 authorizing GPU recovery. Stock QEMU stays the default; these experiments use
-separately pinned images. Automatic resize, other managers and VirtualBox remain
+separately pinned images. Candidate374's changed-pixel rectangle improves
+observed HiDPI cadence to52.6/51.2 distinct IDs/s and native1080 to57.9, with all
+3,553 post-startup token samples valid. Audio and ordinary fallback pass. This is
+a localized-workload lower bound; sustained60Hz/full-frame qualification remains
+open. Its capture guard force-stopped QEMU after a D-state refusal; recovery
+succeeded, but no clean-shutdown receipt exists. Automatic resize, other managers and VirtualBox remain
 unqualified. The virtual Display
 adapter's56MB framebuffer is separate from the native renderer's2GB VRAM.
 [Paired evidence](findings/research/bochs-full-refresh-paired-20261009.md)
@@ -59,6 +64,7 @@ adapter's56MB framebuffer is separate from the native renderer's2GB VRAM.
 · [Guest-boot persistence and cadence](findings/research/console-cadence-native-20261009.md)
 · [Capture-source isolation](findings/research/console-source-token-native-20261009.md)
 · [Native snapshot evidence](findings/research/console-snapshot-native-20261009.md)
+· [Changed-rectangle native result](findings/research/console-changed-bbox-native-20261009.md)
 · [Setup and limits](docs/virtual-console.md).
 
 The qualified remote baseline from **2026-09-16**, candidate **1.0.280**, runs an accelerated desktop through

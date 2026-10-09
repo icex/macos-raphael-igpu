@@ -14,7 +14,9 @@ into1000×760; earlier enter-without-motion failures remain distinct.
 Candidate370 has zero invalid tokens after startup in three native/HiDPI manager
 windows using immutable snapshots plus a single SPICE rectangle. Full-frame
 atomicity, sustained60Hz, automatic resize, other frontends and VirtualBox remain
-unqualified.
+unqualified. Candidate374 improves HiDPI observed cadence to52.6/51.2 IDs/s
+without token failures after startup, but its capture guard force-stops during
+shutdown; recovery and actual process completion must be assessed separately.
 [Current paired evidence](../findings/research/bochs-full-refresh-paired-20261009.md).
 Candidate361 verifies ordinary afplay default USB audio through QEMU/Pulse with
 isolated stereo capture and exact route restoration; endpoint audibility, other
@@ -499,3 +501,26 @@ Shutdown produces the genuine guest terminal and authorizing GPU recovery, but
 both capture witnesses exit137 during container teardown and report immediate-stop.
 That race is being addressed separately; these are not natural-capture-exit passes.
 [Native evidence](../findings/research/console-snapshot-native-20261009.md).
+
+
+## Changed-pixel rectangle native comparison (374)
+
+The separate `experiments/pins-bochs-snapshot-changed.json` image with metal-206
+retains the snapshot contract and same presenter. One rectangle covers all changed
+pixels versus the initialized mirror; first-frame/resize initialization is full.
+Software exact-image full-pixel controls pass, including first-black and4K resize.
+Native HiDPI/native/HiDPI-repeat produce1158/1238/1157 valid manager samples, zero
+invalids after startup. Observed distinct rates52.56/57.86/51.24 per second improve
+on370, but remain lower bounds for a localized token workload. Sustained mixed
+full-field motion and general full-frame/60Hz qualification remain open.
+
+Existing presenter startup/consent, desktop screenshot, default stereo audio and
+ordinary fallback startup pass. ARM/map reuse is denied after orderly exit, but
+the negative checker expects the wrong mapping error and exits6; this is not a
+qualified regrant or RETIRE-readback pass. Add a successful BAR0 mapping control.
+Both initial shutdown witnesses refuse the original process in D state, force
+container exit137 and leave no private terminal. Outer exited-after-guest-request
+text does not establish clean shutdown. Recovery independently authorizes reuse;
+the repeated-witness137 patch is present but unexercised. Keep D-state refusal
+until bounded diagnostics and source evidence justify any eligibility change.
+[Native evidence](../findings/research/console-changed-bbox-native-20261009.md).
