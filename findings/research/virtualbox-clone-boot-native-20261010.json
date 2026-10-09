@@ -1,0 +1,45 @@
+{
+  "scope": "software-only VirtualBox attempt; raw private logs stay outside repository",
+  "artifacts": [
+    {
+      "path": "/home/bogdan/macos-vm/run/c398-vbox-boot-a/result.json",
+      "bytes": 169,
+      "sha256": "1a5bd6b5502f972edf05e3aa63feb430856b9c437b095df1dc761f409fb5bcd8"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c398-vbox-boot-a/scope.json",
+      "bytes": 294,
+      "sha256": "279119642ede111bf77df3b00c7973dc6527dc069e08734da96b4a9773e4db6c"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c398-vbox-boot-a/stopped.json",
+      "bytes": 69,
+      "sha256": "bbc0736d54001e0fe8b921fb3523f19e0ed5526ca314aa4f9a3d662f4ff6b76e"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c398-vbox-boot-a/uart1.log",
+      "bytes": 1678,
+      "sha256": "1508705194740ca80a99b8dcab0e091de5f429725547d8da0a780c22210b9176"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c398-vbox-boot-a/uart2.log",
+      "bytes": 1528,
+      "sha256": "7424c1850e6a6c5a200d82413e6afd04e0ca53457ba876a1ec27af31946b6116"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c398-VBoxAppleSim.c",
+      "bytes": 12107,
+      "sha256": "a74d9c995832380e31b736e4831b045eb69a3cf24eb5262b439ee1c66d318638"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c398-vbox-clones/loader-preparation.json",
+      "bytes": 422,
+      "sha256": "cea1e9fef3df8c72d8c0e014c2eafdab69f1a0334a925045dacc8620909192ea"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c398-vbox-boot-a/vms/rgpu-c398-45a5fcfc/Logs/VBox.log",
+      "bytes": 900302,
+      "sha256": "c548c4b95f1173b6f35dc8bd6c513366669efe840afc906f1659c20f26a7da15"
+    }
+  ]
+}
