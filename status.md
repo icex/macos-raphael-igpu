@@ -7,9 +7,12 @@ peripheral/storage order and single CPU definition in libvirt11.9 conversion.
 A separate KVM CPU-only test verifies the expected CPU properties and preserves
 native zero hardware UUID. All test domains and containers are stopped; the
 host sleep:idle blocker stays active. Full host suite:1,038 pass,3 skipped.
-Runtime paused-launch/descriptor-injection/identity/cleanup integration is next;
+A transaction core now stops owned software QEMU processes after invalid TAP
+setup and injected lost observations, without attempting resume. This is
+failure-path evidence; valid TAP and production backend integration are next;
 full libvirt-managed accelerated macOS remains unqualified.
-[Evidence and remaining boundary](findings/research/libvirt-console-plan-20261009.md).
+[Plan](findings/research/libvirt-console-plan-20261009.md) ·
+[Runtime failure tests](findings/research/libvirt-runtime-failure-20261009.md).
 
 ## Candidate340: native accelerated SPICE desktop after host resume
 

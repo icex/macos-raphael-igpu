@@ -1,0 +1,65 @@
+{
+  "passed": true,
+  "cases": [
+    {
+      "injection": null,
+      "error": "{\"class\": \"GenericError\", \"desc\": \"Unable to query TUNGETIFF on FD 14: Inappropriate ioctl for device\"}",
+      "identity": {
+        "name": "rgpu-d5c28e5e009dac88a95ad970c3f027f5",
+        "uuid": "00000000-0000-0000-0000-000000000000",
+        "run_id": "d5c28e5e009dac88a95ad970c3f027f5",
+        "pid": 416218,
+        "start_ticks": 32569427
+      },
+      "phases": [
+        "creating-paused",
+        "paused-identity",
+        "failure",
+        "stopped"
+      ],
+      "paused_until_failure": true,
+      "process_exited": true
+    },
+    {
+      "injection": "create-reply",
+      "error": "injected loss of successful real create reply",
+      "identity": {
+        "name": "rgpu-1e95e9bc3b291f6e09e1082edd0353e5",
+        "uuid": "00000000-0000-0000-0000-000000000000",
+        "run_id": "1e95e9bc3b291f6e09e1082edd0353e5",
+        "pid": 416914,
+        "start_ticks": 32569497
+      },
+      "phases": [
+        "creating-paused",
+        "failure",
+        "stopped"
+      ],
+      "paused_until_failure": true,
+      "process_exited": true
+    },
+    {
+      "injection": "first-snapshot",
+      "error": "injected first snapshot loss",
+      "identity": {
+        "name": "rgpu-b14cb00cfb409c15839b38b5421d16f8",
+        "uuid": "00000000-0000-0000-0000-000000000000",
+        "run_id": "b14cb00cfb409c15839b38b5421d16f8",
+        "pid": 417459,
+        "start_ticks": 32569556
+      },
+      "phases": [
+        "creating-paused",
+        "failure",
+        "stopped"
+      ],
+      "paused_until_failure": true,
+      "process_exited": true
+    }
+  ],
+  "container": {
+    "cid": "fe1c3e33ca87a482ba64101b28065f1b9fb43415e0b362f77f9237cf4498905d",
+    "started_at": "2026-10-09T07:26:40.733542353Z"
+  },
+  "scope": "TCG device-free container; invalid TAP backend and injected observation losses. No valid TAP, KVM, VFIO or macOS."
+}
