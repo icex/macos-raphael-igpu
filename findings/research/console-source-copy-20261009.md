@@ -23,6 +23,10 @@ Steady4K CPU-owned IOSurface row copies take3.022/3.191ms; contiguous copies
 4.072/4.102ms (only two observations each). These do not support a contiguous-copy
 optimization. Source buffers are filled immediately before each case and readback
 changes cache state; this is a discriminator, not a bandwidth benchmark.
+The standalone synthetic probe was compiled with-O2; the actual presenter used
+the existing installer flags without-O2. This additional difference prevents
+attributing their timing gap solely to source storage. The next within-presenter
+diagnostic preserves those presenter flags for both copy paths.
 
 Stopping the normal console agent also destroys its virtual display. That can
 activate a fallback display writer, but1280×800 alone does not establish who wrote
