@@ -9,6 +9,12 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
+class Geometry(ctypes.Structure):
+    _fields_ = [('w', ctypes.c_uint32), ('h', ctypes.c_uint32)]
+
+class Modes(ctypes.Structure):
+    _fields_ = [('items', Geometry * 8), ('count', ctypes.c_uint)]
+
 class Protocol(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -19,7 +25,9 @@ class Protocol(unittest.TestCase):
         source = pathlib.Path(cls.tmp.name) / 'probe.c'
         source.write_text('#include "console-display-control.h"\n'
                           'unsigned check(const unsigned char*p,size_t n){return rg_validate(p,n);}\n'
-                          'void encode(unsigned char*p,unsigned v){rg_write32(p,v);}\n')
+                          'void encode(unsigned char*p,unsigned v){rg_write32(p,v);}\n'
+                          'int insert(RGModes*m,unsigned w,unsigned h,unsigned cw,unsigned ch){return rg_insert(m,(RGGeometry){w,h},(RGGeometry){cw,ch});}\n'
+                          'void touch(RGModes*m,unsigned w,unsigned h){rg_touch(m,(RGGeometry){w,h});}\n')
         library = pathlib.Path(cls.tmp.name) / 'probe.so'
         subprocess.run([compiler, '-shared', '-fPIC', '-Wall', '-Wextra', '-Werror',
                         '-I', str(ROOT / 'tools'), str(source), '-o', str(library)], check=True)
@@ -54,6 +62,41 @@ class Protocol(unittest.TestCase):
         self.assertEqual(self.check(data + b'x'), 1)
         for kw in [{'magic': 0}, {'version': 2}, {'sequence': 0}]:
             self.assertEqual(self.check(self.request(**kw)), 1)
+
+    def test_lru_keeps_current_across_many_resizes(self):
+        modes = Modes()
+        for i in range(40):
+            self.assertEqual(self.lib.insert(ctypes.byref(modes), 1000 + 2*i, 800, 1000, 800), 1)
+            self.assertLessEqual(modes.count, 8)
+            entries = [(g.w, g.h) for g in modes.items[:modes.count]]
+            self.assertIn((1000, 800), entries)
+            self.assertEqual(entries[-1], (1000 + 2*i, 800))
+        self.assertEqual([g.w for g in modes.items], [1000, 1066, 1068, 1070, 1072, 1074, 1076, 1078])
+
+    def test_revisit_promotes_without_growth(self):
+        modes = Modes()
+        for i in range(8):
+            self.lib.insert(ctypes.byref(modes), 1000 + 2*i, 800, 0, 0)
+        self.lib.touch(ctypes.byref(modes), 1000, 800)
+        self.lib.insert(ctypes.byref(modes), 1200, 800, 0, 0)
+        self.assertEqual(modes.count, 8)
+        self.assertNotIn(1002, [g.w for g in modes.items])
+        self.assertIn(1000, [g.w for g in modes.items])
+        self.lib.insert(ctypes.byref(modes), 1000, 800, 0, 0)
+        self.assertEqual(modes.count, 8)
+        self.assertEqual(modes.items[7].w, 1000)
+
+    def test_candidate_does_not_change_committed_policy(self):
+        modes = Modes()
+        self.lib.insert(ctypes.byref(modes), 2468, 1484, 0, 0)
+        original = bytes(modes)
+        candidate = Modes.from_buffer_copy(original)
+        self.lib.insert(ctypes.byref(candidate), 2500, 1500, 2468, 1484)
+        self.assertEqual(bytes(modes), original)
+        candidate.count = 9
+        before = bytes(candidate)
+        self.assertEqual(self.lib.insert(ctypes.byref(candidate), 2600, 1600, 0, 0), 0)
+        self.assertEqual(bytes(candidate), before)
 
     def test_reply_integer_encoding(self):
         for value in [0, 1, 0x52475044, 0x80000001, 0xffffffff]:

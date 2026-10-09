@@ -116,11 +116,13 @@ static CGDisplayModeRef controlMode(CGDirectDisplayID did,unsigned w,unsigned h)
 @interface RGDisplayControl : NSObject {
  int listener,peer,lockFD;double expires;
  uint8_t request[RG_CONTROL_REQUEST+1],reply[RG_CONTROL_REPLY];size_t received,sent;
- bool replying,waitingMode;unsigned additions,requestFlags;
+ bool replying,waitingMode,tableUncertain;unsigned requestFlags;
+ RGModes dynamicModes;
  CGDirectDisplayID originalID;
 }
 @property(strong) CGVirtualDisplay *display;
 @property(strong) NSMutableArray *modes;
+@property(copy) NSArray *baseModes;
 @property(copy) NSString *socketPath;
 - (BOOL)start:(NSString *)directory display:(CGVirtualDisplay *)display modes:(NSMutableArray *)modes;
 - (void)tick;
@@ -162,7 +164,7 @@ static CGDisplayModeRef controlMode(CGDirectDisplayID did,unsigned w,unsigned h)
  if(fcntl(listener,F_SETFL,O_NONBLOCK)||fcntl(listener,F_SETFD,FD_CLOEXEC))return NO;
  mode_t old=umask(077);int bound=bind(listener,(struct sockaddr *)&addr,sizeof(addr));umask(old);
  if(bound||chmod(addr.sun_path,0600)||listen(listener,1))return NO;
- self.display=display;self.modes=[modes mutableCopy];originalID=display.displayID;
+ self.display=display;self.modes=[modes mutableCopy];self.baseModes=[modes copy];originalID=display.displayID;
  return YES;
 }
 - (void)closePeer {if(peer>=0)close(peer);peer=-1;received=sent=0;replying=false;waitingMode=false;requestFlags=0;}
@@ -175,13 +177,33 @@ static CGDisplayModeRef controlMode(CGDirectDisplayID did,unsigned w,unsigned h)
   chosen=controlMode(originalID,w,h);
   if(!chosen&&waitingMode)return;
   if(!chosen){
-   if(additions>=8)status=5;
+   if(tableUncertain)status=3;
    else {
-    NSMutableArray *candidate=[self.modes mutableCopy];
-    [candidate addObject:[[CGVirtualDisplayMode alloc] initWithWidth:w/2 height:h/2 refreshRate:60]];
-    CGVirtualDisplaySettings *settings=[CGVirtualDisplaySettings new];settings.hiDPI=1;settings.rotation=0;settings.modes=candidate;
-    if(![self.display applySettings:settings])status=3;
-    else {self.modes=candidate;additions++;requestFlags=flags|2;waitingMode=true;return;}
+    // Preserve the actual active geometry, not the last requested geometry.
+    CGDisplayModeRef before=CGDisplayCopyDisplayMode(originalID);
+    RGGeometry current={before?(uint32_t)CGDisplayModeGetWidth(before)*2:0,before?(uint32_t)CGDisplayModeGetHeight(before)*2:0};
+    if(before)CFRelease(before);
+    RGModes candidatePolicy=dynamicModes;
+    if(!current.w||!current.h||!controlTarget(originalID))status=4;
+    else if(!rg_insert(&candidatePolicy,(RGGeometry){w,h},current))status=5;
+    else {
+     NSMutableArray *candidate=[self.baseModes mutableCopy];
+     for(unsigned i=0;i<candidatePolicy.count;i++){
+      RGGeometry g=candidatePolicy.items[i];
+      [candidate addObject:[[CGVirtualDisplayMode alloc] initWithWidth:g.w/2 height:g.h/2 refreshRate:60]];
+     }
+     CGVirtualDisplaySettings *settings=[CGVirtualDisplaySettings new];settings.hiDPI=1;settings.rotation=0;settings.modes=candidate;
+     if(![self.display applySettings:settings]){
+      // A false SPI return does not prove that no state changed. Restore the
+      // retained table on the same object; never pretend the request succeeded.
+      settings.modes=self.modes;
+      bool restored=self.display.displayID==originalID&&controlTarget(originalID)&&[self.display applySettings:settings];
+      tableUncertain=!restored;status=3;
+      emit(@{@"phase":@"control-table-restore",@"restored":@(restored)});
+     }else {
+      self.modes=candidate;dynamicModes=candidatePolicy;requestFlags=flags|2;waitingMode=true;return;
+     }
+    }
    }
   }
  }
@@ -198,6 +220,7 @@ static CGDisplayModeRef controlMode(CGDirectDisplayID did,unsigned w,unsigned h)
  }
  CGDisplayModeRef actual=CGDisplayCopyDisplayMode(originalID);
  if(!status&&(!actual||self.display.displayID!=originalID||!controlTarget(originalID)||CGDisplayModeGetPixelWidth(actual)!=w||CGDisplayModeGetPixelHeight(actual)!=h))status=4;
+ if(!status)rg_touch(&dynamicModes,(RGGeometry){w,h});
  uint32_t values[10]={RG_CONTROL_MAGIC,1,received>=12?rg_read32(request+8):0,status,originalID,
   actual?(uint32_t)CGDisplayModeGetPixelWidth(actual):0,actual?(uint32_t)CGDisplayModeGetPixelHeight(actual):0,
   actual?(uint32_t)CGDisplayModeGetWidth(actual):0,actual?(uint32_t)CGDisplayModeGetHeight(actual):0,flags};
@@ -205,7 +228,7 @@ static CGDisplayModeRef controlMode(CGDirectDisplayID did,unsigned w,unsigned h)
  if(actual)CFRelease(actual);if(chosen)CFRelease(chosen);replying=true;
  emit(@{@"phase":@"control-result",@"sequence":@(values[2]),@"status":@(status),@"display":@(originalID),@"pixel_width":@(values[5]),@"pixel_height":@(values[6]),@"flags":@(flags)});
 }
-- (void)tick {
+- (void)tick { @autoreleasepool {
  if(peer<0){
   peer=accept(listener,NULL,NULL);if(peer<0)return;
   uid_t uid;gid_t gid;int yes=1;
@@ -225,7 +248,7 @@ static CGDisplayModeRef controlMode(CGDirectDisplayID did,unsigned w,unsigned h)
   if(n<0){if(errno!=EAGAIN&&errno!=EWOULDBLOCK&&errno!=EINTR)[self closePeer];return;}
   sent+=(size_t)n;if(sent==sizeof(reply))[self closePeer];
  }
-}
+}}
 @end
 int main(int argc,const char **argv) { @autoreleasepool {
     [NSApplication sharedApplication];
