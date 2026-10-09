@@ -81,10 +81,15 @@ esac
 # unchanged unless the manifest selects this exact device and local endpoint.
 case "${VM_CONSOLE:-off}" in
     off|"") ;;
-    bochs)
+    bochs|bochs-spice)
         [[ "${GENERIC_GRAPHICS:-on}" == off && "${EXTRA:-}" != *-vnc* && "${EXTRA:-}" != *-spice* ]] || {
             echo 'Bochs console requires no generic graphics or injected viewer' >&2; exit 1; }
-        export EXTRA="${EXTRA:-} -device bochs-display,id=rgpu_present,bus=pcie.0,addr=0x7,vgamem=64M -vnc unix:/run/vm/console-vnc.sock"
+        export EXTRA="${EXTRA:-} -device bochs-display,id=rgpu_present,bus=pcie.0,addr=0x7,vgamem=64M"
+        if [[ "${VM_CONSOLE}" == bochs-spice ]]; then
+            export EXTRA="${EXTRA} -spice unix=on,addr=/run/vm/console-spice.sock,disable-ticketing=on,image-compression=off,gl=off"
+        else
+            export EXTRA="${EXTRA} -vnc unix:/run/vm/console-vnc.sock"
+        fi
         ;;
     *) echo 'unknown VM_CONSOLE' >&2; exit 1 ;;
 esac

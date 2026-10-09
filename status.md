@@ -1,4 +1,17 @@
-# Live status — 2026-10-08
+# Live status — 2026-10-09
+
+## Candidate339 harness: local SPICE experiment prepared
+
+The software-only libvirt/Boxes console visibly renders an independent pattern.
+QMP verifies1,094,400 pixels; this does not qualify accelerated macOS in Boxes.
+Metal-185 selects local SPICE with the unchanged336 driver and338 guest helpers.
+Hardware testing has not yet started. Host regression:1031 tests OK,3 skipped.
+
+The host resumed October9 at08:35 EEST on the same boot after KDE idle suspend.
+No hardware guest was running. A verified user-owned sleep:idle block now spans
+ongoing development. The previous native recovery remains registered; the next
+cycle must still perform ordinary admission and MODE2 checks.
+[Investigation](findings/research/console-spice-manager-20261009.md).
 
 ## Candidate338 helpers on336: console mode following; throughput open
 

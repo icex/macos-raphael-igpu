@@ -35,3 +35,20 @@ class ConsoleWindowTest(unittest.TestCase):
                 (root/'run/console-vnc.sock').write_text('not a socket')
                 with self.assertRaises(ValueError):
                     tool.viewer_command(root, state, live, '/usr/bin/vncviewer')
+
+    def test_spice_endpoint_cannot_be_used_for_vnc_or_stale_vm(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root/'run').mkdir()
+            with socket.socket(socket.AF_UNIX) as server:
+                server.bind(str(root/'run/console-spice.sock'))
+                state = {'cid':'abc', 'started_at':'start'}
+                live = {'Id':'abc', 'State':{'Running':True, 'StartedAt':'start'},
+                        'Config':{'Env':['VM_CONSOLE=bochs-spice']}}
+                self.assertEqual(tool.console_endpoint(root, state, live, 'bochs-spice'),
+                                 root/'run/console-spice.sock')
+                with self.assertRaises(ValueError):
+                    tool.viewer_command(root, state, live, '/usr/bin/vncviewer')
+                live['State']['StartedAt'] = 'new'
+                with self.assertRaises(ValueError):
+                    tool.console_endpoint(root, state, live, 'bochs-spice')

@@ -978,6 +978,26 @@ class ExperimentTests(unittest.TestCase):
         manifest['launch_options'].pop('VM_CONSOLE')
         self.assertIn('generic_graphics', tool.validate_running(manifest, observed))
 
+    def test_spice_console_rejects_network_gl_and_wrong_transport(self):
+        tool = self.module()
+        options = dict(BOOTDISK_MODE='custom', NVRAM='stock', GENERIC_GRAPHICS='off',
+                       GDB='on', AUDIO='usb', VM_CONSOLE='bochs-spice')
+        manifest = {'image_id':'img', 'gpu':False, 'launch_options': options}
+        self.assertEqual(tool.launch_options(manifest), options)
+        graphics = ['-vga','none','-display','none','-device',
+                    'bochs-display,id=rgpu_present,bus=pcie.0,addr=0x7,vgamem=64M',
+                    '-spice','unix=on,addr=/run/vm/console-spice.sock,disable-ticketing=on,image-compression=off,gl=off']
+        observed = dict(image_id='img', vfio_args=[], serial_args=[],
+                        pci_topology=[{'model':'usb-audio','bus':'xhci.0'}], graphics_args=graphics)
+        self.assertEqual(tool.validate_running(manifest, observed), [])
+        for replacement in ('port=5905,disable-ticketing=on', graphics[-1].replace('gl=off','gl=on'),
+                            graphics[-1]+',port=5905'):
+            observed['graphics_args'] = graphics[:-1]+[replacement]
+            self.assertIn('generic_graphics', tool.validate_running(manifest, observed))
+        observed['graphics_args'] = graphics
+        options['VM_CONSOLE'] = 'bochs'
+        self.assertIn('generic_graphics', tool.validate_running(manifest, observed))
+
     def test_no_generic_graphics_launch_options_and_running_argv_are_exact(self):
         tool = self.module()
         options = {'BOOTDISK_MODE':'custom', 'NVRAM':'stock',

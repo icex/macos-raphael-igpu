@@ -9,18 +9,23 @@ import stat
 import subprocess
 
 
-def viewer_command(vm, state, container, viewer):
+def console_endpoint(vm, state, container, mode="bochs"):
     if (not container.get('State', {}).get('Running') or
             container.get('Id') != state.get('cid') or
             container['State'].get('StartedAt') != state.get('started_at')):
         raise ValueError('the supervised VM is no longer running with this identity')
     env = container.get('Config', {}).get('Env', [])
-    if 'VM_CONSOLE=bochs' not in env:
+    if mode not in ('bochs', 'bochs-spice') or [v for v in env if v.startswith('VM_CONSOLE=')] != ['VM_CONSOLE='+mode]:
         raise ValueError('the running VM does not select the Bochs console')
-    sock = vm / 'run/console-vnc.sock'
+    sock = vm / ('run/console-spice.sock' if mode == 'bochs-spice' else 'run/console-vnc.sock')
     info = sock.lstat()
     if not stat.S_ISSOCK(info.st_mode) or info.st_uid != os.getuid():
         raise ValueError('console endpoint must be a local socket owned by this user')
+    return sock
+
+
+def viewer_command(vm, state, container, viewer):
+    sock = console_endpoint(vm, state, container)
     # Window closure disconnects only this viewer. The harness retains VM ownership.
     # Resize must be coordinated with the macOS presenter, not sent to QEMU alone.
     return [viewer, '-Shared', '-RemoteResize=0', '-FullScreen=0',

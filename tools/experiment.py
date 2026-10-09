@@ -425,7 +425,8 @@ def launch_options(data):
     contracts = (historical, headless, debugger,
                  dict(headless, AUDIO='usb'), dict(debugger, AUDIO='usb'),
                  dict(debugger, AUDIO='usb', HDMI_AUDIO='on'),
-                 dict(debugger, AUDIO='usb', VM_CONSOLE='bochs'))
+                 dict(debugger, AUDIO='usb', VM_CONSOLE='bochs'),
+                 dict(debugger, AUDIO='usb', VM_CONSOLE='bochs-spice'))
     if type(value) is not dict or value not in contracts:
         raise ValueError('launch options must select the exact historical, no-graphics, or debugger contract')
     return dict(value)
@@ -3038,9 +3039,13 @@ def validate_running(manifest, observed):
             (not dedicated and any('rgpu_critical' in value for value in serial))):
         errors.append('critical_uart_topology')
     expected_graphics = ['-vga', 'none', '-display', 'none']
-    if manifest.get('launch_options', {}).get('VM_CONSOLE') == 'bochs':
-        expected_graphics += ['-device', 'bochs-display,id=rgpu_present,bus=pcie.0,addr=0x7,vgamem=64M',
-                              '-vnc', 'unix:/run/vm/console-vnc.sock']
+    console_mode = manifest.get('launch_options', {}).get('VM_CONSOLE')
+    if console_mode in ('bochs', 'bochs-spice'):
+        expected_graphics += ['-device', 'bochs-display,id=rgpu_present,bus=pcie.0,addr=0x7,vgamem=64M']
+        if console_mode == 'bochs-spice':
+            expected_graphics += ['-spice', 'unix=on,addr=/run/vm/console-spice.sock,disable-ticketing=on,image-compression=off,gl=off']
+        else:
+            expected_graphics += ['-vnc', 'unix:/run/vm/console-vnc.sock']
     if manifest.get('launch_options', {}).get('GENERIC_GRAPHICS') == 'off' and \
             graphics != expected_graphics:
         errors.append('generic_graphics')

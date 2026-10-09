@@ -118,8 +118,8 @@ done
 [[ "${MODE}" == run ]] || [[ -e "${VM_DIR}/BaseSystem.img" ]] || die "missing BaseSystem.img"
 
 case "${GENERIC_GRAPHICS}" in on|off) ;; *) die "unknown generic graphics setting ${GENERIC_GRAPHICS}" ;; esac
-case "${VM_CONSOLE}" in off|bochs) ;; *) die "unknown VM_CONSOLE" ;; esac
-[[ "${VM_CONSOLE}" != bochs || "${GENERIC_GRAPHICS}" == off ]] || die "console requires GENERIC_GRAPHICS=off"
+case "${VM_CONSOLE}" in off|bochs|bochs-spice) ;; *) die "unknown VM_CONSOLE" ;; esac
+[[ "${VM_CONSOLE}" == off || "${GENERIC_GRAPHICS}" == off ]] || die "console requires GENERIC_GRAPHICS=off"
 XAUTH=""
 if [[ "${GENERIC_GRAPHICS}" == on ]]; then
     # The historical QEMU window is an X client and needs Xwayland plus a cookie.

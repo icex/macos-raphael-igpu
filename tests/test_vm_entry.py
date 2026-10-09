@@ -63,6 +63,19 @@ class VmEntryTests(unittest.TestCase):
                                        mode=mode, extra=extra, more_env={"VM_CONSOLE":console})
             self.assertNotEqual(result.returncode, 0)
 
+    def test_spice_console_is_local_and_excludes_vnc(self):
+        result, argv = self.run_entry('qemu-system-x86_64 -vga vmware $EXTRA',
+                                      more_env={"VM_CONSOLE": "bochs-spice"})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn('-vnc', argv)
+        self.assertEqual(argv[argv.index('-spice')+1],
+                         'unix=on,addr=/run/vm/console-spice.sock,disable-ticketing=on,image-compression=off,gl=off')
+        for extra in ('-display none -vnc :5', '-display none -spice port=5905'):
+            result, argv = self.run_entry('qemu-system-x86_64 -vga vmware $EXTRA',
+                                          extra=extra, more_env={"VM_CONSOLE": "bochs-spice"})
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(argv, [])
+
     def test_off_refuses_missing_or_multiple_default_vga(self):
         for launch in (
                 'qemu-system-x86_64 -m 2G -display gtk',
