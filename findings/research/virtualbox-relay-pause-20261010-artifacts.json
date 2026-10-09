@@ -1,0 +1,37 @@
+[
+  {
+    "path": "/home/bogdan/macos-vm/run/c417-vbox-boot-i/scope.json",
+    "bytes": 520,
+    "sha256": "98cb4792f4ca197d1a1a00417dd72e49dfa8b88c356f6e81205c3c4e03c76f52"
+  },
+  {
+    "path": "/home/bogdan/macos-vm/run/c417-vbox-boot-i/result.json",
+    "bytes": 198,
+    "sha256": "7c5fbe7b7f8cefa42a1636e22c405795d24392717820c107199eeae4d4d3ba4e"
+  },
+  {
+    "path": "/home/bogdan/macos-vm/run/c417-vbox-boot-i/user-pause-stop.json",
+    "bytes": 252,
+    "sha256": "59eec5e4cd4570361f0ae5da470143d6ffb4dbb7e99164fde57ba7b4a54da8a5"
+  },
+  {
+    "path": "/home/bogdan/macos-vm/run/c417-vbox-boot-i/root-acpi-request.json",
+    "bytes": 121,
+    "sha256": "d4590e5f5ca15d8a2ff4a98db4d3baed24ee89eaf0bd90eeeceadca18b7f89d9"
+  },
+  {
+    "path": "/home/bogdan/macos-vm/run/c417-vbox-boot-i/boot.png",
+    "bytes": 20613,
+    "sha256": "1e72f7c2bded974c8e37cb5034adb1fb921210d174b126a9bb966ef2ce8e112b"
+  },
+  {
+    "path": "/home/bogdan/macos-vm/run/c417-vbox-boot-i/relay-scope.json",
+    "bytes": 235,
+    "sha256": "e2086de73dbee1d8ab078ce32ba2e849a0e0bac49a76c7beb9088f1903650557"
+  },
+  {
+    "path": "/home/bogdan/macos-vm/run/c417-vbox-boot-i/stopped.json",
+    "bytes": 69,
+    "sha256": "39cd1214069d671e20de823392ac5529c16b380dbdac32ff9c39958813fe0d88"
+  }
+]

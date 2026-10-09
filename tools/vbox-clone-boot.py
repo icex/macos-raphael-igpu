@@ -311,22 +311,16 @@ def main():
             spec = importlib.util.spec_from_file_location('root_relay', Path(__file__).with_name('vbox-root-relay.py'))
             module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
             bound_scope = (home / 'scope.json').read_bytes()
+            pspec = importlib.util.spec_from_file_location('vbox_process', Path(__file__).with_name('vbox-process.py'))
+            pmodule = importlib.util.module_from_spec(pspec); pspec.loader.exec_module(pmodule)
             pinned_process = []
             def verify_relay():
                 if (home / 'scope.json').read_bytes() != bound_scope or state(home, ident, timeout=2) != 'running': return False
-                found=[]
-                for proc in Path('/proc').glob('[0-9]*'):
-                    try:
-                        if proc.stat().st_uid != os.getuid(): continue
-                        argv=(proc/'cmdline').read_bytes().split(b'\0')
-                        if b'--startvm' not in argv or argv[argv.index(b'--startvm')+1] != ident.encode(): continue
-                        if (proc/'exe').resolve().name not in ('VirtualBoxVM','VBoxHeadless'): continue
-                        fields=(proc/'stat').read_text().rsplit(')',1)[1].split()
-                        found.append((int(proc.name),fields[19]))
-                    except (OSError,ValueError,IndexError): continue
-                if len(found)!=1:return False
-                if not pinned_process:pinned_process.extend(found)
-                return pinned_process==found
+                observed = pmodule.process_identity(home, name, ident)
+                if not pinned_process:
+                    pinned_process.append(observed)
+                    (home / 'relay-process.json').write_text(json.dumps(observed, indent=2)+'\n')
+                return pinned_process == [observed]
             relay=module.Relay(home,uuid.uuid4().hex,deadline,verify_relay)
             relay.start()
         call(home, ['createvm', '--name', name, '--uuid', ident, '--ostype', 'MacOS_64', '--basefolder', str(home / 'vms')])
