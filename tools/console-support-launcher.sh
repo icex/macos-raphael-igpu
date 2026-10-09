@@ -1,7 +1,17 @@
 #!/bin/bash
 # Rendered with an exact, owned external payload path by console-support-install.
 set -euo pipefail
-ioreg -r -c RaphaelConsole -d 1 | grep -q 'RaphaelConsole' || exit 0
+bridge=$(ioreg -r -c RaphaelConsole -d 1)
+printf '%s\n' "$bridge" | grep -q 'RaphaelConsole' || exit 0
+# The sealed presenter already supports ABI1 snapshots. Select them only when
+# the new driver reports restart-safe private staging; never inherit this policy
+# or a conflicting RAM cache alias from the launching shell.
+snapshot=0
+if printf '%s\n' "$bridge" | grep -Eq '"SnapshotRestartable" = 1[[:space:]]*$' &&
+   printf '%s\n' "$bridge" | grep -Eq '"SnapshotProtocol" = 1[[:space:]]*$'; then
+ snapshot=1
+fi
+printf '{"event":"capture-transport","snapshot":%s,"policy":"restartable-capability","cache":"default"}\n' "$snapshot"
 app="$HOME/Applications/Raphael Console.app"
 support="$HOME/Library/Application Support/RaphaelGPU/console"
 payload=@@PAYLOAD@@
@@ -47,5 +57,5 @@ if [[ -c /dev/tty.com.redhat.spice.0 && ! -L /dev/tty.com.redhat.spice.0 ]]; the
 fi
 remaining=$((6000-SECONDS+start))
 ((remaining>0)) || exit 3
-"$app/Contents/MacOS/console-presenter" auto 60 "$remaining" >"$support/presenter.log" 2>&1 & presenter=$!
+RGPU_CONSOLE_SNAPSHOT="$snapshot" RGPU_CONSOLE_CACHE=default "$app/Contents/MacOS/console-presenter" auto 60 "$remaining" >"$support/presenter.log" 2>&1 & presenter=$!
 wait "$presenter"

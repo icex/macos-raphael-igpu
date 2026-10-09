@@ -5,39 +5,112 @@
 #endif
 #include <IOKit/IOService.h>
 #include <IOKit/IOUserClient.h>
+#include <IOKit/IOBufferMemoryDescriptor.h>
+#include <libkern/OSAtomic.h>
+#include <libkern/c++/OSSet.h>
 #include <IOKit/pci/IOPCIDevice.h>
 #include <IOKit/IOLib.h>
 #include <pexpert/pexpert.h>
 
+// The slot follows the descriptor, including any retained userspace aliases.
+// Client close is not proof that its mapping has disappeared. 128 MiB payload
+// maximum; failure refuses ARM rather than sharing or recycling an old bank.
+static volatile SInt32 snapshotBuffers = 0;
+static constexpr uint32_t snapshotBytes = 32*1024*1024;
+class RaphaelConsoleBuffer : public IOBufferMemoryDescriptor {
+    OSDeclareDefaultStructors(RaphaelConsoleBuffer)
+    bool counted = false;
+public:
+    static RaphaelConsoleBuffer *allocate() {
+        SInt32 count;
+        do {
+            count = snapshotBuffers;
+            if (count >= 4) return nullptr;
+        } while (!OSCompareAndSwap(count, count+1, &snapshotBuffers));
+        auto *buffer = new RaphaelConsoleBuffer;
+        if (!buffer) { OSDecrementAtomic(&snapshotBuffers); return nullptr; }
+        buffer->counted = true;
+        if (!buffer->initWithPhysicalMask(kernel_task,
+                kIODirectionInOut | kIOMemoryKernelUserShared | kIOMapCopybackCache,
+                snapshotBytes, PAGE_SIZE, 0)) {
+            buffer->release(); return nullptr;
+        }
+        bzero(buffer->getBytesNoCopy(), snapshotBytes);
+        return buffer;
+    }
+    IOMemoryMap *makeMapping(IOMemoryDescriptor *owner, task_t task,
+                            IOVirtualAddress address, IOOptionBits options,
+                            IOByteCount offset, IOByteCount length) override {
+        const auto cache = options & kIOMapCacheMask;
+        if (cache != kIOMapDefaultCache && cache != kIOMapCopybackCache) {
+            // On this x86_64 IOKit ABI createMappingInTask passes the newly
+            // allocated IOMemoryMap here, including before compatible-map reuse.
+            // Reject conflicting aliases; clientMemoryForType options alone are
+            // overridden by userspace map flags. Match superclass failure ownership.
+            reinterpret_cast<IOMemoryMap *>(address)->release();
+            return nullptr;
+        }
+        return IOBufferMemoryDescriptor::makeMapping(owner, task, address,
+                                                      options, offset, length);
+    }
+    void free() override {
+        const bool releaseSlot = counted;
+        IOBufferMemoryDescriptor::free();
+        // Super frees this and then backing RAM. Never access members afterward.
+        if (releaseSlot) OSDecrementAtomic(&snapshotBuffers);
+    }
+};
+class RaphaelConsoleClient;
 class RaphaelConsole : public IOService {
     OSDeclareDefaultStructors(RaphaelConsole)
     IOPCIDevice *pci = nullptr;
     IOMemoryMap *registers = nullptr;
     IOMemoryDescriptor *pixels = nullptr;
     IOLock *lock = nullptr;
+    OSSet *clients = nullptr;
     IOMemoryDescriptor *staging = nullptr;
     IOUserClient *snapshotOwner = nullptr;
+    RaphaelConsoleBuffer *snapshotBuffer = nullptr;
+    IOMemoryMap *stagingMap = nullptr;
+    bool snapshotRestartable = false;
+    bool snapshotPoisoned = false;
+    uint32_t snapshotEpoch = 0;
+    uint32_t snapshotSequence = 0;
     bool snapshotLeased = false; // Never regrant: mappings may outlive client close.
     bool snapshotAvailable = false;
 public:
     bool start(IOService *provider) override;
+    // Multiple connections may retain retired private mappings, but only one
+    // snapshot owner can publish. IOService holds its arbitration lock here.
+    bool handleOpen(IOService *client, IOOptionBits, void *) override {
+        return !isInactive() && clients &&
+            (clients->containsObject(client) ||
+             (clients->getCount() < 8 && clients->setObject(client)));
+    }
+    void handleClose(IOService *client, IOOptionBits) override {
+        if (clients) clients->removeObject(client);
+    }
+    bool handleIsOpen(const IOService *client) const override {
+        return clients && (client ? clients->containsObject(client) : clients->getCount() != 0);
+    }
     void stop(IOService *provider) override;
     void free() override;
     IOReturn newUserClient(task_t task, void *securityID, UInt32 type,
                           OSDictionary *properties, IOUserClient **handler) override;
     IOReturn mode(uint64_t width, uint64_t height);
-    IOMemoryDescriptor *framebuffer() { return pixels; }
-    IOReturn snapshotArm(IOUserClient *owner);
+    IOReturn memory(IOUserClient *owner, UInt32 type, IOOptionBits *options,
+                    IOMemoryDescriptor **memory);
+    IOReturn snapshotArm(RaphaelConsoleClient *owner);
     IOReturn snapshotCommit(IOUserClient *owner, uint64_t w, uint64_t h,
                             uint64_t sequence, uint64_t *ack);
     void snapshotClose(IOUserClient *owner);
-    IOMemoryDescriptor *snapshotMemory(IOUserClient *owner) {
-        return owner == snapshotOwner ? staging : nullptr;
-    }
+    void retireLocked();
 };
 class RaphaelConsoleClient : public IOUserClient {
     OSDeclareDefaultStructors(RaphaelConsoleClient)
     RaphaelConsole *console = nullptr;
+    friend class RaphaelConsole;
+    bool snapshotAttempted = false;
 public:
     bool start(IOService *provider) override {
         console = OSDynamicCast(RaphaelConsole, provider);
@@ -55,9 +128,7 @@ public:
     IOReturn clientMemoryForType(UInt32 type, IOOptionBits *options,
                                  IOMemoryDescriptor **memory) override {
         if (type > 1 || !console || isInactive() || !console->isOpen(this)) return kIOReturnBadArgument;
-        *memory = type ? console->snapshotMemory(this) : console->framebuffer();
-        if (!*memory) return kIOReturnNotReady;
-        (*memory)->retain(); *options = 0; return kIOReturnSuccess;
+        return console->memory(this, type, options, memory);
     }
     IOReturn externalMethod(uint32_t selector, IOExternalMethodArguments *args,
                            IOExternalMethodDispatch *, OSObject *, void *) override {
@@ -79,6 +150,7 @@ public:
         return kIOReturnBadArgument;
     }
 };
+OSDefineMetaClassAndStructors(RaphaelConsoleBuffer, IOBufferMemoryDescriptor)
 OSDefineMetaClassAndStructors(RaphaelConsole, IOService)
 OSDefineMetaClassAndStructors(RaphaelConsoleClient, IOUserClient)
 
@@ -97,17 +169,24 @@ bool RaphaelConsole::start(IOService *provider) {
     pci->setMemoryEnable(true);
     registers = pci->mapDeviceMemoryWithRegister(kIOPCIConfigBaseAddress2);
     lock = IOLockAlloc();
-    if (!registers || registers->getLength() != 4096 || !lock) return false;
+    clients = OSSet::withCapacity(8);
+    if (!registers || registers->getLength() != 4096 || !lock || !clients) return false;
     volatile uint16_t *vbe = reinterpret_cast<volatile uint16_t *>(registers->getVirtualAddress()+0x500);
     if (vbe[0] != 0xb0c5) return false;
     volatile uint32_t *snapshot = reinterpret_cast<volatile uint32_t *>(registers->getVirtualAddress()+0x700);
-    if (snapshot[0] == 0x52534731 && snapshot[1] == 32*1024*1024) {
+    if ((snapshot[0] == 0x52534731 || snapshot[0] == 0x52534732) &&
+            snapshot[1] == snapshotBytes) {
         staging = pci->getDeviceMemoryWithRegister(kIOPCIConfigBaseAddress1);
         if (staging && staging->getLength() == 32*1024*1024) {
-            staging->retain(); snapshotAvailable = true;
+            staging->retain();
+            stagingMap = staging->map(kIOMapWriteCombineCache);
+            snapshotAvailable = stagingMap && stagingMap->getLength() == snapshotBytes;
+            snapshotRestartable = snapshotAvailable && snapshot[0] == 0x52534732;
         } else { staging = nullptr; }
     }
     setProperty("SnapshotProtocol", snapshotAvailable ? 1 : 0, 32);
+    setProperty("SnapshotRestartable", snapshotRestartable ? 1 : 0, 32);
+    setProperty("SnapshotPrivateBufferLimit", 4, 32);
     setProperty("PresentationOnly", true);
     setProperty("ConsoleProtocol", 1, 32);
     registerService();
@@ -127,52 +206,106 @@ IOReturn RaphaelConsole::mode(uint64_t width, uint64_t height) {
     IOLockUnlock(lock);
     return matched ? kIOReturnSuccess : kIOReturnIOError;
 }
-// Experimental staging path: ARM once per service instance; user mapping is
-// never regranted even after close. Separate BAR1 excludes BAR0 boot writers.
-IOReturn RaphaelConsole::snapshotArm(IOUserClient *owner) {
+// Retain under the same lock used by close, including while type1 is mapped.
+IOReturn RaphaelConsole::memory(IOUserClient *owner, UInt32 type,
+                                IOOptionBits *options, IOMemoryDescriptor **memory) {
     IOLockLock(lock);
-    if (isInactive() || !snapshotAvailable || !registers || snapshotLeased) {
-        IOLockUnlock(lock); return kIOReturnNotReady;
+    *memory = nullptr;
+    if (!isInactive()) {
+        if (!type) *memory = pixels;
+        else if (owner == snapshotOwner) *memory = snapshotBuffer;
+    }
+    if (*memory) (*memory)->retain();
+    *options = 0;
+    IOLockUnlock(lock);
+    return *memory ? kIOReturnSuccess : kIOReturnNotReady;
+}
+// Called under lock. Detach before releasing the descriptor. Stale userspace
+// aliases retain private RAM and cannot write kernel-only BAR1 or a new owner.
+void RaphaelConsole::retireLocked() {
+    if (snapshotOwner && registers) {
+        auto *r = reinterpret_cast<volatile uint32_t *>(registers->getVirtualAddress()+0x700);
+        if (snapshotRestartable) { r[12] = snapshotEpoch; OSSynchronizeIO(); }
+        r[2] = 2; OSSynchronizeIO();
+        if (r[2] != 2 || (snapshotRestartable && r[13] != snapshotEpoch))
+            snapshotPoisoned = true;
+    }
+    snapshotOwner = nullptr;
+    if (snapshotBuffer) { snapshotBuffer->release(); snapshotBuffer = nullptr; }
+}
+IOReturn RaphaelConsole::snapshotArm(RaphaelConsoleClient *owner) {
+    // Allocation may block; no provider lock or interrupt context is held here.
+    auto *fresh = RaphaelConsoleBuffer::allocate();
+    if (!fresh) return kIOReturnNoMemory;
+    IOLockLock(lock);
+    if (isInactive() || !snapshotAvailable || !registers || snapshotOwner ||
+            snapshotPoisoned || owner->snapshotAttempted ||
+            (!snapshotRestartable && snapshotLeased)) {
+        IOLockUnlock(lock); fresh->release(); return kIOReturnNotReady;
     }
     auto *r = reinterpret_cast<volatile uint32_t *>(registers->getVirtualAddress()+0x700);
-    if (r[0] != 0x52534731 || r[2] != 0) {
-        IOLockUnlock(lock); return kIOReturnNotReady;
+    const uint32_t magic = snapshotRestartable ? 0x52534732 : 0x52534731;
+    const uint32_t state = r[2];
+    if (r[0] != magic || (state != 0 && !(snapshotRestartable && state == 2)) ||
+            (snapshotRestartable && (snapshotEpoch == UINT32_MAX || r[13] != snapshotEpoch))) {
+        snapshotPoisoned = true;
+        IOLockUnlock(lock); fresh->release(); return kIOReturnNotReady;
     }
-    snapshotLeased = true; // Fail closed even if ARM readback fails.
+    owner->snapshotAttempted = true; // No re-ARM on this connection, even on ambiguity.
+    snapshotLeased = true;
+    if (snapshotRestartable) { ++snapshotEpoch; r[12] = snapshotEpoch; OSSynchronizeIO(); }
     r[2] = 1; OSSynchronizeIO();
-    bool ok = r[2] == 1 && r[3] == 0;
-    if (ok) snapshotOwner = owner;
-    else { r[2] = 2; OSSynchronizeIO(); } // Keep lease retired on failed readback.
+    bool ok = r[2] == 1 && r[3] == 0 && r[7] == 0 &&
+        (!snapshotRestartable || r[13] == snapshotEpoch);
+    if (ok) {
+        snapshotOwner = owner; snapshotBuffer = fresh; snapshotSequence = 0;
+    } else {
+        snapshotPoisoned = true; // Never infer a safe new epoch after ambiguous ARM.
+        r[2] = 2; OSSynchronizeIO(); fresh->release();
+    }
     IOLockUnlock(lock);
     return ok ? kIOReturnSuccess : kIOReturnIOError;
 }
 IOReturn RaphaelConsole::snapshotCommit(IOUserClient *owner, uint64_t w,
                                         uint64_t h, uint64_t sequence, uint64_t *ack) {
+    *ack = 0;
     if (w < 320 || h < 200 || w > 3840 || h > 2160 ||
-        !sequence || sequence > UINT32_MAX || w*h*4 > 32*1024*1024)
+        !sequence || sequence > UINT32_MAX || w*h*4 > snapshotBytes)
         return kIOReturnBadArgument;
     IOLockLock(lock);
-    if (isInactive() || !registers || owner != snapshotOwner) {
+    if (isInactive() || !registers || owner != snapshotOwner || !snapshotBuffer ||
+            !stagingMap || snapshotPoisoned) {
         IOLockUnlock(lock); return kIOReturnNotReady;
     }
+    if (snapshotSequence == UINT32_MAX || sequence != uint64_t(snapshotSequence)+1) {
+        IOLockUnlock(lock); return kIOReturnBadArgument;
+    }
     auto *r = reinterpret_cast<volatile uint32_t *>(registers->getVirtualAddress()+0x700);
+    if (r[2] != 1 || r[3] != 0 || r[7] != snapshotSequence ||
+            (snapshotRestartable && r[13] != snapshotEpoch)) {
+        snapshotPoisoned = true; retireLocked();
+        IOLockUnlock(lock); return kIOReturnIOError;
+    }
+    // Cooperating caller fences and stops touching this private buffer until ACK.
+    // Kernel serialization prevents close/new-owner handoff during the copy.
+    memcpy(reinterpret_cast<void *>(stagingMap->getVirtualAddress()),
+           snapshotBuffer->getBytesNoCopy(), static_cast<size_t>(w*h*4));
+    __asm__ volatile("sfence" ::: "memory");
+    if (snapshotRestartable) { r[12] = snapshotEpoch; OSSynchronizeIO(); }
     r[4] = static_cast<uint32_t>(w); r[5] = static_cast<uint32_t>(h);
-    // Caller must SFENCE its WC staging writes before entering this method.
     OSSynchronizeIO(); r[6] = static_cast<uint32_t>(sequence); OSSynchronizeIO();
-    *ack = r[7];
-    bool ok = r[2] == 1 && r[3] == 0 && *ack == sequence;
+    bool ok = r[2] == 1 && r[3] == 0 && r[7] == sequence &&
+        (!snapshotRestartable || r[13] == snapshotEpoch);
+    if (ok) { snapshotSequence = sequence; *ack = sequence; }
+    else { snapshotPoisoned = true; retireLocked(); }
     IOLockUnlock(lock);
     return ok ? kIOReturnSuccess : kIOReturnIOError;
 }
 void RaphaelConsole::snapshotClose(IOUserClient *owner) {
     IOLockLock(lock);
-    if (owner == snapshotOwner && snapshotOwner) {
-        if (registers) {
-            auto *r = reinterpret_cast<volatile uint32_t *>(registers->getVirtualAddress()+0x700);
-            r[2] = 2; OSSynchronizeIO();
-        }
-        snapshotOwner = nullptr;
-    }
+    // Also excludes a concurrent ARM still allocating before client close.
+    static_cast<RaphaelConsoleClient *>(owner)->snapshotAttempted = true;
+    if (owner == snapshotOwner && snapshotOwner) retireLocked();
     IOLockUnlock(lock);
 }
 IOReturn RaphaelConsole::newUserClient(task_t task, void *securityID, UInt32 type,
@@ -191,10 +324,7 @@ IOReturn RaphaelConsole::newUserClient(task_t task, void *securityID, UInt32 typ
 void RaphaelConsole::stop(IOService *provider) {
     if (lock) IOLockLock(lock);
     if (registers) {
-        if (snapshotOwner) {
-            auto *r = reinterpret_cast<volatile uint32_t *>(registers->getVirtualAddress()+0x700);
-            r[2] = 2; OSSynchronizeIO(); snapshotOwner = nullptr;
-        }
+        retireLocked();
         volatile uint16_t *vbe = reinterpret_cast<volatile uint16_t *>(registers->getVirtualAddress()+0x500);
         vbe[4]=0; OSSynchronizeIO();
     }
@@ -204,7 +334,10 @@ void RaphaelConsole::stop(IOService *provider) {
 void RaphaelConsole::free() {
     if (registers) { registers->release(); registers=nullptr; }
     if (pixels) { pixels->release(); pixels=nullptr; }
+    if (snapshotBuffer) { snapshotBuffer->release(); snapshotBuffer=nullptr; }
+    if (stagingMap) { stagingMap->release(); stagingMap=nullptr; }
     if (staging) { staging->release(); staging=nullptr; }
+    if (clients) { clients->release(); clients=nullptr; }
     if (lock) { IOLockFree(lock); lock=nullptr; }
     IOService::free();
 }

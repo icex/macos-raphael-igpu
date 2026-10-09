@@ -45,9 +45,8 @@ c392-post-input-desktop.png; c392-viewer-close-alive.json; c392-docker-events.js
 The candidate 393 integration worktree contains current docs, the isolated client
 patch, and hashed native reports. Full integration suite: 1,449 tests, 8 skipped,
 OK (54.621 seconds); run/candidate-393-host-tests.log.
-The integration includes the exact tested 392 binary in kext/bin. Hosted CI for
-this delivery is pending; previously published dev c8fc5d5 passed test/build
-(37975249900). Main remains unchanged.
+The integration includes the exact tested 392 binary in kext/bin. Published dev48b4c96 passes hosted test/build (37983196350); release is
+not applicable and main remains unchanged.
 
 Shutdown reporting now reconciles the temporal exit observation with bound capture
 and private completion receipts after cleanup. Archived 390 remains a verified
@@ -56,8 +55,12 @@ reports capture-abort-after-request. This fixes reporting, not the underlying
 capture-exit race. Original artifacts remain unchanged; abort timing and recovery
 gates are unchanged. Replay: run/c393-shutdown-reconciliation-replay.json.
 
-Next: deliver current docs, reporting fix and exact tested 392 binary to dev,
-then verify hosted CI.
+Candidate394 preparation: private per-owner staging, explicit QEMU restart epochs
+and external launcher selection are implemented but not natively qualified. The
+host device oracle passes legacy/restart full-pixel controls. A compatible runtime
+image is building; no394 hardware run has occurred. First native discriminator:
+retained old mappings must not alter a fresh owner, and released mappings must
+return bounded allocation capacity. Then qualify installed presenter restart.
 Qualify installed immutable capture and implement restart-safe ownership before
 claiming atomic production output. Sustained 60 Hz/full-frame integrity, broader
 crash/independent-host-boot coverage, first-user setup and portability remain open.
