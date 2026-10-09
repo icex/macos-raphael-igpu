@@ -8,6 +8,7 @@
 #include <time.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <emmintrin.h>
 
 static void displayChanged(CGDirectDisplayID display, CGDisplayChangeSummaryFlags flags, void *context) {
@@ -34,6 +35,8 @@ typedef struct {
 } ConsoleTiming;
 @interface ConsoleOutput : NSObject <SCStreamOutput, SCStreamDelegate> {
     ConsoleTiming timing;
+    unsigned sourceSamples[2];
+    uint8_t *sourceScratch;
     uint64_t droppedCount; // atomic: capture queue writes, processing queue reads
 }
 @property io_connect_t connection;
@@ -46,6 +49,40 @@ typedef struct {
 @property(strong) dispatch_semaphore_t copying;
 @end
 @implementation ConsoleOutput
+- (BOOL)enableSourceDiagnostic {
+    // Allocate/touch once before starting capture, never inside measured legs.
+    if(posix_memalign((void **)&sourceScratch,64,3840u*2160u*4u))return NO;
+    memset(sourceScratch,0,3840u*2160u*4u);return YES;
+}
+- (void)dealloc {free(sourceScratch);}
+- (void)diagnoseSource:(const uint8_t *)src stride:(size_t)stride width:(size_t)w height:(size_t)h index:(unsigned)index {
+    unsigned sample=sourceSamples[index],first=sample%2;
+    size_t row=w*4;double direct=0,read=0,write=0,df=0,wf=0;
+    double start=now();
+    for(unsigned leg=0;leg<2;leg++) {
+        if((leg^first)==0) {
+            double a=now();
+            for(size_t y=0;y<h;y++)memcpy((void *)(self.address+y*row),src+y*stride,row);
+            double b=now();_mm_sfence();double c=now();direct=b-a;df=c-b;
+        } else {
+            double a=now();
+            for(size_t y=0;y<h;y++)memcpy(sourceScratch+y*row,src+y*stride,row);
+            double b=now();read=b-a;
+            for(size_t y=0;y<h;y++)memcpy((void *)(self.address+y*row),sourceScratch+y*row,row);
+            double c=now();_mm_sfence();double d=now();write=c-b;wf=d-c;
+        }
+    }
+    double legsEnd=now();uint64_t bad=0;
+    // Outside leg timings. Full volatile destination comparison is intentionally costly.
+    volatile const uint8_t *dest=(volatile const uint8_t *)self.address;
+    for(size_t i=0;i<row*h;i++)if(dest[i]!=sourceScratch[i])bad++;
+    double end=now();sourceSamples[index]++;
+    printf("CONSOLE_SOURCE_DIAG size=%zux%zu sample=%u order=%s bytes=%zu stride=%zu direct_ms=%.3f direct_sfence_ms=%.3f source_ram_ms=%.3f ram_wc_ms=%.3f ram_sfence_ms=%.3f legs_ms=%.3f verify_ms=%.3f extra_work_total_ms=%.3f bad_bytes=%llu\n",
+        w,h,sample,first?"staged-first":"direct-first",row*h,stride,
+        1000*direct,1000*df,1000*read,1000*write,1000*wf,1000*(legsEnd-start),1000*(end-legsEnd),1000*(end-start),(unsigned long long)bad);
+    fflush(stdout);
+    if(bad){fprintf(stderr,"console source diagnostic comparison failed\n");exit(6);}
+}
 - (void)stream:(SCStream *)stream didStopWithError:(NSError *)error {
     fprintf(stderr,"capture stopped: %s\n",error.description.UTF8String); exit(5);
 }
@@ -74,11 +111,14 @@ typedef struct {
     double locked=now();
     const uint8_t *src=CVPixelBufferGetBaseAddress(image);
     size_t stride=CVPixelBufferGetBytesPerRow(image);
-    BOOL copied=NO, changed=NO;
+    BOOL copied=NO, changed=NO, diagnostic=NO;
     double rowsBegin=0, rowsEnd=0, fenced=0, modeBegin=0, modeEnd=0, end=0;
     if(src && stride>=w*4) {
         rowsBegin=now();
-        for(size_t y=0;y<h;y++)memcpy((void *)(self.address+y*w*4),src+y*stride,w*4);
+        int diagnosticIndex=(w==1920&&h==1080)?0:((w==3840&&h==2160)?1:-1);
+        diagnostic=sourceScratch&&diagnosticIndex>=0&&sourceSamples[diagnosticIndex]<8&&w==self.width&&h==self.height;
+        if(diagnostic)[self diagnoseSource:src stride:stride width:w height:h index:(unsigned)diagnosticIndex];
+        else for(size_t y=0;y<h;y++)memcpy((void *)(self.address+y*w*4),src+y*stride,w*4);
         rowsEnd=now();
         _mm_sfence(); // publish write-combined stores before the mode or frame count
         fenced=now();
@@ -108,6 +148,11 @@ typedef struct {
             (unsigned long)self.frames,w,h,end-self.reportTime,
             self.reportFrames/(end-self.reportTime),1000*self.copySeconds/self.reportFrames,1000*self.maxCopySeconds,(unsigned long)__atomic_load_n(&droppedCount,__ATOMIC_RELAXED));
         self.reportTime=end;self.reportFrames=0;self.copySeconds=0;self.maxCopySeconds=0;fflush(stdout);
+    }
+    // Diagnostic copies retain legacy counts, but never enter steady stage statistics.
+    if(diagnostic) {
+        if(timing.start)[self reportTiming:unlocked];
+        return;
     }
     // A geometry transition ends the preceding window; never mix resolutions.
     if(timing.start && changed) {
@@ -165,7 +210,13 @@ int main(int argc,const char **argv) { @autoreleasepool {
     if((!did && !autoDisplay) || (fps!=30&&fps!=60&&fps!=120) || !seconds || seconds>6000)return 2;
     io_service_t service=IOServiceGetMatchingService(kIOMainPortDefault,IOServiceMatching("RaphaelConsole"));
     if(!service) { fprintf(stderr,"console device absent\n");return 3; }
+    const char *sourceDiagnostic=getenv("RGPU_CONSOLE_SOURCE_DIAGNOSTIC");
+    if(sourceDiagnostic&&strcmp(sourceDiagnostic,"0")&&strcmp(sourceDiagnostic,"1"))return 2;
     ConsoleOutput *out=[ConsoleOutput new];
+    if(sourceDiagnostic&&!strcmp(sourceDiagnostic,"1")) {
+        if(![out enableSourceDiagnostic])return 3;
+        printf("CONSOLE source_diagnostic=1 samples_per_geometry=8 legacy_timings_include_extra_work=1\n");fflush(stdout);
+    }
     io_connect_t connection=IO_OBJECT_NULL;
     kern_return_t kr=IOServiceOpen(service,mach_task_self(),0,&connection);
     IOObjectRelease(service);
