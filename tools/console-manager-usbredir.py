@@ -20,15 +20,8 @@ def manual_only(viewer, gtk_session):
         raise RuntimeError('automatic USB redirection was not disabled')
 
 
-def run_manager(on_session=None):
-    """Run inside an already-owned private D-Bus session.
-
-    Optional diagnostic callback receives (viewer, session, gtk_session) after
-    manual-only policy is established, before connection. It must not attach USB.
-    This function does not create a second SPICE client.
-    """
-    # Process-local settings; never alter an existing manager's preferences.
-    os.environ['GSETTINGS_BACKEND'] = 'memory'
+def install_session_guard(on_session=None):
+    """Install only after stock _import_gtk has completed config initialization."""
     import gi
     gi.require_version('SpiceClientGtk', '3.0')
     from gi.repository import Gio, SpiceClientGtk
@@ -45,7 +38,29 @@ def run_manager(on_session=None):
         if on_session is not None:
             on_session(self, self._spice_session, gtk_session)
     viewers.SpiceViewer._create_spice_session = create
+
+
+def install_startup_hook(virtmanager, on_session=None, installer=install_session_guard):
+    original_import = virtmanager._import_gtk
+
+    def import_gtk(leftovers):
+        result = original_import(leftovers)
+        installer(on_session)
+        return result
+    virtmanager._import_gtk = import_gtk
+
+
+def run_manager(on_session=None):
+    """Run inside an already-owned private D-Bus session.
+
+    Optional diagnostic callback receives (viewer, session, gtk_session) after
+    manual-only policy is established, before connection. It must not attach USB.
+    This function does not create a second SPICE client.
+    """
+    # Process-local settings; never alter an existing manager's preferences.
+    os.environ['GSETTINGS_BACKEND'] = 'memory'
     from virtManager import virtmanager
+    install_startup_hook(virtmanager, on_session)
     virtmanager.runcli()
 
 

@@ -1,0 +1,35 @@
+{
+  "scope": "offline imports only, Gtk.init suppressed, no viewer/session/VM created",
+  "artifacts": [
+    {
+      "path": "/home/bogdan/macos-vm/run/c426-original-launcher-import-control.json",
+      "bytes": 297,
+      "sha256": "4c1c041555d1b6ad19044453ebd0710dc7d988a6806675c0546fd883716b9b02"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c426-old-import-control.json",
+      "bytes": 138,
+      "sha256": "254ff0de7cf5c55ed9e423eb82acc47e141828c7bf6bebe01f9c0d1a071ac0e8"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c426-import-smoke.py",
+      "bytes": 931,
+      "sha256": "49950b83b22ea5b98f945a8f2dc6966e4c96390d80c8f7fcb0b7f3161dc6debd"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c426-import-smoke.json",
+      "bytes": 169,
+      "sha256": "a94bcc2e3ea469eed4d6e983624ad7f4119194cfcc2613df28bb87f5e3628ee7"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c426-import-smoke.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c426-usbredir-tests.log",
+      "bytes": 1565,
+      "sha256": "a622fa93e3abe7d4126bf1ea41bffa43416c9c8c0099ed802dc302bf3e3e44ed"
+    }
+  ]
+}

@@ -102,3 +102,19 @@ class UsbRedirectionTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):stage.validate_usbredir_card_option(('1.0.421','metal-223'),dict(base,VM_MANAGER='direct',CONSOLE_USBREDIR='on'))
         old=dict(base);stage.validate_usbredir_card_option(('1.0.402','metal-222'),old)
         self.assertEqual(old,base)
+    def test_stock_import_finishes_before_guard_and_preserves_result(self):
+        from types import SimpleNamespace
+        mod=load('console-manager-usbredir.py');events=[];callback=object()
+        def original(args):
+            events.append(('stock',args));return ['remaining']
+        def install(value):events.append(('guard',value))
+        manager=SimpleNamespace(_import_gtk=original)
+        mod.install_startup_hook(manager,callback,install)
+        self.assertEqual(events,[])
+        self.assertEqual(manager._import_gtk(['first']),['remaining'])
+        self.assertEqual(events,[('stock',['first']),('guard',callback)])
+        def fail(args):raise RuntimeError('stock initialization failed')
+        events.clear();manager._import_gtk=fail
+        mod.install_startup_hook(manager,callback,install)
+        with self.assertRaisesRegex(RuntimeError,'stock initialization failed'):manager._import_gtk([])
+        self.assertEqual(events,[])
