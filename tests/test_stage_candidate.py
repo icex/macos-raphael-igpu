@@ -1415,6 +1415,17 @@ class EmptyFirmwareConsoleCardTests(unittest.TestCase):
             raw=json.dumps(changed).encode()
             with self.assertRaises(RuntimeError):tool.validate_card(raw,hashlib.sha256(raw).hexdigest())
 
+    def test_candidate421_clipboard_usb_preserves_console_contract(self):
+        tool=load_tool();tool.configure('1.0.421','metal-223')
+        card=json.loads((ROOT/'experiments/metal-223.json').read_text())
+        raw=json.dumps(card).encode();tool.validate_card(raw,hashlib.sha256(raw).hexdigest())
+        for key,value in [('CONSOLE_USBREDIR','off'),('CONSOLE_USBREDIR',True),
+                          ('CONSOLE_SNAPSHOT','restart'),('CONSOLE_VDAGENT','off'),
+                          ('CONSOLE_FULL_REFRESH','off'),('VM_MANAGER','direct')]:
+            changed=copy.deepcopy(card);changed['launch_options'][key]=value
+            raw=json.dumps(changed).encode()
+            with self.assertRaises(RuntimeError):tool.validate_card(raw,hashlib.sha256(raw).hexdigest())
+
     def test_candidate352_refresh_contract_is_exact(self):
         tool=load_tool();tool.configure('1.0.352','metal-195')
         card=json.loads((ROOT/'experiments/metal-195.json').read_text())

@@ -15,7 +15,9 @@ two corrupt lines and two incomplete snapshots. Independent natural shutdown and
 recoverable cleanup do not erase those capture defects.
 [402 evidence](../findings/research/console-snapshot-private-pool-native-20261010.md).
 
-**Paused at the user’s request:** candidate 417 was stopped during early boot.
+**Current priority: QEMU/virt-manager clipboard and GUI USB redirection.**
+VirtualBox work is deferred at the user’s request. Candidate 417 was stopped during
+early boot at the earlier pause.
 The controller helper forced poweroff, then unregistered the VM on its first
 attempt without a reported cleanup error. This was not clean guest shutdown;
 no desktop, root response or process-admission receipt qualified the hardened
@@ -32,7 +34,7 @@ and medium closure pass, while the controller's transient state-query error and
 shutdown remains scoped; PerfPowerServices CPU use and sustained stability stay open.
 [410 result](../findings/research/virtualbox-fat-exchange-native-20261010.md).
 
-Work is paused at the user’s request. Candidate 420 is source investigation only;
+VirtualBox work is deferred at the user’s request. Candidate 420 is source investigation only;
 no implementation or runtime result is claimed. On resumption, qualify early boot-framebuffer suppression using the inspected 24G830
 AAPL,iokit-ignore-ndrv property and read-only inventory. This candidate has not
 run; it must not claim exclusive aperture ownership or write FIFO/registers.

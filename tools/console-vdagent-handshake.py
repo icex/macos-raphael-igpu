@@ -23,12 +23,15 @@ def announcement(request, port=1):
 
 class Parser:
     """Preserve independent message assembly for client and server chunk ports."""
-    def __init__(self):
+    def __init__(self, *, clipboard_limit=0):
+        self.clipboard_limit=clipboard_limit
         self.wire = bytearray()
         self.ports = {1: bytearray(), 2: bytearray()}
+        self.discard = {1: None, 2: None}
 
     def pending(self):
-        return dict(wire_bytes=len(self.wire), per_port_message_bytes={str(k):len(v) for k,v in self.ports.items()})
+        # Include remaining discard bytes: reconnect must not join old/new frames.
+        return dict(wire_bytes=len(self.wire), per_port_message_bytes={str(k):len(v)+(self.discard[k][0] if self.discard[k] else 0) for k,v in self.ports.items()})
 
     def feed(self, data):
         self.wire.extend(data)
@@ -42,14 +45,26 @@ class Parser:
             body = self.ports[port]
             body.extend(self.wire[CHUNK.size:CHUNK.size + size])
             del self.wire[:CHUNK.size + size]
-            while len(body) >= MESSAGE.size:
+            while self.discard[port] is not None or len(body) >= MESSAGE.size:
+                if self.discard[port] is not None:
+                    remaining,item=self.discard[port]
+                    consumed=min(remaining,len(body));del body[:consumed];remaining-=consumed
+                    if remaining:
+                        self.discard[port]=(remaining,item);break
+                    self.discard[port]=None;found.append(item);continue
                 protocol, kind, opaque, length = MESSAGE.unpack_from(body)
-                if protocol != 1 or length > 4096:
+                maximum=16*1024*1024 if kind==4 and self.clipboard_limit else 4096
+                if protocol != 1 or length > maximum:
                     raise ValueError('invalid message protocol/size')
+                if kind==4 and self.clipboard_limit and length>self.clipboard_limit+4:
+                    del body[:MESSAGE.size]
+                    self.discard[port]=(length,dict(port=port,type=kind,size=length,clipboard_oversize=True))
+                    continue
                 total = MESSAGE.size + length
                 if len(body) < total:
                     break
-                # Only capability words leave this parser. Other payloads are discarded.
+                # Default discovery exposes capability words only. The explicit
+                # clipboard mode exposes only bounded, admitted feature payloads.
                 item = dict(port=port, type=kind, size=length)
                 if kind == 6:
                     if length < 4 or length % 4:
@@ -58,6 +73,8 @@ class Parser:
                     if words[0] not in (0, 1):
                         raise ValueError('invalid capability request flag')
                     item.update(request=words[0], caps=list(words[1:]))
+                if self.clipboard_limit and kind in (2,4,7,8,9,14):
+                    item['clipboard_payload']=bytes(body[MESSAGE.size:total])
                 found.append(item)
                 del body[:total]
         return found

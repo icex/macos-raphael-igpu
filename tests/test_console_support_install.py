@@ -169,13 +169,33 @@ class SupportInstallTests(unittest.TestCase):
         agent_args=json.loads((payload/'agent.args').read_text())
         self.assertEqual(agent_args.count('--guest-scale'),1)
         self.assertEqual(agent_args[agent_args.index('--guest-scale')+1],'1')
+        self.assertNotIn('--clipboard-text',agent_args)
         pid=int((self.support/'control/holder.pid').read_text())
         with self.assertRaises(ProcessLookupError):os.kill(pid,0)
+        (self.support/'control/control.sock').unlink()
+        preference.write_text('{"schema":2,"guest_scale":1,"clipboard_text":true}')
+        result=subprocess.run(['bash','-c',launcher],env=env,capture_output=True,text=True,timeout=6)
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertEqual(json.loads((payload/'agent.args').read_text()).count('--clipboard-text'),1)
         (self.support/'control/holder.pid').unlink()
         ioreg.write_text('#!/bin/sh\nexit 0\n')
         result=subprocess.run(['bash','-c',launcher],env=env,capture_output=True,text=True,timeout=3)
         self.assertEqual(result.returncode,0,result.stderr)
         self.assertFalse((self.support/'control/holder.pid').exists())
+
+    def test_addon_payload_compiles_and_pins_clipboard_helper_outside_capture_app(self):
+        payload=self.home/'compiled-support';payload.mkdir();commands=[]
+        def compiler(argv):
+            commands.append(argv)
+            if '-o' in argv:Path(argv[argv.index('-o')+1]).write_bytes(b'compiled fixture')
+            return 'fixture compiler'
+        m.build_payload(ROOT/'tools',payload,dict(existing='unchanged'),compiler)
+        receipt=json.loads((payload/'support-provenance.json').read_text())
+        self.assertIn('console-clipboard.m',receipt['sources'])
+        self.assertIn('console-vdagent-clipboard.py',receipt['sources'])
+        self.assertIn('console-clipboard',receipt['binaries'])
+        self.assertEqual(sum('console-clipboard.m' in ' '.join(row) for row in commands),1)
+        self.unchanged()
 
     def test_preference_survives_install_and_interrupted_recovery(self):
         preference=self.support/'console-preferences.json'

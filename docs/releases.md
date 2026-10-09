@@ -45,7 +45,9 @@ and recovery pass. This is a bounded experimental milestone, not a generally
 qualified release or sustained 4K at 60 Hz claim.
 [402 native evidence](../findings/research/console-snapshot-private-pool-native-20261010.md).
 
-**Paused at the user’s request:** candidate 417 was stopped during early boot.
+**Current priority: QEMU/virt-manager clipboard and GUI USB redirection.**
+VirtualBox work is deferred at the user’s request. Candidate 417 was stopped during
+early boot at the earlier pause.
 The controller helper forced poweroff, then unregistered the VM on its first
 attempt without a reported cleanup error. This was not clean guest shutdown;
 no desktop, root response or process-admission receipt qualified the hardened

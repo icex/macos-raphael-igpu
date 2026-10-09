@@ -114,6 +114,64 @@ it does not update the host system libraries or the guest package. Fresh-user
 setup remains unqualified.
 
 
+## Optional text clipboard (candidate 423)
+
+Clipboard sharing is off by default. The updated external support package adds
+`console-clipboard` and the SPICE text handler outside the signed capture app.
+Install with the existing support transaction while its owned helpers are stopped;
+this does not replace the presenter or change Screen Recording consent. From the
+updated package’s source directory, as the logged-in guest user:
+
+```sh
+/usr/bin/python3 -B console-preferences.py \
+  --support-dir "$HOME/Library/Application Support/RaphaelGPU/console" --set-clipboard on
+```
+
+Use `--set-clipboard off` to disable or `--read-clipboard` to inspect the choice.
+The setting takes effect at the next normal owned console-agent restart or login,
+not immediately in a running agent. Scale and clipboard settings are preserved
+independently. Missing or legacy preferences leave clipboard sharing off.
+
+With the admitted SPICE agent channel and a compatible client, copy new plain text
+in either desktop and paste in the other. The agent does not export preexisting
+guest clipboard contents when it connects. Only UTF-8 text up to 64 KiB is shared;
+images, files, primary/secondary selections and embedded NUL bytes are unsupported.
+Text is not recorded in agent logs or temporary files. Incoming text above the
+limit is discarded while preserving subsequent resize messages, up to the bounded
+16 MiB message ceiling; malformed frames or excessive traffic terminate the agent.
+Ambiguous timed-out clipboard requests disable sharing until reconnection, and a
+disconnect with queued clipboard bytes refuses continuation to avoid replaying
+old-client data. Clipboard release never clears the guest’s current contents.
+
+The helper checks AppKit’s change counter before writing, but AppKit provides no
+atomic compare-and-clear operation; a concurrent local copy can still race the
+final ownership change. Offline parser, socketpair and installer tests pass.
+Native helper compilation, macOS pasteboard access, actual bidirectional
+virt-manager copy/paste and reconnect behavior remain **unqualified** at this
+source milestone. No OS permission or native clipboard success is inferred from
+these tests.
+
+## Manual USB redirection in virt-manager (candidate 422)
+
+The reviewed `CONSOLE_USBREDIR=on` profile supplies two empty SPICE redirection
+slots on the existing xHCI bus; default off adds none. It does not attach a host
+device or give the VM direct access to host USB device nodes. Use the project’s
+`console-manager-usbredir.py` entrypoint with the prepared isolated virt-manager
+client environment and the existing connection/domain arguments. It starts an
+owned private D-Bus session and disables automatic USB redirection before the
+SPICE connection. Launching an ordinary unguarded manager does not provide that
+manual-only policy. The isolated client must include USB redirection support;
+the older candidate 393 client prefix did not.
+
+In that manager’s console, open **Redirect USB device**, select the intended spare
+device, and use the same chooser to disconnect it when finished. The client machine
+supplies the device; the device must be supported by macOS and available to the
+client. An ordinary desktop authorization prompt may be required. Neither a visible
+chooser nor an empty slot proves successful USB transfer. Native attachment,
+guest enumeration/I/O, detach/reconnect and host ownership restoration still need
+qualification. Existing guest keyboard, tablet and USB audio are separate devices.
+[Topology and client-policy details](../findings/research/console-usb-redirection-plan-20261010.md).
+
 ## Restartable immutable presentation (394/395/402)
 
 The updated external launcher selects the sealed presenter's existing snapshot
@@ -154,7 +212,7 @@ transient state-query error remains recorded. 406's earlier eight-vCPU functiona
 qualification and PerfPowerServices CPU limitation remain separate.
 [410 result](../findings/research/virtualbox-fat-exchange-native-20261010.md).
 
-A future early-loader suppression experiment is read-only inventory work after
-matching the AAPL,iokit-ignore-ndrv property; it is not installed by this helper and
+A future early-loader suppression experiment changes the AAPL,iokit-ignore-ndrv
+property before boot, then performs read-only inventory; it is not installed by this helper and
 must not be applied as a live framebuffer takeover.
 [Source-backed plan](../findings/research/virtualbox-boot-framebuffer-ownership-20261010.md).
