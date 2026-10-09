@@ -48,6 +48,7 @@ def main():
     p.add_argument('--qemu',type=Path,required=True);p.add_argument('--bios-dir',type=Path,required=True)
     p.add_argument('--output',type=Path,required=True);p.add_argument('--seconds',type=int,default=15)
     p.add_argument('--rate',type=int,choices=(60,));p.add_argument('--split',action='store_true')
+    p.add_argument('--snapshot',action='store_true',help='isolated experimental staging/ACK producer')
     p.add_argument('--roi-extension',type=Path,help='optional paired observer control, no extra connection')
     p.add_argument('--manager-wrapper-control',action='store_true',help='also compare actual manager selection function on this isolated widget')
     p.add_argument('--width',type=int,default=640);p.add_argument('--height',type=int,default=480)
@@ -72,7 +73,7 @@ def main():
     nonce='0344034403440344';root=args.output.resolve()
     command=[str(args.qemu.resolve()),'-L',str(args.bios_dir.resolve()),'-machine','q35,accel=tcg',
              '-nodefaults','-S','-m','128M','-vga','none','-display','none','-nic','none',
-             '-device','bochs-display,id=console,addr=02.0,vgamem=64M',
+             '-device','bochs-display,id=console,addr=02.0,vgamem=64M'+(',x-debug-snapshot=on' if args.snapshot else ''),
              '-qtest',f'unix:{root}/qt,server=on,wait=off','-qtest-log','/dev/null',
              '-qmp',f'unix:{root}/qm,server=on,wait=off',
              '-spice',f'unix=on,addr={root}/spice,disable-ticketing=on,image-compression=off,gl=off'+
@@ -103,7 +104,25 @@ def main():
         def pci(off,value):test(f'outl 0xcf8 {0x80001000+off:#x}');test(f'outl 0xcfc {value:#x}')
         qmp('qmp_capabilities');qmp('cont');qmp('stop');pci(0x10,0xe0000000);pci(0x18,0xf0000000);pci(4,2)
         for i,v in [(4,0),(1,args.width),(2,args.height),(3,32),(6,args.width),(8,0),(9,0)]:test(f'writew {0xf0000500+i*2:#x} {v:#x}')
-        def write(raw):test(f'write {0xe0000000+64*args.scale*args.width*4:#x} {len(raw):#x} 0x{raw.hex()}')
+        snapshot_sequence=0
+        if args.snapshot:
+            pci(0x14,0xd0000000)
+            if int(test('readl 0xf0000700').split()[1],0)!=0x52534731:
+                raise RuntimeError('snapshot capability absent')
+            test('writel 0xf0000708 1')
+            test(f'writel 0xf0000710 {args.width}')
+            test(f'writel 0xf0000714 {args.height}')
+        def write(raw):
+            nonlocal snapshot_sequence
+            base=0xd0000000 if args.snapshot else 0xe0000000
+            test(f'write {base+64*args.scale*args.width*4:#x} {len(raw):#x} 0x{raw.hex()}')
+            if args.snapshot:
+                snapshot_sequence+=1
+                test(f'writel 0xf0000718 {snapshot_sequence}')
+                ack=int(test('readl 0xf000071c').split()[1],0)
+                error=int(test('readl 0xf000070c').split()[1],0)
+                if ack!=snapshot_sequence or error:
+                    raise RuntimeError('snapshot ACK mismatch')
         write(band(token,nonce,0,width=args.width,scale=args.scale));test('writew 0xf0000508 0x41')
         import gi
         gi.require_version('Gtk','3.0');gi.require_version('SpiceClientGtk','3.0');gi.require_version('SpiceClientGLib','2.0')
@@ -212,12 +231,15 @@ def main():
         if worker and worker.is_alive():raise RuntimeError('producer did not stop')
         session.disconnect();window.destroy();stream.close();producer.close();events.close()
         if started is None or producer_error:raise RuntimeError(f'no complete measurement: {producer_error}')
+        snapshot_counters=None
+        if args.snapshot:
+            snapshot_counters={name:int(test(f'readl {0xf0000700+offset:#x}').split()[1],0) for name,offset in [('ack',0x1c),('published_seq',0x20),('pending_replaced',0x24),('published_count',0x28),('pending_seq',0x2c)]}
         qmp('quit');process.wait(timeout=10)
         rows=[json.loads(x) for x in (root/'producer.jsonl').read_text().splitlines()]
         stats=dict(seconds=args.seconds,interval_ms=args.interval_ms,unique=unique,unique_per_second=unique/args.seconds,
                    valid=valid,invalid_after_start=invalid,last_sequence=last,producer_count=len(rows),
                    producer_per_second=(len(rows)-1)/(rows[-1]['ack']-rows[0]['ack']) if len(rows)>1 else None,
-                   qemu_exit=process.returncode,split=args.split,explicit_rate=args.rate,display_events=counts,
+                   qemu_exit=process.returncode,split=args.split,snapshot=args.snapshot,snapshot_counters=snapshot_counters,explicit_rate=args.rate,display_events=counts,
                    width=args.width,height=args.height,scale=args.scale,paired_observers=roi is not None,roi_bounds_refused=bounds_refused,
                    manager_wrapper_control=manager is not None,roi_extension=extension_identity,
                    scope='TCG qtest producer and offscreen SpiceDisplay buffer only; no guest OS/GPU/manager/scanout FPS')

@@ -1,0 +1,171 @@
+--- a/hw/display/bochs-display.c
++++ b/hw/display/bochs-display.c
+@@ -41,6 +41,13 @@
+     MemoryRegion     vbe;
+     MemoryRegion     qext;
+     MemoryRegion     edid;
++    MemoryRegion     staging, snapshot_regs;
++    DisplaySurface   *snapshot_pending;
++    bool             x_debug_snapshot;
++    uint32_t         snapshot_state, snapshot_width, snapshot_height;
++    uint32_t         snapshot_ack, snapshot_error;
++    uint32_t         snapshot_pending_seq, snapshot_published_seq;
++    uint32_t         snapshot_replaced, snapshot_published;
+ 
+     /* device config */
+     uint64_t         vgamem;
+@@ -60,8 +67,102 @@
+ #define TYPE_BOCHS_DISPLAY "bochs-display"
+ OBJECT_DECLARE_SIMPLE_TYPE(BochsDisplayState, BOCHS_DISPLAY)
+ 
++/* Diagnostic only: staging is separate from firmware/boot framebuffer BAR0.
++ * One ARM per device lifetime. Guest must own staging and fence before COMMIT.
++ * ACK proves the synchronous host copy, never listener delivery or scanout.
++ */
++#define SNAPSHOT_BYTES (32 * MiB)
++#define SNAPSHOT_MAGIC 0x52534731
++
++static int bochs_snapshot_pre_save(void *opaque)
++{
++    BochsDisplayState *s = opaque;
++    /* No silently incomplete migration of this experimental protocol. */
++    return s->x_debug_snapshot ? -EINVAL : 0;
++}
++
++static uint64_t bochs_snapshot_read(void *opaque, hwaddr addr, unsigned size)
++{
++    BochsDisplayState *s = opaque;
++    switch (addr) {
++    case 0x00: return SNAPSHOT_MAGIC;
++    case 0x04: return SNAPSHOT_BYTES;
++    case 0x08: return s->snapshot_state; /* 0 available, 1 armed, 2 retired */
++    case 0x0c: return s->snapshot_error;
++    case 0x10: return s->snapshot_width;
++    case 0x14: return s->snapshot_height;
++    case 0x1c: return s->snapshot_ack;
++    case 0x20: return s->snapshot_published_seq;
++    case 0x24: return s->snapshot_replaced;
++    case 0x28: return s->snapshot_published;
++    case 0x2c: return s->snapshot_pending_seq;
++    default: return 0;
++    }
++}
++
++static void bochs_snapshot_write(void *opaque, hwaddr addr, uint64_t val,
++                                 unsigned size)
++{
++    BochsDisplayState *s = opaque;
++    DisplaySurface *fresh;
++    uint32_t w = s->snapshot_width, h = s->snapshot_height;
++
++    /* Default MMIO dispatch is under BQL; gfx_update runs under the same lock.
++     * Never reference staging from a DisplaySurface or a deferred callback. */
++    if (addr == 0x08) {
++        if (val == 1 && s->snapshot_state == 0) {
++            s->snapshot_state = 1;
++            s->snapshot_error = 0;
++        } else if (val == 2 && s->snapshot_state == 1) {
++            s->snapshot_state = 2;
++            qemu_free_displaysurface(s->snapshot_pending);
++            s->snapshot_pending = NULL;
++            s->snapshot_pending_seq = 0;
++            memset(&s->mode, 0, sizeof(s->mode));
++        } else {
++            s->snapshot_error = 1;
++        }
++        return;
++    }
++    if (s->snapshot_state != 1) { s->snapshot_error = 1; return; }
++    if (addr == 0x10) { s->snapshot_width = val; return; }
++    if (addr == 0x14) { s->snapshot_height = val; return; }
++    if (addr != 0x18) { s->snapshot_error = 2; return; }
++    if (!val || s->snapshot_ack == UINT32_MAX || val != s->snapshot_ack + 1) {
++        s->snapshot_error = 3;
++        return;
++    }
++    if (w < 320 || h < 200 || w > 3840 || h > 2160 ||
++        (uint64_t)w * h * 4 > SNAPSHOT_BYTES || s->big_endian_fb) {
++        s->snapshot_error = 4;
++        return;
++    }
++    fresh = qemu_create_displaysurface(w, h);
++    memcpy(surface_data(fresh), memory_region_get_ram_ptr(&s->staging),
++           (size_t)w * h * 4);
++    /* Completed snapshots are immutable. Latest pending may replace an older
++     * unpublished snapshot; the console/listeners retain the published one. */
++    if (s->snapshot_pending) { s->snapshot_replaced++; }
++    qemu_free_displaysurface(s->snapshot_pending);
++    s->snapshot_pending = fresh;
++    s->snapshot_pending_seq = val;
++    s->snapshot_error = 0;
++    s->snapshot_ack = val;
++}
++
++static const MemoryRegionOps bochs_snapshot_ops = {
++    .read = bochs_snapshot_read,
++    .write = bochs_snapshot_write,
++    .endianness = DEVICE_LITTLE_ENDIAN,
++    .valid.min_access_size = 4,
++    .valid.max_access_size = 4,
++    .impl.min_access_size = 4,
++    .impl.max_access_size = 4,
++};
++
+ static const VMStateDescription vmstate_bochs_display = {
+     .name = "bochs-display",
++    .pre_save = bochs_snapshot_pre_save,
+     .fields = (const VMStateField[]) {
+         VMSTATE_PCI_DEVICE(pci, BochsDisplayState),
+         VMSTATE_UINT16_ARRAY(vbe_regs, BochsDisplayState, VBE_DISPI_INDEX_NB),
+@@ -210,6 +311,18 @@
+     bool dirty;
+     int y, ys, ret;
+ 
++    if (s->x_debug_snapshot && s->snapshot_state == 1) {
++        if (s->snapshot_pending) {
++            ds = s->snapshot_pending;
++            s->snapshot_pending = NULL;
++            s->snapshot_published_seq = s->snapshot_pending_seq;
++            s->snapshot_pending_seq = 0;
++            s->snapshot_published++;
++            dpy_gfx_replace_surface(s->con, ds);
++            dpy_gfx_update_full(s->con);
++        }
++        return;
++    }
+     ret = bochs_display_get_mode(s, &mode);
+     if (ret < 0) {
+         /* no (valid) video mode */
+@@ -297,6 +410,15 @@
+     pci_register_bar(&s->pci, 0, PCI_BASE_ADDRESS_MEM_PREFETCH, &s->vram);
+     pci_register_bar(&s->pci, 2, PCI_BASE_ADDRESS_SPACE_MEMORY, &s->mmio);
+ 
++    if (s->x_debug_snapshot) {
++        memory_region_init_ram(&s->staging, obj, "bochs-snapshot-staging",
++                               SNAPSHOT_BYTES, &error_fatal);
++        pci_register_bar(&s->pci, 1, PCI_BASE_ADDRESS_MEM_PREFETCH, &s->staging);
++        memory_region_init_io(&s->snapshot_regs, obj, &bochs_snapshot_ops, s,
++                              "bochs-snapshot-regs", 0x30);
++        memory_region_add_subregion(&s->mmio, 0x700, &s->snapshot_regs);
++    }
++
+     if (s->enable_edid) {
+         qemu_edid_generate(s->edid_blob, sizeof(s->edid_blob), &s->edid_info);
+         qemu_edid_region_io(&s->edid, obj, s->edid_blob, sizeof(s->edid_blob));
+@@ -347,6 +469,8 @@
+ {
+     BochsDisplayState *s = BOCHS_DISPLAY(dev);
+ 
++    qemu_free_displaysurface(s->snapshot_pending);
++    s->snapshot_pending = NULL;
+     graphic_console_close(s->con);
+ }
+ 
+@@ -355,6 +479,7 @@
+     DEFINE_PROP_BOOL("edid", BochsDisplayState, enable_edid, true),
+     DEFINE_PROP_BOOL("x-debug-full-refresh", BochsDisplayState,
+                      x_debug_full_refresh, false),
++    DEFINE_PROP_BOOL("x-debug-snapshot", BochsDisplayState, x_debug_snapshot, false),
+     DEFINE_EDID_PROPERTIES(BochsDisplayState, edid_info),
+ };
+ 
