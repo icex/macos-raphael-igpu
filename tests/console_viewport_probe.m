@@ -14,6 +14,34 @@ static BOOL saveJSON(NSString *path, NSDictionary *value) {
     NSData *data=[NSJSONSerialization dataWithJSONObject:value options:NSJSONWritingPrettyPrinted error:&error];
     return data && [data writeToFile:path options:NSDataWritingAtomic error:&error];
 }
+static NSArray *rectValues(NSRect r) {
+    return @[@(r.origin.x),@(r.origin.y),@(r.size.width),@(r.size.height)];
+}
+// Read the original target again rather than trusting a cached NSScreen. Also
+// retain main/window identity: a new screen with identical dimensions is a change.
+static NSDictionary *targetSnapshot(CGDirectDisplayID target, NSWindow *window, NSView *view) {
+    NSScreen *current=nil;
+    for(NSScreen *candidate in NSScreen.screens)
+        if([candidate.deviceDescription[@"NSScreenNumber"] unsignedIntValue]==target) { current=candidate;break; }
+    CGDisplayModeRef mode=CGDisplayCopyDisplayMode(target);
+    NSDictionary *snapshot=@{
+        @"target_display":@(target),@"target_present":@(current!=nil),@"online":@(CGDisplayIsOnline(target)),
+        @"vendor":@(CGDisplayVendorNumber(target)),@"model":@(CGDisplayModelNumber(target)),
+        @"serial":@(CGDisplaySerialNumber(target)),@"mirrors_display":@(CGDisplayMirrorsDisplay(target)),
+        @"main_display":NSScreen.mainScreen.deviceDescription[@"NSScreenNumber"] ?: @0,
+        @"window_display":window.screen.deviceDescription[@"NSScreenNumber"] ?: @0,
+        @"screen_frame":rectValues(current ? current.frame : NSZeroRect),
+        @"cg_frame":rectValues(CGDisplayBounds(target)),@"rotation":@(CGDisplayRotation(target)),
+        @"window_frame":rectValues(window.frame),@"view_bounds":rectValues(view.bounds),
+        @"backing_scale":@(current ? current.backingScaleFactor : 0),
+        @"window_backing_scale":@(window.backingScaleFactor),
+        @"mode_present":@(mode!=NULL),@"mode_id":@(mode ? CGDisplayModeGetIODisplayModeID(mode) : 0),
+        @"refresh_hz":@(mode ? CGDisplayModeGetRefreshRate(mode) : 0),
+        @"cg_physical_size":@[@(mode ? CGDisplayModeGetPixelWidth(mode) : 0),@(mode ? CGDisplayModeGetPixelHeight(mode) : 0)],
+        @"cg_logical_size":@[@(mode ? CGDisplayModeGetWidth(mode) : 0),@(mode ? CGDisplayModeGetHeight(mode) : 0)]};
+    if(mode)CGDisplayModeRelease(mode);
+    return snapshot;
+}
 @interface ViewportWindow : NSWindow
 @end
 @implementation ViewportWindow
@@ -77,6 +105,11 @@ int main(int argc,const char **argv) { @autoreleasepool {
     field.placeholderString=@"Keyboard check after five targets";field.hidden=YES;
     [view addSubview:field];
     [window makeKeyAndOrderFront:nil];[NSApp activateIgnoringOtherApps:YES];
+    CGDirectDisplayID target=[screen.deviceDescription[@"NSScreenNumber"] unsignedIntValue];
+    NSDictionary *baseline=targetSnapshot(target,window,view);
+    if(!target || ![baseline[@"target_present"] boolValue] || ![baseline[@"online"] boolValue] ||
+       ![baseline[@"mode_present"] boolValue]) return 3;
+    __block NSUInteger geometryChanges=0;
     NSMutableArray *clicks=[NSMutableArray array];
     NSMutableArray *screenChanges=[NSMutableArray array];
     __block NSString *lastText=@"";__block NSUInteger missed=0;
@@ -86,7 +119,8 @@ int main(int argc,const char **argv) { @autoreleasepool {
         NSDictionary *state=@{@"token":token,@"step":@(view.step),@"missed":@(missed),
             @"logical_size":@[@(width),@(height)],@"backing_scale":@(screen.backingScaleFactor),
             @"target_top_left":@[@(p.x),@(p.y)],@"text":field.stringValue,
-            @"screen_changes":screenChanges,@"uptime":@(NSProcessInfo.processInfo.systemUptime)};
+            @"screen_changes":screenChanges,@"geometry_changes":@(geometryChanges),
+            @"baseline_target":baseline,@"current_target":targetSnapshot(target,window,view),@"uptime":@(NSProcessInfo.processInfo.systemUptime)};
         if(!saveJSON(ready,state)) _exit(5);
     };
     id monitor=[NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskLeftMouseDown
@@ -108,9 +142,13 @@ int main(int argc,const char **argv) { @autoreleasepool {
         addObserverForName:NSApplicationDidChangeScreenParametersNotification object:nil queue:NSOperationQueue.mainQueue
         usingBlock:^(NSNotification *notification) {
             (void)notification;NSScreen *now=NSScreen.mainScreen;
+            NSDictionary *observed=targetSnapshot(target,window,view);
+            BOOL changed=![observed isEqualToDictionary:baseline];
+            if(changed)geometryChanges++;
             [screenChanges addObject:@{@"uptime":@(NSProcessInfo.processInfo.systemUptime),
                 @"logical_size":@[@(now.frame.size.width),@(now.frame.size.height)],
-                @"backing_scale":@(now.backingScaleFactor)}];publish();
+                @"backing_scale":@(now.backingScaleFactor),@"target":observed,
+                @"geometry_or_identity_changed":@(changed)}];publish();
         }];
     publish();
     NSTimer *timer=[NSTimer scheduledTimerWithTimeInterval:.1 repeats:YES block:^(NSTimer *tick) {
@@ -118,10 +156,14 @@ int main(int argc,const char **argv) { @autoreleasepool {
         BOOL complete=view.step==5 && [field.stringValue isEqualToString:token];
         BOOL timedOut=NSProcessInfo.processInfo.systemUptime-started>=duration;
         if(!complete && !timedOut) return;
-        finished=YES;[tick invalidate];BOOL passed=complete && missed==0 && screenChanges.count==0;
+        finished=YES;[tick invalidate];
+        NSDictionary *finalTarget=targetSnapshot(target,window,view);
+        BOOL finalUnchanged=[finalTarget isEqualToDictionary:baseline];
+        BOOL passed=complete && missed==0 && geometryChanges==0 && finalUnchanged;
         NSDictionary *value=@{@"passed":@(passed),@"complete":@(complete),@"timed_out":@(timedOut),
             @"token":token,@"text":field.stringValue,@"target_hits":@(view.step),@"missed":@(missed),
-            @"clicks":clicks,@"screen_changes":screenChanges,@"logical_size":@[@(width),@(height)],
+            @"clicks":clicks,@"screen_changes":screenChanges,@"geometry_changes":@(geometryChanges),
+            @"baseline_target":baseline,@"final_target":finalTarget,@"final_target_unchanged":@(finalUnchanged),@"logical_size":@[@(width),@(height)],
             @"backing_scale":@(screen.backingScaleFactor),@"elapsed":@(NSProcessInfo.processInfo.systemUptime-started),
             @"scope":@"Guest input observations only. Host artifacts must prove actual manager resize/input path."};
         BOOL saved=saveJSON(result,value);[NSEvent removeMonitor:monitor];[NSNotificationCenter.defaultCenter removeObserver:screenObserver];
