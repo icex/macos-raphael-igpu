@@ -13,9 +13,30 @@ def config(w=2560,h=1440,count=1,flags=0,depth=32,x=0,y=0):return struct.pack('<
 class MonitorTests(unittest.TestCase):
     def test_exact_geometry_and_layout(self):
         self.assertEqual(m.configuration(config())['width'],2560)
-        for args in [dict(count=2),dict(flags=1),dict(flags=3),dict(depth=24),dict(x=1),dict(y=-1),dict(w=3841),dict(h=2161),dict(w=0)]:
+        for args in [dict(count=2),dict(flags=4),dict(depth=24),dict(x=1),dict(y=-1),dict(w=3841),dict(h=2161),dict(w=0)]:
             with self.subTest(args=args),self.assertRaises(ValueError):m.configuration(config(**args))
         with self.assertRaises(ValueError):m.configuration(config()+b'physical-size')
+    def test_defined_flags_exact_lengths_and_advisory_mm(self):
+        for flags in range(4):
+            payload=config(flags=flags)+(struct.pack('<HH',210,350) if flags&2 else b'')
+            result=m.configuration(payload)
+            self.assertEqual(result['flags'],flags)
+            if flags&2:self.assertEqual((result['width_mm'],result['height_mm']),(350,210))
+        for payload in [config(flags=2),config(flags=3)+b'xx',config()+b'xxxx']:
+            with self.assertRaises(ValueError):m.configuration(payload)
+        self.assertEqual(m.configuration(config(flags=3)+bytes(4))['width_mm'],0)
+    def test_refused_metadata_retains_only_bounded_numbers(self):
+        row=m.MonitorParser().feed(m.packet(2,config(flags=7)))[0]
+        self.assertEqual(row['configuration_header']['flags'],7)
+        self.assertEqual(row['configuration_header']['width'],2560)
+        self.assertIn('configuration_error',row)
+    def test_helper_missing_or_nonzero_origin_refused(self):
+        import json,subprocess
+        for origin in [{},{'origin_x':1,'origin_y':0},{'origin_x':0,'origin_y':2}]:
+            value=dict(passed=True,actual=dict(pixel_width=2560,pixel_height=1440,**origin))
+            result=subprocess.CompletedProcess([],0,json.dumps(value),'')
+            with patch.object(m.subprocess,'run',return_value=result):
+                self.assertFalse(m.apply_mode(Path('/helper'),m.configuration(config()),5)['passed'])
     def test_fragmented_monitor_and_capability_share_validated_chunk(self):
         packet=m.packet(2,config());p=m.MonitorParser();rows=[]
         for byte in packet:rows.extend(p.feed(bytes([byte])))
@@ -23,12 +44,12 @@ class MonitorTests(unittest.TestCase):
         self.assertNotIn('payload',rows[0])
         self.assertEqual(p.feed(m.capabilities(1,True))[0]['caps'],[6])
     def test_bad_config_retains_error_but_no_feature_payload(self):
-        row=m.MonitorParser().feed(m.packet(2,config(flags=3)))[0]
+        row=m.MonitorParser().feed(m.packet(2,config(flags=4)))[0]
         self.assertIn('configuration_error',row);self.assertNotIn('configuration',row)
     def test_helper_false_success_or_wrong_dimensions_refused(self):
         import json,subprocess
         for code,passed,w in [(1,True,2560),(0,False,2560),(0,True,1280)]:
-            result=subprocess.CompletedProcess([],code,json.dumps(dict(passed=passed,actual=dict(pixel_width=w,pixel_height=1440))),'')
+            result=subprocess.CompletedProcess([],code,json.dumps(dict(passed=passed,actual=dict(pixel_width=w,pixel_height=1440,origin_x=0,origin_y=0))),'')
             with patch.object(m.subprocess,'run',return_value=result):
                 self.assertFalse(m.apply_mode(Path('/helper'),m.configuration(config()),5)['passed'])
     def test_success_reply_requires_verified_application(self):

@@ -35,14 +35,28 @@ def capabilities(request,enabled):
     return packet(6,struct.pack('<II',request,6 if enabled else 0))
 
 
+def configuration_header(payload):
+    """Bounded numeric metadata, including malformed/unsupported requests."""
+    result=dict(payload_bytes=len(payload))
+    if len(payload)>=8:
+        result.update(zip(('count','flags'),struct.unpack_from('<II',payload)))
+    if len(payload)>=28:
+        result.update(zip(('height','width','depth','x','y'),struct.unpack_from('<IIIii',payload,8)))
+    return result
+
+
 def configuration(payload):
-    # VDAgentMonitorsConfig{u32 count,flags}, VDAgentMonConfig{h,w,depth,i32 x,y}.
-    if len(payload)!=28:raise ValueError('one-monitor exact payload required')
-    count,flags,height,width,depth,x,y=struct.unpack('<IIIIIii',payload)
-    result=dict(count=count,flags=flags,width=width,height=height,depth=depth,x=x,y=y)
-    if count!=1 or flags!=0:raise ValueError('unsupported monitor count/flags')
-    if depth!=32 or x!=0 or y!=0:raise ValueError('unsupported depth/layout')
-    if not 320<=width<=3840 or not 200<=height<=2160:raise ValueError('unsupported physical geometry')
+    result=configuration_header(payload)
+    if len(payload)<8:raise ValueError('missing monitor header')
+    count,flags=result['count'],result['flags']
+    if count!=1 or flags & ~3:raise ValueError('unsupported monitor count/flags')
+    if len(payload)!=(32 if flags & 2 else 28):raise ValueError('one-monitor exact payload required')
+    if result['depth']!=32 or result['x']!=0 or result['y']!=0:raise ValueError('unsupported depth/layout')
+    if not 320<=result['width']<=3840 or not 200<=result['height']<=2160:raise ValueError('unsupported physical geometry')
+    if flags & 2:
+        height_mm,width_mm=struct.unpack_from('<HH',payload,28)
+        result.update(height_mm=height_mm,width_mm=width_mm)
+    result['physical_mm_scope']='advisory hints retained but ignored; no DPI change'
     return result
 
 
@@ -65,6 +79,7 @@ class MonitorParser:
                 if len(body)<20+length:break
                 row=validated[len(rows)]
                 if kind==2:
+                    row['configuration_header']=configuration_header(body[20:20+length])
                     try:row.update(configuration=configuration(body[20:20+length]))
                     except ValueError as error:row.update(configuration_error=str(error))
                 rows.append(row);del body[:20+length]
@@ -78,7 +93,7 @@ def apply_mode(helper,config,timeout):
     if len(run.stdout)>16384 or len(run.stderr)>16384:raise ValueError('helper output limit')
     value=json.loads(run.stdout)
     actual=value.get('actual',{})
-    passed=run.returncode==0 and value.get('passed') is True and (actual.get('pixel_width'),actual.get('pixel_height'))==(config['width'],config['height'])
+    passed=run.returncode==0 and value.get('passed') is True and (actual.get('pixel_width'),actual.get('pixel_height'))==(config['width'],config['height']) and actual.get('origin_x')==0 and actual.get('origin_y')==0
     return dict(passed=passed,exit=run.returncode,result=value)
 
 
@@ -128,7 +143,7 @@ def serve(fd,seconds,enabled,apply,helper,record,clock=time.monotonic):
                 if tx+len(pending)>4096:raise ValueError('transmit byte limit')
     return dict(event='finish',reason='bounded-deadline',received_bytes=rx,transmitted_bytes=tx,
                 pending_transmit_bytes=len(pending),requests=requests,verified_applications=applied,
-                pending_parser_bytes=parser.validator.pending(),scope='existing-mode diagnostic; no arbitrary resolution creation or full desktop qualification')
+                pending_parser_bytes=parser.validator.pending(),scope='existing-mode diagnostic; physical-mm hints ignored, no DPI changes, arbitrary resolution creation or full desktop qualification')
 
 
 def main():

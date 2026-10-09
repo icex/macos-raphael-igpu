@@ -29,6 +29,8 @@ int main(int argc,char **argv) {@autoreleasepool {
  if(CGGetOnlineDisplayList(64,ids,&n)!=kCGErrorSuccess||n>=64)return 3;
  for(unsigned i=0;i<n;i++)if(CGDisplayVendorNumber(ids[i])==0x5250&&CGDisplayModelNumber(ids[i])==0x3453){if(target)return 3;target=ids[i];}
  if(!target)return 3;
+ CGRect beforeBounds=CGDisplayBounds(target);
+ if(apply&&(beforeBounds.origin.x!=0||beforeBounds.origin.y!=0)){emit(@{@"passed":@NO,@"reason":@"target-origin-not-zero"});return 4;}
  CFArrayRef modes=CGDisplayCopyAllDisplayModes(target,(__bridge CFDictionaryRef)@{(id)kCGDisplayShowDuplicateLowResolutionModes:@YES});
  if(!modes)return 3;
  NSMutableArray *list=[NSMutableArray new];CGDisplayModeRef choice=NULL;bool bestHi=false;
@@ -42,7 +44,10 @@ int main(int argc,char **argv) {@autoreleasepool {
  if(!choice){emit(@{@"passed":@NO,@"reason":@"no-existing-exact-physical-mode"});CFRelease(modes);return 4;}
  CGError error=CGDisplaySetDisplayMode(target,choice,NULL);
  CGDisplayModeRef actual=CGDisplayCopyDisplayMode(target);
- bool passed=error==kCGErrorSuccess&&actual&&CGDisplayModeGetPixelWidth(actual)==w&&CGDisplayModeGetPixelHeight(actual)==h&&CGDisplayVendorNumber(target)==0x5250&&CGDisplayModelNumber(target)==0x3453;
- emit(@{@"passed":@(passed),@"display":@(target),@"error":@(error),@"selected":info(choice),@"actual":actual?info(actual):@{},@"scope":@"existing virtual display mode only"});
+ CGRect afterBounds=CGDisplayBounds(target);
+ bool passed=afterBounds.origin.x==0&&afterBounds.origin.y==0&&error==kCGErrorSuccess&&actual&&CGDisplayModeGetPixelWidth(actual)==w&&CGDisplayModeGetPixelHeight(actual)==h&&CGDisplayVendorNumber(target)==0x5250&&CGDisplayModelNumber(target)==0x3453;
+ NSMutableDictionary *actualInfo=actual?[info(actual) mutableCopy]:[NSMutableDictionary new];
+ actualInfo[@"origin_x"]=@(afterBounds.origin.x);actualInfo[@"origin_y"]=@(afterBounds.origin.y);
+ emit(@{@"passed":@(passed),@"display":@(target),@"error":@(error),@"selected":info(choice),@"actual":actualInfo,@"scope":@"existing virtual display mode and zero origin only; no DPI changes"});
  if(actual)CFRelease(actual);CFRelease(modes);return passed?0:5;
 }}
