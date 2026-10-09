@@ -1,3 +1,4 @@
+import errno
 import os
 from pathlib import Path
 import shutil
@@ -34,6 +35,16 @@ class ZombieProofTests(unittest.TestCase):
     def test_permission_failure_is_not_absence(self):
         with patch.object(entry.Path,'read_text',side_effect=PermissionError(13,'private')):
             with self.assertRaises(PermissionError):self.proof()
+    def test_descriptor_permission_failure_is_not_completion(self):
+        original=Path.iterdir
+        def scan(path):
+            if path==self.root/'fd':
+                raise PermissionError(errno.EACCES,'private',str(path))
+            return original(path)
+        with patch.object(entry.Path,'iterdir',new=scan):
+            with self.assertRaises(PermissionError) as caught:self.proof()
+        self.assertEqual(caught.exception.errno,errno.EACCES)
+        self.assertEqual(caught.exception.filename,str(self.root/'fd'))
     def test_changed_state_during_inspection_refuses(self):
         original=Path.read_text;calls=0
         def read(path,*a,**kw):
@@ -47,7 +58,7 @@ class ZombieProofTests(unittest.TestCase):
 
 @unittest.skipUnless(Path('/proc/self/stat').exists() and shutil.which('cc'),'Linux proc and C compiler required')
 class RealZombieTests(unittest.TestCase):
-    def test_zombie_leader_with_live_worker_refuses_then_completed_child_passes(self):
+    def test_zombie_leader_refuses_then_completed_child_obeys_descriptor_visibility(self):
         # pthread_exit leaves a zombie group leader while the worker owns files.
         source=r'''
 #include <pthread.h>
@@ -71,7 +82,25 @@ int main(void){pthread_t t;if(pthread_create(&t,0,worker,0))return 2;pthread_exi
                 self.assertFalse(entry.completed_original_zombie(identity))
                 os.kill(proc.pid,signal.SIGKILL)
                 deadline=time.monotonic()+3
-                while time.monotonic()<deadline and not entry.completed_original_zombie(identity):time.sleep(.01)
-                self.assertTrue(entry.completed_original_zombie(identity))
+                tasks=Path(f'/proc/{proc.pid}/task')
+                while time.monotonic()<deadline and {p.name for p in tasks.iterdir()}!={str(proc.pid)}:
+                    time.sleep(.01)
+                self.assertEqual({p.name for p in tasks.iterdir()},{str(proc.pid)})
+                # Some hosted kernels deny even the parent's fd-directory scan
+                # once this pthread leader is fully dead. That is an expected
+                # conservative refusal, not evidence of completed ownership.
+                fd=Path(f'/proc/{proc.pid}/fd')
+                try:
+                    descriptors=list(fd.iterdir())
+                except PermissionError as denied:
+                    self.assertIn(denied.errno,(errno.EACCES,errno.EPERM))
+                    self.assertEqual(denied.filename,str(fd))
+                    with self.assertRaises(PermissionError) as caught:
+                        entry.completed_original_zombie(identity)
+                    self.assertEqual(caught.exception.errno,denied.errno)
+                    self.assertEqual(caught.exception.filename,str(fd))
+                else:
+                    self.assertEqual(descriptors,[])
+                    self.assertTrue(entry.completed_original_zombie(identity))
             finally:
                 proc.kill();proc.wait(timeout=3)
