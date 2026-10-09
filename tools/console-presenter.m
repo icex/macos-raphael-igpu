@@ -10,6 +10,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <emmintrin.h>
+#include "console-source-token.h"
 
 static void displayChanged(CGDirectDisplayID display, CGDisplayChangeSummaryFlags flags, void *context) {
     printf("CONSOLE display_change=%u flags=0x%x\n",display,flags);fflush(stdout);
@@ -35,6 +36,7 @@ typedef struct {
 } ConsoleTiming;
 @interface ConsoleOutput : NSObject <SCStreamOutput, SCStreamDelegate> {
     ConsoleTiming timing;
+    RGTokenWindow tokenWindow;
     unsigned sourceSamples[2];
     uint8_t *sourceScratch;
     uint64_t droppedCount; // atomic: capture queue writes, processing queue reads
@@ -49,6 +51,49 @@ typedef struct {
 @property(strong) dispatch_semaphore_t copying;
 @end
 @implementation ConsoleOutput
+- (BOOL)configureToken:(const char *)nonce {
+    if(!nonce)return YES;
+    if(!rg_token_nonce(nonce,tokenWindow.nonce))return NO;
+    tokenWindow.enabled=1;
+    printf("CONSOLE_SOURCE_TOKEN configured=1 wait_seconds=60 window_seconds=30 scope=processed-source-only excludes=busy-dropped,upstream-uncaptured,scanout\n");fflush(stdout);return YES;
+}
+- (void)armToken {
+    if(tokenWindow.enabled){tokenWindow.armed=1;tokenWindow.armedAt=now();}
+}
+- (void)pollToken {
+    rg_token_poll(&tokenWindow,now());
+    if(tokenWindow.enabled&&tokenWindow.done&&!tokenWindow.reported){
+        tokenWindow.reported=1;
+        printf("CONSOLE_SOURCE_TOKEN done=1 started=%d armed_at=%.9f start=%.9f end=%.9f waiting=%llu processed=%llu valid=%llu invalid=%llu unique=%llu duplicates=%llu skipped_ids=%llu scale=%u check_total_ms=%.3f check_max_ms=%.3f",
+          tokenWindow.started,tokenWindow.armedAt,tokenWindow.start,tokenWindow.end,
+          (unsigned long long)tokenWindow.waiting,(unsigned long long)tokenWindow.processed,
+          (unsigned long long)tokenWindow.valid,(unsigned long long)tokenWindow.invalid,
+          (unsigned long long)tokenWindow.unique,(unsigned long long)tokenWindow.duplicates,
+          (unsigned long long)tokenWindow.skipped,tokenWindow.scale,1000*tokenWindow.checkSeconds,1000*tokenWindow.checkMax);
+        for(unsigned i=1;i<RG_T_RESULTS;i++)printf(" error_%u=%llu",i,(unsigned long long)tokenWindow.errors[i]);
+        printf("\n");fflush(stdout);
+    }
+}
+- (void)tokenUnavailable {
+    if(tokenWindow.enabled){rg_token_observe(&tokenWindow,now(),RG_T_UNAVAILABLE,0,0);[self pollToken];}
+}
+- (void)checkToken:(const uint8_t *)pixels width:(size_t)w height:(size_t)h stride:(size_t)stride {
+    if(!tokenWindow.enabled||!tokenWindow.armed||tokenWindow.done)return;
+    double begin=now();rg_token_poll(&tokenWindow,begin);if(tokenWindow.done){[self pollToken];return;}
+    uint32_t sequence=0;unsigned scale=tokenWindow.started?tokenWindow.scale:1;
+    int result=rg_token_decode(pixels,w,h,stride,tokenWindow.nonce,scale,&sequence);
+    if(!tokenWindow.started&&result!=RG_T_VALID){scale=2;result=rg_token_decode(pixels,w,h,stride,tokenWindow.nonce,scale,&sequence);}
+    int started=tokenWindow.started;
+    rg_token_observe(&tokenWindow,begin,result,sequence,scale);
+    double cost=now()-begin;tokenWindow.checkSeconds+=cost;if(cost>tokenWindow.checkMax)tokenWindow.checkMax=cost;
+    if(!started&&tokenWindow.started){printf("CONSOLE_SOURCE_TOKEN started=1 sequence=%u scale=%u time=%.9f\n",sequence,scale,begin);fflush(stdout);}
+    [self pollToken];
+}
+- (void)finishToken {
+    if(tokenWindow.enabled&&!tokenWindow.done){printf("CONSOLE_SOURCE_TOKEN interrupted=presenter-stop\n");tokenWindow.done=1;tokenWindow.end=now();}
+    [self pollToken];
+}
+
 - (BOOL)enableSourceDiagnostic {
     // Allocate/touch once before starting capture, never inside measured legs.
     if(posix_memalign((void **)&sourceScratch,64,3840u*2160u*4u))return NO;
@@ -99,18 +144,19 @@ typedef struct {
 }
 - (void)presentSample:(CMSampleBufferRef)sample callbackTime:(double)callbackTime {
     double workerTime=now();
-    if(self.stopping || self.updating)return;
+    if(self.stopping || self.updating){if(tokenWindow.enabled)[self tokenUnavailable];return;}
     NSArray *attachments=(__bridge NSArray *)CMSampleBufferGetSampleAttachmentsArray(sample, false);
-    if(!attachments.count || [attachments[0][SCStreamFrameInfoStatus] integerValue]!=SCFrameStatusComplete)return;
+    if(!attachments.count || [attachments[0][SCStreamFrameInfoStatus] integerValue]!=SCFrameStatusComplete){if(tokenWindow.enabled)[self tokenUnavailable];return;}
     CVPixelBufferRef image=CMSampleBufferGetImageBuffer(sample);
-    if(!image || CVPixelBufferGetPixelFormatType(image)!=kCVPixelFormatType_32BGRA)return;
+    if(!image || CVPixelBufferGetPixelFormatType(image)!=kCVPixelFormatType_32BGRA){if(tokenWindow.enabled)[self tokenUnavailable];return;}
     size_t w=CVPixelBufferGetWidth(image),h=CVPixelBufferGetHeight(image);
-    if(w!=self.targetWidth || h!=self.targetHeight || w*h*4>self.length)return;
+    if(w!=self.targetWidth || h!=self.targetHeight || w*h*4>self.length){if(tokenWindow.enabled)[self tokenUnavailable];return;}
     double begin=now();
-    if(CVPixelBufferLockBaseAddress(image,kCVPixelBufferLock_ReadOnly)!=kCVReturnSuccess)return;
+    if(CVPixelBufferLockBaseAddress(image,kCVPixelBufferLock_ReadOnly)!=kCVReturnSuccess){if(tokenWindow.enabled)[self tokenUnavailable];return;}
     double locked=now();
     const uint8_t *src=CVPixelBufferGetBaseAddress(image);
     size_t stride=CVPixelBufferGetBytesPerRow(image);
+    if(tokenWindow.enabled)[self checkToken:src width:w height:h stride:stride];
     BOOL copied=NO, changed=NO, diagnostic=NO;
     double rowsBegin=0, rowsEnd=0, fenced=0, modeBegin=0, modeEnd=0, end=0;
     if(src && stride>=w*4) {
@@ -208,11 +254,15 @@ int main(int argc,const char **argv) { @autoreleasepool {
     __block unsigned did=(unsigned)strtoul(argv[1],NULL,10);
     unsigned fps=(unsigned)strtoul(argv[2],NULL,10),seconds=(unsigned)strtoul(argv[3],NULL,10);
     if((!did && !autoDisplay) || (fps!=30&&fps!=60&&fps!=120) || !seconds || seconds>6000)return 2;
+    const char *tokenNonce=getenv("RGPU_CONSOLE_TOKEN_NONCE");
+    uint8_t tokenNonceCheck[8];
+    if(tokenNonce&&!rg_token_nonce(tokenNonce,tokenNonceCheck)){fprintf(stderr,"invalid RGPU_CONSOLE_TOKEN_NONCE (exact16hex required)\n");return 2;}
     io_service_t service=IOServiceGetMatchingService(kIOMainPortDefault,IOServiceMatching("RaphaelConsole"));
     if(!service) { fprintf(stderr,"console device absent\n");return 3; }
     const char *sourceDiagnostic=getenv("RGPU_CONSOLE_SOURCE_DIAGNOSTIC");
     if(sourceDiagnostic&&strcmp(sourceDiagnostic,"0")&&strcmp(sourceDiagnostic,"1"))return 2;
     ConsoleOutput *out=[ConsoleOutput new];
+    if(![out configureToken:tokenNonce]){fprintf(stderr,"invalid RGPU_CONSOLE_TOKEN_NONCE (exact16hex required)\n");return 2;}
     if(sourceDiagnostic&&!strcmp(sourceDiagnostic,"1")) {
         if(![out enableSourceDiagnostic])return 3;
         printf("CONSOLE source_diagnostic=1 samples_per_geometry=8 legacy_timings_include_extra_work=1\n");fflush(stdout);
@@ -240,6 +290,7 @@ int main(int argc,const char **argv) { @autoreleasepool {
     dispatch_source_set_timer(timer,dispatch_time(DISPATCH_TIME_NOW,NSEC_PER_SEC),NSEC_PER_SEC/2,NSEC_PER_SEC/20);
     __block NSUInteger polls=0;
     dispatch_source_set_event_handler(timer,^{
+        [out pollToken];
         if(!out.running || out.stopping || out.updating)return;
         size_t w,h;
         if(!mode(did,length,&w,&h)) { fprintf(stderr,"console display disappeared or unsupported mode\n");exit(4); }
@@ -275,13 +326,13 @@ int main(int argc,const char **argv) { @autoreleasepool {
             if(![capture addStreamOutput:out type:SCStreamOutputTypeScreen sampleHandlerQueue:captureQueue error:&addError])exit(4);
             [capture startCaptureWithCompletionHandler:^(NSError *startError){
                 if(startError) { fprintf(stderr,"capture start: %s\n",startError.description.UTF8String);exit(4); }
-                dispatch_async(queue,^{out.running=YES;});
+                dispatch_async(queue,^{out.running=YES;[out armToken];});
                 printf("CONSOLE started display=%u size=%zux%zu requested_fps=%u\n",did,w,h,fps);fflush(stdout);
             }];
         });
     }];
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)seconds*NSEC_PER_SEC),queue,^{
-        out.stopping=YES;dispatch_source_cancel(timer);
+        out.stopping=YES;[out finishToken];dispatch_source_cancel(timer);
         if(!capture) { fprintf(stderr,"capture startup exceeded deadline\n");exit(5); }
         [capture stopCaptureWithCompletionHandler:^(NSError *error){
             dispatch_async(queue,^{

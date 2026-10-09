@@ -13,7 +13,7 @@ from pathlib import Path
 root=Path(sys.argv[1]);manifest=root/'console-helper-manifest.json'
 if manifest.exists():
     value=json.loads(manifest.read_text())
-    expected={'install-console-desktop.sh','console-presenter.m','console-display-layout.m',
+    expected={'console-source-token.h','install-console-desktop.sh','console-presenter.m','console-display-layout.m',
               'virtual-display-server.m','console-helper-install.md','console-install-transaction.py'}
     if value.get('schema')!=1 or value.get('kind')!='console-helper-source-package' or set(value.get('files',{}))!=expected:
         raise SystemExit('Invalid console source manifest')
@@ -68,7 +68,7 @@ value=dict(schema=1,kind='console-helper-installed-build',app_identifier='org.ra
     optimization='-O2',signing='ad-hoc',signature_details=signature,
     consent_note='Ad-hoc CDHash changes may require normal Screen Recording consent renewal.',
     source_manifest=json.loads(manifest.read_text()) if manifest.exists() else None,
-    sources={name:sha(source/name) for name in ('install-console-desktop.sh','console-presenter.m',
+    sources={name:sha(source/name) for name in ('console-source-token.h','install-console-desktop.sh','console-presenter.m',
         'console-display-layout.m','virtual-display-server.m','console-install-transaction.py')},
     binaries={name:sha(app/'Contents'/name) for name in ('MacOS/console-presenter',
         'Helpers/virtual-display-server','Helpers/console-display-layout')})
