@@ -79,6 +79,11 @@ esac
 
 # Explicit presentation-only console: keep the historical no-adapter contract
 # unchanged unless the manifest selects this exact device and local endpoint.
+case "${CONSOLE_VDAGENT:-off}" in
+    off) ;;
+    on) [[ "${VM_MANAGER:-direct}" == libvirt && "${VM_CONSOLE:-off}" == bochs-spice && "${GENERIC_GRAPHICS:-on}" == off ]] || { echo "vdagent requires native libvirt SPICE" >&2; exit 1; } ;;
+    *) echo "unknown CONSOLE_VDAGENT" >&2; exit 1 ;;
+esac
 case "${CONSOLE_SNAPSHOT:-off}" in
     off) ;;
     on) [[ "${VM_MANAGER:-direct}" == libvirt && "${VM_CONSOLE:-off}" == bochs-spice && "${CONSOLE_REFRESH:-default}" == 60 && "${CONSOLE_FULL_REFRESH:-off}" == on && "${GENERIC_GRAPHICS:-on}" == off ]] || { echo "snapshot requires native libvirt SPICE60 full refresh" >&2; exit 1; } ;;
@@ -119,6 +124,11 @@ if [[ -n "${LAN_TAP_NODE:-}" ]]; then
     [[ "${LAN_MAC:-}" =~ ^([0-9a-f]{2}:){5}[0-9a-f]{2}$ ]] || { echo "LAN_MAC must be a lowercase MAC" >&2; exit 1; }
     exec 3<>"${LAN_TAP_NODE}"
     export EXTRA="${EXTRA:-} -netdev tap,id=lan0,fd=3 -device vmxnet3,netdev=lan0,id=lan0,mac=${LAN_MAC}"
+fi
+
+# Keep the new explicit PCI slot after all existing devices (including LAN).
+if [[ "${CONSOLE_VDAGENT:-off}" == on ]]; then
+    export EXTRA="${EXTRA:-} -device virtio-serial-pci,id=rgpu_agent_serial,bus=pcie.0,addr=0x10,max_ports=2 -chardev spicevmc,id=rgpu_vdagent,name=vdagent -device virtserialport,id=rgpu_agent_port,bus=rgpu_agent_serial.0,nr=1,chardev=rgpu_vdagent,name=com.redhat.spice.0"
 fi
 
 case "${VM_MANAGER:-direct}" in

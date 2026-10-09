@@ -34,9 +34,8 @@ Recovery recovered/authorizes_launch=true. Cycle stopped; host awake,vfio-pci/on
 374 forced-stop D-state race remains unresolved;377 diagnostics not exercised.
 
 1318 host tests pass,8skip before run; exact build/identity/dry-run pass.
-Delivery suite:1318 tests pass,8skip (48.991s). Exact-commit hosted CI pending.
-Last dev5cee25d hosted
-37959795782 test/build green. Main unchanged. Next: bounded standard SPICE
+Delivery suite:1318 tests pass,8skip (48.991s). Delivered to dev447131e; exact-commit hosted37963569176 test/build green,
+release skipped. Main unchanged. Next: bounded standard SPICE
 resize transport and remaining4K throughput/correctness/lifecycle qualification.
 AppleVirtIOConsole personality exists in guest24G830; attachment/tty untested.
 [Evidence](findings/research/console-viewport-native-20261009.md) ·

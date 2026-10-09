@@ -69,6 +69,10 @@ def build_plan(argv, run_id):
             'unreviewed HMP monitor profile')
     require(one(rows, '-gdb') == 'tcp:0.0.0.0:1234', 'unreviewed debugger profile')
     devices = values(rows, '-device')
+    agent_devices = ['virtio-serial-pci,id=rgpu_agent_serial,bus=pcie.0,addr=0x10,max_ports=2',
+                     'virtserialport,id=rgpu_agent_port,bus=rgpu_agent_serial.0,nr=1,chardev=rgpu_vdagent,name=com.redhat.spice.0']
+    agent_char = 'spicevmc,id=rgpu_vdagent,name=vdagent'
+    agent = any(d.split(',')[0].startswith(('virtio-serial', 'virtserialport', 'virtconsole')) for d in devices) or agent_char in values(rows, '-chardev')
     bochs = [d for d in devices if d.split(',')[0] == 'bochs-display']
     require(len(bochs) == 1 and bochs[0] in (BOCHS, BOCHS+',x-debug-full-refresh=on',
             BOCHS+',x-debug-full-refresh=on,x-debug-snapshot=on'),
@@ -80,6 +84,7 @@ def build_plan(argv, run_id):
                 'ide-hd,bus=sata.2,drive=OpenCoreBoot', 'ide-hd,bus=sata.4,drive=MacHDD',
                 VFIO, bochs[0], 'isa-serial,chardev=rgpu_console,index=0',
                 'isa-serial,chardev=rgpu_critical,index=1']
+    if agent: expected += agent_devices
     for device in expected:
         require(devices.count(device) == 1, 'missing or duplicate reviewed device')
     extras = [d for d in devices if d not in expected]
@@ -92,6 +97,7 @@ def build_plan(argv, run_id):
     ordered_models = ['qemu-xhci', 'usb-kbd', 'usb-tablet', 'isa-applesmc',
                       'usb-audio', 'ich9-ahci', 'ide-hd', 'ide-hd', 'vmxnet3',
                       'vfio-pci', 'isa-serial', 'isa-serial', 'bochs-display', 'vmxnet3']
+    if agent: ordered_models += ['virtio-serial-pci', 'virtserialport']
     require([d.split(',')[0] for d in devices] == ordered_models,
             'device order would change automatic PCI assignment')
     require('netdev=net0,' in devices[8] and 'netdev=lan0,' in devices[13] and
@@ -100,7 +106,7 @@ def build_plan(argv, run_id):
     require(sorted(values(rows, '-chardev')) == sorted([
         'socket,id=rgpu_console,path=/run/vm/serial.sock,server=on,wait=off',
         'socket,id=rgpu_critical,path=/run/vm/critical.sock,server=on,wait=off',
-        'socket,id=mon1,path=/run/vm/monitor.sock,server=on,wait=off']), 'invalid capture channels')
+        'socket,id=mon1,path=/run/vm/monitor.sock,server=on,wait=off'] + ([agent_char] if agent else [])), 'invalid capture channels')
     require(sorted(values(rows, '-netdev')) == sorted([
         'user,id=net0,hostfwd=tcp::10022-:22,hostfwd=tcp::5900-:5900,',
         'tap,id=lan0,fd=3']), 'unreviewed network backends')

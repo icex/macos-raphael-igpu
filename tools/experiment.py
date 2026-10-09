@@ -433,6 +433,11 @@ def launch_options(data):
                  dict(debugger, AUDIO='usb', VM_CONSOLE='bochs-spice', VM_MANAGER='libvirt', CONSOLE_REFRESH='60'),
                  dict(debugger, AUDIO='usb', VM_CONSOLE='bochs-spice', VM_MANAGER='libvirt', CONSOLE_REFRESH='60', CONSOLE_FULL_REFRESH='on'))
     checked = dict(value) if type(value) is dict else None
+    vdagent = checked.pop('CONSOLE_VDAGENT', 'off') if checked is not None else None
+    if (type(vdagent) is not str or vdagent not in ('off', 'on') or
+            (vdagent == 'on' and any(checked.get(k) != v for k, v in {
+                'VM_MANAGER':'libvirt', 'VM_CONSOLE':'bochs-spice', 'GENERIC_GRAPHICS':'off'}.items()))):
+        raise ValueError('vdagent requires native libvirt SPICE')
     snapshot = checked.pop('CONSOLE_SNAPSHOT', 'off') if checked is not None else None
     if (type(snapshot) is not str or snapshot not in ('off', 'on') or
             (snapshot == 'on' and checked != contracts[-1]) or checked not in contracts):
@@ -526,6 +531,14 @@ def current_identity(vm, candidate, requested_diagnostic, run_id=None,
         raise ValueError('console launch option changed')
     if os.environ.get('CONSOLE_REFRESH', options.get('CONSOLE_REFRESH', 'default')) not in ('', options.get('CONSOLE_REFRESH', 'default')):
         raise ValueError('CONSOLE_REFRESH environment differs from manifest')
+    vdagent = options.get('CONSOLE_VDAGENT', 'off')
+    if type(vdagent) is not str or vdagent not in ('off', 'on'):
+        raise ValueError('invalid CONSOLE_VDAGENT')
+    if vdagent == 'on' and any(options.get(k) != v for k, v in {
+            'VM_MANAGER':'libvirt', 'VM_CONSOLE':'bochs-spice', 'GENERIC_GRAPHICS':'off'}.items()):
+        raise ValueError('vdagent requires native libvirt SPICE')
+    if os.environ.get('CONSOLE_VDAGENT', vdagent) not in ('', vdagent):
+        raise ValueError('CONSOLE_VDAGENT environment differs from manifest')
     snapshot = options.get('CONSOLE_SNAPSHOT', 'off')
     if type(snapshot) is not str or snapshot not in ('off', 'on'):
         raise ValueError('invalid CONSOLE_SNAPSHOT')
@@ -3067,6 +3080,14 @@ def validate_running(manifest, observed):
     if ((dedicated and sorted(serial) != sorted(expected_serial)) or
             (not dedicated and any('rgpu_critical' in value for value in serial))):
         errors.append('critical_uart_topology')
+    expected_agent = []
+    if manifest.get('launch_options', {}).get('CONSOLE_VDAGENT') == 'on':
+        expected_agent = [
+            '-device', 'virtio-serial-pci,id=rgpu_agent_serial,bus=pcie.0,addr=0x10,max_ports=2',
+            '-chardev', 'spicevmc,id=rgpu_vdagent,name=vdagent',
+            '-device', 'virtserialport,id=rgpu_agent_port,bus=rgpu_agent_serial.0,nr=1,chardev=rgpu_vdagent,name=com.redhat.spice.0']
+    if observed.get('agent_args', []) != expected_agent:
+        errors.append('vdagent_topology')
     expected_graphics = ['-vga', 'none', '-display', 'none']
     console_mode = manifest.get('launch_options', {}).get('VM_CONSOLE')
     if console_mode in ('bochs', 'bochs-spice'):
@@ -3165,6 +3186,12 @@ for pid in os.listdir('/proc'):
        (arg==b'-chardev' and args[index+1].startswith(b'socket,id=rgpu_')) or
        (arg==b'-device' and args[index+1].startswith(b'isa-serial'))):
     selected.append(args[index+1].decode())
+  agent=[]
+  for index,arg in enumerate(args[:-1]):
+   value=args[index+1]
+   if ((arg==b'-device' and value.split(b',',1)[0].startswith((b'virtio-serial',b'virtserialport',b'virtconsole'))) or
+       (arg==b'-chardev' and (value.startswith(b'spicevmc,') or b'rgpu_agent' in value or b'rgpu_vdagent' in value))):
+    agent.extend((arg.decode(),value.decode()))
   graphics=[]
   generic=(b'VGA',b'vmware-svga',b'bochs-display',b'ramfb',b'secondary-vga',b'ati-vga',b'cirrus-vga')
   for index,arg in enumerate(args[:-1]):
@@ -3188,7 +3215,7 @@ for pid in os.listdir('/proc'):
      item.update(slot=int(slot,16),function=int(function or '0',16))
     except ValueError:pass
    topology.append(item)
-  rows.append({'vfio_args':[a.decode() for a in args if a.startswith(b'vfio-pci,')], 'pci_topology':topology, 'serial_args':selected, 'graphics_args':graphics, 'argv_sha256':hashlib.sha256(raw).hexdigest()})
+  rows.append({'vfio_args':[a.decode() for a in args if a.startswith(b'vfio-pci,')], 'pci_topology':topology, 'serial_args':selected, 'agent_args':agent, 'graphics_args':graphics, 'argv_sha256':hashlib.sha256(raw).hexdigest()})
 assert len(rows)==1
 print(json.dumps(rows[0]))
 '''
