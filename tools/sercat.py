@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Drain the guest serial port into run/serial.log."""
-import re, socket, stat, sys, threading, time
+import json, re, socket, stat, sys, threading, time
 import os, os.path
 VM = os.path.dirname(os.path.abspath(__file__))
 channel = os.environ.get("VM_SERIAL_CHANNEL")
@@ -10,6 +10,19 @@ p = os.environ.get("VM_SERIAL_SOCKET", os.environ.get(
     "VM_SERIAL", os.path.join(VM, "run", "serial.sock")))
 output = os.environ.get("VM_SERIAL_OUTPUT", os.path.join(VM, "run", "serial.log"))
 cid = os.environ.get("VM_SERIAL_CID")
+eof_output = os.environ.get("VM_SERIAL_EOF")
+eof_identity = None
+if eof_output:
+    eof_identity = dict(schema=1, cid=cid, channel=channel,
+        started_at=os.environ.get("VM_SERIAL_STARTED_AT"),
+        run_id=os.environ.get("VM_SERIAL_RUN_ID"),
+        admission_sha256=os.environ.get("VM_SERIAL_ADMISSION_SHA256"))
+    if (channel not in ("console", "critical") or
+        not re.fullmatch("[0-9a-f]{64}", cid or "") or
+        not re.fullmatch("[0-9a-f]{32}", eof_identity["run_id"] or "") or
+        not re.fullmatch("[0-9a-f]{64}", eof_identity["admission_sha256"] or "") or
+        not eof_identity["started_at"]):
+        sys.exit("invalid serial EOF identity")
 control = None
 if channel == "critical" and cid is not None:
     if len(cid) != 64 or any(ch not in "0123456789abcdef" for ch in cid):
@@ -60,6 +73,7 @@ with open(output, "ab", buffering=0) as f:
     sync_thread = threading.Thread(target=sync_log, name="serial-log-sync", daemon=True)
     sync_thread.start()
     capture_error = None
+    clean_eof = None
     last_control_sent = None
     def send_quiesce_if_requested():
         if control is None or not os.path.exists(control):
@@ -105,6 +119,8 @@ with open(output, "ab", buffering=0) as f:
                 last_control_sent = send_quiesce_if_requested()
                 d = s.recv(65536)
                 if not d:
+                    if eof_output:
+                        clean_eof = dict(eof_monotonic=time.monotonic(), eof_epoch=time.time())
                     break
                 view = memoryview(d)
                 while view:
@@ -132,3 +148,24 @@ with open(output, "ab", buffering=0) as f:
     if capture_error is not None:
         sys.exit("serial capture failed: " + type(capture_error).__name__ +
                  " errno=" + str(getattr(capture_error, "errno", None)))
+
+# Publish only after a real recv EOF and successful final log synchronization.
+# Signal/error paths never create a usable clean-EOF observation.
+if eof_output and clean_eof is not None:
+    value = dict(eof_identity, **clean_eof, published_monotonic=time.monotonic())
+    temporary = eof_output + "." + str(os.getpid()) + ".tmp"
+    with open(temporary, "x") as marker:
+        json.dump(value, marker); marker.flush(); os.fsync(marker.fileno())
+    published = False
+    try:
+        os.link(temporary, eof_output) # Never overwrite an unexpected prior observation.
+        published = True
+        os.unlink(temporary)
+        directory_fd = os.open(os.path.dirname(eof_output) or ".", os.O_RDONLY | os.O_DIRECTORY)
+        try: os.fsync(directory_fd)
+        finally: os.close(directory_fd)
+    except BaseException:
+        if published:
+            try: os.unlink(eof_output)
+            except FileNotFoundError: pass
+        raise

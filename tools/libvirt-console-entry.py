@@ -7,6 +7,8 @@ recovery. This process owns the private session and one transient paused domain.
 from contextlib import contextmanager
 import importlib.util
 import json
+import math
+import stat
 import os
 from pathlib import Path
 import signal
@@ -179,7 +181,36 @@ def completed_original_zombie(identity, diagnostic=None):
         return refused('incomplete-proc-view')
 
 
-def inspect_exited():
+def guest_shutdown_before_eof(directory, identity, scope, eof_monotonic):
+    """Observation eligibility only; never a process-completion proof."""
+    handoff.require(type(eof_monotonic) in (int, float) and math.isfinite(eof_monotonic)
+                    and 0 < eof_monotonic <= time.monotonic() < eof_monotonic + 2,
+                    'invalid or expired EOF boundary')
+    descriptor=os.open(directory/'events.jsonl', os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)
+    try:
+        metadata=os.fstat(descriptor)
+        handoff.require(stat.S_ISREG(metadata.st_mode) and metadata.st_size <= 1048576,
+                        'invalid lifecycle observation file')
+        data=os.read(descriptor,1048577)
+        handoff.require(len(data)<=1048576 and data.endswith(b'\n'), 'incomplete lifecycle observations')
+    finally:os.close(descriptor)
+    selected=None
+    for line in data.splitlines():
+        event=json.loads(line)
+        if not isinstance(event,dict):raise ValueError('invalid lifecycle observation')
+        if event.get('phase')!='libvirt-lifecycle-observed':continue
+        stamp=event.get('observed_monotonic')
+        if (event.get('identity_bound') is True and event.get('guest_shutdown') is True and
+            event.get('event')==6 and event.get('detail')==1 and
+            event.get('identity')==identity and event.get('scope')==scope and
+            event.get('name')==identity['name'] and event.get('uuid')==identity['uuid'] and
+            type(stamp) in (int,float) and math.isfinite(stamp) and
+            0 <= eof_monotonic-stamp <= 2):selected=stamp
+    handoff.require(selected is not None,'no bound guest shutdown preceding EOF')
+    return selected
+
+
+def inspect_exited(eof_monotonic=None):
     """Read-only proof; refusal diagnostics never expose argv, paths or exception text."""
     with exit_check('admission'):
         directory,admission,expected=context()
@@ -209,6 +240,8 @@ def inspect_exited():
     with exit_check('namespace'):
         handoff.require(native.local.namespace_identity()==scope,'exited PID namespace changed')
     completed_zombie=False
+    shutdown_wait=False
+    shutdown_observed=None
     with exit_check('original-process',pid=identity['pid']):
         current=native.local.process(identity['pid'])
         if current is not None and current['start_ticks']==identity['start_ticks']:
@@ -220,7 +253,13 @@ def inspect_exited():
             completion={}
             completed_zombie=state=='Z' and completed_original_zombie(identity,completion)
             if not completed_zombie:
-                raise ExitProofRefusal('original-process','original-pid-present',pid=identity['pid'],state=state,**completion)
+                if (eof_monotonic is not None and state=='Z' and
+                    completion.get('completion_reason')=='not-sole-task'):
+                    with exit_check('shutdown-event'):
+                        shutdown_observed=guest_shutdown_before_eof(directory,identity,scope,eof_monotonic)
+                    shutdown_wait=True
+                else:
+                    raise ExitProofRefusal('original-process','original-pid-present',pid=identity['pid'],state=state,**completion)
     # Only the exact completed zombie can be skipped. Other QEMU processes and
     # unknown visibility retain immediate refusal.
     with exit_check('proc-list'):
@@ -229,6 +268,8 @@ def inspect_exited():
         if not path.name.isdigit():continue
         pid=int(path.name)
         try:
+            if shutdown_wait and pid==identity['pid']:
+                continue # Exact original is rechecked after the complete visibility scan.
             if completed_zombie and pid==identity['pid']:
                 with exit_check('original-process',pid=pid):
                     completion={}
@@ -251,14 +292,25 @@ def inspect_exited():
             completion={}
             if not completed_original_zombie(identity,completion):
                 raise ExitProofRefusal('original-process','original-pid-present',pid=identity['pid'],state='Z',**completion)
-    return dict(exited=True,completed_zombie=completed_zombie,run_id=admission['run_id'],admission_sha256=expected,
+    if shutdown_wait:
+        with exit_check('original-process',pid=identity['pid']):
+            completion={}
+            completed_zombie=completed_original_zombie(identity,completion)
+            if completed_zombie:shutdown_wait=False
+            elif completion.get('completion_reason')!='not-sole-task':
+                raise ExitProofRefusal('original-process','original-pid-present',pid=identity['pid'],**completion)
+        with exit_check('shutdown-event'):
+            shutdown_observed=guest_shutdown_before_eof(directory,identity,scope,eof_monotonic)
+    return dict(exited=not shutdown_wait,shutdown_wait=shutdown_wait,
+                shutdown_observed_monotonic=shutdown_observed,eof_monotonic=eof_monotonic,
+                completed_zombie=completed_zombie,run_id=admission['run_id'],admission_sha256=expected,
                 identity=identity,scope=scope,plan_sha256=paused['plan_sha256'],
                 cid=permit['cid'],started_at=permit['started_at'],
                 deadline_epoch=admission['deadline_epoch'])
 
 
-def inspect_exited_report():
-    try:return inspect_exited()
+def inspect_exited_report(eof_monotonic=None):
+    try:return inspect_exited(eof_monotonic)
     except ExitProofRefusal as error:return dict(exited=False,refusal=error.report)
 
 
@@ -328,7 +380,10 @@ def main():
         context();dependency_check()
     elif command=='inspect-paused':inspect_domain()
     elif command=='inspect-running':inspect_domain(paused=False)
-    elif command=='inspect-exited':print(json.dumps(inspect_exited_report()))
+    elif command=='inspect-exited':
+        if len(sys.argv)>3:raise ValueError('invalid exit arguments')
+        eof=float(sys.argv[2]) if len(sys.argv)==3 else None
+        print(json.dumps(inspect_exited_report(eof)))
     elif command=='launch':launch(sys.argv[2:])
     else:raise ValueError('invalid controller command')
 

@@ -15,6 +15,7 @@ import re
 import shlex
 import shutil
 import signal
+import stat
 import uuid
 import subprocess
 import sys
@@ -183,7 +184,7 @@ def stop_exact(cid, by_name=False):
                 raise RuntimeError("identified container still runs after stop/kill failure")
 
 
-def capture_exit(vm,cid,started_at,deadline,run_id,admission_digest):
+def capture_exit(vm,cid,started_at,deadline,run_id,admission_digest,channel=None):
     """Allow only an already-exited, identity-bound libvirt QEMU to flush receipts.
 
     Every unknown/alive/error path retains the original immediate exact-CID stop.
@@ -201,18 +202,43 @@ def capture_exit(vm,cid,started_at,deadline,run_id,admission_digest):
         if info['Id']!=cid or info['StartedAt']!=started_at or type(info['Running']) is not bool:
             raise RuntimeError('capture exit container identity changed')
         return info['Running']
+    eof=None
     try:
+        if channel is not None:
+            stage='clean-eof'
+            if channel not in ('console','critical'):raise ValueError('invalid EOF channel')
+            path=Path(vm)/'run'/f'capture-eof-{cid}-{channel}.json'
+            fd=os.open(path,os.O_RDONLY|os.O_NONBLOCK|os.O_NOFOLLOW)
+            try:
+                metadata=os.fstat(fd)
+                if not stat.S_ISREG(metadata.st_mode) or metadata.st_size>4096:raise ValueError('invalid EOF file')
+                payload=os.read(fd,4097)
+                if len(payload)>4096:raise ValueError('oversized EOF file')
+                eof=json.loads(payload)
+            finally:os.close(fd)
+            expected=dict(schema=1,cid=cid,started_at=started_at,run_id=run_id,
+                          admission_sha256=admission_digest,channel=channel)
+            if type(eof.get('schema')) is not int or any(eof.get(k)!=v for k,v in expected.items()):raise ValueError('EOF identity mismatch')
+            for field in ('eof_monotonic','eof_epoch','published_monotonic'):
+                if type(eof.get(field)) not in (int,float) or not math.isfinite(eof[field]):
+                    raise ValueError('invalid EOF timestamp')
+            if not (0<eof['eof_monotonic']<=eof['published_monotonic']<=began<eof['eof_monotonic']+2):
+                raise ValueError('stale or future EOF')
+            if not 0<=time.time()-eof['eof_epoch']<2:raise ValueError('invalid EOF epoch')
+            until=eof['eof_monotonic']+2
+            result['eof_monotonic']=eof['eof_monotonic'];result['channel']=channel
         if not running():result['outcome']='already-stopped';return result
         budget=min(1,until-time.monotonic(),deadline-time.time())
         if budget<=0:raise RuntimeError('capture exit budget expired')
         stage='docker-exec'
         observed=json.loads(run([binary('docker'),'exec',cid,'python3','-B',
-                                '/run/rgpu-tools/libvirt-console-entry.py','inspect-exited'],timeout=budget))
+                                '/run/rgpu-tools/libvirt-console-entry.py','inspect-exited']+
+                                ([str(eof['eof_monotonic'])] if eof else []),timeout=budget))
         stage='exit-proof'
-        if observed.get('exited') is False:
+        if observed.get('exited') is False and observed.get('shutdown_wait') is not True:
             report=observed.get('refusal',{})
             stages={'admission','receipt-read','permit-binding','plan-binding','running-binding',
-                    'namespace','original-process','proc-list','proc-scan'}
+                    'namespace','original-process','proc-list','proc-scan','shutdown-event'}
             codes={'missing-file','permission-denied','malformed-json','missing-field',
                    'validation-refused','inspection-error','original-pid-present','other-qemu'}
             if report.get('stage') in stages and report.get('code') in codes:
@@ -241,7 +267,12 @@ def capture_exit(vm,cid,started_at,deadline,run_id,admission_digest):
                     safe['completion_tasks_truncated']=report.get('completion_tasks_truncated') is True
                 result['proof_refusal']=safe
             raise RuntimeError('capture exit proof refused')
-        if not (observed['exited'] is True and observed['cid']==cid and
+        waiting=(eof is not None and observed.get('shutdown_wait') is True and
+                 observed.get('exited') is False and observed.get('eof_monotonic')==eof['eof_monotonic'] and
+                 type(observed.get('shutdown_observed_monotonic')) in (int,float) and
+                 math.isfinite(observed['shutdown_observed_monotonic']) and
+                 0<=eof['eof_monotonic']-observed['shutdown_observed_monotonic']<=2)
+        if not ((observed['exited'] is True or waiting) and observed['cid']==cid and
                 observed['started_at']==started_at and observed['run_id']==run_id and
                 observed['admission_sha256']==admission_digest and
                 type(observed['deadline_epoch']) is int and
@@ -251,6 +282,39 @@ def capture_exit(vm,cid,started_at,deadline,run_id,admission_digest):
         result['deferred']=True
         result['completed_original_zombie']=observed.get('completed_zombie') is True
         stage='exit-wait'
+        result['shutdown_event_wait']=waiting
+        while waiting and time.monotonic()<until and time.time()<deadline:
+            time.sleep(min(.05,max(0,until-time.monotonic()),max(0,deadline-time.time())))
+            budget=min(.5,until-time.monotonic(),deadline-time.time())
+            if budget<=0:break
+            try:
+                next_observed=json.loads(run([binary('docker'),'exec',cid,'python3','-B',
+                    '/run/rgpu-tools/libvirt-console-entry.py','inspect-exited',str(eof['eof_monotonic'])],timeout=budget))
+            except CommandFailure:
+                if not running():
+                    # Container lifetime is proven over, but this is deliberately
+                    # not a process-completion proof or synthesized terminal.
+                    result['outcome']='container-stopped-during-shutdown-wait';return result
+                raise
+            if next_observed.get('exited') is False and isinstance(next_observed.get('refusal'),dict):
+                refusal=next_observed['refusal']
+                # Same fixed vocabulary as the initial probe; never exception text.
+                result['wait_refusal']={k:refusal[k] for k,allowed in {
+                    'stage':('admission','receipt-read','permit-binding','plan-binding','running-binding','namespace','original-process','proc-list','proc-scan','shutdown-event'),
+                    'code':('missing-file','permission-denied','malformed-json','missing-field','validation-refused','inspection-error','original-pid-present','other-qemu'),
+                    'completion_reason':('initial-state-changed','not-sole-task','descriptors-present','final-state-changed','incomplete-proc-view'),
+                    'state':tuple('RSDTtZXIPKW')+('unknown',)}.items() if refusal.get(k) in allowed}
+            for key in ('cid','started_at','run_id','admission_sha256','identity','scope','plan_sha256','deadline_epoch'):
+                if next_observed.get(key)!=observed.get(key):raise RuntimeError('shutdown wait binding changed')
+            if next_observed.get('exited') is True:
+                waiting=False
+                result['completed_original_zombie']=next_observed.get('completed_zombie') is True
+            elif not (next_observed.get('shutdown_wait') is True and
+                      next_observed.get('eof_monotonic')==eof['eof_monotonic'] and
+                      next_observed.get('shutdown_observed_monotonic')==observed['shutdown_observed_monotonic']):
+                raise RuntimeError('shutdown wait no longer eligible')
+        if waiting:
+            result['outcome']='shutdown-wait-expired';return result
         while time.monotonic()<until and time.time()<deadline:
             if not running():result['outcome']='natural-container-exit';return result
             time.sleep(min(.05,max(0,until-time.monotonic())))
@@ -265,7 +329,7 @@ def capture_exit(vm,cid,started_at,deadline,run_id,admission_digest):
         if isinstance(error,CommandFailure):result['command_exit_code']=error.returncode
     finally:
         try:
-            if result.get('outcome') not in ('already-stopped','natural-container-exit'):
+            if result.get('outcome') not in ('already-stopped','natural-container-exit','container-stopped-during-shutdown-wait'):
                 stop_exact(cid) # Never let evidence IO delay the capture-fatal stop.
         finally:
             # Best-effort separate host observation; never synthesize terminal.json.
@@ -614,6 +678,16 @@ def arm(vm, cid, maximum, critical_enabled=False):
         ready_paths[stem] = ready
         units[stem] = unit_base + ".service"
         explicit = ([f"--setenv=VM_SERIAL_CHANNEL={channel}"] if critical_enabled else [])
+        channel_stop=stop_command
+        if os.environ.get('VM_MANAGER')=='libvirt':
+            eof_path=vm/'run'/f'capture-eof-{cid}-{channel}.json'
+            eof_path.unlink(missing_ok=True)
+            channel_stop=stop_command+' --channel '+channel
+            if not critical_enabled:explicit.append(f'--setenv=VM_SERIAL_CHANNEL={channel}')
+            explicit += [f'--setenv=VM_SERIAL_EOF={eof_path}',
+                         f'--setenv=VM_SERIAL_STARTED_AT={started_at}',
+                         f'--setenv=VM_SERIAL_RUN_ID={run_id}',
+                         f'--setenv=VM_SERIAL_ADMISSION_SHA256={admission_digest}']
         collector = [sys.executable, "-u", str(vm / "sercat.py")]
         if not headless:
             collector = [binary("systemd-inhibit"), "--what=sleep:idle",
@@ -621,7 +695,7 @@ def arm(vm, cid, maximum, critical_enabled=False):
                          "--why=Keep capture and the VM awake", *collector]
         run(base + [f"--unit={unit_base}", "--service-type=exec",
                     f"--property=WorkingDirectory={vm}", "--property=TimeoutStopSec=15s",
-                    f"--property=ExecStopPost={stop_command}",
+                    f"--property=ExecStopPost={channel_stop}",
                     f"--setenv=VM_SERIAL_SOCKET={vm / ('run/' + stem + '.sock')}",
                     f"--setenv=VM_SERIAL_OUTPUT={vm / ('run/' + stem + '.log')}",
                     f"--setenv=VM_SERIAL_READY={ready}", f"--setenv=VM_SERIAL_CID={cid}"] +
@@ -997,6 +1071,7 @@ def main():
     capture.add_argument('--deadline',type=int,required=True)
     capture.add_argument('--run-id',required=True)
     capture.add_argument('--admission-sha256',required=True)
+    capture.add_argument('--channel',choices=('console','critical'))
     halt = commands.add_parser("shutdown")
     halt.add_argument("--state", type=Path, required=True)
     halt.add_argument("--grace-seconds", default="20")
@@ -1022,7 +1097,7 @@ def main():
     try:
         if args.command == 'capture-exit':
             result=capture_exit(args.vm_dir,args.cid,args.started_at,args.deadline,
-                                args.run_id,args.admission_sha256)
+                                args.run_id,args.admission_sha256,args.channel)
             print(json.dumps(result));return 0
         if args.command == "shutdown":
             # shutdown checks the saved StartedAt before any request or force-stop.
