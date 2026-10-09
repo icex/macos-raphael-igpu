@@ -269,6 +269,32 @@ class LocalQemu:
             self.root, self.output, manifest, {"cid": self.cid},
             LocalSupervisor(self), None, deadline)
 
+    def retain_evidence(self, label, details):
+        """Keep software UART payloads after cleanup when CI requests it."""
+        target = os.environ.get("RGPU_TRANSPORT_ARTIFACT_DIR")
+        if not target:
+            return
+        destination = Path(target) / (label + "-" + self.run_id)
+        destination.mkdir(parents=True, exist_ok=False)
+        artifacts = {}
+        for directory in (self.run_dir, self.output):
+            for source in directory.iterdir():
+                # Socket paths cannot be copied as regular artifacts.
+                if not source.is_file() or source.is_symlink():
+                    continue
+                relative = source.relative_to(self.root)
+                path = destination / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, path)
+                artifacts[str(relative)] = {"bytes": path.stat().st_size,
+                    "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+        (destination / "result.json").write_text(json.dumps({
+            "scope": "software-only TCG UART fixture; no GPU exposure",
+            "run_id": self.run_id, "details": details, "artifacts": artifacts,
+            "qemu_exited": not self.running(),
+            "collectors_exited": all(p.poll() is not None for p in self.collectors),
+        }, indent=2) + "\n")
+
     def stop_exact(self):
         if self.running():
             if self.containerized:
@@ -421,18 +447,30 @@ class CriticalTransportQualification(unittest.TestCase):
             work = Path(raw)
             _, guest = build_fixture(work, mode="quiesce")
             vm = LocalQemu(work / "vm", guest)
-            self.addCleanup(vm.cleanup)
-            vm.start()
-            vm.cont()
-            vm.wait_for_request_window()
-            receipt = vm.request_quiesce(time.time() + 8)
-            self.assertEqual((receipt["snapshot"], receipt["record_count"]),
-                             (0x01020305, 512))
-            before = vm.critical_log().read_bytes()
-            time.sleep(0.5)
-            after = vm.critical_log().read_bytes()
-            self.assertEqual(after, before)
-            load_experiment().verify_quiesced_capture(receipt, after)
+            details = {"passed": False, "deadline_seconds": 30}
+            try:
+                vm.start()
+                vm.cont()
+                vm.wait_for_request_window()
+                # Qualify fresh snapshot + ACK, not host TCG throughput. At25%
+                # CPU the unchanged maximum fixture takes12.4s after request.
+                # The ignored-token test independently retains its2s boundary.
+                receipt = vm.request_quiesce(time.time() + 30)
+                details["receipt"] = receipt
+                self.assertEqual((receipt["snapshot"], receipt["record_count"]),
+                                 (0x01020305, 512))
+                before = vm.critical_log().read_bytes()
+                time.sleep(0.5)
+                after = vm.critical_log().read_bytes()
+                self.assertEqual(after, before)
+                load_experiment().verify_quiesced_capture(receipt, after)
+                details["passed"] = True
+                print("software UART quiesce:", len(after), "bytes;",
+                      round(receipt["acknowledged_epoch"] - receipt["requested_epoch"], 3),
+                      "seconds after request; fresh snapshot and silence verified")
+            finally:
+                vm.cleanup() # Stop before TemporaryDirectory removes the logs.
+                vm.retain_evidence("quiesce", details)
 
     def test_real_qemu_ignored_token_hits_boundary_and_cleans_up(self):
         require_local_qemu(self)
@@ -440,18 +478,23 @@ class CriticalTransportQualification(unittest.TestCase):
             work = Path(raw)
             _, guest = build_fixture(work, mode="ignore")
             vm = LocalQemu(work / "vm", guest)
-            self.addCleanup(vm.cleanup)
-            vm.start()
-            vm.cont()
-            vm.wait_for_request_window()
-            with self.assertRaisesRegex(RuntimeError, "missed cleanup boundary"):
-                vm.request_quiesce(time.time() + 2)
-            wait_for(lambda: b"COM1-IGNORED-RGPUQ2" in vm.console_log().read_bytes(),
-                     "guest did not receive the ignored control token")
-            self.assertFalse(vm.request_path().exists())
-            self.assertNotIn(b"RGPU_UART_QUIESCED", vm.critical_log().read_bytes())
-            vm.stop_exact()
-            self.assertFalse(vm.running())
+            details = {"passed": False, "deadline_seconds": 2}
+            try:
+                vm.start()
+                vm.cont()
+                vm.wait_for_request_window()
+                with self.assertRaisesRegex(RuntimeError, "missed cleanup boundary"):
+                    vm.request_quiesce(time.time() + 2)
+                wait_for(lambda: b"COM1-IGNORED-RGPUQ2" in vm.console_log().read_bytes(),
+                         "guest did not receive the ignored control token")
+                self.assertFalse(vm.request_path().exists())
+                self.assertNotIn(b"RGPU_UART_QUIESCED", vm.critical_log().read_bytes())
+                vm.stop_exact()
+                self.assertFalse(vm.running())
+                details["passed"] = True
+            finally:
+                vm.cleanup()
+                vm.retain_evidence("ignored-token", details)
 
     @unittest.skipUnless(shutil.which("docker") and shutil.which("systemd-run"),
                          "Docker and user systemd are required for the offline gate")

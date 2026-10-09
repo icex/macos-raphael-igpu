@@ -22,7 +22,8 @@ fixture is prepared separately; no next native launch until a reviewed correctio
 
 1214 host tests pass,8skip. Checked-in kext remains353 with matching manifest;
 355 build is separately pinned. HiDPI milestone is on dev; CI-only357 fix handles
-slow software UART completion and retains failure artifacts, hosted checks pending.
+slow software UART completion and retains failure artifacts. Devdefc0f4 hosted
+test/build37930517553 both pass; retained positive ACK took8.652s versus old8s limit.
 Main unchanged. General desktop, resize/input, console audio/install durability
 and VirtualBox remain open.
 [Evidence](findings/research/libvirt-clean-eof-native-20261009.md) ·

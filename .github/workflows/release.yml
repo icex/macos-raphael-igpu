@@ -21,10 +21,18 @@ jobs:
       - name: Validate producer quiesce over a real software UART
         env:
           RGPU_REQUIRE_QEMU_QUALIFICATION: '1'
+          RGPU_TRANSPORT_ARTIFACT_DIR: ${{ runner.temp }}/rgpu-transport-evidence
         run: |
           python3 -B tests/qualify_critical_transport.py \
             CriticalTransportQualification.test_real_qemu_quiesce_is_newer_acknowledged_and_silent \
             CriticalTransportQualification.test_real_qemu_ignored_token_hits_boundary_and_cleans_up -v
+      - name: Retain software UART evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: software-uart-evidence
+          path: ${{ runner.temp }}/rgpu-transport-evidence
+          if-no-files-found: ignore
       - name: Validate address arithmetic
         run: |
           for source in tests/test_gart_addresses.cpp tests/test_kiq_addresses.cpp tests/test_kiq_queue_preparation.cpp tests/test_sdma_topology.cpp tests/test_sdma_addresses.cpp tests/test_gpu_vm_diagnostics.cpp tests/test_engine_lifecycle.cpp tests/test_recovery_reservation.cpp tests/test_submission_trace.cpp tests/test_gfx_hang_dump.cpp tests/test_texture_setting_locator.cpp; do

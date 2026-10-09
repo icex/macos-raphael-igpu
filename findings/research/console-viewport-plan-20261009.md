@@ -43,3 +43,12 @@ compilation or a narrow input result is not broad UI/application qualification.
 
 Candidate356 is preparation only, branched from completed354. It must incorporate
 reviewed355 lifecycle changes/results before any build or hardware exposure.
+
+Preparation follow-up: fixture compiles successfully with guest clang/AppKit in
+355; source SHA256ad00f4a9d137f2fa6d6fed0d04bb4aedabacf7869985333f8b008eb8c527574b,
+executable11047a8e328cd042982b16032ab8a313c51f84363eda365d04d71ad0602ec386.
+It was not executed. Actual Computer Use window listing succeeds through KWin.
+Use exact title and PID selectors: KWin window IDs exceed JavaScript safe integer
+precision. Avoid clipboard-based typing in the VM; use real key events and verify
+partial guest text. Native356 must first incorporate the reviewed peer-reset
+shutdown correction prompted by355.
