@@ -53,3 +53,19 @@ Focused follow-up: five lifecycle observation, nine zombie proof and22 capture-e
 tests pass. The existing exact-diagnostic expectation was updated for the newly
 reported task fields; refusal behavior is unchanged. Full suite and software
 lifecycle timing qualification remain pending.
+
+Software follow-up: full host suite1196 tests passes (eight skips). Real isolated
+TCG/TAP S5/live-capture-loss pair passes twice after updating the old software
+adapter's synthetic native intent to include the now-required default Bochs
+argument. The actual tiny guest XML remains a declared adapter, not native argv
+qualification. Initial pre-create refusal is preserved at
+`run/c342-capture-exit-da4611e9`; its container was stopped normally.
+
+Ordering repeat `run/c342-capture-exit-d141135e` records a bound guest shutdown
+observation timestamp before S5 serial EOF, then natural container exit in0.292s
+with actual terminal reason guest-shutdown/process_exited=true. Deliberate live
+capture loss has no such observation and immediate stop in0.120s. Both containers
+are stopped. The earlier passing pair is `run/c342-capture-exit-fb7aa2d7`.
+This does not exercise a deliberately delayed shutdown worker, nor prove native
+callback ordering. No grace authorization has been added. The adjacent JSON
+retains exact receipts and event hashes.

@@ -50,6 +50,9 @@ def main():
             if case=='guest-s5-eof':console.sendall(b'x')
             else:console.shutdown(socket.SHUT_RD) # Deliberately lose capture with guest still alive.
             assert console.recv(1)==b''
+            eof_monotonic=time.monotonic()
+            observed_events=[json.loads(line) for line in (directory/'events.jsonl').read_text().splitlines()]
+            guest_before_eof=any(e.get('phase')=='libvirt-lifecycle-observed' and e.get('guest_shutdown') is True and e['observed_monotonic']<=eof_monotonic for e in observed_events)
             # Fixture alone bootstraps TAP as root, then drops controller uid.
             # Match the production image's arch user for this read-only exec.
             real_run=supervisor.run
@@ -67,7 +70,7 @@ def main():
             else:
                 assert result['outcome']=='immediate-stop' and not result['deferred'],result
             final=json.loads(command(['docker','inspect',cid]).stdout)[0];assert not final['State']['Running']
-            records.append(dict(case=case,cid=cid,image=IMAGE,started_at=initial['State']['StartedAt'],finished_at=final['State']['FinishedAt'],exit_code=code,gate=result,terminal=terminal))
+            records.append(dict(case=case,cid=cid,image=IMAGE,started_at=initial['State']['StartedAt'],finished_at=final['State']['FinishedAt'],exit_code=code,gate=result,terminal=terminal,eof_monotonic=eof_monotonic,guest_shutdown_observed_before_eof=guest_before_eof))
         finally:
             if console:console.close()
             if cid:

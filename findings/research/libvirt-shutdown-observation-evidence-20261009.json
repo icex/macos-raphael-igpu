@@ -1,0 +1,82 @@
+{
+  "passed": true,
+  "cases": [
+    {
+      "case": "guest-s5-eof",
+      "cid": "d880ef7fa196c37b2f530c6fcc6752f38f4a2adf819f9ff1d6c2c4ec21a0aebd",
+      "image": "sha256:3a3c82c79bc4e73531f819ccdfa4053b3084efd7c1f645678dbf8b4b3a24369c",
+      "started_at": "2026-10-09T12:04:06.589300808Z",
+      "finished_at": "2026-10-09T12:04:07.418476395Z",
+      "exit_code": 0,
+      "gate": {
+        "cid": "d880ef7fa196c37b2f530c6fcc6752f38f4a2adf819f9ff1d6c2c4ec21a0aebd",
+        "started_at": "2026-10-09T12:04:06.589300808Z",
+        "run_id": "fe15a28575dedf225fd7a40f5fd67356",
+        "deferred": true,
+        "completed_original_zombie": false,
+        "outcome": "natural-container-exit",
+        "elapsed_seconds": 0.2920842429957702
+      },
+      "terminal": {
+        "cid": "d880ef7fa196c37b2f530c6fcc6752f38f4a2adf819f9ff1d6c2c4ec21a0aebd",
+        "identity": {
+          "name": "rgpu-fe15a28575dedf225fd7a40f5fd67356",
+          "pid": 47,
+          "run_id": "fe15a28575dedf225fd7a40f5fd67356",
+          "start_ticks": 34227061,
+          "uuid": "00000000-0000-0000-0000-000000000000"
+        },
+        "process_exited": true,
+        "reason": "guest-shutdown",
+        "run_id": "fe15a28575dedf225fd7a40f5fd67356",
+        "scope": {
+          "device": 5,
+          "init_start_ticks": 34227022,
+          "inode": 4026533528,
+          "kind": "pid-namespace"
+        },
+        "started_at": "2026-10-09T12:04:06.589300808Z"
+      },
+      "eof_monotonic": 62439.254489121,
+      "guest_shutdown_observed_before_eof": true
+    },
+    {
+      "case": "live-qemu-eof",
+      "cid": "d79088b909c0253335f38dd5e4bb927534ba0df8fed7d3a9d13bd3f3d73936db",
+      "image": "sha256:3a3c82c79bc4e73531f819ccdfa4053b3084efd7c1f645678dbf8b4b3a24369c",
+      "started_at": "2026-10-09T12:04:07.577164015Z",
+      "finished_at": "2026-10-09T12:04:08.249593679Z",
+      "exit_code": 1,
+      "gate": {
+        "cid": "d79088b909c0253335f38dd5e4bb927534ba0df8fed7d3a9d13bd3f3d73936db",
+        "started_at": "2026-10-09T12:04:07.577164015Z",
+        "run_id": "975f3c219b10d0f6929e5d461d774134",
+        "deferred": false,
+        "proof_refusal": {
+          "stage": "original-process",
+          "code": "original-pid-present",
+          "pid": 47,
+          "state": "S"
+        },
+        "outcome": "immediate-stop",
+        "error_type": "RuntimeError",
+        "refusal_stage": "exit-proof",
+        "refusal_code": "refused",
+        "elapsed_seconds": 0.12044524300290504
+      },
+      "terminal": null,
+      "eof_monotonic": 62440.236846096,
+      "guest_shutdown_observed_before_eof": false
+    }
+  ],
+  "scope": "Real TCG guest/entry/permit/serial EOF and host gate; S5 exits naturally, intentionally lost live capture forces exact CID. No KVM/GPU/host network; isolated TAP only. ExecStopPost systemd wiring tested separately.",
+  "artifact_root": "/home/bogdan/macos-vm/run/c342-capture-exit-d141135e",
+  "sha256": {
+    "result.json": "6f4b22ff0f2b5e0bc98ca97dcb3ce6a4bb38da6f512912ff5df812e0598c4996",
+    "live-qemu-eof/run/container-cleanup.json": "ce84722088c963a02b99f89d131e6cd5506c8270dee3eb17fc1c098294559d86",
+    "live-qemu-eof/run/libvirt-975f3c219b10d0f6929e5d461d774134/events.jsonl": "47cedd29142e6bb4465192ee1891b729fe6d448602ce00eca67571a58339b650",
+    "guest-s5-eof/run/container-cleanup.json": "7b574aa975c38773199171fc9aabf188196dfe06c0f9e87ea2e2aa9dde1b9f53",
+    "guest-s5-eof/run/libvirt-fe15a28575dedf225fd7a40f5fd67356/events.jsonl": "2d5eda06988f06ee36c9423ca706149242a2afd478c910e1bbc48ab55ceb1583",
+    "guest-s5-eof/run/libvirt-fe15a28575dedf225fd7a40f5fd67356/terminal.json": "76c565cb3277ab120b7eff2587154dd230b3c6a34af9549e27fd6b0fba47d06d"
+  }
+}
