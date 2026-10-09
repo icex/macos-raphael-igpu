@@ -26,7 +26,7 @@ The existing macvtap descriptor must be transferred correctly, along with exact
 CPU, device, serial and lifecycle semantics. Do not bypass the current harness
 or expose the held host libvirt registration merely because SPICE works.
 
-The next hardware experiment is metal-185, unchanged driver1.0.336, new harness
+The initial hardware experiment was metal-185, unchanged driver1.0.336, new harness
 on candidate339. It selects exactly one local SPICE Unix endpoint, no VNC or GL,
 and the same Bochs device/address. The viewer checks container ID, start time,
 console profile and user-owned socket; it disables guest resize, clipboard,
@@ -42,3 +42,24 @@ no blocking sleep/idle inhibitor. A user service rgpu-work-awake now holds a
 verified systemd-inhibit sleep:idle block across development, not only GPU runs.
 The GPU remains vfio-pci, power/control=on, runtime_status=active. These checks
 are not a substitute for the next cycle's normal MODE2 and admission checks.
+
+## Hardware results and limits
+
+The initial336e SPICE run displayed a software-fallback desktop, but native
+initialization refused the empty post-resume DMCUB state before PSP. No Metal
+probe ran; capture was complete but native ownership was absent. Explicit
+identity-bound guest shutdown succeeded, then the supported no-queue recovery
+produced an authorizing receipt. See status archives and candidate336e artifacts.
+
+Candidate340 adds a separately guarded empty-code-window path. Its first run
+passes native desktop Metal and WindowServer accelerator ownership, renders the
+HiDPI desktop through SPICE, and passes separate keyboard and mouse checks.
+Normal guest shutdown and ordinary native recovery both succeed. The viewer
+focus fix was tested using an isolated Xvnc frontend, not by typing into host
+user applications. Full libvirt-managed macOS lifecycle remains untested.
+[Native evidence](console-spice-native-evidence-20261009.json).
+
+The harness now requests and verifies sleep:idle block inhibition; idle-only
+inhibitors no longer admit runs. The additional rgpu-work-awake user service
+covers compilation and gaps between runs. A running dummy inhibitor container
+alone never proves logind inhibition. Explicit forced suspend is not tested.

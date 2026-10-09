@@ -53,4 +53,23 @@ build ID `f5f8285a85f2437285c0aa6a5daa29e1`, executable SHA256
 `659c2ec9ba1236fa160a8c101d2cb54675fee0d020d7a06982dafe1577d6632d`.
 Full host suite after driver changes:1032 tests pass,3 skipped. Metal-186 pins
 this source and enables only the reviewed console cold-state option on SPICE.
-The binary is experimental and has no native execution result yet.
+The binary remains experimental; the first native result is recorded below.
+
+## First native result
+
+Run892ec42661ae367e299f60d55c9da9ee, same host boot, MODE2#276:
+empty firmware hold=1, CNTL0x80000, processor reset1, DMUIF0x100. Native
+reservation retains0x200000, adds0, cursor0x7fe00000; accounting is ready before
+PSP TMR replacement. Native PSP returns0. Independent desktop Metal probe and
+WindowServer accelerator ownership pass. SPICE captures3840×2160 desktop pixels,
+with moving material, keyboard modifiers and correctly positioned mouse input.
+
+Capture is valid CORE_PROBE_PASS; clean guest-request shutdown and ordinary native
+recovery succeed, authorizes_launch=true. This is one post-resume successful run,
+not general suspend/resume or crash qualification. The repeated same-boot run is
+next. See console-spice-native-evidence-20261009.json for immutable artifact hashes
+and input/workload limitations. No DMCUB start or firmware load was added.
+
+The tightened sleep-inhibition harness and focused viewer pass the full host
+suite:1,033 tests,3 skipped. The first run exposed an obsolete idle-only test
+expectation; it was corrected to assert rejection of idle-only inhibition.

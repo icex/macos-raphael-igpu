@@ -45,13 +45,11 @@ class SleepInhibitionTests(unittest.TestCase):
         with self.busctl(self.payload(rows)):
             self.assertFalse(self.tool.sleep_inhibited())
 
-    def test_accepts_user_level_idle_only_block(self):
-        # AGENTS.md: the normal test path runs an external user-level
-        # `systemd-inhibit --what=idle`, so an idle-only block inhibitor satisfies
-        # the gate.
-        rows = [['idle', 'b', 'external idle inhibitor', 'block', 0, 2]]
+    def test_rejects_idle_only_block(self):
+        # Idle inhibition alone does not block desktop-requested suspend.
+        rows = [['idle', 'b', 'external idle inhibitor', 'block', 1000, 2]]
         with self.busctl(self.payload(rows)):
-            self.assertTrue(self.tool.sleep_inhibited())
+            self.assertFalse(self.tool.sleep_inhibited())
 
     def test_rejects_malformed_or_failed_logind_call(self):
         malformed = [

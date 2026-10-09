@@ -20,8 +20,90 @@ full VM-manager lifecycle integration remains unqualified.
 [Evidence](findings/research/console-spice-native-evidence-20261009.json) ·
 [Driver scope](findings/research/console-empty-firmware-20261009.md).
 
-Earlier console runs and the post-suspend refusal are preserved in
-[the October9 archive](findings/research/status-archives/status-pre340-repeat-20261009.md).
+## Candidate339 SPICE transport: desktop visible; native init refused after resume
+
+Run `74b5d9f71656c2d3492fd0972bc7c2a1`, metal-185, unchanged336 driver,
+339 harness, same bootba51b3c6. SPICE client captures the3840×2160 desktop and
+awake assertions pass. This does not establish accelerated output: HOSTRESERVE
+refuses DMCUB boot=0, CNTL=0, processor reset=1, interface control=0. Native PSP
+TMR replacement remains correctly blocked. No native Metal probe runs.
+The attempted moving-material workload did not start (nohup console-detach error).
+
+Capture is complete but verdict INVALID/recovery_lease_pool_missing; native
+ownership was never published. Explicit identity-bound guest shutdown returns
+exited-after-guest-request (`c339-explicit-guest-shutdown.json`); the runner then
+records already-stopped. Ordinary lease recovery refuses the missing record.
+Supported no-queue recovery succeeds with authorizes_launch=true, no kernel
+faults (`c336-e-noqueue-recovery.json`). VM stopped; no reboot or rebind.
+Results: `candidate-336-attempt-e-results`; images `c339-guest-spice-desktop.png`.
+
+The first preparation failed after MODE2#274 because the attempt artifact copy
+was absent, before QEMU/VFIO exposure; no launch was recorded. The corrected
+attempt uses MODE2#275. The host had resumed from KDE suspend at08:35 EEST.
+A verified session-wide sleep:idle inhibitor now spans development. Next: inspect
+the stopped firmware/windows and source-supported handling of post-suspend state;
+do not relax memory reservation or the immediate pre-PSP held-reset proof.
+[Investigation](findings/research/console-spice-manager-20261009.md).
+
+## Candidate338 helpers on336: console mode following; throughput open
+
+Latest run `89af08fc3479528d08a7ef7bea0d0956` (metal-184, same host bootba51b3c6)
+automatically restores the approved presenter, virtual display and awake assertion.
+An uninterrupted three-minute moving-material test completes2,061 event iterations.
+Active five-second samples report10.12–16.09 copied fps (median11.095); these are
+ScreenCaptureKit-to-memory counts, not viewer fps. Full-rate delivery is unqualified.
+
+The preceding336c run verifies native1080p/1080HiDPI mode following and QEMU
+keyboard input with Shift. Explicit write combining passes independent GPU color
+bars and1,843,200 QEMU pixel comparisons. Isolated memory copies improve, but a
+late-session workload fell to8–9 copied fps; its cause remains unresolved.
+A720HiDPI request settled to native720p and is not qualified as HiDPI.
+
+Capture: valid CORE_PROBE_PASS. Shutdown: exited-after-guest-request.
+Automatic recovery refused because the separate software-only libvirt test QEMU
+was still active. After stopping it, the ordinary native-lease recovery path
+succeeds: recovered, authorizes_launch=true. Original refusal remains unchanged.
+Retry receipt: `~/macos-vm/run/c336-d-native-recovery-retry.json` (also registered
+under run/vfio-recovery for the exact latest run). A generic legacy CLI attempt
+before the correct native retry refused its nonce check and is not GPU-failure evidence.
+Results: `candidate-336-attempt-d-results`; hardware VM stopped. No reboot/rebind.
+
+[Helper tests and limits](findings/research/console-resize-copy-20261008.md).
+
+## Candidate336: accelerated macOS in a QEMU window
+
+Run `201412ad0f4bafdc61ad3dde81d38037`, metal-184, host bootba51b3c6.
+Native desktop Metal probe passes with WindowServer accelerator ownership.
+QEMU's own console shows the virtual desktop at1920×1080 logical/3840×2160 pixels,
+including application windows, menu bar and Dock. Mouse clicks and keyboard input
+with Shift pass through QEMU's input path. Display-awake assertions are verified.
+
+Normal System Settings UI granted Screen Recording to the presenter, then the
+packaged org.raphaelgpu.console app. The installed user LaunchAgent creates the
+virtual display, makes it primary, and starts capture on console-enabled profiles.
+Repeat run `a4b743f14436d22521c6e627ab20476c` automatically restored the desktop
+and retained capture permission at login. A three-minute material-window workload
+completed 2,062 event-loop iterations; sampled QEMU captures show rendered effects
+and capture continued. This does not measure delivered frame rate or prove tear-free output.
+Both336 runs shut down through the guest and recovered with authorizing receipts.
+Latest results: `candidate-336-attempt-b-results`; VM stopped. The helpers remain
+bounded to6000seconds; sustained performance, resize, arbitrary VM managers and
+unlimited daily use are not qualified.
+
+Capture artifacts: ~/macos-vm/run/c336-desktop-main.ppm,
+c336-qemu-input-menu.png, c336-qemu-keyboard-shift.png,
+c336-input-and-capture-result.txt and c336-packaged-desktop.ppm.
+The harness reports valid CORE_PROBE_PASS. Shutdown: exited-after-guest-request.
+Recovery: recovered, authorizes_launch=true. Results: candidate-336-results.
+
+Restart corrections preserve mandatory reservation and immediate pre-PSP DMCUB
+reset/disable proof.335 verifies disable under existing reset;336 retires validated
+stale guest mailbox ranges while retaining secure firmware storage.333c/334/335
+refused safely and recovered through the supported no-queue path. The original
+332 host-hang build remains withdrawn. No host reboot or amdgpu rebind occurred.
+
+[Console setup](docs/virtual-console.md) ·
+[Prior investigation status](findings/research/status-archives/status-before-console-desktop-20261008.md).
 
 ## Candidate330: correct HiDPI120 picture and HDMI audio
 
@@ -106,3 +188,17 @@ StockQEMU10.1.2/OpenCore/VirtualSMC1.3.7 works in this tested setup;
 PerfPowerServices was0.0% CPU on two guest boots. Automatic required-hardware HEVC
 decode works; explicit GPU-ID selection remains limited. Main10 decode has scoped
 passes; hardware encode is Main8. [Roadmap](docs/ROADMAP.md).
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-336-attempt-e-results`
+- Verdict: `INVALID`
+- Boundary: `recovery_lease_pool_missing`
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-340-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`

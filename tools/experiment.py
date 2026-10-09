@@ -319,7 +319,7 @@ def retained_amdgpu_initialization(host, journal, evidence_path=None):
 
 
 def sleep_inhibited():
-    """Return whether logind has the permitted user-level idle inhibitor."""
+    """Return whether logind blocks both sleep and idle."""
     try:
         result = subprocess.run(
             ['busctl', '--system', '--json=short', 'call',
@@ -344,7 +344,7 @@ def sleep_inhibited():
             if mode != 'block':
                 continue
             scopes = what.split(':')
-            if ((len(scopes) == 2 and set(scopes) == {'sleep', 'idle'}) or scopes == ['idle']):
+            if len(scopes) == 2 and set(scopes) == {'sleep', 'idle'}:
                 matching = True
         return matching
     except (OSError, subprocess.SubprocessError, ValueError, TypeError, AttributeError):

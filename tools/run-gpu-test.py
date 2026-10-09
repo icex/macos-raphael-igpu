@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run one prepared GPU experiment with a user-level idle inhibitor."""
+"""Run one prepared GPU experiment with a user-level sleep and idle inhibitor."""
 from __future__ import annotations
 import argparse, json, os, subprocess, sys
 from pathlib import Path
@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 def build_command(vm_dir: Path, manifest: Path, output: Path, worktree: Path = ROOT) -> list[str]:
-    return ["systemd-inhibit", "--what=idle", "--mode=block",
+    return ["systemd-inhibit", "--what=sleep:idle", "--mode=block",
             "--who=RaphaelGPU", "--why=GPU test", sys.executable, "-B",
             str(worktree / "tools" / "experiment.py"), "run", "--vm-dir",
             str(vm_dir), "--manifest", str(manifest), "--output", str(output)]

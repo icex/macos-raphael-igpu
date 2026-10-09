@@ -1,0 +1,43 @@
+{
+  "run_id": "892ec42661ae367e299f60d55c9da9ee",
+  "build_id": "f5f8285a85f2437285c0aa6a5daa29e1",
+  "candidate": "1.0.340",
+  "artifact_root": "/home/bogdan/macos-vm/run",
+  "files": {
+    "candidate-340-results/verdict.json": "7c3c1fdc85b6f6f37bd9900f15f77e6bddfb82c8b1de39e477b73f744ae47dfd",
+    "candidate-340-results/probe.json": "6edb5548bb3f217ead17cecbb1eaef4b613dc816ef1a8aff16659ceb1bbe6ffb",
+    "candidate-340-results/shutdown.json": "8599dcd8ae9466ed5b593a9e58c0abb062354e2c2f206c7dd3161a987791c22c",
+    "candidate-340-results/recovery.json": "23565dcb4653340d638574d0cd65c15b7793d42287417e722af63c251a84ba9f",
+    "candidate-340-results/capture-sha256.json": "f81a123c47a4aa00db0c1eb53046cf8f508af7d2e7c2039e05367531a4999473",
+    "c340-spice-desktop.png": "b18c961bb22d9bd56841b9612284e675808e11ce3b6e96aca2252154581df58e",
+    "c340-material-result.txt": "71f89ab9c2056504497a2acbafe19684da0518cae26509bd8823cbb33ed9d65f",
+    "c341-keyboard-final.txt": "741a37fba9a76ed58a08434480f62d3c2d6381a18253a7f93e8d492d4cc9f1a5",
+    "c341-keyboard-timed.png": "8768f271c5254cb4690ee89758835ec04079b67b06f0fb2573361b22ed64662a",
+    "c340-mouse-result.txt": "235357dc13f3e955dfd3f99a24dc46b7c5ea9acfbdce86d451ef9d149450504a",
+    "c340-mouse-input.png": "7f42a747b30071f9f54cb600a25aba8233e55fe161c20c54eaa4b05f374ee5c7",
+    "c340-input-final-and-awake.txt": "c66bceeaedf3ccd3722aaaff3aac6e5dba2d8b36d49f09c4ec5c61067090889b"
+  },
+  "scope": {
+    "native_desktop_metal": true,
+    "spice_desktop_pixels": [
+      3840,
+      2160
+    ],
+    "keyboard_exact": "RGPU336",
+    "mouse_window_point": [
+      295,
+      130
+    ],
+    "material_event_iterations": 2066,
+    "end_to_end_fps": null,
+    "libvirt_macos_lifecycle": false,
+    "shutdown": "exited-after-guest-request",
+    "recovery_authorizes_launch": true
+  },
+  "limitations": [
+    "c341-prefixed input artifacts identify isolated X display341, not driver341",
+    "Mouse test was manually unloaded after its click log, before its45-second text completion; keyboard pass is the separate completed test",
+    "Initial input trials were confounded by focus and expired viewer/probe lifetimes",
+    "launchctl submit unexpectedly restarted the material app; only its first completed180-second interval is counted; owned job/processes subsequently removed"
+  ]
+}

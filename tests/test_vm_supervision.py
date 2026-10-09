@@ -269,11 +269,12 @@ class SupervisionTests(unittest.TestCase):
         self.assertNotIn(str(self.vm/'bin/systemd-inhibit'), serial)
         self.assertIn(str(self.vm/'sercat.py'), serial)
 
-    def test_headless_collector_accepts_idle_only_block_inhibitor(self):
+    def test_headless_collector_rejects_idle_only_block_inhibitor(self):
         self.env["GENERIC_GRAPHICS"] = "off"
         self.fixture.update(logind_inhibited=True, inhibitor_what="idle"); self.save()
         result = self.arm()
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("sleep:idle block inhibitor", result.stderr)
 
     def test_headless_collector_rejects_sleep_only_or_delay_inhibitor(self):
         self.env["GENERIC_GRAPHICS"] = "off"

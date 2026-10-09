@@ -53,7 +53,7 @@ tools/cycle.py --candidate 231 --card metal-079
 | MODE2 reset | fresh receipt with `CP_STAT=0` and `RLC_CNTL=0` — numbered automatically, never overwriting an earlier one |
 | stage | `stage-candidate.py --execute` with the derived commit/boot-id/card/identity digests and the pinned image and Lilu hashes |
 | prepare | `experiment.py prepare` against the staged run id |
-| run | `run-gpu-test.py`, which wraps `experiment.py run` in a user-level `systemd-inhibit --what=idle` and appends the verdict to `status.md` |
+| run | `run-gpu-test.py`, which wraps `experiment.py run` in a user-level `systemd-inhibit --what=sleep:idle` and appends the verdict to `status.md` |
 
 Useful flags: `--attempt NAME` for an isolated retry namespace, `--skip-tests` when the suite
 has just run, `--allow-dirty` for a deliberately uncommitted experiment.

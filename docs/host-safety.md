@@ -29,8 +29,25 @@ does this automatically and refuses to continue otherwise.
 ## No sudo
 
 The normal test path requires no root. Sleep inhibition runs as a user-level
-`systemd-inhibit --what=idle` process, and an inhibitor container must be up for the duration of
-a run. Root-only actions go through the user or a privileged container, never silently.
+`systemd-inhibit --what=sleep:idle` process, and an inhibitor container must be up for the duration of
+a run. The container alone is not proof of inhibition: logind must report both
+`sleep` and `idle` in a block inhibitor. Hold an additional user-session inhibitor
+across builds and between cycles when keeping the development host awake.
+Root-only actions go through the user or a privileged container, never silently.
+
+For an explicitly requested awake development session, start a user-scoped blocker
+before builds and retain it between cycles:
+
+```sh
+systemd-run --user --unit=rgpu-work-awake --collect \
+  systemd-inhibit --what=sleep:idle --mode=block \
+  --who=Raphael-development --why='Active GPU development and testing' sleep infinity
+systemd-inhibit --list
+```
+
+Verify the existing service instead of starting it twice. Release it with
+`systemctl --user stop rgpu-work-awake` only when development no longer needs the
+host awake. This does not disable the experiment's independent stop deadline.
 
 ## Supervision
 

@@ -59,8 +59,8 @@ def logind_block_inhibited():
                             for index in (4, 5))):
                 return False
             scopes = fields[0].split(":")
-            if fields[3] == "block" and (scopes == ["idle"] or
-                    (len(scopes) == 2 and set(scopes) == {"sleep", "idle"})):
+            if (fields[3] == "block" and len(scopes) == 2 and
+                    set(scopes) == {"sleep", "idle"}):
                 matching = True
         return matching
     except (OSError, subprocess.SubprocessError, ValueError, TypeError, AttributeError):
@@ -488,7 +488,7 @@ def arm(vm, cid, maximum, critical_enabled=False):
     stop_command = shlex.join([docker, "stop", "--time", "0", cid])
     headless = os.environ.get("GENERIC_GRAPHICS") == "off"
     if headless and not logind_block_inhibited():
-        raise RuntimeError("headless capture requires an existing idle block inhibitor")
+        raise RuntimeError("headless capture requires an existing sleep:idle block inhibitor")
     channels = [("serial", "console")]
     if critical_enabled:
         channels.append(("critical", "critical"))
@@ -695,7 +695,7 @@ def start_locked(vm, maximum, gpu_args, critical_enabled=False, context=None):
     name = "rgpu-launch-" + uuid.uuid4().hex
     context = context or {}
     if os.environ.get("GENERIC_GRAPHICS") == "off" and not logind_block_inhibited():
-        raise RuntimeError("headless capture requires an existing idle block inhibitor")
+        raise RuntimeError("headless capture requires an existing sleep:idle block inhibitor")
     try:
         familiar_name = run([binary("docker"), "ps", "-a", "--filter",
                              "name=^/macos-sequoia$", "--format", "{{.Names}}"]).strip()

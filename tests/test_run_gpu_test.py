@@ -10,12 +10,12 @@ spec = importlib.util.spec_from_file_location("run_gpu_test", ROOT / "tools/run-
 mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
 
 class RunGpuTestTests(unittest.TestCase):
-    def test_command_has_external_idle_inhibitor(self):
+    def test_command_blocks_sleep_and_idle(self):
         cmd = mod.build_command(Path('/vm'), Path('/m'), Path('/o'), Path('/wt'))
-        self.assertEqual(cmd[:3], ['systemd-inhibit', '--what=idle', '--mode=block'])
+        self.assertEqual(cmd[:3], ['systemd-inhibit', '--what=sleep:idle', '--mode=block'])
         self.assertNotIn('--ack-risk', cmd)
         self.assertNotIn('--manual-reuse', cmd)
-        self.assertNotIn('--what=sleep:idle', cmd)
+        self.assertNotIn('--what=idle', cmd)
         self.assertIn('/wt/tools/experiment.py', cmd)
 
     def test_stale_manual_reuse_attrs_are_never_forwarded(self):

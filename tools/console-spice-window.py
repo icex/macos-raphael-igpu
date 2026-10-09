@@ -56,6 +56,7 @@ def main():
             display.set_property('scaling', True)
             window.add(display)
             display.show()
+            display.grab_focus()
 
     # GObject signal connection is distinct from SpiceSession.connect().
     from gi.repository import GObject
