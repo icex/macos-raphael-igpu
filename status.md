@@ -22,8 +22,14 @@ recovered/authorizes_launch=true. Cycle stopped; host remains awake. No reboot/r
 [Hashes](findings/research/console-snapshot-native-evidence-20261009.json).
 
 1274 host tests pass,8skip, including delivery checks. Candidate370 tested kext
-and milestone docs are integrated into dev; hosted validation pending. Prior368
-hosted37944403991 test/build green. Main unchanged. Next: investigate capture
+and milestone docs are delivered on dev5ec383d; hosted37948929898 test/build
+green. Main unchanged. Next: investigate capture
 wait-witness race and test single changed-pixel rectangle in software before next
 native comparison. Fresh-user bootstrap, sustained performance, repeated crash
 lifecycle, broader apps/codecs, other managers and VirtualBox remain open.
+
+Candidate374/metal-206 is built for changed-pixel single-rectangle comparison and
+bounded witness137 teardown fix.1285 host tests pass,8skip. Native launch pending
+exact image/provenance and dry-run checks. Existing370 presenter will be hash-
+verified; no reinstall required. Snapshot regrant refusal tested only after
+measurements and orderly owner exit, then ordinary agent restoration.
