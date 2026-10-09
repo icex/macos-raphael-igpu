@@ -1,0 +1,256 @@
+{
+  "passed": true,
+  "runs": [
+    {
+      "passed": true,
+      "reason": "guest-shutdown",
+      "identity": {
+        "name": "rgpu-0019930be693bee31292bb90304670d2",
+        "uuid": "00000000-0000-0000-0000-000000000000",
+        "run_id": "0019930be693bee31292bb90304670d2",
+        "pid": 45,
+        "start_ticks": 32667608
+      },
+      "scope": {
+        "kind": "pid-namespace",
+        "device": 5,
+        "inode": 4026533266,
+        "init_start_ticks": 32667571
+      },
+      "process_exited": true,
+      "phases": [
+        "creating-paused",
+        "paused-identity",
+        "network-ready",
+        "running",
+        "stopped"
+      ],
+      "container_id": "cd5ef172a812561ae2091dfc67aba57087adabd70f3d4dba632f8eea6c2a1f47",
+      "container_state": {
+        "Status": "exited",
+        "Running": false,
+        "Paused": false,
+        "Restarting": false,
+        "OOMKilled": false,
+        "Dead": false,
+        "Pid": 0,
+        "ExitCode": 0,
+        "Error": "",
+        "StartedAt": "2026-10-09T07:44:12.080403772Z",
+        "FinishedAt": "2026-10-09T07:44:12.825954167Z"
+      },
+      "events": [
+        {
+          "phase": "creating-paused",
+          "run_id": "0019930be693bee31292bb90304670d2"
+        },
+        {
+          "phase": "paused-identity",
+          "run_id": "0019930be693bee31292bb90304670d2",
+          "identity": {
+            "name": "rgpu-0019930be693bee31292bb90304670d2",
+            "uuid": "00000000-0000-0000-0000-000000000000",
+            "run_id": "0019930be693bee31292bb90304670d2",
+            "pid": 45,
+            "start_ticks": 32667608
+          }
+        },
+        {
+          "phase": "network-ready",
+          "run_id": "0019930be693bee31292bb90304670d2"
+        },
+        {
+          "phase": "running",
+          "run_id": "0019930be693bee31292bb90304670d2",
+          "identity": {
+            "name": "rgpu-0019930be693bee31292bb90304670d2",
+            "uuid": "00000000-0000-0000-0000-000000000000",
+            "run_id": "0019930be693bee31292bb90304670d2",
+            "pid": 45,
+            "start_ticks": 32667608
+          }
+        },
+        {
+          "phase": "test-guest-ready",
+          "identity": {
+            "name": "rgpu-0019930be693bee31292bb90304670d2",
+            "uuid": "00000000-0000-0000-0000-000000000000",
+            "run_id": "0019930be693bee31292bb90304670d2",
+            "pid": 45,
+            "start_ticks": 32667608
+          }
+        },
+        {
+          "phase": "libvirt-lifecycle",
+          "name": "rgpu-0019930be693bee31292bb90304670d2",
+          "uuid": "00000000-0000-0000-0000-000000000000",
+          "event": 2,
+          "detail": 0
+        },
+        {
+          "phase": "libvirt-lifecycle",
+          "name": "rgpu-0019930be693bee31292bb90304670d2",
+          "uuid": "00000000-0000-0000-0000-000000000000",
+          "event": 3,
+          "detail": 0
+        },
+        {
+          "phase": "libvirt-lifecycle",
+          "name": "rgpu-0019930be693bee31292bb90304670d2",
+          "uuid": "00000000-0000-0000-0000-000000000000",
+          "event": 4,
+          "detail": 0
+        },
+        {
+          "phase": "libvirt-lifecycle",
+          "name": "rgpu-0019930be693bee31292bb90304670d2",
+          "uuid": "00000000-0000-0000-0000-000000000000",
+          "event": 6,
+          "detail": 1
+        },
+        {
+          "phase": "libvirt-lifecycle",
+          "name": "rgpu-0019930be693bee31292bb90304670d2",
+          "uuid": "00000000-0000-0000-0000-000000000000",
+          "event": 5,
+          "detail": 0
+        },
+        {
+          "phase": "stopped",
+          "run_id": "0019930be693bee31292bb90304670d2",
+          "reason": "guest-shutdown",
+          "resumed": true,
+          "resume_attempted": true
+        }
+      ],
+      "artifact_directory": "/home/bogdan/macos-vm/run/c341-lifecycle-guest-v8",
+      "boot_image_sha256": "8ec0f7bcd9c191b6fc60d9d2c59514bc5dc3850d6d439fcdb1133de9f6893e8e"
+    },
+    {
+      "passed": true,
+      "reason": "manager-destroyed",
+      "identity": {
+        "name": "rgpu-b2e723171fe00ff2fc34181f735f2b9c",
+        "uuid": "00000000-0000-0000-0000-000000000000",
+        "run_id": "b2e723171fe00ff2fc34181f735f2b9c",
+        "pid": 45,
+        "start_ticks": 32670645
+      },
+      "scope": {
+        "kind": "pid-namespace",
+        "device": 5,
+        "inode": 4026533266,
+        "init_start_ticks": 32670608
+      },
+      "process_exited": true,
+      "phases": [
+        "creating-paused",
+        "paused-identity",
+        "network-ready",
+        "running",
+        "stopped"
+      ],
+      "container_id": "1c23b3bb5f5d6c4e0057e8bbe5337e303a0a984ca1199f9505fea75af641bd5d",
+      "container_state": {
+        "Status": "exited",
+        "Running": false,
+        "Paused": false,
+        "Restarting": false,
+        "OOMKilled": false,
+        "Dead": false,
+        "Pid": 0,
+        "ExitCode": 0,
+        "Error": "",
+        "StartedAt": "2026-10-09T07:44:42.455882253Z",
+        "FinishedAt": "2026-10-09T07:44:43.284154717Z"
+      },
+      "events": [
+        {
+          "phase": "creating-paused",
+          "run_id": "b2e723171fe00ff2fc34181f735f2b9c"
+        },
+        {
+          "phase": "paused-identity",
+          "run_id": "b2e723171fe00ff2fc34181f735f2b9c",
+          "identity": {
+            "name": "rgpu-b2e723171fe00ff2fc34181f735f2b9c",
+            "uuid": "00000000-0000-0000-0000-000000000000",
+            "run_id": "b2e723171fe00ff2fc34181f735f2b9c",
+            "pid": 45,
+            "start_ticks": 32670645
+          }
+        },
+        {
+          "phase": "network-ready",
+          "run_id": "b2e723171fe00ff2fc34181f735f2b9c"
+        },
+        {
+          "phase": "running",
+          "run_id": "b2e723171fe00ff2fc34181f735f2b9c",
+          "identity": {
+            "name": "rgpu-b2e723171fe00ff2fc34181f735f2b9c",
+            "uuid": "00000000-0000-0000-0000-000000000000",
+            "run_id": "b2e723171fe00ff2fc34181f735f2b9c",
+            "pid": 45,
+            "start_ticks": 32670645
+          }
+        },
+        {
+          "phase": "test-guest-ready",
+          "identity": {
+            "name": "rgpu-b2e723171fe00ff2fc34181f735f2b9c",
+            "uuid": "00000000-0000-0000-0000-000000000000",
+            "run_id": "b2e723171fe00ff2fc34181f735f2b9c",
+            "pid": 45,
+            "start_ticks": 32670645
+          }
+        },
+        {
+          "phase": "libvirt-lifecycle",
+          "name": "rgpu-b2e723171fe00ff2fc34181f735f2b9c",
+          "uuid": "00000000-0000-0000-0000-000000000000",
+          "event": 2,
+          "detail": 0
+        },
+        {
+          "phase": "libvirt-lifecycle",
+          "name": "rgpu-b2e723171fe00ff2fc34181f735f2b9c",
+          "uuid": "00000000-0000-0000-0000-000000000000",
+          "event": 3,
+          "detail": 0
+        },
+        {
+          "phase": "libvirt-lifecycle",
+          "name": "rgpu-b2e723171fe00ff2fc34181f735f2b9c",
+          "uuid": "00000000-0000-0000-0000-000000000000",
+          "event": 4,
+          "detail": 0
+        },
+        {
+          "phase": "libvirt-lifecycle",
+          "name": "rgpu-b2e723171fe00ff2fc34181f735f2b9c",
+          "uuid": "00000000-0000-0000-0000-000000000000",
+          "event": 6,
+          "detail": 2
+        },
+        {
+          "phase": "libvirt-lifecycle",
+          "name": "rgpu-b2e723171fe00ff2fc34181f735f2b9c",
+          "uuid": "00000000-0000-0000-0000-000000000000",
+          "event": 5,
+          "detail": 1
+        },
+        {
+          "phase": "stopped",
+          "run_id": "b2e723171fe00ff2fc34181f735f2b9c",
+          "reason": "manager-destroyed",
+          "resumed": true,
+          "resume_attempted": true
+        }
+      ],
+      "artifact_directory": "/home/bogdan/macos-vm/run/c341-lifecycle-forceoff",
+      "boot_image_sha256": "8ec0f7bcd9c191b6fc60d9d2c59514bc5dc3850d6d439fcdb1133de9f6893e8e"
+    }
+  ],
+  "scope": "Isolated TCG software guest, real libvirt lifecycle and container exit. No macOS, host NIC, KVM or VFIO."
+}

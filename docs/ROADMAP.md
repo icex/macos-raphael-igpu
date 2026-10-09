@@ -234,7 +234,11 @@ idle blocking are now required during runs, with a session blocker across builds
 Candidate338 helpers follow native1080p/HiDPI guest modes. Copied-frame counts do
 not qualify viewer throughput. Software-only Boxes transport works, but full
 libvirt-managed macOS launch/input/shutdown/recovery remains the next integration
-milestone. Host-window-driven resize and measured performance remain open.
+milestone. Candidate341 now verifies isolated TAP handoff and container-local
+software guest shutdown/manager Force Off through natural container exit.
+Full native argv/TAP provenance checks and supervised launcher wiring remain.
+[Lifecycle evidence](../findings/research/libvirt-local-lifecycle-20261009.md).
+Host-window-driven resize and measured performance remain open.
 VirtualBox requires a separate transport/driver.
 [Implementation and measured scope](virtual-console.md).
 

@@ -8,6 +8,8 @@ from libvirt, QMP and /proc, not from the requested XML alone.
 import hashlib
 import json
 import os
+import math
+import time
 
 
 class Refused(RuntimeError):
@@ -30,7 +32,13 @@ class PausedDomain:
         require(digest(plan) == expected_digest, 'plan digest changed')
         require(plan['required_launch'] == 'transient-paused' and plan['resume_allowed'] is False,
                 'plan does not require paused admission')
-        require(container.get('cid') and container.get('started_at'), 'container identity missing')
+        external = bool(container.get('cid') and container.get('started_at'))
+        local = (container.get('kind') == 'pid-namespace' and
+                 all(type(container.get(k)) is int and container[k] > 0
+                     for k in ('device', 'inode', 'init_start_ticks')))
+        require(external or local, 'container identity missing')
+        # Local scope binds namespace + init process; the existing host supervisor
+        # independently owns the full Docker CID/StartedAt and exposure deadline.
         self.backend = backend
         # Freeze admitted intent against later caller mutation.
         self.plan = json.loads(json.dumps(plan))
@@ -167,13 +175,26 @@ class PausedDomain:
         if self.created and self.plan['domain_name'] in domains:
             # A failed configuration check must not prevent destroying our exact
             # process, but never stop a replacement merely sharing the name/UUID.
-            state = self.backend.snapshot(self.plan['domain_name'])
-            identity = {key: state[key] for key in ('name', 'uuid', 'run_id', 'pid', 'start_ticks')}
-            require(self.identity is not None and identity == self.identity,
-                    'cleanup refuses unproven or replaced domain ownership')
-            self.check_container()
-            self.backend.destroy_owned(self.identity)
-            require(self.plan['domain_name'] not in self.backend.domains(), 'domain survived destroy')
+            try:
+                state = self.backend.snapshot(self.plan['domain_name'])
+            except Exception as error:
+                missing = getattr(self.backend, 'is_missing_domain_error', lambda e: False)(error)
+                require(missing and self.identity is not None and
+                        self.plan['domain_name'] not in self.backend.domains() and
+                        self.backend.process_gone(self.identity), 'cleanup observation failed without exit proof')
+                state = None
+            if state is not None:
+                identity = {key: state[key] for key in ('name', 'uuid', 'run_id', 'pid', 'start_ticks')}
+                require(self.identity is not None and identity == self.identity,
+                        'cleanup refuses unproven or replaced domain ownership')
+                self.check_container()
+                try:
+                    self.backend.destroy_owned(self.identity)
+                except Exception as error:
+                    missing = getattr(self.backend, 'is_missing_domain_error', lambda e: False)(error)
+                    require(missing and self.backend.process_gone(self.identity),
+                            'destroy failed without process exit proof')
+                require(self.plan['domain_name'] not in self.backend.domains(), 'domain survived destroy')
         if self.created:
             require(self.backend.process_gone(self.identity) is True,
                     'domain absence does not prove QEMU exit')
@@ -182,3 +203,48 @@ class PausedDomain:
                                  resume_attempted=self.resume_attempted)
         self.record('stopped', **self.stop_receipt)
         self.finished = True
+
+
+def monitor(owner, deadline, stop_requested=lambda: False, poll_seconds=0.2):
+    """Follow an already running domain until exit, stop request or fixed deadline.
+
+    Backend calls must remain under the independent outer container deadline;
+    this loop does not replace that host supervisor or guest shutdown protocol.
+    Domain disappearance is never itself proof of process exit or clean shutdown.
+    """
+    require(owner.resumed and not owner.finished, 'monitor requires running owner')
+    require(math.isfinite(deadline) and math.isfinite(poll_seconds) and poll_seconds > 0,
+            'invalid monitor deadline or interval')
+    try:
+        while True:
+            owner.check_container()
+            getattr(owner.backend, 'health_check', lambda: None)()
+            if stop_requested():
+                reason = 'controller-stop-request'
+                break
+            if time.monotonic() >= deadline:
+                reason = 'controller-deadline'
+                break
+            if owner.plan['domain_name'] not in owner.backend.domains():
+                reason = owner.backend.exit_reason(owner.plan['domain_name'], deadline)
+                require(reason in ('guest-shutdown', 'manager-destroyed', 'domain-crashed',
+                                   'domain-exited-unknown'), 'invalid domain exit reason')
+                break
+            try:
+                owner.observe()
+            except Exception as error:
+                missing = getattr(owner.backend, 'is_missing_domain_error', lambda e: False)(error)
+                if not missing or owner.plan['domain_name'] in owner.backend.domains():
+                    raise
+                require(owner.backend.process_gone(owner.identity), 'domain disappeared with QEMU still live')
+                reason = owner.backend.exit_reason(owner.plan['domain_name'], deadline)
+                break
+            time.sleep(min(poll_seconds, max(0, deadline - time.monotonic())))
+        require(reason in ('guest-shutdown', 'manager-destroyed', 'domain-crashed',
+                           'domain-exited-unknown', 'controller-stop-request', 'controller-deadline'),
+                'invalid domain exit reason')
+        owner.cleanup(reason)
+        return reason
+    except BaseException as error:
+        owner.abort(error, 'monitor-failed')
+        raise

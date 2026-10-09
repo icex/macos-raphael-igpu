@@ -1,22 +1,22 @@
 # Live status — 2026-10-09
 
-## Candidate341: libvirt planning and isolated emulator checks
+## Candidate341: libvirt planning, network handoff and local lifecycle
 
-No new GPU run. The complete transient-domain planner preserves the native
-peripheral/storage order and single CPU definition in libvirt11.9 conversion.
-A separate KVM CPU-only test verifies the expected CPU properties and preserves
-native zero hardware UUID. All test domains and containers are stopped; the
-host sleep:idle blocker stays active. Full host suite:1,057 pass,3 skipped.
-A transaction core now stops owned software QEMU processes after invalid TAP
-setup and injected lost observations, without attempting resume. This is
-failure-path evidence. A separate isolated TCG test now attaches a real TAP,
-verifies backend/hub/NIC and QEMU fdinfo before resume, captures an exact injected
-frame, and proves process exit after external libvirt Force Off. Both test
-containers stopped; production backend/lifecycle integration remains next;
-full libvirt-managed accelerated macOS remains unqualified.
-[Plan](findings/research/libvirt-console-plan-20261009.md) ·
-[Runtime failure tests](findings/research/libvirt-runtime-failure-20261009.md) ·
-[TAP and stop test](findings/research/libvirt-runtime-tap-20261009.md).
+No new GPU run. The complete transient-domain planner preserves native
+peripheral/storage order, one CPU definition and the zero hardware UUID.
+Isolated software tests prove a real TAP handoff before resume and exact backend
+packet capture. The new container-local backend now observes actual software
+guest poweroff and independent libvirt Force Off, checks QEMU exit, retains the
+distinct reasons and exits each container naturally with status0. Docker init
+reaping and a real shutdown-observation race were fixed during those tests.
+All test containers are stopped; the host sleep:idle blocker stays active.
+Full host suite:1,063 tests pass,3 skipped.
+
+Production TAP provenance/full-argv verification and vm-entry/harness integration
+remain next. This is not yet a libvirt-managed accelerated macOS pass. The native
+GPU launch path is unchanged. [Plan](findings/research/libvirt-console-plan-20261009.md) ·
+[TAP](findings/research/libvirt-runtime-tap-20261009.md) ·
+[Local lifecycle](findings/research/libvirt-local-lifecycle-20261009.md).
 
 ## Candidate340: native accelerated SPICE desktop after host resume
 

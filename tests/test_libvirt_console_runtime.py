@@ -151,6 +151,43 @@ class RuntimeTests(unittest.TestCase):
         self.backend.reconcile_creation=lambda p:dict(outcome='no-process')
         with self.assertRaises(TimeoutError):owner.prepare(self.fd)
         self.assertTrue(owner.finished);self.assertFalse(self.backend.process)
+    def test_monitor_external_exit_preserves_observed_reason(self):
+        owner=self.owner();owner.prepare(self.fd);owner.resume()
+        self.backend.live=False;self.backend.process=False
+        self.backend.exit_reason=lambda name,deadline:'manager-destroyed'
+        result=mod.monitor(owner,mod.time.monotonic()+5)
+        self.assertEqual(result,'manager-destroyed');self.assertTrue(owner.finished)
+        self.assertNotIn('destroy',self.backend.calls)
+    def test_monitor_deadline_stops_owned_process(self):
+        owner=self.owner();owner.prepare(self.fd);owner.resume()
+        self.assertEqual(mod.monitor(owner,0),'controller-deadline')
+        self.assertFalse(self.backend.process)
+    def test_monitor_stop_request_stops_owned_process(self):
+        owner=self.owner();owner.prepare(self.fd);owner.resume()
+        self.assertEqual(mod.monitor(owner,mod.time.monotonic()+5,lambda:True),'controller-stop-request')
+        self.assertFalse(self.backend.process)
+    def test_monitor_observer_failure_still_cleans_up(self):
+        owner=self.owner();owner.prepare(self.fd);owner.resume()
+        def failure():raise OSError('stop request observation failed')
+        with self.assertRaises(OSError):mod.monitor(owner,mod.time.monotonic()+5,failure)
+        self.assertTrue(owner.finished);self.assertFalse(self.backend.process)
+    def test_monitor_domain_disappearance_race_uses_exit_evidence(self):
+        owner=self.owner();owner.prepare(self.fd);owner.resume()
+        class MissingDomain(RuntimeError):pass
+        def disappear(name):
+            self.backend.live=False;self.backend.process=False
+            raise MissingDomain('gone between list and snapshot')
+        self.backend.snapshot=disappear
+        self.backend.is_missing_domain_error=lambda error:isinstance(error,MissingDomain)
+        self.backend.exit_reason=lambda name,deadline:'guest-shutdown'
+        self.assertEqual(mod.monitor(owner,mod.time.monotonic()+5),'guest-shutdown')
+        self.assertTrue(owner.finished);self.assertNotIn('destroy',self.backend.calls)
+    def test_monitor_event_dispatcher_loss_does_not_skip_cleanup(self):
+        owner=self.owner();owner.prepare(self.fd);owner.resume()
+        def unhealthy():raise RuntimeError('event dispatcher failed')
+        self.backend.health_check=unhealthy
+        with self.assertRaisesRegex(RuntimeError,'dispatcher'):mod.monitor(owner,mod.time.monotonic()+5)
+        self.assertTrue(owner.finished);self.assertFalse(self.backend.process)
     def test_external_domain_disappearance_records_stop_without_destroy(self):
         owner=self.owner();owner.prepare(self.fd);owner.resume();self.backend.live=False;self.backend.process=False
         owner.cleanup('domain-disappeared')
