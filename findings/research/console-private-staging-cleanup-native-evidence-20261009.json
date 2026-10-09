@@ -117,6 +117,56 @@
       "path": "/home/bogdan/macos-vm/run/c395-fourk-presenter.txt",
       "bytes": 37861,
       "sha256": "f2573fe5a81ace0abcede2c358c9811dacafe858e69792268ac29ed246466831"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c395-overlay-final.txt",
+      "bytes": 2980,
+      "sha256": "66c9aec03198de75fc20a81b9461b866e715fe20871bbb7015a1bc333de4d56b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c395-overlay-before.png",
+      "bytes": 34273,
+      "sha256": "e7142511031dd238686b1b574e87eada947dac52c2297783d6ea529356f7a077"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c395-input-final.txt",
+      "bytes": 2966,
+      "sha256": "13c44fdf2156e14b6b05fc12fdeffa9752242b91d32d909a78bc44f18a5b9b07"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c395-input-retry-final.txt",
+      "bytes": 33,
+      "sha256": "d9713f02e3687c6c03297b2c3c9e9b2f16eb1a3b506a32f9d2c3d225a5694793"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c395-input-retry-final2.txt",
+      "bytes": 2602,
+      "sha256": "e186ba093874611a0261518d874d5ab3d706c81d0f92068584a3f918d8682c30"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c395-input-overlay-injection.jsonl",
+      "bytes": 1026,
+      "sha256": "18f87f03de133e162a136993b8b98780a5b479a9b354aea89b61eefb65b2a034"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c395-input-overlay-injection.py",
+      "bytes": 1924,
+      "sha256": "7c04b8a49572935c76de1051074d01edd3a8158569bcc3f3ebbd6acf6af2a55d"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c395-audio-result.txt",
+      "bytes": 625,
+      "sha256": "b39fbfaa1abac9e1e0ef21c6e03d70fde309d446db94e386f1a8a9fa1eb9a2bd"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c395-audio-restored-independent.json",
+      "bytes": 99,
+      "sha256": "b8f254659d9904b96789868fa8f77ce466562297fc1d4b49f1d53b4466a0cf49"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c395-viewer-close-alive.json",
+      "bytes": 149,
+      "sha256": "e1c8c485bc3517c437770a39bfed7f14b7ce94ad23a95a618e1ea214ea62344f"
     }
   ]
 }

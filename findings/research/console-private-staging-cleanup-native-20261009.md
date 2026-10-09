@@ -58,8 +58,29 @@ not establish a regression or isolate the added kernel copy as the bottleneck.
 
 ## Remaining qualification
 
-Final audio/restoration and capture/private-terminal/Docker/recovery receipts are
-pending. The earlier capture-abort race is independent of this ownership fix.
+Final capture/private-terminal/Docker/recovery receipts are pending. The earlier capture-abort race is independent of this ownership fix.
 Client death during commit, broader restart stress and independent host-boot
 coverage remain open. GPU-native virtual transport and VirtualBox remain
 unqualified; neither ACK nor token samples are physical scanout FPS.
+
+
+## Corrected input fixture and audio
+
+With the installed snapshot presenter and resize agent active, the corrected
+fullscreen status-level fixture passes five targets, zero misses, exact text
+`RGPU395C1234`, unchanged geometry over35.707s (`c395-overlay-final.txt`). Root
+views`c395-overlay-before.png` and confirms Dock/menu occlusion by the test window.
+Tests-only source36ebdc1 raises the fixture window above those overlays; it does
+not modify guest input routing or the display driver.
+
+Two preceding harness attempts remain failures: stale Y663 instead of actual685
+produces two hits/three misses; the retry leaves bottom targets obscured by Dock
+and their clicks do not reach the guest fixture. These are retained observation/
+fixture limitations, not a demonstrated input regression or hidden passes.
+A guest relay20s timeout followed by a responsive retry and advancing desktop
+clock does not establish a guest hang.
+
+Default stereo sample capture and independent route restoration pass, with all
+restoration checks true. Closing the owned viewer leaves the identity-matched VM
+alive. Full host suite1453 tests/8 skipped passes in50.932s. Final lifecycle is
+still pending and remains a separate acceptance criterion.

@@ -4,7 +4,10 @@ Current qualification (candidate395): installed immutable snapshot capture
 now survives helper restarts with the sealed capture app unchanged. Private staging
 isolates retired writers: before/after host screenshots match all481401 test pixels.
 Explicit retired-buffer unmap/remap, the four-buffer limit and capacity recovery
-pass; this fixes394's cleanup failure. Automatic odd-size resize and persistent
+pass; this fixes394's cleanup failure. Corrected fullscreen input passes five
+targets/exact text with the agent active; stereo delivery and independent restoration
+pass. Two earlier mispositioned/occluded fixture attempts remain recorded.
+Automatic odd-size resize and persistent
 1×/2× policy retain the earlier installed-helper qualification.
 
 Two100-second actual-manager observations contain5793 unique tokens at1440×900

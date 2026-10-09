@@ -2,7 +2,8 @@
 
 Updated 2026-10-09. Current console qualification: **395**. Installed immutable
 capture has private retired-writer isolation, explicit unmap/remap and bounded
-capacity recovery. Actual-manager100-second mixed-motion observations reach
+capacity recovery. Corrected five-target/text input with the agent active and
+stereo delivery/restoration pass; earlier fixture errors remain retained. Actual-manager100-second mixed-motion observations reach
 57.92 token IDs/s at1440×900 and40.40 overall at4K, zero post-start token errors;
 4K full-field motion remains about26/s.4K60Hz/full-frame integrity remain open.
 395 lifecycle is pending;394/392 forced capture aborts remain unresolved evidence.
