@@ -112,3 +112,22 @@ spice-gtk stationary-pointer clicks after resize remain defective. Candidate392
 qualifies an isolated client-library correction against a matched unpatched build;
 it does not update the host system libraries or the guest package. Fresh-user
 setup remains unqualified.
+
+
+## Restartable immutable presentation (394/395)
+
+The updated external launcher selects the sealed presenter's existing snapshot
+mode only when the bridge reports both SnapshotProtocol1 and SnapshotRestartable1.
+It explicitly selects default RAM cache policy and overrides inherited snapshot/
+cache variables; legacy or unavailable capability selects ordinary presentation.
+Presenter failure propagates and owned children stop, with no hidden fallback or
+restart loop. This requires the matching experimental QEMU image and driver;
+ordinary stock QEMU does not acquire the restartable capability through packaging.
+
+394 verifies installed capture and two owned session restarts without app changes.
+395 additionally passes explicit retained-map cleanup and capacity recovery, plus
+two mixed-motion observations. The old one-shot snapshot image remains one-shot;
+its restart limitation is not waived.395 retains private guest-shutdown/Docker
+exit0 evidence despite an original unverified reporting classification.394
+capture-abort teardown is not a clean shutdown. See
+[qualification evidence](../findings/research/console-private-staging-cleanup-native-20261009.md).

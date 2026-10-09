@@ -1,48 +1,57 @@
 # Live status — 2026-10-09
 
-## Candidate 394: windowed snapshot desktop works; explicit cleanup fails
+## Candidate 395: restartable private staging qualified within measured scope
 
-Run `af7889e45df129e345d9c7f6b03525cd`, metal-217, version1.0.394,
-MODE2 #314, boot `ba51b3c6-9420-4510-af69-38a42b3c79c7`.
-Launch59b5ee6, build source de9518d, build ID778fdc6a957a441eac7d0215ccccd33b.
-Executable SHA2566d2eb6ec48abef60bf102240f0ba8cc8d048e3ec5814a468c6ddd1a1e9cbda97.
+Run `074a0b4c757c6c21ae093b604a98763d`, metal-218, version1.0.395,
+MODE2 #315, boot `ba51b3c6-9420-4510-af69-38a42b3c79c7`.
+Launch87242de, build source0736b77, build ID3e40b3c359bc4250870e118a5fdb7e9d.
+Executable SHA2566a4b164ecabd1165ceac95707c87d858f421c70d6cc0d935b6838ecb7e495e62.
 
-Native private staging isolates retired mappings: both 801×601 host images match
-all481401 pixels after old-owner writes, including writes after the new ACK.
-Old COMMIT/re-ARM and incompatible cache mappings are refused. Four retained
-buffers exhaust the bounded pool as intended. However, the fixture FAILS at
-release-A-capacity with cleanup_ok=false. Individual unmap return codes were not
-logged. Source inspection identifies retired-owner memory lookup preventing
-explicit unmap; candidate395 retains each client's own descriptor through retirement
-and adds native remap/unmap result checks. This fix is built, not natively tested.
+The native fixture now passes explicit retired-owner unmap/remap, four-retained
+buffer capacity refusal, release/reallocation with zeroed storage, and every
+cleanup return. Old-owner COMMIT/re-ARM and incompatible cache aliases remain
+refused. Both host801×601 images match all481401 pixels after stale writes,
+including after the new owner's ACK. This fixes394's explicit-unmap failure.
 
-Installed immutable capture selects the new restart capability without replacing
-the sealed capture app or changing TCC consent. A real virt-manager desktop is
-visible, with exact1235×743,1237×745 and1441×961 resize responses. Two normal helper
-restarts reacquire capture successfully. Default stereo sample delivery passes;
-independent audio-route restoration checks all pass. This does not qualify endpoint
-audibility, A/V sync, sustained60Hz, all-frame integrity or crash races. The bounded
-viewer exits while the identity-matched VM remains alive. No394 pointer test was run.
+Installed snapshot capture starts at4K, returns after fixture ownership release,
+and restarts normally with the capture app/seal/consent unchanged. Actual manager
+odd1235×743→1237×745 resizing works. Corrected fullscreen input fixture passes
+five targets, exact RGPU395C1234 text and unchanged geometry; retain the earlier
+wrong-Y and Dock-obstructed attempts as test limitations. The test window now
+covers overlays without altering user Dock preferences. Default stereo sample
+delivery and independent host audio restoration pass. Endpoint audibility/A-Vsync
+remain unqualified. Viewer closure leaves the identity-matched guest alive.
 
-Shutdown: capture-abort-after-request, both hooks immediate-stop while original
-QEMU PID113 remains R with one task. Docker records SIGKILL and exit137; private
-terminal receipt is missing. Reporting now correctly distinguishes this forced
-shutdown. The underlying capture-exit race remains open. Recovery is recovered,
-authorizes_launch=true; GPU stays vfio-pci, power/control=on. Host awake service
-remains active. No VM is running. CORE_PROBE_PASS is a narrow functional result.
+Motion:100s sampled token windows show57.92 distinct IDs/s at1440×900,40.40 overall
+at4K, no post-start token errors. At4K localized phases observe about50/s and
+full-field phases26/s. Source draw records and presenter timings are retained;
+commit averages roughly9–13ms and worker14–20ms in motion windows. These are not
+GPU FPS, full-frame motion integrity, scanout or absolute latency.4K60 remains open.
 
-Evidence: run/candidate-394-results; c394-native-{before,after}-pixels.json;
-c394-native-final.txt; c394-snapshot-desktop.png; c394-resize-manager.jsonl;
-c394-final-state.txt and decoded logs; c394-audio-result.txt;
-c394-audio-restored-independent.json; c394-viewer-close-alive.json;
-c394-docker-events.jsonl. Pre-exposure archive-path refusal after MODE2 #313 did
-not consume a GPU ledger entry. Full host suite1453 tests,8 skipped passes.
+Shutdown completes with a bound private guest-shutdown terminal and Docker die0,
+no kill events. Both capture hooks report container-stopped-during-shutdown-wait,
+deferred=true. Original shutdown.json conservatively says exit-unverified-after-
+request because the classifier only recognizes natural-container-exit for retained
+private completion. Independent running/terminal/supervision/plan binding passes;
+original receipts remain unchanged. A reporting-only correction is prepared next.
+Recovery is recovered/authorizes_launch=true. CORE_PROBE_PASS remains scoped.
+Critical replay retains374 records with one invalid-chunk line and incomplete
+snapshot7; zero captured panic markers does not mean error-free qualification.
 
-Next: candidate395 must demonstrate explicit retired-buffer unmap, bounded capacity
-recovery and installed presenter reuse on hardware. Separately investigate the
-capture-exit race without weakening abort or recovery gates. Then measure sustained
-presentation and broaden lifecycle qualification. VirtualBox transport remains
-unimplemented; QEMU/virt-manager success is not VirtualBox support.
+Evidence: run/candidate-395-results; c395-native-{before,after}-pixels.json;
+c395-native-final.txt; c395-{matched-1x,fourk}-analysis.json and cadence/source logs;
+c395-post-motion-desktop.png; c395-overlay-final.txt; c395-overlay-before.png;
+c395-audio-result.txt; c395-audio-restored-independent.json; c395-final-state.txt;
+c395-viewer-close-alive.json;
+c395-docker-events.jsonl; c395-private-terminal-independent.json.
+Full final host suite1453 tests,8 skipped,OK50.932s. Exact tested395 kext/bin copied.
+Current docs/report and exact tested binary form this dev milestone. Hosted CI
+must pass for its exact remote commit before delivery is called complete.
 
-Last delivered dev48b4c96 passes hosted test/build run37983196350 and contains
-tested392 kext/bin. Current394/395 changes remain candidate-only. Main unchanged.
+Next:396 bounded exit-refusal diagnostics (no admission changes), then397 split
+commit timings to locate4K cost. Preserve remaining crash-during-commit, independent
+host-boot, first-user setup and whole-frame-motion qualification. VirtualBox7.2.18
+contains a VFIO backend, but actual Raphael assignment/console integration remains
+unqualified; a source-pinned software-only configuration discriminator is prepared.
+No VM is running. Host awake blocker remains active; GPU staysvfio-pci,
+power/control=on. Main unchanged; development milestone delivery goes todev.
