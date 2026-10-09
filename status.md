@@ -54,7 +54,7 @@ survive the tested HiDPI 120→60→120 switches without rerouting.
 - Final state: VM stopped; both functions remain on vfio-pci. No reboot or rebind.
 
 The September publication on main contains the tested330 build. The current dev
-binary is336, tested on the console path; its physical HDMI path has not been
+binary is340, tested on the console path; its physical HDMI path has not been
 independently rerun. That end-of-day stop is historical; work resumed on October5.
 
 Logs are not error-free: startup CAIL, DMUB capability-query and early GFXHDA
@@ -84,7 +84,7 @@ remain open; the tested picture/audio path has no remaining observed blocker.
 | Native desktop | Three minutes of moving/resizing native material windows; four clean raw RFB captures |
 | Safari | Two-minute transparency/blur/scrolling page; three clean captures plus clean desktop after larger-buffer pressure |
 | Stock QEMU / PerfPowerServices | OpenCore/VirtualSMC fix passes two guest boots,0.0% CPU, latest0.86s; prior patched-QEMU evidence retained separately |
-| Host regression | 1028 tests OK, three skipped |
+| Host regression | 1033 tests OK, three skipped |
 
 Earlier texture recreation (144 cases / 131,031,576 pixels), feedback rendering
 (48 cases / 5,280,000 pixels), and hardware H.264/HEVC encode/decode retain their

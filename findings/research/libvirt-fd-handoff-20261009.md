@@ -54,3 +54,35 @@ Artifacts:
 - c341-libvirt-socket-result.json SHA256 29651ecf5cd1a650f3e64f59412d6780abd704c60294e414d45c6bc6249a8a39
 - c339-libvirt-smoke/c341-packet.pcap SHA256 9e84e61201b667822d39a59b0ee88de89a3c7a53f9776b99daef2d27da58c6e8
 - c339-libvirt-smoke/domain-c341-hub.xml SHA256 58b3257a08bebf0b3e9f87562e5ad5b76b622bdb6a7c60bee8c4caac92bd3c34
+
+## Native CPU mapping discriminator
+
+An ordinary libvirt CPU feature named vmware-cpuid-freq is rejected as unknown.
+XML now owns Haswell-noTSX, vendor_id=GenuineIntel and invtsc; explicit QEMU
+CPU-type globals own kvm=on and vmware-cpuid-freq=on. Generated argv contains
+exactly one -cpu. The TCG launch still refuses invariant TSC even with CPU
+check=none, because libvirt verifies the actual guest CPU feature independently.
+That negative result was not treated as a KVM failure.
+
+A separate bounded, network-none container with only /dev/kvm and emulated devices
+starts the profile paused under KVM. QMP query-kvm reports enabled=true; live CPU
+QOM reads vendor=GenuineIntel, kvm=true, vmware-cpuid-freq=true, invtsc=true.
+The paused guest was never booted into macOS and has no VFIO devices. Normal
+container stop destroys its transient domain. This qualifies the narrow CPU
+mapping, not the complete macOS launch profile.
+
+Explicit audio type=none suppresses libvirt's extra SPICE audio backend. Explicit
+itco action=none prevents its default reset action; itco is builtin q35 hardware,
+not an extra PCI device. The observed argv retains ICH9-LPC.noreboot=off and the
+silent audio backend; any hardware profile must account for these deliberately.
+
+CPU artifacts:
+- c341-libvirt-kvm-cpu-properties.json SHA256 2df56434d1ff6950c85df30a587e0c1bfb7301cdf08f7545a6842f1b1956ded2
+- c341-libvirt-kvm-argv.json SHA256 40e1c175f8c56ed5c2a7975e48bcb5c8f19de118c443350167aab1215fe0926c
+- c341-libvirt-kvm-smoke/domain.xml SHA256 3b384f2ed2c4f5b705469dc3e3aa90ac9ad365a48baeed968f562f8cd1f3e1e9
+- c341-cpu-native-error.txt SHA256 0e515ec125c696b75c115586594e155814f28d83ab88dbc8cb0983b8b2110b16
+
+Primary source checks: libvirt11.9 qemu_process.c qemuProcessVerifyCPUFeatures
+checks actual invtsc independently of check=none. QEMU10.1.2 cpu.c defines kvm and
+vmware-cpuid-freq defaults true; qdev-properties.c applies explicit type-matched
+globals to DeviceState. Runtime QOM checks above corroborate the selected profile.

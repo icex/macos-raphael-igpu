@@ -1,0 +1,58 @@
+<domain xmlns:qemu="http://libvirt.org/schemas/domain/qemu/1.0" type="kvm">
+  <name>rgpu-console-kvm-cpu-test</name>
+  <uuid>966b6339-aaff-4138-9433-012f00000341</uuid>
+  <memory unit="MiB">128</memory>
+  <vcpu>1</vcpu>
+  <os>
+    <type arch="x86_64" machine="q35">hvm</type>
+  </os>
+  <features>
+    <acpi />
+    <apic />
+  </features>
+  <devices>
+    <emulator>/usr/sbin/qemu-system-x86_64</emulator>
+    <controller type="pci" index="0" model="pcie-root" />
+    <controller type="usb" model="none" />
+    <memballoon model="none" />
+    <video>
+      <model type="none" />
+    </video>
+    <graphics type="spice">
+      <listen type="socket" socket="/run/rgpu-libvirt/console.spice" />
+      <image compression="off" />
+      <gl enable="no" />
+    </graphics>
+    <audio id="1" type="none" />
+    <watchdog model="itco" action="none" />
+  </devices>
+  <qemu:commandline>
+    <qemu:arg value="-vga" />
+    <qemu:arg value="none" />
+    <qemu:arg value="-display" />
+    <qemu:arg value="none" />
+    <qemu:arg value="-device" />
+    <qemu:arg value="qemu-xhci,id=xhci" />
+    <qemu:arg value="-device" />
+    <qemu:arg value="usb-kbd,bus=xhci.0" />
+    <qemu:arg value="-device" />
+    <qemu:arg value="usb-tablet,bus=xhci.0" />
+    <qemu:arg value="-device" />
+    <qemu:arg value="bochs-display,id=rgpu_present,bus=pcie.0,addr=0x7,vgamem=64M" />
+    <qemu:arg value="-vnc" />
+    <qemu:arg value="unix:/run/rgpu-libvirt/console-vnc.sock" />
+    <qemu:arg value="-qtest" />
+    <qemu:arg value="unix:/run/rgpu-libvirt/qtest.sock,server=on,wait=off" />
+    <qemu:arg value="-global" />
+    <qemu:arg value="Haswell-noTSX-x86_64-cpu.kvm=on" />
+    <qemu:arg value="-global" />
+    <qemu:arg value="Haswell-noTSX-x86_64-cpu.vmware-cpuid-freq=on" />
+  </qemu:commandline>
+  <cpu mode="custom" match="exact" check="none">
+    <model fallback="forbid" vendor_id="GenuineIntel">Haswell-noTSX</model>
+    <feature policy="require" name="invtsc" />
+  </cpu>
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>destroy</on_reboot>
+  <on_crash>destroy</on_crash>
+</domain>
