@@ -29,9 +29,11 @@ The runner label is explicitly Intel, as listed in the
 
 ## Checked-in experimental executable
 
-`kext/bin/RaphaelGPU` contains the hardware-tested candidate381 executable,
-build `8921433ed961428880b20947e0fa0c71`, from clean source
-`6c02c4189de32391a7fb0b2a245f52e0094e9860`. Native guest shutdown preserves a
+`kext/bin/RaphaelGPU` contains the hardware-tested candidate383 executable,
+build `42a989b30403424e97098f562d46651e`, from clean source
+`777bf28521f2acdf5eeabb9fd9dc619ac0a3e9af`. Optional SPICE agent transport and
+bounded existing-mode HiDPI resizing pass with separately identified candidate384
+diagnostic helpers; persistent agent installation remains open. Native guest shutdown preserves a
 real controller terminal and authorizing recovery. Earlier356 normal/fullscreen
 and361 continuous pointer entry at1000×760 pass; input is not rerun in381. Missing-motion/stationary-pointer
 transitions remain open. Candidate364 adds existing-user package/reinstall and

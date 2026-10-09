@@ -40,7 +40,7 @@ Evidence: run/candidate-383-results, c383-monitor-idempotent-complete.txt,
 c383-manager-resize-idempotent.jsonl, c383-resize-session.png,
 c383-audio-reconciliation*, c383-docker-events.jsonl. Candidate384 report contains
 full experiment history. Native383 prelaunch1333tests/8skip; latest diagnostic
-suite result is in run/c384-host-tests-idempotent.log.
+suite1367tests/8skip passes (54.641s), run/c384-host-tests-idempotent.log.
 
 Remaining: persistent packaged agent, arbitrary viewport mode creation, input
 coordinates after automatic resize, broader lifecycle and performance/corruption
