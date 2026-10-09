@@ -50,9 +50,9 @@ scale1, retaining all entries and descriptor bounds. Scale2 and custom tables ar
 unchanged. Root must verify raw native flags, public4K visibility, and ordinary
 public mode selection after native installation.
 
-A separately prepared raw configuration diagnostic is **not the preferred path**
-and must not be run while this mode-table correction is being qualified. Its ABI
-is source-proven: SLConfigureDisplayWithDisplayMode checks public membership then
+A raw configuration diagnostic was prepared but **never executed**, then removed
+from the tree. It is not shipped; the public mode-order correction is the retained
+implementation. The alternative ABI investigation remains source-supported: SLConfigureDisplayWithDisplayMode checks public membership then
 passes a mode number to SLSConfigureDisplayMode; callee assembly7ff807e04f30 saves
 RDI(config),ESI(display),EDX(mode), returns status EAX. Constructing a synthetic
 CGDisplayMode would still hit public membership validation. No private mutating
