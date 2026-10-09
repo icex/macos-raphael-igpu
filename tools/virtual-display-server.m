@@ -43,12 +43,17 @@
 - (BOOL)applySettings:(id)settings;
 @end
 
-// Logical (point) sizes; hiDPI doubles the backing. Covers iPads, MacBooks,
-// common monitors and TVs at or below a 3840x2304 backing.
+// Logical 2x sizes, scaled at construction. The first/native mode must fit
+// the sealed presenter's snapshot ABI even during applySettings transitions.
+static const unsigned kSnapshotMaxWidth=3840, kSnapshotMaxHeight=2160;
 static const unsigned kDefaultModes[][2] = {
-    {1024,768},{1080,810},{1112,834},{1180,820},{1194,834},{1210,840},{1280,720},{1280,800},
+    {1920,1080},{1024,768},{1080,810},{1112,834},{1180,820},{1194,834},{1210,840},{1280,720},{1280,800},
     {1280,1024},{1366,768},{1366,1024},{1376,1032},{1440,900},{1470,956},{1512,982},{1536,960},
-    {1600,900},{1680,1050},{1728,1117},{1920,1080},{1920,1152}};
+    {1600,900},{1680,1050}};
+static bool modeFitsSnapshot(unsigned width,unsigned height,unsigned scale) {
+    return (scale==1||scale==2)&&width>=320/scale&&height>=200/scale&&
+        width<=kSnapshotMaxWidth/scale&&height<=kSnapshotMaxHeight/scale;
+}
 
 static void emit(NSDictionary *d) {
     NSData *j=[NSJSONSerialization dataWithJSONObject:d options:0 error:nil];
@@ -298,36 +303,36 @@ int main(int argc,const char **argv) { @autoreleasepool {
         }else return 2;
     }
     if(customModes&&controlDir)return 2;
-    unsigned initialW=3840/guestScale,initialH=2160/guestScale;
+    unsigned initialW=kSnapshotMaxWidth/guestScale,initialH=kSnapshotMaxHeight/guestScale;
     if(customModes) {
+        // Keep an admissible native fallback even for diagnostic custom tables.
+        [modes addObject:[[CGVirtualDisplayMode alloc] initWithWidth:initialW height:initialH refreshRate:60]];
+        [names addObject:[NSString stringWithFormat:@"%ux%u",initialW,initialH]];
+        bool validCustom=false;
         for(NSString *item in [customModes componentsSeparatedByString:@","]) {
             NSArray *wh=[item componentsSeparatedByString:@"x"];if(wh.count!=2)continue;
             unsigned w=(unsigned)[wh[0] intValue],h=(unsigned)[wh[1] intValue];
-            if(w<640||h<480||w>1920||h>1152)continue;
+            if(w<640||h<480||w>1920||h>1080)continue;
+            if(!modeFitsSnapshot(w*2/guestScale,h*2/guestScale,guestScale))continue;
+            validCustom=true;
+            if(w==1920&&h==1080)continue; // native mode already present
             [modes addObject:[[CGVirtualDisplayMode alloc] initWithWidth:w*2/guestScale height:h*2/guestScale refreshRate:60]];[names addObject:[NSString stringWithFormat:@"%ux%u",w*2/guestScale,h*2/guestScale]];
         }
+        if(!validCustom){emit(@{@"error":@"no valid custom modes"});return 2;}
     } else for(size_t i=0;i<sizeof(kDefaultModes)/sizeof(kDefaultModes[0]);i++) {
+        if(!modeFitsSnapshot(kDefaultModes[i][0]*2/guestScale,kDefaultModes[i][1]*2/guestScale,guestScale)){
+            emit(@{@"error":@"default mode exceeds snapshot transport"});return 2;
+        }
         [modes addObject:[[CGVirtualDisplayMode alloc] initWithWidth:kDefaultModes[i][0]*2/guestScale height:kDefaultModes[i][1]*2/guestScale refreshRate:60]];
         [names addObject:[NSString stringWithFormat:@"%ux%u",kDefaultModes[i][0]*2/guestScale,kDefaultModes[i][1]*2/guestScale]];
     }
-    // 24G830 raw inventory marks the first advertised base mode native.
-    // SkyLight initDisplayModeList suppresses larger-than-native 1x modes
-    // when any same-pixel 2x descriptor exists, even if that descriptor is
-    // invalid. Keep the existing maximum default first at 1x, so controlled
-    // sizes are never larger than native. Preserve scale2/custom ordering.
-    // This changes ordering only, not the descriptor limit or mode count.
-    if(guestScale==1&&!customModes&&modes.count){
-        NSUInteger last=modes.count-1;
-        if(![names[last] isEqual:@"3840x2304"]){emit(@{@"error":@"maximum default mode changed"});return 2;}
-        id nativeMode=modes[last];NSString *nativeName=names[last];
-        [modes removeObjectAtIndex:last];[names removeObjectAtIndex:last];
-        [modes insertObject:nativeMode atIndex:0];[names insertObject:nativeName atIndex:0];
-    }
+    // 24G830 uses the first advertised mode as native. Both scales now use
+    // a 3840x2160 backing; no fallback advertises an unsupported taller mode.
     if(!modes.count){emit(@{@"error":@"no valid modes"});return 2;}
     CGVirtualDisplayDescriptor *d=[CGVirtualDisplayDescriptor new];
     d.queue=dispatch_get_main_queue();d.name=@"Raphael Virtual Display";
     d.vendorID=0x5250;d.productID=0x3453;d.serialNum=0x34530001;d.serialNumber=0x34530001;
-    d.maxPixelsWide=3840;d.maxPixelsHigh=2304;d.sizeInMillimeters=CGSizeMake(600,337.5);
+    d.maxPixelsWide=kSnapshotMaxWidth;d.maxPixelsHigh=kSnapshotMaxHeight;d.sizeInMillimeters=CGSizeMake(600,337.5);
     d.redPrimary=CGPointMake(0.64,0.33);d.greenPrimary=CGPointMake(0.30,0.60);
     d.bluePrimary=CGPointMake(0.15,0.06);d.whitePoint=CGPointMake(0.3127,0.3290);
     d.terminationHandler=^{emit(@{@"phase":@"terminated"});exit(3);};
