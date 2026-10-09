@@ -5,6 +5,8 @@ from pathlib import Path
 import tempfile
 import unittest
 import wave
+import subprocess
+from unittest.mock import patch
 
 ROOT=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('audio_capture',ROOT/'tools/console-audio-capture.py')
@@ -81,6 +83,94 @@ class AudioRouteTests(unittest.TestCase):
         self.route.start();self.backend.data['modules'][-1]['argument']='sink_name=other';self.backend.calls=[]
         with self.assertRaises(RuntimeError):self.route.restore()
         self.assertFalse(self.backend.calls)
+
+    def no_op_restore(self,after_first=None,persistent=False):
+        self.route.start()
+        original=self.backend.pulse;attempts=[]
+        def pulse(*args):
+            if args[0]=='move-sink-input':
+                attempts.append(args)
+                if len(attempts)==1 or persistent:
+                    self.backend.calls.append(args)
+                    if after_first:after_first()
+                    return ''
+            return original(*args)
+        self.backend.pulse=pulse
+        return attempts
+    def test_successful_noop_reissues_once_with_durable_results(self):
+        attempts=self.no_op_restore();self.route.restore()
+        self.assertEqual(len(attempts),2);self.assertTrue(self.route.state['restored'])
+        rows=json.loads(self.route.path.read_text())['restore_attempts']
+        self.assertEqual([r['status'] for r in rows],['observed-still-owned','observed-original'])
+        self.assertEqual([r['command']['returncode'] for r in rows],[0,0])
+        self.assertTrue(all(r['end']>=r['start'] for r in rows))
+    def test_persistent_noop_refuses_without_unloading(self):
+        attempts=self.no_op_restore(persistent=True)
+        with self.assertRaisesRegex(RuntimeError,'bounded reissue'):self.route.restore()
+        self.assertEqual(len(attempts),2);self.assertFalse(self.route.state['restored'])
+        self.assertFalse(any(c[0]=='unload-module' for c in self.backend.calls))
+    def test_retry_revalidates_all_foreign_and_route_guards(self):
+        def mutate(kind):
+            d=self.backend.data
+            if kind=='foreign':
+                row=copy.deepcopy(d['inputs'][0]);row['index']=99;d['inputs'].append(row)
+            elif kind=='third':d['inputs'][0]['sink']=99
+            elif kind=='stream':d['inputs'][0]['properties']['object.serial']='new'
+            elif kind=='client':d['clients'][0]['properties']=dict(d['clients'][0]['properties'],**{'object.serial':'new'})
+            elif kind=='default':d['defaults'][0]='changed'
+            elif kind=='sink':d['sinks'][0]['properties']['object.serial']='new'
+            elif kind=='module':d['modules'][-1]['argument']='changed'
+            elif kind=='mute':d['inputs'][0]['mute']=True
+            elif kind=='vm':self.backend.vm_ok=False
+        for kind in ('foreign','third','stream','client','default','sink','module','mute','vm'):
+            with self.subTest(kind=kind):
+                self.backend=FakeBackend();self.route=tool.Route(self.backend,IDENTITY,Path(self.tmp.name)/'route.json')
+                attempts=self.no_op_restore(lambda:mutate(kind))
+                with self.assertRaises(RuntimeError):self.route.restore()
+                self.assertEqual(len(attempts),1)
+                self.assertFalse(any(c[0]=='unload-module' for c in self.backend.calls))
+    def test_changed_default_refuses_before_first_restore_move(self):
+        self.route.start();self.backend.calls=[];self.backend.data['defaults'][0]='changed'
+        with self.assertRaisesRegex(RuntimeError,'defaults changed'):self.route.restore()
+        self.assertEqual(self.backend.calls,[])
+    def test_restore_deadline_applies_without_capture_alarm(self):
+        self.route.start();self.backend.calls=[]
+        with patch.object(tool.time,'monotonic',return_value=100):
+            with self.assertRaises(TimeoutError):self.route.restore(deadline=99)
+        self.assertFalse(self.backend.calls);self.assertIsNone(self.backend.cleanup_deadline)
+    def test_elapsed_deadline_prevents_reissue(self):
+        clock=[100.0]
+        attempts=self.no_op_restore(lambda:clock.__setitem__(0,116.0))
+        with patch.object(tool.time,'monotonic',side_effect=lambda:clock[0]):
+            with self.assertRaises(TimeoutError):self.route.restore()
+        self.assertEqual(len(attempts),1)
+        self.assertFalse(any(c[0]=='unload-module' for c in self.backend.calls))
+        self.assertEqual(self.route.state['restore_attempts'][0]['error_type'],'TimeoutError')
+    def test_failed_move_is_recorded_and_never_reissued(self):
+        self.route.start();self.backend.calls=[]
+        def failed(*args):
+            self.backend.calls.append(args)
+            self.backend.last_command_result=dict(outcome='returned',returncode=1,stdout='',stderr='move refused')
+            raise subprocess.CalledProcessError(1,['pactl',*map(str,args)],'', 'move refused')
+        self.backend.pulse=failed
+        with self.assertRaises(subprocess.CalledProcessError):self.route.restore()
+        self.assertEqual(len(self.backend.calls),1)
+        record=json.loads(self.route.path.read_text())['restore_attempts'][0]
+        self.assertEqual(record['command']['returncode'],1)
+        self.assertEqual(record['command']['stderr'],'move refused')
+        self.assertEqual(record['status'],'refused')
+
+    def test_backend_commands_use_remaining_deadline_and_retain_result(self):
+        backend=tool.Backend();backend.cleanup_deadline=101
+        result=subprocess.CompletedProcess(['pactl'],0,'result','notice')
+        with patch.object(tool.time,'monotonic',return_value=100),patch.object(tool.subprocess,'run',return_value=result) as run:
+            self.assertEqual(backend.pulse('move-sink-input',31,'original'),'result')
+        self.assertEqual(run.call_args.kwargs['timeout'],1)
+        self.assertEqual(backend.last_command_result['stderr'],'notice')
+        with patch.object(tool.time,'monotonic',return_value=102),patch.object(tool.subprocess,'run') as run:
+            with self.assertRaises(TimeoutError):backend.pulse('unload-module',50)
+            run.assert_not_called()
+
 
 class AudioAnalysisTests(unittest.TestCase):
     def fixture(self,kind):

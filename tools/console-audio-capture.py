@@ -77,7 +77,20 @@ def parse_modules_short(text):
 
 class Backend:
     def command(self,args):
-        return subprocess.check_output(args,text=True,timeout=2).rstrip("\n")
+        deadline=getattr(self,'cleanup_deadline',None)
+        timeout=2 if deadline is None else min(2,deadline-time.monotonic())
+        if timeout<=0:raise TimeoutError('audio cleanup deadline')
+        self.last_command_result=None
+        try:
+            result=subprocess.run(args,text=True,capture_output=True,timeout=timeout)
+        except subprocess.TimeoutExpired as error:
+            self.last_command_result=dict(outcome='timeout',returncode=None)
+            raise
+        self.last_command_result=dict(outcome='returned',returncode=result.returncode,
+            stdout=result.stdout[:2048],stderr=result.stderr[:2048],
+            output_truncated=len(result.stdout)>2048 or len(result.stderr)>2048)
+        if result.returncode:raise subprocess.CalledProcessError(result.returncode,args,result.stdout,result.stderr)
+        return result.stdout.rstrip("\n")
     def pulse(self,*args):return self.command(['pactl',*map(str,args)])
     def snapshot(self):
         return dict(inputs=json.loads(self.pulse('-f','json','list','sink-inputs')),
@@ -156,10 +169,33 @@ class Route:
         require(stream['sink']==sink['index'],'VM route changed')
         require([r['index'] for r in snap['inputs'] if r['sink']==sink['index']]==[stream['index']],'foreign stream joined monitor')
         require(snap['defaults']==self.state['defaults'],'global defaults changed')
-    def restore(self):
+    def cleanup_call(self,operation,*args):
+        if time.monotonic()>=self.cleanup_deadline:raise TimeoutError('audio cleanup deadline')
+        result=operation(*args)
+        if time.monotonic()>=self.cleanup_deadline:raise TimeoutError('audio cleanup deadline')
+        return result
+    def restore(self,deadline=None):
         if not self.state or self.state.get('restored'):return
+        self.cleanup_deadline=min(time.monotonic()+15,deadline if deadline is not None else float('inf'))
+        prior=getattr(self.backend,'cleanup_deadline',None)
+        if prior is not None:self.cleanup_deadline=min(self.cleanup_deadline,prior)
+        self.backend.cleanup_deadline=self.cleanup_deadline
+        try:self.restore_bounded()
+        finally:self.backend.cleanup_deadline=prior
+    def restore_snapshot(self):
+        snap=self.cleanup_call(self.backend.snapshot)
+        sink=self.verify_owned(snap)
+        require(snap['defaults']==self.state['defaults'],'global defaults changed; no default writes authorized')
+        occupants=[r for r in snap['inputs'] if r['sink']==sink['index']]
+        require(all(stream_id(r)==self.state['stream'] for r in occupants),'refuse to move foreign audio')
+        remaining=[r for r in snap['inputs'] if r['index']==self.state['stream']['index']]
+        stream=self.stream(snap) if remaining else None
+        original=self.sink(snap,True) if stream else None
+        if stream:require(stream['sink'] in (sink['index'],original['index']),'VM route changed to third sink')
+        return snap,sink,stream,original
+    def restore_bounded(self):
         module=self.state.get('module')
-        snap=self.backend.snapshot()
+        snap=self.cleanup_call(self.backend.snapshot)
         if module is None:
             matches=[m for m in snap['modules'] if m['name']=='module-null-sink' and
                      ('sink_name='+self.state['name']) in m.get('argument','').split() and
@@ -174,21 +210,41 @@ class Route:
             require(serial(sink),'created sink serial missing')
             self.state['module_argument']=owned['argument']
             self.state['owned_sink']=dict(index=sink['index'],name=sink['name'],serial=serial(sink));self.save()
-        sink=self.verify_owned(snap)
-        occupants=[r for r in snap['inputs'] if r['sink']==sink['index']]
-        require(all(stream_id(r)==self.state['stream'] for r in occupants),'refuse to move foreign audio')
-        if occupants:
-            self.backend.verify_vm(self.identity);stream=self.stream(snap);original=self.sink(snap,True)
-            self.backend.pulse('move-sink-input',stream['index'],original['name'])
-        snap=self.backend.snapshot();self.verify_owned(snap)
+        # Fresh guards before each possible mutation, including the sole retry.
+        for attempt in range(2):
+            snap,sink,stream,original=self.restore_snapshot()
+            if not stream or stream['sink']==original['index']:break
+            self.cleanup_call(self.backend.verify_vm,self.identity)
+            # Re-observe after the process check; never reuse the first attempt's
+            # stream, defaults, module or sink inventory for the retry.
+            snap,sink,stream,original=self.restore_snapshot()
+            if not stream or stream['sink']==original['index']:break
+            record=dict(start=time.monotonic(),attempt=attempt+1,stream=self.state['stream'],
+                client=self.state['client'],owned_sink=self.state['owned_sink'],original_sink=self.state['original_sink'],
+                before_sink=stream['sink'],status='prepared')
+            records=self.state.setdefault('restore_attempts',[])
+            require(len(records)<32,'restore attempt receipt limit')
+            records.append(record);self.save()
+            self.backend.last_command_result=None
+            try:
+                self.cleanup_call(self.backend.pulse,'move-sink-input',stream['index'],original['name'])
+                record['command']=getattr(self.backend,'last_command_result',None) or dict(outcome='returned',returncode=0)
+                record['status']='command-returned';record['command_end']=time.monotonic();self.save()
+                post,owned,current,target=self.restore_snapshot()
+                record['after_sink']=current['sink'] if current else None
+                record['status']='observed-original' if not current or current['sink']==target['index'] else 'observed-still-owned'
+                record['end']=time.monotonic();self.save()
+                if record['status']=='observed-original':break
+                require(attempt==0,'owned sink still occupied after bounded reissue')
+            except BaseException as error:
+                record.setdefault('command',getattr(self.backend,'last_command_result',None))
+                record.update(status='refused',error_type=type(error).__name__,error=str(error)[:512],end=time.monotonic());self.save()
+                raise
+        snap,sink,stream,original=self.restore_snapshot()
         require(not any(r['sink']==sink['index'] for r in snap['inputs']),'owned sink still occupied')
-        # A vanished VM stream requires no recreation or move of any replacement.
-        remaining=[r for r in snap['inputs'] if r['index']==self.state['stream']['index']]
-        if remaining:
-            stream=self.stream(snap);require(stream['sink']==self.sink(snap,True)['index'],'original route not restored')
-        require(snap['defaults']==self.state['defaults'],'global defaults changed; no default writes authorized')
-        self.backend.pulse('unload-module',module)
-        final=self.backend.snapshot()
+        if stream:require(stream['sink']==original['index'],'original route not restored')
+        self.cleanup_call(self.backend.pulse,'unload-module',module)
+        final=self.cleanup_call(self.backend.snapshot)
         require(not any(m['index']==module for m in final['modules']),'owned module remains')
         require(final['defaults']==self.state['defaults'],'defaults changed during module cleanup')
         self.state['restored']=True;self.save()
@@ -246,12 +302,12 @@ def main():
             while time.monotonic()<until:
                 require(recorder.poll() is None,'recorder exited early');route.check();time.sleep(.2)
     finally:
-        signal.alarm(15) # Cleanup is bounded too; retained route.json supports recovery.
+        cleanup_deadline=time.monotonic()+15 # Includes recorder stop; do not replace the capture alarm.
         if recorder and recorder.poll() is None:
             recorder.terminate()
             try:recorder.wait(timeout=2)
             except subprocess.TimeoutExpired:recorder.kill();recorder.wait(timeout=2)
-        route.restore()
+        route.restore(deadline=cleanup_deadline)
         signal.alarm(0)
     with wave.open(str(args.output/'capture.wav'),'wb') as w:
         w.setnchannels(2);w.setsampwidth(2);w.setframerate(48000);w.writeframes(raw.read_bytes())
