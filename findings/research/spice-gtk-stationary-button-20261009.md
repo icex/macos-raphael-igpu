@@ -1,7 +1,8 @@
 # Candidate393: refresh client mouse coordinates before button transitions
 
-Software preparation only. Native qualification is owned by the run coordinator;
-this document does not classify the proposed fix as a native pass.
+Software preparation and bounded native A/B qualification on candidate392. The
+run coordinator owns all native operations. Functional A/B passes; capture-abort
+teardown is forced and must not be classified as clean guest shutdown.
 
 ## Reproducer and source finding
 
@@ -18,7 +19,7 @@ without a subsequent motion event leaves the guest's last absolute coordinates
 stale. `motion_event` already uses `transform_input` plus
 `spice_inputs_channel_position`. `channel-inputs.c:404–442` and486–514 flush
 pending motion/position before sending the button message. This is a concrete
-source-supported candidate explanation, pending the same native reproducer.
+source-supported explanation tested by the matched native A/B below.
 
 `tools/spice-gtk-stationary-button.patch` adds one absolute-position call before
 real press/release events in CLIENT mouse mode, using the already transformed
@@ -93,3 +94,42 @@ existing wrapper re-exec code can prepend the old prefix to `LD_LIBRARY_PATH`.
 An explicit per-process loader override or isolated launcher must be reviewed;
 verify `/proc/PID/maps` before interpreting results. Do not overwrite the existing
 manager prefix. Library build success alone is not this verification.
+
+
+## Native A/B result (candidate392)
+
+The matched unpatched prefix reproduces the stale-coordinate failure. With the
+patched prefix, the guest records one click at(296.978759765625,131.0040283203125)
+and exact text`RGPU341`, `passed=true` in`c392-stationary-fixed-final.txt`.
+The coordinator reports the corresponding expected local point as approximately
+(297.8711,130.1523), within one pixel on each axis; `c392-stationary-ab-analysis.json` retains axis errors0.892333984375 and
+0.8516845703125. The matched unpatched control errors are153.97900390625 and
+67.880615234375. Loaded-library receipts for both runs are
+`c392-stationary-{base,fixed}-libraries.json`; their presence guards against the
+wrapper's old-prefix precedence issue. The accompanying evidence manifest retains their hashes.
+
+This qualifies this stationary-pointer resize/click on the actual manager and
+guest. It is not a system-wide library installation, a guest/driver change,
+all-input-path regression coverage or a fix for every frontend. Cleanup is classified separately below.
+
+
+## Persistence, final state and forced teardown
+
+Run`e068279ba75991d9c288c0d141103dda` retains installed payload and sealed capture
+identity at a fresh1×4K boot (`c392-persistence.txt`). Final state, decoded helper
+logs, viewer-close/VM-alive receipt and the coordinator-viewed desktop screenshot
+are retained. No matching AMD allocation-error messages or panic markers were
+found in392 serial; this does not supply390's suppressed total failure count.
+
+Both capture-exit receipts report`immediate-stop`, original PID present in stateR,
+one task, about0.435s, with no deferral. Docker events retain two SIGTERM and two
+SIGKILL container actions, stop records, die137 and destroy. The private
+`terminal.json` is absent. The outer`shutdown.json` classification
+`exited-after-guest-request` is contradicted as a clean-exit claim by this stronger
+evidence: the run ended in forced capture-abort teardown. GPU recovery separately
+reports`recovered`, `authorizes_launch=true`.
+
+Replay retains snapshot18/383 records as a terminal prefix, invalid-chunk-bounds
+line5939 and incomplete snapshot7/415 chunks. Functional improvements remain
+valid; clean shutdown, perfect capture and broad client input qualification are
+not claimed. The system's distribution SPICE libraries remain untouched.

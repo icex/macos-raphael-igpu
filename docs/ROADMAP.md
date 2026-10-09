@@ -1,11 +1,21 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-10-09. Current console experiment: **1.0.386** (installed existing-user resize startup persists after guest reboot; bounded arbitrary modes and USB-tablet input with agent connected pass; adaptive DPI policy, capture-tail limits remain documented). Prior console experiment: **1.0.383** (optional standard SPICE agent transport and bounded actual-manager requests between existing1440p/4K HiDPI modes pass; guarded audio capture/restoration passes with initial failure retained; natural capture/process exit and authorizing recovery pass; persistent arbitrary resizing remains open). Prior console experiment: **1.0.381** (physical viewport matching: mixed1440p about57.5 observed IDs/s; same4K full-field14.4→34.5–34.9/s; audio retry, fallback, guest-shutdown terminal and authorizing recovery pass; automatic resize and universal60Hz open). Prior console experiment: **1.0.379** (synchronous viewer measurements locate the main HiDPI slowdown after bitmap-creation entry; three rare HiDPI token errors remain; audio, ordinary fallback and natural shutdown/recovery pass). Prior console experiment: **1.0.376** (three110s mixed workloads,14265 valid post-startup samples; ordinary fallback, retired-access refusal, audio retry and clean shutdown pass; full-field performance and broader lifecycle open). Prior console experiment: **1.0.374** (HiDPI52.6/51.2 and native57.9 sampled updates/s,3553 intact samples; forced capture teardown and sustained qualification open). Prior snapshot experiment: **1.0.370** (immutable snapshots plus one SPICE rectangle; three native/HiDPI token windows without post-startup corruption;60Hz and broader lifecycle unqualified). Prior diagnostic: **1.0.368** (native/HiDPI capture-source tokens intact while manager samples remain partial; downstream stage unlocalized). Persistence/cadence: **1.0.366** (existing-user next guest boot retains startup/consent; paced source60 draw calls/s does not produce qualified60Hz output). Installer/lifecycle: **1.0.364** (package/reinstall and one bounded shutdown-wait pass; clean-user qualification open). Console audio/input: **1.0.361** (ordinary afplay default USB output and continuous pointer entry into a resized window pass; endpoint audibility, stationary-pointer resize remain open). Performance comparison: **1.0.352 ON / 1.0.353 OFF** (same-image HiDPI delivery and copy-cost improvement; atomic presentation remains open). Physical display baseline: **1.0.330** (correct-color HiDPI120 and HDMI audio confirmed); prior streaming baseline: **1.0.284**; broader baseline: **1.0.280**. Full desktop acceleration
-is **not qualified**. The reproduced Screen Sharing transparency defect is fixed
-in candidate279 and retained in280. Candidate280 also passes strict capture and
-clean recovery after visual, concurrent-client and codec workloads. The patched-QEMU
-SMC dependency is now removed for the tested configuration via OpenCore/VirtualSMC. Broader desktop, memory, lifecycle, physical-display and
-performance qualification remain open.
+Updated 2026-10-09. Current console qualification: **390/392**. Explicit persistent
+1×/2× policy, odd1× resizing, connected-agent input/audio and fresh-boot1×4K startup
+pass with the capture application unchanged. Matched1440×900 ordinary presentation
+observes about58 distinct token IDs/s for100 seconds without post-start token errors.
+Stock spice-gtk stationary-pointer clicking after resize **fails**; an isolated
+client correction passes the same native check against a matched unpatched
+build control. This isolated prefix is not a patched system default. GPU-native virtual display
+transport is unimplemented. Other VM managers, VirtualBox, universal60Hz,
+full-frame integrity, fresh-user setup and broader lifecycle remain open.
+
+Physical display baseline remains **330**, with user-confirmed correct-color
+HiDPI120 and HDMI audio. Full desktop acceleration is **not qualified**. Historical
+console milestones and their narrower evidence remain below; candidate390 retains
+allocation messages and capture-tail limitations. Candidate392 functional progress
+is retained, but capture abort forces termination with no private shutdown terminal;
+its authorizing GPU recovery does not qualify clean lifecycle.
 
 This is the current roadmap. [Live state and run authority](../status.md) are separate.
 The [previous roadmap](../findings/research/status-archives/roadmap-before-20260916-refresh.md)

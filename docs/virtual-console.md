@@ -1,11 +1,36 @@
 # Accelerated desktop in a VM manager console
 
-Candidate386 adds installed external resize helpers, next-guest-boot persistence,
-and actual manager non-table resize with five-target/text input while the agent
-remains connected. Explicit `agent-mouse=off` retains USB-tablet routing. The
-capture application and consent identity remain unchanged. Fixed HiDPI2 can make
-UI large on GDK1 hosts; adaptive DPI policy remains open. Candidate386 natural shutdown and authorizing recovery pass.
-[Native386 evidence](../findings/research/console-installed-resize-native-20261009.md).
+Current qualification (candidates390/392): native Metal rendering works in
+virt-manager without HDMI. Installed external helpers provide automatic bounded
+resize and an explicit persistent1× or2× guest scale, without changing the sealed
+capture application. Candidate392's fresh guest boot restores1×4K with the same
+helper payload and capture identity. Candidate390 verifies odd1× window sizes,
+five-target/text input with the resize agent connected, stereo audio delivery and
+independent route restoration. USB-tablet routing remains explicit
+(`agent-mouse=off`). The virtual framebuffer is separate from the renderer's2GB.
+[Scale policy evidence](../findings/research/console-scale-policy-native-20261009.md)
+· [Preference usage](console-helper-install.md#persistent-guest-scale).
+
+At matched1440×900 guest/window pixels on a GDK1 host, candidate390's ordinary
+presenter produces about58 distinct observed token IDs/s over100 seconds, with
+no post-start token errors. This is not full-frame integrity, GPU FPS, physical
+scanout or universal60Hz qualification; the experimental snapshot path was unarmed.
+
+Candidate392 reproduces a stock spice-gtk0.42 failure when clicking with a
+stationary pointer after automatic resize: the guest receives stale coordinates.
+A matched unpatched client build reproduces it; an isolated patched client passes
+the same native check within one guest pixel. System libraries remain unchanged;
+this is a client correction, not a GPU driver fix. Continuous
+motion/input successes do not erase this failure. Fresh-user installation,
+broader crash/restart coverage, automatic DPI choice, other managers and VirtualBox
+remain open. A GPU-native virtual display transport is **not implemented**; current
+presentation captures and copies rendered pixels through the console framebuffer.
+Audio endpoint audibility and A/V sync remain unqualified. Candidate390 retains
+allocation-error messages and a partial capture tail despite successful functional
+probes and natural shutdown/recovery.
+Candidate392 later ends through forced capture-abort teardown: both capture hooks
+stop immediately, Docker records forced termination, and no private terminal exists.
+Stopped-GPU recovery authorizes reuse; that is not a clean guest shutdown.
 
 Earlier candidate383 verifies an optional standard SPICE agent channel with live
 AppleVirtIOConsole attachment on x86_64 macOS. A bounded guest agent follows real
@@ -594,8 +619,9 @@ Both captures record natural exit via bounded shutdown wait and a real private
 guest-shutdown terminal; recovery authorizes same-boot reuse. Earlier374 D-state
 forced stop is not repaired or reclassified by this successful run.
 
-Current installed-resize admission is **even physical640..3840 ×480..2160**,
-with fixed HiDPI2. Actual386 host GDK1 requests with odd pixel dimensions are
-refused. Adaptive DPI selection and an explicit odd-size policy remain open.
-Candidate386's independent audio restoration checks all pass; reconnect surfaces
-1502×960→1440×960 match, with five-hit/exact-text reconnect input passing; natural shutdown and authorizing recovery pass, with the partial capture tail retained.
+Current fixed-scale admission is physical640..3840 ×480..2160. Scale1 accepts
+odd dimensions and maps physical pixels to equal logical dimensions. Scale2
+requires even physical dimensions and yields half-sized logical dimensions.
+The policy is explicit and fixed for each holder lifetime; it is not inferred
+from SPICE physical-millimeter hints. Existing installations without a preference
+retain scale2. See [persistent guest scale](console-helper-install.md#persistent-guest-scale).

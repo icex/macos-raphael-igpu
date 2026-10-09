@@ -79,7 +79,36 @@ Candidate381 retains the installed presenter and normal consent while selecting
 existing guest modes and explicitly matching the manager viewport's physical
 pixels. No presenter reinstall or permission bypass is needed for this
 configuration result. Retirement still denies snapshot regrant, then the original
-agent restores ordinary awake3840×2160 capture. Automatic window-to-guest resizing
-is not yet installed: an AppleVirtIOConsole personality inventory alone does not
-prove a usable agent transport or monitor-configuration handler.
+agent restores ordinary awake3840×2160 capture. At that historical381 milestone, automatic window-to-guest resizing was not
+installed. Subsequent383 transport and385–392 external support qualify the bounded
+installed path described below; personality inventory alone was insufficient.
 [Viewport qualification](../findings/research/console-viewport-native-20261009.md).
+
+
+## Persistent guest scale
+
+The optional external resize-support package installs a preference tool outside
+the sealed capture app. From that package's source directory, as the logged-in
+guest user:
+
+```sh
+/usr/bin/python3 -B console-preferences.py \
+  --support-dir "$HOME/Library/Application Support/RaphaelGPU/console" --set-scale 1
+```
+
+Use `--set-scale 2` for HiDPI2 or `--read-scale` to inspect the choice. This writes
+`console-preferences.json` in the owned support directory. Missing preferences
+retain2× compatibility; malformed preferences refuse startup. Support-payload
+updates preserve the preference. Apply a changed policy at the next normal owned
+console-agent restart or guest login; it does not change a running holder in place.
+No capture app rebuild, re-signing or consent change is involved.
+
+Scale1 allows odd physical dimensions within640..3840 ×480..2160 and equal logical
+sizes, useful for a GDK1 manager window. Scale2 requires even dimensions and maps
+to half-sized logical dimensions. This is a user choice, not automatic host-DPI
+detection. Candidate390 validates both policies and candidate392 restores selected
+1×4K at the next guest boot with unchanged capture identity. Current stock
+spice-gtk stationary-pointer clicks after resize remain defective. Candidate392
+qualifies an isolated client-library correction against a matched unpatched build;
+it does not update the host system libraries or the guest package. Fresh-user
+setup remains unqualified.

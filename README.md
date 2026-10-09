@@ -14,33 +14,37 @@ on **`dev`**; this is not yet a generally supported driver release.
 
 ## Current status
 
-**VM window (October 9, candidate386):** native Metal rendering works in
-virt-manager without HDMI. Installed resize helpers now survive a guest reboot
-without changing the consent-bearing capture application. Actual manager requests
-create bounded non-table modes in place; candidate385 exercised eleven sizes and
-LRU eviction. Candidate386 keeps the resize agent connected while five input
-targets and exact text pass, using explicit USB-tablet routing (`agent-mouse=off`).
-The virtual adapter's56 MB framebuffer remains separate from the renderer's2 GB.
-[Installed resize evidence](findings/research/console-installed-resize-native-20261009.md).
+**VM window (October 9, candidates390/392):** native Metal rendering works in
+virt-manager without HDMI. Installed external helpers provide automatic bounded
+resize and an explicit persistent1× or2× guest scale, without changing the sealed
+capture application. Candidate392's fresh guest boot restores1×4K with the same
+helper payload and capture identity. Candidate390 verifies odd1× window sizes,
+five-target/text input with the resize agent connected, stereo audio delivery and
+independent route restoration. USB-tablet routing remains explicit
+(`agent-mouse=off`). The virtual framebuffer is separate from the renderer's2GB.
+[Scale policy evidence](findings/research/console-scale-policy-native-20261009.md)
+· [Preference usage](docs/console-helper-install.md#persistent-guest-scale).
 
-Candidate381 showed that matching guest pixels to the window's physical pixels avoids costly viewer
-scaling. At 2560×1440 into a 1280×720 window on a scale-2 host, mixed-motion
-observations reach about 57.5 distinct IDs/s. With the same 3840×2160 source,
-matching a 1920×1080 scale-2 window raises full-field observations from about
-14.4 to 34.5–34.9 IDs/s. These are observed pipeline updates, not scanout FPS.
-Three windows have 14,160 valid token samples and no post-start errors, but
-candidate379's rare errors and general full-frame integrity remain unresolved.
+At matched1440×900 guest/window pixels on a GDK1 host, candidate390's ordinary
+presenter produces about58 distinct observed token IDs/s over100 seconds, with
+no post-start token errors. This is not full-frame integrity, GPU FPS, physical
+scanout or universal60Hz qualification; the experimental snapshot path was unarmed.
 
-Candidate383's guarded stereo capture and independent route restoration pass;
-its initial cleanup refusal and explicit retry remain recorded. Candidate383 also
-retains the private guest-shutdown/process-exit terminal, Docker exit0 without
-kill/stop, both natural-container-exit capture receipts and authorizing recovery.
-Candidate381's ordinary fallback and retired-buffer refusal remain prior evidence.
-Existing-user capture consent is retained. Fresh-user setup, crash/restart
-lifecycle, adaptive DPI policy, stationary-pointer resize, other
-frontends and VirtualBox remain unqualified. Fixed HiDPI2 makes UI large on GDK1 hosts;
-audio endpoint audibility and A/V sync remain open. Candidate386 audio sample
-delivery passes; natural shutdown and authorizing recovery pass, with the partial capture tail retained.
+Candidate392 reproduces a stock spice-gtk0.42 failure when clicking with a
+stationary pointer after automatic resize: the guest receives stale coordinates.
+A matched unpatched client build reproduces it; an isolated patched client passes
+the same native check within one guest pixel. System libraries remain unchanged;
+this is a client correction, not a GPU driver fix. Continuous
+motion/input successes do not erase this failure. Fresh-user installation,
+broader crash/restart coverage, automatic DPI choice, other managers and VirtualBox
+remain open. A GPU-native virtual display transport is **not implemented**; current
+presentation captures and copies rendered pixels through the console framebuffer.
+Audio endpoint audibility and A/V sync remain unqualified. Candidate390 retains
+allocation-error messages and a partial capture tail despite successful functional
+probes and natural shutdown/recovery.
+Candidate392 later ends through forced capture-abort teardown: both capture hooks
+stop immediately, Docker records forced termination, and no private terminal exists.
+Stopped-GPU recovery authorizes reuse; that is not a clean guest shutdown.
 
 Stock QEMU remains the default; snapshot experiments use separately pinned images.
 [Current agent transport and bounded resize evidence](findings/research/console-vdagent-native-20261009.md)
@@ -185,8 +189,6 @@ receipt permits one normal harness launch without borrowing an older lease.
 This is a stopped, queue-free recovery result; active-queue recovery and physical
 HDMI output remain separately qualified. Host regression: 1128 tests pass.
 
-Current installed-resize admission is **even physical640..3840 ×480..2160**,
-with fixed HiDPI2. Actual386 host GDK1 requests with odd pixel dimensions are
-refused. Adaptive DPI selection and an explicit odd-size policy remain open.
-Candidate386's independent audio restoration checks all pass; reconnect surfaces
-1502×960→1440×960 match, with five-hit/exact-text reconnect input passing; natural shutdown and authorizing recovery pass, with the partial capture tail retained.
+Current resize admission is physical640..3840 ×480..2160: explicit1× permits
+odd dimensions;2× requires even dimensions. The selected lifetime policy persists
+across helper updates and guest boots. Automatic DPI choice remains open.
