@@ -1343,7 +1343,7 @@ class EmptyFirmwareConsoleCardTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):tool.validate_card(raw,hashlib.sha256(raw).hexdigest())
 
     def test_candidate394_restart_contract_is_exact_and_does_not_change392(self):
-        for version,card_id in [('1.0.394','metal-217'),('1.0.395','metal-218')]:
+        for version,card_id in [('1.0.394','metal-217'),('1.0.395','metal-218'),('1.0.396','metal-219')]:
             tool=load_tool();tool.configure(version,card_id)
             card=json.loads((ROOT/'experiments/metal-216.json').read_text())
             card.update(id=card_id,candidate_version=version)
