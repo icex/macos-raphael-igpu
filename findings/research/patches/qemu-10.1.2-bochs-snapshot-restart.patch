@@ -1,0 +1,93 @@
+--- a/hw/display/bochs-display.c
++++ b/hw/display/bochs-display.c
+@@ -44,6 +44,8 @@
+     MemoryRegion     staging, snapshot_regs;
+     DisplaySurface   *snapshot_pending;
+     bool             x_debug_snapshot;
++    bool             x_debug_snapshot_restart;
++    uint32_t         snapshot_requested_epoch, snapshot_active_epoch;
+     uint32_t         snapshot_state, snapshot_width, snapshot_height;
+     uint32_t         snapshot_ack, snapshot_error;
+     uint32_t         snapshot_pending_seq, snapshot_published_seq;
+@@ -85,7 +87,7 @@
+ {
+     BochsDisplayState *s = opaque;
+     switch (addr) {
+-    case 0x00: return SNAPSHOT_MAGIC;
++    case 0x00: return s->x_debug_snapshot_restart ? 0x52534732 : SNAPSHOT_MAGIC;
+     case 0x04: return SNAPSHOT_BYTES;
+     case 0x08: return s->snapshot_state; /* 0 available, 1 armed, 2 retired */
+     case 0x0c: return s->snapshot_error;
+@@ -96,6 +98,8 @@
+     case 0x24: return s->snapshot_replaced;
+     case 0x28: return s->snapshot_published;
+     case 0x2c: return s->snapshot_pending_seq;
++    case 0x30: return s->x_debug_snapshot_restart ? s->snapshot_requested_epoch : 0;
++    case 0x34: return s->x_debug_snapshot_restart ? s->snapshot_active_epoch : 0;
+     default: return 0;
+     }
+ }
+@@ -109,6 +113,33 @@
+ 
+     /* Default MMIO dispatch is under BQL; gfx_update runs under the same lock.
+      * Never reference staging from a DisplaySurface or a deferred callback. */
++    if (s->x_debug_snapshot_restart) {
++        if (addr == 0x30) {
++            s->snapshot_requested_epoch = val;
++            return;
++        }
++        if (addr == 0x08 && val == 1) {
++            if ((s->snapshot_state != 0 && s->snapshot_state != 2) ||
++                s->snapshot_active_epoch == UINT32_MAX ||
++                s->snapshot_requested_epoch != s->snapshot_active_epoch + 1) {
++                s->snapshot_error = 5;
++                return;
++            }
++            qemu_free_displaysurface(s->snapshot_pending);
++            s->snapshot_pending = NULL;
++            s->snapshot_pending_seq = s->snapshot_published_seq = 0;
++            s->snapshot_width = s->snapshot_height = 0;
++            s->snapshot_ack = s->snapshot_error = 0;
++            s->snapshot_active_epoch = s->snapshot_requested_epoch;
++            s->snapshot_state = 1;
++            return;
++        }
++        if (!s->snapshot_active_epoch ||
++            s->snapshot_requested_epoch != s->snapshot_active_epoch) {
++            s->snapshot_error = 5;
++            return;
++        }
++    }
+     if (addr == 0x08) {
+         if (val == 1 && s->snapshot_state == 0) {
+             s->snapshot_state = 1;
+@@ -382,6 +413,10 @@
+     Object *obj = OBJECT(dev);
+     int ret;
+ 
++    if (s->x_debug_snapshot_restart && !s->x_debug_snapshot) {
++        error_setg(errp, "bochs-display: snapshot restart requires snapshot");
++        return;
++    }
+     if (s->vgamem < 4 * MiB) {
+         error_setg(errp, "bochs-display: video memory too small");
+         return;
+@@ -415,7 +450,8 @@
+                                SNAPSHOT_BYTES, &error_fatal);
+         pci_register_bar(&s->pci, 1, PCI_BASE_ADDRESS_MEM_PREFETCH, &s->staging);
+         memory_region_init_io(&s->snapshot_regs, obj, &bochs_snapshot_ops, s,
+-                              "bochs-snapshot-regs", 0x30);
++                              "bochs-snapshot-regs",
++                              s->x_debug_snapshot_restart ? 0x38 : 0x30);
+         memory_region_add_subregion(&s->mmio, 0x700, &s->snapshot_regs);
+     }
+ 
+@@ -480,6 +516,8 @@
+     DEFINE_PROP_BOOL("x-debug-full-refresh", BochsDisplayState,
+                      x_debug_full_refresh, false),
+     DEFINE_PROP_BOOL("x-debug-snapshot", BochsDisplayState, x_debug_snapshot, false),
++    DEFINE_PROP_BOOL("x-debug-snapshot-restart", BochsDisplayState,
++                     x_debug_snapshot_restart, false),
+     DEFINE_EDID_PROPERTIES(BochsDisplayState, edid_info),
+ };
+ 
