@@ -95,6 +95,51 @@ def inspect_domain(paused=True):
     finally:backend.close()
 
 
+def inspect_exited():
+    """Read-only proof for capture teardown; never connects to libvirt or adopts a PID."""
+    directory,admission,expected=context()
+    plan=json.loads((directory/'plan.json').read_text())
+    paused=json.loads((directory/'paused.json').read_text())
+    permit=json.loads((directory/'resume.json').read_text())
+    running=json.loads((directory/'running.json').read_text())
+    handoff.validate_permit(permit,admission,expected,paused)
+    identity=paused['identity'];scope=paused['scope']
+    handoff.require(paused['paused'] is True and paused['run_id']==admission['run_id'] and
+                    plan['run_id']==admission['run_id'] and
+                    runtime.digest(plan)==paused['plan_sha256'], 'exited plan binding changed')
+    handoff.require(identity['name']==plan['domain_name'] and identity['uuid']==plan['uuid'] and
+                    identity['run_id']==admission['run_id'] and
+                    type(identity['pid']) is int and identity['pid']>1 and
+                    type(identity['start_ticks']) is int and identity['start_ticks']>0,
+                    'exited process identity invalid')
+    handoff.require(running['run_id']==admission['run_id'] and running['identity']==identity and
+                    running['scope']==scope and running['plan_sha256']==paused['plan_sha256'] and
+                    running['cid']==permit['cid'] and running['started_at']==permit['started_at'],
+                    'exited running/paused/permit binding changed')
+    handoff.require(native.local.namespace_identity()==scope,'exited PID namespace changed')
+    current=native.local.process(identity['pid'])
+    handoff.require(current is None or current['start_ticks']!=identity['start_ticks'],
+                    'recorded QEMU process still exists')
+    # Domain disappearance alone is insufficient. Refuse replacement/emulator
+    # processes, including unexpected argv changes; inspect exe/comm privately.
+    for path in Path('/proc').iterdir():
+        if not path.name.isdigit():continue
+        try:
+            comm=(path/'comm').read_text().strip()
+            handoff.require(not comm.startswith('qemu-system'),
+                            'another QEMU process still exists')
+            if path.name=='1' and comm in ('docker-init','tini'):
+                continue # Namespace/init-start identity was independently matched above.
+            executable=os.path.basename(os.readlink(path/'exe'))
+            handoff.require(not executable.startswith('qemu-system'),
+                            'another QEMU process still exists')
+        except FileNotFoundError:continue
+    return dict(exited=True,run_id=admission['run_id'],admission_sha256=expected,
+                identity=identity,scope=scope,plan_sha256=paused['plan_sha256'],
+                cid=permit['cid'],started_at=permit['started_at'],
+                deadline_epoch=admission['deadline_epoch'])
+
+
 def launch(argv):
     directory,admission,admission_digest=context()
     dependency_check()
@@ -160,6 +205,7 @@ def main():
         context();dependency_check()
     elif command=='inspect-paused':inspect_domain()
     elif command=='inspect-running':inspect_domain(paused=False)
+    elif command=='inspect-exited':print(json.dumps(inspect_exited()))
     elif command=='launch':launch(sys.argv[2:])
     else:raise ValueError('invalid controller command')
 

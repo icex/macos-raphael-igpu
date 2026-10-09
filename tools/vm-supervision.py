@@ -173,6 +173,53 @@ def stop_exact(cid, by_name=False):
                 raise RuntimeError("identified container still runs after stop/kill failure")
 
 
+def capture_exit(vm,cid,started_at,deadline,run_id,admission_digest):
+    """Allow only an already-exited, identity-bound libvirt QEMU to flush receipts.
+
+    Every unknown/alive/error path retains the original immediate exact-CID stop.
+    No signal is sent during the at-most-two-second natural-container-exit window.
+    """
+    full_cid(cid)
+    began=time.monotonic();until=began+2
+    result=dict(cid=cid,started_at=started_at,run_id=run_id,deferred=False)
+    def running():
+        remaining=min(.5,until-time.monotonic(),deadline-time.time())
+        if remaining<=0:raise RuntimeError('capture exit budget expired')
+        selected='{"Id":{{json .Id}},"StartedAt":{{json .State.StartedAt}},"Running":{{json .State.Running}}}'
+        info=json.loads(run([binary('docker'),'inspect','--format',selected,cid],timeout=remaining))
+        if info['Id']!=cid or info['StartedAt']!=started_at or type(info['Running']) is not bool:
+            raise RuntimeError('capture exit container identity changed')
+        return info['Running']
+    try:
+        if not running():result['outcome']='already-stopped';return result
+        budget=min(1,until-time.monotonic(),deadline-time.time())
+        if budget<=0:raise RuntimeError('capture exit budget expired')
+        observed=json.loads(run([binary('docker'),'exec',cid,'python3','-B',
+                                '/run/rgpu-tools/libvirt-console-entry.py','inspect-exited'],timeout=budget))
+        if not (observed['exited'] is True and observed['cid']==cid and
+                observed['started_at']==started_at and observed['run_id']==run_id and
+                observed['admission_sha256']==admission_digest and
+                type(observed['deadline_epoch']) is int and
+                time.time()<observed['deadline_epoch']<=deadline):
+            raise RuntimeError('capture exit proof mismatch')
+        until=min(until,time.monotonic()+observed['deadline_epoch']-time.time())
+        result['deferred']=True
+        while time.monotonic()<until and time.time()<deadline:
+            if not running():result['outcome']='natural-container-exit';return result
+            time.sleep(min(.05,max(0,until-time.monotonic())))
+        result['outcome']='receipt-grace-expired'
+    except Exception as error:
+        result['outcome']='immediate-stop';result['error_type']=type(error).__name__
+    finally:
+        # Best-effort separate host observation; never synthesize terminal.json.
+        result['elapsed_seconds']=time.monotonic()-began
+        try:
+            _durable_json(Path(vm)/'run'/f'capture-exit-{cid}-{os.getpid()}.json',result)
+        except Exception:pass
+    stop_exact(cid)
+    return result
+
+
 def properties(unit):
     output = run([binary("systemctl"), "--user", "show", unit,
                   "--property=LoadState,ActiveState,SubState,MainPID,Unit,NextElapseUSecRealtime,ExecStart"])
@@ -487,6 +534,15 @@ def arm(vm, cid, maximum, critical_enabled=False):
             ["--", docker, "stop", "--time", "0", cid])
         timer_unit = timer_base + ".timer"
     stop_command = shlex.join([docker, "stop", "--time", "0", cid])
+    if os.environ.get('VM_MANAGER')=='libvirt':
+        if deadline is None:raise RuntimeError('libvirt capture requires an exposure deadline')
+        run_id=os.environ['RGPU_LIBVIRT_RUN_ID'];admission_digest=os.environ['RGPU_LIBVIRT_ADMISSION_SHA256']
+        if not re.fullmatch('[0-9a-f]{32}',run_id) or not re.fullmatch('[0-9a-f]{64}',admission_digest):
+            raise RuntimeError('invalid libvirt capture identity')
+        stop_command=shlex.join([sys.executable,str(Path(__file__).resolve()),'capture-exit',
+                                '--vm-dir',str(vm),'--cid',cid,'--started-at',started_at,
+                                '--deadline',str(deadline),'--run-id',run_id,
+                                '--admission-sha256',admission_digest])
     headless = os.environ.get("GENERIC_GRAPHICS") == "off"
     if headless and not logind_block_inhibited():
         raise RuntimeError("headless capture requires an existing sleep:idle block inhibitor")
@@ -878,6 +934,13 @@ def main():
     create.add_argument("--cid", required=True)
     create.add_argument("--max-seconds", required=True)
     create.add_argument("--critical-serial", action="store_true")
+    capture=commands.add_parser('capture-exit')
+    capture.add_argument('--vm-dir',type=Path,required=True)
+    capture.add_argument('--cid',required=True)
+    capture.add_argument('--started-at',required=True)
+    capture.add_argument('--deadline',type=int,required=True)
+    capture.add_argument('--run-id',required=True)
+    capture.add_argument('--admission-sha256',required=True)
     halt = commands.add_parser("shutdown")
     halt.add_argument("--state", type=Path, required=True)
     halt.add_argument("--grace-seconds", default="20")
@@ -901,6 +964,10 @@ def main():
     args = parser.parse_args()
     cid = None
     try:
+        if args.command == 'capture-exit':
+            result=capture_exit(args.vm_dir,args.cid,args.started_at,args.deadline,
+                                args.run_id,args.admission_sha256)
+            print(json.dumps(result));return 0
         if args.command == "shutdown":
             # shutdown checks the saved StartedAt before any request or force-stop.
             # Do not use generic failure cleanup, which may target a restarted CID.

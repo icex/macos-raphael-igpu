@@ -1,0 +1,151 @@
+{
+  "passed": true,
+  "runs": [
+    {
+      "passed": true,
+      "cases": [
+        {
+          "case": "guest-s5-eof",
+          "cid": "aa8b7ed4f5442bb9069c69c53df2c3146db7b0f192f7845fa50a10a793986258",
+          "image": "sha256:3a3c82c79bc4e73531f819ccdfa4053b3084efd7c1f645678dbf8b4b3a24369c",
+          "started_at": "2026-10-09T09:19:10.572409772Z",
+          "finished_at": "2026-10-09T09:19:11.39562002Z",
+          "exit_code": 0,
+          "gate": {
+            "cid": "aa8b7ed4f5442bb9069c69c53df2c3146db7b0f192f7845fa50a10a793986258",
+            "started_at": "2026-10-09T09:19:10.572409772Z",
+            "run_id": "9579f69437d6fa83952d0ac3b16c186b",
+            "deferred": true,
+            "outcome": "natural-container-exit",
+            "elapsed_seconds": 0.289977367996471
+          },
+          "terminal": {
+            "cid": "aa8b7ed4f5442bb9069c69c53df2c3146db7b0f192f7845fa50a10a793986258",
+            "identity": {
+              "name": "rgpu-9579f69437d6fa83952d0ac3b16c186b",
+              "pid": 47,
+              "run_id": "9579f69437d6fa83952d0ac3b16c186b",
+              "start_ticks": 33237460,
+              "uuid": "00000000-0000-0000-0000-000000000000"
+            },
+            "process_exited": true,
+            "reason": "guest-shutdown",
+            "run_id": "9579f69437d6fa83952d0ac3b16c186b",
+            "scope": {
+              "device": 5,
+              "init_start_ticks": 33237420,
+              "inode": 4026533263,
+              "kind": "pid-namespace"
+            },
+            "started_at": "2026-10-09T09:19:10.572409772Z"
+          }
+        },
+        {
+          "case": "live-qemu-eof",
+          "cid": "749b05bfe737d58b1149952d06a9f8817d5deb579bf75944b447b12c294d1393",
+          "image": "sha256:3a3c82c79bc4e73531f819ccdfa4053b3084efd7c1f645678dbf8b4b3a24369c",
+          "started_at": "2026-10-09T09:19:11.554856999Z",
+          "finished_at": "2026-10-09T09:19:12.238776521Z",
+          "exit_code": 1,
+          "gate": {
+            "cid": "749b05bfe737d58b1149952d06a9f8817d5deb579bf75944b447b12c294d1393",
+            "started_at": "2026-10-09T09:19:11.554856999Z",
+            "run_id": "d1eb709216b761e7ed6af455281b9de8",
+            "deferred": false,
+            "outcome": "immediate-stop",
+            "error_type": "RuntimeError",
+            "elapsed_seconds": 0.060909175997949205
+          },
+          "terminal": null
+        }
+      ],
+      "scope": "Real TCG guest/entry/permit/serial EOF and host gate; S5 exits naturally, intentionally lost live capture forces exact CID. No KVM/GPU/host network; isolated TAP only. ExecStopPost systemd wiring tested separately.",
+      "artifacts": "/home/bogdan/macos-vm/run/c342-capture-exit-f49a6c30",
+      "sha256": {
+        "result.json": "8e835a9959101abcab5e9be0bfe8babb86cff4bb999de9191e0de02713015e40",
+        "live-qemu-eof/run/container-cleanup.json": "8ae5a6166b00116a8739a4b780eed2d50e65c0759983f9e21e625021eacb2876",
+        "live-qemu-eof/run/libvirt-d1eb709216b761e7ed6af455281b9de8/paused.json": "aab7e225abf5a7e427c9c5df11315dc5be9b4310679d80c7fb614e8c4e3d238b",
+        "live-qemu-eof/run/libvirt-d1eb709216b761e7ed6af455281b9de8/resume.json": "5bc64eaed44f68740ac0b56ddd7359ae9a6a3bf7f03dbd886becdce7aa535b3d",
+        "live-qemu-eof/run/libvirt-d1eb709216b761e7ed6af455281b9de8/running.json": "17f28c0a77a966fda207ffb61a484a53477c65813795020e46e680f092b15af6",
+        "guest-s5-eof/run/container-cleanup.json": "290e92161fa19041e6ef12981dff8fc93dd01a9b929b5377e3a530475235c729",
+        "guest-s5-eof/run/libvirt-9579f69437d6fa83952d0ac3b16c186b/paused.json": "d8a7d5c337a6d69ce863b71e11c2f7d566dff573029342687bf80b4555d1d163",
+        "guest-s5-eof/run/libvirt-9579f69437d6fa83952d0ac3b16c186b/resume.json": "5c444b223e4a0e0edd16e30c6e01b84fba18bb792aaaf4c8b6a507710808a2dd",
+        "guest-s5-eof/run/libvirt-9579f69437d6fa83952d0ac3b16c186b/running.json": "855ebd90378bfead4eb233aa01847119c0ff49cfaf6b65b8454f5bf30b68cc67",
+        "guest-s5-eof/run/libvirt-9579f69437d6fa83952d0ac3b16c186b/terminal.json": "d7589dca45159fc2f3955a5c82b76487d322f4a04dbdb3be1c03f28ee09d46d5"
+      }
+    },
+    {
+      "passed": true,
+      "cases": [
+        {
+          "case": "guest-s5-eof",
+          "cid": "6c20afb23ae09920a8fc722c1d1f9e83b758548e89bfdc54145e2bb116030c08",
+          "image": "sha256:3a3c82c79bc4e73531f819ccdfa4053b3084efd7c1f645678dbf8b4b3a24369c",
+          "started_at": "2026-10-09T09:20:01.628804772Z",
+          "finished_at": "2026-10-09T09:20:02.444569976Z",
+          "exit_code": 0,
+          "gate": {
+            "cid": "6c20afb23ae09920a8fc722c1d1f9e83b758548e89bfdc54145e2bb116030c08",
+            "started_at": "2026-10-09T09:20:01.628804772Z",
+            "run_id": "f2190f7c15c7d18569822fd4fc62e4e4",
+            "deferred": true,
+            "outcome": "natural-container-exit",
+            "elapsed_seconds": 0.2891488289969857
+          },
+          "terminal": {
+            "cid": "6c20afb23ae09920a8fc722c1d1f9e83b758548e89bfdc54145e2bb116030c08",
+            "identity": {
+              "name": "rgpu-f2190f7c15c7d18569822fd4fc62e4e4",
+              "pid": 47,
+              "run_id": "f2190f7c15c7d18569822fd4fc62e4e4",
+              "start_ticks": 33242564,
+              "uuid": "00000000-0000-0000-0000-000000000000"
+            },
+            "process_exited": true,
+            "reason": "guest-shutdown",
+            "run_id": "f2190f7c15c7d18569822fd4fc62e4e4",
+            "scope": {
+              "device": 5,
+              "init_start_ticks": 33242525,
+              "inode": 4026533263,
+              "kind": "pid-namespace"
+            },
+            "started_at": "2026-10-09T09:20:01.628804772Z"
+          }
+        },
+        {
+          "case": "live-qemu-eof",
+          "cid": "ff828704b2dc7f2f8b6a15b92a5e296d3a80a6799040c462123dea3dbb3f7757",
+          "image": "sha256:3a3c82c79bc4e73531f819ccdfa4053b3084efd7c1f645678dbf8b4b3a24369c",
+          "started_at": "2026-10-09T09:20:02.595151841Z",
+          "finished_at": "2026-10-09T09:20:03.277548181Z",
+          "exit_code": 1,
+          "gate": {
+            "cid": "ff828704b2dc7f2f8b6a15b92a5e296d3a80a6799040c462123dea3dbb3f7757",
+            "started_at": "2026-10-09T09:20:02.595151841Z",
+            "run_id": "f709203ca5b50dc706dc1f4534fcd2c2",
+            "deferred": false,
+            "outcome": "immediate-stop",
+            "error_type": "RuntimeError",
+            "elapsed_seconds": 0.05906649499956984
+          },
+          "terminal": null
+        }
+      ],
+      "scope": "Real TCG guest/entry/permit/serial EOF and host gate; S5 exits naturally, intentionally lost live capture forces exact CID. No KVM/GPU/host network; isolated TAP only. ExecStopPost systemd wiring tested separately.",
+      "artifacts": "/home/bogdan/macos-vm/run/c342-capture-exit-efa31461",
+      "sha256": {
+        "result.json": "ee152d91820a12fc4f5bafa7a227f780f05822e20e15d9b11bd2a8db85194a7e",
+        "live-qemu-eof/run/container-cleanup.json": "b228d529065608a101cac9fa2da2c6e4339fc9dadac2a3048c7950e0bd267824",
+        "live-qemu-eof/run/libvirt-f709203ca5b50dc706dc1f4534fcd2c2/paused.json": "d702dbf20f943dd2327a4430e949907b740c22b318c7dfd44713bd2ac0b75446",
+        "live-qemu-eof/run/libvirt-f709203ca5b50dc706dc1f4534fcd2c2/resume.json": "8b756384080b7abaf9fa993fe55f1dad8ff0748b832e000c1e2254f9ec961920",
+        "live-qemu-eof/run/libvirt-f709203ca5b50dc706dc1f4534fcd2c2/running.json": "e52b3fc8badf2c88bc0b38d7ca147e8330b5c69fe10ff94116ec5603630fc3b0",
+        "guest-s5-eof/run/container-cleanup.json": "fe15f86a29a99a4896ad2854e656e017bfabee3f115b95743e5ac650ae4b64f7",
+        "guest-s5-eof/run/libvirt-f2190f7c15c7d18569822fd4fc62e4e4/paused.json": "f1e6ccce4f09d5e3784e6c03872df0d86f2918e09fb8c06095465e26224a01aa",
+        "guest-s5-eof/run/libvirt-f2190f7c15c7d18569822fd4fc62e4e4/resume.json": "f42a8d311e5dde46cdd99561318423bfd1df4c371d99bfcb930a1dfb29d48f88",
+        "guest-s5-eof/run/libvirt-f2190f7c15c7d18569822fd4fc62e4e4/running.json": "c9f3cd4359487fedbaf259c76e619fc235340c098da614f6376c0e0871a8792e",
+        "guest-s5-eof/run/libvirt-f2190f7c15c7d18569822fd4fc62e4e4/terminal.json": "c70c7c7dce86b13f46c8f05960d2e375b088c3fc948e4b96d9419f905db6ad01"
+      }
+    }
+  ]
+}
