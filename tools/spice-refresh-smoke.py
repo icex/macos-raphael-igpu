@@ -43,6 +43,15 @@ def band(token,nonce,sequence,second=None,width=640,scale=1):
     return raw
 
 
+def event_control_passed(mode,split,invalidations,unique,invalid_after_start,errors,qemu_exit):
+    """A positive token test and deliberate-corruption control have opposite oracles."""
+    if errors or qemu_exit!=0 or invalidations<=1:return False
+    if mode=='count-only':return True  # No pixel integrity claim.
+    if mode!='roi':return False
+    if split:return invalid_after_start>0
+    return unique>1 and invalid_after_start==0
+
+
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--qemu',type=Path,required=True);p.add_argument('--bios-dir',type=Path,required=True)
@@ -50,6 +59,7 @@ def main():
     p.add_argument('--rate',type=int,choices=(60,));p.add_argument('--split',action='store_true')
     p.add_argument('--snapshot',action='store_true',help='isolated experimental staging/ACK producer')
     p.add_argument('--roi-extension',type=Path,help='optional paired observer control, no extra connection')
+    p.add_argument('--event-observer',choices=['roi','count-only'],help='exercise production EventObserver synchronously; timer only bounds duration')
     p.add_argument('--manager-wrapper-control',action='store_true',help='also compare actual manager selection function on this isolated widget')
     p.add_argument('--width',type=int,default=640);p.add_argument('--height',type=int,default=480)
     p.add_argument('--scale',type=int,choices=(1,2),default=1)
@@ -64,6 +74,11 @@ def main():
         sys.path.insert(0,str(args.roi_extension.resolve()))
         import console_token_roi as roi
     manager=None;extension_identity=None
+    if args.event_observer=='roi' and roi is None:p.error('event ROI control requires extension')
+    if args.event_observer and args.manager_wrapper_control:p.error('choose paired timer or event control')
+    if args.event_observer:
+        manager=load('event_manager_wrapper','console-manager-cadence.py')
+        if roi is not None:roi,extension_identity=manager.load_roi_extension(Path(roi.__file__))
     if args.manager_wrapper_control:
         if roi is None:p.error('manager wrapper control requires ROI extension')
         manager=load('manager_wrapper','console-manager-cadence.py')
@@ -82,6 +97,7 @@ def main():
     rom=bytearray(b'\xff'*65536);rom[0xfff0:0xfff4]=b'\xfa\xf4\xeb\xfd'
     (root/'idle-rom.bin').write_bytes(rom);command += ['-bios',str(root/'idle-rom.bin')]
     (root/'argv.json').write_text(json.dumps(command,indent=2)+'\n')
+    event_control=None
     log=(root/'qemu.log').open('w');process=subprocess.Popen(command,stdout=log,stderr=log)
     channels=[];worker=None;stop=threading.Event();producer_error=[];stats={}
     def expired(signum,frame):raise TimeoutError('bounded smoke deadline elapsed')
@@ -137,7 +153,13 @@ def main():
             counts[kind]+=1
             events.write(json.dumps(dict(time=time.monotonic(),event=kind,values=values))+'\n')
         def channel_new(session,channel):
+            nonlocal event_control
             if isinstance(channel,SpiceClientGLib.DisplayChannel):
+                if args.event_observer:
+                    if event_control is not None:raise RuntimeError('duplicate display channel')
+                    event_control=manager.EventObserver(display,channel,GObject.Object.connect_after,GObject.Object.disconnect,
+                        event_sample if args.event_observer=='roi' else None,
+                        lambda row:events.write(json.dumps(row)+'\n'),event_failure)
                 GObject.Object.connect(channel,'display-mark',lambda channel,mark:event('mark',mark))
                 GObject.Object.connect(channel,'display-invalidate',lambda channel,x,y,w,h:event('invalidate',x,y,w,h))
         GObject.Object.connect(session,'channel-new',channel_new)
@@ -155,6 +177,19 @@ def main():
                     producer.write(json.dumps(dict(sequence=sequence,start=t0,ack=t1,split=args.split))+'\n');producer.flush()
                     stop.wait(max(0,start+sequence/60-time.monotonic()))
             except Exception as error:producer_error.append(repr(error));stop.set()
+        def event_failure(error):
+            producer_error.append(repr(error));Gtk.main_quit()
+        def event_sample(display,trigger):
+            nonlocal unique,invalid,valid,last
+            begin=time.monotonic();row=dict(time=begin,trigger=trigger)
+            try:
+                decoded=manager.sample_display(display,token,nonce,roi)
+                result=tracker.observe(decoded['sequence']);valid+=1;unique+=int(result['unique']);last=decoded['sequence']
+                row.update(valid=True,**decoded,**result)
+            except (ValueError,RuntimeError) as error:
+                if started is not None:invalid+=1
+                row.update(valid=False,error=str(error))
+            row['duration']=time.monotonic()-begin;stream.write(json.dumps(row)+'\n');stream.flush()
         def poll():
             nonlocal started,worker,unique,invalid,valid,last,bounds_refused
             now=time.monotonic();sample={'time':now}
@@ -162,6 +197,10 @@ def main():
                 Gtk.main_quit();return False
             if now-began>args.seconds+15 or producer_error:
                 Gtk.main_quit();return False
+            if args.event_observer:
+                if started is None and event_control is not None and counts['invalidate']:
+                    started=now;worker=threading.Thread(target=produce);worker.start()
+                return True
             try:
                 def full_snapshot():
                     pix=display.get_pixbuf()
@@ -226,9 +265,16 @@ def main():
                 sample.update(valid=False,error=str(error))
             sample['duration']=time.monotonic()-now
             stream.write(json.dumps(sample)+'\n');stream.flush();return True
-        GLib.timeout_add(args.interval_ms,poll);Gtk.main();stop.set()
+        def guarded_poll():
+            try:return poll()
+            except Exception as error:event_failure(error);return False
+        def watchdog():
+            event_failure(TimeoutError('GLib software control deadline'));return False
+        GLib.timeout_add_seconds(args.seconds+15,watchdog)
+        GLib.timeout_add(args.interval_ms,guarded_poll);Gtk.main();stop.set()
         if worker:worker.join(timeout=15)
         if worker and worker.is_alive():raise RuntimeError('producer did not stop')
+        if event_control:event_control.close()
         session.disconnect();window.destroy();stream.close();producer.close();events.close()
         if started is None or producer_error:raise RuntimeError(f'no complete measurement: {producer_error}')
         snapshot_counters=None
@@ -240,10 +286,14 @@ def main():
                    valid=valid,invalid_after_start=invalid,last_sequence=last,producer_count=len(rows),
                    producer_per_second=(len(rows)-1)/(rows[-1]['ack']-rows[0]['ack']) if len(rows)>1 else None,
                    qemu_exit=process.returncode,split=args.split,snapshot=args.snapshot,snapshot_counters=snapshot_counters,explicit_rate=args.rate,display_events=counts,
-                   width=args.width,height=args.height,scale=args.scale,paired_observers=roi is not None,roi_bounds_refused=bounds_refused,
+                   width=args.width,height=args.height,scale=args.scale,paired_observers=roi is not None and not args.event_observer,roi_bounds_refused=bounds_refused,
                    manager_wrapper_control=manager is not None,roi_extension=extension_identity,
                    scope='TCG qtest producer and offscreen SpiceDisplay buffer only; no guest OS/GPU/manager/scanout FPS')
-        if roi:
+        if args.event_observer:
+            stats.update(event_observer=args.event_observer,**event_control.summary())
+            stats['passed']=event_control_passed(args.event_observer,args.split,event_control.invalidations,
+                                                       unique,invalid,producer_error,process.returncode)
+        if roi and not args.event_observer:
             samples=[json.loads(line) for line in (root/'samples.jsonl').read_text().splitlines()]
             stats['observer_disagreements']=sum(row.get('equivalent') is False for row in samples)
             stats['paired_samples']=sum('equivalent' in row for row in samples)
@@ -253,8 +303,9 @@ def main():
                 stats['manager_wrapper_unique']=len(ids)
                 stats['passed']=stats['passed'] and len(ids)>1
         (root/'result.json').write_text(json.dumps(stats,indent=2)+'\n');print(json.dumps(stats))
-        if roi and not stats['passed']:raise RuntimeError('paired observer qualification failed')
+        if (roi or args.event_observer) and not stats['passed']:raise RuntimeError('paired observer qualification failed')
     finally:
+        if event_control:event_control.close()
         signal.alarm(0)
         stop.set()
         if worker:worker.join(timeout=12)

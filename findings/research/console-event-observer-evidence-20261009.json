@@ -1,0 +1,322 @@
+{
+  "schema": 1,
+  "scope": "Candidate378 software-only exact EventObserver controls; native manager untested. Initial failed software processes required recorded SIGTERM; final controls QMP quit0.",
+  "artifacts": [
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-software-receipt.json",
+      "sha256": "49c29d97c9018b92bb0778c958f2db26cfe3d9ded10847e20969a72b3b0a62ac",
+      "bytes": 2506
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-event-control-analysis.json",
+      "sha256": "ad36a31c013ac501013eecaa06f0586ce31fdd84d917d47176165a7f29decfb7",
+      "bytes": 10536
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-event-count/manual-cleanup.json",
+      "sha256": "2496e31f053e026e827f5c0c8dd9339437f8a2159f5d0dd509fc07ca31f22f49",
+      "bytes": 209
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-event-count-fixed/cleanup.json",
+      "sha256": "461a8214f2520940ac1547610268352643ce16eeb7749038f3cd67150e03d1e2",
+      "bytes": 45
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-qualified-count/argv.json",
+      "sha256": "a686c9d9c50a48e9241a3100f6992791c937c2b132b62fe8daac3c5c8ab5e27b",
+      "bytes": 811
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-qualified-count/idle-rom.bin",
+      "sha256": "9712316cb30fd8aab7369e66d6395d4406866b6c7087b105e17dc08f24496e7b",
+      "bytes": 65536
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-qualified-count/qemu.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-qualified-count/display-events.jsonl",
+      "sha256": "44cf0f42afe7d9ecdad2724ac7f3c4b8b11a8192b0c459b4ecbfd476ed831809",
+      "bytes": 99717
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-qualified-count/samples.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-qualified-count/producer.jsonl",
+      "sha256": "e0dd269f187a88bc9bfad2bd5143a1774e05ba737d93d815438f550e7994630f",
+      "bytes": 25028
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-qualified-count/result.json",
+      "sha256": "15b4b36fafc3bd13171133bb2338d0b5769dc7122a452608653a211ed5070ad1",
+      "bytes": 1334
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-qualified-count/cleanup.json",
+      "sha256": "7f78119472753de90ff1d3112256aab246831f22fcbedeb4dba0348c11027f37",
+      "bytes": 45
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-qualified-count.log",
+      "sha256": "66db95a6b64ce29aaca4549b51b5cf9d41513e55c7336b397b4547bc4daf0d41",
+      "bytes": 2645
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-qualified-roi/argv.json",
+      "sha256": "59c5b1b185ded93cfece4529952c433f2972ce1b5e99baecc6c5e56c0052e7db",
+      "bytes": 803
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-qualified-roi/idle-rom.bin",
+      "sha256": "9712316cb30fd8aab7369e66d6395d4406866b6c7087b105e17dc08f24496e7b",
+      "bytes": 65536
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-qualified-roi/qemu.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-qualified-roi/display-events.jsonl",
+      "sha256": "4732eabc4b90797be66b74e0b2b496a5fef9bd39bec7e3917233a98df3a29db9",
+      "bytes": 98634
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-qualified-roi/samples.jsonl",
+      "sha256": "ea7925aaff256b224790bfeb648b61329d011f03ab6f5494acc140a1fd9af66e",
+      "bytes": 58526
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-qualified-roi/producer.jsonl",
+      "sha256": "9b915c1da70ed0a692fae0edd78411d5c31cb29f8de735a484174adc696d208f",
+      "bytes": 25022
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-qualified-roi/result.json",
+      "sha256": "b0dbeef5179cdefc5c09a9ad78e024221b7c9e55386ee3e5ef255b92ac210010",
+      "bytes": 1561
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-qualified-roi/cleanup.json",
+      "sha256": "f2d9b91af45338c1a40baec016fce30f43155638d503f30140d1fd1f8360ff99",
+      "bytes": 45
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-qualified-roi.log",
+      "sha256": "a71b11a5090f522590c9ff9a7ddc2dd680835ffaf1a996f2c1c1ab530518bece",
+      "bytes": 2856
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-qualified-split/argv.json",
+      "sha256": "cace75fd6f3afef2e2ed3c03c94e71dcd0d74790a71c93f3d17e3c222ee8e2a1",
+      "bytes": 811
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-qualified-split/idle-rom.bin",
+      "sha256": "9712316cb30fd8aab7369e66d6395d4406866b6c7087b105e17dc08f24496e7b",
+      "bytes": 65536
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-qualified-split/qemu.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-qualified-split/display-events.jsonl",
+      "sha256": "77b71b7b6725775a8de6ecb5c7cfe374b959aad0bf1db43938cefc9fa6fb3b3a",
+      "bytes": 73495
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-qualified-split/samples.jsonl",
+      "sha256": "3b3b9b471183cffc95cbf21d08afb90353c10872ee4cf1d4cc99f09608806fe6",
+      "bytes": 37744
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-qualified-split/producer.jsonl",
+      "sha256": "3cce1f41fd7c5f7cb1783ecb816e7230b579f9fd72e0a47909d78378fec993bb",
+      "bytes": 15722
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-qualified-split/result.json",
+      "sha256": "f1bd0d6d2aed3fd6821c0ffdd13dc77e62ea730c0ce4d0dbe8c1ba298fb4433a",
+      "bytes": 1562
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-qualified-split/cleanup.json",
+      "sha256": "f536e18eba505ca4f3b604910ff9a7d0dac6b54b9d51fbcbe1773c1a3c51883e",
+      "bytes": 45
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-qualified-split.log",
+      "sha256": "d83eced7dbd06cf700a8cbd9b30c122765d42be866220d5eef8845509f7df05a",
+      "bytes": 2857
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-oracle-receipt.json",
+      "sha256": "bf658c206f19ae2694ca2b20a40f056c4a1bdc2f67ffadac1669371060e9e1fe",
+      "bytes": 2174
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-oracle-analysis.json",
+      "sha256": "9690501e70753570425d95f674d4d387756e4946232c65a04a39681cc944045c",
+      "bytes": 10526
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-host-tests.log",
+      "sha256": "56dbd7080ecb28a1de764ed18bc5215801fc4ede5dece6bd1ee46016b765aaf4",
+      "bytes": 13178
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-oracle-count/argv.json",
+      "sha256": "0fe3a01f293e2ef1dc647b3d84b6f588007e7e4934b63a589eca707467cee682",
+      "bytes": 799
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-oracle-count/idle-rom.bin",
+      "sha256": "9712316cb30fd8aab7369e66d6395d4406866b6c7087b105e17dc08f24496e7b",
+      "bytes": 65536
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-oracle-count/qemu.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-oracle-count/display-events.jsonl",
+      "sha256": "38e2f0ca5df75d99252f7acad7e94616972e6324db4d13b8d79ac19926d549f2",
+      "bytes": 99096
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-oracle-count/samples.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-oracle-count/producer.jsonl",
+      "sha256": "1b1e05422aac5fc13877b75cfd2a15b12390671218690dc4f8adb2f41bf4b87c",
+      "bytes": 25035
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-oracle-count/result.json",
+      "sha256": "413e19fc4a5430d4055f8ee8dbfe17296187de59c1e5612e91b490c9c528883e",
+      "bytes": 1337
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-oracle-count/cleanup.json",
+      "sha256": "2c6ef4442a7af5c12cfa8a0913bc517ff33f57fe5d19abe1ac8efceb83835539",
+      "bytes": 45
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-oracle-count.log",
+      "sha256": "85b2f67a33f81e02d6e2f7d3401f5dcf702ad6f839b11b43fb64cacdc8e0d3a0",
+      "bytes": 2648
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-oracle-roi/argv.json",
+      "sha256": "0b8e0ecafc8c32f44d2861e33824b0243e638a3b622ef382f037388327f4dc12",
+      "bytes": 791
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-oracle-roi/idle-rom.bin",
+      "sha256": "9712316cb30fd8aab7369e66d6395d4406866b6c7087b105e17dc08f24496e7b",
+      "bytes": 65536
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-oracle-roi/qemu.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-oracle-roi/display-events.jsonl",
+      "sha256": "5427b7adacdade8a881d32d689f3213c910f0c04de342fd4c04f1ced05ebaaf5",
+      "bytes": 98972
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-oracle-roi/samples.jsonl",
+      "sha256": "eeff49a04c45e32e92460232b46786b624a188cea6e6ca2a384d06e006ab9931",
+      "bytes": 58702
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-oracle-roi/producer.jsonl",
+      "sha256": "8cf8ffe6191242e6c499f8601dd97db37ec65dc13ee52f8baba3be55b7cc5be0",
+      "bytes": 25024
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-oracle-roi/result.json",
+      "sha256": "80ac4175c26b7bf6f4297acb23d0989aae69f5b18f92c684b8c9babc76bd9f3c",
+      "bytes": 1561
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-oracle-roi/cleanup.json",
+      "sha256": "5a3278e7a6a2e695f37061527ff2f70e129057a6fb051f52b2caf2738cd88390",
+      "bytes": 45
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-oracle-roi.log",
+      "sha256": "97c59b1ea3f4f75003e5443a8a750afff5dd66a3bba4b12772ce4c76822ee144",
+      "bytes": 2856
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-oracle-split/argv.json",
+      "sha256": "ded9370f09ab7502deb9ac6deef1278ce50ff6e02c40349c78d2dd7a2f7f1cc1",
+      "bytes": 799
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-oracle-split/idle-rom.bin",
+      "sha256": "9712316cb30fd8aab7369e66d6395d4406866b6c7087b105e17dc08f24496e7b",
+      "bytes": 65536
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-oracle-split/qemu.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-oracle-split/display-events.jsonl",
+      "sha256": "8b717569ff21d8050fe9d42950efd2be60219cf05b558962ce60faa0df90b7e3",
+      "bytes": 74521
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-oracle-split/samples.jsonl",
+      "sha256": "4ad9a9c6342de087b1dd11e12ad35c586f31c26c769c772f6ab3bd127d89c0e4",
+      "bytes": 38332
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-oracle-split/producer.jsonl",
+      "sha256": "6f9b6489c41be457ee00976966f07d54de70b111d8671733bfce5c558d7975c7",
+      "bytes": 15700
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-oracle-split/result.json",
+      "sha256": "c620879542abed70d1ec9c24021b12c31566d2a63c9f590ef9637a87a207aa32",
+      "bytes": 1562
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-oracle-split/cleanup.json",
+      "sha256": "876d40984ad24708130024a9186338d955d51b411b35cb2b2df42ce934366269",
+      "bytes": 45
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-oracle-split.log",
+      "sha256": "39d867e77e9bc470f558d25859d8ccf3f1b5e06f70f6376700ad7a2caeb0df92",
+      "bytes": 2857
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c378-final-focused.log",
+      "sha256": "1967f59e36cb02e3aff2d93a51561d63aa6efb4bcacbdbef44db9640b3f23a3c",
+      "bytes": 216
+    }
+  ],
+  "validation": {
+    "full_suite": "1306 pass8skip53.279s before final verdict/stale fixes",
+    "final_focused": "13event+6timerROI pass",
+    "software": "Final strict-oracle count/ROI/split controls all QMPexit0; stale-tail helper later changes manager summary only",
+    "native": "Not run; root owns next qualification"
+  }
+}
