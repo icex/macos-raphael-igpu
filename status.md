@@ -1,5 +1,27 @@
 # Live status — 2026-10-10
 
+## Candidate 406: eight-vCPU VirtualBox software qualification, stopped
+
+BootE UUID `339a6c46-92f4-4c31-b32c-80351ac14947`, source `7132cd4`, reaches the
+actual macOS desktop with RealTSCOffset at 4699997773 Hz and eight CPUs. Root
+verified Terminal marker VBOX406_INPUT_OK, build 24G830 and owned awake assertions.
+The owned launchctl awake job was removed and its display/system idle assertions
+cleared before ACPI shutdown. Initial keyboard interaction was slow; no latency
+claim. PerfPowerServices around one CPU core remains an unresolved software issue.
+Retained UART has no panic/monotonicity marker; short duration is not sustained
+SMP qualification. No physical GPU, VFIO or Metal acceleration was used.
+
+Natural guest shutdown is verified: ACPI S5 at 264.423 s, OFF at 264.426 s and
+TERMINATED at 264.475 s, before the 300 s deadline. Original result poweroff,
+unregistered=true, one attempt, no cleanup error; independent exact-UUID absence
+was confirmed 15.846 seconds before deadline. The cleanup retry branch was not
+exercised. Automated guest_boot_qualified=false remains unchanged; manual visual,
+input and awake evidence is separately scoped in the report.
+
+Host suite: 1474 tests passed, 8 skipped, 56.685 seconds. Evidence:
+`findings/research/virtualbox-eight-cpu-qualified-native-20261010.md` and companion
+manifest. Prior status is archived as `status-before-candidate406-20261010.md`.
+
 ## Candidate 402: private snapshot pool tested and stopped
 
 Run `92b1f812226bb5f8594dbcbde467ef3d`, build
@@ -37,23 +59,18 @@ and its hashed manifest. Prior status is archived under
 
 ## Remaining work and delivery
 
-Full-field 4K delivery remains the performance blocker. Repeatability, first-user
-console-only installation and actual accelerated VirtualBox transport remain open.
-VirtualBox software desktop evidence is separate from Raphael/QEMU acceleration.
-Root owns subsequent native launches; candidate 406 software qualification is
-prepared separately. No new launch is authorized by this status text.
+Both native runs are stopped. Full-field 4K delivery remains about 25 decoded
+IDs/s despite lower snapshot copy cost; sustained 4K60 and whole-frame dynamic
+integrity remain unqualified. VirtualBox PerfPowerServices CPU use, sustained SMP
+stability, first-user console setup and actual accelerated VBox transport remain
+open. The 405/408 source audits are integrated; no VBox presentation adapter is
+implemented. Root owns later launches; this document grants no admission.
 
-This candidate's results are local pending reviewed milestone integration. Current
-published dev is `84159a9d33ab22e385e56f4861b0e6dae069cbf4`; its hosted test and
-build jobs passed (Actions 37993406232). Main remains unchanged. The checked-in
-binary still represents tested candidate 399 until explicit milestone delivery.
-
-## Separate VirtualBox software path
-
-Candidate403 reached an eight-vCPU software desktop with RealTSCOffset; no new
-input or graceful shutdown was qualified. Deadline poweroff and later verified
-unregister remain explicit in its report. The exact transient post-stop state-query
-retry is integrated without relaxing identity or timeout gates. Candidate406's
-committed plan/source is included; its later native result remains root-owned and
-will be recorded separately.
-[403 evidence](findings/research/virtualbox-eight-cpu-real-tsc-native-20261010.md).
+Candidate407 integrates these milestones locally for review. The checked-in
+binary and unchanged canonical manifest are the exact tested candidate402 build
+582b7a9276a54795ad3ff711d4130474, executable SHA256
+7bebb5596f5aa31cf1cfff6c4e95b185b74b254ba62c9e01ac403317a19b1bd5.
+Published dev remains84159a9d33ab22e385e56f4861b0e6dae069cbf4 with hosted test/build
+passed (Actions37993406232), until root publishes and verifies the new exact
+commit. Main is unchanged. Integrated407 checks are pending; 406's suite above is
+historical evidence, not a claim about this merged tree.

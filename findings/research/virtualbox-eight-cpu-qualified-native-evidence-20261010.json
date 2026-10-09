@@ -1,0 +1,82 @@
+{
+  "schema": 1,
+  "uuid": "339a6c46-92f4-4c31-b32c-80351ac14947",
+  "scope": "Software-only VBox desktop/input/awake/natural shutdown; no GPU acceleration",
+  "artifacts": [
+    {
+      "path": "/home/bogdan/macos-vm/run/c406-vbox-boot-e/result.json",
+      "bytes": 198,
+      "sha256": "3d556abf5b8b91a18d22a69275bce39fa394bf852f047cfda09e7c18d73a8018"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c406-vbox-boot-e/root-final-verification.json",
+      "bytes": 142,
+      "sha256": "b81352cabf9540c1624713ee08484b9407f48573db025ae913a4cf9fb3cca399"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c406-vbox-boot-e/scope.json",
+      "bytes": 386,
+      "sha256": "e72b1fcb9fe20513aadac88112fd6de1486c67a8ddc4d7f24094499d68287ab8"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c406-vbox-boot-e/stopped.json",
+      "bytes": 69,
+      "sha256": "e6cffff72d177caeb4e1e0ea97b707c8ed9182618f836bf650d18ce3d24e909b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c406-vbox-boot-e/tsc-selected.txt",
+      "bytes": 711,
+      "sha256": "863dac8f6f60b9b478e79ecef1de0be3848bb57a0a6034c573b04042336882bb"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c406-vbox-boot-e/shutdown-selected.txt",
+      "bytes": 1098,
+      "sha256": "467dd2ec8028d931fb395d742f2b74ea8848f797dbb494c9c4b4197571d1697d"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c406-vbox-boot-e/shutdown-confirmation.json",
+      "bytes": 127,
+      "sha256": "0c801285d73dc50079267a4437b50d8d0b4efe2aaf5ef3aeb3eec6865c9a9cc0"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c406-vbox-boot-e/root-acpi-request.json",
+      "bytes": 119,
+      "sha256": "042ce3a97534b8aff54e08e2a796b78f4cc1e62e0717d069431b9a04994bdc57"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c406-vbox-boot-e/input-awake.png",
+      "bytes": 270927,
+      "sha256": "c09c3bae3346849e01ff161f043fe975fbecd6ffef5390de583a068cda6c1df5"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c406-vbox-boot-e/awake-removed.png",
+      "bytes": 265723,
+      "sha256": "d4c1398f78e074786f1ca8ecd7ae1cf14e6213046c88dadaf96de4ae8bc3f227"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c406-vbox-boot-e/after-quit.png",
+      "bytes": 249593,
+      "sha256": "b8a958a2241e0de134c5fe82d7daefe28c43854cd7e6f14df2c9ecb0498bf9b9"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c406-vbox-boot-e/shutdown-dialog-2.png",
+      "bytes": 278623,
+      "sha256": "6cb5c61eaa735188e9f75661a4e90e640e286c144c7ee3eed21c8bf2e3675cbd"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c406-vbox-boot-e/uart1.log",
+      "bytes": 173120,
+      "sha256": "289adeed54da683b21ba8876f8383845f05977b65024dd26e80856b671d6fcdb"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c406-vbox-boot-e/uart2.log",
+      "bytes": 1528,
+      "sha256": "7424c1850e6a6c5a200d82413e6afd04e0ca53457ba876a1ec27af31946b6116"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c406-full-suite.log",
+      "bytes": 13346,
+      "sha256": "662bcc5e6c21c634a51b224994b76813cc2f47caacf7865d2d41b02689e0ada2"
+    }
+  ]
+}
