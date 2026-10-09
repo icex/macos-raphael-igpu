@@ -18,6 +18,14 @@ The installed626688-byte OpenCore.efi contains only a REL-XXX-YYYY-MM-DD templat
 
 The controller now treats observed gurumeditation as functional_failure=firmware-or-vm-guru, promptly leaves observation for owned cleanup and returns nonzero. That state alone does not identify EFI as the cause; the separate assertion evidence does. AttemptA's original result is not rewritten. Eight focused existing controller/preparation tests pass; this new observed-state branch still requires runtime execution.
 
-## BootB progress (live, completion pending)
+## BootB progression (initial observation)
 
-The root-owned attempt progressed past the previous VBox firmware placeholder assertion to the OpenCore picker and EXITBS/HANDOFFXNU, then kernel APFS and USB-tablet initialization. The hardware owner reports AHCI timeouts probing empty ports0/1 with disks on2/4; boot completion is still pending. This demonstrates the targeted protocol-boundary improvement, not a macOS desktop or acceleration result. No lifecycle completion is asserted while the attempt is live.
+The root-owned attempt progressed past the previous VBox firmware placeholder assertion to the OpenCore picker and EXITBS/HANDOFFXNU, then kernel APFS and USB-tablet initialization. The hardware owner reports AHCI timeouts probing empty ports0/1 with disks on2/4; boot completion was pending at this observation. This demonstrates the targeted protocol-boundary improvement, not a macOS desktop or acceleration result. The completed attempt is recorded below.
+
+## Completed bootB: userspace timekeeping panic
+
+The guest entered userspace, then panicked at approximately66.843 seconds on CPU6: `Non-monotonic time: invoke at 0xf8faf2a44, runnable at 0xf8faf8032 @sched_prim.c:3242`. The current process was diskarbitrationd (PID127); that identifies the affected task, not a demonstrated disk defect. Kernel version is Darwin24.6.0/xnu-11417.140.69.711.44. No macOS desktop was observed; screenshot015 still shows initial kernel text. EFI/APFS/XNU progression therefore passes only the earlier firmware boundary.
+
+Root stopped the exact owned VM; result.json verifies poweroff and unregistered=true, guest_boot_qualified=false. Twenty screenshots were attempted. This is deliberate software-VM cleanup after a kernel panic, not natural guest shutdown and not physical GPU recovery. The controller did not classify the serial-only XNU panic as gurumeditation; its original result is retained unchanged. No Raphael/VFIO device was attached.
+
+Next source-guided discriminator: inspect actual configured VBox TSC/CPUID handling and the scheduler monotonicity assertion. Compare one vCPU against the same eight-vCPU profile before attributing the failure to AHCI, a specific timer mode, or adding guessed extradata settings. CPU stress and another VM launch remain owned by root.

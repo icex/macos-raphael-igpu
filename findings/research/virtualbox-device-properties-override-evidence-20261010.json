@@ -75,6 +75,36 @@
     {
       "path": "/home/bogdan/macos-vm/run/c400-vbox-boot-b/screen-001.png",
       "sha256": "66cf90c8c260b96d6600d580835ea812d99da8bb1e3317330d3ba07796fb9477"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c400-vbox-boot-b/result.json",
+      "bytes": 170,
+      "sha256": "1ca2db133c956ceef3bbf1648f64de360e38380e63822485c01e1812528398f2"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c400-vbox-boot-b/stopped.json",
+      "bytes": 69,
+      "sha256": "0349aa6d61b788d4353f5502aef5b719584bd0bd626e72605c8f9dbfe39e4488"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c400-vbox-boot-b/scope.json",
+      "bytes": 297,
+      "sha256": "1500fc9c940547d0da3c64542d07cd88a1e4d3fbd3fd26cb4325a8556cfa784d"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c400-vbox-boot-b/uart1.log",
+      "bytes": 91571,
+      "sha256": "9934dc384a3de9131c8ad0f213df0eeffa776269df2f72bb7526c49c0bc9d8ad"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c400-vbox-boot-b/uart2.log",
+      "bytes": 1528,
+      "sha256": "7424c1850e6a6c5a200d82413e6afd04e0ca53457ba876a1ec27af31946b6116"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c400-vbox-boot-b/screen-015.png",
+      "bytes": 20458,
+      "sha256": "91ce6c49327ac8dc1ab4be0f0f8e73b5ecba2c34fecaa77bb9f5239e3edeb80e"
     }
   ],
   "prior_reference_tag": "1.0.6"
