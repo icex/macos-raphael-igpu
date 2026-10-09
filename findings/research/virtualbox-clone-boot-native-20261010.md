@@ -1,0 +1,11 @@
+# Candidate398: actual VirtualBox EFI failure discriminator
+
+The installed VirtualBox7.2.18 GUI VM starts with independent writable VDI derivatives, native VBoxSMC, EFI64, ICH9/AHCI, i7-6700K CPU profile and VBoxVGA. No physical GPU, VFIO, network, audio, shared folders or3D are configured. Baseline conversion disks and main QEMU images remain untouched. Only the derivative loader disables VirtualSMC and the exact QEMU SMC ACPI patch, removes vsmcgen=2 and adds -rgpuoff; all other plist fields are checked unchanged.
+
+Attempt `run/c398-vbox-boot-a` reaches APFS mounting and OpenCore, then enters GURU_MEDITATION around1.435s. EFI reports VBoxAppleSim.c line145; the exact pinned7.2.18 source identifies AppleGetVar_Unknown0, an unimplemented Apple Device Property protocol entry that deliberately asserts. OpenCore also logs FirmwareFeatures/FirmwareFeaturesMask Invalid Parameter; their causal relevance is not established. This is a firmware failure before macOS kernel boot, not a Metal failure. VBox logs a1920x1080 framebuffer resize immediately before the assertion; no screenshot or visible desktop was captured, so window pixels are not qualified.
+
+Root stopped the owned UUID through the controller's identity-bound cleanup function. The controller observes poweroff and unregisters it; result.json records both. The independent deadline remained armed. No runner was killed and no physical GPU ledger entry was consumed. `guest_boot_qualified=false` is intentional. Controller exit0 and its original result do not signify boot success: the observed firmware assertion defines the functional failure.
+
+Source pin: https://raw.githubusercontent.com/VirtualBox/virtualbox/14841851fa211c7faf615978ba385d59947236c6/src/VBox/Devices/EFI/Firmware/VBoxPkg/VBoxAppleSim/VBoxAppleSim.c, SHA256a74d9c995832380e31b736e4831b045eb69a3cf24eb5262b439ee1c66d318638. Raw config/logs contain private identities and stay restricted outsideGit; artifact hashes are in the companion JSON.
+
+Next discriminator: inspect OpenCore's supported DeviceProperties protocol override. The current clone has it false and two DeviceProperties.Add entries. Prefer an exact supported override in a fresh derivative over patching VirtualBox firmware. This proposed change is not yet applied or tested. Actual VirtualBox acceleration, PCI passthrough and presentation adapter remain open.
