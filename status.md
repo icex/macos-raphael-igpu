@@ -1,29 +1,28 @@
 # Live status — 2026-10-09
 
-## Candidate347: paired console measurements and native clean shutdown
+## Candidate348: timing blocked by capture permission; desktop restored
 
-Run `fe659d623c40c9650ca999f83ae39635`, metal-191, build1.0.347,
-MODE2#286 on bootba51b3c6. Native Metal/WindowServer/display ownership pass;
-actual virt-manager renders native1080p and1080HiDPI with awake assertions.
-Fresh full/ROI samples:30.497/30.323updates/s native,19.664/25.198HiDPI.
-Median observer cost2.228/1.363ms native,5.222/1.452ms HiDPI. All fixtures finish;
-normal desktop screenshot verified. Partial-token samples remain; no GPU-fps or
-atomic-presentation claim.345's50updates/s native result is not reproduced.
+Run `c03cf6652ba2207e7b28074331e7e003`, metal-192, build1.0.348,
+MODE2#287, bootba51b3c6. Native Metal/WindowServer/display checks pass.
+Instrumented presenter compiles but ScreenCaptureKit rejects its changed signature
+with TCC-3801. User cannot access settings now; no permission-policy bypass.
+Attempted timing measurement invalid, no phase measurements or performance claim.
+Original approved bundle restored; presenter frames and actual manager desktop
+screenshot verified. New instrumented bundle retained separately.
 
-Capture: CORE_PROBE_PASS, earliest_failure=null. Outer shutdown:
-exited-after-guest-request. Actual native terminal.json: guest-shutdown,
-process_exited=true. Both EOF handlers: natural-container-exit; completed zombie
-branch=false (already reaped), so native race-specific coverage remains open.
-GPU recovery: recovered, authorizes_launch=true. VM/cycle stopped, host sleep:idle
-inhibitor active. No reboot/rebind needed.
+Capture: CORE_PROBE_PASS, earliest_failure=null. Shutdown:
+exited-after-guest-request, genuine controller terminal guest-shutdown/process exit.
+Both EOF hooks natural-container-exit, completed zombie branch=false. Recovery:
+recovered, authorizes_launch=true. VM/cycle stopped, host sleep:idle inhibitor
+active. No reboot/rebind needed.
 
-Next: split presenter's approximately20ms HiDPI lock/copy interval to identify
-its actual bottleneck; repeat bounded lifecycle coverage. Automatic resize,
-atomic presentation, broader desktop/boot/crash coverage and VirtualBox remain open.
-1176 host tests pass,8 skipped;5 optional ROI guard tests separately pass.
-Kext/manifest match347; default image stock, explicit pins-spice60 selects the
-experimental refresh image.347 milestone integrated into dev; hosted CI pending for this delivery.
-343's earlier hosted test/build run passed.
-[Evidence](findings/research/console-roi-native-20261009.md) ·
-[Hashes](findings/research/console-roi-native-evidence-20261009.json) ·
-[Previous status](findings/research/status-archives/status-before-347-20261009.md).
+Next: synthetic CPU/IOSurface source copies into RAM and existing Bochs WC mapping,
+with bounded timing and readback; no screen capture. This cannot reproduce SCK
+producer synchronization. Native phase timing remains pending macOS permission.
+347's delivered paired observer evidence remains valid; partial presentation,
+automatic resize and broader lifecycle/desktop/boot qualification remain open.
+1177 local tests pass,8 skipped. Dev277ff81 includes the hosted zombie-test fix;
+hosted tests and macOS build both pass (run37919797361). Main unchanged.
+[348 evidence](findings/research/console-timing-tcc-20261009.md) ·
+[347 milestone](findings/research/console-roi-native-20261009.md) ·
+[Previous status](findings/research/status-archives/status-before-348-20261009.md).
