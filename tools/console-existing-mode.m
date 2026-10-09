@@ -50,12 +50,22 @@ int main(int argc,char **argv) {@autoreleasepool {
  }
  if(!apply){emit(@{@"display":@(target),@"modes":list});CFRelease(modes);return 0;}
  if(!choice){emit(@{@"passed":@NO,@"reason":@"no-existing-exact-physical-mode"});CFRelease(modes);return 4;}
- CGError error=CGDisplaySetDisplayMode(target,choice,NULL);
+ // CGDisplaySetDisplayMode is application-lifetime only; this helper exits.
+ // https://developer.apple.com/documentation/coregraphics/cgdisplaysetdisplaymode(_:_:_:)
+ // https://developer.apple.com/documentation/coregraphics/cgconfigureoption/forsession
+ // Configure this target only; do not change mirrors, origins or other displays.
+ CGDisplayConfigRef config=NULL;
+ CGError error=CGBeginDisplayConfiguration(&config);
+ if(error==kCGErrorSuccess){
+  error=CGConfigureDisplayWithDisplayMode(config,target,choice,NULL);
+  if(error==kCGErrorSuccess)error=CGCompleteDisplayConfiguration(config,kCGConfigureForSession);
+  else CGCancelDisplayConfiguration(config);
+ }
  CGDisplayModeRef actual=CGDisplayCopyDisplayMode(target);
  CGRect afterBounds=CGDisplayBounds(target);
  bool passed=afterBounds.origin.x==0&&afterBounds.origin.y==0&&error==kCGErrorSuccess&&actual&&CGDisplayModeGetPixelWidth(actual)==w&&CGDisplayModeGetPixelHeight(actual)==h&&CGDisplayVendorNumber(target)==0x5250&&CGDisplayModelNumber(target)==0x3453;
  NSMutableDictionary *actualInfo=actual?[info(actual) mutableCopy]:[NSMutableDictionary new];
  actualInfo[@"origin_x"]=@(afterBounds.origin.x);actualInfo[@"origin_y"]=@(afterBounds.origin.y);
- emit(@{@"passed":@(passed),@"display":@(target),@"error":@(error),@"selected":info(choice),@"actual":actualInfo,@"scope":@"existing virtual display mode and zero origin only; no DPI changes"});
+ emit(@{@"passed":@(passed),@"display":@(target),@"error":@(error),@"selected":info(choice),@"actual":actualInfo,@"scope":@"session existing virtual display mode and zero origin only; no DPI changes; independent post-exit query required"});
  if(actual)CFRelease(actual);CFRelease(modes);return passed?0:5;
 }}
