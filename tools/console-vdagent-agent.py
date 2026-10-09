@@ -49,41 +49,58 @@ class Handler:
     def __init__(self,apply,record,clock=time.monotonic):
         self.apply=apply;self.record=record;self.clock=clock
         self.messages=Budget(64,16,clock);self.last_apply=-float('inf')
-        self.requests=0;self.applied=0;self.failures=0
+        self.requests=0;self.applied=0;self.failures=0;self.pending=None
+    def refuse(self,row,number,reason):
+        self.failures+=1
+        self.record(dict(event='mode-refused',request=number,reason=reason,configuration_header=row.get('configuration_header')))
+        return reply(False,row['port'])
+    def disconnect(self):
+        self.messages.consume(1)
+        if self.pending:
+            row,number=self.pending;self.refuse(row,number,'client disconnected');self.pending=None
     def handle(self,row,remaining):
         self.messages.consume(1)
         if row['type']==6:
-            return monitors.capabilities(0,True) if row['request'] else b''
+            return monitors.packet(6,struct.pack('<II',0,6),row['port']) if row['request'] else b''
         if row['type']!=2:return b''
-        self.requests+=1;success=False
+        self.requests+=1
         config=row.get('configuration')
         if row['port']!=1 or config is None:
-            error='unsupported monitor request'
-        elif self.clock()-self.last_apply<.25:
-            error='rate-limited'
-        elif remaining<3:
-            error='session ending'
-        else:
-            self.last_apply=self.clock()
-            try:
-                control.geometry(config['width'],config['height'])
-                result=self.apply(config['width'],config['height'],min(2,remaining-1))
-                success=result.get('passed') is True
-                if success and (result.get('pixel_width'),result.get('pixel_height'))!=(config['width'],config['height']):
-                    raise ValueError('holder geometry mismatch')
-                error=None if success else 'holder refused'
-                self.record(dict(event='mode-result',request=self.requests,configuration=config,result=result))
-            except (OSError,ValueError,EOFError) as failure:
-                success=False;error=type(failure).__name__
-        self.applied+=int(success);self.failures+=int(not success)
-        if not success:self.record(dict(event='mode-refused',request=self.requests,reason=error,configuration_header=row.get('configuration_header')))
-        return reply(success,row['port'])
+            return self.refuse(row,self.requests,'unsupported monitor request')
+        try:control.geometry(config['width'],config['height'])
+        except ValueError:return self.refuse(row,self.requests,'unsupported geometry')
+        if remaining<3:return self.refuse(row,self.requests,'session ending')
+        response=b''
+        if self.pending:
+            previous,number=self.pending;response=self.refuse(previous,number,'superseded')
+        self.pending=(row,self.requests)
+        return response
+    def flush(self,remaining):
+        if not self.pending:return b''
+        if remaining>=3 and self.clock()-self.last_apply<.25:return b''
+        row,number=self.pending;self.pending=None
+        if remaining<3:return self.refuse(row,number,'session ending')
+        config=row['configuration'];self.last_apply=self.clock();success=False
+        try:
+            result=self.apply(config['width'],config['height'],min(2,remaining-1))
+            success=result.get('passed') is True
+            if success and (result.get('pixel_width'),result.get('pixel_height'))!=(config['width'],config['height']):
+                raise ValueError('holder geometry mismatch')
+            error=None if success else 'holder refused'
+            self.record(dict(event='mode-result',request=number,configuration=config,result=result))
+        except (OSError,ValueError,EOFError) as failure:
+            success=False;error=type(failure).__name__
+        if not success:return self.refuse(row,number,error)
+        self.applied+=1
+        return reply(True,row['port'])
 
 def serve(fd,seconds,apply,record,clock=time.monotonic):
     deadline=clock()+seconds;parser=monitors.MonitorParser();pending=bytearray(monitors.capabilities(1,True))
     handler=Handler(apply,record,clock);rx_budget=Budget(65536,16384,clock);tx_budget=Budget(8192,4096,clock)
     rx=tx=0;traffic=False
     while clock()<deadline:
+        response=handler.flush(deadline-clock());tx_budget.consume(len(response));pending.extend(response)
+        if len(pending)>8192:raise ValueError('agent outbound backlog exceeded')
         readable,writable,_=select.select([fd],[fd] if pending else [],[],min(.1,max(0,deadline-clock())))
         if clock()>=deadline:break
         if writable:
@@ -99,9 +116,13 @@ def serve(fd,seconds,apply,record,clock=time.monotonic):
         traffic=True;rx+=len(data);rx_budget.consume(len(data))
         for row in parser.feed(data):
             if row['port']==2 and row['type']==13:
-                # Server reports client disconnect; do not deliver old replies
-                # to a subsequent client. Keep this exclusive tty owner alive.
-                pending.clear();record(dict(event='client-disconnected'));continue
+                # Never truncate an already partially written wire frame.
+                # Cancel only the not-yet-applied request. Ambiguous partial
+                # client assembly refuses reconnect rather than joining clients.
+                handler.disconnect()
+                if parser.validator.pending()['per_port_message_bytes']['1']:
+                    raise ValueError('client disconnected with incomplete message')
+                record(dict(event='client-disconnected'));continue
             response=handler.handle(row,deadline-clock());tx_budget.consume(len(response));pending.extend(response)
             if len(pending)>8192:raise ValueError('agent outbound backlog exceeded')
     return dict(event='finish',reason='session-deadline',received_bytes=rx,transmitted_bytes=tx,
