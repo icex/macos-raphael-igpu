@@ -1,0 +1,42 @@
+{
+  "commit": "14841851fa211c7faf615978ba385d59947236c6",
+  "tag": "v7.2.18",
+  "sources": [
+    {
+      "path": "Config.kmk",
+      "url": "https://raw.githubusercontent.com/VirtualBox/virtualbox/14841851fa211c7faf615978ba385d59947236c6/Config.kmk",
+      "bytes": 470756,
+      "sha256": "c01418e625e3abb89d58131669b4421262026c66829597e7fda68165bc025e0c"
+    },
+    {
+      "path": "src/VBox/Devices/Makefile.kmk",
+      "url": "https://raw.githubusercontent.com/VirtualBox/virtualbox/14841851fa211c7faf615978ba385d59947236c6/src/VBox/Devices/Makefile.kmk",
+      "bytes": 51824,
+      "sha256": "f5bccd45cf1c883798079e56002e69fabb4d4d6449fa1d53fa1ca6fae38bf1ef"
+    },
+    {
+      "path": "src/VBox/Devices/Bus/DevPciVfio.cpp",
+      "url": "https://raw.githubusercontent.com/VirtualBox/virtualbox/14841851fa211c7faf615978ba385d59947236c6/src/VBox/Devices/Bus/DevPciVfio.cpp",
+      "bytes": 131320,
+      "sha256": "627a5c736d34143651e19c3bc68821883f717aeaf7e9b6f24aa1bd06eef1876f"
+    },
+    {
+      "path": "src/VBox/Main/src-client/ConsoleImplConfigX86.cpp",
+      "url": "https://raw.githubusercontent.com/VirtualBox/virtualbox/14841851fa211c7faf615978ba385d59947236c6/src/VBox/Main/src-client/ConsoleImplConfigX86.cpp",
+      "bytes": 88922,
+      "sha256": "988635257e7f4463cf58b805a30e15bd911c5c41f97a57804ce145ceb65ebb9d"
+    },
+    {
+      "path": "src/VBox/Main/src-client/ConsoleImplConfigCommon.cpp",
+      "url": "https://raw.githubusercontent.com/VirtualBox/virtualbox/14841851fa211c7faf615978ba385d59947236c6/src/VBox/Main/src-client/ConsoleImplConfigCommon.cpp",
+      "bytes": 231079,
+      "sha256": "4b808b19dbfa27c543e8e9048625958996d8603c21d9c732e681efd049479ea3"
+    },
+    {
+      "path": "src/VBox/Devices/Graphics/DevVGA.cpp",
+      "url": "https://raw.githubusercontent.com/VirtualBox/virtualbox/14841851fa211c7faf615978ba385d59947236c6/src/VBox/Devices/Graphics/DevVGA.cpp",
+      "bytes": 281038,
+      "sha256": "131c03acd816f193b6d62844a788fd58ae16df06801f22e9286419b9a1af5972"
+    }
+  ]
+}
