@@ -21,8 +21,8 @@ both captures natural-container-exit via bounded shutdown wait(~0.469s).
 Recovery recovered/authorizes_launch=true. Cycle stopped; host awake,vfio-pci/on.
 374 forced-stop D-state race remains unresolved;377 diagnostics not exercised.
 
-1298 host tests pass,8skip; build/identity/dry-run pass.376 evidence committed
-before next cycle; delivery pending. Previous374 dev5728db9 hosted37951815825
+1298 host tests pass,8skip; build/identity/dry-run pass.376 milestone includes
+updated docs and the tested kext; delivery suite1298pass/8skip, hosted pending. Previous374 dev5728db9 hosted37951815825
 build/test green. Main unchanged. Broader crash/restart, fullframe/performance,
 fresh-user setup, input edge cases, apps/codecs and VirtualBox remain open.
 [Evidence](findings/research/console-mixed-motion-native-20261009.md) ·

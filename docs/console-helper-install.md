@@ -61,3 +61,9 @@ agent and verified ordinary fallback startup. See
 Candidate374 reuses the exact installed370 presenter executable and retains
 startup/consent on the next guest boot without reinstalling. This remains an
 existing-user result, not fresh-user or console-only first setup qualification.
+
+Candidate376 again retains the installed370 binary/consent. After orderly snapshot
+exit, native positive/negative controls verify ordinary BAR0 mapping and deny
+snapshot regrant. The original login agent is restored byte-for-byte and ordinary
+awake3840x2160 capture restarts. This does not qualify client-crash cleanup or
+rearming snapshot mode within the same VM lifetime.

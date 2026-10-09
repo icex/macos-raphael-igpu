@@ -14,57 +14,28 @@ on **`dev`**; this is not yet a generally supported driver release.
 
 ## Current status
 
-**VM window (October9):** native Metal rendering, keyboard/mouse input and
-bridged LAN work in virt-manager. A same-image OFF/ON comparison (353/352)
-raises sampled 1080 HiDPI delivery from 22–24 to 32–35 updates/s with the opt-in
-Bochs full-refresh setting; guest row-copy time falls from about16 to1.5ms.
-Native1080p delivery does not improve uniformly. The QEMU process uses less CPU
-in all four comparisons; whole-host CPU was not measured. These are sampled
-region updates, not GPU fps or qualified60Hz delivery. Partial token samples
-remain open. Candidate356 now preserves a real guest-shutdown terminal after
-a serial socket reset, with valid capture and authorizing GPU recovery.
-Candidate364 exercises the bounded guest-shutdown wait in both native capture
-hooks, then records natural exit and a genuine terminal; repeated coverage
-remains open. Normal and fullscreen
-virt-manager input pass. Candidate361 also passes five targets plus keyboard
-input after continuous pointer entry into a resized1000×760 window; the earlier
-enter-without-motion failure and stationary-pointer resize remain separate.
-Candidate361 verifies ordinary afplay default output through macOS USB audio →
-QEMU → isolated Pulse capture: stereo frequencies, channel order and silence
-pass, with the original route restored. Endpoint audibility, other applications
-and A/V synchronization remain unqualified.
-Candidate364 also passes existing-user packaged O2 installation and identical
-reinstallation. The first changed ad-hoc binary required normal consent renewal;
-the identical reinstall retained consent. Candidate366 confirms automatic startup
-and unchanged consent on the next guest boot. Fresh-user and console-only first
-setup remain open. Its paced source reaches60 draw calls/s, but repeated HiDPI
-manager samples vary24.9–35.3 valid updates/s with partial tokens; this does not
-qualify60Hz output or a stable speedup. Candidate368 checks actual capture-source
-tokens: all 1,742 HiDPI and 1,738 native samples are valid, while the console still
-contains partial tokens. Investigation now targets copying and framebuffer/QEMU/SPICE
-ownership; no single stage is identified. Candidate370 combines immutable host
-snapshots and single-rectangle SPICE updates: HiDPI, native1080 and HiDPI-repeat
-have389/851/384 valid manager samples with zero invalids after startup. Correct
-desktop, audio capture and ordinary-presenter fallback pass. This is a scoped
-corruption improvement, not full-frame atomicity or60Hz qualification; capture
-wait helpers hit a documented exit race despite completed guest shutdown and
-authorizing GPU recovery. Stock QEMU stays the default; these experiments use
-separately pinned images. Candidate374's changed-pixel rectangle improves
-observed HiDPI cadence to52.6/51.2 distinct IDs/s and native1080 to57.9, with all
-3,553 post-startup token samples valid. Audio and ordinary fallback pass. This is
-a localized-workload lower bound; sustained60Hz/full-frame qualification remains
-open. Its capture guard force-stopped QEMU after a D-state refusal; recovery
-succeeded, but no clean-shutdown receipt exists. Automatic resize, other managers and VirtualBox remain
-unqualified. The virtual Display
-adapter's56MB framebuffer is separate from the native renderer's2GB VRAM.
-[Paired evidence](findings/research/bochs-full-refresh-paired-20261009.md)
-· [Native356 lifecycle/input evidence](findings/research/libvirt-reset-native-20261009.md)
-· [Default audio and continuous input evidence](findings/research/console-default-audio-input-20261009.md)
-· [Installer and shutdown evidence](findings/research/console-install-native-20261009.md)
-· [Guest-boot persistence and cadence](findings/research/console-cadence-native-20261009.md)
-· [Capture-source isolation](findings/research/console-source-token-native-20261009.md)
-· [Native snapshot evidence](findings/research/console-snapshot-native-20261009.md)
-· [Changed-rectangle native result](findings/research/console-changed-bbox-native-20261009.md)
+**VM window (October9, candidate376):** native Metal rendering, bridged LAN and
+keyboard/mouse input work in virt-manager without a physical HDMI connection.
+The experimental immutable-snapshot/changed-rectangle path now has14,265 valid
+post-startup token samples across three110-second mixed-motion workloads.
+Observed HiDPI cadence is about52 distinct updates/s for small changes and18 for
+full-screen motion; native1080p is about58/44. These are sampled lower bounds:
+the viewer's timer observer itself slows during full-screen motion. QEMU counters
+show about39 surface publications/s there; neither metric proves scanout or60Hz.
+
+Ordinary desktop fallback, retired-buffer access refusal, stereo USB/QEMU/Pulse
+sample capture and clean guest shutdown pass in376. Both capture hooks record
+natural exit and GPU recovery authorizes same-boot reuse.374's forced-stop race
+remains unresolved. Existing-user startup/consent is retained; fresh-user setup,
+crash/restart lifecycle, automatic resize, stationary-pointer resize, other
+frontends and VirtualBox remain unqualified. Input was last qualified in361;
+audio endpoint audibility and A/V sync remain open. The virtual Display adapter's
+56MB framebuffer is separate from the native renderer's2GB VRAM.
+
+Stock QEMU remains the default; snapshot experiments use separately pinned images.
+[Current mixed-motion and lifecycle evidence](findings/research/console-mixed-motion-native-20261009.md)
+· [Changed-rectangle comparison](findings/research/console-changed-bbox-native-20261009.md)
+· [Input/audio evidence](findings/research/console-default-audio-input-20261009.md)
 · [Setup and limits](docs/virtual-console.md).
 
 The qualified remote baseline from **2026-09-16**, candidate **1.0.280**, runs an accelerated desktop through

@@ -1,5 +1,13 @@
 # Accelerated desktop in a VM manager console
 
+Current376 evidence extends token integrity to330seconds of mixed workloads:
+all14265 post-startup manager samples valid. Native1080p and HiDPI ordinary
+desktops, audio retry/restoration and clean shutdown pass. Full-screen motion is
+slower, and timer-observer slowdown prevents an exact delivery-rate conclusion.
+Snapshot retirement denies staging reuse while ordinary fallback works. This is
+still an experimental one-shot snapshot lease, not a production restart design.
+[Current evidence and limits](../findings/research/console-mixed-motion-native-20261009.md).
+
 The requested target is a macOS desktop in the VM manager's console, with Raphael
 Metal rendering and no physical HDMI connection. Screen Sharing/Moonlight alone
 does not meet that target. Native Metal/WindowServer ownership, real virt-manager
@@ -524,3 +532,23 @@ text does not establish clean shutdown. Recovery independently authorizes reuse;
 the repeated-witness137 patch is present but unexercised. Keep D-state refusal
 until bounded diagnostics and source evidence justify any eligibility change.
 [Native evidence](../findings/research/console-changed-bbox-native-20261009.md).
+
+## Sustained mixed-motion qualification (376)
+
+Three110-second localized/full-field fixtures and100-second manager windows have
+14265 valid post-startup samples, zero invalid; startup53/17/34 invalid remain.
+HiDPI sampled localized/full-field cadence~52/~18, native~58/~44. The instrumented
+HiDPI repeat shows accepted snapshots~43/s and QEMU surface publications~39/s
+in full-field interiors, while the manager timer callback falls~20/s. These are
+different stages and sampling scopes, not a proven physical delivery rate.
+The source CRC checker timed out before fixture launch; no source-integrity
+window exists for376. Prepare measurement controllers before arming next time.
+
+Corrected native access-refusal control succeeds after orderly presenter exit:
+64MiB BAR0 mapping works; retired ARM and staging mapping are denied. Ordinary
+awake3840x2160 capture restarts with the original agent and existing consent.
+Client-death retirement remains unqualified. Audio retry passes stereo sample
+capture and independent restoration; initial route check failure is retained.
+Both captures record natural exit via bounded shutdown wait and a real private
+guest-shutdown terminal; recovery authorizes same-boot reuse. Earlier374 D-state
+forced stop is not repaired or reclassified by this successful run.

@@ -1,6 +1,6 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-10-09. Current console experiment: **1.0.374** (HiDPI52.6/51.2 and native57.9 sampled updates/s,3553 intact samples; forced capture teardown and sustained qualification open). Prior snapshot experiment: **1.0.370** (immutable snapshots plus one SPICE rectangle; three native/HiDPI token windows without post-startup corruption;60Hz and broader lifecycle unqualified). Prior diagnostic: **1.0.368** (native/HiDPI capture-source tokens intact while manager samples remain partial; downstream stage unlocalized). Persistence/cadence: **1.0.366** (existing-user next guest boot retains startup/consent; paced source60 draw calls/s does not produce qualified60Hz output). Installer/lifecycle: **1.0.364** (package/reinstall and one bounded shutdown-wait pass; clean-user qualification open). Console audio/input: **1.0.361** (ordinary afplay default USB output and continuous pointer entry into a resized window pass; endpoint audibility, stationary-pointer resize remain open). Performance comparison: **1.0.352 ON / 1.0.353 OFF** (same-image HiDPI delivery and copy-cost improvement; atomic presentation remains open). Physical display baseline: **1.0.330** (correct-color HiDPI120 and HDMI audio confirmed); prior streaming baseline: **1.0.284**; broader baseline: **1.0.280**. Full desktop acceleration
+Updated 2026-10-09. Current console experiment: **1.0.376** (three110s mixed workloads,14265 valid post-startup samples; ordinary fallback, retired-access refusal, audio retry and clean shutdown pass; full-field performance and broader lifecycle open). Prior console experiment: **1.0.374** (HiDPI52.6/51.2 and native57.9 sampled updates/s,3553 intact samples; forced capture teardown and sustained qualification open). Prior snapshot experiment: **1.0.370** (immutable snapshots plus one SPICE rectangle; three native/HiDPI token windows without post-startup corruption;60Hz and broader lifecycle unqualified). Prior diagnostic: **1.0.368** (native/HiDPI capture-source tokens intact while manager samples remain partial; downstream stage unlocalized). Persistence/cadence: **1.0.366** (existing-user next guest boot retains startup/consent; paced source60 draw calls/s does not produce qualified60Hz output). Installer/lifecycle: **1.0.364** (package/reinstall and one bounded shutdown-wait pass; clean-user qualification open). Console audio/input: **1.0.361** (ordinary afplay default USB output and continuous pointer entry into a resized window pass; endpoint audibility, stationary-pointer resize remain open). Performance comparison: **1.0.352 ON / 1.0.353 OFF** (same-image HiDPI delivery and copy-cost improvement; atomic presentation remains open). Physical display baseline: **1.0.330** (correct-color HiDPI120 and HDMI audio confirmed); prior streaming baseline: **1.0.284**; broader baseline: **1.0.280**. Full desktop acceleration
 is **not qualified**. The reproduced Screen Sharing transparency defect is fixed
 in candidate279 and retained in280. Candidate280 also passes strict capture and
 clean recovery after visual, concurrent-client and codec workloads. The patched-QEMU
@@ -20,7 +20,7 @@ regression and macOS source-build jobs remain required; see [CI setup](releases.
 
 | Milestone | State | Evidence and remaining work |
 |---|---|---|
-| M0 — Experiment identity and supervision | Implemented; maintained | Immutable manifests, loaded-build checks, capture, deadlines and cleanup. Fixed cycle image selection so preparation and admission use the same pinned emulator. Pre374 host suite: 1285 tests, OK (8 skipped); staging suite: 88 pass. |
+| M0 — Experiment identity and supervision | Implemented; maintained | Immutable manifests, loaded-build checks, capture, deadlines and cleanup. Fixed cycle image selection so preparation and admission use the same pinned emulator. Pre376 host suite: 1298 tests, OK (8 skipped); staging suite: 88 pass. |
 | M1 — Controlled starting state | Demonstrated for current workflow | One-way amdgpu→vfio-pci handoff, power/control=on, fresh MODE2 and clean-state receipts. Broad independent-host-boot qualification remains open. |
 | M2 — Native startup failure localization | Completed for original blocker | False second SDMA instance and subsequent channel routing were traced; historical evidence retained. |
 | M3 — Native engine startup repair | Demonstrated | Raphael topology/address adaptations reach native startup and completed Metal work. Preserve these fixes while diagnosing desktop rendering. |
@@ -330,6 +330,17 @@ container teardown and take immediate-stop; natural capture exit is not claimed.
 Next: bounded witness-exit race fix, software-qualified changed-pixel single
 rectangle and native comparison, then one-shot crash/re-ARM lifecycle checks.
 [Snapshot evidence](../findings/research/console-snapshot-native-20261009.md).
+
+Candidate376 extends this to three110s alternating localized/full-field workloads:
+14265 manager samples valid after startup, with lower sampled rates during
+full-field motion. HiDPI~52/~18 and native~58/~44 localized/full-field rates are
+not true delivery/scanout. Counter observations show~39 QEMU publications/s while
+the manager timer observer itself falls~20 callbacks/s; next use synchronous
+channel invalidations with measured observer cost. The source CRC window timed
+out before the fixtures and does not qualify capture-source integrity here.
+Corrected retired-buffer positive/negative controls, ordinary fallback, stereo
+audio retry/restoration and clean shutdown pass;374's D-state race remains open.
+[Native mixed-motion evidence](../findings/research/console-mixed-motion-native-20261009.md).
 
 Candidate374 changes only the SPICE update rectangle to the union of changed
 pixels while retaining immutable snapshot ownership and the same presenter.
