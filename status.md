@@ -1,49 +1,61 @@
 # Live status — 2026-10-09
 
-## Candidate383: SPICE agent transport and bounded existing-mode resize pass
+## Candidate385: arbitrary resize works; attached agent diverts mouse input
 
-Run c23d74d98b192d4a33a08376d9a64811, metal211,1.0.383,MODE2#307,
-bootba51b3c6. Source777bf28; build42a989b30403424e97098f562d46651e.
-The previously omitted CONSOLE_VDAGENT option now crosses the actual systemd
-launch boundary. Observed PCI virtio-console topology matches the manifest;
-AppleVirtIOConsole exposes /dev/tty.com.redhat.spice.0. Exclusive second-open
-refusal and real bidirectional SPICE capability exchange pass.
+Run `01813fa6d947219cf4c4e04f8e7592a4`, metal212,1.0.385,MODE2#308,
+bootba51b3c6. Built source41307cc, build399fe6c3c07d4d65abecf0da412d5cf8.
+Candidate386 support-only diagnostics were installed in this385 VM; kext unchanged.
+The sealed capture app, capture provenance and CDHash remain identical before and
+after both addon installs and at final verification. Capture resumes without TCC
+renewal. Installed support source0e76973 persists on disk for the next guest boot.
 
-Candidate384 diagnostic sources ran against this same383 VM. Actual virt-manager
-window changes selected existing2560x1440 and3840x2160 HiDPI modes through standard
-SPICE monitor requests. Final40s diagnostic ended39.028s, exit0,7requests,
-5verified applications; no helper timeout, no remaining tty holder. Settled
-manager pixbuf and monitor maps match both sizes. Independent post-agent macOS
-mode and presenter poll remain3840x2160. Correct desktop screenshot retained.
+Native failures retained: codesign requirement has an optional `# ` prefix;
+Darwin lsof emits p/f records and joint tty/cu queries return1 for an unused alias.
+Both parsers fixed. In-place applySettings temporarily moves the same display's
+origin and selects a fallback. Early holder refused before that transition ended.
+The bounded asynchronous holder now waits for settled readiness, configures once,
+and verifies settled readback without changing topology or recreating the display.
 
-Early helper used application-scoped CGDisplaySetDisplayMode and mode drifted;
-session-scoped transaction fixes persistence. Duplicate exact modes now skip
-reconfiguration. Initial launchctl submit diagnostics restarted; removed and
-replaced by explicit KeepAlive=false one-shot jobs. Invalid GI primary dimensions
-are excluded: enum field was declared pointer in installed typelib. These
-failures and source/hash boundaries are retained in the research report.
+A single new2468x1484 request succeeds with independent native timeline. Actual
+virt-manager then creates1402x960 on its first request. Eleven viewport phases,
+including eviction/revisit, all match settled SPICE monitor maps and pixbuf sizes.
+Independent mode inventory shows at most8 dynamic modes and eviction/recreation.
+Actual GDK scale is1, including the attempt named2x; do not claim scale2 evidence.
+Holder2668, presenter2745 and display4128836 stay unchanged through these resizes.
+Final idempotent1440x960 request and restoration to3840x2160 pass; awake verified.
+Audio sample delivery passes48kHz997/1498Hz stereo; independent route, volume,
+mute, defaults and owned-module restoration all pass. Endpoint audibility is not
+established by this capture.
 
-Audio sample delivery passes. First route restoration failed and required an
-explicit identity-guarded retry; revised bounded reconciliation passes native
-capture and restores route, volume, mute, defaults and removes owned module.
-This proves samples, not endpoint audibility or A/V synchronization.
+Input is the integration blocker. With the resize agent attached, actual GTK
+motion/button events reach the viewer but the guest fixture stays step0/miss0.
+Stopping only exact resize agent2744 restores5target hits, zero misses and exact
+keyboard token in the same viewer/holder/presenter. The fixture's overall passed
+is false because it retained one startup same-geometry screen notification; this
+is not silently converted to an overall qualification pass. SPICE source routes
+mouse to any attached agent by default, ignoring the advertised mouse capability;
+the resize-only agent ignores those events. Candidate386 adds agent-mouse=off
+through exact planner/admission/runtime checks to retain USB-tablet input.
+That configuration and next-boot installed-agent persistence remain native-untested.
 
-Viewer closure leaves exact VM alive. Harness stop then exits after guest request;
-private terminal guest-shutdown/process_exited=true, Docker die exit0, no kill/stop
-events. Both captures record natural-container-exit, deferred0.432s,
-shutdown_event_wait=true, zombie=false; console EOF, critical recv-reset.
-Producer quiesce snapshot18 accepted terminal-prefix. Recovery recovered,
-authorizes_launch=true. CORE_PROBE_PASS is separate from desktop qualification.
+Shutdown: viewer close leaves the exact VM alive; harness stop then records
+exited-after-guest-request. Private terminal guest-shutdown/process_exited=true;
+Docker die exit0 and destroy, no kill/stop. Both capture hooks natural-container-exit,
+deferred~0.382s, shutdown_event_wait=false, zombie=false; console clean-eof,
+critical recv-reset. Recovery recovered, authorizes_launch=true. Critical snapshot18
+accepted terminal-prefix, preserving1malformed transport line and incomplete
+snapshot7(398validchunks,noEND). CORE_PROBE_PASS is separate from desktop qualification.
 Host remains awake, vfio-pci, power/control=on. No reboot or amdgpu rebind.
 
-Evidence: run/candidate-383-results, c383-monitor-idempotent-complete.txt,
-c383-manager-resize-idempotent.jsonl, c383-resize-session.png,
-c383-audio-reconciliation*, c383-docker-events.jsonl. Candidate384 report contains
-full experiment history. Native383 prelaunch1333tests/8skip; latest diagnostic
-suite1367tests/8skip passes (54.641s), run/c384-host-tests-idempotent.log.
+Evidence: run/candidate-385-results; c385-newmode-v3-observation.txt;
+c385-manager-resize-lru.jsonl; c385-final-modeaudit.log; c385-final-* logs;
+c385-input-manager-events.jsonl; c385-agent-off-input-result.txt;
+c385-audio-restored-independent.json; c385-docker-events.jsonl.
+Candidate386 research draft documents exact source/observer boundaries, including
+one delayed GX response after an overlong observer command. Prelaunch1408tests/8skip;
+settle support1422tests/8skip pass. Updated mouse-routing suite follows separately.
 
-Remaining: persistent packaged agent, arbitrary viewport mode creation, input
-coordinates after automatic resize, broader lifecycle and performance/corruption
-qualification. Existing381 performance evidence remains valid only for its
-measured workloads. Dev c6d7ef13cb16a90d0bbf45c95fd9ca2ec3e63b3c delivers383/384 with
-hosted37968448791 test/build green; release skipped. Main unchanged. Do not call this completed roadmap work.
+Next: fresh supervised386 boot with installed support, agent-mouse=off, resize and
+real input together, default audio, capture and natural cleanup. Broader performance,
+corruption, forced-stop/crash and manager portability qualification remain open.
+Delivered dev remainsc6d7ef1 with hosted37968448791 test/build green; main unchanged.
