@@ -32,7 +32,9 @@ class ZombieProofTests(unittest.TestCase):
     def test_refusal_identifies_failed_predicate_without_weakening_result(self):
         report={};(self.root/'task'/'99').mkdir()
         self.assertFalse(self.proof(report))
-        self.assertEqual(report,dict(completion_reason='not-sole-task',completion_task_count=2))
+        self.assertEqual(report,dict(completion_reason='not-sole-task',completion_task_count=2,
+                                    completion_tasks=[dict(tid=42,state='unknown'),dict(tid=99,state='unknown')],
+                                    completion_tasks_truncated=False))
         (self.root/'task'/'99').rmdir();(self.root/'fd'/'7').touch();report={}
         self.assertFalse(self.proof(report));self.assertEqual(report,dict(completion_reason='descriptors-present'))
         (self.root/'fd'/'7').unlink();self.write_stat(ticks=44);report={}

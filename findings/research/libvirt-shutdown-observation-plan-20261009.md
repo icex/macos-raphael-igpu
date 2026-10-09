@@ -48,3 +48,8 @@ identity, immediate durable recording and persistence failure, plus task-state
 refusal diagnostics. Per parent instruction these tests have NOT been run while
 candidate353 performance work is active. Only source review/diff check performed;
 no builds, containers, guest or hardware operations.
+
+Focused follow-up: five lifecycle observation, nine zombie proof and22 capture-exit
+tests pass. The existing exact-diagnostic expectation was updated for the newly
+reported task fields; refusal behavior is unchanged. Full suite and software
+lifecycle timing qualification remain pending.
