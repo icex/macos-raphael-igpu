@@ -20,8 +20,10 @@ not GPU FPS or scanout; no matched full4K ordinary-copy regression is claimed.
 Candidate392 retains next-guest-boot1×4K startup, input/audio evidence and a scoped
 stationary-pointer fix in an isolated spice-gtk client. System client libraries
 are unchanged. Candidate394 verifies installed snapshot startup plus two helper
-restarts and audio delivery, but ends in forced capture-abort teardown.395 final
-lifecycle is pending; functional progress does not qualify clean shutdown.
+restarts and audio delivery, but ends in forced capture-abort teardown.395 has
+independent guest-shutdown/Docker exit0/recovery evidence; its original outer
+classification remains unverified because it missed a completed shutdown-wait
+receipt variant. Witness exit137 is not container exit137.
 [Preference usage](console-helper-install.md#persistent-guest-scale).
 
 GPU-native virtual display transport is **not implemented**: Metal renders on

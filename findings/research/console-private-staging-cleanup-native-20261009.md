@@ -1,6 +1,6 @@
 # Candidate395: retired private-map cleanup and capacity recovery
 
-**Native ownership fixture passes; mixed-motion observations complete; final lifecycle pending.**
+**Native ownership fixture passes; mixed-motion observations complete; final lifecycle independently verified, original reporting discrepancy retained.**
 Run`074a0b4c757c6c21ae093b604a98763d`. This extends394's positive pixel-isolation
 result and fixes its explicit retired-unmap failure; it does not reclassify394's
 failed cleanup or forced VM teardown. Root owns all native operations.
@@ -30,8 +30,7 @@ unmap/remap lifecycle. It is not full dynamic manager-frame qualification or a
 proof against a current owner writing concurrently with its own commit.
 
 Installed helpers automatically start snapshot capture; after the native fixture,
-normal installed capture is restored. Completed source/manager observations are retained below. Final shutdown remains
-pending and is not inferred from functional success.
+normal installed capture is restored. Completed source/manager observations are retained below. Final shutdown is documented independently below.
 
 ## Installed mixed-motion observations
 
@@ -58,7 +57,7 @@ not establish a regression or isolate the added kernel copy as the bottleneck.
 
 ## Remaining qualification
 
-Final capture/private-terminal/Docker/recovery receipts are pending. The earlier capture-abort race is independent of this ownership fix.
+Final lifecycle evidence and the original reporting discrepancy appear below. The earlier capture-abort race is independent of this ownership fix.
 Client death during commit, broader restart stress and independent host-boot
 coverage remain open. GPU-native virtual transport and VirtualBox remain
 unqualified; neither ACK nor token samples are physical scanout FPS.
@@ -82,5 +81,15 @@ clock does not establish a guest hang.
 
 Default stereo sample capture and independent route restoration pass, with all
 restoration checks true. Closing the owned viewer leaves the identity-matched VM
-alive. Full host suite1453 tests/8 skipped passes in50.932s. Final lifecycle is
-still pending and remains a separate acceptance criterion.
+alive. Full host suite1453 tests/8 skipped passes in50.932s. Final lifecycle remains a separate acceptance criterion, documented below.
+
+
+## Final lifecycle and reporting discrepancy
+
+395 original shutdown classification is `exit-unverified-after-request`: its
+reconciler did not recognize completed shutdown-wait capture outcomes. Independent
+receipts nevertheless establish guest shutdown/process exit and Docker exit0 without
+kills. Both captures report `container-stopped-during-shutdown-wait`, deferred and
+event-bound, about0.421s. Witness exit137 belongs to the exec observer killed as its
+container exits, not to the container (which exits0). GPU recovery authorizes reuse.
+Original receipts remain unchanged; this does not erase394's forced teardown.

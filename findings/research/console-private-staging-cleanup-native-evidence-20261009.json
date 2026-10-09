@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "run_id": "074a0b4c757c6c21ae093b604a98763d",
-  "scope": "395 native ownership fixture and completed mixed-motion observations; final lifecycle pending",
+  "scope": "395 ownership/motion/input/audio and independently verified natural completion; original unverified reporting retained",
   "artifacts": [
     {
       "path": "/home/bogdan/macos-vm/run/c395-native-final.txt",
@@ -167,6 +167,51 @@
       "path": "/home/bogdan/macos-vm/run/c395-viewer-close-alive.json",
       "bytes": 149,
       "sha256": "e1c8c485bc3517c437770a39bfed7f14b7ce94ad23a95a618e1ea214ea62344f"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c395-docker-events.jsonl",
+      "bytes": 444762,
+      "sha256": "a6af85e725ae590ccf3a55eb20ef5f2f76fd228d0a738cf1a2f478b46f4a62d2"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-395-results/shutdown.json",
+      "bytes": 1139,
+      "sha256": "123d813f5508422985ea7fd9b589b11eebc2247317373da690e2aa2f5fa5b75d"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-395-results/recovery.json",
+      "bytes": 17584,
+      "sha256": "6a75d51d66ff8eb75e9bc1ab5fdd106d30a33e6eadc79a2ac40b32b1477031a8"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-395-results/recovery-replay.json",
+      "bytes": 479,
+      "sha256": "95a424eba3acf9580da62ec7f40964404173beea745735b6ad5172a7624d581f"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-395-results/verdict.json",
+      "bytes": 48528,
+      "sha256": "c96714f860cd3435bcbefb0e0208b9660b80ecea17d1c107f1a42261ac37e1fa"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-395-results/capture-exit-de1ef19dd41bbbc296186f6cb1c73aba2074e2c01183fff7592398a3d6b5709a-1844619.json",
+      "bytes": 513,
+      "sha256": "609375d6a5e5c4ed38563a52990521a8e6688350a7115a28918e33d3e4f94fba"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-395-results/capture-exit-de1ef19dd41bbbc296186f6cb1c73aba2074e2c01183fff7592398a3d6b5709a-1844617.json",
+      "bytes": 515,
+      "sha256": "cdd8baa16302d837c437ee6399206340a018a56059a9f534f51d36ac3ed95c75"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/libvirt-074a0b4c757c6c21ae093b604a98763d/running.json",
+      "bytes": 547,
+      "sha256": "c9d886b4cdd801ddd97aa8525499fc121e6b2879ec819259c0b1c2e3f34e2d33"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/libvirt-074a0b4c757c6c21ae093b604a98763d/terminal.json",
+      "bytes": 516,
+      "sha256": "482223cc2320edd0f1c5a138fae063c4e93999cf4372f88420c77916601a7009"
     }
   ]
 }

@@ -6,7 +6,9 @@ capacity recovery. Corrected five-target/text input with the agent active and
 stereo delivery/restoration pass; earlier fixture errors remain retained. Actual-manager100-second mixed-motion observations reach
 57.92 token IDs/s at1440×900 and40.40 overall at4K, zero post-start token errors;
 4K full-field motion remains about26/s.4K60Hz/full-frame integrity remain open.
-395 lifecycle is pending;394/392 forced capture aborts remain unresolved evidence.
+395 independent private-terminal/Docker exit0 evidence establishes natural
+completion despite an original unverified reporting label;394/392 forced capture
+aborts remain unresolved evidence.
 
 Existing scale preference, odd1× resize, connected-agent input/audio and fresh-boot
 1×4K startup remain qualified in their recorded scopes. The isolated client
