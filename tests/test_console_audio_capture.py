@@ -51,6 +51,11 @@ class AudioRouteTests(unittest.TestCase):
         self.route.start();self.backend.calls=[];self.backend.data['inputs'][0]['properties']['object.serial']='99'
         with self.assertRaises(RuntimeError):self.route.restore()
         self.assertFalse(self.backend.calls)
+    def test_replaced_client_is_not_moved_or_unloaded(self):
+        self.route.start();self.backend.calls=[]
+        self.backend.data['clients'][0]['properties']=dict(self.backend.data['clients'][0]['properties'],**{'object.serial':'replacement'})
+        with self.assertRaisesRegex(RuntimeError,'client replaced'):self.route.restore()
+        self.assertFalse(self.backend.calls)
     def test_foreign_stream_on_owned_sink_refuses_cleanup(self):
         self.route.start();other=copy.deepcopy(self.backend.data['inputs'][0]);other['index']=99;self.backend.data['inputs'].append(other)
         self.backend.calls=[]

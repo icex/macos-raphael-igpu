@@ -27,6 +27,10 @@ def unique(rows,predicate,label):
 
 
 def serial(row):return str(row.get('properties',{}).get('object.serial',''))
+def client_id(snapshot,stream):
+    client=unique(snapshot['clients'],lambda c:str(c['index'])==str(stream['client']),'Pulse client')
+    require(serial(client),'missing client serial')
+    return dict(index=client['index'],serial=serial(client))
 def stream_id(row):
     return dict(index=row['index'],serial=serial(row),client=str(row['client']),properties={
         k:row['properties'].get(k) for k in ('application.name','application.process.id',
@@ -88,6 +92,7 @@ class Route:
     def stream(self,snapshot):
         stream=select_stream(snapshot,self.identity)
         require(stream_id(stream)==self.state['stream'],'VM audio stream replaced')
+        require(client_id(snapshot,stream)==self.state['client'],'Pulse client replaced')
         require(stream['volume']==self.state['volume'] and stream['mute']==self.state['mute'],'VM volume/mute changed')
         return stream
     def sink(self,snapshot,original=False):
@@ -103,7 +108,7 @@ class Route:
         require(serial(original),'missing original sink serial')
         name='rgpu_audio_'+secrets.token_hex(8)
         require(not any(s['name']==name for s in snap['sinks']),'sink name collision')
-        self.state=dict(schema=1,identity=self.identity,stream=stream_id(stream),volume=stream['volume'],mute=stream['mute'],
+        self.state=dict(schema=1,identity=self.identity,stream=stream_id(stream),client=client_id(snap,stream),volume=stream['volume'],mute=stream['mute'],
             original_sink=dict(index=original['index'],name=original['name'],serial=serial(original)),defaults=snap['defaults'],
             name=name,module=None,owned_sink=None,moved=False,restored=False,prior_modules=[m['index'] for m in snap['modules']],create_attempted=True)
         self.save()
@@ -113,9 +118,11 @@ class Route:
         snap=self.backend.snapshot();m=unique(snap['modules'],lambda r:r['index']==module,'new module')
         require(m['name']=='module-null-sink' and 'sink_name='+name in m.get('argument','').split(),'new module identity mismatch')
         self.state['module_argument']=m['argument'];sink=unique(snap['sinks'],lambda s:s['name']==name,'new null sink')
-        require(serial(sink),'missing sink serial')
+        require(serial(sink) and str(sink.get('owner_module'))==str(module),'missing sink serial or wrong owner')
         self.state['owned_sink']=dict(index=sink['index'],name=name,serial=serial(sink));self.save()
-        self.backend.verify_vm(self.identity);self.stream(snap)
+        self.backend.verify_vm(self.identity);snap=self.backend.snapshot();current=self.stream(snap);self.verify_owned(snap)
+        require(current['sink']==self.sink(snap,True)['index'],'VM route changed before move')
+        require(snap['defaults']==self.state['defaults'],'global defaults changed before move')
         require(not any(r['sink']==sink['index'] for r in snap['inputs']),'new sink is not exclusive')
         self.state['move_attempted']=True;self.save()
         self.backend.pulse('move-sink-input',stream['index'],name)
@@ -155,7 +162,7 @@ class Route:
         # A vanished VM stream requires no recreation or move of any replacement.
         remaining=[r for r in snap['inputs'] if r['index']==self.state['stream']['index']]
         if remaining:
-            stream=self.stream(snap);require(stream['sink']==self.state['original_sink']['index'],'original route not restored')
+            stream=self.stream(snap);require(stream['sink']==self.sink(snap,True)['index'],'original route not restored')
         require(snap['defaults']==self.state['defaults'],'global defaults changed; no default writes authorized')
         self.backend.pulse('unload-module',module)
         final=self.backend.snapshot()
