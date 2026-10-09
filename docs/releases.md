@@ -29,11 +29,11 @@ The runner label is explicitly Intel, as listed in the
 
 ## Checked-in experimental executable
 
-`kext/bin/RaphaelGPU` contains the hardware-tested candidate379 executable,
-build `c3e4e8d6f3be4fe7b2d94fb49b52adb6`, from clean source
-`ce106d9e72b92fb8a91c506c40f98990db7d3e76`. Native guest shutdown preserves a
+`kext/bin/RaphaelGPU` contains the hardware-tested candidate381 executable,
+build `8921433ed961428880b20947e0fa0c71`, from clean source
+`6c02c4189de32391a7fb0b2a245f52e0094e9860`. Native guest shutdown preserves a
 real controller terminal and authorizing recovery. Earlier356 normal/fullscreen
-and361 continuous pointer entry at1000×760 pass; input is not rerun in379. Missing-motion/stationary-pointer
+and361 continuous pointer entry at1000×760 pass; input is not rerun in381. Missing-motion/stationary-pointer
 transitions remain open. Candidate364 adds existing-user package/reinstall and
 one native bounded shutdown-wait pass. Candidate366 verifies existing-user next
 guest-boot startup/consent; clean-user and console-only first setup remain open.
@@ -44,6 +44,18 @@ locked capture-source tokens while manager partial tokens persist, narrowing
 investigation downstream without identifying one stage or qualifying atomicity.
 Ordinary afplay default USB → QEMU → Pulse stereo capture and route restoration
 pass; endpoint audibility, other applications and A/V sync are unqualified.
+Candidate381 adds explicit viewport matching: mixed2560×1440 observations reach
+57.5 IDs/s at a1280×720 scale-2 viewport; same4K source full-field observations
+improve14.4→34.5–34.9/s with a1920×1080 scale-2 viewport. Three windows have14,160
+valid samples,22 startup invalids and no post-start invalids. This does not close
+379's rare errors or qualify universal60Hz/full-frame integrity. Audio retry and
+independent restoration, ordinary fallback and retired-access refusal pass. The
+real guest-shutdown terminal and recovery survive; capture receipts report
+container-stopped-during-shutdown-wait, with witness137 rather than a guest137 exit.
+Independent Docker exit0/no-kill events corroborate natural exit; partial terminal
+capture remains documented.
+[Current viewport evidence](../findings/research/console-viewport-native-20261009.md).
+
 Candidate379 adds synchronous same-channel event observation and a bounded QEMU
 trace: full-field HiDPI bitmap-creation entries are38–39/s while client updates
 remain14–15/s. Three rare post-start HiDPI token errors remain unresolved; native
@@ -88,8 +100,8 @@ requires `RGPU_CONSOLE_SNAPSHOT=1`; ordinary BAR0 remains default. Do not interc
 · [Native374 comparison](../findings/research/console-changed-bbox-native-20261009.md).
 
 Candidate330 remains the independently tested Samsung HDMI HiDPI120/audio
-baseline, available on `main` at861ba5e. Candidate379's physical HDMI behavior
-has not been independently rerun. Do not relabel330's evidence as a379 HDMI test.
+baseline, available on `main` at861ba5e. Candidate381's physical HDMI behavior
+has not been independently rerun. Do not relabel330's evidence as a381 HDMI test.
 
 ## Local build
 

@@ -14,26 +14,30 @@ on **`dev`**; this is not yet a generally supported driver release.
 
 ## Current status
 
-**VM window (October 9, candidate 379):** native Metal rendering, bridged LAN,
-and keyboard/mouse input work in virt-manager without physical HDMI. The virtual
-display adapter's 56 MB framebuffer is separate from the native renderer's 2 GB VRAM.
+**VM window (October 9, candidate 381):** native Metal rendering, bridged LAN,
+and previously qualified keyboard/mouse input work in virt-manager without HDMI.
+The virtual adapter's 56 MB framebuffer is separate from the renderer's 2 GB VRAM.
 
-A synchronous viewer observer now locates the main full-screen HiDPI slowdown
-after QEMU bitmap creation: about 38–39 creation entries/s versus 14–15 client
-updates/s. Small changes reach about 50–51 distinct IDs/s; native 1080p is faster.
-These are measured pipeline events, not scanout FPS. Three rare malformed HiDPI
-token samples remain unresolved; earlier clean timer-sampled windows do not
-establish corruption-free output or stable 60 Hz.
+Matching guest pixels to the window's physical pixels avoids costly viewer
+scaling. At 2560×1440 into a 1280×720 window on a scale-2 host, mixed-motion
+observations reach about 57.5 distinct IDs/s. With the same 3840×2160 source,
+matching a 1920×1080 scale-2 window raises full-field observations from about
+14.4 to 34.5–34.9 IDs/s. These are observed pipeline updates, not scanout FPS.
+Three windows have 14,160 valid token samples and no post-start errors, but
+candidate379's rare errors and general full-frame integrity remain unresolved.
 
-Ordinary desktop fallback, retired-buffer access refusal, stereo USB/QEMU/Pulse
-sample capture and natural guest shutdown/recovery pass in 379. The earlier 374
-forced-stop race remains open. Existing-user startup/consent is retained;
-fresh-user setup, crash/restart lifecycle, automatic and stationary-pointer
-resize, other frontends and VirtualBox remain unqualified. Input was last
-qualified in 361; audio endpoint audibility and A/V sync remain open.
+Stereo sample capture passes after a retained route-refusal/retry; ordinary
+desktop fallback and retired-buffer access refusal pass. The guest-shutdown
+terminal and authorizing recovery are retained. Capture helpers report the
+container stopped during their bounded shutdown wait; independent Docker exit0
+events without kill/stop corroborate natural exit. Terminal capture remains partial.
+Existing-user consent is retained; fresh-user
+setup, crash/restart lifecycle, automatic and stationary-pointer resize, other
+frontends and VirtualBox remain unqualified. Input was last qualified in361;
+audio endpoint audibility and A/V sync remain open.
 
 Stock QEMU remains the default; snapshot experiments use separately pinned images.
-[Current event, audio and lifecycle evidence](findings/research/console-event-native-20261009.md)
+[Current viewport, audio and lifecycle evidence](findings/research/console-viewport-native-20261009.md)
 · [Prior mixed-motion evidence](findings/research/console-mixed-motion-native-20261009.md)
 · [Input/audio evidence](findings/research/console-default-audio-input-20261009.md)
 · [Setup and limits](docs/virtual-console.md).

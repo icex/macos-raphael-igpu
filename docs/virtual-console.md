@@ -1,17 +1,23 @@
 # Accelerated desktop in a VM manager console
 
-Current candidate379 uses synchronous client invalidation observations rather
-than timer sampling alone. Full-field HiDPI QEMU publications and bitmap-creation
-entries are about38–39/s, versus14–15 client updates/s. The main measured gap is
-after creation entry; server consumption, coalescing, transport and client drawing
-remain separate stages. Three rare HiDPI token errors are unresolved. The earlier
-376 clean sampled windows remain narrower evidence, not proof of full integrity.
+Candidate381 demonstrates a useful configuration improvement: match guest pixels
+to the actual SpiceDisplay allocation multiplied by the host's GDK scale.
+2560×1440 into a1280×720 scale-2 window reaches about57.5 observed IDs/s across
+localized and full-field phases. Holding the3840×2160 source fixed and expanding
+to a1920×1080 scale-2 window improves full-field observations from14.4 to34.5–34.9/s.
+Whole-window GTK draw wall time also falls, but is not a per-phase/GPU measurement.
+Automatic guest resizing is not implemented or qualified: these modes and window
+sizes are selected explicitly. Arbitrary smaller windows can still incur scaling.
 
-Default stereo sample capture, ordinary desktop fallback, retired staging-access
-refusal and natural shutdown/recovery pass. Snapshot ownership remains a one-shot
-experimental lease, not a qualified production restart design. Existing consent
-is retained; clean-user setup and broader lifecycle remain open.
-[Current evidence and limits](../findings/research/console-event-native-20261009.md).
+Three windows contain14,160 valid token samples with no post-start errors;
+379's rare malformed tokens remain unresolved. This is not universal60Hz or
+full-frame atomicity. Stereo capture passes on retry with route restoration;
+ordinary fallback and retired-access refusal pass. A real guest-shutdown terminal
+and authorizing recovery survive; capture hooks report container-stopped-during-
+shutdown-wait; independent Docker exit0/no-kill events corroborate natural exit.
+Terminal capture remains partial. One-shot snapshot ownership,
+clean-user setup and broader lifecycle remain open.
+[Current evidence and limits](../findings/research/console-viewport-native-20261009.md).
 
 The requested target is a macOS desktop in the VM manager's console, with Raphael
 Metal rendering and no physical HDMI connection. Screen Sharing/Moonlight alone

@@ -74,3 +74,12 @@ regrant are denied; the original agent resumes fresh, awake3840×2160 capture.
 Default stereo delivery and independent audio-route restoration pass. This does
 not qualify fresh-user consent setup or snapshot-owner restart in the same VM.
 [Evidence](../findings/research/console-event-native-20261009.md).
+
+Candidate381 retains the installed presenter and normal consent while selecting
+existing guest modes and explicitly matching the manager viewport's physical
+pixels. No presenter reinstall or permission bypass is needed for this
+configuration result. Retirement still denies snapshot regrant, then the original
+agent restores ordinary awake3840×2160 capture. Automatic window-to-guest resizing
+is not yet installed: an AppleVirtIOConsole personality inventory alone does not
+prove a usable agent transport or monitor-configuration handler.
+[Viewport qualification](../findings/research/console-viewport-native-20261009.md).
