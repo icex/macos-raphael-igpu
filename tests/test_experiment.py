@@ -1038,6 +1038,35 @@ class ExperimentTests(unittest.TestCase):
             options['CONSOLE_FULL_REFRESH']=value
             with self.subTest(value=value),self.assertRaises(ValueError):tool.launch_options(manifest)
 
+    def test_snapshot_default_off_preserves_historical_contracts(self):
+        tool=self.module()
+        historical=dict(BOOTDISK_MODE='custom',NVRAM='stock')
+        self.assertEqual(tool.launch_options({'launch_options':historical}),historical)
+        explicit=dict(historical,CONSOLE_SNAPSHOT='off')
+        self.assertEqual(tool.launch_options({'launch_options':explicit}),explicit)
+        with self.assertRaises(ValueError):
+            tool.launch_options({'launch_options':dict(historical,CONSOLE_SNAPSHOT='on')})
+
+    def test_libvirt_snapshot_requires_exact_manifest_and_observed_device(self):
+        tool=self.module()
+        options=dict(BOOTDISK_MODE='custom',NVRAM='stock',GENERIC_GRAPHICS='off',
+                     GDB='on',AUDIO='usb',VM_CONSOLE='bochs-spice',VM_MANAGER='libvirt',CONSOLE_REFRESH='60',CONSOLE_FULL_REFRESH='on',CONSOLE_SNAPSHOT='on')
+        manifest=dict(image_id='img',gpu=False,run_id='a'*32,launch_options=options)
+        self.assertEqual(tool.launch_options(manifest),options)
+        observed=dict(image_id='img',vfio_args=[],serial_args=[],
+                      pci_topology=[{'model':'usb-audio','bus':'xhci.0'}],
+                      graphics_args=['-spice','unix=on,addr=/run/vm/console-spice.sock,disable-ticketing=on,image-compression=off,seamless-migration=on',
+                                     '-vga','none','-display','none','-device',
+                                     'bochs-display,id=rgpu_present,bus=pcie.0,addr=0x7,vgamem=64M,x-debug-full-refresh=on,x-debug-snapshot=on',
+                                     '-spice','max-refresh-rate=60'],cid='c'*64,argv_sha256='d'*64,
+                      libvirt=dict(verified=True,run_id='a'*32,cid='c'*64,argv_sha256='d'*64))
+        self.assertEqual(tool.validate_running(manifest,observed),[])
+        observed['graphics_args'][7]=observed['graphics_args'][7].replace(',x-debug-snapshot=on','')
+        self.assertIn('generic_graphics',tool.validate_running(manifest,observed))
+        for value in ('yes',True,'on,vgamem=128M'):
+            options['CONSOLE_SNAPSHOT']=value
+            with self.subTest(value=value),self.assertRaises(ValueError):tool.launch_options(manifest)
+
     def test_libvirt_exact_profile_requires_matching_running_proof(self):
         tool=self.module()
         options=dict(BOOTDISK_MODE='custom',NVRAM='stock',GENERIC_GRAPHICS='off',

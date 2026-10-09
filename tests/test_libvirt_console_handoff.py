@@ -53,6 +53,24 @@ class HandoffTests(unittest.TestCase):
         with self.assertRaises(ValueError):mod.run_directory(self.root,'../other')
 
 class RefreshAdmissionTests(unittest.TestCase):
+    def test_snapshot_admission_exact_profile_and_no_side_effect_on_refusal(self):
+        base=dict(VM_MANAGER='libvirt',VM_CONSOLE='bochs-spice',GENERIC_GRAPHICS='off',
+                  CONSOLE_REFRESH='60',CONSOLE_FULL_REFRESH='on',CONSOLE_SNAPSHOT='on')
+        cases=[({},True),({'CONSOLE_SNAPSHOT':'off'},True),({'CONSOLE_SNAPSHOT':True},False),
+               ({'VM_CONSOLE':'bochs'},False),({'GENERIC_GRAPHICS':'on'},False),
+               ({'CONSOLE_FULL_REFRESH':'off'},False),({'CONSOLE_REFRESH':'default'},False)]
+        for change,ok in cases:
+            with self.subTest(change=change),tempfile.TemporaryDirectory() as tmp:
+                manifest=dict(run_id='a'*32,boot_id='boot',image_id='image',max_seconds=120,
+                              launch_options=dict(base,**change))
+                if ok:
+                    path,_=mod.prepare(tmp,manifest,b'manifest',{},dict.fromkeys(mod.MODULES,'hash'))
+                    data=json.loads((path/'admission.json').read_text())
+                    self.assertEqual(data['console_snapshot'],manifest['launch_options']['CONSOLE_SNAPSHOT'])
+                else:
+                    with self.assertRaises(ValueError):mod.prepare(tmp,manifest,b'manifest',{},dict.fromkeys(mod.MODULES,'hash'))
+                    self.assertEqual(list(Path(tmp).iterdir()),[])
+
     def test_new_receipt_binds_default_and_explicit_refresh(self):
         for value in (None,'60'):
             with self.subTest(value=value), tempfile.TemporaryDirectory() as tmp:

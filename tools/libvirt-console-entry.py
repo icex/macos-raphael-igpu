@@ -66,7 +66,11 @@ def validate_plan_refresh(plan,admission):
     full=handoff.validate_full_refresh(admission.get('console_full_refresh','off'))
     bochs=[d for d in planner.values(planner.pairs(plan['native_argv']),'-device')
            if d.split(',')[0]=='bochs-display']
+    snapshot=handoff.validate_snapshot(admission.get('console_snapshot','off'))
+    handoff.require(snapshot == 'off' or (full == 'on' and expected == '60'),
+                    'snapshot requires explicit SPICE60 full refresh')
     wanted_bochs=planner.BOCHS+(',x-debug-full-refresh=on' if full=='on' else '')
+    if snapshot=='on': wanted_bochs+=',x-debug-snapshot=on'
     handoff.require(bochs==[wanted_bochs], 'plan console full refresh differs from admission')
 
 

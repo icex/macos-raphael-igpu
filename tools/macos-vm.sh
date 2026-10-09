@@ -41,6 +41,7 @@ VM_CONSOLE="${VM_CONSOLE:-off}"
 VM_MANAGER="${VM_MANAGER:-direct}"
 CONSOLE_REFRESH="${CONSOLE_REFRESH:-default}"
 CONSOLE_FULL_REFRESH="${CONSOLE_FULL_REFRESH:-off}"
+CONSOLE_SNAPSHOT="${CONSOLE_SNAPSHOT:-off}"
 GDB="${GDB:-off}"              # on = gdbstub on 127.0.0.1:1234 | wait = also start halted
 SSH_PORT="${SSH_PORT:-50922}"
 SCREEN_PORT="${SCREEN_PORT:-5900}"
@@ -122,6 +123,7 @@ done
 
 case "${GENERIC_GRAPHICS}" in on|off) ;; *) die "unknown generic graphics setting ${GENERIC_GRAPHICS}" ;; esac
 case "${VM_CONSOLE}" in off|bochs|bochs-spice) ;; *) die "unknown VM_CONSOLE" ;; esac
+case "${CONSOLE_SNAPSHOT}" in off) ;; on) [[ "${VM_MANAGER}" == libvirt && "${VM_CONSOLE}" == bochs-spice && "${CONSOLE_REFRESH}" == 60 && "${CONSOLE_FULL_REFRESH}" == on && "${GENERIC_GRAPHICS}" == off ]] || die "snapshot requires native libvirt SPICE60 full refresh" ;; *) die "unknown CONSOLE_SNAPSHOT" ;; esac
 case "${CONSOLE_FULL_REFRESH}" in off) ;; on) [[ "${VM_MANAGER}" == libvirt && "${VM_CONSOLE}" == bochs-spice && "${CONSOLE_REFRESH}" == 60 ]] || die "full refresh requires explicit libvirt SPICE60" ;; *) die "unknown CONSOLE_FULL_REFRESH" ;; esac
 case "${CONSOLE_REFRESH}" in default|60) ;; *) die "unknown CONSOLE_REFRESH" ;; esac
 [[ "${CONSOLE_REFRESH}" == default || "${VM_MANAGER}" == libvirt ]] || die "explicit refresh requires libvirt profile"
@@ -317,6 +319,7 @@ DOCKER_ARGS=(
     -e "VM_CONSOLE=${VM_CONSOLE}"
     -e "CONSOLE_REFRESH=${CONSOLE_REFRESH}"
     -e "CONSOLE_FULL_REFRESH=${CONSOLE_FULL_REFRESH}"
+    -e "CONSOLE_SNAPSHOT=${CONSOLE_SNAPSHOT}"
     "${AUDIO_ARGS[@]}"
     "${GPU_ARGS[@]}"
     "${GDB_ARGS[@]}"

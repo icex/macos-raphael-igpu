@@ -70,7 +70,8 @@ def build_plan(argv, run_id):
     require(one(rows, '-gdb') == 'tcp:0.0.0.0:1234', 'unreviewed debugger profile')
     devices = values(rows, '-device')
     bochs = [d for d in devices if d.split(',')[0] == 'bochs-display']
-    require(len(bochs) == 1 and bochs[0] in (BOCHS, BOCHS+',x-debug-full-refresh=on'),
+    require(len(bochs) == 1 and bochs[0] in (BOCHS, BOCHS+',x-debug-full-refresh=on',
+            BOCHS+',x-debug-full-refresh=on,x-debug-snapshot=on'),
             'unreviewed Bochs full refresh profile')
     require(bochs[0] == BOCHS or spice == SPICE+',max-refresh-rate=60',
             'full refresh requires explicit SPICE60')

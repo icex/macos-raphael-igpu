@@ -432,7 +432,10 @@ def launch_options(data):
                  dict(debugger, AUDIO='usb', VM_CONSOLE='bochs-spice', VM_MANAGER='libvirt'),
                  dict(debugger, AUDIO='usb', VM_CONSOLE='bochs-spice', VM_MANAGER='libvirt', CONSOLE_REFRESH='60'),
                  dict(debugger, AUDIO='usb', VM_CONSOLE='bochs-spice', VM_MANAGER='libvirt', CONSOLE_REFRESH='60', CONSOLE_FULL_REFRESH='on'))
-    if type(value) is not dict or value not in contracts:
+    checked = dict(value) if type(value) is dict else None
+    snapshot = checked.pop('CONSOLE_SNAPSHOT', 'off') if checked is not None else None
+    if (type(snapshot) is not str or snapshot not in ('off', 'on') or
+            (snapshot == 'on' and checked != contracts[-1]) or checked not in contracts):
         raise ValueError('launch options must select the exact historical, no-graphics, or debugger contract')
     return dict(value)
 
@@ -523,6 +526,15 @@ def current_identity(vm, candidate, requested_diagnostic, run_id=None,
         raise ValueError('console launch option changed')
     if os.environ.get('CONSOLE_REFRESH', options.get('CONSOLE_REFRESH', 'default')) not in ('', options.get('CONSOLE_REFRESH', 'default')):
         raise ValueError('CONSOLE_REFRESH environment differs from manifest')
+    snapshot = options.get('CONSOLE_SNAPSHOT', 'off')
+    if type(snapshot) is not str or snapshot not in ('off', 'on'):
+        raise ValueError('invalid CONSOLE_SNAPSHOT')
+    if snapshot == 'on' and any(options.get(k) != v for k, v in {
+            'VM_MANAGER': 'libvirt', 'VM_CONSOLE': 'bochs-spice', 'CONSOLE_REFRESH': '60',
+            'CONSOLE_FULL_REFRESH': 'on', 'GENERIC_GRAPHICS': 'off'}.items()):
+        raise ValueError('snapshot requires native libvirt SPICE60 full refresh')
+    if os.environ.get('CONSOLE_SNAPSHOT', snapshot) not in ('', snapshot):
+        raise ValueError('CONSOLE_SNAPSHOT environment differs from manifest')
     if os.environ.get('CONSOLE_FULL_REFRESH', options.get('CONSOLE_FULL_REFRESH', 'off')) not in ('', options.get('CONSOLE_FULL_REFRESH', 'off')):
         raise ValueError('CONSOLE_FULL_REFRESH environment differs from manifest')
     if os.environ.get('VM_MANAGER', options.get('VM_MANAGER', 'direct')) not in ('', options.get('VM_MANAGER', 'direct')):
@@ -3069,6 +3081,8 @@ def validate_running(manifest, observed):
                              'bochs-display,id=rgpu_present,bus=pcie.0,addr=0x7,vgamem=64M']
         if manifest['launch_options'].get('CONSOLE_FULL_REFRESH') == 'on':
             expected_graphics[-1] += ',x-debug-full-refresh=on'
+        if manifest['launch_options'].get('CONSOLE_SNAPSHOT') == 'on':
+            expected_graphics[-1] += ',x-debug-snapshot=on'
         if manifest['launch_options'].get('CONSOLE_REFRESH') == '60':
             expected_graphics += ['-spice', 'max-refresh-rate=60']
         proof = observed.get('libvirt', {})
