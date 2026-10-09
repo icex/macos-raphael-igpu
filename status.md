@@ -36,10 +36,11 @@ VirtualBox acceleration, FIFO publication and exclusive aperture ownership remai
 unimplemented/unqualified. PerfPowerServices CPU use and sustained stability remain
 open. QEMU 402 pool progress and imperfect CR2 capture remain separately recorded.
 
-Dev `59422dae6683550b7027dd8fe53fb7801f33bbcd` has hosted test/build success
+The last verified published baseline, dev
+`59422dae6683550b7027dd8fe53fb7801f33bbcd`, has hosted test/build success
 (Actions `37995939729`). The checked-in binary is the exact tested 402 executable
 with its canonical manifest. Candidate 414 integrates 410 results, 412 ownership
-analysis and 411/413 experimental DMA patches locally for review. Host VBox is
+analysis and 411/413 experimental DMA patches. Host VBox is
 unchanged; no patch was deployed.
 
 The integrated 414 suite passed 1487 tests in 56.379 s, with 8 skipped. All 22
