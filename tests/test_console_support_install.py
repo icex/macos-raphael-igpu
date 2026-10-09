@@ -14,6 +14,31 @@ ROOT=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('support_install',ROOT/'tools/console-support-install.py')
 m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
 
+class SigningFieldsTests(unittest.TestCase):
+    def setUp(self):
+        self.output=(ROOT/'tests/fixtures/codesign-console-adhoc.txt').read_text()
+        self.cdhash='8ccc8ab340e60bc61e8cedafe53b1dd05553d4fe'
+        self.requirement='cdhash H"'+self.cdhash+'"'
+    def test_real_adhoc_output_with_candidate_hashes(self):
+        self.assertIn('CandidateCDHashFull sha256=',self.output)
+        self.assertEqual(m.signing_fields(self.output),(self.cdhash,self.requirement))
+        plain=self.output.replace('# designated =>','designated =>')
+        self.assertEqual(m.signing_fields(plain),(self.cdhash,self.requirement))
+    def test_mixed_prefix_duplicate_requirements_refuse(self):
+        for requirement in (self.requirement,'identifier other'):
+            for duplicate in ('designated => ', '# designated => '):
+                with self.subTest(duplicate=duplicate,requirement=requirement),self.assertRaises(RuntimeError):
+                    m.signing_fields(self.output+duplicate+requirement+'\n')
+    def test_candidate_hash_is_not_substitute_for_unique_cdhash(self):
+        missing=self.output.replace('\nCDHash='+self.cdhash+'\n','\n')
+        with self.assertRaises(RuntimeError):m.signing_fields(missing)
+        with self.assertRaises(RuntimeError):m.signing_fields(self.output+'CDHash='+self.cdhash+'\n')
+    def test_only_exact_optional_comment_prefix_is_accepted(self):
+        for prefix in ('#', '## ', ' # ', '#  '):
+            with self.subTest(prefix=prefix),self.assertRaises(RuntimeError):
+                m.signing_fields(self.output.replace('# designated =>',prefix+'designated =>'))
+
+
 class SupportInstallTests(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory(dir=ROOT.parent,prefix="candidate-support-test-");self.addCleanup(self.tmp.cleanup)

@@ -1,0 +1,23 @@
+Executable=/Users/bogdan/Applications/Raphael Console.app/Contents/MacOS/console-presenter
+Identifier=org.raphaelgpu.console
+Format=app bundle with Mach-O thin (x86_64)
+CodeDirectory v=20400 size=687 flags=0x2(adhoc) hashes=15+3 location=embedded
+VersionPlatform=1
+VersionMin=983040
+VersionSDK=984320
+Hash type=sha256 size=32
+CandidateCDHash sha256=8ccc8ab340e60bc61e8cedafe53b1dd05553d4fe
+CandidateCDHashFull sha256=8ccc8ab340e60bc61e8cedafe53b1dd05553d4fe36e96075a2281c0d9911092d
+Hash choices=sha256
+CMSDigest=8ccc8ab340e60bc61e8cedafe53b1dd05553d4fe36e96075a2281c0d9911092d
+CMSDigestType=2
+Executable Segment base=0
+Executable Segment limit=32768
+Executable Segment flags=0x1
+Page size=4096
+CDHash=8ccc8ab340e60bc61e8cedafe53b1dd05553d4fe
+Signature=adhoc
+Info.plist entries=8
+TeamIdentifier=not set
+Sealed Resources version=2 rules=13 files=2
+# designated => cdhash H"8ccc8ab340e60bc61e8cedafe53b1dd05553d4fe"

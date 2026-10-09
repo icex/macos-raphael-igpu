@@ -34,7 +34,7 @@ def require(value,message):
 def sha(path):return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 def signing_fields(text):
     cd=re.findall(r'(?m)^CDHash=([0-9a-f]+)$',text)
-    dr=re.findall(r'(?m)^designated => (.+)$',text)
+    dr=re.findall(r'(?m)^(?:# )?designated => (.+)$',text)
     require(len(cd)==len(dr)==1,'missing or ambiguous capture signing identity')
     return cd[0],dr[0]
 def command(args):
