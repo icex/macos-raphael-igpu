@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import plistlib
 import subprocess
+import stat
 
 COMMENT = 'Raphael: QEMU SMC ACPI handoff to VirtualSMC'
 FIND = bytes.fromhex('534d435f085f4849440c06100001085f5354410a0b')
@@ -50,7 +51,11 @@ def main():
     if len(receipt) != 2 or any(not x['source_unchanged'] or x['compare_returncode'] for x in receipt):
         raise ValueError('baseline conversion unverified')
     for name in ('OpenCore', 'mac_hdd_ng'):
-        if (r/(name+'-boot.vdi')).exists():
+        source = r/(name+'.vdi')
+        st = source.lstat()
+        if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid():
+            raise ValueError('baseline must be owned regular file')
+        if os.path.lexists(r/(name+'-boot.vdi')):
             raise ValueError('derivative already exists')
     for name in ('OpenCore', 'mac_hdd_ng'):
         subprocess.run(['cp', '--reflink=always', '--no-clobber', str(r/(name+'.vdi')), str(r/(name+'-boot.vdi'))], check=True)
@@ -61,7 +66,7 @@ def main():
     with target.open('xb') as f:
         plistlib.dump(new, f, sort_keys=False)
     raw = r/'OpenCore-boot.raw'
-    if raw.exists():
+    if os.path.lexists(raw):
         raise ValueError('derivative already exists')
     subprocess.run(['cp','--reflink=always',str(r/'OpenCore-inspect.raw'),str(raw)],check=True)
     subprocess.run(['mcopy','-o','-i',str(raw)+'@@1048576',str(target),'::/EFI/OC/config.plist'],check=True)

@@ -112,6 +112,8 @@ def main():
             raise ValueError('independent owned regular derivative required')
         if p.parent.resolve() != Path('/home/bogdan/macos-vm/run/c398-vbox-clones') or not p.name.endswith('-boot.vdi'):
             raise ValueError('only named398 writable derivatives permitted')
+    if a.smc_key_file.lstat().st_size > 66:
+        raise ValueError('oversized key file')
     key = private_file(a.smc_key_file).rstrip(b'\r\n')
     home = a.output.resolve()
     if home.exists():
