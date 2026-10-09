@@ -1,25 +1,25 @@
 # Live status — 2026-10-09
 
-## Candidate358: explicit console stereo audio passes; first-entry input remains open
+## Candidate361: default application audio and continuous pointer entry pass
 
-Run775fc7e86900090204edd78ae20f34a4, metal-200, build1.0.358,
-MODE2#296, bootba51b3c6. Exact QEMU USB HAL output delivers expected stereo tones
-through VM-only Pulse capture; frequencies/channel separation/silence pass.
-Original stream route, volume/mute/defaults restored and owned sink/module removed,
-independently verified. Default-application output and endpoint audibility untested.
+Run4078e49c09b0a4fa591ca4a6df2511ca, metal-201, build1.0.361,
+MODE2#297, bootba51b3c6. Ordinary afplay through existing default QEMU USB output
+passes stereo frequency/channel/silence checks in VM-only Pulse capture. Original
+host route/volume/mute/defaults restored, owned sink/module removed; guest defaults
+unchanged. Endpoint audibility and broader A/V synchronization unqualified.
 
-Read-only GTK trace shows enter+button without motion after resize clicks at prior
-guest position. Real motion restores mapping; subsequent five targets+token pass
-at1000x760 and1080HiDPI without guest mode changes. Initial click opens Apple menu
-outside fixture: fixture passed=true is not full transition qualification.
-Next test continuous real pointer motion and default-application audio output.
+Actual virt-manager resizes1288x909→1000x760. Continuous relative pointer entry
+produces GTK motion before first guest click; five targets and exact token pass,
+zero misses, no guest mode changes (1080HiDPI).358 enter-without-motion failure
+remains distinct; stationary-pointer resize/automatic resolution remain unqualified.
 
-CORE_PROBE_PASS, earliest_failure=null; genuine terminal guest-shutdown with
-process_exited=true. Recovery recovered/authorizes_launch=true. VM/cycle stopped;
-host awake. No reboot/rebind. [Evidence](findings/research/console-audio-native-20261009.md)
-· [Hashed artifacts](findings/research/console-audio-native-evidence-20261009.json).
+CORE_PROBE_PASS, earliest_failure=null; genuine guest-shutdown/process_exited
+terminal. Both hooks complete naturally~0.394s; critical reset distinct fromEOF.
+Recovery recovered/authorizes_launch=true. VM/cycle stopped; host awake.
+No reboot/rebind. [Evidence](findings/research/console-default-audio-input-20261009.md)
+· [Hashed artifacts](findings/research/console-default-audio-input-evidence-20261009.json).
 
-1236 host tests pass,8skip; staging87 pass. Audio inventory parser repair17focused
-checks pass. Checked-in kext remains tested356;358 separately pinned.356 lifecycle
-milestone is on devc24ff71; hosted37934370047 pending. Main unchanged. Broader
-installation durability, desktop/codec/performance and VirtualBox remain open.
+1241 host tests pass,8skip.361 build separately pinned.358 milestone is on
+dev121a4ac, hosted37935096265 test/build green; main unchanged. Next optimized
+console helper package/install provenance and rollback, then clean-user first-use
+and second-boot qualification. Broader performance/desktop/codecs and VirtualBox open.

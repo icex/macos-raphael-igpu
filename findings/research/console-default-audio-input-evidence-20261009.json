@@ -1,0 +1,225 @@
+{
+  "candidate": 361,
+  "run_id": "4078e49c09b0a4fa591ca4a6df2511ca",
+  "run_commit": "6cdffc0409dfe8bded589f51b6a9bc1617e823fd",
+  "build_source": "3e12be81f561c4c2b14a066785687b7cfde21f3f",
+  "build_id": "1ab964d9844d4dd5aa4acd20b139d2c3",
+  "mode2": 297,
+  "artifacts": [
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-361-results/running-identity.json",
+      "bytes": 2467,
+      "sha256": "da7ac98e2f19f507116057d5837eef123bc1dfb1dc8d8837a0db3dc396a11a6d"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-361-results/verdict.json",
+      "bytes": 47071,
+      "sha256": "5952252778c798936de0397b106b6a28d1427e7dbe2ba62cf82628b63bca5a06"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-361-results/critical-quiesce.json",
+      "bytes": 708,
+      "sha256": "bbf5ecd68f92df80e9c9522a79e9882b5c4500bccc3ad50e6ade31b7858e6616"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-361-results/critical.txt",
+      "bytes": 2601184,
+      "sha256": "0886577bcd7f36aab514f66f104082adb593486b8aec322532318b0209a10ff6"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-361-results/shutdown.json",
+      "bytes": 236,
+      "sha256": "14a6b79d1704125027068df00abcbfd3d0d1a8ef902c172b5c1e016608b0d15b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-361-results/recovery.json",
+      "bytes": 17590,
+      "sha256": "bd31b76e891b998d88a582a3ceff7b633d3a2045ad3161d3264509f81d3ea0aa"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-361-results/vm-launch.log",
+      "bytes": 2592,
+      "sha256": "a1bc56d4b18754648c0e28490f20d91c6b31aeef7cb32a0fa5e9e0ea1c428199"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/libvirt-4078e49c09b0a4fa591ca4a6df2511ca/terminal.json",
+      "bytes": 516,
+      "sha256": "bb6091bec103f39e6050734f021d3fc7519a1d90bb55ad79b6f2cc709830901d"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/libvirt-4078e49c09b0a4fa591ca4a6df2511ca/events.jsonl",
+      "bytes": 4697,
+      "sha256": "367871ad1c17eb7a872821c4425c7d540382b1a383d4e4116515c787ffd8a2ad"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c361-audio-before.txt",
+      "bytes": 967,
+      "sha256": "1590da80333673ec2a7e0c49586b59cb511acec8d32cdc5906e4e2b404982725"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c361-audio-after-and-viewport-start.txt",
+      "bytes": 300,
+      "sha256": "b288554d97ab3308e84b8cecc3492a39956d4db047d19826b9bbfa177cff6531"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c361-audio-default-controller.log",
+      "bytes": 90,
+      "sha256": "42662b108b6aa2fdec84d0fbef0075a92e3bb655c6a8b56dc8b079da3eaa8f7d"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c361-audio-controller.py",
+      "bytes": 1689,
+      "sha256": "1d70ef8490d67a42cc5a5ee7d32b6f8fac7baca1e10eb921bdac9df2cbaedbad"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c361-default-audio-tone.json",
+      "bytes": 222,
+      "sha256": "6946578b0af6c5637794dfe8c8cd6d31cd6c454f4689801bc6dad62221ad92a1"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c361-default-audio-tone.wav",
+      "bytes": 1152044,
+      "sha256": "e906157dd21bca2c80e2d2f1dbb1c9c51324f7cca2dc3c7eec6e32b8a3922da2"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c361-manager-input-events.jsonl",
+      "bytes": 18374,
+      "sha256": "8538d1766938547d8876410514b02b4a823c08a9f42508493c3da136d98a9ae5"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c361-manager-input-observer.py",
+      "bytes": 2108,
+      "sha256": "3a16171f71d0146ef6585b6683f54ddf903e4a48e2e26222585c814b095bbd37"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c361-viewport-continuous-result.json",
+      "bytes": 1247,
+      "sha256": "57f6fa347c116a682088a19cd53c97005e28ec8ffbe89551ae198eeeb0da609e"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c361-viewport-continuous.png",
+      "bytes": 64424,
+      "sha256": "0345de4042f0330f8ac26bff088843be2ecb6c454fdf390c8352311dfa9b7874"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c361-viewer-close-alive.json",
+      "bytes": 204,
+      "sha256": "3f112f244ab8a092dde7a423cc80223eb93548df7d72b0b52621a77766a68bbc"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c361-final-awake.txt",
+      "bytes": 564,
+      "sha256": "9cc89b916bf59079e13ce75737a71f944c118a0a6f4be4fa9c1777895c1d49f7"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c361-audio-default/capture.pcm",
+      "bytes": 3473408,
+      "sha256": "c7ed7219f0bf3ae160c27c71ef20f4f4db9e2d5b2f92ad2310c8723ea778d574"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c361-audio-default/recorder.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c361-audio-default/ready.json",
+      "bytes": 128,
+      "sha256": "015b5cf68d2b8e77a54641e88ba855b405b6f5ca09a4199b926dd6f3aefd0c04"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c361-audio-default/guest-tone.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c361-audio-default/route.json",
+      "bytes": 2147,
+      "sha256": "3d12e2ba7d444436792f6fd942ce7252e4d3ac46d30e75f30331a1afbfdf1016"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c361-audio-default/capture.wav",
+      "bytes": 3473452,
+      "sha256": "2b70ee2ac064fe2cdd8d59025849b90233ed7fba0c8cf660807c0eec317d17aa"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c361-audio-default/analysis.txt",
+      "bytes": 487,
+      "sha256": "d0dc6067b3192ef097220538e85d27ad1d2689bee2d5ff4da81e88be494a012a"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c361-audio-default/post-restoration.json",
+      "bytes": 647,
+      "sha256": "24ac1961d6d4208e7272191e691c6d07f07b1a1c67eb815f99a8dea6c8788b2d"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/capture-eof-f08886f5bdac9115e0da052bab869a9db7e91e6ccb630581475f69d963473f3a-console.json",
+      "bytes": 399,
+      "sha256": "53d461f1bdfeb465e4d36c214e3b4d2accb05544c3462e91a85cd1516a37260c"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/capture-reset-f08886f5bdac9115e0da052bab869a9db7e91e6ccb630581475f69d963473f3a-critical.json",
+      "bytes": 461,
+      "sha256": "dcfc82f453225562ffb24b643f4451f82c581cee71a35747ef5d24b8641d4ea1"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/capture-exit-f08886f5bdac9115e0da052bab869a9db7e91e6ccb630581475f69d963473f3a-933679.json",
+      "bytes": 473,
+      "sha256": "d70e0dd64774c093dea7896e9649bd7bfb571cb1e39bb05d26af7c06f4b6229b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/capture-exit-f08886f5bdac9115e0da052bab869a9db7e91e6ccb630581475f69d963473f3a-933677.json",
+      "bytes": 476,
+      "sha256": "907b6cfaf07cdbfbc5a75706cd8ff9150cd3535a44a8cab0b2083e5b70d6060d"
+    }
+  ],
+  "capture_exit": [
+    {
+      "budget_origin": "transport-observation",
+      "channel": "console",
+      "cid": "f08886f5bdac9115e0da052bab869a9db7e91e6ccb630581475f69d963473f3a",
+      "completed_original_zombie": false,
+      "deferred": true,
+      "elapsed_seconds": 0.3941141190007329,
+      "outcome": "natural-container-exit",
+      "run_id": "4078e49c09b0a4fa591ca4a6df2511ca",
+      "shutdown_event_wait": false,
+      "started_at": "2026-10-09T13:10:56.404320756Z",
+      "transport_end_kind": "clean-eof",
+      "transport_end_monotonic": 66773.699202323
+    },
+    {
+      "budget_origin": "transport-observation",
+      "channel": "critical",
+      "cid": "f08886f5bdac9115e0da052bab869a9db7e91e6ccb630581475f69d963473f3a",
+      "completed_original_zombie": false,
+      "deferred": true,
+      "elapsed_seconds": 0.39410530900931917,
+      "outcome": "natural-container-exit",
+      "run_id": "4078e49c09b0a4fa591ca4a6df2511ca",
+      "shutdown_event_wait": false,
+      "started_at": "2026-10-09T13:10:56.404320756Z",
+      "transport_end_kind": "recv-reset",
+      "transport_end_monotonic": 66773.699039552
+    }
+  ],
+  "terminal": {
+    "cid": "f08886f5bdac9115e0da052bab869a9db7e91e6ccb630581475f69d963473f3a",
+    "identity": {
+      "name": "rgpu-4078e49c09b0a4fa591ca4a6df2511ca",
+      "pid": 113,
+      "run_id": "4078e49c09b0a4fa591ca4a6df2511ca",
+      "start_ticks": 34628088,
+      "uuid": "00000000-0000-0000-0000-000000000000"
+    },
+    "process_exited": true,
+    "reason": "guest-shutdown",
+    "run_id": "4078e49c09b0a4fa591ca4a6df2511ca",
+    "scope": {
+      "device": 5,
+      "init_start_ticks": 34628004,
+      "inode": 4026533263,
+      "kind": "pid-namespace"
+    },
+    "started_at": "2026-10-09T13:10:56.404320756Z"
+  }
+}
