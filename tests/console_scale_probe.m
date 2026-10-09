@@ -109,7 +109,7 @@ int main(int argc,const char **argv) { @autoreleasepool {
     NSMutableDictionary *result=[@{@"scope":@"Existing-mode scale diagnostic; no display creation or mode-table mutation",
         @"operation":select?@"select":@"list",@"before_displays":before?:@[],@"matching_displays":@(matches),
         @"requested":@{@"pixel_width":@(g[0]),@"pixel_height":@(g[1]),@"width":@(g[2]),@"height":@(g[3])}} mutableCopy];
-    BOOL passed=NO;NSString *reason=@"ambiguous or unavailable target";CGDisplayModeRef chosen=NULL;
+    BOOL passed=NO,configured=NO;NSString *reason=@"ambiguous or unavailable target";CGDisplayModeRef chosen=NULL;
     if(before&&matches==1){
         CFArrayRef modes=CGDisplayCopyAllDisplayModes(target,(__bridge CFDictionaryRef)@{(id)kCGDisplayShowDuplicateLowResolutionModes:@YES});
         NSMutableArray *all=[NSMutableArray array];
@@ -131,6 +131,7 @@ int main(int argc,const char **argv) { @autoreleasepool {
                     if(!e)e=CGCompleteDisplayConfiguration(config,kCGConfigureForSession);else CGCancelDisplayConfiguration(config);}
                 result[@"configure_error"]=@(e);reason=@"configure failed";
                 if(!e){
+                    configured=YES;
                     double deadline=now()+4,stable=-1;NSMutableArray *samples=[NSMutableArray array];reason=@"settle deadline";
                     while(now()<deadline){
                         NSArray *observed=inventory();CGDisplayModeRef current=CGDisplayCopyDisplayMode(target);
@@ -162,7 +163,7 @@ int main(int argc,const char **argv) { @autoreleasepool {
     }
     if(select){
         NSMutableArray *adaptations=[NSMutableArray array];
-        BOOL finalTopology=topology(after,before,target,YES,adaptations);
+        BOOL finalTopology=topology(after,before,target,configured,adaptations);
         result[@"final_topology_valid"]=@(finalTopology);
         result[@"allowed_mirror_mode_changes"]=adaptations;
         CGDisplayModeRef final=CGDisplayCopyDisplayMode(target);
