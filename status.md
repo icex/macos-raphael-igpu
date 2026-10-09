@@ -22,8 +22,7 @@ Recovery recovered/authorizes_launch=true. Cycle stopped; host awake,vfio-pci/on
 374 forced-stop D-state race remains unresolved;377 diagnostics not exercised.
 
 1298 host tests pass,8skip; build/identity/dry-run pass.376 milestone includes
-updated docs and the tested kext; delivery suite1298pass/8skip, hosted pending. Previous374 dev5728db9 hosted37951815825
-build/test green. Main unchanged. Broader crash/restart, fullframe/performance,
+updated docs and the tested kext; delivery suite1298pass/8skip, hosted37955017465 test/build green. 376 dev50ca04f published and verified; previous374 hosted also green. Main unchanged. Broader crash/restart, fullframe/performance,
 fresh-user setup, input edge cases, apps/codecs and VirtualBox remain open.
 [Evidence](findings/research/console-mixed-motion-native-20261009.md) ·
 [Hashes](findings/research/console-mixed-motion-native-evidence-20261009.json).
