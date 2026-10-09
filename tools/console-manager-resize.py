@@ -12,8 +12,8 @@ import time
 def surface_metadata(display,cadence,spice):
     """Read only scalar fields on this widget's existing display channel.
 
-    GI signature verified locally: display_channel_get_primary(surface_id,
-    DisplayPrimary) -> bool. Never access primary.data or open a new session.
+    The installed DisplayPrimary GI layout is invalid; never call it.
+    Monitor records have fixed scalar fields and do not contain that enum.
     """
     channel=cadence.matching_display_channel(display,spice.DisplayChannel)
     monitors=channel.get_property('monitors')
@@ -22,15 +22,14 @@ def surface_metadata(display,cadence,spice):
         for monitor in monitors:
             maps.append({name:int(getattr(monitor,name)) for name in
                          ('id','surface_id','x','y','width','height')})
-    primary=spice.DisplayPrimary()
-    available=channel.display_channel_get_primary(0,primary)
-    geometry={name:int(getattr(primary,name)) for name in
-              ('width','height','stride','format')} if available else None
+    # Installed0.42 GIR incorrectly models enum format as gpointer, shifting
+    # DisplayPrimary fields on x86_64. Do not call this unsafe marshaling path.
     return dict(channel_id=int(channel.get_property('channel-id')),
                 widget_monitor_id=int(display.get_property('monitor-id')),
-                monitors=maps,primary_surface_id=0,primary_available=bool(available),
-                primary=geometry,
-                scope='existing-channel primary and monitor metadata; no pixel copy or pointer access')
+                monitors=maps,primary_surface_id=0,primary_available=False,
+                primary_unavailable='GI-ABI-mismatch: enum format declared as pointer',
+                primary=None,
+                scope='existing-channel monitor metadata only; primary unavailable; no pixel or pointer access')
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)

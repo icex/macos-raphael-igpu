@@ -54,18 +54,26 @@ int main(int argc,char **argv) {@autoreleasepool {
  // https://developer.apple.com/documentation/coregraphics/cgdisplaysetdisplaymode(_:_:_:)
  // https://developer.apple.com/documentation/coregraphics/cgconfigureoption/forsession
  // Configure this target only; do not change mirrors, origins or other displays.
- CGDisplayConfigRef config=NULL;
- CGError error=CGBeginDisplayConfiguration(&config);
- if(error==kCGErrorSuccess){
-  error=CGConfigureDisplayWithDisplayMode(config,target,choice,NULL);
-  if(error==kCGErrorSuccess)error=CGCompleteDisplayConfiguration(config,kCGConfigureForSession);
-  else CGCancelDisplayConfiguration(config);
+ CGDisplayModeRef currentMode=CGDisplayCopyDisplayMode(target);
+ bool already=currentMode&&CGDisplayModeGetIODisplayModeID(currentMode)==CGDisplayModeGetIODisplayModeID(choice)&&
+  CGDisplayModeGetPixelWidth(currentMode)==w&&CGDisplayModeGetPixelHeight(currentMode)==h&&
+  CGDisplayVendorNumber(target)==0x5250&&CGDisplayModelNumber(target)==0x3453;
+ if(currentMode)CFRelease(currentMode);
+ CGError error=kCGErrorSuccess;
+ if(!already){
+  CGDisplayConfigRef config=NULL;
+  error=CGBeginDisplayConfiguration(&config);
+  if(error==kCGErrorSuccess){
+   error=CGConfigureDisplayWithDisplayMode(config,target,choice,NULL);
+   if(error==kCGErrorSuccess)error=CGCompleteDisplayConfiguration(config,kCGConfigureForSession);
+   else CGCancelDisplayConfiguration(config);
+  }
  }
  CGDisplayModeRef actual=CGDisplayCopyDisplayMode(target);
  CGRect afterBounds=CGDisplayBounds(target);
- bool passed=afterBounds.origin.x==0&&afterBounds.origin.y==0&&error==kCGErrorSuccess&&actual&&CGDisplayModeGetPixelWidth(actual)==w&&CGDisplayModeGetPixelHeight(actual)==h&&CGDisplayVendorNumber(target)==0x5250&&CGDisplayModelNumber(target)==0x3453;
+ bool passed=afterBounds.origin.x==0&&afterBounds.origin.y==0&&error==kCGErrorSuccess&&actual&&CGDisplayModeGetIODisplayModeID(actual)==CGDisplayModeGetIODisplayModeID(choice)&&CGDisplayModeGetPixelWidth(actual)==w&&CGDisplayModeGetPixelHeight(actual)==h&&CGDisplayVendorNumber(target)==0x5250&&CGDisplayModelNumber(target)==0x3453;
  NSMutableDictionary *actualInfo=actual?[info(actual) mutableCopy]:[NSMutableDictionary new];
  actualInfo[@"origin_x"]=@(afterBounds.origin.x);actualInfo[@"origin_y"]=@(afterBounds.origin.y);
- emit(@{@"passed":@(passed),@"display":@(target),@"error":@(error),@"selected":info(choice),@"actual":actualInfo,@"scope":@"session existing virtual display mode and zero origin only; no DPI changes; independent post-exit query required"});
+ emit(@{@"passed":@(passed),@"changed":@(!already&&error==kCGErrorSuccess),@"display":@(target),@"error":@(error),@"selected":info(choice),@"actual":actualInfo,@"scope":@"session existing virtual display mode and zero origin only; no DPI changes; independent post-exit query required"});
  if(actual)CFRelease(actual);CFRelease(modes);return passed?0:5;
 }}
