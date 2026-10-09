@@ -1,0 +1,498 @@
+{
+  "schema": 1,
+  "fixture_sha256": "86ea80b4c87c3da05ab1aaf4e13ca3b558b397864855f30c198b228b65d71f8e",
+  "analysis_sha256": "59e2565b45f80cadfb83005690c00a8594f99ac625b526276f7da8db49125c82",
+  "scope": "software TCG/qtest same-host study; counters identify observed stages, not GPU/native equivalence, scanout or root cause; GTK timing is whole-run only",
+  "cases": [
+    {
+      "path": "/home/bogdan/macos-vm/run/c380-base-fullfield-4k",
+      "mode": "base",
+      "raw_sha256": {
+        "result.json": "251b700cceb4dbc33c7999a7c49cd354db19cd60edf40619fd210cdc1b99e888",
+        "cleanup.json": "8def258e0ee0f003f7dadef238f951a6c8b45a5a7fa92aee2e4206fcfd6c0bbe",
+        "argv.json": "93f0d3a5025bee8d297dc3f33a1fe3a7948a4607b33f23b1224a6c493040e24b",
+        "producer.jsonl": "61db84e129209f349038e28aaf1e84fb4d6d174ca39bb153f8874567b35d635e",
+        "samples.jsonl": "6fb8c72729daa47a41ca639e6c01fadcb6e0304ffb954a6d767137943a8d3e73",
+        "display-events.jsonl": "160125ead3ccd1eae6c4f16481d3cdfacf52487100150a708fab41a0bf97daa8",
+        "qemu.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "configured_identity": {
+        "qemu": "/home/bogdan/macos-vm/run/c372-changed-bbox/qemu-changed-bbox",
+        "qemu_sha256": "ee0cb8cd35615ffbcc978073669c7dfcb2e00b04dda2d9a244a7eeeebbfdc526",
+        "library": "/home/bogdan/macos-vm/run/c380-server-study/base-build/server/libspice-server.so.1.15.0",
+        "library_sha256": "b13af29629a79a1b21e39321906d913cdb22a0ac53407c604797e7e328a6c857"
+      },
+      "identity_scope": "selected wrapper and current pinned binary hashes; not a retained per-run process-maps attestation",
+      "whole_run": {
+        "seconds": 20,
+        "width": 3840,
+        "height": 2160,
+        "scale": 2,
+        "damage": "full-field",
+        "compact_band": true,
+        "producer_count": 1111,
+        "producer_per_second": 55.512090322327,
+        "unique": 536,
+        "unique_per_second": 26.8,
+        "invalid_after_start": 0,
+        "snapshot_counters": {
+          "ack": 1112,
+          "published_seq": 1112,
+          "pending_replaced": 246,
+          "published_count": 866,
+          "pending_seq": 0
+        },
+        "widget_geometry": {
+          "width": 1280,
+          "height": 720,
+          "gdk_scale": 1,
+          "scaling": true,
+          "resize_guest": false,
+          "monitor_id": 0,
+          "windowed": false,
+          "requested": [
+            1280,
+            720
+          ]
+        },
+        "widget_draw_timing": {
+          "started": 539,
+          "completed": 539,
+          "total_seconds": 13.800755034957547,
+          "max_seconds": 0.027114620999782346,
+          "pending": null,
+          "reentrant": 0
+        }
+      },
+      "server_report": null
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c380-instrumented-fullfield-4k",
+      "mode": "instrumented",
+      "raw_sha256": {
+        "result.json": "5d09b6e92eff594df47510b25016e16f9a04ec62e701b2a61f64ada073c05142",
+        "cleanup.json": "492b312e8d8bb9a1bf9268f31b5bdfeead188ffb5dd8e190ff365be1460ebbdd",
+        "argv.json": "e376613968d1a57a935d2f6a815a0904c53032e3062159a6cc4d71c42b133da8",
+        "producer.jsonl": "72e9da4b5dd958ad388c1bd77f1cc42f2bd9773fccca69bfdab73f7577b2b5c8",
+        "samples.jsonl": "87c956e6e68398209a36685b9d769a0af94107d184c49b3a47b157350d1abfc0",
+        "display-events.jsonl": "0866932a82d582102f5f14dd4e95284b92a3e866af636b6daa073ad92713267d",
+        "qemu.log": "6f5cff8f54726d7b036f4fae5bebb4362509348f4114479679b859a59f68f6f7"
+      },
+      "configured_identity": {
+        "qemu": "/home/bogdan/macos-vm/run/c372-changed-bbox/qemu-changed-bbox",
+        "qemu_sha256": "ee0cb8cd35615ffbcc978073669c7dfcb2e00b04dda2d9a244a7eeeebbfdc526",
+        "library": "/home/bogdan/macos-vm/run/c380-server-study/instrumented-build/server/libspice-server.so.1.15.0",
+        "library_sha256": "a9b211f70ba28cf955c69467e6579631188028d695ae96b8cffb7f3ea0d3cadb"
+      },
+      "identity_scope": "selected wrapper and current pinned binary hashes; not a retained per-run process-maps attestation",
+      "whole_run": {
+        "seconds": 20,
+        "width": 3840,
+        "height": 2160,
+        "scale": 2,
+        "damage": "full-field",
+        "compact_band": true,
+        "producer_count": 1107,
+        "producer_per_second": 55.33151905760499,
+        "unique": 537,
+        "unique_per_second": 26.85,
+        "invalid_after_start": 0,
+        "snapshot_counters": {
+          "ack": 1108,
+          "published_seq": 1108,
+          "pending_replaced": 236,
+          "published_count": 872,
+          "pending_seq": 0
+        },
+        "widget_geometry": {
+          "width": 1280,
+          "height": 720,
+          "gdk_scale": 1,
+          "scaling": true,
+          "resize_guest": false,
+          "monitor_id": 0,
+          "windowed": false,
+          "requested": [
+            1280,
+            720
+          ]
+        },
+        "widget_draw_timing": {
+          "started": 540,
+          "completed": 540,
+          "total_seconds": 13.868918903870508,
+          "max_seconds": 0.038071186005254276,
+          "pending": null,
+          "reentrant": 0
+        }
+      },
+      "server_report": {
+        "schema": 1,
+        "complete": true,
+        "start_us": 78578558528,
+        "end_us": 78590558528,
+        "reported_us": 78590563082,
+        "draw_consumed": 522,
+        "draw_parsed": 522,
+        "opaque_equal_replacements": 522,
+        "pending_pipe_removals": 200,
+        "equal_pending_pipe_removals": 200,
+        "draw_copy_marshal_entries": 323,
+        "draw_copy_marshal_completed": 323,
+        "draw_copy_marshal_us": 874,
+        "display_write_bytes": 10716104425,
+        "display_outgoing_buffers_completed": 323,
+        "display_completed_buffer_bytes": 10716396777,
+        "display_write_eagain": 6981,
+        "display_blocked_polls": 6981,
+        "display_ack_wait_polls": 0
+      },
+      "aligned_window": {
+        "start": 78578.558528,
+        "end": 78590.558528,
+        "seconds": 12.0,
+        "producer_acks": 665,
+        "producer_ack_rate": 55.416666666666664,
+        "first_ack_sequence": 159,
+        "last_ack_sequence": 823,
+        "client_valid_samples": 323,
+        "client_unique": 323,
+        "client_unique_rate": 26.916666666666668,
+        "first_client_sequence": 156,
+        "last_client_sequence": 820,
+        "client_invalid": 0,
+        "invalid_errors": [],
+        "invalidate_entries": 323,
+        "invalidate_completions": 323,
+        "server_draw_rate": 43.5,
+        "server_pipe_removal_rate": 16.666666666666668,
+        "server_copy_marshal_rate": 26.916666666666668,
+        "display_write_bytes_per_second": 893008702.0833334,
+        "approximate_draw_minus_removals_minus_marshals": -1,
+        "marshal_minus_client_samples": 0,
+        "boundary_scope": "half-open host-monotonic interval; command lifecycle crosses edges, report loads/adds race; arithmetic residual is approximate, never conservation proof"
+      }
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c380-instrumented-window-fullfield-4k",
+      "mode": "instrumented",
+      "raw_sha256": {
+        "result.json": "e19ae98718c363ad2af7f809b4b011f92e984d51d9893187394a581c700e6a2e",
+        "cleanup.json": "0aea3b2bab6ac15288c6408487b293d1e493b4aed99de360dc05ea8503e01f27",
+        "argv.json": "f93a7deb3055439429b6d221aaf1608b431eecbf8bb98df80eb32bcf6189d729",
+        "producer.jsonl": "4305e24c40b1fd2fd1e6d61e48bde5d856174dee2aebfc8ff4faf1bb338cce38",
+        "samples.jsonl": "c67a22816e0bf1e83c65331781e17cbc480febaa6836d491821eaf1360df7f32",
+        "display-events.jsonl": "75cc24d24f289d96956b803c6d4be20f638a0d2cc5d78b916b15c5b8b6b4b4cd",
+        "qemu.log": "e75c8973fe25581a4fca05ebeca69f12895a5ba3955ea84a43e8ad163f4f3528"
+      },
+      "configured_identity": {
+        "qemu": "/home/bogdan/macos-vm/run/c372-changed-bbox/qemu-changed-bbox",
+        "qemu_sha256": "ee0cb8cd35615ffbcc978073669c7dfcb2e00b04dda2d9a244a7eeeebbfdc526",
+        "library": "/home/bogdan/macos-vm/run/c380-server-study/instrumented-build/server/libspice-server.so.1.15.0",
+        "library_sha256": "a9b211f70ba28cf955c69467e6579631188028d695ae96b8cffb7f3ea0d3cadb"
+      },
+      "identity_scope": "selected wrapper and current pinned binary hashes; not a retained per-run process-maps attestation",
+      "whole_run": {
+        "seconds": 20,
+        "width": 3840,
+        "height": 2160,
+        "scale": 2,
+        "damage": "full-field",
+        "compact_band": true,
+        "producer_count": 1142,
+        "producer_per_second": 57.07446783862556,
+        "unique": 308,
+        "unique_per_second": 15.4,
+        "invalid_after_start": 0,
+        "snapshot_counters": {
+          "ack": 1143,
+          "published_seq": 1142,
+          "pending_replaced": 272,
+          "published_count": 870,
+          "pending_seq": 1143
+        },
+        "widget_geometry": {
+          "width": 1280,
+          "height": 720,
+          "gdk_scale": 2,
+          "scaling": true,
+          "resize_guest": false,
+          "monitor_id": 0,
+          "windowed": true,
+          "requested": [
+            1280,
+            720
+          ]
+        },
+        "widget_draw_timing": {
+          "started": 309,
+          "completed": 309,
+          "total_seconds": 15.063424016931094,
+          "max_seconds": 0.05383429100038484,
+          "pending": null,
+          "reentrant": 0
+        }
+      },
+      "server_report": {
+        "schema": 1,
+        "complete": true,
+        "start_us": 78634130508,
+        "end_us": 78646130508,
+        "reported_us": 78646131236,
+        "draw_consumed": 522,
+        "draw_parsed": 522,
+        "opaque_equal_replacements": 522,
+        "pending_pipe_removals": 338,
+        "equal_pending_pipe_removals": 338,
+        "draw_copy_marshal_entries": 184,
+        "draw_copy_marshal_completed": 184,
+        "draw_copy_marshal_us": 519,
+        "display_write_bytes": 6104733160,
+        "display_outgoing_buffers_completed": 184,
+        "display_completed_buffer_bytes": 6104696616,
+        "display_write_eagain": 4102,
+        "display_blocked_polls": 4102,
+        "display_ack_wait_polls": 0
+      },
+      "aligned_window": {
+        "start": 78634.130508,
+        "end": 78646.130508,
+        "seconds": 12.0,
+        "producer_acks": 682,
+        "producer_ack_rate": 56.833333333333336,
+        "first_ack_sequence": 163,
+        "last_ack_sequence": 844,
+        "client_valid_samples": 184,
+        "client_unique": 184,
+        "client_unique_rate": 15.333333333333334,
+        "first_client_sequence": 160,
+        "last_client_sequence": 838,
+        "client_invalid": 0,
+        "invalid_errors": [],
+        "invalidate_entries": 184,
+        "invalidate_completions": 184,
+        "server_draw_rate": 43.5,
+        "server_pipe_removal_rate": 28.166666666666668,
+        "server_copy_marshal_rate": 15.333333333333334,
+        "display_write_bytes_per_second": 508727763.3333333,
+        "approximate_draw_minus_removals_minus_marshals": 0,
+        "marshal_minus_client_samples": 0,
+        "boundary_scope": "half-open host-monotonic interval; command lifecycle crosses edges, report loads/adds race; arithmetic residual is approximate, never conservation proof"
+      }
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c380-instrumented-window-matched-pixels",
+      "mode": "instrumented",
+      "raw_sha256": {
+        "result.json": "67ee06568fd776c85dfb21b7d1dc209ec28fed2484fe45a8134d8a219cadc55f",
+        "cleanup.json": "90adc8b71089d072df784e833507ffb4ee50e4122384e8ad1cd867981149e90e",
+        "argv.json": "238021f573b3676c23585dd37f1f541e8f361913eb840715a5698f9d606694f3",
+        "producer.jsonl": "131dba3175e5cd24874d4bf27867f0e905a6f64828e96d0b5d3b67a3412259ee",
+        "samples.jsonl": "e04976917c4ad77b0c751aadabfcbb0a5a94f19613bb3c32b8ccd793cb0594aa",
+        "display-events.jsonl": "b87cd93f5848d839ce789bd534038c12ff75526a161ab8d04190b624a6e9221f",
+        "qemu.log": "ee90a150f7c695fb1e7402227d9db593df1f1df010e55affa3e20e89edb464e6"
+      },
+      "configured_identity": {
+        "qemu": "/home/bogdan/macos-vm/run/c372-changed-bbox/qemu-changed-bbox",
+        "qemu_sha256": "ee0cb8cd35615ffbcc978073669c7dfcb2e00b04dda2d9a244a7eeeebbfdc526",
+        "library": "/home/bogdan/macos-vm/run/c380-server-study/instrumented-build/server/libspice-server.so.1.15.0",
+        "library_sha256": "a9b211f70ba28cf955c69467e6579631188028d695ae96b8cffb7f3ea0d3cadb"
+      },
+      "identity_scope": "selected wrapper and current pinned binary hashes; not a retained per-run process-maps attestation",
+      "whole_run": {
+        "seconds": 20,
+        "width": 2560,
+        "height": 1440,
+        "scale": 2,
+        "damage": "full-field",
+        "compact_band": true,
+        "producer_count": 1200,
+        "producer_per_second": 60.00471276212095,
+        "unique": 1156,
+        "unique_per_second": 57.8,
+        "invalid_after_start": 0,
+        "snapshot_counters": {
+          "ack": 1201,
+          "published_seq": 1201,
+          "pending_replaced": 44,
+          "published_count": 1157,
+          "pending_seq": 0
+        },
+        "widget_geometry": {
+          "width": 1280,
+          "height": 720,
+          "gdk_scale": 2,
+          "scaling": true,
+          "resize_guest": false,
+          "monitor_id": 0,
+          "windowed": true,
+          "requested": [
+            1280,
+            720
+          ]
+        },
+        "widget_draw_timing": {
+          "started": 1158,
+          "completed": 1158,
+          "total_seconds": 0.5994941215321887,
+          "max_seconds": 0.0018175970035372302,
+          "pending": null,
+          "reentrant": 0
+        }
+      },
+      "server_report": {
+        "schema": 1,
+        "complete": true,
+        "start_us": 78728203364,
+        "end_us": 78740203364,
+        "reported_us": 78740209169,
+        "draw_consumed": 693,
+        "draw_parsed": 693,
+        "opaque_equal_replacements": 693,
+        "pending_pipe_removals": 0,
+        "equal_pending_pipe_removals": 0,
+        "draw_copy_marshal_entries": 693,
+        "draw_copy_marshal_completed": 693,
+        "draw_copy_marshal_us": 1240,
+        "display_write_bytes": 10218769407,
+        "display_outgoing_buffers_completed": 693,
+        "display_completed_buffer_bytes": 10218769407,
+        "display_write_eagain": 9583,
+        "display_blocked_polls": 9583,
+        "display_ack_wait_polls": 0
+      },
+      "aligned_window": {
+        "start": 78728.203364,
+        "end": 78740.203364,
+        "seconds": 12.0,
+        "producer_acks": 720,
+        "producer_ack_rate": 60.0,
+        "first_ack_sequence": 175,
+        "last_ack_sequence": 894,
+        "client_valid_samples": 693,
+        "client_unique": 693,
+        "client_unique_rate": 57.75,
+        "first_client_sequence": 175,
+        "last_client_sequence": 894,
+        "client_invalid": 0,
+        "invalid_errors": [],
+        "invalidate_entries": 693,
+        "invalidate_completions": 693,
+        "server_draw_rate": 57.75,
+        "server_pipe_removal_rate": 0.0,
+        "server_copy_marshal_rate": 57.75,
+        "display_write_bytes_per_second": 851564117.25,
+        "approximate_draw_minus_removals_minus_marshals": 0,
+        "marshal_minus_client_samples": 0,
+        "boundary_scope": "half-open host-monotonic interval; command lifecycle crosses edges, report loads/adds race; arithmetic residual is approximate, never conservation proof"
+      }
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c380-instrumented-window-4k-one-to-one",
+      "mode": "instrumented",
+      "raw_sha256": {
+        "result.json": "b94ef396f500edf6a415841716447519732a2f76e893f16cffbc19d0c7d1c7f5",
+        "cleanup.json": "5c5ba4f33f8dc89a812f0614fa9e396d073ac1ce0bc73d3c7196e4fe7d1b1f05",
+        "argv.json": "4ed704f5588f5bf08b1527055ba6e35f46eeac4e9269fab30d4b622b5ac14d27",
+        "producer.jsonl": "7c852835f4113339eb8d68b1d2faff63cb20302eab2f16b1c4435012240d4088",
+        "samples.jsonl": "58de8a45a6bbe549db4296e5056a8ec7736c421bd48c07bd3c233fae2f34e7e8",
+        "display-events.jsonl": "02c2ab30fb9db3488ef82219d62d32d3093f92859812e83da3f138329c6703c8",
+        "qemu.log": "c67a1fb9e09046e4333498c86ff35e52818878dd7dfe32d48d46afe5ef7bb2d3"
+      },
+      "configured_identity": {
+        "qemu": "/home/bogdan/macos-vm/run/c372-changed-bbox/qemu-changed-bbox",
+        "qemu_sha256": "ee0cb8cd35615ffbcc978073669c7dfcb2e00b04dda2d9a244a7eeeebbfdc526",
+        "library": "/home/bogdan/macos-vm/run/c380-server-study/instrumented-build/server/libspice-server.so.1.15.0",
+        "library_sha256": "a9b211f70ba28cf955c69467e6579631188028d695ae96b8cffb7f3ea0d3cadb"
+      },
+      "identity_scope": "selected wrapper and current pinned binary hashes; not a retained per-run process-maps attestation",
+      "whole_run": {
+        "seconds": 20,
+        "width": 3840,
+        "height": 2160,
+        "scale": 2,
+        "damage": "full-field",
+        "compact_band": true,
+        "producer_count": 863,
+        "producer_per_second": 43.12044425856245,
+        "unique": 851,
+        "unique_per_second": 42.55,
+        "invalid_after_start": 0,
+        "snapshot_counters": {
+          "ack": 864,
+          "published_seq": 863,
+          "pending_replaced": 1,
+          "published_count": 862,
+          "pending_seq": 864
+        },
+        "widget_geometry": {
+          "width": 1920,
+          "height": 1080,
+          "gdk_scale": 2,
+          "scaling": true,
+          "resize_guest": false,
+          "monitor_id": 0,
+          "windowed": true,
+          "requested": [
+            1920,
+            1080
+          ]
+        },
+        "widget_draw_timing": {
+          "started": 847,
+          "completed": 847,
+          "total_seconds": 1.4413284550537355,
+          "max_seconds": 0.004170567000983283,
+          "pending": null,
+          "reentrant": 0
+        }
+      },
+      "server_report": {
+        "schema": 1,
+        "complete": true,
+        "start_us": 78779104921,
+        "end_us": 78791104921,
+        "reported_us": 78791127093,
+        "draw_consumed": 518,
+        "draw_parsed": 518,
+        "opaque_equal_replacements": 518,
+        "pending_pipe_removals": 5,
+        "equal_pending_pipe_removals": 5,
+        "draw_copy_marshal_entries": 513,
+        "draw_copy_marshal_completed": 513,
+        "draw_copy_marshal_us": 1317,
+        "display_write_bytes": 17020159587,
+        "display_outgoing_buffers_completed": 513,
+        "display_completed_buffer_bytes": 17020159587,
+        "display_write_eagain": 11304,
+        "display_blocked_polls": 11304,
+        "display_ack_wait_polls": 0
+      },
+      "aligned_window": {
+        "start": 78779.104921,
+        "end": 78791.104921,
+        "seconds": 12.0,
+        "producer_acks": 519,
+        "producer_ack_rate": 43.25,
+        "first_ack_sequence": 125,
+        "last_ack_sequence": 643,
+        "client_valid_samples": 513,
+        "client_unique": 513,
+        "client_unique_rate": 42.75,
+        "first_client_sequence": 124,
+        "last_client_sequence": 642,
+        "client_invalid": 0,
+        "invalid_errors": [],
+        "invalidate_entries": 513,
+        "invalidate_completions": 513,
+        "server_draw_rate": 43.166666666666664,
+        "server_pipe_removal_rate": 0.4166666666666667,
+        "server_copy_marshal_rate": 42.75,
+        "display_write_bytes_per_second": 1418346632.25,
+        "approximate_draw_minus_removals_minus_marshals": 0,
+        "marshal_minus_client_samples": 0,
+        "boundary_scope": "half-open host-monotonic interval; command lifecycle crosses edges, report loads/adds race; arithmetic residual is approximate, never conservation proof"
+      }
+    }
+  ]
+}
