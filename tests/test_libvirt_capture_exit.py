@@ -187,7 +187,9 @@ class EntryRefusalDiagnosticsTests(unittest.TestCase):
             return original(path,*a,**kw)
         with patch.object(entry.Path,'read_text',new=read),patch.object(entry,'completed_original_zombie',return_value=False):
             with self.assertRaises(entry.ExitProofRefusal) as caught:self.inspect(dict(start_ticks=43))
-        self.assertEqual(caught.exception.report,dict(stage='original-process',code='original-pid-present',pid=42,state='Z'))
+        self.assertEqual({k:v for k,v in caught.exception.report.items() if not k.startswith('diag_')},
+                         dict(stage='original-process',code='original-pid-present',pid=42,state='Z'))
+        self.assertIn('diag_errors',caught.exception.report)
     def test_permission_exception_text_is_never_returned(self):
         with patch.object(entry,'context',side_effect=PermissionError(13,'secret path')):
             result=entry.inspect_exited_report()

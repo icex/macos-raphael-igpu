@@ -282,6 +282,28 @@ def capture_exit(vm,cid,started_at,deadline,run_id,admission_digest,channel=None
                         clean.append(sample)
                     safe['completion_tasks']=clean
                     safe['completion_tasks_truncated']=report.get('completion_tasks_truncated') is True
+                # Diagnostics cannot authorize a wait or completion. Retain only
+                # bounded typed fields, never arbitrary exception text or paths.
+                for key in ('diag_flags','diag_task_count'):
+                    v=report.get(key)
+                    if type(v) is int and 0<=v<(2**64 if key=='diag_flags' else 65):safe[key]=v
+                for key in ('diag_tasks_truncated','diag_budget_exhausted'):
+                    if type(report.get(key)) is bool:safe[key]=report[key]
+                wchan=report.get('diag_wchan')
+                if type(wchan) is str and re.fullmatch(r'(?:0|[A-Za-z_][A-Za-z0-9_.]{0,126})',wchan):safe['diag_wchan']=wchan
+                diagnostics=report.get('diag_errors')
+                if isinstance(diagnostics,list):
+                    safe['diag_errors']=[v for v in diagnostics[:12] if type(v) is str and
+                        re.fullmatch(r'(stat|wchan|task|tasks):(permission|missing|budget|oversized|malformed|io|identity-changed)',v)]
+                tasks=report.get('diag_tasks')
+                if isinstance(tasks,list):
+                    safe['diag_tasks']=[]
+                    for item in tasks[:8]:
+                        if (isinstance(item,dict) and type(item.get('tid')) is int and item['tid']>0 and
+                            item.get('state') in tuple('RSDTtZXIPKW') and
+                            type(item.get('flags')) is int and 0<=item['flags']<2**64 and
+                            type(item.get('start_ticks')) is int and item['start_ticks']>0):
+                            safe['diag_tasks'].append({k:item[k] for k in ('tid','state','flags','start_ticks')})
                 result['proof_refusal']=safe
             raise RuntimeError('capture exit proof refused')
         waiting=(eof is not None and observed.get('shutdown_wait') is True and

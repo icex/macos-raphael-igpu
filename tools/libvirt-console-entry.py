@@ -8,6 +8,7 @@ from contextlib import contextmanager
 import importlib.util
 import json
 import math
+import re
 import stat
 import os
 from pathlib import Path
@@ -144,6 +145,79 @@ def exit_check(stage,**details):
         raise ExitProofRefusal(stage,code,**details) from None
 
 
+def refusal_diagnostics(identity, proc=Path('/proc')):
+    """Best-effort refusal context, NEVER exit/wait eligibility or completion.
+
+    At most20ms between operations,64 counted entries (+1 lookahead),8 task stats,4096 bytes
+    per stat and128 bytes of symbolic wchan. Existing docker-exec timeout remains
+    the external syscall bound. Proc observations race; counts may be lower bounds.
+    """
+    result=dict(diag_errors=[],diag_tasks=[],diag_tasks_truncated=False,
+                diag_budget_exhausted=False)
+    until=time.monotonic()+.020
+    class DiagnosticError(Exception):pass
+    def budget():
+        if time.monotonic()>=until:
+            result['diag_budget_exhausted']=True
+            raise DiagnosticError('budget')
+    def read(path, limit):
+        budget()
+        fd=os.open(path,os.O_RDONLY|os.O_NONBLOCK|os.O_NOFOLLOW)
+        try:
+            value=os.read(fd,limit+1)
+            if len(value)>limit:raise DiagnosticError('oversized')
+            return value.decode('ascii')
+        finally:os.close(fd)
+    def parse(path):
+        fields=read(path,4096).rsplit(')',1)[1].split()
+        state=fields[0];flags=int(fields[6]);ticks=int(fields[19])
+        if state not in tuple('RSDTtZXIPKW') or not 0<=flags<2**64 or ticks<=0:
+            raise DiagnosticError('malformed')
+        return dict(state=state,flags=flags,start_ticks=ticks)
+    def error(stage, exc):
+        code=('permission' if isinstance(exc,PermissionError) else
+              'missing' if isinstance(exc,FileNotFoundError) else
+              str(exc) if isinstance(exc,DiagnosticError) else
+              'malformed' if isinstance(exc,(ValueError,IndexError,UnicodeError)) else 'io')
+        result['diag_errors'].append(stage+':'+code)
+    base=proc/str(identity['pid'])
+    try:
+        leader=parse(base/'stat')
+        if leader['start_ticks']!=identity['start_ticks']:
+            raise DiagnosticError('identity-changed')
+        result['diag_flags']=leader['flags']
+    except (OSError,ValueError,IndexError,DiagnosticError) as exc:
+        error('stat',exc);return result
+    try:
+        wchan=read(base/'wchan',128).strip()
+        if not re.fullmatch(r'(?:0|[A-Za-z_][A-Za-z0-9_.]{0,126})',wchan):
+            raise DiagnosticError('malformed')
+        result['diag_wchan']=wchan
+    except (OSError,ValueError,DiagnosticError) as exc:error('wchan',exc)
+    count=0;sampled=0
+    try:
+        budget()
+        with os.scandir(base/'task') as entries:
+            for entry in entries:
+                budget()
+                if count==64:
+                    result['diag_tasks_truncated']=True;break
+                count+=1
+                if not entry.name.isdigit():raise DiagnosticError('malformed')
+                if sampled<8:
+                    sampled+=1
+                    try:
+                        task=parse(base/'task'/entry.name/'stat')
+                        result['diag_tasks'].append(dict(tid=int(entry.name),**task))
+                    except (OSError,ValueError,IndexError,DiagnosticError) as exc:
+                        error('task',exc)
+                else:result['diag_tasks_truncated']=True
+        result['diag_task_count']=count
+    except (OSError,ValueError,DiagnosticError) as exc:
+        result['diag_task_count']=count;result['diag_tasks_truncated']=True;error('tasks',exc)
+    return result
+
+
 def completed_original_zombie(identity, diagnostic=None):
     """Only a stable, exact, sole-thread zombie with no descriptors is complete.
 
@@ -266,7 +340,8 @@ def inspect_exited(eof_monotonic=None):
                         shutdown_observed=guest_shutdown_before_eof(directory,identity,scope,eof_monotonic)
                     shutdown_wait=True
                 else:
-                    raise ExitProofRefusal('original-process','original-pid-present',pid=identity['pid'],state=state,**completion)
+                    raise ExitProofRefusal('original-process','original-pid-present',pid=identity['pid'],state=state,
+                        **completion,**refusal_diagnostics(identity))
     # Only the exact original completed/pending zombie is skipped here and
     # rechecked below. Other QEMU and unknown visibility retain refusal.
     with exit_check('proc-list'):
