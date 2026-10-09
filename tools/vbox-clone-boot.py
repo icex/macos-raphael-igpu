@@ -246,6 +246,7 @@ def parser():
     ap.add_argument('--loader', type=Path)
     ap.add_argument('--disk', type=Path)
     ap.add_argument('--exchange', type=Path)
+    ap.add_argument('--root-relay', action='store_true', help='fixed read-only probe over opt-in virtio NAT')
     ap.add_argument('--smc-key-file', type=Path)
     ap.add_argument('--output', type=Path)
     ap.add_argument('--seconds', type=int, default=240)
@@ -275,6 +276,7 @@ def main():
             raise ValueError('only named398 writable derivatives permitted')
     if a.loader.resolve() == a.disk.resolve():
         raise ValueError('loader and system disk must differ')
+    if a.root_relay and a.exchange: ap.error("root relay probe and exchange are separate experiments")
     exchange = exchange_input(a.exchange) if a.exchange else None
     if exchange and Path(exchange['path']) in (a.loader.resolve(), a.disk.resolve()):
         raise ValueError('exchange must differ from boot media')
@@ -295,13 +297,38 @@ def main():
              'graphics_controller': a.graphics_controller,
              'cpus': a.cpus, 'cpu_profile': 'Intel Core i7-6700K',
              'tsc_override': None if a.tsc_mode == 'auto' else a.tsc_mode}
+    if a.root_relay: scope['network_probe'] = {'nic':'virtio','mode':'nat','localhost_reachable':True}
     if exchange: scope['exchange'] = exchange
     (home / 'scope.json').write_text(json.dumps(scope, indent=2) + '\n')
     registered = False
     guard = None
+    relay = None
     result = {'uuid': ident, 'guest_boot_qualified': False}
     if exchange: result['exchange_closed'] = False
     try:
+        if a.root_relay:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location('root_relay', Path(__file__).with_name('vbox-root-relay.py'))
+            module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+            bound_scope = (home / 'scope.json').read_bytes()
+            pinned_process = []
+            def verify_relay():
+                if (home / 'scope.json').read_bytes() != bound_scope or state(home, ident, timeout=2) != 'running': return False
+                found=[]
+                for proc in Path('/proc').glob('[0-9]*'):
+                    try:
+                        if proc.stat().st_uid != os.getuid(): continue
+                        argv=(proc/'cmdline').read_bytes().split(b'\0')
+                        if b'--startvm' not in argv or argv[argv.index(b'--startvm')+1] != ident.encode(): continue
+                        if (proc/'exe').resolve().name not in ('VirtualBoxVM','VBoxHeadless'): continue
+                        fields=(proc/'stat').read_text().rsplit(')',1)[1].split()
+                        found.append((int(proc.name),fields[19]))
+                    except (OSError,ValueError,IndexError): continue
+                if len(found)!=1:return False
+                if not pinned_process:pinned_process.extend(found)
+                return pinned_process==found
+            relay=module.Relay(home,uuid.uuid4().hex,deadline,verify_relay)
+            relay.start()
         call(home, ['createvm', '--name', name, '--uuid', ident, '--ostype', 'MacOS_64', '--basefolder', str(home / 'vms')])
         config = home / 'vms' / name / (name + '.vbox')
         config_key(config, key); del key
@@ -311,10 +338,12 @@ def main():
             call(home, ['setextradata', ident, 'VBoxInternal/TM/TSCMode', a.tsc_mode])
         call(home, ['modifyvm', ident, '--memory', '8192', '--cpus', str(a.cpus), '--cpu-profile', 'Intel Core i7-6700K',
                     '--firmware', 'efi64', '--chipset', 'ich9', '--ioapic', 'on', '--graphicscontroller', a.graphics_controller,
-                    '--vram', '64', '--accelerate-3d', 'off', '--nic1', 'none', '--audio-enabled', 'off',
+                    '--vram', '64', '--accelerate-3d', 'off', '--nic1', 'nat' if a.root_relay else 'none', '--audio-enabled', 'off',
                     '--usb-xhci', 'on', '--mouse', 'usbtablet', '--keyboard', 'usb',
                     '--uart1', '0x3f8', '4', '--uart-mode1', 'file', str(home / 'uart1.log'),
                     '--uart2', '0x2f8', '3', '--uart-mode2', 'file', str(home / 'uart2.log')])
+        if a.root_relay:
+            call(home, ['modifyvm', ident, '--nictype1', 'virtio', '--nat-localhostreachable1', 'on'])
         call(home, ['storagectl', ident, '--name', 'SATA', '--add', 'sata', '--controller', 'IntelAhci', '--portcount', '6', '--bootable', 'on'])
         for port, disk in [('2', a.loader), ('4', a.disk)]:
             call(home, ['storageattach', ident, '--storagectl', 'SATA', '--port', port, '--device', '0', '--type', 'hdd', '--medium', str(disk.resolve())])
@@ -356,6 +385,9 @@ def main():
     except Exception as e:
         result['error_type'] = type(e).__name__
     finally:
+        if relay:
+            try: relay.close()
+            except Exception as e: result["relay_cleanup_error"] = type(e).__name__
         if registered:
             try:
                 result['final_state'] = stop(home, ident)
