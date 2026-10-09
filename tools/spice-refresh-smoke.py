@@ -49,16 +49,24 @@ def main():
     p.add_argument('--output',type=Path,required=True);p.add_argument('--seconds',type=int,default=15)
     p.add_argument('--rate',type=int,choices=(60,));p.add_argument('--split',action='store_true')
     p.add_argument('--roi-extension',type=Path,help='optional paired observer control, no extra connection')
+    p.add_argument('--manager-wrapper-control',action='store_true',help='also compare actual manager selection function on this isolated widget')
     p.add_argument('--width',type=int,default=640);p.add_argument('--height',type=int,default=480)
     p.add_argument('--scale',type=int,choices=(1,2),default=1)
+    p.add_argument('--interval-ms',type=int,default=8)
     args=p.parse_args()
     if not 1<=args.seconds<=30:p.error('seconds must be 1..30')
+    if not 8<=args.interval_ms<=1000:p.error('interval must be8..1000ms')
     if not 320*args.scale<=args.width<=3840 or not 160*args.scale<=args.height<=2160:p.error('unsupported geometry')
     roi=None
     if args.roi_extension:
         import sys
         sys.path.insert(0,str(args.roi_extension.resolve()))
         import console_token_roi as roi
+    manager=None;extension_identity=None
+    if args.manager_wrapper_control:
+        if roi is None:p.error('manager wrapper control requires ROI extension')
+        manager=load('manager_wrapper','console-manager-cadence.py')
+        roi,extension_identity=manager.load_roi_extension(Path(roi.__file__))
     args.output.mkdir(parents=True,exist_ok=False)
     token=load('token','console-token.py');smoke=load('smoke','qemu-console-smoke.py')
     nonce='0344034403440344';root=args.output.resolve()
@@ -167,6 +175,14 @@ def main():
                                 if full['pixels'][a:a+length]!=small['pixels'][b:b+length]:pixels_equal=False
                         sample['roi_pixels_equal']=pixels_equal
                         sample['equivalent']=results['roi']==results['full'] and pixels_equal
+                        if manager is not None:
+                            wrapper_results={}
+                            for name,extension in [('full',None),('roi',roi)]:
+                                try:wrapper_results[name]=dict(valid=True,**manager.sample_display(display,token,nonce,extension))
+                                except (ValueError,RuntimeError) as error:wrapper_results[name]=dict(valid=False,error=str(error))
+                            sample['manager_wrapper']=wrapper_results
+                            sample['manager_wrapper_equivalent']=wrapper_results['full']==wrapper_results['roi']
+                            sample['equivalent']=sample['equivalent'] and sample['manager_wrapper_equivalent']
                         if not sample['equivalent']:raise RuntimeError('observer disagreement')
                     if not results['full']['valid']:raise ValueError(results['full']['error'])
                     if not results['roi']['valid']:raise ValueError(results['roi']['error'])
@@ -191,24 +207,29 @@ def main():
                 sample.update(valid=False,error=str(error))
             sample['duration']=time.monotonic()-now
             stream.write(json.dumps(sample)+'\n');stream.flush();return True
-        GLib.timeout_add(8,poll);Gtk.main();stop.set()
+        GLib.timeout_add(args.interval_ms,poll);Gtk.main();stop.set()
         if worker:worker.join(timeout=15)
         if worker and worker.is_alive():raise RuntimeError('producer did not stop')
         session.disconnect();window.destroy();stream.close();producer.close();events.close()
         if started is None or producer_error:raise RuntimeError(f'no complete measurement: {producer_error}')
         qmp('quit');process.wait(timeout=10)
         rows=[json.loads(x) for x in (root/'producer.jsonl').read_text().splitlines()]
-        stats=dict(seconds=args.seconds,unique=unique,unique_per_second=unique/args.seconds,
+        stats=dict(seconds=args.seconds,interval_ms=args.interval_ms,unique=unique,unique_per_second=unique/args.seconds,
                    valid=valid,invalid_after_start=invalid,last_sequence=last,producer_count=len(rows),
                    producer_per_second=(len(rows)-1)/(rows[-1]['ack']-rows[0]['ack']) if len(rows)>1 else None,
                    qemu_exit=process.returncode,split=args.split,explicit_rate=args.rate,display_events=counts,
                    width=args.width,height=args.height,scale=args.scale,paired_observers=roi is not None,roi_bounds_refused=bounds_refused,
+                   manager_wrapper_control=manager is not None,roi_extension=extension_identity,
                    scope='TCG qtest producer and offscreen SpiceDisplay buffer only; no guest OS/GPU/manager/scanout FPS')
         if roi:
             samples=[json.loads(line) for line in (root/'samples.jsonl').read_text().splitlines()]
             stats['observer_disagreements']=sum(row.get('equivalent') is False for row in samples)
             stats['paired_samples']=sum('equivalent' in row for row in samples)
             stats['passed']=stats['observer_disagreements']==0 and stats['paired_samples']>0
+            if manager is not None:
+                ids={row['manager_wrapper']['full']['sequence'] for row in samples if row.get('manager_wrapper',{}).get('full',{}).get('valid')}
+                stats['manager_wrapper_unique']=len(ids)
+                stats['passed']=stats['passed'] and len(ids)>1
         (root/'result.json').write_text(json.dumps(stats,indent=2)+'\n');print(json.dumps(stats))
         if roi and not stats['passed']:raise RuntimeError('paired observer qualification failed')
     finally:

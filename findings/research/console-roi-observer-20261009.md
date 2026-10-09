@@ -88,3 +88,39 @@ these optional platform-dependent tests. No production harness/profile changes.
 Validation completed: full host suite1,162 tests pass,8 skipped (including the
 five optional observer tests); those five also pass when run with the built
 extension. Binary/source/raw-record hashes are in the adjacent evidence JSON.
+
+## Optional manager-wrapper selection (software-qualified only)
+
+`console-manager-cadence.py --roi-extension /absolute/console_token_roi.<ABI>.so`
+now opts into ROI sampling. Omitting it preserves the original full-pixbuf path.
+The extension is loaded from that explicit resolved native-module file; its
+SHA256 and Python ABI tag are recorded in start/finish receipts. Loading verifies
+the file identity did not change. Each callback reacquires the surface through
+the checked helper, including1×/2× token fallback. Guard refusals never silently
+switch back to a full screenshot. Reported dimensions remain the full monitored
+surface, not the compact ROI canvas.
+
+Six selection tests verify default full sampling, explicit ROI-only selection,
+reacquisition, HiDPI coordinates, nonce refusal and rejection of a Python source
+file masquerading as an extension. The actual wrapper's sampling function also
+ran against the isolated fixture widget, using its existing session only. With
+a32ms control timer,1080p/HiDPI/deliberate-split runs each compared94 callback
+observations with zero disagreement; valid sequence counts advance94/21/14.
+HiDPI retains2 partial-token rejections and the deliberate split retains80.
+All three QEMU processes exit0. This does **not** qualify a real manager launch.
+
+The first attempted wrapper comparison redundantly performed two full4K
+snapshots plus ROI work every8ms. SPICE delivered only the initial invalidation
+and the token stopped progressing, although the observers agreed. That retained
+run is explicitly observer-overload evidence, not a successful progress test.
+Raising only the software comparison interval to32ms restores updates. The
+fixture now requires advancing wrapper IDs as well as agreement. Neither the
+manager's default16ms interval nor native345's sampler changed. This is a
+concrete reason to measure observer overhead and avoid treating agreement alone
+as pipeline qualification.
+
+Wrapper receipts: `~/macos-vm/run/c346-manager-roi32`; overloaded exploratory
+receipts: `~/macos-vm/run/c346-manager-roi`. The adjacent evidence JSON records
+both, with the overloaded HiDPI control explicitly unqualified.
+
+After wrapper integration, full host suite1,168 tests pass,8 skipped.

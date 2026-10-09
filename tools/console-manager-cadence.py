@@ -2,6 +2,8 @@
 """Sample the actual virt-manager SpiceDisplay buffer; opens no second connection."""
 import argparse
 import importlib.util
+import importlib.machinery
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -10,8 +12,46 @@ import sys
 import time
 
 
+def load_roi_extension(path):
+    """Load one explicit local extension and retain its actual binary identity."""
+    path=Path(path).resolve(strict=True)
+    if not path.is_file() or not any(str(path).endswith(suffix) for suffix in importlib.machinery.EXTENSION_SUFFIXES):
+        raise ValueError('ROI extension must be a local native extension file')
+    def digest():
+        with path.open('rb') as stream:return hashlib.file_digest(stream,'sha256').hexdigest()
+    before=digest()
+    spec=importlib.util.spec_from_file_location('console_token_roi',path)
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    if Path(module.__file__).resolve()!=path or digest()!=before:
+        raise ValueError('ROI extension changed while loading')
+    if not callable(getattr(module,'snapshot',None)):raise ValueError('ROI extension lacks snapshot API')
+    return module,dict(path=str(path),sha256=before,python_cache_tag=sys.implementation.cache_tag)
+
+
+def sample_display(display,token,nonce,roi=None):
+    """Reacquire each callback; ROI never falls back to a full screenshot."""
+    errors=[]
+    if roi is None:
+        pixels=display.get_pixbuf()
+        if pixels is None:raise ValueError('manager has no decoded pixbuf')
+        raw=pixels.get_pixels()
+    for scale in (1,2):
+        try:
+            if roi is None:
+                width,height=pixels.get_width(),pixels.get_height()
+                sequence=token.decode(raw,width,height,pixels.get_rowstride(),pixels.get_n_channels(),nonce,scale)
+            else:
+                sample=roi.snapshot(display,scale)
+                sequence=token.decode(sample['pixels'],sample['width'],sample['height'],sample['stride'],sample['channels'],nonce,scale)
+                width,height=sample['surface_width'],sample['surface_height']
+            return dict(sequence=sequence,scale=scale,width=width,height=height)
+        except (ValueError,RuntimeError) as error:errors.append(str(error))
+    raise ValueError('; '.join(errors))
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--roi-extension',type=Path,help='optional explicit console_token_roi native extension file; default remains full pixbuf')
     parser.add_argument('--manager-prefix',type=Path,required=True,help='extracted package root/usr')
     parser.add_argument('--nonce',required=True)
     parser.add_argument('--output',type=Path,required=True,help='new JSONL raw-sample file')
@@ -36,6 +76,8 @@ def main():
         os.environ[name]=str(args.output.parent/('manager-cadence-'+leaf))
     spec=importlib.util.spec_from_file_location('token',Path(__file__).with_name('console-token.py'))
     token=importlib.util.module_from_spec(spec);spec.loader.exec_module(token)
+    roi,extension_identity=load_roi_extension(args.roi_extension) if args.roi_extension else (None,None)
+    observer='roi' if roi is not None else 'full-pixbuf'
     import gi
     gi.require_version('Gtk','3.0');gi.require_version('SpiceClientGtk','3.0')
     from gi.repository import Gtk,GLib,SpiceClientGtk
@@ -45,16 +87,17 @@ def main():
     unique=0;invalid=0;duplicates=0;max_stale=0.;max_sample=0.;finished=False
     def record(data):stream.write(json.dumps(data)+'\n');stream.flush()
     record(dict(event='start',nonce=args.nonce,seconds=args.seconds,interval_ms=args.interval_ms,
+                observer=observer,roi_extension=extension_identity,
                 scope='sampled decoded manager buffer only; no host scanout or absolute latency'))
     def finish(reason):
         nonlocal finished
         if finished:return
         finished=True
         elapsed=0 if first is None else time.monotonic()-first
-        summary=dict(reason=reason,nonce=args.nonce,unique=unique,duplicates=duplicates,invalid=invalid,
+        summary=dict(reason=reason,nonce=args.nonce,observer=observer,roi_extension=extension_identity,unique=unique,duplicates=duplicates,invalid=invalid,
                      elapsed=elapsed,sampled_unique_per_second=unique/elapsed if elapsed else None,
                      max_observed_stale_seconds=max_stale,max_sampling_seconds=max_sample,
-                     scope='Sampling lower bound; full pixbuf copying may reduce measured throughput. No GPU FPS, host scanout, or absolute latency claim.')
+                     scope='Sampling lower bound; observer work may reduce measured throughput. No GPU FPS, host scanout, or absolute latency claim.')
         record(dict(event='finish',**summary));summary_path.write_text(json.dumps(summary,indent=2)+'\n');stream.close()
     def displays():
         found=[]
@@ -74,15 +117,8 @@ def main():
         try:
             candidates=displays()
             if len(candidates)!=1:raise ValueError('need exactly one manager SpiceDisplay')
-            pixels=candidates[0].get_pixbuf()
-            if pixels is None:raise ValueError('manager has no decoded pixbuf')
-            raw=pixels.get_pixels();errors=[]
-            for scale in (1,2):
-                try:
-                    sequence=token.decode(raw,pixels.get_width(),pixels.get_height(),pixels.get_rowstride(),pixels.get_n_channels(),args.nonce,scale)
-                    break
-                except ValueError as error:errors.append(str(error))
-            else:raise ValueError('; '.join(errors))
+            decoded=sample_display(candidates[0],token,args.nonce,roi)
+            sequence=decoded['sequence']
             state=tracker.observe(sequence)
             if first is None:first=now
             if state['unique']:
@@ -92,7 +128,7 @@ def main():
             else:
                 duplicates+=1
                 if last_unique is not None:max_stale=max(max_stale,now-last_unique)
-            sample.update(valid=True,sequence=sequence,scale=scale,width=pixels.get_width(),height=pixels.get_height(),**state)
+            sample.update(valid=True,**decoded,**state)
         except (ValueError,RuntimeError) as error:
             invalid+=1;sample.update(valid=False,error=str(error))
         except Exception as error:
