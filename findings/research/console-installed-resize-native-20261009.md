@@ -2,7 +2,7 @@
 
 Run `e5d5d205577125364146f54224bbd3f6`, metal213, build
 `ded62ba27d244bf892d516099cc7335d`, source `17e9077`.
-This report covers completed functional observations; reconnect input and shutdown/recovery remain pending at this revision.
+This report covers completed functional observations; shutdown/recovery remain pending at this revision.
 
 ## Installed startup and unchanged consent-bearing application
 
@@ -46,7 +46,7 @@ UI physically large despite exact pixel-size agreement; adaptive DPI policy is a
 separate unimplemented feature. Candidate385's eleven-size bounded LRU control is
 prior evidence, not a repeated386 stress test. Broader crash/restart lifecycle,
 first-user installation, other VM managers, VirtualBox, universal60Hz, and complete
-frame integrity remain open. Final reconnect-input and cleanup results
+frame integrity remain open. Final cleanup results
 must be added before delivery is called complete.
 
 ## Geometry boundary and reconnect surface check
@@ -59,4 +59,23 @@ roadmap work.
 
 `c386-reconnect-manager-events.jsonl` records actual GDK1 viewports1502×960 then
 1440×960 with matching settled pixbuf dimensions. This qualifies reconnect resize
-for those requests; its new input result remains pending separately.
+for those requests; its input result is completed below.
+
+## Reconnect input, restoration, and retained errors
+
+`c386-input-reconnect-result.txt` passes five hits, zero misses, exact text
+`RGPUD72C039B` and zero actual geometry changes. Holder612, agent768 (tty fd5),
+and presenter769 remain unchanged. `c386-viewer-close-alive.json` verifies the
+exact VM remains alive after viewer closure. `c386-final-state.txt` records
+successful restoration to3840×2160.
+
+`c386-final-capture-identity-user.txt`, executed as the owning user501, verifies
+the same complete application hash, receipt and CDHash recorded at startup. The
+earlier root invocation in `c386-final-capture-identity.txt` failed its ownership
+check; retain this observer error rather than interpreting it as a changed seal.
+
+Decoded `c386-final-{display,presenter,vdagent,launcher}.log` retain one
+ConnectionRefusedError on request8 while direct geometry control was running.
+Subsequent requests succeed. Two zero-monitor requests are unsupported refusals.
+The run is not universally error-free; concurrent direct control is not qualified
+as a reliable multi-client operation. Cleanup is pending at this revision.
