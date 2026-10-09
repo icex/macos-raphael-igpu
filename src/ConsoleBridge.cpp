@@ -337,12 +337,14 @@ void RaphaelConsole::recordTiming(uint32_t w, uint32_t h, const uint64_t (&t)[8]
                            (t[3]-t[2]) + (t[7]-t[6])};
     if (!timing.record(t[7], w, h, ns)) return;
     for (const auto &b : timing.buckets) if (b.count) {
-        IOLog("RaphaelConsole: timing window=%u elapsed_ns=%llu geometry=%ux%u count=%llu "
-              "lock_ns=%llu/%llu copy_fence_ns=%llu/%llu geometry_mmio_ns=%llu/%llu "
-              "doorbell_ns=%llu/%llu ack_checks_ns=%llu/%llu dropped_geometry=%llu saturated=%u\n",
+        IOLog(CONSOLE_TIMING_LINE1,
               timing.reports+1, t[7]-timing.started, b.width, b.height, b.count,
-              b.total[0], b.maximum[0], b.total[1], b.maximum[1], b.total[2], b.maximum[2],
-              b.total[3], b.maximum[3], b.total[4], b.maximum[4], timing.dropped, timing.saturated);
+              timing.saturated, b.total[0], b.maximum[0], b.total[1], b.maximum[1],
+              b.total[2], b.maximum[2]);
+        IOLog(CONSOLE_TIMING_LINE2,
+              timing.reports+1, t[7]-timing.started, b.width, b.height, b.count,
+              timing.saturated, b.total[3], b.maximum[3], b.total[4], b.maximum[4],
+              timing.dropped);
     }
     timing.clearWindow(t[7]);
 }

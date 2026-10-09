@@ -15,7 +15,18 @@ class ConsoleTimingTests(unittest.TestCase):
         source = r'''
 #include "ConsoleTiming.hpp"
 #include <cassert>
+#include <cstdio>
 int main() {
+    char row[512];
+    const unsigned long long max = UINT64_MAX;
+    int length = snprintf(row, sizeof(row), CONSOLE_TIMING_LINE1,
+                          128u, max, 3840u, 2160u, max, 1u,
+                          max, max, max, max, max, max);
+    assert(length > 0 && length <= 239);
+    length = snprintf(row, sizeof(row), CONSOLE_TIMING_LINE2,
+                      128u, max, 3840u, 2160u, max, 1u,
+                      max, max, max, max, max);
+    assert(length > 0 && length <= 239);
     ConsoleTiming t;
     const uint64_t a[5] = {1, 2, 3, 4, 5};
     assert(!t.record(0, 1440, 900, a));

@@ -47,3 +47,21 @@ compiles and executes the production aggregate policy, exercising geometry
 separation, bounded bucket admission, exact period boundary, reset, saturation,
 lifetime cap and backward-time refusal to flush. No kext build or native run has
 been performed for this change at this stage.
+
+## Candidate399 follow-up: bounded serial records
+
+Native397 exposed approximately256-byte logger truncation: long rows commonly
+lost the final saturation field. The numeric stage fields observed by the parent
+remain evidence, but missing saturation flags must remain explicitly unavailable.
+Candidate399 changes formatting only, in a separate source commit from the host
+patch. No new kext build/native validation accompanies this formatting change.
+
+Each geometry/window now has two `RaphaelConsole:T` records, both repeating
+`w`(window), `dt`(elapsed ns), `g`(geometry), `n`(successful count), `sat` and part.
+Part1 carries `l`(lock), `c`(copy/fence), `gmm`(geometry MMIO); part2 carries
+`d`(doorbell), `a`(ACK checks), `drop`(untracked geometry count). Stage values remain
+total/max nanoseconds. Both parts are required for a complete sample and matched
+by repeated metadata; do not silently join unlike records. Maximum output becomes
+16 lines/window with the same5s/128-window caps. The production-format host test
+uses maximum uint64 values and actual admitted geometry/report bounds to assert
+both complete rows, including newline, fit within239 bytes.

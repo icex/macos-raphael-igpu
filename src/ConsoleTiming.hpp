@@ -1,6 +1,10 @@
 // Bounded diagnostic aggregation only. Caller serializes access; units are ns.
 #pragma once
 #include <stdint.h>
+// Two parts fit the serial logger's 256-byte boundary even at UINT64_MAX.
+// Values after l/c/g/d/a are total/max ns; dt is elapsed ns, n successful count.
+#define CONSOLE_TIMING_LINE1 "RaphaelConsole:T w=%u dt=%llu g=%ux%u n=%llu sat=%u p=1 l=%llu/%llu c=%llu/%llu gmm=%llu/%llu\n"
+#define CONSOLE_TIMING_LINE2 "RaphaelConsole:T w=%u dt=%llu g=%ux%u n=%llu sat=%u p=2 d=%llu/%llu a=%llu/%llu drop=%llu\n"
 struct ConsoleTiming {
     static constexpr unsigned slots = 8, stages = 5, reportLimit = 128;
     static constexpr uint64_t period = 5000000000ULL;
