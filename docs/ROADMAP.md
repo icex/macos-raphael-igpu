@@ -1,6 +1,6 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-10-09. Current persistence/cadence: **1.0.366** (existing-user next guest boot retains startup/consent; paced source60 draw calls/s does not produce qualified60Hz output). Installer/lifecycle: **1.0.364** (package/reinstall and one bounded shutdown-wait pass; clean-user qualification open). Console audio/input: **1.0.361** (ordinary afplay default USB output and continuous pointer entry into a resized window pass; endpoint audibility, stationary-pointer resize remain open). Performance comparison: **1.0.352 ON / 1.0.353 OFF** (same-image HiDPI delivery and copy-cost improvement; atomic presentation remains open). Physical display baseline: **1.0.330** (correct-color HiDPI120 and HDMI audio confirmed); prior streaming baseline: **1.0.284**; broader baseline: **1.0.280**. Full desktop acceleration
+Updated 2026-10-09. Current diagnostic: **1.0.368** (native/HiDPI capture-source tokens intact while manager samples remain partial; downstream stage unlocalized). Persistence/cadence: **1.0.366** (existing-user next guest boot retains startup/consent; paced source60 draw calls/s does not produce qualified60Hz output). Installer/lifecycle: **1.0.364** (package/reinstall and one bounded shutdown-wait pass; clean-user qualification open). Console audio/input: **1.0.361** (ordinary afplay default USB output and continuous pointer entry into a resized window pass; endpoint audibility, stationary-pointer resize remain open). Performance comparison: **1.0.352 ON / 1.0.353 OFF** (same-image HiDPI delivery and copy-cost improvement; atomic presentation remains open). Physical display baseline: **1.0.330** (correct-color HiDPI120 and HDMI audio confirmed); prior streaming baseline: **1.0.284**; broader baseline: **1.0.280**. Full desktop acceleration
 is **not qualified**. The reproduced Screen Sharing transparency defect is fixed
 in candidate279 and retained in280. Candidate280 also passes strict capture and
 clean recovery after visual, concurrent-client and codec workloads. The patched-QEMU
@@ -20,7 +20,7 @@ regression and macOS source-build jobs remain required; see [CI setup](releases.
 
 | Milestone | State | Evidence and remaining work |
 |---|---|---|
-| M0 — Experiment identity and supervision | Implemented; maintained | Immutable manifests, loaded-build checks, capture, deadlines and cleanup. Fixed cycle image selection so preparation and admission use the same pinned emulator. Pre366 host suite: 1264 tests, OK (8 skipped); staging suite: 88 pass. |
+| M0 — Experiment identity and supervision | Implemented; maintained | Immutable manifests, loaded-build checks, capture, deadlines and cleanup. Fixed cycle image selection so preparation and admission use the same pinned emulator. Pre368 host suite: 1268 tests, OK (8 skipped); staging suite: 88 pass. |
 | M1 — Controlled starting state | Demonstrated for current workflow | One-way amdgpu→vfio-pci handoff, power/control=on, fresh MODE2 and clean-state receipts. Broad independent-host-boot qualification remains open. |
 | M2 — Native startup failure localization | Completed for original blocker | False second SDMA instance and subsequent channel routing were traced; historical evidence retained. |
 | M3 — Native engine startup repair | Demonstrated | Raphael topology/address adaptations reach native startup and completed Metal work. Preserve these fixes while diagnosing desktop rendering. |
@@ -308,6 +308,16 @@ draws33.063/53.647 give23.633/25.967 valid IDs/s. Neither stable speedup nor60Hz
 output is established; draw calls are not completed composition. Next validate
 actual readonly SCK source tokens before blaming VRAM/QEMU/SPICE.
 [Persistence and cadence evidence](../findings/research/console-cadence-native-20261009.md).
+
+Candidate368 checks tokens in actual readonly-locked SCK buffers before copying.
+Complete 30-second windows contain 1,742 HiDPI and 1,738 native valid samples, zero
+source invalids. Bracketed manager samples still contain 633/1,065 and 35/1,116
+invalids. This narrows investigation beyond checked source regions, without proving
+source stability after checking or isolating framebuffer versus QEMU versus SPICE.
+Normal consent renewal and diagnostic-off restoration pass; genuine shutdown and
+recovery authorize reuse. Next: exclusive staging memory and acknowledged immutable
+host snapshot proof before a native transport comparison.
+[Source-token evidence](../findings/research/console-source-token-native-20261009.md).
 
 Host-window resize, repeated crash recovery, independent host boots and broader
 desktop coverage follow. Both host sleep and idle blocking remain required during

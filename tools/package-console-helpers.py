@@ -8,7 +8,7 @@ import subprocess
 import zipfile
 
 ROOT=Path(__file__).resolve().parents[1]
-FILES=('tools/install-console-desktop.sh','tools/console-presenter.m',
+FILES=('tools/console-source-token.h','tools/install-console-desktop.sh','tools/console-presenter.m',
        'tools/console-display-layout.m','tools/virtual-display-server.m',
        'docs/console-helper-install.md','tools/console-install-transaction.py')
 

@@ -1,6 +1,6 @@
 # Console helper source package
 
-This artifact supplies the installer, transaction coordinator and three exact guest helper sources together. It is not a
+This artifact supplies the installer, transaction coordinator and three exact guest helper sources and the shared source-token header together. It is not a
 kext installer or a prequalified clean-guest deployment. The manifest identifies
 source commit, whether the packaging tree was clean, and each input's byte count
 and SHA256. Keep the package and its manifest with the installed build receipt.
@@ -43,3 +43,9 @@ boot for that same installed app; it does not qualify independent host boot or
 console-only first setup. [Persistence evidence](../findings/research/console-cadence-native-20261009.md). See [native evidence](../findings/research/console-install-native-20261009.md).
 Sessions remain bounded to6000seconds. This is an experimental
 source package, not an unattended daily-use product.
+
+Candidate368 also compiles the shared source-token header into the native presenter.
+Its opt-in diagnostic passes bounded source-validity windows at native and HiDPI
+resolutions; normal copying remains the default. Changing the signed app required
+ordinary consent renewal again. Both diagnostic cases restore the original agent
+and ordinary capture. This is not fresh-user or unattended deployment qualification.

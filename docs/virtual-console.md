@@ -439,3 +439,26 @@ Capture CORE_PROBE_PASS, genuine guest-shutdown terminal and authorizing recover
 pass. Both hooks finish naturally about0.451s with shutdown_event_wait=false;
 this does not repeat364's pending-worker branch exercise.
 [Exact artifacts and scope](../findings/research/console-cadence-native-20261009.md).
+
+
+## Capture-source token diagnostic (368 native result)
+
+An opt-in `RGPU_CONSOLE_TOKEN_NONCE` (exact16hex) checks the two matching token
+regions directly in each processed, readonly-locked ScreenCaptureKit source
+before normal framebuffer copying. It waits up to60s for the first valid token,
+then counts a fixed30s window, including invalid and duplicate processed samples.
+No full-frame copy or transport change is introduced. Busy-dropped callbacks,
+upstream uncaptured frames, destination correctness and scanout are outside scope.
+An invalid source sample does not stop or change ordinary presentation.
+
+Candidate368 compiles and installs this diagnostic natively; changed ad-hoc signing
+requires normal Screen Recording renewal. Complete 30-second windows have 1,742/1,742
+HiDPI and 1,738/1,738 native valid processed source samples. The manager still sees
+633/1,065 and 35/1,116 invalid samples inside intervals bracketed by valid interior
+source IDs. Corrupted manager IDs are not trusted; clocks are not synchronized.
+This narrows beyond the checked source regions, without identifying one downstream
+stage, proving source stability after checking, or establishing whole-frame atomicity.
+Both runs restore the original LaunchAgent and ordinary capture; final manager
+desktop, guest shutdown and recovery pass. Audio/input are not rerun.
+[Native result and limitations](../findings/research/console-source-token-native-20261009.md)
+· [Timing and error categories](../findings/research/console-source-token-plan-20261009.md).

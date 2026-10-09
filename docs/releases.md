@@ -29,17 +29,19 @@ The runner label is explicitly Intel, as listed in the
 
 ## Checked-in experimental executable
 
-`kext/bin/RaphaelGPU` contains the hardware-tested candidate366 executable,
-build `65c6d6549d144f319d2a7e84f905d202`, from clean source
-`fcfea4ecda0be1ec84797166c8c7d479d4eda760`. Native reset shutdown preserves a
+`kext/bin/RaphaelGPU` contains the hardware-tested candidate368 executable,
+build `b0d4f6d56caa4d23a0aa439e0613aa83`, from clean source
+`d995a1447a5d468a69820ead00f303d0b71f09e4`. Native reset shutdown preserves a
 real controller terminal and authorizing recovery. Earlier356 normal/fullscreen
-and361 continuous pointer entry at1000×760 pass; input is not rerun in366. Missing-motion/stationary-pointer
+and361 continuous pointer entry at1000×760 pass; input is not rerun in368. Missing-motion/stationary-pointer
 transitions remain open. Candidate364 adds existing-user package/reinstall and
 one native bounded shutdown-wait pass. Candidate366 verifies existing-user next
 guest-boot startup/consent; clean-user and console-only first setup remain open.
 The352 ON/353 OFF performance comparison remains separate.366 paced source
 reaches60 draw calls/s, but HiDPI manager samples vary with partial tokens; neither
-60Hz output nor stable speedup is qualified.
+60Hz output nor stable speedup is qualified. Candidate368 then validates actual
+locked capture-source tokens while manager partial tokens persist, narrowing
+investigation downstream without identifying one stage or qualifying atomicity.
 Ordinary afplay default USB → QEMU → Pulse stereo capture and route restoration
 pass; endpoint audibility, other applications and A/V sync are unqualified.
 These results do not qualify60Hz, all VM managers or VirtualBox.
