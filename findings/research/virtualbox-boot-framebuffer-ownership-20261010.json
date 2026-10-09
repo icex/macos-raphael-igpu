@@ -1,0 +1,42 @@
+{
+  "scope": "offline source; not guest execution",
+  "apple_open_source": {
+    "commit": "76285384ff0ce63965a21b8023bf6d7e447fcc19",
+    "url": "https://raw.githubusercontent.com/apple-oss-distributions/IOGraphics/76285384ff0ce63965a21b8023bf6d7e447fcc19/IONDRVSupport/IONDRVFramebuffer.cpp",
+    "sha256": "595d7c14a2c8c84b24b7715bdf4604329669ccacdccb6a6b601c41f9f3411a90"
+  },
+  "decoded_24G830": [
+    {
+      "path": "/home/bogdan/macos-vm/re/roadmap-24G830/IONDRVSupport-full/functions/00001676_IONDRVFramebuffer__probe.asm",
+      "sha256": "6fa4b1bcf21150841a098debaa9b9af8eaecee75817b28dcd82de32d43962237"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/re/roadmap-24G830/IONDRVSupport-full/functions/00001676_IONDRVFramebuffer__probe.c",
+      "sha256": "7dc10ebe9b4506d46d45b70046686a735e1812f8b7d71be98dc59abfff4bddc2"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/re/roadmap-24G830/IONDRVSupport-full/functions/000017b4_IONDRVFramebuffer__stop.asm",
+      "sha256": "b45273f549ab537b9c998af3799a01b804d5ef895ec44fd5a4460586257b4054"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/re/roadmap-24G830/IONDRVSupport-full/functions/000017b4_IONDRVFramebuffer__stop.c",
+      "sha256": "5504569bf93aa54b33171720575ef6702aafb756f0d3184e83fe1e670f59670c"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/re/roadmap-24G830/IONDRVSupport-full/functions/00001852_IONDRVFramebuffer__start.asm",
+      "sha256": "c2da9c03c5405d0709159b4bdec1dd1edaf247574b104d07aa2e378780d37f6f"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/re/roadmap-24G830/IONDRVSupport-full/functions/00001852_IONDRVFramebuffer__start.c",
+      "sha256": "ad7fb6ed36675f9d57724cb2b3ca860c7b81fd705a1adc2f7ba73e319caeaf07"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/re/roadmap-24G830/IONDRVSupport-full/functions/00002fae_IOBootNDRV__fromRegistryEntry.asm",
+      "sha256": "7d819062102982805b877c890d07f5cc0bc935e002e922074a934924405b680e"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/re/roadmap-24G830/IONDRVSupport-full/functions/00002fae_IOBootNDRV__fromRegistryEntry.c",
+      "sha256": "492388b9c922a4d6e44c745a4906f7024228649f3f9c29c0c18f1bac01a84db3"
+    }
+  ]
+}
