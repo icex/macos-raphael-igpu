@@ -1,0 +1,67 @@
+{
+  "schema": 1,
+  "run_id": "074a0b4c757c6c21ae093b604a98763d",
+  "scope": "395 completed native ownership fixture only; live performance and lifecycle pending",
+  "artifacts": [
+    {
+      "path": "/home/bogdan/macos-vm/run/c395-native-final.txt",
+      "bytes": 1674,
+      "sha256": "0190559926014c4b20113f3f025b4b1ecf85e9a5408a27a245cd901f08b54062"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c395-native-before-pixels.json",
+      "bytes": 268,
+      "sha256": "660afc711ec8fd7806b985ff3913637a5f10c42ea4c14f484661ba65d4e94dd6"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c395-native-after-pixels.json",
+      "bytes": 267,
+      "sha256": "9a8b4b0374c72850af2f1c3f7e72a1ecc8e5090e25a830feb5cbe46e4231194c"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c395-native-before.ppm",
+      "bytes": 1444819,
+      "sha256": "688fbf70f61f021917152d95b5705d397eae62fb1cb243caf5235437ab4fb417"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c395-native-after.ppm",
+      "bytes": 1444819,
+      "sha256": "688fbf70f61f021917152d95b5705d397eae62fb1cb243caf5235437ab4fb417"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c395-native-controller.py",
+      "bytes": 2701,
+      "sha256": "985bdedcd1c45db8b587142eb0bf5b88dda603524fea37a1815b8bad4cefb885"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c395-console_snapshot_restart.c",
+      "bytes": 7782,
+      "sha256": "76d8f9219288f371ce3e57d25a6db069ee19c5906dff32a813e2c320e816ebbd"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c395-native-prep.txt",
+      "bytes": 1238,
+      "sha256": "e5ea317db041a82902c430b8938d4ba719ef7ca94d8ae575d4f800e97254601a"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c395-restore.txt",
+      "bytes": 131,
+      "sha256": "84e98060733886bc63eb456bea1baa1defc2f8ab31228dbb43220e2dc3f93ef6"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c395-snapshot-native.plist",
+      "bytes": 696,
+      "sha256": "51f65641bd2aa735e92126d8164a5d12b336bf919b351a501320a1069750ff06"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-395-results/manifest.json",
+      "bytes": 13012,
+      "sha256": "06f97204cf40178a3c28f9eb3484a89880400d5ac7f8f079847414c264bec273"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-395-results/running-identity.json",
+      "bytes": 3029,
+      "sha256": "49415635098cc158716a9183a7bb1eaf60055c6bd1aa4477575bc74369b66d29"
+    }
+  ]
+}
