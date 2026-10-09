@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Persistent console UI scale; changes take effect at the next owned restart.
+"""Persistent console UI scale and opt-in text clipboard.
+
+Both settings take effect at the next owned restart.
 
 Concurrent valid setters use atomic last-writer-wins publication.
 """
@@ -50,18 +52,25 @@ def read(path):
             result[key] = value
         return result
     value = json.loads(data, object_pairs_hook=unique)
-    if (type(value) is not dict or set(value) != {'schema', 'guest_scale'} or
-            type(value['schema']) is not int or value['schema'] != 1 or
-            type(value['guest_scale']) is not int or value['guest_scale'] not in (1, 2)):
+    if type(value) is not dict or type(value.get('schema')) is not int:
+        raise ValueError('unsupported console preferences')
+    keys={'schema','guest_scale'} if value['schema']==1 else {'schema','guest_scale','clipboard_text'}
+    if (value['schema'] not in (1,2) or set(value)!=keys or
+            type(value['guest_scale']) is not int or value['guest_scale'] not in (1,2) or
+            (value['schema']==2 and type(value['clipboard_text']) is not bool)):
         raise ValueError('unsupported console preferences')
     return dict(value, source='user-preference')
 
-def write(path, scale):
-    if type(scale) is not int or scale not in (1, 2):
+def write(path, scale=None, *, clipboard_text=None):
+    if scale is not None and (type(scale) is not int or scale not in (1, 2)):
         raise ValueError('guest scale must be 1 or 2')
     path = directory(path)
-    read(path)  # Refuse replacing a foreign, malformed or aliased preference.
-    value = dict(schema=1, guest_scale=scale)
+    old=read(path)  # Refuse replacing a foreign, malformed or aliased preference.
+    if clipboard_text is not None and type(clipboard_text) is not bool:
+        raise ValueError('clipboard preference must be boolean')
+    value = dict(schema=old['schema'], guest_scale=old['guest_scale'] if scale is None else scale)
+    if old['schema']==2 or clipboard_text is not None:
+        value.update(schema=2,clipboard_text=old.get('clipboard_text',False) if clipboard_text is None else clipboard_text)
     fd, temporary = tempfile.mkstemp(prefix='.console-preferences-', dir=path)
     try:
         with os.fdopen(fd, 'w') as stream:
@@ -83,11 +92,13 @@ def main():
     parser.add_argument('--support-dir', type=Path, required=True)
     parser.add_argument('--set-scale', type=int, choices=(1, 2))
     parser.add_argument('--read-scale', action='store_true')
+    parser.add_argument('--set-clipboard',choices=('on','off'))
+    parser.add_argument('--read-clipboard',action='store_true')
     args = parser.parse_args()
-    if args.read_scale and args.set_scale is not None:
+    if (args.read_scale or args.read_clipboard) and (args.set_scale is not None or args.set_clipboard is not None) or args.read_scale and args.read_clipboard:
         parser.error('read and write are separate operations')
-    value = read(args.support_dir) if args.set_scale is None else write(args.support_dir, args.set_scale)
-    print(value['guest_scale'] if args.read_scale else json.dumps(value))
+    value = read(args.support_dir) if args.set_scale is None and args.set_clipboard is None else write(args.support_dir, args.set_scale, clipboard_text=None if args.set_clipboard is None else args.set_clipboard=='on')
+    print(value['guest_scale'] if args.read_scale else ('on' if value.get('clipboard_text',False) else 'off') if args.read_clipboard else json.dumps(value))
 
 if __name__ == '__main__':
     main()

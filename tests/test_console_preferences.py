@@ -24,6 +24,21 @@ class PreferencesTests(unittest.TestCase):
         prefs.write(self.directory,2)
         self.assertEqual(prefs.read(self.directory)['guest_scale'],2)
         self.assertEqual(list(self.directory.glob('.console-preferences-*')),[])
+    def test_explicit_clipboard_migration_preserves_scale_and_independent_setters(self):
+        prefs.write(self.directory,1)
+        self.assertNotIn('clipboard_text',prefs.read(self.directory))
+        value=prefs.write(self.directory,clipboard_text=True)
+        self.assertEqual((value['schema'],value['guest_scale'],value['clipboard_text']),(2,1,True))
+        self.assertTrue(prefs.write(self.directory,2)['clipboard_text'])
+        self.assertFalse(prefs.write(self.directory,clipboard_text=False)['clipboard_text'])
+        self.assertEqual(prefs.read(self.directory)['guest_scale'],2)
+        for value in ('on',1,[]):
+            with self.assertRaises(ValueError):prefs.write(self.directory,clipboard_text=value)
+        for data in [b'{"schema":2,"guest_scale":1}',b'{"schema":2,"guest_scale":1,"clipboard_text":1}',
+                     b'{"schema":1,"guest_scale":1,"clipboard_text":true}']:
+            self.put(data)
+            with self.assertRaises(ValueError):prefs.read(self.directory)
+
     def test_malformed_and_oversized_are_not_overwritten(self):
         for data in [b'bad',b'[]',b'{"schema":1,"guest_scale":true}',
                      b'{"schema":1,"guest_scale":3}',b'{"schema":1,"guest_scale":1,"extra":0}',
