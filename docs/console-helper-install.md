@@ -107,7 +107,7 @@ Scale1 allows odd physical dimensions within640..3840 ×480..2160 and equal logi
 sizes, useful for a GDK1 manager window. Scale2 requires even dimensions and maps
 to half-sized logical dimensions. This is a user choice, not automatic host-DPI
 detection. Candidate390 validates both policies and candidate392 restores selected
-1×4K at the next guest boot with unchanged capture identity. Current stock
+1× 4K at the next guest boot with unchanged capture identity. Current stock
 spice-gtk stationary-pointer clicks after resize remain defective. Candidate392
 qualifies an isolated client-library correction against a matched unpatched build;
 it does not update the host system libraries or the guest package. Fresh-user
@@ -143,14 +143,14 @@ snapshots retained separately. Pooling is not enabled by this installer on stock
 ## Actual VirtualBox software-boot scope
 
 Candidate 410 uses a separate, bounded FAT exchange disk to return fresh PCI and
-framebuffer inventory from stock VMSVGA. Its nine returned file hashes pass; old409
+framebuffer inventory from stock VMSVGA. Its nine returned file hashes pass; old 409
 temporary files were absent. Existing IONDRVFramebuffer/user-client attachment
 means the aperture cannot be assumed unowned. This helper package does not supply
 a VirtualBox presentation adapter or acceleration.
 
 Root verified input/awake state and removal of the owned awake job. Natural guest
 shutdown and medium closure are independently proven, while the controller's
-transient state-query error remains recorded.406's earlier eight-vCPU functional
+transient state-query error remains recorded. 406's earlier eight-vCPU functional
 qualification and PerfPowerServices CPU limitation remain separate.
 [410 result](../findings/research/virtualbox-fat-exchange-native-20261010.md).
 

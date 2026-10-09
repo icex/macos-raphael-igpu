@@ -5,7 +5,7 @@ measured 4K snapshot copy cost from 6.834 to 1.948 ms in the recorded comparison
 Localized motion reaches about 57 decoded token IDs/s; full-field motion remains
 about 25 IDs/s and does not improve. The 100-second actual-manager observation has
 4402 unique IDs and zero invalid or duplicate samples. These are sampled pipeline
-updates, not GPU FPS, whole-frame integrity or sustained 4K60 qualification.
+updates, not GPU FPS, whole-frame integrity or sustained 4K at 60 Hz qualification.
 
 Full-pixel stale-writer isolation, retained-map cleanup, owned presenter restart,
 odd-size resize, five-target/text input and stereo sample delivery/restoration
@@ -15,22 +15,22 @@ shutdown and authorizing recovery pass.
 [402 native evidence](../findings/research/console-snapshot-private-pool-native-20261010.md).
 
 **Actual VirtualBox, candidate 410:** a small FAT exchange disk now returns fresh
-macOS registry evidence from the stock VMSVGA software desktop. GFX0 is15ad:0405
-atPCI0:2.0, with64MiB framebuffer memory and2MiB FIFO memory. Display_boot /
+macOS registry evidence from the stock VMSVGA software desktop. GFX0 is `15ad:0405`
+at PCI `0:2.0`, with 64 MiB framebuffer memory and 2 MiB FIFO memory. Display_boot /
 IONDRVFramebuffer and its user clients are still attached; this is not exclusive
 ownership or accelerated presentation. Nine returned file hashes verify. Original
 409 temporary files were absent and were not recovered.
 
 Root verified input/awake state and removed the owned awake job before shutdown.
 Independent S5/OFF evidence and medium closure prove natural completion, but the
-original controller retains a transient state-query VBoxCallError and a0×0
-screenshot refusal. These errors are not erased by successful cleanup. Earlier406
+original controller retains a transient state-query VBoxCallError and a 0×0
+screenshot refusal. These errors are not erased by successful cleanup. Earlier 406
 qualified eight-vCPU software input and natural shutdown; slow interaction and
 PerfPowerServices CPU use remain open.
 [410 evidence](../findings/research/virtualbox-fat-exchange-native-20261010.md).
 
 The next boot-framebuffer discriminator is **read-only and not yet run**: an early
-loader property can suppress IONDRVFramebuffer matching in the inspected24G830
+loader property can suppress IONDRVFramebuffer matching in the inspected 24G830
 sources, then inventory must establish the resulting attachment state. It is not
 a live takeover or an exclusive memory lease. Separately, experimental VFIO DMA
 rollback/readiness patches pass extracted-function tests but are **not deployed**;
@@ -46,7 +46,7 @@ and lifecycle limitations remain in the linked reports.
 [395 baseline](../findings/research/console-private-staging-cleanup-native-20261009.md) ·
 [399 timing](../findings/research/console-host-snapshot-timing-native-20261010.md).
 
-Candidate392 retains next-guest-boot1×4K startup, input/audio evidence and a scoped
+Candidate392 retains next-guest-boot1× 4K startup, input/audio evidence and a scoped
 stationary-pointer fix in an isolated spice-gtk client. System client libraries
 are unchanged. Candidate394 verifies installed snapshot startup plus two helper
 restarts and audio delivery, but ends in forced capture-abort teardown.395 has
