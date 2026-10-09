@@ -15,6 +15,63 @@ import uuid
 import xml.etree.ElementTree as ET
 
 
+EXCHANGE_DIR = Path('/home/bogdan/macos-vm/run/c410-exchange')
+EXCHANGE_SIZE = 32 * 1024 * 1024
+
+def exchange_input(path):
+    """Validate only the independent, bounded exchange medium; never guest disks."""
+    st = path.lstat()
+    if (not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid() or
+            st.st_nlink != 1 or st.st_mode & 0o077 or
+            not 512 <= st.st_size <= 40 * 1024 * 1024 or
+            path.parent.resolve() != EXCHANGE_DIR or path.name != 'exchange.vdi'):
+        raise ValueError('exchange must be private independent bounded owned VDI')
+    raw = subprocess.run(['qemu-img', 'info', '--output=json', str(path.resolve())],
+                         capture_output=True, check=True, timeout=10).stdout
+    info = json.loads(raw)
+    if info.get('format') != 'vdi' or info.get('virtual-size') != EXCHANGE_SIZE or info.get('backing-filename'):
+        raise ValueError('exchange requires standalone32MiB VDI')
+    return dict(path=str(path.resolve()), bytes=st.st_size,
+                sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+                virtual_size=EXCHANGE_SIZE, port=5, device=0)
+
+def exchange_medium(home, exchange):
+    # VBox7.2 showmediuminfo has human-readable output only. Restrict keys,
+    # require one exact identity/path/format; retain complete output privately.
+    raw = call(home, ['showmediuminfo', 'disk', exchange['path']])
+    fields = {}
+    for line in raw.splitlines():
+        if ':' not in line: continue
+        key, value = line.split(':', 1)
+        if key in ('UUID', 'Location', 'Storage format'):
+            if key in fields: raise RuntimeError('duplicate exchange medium identity')
+            fields[key] = value.strip()
+    ident = fields.get('UUID', '')
+    if (not re.fullmatch('[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}', ident) or
+            fields.get('Location') != exchange['path'] or fields.get('Storage format') != 'VDI'):
+        raise RuntimeError('exchange medium identity mismatch')
+    if exchange.get('uuid', ident) != ident: raise RuntimeError('exchange UUID changed')
+    return ident
+
+def close_exchange(home, exchange):
+    medium_uuid = exchange_medium(home, exchange)
+    call(home, ['closemedium', 'disk', medium_uuid])
+    return hashlib.sha256(Path(exchange['path']).read_bytes()).hexdigest()
+
+
+def verify_exchange_attachment(home, ident, exchange):
+    if state(home, ident) != 'poweroff': raise RuntimeError('exchange requires owned stopped VM')
+    raw = call(home, ['showvminfo', ident, '--machinereadable'])
+    fields = dict(line.split('=', 1) for line in raw.splitlines() if '=' in line)
+    def value(key): return fields.get('"'+key+'"', fields.get(key, '')).strip('"')
+    scope = json.loads(private_file(home / 'scope.json'))
+    expected_cfg = str(home / 'vms' / scope['name'] / (scope['name'] + '.vbox'))
+    if value('UUID') != ident or value('CfgFile') != expected_cfg or value('VMState') != 'poweroff':
+        raise RuntimeError('exchange attachment observation lost stopped identity')
+    if value('SATA-5-0') != exchange['path'] or value('SATA-ImageUUID-5-0') != exchange['uuid']:
+        raise RuntimeError('exchange attachment differs from scoped medium')
+
+
 def private_file(path):
     st = path.lstat()
     if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid() or st.st_mode & 0o077:
@@ -50,7 +107,7 @@ class VBoxCallError(RuntimeError):
 
 
 def call(home, args, timeout=15):
-    env = dict(os.environ, VBOX_USER_HOME=str(home / 'config'))
+    env = dict(os.environ, VBOX_USER_HOME=str(home / 'config'), LC_ALL='C')
     p = subprocess.run(['VBoxManage', *args], env=env, capture_output=True, timeout=timeout)
     # Raw output may contain machine identity. Never echo it.
     with (home / 'commands-private.log').open('ab') as f:
@@ -75,6 +132,11 @@ def state(home, ident, timeout=15):
     expected = home / 'vms' / scope['name'] / (scope['name'] + '.vbox')
     if fields.get('CfgFile', '').strip('"') != str(expected):
         raise RuntimeError('machine config binding mismatch')
+    exchange = scope.get('exchange')
+    if exchange and exchange.get('uuid'):
+        for key, expected_value in [('SATA-5-0', exchange['path']), ('SATA-ImageUUID-5-0', exchange['uuid'])]:
+            observed = fields.get('"'+key+'"', fields.get(key, '')).strip('"')
+            if observed != expected_value: raise RuntimeError('scoped exchange attachment changed')
     return fields.get('VMState', '').strip('"')
 
 
@@ -183,6 +245,7 @@ def parser():
     ap.add_argument('--derive-smc-key', nargs=2, type=Path, metavar=('PRIVATE_ARGV', 'NEW_PRIVATE_KEY'))
     ap.add_argument('--loader', type=Path)
     ap.add_argument('--disk', type=Path)
+    ap.add_argument('--exchange', type=Path)
     ap.add_argument('--smc-key-file', type=Path)
     ap.add_argument('--output', type=Path)
     ap.add_argument('--seconds', type=int, default=240)
@@ -212,6 +275,9 @@ def main():
             raise ValueError('only named398 writable derivatives permitted')
     if a.loader.resolve() == a.disk.resolve():
         raise ValueError('loader and system disk must differ')
+    exchange = exchange_input(a.exchange) if a.exchange else None
+    if exchange and Path(exchange['path']) in (a.loader.resolve(), a.disk.resolve()):
+        raise ValueError('exchange must differ from boot media')
     lease_fd = os.open(a.loader.parent / 'boot-controller.lock', os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
     fcntl.flock(lease_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     if a.smc_key_file.lstat().st_size > 66:
@@ -229,10 +295,12 @@ def main():
              'graphics_controller': a.graphics_controller,
              'cpus': a.cpus, 'cpu_profile': 'Intel Core i7-6700K',
              'tsc_override': None if a.tsc_mode == 'auto' else a.tsc_mode}
+    if exchange: scope['exchange'] = exchange
     (home / 'scope.json').write_text(json.dumps(scope, indent=2) + '\n')
     registered = False
     guard = None
     result = {'uuid': ident, 'guest_boot_qualified': False}
+    if exchange: result['exchange_closed'] = False
     try:
         call(home, ['createvm', '--name', name, '--uuid', ident, '--ostype', 'MacOS_64', '--basefolder', str(home / 'vms')])
         config = home / 'vms' / name / (name + '.vbox')
@@ -250,6 +318,14 @@ def main():
         call(home, ['storagectl', ident, '--name', 'SATA', '--add', 'sata', '--controller', 'IntelAhci', '--portcount', '6', '--bootable', 'on'])
         for port, disk in [('2', a.loader), ('4', a.disk)]:
             call(home, ['storageattach', ident, '--storagectl', 'SATA', '--port', port, '--device', '0', '--type', 'hdd', '--medium', str(disk.resolve())])
+        if exchange:
+            # Recheck exact bytes immediately before attachment, no generic extra disks.
+            if exchange_input(a.exchange) != exchange: raise RuntimeError('exchange changed before attachment')
+            call(home, ['storageattach', ident, '--storagectl', 'SATA', '--port', '5', '--device', '0', '--type', 'hdd', '--medium', exchange['path']])
+            exchange['uuid'] = exchange_medium(home, exchange)
+            scope['exchange'] = exchange
+            (home / 'scope.json').write_text(json.dumps(scope, indent=2)+'\n')
+            verify_exchange_attachment(home, ident, exchange)
         if time.monotonic() >= deadline - 20:
             raise RuntimeError('setup exhausted deadline')
         guard = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), '--watchdog', str(home), ident, str(deadline)], start_new_session=True, pass_fds=(lease_fd,), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -286,6 +362,11 @@ def main():
                 (home / 'finished').write_text('VM stop independently verified\n')
                 result['unregister_attempts'] = unregister_stopped(home, ident)
                 result['unregistered'] = True
+                if exchange and exchange.get('uuid'):
+                    # unregister detached the owned VM; close only the exact medium,
+                    # never delete it. A retained use/lock fails closed.
+                    result['exchange_sha256_after'] = close_exchange(home, exchange)
+                    result['exchange_closed'] = True
                 (home / 'finished').write_text('stopped and unregistered\n')
             except Exception as e:
                 result['cleanup_error'] = type(e).__name__

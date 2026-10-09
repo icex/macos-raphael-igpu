@@ -1,0 +1,18 @@
+{
+  "label": "RGPU410",
+  "virtual_size": 33554432,
+  "partition_offset": 1048576,
+  "listing": " Volume in drive : is RGPU410    \n Volume Serial Number is 5936-A6E1\nDirectory for ::/\n\nINVENT~1 PY       1915 2026-10-10   1:07  inventory.py\nrun410   py       2853 2026-10-10   1:07 \nrun      sh         67 2026-10-10   1:07 \n        3 files               4 835 bytes\n                         32 413 696 bytes free\n\n",
+  "files": {
+    "/home/bogdan/macos-vm/run/c410-exchange/inventory.py": "b975a17bc3bf1eb191d221e264b23e54509be394d16f9cbb6378dafb25a68acd",
+    "/home/bogdan/macos-vm/run/c410-exchange/run410.py": "2354a264321b192e7bbdc6de96c0ca192a3994d65a4dfbc4aee8707fe0ce575f",
+    "/home/bogdan/macos-vm/run/c410-exchange/run.sh": "5293c5ed676a27863b8a74e2df2e3c15662d5001c1d30ae1b2b9ae0a2b944138",
+    "/home/bogdan/macos-vm/run/c410-exchange/exchange.raw": "5540e83760b84bbc369f7483aac3e689a2a568d6ee523ff1f05a3862c4f132d8",
+    "/home/bogdan/macos-vm/run/c410-exchange/exchange.vdi": "2e72a2d0e817afa1e91cc63f033b5e2a779693521f39e7aaa3efb25a2d5498ef"
+  },
+  "scope": "offline only; no VM, host mount or guest execution",
+  "preparation_receipt_sha256": "a5b29248cbebff761bca1e923a5e73f142fb400b659a9f2d464d61e5ef42e007",
+  "fat_file_readback_verified": true,
+  "controller_source_sha256": "69e1f4470d2d05069b6afc34a87e94a004f1088c62a91bff5f507f3312fea135",
+  "guest_command": "sh /Volumes/RGPU410/run.sh"
+}
