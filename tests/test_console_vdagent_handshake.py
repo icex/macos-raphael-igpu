@@ -22,9 +22,28 @@ class HandshakeTests(unittest.TestCase):
     def test_oversize_and_bad_port_refused_before_body(self):
         for head in [m.CHUNK.pack(1,2049),m.CHUNK.pack(3,20),m.CHUNK.pack(1,0)]:
             with self.assertRaises(ValueError):m.Parser().feed(head)
-    def test_oversize_message_and_cross_boundary_refused(self):
-        for data in [m.MESSAGE.pack(1,6,0,4097),message(6,struct.pack('<I',0))+b'extra']:
+    def test_oversize_message_and_malformed_trailing_header_refused(self):
+        for data in [m.MESSAGE.pack(1,6,0,4097),message(6,struct.pack('<I',0))+m.MESSAGE.pack(99,6,0,4)]:
             with self.assertRaises(ValueError):m.Parser().feed(chunk(1,data))
+    def test_two_messages_in_one_chunk_then_partial_header(self):
+        a=message(6,struct.pack('<II',0,123));b=message(6,struct.pack('<II',1,456))
+        p=m.Parser();rows=p.feed(chunk(1,a+b+a[:9]))
+        self.assertEqual([x['caps'] for x in rows],[[123],[456]])
+        self.assertEqual(p.pending()['per_port_message_bytes']['1'],9)
+        self.assertEqual(p.feed(chunk(1,a[9:]))[0]['caps'],[123])
+        self.assertEqual(p.pending()['per_port_message_bytes']['1'],0)
+    def test_body_completion_and_next_message_share_chunk(self):
+        a=message(6,struct.pack('<II',0,123));p=m.Parser()
+        self.assertEqual(p.feed(chunk(1,a[:23])),[])
+        self.assertEqual(len(p.feed(chunk(1,a[23:]+a))),2)
+    def test_residual_wire_is_reported_on_success(self):
+        from unittest.mock import patch
+        packet=m.announcement(0)+m.CHUNK.pack(1,20)[:3]
+        with patch.object(m.select,'select',return_value=([99],[99],[])), \
+             patch.object(m.os,'write',side_effect=lambda fd,data:len(data)), \
+             patch.object(m.os,'read',return_value=packet):
+            result=m.exchange(99,seconds=.2)
+        self.assertTrue(result['passed']);self.assertEqual(result['pending_parser_bytes']['wire_bytes'],3)
     def test_malformed_capabilities_refused(self):
         for payload in [b'',b'12345',struct.pack('<I',2)]:
             with self.assertRaises(ValueError):m.Parser().feed(chunk(1,message(6,payload)))

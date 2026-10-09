@@ -27,6 +27,9 @@ class Parser:
         self.wire = bytearray()
         self.ports = {1: bytearray(), 2: bytearray()}
 
+    def pending(self):
+        return dict(wire_bytes=len(self.wire), per_port_message_bytes={str(k):len(v) for k,v in self.ports.items()})
+
     def feed(self, data):
         self.wire.extend(data)
         found = []
@@ -39,26 +42,24 @@ class Parser:
             body = self.ports[port]
             body.extend(self.wire[CHUNK.size:CHUNK.size + size])
             del self.wire[:CHUNK.size + size]
-            if len(body) < MESSAGE.size:
-                continue
-            protocol, kind, opaque, length = MESSAGE.unpack_from(body)
-            if protocol != 1 or length > 4096:
-                raise ValueError('invalid message protocol/size')
-            total = MESSAGE.size + length
-            if len(body) > total:
-                raise ValueError('chunk crosses message boundary')
-            if len(body) == total:
+            while len(body) >= MESSAGE.size:
+                protocol, kind, opaque, length = MESSAGE.unpack_from(body)
+                if protocol != 1 or length > 4096:
+                    raise ValueError('invalid message protocol/size')
+                total = MESSAGE.size + length
+                if len(body) < total:
+                    break
                 # Only capability words leave this parser. Other payloads are discarded.
                 item = dict(port=port, type=kind, size=length)
                 if kind == 6:
                     if length < 4 or length % 4:
                         raise ValueError('malformed capability payload')
-                    words = struct.unpack('<' + 'I' * (length // 4), body[MESSAGE.size:])
+                    words = struct.unpack('<' + 'I' * (length // 4), body[MESSAGE.size:total])
                     if words[0] not in (0, 1):
                         raise ValueError('invalid capability request flag')
                     item.update(request=words[0], caps=list(words[1:]))
                 found.append(item)
-                body.clear()
+                del body[:total]
         return found
 
 
@@ -129,8 +130,8 @@ def exchange(fd, seconds=10, clock=time.monotonic):
         if client_reply and not pending:
             return dict(passed=True, received_bytes=received, transmitted_bytes=sent,
                         responses=responses, initial_zero_reads=zeros, arrivals=arrivals,
-                        unhandled_metadata=unknown, elapsed=clock()-start,
-                        scope='capability transport compatible; no nonce freshness, feature, resize or ownership qualification')
+                        unhandled_metadata=unknown, pending_parser_bytes=parser.pending(), elapsed=clock()-start,
+                        scope='capability transport compatible; residual bytes may be incomplete subsequent traffic, not a fully parsed stream; no nonce freshness, feature, resize or ownership qualification')
     raise TimeoutError('capability discovery deadline; client absence remains possible')
 
 
