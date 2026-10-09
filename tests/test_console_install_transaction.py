@@ -18,7 +18,7 @@ class PowerLoss(BaseException):
 class InstallationTests(unittest.TestCase):
     def setUp(self):
         # Real owner-only ancestors, same condition as /Users/name in the guest.
-        self.directory = tempfile.TemporaryDirectory(dir=ROOT)
+        self.directory = tempfile.TemporaryDirectory(dir=ROOT.parent, prefix='candidate-installer-test-')
         self.home = Path(self.directory.name)
         self.tx = module.Transaction(self.home, active=lambda app: None)
         self.fd = self.tx.lock()
