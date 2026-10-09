@@ -3,6 +3,9 @@
 import json, plistlib, subprocess
 
 def inventory(nodes):
+    if isinstance(nodes,dict): nodes=[nodes]
+    if not isinstance(nodes,list) or any(not isinstance(n,dict) for n in nodes):
+        raise ValueError("registry root must be dictionary or list of dictionaries")
     out=[]
     keys=('vendor-id','device-id','class-code','assigned-addresses','reg','IODeviceMemory')
     def safe(v):

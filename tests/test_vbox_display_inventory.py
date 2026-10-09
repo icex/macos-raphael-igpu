@@ -18,6 +18,13 @@ class InventoryTests(unittest.TestCase):
   self.assertFalse(rows[0]['matching_pci_ancestor'])
   self.assertEqual(rows[0]['ancestry'][0]['name'],'IOResources')
   self.assertNotIn('secret',str(rows))
+ def test_dictionary_and_array_roots_equivalent(self):
+  m=load('vbox-display-inventory.py')
+  tree={'IORegistryEntryName':'IOResources','IORegistryEntryChildren':[{'IOObjectClass':'IONDRVFramebuffer','IORegistryEntryName':'display_boot'}]}
+  self.assertEqual(m.inventory(tree),m.inventory([tree]))
+  self.assertEqual(len(m.inventory(tree)),1)
+  for invalid in ('root',42,[{} ,'bad']):
+   with self.assertRaises(ValueError):m.inventory(invalid)
  def test_controller_graphics_choice(self):
   p=load('vbox-clone-boot.py').parser()
   self.assertEqual(p.parse_args([]).graphics_controller,'vboxvga')

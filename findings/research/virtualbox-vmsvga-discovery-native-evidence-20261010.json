@@ -1,0 +1,82 @@
+{
+  "schema": 1,
+  "uuid": "77338280-20ea-4365-8e8d-59486e64be2c",
+  "scope": "Software discovery, failed heuristic inventory, positive fallback attachment and natural shutdown; no GPU",
+  "artifacts": [
+    {
+      "path": "/home/bogdan/macos-vm/run/c409-vbox-boot-f/result.json",
+      "bytes": 198,
+      "sha256": "1dbded5cde7e3832f3e03f8aead87990208ed013e32ad8b49231c37f13f746d9"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c409-vbox-boot-f/scope.json",
+      "bytes": 421,
+      "sha256": "fe48a64764c4affac7ad6c1e08f80b2691c10805121128bd0a6c25e8c8ea4999"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c409-vbox-boot-f/root-final-verification.json",
+      "bytes": 149,
+      "sha256": "a62987784b0553953f00689d3a260d5f13611fb460227be03f70fdaaf2ae237c"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c409-vbox-boot-f/root-acpi-request.json",
+      "bytes": 118,
+      "sha256": "b762305ade49653b5da276acd7505361b70025205bbb550a251c73ad5d5be622"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c409-vbox-boot-f/shutdown-selected.txt",
+      "bytes": 198,
+      "sha256": "3b4ae03ef79b9d697b2b860328d5db844c8f2663951c7649f458f2119217bd5e"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c409-vbox-boot-f/stopped.json",
+      "bytes": 69,
+      "sha256": "360653d5473df05418fa61c44397fe2fb009dfc9eb04d638ace1ab69a28e3276"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c409-vbox-boot-f/framebuffer.png",
+      "bytes": 270510,
+      "sha256": "92ca4bce8c7d966a7f4e2bbdfd9e66b51d2745446c5356789da2b066e3aacd25"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c409-vbox-boot-f/awake.png",
+      "bytes": 306270,
+      "sha256": "abb8d982d1cc26a4ef153517178d5d617a6ab7f1d3b83341ac6431d33f682975"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c409-vbox-boot-f/inventory-complete.png",
+      "bytes": 361192,
+      "sha256": "b0cc87c0f3965f48d054b548fcd0aad28db7e8d00cc3a4dec2a82426ff8eb13b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c409-vbox-boot-f/inventory-fallback.png",
+      "bytes": 243137,
+      "sha256": "765c8cf7486f7c16f4fa0fb33dd33d3ef1ad19128cce9e66e9f85ce4f7681ffc"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c409-vbox-boot-f/shutdown-dialog.png",
+      "bytes": 264558,
+      "sha256": "f96b9ea3e2b31917c561604fac2d572983424b51d4056a617c4f3f9e7596e1ff"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c409-vbox-boot-f/uart1.log",
+      "bytes": 169629,
+      "sha256": "253c8c2987ec5b194e60d97496e89f1075605225397cfc887a17cfee4c9a11ba"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c409-vbox-boot-f/uart2.log",
+      "bytes": 1528,
+      "sha256": "f2488c488cb882c28f387aa6aa8dd41bb5328947f616d293136c0199159c2817"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c409-vbox-boot-f/disk-listing.private.txt",
+      "bytes": 1074,
+      "sha256": "6083d50d090a1ed9f73d3a11c2a7ae9240e96f9796dc11c02be1a3fe99e32c9c"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c409-root-schema-full-suite.log",
+      "bytes": 13975,
+      "sha256": "242ff32cfa8ec715c41b3a0fbdaf9c17f4719c59a0661df55d7def1c1e09a002"
+    }
+  ]
+}
