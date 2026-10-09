@@ -1,0 +1,52 @@
+{
+  "opencore_reference_tag": "1.0.6",
+  "opencore_reference_commit": "64e3b5811ee17804cc04236618dc968ca57378a6",
+  "installed_opencore_version": "not identified; do not claim exact source/binary match",
+  "artifacts": [
+    {
+      "path": "/home/bogdan/macos-vm/run/c400-source/Docs_Configuration.tex",
+      "upstream_path": "Docs/Configuration.tex",
+      "url": "https://raw.githubusercontent.com/acidanthera/OpenCorePkg/64e3b5811ee17804cc04236618dc968ca57378a6/Docs/Configuration.tex",
+      "sha256": "f5365899ce0852e9d11866030d5bf4015e8b8bbefb781c1a009aa5309eb817c9"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c400-source/Library_OcMainLib_OpenCoreUefi.c",
+      "upstream_path": "Library/OcMainLib/OpenCoreUefi.c",
+      "url": "https://raw.githubusercontent.com/acidanthera/OpenCorePkg/64e3b5811ee17804cc04236618dc968ca57378a6/Library/OcMainLib/OpenCoreUefi.c",
+      "sha256": "e5b116d0c61975fcc477e536736429a531343db2133d2a1b200731f24dfd172a"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c400-source/Library_OcDevicePropertyLib_OcDevicePropertyLib.c",
+      "upstream_path": "Library/OcDevicePropertyLib/OcDevicePropertyLib.c",
+      "url": "https://raw.githubusercontent.com/acidanthera/OpenCorePkg/64e3b5811ee17804cc04236618dc968ca57378a6/Library/OcDevicePropertyLib/OcDevicePropertyLib.c",
+      "sha256": "65c03bfdc958159d243d72e9ddd434f186eaa373c22dce0047c90104743b057c"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c400-source/Include_Apple_Protocol_DevicePathPropertyDatabase.h",
+      "upstream_path": "Include/Apple/Protocol/DevicePathPropertyDatabase.h",
+      "url": "https://raw.githubusercontent.com/acidanthera/OpenCorePkg/64e3b5811ee17804cc04236618dc968ca57378a6/Include/Apple/Protocol/DevicePathPropertyDatabase.h",
+      "sha256": "101422c9ae59ca447a0dbb8ed352d7d5d9a2aad82a97e79605413fb6eb30967c"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c398-VBoxAppleSim.c",
+      "url": "https://raw.githubusercontent.com/VirtualBox/virtualbox/14841851fa211c7faf615978ba385d59947236c6/src/VBox/Devices/EFI/Firmware/VBoxPkg/VBoxAppleSim/VBoxAppleSim.c",
+      "sha256": "a74d9c995832380e31b736e4831b045eb69a3cf24eb5262b439ee1c66d318638"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c398-vbox-boot-a/result.json",
+      "sha256": "1a5bd6b5502f972edf05e3aa63feb430856b9c437b095df1dc761f409fb5bcd8"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c398-vbox-boot-a/stopped.json",
+      "sha256": "bbc0736d54001e0fe8b921fb3523f19e0ed5526ca314aa4f9a3d662f4ff6b76e"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c398-vbox-clones/boot-b-preparation.json",
+      "sha256": "c6a9ec70690c222ddf4520079c2e95227f0bd49d85728f7c6c246f4524de058f"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c398-vbox-clones/OpenCore-inspect.efi",
+      "sha256": "a78f699080543456c29551134b78f1bb59f69ec38bc94b59b3c04bb5f28bdd12"
+    }
+  ]
+}

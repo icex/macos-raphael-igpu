@@ -209,6 +209,9 @@ def main():
             if guard.poll() is not None:
                 raise RuntimeError('watchdog exited before completion')
             current = state(home, ident)
+            if current == 'gurumeditation':
+                result['functional_failure'] = 'firmware-or-vm-guru'
+                break
             if current in ('poweroff', 'aborted'):
                 break
             if current == 'running':
@@ -237,7 +240,7 @@ def main():
         if guard and (home / 'finished').exists():
             guard.wait(timeout=3)
     print(json.dumps({k:v for k,v in result.items() if k not in ('uuid',)}))
-    return 1 if 'error_type' in result or 'cleanup_error' in result else 0
+    return 1 if any(k in result for k in ('error_type', 'cleanup_error', 'functional_failure')) else 0
 
 
 if __name__ == '__main__':
