@@ -1659,6 +1659,8 @@ static mach_vm_address_t orgPspTmrInit {};
 static mach_vm_address_t orgGmmSetMemoryAttributes {};
 static bool hostReserveEnabled = false, hostReservationReady = false;
 static bool consolePresentationEnabled = false;
+static bool consoleColdEnabled = false;
+static bool consoleColdFirmware = false;
 static bool dcnVersionQueryEnabled = false, displayIdleExitEnabled = false;
 static bool dcnFirmwareResponsive = false;
 static bool dcnReinitEnabled = false, dcnResumeHeldEnabled = false, dcnPspLoadEnabled = false;
@@ -1710,7 +1712,8 @@ static uint32_t wrapPspTmrInit(void *psp) {
     struct TmrState {
         uint32_t read(uint32_t reg) { return fbRead(asicInfo, reg); }
     } io;
-    const bool reserved = hostReserveEnabled && hostReservationReady && asicInfo && psp;
+    const bool reserved = hostReserveEnabled && hostReservationReady && asicInfo && psp &&
+        (!consoleColdFirmware || RaphaelConsoleTmr::emptyFirmware(io));
     bool entered = false;
     uint32_t result = RaphaelConsoleTmr::replace(reserved, io, [&]() {
         entered = true;
@@ -3649,6 +3652,7 @@ static uint32_t wrapGmmSetMemoryAttributes(void *self, uint32_t type, void *attr
     auto a = reinterpret_cast<uint8_t *>(attributes);
     if (!(*reinterpret_cast<uint32_t *>(a + 4) & 1)) return original(self, type, attributes);
     hostReservationReady = false;
+    consoleColdFirmware = false;
     if (self == nullptr || asicInfo == nullptr || hwlibsBase == 0) return 2;
     auto o = reinterpret_cast<uint8_t *>(self);
     const uint64_t total = *reinterpret_cast<uint64_t *>(a + 8);
@@ -3658,6 +3662,17 @@ static uint32_t wrapGmmSetMemoryAttributes(void *self, uint32_t type, void *attr
     const uint32_t top = fbRead(asicInfo, kGcFbTop) & 0xffffff;
     const uint64_t physical = uint64_t(fbRead(asicInfo, kGcFbOffset) & 0xffffff) << 24;
     const uint32_t bootStatus=fbRead(asicInfo,0x36a3);
+    if (top<base || total!=((uint64_t(top-base)+1)<<24) || !physical ||
+        !visible || visible>total || existing>total-visible) return 2;
+    struct EmptyFirmwareTransport {
+        uint32_t read(uint32_t r) { return fbRead(asicInfo,r); }
+        void write(uint32_t r,uint32_t v) { fbWrite(asicInfo,r,v); }
+    } emptyIO;
+    if (consoleColdEnabled && RaphaelConsoleTmr::emptyFirmware(emptyIO)) {
+        consoleColdFirmware=RaphaelConsoleTmr::holdEmptyFirmware(emptyIO);
+        CRLOG("CONSOLE: empty firmware reset hold=%u",consoleColdFirmware);
+        if (!consoleColdFirmware) return 2;
+    }
     if (consolePresentationEnabled && bootStatus==0 && fbRead(asicInfo,0x36a4)==0x05003500) {
         struct HeldTransport {
             uint32_t read(uint32_t r) { return fbRead(asicInfo,r); }
@@ -3672,8 +3687,8 @@ static uint32_t wrapGmmSetMemoryAttributes(void *self, uint32_t type, void *attr
         RaphaelConsoleTmr::held(heldControl,heldReset,heldInterface);
     const bool displayHeld = dcnReinitEnabled && dcnResumeHeldEnabled && heldReset==1 &&
         (heldControl&~0x100000u)==0x800c6 && heldInterface==0x100;
-    bool approvedHeld = (consoleHeld || displayHeld) && bootStatus==0 &&
-        fbRead(asicInfo,0x36a4)==0x05003500;
+    bool approvedHeld = consoleColdFirmware || ((consoleHeld || displayHeld) && bootStatus==0 &&
+        fbRead(asicInfo,0x36a4)==0x05003500);
     if (consolePresentationEnabled)
         CRLOG("CONSOLE: reservation firmware state CNTL=%#x reset=%#x DMUIF=%#x held=%u",
               heldControl,heldReset,heldInterface,approvedHeld);
@@ -3691,19 +3706,27 @@ static uint32_t wrapGmmSetMemoryAttributes(void *self, uint32_t type, void *attr
         const uint32_t hi = fbRead(asicInfo, 0x366d + cw) & 0x1fffffff;
         const uint64_t address = fbRead(asicInfo, 0x3675 + 2*cw) |
             (uint64_t(fbRead(asicInfo, 0x3676 + 2*cw)) << 32);
+        if (consoleColdFirmware && !hi && !lo && !address) {
+            windows[i] = {0,0};
+            continue;
+        }
         if (hi <= lo) return 2;
         windows[i] = {address, uint64_t(hi - lo) + 1};
         RLOG("HOSTRESERVE: CW%u address=%#llx bytes=%#llx", cw, address, windows[i].bytes);
     }
     RaphaelHostMemory::Plan plan {};
-    if (!RaphaelHostMemory::plan(uint64_t(base) << 24, physical, total, visible,
-                                 existing, windows, 6, plan, false,
-                                 consolePresentationEnabled && approvedHeld)) {
+    const bool planned = consoleColdFirmware ?
+        RaphaelHostMemory::emptyFirmwarePlan(uint64_t(base)<<24,physical,total,visible,
+                                             existing,windows+2,4,plan) :
+        RaphaelHostMemory::plan(uint64_t(base)<<24,physical,total,visible,
+                                existing,windows,6,plan,false,
+                                consolePresentationEnabled && approvedHeld);
+    if (!planned) {
         CRLOG("HOSTRESERVE: window range refused total=%#llx visible=%#llx reserved=%#llx",
               total, visible, existing);
         return 2;
     }
-    if (consolePresentationEnabled || (dcnReinitEnabled && dcnPspLoadEnabled && dcnResumeHeldEnabled)) {
+    if (!consoleColdFirmware && (consolePresentationEnabled || (dcnReinitEnabled && dcnPspLoadEnabled && dcnResumeHeldEnabled))) {
         if (!approvedHeld) {
             if (fbRead(asicInfo,0x36a4)!=0x05003500 ||
                 !(fbRead(asicInfo,0x36b6)&0x10000) || (fbRead(asicInfo,0x36c0)&1)) return 2;
@@ -10897,6 +10920,8 @@ static void pluginStart() {
     RLOG("VCNPRESET: rgpuvcnpreset=%u", vcnPresetEnabled);
     uint32_t console = 0;
     consolePresentationEnabled = PE_parse_boot_argn("rgpuconsole", &console, sizeof(console)) && console == 1;
+    int coldConsole=0;
+    consoleColdEnabled = consolePresentationEnabled && PE_parse_boot_argn("rgpuconsolecold", &coldConsole, sizeof(coldConsole)) && coldConsole == 1;
     uint32_t hostReserve = 0;
     hostReserveEnabled = consolePresentationEnabled ||
         (PE_parse_boot_argn("rgpuhostreserve", &hostReserve, sizeof(hostReserve)) && hostReserve == 1);

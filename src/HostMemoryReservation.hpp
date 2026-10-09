@@ -5,6 +5,27 @@
 namespace RaphaelHostMemory {
 struct Window { uint64_t address, bytes; };
 struct Plan { uint64_t limit, reserved, additional; };
+// Only for an independently proven empty/held DMCUB. There is no executable
+// host firmware to preserve. Retire validated inactive mailbox windows while
+// retaining every byte already reserved by the native allocator.
+inline bool emptyFirmwarePlan(uint64_t mcBase, uint64_t physicalBase,
+                              uint64_t total, uint64_t visible, uint64_t existing,
+                              const Window *mailboxes, size_t count, Plan &out) {
+    if (!mcBase || !physicalBase || !total || !visible || visible > total ||
+        existing > total-visible || !mailboxes || count != 4) return false;
+    for (size_t i=0; i<count; ++i) {
+        const auto &w=mailboxes[i];
+        if (!w.address && !w.bytes) continue;
+        if (!w.bytes) return false;
+        uint64_t off;
+        if (w.address>=mcBase && w.address-mcBase<total) off=w.address-mcBase;
+        else if (w.address>=physicalBase && w.address-physicalBase<total) off=w.address-physicalBase;
+        else return false;
+        if (w.bytes>total-off) return false;
+    }
+    out={total-existing,existing,0};
+    return true;
+}
 // Firmware code uses CPU-physical offsets; mailbox windows use MC addresses.
 // Preserve the entire 32MiB-aligned tail containing every live host window.
 inline bool plan(uint64_t mcBase, uint64_t physicalBase, uint64_t total,

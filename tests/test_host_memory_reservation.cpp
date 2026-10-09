@@ -7,6 +7,18 @@ int main() {
         {mc+0x7fada600,0xae01},{mc+0x7fae5400,0x4001},
         {mc+0x7fae9400,0x10041},{mc+0x7faf9500,0xc881}};
     Plan held{};
+    Window emptyMailboxes[4]{};
+    assert(emptyFirmwarePlan(mc,phys,total,0x10000000,0,emptyMailboxes,4,held));
+    assert(held.limit==total && held.reserved==0 && held.additional==0);
+    emptyMailboxes[0]={mc+0x4a0000,0xb601};
+    assert(emptyFirmwarePlan(mc,phys,total,0x10000000,0x200000,emptyMailboxes,4,held));
+    assert(held.limit==total-0x200000 && held.reserved==0x200000 && held.additional==0);
+    emptyMailboxes[0]={mc+total-1,2};
+    assert(!emptyFirmwarePlan(mc,phys,total,0x10000000,0,emptyMailboxes,4,held));
+    emptyMailboxes[0]={UINT64_MAX-4,8};
+    assert(!emptyFirmwarePlan(mc,phys,total,0x10000000,0,emptyMailboxes,4,held));
+    assert(!emptyFirmwarePlan(mc,phys,total,0x10000000,total,emptyMailboxes,4,held));
+    assert(!emptyFirmwarePlan(mc,phys,total,0x10000000,0,emptyMailboxes,3,held));
     assert(plan(mc,phys,total,0x10000000,0x200000,retired,6,held));
     assert(held.limit==0x7c000000);
     assert(plan(mc,phys,total,0x10000000,0x200000,retired,6,held,true));

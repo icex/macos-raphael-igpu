@@ -7,7 +7,37 @@ struct IO {
     void write(uint32_t reg,uint32_t value) { ++writes; if(!rejectWrite)regs[reg]=value; }
     uint32_t read(uint32_t reg) { ++reads; return regs.at(reg); }
 };
+static IO cold() {
+    IO io;io.regs[0x36b6]=0x90000;io.regs[0x3802]=0;
+    io.regs[0x36a3]=0;io.regs[0x36a4]=0;
+    for(unsigned c=0;c<2;++c) for(auto r:{0x3665+c,0x366d+c,0x3675+2*c,0x3676+2*c})io.regs[r]=0;
+    for(unsigned r=0;r<3;++r) for(auto a:{0x364e + 2*r,0x364f+2*r,0x365e + r})io.regs[a]=0;
+    return io;
+}
 int main() {
+    IO empty=cold();
+    assert(RaphaelConsoleTmr::holdEmptyFirmware(empty));
+    assert(empty.regs[0x36b6]==0x80000 && empty.regs[0x3802]==0x100);
+    // Any code mapping, firmware identity, inaccessible read or running CPU
+    // refuses this separate cold path before any write.
+    for (auto entry:cold().regs) {
+        if(entry.first==0x36b6 || entry.first==0x3802 || entry.first==0x36c0)continue;
+        for(auto value:{1u,UINT32_MAX}) {
+            IO bad=cold();bad.regs[entry.first]=value;
+            assert(!RaphaelConsoleTmr::holdEmptyFirmware(bad) && bad.writes==0);
+        }
+    }
+    for(auto r:{0x36b6,0x3802,0x36c0}) {
+        IO bad=cold();bad.regs[r]=UINT32_MAX;
+        assert(!RaphaelConsoleTmr::holdEmptyFirmware(bad) && bad.writes==0);
+    }
+    IO runningCold=cold();runningCold.regs[0x36c0]=0;
+    assert(!RaphaelConsoleTmr::holdEmptyFirmware(runningCold) && runningCold.writes==0);
+    IO noWrite=cold();noWrite.rejectWrite=true;
+    assert(!RaphaelConsoleTmr::holdEmptyFirmware(noWrite));
+    empty.regs[0x366d]=0x80000001;
+    assert(!RaphaelConsoleTmr::emptyFirmware(empty));
+
     assert(RaphaelConsoleTmr::held(0x80000,1,0x100)); // observed held state after333
     assert(!RaphaelConsoleTmr::held(0x90000,1,0x100)); // enable must still be clear
     IO resetEnabled;resetEnabled.regs[0x36b6]=0x90000;
