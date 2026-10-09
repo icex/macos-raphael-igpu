@@ -21,8 +21,9 @@ recovered/authorizes_launch=true. Cycle stopped; host remains awake. No reboot/r
 [Evidence](findings/research/console-snapshot-native-20261009.md) ·
 [Hashes](findings/research/console-snapshot-native-evidence-20261009.json).
 
-1274 pre-run host tests pass,8skip. Dev c42380a delivers368, hosted37944403991
-test/build green.370 delivery pending; main unchanged. Next: investigate capture
+1274 host tests pass,8skip, including delivery checks. Candidate370 tested kext
+and milestone docs are integrated into dev; hosted validation pending. Prior368
+hosted37944403991 test/build green. Main unchanged. Next: investigate capture
 wait-witness race and test single changed-pixel rectangle in software before next
 native comparison. Fresh-user bootstrap, sustained performance, repeated crash
 lifecycle, broader apps/codecs, other managers and VirtualBox remain open.
