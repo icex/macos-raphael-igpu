@@ -74,3 +74,29 @@ Software validation so far: patch dry-run applies to retained six-patch source;
 patch, exercising per-geometry counts/totals/max, pending counts, bucket bound,
 period boundary, reset, saturation and lifetime cap. This is policy validation,
 not a QEMU build or device test.
+
+## Exact runtime build and software qualification
+
+The isolated runtime build is complete. New image
+`sha256:ef2d8d7843120042950a5de3b8070fa455092c597602ffd2d66cba83ffc29864`,
+QEMU executable SHA256
+`866e4ce4c0ecaad0392369d9f0d96e6a304ce081585c8585bd5f9cf1919ac686`.
+All182 loaded dependency file hashes equal the independently tested c394 image.
+Build commands/input hashes/container cleanup are under `run/c399-qemu-runtime`;
+exact software commands/results and natural exit0/removal receipt are under
+`run/c399-image-validation`. The accompanying software evidence JSON pins them.
+
+Actual image qtest/QMP results: restart15, legacy11, timing-enabled restart15
+full-pixel checks pass, including odd geometry, stale epochs and writes after ACK.
+Migration refuses all three; QEMU exits0. Default timing is absent, missing snapshot
+prerequisite refuses, and enabled output includes consistent completed-stage and
+pending counts across four geometries. A software4K sample spends5012us in copy
+including first-touch versus14us allocation: a useful discriminator result, not a
+native desktop benchmark or proof that allocation-induced faults are negligible.
+
+No physical devices/KVM/guest disks/network or native display were used. Software
+containers were capability-dropped, user1000, with no-new-privileges. No forced
+validation stop was needed. Runtime image is separately named; c394 stays intact.
+Candidate399 adds the exact `restart-timing` launch enum (old values preserved),
+metal221 and matching image pins. Native build/deployment/qualification remains
+separate; no native run has been performed by this agent.

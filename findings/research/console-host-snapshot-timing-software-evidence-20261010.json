@@ -1,0 +1,71 @@
+{
+  "scope": "software-only exact runtime device oracle, not native performance",
+  "image": "sha256:ef2d8d7843120042950a5de3b8070fa455092c597602ffd2d66cba83ffc29864",
+  "binary_sha256": "866e4ce4c0ecaad0392369d9f0d96e6a304ce081585c8585bd5f9cf1919ac686",
+  "evidence_path": "/home/bogdan/macos-vm/run/c399-image-validation/evidence.json",
+  "evidence_sha256": "3020dae89de1a1c7712a5f6c42a7293a52eb9828471d191441a52c92f4bdd66b",
+  "same_dependency_hashes_as_c394": 182,
+  "cleanup": {
+    "cid": "b4b8a8631afa0b444d6ecd27a91b28f786b5fc48d21ddc6bc1c78ecfc57647aa",
+    "image": "sha256:ef2d8d7843120042950a5de3b8070fa455092c597602ffd2d66cba83ffc29864",
+    "forced_stop": false,
+    "exit_code": 0,
+    "removed": true
+  },
+  "cases": {
+    "restart": {
+      "full_pixel_checks": 15,
+      "qemu_exit_code": 0,
+      "migration_status": "failed",
+      "host_timing_enabled": false,
+      "host_timing_rows": []
+    },
+    "legacy": {
+      "full_pixel_checks": 11,
+      "qemu_exit_code": 0,
+      "migration_status": "failed",
+      "host_timing_enabled": false,
+      "host_timing_rows": []
+    },
+    "timing": {
+      "full_pixel_checks": 15,
+      "qemu_exit_code": 0,
+      "migration_status": "failed",
+      "host_timing_enabled": true,
+      "host_timing_rows": [
+        "bochs-snapshot-timing window=1 start_us=95004725410 end_us=95009872707 geometry=640x480 commits=4 alloc_calls=4 copy_calls=4 free_calls=4 pending_present=1 pending_null=3 alloc_us=49/17 copy_us=781/204 free_us=47/47 dropped_geometry=0 saturated=0",
+        "bochs-snapshot-timing window=1 start_us=95004725410 end_us=95009872707 geometry=1920x1080 commits=1 alloc_calls=1 copy_calls=1 free_calls=1 pending_present=0 pending_null=1 alloc_us=12/12 copy_us=1252/1252 free_us=0/0 dropped_geometry=0 saturated=0",
+        "bochs-snapshot-timing window=1 start_us=95004725410 end_us=95009872707 geometry=3840x2160 commits=1 alloc_calls=1 copy_calls=1 free_calls=1 pending_present=0 pending_null=1 alloc_us=14/14 copy_us=5012/5012 free_us=1/1 dropped_geometry=0 saturated=0",
+        "bochs-snapshot-timing window=1 start_us=95004725410 end_us=95009872707 geometry=800x600 commits=1 alloc_calls=1 copy_calls=1 free_calls=1 pending_present=0 pending_null=1 alloc_us=24/24 copy_us=503/503 free_us=0/0 dropped_geometry=0 saturated=0"
+      ]
+    }
+  },
+  "artifacts_sha256": {
+    "c399-image-validation/run.py": "2a090ea3c450f339a281ed14bcd0cbe43351c15837631af9e68b2654b85a926c",
+    "c399-image-validation/check.py": "88a1fa1535ee9802b578620abc082c6349c10990f2cabeb90a065c65610ac580",
+    "c399-image-validation/docker-argv.json": "a65eae2271b54dfd3bb5a9fadfd43f3dfdd7978556f358427776f96c00687fbc",
+    "c399-image-validation/metadata.json": "19e3cccf38d1c1f2d59b8854746cc7bbd99b08505c92cae73271b18712528472",
+    "c399-image-validation/cleanup.json": "48c8bd289a812b7cd7828e7f9e6596d6117bb3e4beb92186abc66af034167730",
+    "c399-qemu-runtime/inputs.json": "03b3ebba674597dfb81bacb811b64e44063a95b925e959a969aa74b11ca03832",
+    "c399-qemu-runtime/image-inspect.json": "ba2b4388dea3731be0452013a72f473ceaf15a8273486cac80784997301de4f0",
+    "c399-image-validation/ordinary.json": "5d6c095ffbeae7f0176e17f06b29d1cd9af76527e878cfcb99bafd0d6b5736b1",
+    "c399-image-validation/restart/result.json": "e351350adfce8a26af32c748ed0f5287ca8842bc7251c135f0f20b64b39eaf3d",
+    "c399-image-validation/legacy/result.json": "d50e32ec0f329cd33a2bbff361e12dc41ad7eb7925aa67d00e7a56f6ef59f142",
+    "c399-image-validation/timing/result.json": "52bdfd2cc39440650f8ab902898ee15098ab6e8c51b1fe88f78f01a2bedcd809",
+    "c399-qemu-runtime/build.log": "0a9809689319c8bcc5f7cad258392dd2e9d40cdf2aecc8e87b751d0005787900",
+    "c399-qemu-runtime/build-cleanup.json": "837c322a2d7ddef4a5fa0d6080811e73162471ee4814408de59c9e9b1f979d87",
+    "c399-qemu-runtime/build-container-inspect.json": "561599ac3b14ca829d6d1c65571959aa09565fb555e01d869640dae50ce27e5e",
+    "c399-qemu-runtime/build.sh": "67e91c594e0ca5183dde9ba7bf9db47bd7dea31b59038e2ad3982b3ea0bff40d",
+    "c399-qemu-runtime/Dockerfile": "702c2ef31d5cad8f9e69f7c55d614f63e686343462aa6847b7f7716eebd9aed9",
+    "c399-qemu-runtime/qemu-10.1.2-bochs-snapshot-timing.patch": "c6dd2e88645c1d7f7fd97ec0fd3c06f043dedc8bd15d17218c0265de322f12b5",
+    "c399-qemu-runtime/build/qemu-system-x86_64": "866e4ce4c0ecaad0392369d9f0d96e6a304ce081585c8585bd5f9cf1919ac686",
+    "c399-image-validation/restart/qemu.log": "1b7333e4e9b8a9a131c489ff766b2ac6f817933153bbda49904031a4b82a4a93",
+    "c399-image-validation/restart/argv.json": "a8f70d51392c3f823f5fbf0db9fbab43881cbb7d5fd56c87a48569dd88837687",
+    "c399-image-validation/legacy/qemu.log": "b74712ae8a259eae723e3c358e0779aff1aa5bad8c315452a8eb44865cf67aa0",
+    "c399-image-validation/legacy/argv.json": "bc0eae050363fc6273b42fd02e24848c0e3e8d30bbe3d7c3e5a84e1181372c0b",
+    "c399-image-validation/timing/qemu.log": "3d83f110b6ae67c3de5655da93f863f7d23375162641840d918bb4033295029a",
+    "c399-image-validation/timing/argv.json": "84bbda4124b8001e103c46aab5e46e3359f5ef8f75e8ce8d5b687526b24391a0",
+    "c399-image-validation/timing/missing-timing-prerequisite.txt": "facad3304b47c2f142fe58c0b0eccb0e4c521bc1c6013fd6f927c4633d77a873",
+    "c399-image-validation/container-inspect.json": "4b471838d5f78bfd505412a20961d5c451ec777c3e9cd54b5adfaf1207788352"
+  }
+}
