@@ -133,7 +133,7 @@ def exit_check(stage,**details):
         raise ExitProofRefusal(stage,code,**details) from None
 
 
-def completed_original_zombie(identity):
+def completed_original_zombie(identity, diagnostic=None):
     """Only a stable, exact, sole-thread zombie with no descriptors is complete.
 
     A zombie group leader alone is insufficient: surviving threads can retain
@@ -144,16 +144,21 @@ def completed_original_zombie(identity):
         fields=(root/'stat').read_text().rsplit(')',1)[1].split()
         return int(fields[19]),fields[0]
     expected=(identity['start_ticks'],'Z')
+    def refused(reason, **details):
+        if diagnostic is not None:diagnostic.update(completion_reason=reason, **details)
+        return False
     try:
-        if state()!=expected:return False
-        if {p.name for p in (root/'task').iterdir()}!={str(pid)}:return False
-        if any((root/'fd').iterdir()):return False
-        return state()==expected
+        if state()!=expected:return refused('initial-state-changed')
+        tasks={p.name for p in (root/'task').iterdir()}
+        if tasks!={str(pid)}:return refused('not-sole-task',completion_task_count=len(tasks))
+        if any((root/'fd').iterdir()):return refused('descriptors-present')
+        if state()!=expected:return refused('final-state-changed')
+        return True
     except FileNotFoundError:
         # Reaping during the check is also completion, but a reused PID is not.
         try:root.stat()
         except FileNotFoundError:return True
-        return False
+        return refused('incomplete-proc-view')
 
 
 def inspect_exited():
@@ -194,9 +199,10 @@ def inspect_exited():
                 raw=Path(f"/proc/{identity['pid']}/stat").read_text().rsplit(')',1)[1].split()[0]
                 if raw in tuple('RSDTtZXIPKW'):state=raw
             except (OSError,IndexError):pass
-            completed_zombie=state=='Z' and completed_original_zombie(identity)
+            completion={}
+            completed_zombie=state=='Z' and completed_original_zombie(identity,completion)
             if not completed_zombie:
-                raise ExitProofRefusal('original-process','original-pid-present',pid=identity['pid'],state=state)
+                raise ExitProofRefusal('original-process','original-pid-present',pid=identity['pid'],state=state,**completion)
     # Only the exact completed zombie can be skipped. Other QEMU processes and
     # unknown visibility retain immediate refusal.
     with exit_check('proc-list'):
@@ -207,8 +213,9 @@ def inspect_exited():
         try:
             if completed_zombie and pid==identity['pid']:
                 with exit_check('original-process',pid=pid):
-                    if not completed_original_zombie(identity):
-                        raise ExitProofRefusal('original-process','original-pid-present',pid=pid,state='Z')
+                    completion={}
+                    if not completed_original_zombie(identity,completion):
+                        raise ExitProofRefusal('original-process','original-pid-present',pid=pid,state='Z',**completion)
                 continue
             with exit_check('proc-scan',pid=pid,operation='comm'):
                 comm=(path/'comm').read_text().strip()
@@ -223,8 +230,9 @@ def inspect_exited():
         except FileNotFoundError:continue
     if completed_zombie:
         with exit_check('original-process',pid=identity['pid']):
-            if not completed_original_zombie(identity):
-                raise ExitProofRefusal('original-process','original-pid-present',pid=identity['pid'],state='Z')
+            completion={}
+            if not completed_original_zombie(identity,completion):
+                raise ExitProofRefusal('original-process','original-pid-present',pid=identity['pid'],state='Z',**completion)
     return dict(exited=True,completed_zombie=completed_zombie,run_id=admission['run_id'],admission_sha256=expected,
                 identity=identity,scope=scope,plan_sha256=paused['plan_sha256'],
                 cid=permit['cid'],started_at=permit['started_at'],

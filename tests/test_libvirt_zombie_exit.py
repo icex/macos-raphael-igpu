@@ -19,9 +19,9 @@ class ZombieProofTests(unittest.TestCase):
         self.identity=dict(pid=42,start_ticks=43);self.write_stat()
     def write_stat(self,state='Z',ticks=43):
         (self.root/'stat').write_text('42 (qemu-system-x86) '+' '.join([state]+['0']*18+[str(ticks)]))
-    def proof(self):
+    def proof(self, diagnostic=None):
         with patch.object(entry,'Path',side_effect=lambda value:self.root if str(value)=='/proc/42' else Path(value)):
-            return entry.completed_original_zombie(self.identity)
+            return entry.completed_original_zombie(self.identity,diagnostic)
     def test_exact_zombie_with_no_worker_or_descriptor_passes(self):self.assertTrue(self.proof())
     def test_live_states_reused_pid_workers_and_fds_refuse(self):
         for state in ('R','S','D','T','X'):
@@ -29,6 +29,14 @@ class ZombieProofTests(unittest.TestCase):
         self.write_stat(ticks=44);self.assertFalse(self.proof());self.write_stat()
         (self.root/'task'/'99').mkdir();self.assertFalse(self.proof());(self.root/'task'/'99').rmdir()
         (self.root/'fd'/'7').touch();self.assertFalse(self.proof())
+    def test_refusal_identifies_failed_predicate_without_weakening_result(self):
+        report={};(self.root/'task'/'99').mkdir()
+        self.assertFalse(self.proof(report))
+        self.assertEqual(report,dict(completion_reason='not-sole-task',completion_task_count=2))
+        (self.root/'task'/'99').rmdir();(self.root/'fd'/'7').touch();report={}
+        self.assertFalse(self.proof(report));self.assertEqual(report,dict(completion_reason='descriptors-present'))
+        (self.root/'fd'/'7').unlink();self.write_stat(ticks=44);report={}
+        self.assertFalse(self.proof(report));self.assertEqual(report,dict(completion_reason='initial-state-changed'))
     def test_partial_missing_proc_data_is_not_reaping(self):
         (self.root/'stat').unlink();self.assertFalse(self.proof())
         shutil.rmtree(self.root);self.assertTrue(self.proof())

@@ -146,6 +146,17 @@ class RefusalDiagnosticsTests(unittest.TestCase):
     setUp=CaptureExitTests.setUp
     command=CaptureExitTests.command
     invoke=CaptureExitTests.invoke
+    def test_completion_refusal_keeps_only_known_reason_and_count(self):
+        self.proof=dict(exited=False,refusal=dict(stage='original-process',code='original-pid-present',
+            pid=42,state='Z',completion_reason='not-sole-task',completion_task_count=2,task_paths=['secret']))
+        result,stop=self.invoke();stop.assert_called_once_with(CID)
+        self.assertEqual(result['proof_refusal'],dict(stage='original-process',code='original-pid-present',
+            pid=42,state='Z',completion_reason='not-sole-task',completion_task_count=2))
+        self.proof['refusal'].update(completion_reason='private-text',completion_task_count=True)
+        self.live=[True]
+        result,stop=self.invoke();stop.assert_called_once_with(CID)
+        self.assertNotIn('completion_reason',result['proof_refusal']);self.assertNotIn('completion_task_count',result['proof_refusal'])
+
     def test_structured_permission_refusal_is_retained_without_text_or_argv(self):
         self.proof=dict(exited=False,refusal=dict(stage='proc-scan',code='permission-denied',pid=77,process_uid=0,errno=13,operation='exe',argv='secret',message='secret'))
         result,stop=self.invoke();stop.assert_called_once_with(CID)

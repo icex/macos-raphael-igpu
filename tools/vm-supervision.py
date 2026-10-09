@@ -221,6 +221,11 @@ def capture_exit(vm,cid,started_at,deadline,run_id,admission_digest):
                     if type(report.get(key)) is int and report[key]>=0:safe[key]=report[key]
                 if report.get('state') in tuple('RSDTtZXIPKW')+('unknown',):safe['state']=report['state']
                 if report.get('operation') in ('comm','exe'):safe['operation']=report['operation']
+                if report.get('completion_reason') in ('initial-state-changed','not-sole-task',
+                        'descriptors-present','final-state-changed','incomplete-proc-view'):
+                    safe['completion_reason']=report['completion_reason']
+                if type(report.get('completion_task_count')) is int and report['completion_task_count']>=0:
+                    safe['completion_task_count']=report['completion_task_count']
                 result['proof_refusal']=safe
             raise RuntimeError('capture exit proof refused')
         if not (observed['exited'] is True and observed['cid']==cid and
