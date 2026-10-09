@@ -4,7 +4,7 @@ Candidate386 adds installed external resize helpers, next-guest-boot persistence
 and actual manager non-table resize with five-target/text input while the agent
 remains connected. Explicit `agent-mouse=off` retains USB-tablet routing. The
 capture application and consent identity remain unchanged. Fixed HiDPI2 can make
-UI large on GDK1 hosts; adaptive DPI policy remains open. Final386 cleanup are pending review.
+UI large on GDK1 hosts; adaptive DPI policy remains open. Candidate386 natural shutdown and authorizing recovery pass.
 [Native386 evidence](../findings/research/console-installed-resize-native-20261009.md).
 
 Earlier candidate383 verifies an optional standard SPICE agent channel with live
@@ -598,4 +598,4 @@ Current installed-resize admission is **even physical640..3840 ×480..2160**,
 with fixed HiDPI2. Actual386 host GDK1 requests with odd pixel dimensions are
 refused. Adaptive DPI selection and an explicit odd-size policy remain open.
 Candidate386's independent audio restoration checks all pass; reconnect surfaces
-1502×960→1440×960 match, with five-hit/exact-text reconnect input passing; final cleanup awaits review.
+1502×960→1440×960 match, with five-hit/exact-text reconnect input passing; natural shutdown and authorizing recovery pass, with the partial capture tail retained.

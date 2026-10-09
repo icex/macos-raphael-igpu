@@ -29,12 +29,16 @@ The runner label is explicitly Intel, as listed in the
 
 ## Checked-in experimental executable
 
-`kext/bin/RaphaelGPU` contains the hardware-tested candidate383 executable,
-build `42a989b30403424e97098f562d46651e`, from clean source
-`777bf28521f2acdf5eeabb9fd9dc619ac0a3e9af`. Optional SPICE agent transport and
-bounded existing-mode HiDPI resizing pass with separately identified candidate384
-diagnostic helpers; persistent agent installation remains open. Native guest shutdown preserves a
-real controller terminal and authorizing recovery. Earlier356 normal/fullscreen
+`kext/bin/RaphaelGPU` contains the hardware-tested candidate386 executable,
+build `ded62ba27d244bf892d516099cc7335d`, from clean source
+`17e907790afba76b50976da674ae75a6a411cc72`. Card213 qualifies installed external
+resize helpers after a guest reboot, bounded even-size mode control, and actual
+manager USB-tablet input while the agent remains connected (`agent-mouse=off`).
+The ordinary presenter was used; snapshot ownership remained **unarmed**.
+The sealed capture application stayed unchanged. Audio sample delivery and
+independent route restoration pass. Natural guest shutdown retains the genuine
+controller terminal and authorizing recovery, with the partial critical capture
+tail explicitly preserved. Earlier356 normal/fullscreen
 and361 continuous pointer entry at1000×760 pass; input is not rerun in381. Missing-motion/stationary-pointer
 transitions remain open. Candidate364 adds existing-user package/reinstall and
 one native bounded shutdown-wait pass. Candidate366 verifies existing-user next
@@ -795,13 +799,13 @@ The external support payload introduced in385 starts on the next guest boot in38
 without changing the signed capture application, its receipt, or CDHash. Dynamic
 mode control and USB-tablet input coexist with the resize agent connected under
 explicit `agent-mouse=off`. This is an existing-user qualification, not a clean-user
-installer or adaptive-DPI release. The checked-in binary statement above remains
-its own provenance record until the tested386 bundle is explicitly delivered.
-Final386 cleanup review is pending.
+installer or adaptive-DPI release. The checked-in executable provenance is
+recorded above; helper payload identity is recorded separately in the native report.
+Candidate386 natural shutdown and authorizing recovery pass.
 [Evidence](../findings/research/console-installed-resize-native-20261009.md).
 
 Current installed-resize admission is **even physical640..3840 ×480..2160**,
 with fixed HiDPI2. Actual386 host GDK1 requests with odd pixel dimensions are
 refused. Adaptive DPI selection and an explicit odd-size policy remain open.
 Candidate386's independent audio restoration checks all pass; reconnect surfaces
-1502×960→1440×960 match, with five-hit/exact-text reconnect input passing; final cleanup awaits review.
+1502×960→1440×960 match, with five-hit/exact-text reconnect input passing; natural shutdown and authorizing recovery pass, with the partial capture tail retained.

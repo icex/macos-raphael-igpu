@@ -40,7 +40,7 @@ Existing-user capture consent is retained. Fresh-user setup, crash/restart
 lifecycle, adaptive DPI policy, stationary-pointer resize, other
 frontends and VirtualBox remain unqualified. Fixed HiDPI2 makes UI large on GDK1 hosts;
 audio endpoint audibility and A/V sync remain open. Candidate386 audio sample
-delivery passes; final cleanup are pending review.
+delivery passes; natural shutdown and authorizing recovery pass, with the partial capture tail retained.
 
 Stock QEMU remains the default; snapshot experiments use separately pinned images.
 [Current agent transport and bounded resize evidence](findings/research/console-vdagent-native-20261009.md)
@@ -189,4 +189,4 @@ Current installed-resize admission is **even physical640..3840 ×480..2160**,
 with fixed HiDPI2. Actual386 host GDK1 requests with odd pixel dimensions are
 refused. Adaptive DPI selection and an explicit odd-size policy remain open.
 Candidate386's independent audio restoration checks all pass; reconnect surfaces
-1502×960→1440×960 match, with five-hit/exact-text reconnect input passing; final cleanup awaits review.
+1502×960→1440×960 match, with five-hit/exact-text reconnect input passing; natural shutdown and authorizing recovery pass, with the partial capture tail retained.

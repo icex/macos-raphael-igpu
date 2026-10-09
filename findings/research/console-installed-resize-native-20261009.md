@@ -1,8 +1,9 @@
 # Candidate386: installed resize with USB-tablet input
 
 Run `e5d5d205577125364146f54224bbd3f6`, metal213, build
-`ded62ba27d244bf892d516099cc7335d`, source `17e9077`.
-This report covers completed functional observations; shutdown/recovery remain pending at this revision.
+`ded62ba27d244bf892d516099cc7335d`, source `17e907790afba76b50976da674ae75a6a411cc72`.
+This report covers completed functional observations and shutdown/recovery.
+Card213 used the ordinary presenter; experimental snapshot ownership remained unarmed.
 
 ## Installed startup and unchanged consent-bearing application
 
@@ -46,8 +47,7 @@ UI physically large despite exact pixel-size agreement; adaptive DPI policy is a
 separate unimplemented feature. Candidate385's eleven-size bounded LRU control is
 prior evidence, not a repeated386 stress test. Broader crash/restart lifecycle,
 first-user installation, other VM managers, VirtualBox, universal60Hz, and complete
-frame integrity remain open. Final cleanup results
-must be added before delivery is called complete.
+frame integrity remain open. Cleanup receipts are recorded below.
 
 ## Geometry boundary and reconnect surface check
 
@@ -78,4 +78,20 @@ Decoded `c386-final-{display,presenter,vdagent,launcher}.log` retain one
 ConnectionRefusedError on request8 while direct geometry control was running.
 Subsequent requests succeed. Two zero-monitor requests are unsupported refusals.
 The run is not universally error-free; concurrent direct control is not qualified
-as a reliable multi-client operation. Cleanup is pending at this revision.
+as a reliable multi-client operation. Cleanup receipts are recorded below.
+
+## Completed shutdown and capture boundary
+
+Harness shutdown is exited-after-guest-request. The private libvirt terminal
+records guest-shutdown with process_exited:true. Docker events contain container
+die(exit0) and destroy, with no container kill/stop; an exec-helper137 is a
+distinct event, not the VM exit code. Both capture receipts report deferred
+natural-container-exit after about0.401s, shutdown_event_wait:false and
+completed_original_zombie:false. Console records clean EOF; critical records
+recv-reset, which remains an error transport boundary rather than being called EOF.
+
+Recovery is recovered and authorizes_launch:true. Critical snapshot18 is a
+terminal prefix, retaining one invalid-chunk-bounds line and incomplete snapshot7
+with318 valid chunks/no END. Clean shutdown and authorizing recovery therefore
+do not mean a perfect capture tail. The completed manifest includes these
+independently hashed receipts.
