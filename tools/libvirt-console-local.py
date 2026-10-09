@@ -45,6 +45,7 @@ class LocalBackend:
         self.lv=libvirt;self.lq=libvirt_qemu
         self.scope=namespace_identity()
         self.event_path=Path(event_path)
+        self.record_lock=threading.Lock()
         self.pending=deque()
         self.attempt=None
         self.known_identity=None
@@ -66,8 +67,24 @@ class LocalBackend:
             self.event_error=error
 
     def lifecycle(self,conn,domain,event,detail,opaque):
-        self.pending.append(dict(name=domain.name(),uuid=domain.UUIDString(),
-                                 event=event,detail=detail))
+        observed=dict(name=domain.name(),uuid=domain.UUIDString(),
+                      event=event,detail=detail)
+        # Persist at callback arrival, not only after domain disappearance. This
+        # is observation, never authorization to ignore capture loss or workers.
+        try:
+            identity=dict(self.known_identity) if self.known_identity else None
+            bound=bool(identity and self.attempt and
+                       all(identity.get(k)==v for k,v in self.attempt.items()) and
+                       observed['name']==identity['name'] and observed['uuid']==identity['uuid'])
+            self.record(dict(phase='libvirt-lifecycle-observed',**observed,
+                observed_epoch=time.time(),observed_monotonic=time.monotonic(),
+                identity_bound=bound,identity=identity if bound else None,
+                scope=dict(self.scope),
+                guest_shutdown=bool(bound and event==self.lv.VIR_DOMAIN_EVENT_SHUTDOWN and
+                                    detail==self.lv.VIR_DOMAIN_EVENT_SHUTDOWN_GUEST)))
+        except BaseException as error:
+            self.event_error=error
+        self.pending.append(observed)
 
     def container_identity(self):return namespace_identity()
 
@@ -181,8 +198,9 @@ class LocalBackend:
         raise NotImplementedError('admitted TAP provenance/topology verifier required')
 
     def record(self,event):
-        with self.event_path.open('a') as stream:
-            stream.write(json.dumps(event)+'\n');stream.flush();os.fsync(stream.fileno())
+        with self.record_lock:
+            with self.event_path.open('a') as stream:
+                stream.write(json.dumps(event)+'\n');stream.flush();os.fsync(stream.fileno())
 
     def is_missing_domain_error(self,error):
         return (isinstance(error,DomainExited) or

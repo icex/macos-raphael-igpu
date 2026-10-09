@@ -226,6 +226,19 @@ def capture_exit(vm,cid,started_at,deadline,run_id,admission_digest):
                     safe['completion_reason']=report['completion_reason']
                 if type(report.get('completion_task_count')) is int and report['completion_task_count']>=0:
                     safe['completion_task_count']=report['completion_task_count']
+                task_samples=report.get('completion_tasks')
+                if isinstance(task_samples,list) and len(task_samples)<=8:
+                    clean=[]
+                    for item in task_samples:
+                        if not isinstance(item,dict):continue
+                        if type(item.get('tid')) is not int or item['tid']<0:continue
+                        if item.get('state') not in tuple('RSDTtZXIPKW')+('unknown',):continue
+                        sample={'tid':item['tid'],'state':item['state']}
+                        if type(item.get('start_ticks')) is int and item['start_ticks']>=0:
+                            sample['start_ticks']=item['start_ticks']
+                        clean.append(sample)
+                    safe['completion_tasks']=clean
+                    safe['completion_tasks_truncated']=report.get('completion_tasks_truncated') is True
                 result['proof_refusal']=safe
             raise RuntimeError('capture exit proof refused')
         if not (observed['exited'] is True and observed['cid']==cid and

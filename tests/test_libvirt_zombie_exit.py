@@ -53,6 +53,17 @@ class ZombieProofTests(unittest.TestCase):
             with self.assertRaises(PermissionError) as caught:self.proof()
         self.assertEqual(caught.exception.errno,errno.EACCES)
         self.assertEqual(caught.exception.filename,str(self.root/'fd'))
+    def test_worker_diagnostics_do_not_authorize_completion(self):
+        (self.root/'task'/'99').mkdir()
+        (self.root/'task'/'99'/'stat').write_text('99 (worker) '+' '.join(['S']+['0']*18+['77']))
+        details={}
+        with patch.object(entry,'Path',side_effect=lambda value:self.root if str(value)=='/proc/42' else Path(value)):
+            self.assertFalse(entry.completed_original_zombie(self.identity,details))
+        self.assertEqual(details['completion_reason'],'not-sole-task')
+        self.assertEqual(details['completion_task_count'],2)
+        self.assertIn({'tid':99,'state':'S','start_ticks':77},details['completion_tasks'])
+        self.assertIn({'tid':42,'state':'unknown'},details['completion_tasks'])
+
     def test_changed_state_during_inspection_refuses(self):
         original=Path.read_text;calls=0
         def read(path,*a,**kw):

@@ -155,7 +155,20 @@ def completed_original_zombie(identity, diagnostic=None):
     try:
         if state()!=expected:return refused('initial-state-changed')
         tasks={p.name for p in (root/'task').iterdir()}
-        if tasks!={str(pid)}:return refused('not-sole-task',completion_task_count=len(tasks))
+        if tasks!={str(pid)}:
+            # Bounded diagnostics only. Unknown/disappearing task details cannot
+            # turn a non-sole leader into completion or delay the fatal path.
+            samples=[]
+            if diagnostic is not None:
+                for tid in sorted(tasks)[:8]:
+                    item=dict(tid=int(tid)) if tid.isdigit() else dict(tid=-1)
+                    try:
+                        fields=(root/'task'/tid/'stat').read_text().rsplit(')',1)[1].split()
+                        item.update(state=fields[0],start_ticks=int(fields[19]))
+                    except (OSError,ValueError,IndexError):item['state']='unknown'
+                    samples.append(item)
+            return refused('not-sole-task',completion_task_count=len(tasks),
+                           completion_tasks=samples,completion_tasks_truncated=len(tasks)>8)
         if any((root/'fd').iterdir()):return refused('descriptors-present')
         if state()!=expected:return refused('final-state-changed')
         return True
