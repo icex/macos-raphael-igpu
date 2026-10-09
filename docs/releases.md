@@ -29,11 +29,11 @@ The runner label is explicitly Intel, as listed in the
 
 ## Checked-in experimental executable
 
-`kext/bin/RaphaelGPU` contains the hardware-tested candidate368 executable,
-build `b0d4f6d56caa4d23a0aa439e0613aa83`, from clean source
-`d995a1447a5d468a69820ead00f303d0b71f09e4`. Native reset shutdown preserves a
+`kext/bin/RaphaelGPU` contains the hardware-tested candidate370 executable,
+build `5dd91fea9b9340a2a6aa020c70c6b0d4`, from clean source
+`11f0440a02e2c014221fde01d8ae91aed4c17cad`. Native reset shutdown preserves a
 real controller terminal and authorizing recovery. Earlier356 normal/fullscreen
-and361 continuous pointer entry at1000×760 pass; input is not rerun in368. Missing-motion/stationary-pointer
+and361 continuous pointer entry at1000×760 pass; input is not rerun in370. Missing-motion/stationary-pointer
 transitions remain open. Candidate364 adds existing-user package/reinstall and
 one native bounded shutdown-wait pass. Candidate366 verifies existing-user next
 guest-boot startup/consent; clean-user and console-only first setup remain open.
@@ -44,24 +44,31 @@ locked capture-source tokens while manager partial tokens persist, narrowing
 investigation downstream without identifying one stage or qualifying atomicity.
 Ordinary afplay default USB → QEMU → Pulse stereo capture and route restoration
 pass; endpoint audibility, other applications and A/V sync are unqualified.
+Candidate370 adds opt-in immutable host snapshots and one SPICE update rectangle:
+three native/HiDPI token windows have no invalid samples after startup, with audio
+capture and ordinary fallback startup passing.60Hz/full-frame atomicity remain
+unqualified. Its genuine guest shutdown/recovery pass is separate from capture
+witness137/immediate-stop during container teardown; do not claim natural capture.
 These results do not qualify60Hz, all VM managers or VirtualBox.
 
 The adjacent `build-manifest.json` records input hashes and executable SHA-256.
 The source tree and `kext/Info.plist` match that driver build; subsequent user-space
 helper changes have separate history. Source builds never use this binary as a
 fallback. The executable alone is not an installable bundle: use the matching
-Info.plist, Lilu and tested VM setup. The matching console card is metal-203 with
-`--pins experiments/pins-bochs-full-refresh.json`, explicit SPICE60 and
-`CONSOLE_FULL_REFRESH=on`. Do not interchange exact launch contracts.
+Info.plist, Lilu and tested VM setup. The matching snapshot card is metal-205 with
+`--pins experiments/pins-bochs-snapshot.json`, explicit SPICE60,
+`CONSOLE_FULL_REFRESH=on` and `CONSOLE_SNAPSHOT=on`. The presenter separately
+requires `RGPU_CONSOLE_SNAPSHOT=1`; ordinary BAR0 remains default. Do not interchange exact launch contracts.
 [Console setup and scope](virtual-console.md)
 · [Native356 evidence](../findings/research/libvirt-reset-native-20261009.md)
 · [Native361 audio/input evidence](../findings/research/console-default-audio-input-20261009.md)
 · [Native364 installer/lifecycle evidence](../findings/research/console-install-native-20261009.md)
-· [Native366 persistence/cadence evidence](../findings/research/console-cadence-native-20261009.md).
+· [Native366 persistence/cadence evidence](../findings/research/console-cadence-native-20261009.md)
+· [Native370 snapshot evidence](../findings/research/console-snapshot-native-20261009.md).
 
 Candidate330 remains the independently tested Samsung HDMI HiDPI120/audio
-baseline, available on `main` at861ba5e. Candidate366's physical HDMI behavior
-has not been independently rerun. Do not relabel330's evidence as a366 HDMI test.
+baseline, available on `main` at861ba5e. Candidate370's physical HDMI behavior
+has not been independently rerun. Do not relabel330's evidence as a370 HDMI test.
 
 ## Local build
 

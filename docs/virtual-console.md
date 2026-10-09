@@ -11,8 +11,10 @@ and authorizing recovery. Candidate364 exercises the bounded shutdown-wait branc
 in both hooks before natural exit; broader lifecycle coverage remains open.
 Normal/fullscreen input pass. Candidate361 also passes continuous pointer entry
 into1000×760; earlier enter-without-motion failures remain distinct.
-Partial-region samples, automatic resize, other frontends and VirtualBox remain
-open. This is not qualified60Hz delivery.
+Candidate370 has zero invalid tokens after startup in three native/HiDPI manager
+windows using immutable snapshots plus a single SPICE rectangle. Full-frame
+atomicity, sustained60Hz, automatic resize, other frontends and VirtualBox remain
+unqualified.
 [Current paired evidence](../findings/research/bochs-full-refresh-paired-20261009.md).
 Candidate361 verifies ordinary afplay default USB audio through QEMU/Pulse with
 isolated stereo capture and exact route restoration; endpoint audibility, other
@@ -462,3 +464,38 @@ Both runs restore the original LaunchAgent and ordinary capture; final manager
 desktop, guest shutdown and recovery pass. Audio/input are not rerun.
 [Native result and limitations](../findings/research/console-source-token-native-20261009.md)
 · [Timing and error categories](../findings/research/console-source-token-plan-20261009.md).
+
+
+## Immutable snapshots and single-rectangle native experiment (370)
+
+The separately pinned `experiments/pins-bochs-snapshot.json` image and metal-205
+contract require `CONSOLE_SNAPSHOT=on`, full-refresh ON and SPICE60. The matching
+presenter must explicitly set `RGPU_CONSOLE_SNAPSHOT=1`; unset/0 retains ordinary
+BAR0 capture. It checks SnapshotProtocol1, waits for ScreenCaptureKit startup,
+then arms one staging lease and maps the separate32MiB BAR. Each frame is copied
+into staging, fenced, committed and acknowledged before reuse. The ACK proves
+host copying, not delivery or scanout. QEMU owns the immutable pending/published
+surface; SPICE uses one update rectangle. Snapshot migration is refused.
+
+This is a one-shot lease per QEMU device lifetime. A successful ARM consumes it
+even if later setup fails; do not retry snapshot after presenter death/restart
+within that guest. Ordinary BAR0 fallback remains available after owner close.
+Normal capture permission/start failure before ARM does not consume the lease.
+The native run renewed normal Screen Recording consent first, then armed once,
+changed HiDPI→native→HiDPI, and restored the original agent for future login.
+Never edit the TCC database to work around consent.
+
+After connection startup,389/851/384 manager token samples were valid with zero
+invalids; a real manager desktop screenshot and default USB/QEMU/Pulse stereo
+capture pass. The first source diagnostic has1284 valid decoded tokens and17
+unavailable observations; later cases do not rerun that completed source window.
+Observed unique ID rates14.24/41.01/14.31 per second are sampling lower bounds.
+The HiDPI observer itself sampled only~19.45/s. This does not qualify60Hz or
+full-frame atomicity, and the combined changes do not isolate their contributions.
+
+Orderly snapshot-owner exit and fresh ordinary capture startup pass. Explicit
+RETIRE readback, same-guest re-ARM refusal and presenter crash remain untested.
+Shutdown produces the genuine guest terminal and authorizing GPU recovery, but
+both capture witnesses exit137 during container teardown and report immediate-stop.
+That race is being addressed separately; these are not natural-capture-exit passes.
+[Native evidence](../findings/research/console-snapshot-native-20261009.md).
