@@ -84,13 +84,40 @@ class SessionAgentTests(unittest.TestCase):
         self.assertFalse(self.success(handler.flush(2.9)));self.assertEqual(self.calls,[])
 
     def test_holder_inventory_refuses_foreign_and_missing_self(self):
-        for stdout,code,stderr,own in [('p123\n',0,'',False),('',1,'',True),('p123\n',0,'',True),('',1,'warning',False)]:
+        for stdout,code,stderr,own in [('p123\nf3\n',0,'',False),('',1,'',True),('p123\nf3\n',0,'',True),('',1,'warning',False)]:
             with self.subTest(stdout=stdout,code=code,own=own):
                 result=subprocess.CompletedProcess([],code,stdout,stderr)
                 with patch.object(agent.subprocess,'run',return_value=result),self.assertRaises(RuntimeError):agent.holders(own)
 
     def test_holder_inventory_accepts_empty_then_only_self(self):
         with patch.object(agent.subprocess,'run',return_value=subprocess.CompletedProcess([],1,'','')):agent.holders()
-        with patch.object(agent.subprocess,'run',return_value=subprocess.CompletedProcess([],0,f'p{os.getpid()}\n','')):agent.holders(True)
+        with patch.object(agent.subprocess,'run',side_effect=[subprocess.CompletedProcess([],0,f'p{os.getpid()}\nf3\n',''),subprocess.CompletedProcess([],1,'','')]):agent.holders(True)
+
+    def test_real_per_node_holder_output_and_exact_queries(self):
+        # Native385 per-node output: tty matched PID1846/fd3, cu unmatched.
+        results=[subprocess.CompletedProcess([],0,'p1846\nf3\n',''),subprocess.CompletedProcess([],1,'','')]
+        with patch.object(agent.os,'getpid',return_value=1846),patch.object(agent.subprocess,'run',side_effect=results) as run:
+            agent.holders(True)
+        self.assertEqual([call.args[0] for call in run.call_args_list],
+            [['/usr/sbin/lsof','-nP','-F','pf',agent.DEVICE],['/usr/sbin/lsof','-nP','-F','pf',agent.CALLOUT]])
+        self.assertTrue(all(call.kwargs['timeout']==2 for call in run.call_args_list))
+
+    def test_holder_parser_rejects_unknown_orphan_incomplete_and_wrong_status(self):
+        for text,code in [('f3\n',0),('p1846\nnname\n',0),('p1846\n',0),
+                          ('p1846\nf3',0),('p0\nf3\n',0),('p1846\nf3\nf3\n',0),
+                          ('p1846\nf3\np1846\nf4\n',0),('p1846\nf3\n',1),('',0),
+                          ('p1846\nf3u\n',0),('p1846\nf3\n',2)]:
+            with self.subTest(text=text,code=code),self.assertRaises((RuntimeError,ValueError)):
+                agent.holder_records(subprocess.CompletedProcess([],code,text,''))
+        with self.assertRaises(RuntimeError):agent.holder_records(subprocess.CompletedProcess([],0,'p1846\nf3\n','warning'))
+
+    def test_foreign_callout_alias_refuses_and_self_alias_is_allowed(self):
+        for pid,accepted in [(1846,True),(9999,False)]:
+            results=[subprocess.CompletedProcess([],0,'p1846\nf3\n',''),
+                     subprocess.CompletedProcess([],0,f'p{pid}\nf4\n','')]
+            with patch.object(agent.os,'getpid',return_value=1846),patch.object(agent.subprocess,'run',side_effect=results):
+                if accepted:agent.holders(True)
+                else:
+                    with self.assertRaises(RuntimeError):agent.holders(True)
 
 if __name__=='__main__':unittest.main()

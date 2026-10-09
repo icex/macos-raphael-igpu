@@ -33,15 +33,42 @@ class Budget:
         if amount>self.available:raise ValueError('agent traffic rate exceeded')
         self.available-=amount
 
-def holders(allow_self=False):
-    result=subprocess.run(['/usr/sbin/lsof','-nP','-F','p',DEVICE,CALLOUT],capture_output=True,text=True,timeout=2)
+def holder_records(result):
+    """One exact-node lsof query; p records require numeric f descendants."""
     if result.stderr or result.returncode not in (0,1):raise RuntimeError('port holder inventory unavailable')
-    lines=result.stdout.splitlines()
-    if any(not row.startswith('p') or not row[1:].isdigit() for row in lines):raise ValueError('invalid holder inventory')
-    owners={int(row[1:]) for row in lines}
+    text=result.stdout
+    if not isinstance(text,str) or len(text)>65536:raise ValueError('holder inventory size/type refused')
+    if not text:
+        if result.returncode!=1:raise RuntimeError('empty successful holder inventory')
+        return set()
+    if result.returncode!=0:raise RuntimeError('nonempty failed single-node holder inventory')
+    if not text.endswith('\n'):raise ValueError('truncated holder inventory')
+    owners=set();current=None;descriptors=set()
+    for row in text.splitlines():
+        if len(row)<2 or row[0] not in ('p','f') or not row[1:].isascii() or not row[1:].isdigit() or len(row)>12:
+            raise ValueError('invalid holder inventory field')
+        number=int(row[1:])
+        if row[0]=='p':
+            if number<=0 or number in owners or (current is not None and not descriptors):
+                raise ValueError('invalid holder process record')
+            current=number;owners.add(number);descriptors=set()
+        else:
+            if current is None or number in descriptors:raise ValueError('orphan/duplicate holder descriptor')
+            descriptors.add(number)
+    if current is None or not descriptors:raise ValueError('holder process has no descriptor')
+    return owners
+
+def holders(allow_self=False):
+    # A combined query can return1 solely because the other alias has no match.
+    # Keep exit status and visibility evidence separate for each exact node.
+    owners=[]
+    for node in (DEVICE,CALLOUT):
+        result=subprocess.run(['/usr/sbin/lsof','-nP','-F','pf',node],capture_output=True,text=True,timeout=2)
+        owners.append(holder_records(result))
     if allow_self:
-        if result.returncode!=0 or owners!={os.getpid()}:raise RuntimeError('port is shared or own holder not visible')
-    elif result.returncode!=1 or owners:raise RuntimeError('agent port already held')
+        if owners[0]!={os.getpid()} or owners[1]-{os.getpid()}:
+            raise RuntimeError('port is shared or own tty holder not visible')
+    elif any(owners):raise RuntimeError('agent port already held')
 
 def reply(success,port=1):return monitors.packet(3,struct.pack('<II',2,1 if success else 2),port)
 
