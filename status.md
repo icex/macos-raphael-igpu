@@ -1,30 +1,29 @@
 # Live status — 2026-10-09
 
-## Candidate374: native HiDPI cadence improves; capture teardown still blocked
+## Candidate376: mixed-motion integrity and orderly retirement pass; performance open
 
-Runf5fd1fe85aeb7a340b0ac52a4d78157a, metal-206, build1.0.374,
-MODE2#302, bootba51b3c6. Single changed-pixel SPICE rectangle preserves snapshot
-ownership. Same370 presenter/fixture: HiDPI52.56 then51.24 distinct IDs/s sampled,
-native57.86; all3553 post-startup manager token samples valid. These are lower
-bounds for a localized workload, not60Hz/scanout/full-frame qualification.
-First source check1724 decoded valid,2 unavailable; no decoded corruption.
-Desktop screenshot, USB audio capture/restoration and ordinary fallback startup
-pass. Existing-user startup/consent retained. Input not rerun.
+Run35c4167dbec05e9d295b5f77b97a669c, metal207,1.0.376,MODE2#303,
+bootba51b3c6. Same374 changed-bbox image and installed370 presenter/consent.
+Three110s mixed-motion fixtures;300s actual-manager observation. All14265 sampled
+tokens after startup valid; startup53/17/34 invalid retained separately.
+HiDPI localized~52 distinct IDs/s, full-field~18; native~58/~44. These are sampled
+lower bounds. Source CRC checker timed out before fixture: no source CRC claim.
+Instrumented interiors show QEMU publishing~39/s during full-field HiDPI while
+manager timer callbacks fall~20/s: observer limit prevents exact delivery claim.
+Next discriminator: same-channel synchronous invalidation/ROI observations.
 
-After orderly snapshot exit, ARMNotReady and staging-mapBadArgument deny reuse;
-checker expected a different mapping error and exits6. Not a lifecycle pass.
-Original agent restored with awake ordinary3840x2160 capture.
-CORE_PROBE_PASS, earliest_failure=null. Both initial capture proofs refuse PID113
-stateD and force container stop; Docker exit137, private terminal absent. Outer
-exited-after-guest-request is NOT clean shutdown.373 repeat137 fix not exercised.
-GPU recovery independently recovered/authorizes_launch=true. Cycle stopped;
-host remains awake, vfio-pci/power-on. No reboot/rebind.
-[Evidence](findings/research/console-changed-bbox-native-20261009.md) ·
-[Hashes](findings/research/console-changed-bbox-native-evidence-20261009.json).
+Readable desktop screenshot, stereo USB/QEMU/Pulse capture retry and independent
+route restoration pass; first audio route attempt refused and restored. Input
+not rerun. Corrected retired-buffer control passes: BAR0 mapping works, ARM and
+staging regrant denied. Original agent and awake ordinary3840x2160 capture restored.
+CORE_PROBE_PASS/earliest_failure=null. Private guest-shutdown/process_exited=true;
+both captures natural-container-exit via bounded shutdown wait(~0.469s).
+Recovery recovered/authorizes_launch=true. Cycle stopped; host awake,vfio-pci/on.
+374 forced-stop D-state race remains unresolved;377 diagnostics not exercised.
 
-1285 host tests pass,8skip, including delivery checks. Candidate374 docs and
-hardware-tested kext are integrated into dev; hosted37951815825 test/build green. Prior370
-hosted37948929898 test/build green. Main unchanged. Next: bounded read-only D-state
-refusal diagnostics without weakening gates, corrected regrant positive/negative
-control, and sustained localized/full-field workload. Broader apps/codecs,
-fresh-user bootstrap, crash lifecycle, other managers and VirtualBox remain open.
+1298 host tests pass,8skip; build/identity/dry-run pass.376 evidence committed
+before next cycle; delivery pending. Previous374 dev5728db9 hosted37951815825
+build/test green. Main unchanged. Broader crash/restart, fullframe/performance,
+fresh-user setup, input edge cases, apps/codecs and VirtualBox remain open.
+[Evidence](findings/research/console-mixed-motion-native-20261009.md) ·
+[Hashes](findings/research/console-mixed-motion-native-evidence-20261009.json).
