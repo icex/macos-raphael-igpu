@@ -177,7 +177,7 @@ def watchdog(home, ident, deadline):
     (home / 'watchdog-result.json').write_text(json.dumps(result) + '\n')
 
 
-def main():
+def parser():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--execute', action='store_true')
     ap.add_argument('--derive-smc-key', nargs=2, type=Path, metavar=('PRIVATE_ARGV', 'NEW_PRIVATE_KEY'))
@@ -189,6 +189,11 @@ def main():
     ap.add_argument('--cpus', type=int, choices=(1, 8), default=8)
     ap.add_argument('--tsc-mode', choices=('auto', 'RealTSCOffset'), default='auto')
     ap.add_argument('--watchdog', nargs=3, metavar=('HOME', 'UUID', 'DEADLINE'))
+    ap.add_argument('--graphics-controller', choices=('vboxvga', 'vmsvga'), default='vboxvga')
+    return ap
+
+def main():
+    ap = parser()
     a = ap.parse_args()
     if a.derive_smc_key:
         if a.execute or a.watchdog:
@@ -221,6 +226,7 @@ def main():
     deadline = time.monotonic() + a.seconds
     scope = {'uuid': ident, 'name': name, 'deadline_monotonic': deadline,
              'loader': str(a.loader.resolve()), 'disk': str(a.disk.resolve()), 'gpu': False,
+             'graphics_controller': a.graphics_controller,
              'cpus': a.cpus, 'cpu_profile': 'Intel Core i7-6700K',
              'tsc_override': None if a.tsc_mode == 'auto' else a.tsc_mode}
     (home / 'scope.json').write_text(json.dumps(scope, indent=2) + '\n')
@@ -236,7 +242,7 @@ def main():
         if a.tsc_mode != 'auto':
             call(home, ['setextradata', ident, 'VBoxInternal/TM/TSCMode', a.tsc_mode])
         call(home, ['modifyvm', ident, '--memory', '8192', '--cpus', str(a.cpus), '--cpu-profile', 'Intel Core i7-6700K',
-                    '--firmware', 'efi64', '--chipset', 'ich9', '--ioapic', 'on', '--graphicscontroller', 'vboxvga',
+                    '--firmware', 'efi64', '--chipset', 'ich9', '--ioapic', 'on', '--graphicscontroller', a.graphics_controller,
                     '--vram', '64', '--accelerate-3d', 'off', '--nic1', 'none', '--audio-enabled', 'off',
                     '--usb-xhci', 'on', '--mouse', 'usbtablet', '--keyboard', 'usb',
                     '--uart1', '0x3f8', '4', '--uart-mode1', 'file', str(home / 'uart1.log'),
