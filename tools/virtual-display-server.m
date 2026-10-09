@@ -1,7 +1,8 @@
 // Keep a CGVirtualDisplay online with a broad HiDPI mode table so remote clients
 // (Apple Screen Sharing "client resolution", Sunshine) can switch the guest's
 // screen to their own size. Private SPI is ABI-guarded like remote-retina.m.
-// Usage: virtual-display-server --serve [--modes WxH,WxH,...] | --abi
+// Usage: virtual-display-server --serve [--control-dir ABS] [--guest-scale 1|2]
+// Legacy --modes values retain their historical 2x physical extents at either scale.
 #import <CoreGraphics/CoreGraphics.h>
 #import <AppKit/AppKit.h>
 #import <Foundation/Foundation.h>
@@ -88,12 +89,12 @@ static NSArray *inventory(void) {
     }
     return a;
 }
-static bool selectMode(CGDirectDisplayID did,unsigned w,unsigned h) {
+static bool selectMode(CGDirectDisplayID did,unsigned w,unsigned h,unsigned scale) {
     CFArrayRef modes=CGDisplayCopyAllDisplayModes(did,(__bridge CFDictionaryRef)@{(id)kCGDisplayShowDuplicateLowResolutionModes:@YES});
     bool ok=false;
     if(modes)for(CFIndex i=0;i<CFArrayGetCount(modes)&&!ok;i++) {
         CGDisplayModeRef m=(CGDisplayModeRef)CFArrayGetValueAtIndex(modes,i);
-        if(CGDisplayModeGetWidth(m)==w&&CGDisplayModeGetHeight(m)==h&&CGDisplayModeGetPixelWidth(m)==2*w)
+        if(CGDisplayModeGetWidth(m)==w&&CGDisplayModeGetHeight(m)==h&&CGDisplayModeGetPixelWidth(m)==scale*w&&CGDisplayModeGetPixelHeight(m)==scale*h)
             ok=CGDisplaySetDisplayMode(did,m,NULL)==kCGErrorSuccess;
     }
     if(modes)CFRelease(modes);return ok;
@@ -106,19 +107,19 @@ static bool controlIdentity(CGDirectDisplayID did) {
 static bool controlTarget(CGDirectDisplayID did) {
  return controlIdentity(did)&&CGDisplayBounds(did).origin.x==0&&CGDisplayBounds(did).origin.y==0;
 }
-static CGDisplayModeRef controlMode(CGDirectDisplayID did,unsigned w,unsigned h) {
+static CGDisplayModeRef controlMode(CGDirectDisplayID did,unsigned w,unsigned h,unsigned scale) {
  CFArrayRef all=CGDisplayCopyAllDisplayModes(did,(__bridge CFDictionaryRef)@{(id)kCGDisplayShowDuplicateLowResolutionModes:@YES});
  CGDisplayModeRef result=NULL;
  if(all)for(CFIndex i=0;i<CFArrayGetCount(all);i++){
   CGDisplayModeRef m=(CGDisplayModeRef)CFArrayGetValueAtIndex(all,i);
-  if(CGDisplayModeGetPixelWidth(m)==w&&CGDisplayModeGetPixelHeight(m)==h&&CGDisplayModeGetWidth(m)*2==w&&CGDisplayModeGetHeight(m)*2==h){result=CGDisplayModeRetain(m);break;}
+  if(CGDisplayModeGetPixelWidth(m)==w&&CGDisplayModeGetPixelHeight(m)==h&&CGDisplayModeGetWidth(m)*scale==w&&CGDisplayModeGetHeight(m)*scale==h){result=CGDisplayModeRetain(m);break;}
  }
  if(all)CFRelease(all);return result;
 }
 @interface RGDisplayControl : NSObject {
  int listener,peer,lockFD;double expires;
- uint8_t request[RG_CONTROL_REQUEST+1],reply[RG_CONTROL_REPLY];size_t received,sent;
- bool replying,waitingMode,waitingVerify,tableUncertain;unsigned requestFlags;double stable;
+ uint8_t request[RG_CONTROL_REQUEST_MAX+1],reply[RG_CONTROL_REPLY];size_t received,sent;
+ bool replying,waitingMode,waitingVerify,tableUncertain;unsigned requestFlags,guestScale;double stable;
  RGModes dynamicModes;
  CGDirectDisplayID originalID;
 }
@@ -126,11 +127,12 @@ static CGDisplayModeRef controlMode(CGDirectDisplayID did,unsigned w,unsigned h)
 @property(strong) NSMutableArray *modes;
 @property(copy) NSArray *baseModes;
 @property(copy) NSString *socketPath;
-- (BOOL)start:(NSString *)directory display:(CGVirtualDisplay *)display modes:(NSMutableArray *)modes;
+- (BOOL)start:(NSString *)directory display:(CGVirtualDisplay *)display modes:(NSMutableArray *)modes scale:(unsigned)scale;
 - (void)tick;
 @end
 @implementation RGDisplayControl
-- (BOOL)start:(NSString *)directory display:(CGVirtualDisplay *)display modes:(NSMutableArray *)modes {
+- (BOOL)start:(NSString *)directory display:(CGVirtualDisplay *)display modes:(NSMutableArray *)modes scale:(unsigned)scale {
+ guestScale=scale;
  listener=peer=lockFD=-1;
  if(!directory.isAbsolutePath||![directory.stringByStandardizingPath isEqual:directory])return NO;
  // Validate every ancestor: never traverse a symbolic link or writable foreign directory.
@@ -172,6 +174,7 @@ static CGDisplayModeRef controlMode(CGDirectDisplayID did,unsigned w,unsigned h)
 - (void)closePeer {if(peer>=0)close(peer);peer=-1;received=sent=0;replying=false;waitingMode=waitingVerify=false;requestFlags=0;stable=-1;}
 - (void)respond {
  unsigned status=rg_validate(request,received),flags=requestFlags;
+ if(!status&&rg_request_scale(request)!=guestScale)status=2;
  unsigned w=received>=20?rg_read32(request+12):0,h=received>=20?rg_read32(request+16):0;
  CGDisplayModeRef chosen=NULL;
  bool identity=self.display.displayID==originalID&&controlIdentity(originalID);
@@ -179,7 +182,7 @@ static CGDisplayModeRef controlMode(CGDirectDisplayID did,unsigned w,unsigned h)
  if(!status&&!waitingMode&&!waitingVerify&&!controlTarget(originalID))status=4;
  if(!status&&waitingVerify){
   CGDisplayModeRef observed=CGDisplayCopyDisplayMode(originalID);
-  bool ready=controlTarget(originalID)&&observed&&CGDisplayModeGetPixelWidth(observed)==w&&CGDisplayModeGetPixelHeight(observed)==h&&CGDisplayModeGetWidth(observed)*2==w&&CGDisplayModeGetHeight(observed)*2==h;
+  bool ready=controlTarget(originalID)&&observed&&CGDisplayModeGetPixelWidth(observed)==w&&CGDisplayModeGetPixelHeight(observed)==h&&CGDisplayModeGetWidth(observed)*guestScale==w&&CGDisplayModeGetHeight(observed)*guestScale==h;
   if(observed)CFRelease(observed);
   int settled=rg_settle(&stable,identity,ready,controlNow()>=expires-.25,controlNow());
   if(!settled)return;
@@ -187,7 +190,7 @@ static CGDisplayModeRef controlMode(CGDirectDisplayID did,unsigned w,unsigned h)
  }
 
  if(!status&&!waitingVerify){
-  chosen=controlMode(originalID,w,h);
+  chosen=controlMode(originalID,w,h,guestScale);
   if(waitingMode){
    int settled=rg_settle(&stable,identity,chosen&&controlTarget(originalID),controlNow()>=expires-.25,controlNow());
    if(settled<=0){if(chosen)CGDisplayModeRelease(chosen);chosen=NULL;if(!settled)return;status=4;}
@@ -198,7 +201,7 @@ static CGDisplayModeRef controlMode(CGDirectDisplayID did,unsigned w,unsigned h)
    else {
     // Preserve the actual active geometry, not the last requested geometry.
     CGDisplayModeRef before=CGDisplayCopyDisplayMode(originalID);
-    RGGeometry current={before?(uint32_t)CGDisplayModeGetWidth(before)*2:0,before?(uint32_t)CGDisplayModeGetHeight(before)*2:0};
+    RGGeometry current={before?(uint32_t)CGDisplayModeGetPixelWidth(before):0,before?(uint32_t)CGDisplayModeGetPixelHeight(before):0};
     if(before)CFRelease(before);
     RGModes candidatePolicy=dynamicModes;
     if(!current.w||!current.h||!controlTarget(originalID))status=4;
@@ -207,9 +210,9 @@ static CGDisplayModeRef controlMode(CGDirectDisplayID did,unsigned w,unsigned h)
      NSMutableArray *candidate=[self.baseModes mutableCopy];
      for(unsigned i=0;i<candidatePolicy.count;i++){
       RGGeometry g=candidatePolicy.items[i];
-      [candidate addObject:[[CGVirtualDisplayMode alloc] initWithWidth:g.w/2 height:g.h/2 refreshRate:60]];
+      [candidate addObject:[[CGVirtualDisplayMode alloc] initWithWidth:g.w/guestScale height:g.h/guestScale refreshRate:60]];
      }
-     CGVirtualDisplaySettings *settings=[CGVirtualDisplaySettings new];settings.hiDPI=1;settings.rotation=0;settings.modes=candidate;
+     CGVirtualDisplaySettings *settings=[CGVirtualDisplaySettings new];settings.hiDPI=(guestScale==2);settings.rotation=0;settings.modes=candidate;
      if(![self.display applySettings:settings]){
       // A false SPI return does not prove that no state changed. Restore the
       // retained table on the same object; never pretend the request succeeded.
@@ -243,9 +246,9 @@ static CGDisplayModeRef controlMode(CGDirectDisplayID did,unsigned w,unsigned h)
   }
  }
  CGDisplayModeRef actual=CGDisplayCopyDisplayMode(originalID);
- if(!status&&(!actual||self.display.displayID!=originalID||!controlTarget(originalID)||CGDisplayModeGetPixelWidth(actual)!=w||CGDisplayModeGetPixelHeight(actual)!=h))status=4;
+ if(!status&&(!actual||self.display.displayID!=originalID||!controlTarget(originalID)||CGDisplayModeGetPixelWidth(actual)!=w||CGDisplayModeGetPixelHeight(actual)!=h||CGDisplayModeGetWidth(actual)*guestScale!=w||CGDisplayModeGetHeight(actual)*guestScale!=h))status=4;
  if(!status)rg_touch(&dynamicModes,(RGGeometry){w,h});
- uint32_t values[10]={RG_CONTROL_MAGIC,1,received>=12?rg_read32(request+8):0,status,originalID,
+ uint32_t values[10]={RG_CONTROL_MAGIC,received>=8?rg_read32(request+4):0,received>=12?rg_read32(request+8):0,status,originalID,
   actual?(uint32_t)CGDisplayModeGetPixelWidth(actual):0,actual?(uint32_t)CGDisplayModeGetPixelHeight(actual):0,
   actual?(uint32_t)CGDisplayModeGetWidth(actual):0,actual?(uint32_t)CGDisplayModeGetHeight(actual):0,flags};
  for(unsigned i=0;i<10;i++)rg_write32(reply+4*i,values[i]);
@@ -265,7 +268,11 @@ static CGDisplayModeRef controlMode(CGDirectDisplayID did,unsigned w,unsigned h)
   ssize_t n=read(peer,request+received,sizeof(request)-received);
   if(n==0){[self closePeer];return;}
   if(n<0){if(errno!=EAGAIN&&errno!=EWOULDBLOCK&&errno!=EINTR)[self closePeer];return;}
-  received+=(size_t)n;if(received>=RG_CONTROL_REQUEST)[self respond];
+  received+=(size_t)n;
+  if(received>=8){
+   size_t expected=rg_request_size(rg_read32(request+4));
+   if(!expected||received>=expected)[self respond];
+  }
  }
  if(replying){
   ssize_t n=write(peer,reply+sent,sizeof(reply)-sent);
@@ -281,20 +288,29 @@ int main(int argc,const char **argv) { @autoreleasepool {
     if(strcmp(argv[1],"--serve"))return 2;
     if(!abi()){emit(@{@"error":@"virtual display ABI is unsupported"});return 2;}
     NSMutableArray *modes=[NSMutableArray new];NSMutableArray *names=[NSMutableArray new];
-    unsigned initialW=1920,initialH=1080;
-    NSString *controlDir=nil;
-    if(argc==4&&!strcmp(argv[2],"--control-dir"))controlDir=@(argv[3]);
-    else if(argc!=2&&!(argc==4&&!strcmp(argv[2],"--modes")))return 2;
-    if(argc>=4&&!strcmp(argv[2],"--modes")) {
-        for(NSString *item in [@(argv[3]) componentsSeparatedByString:@","]) {
+    unsigned guestScale=2;bool scaleSeen=false;
+    NSString *controlDir=nil,*customModes=nil;
+    for(int i=2;i<argc;i+=2){
+        if(i+1>=argc)return 2;
+        if(!strcmp(argv[i],"--control-dir")&&!controlDir)controlDir=@(argv[i+1]);
+        else if(!strcmp(argv[i],"--modes")&&!customModes)customModes=@(argv[i+1]);
+        else if(!strcmp(argv[i],"--guest-scale")&&!scaleSeen){
+            if(strcmp(argv[i+1],"1")&&strcmp(argv[i+1],"2"))return 2;
+            guestScale=(unsigned)(argv[i+1][0]-'0');scaleSeen=true;
+        }else return 2;
+    }
+    if(customModes&&controlDir)return 2;
+    unsigned initialW=3840/guestScale,initialH=2160/guestScale;
+    if(customModes) {
+        for(NSString *item in [customModes componentsSeparatedByString:@","]) {
             NSArray *wh=[item componentsSeparatedByString:@"x"];if(wh.count!=2)continue;
             unsigned w=(unsigned)[wh[0] intValue],h=(unsigned)[wh[1] intValue];
             if(w<640||h<480||w>1920||h>1152)continue;
-            [modes addObject:[[CGVirtualDisplayMode alloc] initWithWidth:w height:h refreshRate:60]];[names addObject:item];
+            [modes addObject:[[CGVirtualDisplayMode alloc] initWithWidth:w*2/guestScale height:h*2/guestScale refreshRate:60]];[names addObject:[NSString stringWithFormat:@"%ux%u",w*2/guestScale,h*2/guestScale]];
         }
     } else for(size_t i=0;i<sizeof(kDefaultModes)/sizeof(kDefaultModes[0]);i++) {
-        [modes addObject:[[CGVirtualDisplayMode alloc] initWithWidth:kDefaultModes[i][0] height:kDefaultModes[i][1] refreshRate:60]];
-        [names addObject:[NSString stringWithFormat:@"%ux%u",kDefaultModes[i][0],kDefaultModes[i][1]]];
+        [modes addObject:[[CGVirtualDisplayMode alloc] initWithWidth:kDefaultModes[i][0]*2/guestScale height:kDefaultModes[i][1]*2/guestScale refreshRate:60]];
+        [names addObject:[NSString stringWithFormat:@"%ux%u",kDefaultModes[i][0]*2/guestScale,kDefaultModes[i][1]*2/guestScale]];
     }
     if(!modes.count){emit(@{@"error":@"no valid modes"});return 2;}
     CGVirtualDisplayDescriptor *d=[CGVirtualDisplayDescriptor new];
@@ -306,19 +322,19 @@ int main(int argc,const char **argv) { @autoreleasepool {
     d.terminationHandler=^{emit(@{@"phase":@"terminated"});exit(3);};
     CGVirtualDisplay *display=[[CGVirtualDisplay alloc] initWithDescriptor:d];
     if(!display){emit(@{@"error":@"virtual display refused"});return 3;}
-    CGVirtualDisplaySettings *settings=[CGVirtualDisplaySettings new];settings.hiDPI=1;settings.rotation=0;settings.modes=modes;
+    CGVirtualDisplaySettings *settings=[CGVirtualDisplaySettings new];settings.hiDPI=(guestScale==2);settings.rotation=0;settings.modes=modes;
     bool applied=[display applySettings:settings];
     NSDate *until=[NSDate dateWithTimeIntervalSinceNow:2];
     while(until.timeIntervalSinceNow>0)[[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
-    bool selected=applied&&selectMode(display.displayID,initialW,initialH);
-    emit(@{@"phase":@"serving",@"applied":@(applied),@"display":@(display.displayID),@"initial_selected":@(selected),
+    bool selected=applied&&selectMode(display.displayID,initialW,initialH,guestScale);
+    emit(@{@"phase":@"serving",@"applied":@(applied),@"display":@(display.displayID),@"initial_selected":@(selected),@"guest_scale":@(guestScale),
            @"modes":names,@"displays":inventory()});
     RGDisplayControl *control=nil;
     if(controlDir){
         control=[RGDisplayControl new];
-        if(![control start:controlDir display:display modes:modes]){emit(@{@"error":@"control endpoint refused"});return 4;}
+        if(![control start:controlDir display:display modes:modes scale:guestScale]){emit(@{@"error":@"control endpoint refused"});return 4;}
         [NSTimer scheduledTimerWithTimeInterval:0.02 repeats:YES block:^(NSTimer *timer){(void)timer;[control tick];}];
-        emit(@{@"phase":@"control-ready",@"display":@(display.displayID),@"socket":control.socketPath});
+        emit(@{@"phase":@"control-ready",@"display":@(display.displayID),@"socket":control.socketPath,@"guest_scale":@(guestScale)});
     }
     signal(SIGTERM,exit);
     [[NSRunLoop currentRunLoop] run];   // hold the display until killed
