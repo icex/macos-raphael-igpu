@@ -19,7 +19,7 @@ recovered/authorizes_launch=true. VM/cycle stopped; host remains awake. No reboo
 [Hashes](findings/research/console-cadence-native-evidence-20261009.json).
 
 1264 host tests pass,8skip. Checked-in kext/manifest match tested366
-build65c6d6549d144f319d2a7e84f905d202; delivery pending. Dev2d90bfe delivers364 installer/docs/tested binary;
-hosted37939711494 test/build green. Main unchanged.366 delivery pending.
+build65c6d6549d144f319d2a7e84f905d202. Milestone integrated into dev; hosted
+validation pending. Prior364 hosted37939711494 test/build green. Main unchanged.
 Fresh-user/console-only bootstrap, frame atomicity/performance, broader desktop,
 codecs, managers and VirtualBox remain open.
