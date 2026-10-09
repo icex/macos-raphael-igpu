@@ -118,6 +118,58 @@ class ShutdownWaitHostTests(unittest.TestCase):
         result,stop=self.invoke_channel();stop.assert_not_called()
         self.assertEqual(result['outcome'],'container-stopped-during-shutdown-wait')
         self.assertNotIn('process_exited',result)
+    def killed_witness(self, code=137, inspect_after=None):
+        self.proof=self.waiting;original=self.command
+        def command(args,**kwargs):
+            if args[1]=='exec' and self.clock>10:raise sup.CommandFailure('private witness command',code)
+            if args[1]=='inspect' and self.clock>10 and inspect_after is not None:
+                return inspect_after(args,**kwargs)
+            return original(args,**kwargs)
+        self.command=command
+    def test_killed_witness_waits_for_delayed_container_exit_without_completion_claim(self):
+        self.live=[True,True,True,False];self.killed_witness()
+        result,stop=self.invoke_channel();stop.assert_not_called()
+        self.assertEqual(result['outcome'],'container-stopped-during-shutdown-wait')
+        self.assertEqual(result['witness_exit_code'],137)
+        self.assertTrue(result['shutdown_event_wait']);self.assertFalse(result['completed_original_zombie'])
+        self.assertNotIn('process_exited',result);self.assertLess(self.clock,11.7)
+        self.assertNotIn('private',json.dumps(result))
+        self.assertEqual(len([a for a in self.calls if a[1]=='exec']),1)
+    def test_killed_witness_never_extends_original_transport_budget(self):
+        self.live=[True];self.killed_witness()
+        result,stop=self.invoke_channel();stop.assert_called_once_with(CID)
+        self.assertEqual(result['outcome'],'immediate-stop')
+        self.assertEqual(result['command_exit_code'],137)
+        self.assertAlmostEqual(self.clock,11.7)
+    def test_killed_witness_respects_earlier_admitted_deadline(self):
+        self.waiting['deadline_epoch']=111;self.live=[True];self.killed_witness()
+        result,stop=self.invoke_channel();stop.assert_called_once_with(CID)
+        self.assertAlmostEqual(self.clock,11)
+    def test_killed_witness_container_identity_change_or_inspection_error_refuses(self):
+        for outcome in ('replacement','malformed','unreachable'):
+            with self.subTest(outcome=outcome):
+                self.setUp();self.live=[True]
+                def inspect_after(*a,**kw):
+                    if outcome=='unreachable':raise sup.CommandFailure('private',1)
+                    if outcome=='malformed':return '{'
+                    return json.dumps(dict(Id=CID,StartedAt='replacement',Running=False))
+                self.killed_witness(inspect_after=inspect_after)
+                result,stop=self.invoke_channel();stop.assert_called_once_with(CID)
+                self.assertEqual(result['outcome'],'immediate-stop');self.assertLess(self.clock,10.1)
+    def test_other_failed_witness_gets_no_container_grace(self):
+        self.live=[True];self.killed_witness(1)
+        result,stop=self.invoke_channel();stop.assert_called_once_with(CID)
+        self.assertEqual(result['command_exit_code'],1);self.assertLess(self.clock,10.1)
+    def test_initial_killed_witness_has_no_shutdown_wait_authority(self):
+        original=self.command
+        def command(args,**kwargs):
+            if args[1]=='exec':raise sup.CommandFailure('private',137)
+            return original(args,**kwargs)
+        self.command=command
+        result,stop=self.invoke_channel();stop.assert_called_once_with(CID)
+        self.assertFalse(result['deferred']);self.assertEqual(self.clock,10)
+        self.assertNotIn('witness_exit_code',result)
+
     def test_changed_identity_during_wait_refuses(self):
         self.proof=self.waiting;original=self.command
         def command(args,**kwargs):
