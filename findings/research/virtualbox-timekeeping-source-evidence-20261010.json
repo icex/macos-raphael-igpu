@@ -1,0 +1,23 @@
+{
+  "sources": [
+    {
+      "path": "/home/bogdan/macos-vm/run/c401-source/TMR3.cpp",
+      "url": "https://raw.githubusercontent.com/VirtualBox/virtualbox/14841851fa211c7faf615978ba385d59947236c6/src/VBox/VMM/VMMR3/TMR3.cpp",
+      "sha256": "9c5a3d309f181b83026e77a9cfef68a3baa5ac7deed0e6206efd668d171d5226"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c401-source/TMAllCpu.cpp",
+      "url": "https://raw.githubusercontent.com/VirtualBox/virtualbox/14841851fa211c7faf615978ba385d59947236c6/src/VBox/VMM/VMMAll/TMAllCpu.cpp",
+      "sha256": "42397a636790760de5c05d8e9a03738aa91811f458ce2cc31d1d5fe07c73a646"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c401-source/sched_prim.c",
+      "sha256": "058d42438f10568080d0283779d42728a6987d112f5750b30e0947bb0b2098ca",
+      "url": "https://raw.githubusercontent.com/apple-oss-distributions/xnu/xnu-11417.140.69/osfmk/kern/sched_prim.c"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c401-source/bootB-timing-selected.json",
+      "sha256": "b75f42c7916df5c1e676178d7d9dec66bd5b1c7111dd091b15b03d92fcc38704"
+    }
+  ]
+}
