@@ -1,21 +1,24 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-10-09. Current console qualification: **390/392**. Explicit persistent
-1×/2× policy, odd1× resizing, connected-agent input/audio and fresh-boot1×4K startup
-pass with the capture application unchanged. Matched1440×900 ordinary presentation
-observes about58 distinct token IDs/s for100 seconds without post-start token errors.
-Stock spice-gtk stationary-pointer clicking after resize **fails**; an isolated
-client correction passes the same native check against a matched unpatched
-build control. This isolated prefix is not a patched system default. GPU-native virtual display
-transport is unimplemented. Other VM managers, VirtualBox, universal60Hz,
-full-frame integrity, fresh-user setup and broader lifecycle remain open.
+Updated 2026-10-09. Current console qualification: **395**. Installed immutable
+capture has private retired-writer isolation, explicit unmap/remap and bounded
+capacity recovery. Actual-manager100-second mixed-motion observations reach
+57.92 token IDs/s at1440×900 and40.40 overall at4K, zero post-start token errors;
+4K full-field motion remains about26/s.4K60Hz/full-frame integrity remain open.
+395 lifecycle is pending;394/392 forced capture aborts remain unresolved evidence.
 
-Physical display baseline remains **330**, with user-confirmed correct-color
-HiDPI120 and HDMI audio. Full desktop acceleration is **not qualified**. Historical
-console milestones and their narrower evidence remain below; candidate390 retains
-allocation messages and capture-tail limitations. Candidate392 functional progress
-is retained, but capture abort forces termination with no private shutdown terminal;
-its authorizing GPU recovery does not qualify clean lifecycle.
+Existing scale preference, odd1× resize, connected-agent input/audio and fresh-boot
+1×4K startup remain qualified in their recorded scopes. The isolated client
+stationary-pointer fix is not installed system-wide. Fresh-user setup, broader
+crash/host-boot coverage and other frontends remain open. GPU-native virtual display
+transport is unimplemented. VirtualBox7.2.18 has a VFIO backend, but its configuration
+path and Raphael/console integration are unqualified, requiring a separate audit
+and implementation—not an assumption that QEMU success transfers.
+
+Physical baseline remains **330**, user-confirmed correct-color HiDPI120/HDMI audio.
+Full desktop acceleration is **not qualified**. Detailed historical milestones and
+limits remain below. [395 evidence](../findings/research/console-private-staging-cleanup-native-20261009.md)
+· [VirtualBox source audit](../findings/research/virtualbox-vfio-configuration-design-20261009.md).
 
 This is the current roadmap. [Live state and run authority](../status.md) are separate.
 The [previous roadmap](../findings/research/status-archives/roadmap-before-20260916-refresh.md)
@@ -408,7 +411,7 @@ corrected mapping positive control, sustained mixed-motion and crash lifecycle.
 
 Host-window resize, repeated crash recovery, independent host boots and broader
 desktop coverage follow. Both host sleep and idle blocking remain required during
-development. VirtualBox requires a separate transport/driver.
+development. VirtualBox requires separately qualified rendering access and console integration.
 [Implementation and measured scope](virtual-console.md).
 
 0. **Physical display and HDMI audio (user priority, 2026-09-17).**

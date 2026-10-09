@@ -14,37 +14,35 @@ on **`dev`**; this is not yet a generally supported driver release.
 
 ## Current status
 
-**VM window (October 9, candidates390/392):** native Metal rendering works in
-virt-manager without HDMI. Installed external helpers provide automatic bounded
-resize and an explicit persistent1× or2× guest scale, without changing the sealed
-capture application. Candidate392's fresh guest boot restores1×4K with the same
-helper payload and capture identity. Candidate390 verifies odd1× window sizes,
-five-target/text input with the resize agent connected, stereo audio delivery and
-independent route restoration. USB-tablet routing remains explicit
-(`agent-mouse=off`). The virtual framebuffer is separate from the renderer's2GB.
-[Scale policy evidence](findings/research/console-scale-policy-native-20261009.md)
-· [Preference usage](docs/console-helper-install.md#persistent-guest-scale).
+**VM window (October 9, candidate395):** installed immutable snapshot capture
+now survives helper restarts with the sealed capture app unchanged. Private staging
+isolates retired writers: before/after host screenshots match all481401 test pixels.
+Explicit retired-buffer unmap/remap, the four-buffer limit and capacity recovery
+pass; this fixes394's cleanup failure. Automatic odd-size resize and persistent
+1×/2× policy retain the earlier installed-helper qualification.
 
-At matched1440×900 guest/window pixels on a GDK1 host, candidate390's ordinary
-presenter produces about58 distinct observed token IDs/s over100 seconds, with
-no post-start token errors. This is not full-frame integrity, GPU FPS, physical
-scanout or universal60Hz qualification; the experimental snapshot path was unarmed.
+Two100-second actual-manager observations contain5793 unique tokens at1440×900
+(57.92 IDs/s) and4041 at4K (40.40 IDs/s overall), with zero post-start token errors.
+4K localized motion is about50 IDs/s; full-field motion about26. Sustained4K60Hz
+and full-frame dynamic integrity remain open. These are sampled pipeline updates,
+not GPU FPS or scanout; no matched full4K ordinary-copy regression is claimed.
+[Native ownership and motion evidence](findings/research/console-private-staging-cleanup-native-20261009.md).
 
-Candidate392 reproduces a stock spice-gtk0.42 failure when clicking with a
-stationary pointer after automatic resize: the guest receives stale coordinates.
-A matched unpatched client build reproduces it; an isolated patched client passes
-the same native check within one guest pixel. System libraries remain unchanged;
-this is a client correction, not a GPU driver fix. Continuous
-motion/input successes do not erase this failure. Fresh-user installation,
-broader crash/restart coverage, automatic DPI choice, other managers and VirtualBox
-remain open. A GPU-native virtual display transport is **not implemented**; current
-presentation captures and copies rendered pixels through the console framebuffer.
-Audio endpoint audibility and A/V sync remain unqualified. Candidate390 retains
-allocation-error messages and a partial capture tail despite successful functional
-probes and natural shutdown/recovery.
-Candidate392 later ends through forced capture-abort teardown: both capture hooks
-stop immediately, Docker records forced termination, and no private terminal exists.
-Stopped-GPU recovery authorizes reuse; that is not a clean guest shutdown.
+Candidate392 retains next-guest-boot1×4K startup, input/audio evidence and a scoped
+stationary-pointer fix in an isolated spice-gtk client. System client libraries
+are unchanged. Candidate394 verifies installed snapshot startup plus two helper
+restarts and audio delivery, but ends in forced capture-abort teardown.395 final
+lifecycle is pending; functional progress does not qualify clean shutdown.
+[Preference usage](docs/console-helper-install.md#persistent-guest-scale).
+
+GPU-native virtual display transport is **not implemented**: Metal renders on
+Raphael, while presentation captures/copies into a separate virtual framebuffer.
+VirtualBox7.2.18 contains a Linux VFIO backend, but its release configuration path,
+Raphael safety/acceleration and separate console transport remain unqualified.
+It is not supported by a configuration switch or by a VirtualBox-styled QEMU window.
+[VirtualBox source audit](findings/research/virtualbox-vfio-configuration-design-20261009.md).
+Fresh-user installation, automatic DPI choice, broader crash/host-boot coverage,
+audio endpoint audibility and A/V sync remain open.
 
 Stock QEMU remains the default; snapshot experiments use separately pinned images.
 [Current agent transport and bounded resize evidence](findings/research/console-vdagent-native-20261009.md)
