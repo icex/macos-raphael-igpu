@@ -15,6 +15,14 @@ two corrupt lines and two incomplete snapshots. Independent natural shutdown and
 recoverable cleanup do not erase those capture defects.
 [402 evidence](../findings/research/console-snapshot-private-pool-native-20261010.md).
 
+**Paused at the user’s request:** candidate 417 was stopped during early boot.
+The controller helper forced poweroff, then unregistered the VM on its first
+attempt without a reported cleanup error. This was not clean guest shutdown;
+no desktop, root response or process-admission receipt qualified the hardened
+process fix. No GPU was exposed. Candidate 420 retains source investigation only.
+[417 pause result](../findings/research/virtualbox-relay-pause-20261010.md) ·
+[420 resume points](../findings/research/virtualbox-pgm-lease-paused-20261010.md).
+
 **VirtualBox 410** now returns fresh registry evidence over a bounded FAT exchange
 disk. Stock VMSVGA GFX0 at `0:2.0` has 64 MiB framebuffer / 2 MiB FIFO memory and an active
 Display_boot/IONDRVFramebuffer with user clients. Nine returned file hashes pass;

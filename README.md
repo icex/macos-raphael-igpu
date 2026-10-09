@@ -28,6 +28,14 @@ two incomplete snapshots: function passes, capture is imperfect. Independent nat
 shutdown and authorizing recovery pass.
 [402 native evidence](findings/research/console-snapshot-private-pool-native-20261010.md).
 
+**Paused at the user’s request:** candidate 417 was stopped during early boot.
+The controller helper forced poweroff, then unregistered the VM on its first
+attempt without a reported cleanup error. This was not clean guest shutdown;
+no desktop, root response or process-admission receipt qualified the hardened
+process fix. No GPU was exposed. Candidate 420 retains source investigation only.
+[417 pause result](findings/research/virtualbox-relay-pause-20261010.md) ·
+[420 resume points](findings/research/virtualbox-pgm-lease-paused-20261010.md).
+
 **Actual VirtualBox, candidate 410:** a small FAT exchange disk now returns fresh
 macOS registry evidence from the stock VMSVGA software desktop. GFX0 is `15ad:0405`
 at PCI `0:2.0`, with 64 MiB framebuffer memory and 2 MiB FIFO memory. Display_boot /
@@ -43,9 +51,9 @@ qualified eight-vCPU software input and natural shutdown; slow interaction and
 PerfPowerServices CPU use remain open.
 [410 evidence](findings/research/virtualbox-fat-exchange-native-20261010.md).
 
-The next boot-framebuffer discriminator is **read-only and not yet run**: an early
-loader property can suppress IONDRVFramebuffer matching in the inspected 24G830
-sources, then inventory must establish the resulting attachment state. It is not
+The next boot-framebuffer discriminator is **not yet run**: change an early
+loader property to suppress IONDRVFramebuffer matching in the inspected 24G830
+sources, then use read-only inventory to establish the resulting attachment state. It is not
 a live takeover or an exclusive memory lease. Candidate 415 verified the virtio
 network interface, but its root-command relay refused process admission with HTTP
 403; no root payload ran. Natural shutdown and unregister succeeded.

@@ -45,6 +45,14 @@ and recovery pass. This is a bounded experimental milestone, not a generally
 qualified release or sustained 4K at 60 Hz claim.
 [402 native evidence](../findings/research/console-snapshot-private-pool-native-20261010.md).
 
+**Paused at the user’s request:** candidate 417 was stopped during early boot.
+The controller helper forced poweroff, then unregistered the VM on its first
+attempt without a reported cleanup error. This was not clean guest shutdown;
+no desktop, root response or process-admission receipt qualified the hardened
+process fix. No GPU was exposed. Candidate 420 retains source investigation only.
+[417 pause result](../findings/research/virtualbox-relay-pause-20261010.md) ·
+[420 resume points](../findings/research/virtualbox-pgm-lease-paused-20261010.md).
+
 Candidate 410 separately returns verified stock-VMSVGA registry evidence over a
 small FAT disk, including the still-attached boot framebuffer. Natural shutdown
 and medium closure are independently verified; the original controller state-query
@@ -59,9 +67,9 @@ payload ran; natural shutdown passed. The boot-framebuffer
 suppression plan is likewise not a qualified takeover.
 [410 evidence](../findings/research/virtualbox-fat-exchange-native-20261010.md) ·
 [DMA limits](../findings/research/virtualbox-dma-ram-lease-20261010.md).
-Published dev `0ecc1715950ea6db3c256fb4930191830bd9ef1b` passed hosted test and
+Previous published baseline `0ecc1715950ea6db3c256fb4930191830bd9ef1b` passed hosted test and
 macOS build in [run 37998445036](https://github.com/icex/macos-raphael-igpu/actions/runs/37998445036);
-the untagged release job was skipped. Later integration has not yet been published.
+the untagged release job was skipped. The new integration requires its own hosted CI result.
 Main's physical 330 baseline is unchanged. Exact-commit publication checks are
 tracked in [GitHub Actions](https://github.com/icex/macos-raphael-igpu/actions).
 
