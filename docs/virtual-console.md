@@ -6,8 +6,11 @@ does not meet that target. Native Metal/WindowServer ownership, real virt-manage
 mouse/keyboard input and bridged LAN traffic pass. The same-image353 OFF/352 ON
 comparison improves sampled1080HiDPI delivery from22–24 to32–35updates/s with an
 opt-in Bochs full-refresh property; native1080p does not improve uniformly.
-The controller shutdown-receipt race, partial-region samples, automatic resize,
-other frontends and VirtualBox remain open. This is not qualified60Hz delivery.
+Candidate356 completes native reset shutdown with a real controller terminal
+and authorizing recovery; the pending-worker wait remains native-unexercised.
+Normal/fullscreen input pass, but the small-window transition retains two misses.
+Partial-region samples, automatic resize, other frontends and VirtualBox remain
+open. This is not qualified60Hz delivery.
 [Current paired evidence](../findings/research/bochs-full-refresh-paired-20261009.md).
 Candidate332's unsafe TMR experiment remains withdrawn.
 
@@ -292,3 +295,28 @@ a remaining task and the native controller terminal receipt is missing. Earlier
 343/347 clean shutdowns do not close this race. Broader crash/reconnect, resize,
 console audio and other-manager qualification remain separate.
 [Exact artifacts, copy timings and lifecycle scope](../findings/research/bochs-full-refresh-paired-20261009.md).
+
+
+## Native reset shutdown and viewport input (356)
+
+Candidate356 preserves the critical collector's recv-reset104 error separately
+from console clean EOF. Both capture hooks find the original QEMU process already
+reaped and observe natural container exit in about0.373s. The actual controller
+terminal reports guest-shutdown and process_exited=true; final critical bytes/hash
+match the quiesce ACK, CORE_PROBE_PASS is valid and GPU recovery authorizes reuse.
+The new event-bound pending-worker wait is **not** exercised by these native hooks.
+An independent task watcher sees a transient zombie leader with a live KVM worker;
+that observation does not establish which branch the hooks took.
+
+| Actual virt-manager viewport | Input result |
+| --- | --- |
+| Normal1288×909 | Five corner/center targets and exact keyboard token pass; zero misses. |
+| Fullscreen1920×1080 | Five targets and exact token pass; zero misses. |
+| Small1000×760 after resizing | Two initial clicks arrive at the prior guest center; all targets/token later delivered after pointer reentry/motion. Retained as failed. |
+
+The guest stays at1920×1080 logical with backing scale2 throughout. This proves
+neither automatic guest-mode resize nor a repaired coordinate transition. The
+small-window cause remains undetermined; automation motion/enter and viewer state
+need discrimination. Closing the viewer preserves the exact VM and reopening
+shows the desktop. Console USB audio and other-manager qualification remain open.
+[Run identity, artifacts and limits](../findings/research/libvirt-reset-native-20261009.md).

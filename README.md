@@ -21,11 +21,16 @@ Bochs full-refresh setting; guest row-copy time falls from about16 to1.5ms.
 Native1080p delivery does not improve uniformly. The QEMU process uses less CPU
 in all four comparisons; whole-host CPU was not measured. These are sampled
 region updates, not GPU fps or qualified60Hz delivery. Partial token samples
-and the controller shutdown-receipt race remain open. Stock QEMU stays the
-default; this result uses a separately pinned experimental image. Automatic
-resize, other managers and VirtualBox remain unqualified. The virtual Display
+remain open. Candidate356 now preserves a real guest-shutdown terminal after
+a serial socket reset, with valid capture and authorizing GPU recovery. The new
+pending-worker wait is not yet exercised by native hooks. Normal and fullscreen
+virt-manager input pass; a small-window transition retains two failed clicks.
+Stock QEMU stays the default; performance results use a separately pinned
+experimental image. Automatic resize, other managers and VirtualBox remain
+unqualified. The virtual Display
 adapter's56MB framebuffer is separate from the native renderer's2GB VRAM.
 [Paired evidence](findings/research/bochs-full-refresh-paired-20261009.md)
+· [Native356 lifecycle/input evidence](findings/research/libvirt-reset-native-20261009.md)
 · [Setup and limits](docs/virtual-console.md).
 
 The qualified remote baseline from **2026-09-16**, candidate **1.0.280**, runs an accelerated desktop through
