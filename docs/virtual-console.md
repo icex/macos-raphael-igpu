@@ -7,7 +7,8 @@ mouse/keyboard input and bridged LAN traffic pass. The same-image353 OFF/352 ON
 comparison improves sampled1080HiDPI delivery from22–24 to32–35updates/s with an
 opt-in Bochs full-refresh property; native1080p does not improve uniformly.
 Candidate356 completes native reset shutdown with a real controller terminal
-and authorizing recovery; the pending-worker wait remains native-unexercised.
+and authorizing recovery. Candidate364 exercises the bounded shutdown-wait branch
+in both hooks before natural exit; broader lifecycle coverage remains open.
 Normal/fullscreen input pass. Candidate361 also passes continuous pointer entry
 into1000×760; earlier enter-without-motion failures remain distinct.
 Partial-region samples, automatic resize, other frontends and VirtualBox remain
@@ -101,8 +102,9 @@ VirtualBox support remains a separate unimplemented transport problem.
 
 ## Install the guest console desktop
 
-Copy these files into one directory in the macOS guest: `install-console-desktop.sh`,
-`console-presenter.m`, `console-display-layout.m`, and `virtual-display-server.m`.
+Use the source ZIP produced by `tools/package-console-helpers.py`: installer,
+transaction coordinator, three Objective-C sources, notes and hash manifest.
+See [package requirements and recovery](console-helper-install.md).
 With Command Line Tools installed, run as the logged-in user:
 
 ```sh
@@ -129,8 +131,8 @@ renewed macOS consent; release signing remains future work.
 
 The host still launches and owns the VM through the experiment harness. Installing
 these guest helpers does not transfer lifecycle ownership to a GUI, reset the GPU,
-or permit concurrent VM-manager launches. A full libvirt lifecycle integration
-remains required before managing this VM directly through virt-manager.
+or permit concurrent VM-manager launches. The tested private libvirt integration
+retains harness ownership; arbitrary GUI lifecycle actions remain unqualified.
 
 ## Candidate338 helper follow-up
 
@@ -375,6 +377,31 @@ resolution following remain open. No driver/viewer patch was applied.
 CORE_PROBE_PASS, genuine guest-shutdown/process-exited terminal and authorizing
 recovery pass. Both hooks complete naturally in about0.394s, preserving critical
 recv-reset versus console clean EOF. They find completed process state; the
-pending-worker event wait remains native-unexercised. Next qualification is
+pending-worker event wait was still native-unexercised in361;364 follows below.
+The next planned qualification was
 reproducible optimized helper installation, first use/second boot and rollback.
 [Exact identities and hashed artifacts](../findings/research/console-default-audio-input-20261009.md).
+
+
+## Existing-user installer and bounded shutdown wait (364)
+
+The source package compiles/signs all three helpers with O2 in macOS, verifies
+signatures and records provenance before publication. Active-session installation
+refuses without target changes. Sixteen transaction tests pass using disposable
+macOS directories, including interruption/recovery and exclusive renames; this is
+not power-loss testing of the actual installed app.
+
+The changed ad-hoc app initially receives TCC-3801. Normal System Settings consent
+renewal restores actual capture; the transient stale/corrupt framebuffer during
+permission failure remains a user-facing limitation. Identical-package reinstall
+produces the same complete app, three binaries and CDHash, and restarts without
+renewal. Correct desktop and default afplay stereo/restoration pass. Input is not
+rerun. Fresh-user, next guest boot and unattended deployment remain unqualified.
+
+Both native capture receipts record shutdown_event_wait=true, then natural exit
+in about0.411s. Bound guest SHUTDOWN precedes the distinct recv-reset/clean-EOF
+boundaries by1.25/1.29ms. Genuine guest-shutdown/process-exited terminal and GPU
+recovery authorize reuse. This supersedes the earlier native-unexercised limit:
+one positive branch exercise, with initial task IDs not separately retained,
+is not universal race closure or repeated lifecycle qualification.
+[Exact run and50 hashed artifacts](../findings/research/console-install-native-20261009.md).
