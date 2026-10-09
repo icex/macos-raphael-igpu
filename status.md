@@ -38,5 +38,6 @@ Dev59422dae6683550b7027dd8fe53fb7801f33bbcd has hosted test/build success
 (Actions37995939729); checked-in binary is exact tested402 with canonical manifest.
 Candidate414 integrates410 results,412 ownership analysis and411/413 experimental
 DMA patches locally for review. Host VBox is unchanged; no patch was deployed.
-Integrated checks are pending. Main unchanged; status grants
+Integrated414 host suite: Ran 1487 tests in 56.379s  OK (skipped=8).
+The22 native410 artifact hashes and exact402 binary/manifest were reverified. Main unchanged; status grants
 no launch admission.
