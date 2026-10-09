@@ -85,7 +85,7 @@ class ExitedIdentityTests(unittest.TestCase):
              patch.object(entry.handoff.time,'time',return_value=100):return entry.inspect_exited()
     def test_absent_exact_process_and_bound_receipts_pass(self):self.assertTrue(self.inspect()['exited'])
     def test_live_pinned_process_refuses(self):
-        with self.assertRaisesRegex(ValueError,'still exists'):self.inspect(dict(start_ticks=43))
+        with self.assertRaisesRegex(ValueError,'original-pid-present'):self.inspect(dict(start_ticks=43))
     def test_forged_pid_only_in_running_refuses(self):
         self.running['identity']=dict(self.identity,pid=999);self.save()
         with self.assertRaisesRegex(ValueError,'binding'):self.inspect()
@@ -103,7 +103,7 @@ class ExitedIdentityTests(unittest.TestCase):
              patch.object(entry.native.local,'namespace_identity',return_value=self.scope),\
              patch.object(entry.native.local,'process',return_value=None),patch.object(entry.Path,'iterdir',return_value=[path]),\
              patch.object(entry.handoff.time,'time',return_value=100):
-            with self.assertRaisesRegex(ValueError,'another QEMU'):entry.inspect_exited()
+            with self.assertRaisesRegex(ValueError,'other-qemu'):entry.inspect_exited()
 
 class CaptureWiringTests(unittest.TestCase):
     def test_only_libvirt_collectors_use_guard_deadline_stays_immediate(self):
@@ -130,3 +130,55 @@ class CaptureWiringTests(unittest.TestCase):
                     self.assertIn(CID,stop)
                     if manager=='libvirt':self.assertIn('capture-exit',stop);self.assertIn(ADMIT,stop)
                     else:self.assertEqual(stop,'--property=ExecStopPost=docker stop --time 0 '+CID)
+
+class RefusalDiagnosticsTests(unittest.TestCase):
+    setUp=CaptureExitTests.setUp
+    command=CaptureExitTests.command
+    invoke=CaptureExitTests.invoke
+    def test_structured_permission_refusal_is_retained_without_text_or_argv(self):
+        self.proof=dict(exited=False,refusal=dict(stage='proc-scan',code='permission-denied',pid=77,process_uid=0,errno=13,operation='exe',argv='secret',message='secret'))
+        result,stop=self.invoke();stop.assert_called_once_with(CID)
+        self.assertEqual(result['refusal_stage'],'exit-proof')
+        self.assertEqual(result['proof_refusal'],dict(stage='proc-scan',code='permission-denied',pid=77,process_uid=0,errno=13,operation='exe'))
+        self.assertNotIn('secret',json.dumps(result))
+    def test_docker_exec_timeout_has_distinct_stage_and_code(self):
+        original=self.command
+        def command(argv,**kw):
+            if argv[1]=='exec':raise sup.CommandTimeout('secret args never retained')
+            return original(argv,**kw)
+        self.command=command;result,stop=self.invoke();stop.assert_called_once_with(CID)
+        self.assertEqual((result['refusal_stage'],result['refusal_code']),('docker-exec','command-timeout'))
+        self.assertNotIn('secret',json.dumps(result))
+    def test_inspect_failure_has_distinct_stage_and_exit_code(self):
+        self.command=lambda *a,**kw:(_ for _ in ()).throw(sup.CommandFailure('secret',7))
+        result,stop=self.invoke();stop.assert_called_once_with(CID)
+        self.assertEqual((result['refusal_stage'],result['refusal_code'],result['command_exit_code']),('container-inspect','command-failed',7))
+
+class EntryRefusalDiagnosticsTests(unittest.TestCase):
+    setUp=ExitedIdentityTests.setUp
+    save=ExitedIdentityTests.save
+    inspect=ExitedIdentityTests.inspect
+    def test_live_zombie_is_still_refused_with_state(self):
+        original=entry.Path.read_text
+        def read(path,*a,**kw):
+            if str(path)=='/proc/42/stat':return '42 (qemu-system-x86) Z 1'
+            return original(path,*a,**kw)
+        with patch.object(entry.Path,'read_text',new=read):
+            with self.assertRaises(entry.ExitProofRefusal) as caught:self.inspect(dict(start_ticks=43))
+        self.assertEqual(caught.exception.report,dict(stage='original-process',code='original-pid-present',pid=42,state='Z'))
+    def test_permission_exception_text_is_never_returned(self):
+        with patch.object(entry,'context',side_effect=PermissionError(13,'secret path')):
+            result=entry.inspect_exited_report()
+        self.assertEqual(result,dict(exited=False,refusal=dict(stage='admission',code='permission-denied',errno=13)))
+        self.assertNotIn('secret',json.dumps(result))
+    def test_process_permission_reports_pid_and_operation(self):
+        path=self.path/'99';path.mkdir();(path/'comm').write_text('sshd')
+        with patch.object(entry,'context',return_value=(self.path,self.admission,ADMIT)),\
+             patch.object(entry.native.local,'namespace_identity',return_value=self.scope),\
+             patch.object(entry.native.local,'process',return_value=None),patch.object(entry.Path,'iterdir',return_value=[path]),\
+             patch.object(entry.os,'readlink',side_effect=PermissionError(13,'secret')),\
+             patch.object(entry.handoff.time,'time',return_value=100):
+            result=entry.inspect_exited_report()
+        self.assertEqual(result['refusal']['stage'],'proc-scan');self.assertEqual(result['refusal']['operation'],'exe')
+        self.assertEqual(result['refusal']['pid'],99);self.assertEqual(result['refusal']['code'],'permission-denied')
+        self.assertNotIn('secret',json.dumps(result))

@@ -38,6 +38,21 @@ class VmEntryTests(unittest.TestCase):
                                     capture_output=True, timeout=5)
             return result, capture.read_text().splitlines() if capture.exists() else []
 
+    def test_only_libvirt_omits_container_ssh_helper(self):
+        # Execute the actual late-entry action block with a side-effect marker.
+        # Native argv/profile admission is covered separately above this block.
+        source=ENTRY.read_text()
+        block=source[source.index('# Libvirt uses Docker exec'):source.index('echo "QEMU graphics policy:')]
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary);marker=root/'ssh-started'
+            script=root/'enable-ssh.sh';script.write_text('#!/bin/sh\ntouch ssh-started\n');script.chmod(0o700)
+            for manager,expected in [('direct',True),('libvirt',False),('',True)]:
+                marker.unlink(missing_ok=True)
+                env=dict(os.environ,VM_MANAGER=manager)
+                result=subprocess.run(['bash','-c',block],cwd=root,env=env,capture_output=True,text=True,timeout=3)
+                self.assertEqual(result.returncode,0,result.stderr)
+                self.assertEqual(marker.exists(),expected)
+
     def test_libvirt_or_unknown_manager_cannot_fall_through_to_qemu(self):
         for manager in ['libvirt','unknown']:
             result,argv=self.run_entry('exec qemu-system-x86_64 -vga vmware $EXTRA',

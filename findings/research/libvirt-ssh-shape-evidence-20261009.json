@@ -1,0 +1,170 @@
+{
+  "passed": true,
+  "runs": [
+    {
+      "passed": true,
+      "cases": [
+        {
+          "case": "ssh-enabled-s5",
+          "cid": "94ed7fabea913cb55ea772d543bbe9c2e7a999d1b11c7ae611a5406efa361c41",
+          "image": "sha256:3a3c82c79bc4e73531f819ccdfa4053b3084efd7c1f645678dbf8b4b3a24369c",
+          "started_at": "2026-10-09T09:39:25.222101501Z",
+          "finished_at": "2026-10-09T09:39:26.233656496Z",
+          "exit_code": 137,
+          "gate": {
+            "cid": "94ed7fabea913cb55ea772d543bbe9c2e7a999d1b11c7ae611a5406efa361c41",
+            "started_at": "2026-10-09T09:39:25.222101501Z",
+            "run_id": "956d75ea928cb5bff06e31b9d55ae4b4",
+            "deferred": false,
+            "proof_refusal": {
+              "stage": "proc-scan",
+              "code": "permission-denied",
+              "pid": 13,
+              "process_uid": 1000,
+              "process_euid": 0,
+              "errno": 13,
+              "operation": "exe"
+            },
+            "outcome": "immediate-stop",
+            "error_type": "RuntimeError",
+            "refusal_stage": "exit-proof",
+            "refusal_code": "refused",
+            "elapsed_seconds": 0.1325328270031605
+          },
+          "terminal": null
+        },
+        {
+          "case": "ssh-disabled-s5",
+          "cid": "bba38dc72f2c1c94ab8d7fb6ce1efd13f1f20fa199b60c7ac7fb389172f90d69",
+          "image": "sha256:3a3c82c79bc4e73531f819ccdfa4053b3084efd7c1f645678dbf8b4b3a24369c",
+          "started_at": "2026-10-09T09:39:26.378214583Z",
+          "finished_at": "2026-10-09T09:39:27.200341174Z",
+          "exit_code": 0,
+          "gate": {
+            "cid": "bba38dc72f2c1c94ab8d7fb6ce1efd13f1f20fa199b60c7ac7fb389172f90d69",
+            "started_at": "2026-10-09T09:39:26.378214583Z",
+            "run_id": "4a6023a4d7737b5b6d4456c63f038875",
+            "deferred": true,
+            "outcome": "natural-container-exit",
+            "elapsed_seconds": 0.2918930929954513
+          },
+          "terminal": {
+            "cid": "bba38dc72f2c1c94ab8d7fb6ce1efd13f1f20fa199b60c7ac7fb389172f90d69",
+            "identity": {
+              "name": "rgpu-4a6023a4d7737b5b6d4456c63f038875",
+              "pid": 47,
+              "run_id": "4a6023a4d7737b5b6d4456c63f038875",
+              "start_ticks": 33359040,
+              "uuid": "00000000-0000-0000-0000-000000000000"
+            },
+            "process_exited": true,
+            "reason": "guest-shutdown",
+            "run_id": "4a6023a4d7737b5b6d4456c63f038875",
+            "scope": {
+              "device": 5,
+              "init_start_ticks": 33359001,
+              "inode": 4026533261,
+              "kind": "pid-namespace"
+            },
+            "started_at": "2026-10-09T09:39:26.378214583Z"
+          }
+        }
+      ],
+      "scope": "Production image SSH-helper root-process shape versus omission; same real TCG S5/handoff/strict exit guard. No KVM/GPU/host network; isolated TAP only. Container default capabilities match production plus NET_ADMIN for isolated TAP.",
+      "artifacts": "/home/bogdan/macos-vm/run/c343-ssh-shape-7891c49a",
+      "sha256": {
+        "result.json": "bc96c89e8ef6cc8424284244aae98defea5b2a4e3b488a2f2d7cd09488774b77",
+        "ssh-disabled-s5/run/container-cleanup.json": "64aa2549531e5cbd2bf4417d18e83b1e91b3c449cb06eea67d35aed8fd8a00eb",
+        "ssh-disabled-s5/run/libvirt-4a6023a4d7737b5b6d4456c63f038875/paused.json": "92cf02001cb0aee4ceaad72976ff5e114ab7803766d844b7a9c498ec54968f8c",
+        "ssh-disabled-s5/run/libvirt-4a6023a4d7737b5b6d4456c63f038875/resume.json": "5acd03f4afd46ecd921a8e3f3fda4f57bdbe3a0a6d100b0869d113d66273b22d",
+        "ssh-disabled-s5/run/libvirt-4a6023a4d7737b5b6d4456c63f038875/running.json": "2954f09c8abae503fbfef2fc39f3a193e9b3ea6c2ce6011b7f00d17ba140b4d0",
+        "ssh-disabled-s5/run/libvirt-4a6023a4d7737b5b6d4456c63f038875/terminal.json": "2c98bf7712139a07e37c68c898a27b1b1421ec6dcc5c4f937f907d8fd346e55b",
+        "ssh-enabled-s5/run/container-cleanup.json": "11030768ff7ed36663691aa418e2b6de64863e589d621d05702baa566ac64278",
+        "ssh-enabled-s5/run/libvirt-956d75ea928cb5bff06e31b9d55ae4b4/paused.json": "0b77714a39b36a298cf08acda4e741fcfc9cad39c56e066e779e06e90d565ab9",
+        "ssh-enabled-s5/run/libvirt-956d75ea928cb5bff06e31b9d55ae4b4/resume.json": "8cd578a16d2f4e03d0e8e4aa704f9ea48a64bf16e5431c3d55de7f7de2311d10",
+        "ssh-enabled-s5/run/libvirt-956d75ea928cb5bff06e31b9d55ae4b4/running.json": "4abb6ce47bfc7c29434a821a9e14d31a008d06beadccdcc71663f41e786bd60b"
+      }
+    },
+    {
+      "passed": true,
+      "cases": [
+        {
+          "case": "guest-s5-eof",
+          "cid": "b7e92ce24e2a4b76c610b63df9e22117cdbc998b2b6714d14430e51eae5e2e3b",
+          "image": "sha256:3a3c82c79bc4e73531f819ccdfa4053b3084efd7c1f645678dbf8b4b3a24369c",
+          "started_at": "2026-10-09T09:40:52.999962255Z",
+          "finished_at": "2026-10-09T09:40:53.8276261Z",
+          "exit_code": 0,
+          "gate": {
+            "cid": "b7e92ce24e2a4b76c610b63df9e22117cdbc998b2b6714d14430e51eae5e2e3b",
+            "started_at": "2026-10-09T09:40:52.999962255Z",
+            "run_id": "dfe89902500aca2ef6ebe6100b527e9e",
+            "deferred": true,
+            "outcome": "natural-container-exit",
+            "elapsed_seconds": 0.2913887329996214
+          },
+          "terminal": {
+            "cid": "b7e92ce24e2a4b76c610b63df9e22117cdbc998b2b6714d14430e51eae5e2e3b",
+            "identity": {
+              "name": "rgpu-dfe89902500aca2ef6ebe6100b527e9e",
+              "pid": 47,
+              "run_id": "dfe89902500aca2ef6ebe6100b527e9e",
+              "start_ticks": 33367702,
+              "uuid": "00000000-0000-0000-0000-000000000000"
+            },
+            "process_exited": true,
+            "reason": "guest-shutdown",
+            "run_id": "dfe89902500aca2ef6ebe6100b527e9e",
+            "scope": {
+              "device": 5,
+              "init_start_ticks": 33367663,
+              "inode": 4026533263,
+              "kind": "pid-namespace"
+            },
+            "started_at": "2026-10-09T09:40:52.999962255Z"
+          }
+        },
+        {
+          "case": "live-qemu-eof",
+          "cid": "461394dd57f0a2bd7118bf348c586e73f8f708a2f91b1020d10d2fcc5dfbb7fe",
+          "image": "sha256:3a3c82c79bc4e73531f819ccdfa4053b3084efd7c1f645678dbf8b4b3a24369c",
+          "started_at": "2026-10-09T09:40:53.996399864Z",
+          "finished_at": "2026-10-09T09:40:54.6715965Z",
+          "exit_code": 1,
+          "gate": {
+            "cid": "461394dd57f0a2bd7118bf348c586e73f8f708a2f91b1020d10d2fcc5dfbb7fe",
+            "started_at": "2026-10-09T09:40:53.996399864Z",
+            "run_id": "afd85f8772bf1565ec7a341c62ef8a0a",
+            "deferred": false,
+            "proof_refusal": {
+              "stage": "original-process",
+              "code": "original-pid-present",
+              "pid": 47,
+              "state": "S"
+            },
+            "outcome": "immediate-stop",
+            "error_type": "RuntimeError",
+            "refusal_stage": "exit-proof",
+            "refusal_code": "refused",
+            "elapsed_seconds": 0.12723878500401042
+          },
+          "terminal": null
+        }
+      ],
+      "scope": "Real TCG guest/entry/permit/serial EOF and host gate; S5 exits naturally, intentionally lost live capture forces exact CID. No KVM/GPU/host network; isolated TAP only. ExecStopPost systemd wiring tested separately.",
+      "artifacts": "/home/bogdan/macos-vm/run/c342-capture-exit-af8a307b",
+      "sha256": {
+        "result.json": "b74ab22f2980515bbb2f1590b2282abafe9d2e9d6a02238b88e86474bd45b71a",
+        "live-qemu-eof/run/container-cleanup.json": "e655a1424c860bdc216536482b4263ab6dd84bf001e270ef1bc0862e9bc55c1c",
+        "live-qemu-eof/run/libvirt-afd85f8772bf1565ec7a341c62ef8a0a/paused.json": "6877d239728da4e709e35a93caaef6f59fec208659897ae2b1ef128465138575",
+        "live-qemu-eof/run/libvirt-afd85f8772bf1565ec7a341c62ef8a0a/resume.json": "f35f5f0514a865d7ec74cfdbfc389804c2994aa7c61c060b3e0b57cb62ba516b",
+        "live-qemu-eof/run/libvirt-afd85f8772bf1565ec7a341c62ef8a0a/running.json": "aee3732cb17e2b47bf1ade2cb756e5b04f3d5cd189d878132d93584cd9b54fd7",
+        "guest-s5-eof/run/container-cleanup.json": "86dd2fd02148c64dc21bfcf41ec061acabf88409da978ecbffd0f5a2f41f5083",
+        "guest-s5-eof/run/libvirt-dfe89902500aca2ef6ebe6100b527e9e/paused.json": "ec22fd7e30023f657fa595387b63d2bff773adcb7e159b26b7be96a5edb95d7b",
+        "guest-s5-eof/run/libvirt-dfe89902500aca2ef6ebe6100b527e9e/resume.json": "8191927b2bb8393ad5f4484297c89f15adddda76b11372e9483283d1e8635c51",
+        "guest-s5-eof/run/libvirt-dfe89902500aca2ef6ebe6100b527e9e/running.json": "00c2df7422dc3837005a6dd2608cf74b39b007b70badc4b4b2c578e20c3c9790",
+        "guest-s5-eof/run/libvirt-dfe89902500aca2ef6ebe6100b527e9e/terminal.json": "65549e67c3a9757de1cc30df8882f0595b8d14acdba501396087750e3273668e"
+      }
+    }
+  ]
+}

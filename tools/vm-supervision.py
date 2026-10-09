@@ -28,6 +28,16 @@ DOCKER_ENV = ("DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_CONFIG", "DOCKER_TLS_VERI
               "DOCKER_CERT_PATH")
 
 
+class CommandTimeout(RuntimeError):
+    pass
+
+
+class CommandFailure(RuntimeError):
+    def __init__(self,message,returncode):
+        self.returncode=returncode
+        super().__init__(message)
+
+
 class ManagedStopUnconfirmed(RuntimeError):
     pass
 
@@ -137,10 +147,10 @@ def run(args, timeout=10):
                                 env=dict(os.environ, LC_ALL="C", TZ="UTC"))
     except subprocess.TimeoutExpired:
         # TimeoutExpired includes full argv, including forwarded endpoint values.
-        raise RuntimeError(f"{Path(args[0]).name} {args[1]} timed out") from None
+        raise CommandTimeout(f"{Path(args[0]).name} {args[1]} timed out") from None
     if result.returncode:
         # Do not echo command environments or complete Docker inspection output.
-        raise RuntimeError(f"{Path(args[0]).name} {args[1]} failed ({result.returncode})")
+        raise CommandFailure(f"{Path(args[0]).name} {args[1]} failed ({result.returncode})",result.returncode)
     return result.stdout
 
 
@@ -181,6 +191,7 @@ def capture_exit(vm,cid,started_at,deadline,run_id,admission_digest):
     """
     full_cid(cid)
     began=time.monotonic();until=began+2
+    stage='container-inspect'
     result=dict(cid=cid,started_at=started_at,run_id=run_id,deferred=False)
     def running():
         remaining=min(.5,until-time.monotonic(),deadline-time.time())
@@ -194,8 +205,24 @@ def capture_exit(vm,cid,started_at,deadline,run_id,admission_digest):
         if not running():result['outcome']='already-stopped';return result
         budget=min(1,until-time.monotonic(),deadline-time.time())
         if budget<=0:raise RuntimeError('capture exit budget expired')
+        stage='docker-exec'
         observed=json.loads(run([binary('docker'),'exec',cid,'python3','-B',
                                 '/run/rgpu-tools/libvirt-console-entry.py','inspect-exited'],timeout=budget))
+        stage='exit-proof'
+        if observed.get('exited') is False:
+            report=observed.get('refusal',{})
+            stages={'admission','receipt-read','permit-binding','plan-binding','running-binding',
+                    'namespace','original-process','proc-list','proc-scan'}
+            codes={'missing-file','permission-denied','malformed-json','missing-field',
+                   'validation-refused','inspection-error','original-pid-present','other-qemu'}
+            if report.get('stage') in stages and report.get('code') in codes:
+                safe={k:report[k] for k in ('stage','code')}
+                for key in ('pid','process_uid','process_euid','errno'):
+                    if type(report.get(key)) is int and report[key]>=0:safe[key]=report[key]
+                if report.get('state') in tuple('RSDTtZXIPKW')+('unknown',):safe['state']=report['state']
+                if report.get('operation') in ('comm','exe'):safe['operation']=report['operation']
+                result['proof_refusal']=safe
+            raise RuntimeError('capture exit proof refused')
         if not (observed['exited'] is True and observed['cid']==cid and
                 observed['started_at']==started_at and observed['run_id']==run_id and
                 observed['admission_sha256']==admission_digest and
@@ -204,12 +231,19 @@ def capture_exit(vm,cid,started_at,deadline,run_id,admission_digest):
             raise RuntimeError('capture exit proof mismatch')
         until=min(until,time.monotonic()+observed['deadline_epoch']-time.time())
         result['deferred']=True
+        stage='exit-wait'
         while time.monotonic()<until and time.time()<deadline:
             if not running():result['outcome']='natural-container-exit';return result
             time.sleep(min(.05,max(0,until-time.monotonic())))
         result['outcome']='receipt-grace-expired'
     except Exception as error:
         result['outcome']='immediate-stop';result['error_type']=type(error).__name__
+        result['refusal_stage']=stage
+        result['refusal_code']=('command-timeout' if isinstance(error,CommandTimeout) else
+                                'command-failed' if isinstance(error,CommandFailure) else
+                                'malformed-json' if isinstance(error,json.JSONDecodeError) else
+                                'refused')
+        if isinstance(error,CommandFailure):result['command_exit_code']=error.returncode
     finally:
         try:
             if result.get('outcome') not in ('already-stopped','natural-container-exit'):

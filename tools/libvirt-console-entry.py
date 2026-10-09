@@ -4,6 +4,7 @@
 Host supervisor owns exact CID/start, original deadline, serial drains and GPU
 recovery. This process owns the private session and one transient paused domain.
 """
+from contextlib import contextmanager
 import importlib.util
 import json
 import os
@@ -95,49 +96,99 @@ def inspect_domain(paused=True):
     finally:backend.close()
 
 
+class ExitProofRefusal(ValueError):
+    def __init__(self,stage,code,**details):
+        self.report=dict(stage=stage,code=code,**details)
+        super().__init__(stage+': '+code)
+
+
+@contextmanager
+def exit_check(stage,**details):
+    try:yield
+    except ExitProofRefusal:raise
+    except FileNotFoundError:
+        if stage=='proc-scan':raise # Preserve disappearing-process handling.
+        raise ExitProofRefusal(stage,'missing-file',**details) from None
+    except Exception as error:
+        code=('permission-denied' if isinstance(error,PermissionError) else
+              'malformed-json' if isinstance(error,json.JSONDecodeError) else
+              'missing-field' if isinstance(error,KeyError) else
+              'validation-refused' if isinstance(error,ValueError) else 'inspection-error')
+        if isinstance(error,OSError) and type(error.errno) is int:details['errno']=error.errno
+        if code=='permission-denied' and 'pid' in details:
+            try:
+                uid=next(row for row in Path(f"/proc/{details['pid']}/status").read_text().splitlines() if row.startswith('Uid:'))
+                details['process_uid']=int(uid.split()[1])
+                details['process_euid']=int(uid.split()[2])
+            except (OSError,ValueError,StopIteration):pass
+        raise ExitProofRefusal(stage,code,**details) from None
+
+
 def inspect_exited():
-    """Read-only proof for capture teardown; never connects to libvirt or adopts a PID."""
-    directory,admission,expected=context()
-    plan=json.loads((directory/'plan.json').read_text())
-    paused=json.loads((directory/'paused.json').read_text())
-    permit=json.loads((directory/'resume.json').read_text())
-    running=json.loads((directory/'running.json').read_text())
-    handoff.validate_permit(permit,admission,expected,paused)
-    identity=paused['identity'];scope=paused['scope']
-    handoff.require(paused['paused'] is True and paused['run_id']==admission['run_id'] and
-                    plan['run_id']==admission['run_id'] and
-                    runtime.digest(plan)==paused['plan_sha256'], 'exited plan binding changed')
-    handoff.require(identity['name']==plan['domain_name'] and identity['uuid']==plan['uuid'] and
-                    identity['run_id']==admission['run_id'] and
-                    type(identity['pid']) is int and identity['pid']>1 and
-                    type(identity['start_ticks']) is int and identity['start_ticks']>0,
-                    'exited process identity invalid')
-    handoff.require(running['run_id']==admission['run_id'] and running['identity']==identity and
-                    running['scope']==scope and running['plan_sha256']==paused['plan_sha256'] and
-                    running['cid']==permit['cid'] and running['started_at']==permit['started_at'],
-                    'exited running/paused/permit binding changed')
-    handoff.require(native.local.namespace_identity()==scope,'exited PID namespace changed')
-    current=native.local.process(identity['pid'])
-    handoff.require(current is None or current['start_ticks']!=identity['start_ticks'],
-                    'recorded QEMU process still exists')
-    # Domain disappearance alone is insufficient. Refuse replacement/emulator
-    # processes, including unexpected argv changes; inspect exe/comm privately.
-    for path in Path('/proc').iterdir():
+    """Read-only proof; refusal diagnostics never expose argv, paths or exception text."""
+    with exit_check('admission'):
+        directory,admission,expected=context()
+    with exit_check('receipt-read'):
+        plan=json.loads((directory/'plan.json').read_text())
+        paused=json.loads((directory/'paused.json').read_text())
+        permit=json.loads((directory/'resume.json').read_text())
+        running=json.loads((directory/'running.json').read_text())
+    with exit_check('permit-binding'):
+        handoff.validate_permit(permit,admission,expected,paused)
+    with exit_check('plan-binding'):
+        identity=paused['identity'];scope=paused['scope']
+        handoff.require(paused['paused'] is True and paused['run_id']==admission['run_id'] and
+                        plan['run_id']==admission['run_id'] and
+                        runtime.digest(plan)==paused['plan_sha256'], 'exited plan binding changed')
+        handoff.require(identity['name']==plan['domain_name'] and identity['uuid']==plan['uuid'] and
+                        identity['run_id']==admission['run_id'] and
+                        type(identity['pid']) is int and identity['pid']>1 and
+                        type(identity['start_ticks']) is int and identity['start_ticks']>0,
+                        'exited process identity invalid')
+    with exit_check('running-binding'):
+        handoff.require(running['run_id']==admission['run_id'] and running['identity']==identity and
+                        running['scope']==scope and running['plan_sha256']==paused['plan_sha256'] and
+                        running['cid']==permit['cid'] and running['started_at']==permit['started_at'],
+                        'exited running/paused/permit binding changed')
+    with exit_check('namespace'):
+        handoff.require(native.local.namespace_identity()==scope,'exited PID namespace changed')
+    with exit_check('original-process',pid=identity['pid']):
+        current=native.local.process(identity['pid'])
+        if current is not None and current['start_ticks']==identity['start_ticks']:
+            state='unknown'
+            try:
+                raw=Path(f"/proc/{identity['pid']}/stat").read_text().rsplit(')',1)[1].split()[0]
+                if raw in tuple('RSDTtZXIPKW'):state=raw
+            except (OSError,IndexError):pass
+            raise ExitProofRefusal('original-process','original-pid-present',pid=identity['pid'],state=state)
+    # Keep the same conservative scan: any live original/other QEMU or unknown
+    # process visibility still refuses; this change only classifies the refusal.
+    with exit_check('proc-list'):
+        paths=list(Path('/proc').iterdir())
+    for path in paths:
         if not path.name.isdigit():continue
+        pid=int(path.name)
         try:
-            comm=(path/'comm').read_text().strip()
-            handoff.require(not comm.startswith('qemu-system'),
-                            'another QEMU process still exists')
+            with exit_check('proc-scan',pid=pid,operation='comm'):
+                comm=(path/'comm').read_text().strip()
+            if comm.startswith('qemu-system'):
+                raise ExitProofRefusal('proc-scan','other-qemu',pid=pid)
             if path.name=='1' and comm in ('docker-init','tini'):
-                continue # Namespace/init-start identity was independently matched above.
-            executable=os.path.basename(os.readlink(path/'exe'))
-            handoff.require(not executable.startswith('qemu-system'),
-                            'another QEMU process still exists')
+                continue # Scoped namespace/init identity was matched above.
+            with exit_check('proc-scan',pid=pid,operation='exe'):
+                executable=os.path.basename(os.readlink(path/'exe'))
+            if executable.startswith('qemu-system'):
+                raise ExitProofRefusal('proc-scan','other-qemu',pid=pid)
         except FileNotFoundError:continue
     return dict(exited=True,run_id=admission['run_id'],admission_sha256=expected,
                 identity=identity,scope=scope,plan_sha256=paused['plan_sha256'],
                 cid=permit['cid'],started_at=permit['started_at'],
                 deadline_epoch=admission['deadline_epoch'])
+
+
+def inspect_exited_report():
+    try:return inspect_exited()
+    except ExitProofRefusal as error:return dict(exited=False,refusal=error.report)
 
 
 def launch(argv):
@@ -205,7 +256,7 @@ def main():
         context();dependency_check()
     elif command=='inspect-paused':inspect_domain()
     elif command=='inspect-running':inspect_domain(paused=False)
-    elif command=='inspect-exited':print(json.dumps(inspect_exited()))
+    elif command=='inspect-exited':print(json.dumps(inspect_exited_report()))
     elif command=='launch':launch(sys.argv[2:])
     else:raise ValueError('invalid controller command')
 

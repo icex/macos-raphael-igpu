@@ -123,6 +123,10 @@ SHIM
     *) echo 'unknown VM_MANAGER' >&2; exit 1 ;;
 esac
 
-./enable-ssh.sh >/dev/null 2>&1 || true
+# Libvirt uses Docker exec and its private Unix socket. Guest SSH is QEMU's
+# separate port10022 forwarding; unused container sshd adds privileged processes.
+if [[ "${VM_MANAGER:-direct}" != libvirt ]]; then
+    ./enable-ssh.sh >/dev/null 2>&1 || true
+fi
 echo "QEMU graphics policy: GENERIC_GRAPHICS=${GENERIC_GRAPHICS:-on}"
 exec bash "${LAUNCH}"
