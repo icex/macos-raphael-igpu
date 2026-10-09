@@ -4,7 +4,7 @@
 Run`af7889e45df129e345d9c7f6b03525cd`, container
 `3f191ce6f3c05412de6592caf168cbbba72a16bc69f6df7b61cbfc677e6f61e5`.
 The accompanying manifest pins build/run identity and stable evidence. Root owns
-all native operations. Shutdown and recovery are pending at this report revision.
+all native operations. Final teardown is a forced capture abort; stopped-GPU recovery authorizes reuse.
 
 ## Isolation succeeds; cleanup fixture fails
 
@@ -57,4 +57,19 @@ restart-safe ownership. Client death during commit, repeated resource exhaustion
 longer mixed-content performance and independent host-boot coverage remain open.
 The immutable path remains experimental; GPU-native virtual transport and
 VirtualBox support are not implemented. Functional evidence does not establish
-clean shutdown: append final capture/terminal/Docker/recovery receipts separately.
+clean shutdown; final receipts below record a capture abort.
+
+
+## Final lifecycle: capture abort, separately successful recovery
+
+`shutdown.json` now classifies`capture-abort-after-request`, retaining the earlier
+outer observation`exited-after-guest-request` only as`observed_outcome`.
+`exit_reconciliation.private_terminal_verified=false`; the private terminal is
+missing. Both capture receipts report`immediate-stop`, no deferral, about0.515s.
+Original QEMU PID113 remains stateR with one task and flags138412428 at inspection;
+this is not an exited-process proof. Docker records SIGTERM and SIGKILL, stop,
+exit137 and destroy. Thus there is no clean guest-shutdown qualification.
+
+The stopped-GPU recovery receipt independently reports`recovered` and
+`authorizes_launch=true`. The host safety gate remains intact; successful recovery
+does not erase forced teardown or the native fixture's explicit-unmap failure.

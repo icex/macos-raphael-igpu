@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "run_id": "af7889e45df129e345d9c7f6b03525cd",
-  "scope": "394 partial native qualification; retired unmap failure retained; lifecycle pending",
+  "scope": "394 partial native qualification; explicit retired-unmap failure and forced capture-abort teardown; authorizing GPU recovery",
   "artifacts": [
     {
       "path": "/home/bogdan/macos-vm/run/c394-audio-restored-independent.json",
@@ -167,6 +167,47 @@
       "path": "/home/bogdan/macos-vm/run/candidate-394-results/running-identity.json",
       "bytes": 3029,
       "sha256": "1ba5c3a4c355d738fca2ce166666754959892e809eb255a5c41b94ae2786020a"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c394-docker-events.jsonl",
+      "bytes": 444743,
+      "sha256": "de73fcf3478a6bc5c6c17f63ccf18768677c094aa004bf9d974630b91d0e3a2e"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-394-results/shutdown.json",
+      "bytes": 1089,
+      "sha256": "8ebfa4c85731422f4bd8ac468ec25fecec99050b406c18a67a1feeb7a1bfa82e"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-394-results/recovery.json",
+      "bytes": 17577,
+      "sha256": "e8e1b43ed5a9164ad9cbd9300cf836430395140754a70e92e495a48fb4e2eebb"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-394-results/recovery-replay.json",
+      "bytes": 352,
+      "sha256": "4f3f5d43351c9999b01f8d34555bf54c59da74f9cd558bf3b25655f197535870"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-394-results/verdict.json",
+      "bytes": 47059,
+      "sha256": "db1d3adde03b2969a9b6e6cd75521edd6376b9b884582fed0a228d5a7973b6ac"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-394-results/events.jsonl",
+      "bytes": 98213,
+      "sha256": "942818f45782856ba7f4bd352db1ac09e8672c0b489a8b62871d0378bea533a8"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-394-results/capture-exit-3f191ce6f3c05412de6592caf168cbbba72a16bc69f6df7b61cbfc677e6f61e5-1801959.json",
+      "bytes": 831,
+      "sha256": "2b78d59d8ceb0680ecb328b85ee9c25348b24567beda2597f4e81bb76291f52d"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-394-results/capture-exit-3f191ce6f3c05412de6592caf168cbbba72a16bc69f6df7b61cbfc677e6f61e5-1801957.json",
+      "bytes": 833,
+      "sha256": "c49760d51b518b2af4c1cd13a46244da4c94d280597c2bcc44032ff3c0db5c8f"
     }
-  ]
+  ],
+  "private_terminal_verified": false
 }
