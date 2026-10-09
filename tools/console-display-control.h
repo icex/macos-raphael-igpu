@@ -13,6 +13,18 @@ static void rg_write32(uint8_t *p,uint32_t v) {for(unsigned i=0;i<4;i++)p[i]=(ui
 static inline size_t rg_request_size(uint32_t version) {
  return version==1?RG_CONTROL_REQUEST:version==2?RG_CONTROL_REQUEST_MAX:0;
 }
+/* Stream framing: 0 wait, 1 dispatch for validation, -1 close/refuse.
+ * Legacy v1 dispatches at 20 bytes without EOF. V2 requires exact 24 bytes
+ * followed by write-side EOF, preventing delayed suffixes before mutation. */
+static inline int rg_request_frame(const uint8_t *p,size_t n,int eof) {
+ if(n<8)return eof?-1:0;
+ uint32_t version=rg_read32(p+4);
+ size_t expected=rg_request_size(version);
+ if(!expected||n>expected)return 1; /* validator rejects, never mutates */
+ if(n<expected)return eof?-1:0;
+ if(version==1)return 1;
+ return eof?1:0;
+}
 /* Call only after successful rg_validate: v2 needs the complete 24 bytes. */
 static inline unsigned rg_request_scale(const uint8_t *p) {
  return rg_read32(p+4)==1?2:rg_read32(p+20);

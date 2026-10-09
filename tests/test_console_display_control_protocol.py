@@ -25,6 +25,7 @@ class Protocol(unittest.TestCase):
         source = pathlib.Path(cls.tmp.name) / 'probe.c'
         source.write_text('#include "console-display-control.h"\n'
                           'int settle(double*s,int identity,int ready,int expired,double now){return rg_settle(s,identity,ready,expired,now); }\n'
+                          'int frame(const unsigned char*p,size_t n,int eof){return rg_request_frame(p,n,eof); }\n'
                           'size_t size_for(unsigned v){return rg_request_size(v); }\n'
                           'unsigned scale_for(const unsigned char*p,size_t n){return rg_validate(p,n)?0:rg_request_scale(p); }\n'
                           'unsigned check(const unsigned char*p,size_t n){return rg_validate(p,n);}\n'
@@ -36,6 +37,7 @@ class Protocol(unittest.TestCase):
                         '-I', str(ROOT / 'tools'), str(source), '-o', str(library)], check=True)
         cls.lib = ctypes.CDLL(str(library))
         cls.lib.settle.argtypes = [ctypes.POINTER(ctypes.c_double), ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_double]
+        cls.lib.frame.argtypes = [ctypes.c_char_p, ctypes.c_size_t, ctypes.c_int]
         cls.lib.scale_for.argtypes = [ctypes.c_char_p, ctypes.c_size_t]
         cls.lib.size_for.argtypes = [ctypes.c_uint]
         cls.lib.size_for.restype = ctypes.c_size_t
@@ -87,6 +89,30 @@ class Protocol(unittest.TestCase):
         legacy=self.request()
         self.assertEqual(self.lib.scale_for(legacy,len(legacy)),2)
         self.assertEqual(self.check(legacy+struct.pack('<I',2)),1)
+
+    def test_v2_stream_requires_eof_before_dispatch(self):
+        data=self.request(1235,743,version=2)+struct.pack('<I',1)
+        for length in range(25):
+            part=data[:length]
+            self.assertEqual(self.lib.frame(part,len(part),0),0)
+            self.assertEqual(self.lib.frame(part,len(part),1),1 if length==24 else -1)
+        # A delayed extra byte, even after a complete waiting frame, dispatches
+        # only an invalid buffer; the same validator used by respond refuses it.
+        self.assertEqual(self.lib.frame(data,24,0),0)
+        extra=data+b'x'
+        self.assertEqual(self.lib.frame(extra,25,0),1)
+        self.assertEqual(self.check(extra),1)
+        self.assertEqual(self.lib.frame(extra,25,1),1)
+        self.assertEqual(self.check(data),0)
+
+    def test_legacy_immediate_frame_and_malformed_stream(self):
+        legacy=self.request()
+        self.assertEqual(self.lib.frame(legacy,20,0),1)
+        self.assertEqual(self.lib.frame(legacy,20,1),1)
+        for n in range(20):self.assertEqual(self.lib.frame(legacy[:n],n,0),0)
+        unknown=self.request(version=3)[:8]
+        self.assertEqual(self.lib.frame(unknown,8,0),1)
+        self.assertEqual(self.check(unknown),1)
 
     def test_lru_keeps_current_across_many_resizes(self):
         modes = Modes()

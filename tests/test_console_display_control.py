@@ -28,7 +28,15 @@ class ControlTests(unittest.TestCase):
                             values=(control.REQUEST if scale==2 else control.REQUEST_V2).unpack(data)
                             magic,version,sequence,w,h=values[:5]
                             self.assertEqual((magic,version,w,h),(control.MAGIC,1 if scale==2 else 2,width,height))
-                            if scale==1:self.assertEqual(values[5],1)
+                            if scale==1:
+                                self.assertEqual(values[5],1)
+                                # A real EOF must arrive before this peer replies:
+                                # missing shutdown would block until timeout.
+                                self.assertEqual(peer.recv(1),b'')
+                            else:
+                                peer.setblocking(False)
+                                with self.assertRaises(BlockingIOError):peer.recv(1)
+                                peer.settimeout(3)
                             response=reply(sequence)
                             # Split the wire reply to exercise partial reads.
                             peer.sendall(response[:7]);peer.sendall(response[7:])

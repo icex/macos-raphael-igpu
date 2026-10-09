@@ -76,6 +76,9 @@ def request(directory,width,height,timeout=5,*,scale=2):
             raise ValueError('control endpoint replaced during connect')
         connection.settimeout(remaining());connection.sendall(REQUEST.pack(MAGIC,1,sequence,width,height) if scale==2 else
                                                          REQUEST_V2.pack(MAGIC,2,sequence,width,height,scale))
+        # V2 frames end at write-side EOF; the holder must reject any suffix
+        # before mode mutation. V1 retains historical immediate framing.
+        if scale==1:connection.shutdown(socket.SHUT_WR)
         data=bytearray()
         while len(data)<REPLY.size:
             connection.settimeout(remaining());part=connection.recv(REPLY.size-len(data))

@@ -266,13 +266,11 @@ static CGDisplayModeRef controlMode(CGDirectDisplayID did,unsigned w,unsigned h,
  if((waitingMode||waitingVerify)&&!replying)[self respond];
  if(!replying&&!waitingMode&&!waitingVerify){
   ssize_t n=read(peer,request+received,sizeof(request)-received);
-  if(n==0){[self closePeer];return;}
   if(n<0){if(errno!=EAGAIN&&errno!=EWOULDBLOCK&&errno!=EINTR)[self closePeer];return;}
   received+=(size_t)n;
-  if(received>=8){
-   size_t expected=rg_request_size(rg_read32(request+4));
-   if(!expected||received>=expected)[self respond];
-  }
+  int frame=rg_request_frame(request,received,n==0);
+  if(frame<0){[self closePeer];return;}
+  if(frame>0)[self respond];
  }
  if(replying){
   ssize_t n=write(peer,reply+sent,sizeof(reply)-sent);
