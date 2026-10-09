@@ -1,0 +1,310 @@
+--- a/src/VBox/Devices/Bus/DevPciVfio.cpp
++++ b/src/VBox/Devices/Bus/DevPciVfio.cpp
+@@ -368,40 +368,42 @@
+             /** The IOMMU file descriptor. */
+             int          iFdIommu;
+             /** The IOMMU page table object id. */
+             uint32_t     idIommuHwpt;
+         } IommuFd;
+         /** VFIO container based data. */
+         struct
+         {
+             /** The VFIO container file descriptor. */
+             int          iFdVfioContainer;
+             /** The VFIO group filedescriptor. */
+             int          iFdVfioGroup;
+         } VfioGroup;
+     };
+ 
+     /** The VFIO PCI functions. */
+     VFIOPCIFUN           aPciFuns[8];
+ 
+     /** Flag whether the guest RAM was mapped to the IOMMU. */
+     bool                 fGuestRamMapped;
++    /** Sticky failed DMA admission; reopening the device is required. */
++    bool                 fGuestRamMapFailed;
+ } VFIOPCI;
+ /** Pointer to the raw PCI instance data. */
+ typedef VFIOPCI *PVFIOPCI;
+ 
+ 
+ #ifndef VBOX_DEVICE_STRUCT_TESTCASE
+ 
+ /**
+  * eventfd2() syscall wrapper.
+  *
+  * @returns IPRT status code.
+  * @param   uValInit            The initial value of the maintained counter.
+  * @param   fFlags              Flags controlling the eventfd behavior.
+  * @param   piFdEvt             Where to store the file descriptor of the eventfd object on success.
+  */
+ DECLINLINE(int) pciVfioLnxEventfd2(uint32_t uValInit, uint32_t fFlags, int *piFdEvt)
+ {
+     int rcLnx = syscall(LNX_SYSCALL_EVENTFD2, uValInit, fFlags);
+     if (RT_UNLIKELY(rcLnx == -1))
+         return RTErrConvertFromErrno(errno);
+@@ -2073,111 +2075,155 @@
+         Map.size       = sizeof(Map);
+         Map.flags      = IOMMU_IOAS_MAP_FIXED_IOVA | IOMMU_IOAS_MAP_WRITEABLE | IOMMU_IOAS_MAP_READABLE;
+         Map.ioas_id    = pThis->IommuFd.idIommuHwpt;
+         Map.__reserved = 0;
+         Map.user_va    = uPtrMapping;
+         Map.length     = cbMapping;
+         Map.iova       = GCPhysStart;
+ 
+         int rcLnx = ioctl(pThis->IommuFd.iFdIommu, IOMMU_IOAS_MAP, &Map);
+         if (rcLnx == -1)
+         {
+             LogRel(("errno=%d\n", errno));
+             return RTErrConvertFromErrno(errno);
+         }
+     }
+ 
+     return VINF_SUCCESS;
+ }
+ 
+ 
++/** Successful extents of the current map transaction, newest first. */
++struct VFIOPDMAEXTENT
++{
++    VFIOPDMAEXTENT *pNext;
++    RTGCPHYS GCPhys;
++    size_t cb;
++};
++
++static int pciVfioUnmapRegion(PVFIOPCI pThis, RTGCPHYS GCPhys, size_t cb)
++{
++    if (pThis->fVfioLegacy)
++    {
++        struct vfio_iommu_type1_dma_unmap Unmap = {};
++        Unmap.argsz = sizeof(Unmap);
++        Unmap.iova = GCPhys;
++        Unmap.size = cb;
++        if (ioctl(pThis->VfioGroup.iFdVfioContainer, VFIO_IOMMU_UNMAP_DMA, &Unmap) == -1)
++            return RTErrConvertFromErrno(errno);
++        return Unmap.size == cb ? VINF_SUCCESS : VERR_IO_GEN_FAILURE;
++    }
++    struct iommu_ioas_unmap Unmap = {};
++    Unmap.size = sizeof(Unmap);
++    Unmap.ioas_id = pThis->IommuFd.idIommuHwpt;
++    Unmap.iova = GCPhys;
++    Unmap.length = cb;
++    if (ioctl(pThis->IommuFd.iFdIommu, IOMMU_IOAS_UNMAP, &Unmap) == -1)
++        return RTErrConvertFromErrno(errno);
++    return Unmap.length == cb ? VINF_SUCCESS : VERR_IO_GEN_FAILURE;
++}
++
++static int pciVfioMapRecorded(PVFIOPCI pThis, RTGCPHYS GCPhys, uintptr_t uPtr,
++                              size_t cb, VFIOPDMAEXTENT **ppHead)
++{
++    /* Allocate before the ioctl: every successful mapping must be recorded. */
++    VFIOPDMAEXTENT *pExtent = (VFIOPDMAEXTENT *)RTMemAlloc(sizeof(*pExtent));
++    if (!pExtent)
++        return VERR_NO_MEMORY;
++    int rc = pciVfioMapRegion(pThis, GCPhys, uPtr, cb);
++    if (RT_FAILURE(rc))
++    {
++        RTMemFree(pExtent);
++        return rc;
++    }
++    pExtent->GCPhys = GCPhys;
++    pExtent->cb = cb;
++    pExtent->pNext = *ppHead;
++    *ppHead = pExtent;
++    return VINF_SUCCESS;
++}
++
+ static int pciVfioIommuGuestRamMap(PVFIOPCI pThis, PPDMDEVINS pDevIns)
+ {
+-    if (!pThis->fGuestRamMapped)
+-    {
+-        /** @todo This is a really gross hack because we currently lack
+-         * a dedicated interface to get knowledge about guest RAM mappings.
+-         * This might also return mappings for stuff not being guest RAM.
+-         */
+-        RTGCPHYS  GCPhysStart = 0;
+-        uintptr_t uPtrMapping = 0;
+-        size_t    cbMapping   = 0;
+-        for (RTGCPHYS GCPhys = 0; GCPhys < _4G + PDMDevHlpMMPhysGetRamSizeAbove4GB(pDevIns); GCPhys += _4K)
+-        {
+-            void *pv = NULL;
+-            PGMPAGEMAPLOCK Lock;
+-            int rc = PDMDevHlpPhysGCPhys2CCPtr(pDevIns, GCPhys, 0 /*fFlags*/, &pv, &Lock);
+-            if (RT_SUCCESS(rc))
+-            {
+-                if (cbMapping)
++    if (pThis->fGuestRamMapFailed)
++        return VERR_INVALID_STATE;
++    if (pThis->fGuestRamMapped)
++        return VINF_SUCCESS;
++    VFIOPDMAEXTENT *pHead = NULL;
++    RTGCPHYS GCPhysStart = 0;
++    uintptr_t uPtrMapping = 0;
++    size_t cbMapping = 0;
++    int rc = VINF_SUCCESS;
++    /* Existing discovery policy retained, NOT qualified as authoritative RAM or
++     * stable DMA lifetime. PGM mapping locks are still released by this loop. */
++    for (RTGCPHYS GCPhys = 0; GCPhys < _4G + PDMDevHlpMMPhysGetRamSizeAbove4GB(pDevIns); GCPhys += _4K)
++    {
++        void *pv = NULL;
++        PGMPAGEMAPLOCK Lock;
++        int rcPage = PDMDevHlpPhysGCPhys2CCPtr(pDevIns, GCPhys, 0, &pv, &Lock);
++        if (RT_SUCCESS(rcPage))
++        {
++            if (cbMapping && uPtrMapping + cbMapping != (uintptr_t)pv)
++            {
++                rc = pciVfioMapRecorded(pThis, GCPhysStart, uPtrMapping, cbMapping, &pHead);
++                if (RT_FAILURE(rc))
+                 {
+-                    if (uPtrMapping + cbMapping == (uintptr_t)pv)
+-                        cbMapping += _4K;
+-                    else
+-                    {
+-                        rc = pciVfioMapRegion(pThis, GCPhysStart, uPtrMapping, cbMapping);
+-                        if (RT_FAILURE(rc))
+-                            LogRel(("Mapping %RGp/%zu failed with %Rrc\n", GCPhysStart, cbMapping, rc));
+-
+-                        GCPhysStart = GCPhys;
+-                        uPtrMapping = (uintptr_t)pv;
+-                        cbMapping = _4K;
+-                    }
++                    PDMDevHlpPhysReleasePageMappingLock(pDevIns, &Lock);
++                    break;
+                 }
+-                else
+-                {
+-                    Assert(!uPtrMapping);
+-                    GCPhysStart = GCPhys;
+-                    uPtrMapping = (uintptr_t)pv;
+-                    cbMapping = _4K;
+-                }
+-                PDMDevHlpPhysReleasePageMappingLock(pDevIns, &Lock);
++                cbMapping = 0;
+             }
+-            else if (cbMapping)
+-            {
+-                LogRel(("PDMDevHlpPhysGCPhys2CCPtr(,%RGp) -> %Rrc\n", GCPhys, rc));
+-                /* Map what we currently have. */
+-                Assert(uPtrMapping);
+-                rc = pciVfioMapRegion(pThis, GCPhysStart, uPtrMapping, cbMapping);
+-                if (RT_FAILURE(rc))
+-                    LogRel(("Mapping %RGp/%zu failed with %Rrc\n", GCPhysStart, cbMapping, rc));
+-                cbMapping   = 0;
+-                uPtrMapping = 0;
++            if (!cbMapping)
++            {
+                 GCPhysStart = GCPhys;
++                uPtrMapping = (uintptr_t)pv;
+             }
+-        }
+-
+-        if (cbMapping)
+-        {
+-            /* Map what we currently have. */
+-            Assert(uPtrMapping);
+-            int rc = pciVfioMapRegion(pThis, GCPhysStart, uPtrMapping, cbMapping);
++            cbMapping += _4K;
++            PDMDevHlpPhysReleasePageMappingLock(pDevIns, &Lock);
++        }
++        else if (cbMapping)
++        {
++            rc = pciVfioMapRecorded(pThis, GCPhysStart, uPtrMapping, cbMapping, &pHead);
++            cbMapping = 0;
+             if (RT_FAILURE(rc))
+-                LogRel(("Mapping %RGp/%zu failed with %Rrc\n", GCPhysStart, cbMapping, rc));
+-            cbMapping   = 0;
+-            uPtrMapping = 0;
+-        }
+-
++                break;
++        }
++    }
++    if (RT_SUCCESS(rc) && cbMapping)
++        rc = pciVfioMapRecorded(pThis, GCPhysStart, uPtrMapping, cbMapping, &pHead);
++    if (RT_FAILURE(rc))
++        pThis->fGuestRamMapFailed = true;
++    while (pHead)
++    {
++        VFIOPDMAEXTENT *pExtent = pHead;
++        pHead = pExtent->pNext;
++        if (RT_FAILURE(rc))
++        {
++            int rcUndo = pciVfioUnmapRegion(pThis, pExtent->GCPhys, pExtent->cb);
++            if (RT_FAILURE(rcUndo))
++                LogRel(("VFIO#%d: DMA rollback failed (%Rrc); bus mastering remains refused\n", pThis->iInstance, rcUndo));
++        }
++        RTMemFree(pExtent);
++    }
++    if (RT_SUCCESS(rc))
+         pThis->fGuestRamMapped = true;
+-    }
+-
+-    return VINF_SUCCESS;
++    return rc;
+ }
+ 
+ 
+ static int pciVfioConfigPassthroughRead(PVFIOPCIFUN pFun, uint32_t uAddress, unsigned cb, uint32_t *pu32Value)
+ {
+     switch (cb)
+     {
+         case 1:
+         {
+             uint8_t u8;
+             int rc = pciVfioCfgSpaceReadU8(pFun, uAddress, &u8);
+             if (RT_FAILURE(rc)) return rc;
+             *pu32Value = u8;
+             break;
+         }
+         case 2:
+         {
+             uint16_t u16;
+             int rc = pciVfioCfgSpaceReadU16(pFun, uAddress, &u16);
+             if (RT_FAILURE(rc)) return rc;
+@@ -2332,42 +2378,45 @@
+             LogRel(("VFIO#%d.%u: Invalid PCI config write at offset %#x, ignoring\n",
+                     pThis->iInstance, pFun->uPciFun, uAddress));
+             break;
+         }
+         case VFIO_PCI_CFG_SPACE_ACCESS_PASSTHROUGH:
+         {
+             rc = pciVfioConfigPassthroughWrite(pFun, uAddress, cb, u32Value);
+             break;
+         }
+         case VFIO_PCI_CFG_SPACE_ACCESS_DO_DEFAULT:
+             return VINF_PDM_PCI_DO_DEFAULT;
+         case VFIO_PCI_CFG_SPACE_ACCESS_EMULATE:
+         {
+             /* Map all the guest memory into the IOMMU as soon as the BUSMASTER bit is enabled. */
+             if (uAddress == VBOX_PCI_COMMAND)
+             {
+                 if (u32Value & RT_BIT(2))
+                 {
+                     rc = pciVfioIommuGuestRamMap(pThis, pDevIns);
+                     if (RT_FAILURE(rc))
+-                        LogRel(("VFIO#%d.%u: Failed to map guest RAM into IOMMU for device, expect broken device (%Rrc)\n",
++                    {
++                        LogRel(("VFIO#%d.%u: DMA admission failed; refusing bus master enable (%Rrc)\n",
+                                 pThis->iInstance, pFun->uPciFun, rc));
++                        return rc; /* Neither physical nor emulated BME may be enabled. */
++                    }
+                 }
+ 
+                 /* Check whether the INTx config changes. */
+                 bool const fIntxEnabled = !RT_BOOL(u32Value & RT_BIT(10));
+                 if (fIntxEnabled != (pFun->uIrqModeCur == VFIO_PCI_INTX_IRQ_INDEX))
+                 {
+                     rc = pciVfioIrqReconfigure(pThis, pFun, VFIO_PCI_INTX_IRQ_INDEX, fIntxEnabled ? 1 : 0);
+                     if (RT_FAILURE(rc))
+                         LogRel(("VFIO#%d.%u: Failed to reconfigure the INTx interrupt config of the device, expect a broken device (%Rrc)\n",
+                                 pThis->iInstance, pFun->uPciFun, rc));
+                 }
+ 
+                 /* Now write to the device. */
+                 rc = pciVfioConfigPassthroughWrite(pFun, uAddress, cb, u32Value);
+                 if (RT_FAILURE(rc))
+                     LogRel(("VFIO#%d.%u: Failed to update command register in device (%Rrc)", pThis->iInstance, pFun->uPciFun, rc));
+                 rc = VINF_PDM_PCI_DO_DEFAULT; /* Need to update BAR mappings. */
+             }
+             else if (   pFun->offMsiCtrl == uAddress
+                      && cb == sizeof(uint16_t))

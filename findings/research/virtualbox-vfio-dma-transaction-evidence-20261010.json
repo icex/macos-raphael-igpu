@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "upstream_commit": "14841851fa211c7faf615978ba385d59947236c6",
+  "scope": "Exact patch apply and extracted production functions with fake PGM/ioctl; not full VirtualBox or hardware",
+  "patched_source_sha256": "9d546b718e507685fce2c5d4a62b974ff0d024251e3353013f8f089ec2092bac",
+  "files": [
+    {
+      "path": "/home/bogdan/macos-vm/run/c408-display-source/DevPciVfio.cpp",
+      "sha256": "627a5c736d34143651e19c3bc68821883f717aeaf7e9b6f24aa1bd06eef1876f",
+      "bytes": 131320
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c411-source/pdmdev.h",
+      "sha256": "f70334a7b78dd786b467d014c2241c439002552f1b95c3b0023cb520c1bbaf16",
+      "bytes": 430339
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/worktrees/candidate-411/findings/research/patches/virtualbox-7.2.18-vfio-dma-transaction.patch",
+      "sha256": "ab331a2381a40dd5f80a3690da19009795faaabecec7f1c874d52c57e51e2ce7",
+      "bytes": 11846
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/worktrees/candidate-411/tests/test_vbox_dma_transaction.py",
+      "sha256": "9a747b3ab84a0ea833963c07e1498f89ff62c5bd1d93e316d445dfe2b7535628",
+      "bytes": 4777
+    }
+  ]
+}
