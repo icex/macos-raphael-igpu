@@ -1213,3 +1213,17 @@ class Candidate280ContractTest(unittest.TestCase):
         self.assertEqual(card["candidate_version"], "1.0.282")
         self.assertEqual(card["functional_boot_arguments"]["rgpualloclog"], "1")
         self.assertEqual(card["functional_boot_arguments"]["rgpummhub"], "1")
+
+
+class EmptyFirmwareConsoleCardTests(unittest.TestCase):
+    def test_cold_firmware_opt_in_and_spice_topology_are_exact(self):
+        tool=load_tool();tool.configure('1.0.340','metal-186')
+        card=json.loads((ROOT/'experiments/metal-186.json').read_text())
+        raw=json.dumps(card).encode();tool.validate_card(raw,hashlib.sha256(raw).hexdigest())
+        for section,key,value in [('functional_boot_arguments','rgpuconsolecold','0'),
+                                   ('functional_boot_arguments','rgpuconsole','0'),
+                                   ('launch_options','VM_CONSOLE','bochs')]:
+            changed=copy.deepcopy(card);changed[section][key]=value
+            raw=json.dumps(changed).encode()
+            with self.assertRaises(RuntimeError):
+                tool.validate_card(raw,hashlib.sha256(raw).hexdigest())

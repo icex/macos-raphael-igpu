@@ -45,3 +45,12 @@ Any inaccessible register, partially populated code window, changed identity,
 failed reset readback or invalid memory range must refuse before PSP. A visible
 software-fallback desktop does not pass this experiment. Recovery remains the
 ordinary harness plus the separately validated no-queue fallback if init refuses.
+
+## Prepared artifact
+
+Build1.0.340, source `fc308455fea0e25e411676b70d9f6f4f2485f686`,
+build ID `f5f8285a85f2437285c0aa6a5daa29e1`, executable SHA256
+`659c2ec9ba1236fa160a8c101d2cb54675fee0d020d7a06982dafe1577d6632d`.
+Full host suite after driver changes:1032 tests pass,3 skipped. Metal-186 pins
+this source and enables only the reviewed console cold-state option on SPICE.
+The binary is experimental and has no native execution result yet.
