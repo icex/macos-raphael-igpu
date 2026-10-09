@@ -45,7 +45,8 @@ c395-audio-result.txt; c395-audio-restored-independent.json; c395-final-state.tx
 c395-viewer-close-alive.json;
 c395-docker-events.jsonl; c395-private-terminal-independent.json.
 Full final host suite1453 tests,8 skipped,OK50.932s. Exact tested395 kext/bin copied.
-Current docs/report updated; dev delivery and hosted CI verification pending.
+Current docs/report and exact tested binary form this dev milestone. Hosted CI
+must pass for its exact remote commit before delivery is called complete.
 
 Next:396 bounded exit-refusal diagnostics (no admission changes), then397 split
 commit timings to locate4K cost. Preserve remaining crash-during-commit, independent
