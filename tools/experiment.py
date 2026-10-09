@@ -438,6 +438,11 @@ def launch_options(data):
             (vdagent == 'on' and any(checked.get(k) != v for k, v in {
                 'VM_MANAGER':'libvirt', 'VM_CONSOLE':'bochs-spice', 'GENERIC_GRAPHICS':'off'}.items()))):
         raise ValueError('vdagent requires native libvirt SPICE')
+    usbredir = checked.pop('CONSOLE_USBREDIR', 'off') if checked is not None else None
+    if (type(usbredir) is not str or usbredir not in ('off', 'on') or
+            (usbredir == 'on' and any(checked.get(k) != v for k, v in {
+                'VM_MANAGER':'libvirt', 'VM_CONSOLE':'bochs-spice', 'GENERIC_GRAPHICS':'off'}.items()))):
+        raise ValueError('usbredir requires native libvirt SPICE')
     snapshot = checked.pop('CONSOLE_SNAPSHOT', 'off') if checked is not None else None
     if (type(snapshot) is not str or snapshot not in ('off', 'on', 'restart', 'restart-timing','restart-timing-pool') or
             (snapshot in ('on', 'restart', 'restart-timing','restart-timing-pool') and checked != contracts[-1]) or checked not in contracts):
@@ -539,6 +544,14 @@ def current_identity(vm, candidate, requested_diagnostic, run_id=None,
         raise ValueError('vdagent requires native libvirt SPICE')
     if os.environ.get('CONSOLE_VDAGENT', vdagent) not in ('', vdagent):
         raise ValueError('CONSOLE_VDAGENT environment differs from manifest')
+    usbredir = options.get('CONSOLE_USBREDIR', 'off')
+    if type(usbredir) is not str or usbredir not in ('off', 'on'):
+        raise ValueError('invalid CONSOLE_USBREDIR')
+    if usbredir == 'on' and any(options.get(k) != v for k, v in {
+            'VM_MANAGER':'libvirt', 'VM_CONSOLE':'bochs-spice', 'GENERIC_GRAPHICS':'off'}.items()):
+        raise ValueError('usbredir requires native libvirt SPICE')
+    if os.environ.get('CONSOLE_USBREDIR', usbredir) not in ('', usbredir):
+        raise ValueError('CONSOLE_USBREDIR environment differs from manifest')
     snapshot = options.get('CONSOLE_SNAPSHOT', 'off')
     if type(snapshot) is not str or snapshot not in ('off', 'on', 'restart', 'restart-timing','restart-timing-pool'):
         raise ValueError('invalid CONSOLE_SNAPSHOT')
@@ -3088,6 +3101,13 @@ def validate_running(manifest, observed):
             '-device', 'virtserialport,id=rgpu_agent_port,bus=rgpu_agent_serial.0,nr=1,chardev=rgpu_vdagent,name=com.redhat.spice.0']
     if observed.get('agent_args', []) != expected_agent:
         errors.append('vdagent_topology')
+    expected_usbredir=[]
+    if manifest.get('launch_options', {}).get('CONSOLE_USBREDIR') == 'on':
+        for i in range(2):
+            expected_usbredir += ['-chardev', f'spicevmc,id=rgpu_usbredir{i},name=usbredir',
+                '-device', f'usb-redir,id=rgpu_usbredir_dev{i},chardev=rgpu_usbredir{i},bus=xhci.0']
+    if observed.get('usbredir_args', []) != expected_usbredir:
+        errors.append('usbredir_topology')
     expected_graphics = ['-vga', 'none', '-display', 'none']
     console_mode = manifest.get('launch_options', {}).get('VM_CONSOLE')
     if console_mode in ('bochs', 'bochs-spice'):
@@ -3201,8 +3221,14 @@ for pid in os.listdir('/proc'):
   for index,arg in enumerate(args[:-1]):
    value=args[index+1]
    if ((arg==b'-device' and value.split(b',',1)[0].startswith((b'virtio-serial',b'virtserialport',b'virtconsole'))) or
-       (arg==b'-chardev' and (value.startswith(b'spicevmc,') or b'rgpu_agent' in value or b'rgpu_vdagent' in value))):
+       (arg==b'-chardev' and ((value.startswith(b'spicevmc,') and b'name=usbredir' not in value) or b'rgpu_agent' in value or b'rgpu_vdagent' in value))):
     agent.extend((arg.decode(),value.decode()))
+  usbredir=[]
+  for index,arg in enumerate(args[:-1]):
+   value=args[index+1]
+   if ((arg==b'-device' and value.split(b',',1)[0]==b'usb-redir') or
+       (arg==b'-chardev' and (b'name=usbredir' in value or b'rgpu_usbredir' in value))):
+    usbredir.extend((arg.decode(),value.decode()))
   graphics=[]
   generic=(b'VGA',b'vmware-svga',b'bochs-display',b'ramfb',b'secondary-vga',b'ati-vga',b'cirrus-vga')
   for index,arg in enumerate(args[:-1]):
@@ -3226,7 +3252,7 @@ for pid in os.listdir('/proc'):
      item.update(slot=int(slot,16),function=int(function or '0',16))
     except ValueError:pass
    topology.append(item)
-  rows.append({'vfio_args':[a.decode() for a in args if a.startswith(b'vfio-pci,')], 'pci_topology':topology, 'serial_args':selected, 'agent_args':agent, 'graphics_args':graphics, 'argv_sha256':hashlib.sha256(raw).hexdigest()})
+  rows.append({'vfio_args':[a.decode() for a in args if a.startswith(b'vfio-pci,')], 'pci_topology':topology, 'serial_args':selected, 'agent_args':agent, 'usbredir_args':usbredir, 'graphics_args':graphics, 'argv_sha256':hashlib.sha256(raw).hexdigest()})
 assert len(rows)==1
 print(json.dumps(rows[0]))
 '''

@@ -84,6 +84,11 @@ case "${CONSOLE_VDAGENT:-off}" in
     on) [[ "${VM_MANAGER:-direct}" == libvirt && "${VM_CONSOLE:-off}" == bochs-spice && "${GENERIC_GRAPHICS:-on}" == off ]] || { echo "vdagent requires native libvirt SPICE" >&2; exit 1; } ;;
     *) echo "unknown CONSOLE_VDAGENT" >&2; exit 1 ;;
 esac
+case "${CONSOLE_USBREDIR:-off}" in
+    off) ;;
+    on) [[ "${VM_MANAGER:-direct}" == libvirt && "${VM_CONSOLE:-off}" == bochs-spice && "${GENERIC_GRAPHICS:-on}" == off ]] || { echo "USB redirection requires native libvirt SPICE" >&2; exit 1; } ;;
+    *) echo "unknown CONSOLE_USBREDIR" >&2; exit 1 ;;
+esac
 case "${CONSOLE_SNAPSHOT:-off}" in
     off) ;;
     on|restart|restart-timing|restart-timing-pool) [[ "${VM_MANAGER:-direct}" == libvirt && "${VM_CONSOLE:-off}" == bochs-spice && "${CONSOLE_REFRESH:-default}" == 60 && "${CONSOLE_FULL_REFRESH:-off}" == on && "${GENERIC_GRAPHICS:-on}" == off ]] || { echo "snapshot requires native libvirt SPICE60 full refresh" >&2; exit 1; } ;;
@@ -135,6 +140,13 @@ fi
 # Keep the new explicit PCI slot after all existing devices (including LAN).
 if [[ "${CONSOLE_VDAGENT:-off}" == on ]]; then
     export EXTRA="${EXTRA:-} -device virtio-serial-pci,id=rgpu_agent_serial,bus=pcie.0,addr=0x10,max_ports=2 -chardev spicevmc,id=rgpu_vdagent,name=vdagent -device virtserialport,id=rgpu_agent_port,bus=rgpu_agent_serial.0,nr=1,chardev=rgpu_vdagent,name=com.redhat.spice.0"
+fi
+
+# Empty SPICE USB slots only; no host USB device is opened by QEMU here.
+if [[ "${CONSOLE_USBREDIR:-off}" == on ]]; then
+    for slot in 0 1; do
+        export EXTRA="${EXTRA:-} -chardev spicevmc,id=rgpu_usbredir${slot},name=usbredir -device usb-redir,id=rgpu_usbredir_dev${slot},chardev=rgpu_usbredir${slot},bus=xhci.0"
+    done
 fi
 
 case "${VM_MANAGER:-direct}" in
