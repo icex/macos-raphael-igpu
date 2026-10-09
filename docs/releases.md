@@ -45,11 +45,15 @@ and recovery pass. This is a bounded experimental milestone, not a generally
 qualified release or sustained 4K60 claim.
 [402 native evidence](../findings/research/console-snapshot-private-pool-native-20261010.md).
 
-Candidate 406 separately qualifies an eight-vCPU VirtualBox software desktop with
-RealTSCOffset, keyboard/awake checks and natural shutdown before its deadline,
-followed by first-attempt unregister. Initial interaction was slow; PerfPowerServices remains near one CPU core;
-this does not qualify Raphael acceleration or long-term stability in VirtualBox.
-[406 evidence](../findings/research/virtualbox-eight-cpu-qualified-native-20261010.md).
+Candidate 410 separately returns verified stock-VMSVGA registry evidence over a
+small FAT disk, including the still-attached boot framebuffer. Natural shutdown
+and medium closure are independently verified; the original controller state-query
+error remains. There is no VirtualBox GPU acceleration or presentation adapter.
+Experimental VFIO DMA transaction patches are source/test artifacts only, not
+installed host binaries or an authorization for passthrough. The boot-framebuffer
+suppression plan is likewise not a qualified takeover.
+[410 evidence](../findings/research/virtualbox-fat-exchange-native-20261010.md) ·
+[DMA limits](../findings/research/virtualbox-dma-ram-lease-20261010.md).
 Main's physical 330 baseline is unchanged. Exact-commit publication checks are
 tracked in [GitHub Actions](https://github.com/icex/macos-raphael-igpu/actions).
 

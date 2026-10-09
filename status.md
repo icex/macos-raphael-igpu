@@ -36,5 +36,7 @@ open. QEMU402 pool progress and imperfect CR2 capture remain separately recorded
 
 Dev59422dae6683550b7027dd8fe53fb7801f33bbcd has hosted test/build success
 (Actions37995939729); checked-in binary is exact tested402 with canonical manifest.
-410 results are local pending reviewed integration. Main unchanged; status grants
+Candidate414 integrates410 results,412 ownership analysis and411/413 experimental
+DMA patches locally for review. Host VBox is unchanged; no patch was deployed.
+Integrated checks are pending. Main unchanged; status grants
 no launch admission.

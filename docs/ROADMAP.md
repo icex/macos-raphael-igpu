@@ -15,15 +15,25 @@ two corrupt lines and two incomplete snapshots. Independent natural shutdown and
 recoverable cleanup do not erase those capture defects.
 [402 evidence](../findings/research/console-snapshot-private-pool-native-20261010.md).
 
-**VirtualBox 406** qualifies a bounded eight-vCPU software-desktop sequence with
-RealTSCOffset: macOS 24G830 keyboard marker, awake assertions, owned awake-job
-removal, natural S5/poweroff at about 264.4 seconds before the 300-second deadline,
-and first-attempt unregister. Initial interaction was slow; PerfPowerServices remains near one CPU core;
-long-term stability and Raphael acceleration remain open. Earlier forced cleanup
-receipts are preserved. Stock publication/fence audits do not establish an
-immutable pixel lease or an accelerated VirtualBox console adapter.
-[406 result](../findings/research/virtualbox-eight-cpu-qualified-native-20261010.md) ·
-[Adapter audit](../findings/research/virtualbox-display-transport-adapter-20261010.md) ·
+**VirtualBox 410** now returns fresh registry evidence over a bounded FAT exchange
+disk. Stock VMSVGA GFX0 at0:2.0 has64MiB framebuffer/2MiB FIFO memory and an active
+Display_boot/IONDRVFramebuffer with user clients. Nine returned file hashes pass;
+original409 temporary files were absent. Independent natural S5/OFF, unregister
+and medium closure pass, while the controller's transient state-query error and
+0×0 screenshot refusal remain recorded.406's earlier eight-vCPU input/natural
+shutdown remains scoped; PerfPowerServices CPU use and sustained stability stay open.
+[410 result](../findings/research/virtualbox-fat-exchange-native-20261010.md).
+
+Next: qualify early boot-framebuffer suppression using the inspected24G830
+AAPL,iokit-ignore-ndrv property and read-only inventory. This candidate has not
+run; it must not claim exclusive aperture ownership or write FIFO/registers.
+Separate411/413 VFIO DMA transaction patches have extracted-function tests, but
+are not deployed or full-VBox-build qualified. Authoritative RAM coverage/lifetime,
+reset policy and complete passthrough safety remain blockers. Stock FIFO fences
+do not establish immutable frame publication. No VBox Raphael acceleration or
+production display adapter exists.
+[Framebuffer plan](../findings/research/virtualbox-boot-framebuffer-ownership-20261010.md) ·
+[DMA readiness and lease limits](../findings/research/virtualbox-dma-ram-lease-20261010.md) ·
 [Stock fence audit](../findings/research/virtualbox-stock-publication-fences-20261010.md).
 
 Existing scale preference, odd1× resize, connected-agent input/audio and fresh-boot

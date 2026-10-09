@@ -142,11 +142,19 @@ snapshots retained separately. Pooling is not enabled by this installer on stock
 
 ## Actual VirtualBox software-boot scope
 
-Candidate 406 qualifies an eight-vCPU macOS 24G830 software-desktop sequence with
-RealTSCOffset, keyboard input, awake assertions, removal of the owned awake job,
-and natural guest shutdown before the controller deadline. Unregister succeeds
-on its first attempt. The earlier 401/403 forced-shutdown receipts remain intact.
-PerfPowerServices still uses roughly one CPU core. Long-term stability and this
-accelerated helper package remain unqualified on VirtualBox; no GPU transport is
-provided by the software boot result.
-[406 result](../findings/research/virtualbox-eight-cpu-qualified-native-20261010.md).
+Candidate 410 uses a separate, bounded FAT exchange disk to return fresh PCI and
+framebuffer inventory from stock VMSVGA. Its nine returned file hashes pass; old409
+temporary files were absent. Existing IONDRVFramebuffer/user-client attachment
+means the aperture cannot be assumed unowned. This helper package does not supply
+a VirtualBox presentation adapter or acceleration.
+
+Root verified input/awake state and removal of the owned awake job. Natural guest
+shutdown and medium closure are independently proven, while the controller's
+transient state-query error remains recorded.406's earlier eight-vCPU functional
+qualification and PerfPowerServices CPU limitation remain separate.
+[410 result](../findings/research/virtualbox-fat-exchange-native-20261010.md).
+
+A future early-loader suppression experiment is read-only inventory work after
+matching the AAPL,iokit-ignore-ndrv property; it is not installed by this helper and
+must not be applied as a live framebuffer takeover.
+[Source-backed plan](../findings/research/virtualbox-boot-framebuffer-ownership-20261010.md).

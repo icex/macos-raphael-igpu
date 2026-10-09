@@ -28,15 +28,30 @@ two incomplete snapshots: function passes, capture is imperfect. Independent nat
 shutdown and authorizing recovery pass.
 [402 native evidence](findings/research/console-snapshot-private-pool-native-20261010.md).
 
-**Actual VirtualBox, candidate 406:** the eight-vCPU macOS 24G830 software desktop
-passes keyboard-marker and awake checks with RealTSCOffset. After removing the
-owned awake job, the guest reaches natural S5/poweroff at about 264.4 seconds,
-before the 300-second deadline; unregister succeeds on its first attempt. Earlier
-forced shutdowns remain recorded. Initial interaction was slow, and PerfPowerServices still consumes roughly one
-CPU core. This bounded success does not qualify long-term stability, Raphael
-passthrough, Metal acceleration or an atomic VirtualBox presentation adapter.
-[406 evidence](findings/research/virtualbox-eight-cpu-qualified-native-20261010.md) ·
-[Display-adapter audit](findings/research/virtualbox-display-transport-adapter-20261010.md) ·
+**Actual VirtualBox, candidate 410:** a small FAT exchange disk now returns fresh
+macOS registry evidence from the stock VMSVGA software desktop. GFX0 is15ad:0405
+atPCI0:2.0, with64MiB framebuffer memory and2MiB FIFO memory. Display_boot /
+IONDRVFramebuffer and its user clients are still attached; this is not exclusive
+ownership or accelerated presentation. Nine returned file hashes verify. Original
+409 temporary files were absent and were not recovered.
+
+Root verified input/awake state and removed the owned awake job before shutdown.
+Independent S5/OFF evidence and medium closure prove natural completion, but the
+original controller retains a transient state-query VBoxCallError and a0×0
+screenshot refusal. These errors are not erased by successful cleanup. Earlier406
+qualified eight-vCPU software input and natural shutdown; slow interaction and
+PerfPowerServices CPU use remain open.
+[410 evidence](findings/research/virtualbox-fat-exchange-native-20261010.md).
+
+The next boot-framebuffer discriminator is **read-only and not yet run**: an early
+loader property can suppress IONDRVFramebuffer matching in the inspected24G830
+sources, then inventory must establish the resulting attachment state. It is not
+a live takeover or an exclusive memory lease. Separately, experimental VFIO DMA
+rollback/readiness patches pass extracted-function tests but are **not deployed**;
+complete RAM-lifetime, reset and passthrough safety remain unresolved. No Raphael
+acceleration or atomic presentation adapter is implemented for VirtualBox.
+[Framebuffer plan](findings/research/virtualbox-boot-framebuffer-ownership-20261010.md) ·
+[DMA limits](findings/research/virtualbox-dma-ram-lease-20261010.md) ·
 [Stock fence limits](findings/research/virtualbox-stock-publication-fences-20261010.md).
 
 Earlier candidate 395 supplies the private-buffer ownership and restart baseline;
