@@ -46,11 +46,21 @@ PerfPowerServices CPU use remain open.
 The next boot-framebuffer discriminator is **read-only and not yet run**: an early
 loader property can suppress IONDRVFramebuffer matching in the inspected 24G830
 sources, then inventory must establish the resulting attachment state. It is not
-a live takeover or an exclusive memory lease. Separately, experimental VFIO DMA
-rollback/readiness patches pass extracted-function tests but are **not deployed**;
-complete RAM-lifetime, reset and passthrough safety remain unresolved. No Raphael
+a live takeover or an exclusive memory lease. Candidate 415 verified the virtio
+network interface, but its root-command relay refused process admission with HTTP
+403; no root payload ran. Natural shutdown and unregister succeeded.
+
+Candidates 416/418 now compile the baseline and patched VirtualBox 7.2.18 userland
+from full source in isolated directories. The first patched build exposed missing
+bundled Linux UAPI definitions; the corrected build and ABI comparison pass.
+Qt/OpenGL, host kernel-module builds and packaging were excluded, and the 242
+built testcase executables were not run. Extracted transaction tests substitute
+PGM and map-ioctl behavior; these are **not deployed or runtime-qualified builds**.
+Complete RAM-lifetime, reset and passthrough safety remain unresolved. No Raphael
 acceleration or atomic presentation adapter is implemented for VirtualBox.
 [Framebuffer plan](findings/research/virtualbox-boot-framebuffer-ownership-20261010.md) ·
+[415 relay refusal](findings/research/virtualbox-root-relay-native-20261010.md) ·
+[418 production build](findings/research/virtualbox-dma-production-build-20261010.md) ·
 [DMA limits](findings/research/virtualbox-dma-ram-lease-20261010.md) ·
 [Stock fence limits](findings/research/virtualbox-stock-publication-fences-20261010.md).
 

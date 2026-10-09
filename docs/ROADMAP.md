@@ -24,15 +24,22 @@ and medium closure pass, while the controller's transient state-query error and
 shutdown remains scoped; PerfPowerServices CPU use and sustained stability stay open.
 [410 result](../findings/research/virtualbox-fat-exchange-native-20261010.md).
 
-Next: qualify early boot-framebuffer suppression using the inspected 24G830
+Work is paused at the user’s request. Candidate 420 is source investigation only;
+no implementation or runtime result is claimed. On resumption, qualify early boot-framebuffer suppression using the inspected 24G830
 AAPL,iokit-ignore-ndrv property and read-only inventory. This candidate has not
 run; it must not claim exclusive aperture ownership or write FIFO/registers.
-Separate 411/413 VFIO DMA transaction patches have extracted-function tests, but
-are not deployed or full-VBox-build qualified. Authoritative RAM coverage/lifetime,
-reset policy and complete passthrough safety remain blockers. Stock FIFO fences
+Candidate 415 verified virtio networking, but the guarded root relay returned
+HTTP 403 and executed no payload; natural shutdown and unregister succeeded.
+Candidates 416/418 now pass isolated full-source baseline/patched userland builds
+with optional Qt/OpenGL, kernel-module builds and packaging excluded. Corrected
+bundled unmap UAPI definitions pass a compiled Linux ABI comparison. The 242 built
+testcase executables were not run; extracted transaction fixtures substitute PGM
+and map calls. Nothing was installed or runtime-qualified. Authoritative RAM
+coverage/lifetime, reset policy and complete passthrough safety remain blockers. Stock FIFO fences
 do not establish immutable frame publication. No VBox Raphael acceleration or
 production display adapter exists.
 [Framebuffer plan](../findings/research/virtualbox-boot-framebuffer-ownership-20261010.md) ·
+[Production build](../findings/research/virtualbox-dma-production-build-20261010.md) ·
 [DMA readiness and lease limits](../findings/research/virtualbox-dma-ram-lease-20261010.md) ·
 [Stock fence audit](../findings/research/virtualbox-stock-publication-fences-20261010.md).
 

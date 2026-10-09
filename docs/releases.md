@@ -49,11 +49,19 @@ Candidate 410 separately returns verified stock-VMSVGA registry evidence over a
 small FAT disk, including the still-attached boot framebuffer. Natural shutdown
 and medium closure are independently verified; the original controller state-query
 error remains. There is no VirtualBox GPU acceleration or presentation adapter.
-Experimental VFIO DMA transaction patches are source/test artifacts only, not
-installed host binaries or an authorization for passthrough. The boot-framebuffer
+Candidates 416/418 additionally compile baseline and patched VirtualBox userland
+in isolated directories; neither build was installed or run. Optional GUI/OpenGL,
+kernel-module builds and packaging were excluded. The initial missing-UAPI build
+failure remains recorded; corrected production definitions and ABI checks pass.
+This is compile coverage, not PGM lifetime or passthrough qualification. Candidate
+415’s network interface worked, but its root relay refused HTTP 403 before any
+payload ran; natural shutdown passed. The boot-framebuffer
 suppression plan is likewise not a qualified takeover.
 [410 evidence](../findings/research/virtualbox-fat-exchange-native-20261010.md) ·
 [DMA limits](../findings/research/virtualbox-dma-ram-lease-20261010.md).
+Published dev `0ecc1715950ea6db3c256fb4930191830bd9ef1b` passed hosted test and
+macOS build in [run 37998445036](https://github.com/icex/macos-raphael-igpu/actions/runs/37998445036);
+the untagged release job was skipped. Later integration has not yet been published.
 Main's physical 330 baseline is unchanged. Exact-commit publication checks are
 tracked in [GitHub Actions](https://github.com/icex/macos-raphael-igpu/actions).
 
