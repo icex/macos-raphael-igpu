@@ -142,18 +142,33 @@ class SupportInstallTests(unittest.TestCase):
         self.assertTrue(self.transaction.journal.exists());self.unchanged()
     def test_generated_launcher_owns_children_and_skips_physical_profile(self):
         payload=self.home/'test payload';payload.mkdir()
+        (payload/'console-preferences.py').write_bytes((ROOT/'tools/console-preferences.py').read_bytes())
+        preference=self.support/'console-preferences.json'
+        preference.write_text('{"schema":1,"guest_scale":1}');preference.chmod(0o600)
         bindir=self.home/'bin';bindir.mkdir()
         ioreg=bindir/'ioreg';ioreg.write_text('#!/bin/sh\necho RaphaelConsole\n');ioreg.chmod(0o700)
         caffeinate=bindir/'caffeinate';caffeinate.write_text('#!/bin/sh\nexec sleep 30\n');caffeinate.chmod(0o700)
         holder=payload/'virtual-display-server'
-        holder.write_text('#!/usr/bin/env python3\nimport os,pathlib,socket,sys,time\np=pathlib.Path(sys.argv[sys.argv.index("--control-dir")+1]);p.mkdir(mode=0o700,exist_ok=True)\nos.chdir(p);s=socket.socket(socket.AF_UNIX);s.bind("control.sock")\n(p/"holder.pid").write_text(str(os.getpid()))\nprint(\'{"phase":"serving"}\',flush=True)\ntime.sleep(30)\n')
+        holder.write_text('#!/usr/bin/env python3\nimport os,pathlib,socket,sys,time\np=pathlib.Path(sys.argv[sys.argv.index("--control-dir")+1]);p.mkdir(mode=0o700,exist_ok=True)\nos.chdir(p);s=socket.socket(socket.AF_UNIX);s.bind("control.sock")\n(p/"holder.pid").write_text(str(os.getpid()))\n(p/"holder.args").write_text(__import__("json").dumps(sys.argv[1:]))\nprint(\'{"phase":"serving"}\',flush=True)\ntime.sleep(30)\n')
         holder.chmod(0o700)
         for name in ('MacOS/console-presenter','Helpers/console-display-layout'):
             path=self.app/'Contents'/name;path.write_text('#!/bin/sh\nexit 0\n');path.chmod(0o700)
+        # Software fixture substitutes only the tty availability test; no real tty
+        # is opened. Both launched children record argv, using the real prefs tool.
+        (payload/'console-vdagent-agent.py').write_text('import json,pathlib,sys,time\npathlib.Path(__file__).with_name("agent.args").write_text(json.dumps(sys.argv[1:]))\ntime.sleep(30)\n')
+        presenter=self.app/'Contents/MacOS/console-presenter'
+        presenter.write_text('#!/bin/sh\nsleep .3\nexit 0\n')
         launcher=(self.source/'console-support-launcher.sh').read_text().replace('@@PAYLOAD@@',shlex.quote(str(payload)))
+        launcher=launcher.replace('/dev/tty.com.redhat.spice.0','/dev/null')
         env=dict(os.environ,HOME=str(self.home),PATH=str(bindir)+os.pathsep+os.environ['PATH'])
         result=subprocess.run(['bash','-c',launcher],env=env,capture_output=True,text=True,timeout=6)
         self.assertEqual(result.returncode,0,result.stderr)
+        holder_args=json.loads((self.support/'control/holder.args').read_text())
+        self.assertEqual(holder_args.count('--guest-scale'),1)
+        self.assertEqual(holder_args[holder_args.index('--guest-scale')+1],'1')
+        agent_args=json.loads((payload/'agent.args').read_text())
+        self.assertEqual(agent_args.count('--guest-scale'),1)
+        self.assertEqual(agent_args[agent_args.index('--guest-scale')+1],'1')
         pid=int((self.support/'control/holder.pid').read_text())
         with self.assertRaises(ProcessLookupError):os.kill(pid,0)
         (self.support/'control/holder.pid').unlink()
@@ -161,6 +176,27 @@ class SupportInstallTests(unittest.TestCase):
         result=subprocess.run(['bash','-c',launcher],env=env,capture_output=True,text=True,timeout=3)
         self.assertEqual(result.returncode,0,result.stderr)
         self.assertFalse((self.support/'control/holder.pid').exists())
+
+    def test_preference_survives_install_and_interrupted_recovery(self):
+        preference=self.support/'console-preferences.json'
+        preference.write_text('{"schema":1,"guest_scale":1}');preference.chmod(0o600)
+        before=preference.read_bytes();inode=preference.stat().st_ino
+        self.transaction.install(self.build)
+        self.assertEqual(preference.read_bytes(),before)
+        self.assertEqual(preference.stat().st_ino,inode)
+        original=m.base.move_verified
+        def interrupted(source,target,digest):
+            if Path(source).name=='new-1':raise KeyboardInterrupt()
+            return original(source,target,digest)
+        def second(payload,capture):
+            self.build(payload,capture);(payload/'version').write_text('second')
+        with patch.object(m.base,'move_verified',side_effect=interrupted):
+            with self.assertRaises(KeyboardInterrupt):self.transaction.install(second)
+        recovered=m.SupportTransaction(self.home,self.source,active=lambda app:None,run=self.fake_run)
+        recovered.recover()
+        self.assertEqual(preference.read_bytes(),before)
+        self.assertEqual(preference.stat().st_ino,inode)
+        self.unchanged()
 
     def test_payload_and_journal_cannot_escape_fixed_targets(self):
         for bad in ('../escape','x'*64,'a'*63):
