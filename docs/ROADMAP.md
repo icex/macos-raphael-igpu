@@ -1,6 +1,6 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-10-09. Current console build: **1.0.342** (native manager delivery measured; atomic presentation and controller exit ordering remain open). Physical display baseline: **1.0.330** (correct-color HiDPI120 and HDMI audio confirmed); prior streaming baseline: **1.0.284**; broader baseline: **1.0.280**. Full desktop acceleration
+Updated 2026-10-09. Current console build: **1.0.347** (paired observer measurements and native clean exit; atomic presentation and race-specific lifecycle coverage remain open). Physical display baseline: **1.0.330** (correct-color HiDPI120 and HDMI audio confirmed); prior streaming baseline: **1.0.284**; broader baseline: **1.0.280**. Full desktop acceleration
 is **not qualified**. The reproduced Screen Sharing transparency defect is fixed
 in candidate279 and retained in280. Candidate280 also passes strict capture and
 clean recovery after visual, concurrent-client and codec workloads. The patched-QEMU
@@ -20,7 +20,7 @@ regression and macOS source-build jobs remain required; see [CI setup](releases.
 
 | Milestone | State | Evidence and remaining work |
 |---|---|---|
-| M0 — Experiment identity and supervision | Implemented; maintained | Immutable manifests, loaded-build checks, capture, deadlines and cleanup. Fixed cycle image selection so preparation and admission use the same pinned emulator. Host suite: 1128 tests, OK (3 skipped). |
+| M0 — Experiment identity and supervision | Implemented; maintained | Immutable manifests, loaded-build checks, capture, deadlines and cleanup. Fixed cycle image selection so preparation and admission use the same pinned emulator. Host suite: 1176 tests, OK (8 skipped; optional ROI guards also pass separately). |
 | M1 — Controlled starting state | Demonstrated for current workflow | One-way amdgpu→vfio-pci handoff, power/control=on, fresh MODE2 and clean-state receipts. Broad independent-host-boot qualification remains open. |
 | M2 — Native startup failure localization | Completed for original blocker | False second SDMA instance and subsequent channel routing were traced; historical evidence retained. |
 | M3 — Native engine startup repair | Demonstrated | Raphael topology/address adaptations reach native startup and completed Metal work. Preserve these fixes while diagnosing desktop rendering. |
@@ -241,17 +241,26 @@ Candidate342 verifies the PATH fix and measures895/555 distinct tokens over30s
 at native1080p/HiDPI respectively (29.82/18.50 updates/s in the sampled manager
 buffer). Eight/18 partially invalid token samples keep atomic presentation open.
 The missing controller terminal receipt in342 is superseded by343’s native
-shutdown pass. Next isolate QEMU refresh scheduling and live-framebuffer write
-tearing before performance changes.
+shutdown pass.345 separately tests explicit QEMU refresh scheduling; partial-region
+presentation remains open.
 [Measured evidence](../findings/research/console-cadence-20261009.md).
 
 Candidate345's opt-in QEMU refresh image improves sampled native1080p/HiDPI
 delivery to49.993/22.529updates/s, with35/113 intermediate invalid token samples.
 Capture and GPU recovery pass, but original QEMU stateZ causes immediate cleanup
-before terminal.json. Next resolve that completed-process boundary in software,
-and qualify a smaller observer before further performance claims. Default image
+before terminal.json.347 adds a software-qualified completed-process proof and
+qualifies the smaller observer in the actual manager. Default image
 pins stay stock; the refresh image has separate opt-in pins.
 [Native refresh evidence](../findings/research/native-refresh-20261009.md).
+
+Candidate347 repeats a native clean controller exit, capture and authorizing recovery.
+Both hooks see QEMU already reaped; the completed-zombie branch is not exercised.
+Fresh paired full/ROI measurements:30.497/30.323updates/s native and19.664/25.198
+HiDPI; sampling cost drops2.228→1.363ms and5.222→1.452ms respectively. All fixtures
+finish and the normal desktop returns. Partial samples persist;345's50updates/s
+native result is not reproduced. Next isolate the guest presenter's approximately
+20ms HiDPI buffer-lock/copy interval before optimizing it.
+[Paired native evidence](../findings/research/console-roi-native-20261009.md).
 
 Host-window resize, repeated crash recovery, independent host boots and broader
 desktop coverage follow. Both host sleep and idle blocking remain required during

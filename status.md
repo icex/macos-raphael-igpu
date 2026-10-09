@@ -1,29 +1,29 @@
 # Live status — 2026-10-09
 
-## Candidate345: faster sampled console; native exit receipt blocked by zombie state
+## Candidate347: paired console measurements and native clean shutdown
 
-Run `e5c19e2555990ca2df1d9ac171c73fac`, metal-190, build1.0.345,
-MODE2#285 on bootba51b3c6. Native Metal/WindowServer ownership and paused explicit
-refresh admission pass. Actual virt-manager renders1080p and1080HiDPI awake.
-Thirty-second samples observe1500/676 distinct tokens,49.993/22.529updates/s,
-versus342's29.823/18.496. These are sampled console rates, not GPU fps or scanout.
-After-first invalid tokens35/113 and median sampler cost2.257/5.330ms remain.
-Both60-second fixtures complete and the normal desktop returns.
+Run `fe659d623c40c9650ca999f83ae39635`, metal-191, build1.0.347,
+MODE2#286 on bootba51b3c6. Native Metal/WindowServer/display ownership pass;
+actual virt-manager renders native1080p and1080HiDPI with awake assertions.
+Fresh full/ROI samples:30.497/30.323updates/s native,19.664/25.198HiDPI.
+Median observer cost2.228/1.363ms native,5.222/1.452ms HiDPI. All fixtures finish;
+normal desktop screenshot verified. Partial-token samples remain; no GPU-fps or
+atomic-presentation claim.345's50updates/s native result is not reproduced.
 
-Capture: valid CORE_PROBE_PASS, no earliest failure. Outer shutdown:
-exited-after-guest-request. GPU recovery: recovered, authorizes_launch=true.
-VM and cycle stopped; host sleep:idle blocker remains active. No reboot/rebind.
-**Native terminal receipt absent:** both EOF handlers see original QEMU PID113
-in stateZ and immediately stop the container.343's earlier natural-exit pass
-remains valid but did not cover this reaping timing. Next: source-audit and
-software-test a strict completed-process proof; separately qualify a small-region
-observer to reduce sampling overhead. Atomic presentation and broader lifecycle
-remain open.
+Capture: CORE_PROBE_PASS, earliest_failure=null. Outer shutdown:
+exited-after-guest-request. Actual native terminal.json: guest-shutdown,
+process_exited=true. Both EOF handlers: natural-container-exit; completed zombie
+branch=false (already reaped), so native race-specific coverage remains open.
+GPU recovery: recovered, authorizes_launch=true. VM/cycle stopped, host sleep:idle
+inhibitor active. No reboot/rebind needed.
 
-1157 host tests pass,3 skipped. Candidate kext/manifest match345. Explicit
-`experiments/pins-spice60.json` selects the experimental refresh image; default
-pins remain stock. Candidate343 is delivered ondev29b462e, hosted tests/build
-green.345 remains local pending the lifecycle follow-up.
-[Evidence](findings/research/native-refresh-20261009.md) ·
-[Hashes](findings/research/native-refresh-evidence-20261009.json) ·
-[Previous status](findings/research/status-archives/status-before-345-20261009.md).
+Next: split presenter's approximately20ms HiDPI lock/copy interval to identify
+its actual bottleneck; repeat bounded lifecycle coverage. Automatic resize,
+atomic presentation, broader desktop/boot/crash coverage and VirtualBox remain open.
+1176 host tests pass,8 skipped;5 optional ROI guard tests separately pass.
+Kext/manifest match347; default image stock, explicit pins-spice60 selects the
+experimental refresh image.343 delivered ondev29b462e with green hosted CI;
+347 results prepared for milestone integration.
+[Evidence](findings/research/console-roi-native-20261009.md) ·
+[Hashes](findings/research/console-roi-native-evidence-20261009.json) ·
+[Previous status](findings/research/status-archives/status-before-347-20261009.md).

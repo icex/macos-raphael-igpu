@@ -2,13 +2,13 @@
 
 The requested target is a macOS desktop in the VM manager's console, with Raphael
 Metal rendering and no physical HDMI connection. Screen Sharing/Moonlight alone
-does not meet that target. Candidates341–343 present the accelerated desktop inside
+does not meet that target. Candidates341–347 present the accelerated desktop inside
 virt-manager at1920×1080 logical/3840×2160 pixels. Native Metal/WindowServer
 ownership, real manager mouse/keyboard input and bridged LAN traffic pass.
-Candidate343 also preserves the native guest-shutdown terminal receipt with
+Candidates343 and347 preserve the native guest-shutdown terminal receipt with
 valid capture and authorizing GPU recovery. Crash/independent-boot coverage,
 sustained frame delivery, automatic resize, other frontends and VirtualBox
-remain open. [Current run evidence](../findings/research/libvirt-native-terminal-20261009.md).
+remain open. [Current run evidence](../findings/research/console-roi-native-20261009.md).
 Candidate332's unsafe TMR experiment remains withdrawn.
 
 ## Architecture under test
@@ -17,8 +17,8 @@ Raphael VFIO remains the renderer. A guest CGVirtualDisplay supplies a desktop;
 ScreenCaptureKit copies complete BGRA frames to a separate presentation-only
 `bochs-display` PCI device. Stock QEMU presents that device through its ordinary
 VNC/SPICE/GTK console; input uses QEMU's existing USB keyboard/tablet. This adds
-CPU framebuffer copies, not a second 3D renderer. Throughput and latency need
-measurement, especially at HiDPI resolutions.
+CPU framebuffer copies, not a second 3D renderer. Sampled delivery is measured below;
+full-frame throughput, scanout and latency remain unqualified.
 
 The opt-in `rgpuconsole=1` service matches only QEMU 1234:1111, class 038000,
 checks its VBE identity and bounded BARs, and never enables bus mastering. Only
@@ -49,8 +49,8 @@ remain required. No existing hashed design contract is changed.
 ## Hypervisor boundaries
 
 QEMU and libvirt can expose a physical PCI device and a separate console device.
-Candidates341–343 test native accelerated macOS through virt-manager, including
-a native guest-shutdown terminal receipt on343. Broader lifecycle coverage remains open.
+Candidates341–347 test native accelerated macOS through virt-manager, including
+native guest-shutdown terminal receipts on343 and347. Broader lifecycle coverage remains open.
 VirtualBox7.2.18 is installed on this host, but upstream removed Linux PCI
 passthrough in6.1; its normal macOS virtual display is not a Raphael GPU.
 Supporting VirtualBox would require a different GPU transport/driver or restoring
@@ -246,3 +246,19 @@ is lost when the strict exit checker encounters QEMU already in stateZ. That
 reaping timing remains a lifecycle blocker despite343's successful shutdown.
 Default pins remain stock; use `experiments/pins-spice60.json` for this experiment.
 [Results, exact artifacts and limits](../findings/research/native-refresh-20261009.md).
+
+## Candidate347 paired observer and lifecycle result
+
+The actual manager accepts the optional checked ROI observer. Fresh30-second
+full/ROI samples observe30.497/30.323updates/s at native1080p and19.664/25.198
+at1080HiDPI. Median sampling cost drops from2.228to1.363ms and5.222to1.452ms.
+This measures observer impact in one sequential pair; partial tokens remain,
+and345's50updates/s native result is not reproduced. These are not GPU fps,
+complete-frame throughput or scanout. Default observer remains full pixbuf.
+
+The normal desktop returns and actual controller guest-shutdown/process-exit
+receipt, natural container exit, valid capture and authorizing GPU recovery pass.
+The new completed-zombie path is software-tested but not exercised in this run:
+both native hooks observe QEMU already reaped. Broader lifecycle remains open.
+Next split guest buffer-lock/copy timing; its combined HiDPI interval is about20ms.
+[Full results and artifacts](../findings/research/console-roi-native-20261009.md).

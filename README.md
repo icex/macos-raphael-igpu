@@ -15,12 +15,13 @@ on **`dev`**; this is not yet a generally supported driver release.
 ## Current status
 
 **VM window (October9):** native Metal rendering, keyboard/mouse input and
-bridged LAN work in virt-manager. Candidate343 retains a native guest-shutdown
-receipt. Experimental345 raises sampled console delivery from29.8 to50.0updates/s
-at1080p and18.5 to22.5 atHiDPI, using an opt-in QEMU refresh patch. These are not
-GPU fps. Incomplete region samples remain, and345 exposes a zombie-process
-terminal-receipt race despite valid capture and authorizing GPU recovery.
-Stock QEMU remains the default. Automatic resize and broader qualification remain
+bridged LAN work in virt-manager. Candidate347 preserves a native guest-shutdown
+receipt, valid capture and authorizing GPU recovery. Fresh full/ROI observer
+comparisons measure30.5/30.3 sampled updates/s at1080p and19.7/25.2 atHiDPI;
+these are not GPU fps. Lower observer cost helps the HiDPI measurement, while
+partial-region samples and run-to-run variation remain. The native zombie-exit
+race branch still needs coverage. Stock QEMU remains the default; these samples
+use the opt-in refresh image. Automatic resize and broader qualification remain
 open. The virtual Display adapter's56MB framebuffer is separate from the native
 renderer's2GB VRAM. [Evidence and setup](docs/virtual-console.md).
 
