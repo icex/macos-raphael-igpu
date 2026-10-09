@@ -1,0 +1,74 @@
+{
+  "passed": true,
+  "cases": [
+    {
+      "receipt": {
+        "case": "original",
+        "cid": "5bfbe8b2a5f9c5df03aa4fa2f166ebd1a10917969a6750ff06c0c5d8f24112ec",
+        "image": "sha256:3a3c82c79bc4e73531f819ccdfa4053b3084efd7c1f645678dbf8b4b3a24369c",
+        "started_at": "2026-10-09T09:04:39.799858988Z",
+        "finished_at": "2026-10-09T09:04:40.258678651Z",
+        "exit_code": 0,
+        "running": false,
+        "devices": [],
+        "network": "none"
+      },
+      "result": {
+        "passed": true,
+        "case": "original",
+        "guests": {
+          "i686": "/usr/sbin/qemu-system-i386"
+        },
+        "shim_invoked": true,
+        "daemon_path": [
+          "PATH=/run/study/shim:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+        ],
+        "domains": [],
+        "qemu_processes": [],
+        "scope": "Global capabilities discovery only; no domain creation, KVM, VFIO or host devices."
+      }
+    },
+    {
+      "receipt": {
+        "case": "sanitized",
+        "cid": "de7fc2fcd2f5930fa1971bb7bda5672a971e042c13f04b225f59d5849601ddbe",
+        "image": "sha256:3a3c82c79bc4e73531f819ccdfa4053b3084efd7c1f645678dbf8b4b3a24369c",
+        "started_at": "2026-10-09T09:04:40.388235279Z",
+        "finished_at": "2026-10-09T09:04:41.092205564Z",
+        "exit_code": 0,
+        "running": false,
+        "devices": [],
+        "network": "none"
+      },
+      "result": {
+        "passed": true,
+        "case": "sanitized",
+        "guests": {
+          "i686": "/usr/sbin/qemu-system-i386",
+          "x86_64": "/usr/sbin/qemu-system-x86_64"
+        },
+        "shim_invoked": false,
+        "daemon_path": [
+          "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+        ],
+        "domains": [],
+        "qemu_processes": [],
+        "scope": "Global capabilities discovery only; no domain creation, KVM, VFIO or host devices."
+      }
+    }
+  ],
+  "artifacts": "/home/bogdan/macos-vm/run/c342-path-11b171f0",
+  "sha256": {
+    "result.json": "404a9e6604cef443c51d303103ec861e23d872fb9d3492695d1f04090514d95d",
+    "original/capabilities.xml": "f51919e2716e122b1d5c773cc03b833bb0b846a60c416e90283d5ddb356fb696",
+    "original/result.json": "3ec726f86eb096701e2b1bd77a00f33dcbb765bb86ceecfa52fe6d9aef4d6a0a",
+    "original/stdout.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "original/stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "original/container.json": "efb87adf3c8feb40518c90fa5652aeb99fc2448dcd59282a26dfe3666f7ff772",
+    "sanitized/capabilities.xml": "e2ba1851258f8934c35f31c983d4bf89d49749c475635dc33682037136729332",
+    "sanitized/result.json": "ddcbe9cd1fc7589149164cc1a842d62c90080081d6ae1537a4df8cc97c480803",
+    "sanitized/stdout.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "sanitized/stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "sanitized/container.json": "ad79157e91708f4df0f77a860f400daf0abe9536d6d0cc7f26781d66646fca3a"
+  }
+}
