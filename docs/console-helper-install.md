@@ -114,7 +114,7 @@ it does not update the host system libraries or the guest package. Fresh-user
 setup remains unqualified.
 
 
-## Restartable immutable presentation (394/395)
+## Restartable immutable presentation (394/395/402)
 
 The updated external launcher selects the sealed presenter's existing snapshot
 mode only when the bridge reports both SnapshotProtocol1 and SnapshotRestartable1.
@@ -132,12 +132,21 @@ exit0 evidence despite an original unverified reporting classification.394
 capture-abort teardown is not a clean shutdown. See
 [qualification evidence](../findings/research/console-private-staging-cleanup-native-20261009.md).
 
+Candidate 402 retains the same sealed presenter and external-helper interfaces.
+Its optional host-private pool requires the exact experimental QEMU image and
+`CONSOLE_SNAPSHOT=restart-timing-pool`; no capture-app replacement or fresh consent
+was needed for this test. Owned restart, odd resize, input and audio regressions
+pass. Natural shutdown/recovery pass with two corrupt serial lines and two incomplete
+snapshots retained separately. Pooling is not enabled by this installer on stock QEMU.
+[402 evidence](../findings/research/console-snapshot-private-pool-native-20261010.md).
+
 ## Actual VirtualBox software-boot scope
 
-Candidate 401 uses a separate cloned guest with native VBox EFI/SMC and one vCPU,
-reaching a software desktop and verified keyboard input. This does not qualify
-this accelerated capture/helper package on VBox or provide a VBox GPU transport.
-Scheduler timekeeping with eight vCPUs timekeeping, normal guest shutdown without Terminal job
-confirmation, and acceleration remain open. Before a controlled shutdown, stop
-only the test's owned awake job and confirm it no longer blocks Terminal closure.
-[Actual result](../findings/research/virtualbox-single-cpu-native-20261010.md).
+Candidate 403 reaches a software desktop with eight vCPUs and RealTSCOffset;
+clock mode and frequency changed together. Candidate 401's earlier one-vCPU
+keyboard and awake checks remain separately scoped. Neither qualifies this
+accelerated helper package or a GPU transport on VirtualBox. New eight-vCPU input,
+orderly shutdown and long-term clock stability remain open. Before controlled
+shutdown, stop only the test's owned awake job and verify that it no longer blocks
+Terminal closure.
+[403 result](../findings/research/virtualbox-eight-cpu-real-tsc-native-20261010.md).

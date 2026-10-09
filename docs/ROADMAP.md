@@ -1,31 +1,35 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-10-10. Current accelerated-console functional qualification: **395**;
-**399** adds stage timing and clean completion, **401** adds actual VirtualBox
-software desktop/input with one vCPU. No VBox Metal acceleration is implemented.
-VBox boot with eight vCPUs panics on scheduler time; shutdown with one vCPU required deadline
-poweroff after a Terminal job confirmation, followed by delayed GUI unlock and
-verified unregister. SMP timekeeping and graceful software shutdown remain open.
-[VBox result](../findings/research/virtualbox-single-cpu-native-20261010.md) ·
-[399 timing](../findings/research/console-host-snapshot-timing-native-20261010.md).
+Updated 2026-10-10. Current accelerated-console experiment: **402**. The bounded
+private host-buffer pool lowers measured snapshot copy cost from 6.834 to 1.948 ms.
+Localized motion reaches about 57 decoded IDs/s, while full-field motion stays
+about 25/s: sustained 4K60 and whole-frame dynamic integrity remain open. The
+100-second manager observation has 4402 unique IDs and zero invalid/duplicate
+samples; these are pipeline samples, not GPU FPS. One sequential trial per
+configuration does not establish a universal performance gain.
 
-Current installed console scope: **395**. Installed immutable
-capture has private retired-writer isolation, explicit unmap/remap and bounded
-capacity recovery. Corrected five-target/text input with the agent active and
-stereo delivery/restoration pass; earlier fixture errors remain retained. Actual-manager100-second mixed-motion observations reach
-57.92 token IDs/s at1440×900 and40.40 overall at4K, zero post-start token errors;
-4K full-field motion remains about26/s.4K60Hz/full-frame integrity remain open.
-395 independent private-terminal/Docker exit0 evidence establishes natural
-completion despite an original unverified reporting label;394/392 forced capture
-aborts remain unresolved evidence.
+402 also passes controlled full-pixel stale-owner isolation, retained-map cleanup,
+owned presenter restart with unchanged capture-app seal, odd resize, five-target
+input/exact text and stereo sample delivery/restoration. Serial capture retains
+two corrupt lines and two incomplete snapshots. Independent natural shutdown and
+recoverable cleanup do not erase those capture defects.
+[402 evidence](../findings/research/console-snapshot-private-pool-native-20261010.md).
+
+**VirtualBox 403** reaches a software desktop with eight vCPUs and RealTSCOffset;
+the coupled clock-mode/frequency change avoids the prior panic in this bounded
+observation. New input, orderly shutdown and long-term stability are still open;
+403 used deadline poweroff and later unregister. Raphael acceleration and atomic
+window presentation are unimplemented. The separate 405 source audit defines
+VBoxVGA's register, ownership and transport requirements.
+[403 result](../findings/research/virtualbox-eight-cpu-real-tsc-native-20261010.md) ·
+[Adapter audit](../findings/research/virtualbox-display-transport-adapter-20261010.md).
 
 Existing scale preference, odd1× resize, connected-agent input/audio and fresh-boot
 1×4K startup remain qualified in their recorded scopes. The isolated client
 stationary-pointer fix is not installed system-wide. Fresh-user setup, broader
 crash/host-boot coverage and other frontends remain open. GPU-native virtual display
-transport is unimplemented. VirtualBox7.2.18 has a VFIO backend, but its configuration
-dispatch is observed, but Raphael/accelerated-console integration remains unqualified, requiring a separate audit
-and implementation—not an assumption that QEMU success transfers.
+transport is unimplemented. VirtualBox 7.2.18 has a VFIO backend with observed configuration dispatch;
+Raphael safety and accelerated-console integration remain unqualified.
 
 Physical baseline remains **330**, user-confirmed correct-color HiDPI120/HDMI audio.
 Full desktop acceleration is **not qualified**. Detailed historical milestones and

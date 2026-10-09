@@ -29,23 +29,25 @@ The runner label is explicitly Intel, as listed in the
 
 ## Checked-in experimental executable
 
-`kext/bin/RaphaelGPU` contains the exact hardware-tested candidate 399 executable,
-build `f868a8dae9664e469b2011390547c5ca`, from clean source
-`b7e17c09679eb3e78e1be9895d2d5be550a06391`, SHA256
-`d8257d14791c7f1cee6050c250a4327cb35bde75e0bf0036c1bbc470b939ceaa`.
-The matching archive build manifest is copied unchanged. Card 221 runs opt-in
-snapshot timing with the installed restartable private-buffer presenter. Host copy
-including first touch averages 6.834 ms; this is diagnostic evidence, not optimization.
-The 100-second 4K observation has 4036 unique token IDs, no invalid/duplicates; natural
-private-terminal/Docker completion and recovery pass. The late screenshot captured
-the wrong host window and is not returned-desktop proof. Input/audio qualification
-remains separately scoped to 395 and preceding recorded runs.
-[399 native evidence](../findings/research/console-host-snapshot-timing-native-20261010.md).
+`kext/bin/RaphaelGPU` contains the exact hardware-tested candidate 402 executable,
+build `582b7a9276a54795ad3ff711d4130474`, from clean source
+`c9a3a5d0d66e9dbd9e789df709068afc14bc6bea`, SHA256
+`7bebb5596f5aa31cf1cfff6c4e95b185b74b254ba62c9e01ac403317a19b1bd5`.
+The canonical archive build manifest is copied unchanged. Card 222 requires the
+pinned experimental QEMU image and exact `restart-timing-pool` profile. Packaging
+the kext alone does not enable the host-side pool in stock QEMU.
 
-Candidate 401 separately boots a software-only VirtualBox macOS desktop with one vCPU
-and keyboard/awake checks. It does not use this driver for accelerated VBox graphics;
-eight-vCPU timekeeping and graceful GUI shutdown remain open. Original forced
-poweroff/late-unregister receipts are retained. Main's physical 330 baseline is
+Measured host copy drops from 6.834 to 1.948 ms; localized delivery reaches about
+57 decoded IDs/s, while full-field delivery remains about 25/s. Full-pixel
+stale-owner, restart, odd-resize, input and audio regressions pass. Serial capture
+still has two corrupt lines and two incomplete snapshots; independent natural shutdown
+and recovery pass. This is a bounded experimental milestone, not a generally
+qualified release or sustained 4K60 claim.
+[402 native evidence](../findings/research/console-snapshot-private-pool-native-20261010.md).
+
+Candidate 403 separately reaches an eight-vCPU VirtualBox software desktop with
+RealTSCOffset; it does not use this driver for accelerated VBox graphics. New input
+and natural shutdown qualification remain open. Main's physical 330 baseline is
 unchanged. Exact-commit publication checks are tracked in
 [GitHub Actions](https://github.com/icex/macos-raphael-igpu/actions).
 
