@@ -1,7 +1,7 @@
 # VirtualBox7.2.18: backend presence is not Raphael qualification
 
-Read-only audit; no VirtualBox VM was created/started and no VFIO/device descriptor
-was opened. The companion Python script only checks filesystem metadata and emits
+Initial read-only audit (before the root-owned discriminator below): no VirtualBox
+VM was created/started by this audit and no VFIO/device descriptor was opened. The companion Python script only checks filesystem metadata and emits
 a proposed configuration. Current QEMU native ownership remains with root.
 
 ## Exact release boundary
@@ -68,3 +68,53 @@ mechanism; ordinary VRAM writes are not restart-safe atomic publication.
 A VirtualBox-styled viewer around QEMU would not satisfy the requested actual
 VirtualBox hypervisor support. Both rendering access and its own display/input/
 audio/lifecycle must be qualified; no configuration-only success is claimed here.
+
+## Executed software discriminator (root-owned)
+
+Root executes the guarded configuration on installed7.2.18. Untraced startup
+reaches the exact backend error: opening`/dev/null/raphael-discriminator-vfio`
+fails with20 (`VERR_PATH_NOT_FOUND`). Retained`VBox.log` contains the actual CFGM
+values. This establishes installed backend configuration dispatch; the VM never
+boots. Machine state is verified poweroff, then the owned VM is unregistered,
+with files retained in`run/c396-vbox-dispatch` and pinned by the accompanying
+12-artifact evidence manifest. The wrapper's exit-untraced.json returncode0 is
+not guest success: the retained application log explicitly reports startup failure.
+
+The attempted traced start fails earlier in VirtualBox hardening with effective
+UID not root, consistent with the setuid tracing restriction. Consequently there
+is **no successful syscall-trace proof** of the untraced startup. The retained
+`opens.strace` covers only that failed traced attempt. The fake access paths and
+exact ENOTDIR diagnostic support the configured refusal; do not promote this to
+independent traced proof that all actual device opens were absent.
+
+No Raphael attachment, PCI enumeration, DMA, interrupts, reset, macOS boot,
+Metal acceleration or VirtualBox console adaptation is qualified by this result.
+The earlier proposed acceptance included a syscall trace which remains unfulfilled;
+its absence is recorded, not silently replaced by the configuration result.
+
+## Pinned passthrough prerequisites (not implemented)
+
+All line references below are to
+[`DevPciVfio.cpp` at14841851fa211c7faf615978ba385d59947236c6](https://github.com/VirtualBox/virtualbox/blob/14841851fa211c7faf615978ba385d59947236c6/src/VBox/Devices/Bus/DevPciVfio.cpp),
+already hashed in the source manifest:
+
+- Lines2052–2081 map host addresses into guest-physical IOVAs with read/write
+  permissions through legacy VFIO or IOMMUFD. Lines2093 onward scan guest4K
+  addresses using`PDMDevHlpPhysGCPhys2CCPtr`; the upstream TODO explicitly warns
+  that mappings may include non-RAM. Failures at2117–2119 and2140–2142 are logged
+  at those call sites rather than returned immediately. Complete construction,
+  partial-failure and teardown behavior needs a fail-closed audit before Raphael.
+- Lines2638–2649 issue`VFIO_DEVICE_RESET` for every opened function during reset,
+  without a capability-flag check there. This is not our reviewed MODE2/recovery
+  sequence. Lines2666–2673 begin IOMMUFD detach in destruction; legacy handling and
+  cleanup ordering need independent verification.
+- Config-space table1973–1993 initializes vendor/device/subsystem IDs from the
+  physical device and marks guest writes invalid. No reviewed QEMU-style identity
+  override is provided by the admitted configuration fields.
+- ROM setup996–1027 queries the VFIO ROM region and reads it with`pread`. No
+  reviewed external ROM-file override matches the current QEMU launch contract.
+
+These are source findings, not hardware failures or proof that integration is
+impossible. The next code prerequisite for passthrough is audited DMA/reset and
+identity/ROM adaptation, not an immediate real-device attachment. A software-only
+VBoxVGA presentation test can proceed independently of that physical-GPU work.

@@ -118,7 +118,9 @@ def reconcile_exit(vm, state, result, supervisor=None):
                 raise ValueError('unknown capture outcome')
             evidence['capture_receipts'].append(dict(path=str(path),
                 sha256=hashlib.sha256(raw).hexdigest(), outcome=outcome,
-                channel=receipt.get('channel')))
+                channel=receipt.get('channel'),
+                deferred=receipt.get('deferred'),
+                shutdown_event_wait=receipt.get('shutdown_event_wait')))
             forced |= outcome in ('immediate-stop', 'shutdown-wait-expired',
                                   'receipt-grace-expired')
         except (OSError, ValueError, TypeError, AttributeError):
@@ -144,7 +146,10 @@ def reconcile_exit(vm, state, result, supervisor=None):
                              for e in evidence['errors']) and
             sorted(r['channel'] for r in natural if isinstance(r['channel'], str)) == expected and
             len(natural) == len(expected) and
-            all(r['outcome'] == 'natural-container-exit' for r in natural)):
+            all(r['outcome'] == 'natural-container-exit' or
+                (r['outcome'] == 'container-stopped-during-shutdown-wait' and
+                 r['deferred'] is True and r['shutdown_event_wait'] is True)
+                for r in natural)):
         try:
             run_id = state['libvirt_run_id']
             if not re.fullmatch('[0-9a-f]{32}', run_id):

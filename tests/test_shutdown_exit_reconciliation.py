@@ -98,7 +98,33 @@ class ExitReconciliationTests(unittest.TestCase):
                 self.assertEqual(result['outcome'], 'exited-after-guest-request' if expected
                                  else 'exit-unverified-after-request')
                 self.assertNotIn('container_exit_code', result['exit_reconciliation'])
+            # 395: witness exec137 may race natural container removal. Only
+            # the completed wait outcome plus both flags and private proof count.
+            for changes, terminal_changes, expected in (
+                    ({}, {}, True),
+                    ({'deferred':False}, {}, False),
+                    ({'shutdown_event_wait':False}, {}, False),
+                    ({'deferred':1}, {}, False),
+                    ({'run_id':'f'*32}, {}, False),
+                    ({}, {'process_exited':False}, False),
+                    ({}, {'scope':dict(scope,inode=1)}, False),
+                    ({'outcome':'immediate-stop'}, {}, False)):
+                for i, channel in enumerate(('console','critical')):
+                    receipt=dict(binding, channel=channel,
+                        outcome='container-stopped-during-shutdown-wait',
+                        deferred=True, shutdown_event_wait=True, witness_exit_code=137)
+                    if i==1:receipt.update(changes)
+                    (run/f"capture-exit-{state['cid']}-{i}.json").write_text(json.dumps(receipt))
+                (private/'terminal.json').write_text(json.dumps(dict(terminal,**terminal_changes)))
+                result=module.reconcile_exit(vm,state,original,supervisor)
+                self.assertEqual(result['exit_reconciliation']['private_terminal_verified'],expected)
+                wanted=('capture-abort-after-request' if changes.get('outcome')=='immediate-stop'
+                        else 'exited-after-guest-request' if expected else 'exit-unverified-after-request')
+                self.assertEqual(result['outcome'],wanted)
+                self.assertNotIn('container_exit_code',result['exit_reconciliation'])
             (private/'terminal.json').write_text(json.dumps(terminal))
+            (run/f"capture-exit-{state['cid']}-0.json").write_text(json.dumps(
+                dict(binding,channel='console',outcome='natural-container-exit')))
             (run/f"capture-exit-{state['cid']}-1.json").unlink()
             self.assertEqual(module.reconcile_exit(vm, state, original, supervisor)['outcome'],
                              'exit-unverified-after-request')

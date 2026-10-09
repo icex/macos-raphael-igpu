@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "scope": "Installed7.2.18 backend configuration dispatch only; no guest boot or successful syscall trace",
+  "artifacts": [
+    {
+      "path": "/home/bogdan/macos-vm/run/c396-vbox-dispatch/plan.json",
+      "bytes": 1272,
+      "sha256": "3763e874b83134f05881661feef2f2ed5662082f332d76e2ccb0a103d06e18f5"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c396-vbox-dispatch/setup.log",
+      "bytes": 3972,
+      "sha256": "5462b7dd86c5b0c71ace4a3a1f18feb18392cd815848167ef35dfa12e31bd97a"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c396-vbox-dispatch/machine.txt",
+      "bytes": 2397,
+      "sha256": "7382f83da50ba4d533e99b13228e77d7938c1c004cafa0582872f5e65139f8f3"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c396-vbox-dispatch/start.log",
+      "bytes": 183,
+      "sha256": "6a5b16c509479e8e1c649b3c866074185721d6dce52a5a280457b52c5ac75d28"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c396-vbox-dispatch/opens.strace",
+      "bytes": 178652,
+      "sha256": "5fba31766d6dcf5e75ef3ed450ade01baacd4d6a7be0f3ca138f733905a60f78"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c396-vbox-dispatch/exit.json",
+      "bytes": 22,
+      "sha256": "b9f87d4ceb14f54a8787da14c5985aa499e13197fe39c8f0f4ecf87e7a01957e"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c396-vbox-dispatch/start-untraced.log",
+      "bytes": 311,
+      "sha256": "79254099358c58a9e320ccd6bb4efa19ed5e7ed9ada3eb615f17d9c13a8a816b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c396-vbox-dispatch/exit-untraced.json",
+      "bytes": 58,
+      "sha256": "9873f74123bca17fbac6f07a36a65b6050b1d66c058ddd01a6fcc364c2d8a84a"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c396-vbox-dispatch/machine-after.txt",
+      "bytes": 2397,
+      "sha256": "5b9be1cdcff0c30b372def96e47fa4e7b3ef5f19fd8d336f1c7734a2b8bc41b1"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c396-vbox-dispatch/unregister.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c396-vbox-dispatch/cleanup.json",
+      "bytes": 158,
+      "sha256": "b5a2072b6565d1779c235807a44a05f725433c3fc46f6f53c27946e9d46a9b91"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c396-vbox-dispatch/vms/rgpu-c396-vfio-config/Logs/VBox.log",
+      "bytes": 26763,
+      "sha256": "8a3dab55033a08edc703473825cecaef6d57423335c539d11d3eed8a5c24e44a"
+    }
+  ]
+}

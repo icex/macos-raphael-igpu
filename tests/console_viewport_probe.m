@@ -91,7 +91,9 @@ int main(int argc,const char **argv) { @autoreleasepool {
     NSString *token=[@"RGPU" stringByAppendingString:[[NSString stringWithUTF8String:argv[2]] uppercaseString]];
     ViewportWindow *window=[[ViewportWindow alloc] initWithContentRect:frame styleMask:NSWindowStyleMaskBorderless
                                                   backing:NSBackingStoreBuffered defer:NO];
-    window.level=NSFloatingWindowLevel;window.title=@"Raphael viewport input qualification";
+    // Keep the bounded fullscreen test targets above Dock/menu overlays.
+    // This changes only the test window, not user Dock or display preferences.
+    window.level=NSStatusWindowLevel;window.title=@"Raphael viewport input qualification";
     ViewportView *view=[[ViewportView alloc] initWithFrame:NSMakeRect(0,0,frame.size.width,frame.size.height)];
     view.token=token;
     CGFloat width=frame.size.width,height=frame.size.height;

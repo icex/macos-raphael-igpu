@@ -1,48 +1,50 @@
 # Live status — 2026-10-09
 
-## Candidate 394: windowed snapshot desktop works; explicit cleanup fails
+## Candidate396: fresh snapshot desktop and clean supervised completion
 
-Run `af7889e45df129e345d9c7f6b03525cd`, metal-217, version1.0.394,
-MODE2 #314, boot `ba51b3c6-9420-4510-af69-38a42b3c79c7`.
-Launch59b5ee6, build source de9518d, build ID778fdc6a957a441eac7d0215ccccd33b.
-Executable SHA2566d2eb6ec48abef60bf102240f0ba8cc8d048e3ec5814a468c6ddd1a1e9cbda97.
+Run `3048b197864060d823c97e47ecd64438`, metal219, version1.0.396,
+MODE2 #316, host boot `ba51b3c6-9420-4510-af69-38a42b3c79c7`.
+Launch0932ba8, build sourceba39a0f, build IDea436cef094b48a7bda10a964918b5a9.
+Executable SHA2567bb2002bb3e59277f09504af4d34f74a35c6022683681f627e864e718b696e0c.
+Driver source matches395; this run exercises lifecycle diagnostics/reporting.
 
-Native private staging isolates retired mappings: both 801×601 host images match
-all481401 pixels after old-owner writes, including writes after the new ACK.
-Old COMMIT/re-ARM and incompatible cache mappings are refused. Four retained
-buffers exhaust the bounded pool as intended. However, the fixture FAILS at
-release-A-capacity with cleanup_ok=false. Individual unmap return codes were not
-logged. Source inspection identifies retired-owner memory lookup preventing
-explicit unmap; candidate395 retains each client's own descriptor through retirement
-and adds native remap/unmap result checks. This fix is built, not natively tested.
+Installed sealed presenter autostarts snapshot1 at4K with advancing ACKs, then
+actual virt-manager resizes to1440×900 and shows the macOS desktop. Display-awake
+assertions hold. Viewer closure leaves the same VM alive. This short run does not
+repeat395 input/audio/motion or establish a new performance result.
 
-Installed immutable capture selects the new restart capability without replacing
-the sealed capture app or changing TCC consent. A real virt-manager desktop is
-visible, with exact1235×743,1237×745 and1441×961 resize responses. Two normal helper
-restarts reacquire capture successfully. Default stereo sample delivery passes;
-independent audio-route restoration checks all pass. This does not qualify endpoint
-audibility, A/V sync, sustained60Hz, all-frame integrity or crash races. The bounded
-viewer exits while the identity-matched VM remains alive. No394 pointer test was run.
+Shutdown is exited-after-guest-request with private_terminal_verified=true. Both
+capture hooks report natural-container-exit, Docker dies0 without kill events, and
+recovery is recovered/authorizes_launch=true. Critical replay retains365 records
+with no corrupt lines or incomplete snapshots. CORE_PROBE_PASS remains scoped.
+The R/PF_EXITING refusal did not occur: new bounded fd/task diagnostics were not
+exercised, and the earlier capture-exit race is not declared fixed. Reporting now
+also recognizes395's bound deferred-wait/private-terminal completion; offline
+replay preserves392's forced-abort classification and original artifact hashes.
 
-Shutdown: capture-abort-after-request, both hooks immediate-stop while original
-QEMU PID113 remains R with one task. Docker records SIGKILL and exit137; private
-terminal receipt is missing. Reporting now correctly distinguishes this forced
-shutdown. The underlying capture-exit race remains open. Recovery is recovered,
-authorizes_launch=true; GPU stays vfio-pci, power/control=on. Host awake service
-remains active. No VM is running. CORE_PROBE_PASS is a narrow functional result.
+Evidence: run/candidate-396-results; c396-state.txt; c396-post-resize.txt;
+c396-manager-events.jsonl; c396-desktop.png; c396-viewer-close-alive.json;
+c396-docker-events.jsonl; c396-shutdown-reconciliation-replay.json.
+Full integrated host suite1457 tests,8 skipped,OK50.999s. No VM remains running.
+Host awake blocker active; GPU remainsvfio-pci withpower/control=on.
 
-Evidence: run/candidate-394-results; c394-native-{before,after}-pixels.json;
-c394-native-final.txt; c394-snapshot-desktop.png; c394-resize-manager.jsonl;
-c394-final-state.txt and decoded logs; c394-audio-result.txt;
-c394-audio-restored-independent.json; c394-viewer-close-alive.json;
-c394-docker-events.jsonl. Pre-exposure archive-path refusal after MODE2 #313 did
-not consume a GPU ledger entry. Full host suite1453 tests,8 skipped passes.
+Last delivered milestone: devc1f64d055fb1161f55281972912d0cf4c4178f2f,
+hosted test/build PASS run37988921669, release skipped, exact tested395kext/bin.
+395 qualifies private staging isolation, explicit retired unmap/capacity recovery,
+installed restart, odd resizing, corrected input fixture and stereo sample delivery.
+Measured1440×900 tokens~58/s;4K localized~50/s,full-field~26/s, no post-start token
+errors. Whole-frame motion,4K60, endpoint audibility/A-Vsync, crash races and
+first-user setup remain open.396 changes are candidate-only; main unchanged.
 
-Next: candidate395 must demonstrate explicit retired-buffer unmap, bounded capacity
-recovery and installed presenter reuse on hardware. Separately investigate the
-capture-exit race without weakening abort or recovery gates. Then measure sustained
-presentation and broaden lifecycle qualification. VirtualBox transport remains
-unimplemented; QEMU/virt-manager success is not VirtualBox support.
+VirtualBox7.2.18 guarded diskless configuration reaches its real pci-vfio backend
+and fails at the deliberately impossible path (errno20), then is confirmed powered
+off and unregistered. Setuid hardening refused the traced attempt; no successful
+syscall trace or actual GPU/DMA/reset/acceleration qualification is claimed.
+Pinned source audit identifies unresolved DMA/reset/identity/ROM requirements;
+VBoxVGA requires its own presentation adapter. Evidence: run/c396-vbox-dispatch.
 
-Last delivered dev48b4c96 passes hosted test/build run37983196350 and contains
-tested392 kext/bin. Current394/395 changes remain candidate-only. Main unchanged.
+Next:397 opt-in bounded stage timings distinguish private-RAM→WC copy/fence,
+geometry MMIO, doorbell/host work and ACK checks. Preserve all existing gates and
+sealed capture app. Source and build are prepared; native timing qualification
+remains outstanding. Continue VBox software boot/presentation investigation
+separately, with no physical passthrough inferred from configuration dispatch.
