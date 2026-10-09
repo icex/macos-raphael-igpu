@@ -1,28 +1,29 @@
 # Live status — 2026-10-09
 
-## Candidate352: full-refresh copy improvement; exact shutdown refusal captured
+## Candidate353: full-refresh HiDPI improvement confirmed by same-image OFF baseline
 
-Run `7904cfef4aaa37f79efe02f604d921ac`, metal-195, build1.0.352,
-MODE2#290, bootba51b3c6. Native Metal/WindowServer/display pass. Experimental
-Bochs full refresh disables only VGA dirty logging at explicit SPICE60;
-default image/profile and migration tracking unchanged. HiDPI row copies now
-~1.48ms versus prior~16ms; all16 captured-frame byte checks pass.
+Run `8b32ccd1e303a4b3fa845aaeded1d885`, metal-196, build1.0.353,
+MODE2#292, bootba51b3c6. Native Metal/WindowServer/display pass; normal desktop
+visible in actual virt-manager and viewer closure leaves VM alive. Same image,
+SPICE60 and O2 presenter as352, but full-refresh property absent/OFF.
 
-Actual manager delivery44.186/50.084 native and31.758/34.882 HiDPI updates/s
-(full/ROI observers). All fixtures finish, diagnostic flag removed and normal
-desktop restored. Fixture itself produces~37–38HiDPI draws/s; no60Hz ceiling,
-GPU FPS, atomicity or full desktop qualification claim. Next353 uses the SAME
-image/presenter with full-refresh absent/OFF for a controlled CPU/cadence baseline.
+OFF native/HiDPI row copies4.04/16.38ms versus ON0.37/1.48ms. HiDPI manager
+delivery OFF23.53/22.36 versus ON31.76/34.88 updates/s (full/ROI observers).
+Native delivery has no uniform gain. QEMU CPU is lower ON in all four measured
+cases; total host CPU is unmeasured. Producer draws vary and are below60/s,
+so no GPU FPS,60Hz ceiling, atomicity or full desktop qualification claim.
 
 Capture CORE_PROBE_PASS, earliest_failure=null. Outer shutdown:
-exited-after-guest-request. Terminal absent: both EOF hooks (~0.370s) see PID113
-stateZ with two tasks, completion_reason=not-sole-task. Keep strict proof;
-investigate remaining-thread shutdown ordering. GPU recovery recovered,
+exited-after-guest-request. Terminal absent: both EOF hooks (~0.316s) see PID113
+stateZ with two tasks, completion_reason=not-sole-task. GPU recovery recovered,
 authorizes_launch=true. VM/cycle stopped, host awake; no reboot/rebind needed.
+Next354 adds early shutdown-event and bounded task-state diagnostics; no new grace.
 
-1188 host tests pass,8skip; kext/manifest match352. Changes local, dev277ff81
-hosted CI green, main unchanged. General desktop, lifecycle, window resize,
+Initial353 metadata failure occurred before QEMU/VFIO (MODE2#291, no ledger
+launch); expanded identity was repaired and deep-validated before retry.
+1189 host tests pass,8skip; kext/manifest match353. Milestone delivery to dev
+pending; main unchanged. General desktop, lifecycle, window resize/input,
 console audio/install durability and VirtualBox qualification remain open.
-[Evidence](findings/research/bochs-full-refresh-native-20261009.md) ·
-[Raw samples/receipts](findings/research/bochs-full-refresh-native-evidence-20261009.json) ·
-[Previous status](findings/research/status-archives/status-before-352-20261009.md).
+[Evidence](findings/research/bochs-full-refresh-paired-20261009.md) ·
+[Paired data/receipts](findings/research/bochs-full-refresh-paired-evidence-20261009.json) ·
+[Previous status](findings/research/status-archives/status-before-353-20261009.md).
