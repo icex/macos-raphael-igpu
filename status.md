@@ -22,8 +22,8 @@ its actual bottleneck; repeat bounded lifecycle coverage. Automatic resize,
 atomic presentation, broader desktop/boot/crash coverage and VirtualBox remain open.
 1176 host tests pass,8 skipped;5 optional ROI guard tests separately pass.
 Kext/manifest match347; default image stock, explicit pins-spice60 selects the
-experimental refresh image.343 delivered ondev29b462e with green hosted CI;
-347 results prepared for milestone integration.
+experimental refresh image.347 milestone integrated into dev; hosted CI pending for this delivery.
+343's earlier hosted test/build run passed.
 [Evidence](findings/research/console-roi-native-20261009.md) ·
 [Hashes](findings/research/console-roi-native-evidence-20261009.json) ·
 [Previous status](findings/research/status-archives/status-before-347-20261009.md).
