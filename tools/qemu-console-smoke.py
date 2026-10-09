@@ -41,13 +41,15 @@ class Channel:
         self.socket.close()
 
 
-def run(qemu):
+def run(qemu, full_refresh=None):
+    if full_refresh not in (None, "off", "on"):raise ValueError("invalid diagnostic property")
     with tempfile.TemporaryDirectory(prefix='rgpu-console-') as temp:
         root = Path(temp)
         with (root/'qemu.log').open('w+') as log:
             command = [qemu, '-machine', 'q35,accel=tcg', '-nodefaults', '-S',
                        '-m', '128M', '-vga', 'none', '-display', 'none',
-                       '-device', 'bochs-display,id=console,addr=02.0,vgamem=64M',
+                       '-device', 'bochs-display,id=console,addr=02.0,vgamem=64M'+
+                       (f',x-debug-full-refresh={full_refresh}' if full_refresh else ''),
                        '-qtest', f'unix:{root}/qtest,server=on,wait=off',
                        '-qmp', f'unix:{root}/qmp,server=on,wait=off']
             process = subprocess.Popen(command, stdout=log, stderr=log)
@@ -79,6 +81,10 @@ def run(qemu):
                     test(f'outl 0xcfc {value:#x}')
 
                 qmp('qmp_capabilities')
+                property_value = None
+                if full_refresh:
+                    property_value=qmp('qom-get',{'path':'/machine/peripheral/console','property':'x-debug-full-refresh'})
+                    if property_value != (full_refresh=='on'):raise RuntimeError('property mismatch')
                 identity = pci(0)
                 if identity != 0x11111234:
                     raise RuntimeError(f'unexpected Bochs PCI identity {identity:#x}')
@@ -110,6 +116,8 @@ def run(qemu):
                     header = f'P6\n{width} {height}\n255\n'.encode()
                     if data != header + rgb:
                         raise RuntimeError(f'console pixels mismatch at phase {phase}')
+                    qmp('screendump', {'filename':str(path)})
+                    if path.read_bytes()!=data:raise RuntimeError('static frame changed without guest write')
                     frames.append({'width':width,'height':height,'phase':phase,
                                    'pixels_checked':width*height,
                                    'sha256':hashlib.sha256(data).hexdigest()})
@@ -117,7 +125,9 @@ def run(qemu):
                 return {'schema':1, 'passed':True, 'scope':'software console transport only',
                         'qemu':subprocess.check_output([qemu,'--version'],text=True).splitlines()[0],
                         'pci_identity':hex(identity), 'frames':frames,
-                        'physical_gpu_opened':False}
+                        'physical_gpu_opened':False, 'full_refresh':full_refresh,
+                        'property_value':property_value, 'static_repeat_checked':True,
+                        'qemu_exit_code':process.returncode}
             finally:
                 for channel in channels:
                     channel.close()
@@ -135,8 +145,9 @@ def run(qemu):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--qemu', default='qemu-system-x86_64')
+    parser.add_argument('--bochs-full-refresh',choices=['off','on'],default=None)
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
-    result = run(args.qemu)
+    result = run(args.qemu,args.bochs_full_refresh)
     args.output.write_text(json.dumps(result, indent=2)+'\n')
     print(json.dumps(result))

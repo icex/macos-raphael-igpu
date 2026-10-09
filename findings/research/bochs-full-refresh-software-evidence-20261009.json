@@ -1,0 +1,134 @@
+{
+  "scope": "isolated build and serialized TCG qtest pixels only; no physical GPU",
+  "root": "/home/bogdan/macos-vm/run/c352-bochs-build",
+  "configure": [
+    "--target-list=x86_64-softmmu",
+    "--enable-spice",
+    "--enable-tcg",
+    "--enable-kvm",
+    "--disable-docs",
+    "--disable-guest-agent",
+    "--disable-download",
+    "--disable-werror"
+  ],
+  "build": [
+    "ninja",
+    "-j4",
+    "qemu-system-x86_64"
+  ],
+  "sha256": {
+    "/home/bogdan/macos-vm/run/c352-bochs-build/build/qemu-system-x86_64": "7bef105f40f6b399ef2aa870045bb8b46028f90e5a346f622fc047ec6eaf272c",
+    "/home/bogdan/macos-vm/run/c352-bochs-build/configure.log": "1b1111c9e42773ab4382acb7cca8122ed66cb7bcba1a1f0fccd9eec09390de76",
+    "/home/bogdan/macos-vm/run/c352-bochs-build/build.log": "aae5f23ecfd2c24311fa9421d9297be6e2a2ee1088f9f46398383a9f9d57ddda",
+    "/home/bogdan/macos-vm/run/research/qemu-smc-20260916/qemu-10.1.2.tar.xz": "9d75f331c1a5cb9b6eb8fd9f64f563ec2eab346c822cb97f8b35cd82d3f11479",
+    "/home/bogdan/macos-vm/run/worktrees/candidate-352/findings/research/patches/qemu-10.1.2-spice-explicit-nongl-refresh.patch": "68170966dec625104c7cd1573600bd3d63216c258cfdd69bd8d776f3b385d18c",
+    "/home/bogdan/macos-vm/run/worktrees/candidate-352/findings/research/patches/qemu-10.1.2-bochs-full-refresh-diagnostic.patch": "d2e2dd79e8698f7570a4e2f30c09233c02f7f04519dd876e979b2ae6e2a07b3d"
+  },
+  "results": {
+    "default": {
+      "schema": 1,
+      "passed": true,
+      "scope": "software console transport only",
+      "qemu": "QEMU emulator version 10.1.2",
+      "pci_identity": "0x11111234",
+      "frames": [
+        {
+          "width": 640,
+          "height": 480,
+          "phase": 0,
+          "pixels_checked": 307200,
+          "sha256": "ede46fa1ab933d2976a50000e6ed3ab794ebda341607e327339c678ad6d603c4"
+        },
+        {
+          "width": 640,
+          "height": 480,
+          "phase": 1,
+          "pixels_checked": 307200,
+          "sha256": "64423cd57ec967773d7f1346822ec7413dab6e664204331c5386de67a0e0d250"
+        },
+        {
+          "width": 800,
+          "height": 600,
+          "phase": 2,
+          "pixels_checked": 480000,
+          "sha256": "f338e3f8084fee97049f52feb9a0afec87998e31f6da979ef7bb38bcb4991d4c"
+        }
+      ],
+      "physical_gpu_opened": false,
+      "full_refresh": null,
+      "property_value": null,
+      "static_repeat_checked": true,
+      "qemu_exit_code": 0
+    },
+    "off": {
+      "schema": 1,
+      "passed": true,
+      "scope": "software console transport only",
+      "qemu": "QEMU emulator version 10.1.2",
+      "pci_identity": "0x11111234",
+      "frames": [
+        {
+          "width": 640,
+          "height": 480,
+          "phase": 0,
+          "pixels_checked": 307200,
+          "sha256": "ede46fa1ab933d2976a50000e6ed3ab794ebda341607e327339c678ad6d603c4"
+        },
+        {
+          "width": 640,
+          "height": 480,
+          "phase": 1,
+          "pixels_checked": 307200,
+          "sha256": "64423cd57ec967773d7f1346822ec7413dab6e664204331c5386de67a0e0d250"
+        },
+        {
+          "width": 800,
+          "height": 600,
+          "phase": 2,
+          "pixels_checked": 480000,
+          "sha256": "f338e3f8084fee97049f52feb9a0afec87998e31f6da979ef7bb38bcb4991d4c"
+        }
+      ],
+      "physical_gpu_opened": false,
+      "full_refresh": "off",
+      "property_value": false,
+      "static_repeat_checked": true,
+      "qemu_exit_code": 0
+    },
+    "on": {
+      "schema": 1,
+      "passed": true,
+      "scope": "software console transport only",
+      "qemu": "QEMU emulator version 10.1.2",
+      "pci_identity": "0x11111234",
+      "frames": [
+        {
+          "width": 640,
+          "height": 480,
+          "phase": 0,
+          "pixels_checked": 307200,
+          "sha256": "ede46fa1ab933d2976a50000e6ed3ab794ebda341607e327339c678ad6d603c4"
+        },
+        {
+          "width": 640,
+          "height": 480,
+          "phase": 1,
+          "pixels_checked": 307200,
+          "sha256": "64423cd57ec967773d7f1346822ec7413dab6e664204331c5386de67a0e0d250"
+        },
+        {
+          "width": 800,
+          "height": 600,
+          "phase": 2,
+          "pixels_checked": 480000,
+          "sha256": "f338e3f8084fee97049f52feb9a0afec87998e31f6da979ef7bb38bcb4991d4c"
+        }
+      ],
+      "physical_gpu_opened": false,
+      "full_refresh": "on",
+      "property_value": true,
+      "static_repeat_checked": true,
+      "qemu_exit_code": 0
+    }
+  }
+}
