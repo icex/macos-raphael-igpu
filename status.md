@@ -1,55 +1,49 @@
 # Live status — 2026-10-10
 
-## Candidate 401: actual VirtualBox desktop, without GPU acceleration
+## Candidate 402: private snapshot pool tested and stopped
 
-BootC UUID `1a0740c7-3655-481e-a5f5-e7dac76dee1e` reaches the macOS desktop.
-The hardware owner verified Terminal marker `VBOX401_INPUT_OK`, one vCPU,
-macOS build 24G830 and awake assertions. The loader matches bootB; only the CPU
-count changed from eight to one. Both runs use emulated TSC at 4294967295 Hz.
-No monotonicity panic occurred during approximately 238 seconds. This supports
-an SMP contribution; it does not prove the root cause or qualify sustained use.
-No Raphael/VFIO device, Metal acceleration or accelerated VBox transport was used.
+Run `92b1f812226bb5f8594dbcbde467ef3d`, build
+`582b7a9276a54795ad3ff711d4130474`, source
+`c9a3a5d0d66e9dbd9e789df709068afc14bc6bea`, launch `5f39b75`.
+The opt-in private host pool lowers measured host snapshot copy from 399's
+6.834 ms to 1.948 ms and guest doorbell from 6.983 ms to 1.969 ms.
+Selected host windows contain 5677 reused successes, zero fallback/new blocks;
+three blocks occupy 96 MiB. Host and guest timing windows are independent.
 
-Shutdown was forced. A noninteractive sudo request required a password; the ACPI
-shutdown dialog was confirmed, but Terminal's background caffeinate job blocked
-completion. The controller powered off the VM at its deadline. Immediate
-unregister failed while the GUI held its session lock. Root later verified the
-exact UUID/configuration powered off, unregistered it and confirmed list absence.
-Original error receipts remain intact; this is not natural guest shutdown.
+Actual-manager 4K mixed workload: 4402 unique tokens in 100.007 seconds, zero
+invalid/duplicate samples. Localized phases reach about 57 IDs/s; full-field
+phases remain about 25 IDs/s versus 399's 26.4. This single comparison does not
+qualify 4K at 60 Hz or a uniform throughput gain. The short final phase is excluded.
+Root viewed both motion and returned desktop screenshots.
 
-## Candidate 399: accelerated-console timing result
+Native isolation/cleanup passes: all 481401 controlled-frame pixels match before
+and after stale mapping writes, retained unmap/remap succeeds, old calls/WC aliases
+and excess retained buffers refuse, and all cleanup returns succeed. Unchanged
+sealed app restart resumes ACKs; actual-manager odd resize reaches 1235×743.
+Input passes five targets, exact text, zero misses/geometry changes. Audio sample
+delivery passes separated 997/1498 Hz channels; independent route restoration
+passes. Endpoint audibility is not claimed.
 
-QEMU run `1849f3959a4a38e15836c9364554f76f` ended with verified private guest
-shutdown/process exit, Docker exit 0 without kill events and authorizing recovery.
-Both capture receipts report `container-stopped-during-shutdown-wait` with deferred
-and event-wait flags. CR2 snapshot 18 retains 365 records, zero corrupt lines and
-no incomplete snapshots under terminal-prefix tolerance.
+Shutdown is verified: private guest-shutdown/process-exited terminal, both capture
+hooks natural-container-exit with deferred event waits (~0.618 s), Docker die 0
+without kill events, and recovered/authorizes_launch=true. Original reconciliation
+retains the unavailable stopped-container-inspection note. CR2 snapshot 18 has
+330 records under terminal-prefix tolerance, two corrupt lines and incomplete
+snapshots 7/14; logs are not claimed perfect. The GPU cycle is stopped.
 
-The 4K manager observation contains 4036 unique token IDs in 100.006 seconds with
-zero invalid/duplicate samples; the short final phase is excluded. Host snapshot
-copy including first touch averages 6.834 ms, allocation 0.02058 ms and pending free
-0.09521 ms; guest doorbell averages 6.983 ms. This measures cost, not an optimization.
-The late `c399-desktop.png` captured the wrong host window and is excluded from
-returned-desktop evidence. Input/audio qualification remains scoped to prior runs.
+Evidence: [native pool report](findings/research/console-snapshot-private-pool-native-20261010.md)
+and its hashed manifest. Prior status is archived under
+`findings/research/status-archives/status-before-candidate402-20261010.md`.
 
-Both the 399 GPU cycle and 401 software VM are stopped. Root owns later launches.
-Evidence: `findings/research/console-host-snapshot-timing-native-20261010.md` and
-`findings/research/virtualbox-single-cpu-native-20261010.md`.
+## Remaining work and delivery
 
-## Local validation and publication
+Full-field 4K delivery remains the performance blocker. Repeatability, first-user
+console-only installation and actual accelerated VirtualBox transport remain open.
+VirtualBox software desktop evidence is separate from Raphael/QEMU acceleration.
+Root owns subsequent native launches; candidate 406 software qualification is
+prepared separately. No new launch is authorized by this status text.
 
-Candidate 404 integrates 399 instrumentation/tested binary and 401 software desktop
-and input evidence. The checked-in executable is exact tested 399 build
-`f868a8dae9664e469b2011390547c5ca`, source
-`b7e17c09679eb3e78e1be9895d2d5be550a06391`, SHA256
-`d8257d14791c7f1cee6050c250a4327cb35bde75e0bf0036c1bbc470b939ceaa`.
-Its binary and manifest match the canonical archive byte for byte and the native
-run identity; receipt: `run/c404-binary-provenance.json`.
-
-Integrated host suite: 1469 tests passed, 8 skipped, 56.196 seconds
-(`run/c404-full-suite.log`). Published commit refs and their hosted test/build
-results are tracked in [GitHub Actions](https://github.com/icex/macos-raphael-igpu/actions).
-The preceding `c1f64d0` milestone has verified green hosted test/build results.
-Main's physical 330 baseline is unchanged. VirtualBox Metal/GPU transport, SMP
-timekeeping, graceful GUI shutdown, 4K at 60 Hz and first-user console-only installation
-remain open. A software desktop is not acceleration.
+This candidate's results are local pending reviewed milestone integration. Current
+published dev is `84159a9d33ab22e385e56f4861b0e6dae069cbf4`; its hosted test and
+build jobs passed (Actions 37993406232). Main remains unchanged. The checked-in
+binary still represents tested candidate 399 until explicit milestone delivery.
