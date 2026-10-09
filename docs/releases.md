@@ -29,24 +29,25 @@ The runner label is explicitly Intel, as listed in the
 
 ## Checked-in experimental executable
 
-`kext/bin/RaphaelGPU` contains the exact hardware-tested candidate399 executable,
+`kext/bin/RaphaelGPU` contains the exact hardware-tested candidate 399 executable,
 build `f868a8dae9664e469b2011390547c5ca`, from clean source
 `b7e17c09679eb3e78e1be9895d2d5be550a06391`, SHA256
 `d8257d14791c7f1cee6050c250a4327cb35bde75e0bf0036c1bbc470b939ceaa`.
-The matching archive build manifest is copied unchanged. Card221 runs opt-in
-snapshot timing with the installed restartable private-buffer presenter. Hostcopy
-including firsttouch averages6.834ms; this is diagnostic evidence, not optimization.
-The100-second4K observation has4036unique token IDs, no invalid/duplicates; natural
+The matching archive build manifest is copied unchanged. Card 221 runs opt-in
+snapshot timing with the installed restartable private-buffer presenter. Host copy
+including first touch averages 6.834 ms; this is diagnostic evidence, not optimization.
+The 100-second 4K observation has 4036 unique token IDs, no invalid/duplicates; natural
 private-terminal/Docker completion and recovery pass. The late screenshot captured
 the wrong host window and is not returned-desktop proof. Input/audio qualification
-remains separately scoped to395 and preceding recorded runs.
+remains separately scoped to 395 and preceding recorded runs.
 [399 native evidence](../findings/research/console-host-snapshot-timing-native-20261010.md).
 
-Candidate401 separately boots a software-only VirtualBox macOS desktop with1vCPU
+Candidate 401 separately boots a software-only VirtualBox macOS desktop with one vCPU
 and keyboard/awake checks. It does not use this driver for accelerated VBox graphics;
 eight-vCPU timekeeping and graceful GUI shutdown remain open. Original forced
-poweroff/late-unregister receipts are retained. Main's physical330 baseline is
-unchanged; this delivery is prepared fordev and requires root review/push/hostedCI.
+poweroff/late-unregister receipts are retained. Main's physical 330 baseline is
+unchanged. Exact-commit publication checks are tracked in
+[GitHub Actions](https://github.com/icex/macos-raphael-igpu/actions).
 
 ### Historical console qualifications
 

@@ -134,10 +134,10 @@ capture-abort teardown is not a clean shutdown. See
 
 ## Actual VirtualBox software-boot scope
 
-Candidate401 uses a separate cloned guest with native VBox EFI/SMC and1vCPU,
+Candidate 401 uses a separate cloned guest with native VBox EFI/SMC and one vCPU,
 reaching a software desktop and verified keyboard input. This does not qualify
 this accelerated capture/helper package on VBox or provide a VBox GPU transport.
-Eight-vCPU scheduler timekeeping, normal guest shutdown without Terminal job
+Scheduler timekeeping with eight vCPUs timekeeping, normal guest shutdown without Terminal job
 confirmation, and acceleration remain open. Before a controlled shutdown, stop
 only the test's owned awake job and confirm it no longer blocks Terminal closure.
 [Actual result](../findings/research/virtualbox-single-cpu-native-20261010.md).

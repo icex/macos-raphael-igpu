@@ -1,18 +1,17 @@
 # Accelerated desktop in a VM manager console
 
-**October10 update:** actual VirtualBox7.2.18 boots macOS24G830 to a desktop
+**October 10 update:** actual VirtualBox 7.2.18 boots macOS build 24G830 to a desktop
 with one vCPU; Terminal keyboard input and awake assertions pass. Eight vCPUs
-reached userspace but panicked on non-monotonic scheduler time. The one-vCPU
-comparison retains the same emulated TSC mode/frequency. This is **software display,
-not Raphael passthrough or Metal acceleration**. Shutdown hit a Terminal background-job
+reached userspace but panicked on non-monotonic scheduler time. The comparison with one vCPU retains the same emulated TSC mode/frequency. This is **software display,
+not Raphael passthrough or Metal acceleration**. Shutdown hit a Terminal background job
 confirmation and deadline poweroff; GUI unlock delayed unregister, which later passed.
 [Actual VBox evidence](../findings/research/virtualbox-single-cpu-native-20261010.md).
 
-Candidate399 measures host snapshot copy/first-touch at6.834ms versus allocation
-0.02058ms and pending-free0.09521ms. Its100-second4K token observation has4036unique
-IDs and no invalid/duplicate samples; no optimization or60Hz gain is claimed.
+Candidate 399 measures host snapshot copy/first-touch at 6.834 ms versus allocation
+0.02058 ms and pending free 0.09521 ms. Its 100-second 4K token observation has 4036 unique
+IDs and no invalid/duplicate samples; no optimization or 60 Hz gain is claimed.
 Natural completion/recovery pass. Its late wrong-window screenshot is excluded,
-so399 does not add returned-desktop visual qualification.
+so 399 does not add returned-desktop visual qualification.
 [Host timing evidence](../findings/research/console-host-snapshot-timing-native-20261010.md).
 
 Current qualification (candidate395): installed immutable snapshot capture

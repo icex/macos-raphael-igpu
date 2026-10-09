@@ -1,9 +1,9 @@
 # Raphael iGPU acceleration roadmap
 
-Updated2026-10-10. Current accelerated-console functional qualification: **395**;
+Updated 2026-10-10. Current accelerated-console functional qualification: **395**;
 **399** adds stage timing and clean completion, **401** adds actual VirtualBox
 software desktop/input with one vCPU. No VBox Metal acceleration is implemented.
-Eight-vCPU VBox boot panics on scheduler time; one-vCPU shutdown required deadline
+VBox boot with eight vCPUs panics on scheduler time; shutdown with one vCPU required deadline
 poweroff after a Terminal job confirmation, followed by delayed GUI unlock and
 verified unregister. SMP timekeeping and graceful software shutdown remain open.
 [VBox result](../findings/research/virtualbox-single-cpu-native-20261010.md) ·
