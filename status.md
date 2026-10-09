@@ -1,31 +1,28 @@
 # Live status — 2026-10-09
 
-## Candidate351: destination write cost localized; normal desktop restored
+## Candidate352: full-refresh copy improvement; exact shutdown refusal captured
 
-Run `60b6600fc4514bab8b734e41b70ace39`, metal-194, build1.0.351,
-MODE2#289, bootba51b3c6. Native Metal/WindowServer/display checks pass.
-Actual SCK source→RAM is cheap; both direct and RAM→console HiDPI writes
-remain around15–17ms. Native second writes are often cheaper regardless of
-order. All32 full-byte comparisons pass across O0/O2 of identical source;
-compiler optimization does not eliminate the slow writes. No speedup claimed.
+Run `7904cfef4aaa37f79efe02f604d921ac`, metal-195, build1.0.352,
+MODE2#290, bootba51b3c6. Native Metal/WindowServer/display pass. Experimental
+Bochs full refresh disables only VGA dirty logging at explicit SPICE60;
+default image/profile and migration tracking unchanged. HiDPI row copies now
+~1.48ms versus prior~16ms; all16 captured-frame byte checks pass.
 
-Normal Settings UI renews capture permission without user intervention.
-Both moving fixtures finish; diagnostic flag removed, approved O2 presenter
-returns to normal capture and actual virt-manager desktop. Display awake.
-352's separate software KVM test establishes dirty-log rearming first-write
-cost, not yet Bochs-specific causality. Next: opt-in full-refresh Bochs test,
-preserving default behavior and migration tracking; quantify CPU/bandwidth.
+Actual manager delivery44.186/50.084 native and31.758/34.882 HiDPI updates/s
+(full/ROI observers). All fixtures finish, diagnostic flag removed and normal
+desktop restored. Fixture itself produces~37–38HiDPI draws/s; no60Hz ceiling,
+GPU FPS, atomicity or full desktop qualification claim. Next353 uses the SAME
+image/presenter with full-refresh absent/OFF for a controlled CPU/cadence baseline.
 
-Capture CORE_PROBE_PASS, earliest_failure=null. Shutdown:
-exited-after-guest-request; real guest-shutdown terminal process_exited=true.
-Both EOF hooks use already-reaped natural exit (~0.455s), so350's zombie
-refusal remains unresolved and new predicate diagnostics were not exercised.
-Recovery recovered, authorizes_launch=true. VM/cycle stopped, host awake.
-No reboot/rebind needed.1181 host tests pass,8skip; kext/manifest match351.
+Capture CORE_PROBE_PASS, earliest_failure=null. Outer shutdown:
+exited-after-guest-request. Terminal absent: both EOF hooks (~0.370s) see PID113
+stateZ with two tasks, completion_reason=not-sole-task. Keep strict proof;
+investigate remaining-thread shutdown ordering. GPU recovery recovered,
+authorizes_launch=true. VM/cycle stopped, host awake; no reboot/rebind needed.
 
-Candidate changes remain local. Dev277ff81 hosted test/build green; main
-unchanged. General desktop, lifecycle, automatic resize, atomic presentation
-and VirtualBox qualification remain open.
-[Evidence](findings/research/console-dirty-write-20261009.md) ·
-[Raw samples and receipts](findings/research/console-dirty-write-evidence-20261009.json) ·
-[Previous status](findings/research/status-archives/status-before-351-20261009.md).
+1188 host tests pass,8skip; kext/manifest match352. Changes local, dev277ff81
+hosted CI green, main unchanged. General desktop, lifecycle, window resize,
+console audio/install durability and VirtualBox qualification remain open.
+[Evidence](findings/research/bochs-full-refresh-native-20261009.md) ·
+[Raw samples/receipts](findings/research/bochs-full-refresh-native-evidence-20261009.json) ·
+[Previous status](findings/research/status-archives/status-before-352-20261009.md).
