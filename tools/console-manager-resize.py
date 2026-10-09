@@ -9,6 +9,29 @@ import runpy
 import sys
 import time
 
+def surface_metadata(display,cadence,spice):
+    """Read only scalar fields on this widget's existing display channel.
+
+    GI signature verified locally: display_channel_get_primary(surface_id,
+    DisplayPrimary) -> bool. Never access primary.data or open a new session.
+    """
+    channel=cadence.matching_display_channel(display,spice.DisplayChannel)
+    monitors=channel.get_property('monitors')
+    maps=[]
+    if monitors is not None:
+        for monitor in monitors:
+            maps.append({name:int(getattr(monitor,name)) for name in
+                         ('id','surface_id','x','y','width','height')})
+    primary=spice.DisplayPrimary()
+    available=channel.display_channel_get_primary(0,primary)
+    geometry={name:int(getattr(primary,name)) for name in
+              ('width','height','stride','format')} if available else None
+    return dict(channel_id=int(channel.get_property('channel-id')),
+                widget_monitor_id=int(display.get_property('monitor-id')),
+                monitors=maps,primary_surface_id=0,primary_available=bool(available),
+                primary=geometry,
+                scope='existing-channel primary and monitor metadata; no pixel copy or pointer access')
+
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--manager-prefix',type=Path,required=True)
@@ -29,7 +52,8 @@ def main():
     cadence=importlib.util.module_from_spec(spec);spec.loader.exec_module(cadence)
     import gi
     gi.require_version('Gtk','3.0');gi.require_version('SpiceClientGtk','3.0')
-    from gi.repository import Gtk,GLib,Gio,SpiceClientGtk
+    gi.require_version('SpiceClientGLib','2.0')
+    from gi.repository import Gtk,GLib,Gio,SpiceClientGtk,SpiceClientGLib
     # The manager synchronizes this preference after connecting its channels.
     # Store it only in this diagnostic's isolated keyfile settings directory.
     settings=Gio.Settings.new('org.virt-manager.virt-manager.console')
@@ -62,10 +86,10 @@ def main():
             if not control.check():return True
             if control.metadata['resize_guest'] is not True:raise RuntimeError('manager disabled resize-guest')
             if ready_at is None:
-                ready_at=time.monotonic();record(event='viewport-ready',phase=phase,**control.metadata)
+                ready_at=time.monotonic();record(event='viewport-ready',phase=phase,surface_metadata=surface_metadata(display,cadence,SpiceClientGLib),**control.metadata)
             if time.monotonic()-ready_at>=10:
                 pix=display.get_pixbuf()
-                record(event='surface',phase=phase,width=pix.get_width() if pix else None,height=pix.get_height() if pix else None)
+                record(event='surface',phase=phase,surface_metadata=surface_metadata(display,cadence,SpiceClientGLib),width=pix.get_width() if pix else None,height=pix.get_height() if pix else None)
                 phase+=1
                 if phase==len(sizes):
                     done=True;record(event='finished');return False
