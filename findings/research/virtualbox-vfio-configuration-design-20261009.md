@@ -68,3 +68,26 @@ mechanism; ordinary VRAM writes are not restart-safe atomic publication.
 A VirtualBox-styled viewer around QEMU would not satisfy the requested actual
 VirtualBox hypervisor support. Both rendering access and its own display/input/
 audio/lifecycle must be qualified; no configuration-only success is claimed here.
+
+## Executed software discriminator (root-owned)
+
+Root executes the guarded configuration on installed7.2.18. Untraced startup
+reaches the exact backend error: opening`/dev/null/raphael-discriminator-vfio`
+fails with20 (`VERR_PATH_NOT_FOUND`). Retained`VBox.log` contains the actual CFGM
+values. This establishes installed backend configuration dispatch; the VM never
+boots. Machine state is verified poweroff, then the owned VM is unregistered,
+with files retained in`run/c396-vbox-dispatch` and pinned by the accompanying
+13-artifact evidence manifest. The wrapper's exit-untraced.json returncode0 is
+not guest success: the retained application log explicitly reports startup failure.
+
+The attempted traced start fails earlier in VirtualBox hardening with effective
+UID not root, consistent with the setuid tracing restriction. Consequently there
+is **no successful syscall-trace proof** of the untraced startup. The retained
+`opens.strace` covers only that failed traced attempt. The fake access paths and
+exact ENOTDIR diagnostic support the configured refusal; do not promote this to
+independent traced proof that all actual device opens were absent.
+
+No Raphael attachment, PCI enumeration, DMA, interrupts, reset, macOS boot,
+Metal acceleration or VirtualBox console adaptation is qualified by this result.
+The earlier proposed acceptance included a syscall trace which remains unfulfilled;
+its absence is recorded, not silently replaced by the configuration result.
