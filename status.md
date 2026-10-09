@@ -1,55 +1,52 @@
 # Live status — 2026-10-09
 
-## Candidate386: persistent window resize, input and reconnect pass
+## Candidate388: odd 1x modes work on the existing virtual display
 
-Run `e5d5d205577125364146f54224bbd3f6`, metal213,1.0.386,MODE2#309,
-bootba51b3c6. Built source17e907790afba76b50976da674ae75a6a411cc72,
-buildded62ba27d244bf892d516099cc7335d. Executable SHA256
-781269e526cb3dce4736f5b3f031bdfb1f441ec2abd7f81d0e7ccd8cf7d20457.
-Guest boot6A97FB22-D9FD-4639-A869-F257061672A1 reused installed support
-4d424e4034ed6cf6a1f44bd6490e52406fa8d9f25cb1e1ac59692a8f7daf3a46.
-Holder612, presenter769 and resize agent768 started automatically; ttyfd5 attached.
-The sealed capture app/receipt/CDHash remain identical to385, no new TCC prompt.
+Run `f61db53ed51c02394163eb0ba7e08367`, metal214,1.0.388,MODE2#310,
+bootba51b3c6. Sourcecaab7d8, build95053dc30d5e479cbeec0ec58a119168;
+executablea82d6cd0d017c2f62d3614c5f4a6e6cc7cc6ca59c9d5248e6ffe0daf0c9cfcff.
+Installed support4d424e40 starts holder617,resize agent759,presenter760; capture
+app/receipt/CDHash unchanged, ordinary presenter (snapshot unarmed), awake.
 
-SPICE agent-mouse=off retains USB-tablet delivery while the resize agent stays
-attached. Actual manager GDK1 surfaces1460x960→1440x960 match. The native input
-fixture passes five targets/zero misses/exact keyboard token. A deliberate transient
-geometry-change control fails with4changes despite restoring the final mode;
-one unchanged notification is retained without falsely failing the stable test.
-After closing/reopening the viewer,1502x960→1440x960 surfaces match; input passes
-again with geometry_changes0 and unchanged holder/presenter/agent. Closing this
-viewer leaves the exact VM alive. Final3840x2160 restoration passes.
+Existing holder control adds2470x1486 physical/1235x743 logical. Native enumeration
+shows both that2x mode and1235x743 physical/logical1x. Diagnostic source389ef586a2
+selects both directions on the same holder/presenter with exact settled readback.
+Actual manager viewport1235x743,GDK1,resize-guest=false has matching SPICE monitor
+and pixbuf sizes; screenshot shows a correctly sized desktop. This is explicit
+selection evidence, not yet automatic resize at1x or a new hiDPI=0 holder.
 
-Default guest stereo sample capture passes48kHz997/1498Hz; independent sink,
-volume,mute,defaults and owned-module restoration all pass. This does not prove
-physical endpoint audibility or A/V sync. The display stays awake during testing.
-Final logs retain two refused count0 monitor requests and one ConnectionRefusedError
-request8 during the direct geometry-control test; later requests succeed. A final
-capture-identity observer first ran as root and failed ownership checks; rerunning
-as the actual user501 passes with the original seal. No capture app was modified.
+Retained observer failures: original probe rejected expected mirror-source
+membership before mutation. Next probe configured successfully but rejected the
+mirror destination's native mode adaptation. Revised observer keeps exact
+preconfigure checks and permits only mode/frame-size adaptation of an existing
+mirror destination after configuration, preserving identities/origins/mirror graph.
+Original results remain false. Initial pointer attempt hits two top targets then
+fails because Dock covers lower targets (screenshot records obstruction). Retest
+clicks visible portions of the same lower targets: five hits, zero misses, exact
+RGPUB821A650 token, geometry_changes0, passed=true, same1235x743/backing_scale1.
+An lsof observer queried an absent tty alias; exact tty.com.redhat.spice.0 shows
+agent759/fd5. These observer errors are not hidden or counted as passes.
 
-Shutdown: harness exited-after-guest-request, private terminal guest-shutdown with
-process_exited=true. Docker container die0/destroy, no kill/stop. Both capture hooks
-natural-container-exit, deferred~0.401s, shutdown_event_wait=false, zombie=false;
-console clean-eof, critical recv-reset. Recovery recovered/authorizes_launch=true.
-Critical snapshot18 accepted terminal-prefix;1invalid-chunk-bounds line and
-incomplete snapshot7(318validchunks,noEND) retained. CORE_PROBE_PASS remains narrow;
-the early window probe has zero observed presented frames and does not qualify
-performance. Host remains awake, vfio-pci, power/control=on; no reboot/rebind.
+Default stereo sample capture48kHz997/1498Hz passes; independent route/volume/
+mute/defaults/module restoration all pass. Endpoint audibility/A-V sync unqualified.
+Closing owned viewer leaves exact VM alive; final3840x2160 HiDPI restoration passes.
+Shutdown exited-after-guest-request; private terminal guest-shutdown/process_exited
+true; Docker die0/destroy, no container kill/stop. Both capture hooks natural exit,
+deferred~0.390s, no shutdown-event wait/zombie; consoleEOF,criticalRST. Critical
+snapshot18(367records) terminal-prefix accepted, zero corrupt/incomplete snapshots.
+Recovery recovered/authorizes_launch=true. Host awake,vfio-pci,power/control=on.
 
-Evidence: run/candidate-386-results; c386-persistence.txt;
-c386-input-positive-result.txt; c386-input-negative-result.txt;
-c386-reconnect-manager-events.jsonl; c386-input-reconnect-result.txt;
-c386-audio-result.txt; c386-audio-restored-independent.json;
-c386-final-state.txt; c386-final-capture-identity-user.txt;
-c386-viewer-close-alive.json; c386-docker-events.jsonl.
-Mouse-routing host suite1426tests/8skip passed; staging88tests passed.
-Final delivery suite1426tests/8skip passed; tested386 executable and matching
-build-manifest are in kext/bin. Hosted delivery CI remains pending.
+Evidence: run/candidate-388-results; c388-scale-setup.txt;
+c388-odd-mode-result.txt;c388-odd-mode-v2-result.txt;c388-restore-two-x-v3.txt;
+c388-one-x-v3.txt;c388-odd-manager-events.jsonl;c388-odd-desktop.png;
+c388-input-odd-timed-result.txt;c388-odd-input.png;c388-input-visible-result.txt;
+c388-audio-result.txt;c388-audio-restored-independent.json;
+c388-final-state.txt;c388-final-capture-identity.txt;c388-docker-events.jsonl.
+Full host suite1426tests/8skip54.145s passes; native scale/input probes compile.
 
-Next: deliver the verified385/386 support and tested386 binary with updated docs
-and green exact-commit hosted CI. Resize currently accepts even physical
-640..3840x480..2160 only and forcesHiDPI2; at GDK1 this halves the logical workspace.
-Odd-size/DPI policy, full-frame corruption/performance, forced-stop/crash and other
-VM managers/VirtualBox remain open. Delivered dev remainsc6d7ef1 with hosted
-37968448791 test/build green until the new delivery passes. Main unchanged.
+Delivered devc8fc5d5296d33e15c6f1284dd9c43024ae62eecd includes tested386 kext/bin,
+resize/input/lifecycle docs; hosted37975249900 test/build success, release skipped.
+Main unchanged. Candidate390 prepares explicit persistent1x/2x scale and v2 control
+requests; fixed hiDPI=0,odd automatic resizing,full4K1x and persisted choice need
+native qualification. Full-frame integrity/performance,forced-stop/crash,other
+managers/VirtualBox and broader roadmap remain open. No new388binary delivery yet.
