@@ -24,14 +24,24 @@ static SCStreamConfiguration *configuration(size_t w, size_t h, unsigned fps) {
     c.minimumFrameInterval=CMTimeMake(1,fps); c.queueDepth=3; c.showsCursor=YES;
     return c;
 }
-@interface ConsoleOutput : NSObject <SCStreamOutput, SCStreamDelegate>
+// Processing-queue-owned statistics. Durations are wall time, not CPU time.
+enum { TimingQueue, TimingLock, TimingRows, TimingFence, TimingMode,
+       TimingUnlock, TimingTotal, TimingCount };
+typedef struct {
+    double start, sum[TimingCount], maximum[TimingCount];
+    uint64_t frames, bytes, transitions;
+    size_t width, height, strideMin, strideMax;
+} ConsoleTiming;
+@interface ConsoleOutput : NSObject <SCStreamOutput, SCStreamDelegate> {
+    ConsoleTiming timing;
+    uint64_t droppedCount; // atomic: capture queue writes, processing queue reads
+}
 @property io_connect_t connection;
 @property mach_vm_address_t address;
 @property mach_vm_size_t length;
 @property NSUInteger frames, width, height, targetWidth, targetHeight, reportFrames;
 @property double reportTime, copySeconds, maxCopySeconds;
 @property BOOL stopping, updating, running;
-@property NSUInteger dropped;
 @property(strong) dispatch_queue_t processingQueue;
 @property(strong) dispatch_semaphore_t copying;
 @end
@@ -41,15 +51,17 @@ static SCStreamConfiguration *configuration(size_t w, size_t h, unsigned fps) {
 }
 - (void)stream:(SCStream *)stream didOutputSampleBuffer:(CMSampleBufferRef)sample ofType:(SCStreamOutputType)type {
     if(type!=SCStreamOutputTypeScreen || !CMSampleBufferIsValid(sample))return;
+    double callbackTime=now();
     // Keep at most one copy queued/running. Slow mappings must not accumulate
     // retained frames ahead of mode changes and shutdown on the control queue.
-    if(dispatch_semaphore_wait(self.copying,DISPATCH_TIME_NOW)) { self.dropped++;return; }
+    if(dispatch_semaphore_wait(self.copying,DISPATCH_TIME_NOW)) { __atomic_fetch_add(&droppedCount,1,__ATOMIC_RELAXED);return; }
     CFRetain(sample);
     dispatch_async(self.processingQueue,^{
-        [self presentSample:sample];CFRelease(sample);dispatch_semaphore_signal(self.copying);
+        [self presentSample:sample callbackTime:callbackTime];CFRelease(sample);dispatch_semaphore_signal(self.copying);
     });
 }
-- (void)presentSample:(CMSampleBufferRef)sample {
+- (void)presentSample:(CMSampleBufferRef)sample callbackTime:(double)callbackTime {
+    double workerTime=now();
     if(self.stopping || self.updating)return;
     NSArray *attachments=(__bridge NSArray *)CMSampleBufferGetSampleAttachmentsArray(sample, false);
     if(!attachments.count || [attachments[0][SCStreamFrameInfoStatus] integerValue]!=SCFrameStatusComplete)return;
@@ -59,29 +71,81 @@ static SCStreamConfiguration *configuration(size_t w, size_t h, unsigned fps) {
     if(w!=self.targetWidth || h!=self.targetHeight || w*h*4>self.length)return;
     double begin=now();
     if(CVPixelBufferLockBaseAddress(image,kCVPixelBufferLock_ReadOnly)!=kCVReturnSuccess)return;
+    double locked=now();
     const uint8_t *src=CVPixelBufferGetBaseAddress(image);
     size_t stride=CVPixelBufferGetBytesPerRow(image);
+    BOOL copied=NO, changed=NO;
+    double rowsBegin=0, rowsEnd=0, fenced=0, modeBegin=0, modeEnd=0, end=0;
     if(src && stride>=w*4) {
+        rowsBegin=now();
         for(size_t y=0;y<h;y++)memcpy((void *)(self.address+y*w*4),src+y*stride,w*4);
+        rowsEnd=now();
         _mm_sfence(); // publish write-combined stores before the mode or frame count
-        if(w!=self.width || h!=self.height) {
+        fenced=now();
+        changed=(w!=self.width || h!=self.height);
+        modeBegin=now();
+        if(changed) {
             uint64_t dims[]={w,h};
             kern_return_t kr=IOConnectCallScalarMethod(self.connection,0,dims,2,NULL,NULL);
             if(kr) { fprintf(stderr,"console mode: %x\n",kr);exit(4); }
             self.width=w;self.height=h;
             printf("CONSOLE mode=%zux%zu\n",w,h);
         }
-        double end=now(),duration=end-begin;
+        modeEnd=now();
+        end=now();
+        double duration=end-begin;
+        copied=YES;
         self.frames++;self.reportFrames++;self.copySeconds+=duration;
         if(duration>self.maxCopySeconds)self.maxCopySeconds=duration;
-        if(self.frames==1 || end-self.reportTime>=5) {
-            printf("CONSOLE frames=%lu size=%zux%zu elapsed=%.3f copied_fps=%.2f copy_avg_ms=%.3f copy_max_ms=%.3f dropped=%lu\n",
-                (unsigned long)self.frames,w,h,end-self.reportTime,
-                self.reportFrames/(end-self.reportTime),1000*self.copySeconds/self.reportFrames,1000*self.maxCopySeconds,(unsigned long)self.dropped);
-            self.reportTime=end;self.reportFrames=0;self.copySeconds=0;self.maxCopySeconds=0;fflush(stdout);
-        }
+
     }
+    double unlockBegin=now();
     CVPixelBufferUnlockBaseAddress(image,kCVPixelBufferLock_ReadOnly);
+    double unlocked=now();
+    if(!copied)return;
+    if(self.frames==1 || end-self.reportTime>=5) {
+        printf("CONSOLE frames=%lu size=%zux%zu elapsed=%.3f copied_fps=%.2f copy_avg_ms=%.3f copy_max_ms=%.3f dropped=%lu\n",
+            (unsigned long)self.frames,w,h,end-self.reportTime,
+            self.reportFrames/(end-self.reportTime),1000*self.copySeconds/self.reportFrames,1000*self.maxCopySeconds,(unsigned long)__atomic_load_n(&droppedCount,__ATOMIC_RELAXED));
+        self.reportTime=end;self.reportFrames=0;self.copySeconds=0;self.maxCopySeconds=0;fflush(stdout);
+    }
+    // A geometry transition ends the preceding window; never mix resolutions.
+    if(timing.start && changed) {
+        [self reportTiming:unlocked];
+    }
+    if(!timing.start) {
+        timing.start=workerTime;timing.width=w;timing.height=h;
+        timing.strideMin=stride;timing.strideMax=stride;
+    }
+    if(changed) {
+        timing.transitions++;
+        // Transition cost has its own count; exclude the entire frame from steady statistics.
+        printf("CONSOLE_TIMING_MODE size=%zux%zu mode_ms=%.3f total_ms=%.3f\n",
+               w,h,1000*(modeEnd-modeBegin),1000*(unlocked-workerTime));
+        return;
+    }
+    double values[TimingCount]={workerTime-callbackTime,locked-begin,
+        rowsEnd-rowsBegin,fenced-rowsEnd,modeEnd-modeBegin,
+        unlocked-unlockBegin,unlocked-workerTime};
+    timing.frames++;timing.bytes+=(uint64_t)w*h*4;
+    if(stride<timing.strideMin)timing.strideMin=stride;
+    if(stride>timing.strideMax)timing.strideMax=stride;
+    for(unsigned i=0;i<TimingCount;i++) {
+        timing.sum[i]+=values[i];
+        if(values[i]>timing.maximum[i])timing.maximum[i]=values[i];
+    }
+    if(unlocked-timing.start>=5)[self reportTiming:unlocked];
+}
+- (void)reportTiming:(double)end {
+    static const char *names[]={"queue","lock","rows","sfence","mode_check","unlock","worker_total"};
+    printf("CONSOLE_TIMING size=%zux%zu window_s=%.3f steady_frames=%llu bytes=%llu stride_min=%zu stride_max=%zu excluded_mode_frames=%llu",
+           timing.width,timing.height,end-timing.start,
+           (unsigned long long)timing.frames,(unsigned long long)timing.bytes,
+           timing.strideMin,timing.strideMax,(unsigned long long)timing.transitions);
+    for(unsigned i=0;i<TimingCount;i++)
+        printf(" %s_avg_ms=%.3f %s_max_ms=%.3f",names[i],
+               timing.frames?1000*timing.sum[i]/timing.frames:0,names[i],1000*timing.maximum[i]);
+    printf("\n");fflush(stdout);memset(&timing,0,sizeof(timing));
 }
 @end
 
