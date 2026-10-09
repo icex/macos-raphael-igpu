@@ -1,0 +1,124 @@
+{
+  "scope": "offline production build and non-VM tests; no physical runtime",
+  "build_exit_code": 0,
+  "initial_build_exit_code": 2,
+  "host_tests": 1488,
+  "host_skipped": 8,
+  "artifacts": [
+    {
+      "path": "/home/bogdan/macos-vm/run/c418-build/input-provenance.json",
+      "bytes": 1776,
+      "sha256": "e54bc8f5627edfc02ce8e768165b3d1aa47b70da309123d858b617c9dab69cf9"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c418-build/input-provenance-final.json",
+      "bytes": 2299,
+      "sha256": "8950d615ccb5bda18b7b0dc79b90575fa3c8e5570ed289bac1cc15fd65392c61"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c418-build/build-result.json",
+      "bytes": 2703,
+      "sha256": "b055535ec8fa7e41482e785bd01600643574380e6b47e6d93fab4352b1492fb7"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c418-build/configure.log",
+      "bytes": 2385,
+      "sha256": "fbc857268b3172a3169a1127f908b2ae7f4e42623e6f86717ed6627397d29190"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c418-build/build.log",
+      "bytes": 1167778,
+      "sha256": "39678c5f2246222eddddd709decee71f6ab06a4e18abee7497788114a2ba72ff"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c418-build/build-fixed.log",
+      "bytes": 134060,
+      "sha256": "422f3fe1a395439ec29e523b6431a1d9a14d11f600b4d5df71171833bd057f8c"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c418-build/transaction-tests.log",
+      "bytes": 220,
+      "sha256": "4cd906c068b447bd9c056ac9f77eb7a41306e966621048dd4e769c1eedfa64fd"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c418-build/transaction-uapi-tests-final.log",
+      "bytes": 342,
+      "sha256": "c0469af0335a911067a1deb3306ce145a609c9b783b8401558a51ccb7fa47859"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c418-build/final-patch-apply.txt",
+      "bytes": 149,
+      "sha256": "3165de575b8659df3bb05aab559481bdcfdde0656dca0c6717ecf1460f0b8d8c"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c418-build/full-suite.log",
+      "bytes": 14005,
+      "sha256": "63a409eff796c9e5ea268a817190091d6a948abca78c286e356c2cc5af549a66"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c418-build/build-patched.sh",
+      "bytes": 258,
+      "sha256": "03027c2399c7634cee1c0cd736c4b860ce9bea6c8abe9a68f8947f481eeb4c58"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c418-build/VBoxDD.so.ldd.txt",
+      "bytes": 2668,
+      "sha256": "c0a20d6048ab498b69afca06d84f1afbfb7b35f334a20fcc2bc07e4055497d39"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c418-build/VBoxHeadless.ldd.txt",
+      "bytes": 2453,
+      "sha256": "5fdc9df711888e391265313df738fba6982f25c9ad4213f98f3ce881b3dac4ce"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c418-build/VBoxManage.ldd.txt",
+      "bytes": 2583,
+      "sha256": "c08cd5d5660ac1e5273caf3be8d46d6616fefc737ae75d6569716b1d00814c84"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c418-build/VBoxSVC.ldd.txt",
+      "bytes": 2789,
+      "sha256": "c6fbe6311c54fd208a40b899545d56f384fb6a83732484b1168d2e9e7d3b954a"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c418-build/VBoxVMM.so.ldd.txt",
+      "bytes": 2288,
+      "sha256": "343ca31f8fb2c8573208638a1a70a9f615b7b99918afdaf9b97a0aad1629b22e"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c418-build/VBoxXPCOM.so.ldd.txt",
+      "bytes": 2288,
+      "sha256": "e7ce96b9c0b90cde63e9f7af2086d091c0ee5a36ee526b26a0efccc4a5678dd3"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c418-build/components-VBoxC.so.ldd.txt",
+      "bytes": 2826,
+      "sha256": "4f86de8604f0bf287b782d9228de74a538abbac496ce957cd149d0d7b6267e2b"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c418-build/VirtualBox-7.2.18/src/VBox/VMM/VMMR3/PGMR3Phys.cpp",
+      "bytes": 257948,
+      "sha256": "097e27b9c3219bce0aae200719ccf72093a2e153804e0c3e882d466fdd19c3b3"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c418-build/VirtualBox-7.2.18/src/VBox/VMM/VMMR3/PGMR3SavedState.cpp",
+      "bytes": 137931,
+      "sha256": "312116ffc88cd306dc933a3cf1d7b987146b25e1300965b4604b23aa57aa1d28"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c418-build/VirtualBox-7.2.18/src/VBox/VMM/VMMAll/PGMAllPhys.cpp",
+      "bytes": 222155,
+      "sha256": "8a0b40d1ced53a9e4bc1eb922366e40366276fe4468b39721c68b7c52f654907"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c418-build/VirtualBox-7.2.18/src/VBox/VMM/VMMR0/PGMR0SharedPage.cpp",
+      "bytes": 7986,
+      "sha256": "aa96bdaae3af82d85d4c05f483c4681dbb4092203d81e453195283b9a20eed5d"
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c418-build/VirtualBox-7.2.18/src/VBox/VMM/VMMR0/PGMR0.cpp",
+      "bytes": 60019,
+      "sha256": "cbbdde7754434e3455e896795fcb9eddefda13b66123b3fe315f0569d7e8c0bd"
+    }
+  ]
+}

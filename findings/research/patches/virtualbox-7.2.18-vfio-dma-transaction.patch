@@ -316,3 +316,31 @@
              }
              else if (   pFun->offMsiCtrl == uAddress
                       && cb == sizeof(uint16_t))
+--- a/src/VBox/Devices/Bus/DevPciVfio.h
++++ b/src/VBox/Devices/Bus/DevPciVfio.h
+@@ -78,0 +79,12 @@
++
++
++/* Linux UAPI: IOMMU_IOAS_UNMAP, fixed request with flags absent. */
++struct iommu_ioas_unmap
++{
++    uint32_t size;
++    uint32_t ioas_id;
++    uint64_t iova;
++    uint64_t length;
++};
++AssertCompileSize(struct iommu_ioas_unmap, 2 * sizeof(uint32_t) + 2 * sizeof(uint64_t));
++#define IOMMU_IOAS_UNMAP                _IO(IOMMUFD_TYPE, 0x86)
+@@ -205,0 +218,12 @@
++
++
++/* Linux UAPI fixed prefix; flags=0 uses no optional dirty-bitmap tail. */
++struct vfio_iommu_type1_dma_unmap
++{
++    uint32_t argsz;
++    uint32_t flags;
++    uint64_t iova;
++    uint64_t size;
++};
++AssertCompileSize(struct vfio_iommu_type1_dma_unmap, 2 * sizeof(uint32_t) + 2 * sizeof(uint64_t));
++#define VFIO_IOMMU_UNMAP_DMA            _IO(VFIO_TYPE, VFIO_BASE + 14)
