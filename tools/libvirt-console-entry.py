@@ -151,7 +151,8 @@ def exit_check(stage,**details):
 def refusal_diagnostics(identity, proc=Path('/proc')):
     """Best-effort refusal context, NEVER exit/wait eligibility or completion.
 
-    At most20ms between operations,64 counted entries (+1 lookahead),8 task stats,4096 bytes
+    At most20ms between operations,64 counted entries (+1 lookahead) per scan,
+    two task scans with8 task stats each,64 descriptor names,4096 bytes
     per stat and128 bytes of symbolic wchan. Existing docker-exec timeout remains
     the external syscall bound. Proc observations race; counts may be lower bounds.
     """
@@ -197,27 +198,65 @@ def refusal_diagnostics(identity, proc=Path('/proc')):
             raise DiagnosticError('malformed')
         result['diag_wchan']=wchan
     except (OSError,ValueError,DiagnosticError) as exc:error('wchan',exc)
-    count=0;sampled=0
+    def tasks(prefix, label):
+        result[prefix+'tasks']=[];result[prefix+'tasks_truncated']=False
+        count=0;sampled=0
+        try:
+            budget()
+            with os.scandir(base/'task') as entries:
+                for entry in entries:
+                    budget()
+                    if count==64:
+                        result[prefix+'tasks_truncated']=True;break
+                    count+=1
+                    if not entry.name.isdigit():raise DiagnosticError('malformed')
+                    if sampled<8:
+                        sampled+=1
+                        try:
+                            task=parse(base/'task'/entry.name/'stat')
+                            result[prefix+'tasks'].append(dict(tid=int(entry.name),**task))
+                        except (OSError,ValueError,IndexError,DiagnosticError) as exc:
+                            error(label,exc)
+                    else:result[prefix+'tasks_truncated']=True
+            result[prefix+'task_count']=count
+        except (OSError,ValueError,DiagnosticError) as exc:
+            result[prefix+'task_count']=count;result[prefix+'tasks_truncated']=True;error(label,exc)
+    tasks('diag_', 'task')
+    # Observation only: count descriptor names without following targets, bracket
+    # with exact leader identity reads, then independently sample tasks again.
+    # Everything shares the original20ms budget; no sleep, new grace or decision.
     try:
+        before=parse(base/'stat')
+        if before['start_ticks']!=identity['start_ticks']:
+            raise DiagnosticError('identity-changed')
+        count=0;truncated=False
         budget()
-        with os.scandir(base/'task') as entries:
-            for entry in entries:
+        with os.scandir(base/'fd') as entries:
+            for item in entries:
                 budget()
-                if count==64:
-                    result['diag_tasks_truncated']=True;break
+                if count==64:truncated=True;break
+                if not item.name.isdigit():raise DiagnosticError('malformed')
                 count+=1
-                if not entry.name.isdigit():raise DiagnosticError('malformed')
-                if sampled<8:
-                    sampled+=1
-                    try:
-                        task=parse(base/'task'/entry.name/'stat')
-                        result['diag_tasks'].append(dict(tid=int(entry.name),**task))
-                    except (OSError,ValueError,IndexError,DiagnosticError) as exc:
-                        error('task',exc)
-                else:result['diag_tasks_truncated']=True
-        result['diag_task_count']=count
-    except (OSError,ValueError,DiagnosticError) as exc:
-        result['diag_task_count']=count;result['diag_tasks_truncated']=True;error('tasks',exc)
+        after=parse(base/'stat')
+        if after['start_ticks']!=identity['start_ticks']:
+            raise DiagnosticError('identity-changed')
+        result['diag_fd_count']=count
+        result['diag_fds_truncated']=truncated
+        result['diag_final_stat']=after
+    except (OSError,ValueError,IndexError,DiagnosticError) as exc:
+        error('fd',exc)
+    tasks('diag_second_', 'task2')
+    try:
+        final=parse(base/'stat')
+        if final['start_ticks']!=identity['start_ticks']:
+            raise DiagnosticError('identity-changed')
+        result['diag_final_stat']=final
+    except (OSError,ValueError,IndexError,DiagnosticError) as exc:
+        # Do not present counts as identity-rechecked if the final read failed.
+        for key in ('diag_fd_count','diag_fds_truncated','diag_final_stat',
+                    'diag_second_task_count','diag_second_tasks','diag_second_tasks_truncated'):
+            result.pop(key,None)
+        error('stat2',exc)
     return result
 
 
