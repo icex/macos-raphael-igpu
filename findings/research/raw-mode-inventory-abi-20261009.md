@@ -31,3 +31,29 @@ Compare raw absent-public modes13/18/20 with visible21 to discriminate creation
 failure from public-list filtering. Availability of3840×2304 already contradicts
 a simple monotonic maximum-size explanation. Serial reuse/cache persistence is
 not established by this source; no serial or cache changes are proposed here.
+
+## Native raw evidence and preferred configuration correction
+
+`run/c390-raw-modes.txt` contains raw valid1x IDs13/18/20, flags3, at
+2880×1800/3360×2100/3840×2160. Matching2x descriptors36/37/40 have flags0x200002
+without the validity bit. Native-flag4 belongs to first advertised2048×1536 mode1.
+The decoded initDisplayModeList comparison scans all raw matching2x entries,
+not just valid entries; it suppresses those larger-than-native1x modes. Public
+duplicate-mode options act after this filter.3840×2304 survives without a matching
+2x descriptor, arguing against a simple size limit.
+
+CoreGraphics applySettings and CoreDisplay VirtualDisplayProxy applyProxySettings
+serialize/iterate supplied modes in order. The first/native correspondence is
+native evidence, not a proven general private-SPI ordering guarantee. The minimal
+public-path experiment moves the existing3840×2304 default to the front ONLY at
+scale1, retaining all entries and descriptor bounds. Scale2 and custom tables are
+unchanged. Root must verify raw native flags, public4K visibility, and ordinary
+public mode selection after native installation.
+
+A separately prepared raw configuration diagnostic is **not the preferred path**
+and must not be run while this mode-table correction is being qualified. Its ABI
+is source-proven: SLConfigureDisplayWithDisplayMode checks public membership then
+passes a mode number to SLSConfigureDisplayMode; callee assembly7ff807e04f30 saves
+RDI(config),ESI(display),EDX(mode), returns status EAX. Constructing a synthetic
+CGDisplayMode would still hit public membership validation. No private mutating
+probe, binary patch, cache purge, or serial change has been executed here.

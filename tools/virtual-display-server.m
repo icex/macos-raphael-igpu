@@ -310,6 +310,19 @@ int main(int argc,const char **argv) { @autoreleasepool {
         [modes addObject:[[CGVirtualDisplayMode alloc] initWithWidth:kDefaultModes[i][0]*2/guestScale height:kDefaultModes[i][1]*2/guestScale refreshRate:60]];
         [names addObject:[NSString stringWithFormat:@"%ux%u",kDefaultModes[i][0]*2/guestScale,kDefaultModes[i][1]*2/guestScale]];
     }
+    // 24G830 raw inventory marks the first advertised base mode native.
+    // SkyLight initDisplayModeList suppresses larger-than-native 1x modes
+    // when any same-pixel 2x descriptor exists, even if that descriptor is
+    // invalid. Keep the existing maximum default first at 1x, so controlled
+    // sizes are never larger than native. Preserve scale2/custom ordering.
+    // This changes ordering only, not the descriptor limit or mode count.
+    if(guestScale==1&&!customModes&&modes.count){
+        NSUInteger last=modes.count-1;
+        if(![names[last] isEqual:@"3840x2304"]){emit(@{@"error":@"maximum default mode changed"});return 2;}
+        id nativeMode=modes[last];NSString *nativeName=names[last];
+        [modes removeObjectAtIndex:last];[names removeObjectAtIndex:last];
+        [modes insertObject:nativeMode atIndex:0];[names insertObject:nativeName atIndex:0];
+    }
     if(!modes.count){emit(@{@"error":@"no valid modes"});return 2;}
     CGVirtualDisplayDescriptor *d=[CGVirtualDisplayDescriptor new];
     d.queue=dispatch_get_main_queue();d.name=@"Raphael Virtual Display";
