@@ -72,7 +72,7 @@ class RefreshAdmissionTests(unittest.TestCase):
     def test_snapshot_admission_exact_profile_and_no_side_effect_on_refusal(self):
         base=dict(VM_MANAGER='libvirt',VM_CONSOLE='bochs-spice',GENERIC_GRAPHICS='off',
                   CONSOLE_REFRESH='60',CONSOLE_FULL_REFRESH='on',CONSOLE_SNAPSHOT='on')
-        cases=[({},True),({'CONSOLE_SNAPSHOT':'restart'},True),({'CONSOLE_SNAPSHOT':'restart-timing'},True),({'CONSOLE_SNAPSHOT':'restart-timing-pool'},True),({'CONSOLE_SNAPSHOT':'off'},True),({'CONSOLE_SNAPSHOT':True},False),
+        cases=[({},True),({'CONSOLE_REFRESH':'120'},True),({'CONSOLE_SNAPSHOT':'restart'},True),({'CONSOLE_SNAPSHOT':'restart-timing'},True),({'CONSOLE_SNAPSHOT':'restart-timing-pool'},True),({'CONSOLE_SNAPSHOT':'off'},True),({'CONSOLE_SNAPSHOT':True},False),
                ({'VM_CONSOLE':'bochs'},False),({'GENERIC_GRAPHICS':'on'},False),
                ({'CONSOLE_FULL_REFRESH':'off'},False),({'CONSOLE_REFRESH':'default'},False)]
         cases += [(dict(change,CONSOLE_SNAPSHOT='restart'),ok) for change,ok in cases if 'CONSOLE_SNAPSHOT' not in change]
@@ -120,7 +120,7 @@ class RefreshAdmissionTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError,'invalid admitted console full'):mod.validate_admission(data,'a'*32,mod.digest(data),tmp,'boot')
 
     def test_invalid_requested_refresh_cannot_publish_admission(self):
-        for value in ('30','120',60,True,None,''):
+        for value in ('30','144',60,True,None,''):
             with self.subTest(value=value), tempfile.TemporaryDirectory() as tmp:
                 manifest=dict(launch_options={'VM_MANAGER':'libvirt','CONSOLE_REFRESH':value})
                 with self.assertRaisesRegex(ValueError,'refresh'):mod.prepare(tmp,manifest,b'',{}, {})

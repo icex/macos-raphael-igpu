@@ -63,7 +63,7 @@ def build_plan(argv, run_id):
     require(match is not None and int(match[1]) <= 64, 'unreviewed CPU topology')
     cores = match[1]
     spice = one(rows, '-spice')
-    require(spice in (SPICE, SPICE+',max-refresh-rate=60', SPICE+',agent-mouse=off', SPICE+',max-refresh-rate=60,agent-mouse=off') and one(rows, '-vga') == 'none' and
+    require(spice in tuple(SPICE+rate+agent for rate in ('', ',max-refresh-rate=60', ',max-refresh-rate=120') for agent in ('', ',agent-mouse=off')) and one(rows, '-vga') == 'none' and
             one(rows, '-display') == 'none', 'unreviewed console profile')
     require(one(rows, '-audiodev') == 'pa,id=hda', 'unreviewed audio backend')
     require(one(rows, '-smbios') == 'type=2' and one(rows, '-boot') == 'menu=on', 'unreviewed boot profile')
@@ -86,8 +86,8 @@ def build_plan(argv, run_id):
             BOCHS+',x-debug-full-refresh=on,x-debug-snapshot=on,x-debug-snapshot-restart=on,x-debug-snapshot-timing=on',
             BOCHS+',x-debug-full-refresh=on,x-debug-snapshot=on,x-debug-snapshot-restart=on,x-debug-snapshot-timing=on,x-debug-snapshot-pool=on'),
             'unreviewed Bochs full refresh profile')
-    require(bochs[0] == BOCHS or spice.removesuffix(',agent-mouse=off') == SPICE+',max-refresh-rate=60',
-            'full refresh requires explicit SPICE60')
+    require(bochs[0] == BOCHS or spice.removesuffix(',agent-mouse=off') in (SPICE+',max-refresh-rate=60', SPICE+',max-refresh-rate=120'),
+            'full refresh requires explicit SPICE60/120')
     expected = ['qemu-xhci,id=xhci', 'usb-kbd,bus=xhci.0', 'usb-tablet,bus=xhci.0',
                 'usb-audio,audiodev=hda,bus=xhci.0', 'ich9-ahci,id=sata',
                 'ide-hd,bus=sata.2,drive=OpenCoreBoot', 'ide-hd,bus=sata.4,drive=MacHDD',

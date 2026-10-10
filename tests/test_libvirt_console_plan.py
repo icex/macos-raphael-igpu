@@ -42,10 +42,19 @@ class LibvirtConsolePlanTests(unittest.TestCase):
         args=[n.attrib['value'] for n in root.findall('./{'+plan.NS+'}commandline/{'+plan.NS+'}arg')]
         self.assertEqual(args[-2:],['-spice','max-refresh-rate=60'])
         self.assertEqual(len(root.findall('./devices/graphics')),1)
-        for extra in ('max-refresh-rate=120','max-refresh-rate=0','max-refresh-rate=60,port=5905',
+        for extra in ('max-refresh-rate=144','max-refresh-rate=0','max-refresh-rate=60,port=5905',
                       'max-refresh-rate=60,max-refresh-rate=60'):
             bad=native_fixture();bad[bad.index(plan.SPICE)]+=','+extra
             with self.subTest(extra=extra),self.assertRaises(ValueError):plan.build_plan(bad,'1'*32)
+
+    def test_120hz_preserves_single_server_and_snapshot_profile(self):
+        argv=native_fixture();argv[argv.index(plan.SPICE)]+=",max-refresh-rate=120"
+        argv[argv.index(plan.BOCHS)]+=",x-debug-full-refresh=on,x-debug-snapshot=on,x-debug-snapshot-restart=on,x-debug-snapshot-timing=on,x-debug-snapshot-pool=on"
+        result=plan.build_plan(argv,'1'*32);root=ET.fromstring(result['xml'])
+        args=[n.attrib['value'] for n in root.findall('./{'+plan.NS+'}commandline/{'+plan.NS+'}arg')]
+        self.assertEqual(args[-2:],['-spice','max-refresh-rate=120'])
+        self.assertEqual(len(root.findall('./devices/graphics')),1)
+        self.assertEqual(result['native_argv'],argv)
 
     def test_snapshot_exact_property_and_profile(self):
         for setting in ('on','restart','restart-timing','restart-timing-pool'):

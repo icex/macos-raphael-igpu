@@ -55,7 +55,7 @@ class VmEntryTests(unittest.TestCase):
 
     def test_full_refresh_shell_only_accepts_explicit_libvirt_spice60(self):
         source=ENTRY.read_text();block=source[source.index('# Explicit presentation-only console:'):source.index('if [[ -n "${LAN_TAP_NODE:-}" ]]')]
-        for full,rate,manager,ok in [('on','60','libvirt',True),('off','60','libvirt',True),('on','default','libvirt',False),('on','60','direct',False),('yes','60','libvirt',False)]:
+        for full,rate,manager,ok in [('on','60','libvirt',True),('on','120','libvirt',True),('off','60','libvirt',True),('on','default','libvirt',False),('on','60','direct',False),('yes','60','libvirt',False)]:
             env=dict(os.environ,CONSOLE_FULL_REFRESH=full,CONSOLE_REFRESH=rate,VM_MANAGER=manager,VM_CONSOLE='bochs-spice',GENERIC_GRAPHICS='off',EXTRA='-display none')
             result=subprocess.run(['bash','-c',block+'\nprintf "%s" "$EXTRA"'],env=env,capture_output=True,text=True,timeout=3)
             self.assertEqual(result.returncode==0,ok,result.stderr)
@@ -64,7 +64,7 @@ class VmEntryTests(unittest.TestCase):
     def test_snapshot_shell_selector_exact_native_profile(self):
         source=ENTRY.read_text();block=source[source.index('# Explicit presentation-only console:'):source.index('if [[ -n "${LAN_TAP_NODE:-}" ]]')]
         base=dict(os.environ,CONSOLE_SNAPSHOT='on',CONSOLE_FULL_REFRESH='on',CONSOLE_REFRESH='60',VM_MANAGER='libvirt',VM_CONSOLE='bochs-spice',GENERIC_GRAPHICS='off',EXTRA='-display none')
-        cases=[({},True),({'CONSOLE_SNAPSHOT':'restart'},True),({'CONSOLE_SNAPSHOT':'restart-timing'},True),({'CONSOLE_SNAPSHOT':'restart-timing-pool'},True),({'CONSOLE_SNAPSHOT':'off'},True),({'CONSOLE_SNAPSHOT':'yes'},False),
+        cases=[({},True),({'CONSOLE_REFRESH':'120'},True),({'CONSOLE_SNAPSHOT':'restart'},True),({'CONSOLE_SNAPSHOT':'restart-timing'},True),({'CONSOLE_SNAPSHOT':'restart-timing-pool'},True),({'CONSOLE_SNAPSHOT':'off'},True),({'CONSOLE_SNAPSHOT':'yes'},False),
                ({'CONSOLE_FULL_REFRESH':'off'},False),({'CONSOLE_REFRESH':'default'},False),
                ({'VM_MANAGER':'direct'},False),({'VM_CONSOLE':'bochs'},False),({'GENERIC_GRAPHICS':'on'},False)]
         cases += [(dict(changes,CONSOLE_SNAPSHOT='restart'),ok) for changes,ok in cases if 'CONSOLE_SNAPSHOT' not in changes]
@@ -82,7 +82,7 @@ class VmEntryTests(unittest.TestCase):
 
     def test_console_refresh_shell_selector_preserves_endpoint_and_refuses_other_profiles(self):
         source=ENTRY.read_text();block=source[source.index('# Explicit presentation-only console:'):source.index('if [[ -n "${LAN_TAP_NODE:-}" ]]')]
-        for rate,manager,accepted in [('default','direct',True),('60','libvirt',True),('60','direct',False),('120','libvirt',False)]:
+        for rate,manager,accepted in [('default','direct',True),('60','libvirt',True),('60','direct',False),('120','libvirt',True),('120','direct',False),('144','libvirt',False)]:
             env=dict(os.environ,CONSOLE_REFRESH=rate,VM_MANAGER=manager,VM_CONSOLE='bochs-spice',GENERIC_GRAPHICS='off',EXTRA='-display none')
             result=subprocess.run(['bash','-c',block+'\nprintf "%s" "$EXTRA"'],env=env,capture_output=True,text=True,timeout=3)
             with self.subTest(rate=rate,manager=manager):
@@ -90,7 +90,7 @@ class VmEntryTests(unittest.TestCase):
                 if accepted:
                     spice=result.stdout.split(' -spice ',1)[1]
                     expected='unix=on,addr=/run/vm/console-spice.sock,disable-ticketing=on,image-compression=off,gl=off'
-                    self.assertEqual(spice,expected+(',max-refresh-rate=60' if rate=='60' else ''))
+                    self.assertEqual(spice,expected+(',max-refresh-rate='+rate if rate in ('60','120') else ''))
 
     def test_libvirt_or_unknown_manager_cannot_fall_through_to_qemu(self):
         for manager in ['libvirt','unknown']:

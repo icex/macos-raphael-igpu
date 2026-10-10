@@ -67,15 +67,15 @@ def validate_plan_refresh(plan,admission):
     selected=[d for d in planner.values(rows,'-device') if d.split(',')[0]=='usb-redir']
     handoff.require(selected==(planner.USBREDIR_DEVICES if usbredir=='on' else []), 'USB redirection differs from admission')
     vdagent=handoff.validate_vdagent(admission.get('console_vdagent','off'))
-    wanted=planner.SPICE+(',max-refresh-rate=60' if expected=='60' else '')
+    wanted=planner.SPICE+(',max-refresh-rate='+expected if expected in ('60','120') else '')
     if vdagent=='on':wanted+=',agent-mouse=off'
     handoff.require(spice==wanted,'plan console refresh differs from admission')
     full=handoff.validate_full_refresh(admission.get('console_full_refresh','off'))
     bochs=[d for d in planner.values(planner.pairs(plan['native_argv']),'-device')
            if d.split(',')[0]=='bochs-display']
     snapshot=handoff.validate_snapshot(admission.get('console_snapshot','off'))
-    handoff.require(snapshot == 'off' or (full == 'on' and expected == '60'),
-                    'snapshot requires explicit SPICE60 full refresh')
+    handoff.require(snapshot == 'off' or (full == 'on' and expected in ('60','120')),
+                    'snapshot requires explicit SPICE60/120 full refresh')
     wanted_bochs=planner.BOCHS+(',x-debug-full-refresh=on' if full=='on' else '')
     if snapshot in ('on','restart','restart-timing','restart-timing-pool'): wanted_bochs+=',x-debug-snapshot=on'
     if snapshot in ('restart','restart-timing','restart-timing-pool'): wanted_bochs+=',x-debug-snapshot-restart=on'

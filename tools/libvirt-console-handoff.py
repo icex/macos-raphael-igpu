@@ -41,7 +41,7 @@ def run_directory(base,run_id):
 
 
 def validate_refresh(value):
-    require(type(value) is str and value in ("default", "60"),
+    require(type(value) is str and value in ("default", "60", "120"),
             "invalid admitted console refresh")
     return value
 
@@ -72,12 +72,12 @@ def prepare(base,manifest,manifest_bytes,network,modules,now=None):
     require(manifest['launch_options'].get('VM_MANAGER')=='libvirt','wrong manager profile')
     refresh=validate_refresh(manifest['launch_options'].get('CONSOLE_REFRESH','default'))
     full=validate_full_refresh(manifest['launch_options'].get('CONSOLE_FULL_REFRESH','off'))
-    require(full == 'off' or refresh == '60', 'full refresh requires explicit SPICE60')
+    require(full == 'off' or refresh in ('60', '120'), 'full refresh requires explicit SPICE60/120')
     snapshot=validate_snapshot(manifest['launch_options'].get('CONSOLE_SNAPSHOT','off'))
-    require(snapshot == 'off' or (full == 'on' and refresh == '60' and
+    require(snapshot == 'off' or (full == 'on' and refresh in ('60', '120') and
             manifest['launch_options'].get('VM_CONSOLE') == 'bochs-spice' and
             manifest['launch_options'].get('GENERIC_GRAPHICS') == 'off'),
-            'snapshot requires native libvirt SPICE60 full refresh')
+            'snapshot requires native libvirt SPICE60/120 full refresh')
     usbredir=validate_usbredir(manifest['launch_options'].get('CONSOLE_USBREDIR','off'))
     require(usbredir == 'off' or (manifest['launch_options'].get('VM_CONSOLE') == 'bochs-spice' and
             manifest['launch_options'].get('GENERIC_GRAPHICS') == 'off'), 'usbredir requires native libvirt SPICE')
@@ -105,10 +105,10 @@ def validate_admission(data,run_id,expected_digest,modules_dir,boot_id,now=None)
     validate_usbredir(data.get('console_usbredir','off'))
     validate_refresh(data.get('console_refresh','default'))
     full=validate_full_refresh(data.get('console_full_refresh','off'))
-    require(full == 'off' or data.get('console_refresh') == '60', 'full refresh requires explicit SPICE60')
+    require(full == 'off' or data.get('console_refresh') in ('60', '120'), 'full refresh requires explicit SPICE60/120')
     snapshot=validate_snapshot(data.get('console_snapshot','off'))
-    require(snapshot == 'off' or (full == 'on' and data.get('console_refresh') == '60'),
-            'snapshot requires explicit SPICE60 full refresh')
+    require(snapshot == 'off' or (full == 'on' and data.get('console_refresh') in ('60', '120')),
+            'snapshot requires explicit SPICE60/120 full refresh')
     require(type(data['manifest_sha256']) is str and re.fullmatch('[0-9a-f]{64}',data['manifest_sha256']),
             'missing admitted manifest digest')
     now=time.time() if now is None else now

@@ -58,10 +58,16 @@ class DaemonEnvironmentTests(unittest.TestCase):
 class RefreshPlanBindingTests(unittest.TestCase):
     def plan(self,refresh='default'):
         spice=mod.native.configuration.planner.SPICE
-        if refresh=='60':spice+=',max-refresh-rate=60'
+        if refresh in ('60','120'):spice+=',max-refresh-rate='+refresh
         return {'native_argv':['-spice',spice,'-device',mod.native.configuration.planner.BOCHS]}
+    def test_120_must_match_admission_in_both_directions(self):
+        mod.validate_plan_refresh(self.plan('120'),{'console_refresh':'120'})
+        for actual,admitted in [('60','120'),('120','60'),('default','120'),('120','default')]:
+            with self.subTest(actual=actual,admitted=admitted),self.assertRaises(ValueError):
+                mod.validate_plan_refresh(self.plan(actual),{'console_refresh':admitted})
+
     def test_agent_mouse_route_bound_to_admission_both_directions(self):
-        for refresh in ('default','60'):
+        for refresh in ('default','60','120'):
             bare=self.plan(refresh)
             active=self.plan(refresh);active['native_argv'][1]+=',agent-mouse=off'
             admitted={'console_refresh':refresh,'console_vdagent':'on'}

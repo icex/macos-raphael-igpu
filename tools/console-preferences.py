@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Persistent console UI scale and opt-in text clipboard.
+"""Persistent console UI scale, refresh rate and opt-in text clipboard.
 
-Both settings take effect at the next owned restart.
+All settings take effect at the next owned restart.
 
 Concurrent valid setters use atomic last-writer-wins publication.
 """
@@ -54,23 +54,30 @@ def read(path):
     value = json.loads(data, object_pairs_hook=unique)
     if type(value) is not dict or type(value.get('schema')) is not int:
         raise ValueError('unsupported console preferences')
-    keys={'schema','guest_scale'} if value['schema']==1 else {'schema','guest_scale','clipboard_text'}
-    if (value['schema'] not in (1,2) or set(value)!=keys or
+    keys={'schema','guest_scale'}
+    if value['schema']>=2:keys.add('clipboard_text')
+    if value['schema']>=3:keys.add('refresh_rate')
+    if (value['schema'] not in (1,2,3) or set(value)!=keys or
             type(value['guest_scale']) is not int or value['guest_scale'] not in (1,2) or
-            (value['schema']==2 and type(value['clipboard_text']) is not bool)):
+            (value['schema']>=2 and type(value['clipboard_text']) is not bool) or
+            (value['schema']==3 and (type(value['refresh_rate']) is not int or value['refresh_rate'] not in (60,120)))):
         raise ValueError('unsupported console preferences')
     return dict(value, source='user-preference')
 
-def write(path, scale=None, *, clipboard_text=None):
+def write(path, scale=None, *, clipboard_text=None, refresh_rate=None):
     if scale is not None and (type(scale) is not int or scale not in (1, 2)):
         raise ValueError('guest scale must be 1 or 2')
     path = directory(path)
     old=read(path)  # Refuse replacing a foreign, malformed or aliased preference.
     if clipboard_text is not None and type(clipboard_text) is not bool:
         raise ValueError('clipboard preference must be boolean')
+    if refresh_rate is not None and (type(refresh_rate) is not int or refresh_rate not in (60,120)):
+        raise ValueError('refresh rate must be 60 or 120')
     value = dict(schema=old['schema'], guest_scale=old['guest_scale'] if scale is None else scale)
-    if old['schema']==2 or clipboard_text is not None:
+    if old['schema']>=2 or clipboard_text is not None or refresh_rate is not None:
         value.update(schema=2,clipboard_text=old.get('clipboard_text',False) if clipboard_text is None else clipboard_text)
+    if old['schema']==3 or refresh_rate is not None:
+        value.update(schema=3,refresh_rate=old.get('refresh_rate',60) if refresh_rate is None else refresh_rate)
     fd, temporary = tempfile.mkstemp(prefix='.console-preferences-', dir=path)
     try:
         with os.fdopen(fd, 'w') as stream:
@@ -94,11 +101,21 @@ def main():
     parser.add_argument('--read-scale', action='store_true')
     parser.add_argument('--set-clipboard',choices=('on','off'))
     parser.add_argument('--read-clipboard',action='store_true')
+    parser.add_argument('--set-refresh',type=int,choices=(60,120))
+    parser.add_argument('--read-refresh',action='store_true')
     args = parser.parse_args()
-    if (args.read_scale or args.read_clipboard) and (args.set_scale is not None or args.set_clipboard is not None) or args.read_scale and args.read_clipboard:
+    reads=(args.read_scale,args.read_clipboard,args.read_refresh)
+    writes=(args.set_scale is not None,args.set_clipboard is not None,args.set_refresh is not None)
+    if sum(reads)>1 or any(reads) and any(writes):
         parser.error('read and write are separate operations')
-    value = read(args.support_dir) if args.set_scale is None and args.set_clipboard is None else write(args.support_dir, args.set_scale, clipboard_text=None if args.set_clipboard is None else args.set_clipboard=='on')
-    print(value['guest_scale'] if args.read_scale else ('on' if value.get('clipboard_text',False) else 'off') if args.read_clipboard else json.dumps(value))
+    value = read(args.support_dir) if not any(writes) else write(
+        args.support_dir,args.set_scale,
+        clipboard_text=None if args.set_clipboard is None else args.set_clipboard=='on',
+        refresh_rate=args.set_refresh)
+    if args.read_scale:print(value['guest_scale'])
+    elif args.read_clipboard:print('on' if value.get('clipboard_text',False) else 'off')
+    elif args.read_refresh:print(value.get('refresh_rate',60))
+    else:print(json.dumps(value))
 
 if __name__ == '__main__':
     main()

@@ -432,6 +432,8 @@ def launch_options(data):
                  dict(debugger, AUDIO='usb', VM_CONSOLE='bochs-spice', VM_MANAGER='libvirt'),
                  dict(debugger, AUDIO='usb', VM_CONSOLE='bochs-spice', VM_MANAGER='libvirt', CONSOLE_REFRESH='60'),
                  dict(debugger, AUDIO='usb', VM_CONSOLE='bochs-spice', VM_MANAGER='libvirt', CONSOLE_REFRESH='60', CONSOLE_FULL_REFRESH='on'))
+    snapshot_contracts = (contracts[-1], dict(contracts[-1], CONSOLE_REFRESH='120'))
+    contracts += (dict(contracts[-2], CONSOLE_REFRESH='120'), snapshot_contracts[-1])
     checked = dict(value) if type(value) is dict else None
     vdagent = checked.pop('CONSOLE_VDAGENT', 'off') if checked is not None else None
     if (type(vdagent) is not str or vdagent not in ('off', 'on') or
@@ -445,7 +447,7 @@ def launch_options(data):
         raise ValueError('usbredir requires native libvirt SPICE')
     snapshot = checked.pop('CONSOLE_SNAPSHOT', 'off') if checked is not None else None
     if (type(snapshot) is not str or snapshot not in ('off', 'on', 'restart', 'restart-timing','restart-timing-pool') or
-            (snapshot in ('on', 'restart', 'restart-timing','restart-timing-pool') and checked != contracts[-1]) or checked not in contracts):
+            (snapshot in ('on', 'restart', 'restart-timing','restart-timing-pool') and checked not in snapshot_contracts) or checked not in contracts):
         raise ValueError('launch options must select the exact historical, no-graphics, or debugger contract')
     return dict(value)
 
@@ -555,10 +557,10 @@ def current_identity(vm, candidate, requested_diagnostic, run_id=None,
     snapshot = options.get('CONSOLE_SNAPSHOT', 'off')
     if type(snapshot) is not str or snapshot not in ('off', 'on', 'restart', 'restart-timing','restart-timing-pool'):
         raise ValueError('invalid CONSOLE_SNAPSHOT')
-    if snapshot in ('on', 'restart', 'restart-timing','restart-timing-pool') and any(options.get(k) != v for k, v in {
-            'VM_MANAGER': 'libvirt', 'VM_CONSOLE': 'bochs-spice', 'CONSOLE_REFRESH': '60',
-            'CONSOLE_FULL_REFRESH': 'on', 'GENERIC_GRAPHICS': 'off'}.items()):
-        raise ValueError('snapshot requires native libvirt SPICE60 full refresh')
+    if snapshot in ('on', 'restart', 'restart-timing','restart-timing-pool') and (options.get('CONSOLE_REFRESH') not in ('60','120') or any(options.get(k) != v for k, v in {
+            'VM_MANAGER': 'libvirt', 'VM_CONSOLE': 'bochs-spice',
+            'CONSOLE_FULL_REFRESH': 'on', 'GENERIC_GRAPHICS': 'off'}.items())):
+        raise ValueError('snapshot requires native libvirt SPICE60/120 full refresh')
     if os.environ.get('CONSOLE_SNAPSHOT', snapshot) not in ('', snapshot):
         raise ValueError('CONSOLE_SNAPSHOT environment differs from manifest')
     if os.environ.get('CONSOLE_FULL_REFRESH', options.get('CONSOLE_FULL_REFRESH', 'off')) not in ('', options.get('CONSOLE_FULL_REFRESH', 'off')):
@@ -3132,8 +3134,8 @@ def validate_running(manifest, observed):
         if manifest['launch_options'].get('CONSOLE_SNAPSHOT') == 'restart-timing-pool':
             expected_graphics[-1] += ',x-debug-snapshot-pool=on'
         supplements=[]
-        if manifest['launch_options'].get('CONSOLE_REFRESH') == '60':
-            supplements.append('max-refresh-rate=60')
+        if manifest['launch_options'].get('CONSOLE_REFRESH') in ('60','120'):
+            supplements.append('max-refresh-rate='+manifest['launch_options']['CONSOLE_REFRESH'])
         if manifest['launch_options'].get('CONSOLE_VDAGENT') == 'on':
             supplements.append('agent-mouse=off')
         if supplements:

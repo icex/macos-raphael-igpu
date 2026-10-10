@@ -55,6 +55,11 @@ static bool modeFitsSnapshot(unsigned width,unsigned height,unsigned scale) {
         width<=kSnapshotMaxWidth/scale&&height<=kSnapshotMaxHeight/scale;
 }
 
+// Reported refresh may use fractional video timings; zero/unknown is not proof.
+static bool refreshMatches(double actual,unsigned requested) {
+    return (requested==60||requested==120)&&actual>=requested-.5&&actual<=requested+.5;
+}
+
 static void emit(NSDictionary *d) {
     NSData *j=[NSJSONSerialization dataWithJSONObject:d options:0 error:nil];
     fwrite(j.bytes,1,j.length,stdout);putchar('\n');fflush(stdout);
@@ -89,17 +94,17 @@ static NSArray *inventory(void) {
         NSMutableDictionary *row=[@{@"id":@(ids[i]),@"main":@(CGDisplayIsMain(ids[i])!=0),@"active":@(CGDisplayIsActive(ids[i])!=0),
             @"model":@(CGDisplayModelNumber(ids[i]))} mutableCopy];
         if(m){row[@"width"]=@(CGDisplayModeGetWidth(m));row[@"height"]=@(CGDisplayModeGetHeight(m));
-              row[@"pixel_width"]=@(CGDisplayModeGetPixelWidth(m));row[@"pixel_height"]=@(CGDisplayModeGetPixelHeight(m));CFRelease(m);}
+              row[@"pixel_width"]=@(CGDisplayModeGetPixelWidth(m));row[@"pixel_height"]=@(CGDisplayModeGetPixelHeight(m));row[@"refresh_rate"]=@(CGDisplayModeGetRefreshRate(m));CFRelease(m);}
         [a addObject:row];
     }
     return a;
 }
-static bool selectMode(CGDirectDisplayID did,unsigned w,unsigned h,unsigned scale) {
+static bool selectMode(CGDirectDisplayID did,unsigned w,unsigned h,unsigned scale,unsigned refresh) {
     CFArrayRef modes=CGDisplayCopyAllDisplayModes(did,(__bridge CFDictionaryRef)@{(id)kCGDisplayShowDuplicateLowResolutionModes:@YES});
     bool ok=false;
     if(modes)for(CFIndex i=0;i<CFArrayGetCount(modes)&&!ok;i++) {
         CGDisplayModeRef m=(CGDisplayModeRef)CFArrayGetValueAtIndex(modes,i);
-        if(CGDisplayModeGetWidth(m)==w&&CGDisplayModeGetHeight(m)==h&&CGDisplayModeGetPixelWidth(m)==scale*w&&CGDisplayModeGetPixelHeight(m)==scale*h)
+        if(CGDisplayModeGetWidth(m)==w&&CGDisplayModeGetHeight(m)==h&&CGDisplayModeGetPixelWidth(m)==scale*w&&CGDisplayModeGetPixelHeight(m)==scale*h&&refreshMatches(CGDisplayModeGetRefreshRate(m),refresh))
             ok=CGDisplaySetDisplayMode(did,m,NULL)==kCGErrorSuccess;
     }
     if(modes)CFRelease(modes);return ok;
@@ -112,19 +117,19 @@ static bool controlIdentity(CGDirectDisplayID did) {
 static bool controlTarget(CGDirectDisplayID did) {
  return controlIdentity(did)&&CGDisplayBounds(did).origin.x==0&&CGDisplayBounds(did).origin.y==0;
 }
-static CGDisplayModeRef controlMode(CGDirectDisplayID did,unsigned w,unsigned h,unsigned scale) {
+static CGDisplayModeRef controlMode(CGDirectDisplayID did,unsigned w,unsigned h,unsigned scale,unsigned refresh) {
  CFArrayRef all=CGDisplayCopyAllDisplayModes(did,(__bridge CFDictionaryRef)@{(id)kCGDisplayShowDuplicateLowResolutionModes:@YES});
  CGDisplayModeRef result=NULL;
  if(all)for(CFIndex i=0;i<CFArrayGetCount(all);i++){
   CGDisplayModeRef m=(CGDisplayModeRef)CFArrayGetValueAtIndex(all,i);
-  if(CGDisplayModeGetPixelWidth(m)==w&&CGDisplayModeGetPixelHeight(m)==h&&CGDisplayModeGetWidth(m)*scale==w&&CGDisplayModeGetHeight(m)*scale==h){result=CGDisplayModeRetain(m);break;}
+  if(CGDisplayModeGetPixelWidth(m)==w&&CGDisplayModeGetPixelHeight(m)==h&&CGDisplayModeGetWidth(m)*scale==w&&CGDisplayModeGetHeight(m)*scale==h&&refreshMatches(CGDisplayModeGetRefreshRate(m),refresh)){result=CGDisplayModeRetain(m);break;}
  }
  if(all)CFRelease(all);return result;
 }
 @interface RGDisplayControl : NSObject {
  int listener,peer,lockFD;double expires;
  uint8_t request[RG_CONTROL_REQUEST_MAX+1],reply[RG_CONTROL_REPLY];size_t received,sent;
- bool replying,waitingMode,waitingVerify,tableUncertain;unsigned requestFlags,guestScale;double stable;
+ bool replying,waitingMode,waitingVerify,tableUncertain;unsigned requestFlags,guestScale,refreshRate;double stable;
  RGModes dynamicModes;
  CGDirectDisplayID originalID;
 }
@@ -132,12 +137,12 @@ static CGDisplayModeRef controlMode(CGDirectDisplayID did,unsigned w,unsigned h,
 @property(strong) NSMutableArray *modes;
 @property(copy) NSArray *baseModes;
 @property(copy) NSString *socketPath;
-- (BOOL)start:(NSString *)directory display:(CGVirtualDisplay *)display modes:(NSMutableArray *)modes scale:(unsigned)scale;
+- (BOOL)start:(NSString *)directory display:(CGVirtualDisplay *)display modes:(NSMutableArray *)modes scale:(unsigned)scale refresh:(unsigned)refresh;
 - (void)tick;
 @end
 @implementation RGDisplayControl
-- (BOOL)start:(NSString *)directory display:(CGVirtualDisplay *)display modes:(NSMutableArray *)modes scale:(unsigned)scale {
- guestScale=scale;
+- (BOOL)start:(NSString *)directory display:(CGVirtualDisplay *)display modes:(NSMutableArray *)modes scale:(unsigned)scale refresh:(unsigned)refresh {
+ guestScale=scale;refreshRate=refresh;
  listener=peer=lockFD=-1;
  if(!directory.isAbsolutePath||![directory.stringByStandardizingPath isEqual:directory])return NO;
  // Validate every ancestor: never traverse a symbolic link or writable foreign directory.
@@ -187,7 +192,7 @@ static CGDisplayModeRef controlMode(CGDirectDisplayID did,unsigned w,unsigned h,
  if(!status&&!waitingMode&&!waitingVerify&&!controlTarget(originalID))status=4;
  if(!status&&waitingVerify){
   CGDisplayModeRef observed=CGDisplayCopyDisplayMode(originalID);
-  bool ready=controlTarget(originalID)&&observed&&CGDisplayModeGetPixelWidth(observed)==w&&CGDisplayModeGetPixelHeight(observed)==h&&CGDisplayModeGetWidth(observed)*guestScale==w&&CGDisplayModeGetHeight(observed)*guestScale==h;
+  bool ready=controlTarget(originalID)&&observed&&CGDisplayModeGetPixelWidth(observed)==w&&CGDisplayModeGetPixelHeight(observed)==h&&CGDisplayModeGetWidth(observed)*guestScale==w&&CGDisplayModeGetHeight(observed)*guestScale==h&&refreshMatches(CGDisplayModeGetRefreshRate(observed),refreshRate);
   if(observed)CFRelease(observed);
   int settled=rg_settle(&stable,identity,ready,controlNow()>=expires-.25,controlNow());
   if(!settled)return;
@@ -195,7 +200,7 @@ static CGDisplayModeRef controlMode(CGDirectDisplayID did,unsigned w,unsigned h,
  }
 
  if(!status&&!waitingVerify){
-  chosen=controlMode(originalID,w,h,guestScale);
+  chosen=controlMode(originalID,w,h,guestScale,refreshRate);
   if(waitingMode){
    int settled=rg_settle(&stable,identity,chosen&&controlTarget(originalID),controlNow()>=expires-.25,controlNow());
    if(settled<=0){if(chosen)CGDisplayModeRelease(chosen);chosen=NULL;if(!settled)return;status=4;}
@@ -215,7 +220,7 @@ static CGDisplayModeRef controlMode(CGDirectDisplayID did,unsigned w,unsigned h,
      NSMutableArray *candidate=[self.baseModes mutableCopy];
      for(unsigned i=0;i<candidatePolicy.count;i++){
       RGGeometry g=candidatePolicy.items[i];
-      [candidate addObject:[[CGVirtualDisplayMode alloc] initWithWidth:g.w/guestScale height:g.h/guestScale refreshRate:60]];
+      [candidate addObject:[[CGVirtualDisplayMode alloc] initWithWidth:g.w/guestScale height:g.h/guestScale refreshRate:refreshRate]];
      }
      CGVirtualDisplaySettings *settings=[CGVirtualDisplaySettings new];settings.hiDPI=(guestScale==2);settings.rotation=0;settings.modes=candidate;
      if(![self.display applySettings:settings]){
@@ -236,7 +241,7 @@ static CGDisplayModeRef controlMode(CGDirectDisplayID did,unsigned w,unsigned h,
  if(!status&&(self.display.displayID!=originalID||!controlTarget(originalID)))status=4;
  if(!status&&!waitingVerify){
   CGDisplayModeRef current=CGDisplayCopyDisplayMode(originalID);
-  bool same=current&&CGDisplayModeGetIODisplayModeID(current)==CGDisplayModeGetIODisplayModeID(chosen)&&CGDisplayModeGetPixelWidth(current)==w&&CGDisplayModeGetPixelHeight(current)==h;
+  bool same=current&&CGDisplayModeGetIODisplayModeID(current)==CGDisplayModeGetIODisplayModeID(chosen)&&CGDisplayModeGetPixelWidth(current)==w&&CGDisplayModeGetPixelHeight(current)==h&&refreshMatches(CGDisplayModeGetRefreshRate(current),refreshRate);
   if(current)CFRelease(current);
   if(!same){
    CGDisplayConfigRef config=NULL;CGError e=CGBeginDisplayConfiguration(&config);
@@ -251,14 +256,15 @@ static CGDisplayModeRef controlMode(CGDirectDisplayID did,unsigned w,unsigned h,
   }
  }
  CGDisplayModeRef actual=CGDisplayCopyDisplayMode(originalID);
- if(!status&&(!actual||self.display.displayID!=originalID||!controlTarget(originalID)||CGDisplayModeGetPixelWidth(actual)!=w||CGDisplayModeGetPixelHeight(actual)!=h||CGDisplayModeGetWidth(actual)*guestScale!=w||CGDisplayModeGetHeight(actual)*guestScale!=h))status=4;
+ if(!status&&(!actual||self.display.displayID!=originalID||!controlTarget(originalID)||CGDisplayModeGetPixelWidth(actual)!=w||CGDisplayModeGetPixelHeight(actual)!=h||CGDisplayModeGetWidth(actual)*guestScale!=w||CGDisplayModeGetHeight(actual)*guestScale!=h||!refreshMatches(CGDisplayModeGetRefreshRate(actual),refreshRate)))status=4;
  if(!status)rg_touch(&dynamicModes,(RGGeometry){w,h});
  uint32_t values[10]={RG_CONTROL_MAGIC,received>=8?rg_read32(request+4):0,received>=12?rg_read32(request+8):0,status,originalID,
   actual?(uint32_t)CGDisplayModeGetPixelWidth(actual):0,actual?(uint32_t)CGDisplayModeGetPixelHeight(actual):0,
   actual?(uint32_t)CGDisplayModeGetWidth(actual):0,actual?(uint32_t)CGDisplayModeGetHeight(actual):0,flags};
+ double actualRefresh=actual?CGDisplayModeGetRefreshRate(actual):0;
  for(unsigned i=0;i<10;i++)rg_write32(reply+4*i,values[i]);
  if(actual)CFRelease(actual);if(chosen)CFRelease(chosen);replying=true;
- emit(@{@"phase":@"control-result",@"sequence":@(values[2]),@"status":@(status),@"display":@(originalID),@"pixel_width":@(values[5]),@"pixel_height":@(values[6]),@"flags":@(flags)});
+ emit(@{@"phase":@"control-result",@"sequence":@(values[2]),@"status":@(status),@"display":@(originalID),@"pixel_width":@(values[5]),@"pixel_height":@(values[6]),@"refresh_rate":@(actualRefresh),@"requested_refresh":@(refreshRate),@"flags":@(flags)});
 }
 - (void)tick { @autoreleasepool {
  if(peer<0){
@@ -291,7 +297,7 @@ int main(int argc,const char **argv) { @autoreleasepool {
     if(strcmp(argv[1],"--serve"))return 2;
     if(!abi()){emit(@{@"error":@"virtual display ABI is unsupported"});return 2;}
     NSMutableArray *modes=[NSMutableArray new];NSMutableArray *names=[NSMutableArray new];
-    unsigned guestScale=2;bool scaleSeen=false;
+    unsigned guestScale=2,refreshRate=60;bool scaleSeen=false,refreshSeen=false;
     NSString *controlDir=nil,*customModes=nil;
     for(int i=2;i<argc;i+=2){
         if(i+1>=argc)return 2;
@@ -300,13 +306,16 @@ int main(int argc,const char **argv) { @autoreleasepool {
         else if(!strcmp(argv[i],"--guest-scale")&&!scaleSeen){
             if(strcmp(argv[i+1],"1")&&strcmp(argv[i+1],"2"))return 2;
             guestScale=(unsigned)(argv[i+1][0]-'0');scaleSeen=true;
+        }else if(!strcmp(argv[i],"--refresh-rate")&&!refreshSeen){
+            if(strcmp(argv[i+1],"60")&&strcmp(argv[i+1],"120"))return 2;
+            refreshRate=(unsigned)strtoul(argv[i+1],NULL,10);refreshSeen=true;
         }else return 2;
     }
     if(customModes&&controlDir)return 2;
     unsigned initialW=kSnapshotMaxWidth/guestScale,initialH=kSnapshotMaxHeight/guestScale;
     if(customModes) {
         // Keep an admissible native fallback even for diagnostic custom tables.
-        [modes addObject:[[CGVirtualDisplayMode alloc] initWithWidth:initialW height:initialH refreshRate:60]];
+        [modes addObject:[[CGVirtualDisplayMode alloc] initWithWidth:initialW height:initialH refreshRate:refreshRate]];
         [names addObject:[NSString stringWithFormat:@"%ux%u",initialW,initialH]];
         bool validCustom=false;
         for(NSString *item in [customModes componentsSeparatedByString:@","]) {
@@ -316,14 +325,14 @@ int main(int argc,const char **argv) { @autoreleasepool {
             if(!modeFitsSnapshot(w*2/guestScale,h*2/guestScale,guestScale))continue;
             validCustom=true;
             if(w==1920&&h==1080)continue; // native mode already present
-            [modes addObject:[[CGVirtualDisplayMode alloc] initWithWidth:w*2/guestScale height:h*2/guestScale refreshRate:60]];[names addObject:[NSString stringWithFormat:@"%ux%u",w*2/guestScale,h*2/guestScale]];
+            [modes addObject:[[CGVirtualDisplayMode alloc] initWithWidth:w*2/guestScale height:h*2/guestScale refreshRate:refreshRate]];[names addObject:[NSString stringWithFormat:@"%ux%u",w*2/guestScale,h*2/guestScale]];
         }
         if(!validCustom){emit(@{@"error":@"no valid custom modes"});return 2;}
     } else for(size_t i=0;i<sizeof(kDefaultModes)/sizeof(kDefaultModes[0]);i++) {
         if(!modeFitsSnapshot(kDefaultModes[i][0]*2/guestScale,kDefaultModes[i][1]*2/guestScale,guestScale)){
             emit(@{@"error":@"default mode exceeds snapshot transport"});return 2;
         }
-        [modes addObject:[[CGVirtualDisplayMode alloc] initWithWidth:kDefaultModes[i][0]*2/guestScale height:kDefaultModes[i][1]*2/guestScale refreshRate:60]];
+        [modes addObject:[[CGVirtualDisplayMode alloc] initWithWidth:kDefaultModes[i][0]*2/guestScale height:kDefaultModes[i][1]*2/guestScale refreshRate:refreshRate]];
         [names addObject:[NSString stringWithFormat:@"%ux%u",kDefaultModes[i][0]*2/guestScale,kDefaultModes[i][1]*2/guestScale]];
     }
     // 24G830 uses the first advertised mode as native. Both scales now use
@@ -342,15 +351,23 @@ int main(int argc,const char **argv) { @autoreleasepool {
     bool applied=[display applySettings:settings];
     NSDate *until=[NSDate dateWithTimeIntervalSinceNow:2];
     while(until.timeIntervalSinceNow>0)[[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
-    bool selected=applied&&selectMode(display.displayID,initialW,initialH,guestScale);
-    emit(@{@"phase":@"serving",@"applied":@(applied),@"display":@(display.displayID),@"initial_selected":@(selected),@"guest_scale":@(guestScale),
+    bool selected=applied&&selectMode(display.displayID,initialW,initialH,guestScale,refreshRate);
+    if(selected){
+        CGDisplayModeRef observed=CGDisplayCopyDisplayMode(display.displayID);
+        selected=observed&&CGDisplayModeGetWidth(observed)==initialW&&CGDisplayModeGetHeight(observed)==initialH&&
+            CGDisplayModeGetPixelWidth(observed)==initialW*guestScale&&CGDisplayModeGetPixelHeight(observed)==initialH*guestScale&&
+            refreshMatches(CGDisplayModeGetRefreshRate(observed),refreshRate);
+        if(observed)CFRelease(observed);
+    }
+    if(!selected){emit(@{@"error":@"initial mode or refresh readback mismatch",@"displays":inventory()});return 4;}
+    emit(@{@"phase":@"serving",@"applied":@(applied),@"display":@(display.displayID),@"initial_selected":@(selected),@"guest_scale":@(guestScale),@"refresh_rate":@(refreshRate),
            @"modes":names,@"displays":inventory()});
     RGDisplayControl *control=nil;
     if(controlDir){
         control=[RGDisplayControl new];
-        if(![control start:controlDir display:display modes:modes scale:guestScale]){emit(@{@"error":@"control endpoint refused"});return 4;}
+        if(![control start:controlDir display:display modes:modes scale:guestScale refresh:refreshRate]){emit(@{@"error":@"control endpoint refused"});return 4;}
         [NSTimer scheduledTimerWithTimeInterval:0.02 repeats:YES block:^(NSTimer *timer){(void)timer;[control tick];}];
-        emit(@{@"phase":@"control-ready",@"display":@(display.displayID),@"socket":control.socketPath,@"guest_scale":@(guestScale)});
+        emit(@{@"phase":@"control-ready",@"display":@(display.displayID),@"socket":control.socketPath,@"guest_scale":@(guestScale),@"refresh_rate":@(refreshRate)});
     }
     signal(SIGTERM,exit);
     [[NSRunLoop currentRunLoop] run];   // hold the display until killed

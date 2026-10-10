@@ -1012,9 +1012,14 @@ class ExperimentTests(unittest.TestCase):
                                      '-spice','max-refresh-rate=60'],cid='c'*64,argv_sha256='d'*64,
                       libvirt=dict(verified=True,run_id='a'*32,cid='c'*64,argv_sha256='d'*64))
         self.assertEqual(tool.validate_running(manifest,observed),[])
+        options['CONSOLE_REFRESH']='120'
+        self.assertEqual(tool.launch_options(manifest),options)
+        self.assertIn('generic_graphics',tool.validate_running(manifest,observed))
+        observed['graphics_args'][-1]='max-refresh-rate=120'
+        self.assertEqual(tool.validate_running(manifest,observed),[])
         observed['graphics_args']=observed['graphics_args'][:-2]
         self.assertIn('generic_graphics',tool.validate_running(manifest,observed))
-        for value in ('120',60,'default','60,port=5905'):
+        for value in ('144',60,'default','60,port=5905'):
             options['CONSOLE_REFRESH']=value
             with self.subTest(value=value),self.assertRaises(ValueError):tool.launch_options(manifest)
 

@@ -91,17 +91,17 @@ case "${CONSOLE_USBREDIR:-off}" in
 esac
 case "${CONSOLE_SNAPSHOT:-off}" in
     off) ;;
-    on|restart|restart-timing|restart-timing-pool) [[ "${VM_MANAGER:-direct}" == libvirt && "${VM_CONSOLE:-off}" == bochs-spice && "${CONSOLE_REFRESH:-default}" == 60 && "${CONSOLE_FULL_REFRESH:-off}" == on && "${GENERIC_GRAPHICS:-on}" == off ]] || { echo "snapshot requires native libvirt SPICE60 full refresh" >&2; exit 1; } ;;
+    on|restart|restart-timing|restart-timing-pool) [[ "${VM_MANAGER:-direct}" == libvirt && "${VM_CONSOLE:-off}" == bochs-spice && ( "${CONSOLE_REFRESH:-default}" == 60 || "${CONSOLE_REFRESH:-default}" == 120 ) && "${CONSOLE_FULL_REFRESH:-off}" == on && "${GENERIC_GRAPHICS:-on}" == off ]] || { echo "snapshot requires native libvirt SPICE60/120 full refresh" >&2; exit 1; } ;;
     *) echo "unknown CONSOLE_SNAPSHOT" >&2; exit 1 ;;
 esac
 case "${CONSOLE_FULL_REFRESH:-off}" in
     off) ;;
-    on) [[ "${VM_MANAGER:-direct}" == libvirt && "${VM_CONSOLE:-off}" == bochs-spice && "${CONSOLE_REFRESH:-default}" == 60 ]] || { echo "full refresh requires libvirt SPICE60" >&2; exit 1; } ;;
+    on) [[ "${VM_MANAGER:-direct}" == libvirt && "${VM_CONSOLE:-off}" == bochs-spice && ( "${CONSOLE_REFRESH:-default}" == 60 || "${CONSOLE_REFRESH:-default}" == 120 ) ]] || { echo "full refresh requires libvirt SPICE60/120" >&2; exit 1; } ;;
     *) echo "unknown CONSOLE_FULL_REFRESH" >&2; exit 1 ;;
 esac
 case "${CONSOLE_REFRESH:-default}" in
     default) ;;
-    60) [[ "${VM_MANAGER:-direct}" == libvirt && "${VM_CONSOLE:-off}" == bochs-spice ]] || { echo "explicit refresh requires libvirt SPICE" >&2; exit 1; } ;;
+    60|120) [[ "${VM_MANAGER:-direct}" == libvirt && "${VM_CONSOLE:-off}" == bochs-spice ]] || { echo "explicit refresh requires libvirt SPICE" >&2; exit 1; } ;;
     *) echo "unknown CONSOLE_REFRESH" >&2; exit 1 ;;
 esac
 case "${VM_CONSOLE:-off}" in
@@ -117,7 +117,7 @@ case "${VM_CONSOLE:-off}" in
         if [[ "${CONSOLE_SNAPSHOT:-off}" == restart-timing-pool ]]; then export EXTRA="${EXTRA},x-debug-snapshot-pool=on"; fi
         if [[ "${VM_CONSOLE}" == bochs-spice ]]; then
             export EXTRA="${EXTRA} -spice unix=on,addr=/run/vm/console-spice.sock,disable-ticketing=on,image-compression=off,gl=off"
-            if [[ "${CONSOLE_REFRESH:-default}" == 60 ]]; then export EXTRA="${EXTRA},max-refresh-rate=60"; fi
+            if [[ ( "${CONSOLE_REFRESH:-default}" == 60 || "${CONSOLE_REFRESH:-default}" == 120 ) ]]; then export EXTRA="${EXTRA},max-refresh-rate=${CONSOLE_REFRESH}"; fi
             # SPICE routes mouse to any attached agent regardless of capabilities.
             # Our resize-only agent leaves input on the existing USB tablet.
             if [[ "${CONSOLE_VDAGENT:-off}" == on ]]; then export EXTRA="${EXTRA},agent-mouse=off"; fi

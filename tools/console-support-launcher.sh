@@ -41,10 +41,13 @@ clipboard=$(/usr/bin/python3 -B "$payload/console-preferences.py" --support-dir 
 clipboard_args=()
 case "$clipboard" in on) clipboard_args=(--clipboard-text) ;; off) ;; *) exit 3 ;; esac
 printf '{"event":"clipboard-policy","text":"%s","scope":"explicit persistent preference"}\n' "$clipboard"
+refresh_rate=$(/usr/bin/python3 -B "$payload/console-preferences.py" --support-dir "$support" --read-refresh)
+case "$refresh_rate" in 60|120) ;; *) exit 3 ;; esac
+printf '{"event":"refresh-policy","refresh_rate":%s,"scope":"fixed for this holder lifetime"}\n' "$refresh_rate"
 start=$SECONDS
 caffeinate -dimsu -t 6000 & awake=$!
 : >"$support/display.log"
-"$payload/virtual-display-server" --serve --control-dir "$support/control" --guest-scale "$guest_scale" >"$support/display.log" 2>&1 & vd=$!
+"$payload/virtual-display-server" --serve --control-dir "$support/control" --guest-scale "$guest_scale" --refresh-rate "$refresh_rate" >"$support/display.log" 2>&1 & vd=$!
 for ((i=0;i<200;i++)); do
  if grep -q '"phase":"serving"' "$support/display.log" && [[ -S "$support/control/control.sock" ]]; then break; fi
  kill -0 "$vd" 2>/dev/null || exit 3
@@ -61,5 +64,5 @@ if [[ -c /dev/tty.com.redhat.spice.0 && ! -L /dev/tty.com.redhat.spice.0 ]]; the
 fi
 remaining=$((6000-SECONDS+start))
 ((remaining>0)) || exit 3
-RGPU_CONSOLE_SNAPSHOT="$snapshot" RGPU_CONSOLE_CACHE=default "$app/Contents/MacOS/console-presenter" auto 60 "$remaining" >"$support/presenter.log" 2>&1 & presenter=$!
+RGPU_CONSOLE_SNAPSHOT="$snapshot" RGPU_CONSOLE_CACHE=default "$app/Contents/MacOS/console-presenter" auto "$refresh_rate" "$remaining" >"$support/presenter.log" 2>&1 & presenter=$!
 wait "$presenter"

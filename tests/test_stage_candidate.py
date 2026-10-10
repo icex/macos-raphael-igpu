@@ -1437,6 +1437,17 @@ class EmptyFirmwareConsoleCardTests(unittest.TestCase):
             raw=json.dumps(changed).encode()
             with self.assertRaises(RuntimeError):tool.validate_card(raw,hashlib.sha256(raw).hexdigest())
 
+    def test_candidate430_retina120_preserves_console_contract(self):
+        tool=load_tool();tool.configure('1.0.430','metal-225')
+        card=json.loads((ROOT/'experiments/metal-225.json').read_text())
+        raw=json.dumps(card).encode();tool.validate_card(raw,hashlib.sha256(raw).hexdigest())
+        for key,value in [('CONSOLE_USBREDIR','off'),('CONSOLE_USBREDIR',True),
+                          ('CONSOLE_SNAPSHOT','restart'),('CONSOLE_VDAGENT','off'),
+                          ('CONSOLE_FULL_REFRESH','off'),('VM_MANAGER','direct'),('CONSOLE_REFRESH','60'),('CONSOLE_REFRESH',120),('CONSOLE_REFRESH','144')]:
+            changed=copy.deepcopy(card);changed['launch_options'][key]=value
+            raw=json.dumps(changed).encode()
+            with self.assertRaises(RuntimeError):tool.validate_card(raw,hashlib.sha256(raw).hexdigest())
+
     def test_candidate352_refresh_contract_is_exact(self):
         tool=load_tool();tool.configure('1.0.352','metal-195')
         card=json.loads((ROOT/'experiments/metal-195.json').read_text())

@@ -3,6 +3,8 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import subprocess
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -37,6 +39,45 @@ class PreferencesTests(unittest.TestCase):
         for data in [b'{"schema":2,"guest_scale":1}',b'{"schema":2,"guest_scale":1,"clipboard_text":1}',
                      b'{"schema":1,"guest_scale":1,"clipboard_text":true}']:
             self.put(data)
+            with self.assertRaises(ValueError):prefs.read(self.directory)
+
+    def test_refresh_schema_migration_preserves_other_choices(self):
+        self.assertEqual(prefs.read(self.directory).get('refresh_rate',60),60)
+        prefs.write(self.directory,1,clipboard_text=True)
+        value=prefs.write(self.directory,refresh_rate=120)
+        self.assertEqual((value['schema'],value['guest_scale'],value['clipboard_text'],value['refresh_rate']),(3,1,True,120))
+        self.assertEqual(prefs.write(self.directory,2)['refresh_rate'],120)
+        self.assertEqual(prefs.write(self.directory,clipboard_text=False)['refresh_rate'],120)
+        value=prefs.write(self.directory,refresh_rate=60)
+        self.assertEqual((value['guest_scale'],value['clipboard_text'],value['refresh_rate']),(2,False,60))
+        self.path.unlink()
+        value=prefs.write(self.directory,refresh_rate=120)
+        self.assertEqual((value['guest_scale'],value['clipboard_text'],value['refresh_rate']),(2,False,120))
+
+    def test_refresh_cli_defaults_legacy_schemas_and_explicit_120(self):
+        command=[sys.executable,'-B',str(ROOT/'tools/console-preferences.py'),'--support-dir',str(self.directory)]
+        for value in [None,dict(schema=1,guest_scale=1),dict(schema=2,guest_scale=2,clipboard_text=True)]:
+            if value is not None:self.put(json.dumps(value).encode())
+            self.assertEqual(subprocess.check_output(command+['--read-refresh'],text=True).strip(),'60')
+        subprocess.run(command+['--set-refresh','120'],check=True,capture_output=True)
+        self.assertEqual(subprocess.check_output(command+['--read-refresh'],text=True).strip(),'120')
+        self.assertTrue(prefs.read(self.directory)['clipboard_text'])
+        for args in [['--read-refresh','--read-scale'],['--read-refresh','--set-clipboard','off'],['--set-refresh','90']]:
+            self.assertNotEqual(subprocess.run(command+args,capture_output=True).returncode,0)
+
+    def test_refresh_invalid_schema_fields_types_and_failed_migration(self):
+        prefs.write(self.directory,1,clipboard_text=True);old=self.path.read_bytes()
+        with patch.object(prefs.os,'replace',side_effect=OSError('injected')),self.assertRaises(OSError):
+            prefs.write(self.directory,refresh_rate=120)
+        self.assertEqual(self.path.read_bytes(),old)
+        for value in (True,'120',60.0,0,90,121):
+            with self.assertRaises(ValueError):prefs.write(self.directory,refresh_rate=value)
+        for value in [dict(schema=3,guest_scale=1,clipboard_text=True),
+                      dict(schema=2,guest_scale=1,clipboard_text=True,refresh_rate=60),
+                      dict(schema=3,guest_scale=1,clipboard_text=True,refresh_rate=True),
+                      dict(schema=3,guest_scale=1,clipboard_text=True,refresh_rate=90),
+                      dict(schema=3,guest_scale=1,clipboard_text=True,refresh_rate=60.0)]:
+            self.put(json.dumps(value).encode())
             with self.assertRaises(ValueError):prefs.read(self.directory)
 
     def test_malformed_and_oversized_are_not_overwritten(self):

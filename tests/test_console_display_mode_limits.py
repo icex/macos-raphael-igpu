@@ -19,6 +19,7 @@ class ModeLimitsTests(unittest.TestCase):
 #include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <math.h>
 ACTUAL
 int main(void) {
  for(unsigned scale=1;scale<=2;scale++) {
@@ -37,6 +38,12 @@ int main(void) {
   assert(!modeFitsSnapshot(0,0,scale));
  }
  assert(!modeFitsSnapshot(1920,1080,0));assert(!modeFitsSnapshot(1920,1080,3));
+ assert(refreshMatches(60,60));assert(refreshMatches(120,120));
+ assert(refreshMatches(59.94,60));assert(refreshMatches(119.88,120));
+ assert(!refreshMatches(60,120));assert(!refreshMatches(120,60));
+ assert(!refreshMatches(0,60));assert(!refreshMatches(NAN,60));assert(!refreshMatches(INFINITY,120));
+ assert(!refreshMatches(59.49,60));assert(!refreshMatches(120.51,120));
+ assert(!refreshMatches(90,90));
  return 0;
 }
 '''.replace('ACTUAL',actual)
