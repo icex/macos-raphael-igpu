@@ -1,5 +1,17 @@
 # Raphael iGPU acceleration roadmap
 
+**October 10, candidate 443: GPU-scaled moving output verified; pacing is not the limit.**
+Across three same-boot cycles, 300 of 300 sampled moving frames read back from the
+host GL framebuffer carried the correct fresh token after scaling 3840×2160 into the
+1440×900 window. With the source now outliving every observation, default-pacing GL
+measured 38.6–41.8 decoded IDs/s in full-field phases (repeating 441's gain over
+Cairo's 23.7–23.9). QEMU start-relative pacing raised full-field refreshes from
+about 48/s to 58/s but did not raise delivery (37.8–39.4 IDs/s): about 40 commands/s
+are created regardless of refresh rate, so the remaining ceiling lies upstream of
+the client. These are sampled and decoded observations, not scanout FPS or sustained
+4K60. All runs shut down at guest request and recovered with reuse authorized.
+[443 evidence](../findings/research/console-gl-pacing-20261010.md).
+
 **October 10, candidate 441: optional host GPU scaling improves full-field 4K.**
 In the same boot, the private GTK client’s raw-primary GL renderer observed
 37.74–41.80 decoded token IDs/s during full-field phases, versus 23.73–23.85
@@ -326,9 +338,11 @@ from device enumeration or passing microbenchmarks.
 
 ## Next work, in order
 
-Only full-field 4K performance is active: qualify and repeat the 441 GPU scaling
-gain, preserve filtering quality, measure rendered-frame delivery, then address
-the remaining sustained 60 Hz gap. All other roadmap tasks are on hold. The
+Only full-field 4K performance is active. Candidate 443 repeated the 441 GPU
+scaling gain, verified sampled moving GL output and rejected start-relative pacing
+as a delivery fix. Next: locate why full-field refreshes yield only ~40 commands/s
+(guest presenter publication versus QEMU update-to-command path), then qualify
+filtering quality and input with the GL renderer and close the sustained 60 Hz gap. All other roadmap tasks are on hold. The
 following dated entries retain earlier evidence and do not supersede this priority.
 
 **Current user priority (October9): an accelerated macOS desktop in a VM-manager

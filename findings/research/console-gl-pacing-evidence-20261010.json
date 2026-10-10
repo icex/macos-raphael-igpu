@@ -1,0 +1,361 @@
+{
+  "schema": 1,
+  "candidate": "1.0.443",
+  "card": "metal-237",
+  "boot_id": "ba51b3c6-9420-4510-af69-38a42b3c79c7",
+  "order": "a default, b start-relative, c default",
+  "cycles": {
+    "a": {
+      "arm": "default",
+      "pins": "pins-bochs-client-lossless.json",
+      "run_id": "b45679d76040a93ce89b15b4be3951ee",
+      "verdict": "CORE_PROBE_PASS",
+      "shutdown": "exited-after-guest-request",
+      "reconciliation_errors": [
+        "stopped container inspection unavailable or mismatched"
+      ],
+      "private_terminal_verified": true,
+      "recovery": "recovered",
+      "authorizes_launch": true,
+      "moving_gl": {
+        "requested": 100,
+        "valid": 100,
+        "invalid": 0,
+        "missing": 0,
+        "unique_sequences": 100,
+        "monotonic": true,
+        "geometry": {
+          "event": "geometry",
+          "time": 171179.581012217,
+          "primary": [
+            3840,
+            2160
+          ],
+          "display": [
+            1440,
+            900
+          ],
+          "monitor": 0,
+          "scaling": true,
+          "resize_guest": false,
+          "area_scale": 1
+        },
+        "scope": "paired token CRC at mapped GL FBO samples during moving mixed source; sparse diagnostic, not every frame or FPS"
+      },
+      "perf": {
+        "observer_seconds": 100.00042129401118,
+        "unique": 5112,
+        "invalid": 9,
+        "duplicates": 0,
+        "source_complete": true,
+        "phases": [
+          {
+            "index": 0,
+            "kind": "localized",
+            "client_ids_per_second": 56.496,
+            "dequeue_per_second": 56.496,
+            "refresh_per_second": 58.336,
+            "create_us": null,
+            "queue_busy": 0,
+            "create_us_mean": 1381.7,
+            "mirror_us_mean": 10.4,
+            "bitmap_us_mean": 4.8
+          },
+          {
+            "index": 1,
+            "kind": "full-field",
+            "client_ids_per_second": 41.773,
+            "dequeue_per_second": 41.773,
+            "refresh_per_second": 48.003,
+            "create_us": null,
+            "queue_busy": 0,
+            "create_us_mean": 4966.9,
+            "mirror_us_mean": 2525.8,
+            "bitmap_us_mean": 2318.7
+          },
+          {
+            "index": 2,
+            "kind": "localized",
+            "client_ids_per_second": 56.518,
+            "dequeue_per_second": 56.518,
+            "refresh_per_second": 58.634,
+            "create_us": null,
+            "queue_busy": 0,
+            "create_us_mean": 1318.2,
+            "mirror_us_mean": 10.5,
+            "bitmap_us_mean": 5.1
+          },
+          {
+            "index": 3,
+            "kind": "full-field",
+            "client_ids_per_second": 41.452,
+            "dequeue_per_second": 41.508,
+            "refresh_per_second": 47.915,
+            "create_us": null,
+            "queue_busy": 0,
+            "create_us_mean": 4998.4,
+            "mirror_us_mean": 2565.8,
+            "bitmap_us_mean": 2325.9
+          },
+          {
+            "index": 4,
+            "kind": "localized",
+            "client_ids_per_second": 56.621,
+            "dequeue_per_second": 56.621,
+            "refresh_per_second": 58.29,
+            "create_us": null,
+            "queue_busy": 0,
+            "create_us_mean": 1455.7,
+            "mirror_us_mean": 10.3,
+            "bitmap_us_mean": 4.7
+          }
+        ]
+      },
+      "artifacts": {
+        "/home/bogdan/macos-vm/run/c443-a-perf-pipeline-analysis.json": "dca1d4bdcb407d3aeaebadf1e2c9aab10d8faa583e462dfa1ae6df1ed29b0814",
+        "/home/bogdan/macos-vm/run/c443-a-perf-cadence.jsonl": "0a0a830173e5b9db33384566da639790065991331323f67a657c6210d5bd4c3f",
+        "/home/bogdan/macos-vm/run/c443-a-perf-source.txt": "dd9a92a9eb6b0cd3043139e4c1bda16e2567a9bc180ffe4a187f60d7dd1d9e28",
+        "/home/bogdan/macos-vm/run/c443-a-perf-spice-timing.trace": "b86f7130ebe1c488dc077ca801e32891e0465d85ac56d0a5d806e36d5d2366b1",
+        "/home/bogdan/macos-vm/run/worktrees/candidate-443/.research/gl-moving-a/readbacks.jsonl": "a86a7324ea87b1e505ca744b3846bba0f167849d79b800d5430f7959d63f622b",
+        "/home/bogdan/macos-vm/run/c443-a-perf-maps.txt": "d1a003f68f4a248962994335364a259a2caaed4a727b3935a90ca1c2fc79add1",
+        "/home/bogdan/macos-vm/run/candidate-443-results/recovery.json": "21951c4e42b929fb8f83d99b3e367e2d81dab8a25b9b521390aeaadd811ec5c8",
+        "/home/bogdan/macos-vm/run/candidate-443-results/shutdown.json": "95e5bc0d48c85b5b91dfe9c34157bc9bde1ac047f6cedf9c7829efedc5eadc7b"
+      }
+    },
+    "b": {
+      "arm": "start-relative",
+      "pins": "pins-bochs-start-pacing.json",
+      "run_id": "7d4fec2b2d4ed596e28e261377d8a6ef",
+      "verdict": "CORE_PROBE_PASS",
+      "shutdown": "exited-after-guest-request",
+      "reconciliation_errors": [
+        "stopped container inspection unavailable or mismatched"
+      ],
+      "private_terminal_verified": true,
+      "recovery": "recovered",
+      "authorizes_launch": true,
+      "moving_gl": {
+        "requested": 100,
+        "valid": 100,
+        "invalid": 0,
+        "missing": 0,
+        "unique_sequences": 100,
+        "monotonic": true,
+        "geometry": {
+          "event": "geometry",
+          "time": 171942.091296899,
+          "primary": [
+            3840,
+            2160
+          ],
+          "display": [
+            1440,
+            900
+          ],
+          "monitor": 0,
+          "scaling": true,
+          "resize_guest": false,
+          "area_scale": 1
+        },
+        "scope": "paired token CRC at mapped GL FBO samples during moving mixed source; sparse diagnostic, not every frame or FPS"
+      },
+      "perf": {
+        "observer_seconds": 100.0114500450145,
+        "unique": 4994,
+        "invalid": 10,
+        "duplicates": 0,
+        "source_complete": true,
+        "phases": [
+          {
+            "index": 0,
+            "kind": "localized",
+            "client_ids_per_second": 56.435,
+            "dequeue_per_second": 56.435,
+            "refresh_per_second": 58.329,
+            "create_us": null,
+            "queue_busy": 0,
+            "create_us_mean": 1311.4,
+            "mirror_us_mean": 10.8,
+            "bitmap_us_mean": 5.0
+          },
+          {
+            "index": 1,
+            "kind": "full-field",
+            "client_ids_per_second": 39.396,
+            "dequeue_per_second": 41.4,
+            "refresh_per_second": 58.149,
+            "create_us": null,
+            "queue_busy": 0,
+            "create_us_mean": 3690.4,
+            "mirror_us_mean": 2200.4,
+            "bitmap_us_mean": 2282.6
+          },
+          {
+            "index": 2,
+            "kind": "localized",
+            "client_ids_per_second": 56.462,
+            "dequeue_per_second": 56.462,
+            "refresh_per_second": 58.355,
+            "create_us": null,
+            "queue_busy": 0,
+            "create_us_mean": 1426.0,
+            "mirror_us_mean": 11.2,
+            "bitmap_us_mean": 5.0
+          },
+          {
+            "index": 3,
+            "kind": "full-field",
+            "client_ids_per_second": 37.828,
+            "dequeue_per_second": 40.781,
+            "refresh_per_second": 58.163,
+            "create_us": null,
+            "queue_busy": 0,
+            "create_us_mean": 4207.0,
+            "mirror_us_mean": 2615.5,
+            "bitmap_us_mean": 2557.3
+          },
+          {
+            "index": 4,
+            "kind": "localized",
+            "client_ids_per_second": 56.532,
+            "dequeue_per_second": 56.532,
+            "refresh_per_second": 58.422,
+            "create_us": null,
+            "queue_busy": 0,
+            "create_us_mean": 1580.3,
+            "mirror_us_mean": 13.4,
+            "bitmap_us_mean": 5.5
+          }
+        ]
+      },
+      "artifacts": {
+        "/home/bogdan/macos-vm/run/c443-b-perf-pipeline-analysis.json": "91bfdc58e381ae9fd1ae6de63da38f622de40defc07ee5466039dd9b7e9f0533",
+        "/home/bogdan/macos-vm/run/c443-b-perf-cadence.jsonl": "35f3fab8f64d9b00348f50b1bcb7baabfd9513f971182bd5fe4a8534e56cc566",
+        "/home/bogdan/macos-vm/run/c443-b-perf-source.txt": "9cc7b08eea4b30488b6272b44d13012ba2ac35e8a15ac463cee8374d949eda6d",
+        "/home/bogdan/macos-vm/run/c443-b-perf-spice-timing.trace": "731c3b551093d3e00e5516bc0c933f323ae53474a4b0976b7800e176a43adb89",
+        "/home/bogdan/macos-vm/run/worktrees/candidate-443/.research/gl-moving-b/readbacks.jsonl": "bfbc1df37bf095c800b3fe19fbe139d00ca4b302bb1e93d6bb0b06788d12b39f",
+        "/home/bogdan/macos-vm/run/c443-b-perf-maps.txt": "d1a003f68f4a248962994335364a259a2caaed4a727b3935a90ca1c2fc79add1",
+        "/home/bogdan/macos-vm/run/candidate-443-attempt-start-b-results/recovery.json": "975cc7efbfdf5888e1d23beb59ec3f6cfead558660b5b6a8652f044d93047abd",
+        "/home/bogdan/macos-vm/run/candidate-443-attempt-start-b-results/shutdown.json": "213747385fcde781bdd7c3b6041a49dcf6dd74432090296940091fdbdea1be94"
+      }
+    },
+    "c": {
+      "arm": "default",
+      "pins": "pins-bochs-client-lossless.json",
+      "run_id": "5fa9236a4d79c40e45c851a41e130f49",
+      "verdict": "CORE_PROBE_PASS",
+      "shutdown": "exited-after-guest-request",
+      "reconciliation_errors": [
+        "stopped container inspection unavailable or mismatched"
+      ],
+      "private_terminal_verified": true,
+      "recovery": "recovered",
+      "authorizes_launch": true,
+      "moving_gl": {
+        "requested": 100,
+        "valid": 100,
+        "invalid": 0,
+        "missing": 0,
+        "unique_sequences": 100,
+        "monotonic": true,
+        "geometry": {
+          "event": "geometry",
+          "time": 172375.985077232,
+          "primary": [
+            3840,
+            2160
+          ],
+          "display": [
+            1440,
+            900
+          ],
+          "monitor": 0,
+          "scaling": true,
+          "resize_guest": false,
+          "area_scale": 1
+        },
+        "scope": "paired token CRC at mapped GL FBO samples during moving mixed source; sparse diagnostic, not every frame or FPS"
+      },
+      "perf": {
+        "observer_seconds": 100.00361164999777,
+        "unique": 5023,
+        "invalid": 11,
+        "duplicates": 1,
+        "source_complete": true,
+        "phases": [
+          {
+            "index": 0,
+            "kind": "localized",
+            "client_ids_per_second": 56.144,
+            "dequeue_per_second": 56.144,
+            "refresh_per_second": 57.988,
+            "create_us": null,
+            "queue_busy": 0,
+            "create_us_mean": 1437.7,
+            "mirror_us_mean": 11.1,
+            "bitmap_us_mean": 4.9
+          },
+          {
+            "index": 1,
+            "kind": "full-field",
+            "client_ids_per_second": 38.613,
+            "dequeue_per_second": 38.836,
+            "refresh_per_second": 46.803,
+            "create_us": null,
+            "queue_busy": 0,
+            "create_us_mean": 5505.2,
+            "mirror_us_mean": 3035.0,
+            "bitmap_us_mean": 2708.4
+          },
+          {
+            "index": 2,
+            "kind": "localized",
+            "client_ids_per_second": 56.46,
+            "dequeue_per_second": 56.46,
+            "refresh_per_second": 57.962,
+            "create_us": null,
+            "queue_busy": 0,
+            "create_us_mean": 1455.4,
+            "mirror_us_mean": 11.1,
+            "bitmap_us_mean": 4.8
+          },
+          {
+            "index": 3,
+            "kind": "full-field",
+            "client_ids_per_second": 39.438,
+            "dequeue_per_second": 39.66,
+            "refresh_per_second": 46.902,
+            "create_us": null,
+            "queue_busy": 0,
+            "create_us_mean": 5456.5,
+            "mirror_us_mean": 2911.6,
+            "bitmap_us_mean": 2653.7
+          },
+          {
+            "index": 4,
+            "kind": "localized",
+            "client_ids_per_second": 57.012,
+            "dequeue_per_second": 57.012,
+            "refresh_per_second": 58.013,
+            "create_us": null,
+            "queue_busy": 0,
+            "create_us_mean": 1443.0,
+            "mirror_us_mean": 11.1,
+            "bitmap_us_mean": 5.2
+          }
+        ]
+      },
+      "artifacts": {
+        "/home/bogdan/macos-vm/run/c443-c-perf-pipeline-analysis.json": "38dd42c273cc36460243d67f446371dc5e82853affe291eee0a4b35a33210d71",
+        "/home/bogdan/macos-vm/run/c443-c-perf-cadence.jsonl": "0dc2e33c885996de3fcb1fb043025421c5767d7ebaa2b4ede5aca8213be31afa",
+        "/home/bogdan/macos-vm/run/c443-c-perf-source.txt": "ea3d1bb4de16a5ef8e054ea4c7ec8b62cb102c185e9d0a5e912ca42f66240333",
+        "/home/bogdan/macos-vm/run/c443-c-perf-spice-timing.trace": "6fc167a73ac2f0031bde548dc20f78d3e255dfb142577d05e9a10791af724df2",
+        "/home/bogdan/macos-vm/run/worktrees/candidate-443/.research/gl-moving-c/readbacks.jsonl": "3a3f0bd2c1d0f6120aca2a8fee84ebcc931f4615eee0b0f6fcd310a407a42863",
+        "/home/bogdan/macos-vm/run/c443-c-perf-maps.txt": "d1a003f68f4a248962994335364a259a2caaed4a727b3935a90ca1c2fc79add1",
+        "/home/bogdan/macos-vm/run/candidate-443-attempt-default-c-results/recovery.json": "ee0f76383f2c74fcc46a063337ceae43f0222fe5e1b08e2ecf66350a21c4f700",
+        "/home/bogdan/macos-vm/run/candidate-443-attempt-default-c-results/shutdown.json": "d57a91fd50dc7f7d3c67b5e05d258d0481298e623dd5a79992ac0182091f1d01"
+      }
+    }
+  },
+  "void_window": "cycle a first perf window: requested 165 s source exceeded c430-source-cadence 1..120 s bound (exit 2, empty log); observer saw no valid token; set aside in run/c443-a-void-perf1, not a measurement"
+}
