@@ -219,6 +219,7 @@ SUPPORTED_CARD_DIAGNOSTICS = {
     ("1.0.399", "metal-221"): "rgpuvmdiag=1",
     ("1.0.402", "metal-222"): "rgpuvmdiag=1",
     ("1.0.421", "metal-223"): "rgpuvmdiag=1",
+    ("1.0.428", "metal-224"): "rgpuvmdiag=1",
     ("1.0.335", "metal-183"): "rgpuvmdiag=1",
     ("1.0.334", "metal-182"): "rgpuvmdiag=1",
     ("1.0.333", "metal-181"): "rgpuvmdiag=1",
@@ -310,8 +311,8 @@ def configure(version, card_id, attempt=None):
     """Select the exact reviewed candidate/card pair; defaults are 1.0.185."""
     global CANDIDATE_VERSION, CARD_ID, NUMBER, WT, CANDIDATE, DIST, IDENTITIES
     global RUN_ID_FILE, CARD
-    if not re.fullmatch(r"1\.0\.((?:1[0-9]{2}|2[0-5][0-9]|2[67][0-9]|280|281|282|283|284|285|286|287|288|289|290|291|292|293|294|295|296|297|298|299|300|301|302|303|304|305|306|307|308|309|310|311|312|313|314|315|316|317|318|319|320|321|322|323|324|325|326|327|328|329|330|331|332|333|334|335|336|340|341|342|343|345|347|350|351|352|353|354|355|356|358|361|364|366|368|370|374|376|379|381|382|383|385|386|388|390|392|394|395|396|397|399|402|421))", version):
-        raise RuntimeError("candidate version must be in the reviewed candidate set through 1.0.421")
+    if not re.fullmatch(r"1\.0\.((?:1[0-9]{2}|2[0-5][0-9]|2[67][0-9]|280|281|282|283|284|285|286|287|288|289|290|291|292|293|294|295|296|297|298|299|300|301|302|303|304|305|306|307|308|309|310|311|312|313|314|315|316|317|318|319|320|321|322|323|324|325|326|327|328|329|330|331|332|333|334|335|336|340|341|342|343|345|347|350|351|352|353|354|355|356|358|361|364|366|368|370|374|376|379|381|382|383|385|386|388|390|392|394|395|396|397|399|402|421|428))", version):
+        raise RuntimeError("candidate version must be in the reviewed candidate set through 1.0.428")
     if not re.fullmatch(r"metal-[0-9]{3}", card_id):
         raise RuntimeError("card id must be metal-NNN")
     if attempt is not None and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,31}", attempt):
@@ -378,7 +379,7 @@ def exact_hex(value, digits, label):
 def validate_usbredir_card_option(pair, card_launch):
     """Consume only the explicitly reviewed candidate USB redirection option."""
     value = card_launch.pop("CONSOLE_USBREDIR", "off")
-    expected = "on" if pair == ("1.0.421", "metal-223") else "off"
+    expected = "on" if pair in (("1.0.421", "metal-223"), ("1.0.428", "metal-224")) else "off"
     if type(value) is not str or value != expected:
         raise RuntimeError("candidate USB redirection contract mismatch")
     if value == "on" and any(card_launch.get(k) != v for k, v in {
@@ -1014,6 +1015,7 @@ def validate_card(raw, expected_sha256):
     CANDIDATE203_FUNCTIONAL[("1.0.397", "metal-220")] = dict(CANDIDATE203_FUNCTIONAL[("1.0.352", "metal-195")], rgpuconsoletiming="1")
     CANDIDATE203_FUNCTIONAL[("1.0.399", "metal-221")] = dict(CANDIDATE203_FUNCTIONAL[("1.0.397", "metal-220")])
     CANDIDATE203_FUNCTIONAL[("1.0.402", "metal-222")] = dict(CANDIDATE203_FUNCTIONAL[("1.0.399", "metal-221")])
+    CANDIDATE203_FUNCTIONAL[("1.0.428", "metal-224")] = dict(CANDIDATE203_FUNCTIONAL[("1.0.402", "metal-222")])
     CANDIDATE203_FUNCTIONAL[("1.0.421", "metal-223")] = dict(CANDIDATE203_FUNCTIONAL[("1.0.402", "metal-222")])
     if pair in CANDIDATE203_FUNCTIONAL:
         card_launch = dict(card.get("launch_options") or {})

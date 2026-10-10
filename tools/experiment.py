@@ -3103,6 +3103,7 @@ def validate_running(manifest, observed):
         errors.append('vdagent_topology')
     expected_usbredir=[]
     if manifest.get('launch_options', {}).get('CONSOLE_USBREDIR') == 'on':
+        expected_usbredir += ['-global', 'qemu-xhci.p2=8', '-global', 'qemu-xhci.p3=8']
         for i in range(2):
             expected_usbredir += ['-chardev', f'spicevmc,id=rgpu_usbredir{i},name=usbredir',
                 '-device', f'usb-redir,id=rgpu_usbredir_dev{i},chardev=rgpu_usbredir{i},bus=xhci.0']
@@ -3227,6 +3228,7 @@ for pid in os.listdir('/proc'):
   for index,arg in enumerate(args[:-1]):
    value=args[index+1]
    if ((arg==b'-device' and value.split(b',',1)[0]==b'usb-redir') or
+       (arg==b'-global' and value.startswith(b'qemu-xhci.')) or
        (arg==b'-chardev' and (b'name=usbredir' in value or b'rgpu_usbredir' in value))):
     usbredir.extend((arg.decode(),value.decode()))
   graphics=[]

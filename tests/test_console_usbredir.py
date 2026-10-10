@@ -12,6 +12,7 @@ def load(name):
 class UsbRedirectionTests(unittest.TestCase):
     def args(self):
         a=native_fixture()
+        for value in plan.USBREDIR_GLOBALS:a += ['-global',value]
         for ch,dev in zip(plan.USBREDIR_CHARS,plan.USBREDIR_DEVICES):a+=['-chardev',ch,'-device',dev]
         return a
     def test_exact_slots_preserved_and_admission_both_directions(self):
@@ -29,6 +30,15 @@ class UsbRedirectionTests(unittest.TestCase):
                a+['-device','usb-host,vendorid=1,productid=2']]
         for args in cases:
             with self.subTest(args=args[-4:]),self.assertRaises(ValueError):plan.build_plan(args,'1'*32)
+    def test_direct_port_count_is_exact_and_not_allowed_without_usb(self):
+        for globals_ in ([], ['qemu-xhci.p2=4','qemu-xhci.p3=8'], ['qemu-xhci.p2=8'], plan.USBREDIR_GLOBALS*2):
+            args=self.args()[0:]
+            rows=list(zip(args[::2],args[1::2]))
+            args=[x for row in rows if row[0]!='-global' for x in row]
+            for value in globals_:args+=['-global',value]
+            with self.assertRaises(ValueError):plan.build_plan(args,'1'*32)
+        with self.assertRaises(ValueError):plan.build_plan(native_fixture()+['-global','qemu-xhci.p2=8'],'1'*32)
+
     def test_manual_policy_disables_both_automatic_routes(self):
         mod=load('console-manager-usbredir.py')
         class Properties:
@@ -63,6 +73,7 @@ class UsbRedirectionTests(unittest.TestCase):
         # Find the retained raw CPU globals rather than libvirt's earlier global.
         idx=state['argv'].index('Haswell-noTSX-x86_64-cpu.kvm=on')-1
         extra=[]
+        for value in plan.USBREDIR_GLOBALS:extra += ['-global',value]
         for ch,dev in zip(plan.USBREDIR_CHARS,plan.USBREDIR_DEVICES):extra+=['-chardev',ch,'-device',dev]
         state['argv'][idx:idx]=extra
         self.assertTrue(verifier.verify(active,state))

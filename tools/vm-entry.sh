@@ -144,6 +144,8 @@ fi
 
 # Empty SPICE USB slots only; no host USB device is opened by QEMU here.
 if [[ "${CONSOLE_USBREDIR:-off}" == on ]]; then
+    # Five endpoints need direct ports; avoid QEMU auto-inserting a USB hub.
+    export EXTRA="${EXTRA:-} -global qemu-xhci.p2=8 -global qemu-xhci.p3=8"
     for slot in 0 1; do
         export EXTRA="${EXTRA:-} -chardev spicevmc,id=rgpu_usbredir${slot},name=usbredir -device usb-redir,id=rgpu_usbredir_dev${slot},chardev=rgpu_usbredir${slot},bus=xhci.0"
     done
