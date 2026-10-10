@@ -15,7 +15,7 @@
 	<key>CFBundlePackageType</key>
 	<string>KEXT</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0.434</string>
+	<string>1.0.435</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
 	<key>CFBundleSupportedPlatforms</key>
@@ -23,7 +23,7 @@
 		<string>MacOSX</string>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>1.0.434</string>
+	<string>1.0.435</string>
 	<key>IOKitPersonalities</key>
 	<dict>
 		<key>as.rgpu.RaphaelGPU</key>
@@ -57,8 +57,6 @@
 	</dict>
 	<key>OSBundleLibraries</key>
 	<dict>
-		<key>com.apple.iokit.IOGraphicsFamily</key>
-		<string>2.0.0</string>
 		<key>as.vit9696.Lilu</key>
 		<string>1.2.0</string>
 		<key>com.apple.kpi.bsd</key>
