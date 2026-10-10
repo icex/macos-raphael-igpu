@@ -80,7 +80,12 @@ def build_plan(argv, run_id):
     agent = any(d.split(',')[0].startswith(('virtio-serial', 'virtserialport', 'virtconsole')) for d in devices) or agent_char in values(rows, '-chardev')
     require(spice.endswith(',agent-mouse=off') == agent, 'agent mouse routing must match agent topology')
     bochs = [d for d in devices if d.split(',')[0] == 'bochs-display']
-    require(len(bochs) == 1 and bochs[0] in (BOCHS, BOCHS+',x-debug-full-refresh=on',
+    native_edid=bochs[0].endswith(',xres=2560,yres=1440,refresh_rate=120000') if len(bochs)==1 else False
+    if native_edid:
+        require(bochs[0] == BOCHS+',x-debug-full-refresh=on,x-debug-snapshot=on,x-debug-snapshot-restart=on,x-debug-snapshot-timing=on,x-debug-snapshot-pool=on,xres=2560,yres=1440,refresh_rate=120000' and
+                spice.removesuffix(',agent-mouse=off') == SPICE+',max-refresh-rate=120', 'unreviewed native EDID profile')
+    checked_bochs=bochs[0].removesuffix(',xres=2560,yres=1440,refresh_rate=120000') if native_edid else (bochs[0] if len(bochs)==1 else '')
+    require(len(bochs) == 1 and checked_bochs in (BOCHS, BOCHS+',x-debug-full-refresh=on',
             BOCHS+',x-debug-full-refresh=on,x-debug-snapshot=on',
             BOCHS+',x-debug-full-refresh=on,x-debug-snapshot=on,x-debug-snapshot-restart=on',
             BOCHS+',x-debug-full-refresh=on,x-debug-snapshot=on,x-debug-snapshot-restart=on,x-debug-snapshot-timing=on',

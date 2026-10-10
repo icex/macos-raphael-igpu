@@ -81,6 +81,8 @@ def validate_plan_refresh(plan,admission):
     if snapshot in ('restart','restart-timing','restart-timing-pool'): wanted_bochs+=',x-debug-snapshot-restart=on'
     if snapshot in ('restart-timing','restart-timing-pool'): wanted_bochs+=',x-debug-snapshot-timing=on'
     if snapshot=='restart-timing-pool': wanted_bochs+=',x-debug-snapshot-pool=on'
+    if handoff.validate_edid(admission.get('console_edid','default')) == '1440p120':
+        wanted_bochs+=',xres=2560,yres=1440,refresh_rate=120000'
     handoff.require(bochs==[wanted_bochs], 'plan console full refresh differs from admission')
 
 

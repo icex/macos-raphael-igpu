@@ -39,6 +39,7 @@ CRITICAL_SERIAL="${CRITICAL_SERIAL:-off}" # on = dedicated CR2 UART at COM2
 GENERIC_GRAPHICS="${GENERIC_GRAPHICS:-on}" # off = authenticated headless/no-VGA path
 VM_CONSOLE="${VM_CONSOLE:-off}"
 VM_MANAGER="${VM_MANAGER:-direct}"
+CONSOLE_EDID="${CONSOLE_EDID:-default}"
 CONSOLE_REFRESH="${CONSOLE_REFRESH:-default}"
 CONSOLE_FULL_REFRESH="${CONSOLE_FULL_REFRESH:-off}"
 CONSOLE_SNAPSHOT="${CONSOLE_SNAPSHOT:-off}"
@@ -129,6 +130,7 @@ case "${CONSOLE_VDAGENT}" in off) ;; on) [[ "${VM_MANAGER}" == libvirt && "${VM_
 case "${CONSOLE_USBREDIR}" in off) ;; on) [[ "${VM_MANAGER}" == libvirt && "${VM_CONSOLE}" == bochs-spice && "${GENERIC_GRAPHICS}" == off ]] || die "USB redirection requires native libvirt SPICE" ;; *) die "unknown CONSOLE_USBREDIR" ;; esac
 case "${CONSOLE_SNAPSHOT}" in off) ;; on|restart|restart-timing|restart-timing-pool) [[ "${VM_MANAGER}" == libvirt && "${VM_CONSOLE}" == bochs-spice && ( "${CONSOLE_REFRESH}" == 60 || "${CONSOLE_REFRESH}" == 120 ) && "${CONSOLE_FULL_REFRESH}" == on && "${GENERIC_GRAPHICS}" == off ]] || die "snapshot requires native libvirt SPICE60/120 full refresh" ;; *) die "unknown CONSOLE_SNAPSHOT" ;; esac
 case "${CONSOLE_FULL_REFRESH}" in off) ;; on) [[ "${VM_MANAGER}" == libvirt && "${VM_CONSOLE}" == bochs-spice && ( "${CONSOLE_REFRESH}" == 60 || "${CONSOLE_REFRESH}" == 120 ) ]] || die "full refresh requires explicit libvirt SPICE60/120" ;; *) die "unknown CONSOLE_FULL_REFRESH" ;; esac
+case "${CONSOLE_EDID:-default}" in default) ;;1440p120) [[ "${VM_MANAGER}" == libvirt && "${VM_CONSOLE}" == bochs-spice && "${CONSOLE_REFRESH}" == 120 && "${CONSOLE_FULL_REFRESH}" == on && "${CONSOLE_SNAPSHOT}" == restart-timing-pool && "${GENERIC_GRAPHICS}" == off ]] || die "native EDID requires120Hz snapshot pool" ;; *) die "unknown CONSOLE_EDID" ;; esac
 case "${CONSOLE_REFRESH}" in default|60|120) ;; *) die "unknown CONSOLE_REFRESH" ;; esac
 [[ "${CONSOLE_REFRESH}" == default || "${VM_MANAGER}" == libvirt ]] || die "explicit refresh requires libvirt profile"
 case "${VM_MANAGER}" in
@@ -321,6 +323,7 @@ DOCKER_ARGS=(
     -e "EXTRA=${EXTRA_QEMU}"
     -e "GENERIC_GRAPHICS=${GENERIC_GRAPHICS}"
     -e "VM_CONSOLE=${VM_CONSOLE}"
+    -e "CONSOLE_EDID=${CONSOLE_EDID}"
     -e "CONSOLE_REFRESH=${CONSOLE_REFRESH}"
     -e "CONSOLE_FULL_REFRESH=${CONSOLE_FULL_REFRESH}"
     -e "CONSOLE_SNAPSHOT=${CONSOLE_SNAPSHOT}"

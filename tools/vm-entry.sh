@@ -99,6 +99,11 @@ case "${CONSOLE_FULL_REFRESH:-off}" in
     on) [[ "${VM_MANAGER:-direct}" == libvirt && "${VM_CONSOLE:-off}" == bochs-spice && ( "${CONSOLE_REFRESH:-default}" == 60 || "${CONSOLE_REFRESH:-default}" == 120 ) ]] || { echo "full refresh requires libvirt SPICE60/120" >&2; exit 1; } ;;
     *) echo "unknown CONSOLE_FULL_REFRESH" >&2; exit 1 ;;
 esac
+case "${CONSOLE_EDID:-default}" in
+ default) ;;
+ 1440p120) [[ "${VM_MANAGER:-direct}" == libvirt && "${VM_CONSOLE:-off}" == bochs-spice && "${CONSOLE_REFRESH:-default}" == 120 && "${CONSOLE_FULL_REFRESH:-off}" == on && "${CONSOLE_SNAPSHOT:-off}" == restart-timing-pool && "${GENERIC_GRAPHICS:-on}" == off ]] || { echo "native EDID requires120Hz snapshot pool" >&2; exit 1; } ;;
+ *) echo "unknown CONSOLE_EDID" >&2; exit 1 ;;
+esac
 case "${CONSOLE_REFRESH:-default}" in
     default) ;;
     60|120) [[ "${VM_MANAGER:-direct}" == libvirt && "${VM_CONSOLE:-off}" == bochs-spice ]] || { echo "explicit refresh requires libvirt SPICE" >&2; exit 1; } ;;
@@ -115,6 +120,7 @@ case "${VM_CONSOLE:-off}" in
         if [[ "${CONSOLE_SNAPSHOT:-off}" == restart || "${CONSOLE_SNAPSHOT:-off}" == restart-timing || "${CONSOLE_SNAPSHOT:-off}" == restart-timing-pool ]]; then export EXTRA="${EXTRA},x-debug-snapshot-restart=on"; fi
         if [[ "${CONSOLE_SNAPSHOT:-off}" == restart-timing || "${CONSOLE_SNAPSHOT:-off}" == restart-timing-pool ]]; then export EXTRA="${EXTRA},x-debug-snapshot-timing=on"; fi
         if [[ "${CONSOLE_SNAPSHOT:-off}" == restart-timing-pool ]]; then export EXTRA="${EXTRA},x-debug-snapshot-pool=on"; fi
+        if [[ "${CONSOLE_EDID:-default}" == 1440p120 ]]; then export EXTRA="${EXTRA},xres=2560,yres=1440,refresh_rate=120000"; fi
         if [[ "${VM_CONSOLE}" == bochs-spice ]]; then
             export EXTRA="${EXTRA} -spice unix=on,addr=/run/vm/console-spice.sock,disable-ticketing=on,image-compression=off,gl=off"
             if [[ ( "${CONSOLE_REFRESH:-default}" == 60 || "${CONSOLE_REFRESH:-default}" == 120 ) ]]; then export EXTRA="${EXTRA},max-refresh-rate=${CONSOLE_REFRESH}"; fi

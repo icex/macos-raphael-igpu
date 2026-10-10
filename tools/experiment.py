@@ -445,6 +445,10 @@ def launch_options(data):
             (usbredir == 'on' and any(checked.get(k) != v for k, v in {
                 'VM_MANAGER':'libvirt', 'VM_CONSOLE':'bochs-spice', 'GENERIC_GRAPHICS':'off'}.items()))):
         raise ValueError('usbredir requires native libvirt SPICE')
+    edid = checked.pop('CONSOLE_EDID', 'default') if checked is not None else None
+    if (type(edid) is not str or edid not in ('default', '1440p120') or
+            (edid != 'default' and any(checked.get(k) != v for k,v in {'VM_MANAGER':'libvirt','VM_CONSOLE':'bochs-spice','GENERIC_GRAPHICS':'off','CONSOLE_REFRESH':'120','CONSOLE_FULL_REFRESH':'on','CONSOLE_SNAPSHOT':'restart-timing-pool'}.items()))):
+        raise ValueError('native EDID requires exact native SPICE refresh contract')
     snapshot = checked.pop('CONSOLE_SNAPSHOT', 'off') if checked is not None else None
     if (type(snapshot) is not str or snapshot not in ('off', 'on', 'restart', 'restart-timing','restart-timing-pool') or
             (snapshot in ('on', 'restart', 'restart-timing','restart-timing-pool') and checked not in snapshot_contracts) or checked not in contracts):
@@ -536,6 +540,8 @@ def current_identity(vm, candidate, requested_diagnostic, run_id=None,
         raise ValueError('generic graphics launch option changed')
     if os.environ.get('VM_CONSOLE', options.get('VM_CONSOLE', 'off')) not in ('', options.get('VM_CONSOLE', 'off')):
         raise ValueError('console launch option changed')
+    if os.environ.get('CONSOLE_EDID', options.get('CONSOLE_EDID', 'default')) not in ('', options.get('CONSOLE_EDID', 'default')):
+        raise ValueError('CONSOLE_EDID environment differs from manifest')
     if os.environ.get('CONSOLE_REFRESH', options.get('CONSOLE_REFRESH', 'default')) not in ('', options.get('CONSOLE_REFRESH', 'default')):
         raise ValueError('CONSOLE_REFRESH environment differs from manifest')
     vdagent = options.get('CONSOLE_VDAGENT', 'off')
@@ -3133,6 +3139,8 @@ def validate_running(manifest, observed):
             expected_graphics[-1] += ',x-debug-snapshot-timing=on'
         if manifest['launch_options'].get('CONSOLE_SNAPSHOT') == 'restart-timing-pool':
             expected_graphics[-1] += ',x-debug-snapshot-pool=on'
+        if manifest['launch_options'].get('CONSOLE_EDID', 'default') == '1440p120':
+            expected_graphics[-1] += ',xres=2560,yres=1440,refresh_rate=120000'
         supplements=[]
         if manifest['launch_options'].get('CONSOLE_REFRESH') in ('60','120'):
             supplements.append('max-refresh-rate='+manifest['launch_options']['CONSOLE_REFRESH'])

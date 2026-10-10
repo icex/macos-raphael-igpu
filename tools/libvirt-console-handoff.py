@@ -58,6 +58,11 @@ def validate_snapshot(value):
     return value
 
 
+def validate_edid(value):
+    require(type(value) is str and value in ('default','1440p120'), 'invalid admitted console EDID')
+    return value
+
+
 def validate_vdagent(value):
     require(type(value) is str and value in ('off', 'on'), 'invalid admitted console vdagent')
     return value
@@ -78,6 +83,8 @@ def prepare(base,manifest,manifest_bytes,network,modules,now=None):
             manifest['launch_options'].get('VM_CONSOLE') == 'bochs-spice' and
             manifest['launch_options'].get('GENERIC_GRAPHICS') == 'off'),
             'snapshot requires native libvirt SPICE60/120 full refresh')
+    edid=validate_edid(manifest['launch_options'].get('CONSOLE_EDID','default'))
+    require(edid == 'default' or (refresh == '120' and full == 'on' and snapshot == 'restart-timing-pool'), 'native EDID requires120Hz snapshot pool')
     usbredir=validate_usbredir(manifest['launch_options'].get('CONSOLE_USBREDIR','off'))
     require(usbredir == 'off' or (manifest['launch_options'].get('VM_CONSOLE') == 'bochs-spice' and
             manifest['launch_options'].get('GENERIC_GRAPHICS') == 'off'), 'usbredir requires native libvirt SPICE')
@@ -89,7 +96,7 @@ def prepare(base,manifest,manifest_bytes,network,modules,now=None):
     directory=run_directory(base,manifest['run_id']);directory.mkdir(mode=0o700)
     now=time.time() if now is None else now
     data=dict(schema=1,run_id=manifest['run_id'],boot_id=manifest['boot_id'],
-              manifest_sha256=sha(manifest_bytes),image_id=manifest['image_id'],console_refresh=refresh,console_full_refresh=full,console_snapshot=snapshot,console_vdagent=vdagent,console_usbredir=usbredir,
+              manifest_sha256=sha(manifest_bytes),image_id=manifest['image_id'],console_refresh=refresh,console_full_refresh=full,console_snapshot=snapshot,console_vdagent=vdagent,console_usbredir=usbredir,console_edid=edid,
               deadline_epoch=math.floor(now+manifest['max_seconds']),network=network,
               modules_sha256=modules)
     write_once(directory/'admission.json',data)
@@ -109,6 +116,8 @@ def validate_admission(data,run_id,expected_digest,modules_dir,boot_id,now=None)
     snapshot=validate_snapshot(data.get('console_snapshot','off'))
     require(snapshot == 'off' or (full == 'on' and data.get('console_refresh') in ('60', '120')),
             'snapshot requires explicit SPICE60/120 full refresh')
+    edid=validate_edid(data.get('console_edid','default'))
+    require(edid == 'default' or (data.get('console_refresh') == '120' and full == 'on' and snapshot == 'restart-timing-pool'), 'native EDID requires120Hz snapshot pool')
     require(type(data['manifest_sha256']) is str and re.fullmatch('[0-9a-f]{64}',data['manifest_sha256']),
             'missing admitted manifest digest')
     now=time.time() if now is None else now
