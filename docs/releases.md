@@ -29,23 +29,24 @@ The runner label is explicitly Intel, as listed in the
 
 ## Checked-in experimental executable
 
-`kext/bin/RaphaelGPU` contains the exact hardware-tested candidate 402 executable,
-build `582b7a9276a54795ad3ff711d4130474`, from clean source
-`c9a3a5d0d66e9dbd9e789df709068afc14bc6bea`, SHA256
-`7bebb5596f5aa31cf1cfff6c4e95b185b74b254ba62c9e01ac403317a19b1bd5`.
-The canonical archive build manifest is copied unchanged. Card 222 requires the
-pinned experimental QEMU image and exact `restart-timing-pool` profile. Packaging
-the kext alone does not enable the host-side pool in stock QEMU.
+`kext/bin/RaphaelGPU` contains the exact hardware-tested candidate 428 executable,
+build `3b413b25e1ce4f7eb6bb8e1a27384d7c`, from clean source
+`68f247c745fd5d73a268f856ed472270f139a7cf`, SHA256
+`39aabe6038a5e5cb6f086e44ed51530d0abacb8c249a9cad30cc46be7cddbf72`.
+The canonical archive build manifest is copied unchanged. Card 224 requires the
+pinned experimental QEMU image and exact `restart-timing-pool` profile. This
+version changes support integration, not the GPU rendering implementation.
 
-Measured host copy drops from 6.834 to 1.948 ms; localized delivery reaches about
-57 decoded IDs/s, while full-field delivery remains about 25/s. Full-pixel
-stale-owner, restart, odd-resize, input and audio regressions pass. Serial capture
-still has two corrupt lines and two incomplete snapshots; independent natural shutdown
-and recovery pass. This is a bounded experimental milestone, not a generally
-qualified release or sustained 4K at 60 Hz claim.
-[402 native evidence](../findings/research/console-snapshot-private-pool-native-20261010.md).
+Native virt-manager text clipboard and GUI USB redirection now have scoped
+runtime evidence. Kingston storage enumeration and repeated read-only I/O pass;
+Arctis output callbacks pass without an audible-playback claim. Kingston eject remained busy; abrupt viewer
+failure did not restore all Arctis interfaces. Guest shutdown was observed, but
+the final receipt is `capture-abort-after-request`; GPU recovery passed. See the
+[428 evidence](../findings/research/virt-manager-clipboard-usb-native-20261010.md).
+The prior 402 performance results remain the baseline; this milestone does not
+establish sustained 4K60, 5K or 120 Hz virtual presentation.
 
-**Current priority: QEMU/virt-manager clipboard and GUI USB redirection.**
+**Current priority: Retina sizing and refresh support in QEMU/virt-manager.**
 VirtualBox work is deferred at the user’s request. Candidate 417 was stopped during
 early boot at the earlier pause.
 The controller helper forced poweroff, then unregistered the VM on its first

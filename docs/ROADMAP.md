@@ -1,6 +1,21 @@
 # Raphael iGPU acceleration roadmap
 
-Updated 2026-10-10. Current accelerated-console experiment: **402**. The bounded
+**October 10, candidate 428: native virt-manager clipboard and USB milestone.**
+Fresh ASCII and Unicode/multiline text passes in both directions using the tested
+X11 client backend. The existing USB chooser redirects the Kingston DataTraveler:
+macOS enumerates its USB3 storage and two 1 MiB reads match. Arctis USB audio also
+enumerates and accepts stereo output callbacks; audible playback was not tested.
+Window-driven 1280×720, 1101×703 and 1600×900 modes are checked separately.
+Normal Arctis chooser detach restores host drivers; abrupt viewer failure does
+not have the same recovery guarantee. Kingston eject attempts remained busy.
+Guest shutdown was observed, but capture forced an abort; GPU recovery passed.
+
+**Next: full Retina window sizing, standard 4K/5K backing modes and 120 Hz.**
+The current virtual snapshot transport is still capped at 4K/60. Physical HDMI
+4K120 does not establish 120 Hz delivery through the virtual copy/SPICE path.
+[Native evidence](../findings/research/virt-manager-clipboard-usb-native-20261010.md).
+
+Updated 2026-10-10. Performance baseline: **402**; desktop integration: **428**. The bounded
 private host-buffer pool lowers measured snapshot copy cost from 6.834 to 1.948 ms.
 Localized motion reaches about 57 decoded IDs/s, while full-field motion stays
 about 25/s: sustained 4K at 60 Hz and whole-frame dynamic integrity remain open. The
@@ -15,7 +30,7 @@ two corrupt lines and two incomplete snapshots. Independent natural shutdown and
 recoverable cleanup do not erase those capture defects.
 [402 evidence](../findings/research/console-snapshot-private-pool-native-20261010.md).
 
-**Current priority: QEMU/virt-manager clipboard and GUI USB redirection.**
+**QEMU/virt-manager remains the priority; VirtualBox is deferred.**
 VirtualBox work is deferred at the user’s request. Candidate 417 was stopped during
 early boot at the earlier pause.
 The controller helper forced poweroff, then unregistered the VM on its first

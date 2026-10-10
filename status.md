@@ -24,5 +24,6 @@ Receipts: ~/macos-vm/run/candidate-428-results/. Clipboard evidence:
 ~/macos-vm/run/c428-x11-tests/events.jsonl; USB read evidence:
 ~/macos-vm/run/c428-kingston-read-eject.json; helpers: c428-final-helpers.txt.
 
-Published dev remains4fdd0f3 pending candidate429 documentation/binary integration
-and hosted CI. Main unchanged. VirtualBox remains deferred.
+Candidate429 integrates the completed clipboard/USB milestone and checked-in1.0.428
+binary for dev publication. Host suite passes; hosted CI remains pending.
+Main unchanged. VirtualBox remains deferred. Candidate430 prepares4K/120 testing.

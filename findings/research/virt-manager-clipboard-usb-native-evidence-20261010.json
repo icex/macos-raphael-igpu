@@ -1,0 +1,127 @@
+{
+  "schema": 1,
+  "run_id": "817dfe19b8e46522c6b350fb21dc0bd4",
+  "artifact_root": "/home/bogdan/macos-vm/run",
+  "artifacts": [
+    {
+      "path": "c428-x11-tests/events.jsonl",
+      "bytes": 449,
+      "sha256": "08e82b71772f72869a1fffb95bff4bd2913bee826802d36ddf9790b9053c8237"
+    },
+    {
+      "path": "c428-x11-h2g-ascii.txt",
+      "bytes": 79,
+      "sha256": "b47c966112668f217c02b29aa1e290dea102ad767540bd92b7c653b49d5d122d"
+    },
+    {
+      "path": "c428-x11-h2g-unicode.txt",
+      "bytes": 81,
+      "sha256": "398b514236f01737a42a139f1c29a73916e8d8d40b661ff8a7b2eb0506ee5ffc"
+    },
+    {
+      "path": "c428-x11-g2h-ascii.txt",
+      "bytes": 68,
+      "sha256": "0993563d375e32dbc45eea85879e849e5b8911ad37b027c73ee0d24ccaa22947"
+    },
+    {
+      "path": "c428-x11-g2h-unicode.txt",
+      "bytes": 70,
+      "sha256": "c4ba57b380cff7bf0c76151f903e5c7d2ff16e42e6fef3c3e56d960613d70ebe"
+    },
+    {
+      "path": "c428-desktop-tests/events.jsonl",
+      "bytes": 899,
+      "sha256": "0ca9057be20d01e71d708247647758c1003f9148fecc6b10f705064033a95fc8"
+    },
+    {
+      "path": "c428-reconnect-tests/events.jsonl",
+      "bytes": 1271,
+      "sha256": "a2ebef04fa15268faaa5a7a85cb3dcccf60bc7b07268664265609371dc0b63fc"
+    },
+    {
+      "path": "c428-kingston-tests/events.jsonl",
+      "bytes": 994,
+      "sha256": "ab4d5ddc7216325f4ae0d2816dd327455dae95614e5e9150336a7cca7de930a4"
+    },
+    {
+      "path": "c428-arctis-attached.txt",
+      "bytes": 4606,
+      "sha256": "0bf10dcf7968d8eb352ea4210a9c95d9872ed73277d64749d10fb97e88ab2fbe"
+    },
+    {
+      "path": "c428-arctis-tone.txt",
+      "bytes": 102,
+      "sha256": "46a4780b2b3003b84207c417768a9593b5dea70a929edbf74bae30a2247e46e9"
+    },
+    {
+      "path": "c428-restore-arctis-user.json",
+      "bytes": 196,
+      "sha256": "1aca02eac4a1795951d0445a9fbd8e98a3fe056f6af0b06115da30bc30f832da"
+    },
+    {
+      "path": "c428-kingston-guest-confirmation.txt",
+      "bytes": 5275,
+      "sha256": "0677645698a8922edb6b7a6d9d6776b896d11e51269664f730b81bd43a047206"
+    },
+    {
+      "path": "c428-kingston-read-eject.json",
+      "bytes": 276,
+      "sha256": "544db3ac9e03ef8792d205a94a7a79719e5027b2fc1f65c07bf5b932fa224443"
+    },
+    {
+      "path": "c428-kingston-eject-retry.txt",
+      "bytes": 401,
+      "sha256": "5fe8d63d242d421cd010a263376d10d46c90f7a0d8c97f5631ed4536cbd03a26"
+    },
+    {
+      "path": "c428-resize-odd-and-eject.txt",
+      "bytes": 2105,
+      "sha256": "9dda5dec5de1ae4db6da5223d6e2741f67689a9f1dc1234d8ae9cc7ace01c5d1"
+    },
+    {
+      "path": "c428-final-helpers.txt",
+      "bytes": 3443,
+      "sha256": "b5daeba67047006c555d2434291ce0a3b7eb25adba2edbdcfce12b4700b17328"
+    },
+    {
+      "path": "candidate-428-results/running-identity.json",
+      "bytes": 3610,
+      "sha256": "7498f7752c55ab7cf3afcddcabfc07513c2394044208bc45e0d641ed340d33b2"
+    },
+    {
+      "path": "candidate-428-results/verdict.json",
+      "bytes": 47314,
+      "sha256": "54fc0b343a0cf514e58824438ed5d9099555874a4e59f5319a5fcdbec086ff26"
+    },
+    {
+      "path": "candidate-428-results/recovery-replay.json",
+      "bytes": 438,
+      "sha256": "b7df1d3951d771afe52798e5ad9c91ab0cb9af0723228471adbc135ce4ba9acf"
+    },
+    {
+      "path": "candidate-428-results/shutdown.json",
+      "bytes": 1217,
+      "sha256": "5ffcc13cf7907b5be1c4a35e742d4c1ec0569f448e477a9c209e05d6167bc2d8"
+    },
+    {
+      "path": "candidate-428-results/recovery.json",
+      "bytes": 17577,
+      "sha256": "487ddd27f30ee971f157fb98be74298ab9cd98240a448d277e0dc5dcd35c193e"
+    },
+    {
+      "path": "libvirt-817dfe19b8e46522c6b350fb21dc0bd4/events.jsonl",
+      "bytes": 3216,
+      "sha256": "99213c9719481db539e3767ca8475a6e38691e7f777e43637bdd5b128d1a7ca4"
+    },
+    {
+      "path": "capture-exit-56bc1ed490779e9e268988e7581fb138c4c334278a590bf256ff2df538425c28-2335825.json",
+      "bytes": 1127,
+      "sha256": "6895539161390ce793dc12df64dc4ed0e692ff99b27ca93ac902a3fe6aeb8e99"
+    },
+    {
+      "path": "capture-exit-56bc1ed490779e9e268988e7581fb138c4c334278a590bf256ff2df538425c28-2335831.json",
+      "bytes": 1124,
+      "sha256": "93a497bb920103f761fb162cd3f1a5d213be9ca485afa2d19ece875a7a080c45"
+    }
+  ]
+}

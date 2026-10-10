@@ -146,15 +146,16 @@ old-client data. Clipboard release never clears the guest’s current contents.
 The helper checks AppKit’s change counter before writing, but AppKit provides no
 atomic compare-and-clear operation; a concurrent local copy can still race the
 final ownership change. Offline parser, socketpair and installer tests pass.
-Native helper compilation, macOS pasteboard access, actual bidirectional
-virt-manager copy/paste and reconnect behavior remain **unqualified** at this
-source milestone. No OS permission or native clipboard success is inferred from
-these tests.
+Candidate428 compiles the helper and verifies fresh ASCII and Unicode/multiline
+text in both directions through native virt-manager with `GDK_BACKEND=x11` on
+KDE. Use this tested backend for now. The Wayland background automation had delayed
+clipboard delivery; it is not qualified as equivalent. The check uses actual
+GtkClipboard and macOS pbcopy/pbpaste, not an independent transport client.
 
-## Manual USB redirection in virt-manager (candidate 422)
+## Manual USB redirection in virt-manager (428 native qualification)
 
 The reviewed `CONSOLE_USBREDIR=on` profile supplies two empty SPICE redirection
-slots on the existing xHCI bus; default off adds none. It does not attach a host
+slots on the existing xHCI bus with eight direct USB2/USB3 ports; default off adds none. It does not attach a host
 device or give the VM direct access to host USB device nodes. Use the project’s
 `console-manager-usbredir.py` entrypoint with the prepared isolated virt-manager
 client environment and the existing connection/domain arguments. It starts an
@@ -163,13 +164,25 @@ SPICE connection. Launching an ordinary unguarded manager does not provide that
 manual-only policy. The isolated client must include USB redirection support;
 the older candidate 393 client prefix did not.
 
-In that manager’s console, open **Redirect USB device**, select the intended spare
+For the tested KDE setup, launch with `GDK_BACKEND=x11`. In that manager’s
+console, open **Virtual Machine → Redirect USB device**, select the intended spare
 device, and use the same chooser to disconnect it when finished. The client machine
 supplies the device; the device must be supported by macOS and available to the
 client. An ordinary desktop authorization prompt may be required. Neither a visible
-chooser nor an empty slot proves successful USB transfer. Native attachment,
-guest enumeration/I/O, detach/reconnect and host ownership restoration still need
-qualification. Existing guest keyboard, tablet and USB audio are separate devices.
+chooser nor an empty slot alone proves successful USB transfer. Candidate428
+verifies Kingston USB3 storage enumeration and repeated read-only I/O, and Arctis
+USB audio enumeration/output callbacks. The normal Arctis chooser disconnect
+restores Linux audio/HID drivers. Eject storage inside macOS before unchecking it.
+The Kingston probe made no writes, but macOS mounted its volumes writable and
+eject attempts failed while they were busy; clean Kingston eject is not qualified.
+The physical USB device must be attached to the computer running the SPICE viewer;
+remote desktop access to a Linux-hosted viewer does not forward USB from the
+remote computer automatically.
+
+Do not terminate the viewer process while a device is attached: a forced test
+viewer stop left Arctis interfaces detached. The normal chooser disconnect did
+restore them. This is a known lifecycle limit, not general crash recovery.
+Existing guest keyboard, tablet and QEMU USB audio remain separate devices.
 [Topology and client-policy details](../findings/research/console-usb-redirection-plan-20261010.md).
 
 ## Restartable immutable presentation (394/395/402)
