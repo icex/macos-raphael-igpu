@@ -1,5 +1,17 @@
 # Raphael iGPU acceleration roadmap
 
+**October 11, candidate 444: full-field 4K in the window from ~40 to ~50 IDs/s.**
+A per-stage budget showed the guest presenter's snapshot commits waiting for QEMU's
+global lock behind SPICE update creation. Three QEMU changes (snapshot copy and SPICE
+update creation outside that lock, publish on commit) let the server send 52-54 full
+4K updates/s with no replaced snapshots; the viewer then saturated copying ~1.3 GB/s
+of raw pixels. A private client build that receives raw bitmaps without the extra copy
+measured 50.35/49.79 decoded IDs/s full-field and ~57 localized at 3840×2160 → 1440×900,
+with 100/100 sampled moving frames valid. LZ4 was slower. These are research images and
+a private client, not sustained 4K60 or scanout FPS. Next: overlap the presenter's capture
+lock with its commit, then the client's remaining copy; Moonlight pairing is pending.
+[444 evidence](../findings/research/console-4k-pipeline-locks-20261011.md).
+
 **October 10, candidate 443: GPU-scaled moving output verified; pacing is not the limit.**
 Across three same-boot cycles, 300 of 300 sampled moving frames read back from the
 host GL framebuffer carried the correct fresh token after scaling 3840×2160 into the
@@ -338,11 +350,13 @@ from device enumeration or passing microbenchmarks.
 
 ## Next work, in order
 
-Only full-field 4K performance is active. Candidate 443 repeated the 441 GPU
-scaling gain, verified sampled moving GL output and rejected start-relative pacing
-as a delivery fix. Next: locate why full-field refreshes yield only ~40 commands/s
-(guest presenter publication versus QEMU update-to-command path), then qualify
-filtering quality and input with the GL renderer and close the sustained 60 Hz gap. All other roadmap tasks are on hold. The
+Only full-field 4K performance is active. Candidate 444 located the full-field loss
+(presenter commits held behind SPICE update creation on QEMU's global lock), removed it in
+QEMU research images and removed one client copy: ~50 full-field decoded IDs/s in the
+1440×900 window. Next: overlap the presenter's capture lock with its commit (presenter
+rebuild, one consent renewal), reduce the client's remaining copy/upload, then qualify
+input/resize/fallback with these changes; Moonlight pairing of the host client is pending
+the user. All other roadmap tasks are on hold. The
 following dated entries retain earlier evidence and do not supersede this priority.
 
 **Current user priority (October9): an accelerated macOS desktop in a VM-manager

@@ -1,5 +1,17 @@
 # Accelerated desktop in a VM manager console
 
+**October 11, candidate 444: full-field 4K in the window from ~40 to ~50 IDs/s.**
+A per-stage budget showed the guest presenter's snapshot commits waiting for QEMU's
+global lock behind SPICE update creation. Three QEMU changes (snapshot copy and SPICE
+update creation outside that lock, publish on commit) let the server send 52-54 full
+4K updates/s with no replaced snapshots; the viewer then saturated copying ~1.3 GB/s
+of raw pixels. A private client build that receives raw bitmaps without the extra copy
+measured 50.35/49.79 decoded IDs/s full-field and ~57 localized at 3840×2160 → 1440×900,
+with 100/100 sampled moving frames valid. LZ4 was slower. These are research images and
+a private client, not sustained 4K60 or scanout FPS. Next: overlap the presenter's capture
+lock with its commit, then the client's remaining copy; Moonlight pairing is pending.
+[444 evidence](../findings/research/console-4k-pipeline-locks-20261011.md).
+
 **October 10, candidate 443: GPU-scaled moving output verified; pacing is not the limit.**
 Across three same-boot cycles, 300 of 300 sampled moving frames read back from the
 host GL framebuffer carried the correct fresh token after scaling 3840×2160 into the

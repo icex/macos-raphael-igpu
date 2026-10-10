@@ -1,0 +1,947 @@
+{
+  "schema": 1,
+  "candidate": "1.0.444",
+  "card": "metal-238",
+  "build_id": "245bdd63d44749ad908125b57e216c88",
+  "boot_id": "ba51b3c6-9420-4510-af69-38a42b3c79c7",
+  "images": {
+    "439": "sha256:085d8ac0e59a1ca44eec9dce8c1159607ba91f36c66af4317c8e7999c2733dec",
+    "unlocked-copy": "sha256:dade0cb39135db61ce6a8301c3bdefb5b5c8209bbc5d72ec32890f13401edaca",
+    "commit-publish": "sha256:6a2165ac3b91eacc7c0e73a6b6b38bb9e4586bc665ca2db18b05604b3533da37",
+    "create-unlocked": "sha256:a18ff5ac44e84bace6bc63273be1dc6e05b0bb1a6f81a2b0bb7da4f377addcf6"
+  },
+  "runs": {
+    "443-budget-d": "b056c43988e9507beb3f6d7306cc5809",
+    "a": "b497f2d0201925ebc067c56d5640146d",
+    "b": "a3c8ce8bc1ce91cd4329e2ab63288fa0",
+    "c": "d2572b4f776184f35b3f255837c9ac56",
+    "d": "ac0c365f40e164da7063307d5702be68"
+  },
+  "client_libs": {
+    "libspice-client-glib-2.0.so.8.8.2": {
+      "441": "1f3835b281f0953e024404550f05ddf066a30f66c767d9d4151b5df75957d375",
+      "444": "1ce41bdc44363188aeffa2e5cc40314555ad952881da7ea0652b7feee05e6a8c"
+    },
+    "libspice-client-gtk-3.0.so.5.1.1": {
+      "441": "ea604719b41346a8646ae2c2e13dea432ff8fa3e91460ee77637dd430b14ca18",
+      "444": "ea604719b41346a8646ae2c2e13dea432ff8fa3e91460ee77637dd430b14ca18"
+    }
+  },
+  "windows": {
+    "c443-d": {
+      "phases": [
+        {
+          "index": 0,
+          "kind": "localized",
+          "client_ids_s": 56.25,
+          "dequeue_s": 56.25,
+          "refresh_s": 58.2,
+          "create_ms": 1.36,
+          "qemu_windows": 3,
+          "commits_s": 57.99,
+          "replaced_s": 1.66,
+          "qemu_copy_ms": 1.75
+        },
+        {
+          "index": 1,
+          "kind": "full-field",
+          "client_ids_s": 41.98,
+          "dequeue_s": 42.04,
+          "refresh_s": 48.17,
+          "create_ms": 4.84,
+          "qemu_windows": 3,
+          "commits_s": 45.29,
+          "replaced_s": 3.2,
+          "qemu_copy_ms": 3.25
+        },
+        {
+          "index": 2,
+          "kind": "localized",
+          "client_ids_s": 57.49,
+          "dequeue_s": 57.49,
+          "refresh_s": 58.61,
+          "create_ms": 1.31,
+          "qemu_windows": 3,
+          "commits_s": 57.96,
+          "replaced_s": 0.53,
+          "qemu_copy_ms": 1.7
+        },
+        {
+          "index": 3,
+          "kind": "full-field",
+          "client_ids_s": 42.03,
+          "dequeue_s": 42.03,
+          "refresh_s": 48.21,
+          "create_ms": 4.88,
+          "qemu_windows": 3,
+          "commits_s": 45.13,
+          "replaced_s": 2.86,
+          "qemu_copy_ms": 3.31
+        },
+        {
+          "index": 4,
+          "kind": "localized",
+          "client_ids_s": 56.49,
+          "dequeue_s": 56.49,
+          "refresh_s": 58.27,
+          "create_ms": 1.38,
+          "qemu_windows": 3,
+          "commits_s": 57.98,
+          "replaced_s": 1.46,
+          "qemu_copy_ms": 1.67
+        }
+      ],
+      "presenter": {
+        "localized_copied_fps_median": 57.94,
+        "fullfield_windows": 4,
+        "fullfield_copied_fps": 45.29,
+        "fullfield_dropped_s": 12.42,
+        "localized_timing": {
+          "lock_avg_ms": 3.3,
+          "rows_avg_ms": 1.34,
+          "snapshot_commit_avg_ms": 3.8,
+          "worker_total_avg_ms": 8.47,
+          "worker_total_max_ms": 14.43,
+          "windows": 11
+        },
+        "fullfield_timing": {
+          "lock_avg_ms": 4.31,
+          "rows_avg_ms": 2.89,
+          "snapshot_commit_avg_ms": 6.61,
+          "worker_total_avg_ms": 13.82,
+          "worker_total_max_ms": 28.14,
+          "windows": 14
+        }
+      }
+    },
+    "c444-a": {
+      "phases": [
+        {
+          "index": 0,
+          "kind": "localized",
+          "client_ids_s": 55.87,
+          "dequeue_s": 55.87,
+          "refresh_s": 57.82,
+          "create_ms": 1.45,
+          "qemu_windows": 3,
+          "commits_s": 57.88,
+          "replaced_s": 1.93,
+          "qemu_copy_ms": 1.96
+        },
+        {
+          "index": 1,
+          "kind": "full-field",
+          "client_ids_s": 38.71,
+          "dequeue_s": 38.71,
+          "refresh_s": 47.86,
+          "create_ms": 5.03,
+          "qemu_windows": 3,
+          "commits_s": 40.46,
+          "replaced_s": 1.59,
+          "qemu_copy_ms": 3.63
+        },
+        {
+          "index": 2,
+          "kind": "localized",
+          "client_ids_s": 56.41,
+          "dequeue_s": 56.41,
+          "refresh_s": 57.97,
+          "create_ms": 1.43,
+          "qemu_windows": 3,
+          "commits_s": 57.98,
+          "replaced_s": 1.53,
+          "qemu_copy_ms": 1.89
+        },
+        {
+          "index": 3,
+          "kind": "full-field",
+          "client_ids_s": 39.09,
+          "dequeue_s": 39.31,
+          "refresh_s": 47.99,
+          "create_ms": 4.93,
+          "qemu_windows": 3,
+          "commits_s": 40.73,
+          "replaced_s": 1.2,
+          "qemu_copy_ms": 3.55
+        },
+        {
+          "index": 4,
+          "kind": "localized",
+          "client_ids_s": 56.63,
+          "dequeue_s": 56.63,
+          "refresh_s": 57.91,
+          "create_ms": 1.45,
+          "qemu_windows": 3,
+          "commits_s": 57.92,
+          "replaced_s": 1.4,
+          "qemu_copy_ms": 1.88
+        }
+      ],
+      "presenter": {
+        "localized_copied_fps_median": 57.86,
+        "fullfield_windows": 5,
+        "fullfield_copied_fps": 41.56,
+        "fullfield_dropped_s": 16.09,
+        "localized_timing": {
+          "lock_avg_ms": 3.33,
+          "rows_avg_ms": 1.64,
+          "snapshot_commit_avg_ms": 4.28,
+          "worker_total_avg_ms": 9.26,
+          "worker_total_max_ms": 15.32,
+          "windows": 12
+        },
+        "fullfield_timing": {
+          "lock_avg_ms": 4.7,
+          "rows_avg_ms": 3.32,
+          "snapshot_commit_avg_ms": 7.41,
+          "worker_total_avg_ms": 15.45,
+          "worker_total_max_ms": 28.55,
+          "windows": 12
+        }
+      }
+    },
+    "c444-b": {
+      "phases": [
+        {
+          "index": 0,
+          "kind": "localized",
+          "client_ids_s": 55.57,
+          "dequeue_s": 55.57,
+          "refresh_s": 58.41,
+          "create_ms": 1.5,
+          "qemu_windows": 3,
+          "commits_s": 57.95,
+          "replaced_s": 14.46,
+          "qemu_copy_ms": 1.97
+        },
+        {
+          "index": 1,
+          "kind": "full-field",
+          "client_ids_s": 40.09,
+          "dequeue_s": 40.37,
+          "refresh_s": 49.11,
+          "create_ms": 4.72,
+          "qemu_windows": 3,
+          "commits_s": 46.59,
+          "replaced_s": 9.85,
+          "qemu_copy_ms": 3.53
+        },
+        {
+          "index": 2,
+          "kind": "localized",
+          "client_ids_s": 53.19,
+          "dequeue_s": 53.19,
+          "refresh_s": 58.14,
+          "create_ms": 1.56,
+          "qemu_windows": 3,
+          "commits_s": 57.97,
+          "replaced_s": 23.83,
+          "qemu_copy_ms": 2.21
+        },
+        {
+          "index": 3,
+          "kind": "full-field",
+          "client_ids_s": 39.51,
+          "dequeue_s": 41.24,
+          "refresh_s": 48.37,
+          "create_ms": 5.02,
+          "qemu_windows": 3,
+          "commits_s": 44.4,
+          "replaced_s": 6.45,
+          "qemu_copy_ms": 3.8
+        },
+        {
+          "index": 4,
+          "kind": "localized",
+          "client_ids_s": 53.08,
+          "dequeue_s": 53.08,
+          "refresh_s": 57.99,
+          "create_ms": 1.58,
+          "qemu_windows": 3,
+          "commits_s": 57.98,
+          "replaced_s": 17.77,
+          "qemu_copy_ms": 2.13
+        }
+      ],
+      "presenter": {
+        "localized_copied_fps_median": 57.9,
+        "fullfield_windows": 4,
+        "fullfield_copied_fps": 47.24,
+        "fullfield_dropped_s": 10.44,
+        "localized_timing": {
+          "lock_avg_ms": 3.45,
+          "rows_avg_ms": 1.42,
+          "snapshot_commit_avg_ms": 4.05,
+          "worker_total_avg_ms": 8.93,
+          "worker_total_max_ms": 14.45,
+          "windows": 10
+        },
+        "fullfield_timing": {
+          "lock_avg_ms": 4.62,
+          "rows_avg_ms": 3.07,
+          "snapshot_commit_avg_ms": 6.4,
+          "worker_total_avg_ms": 14.11,
+          "worker_total_max_ms": 24.26,
+          "windows": 11
+        }
+      }
+    },
+    "c444-c": {
+      "phases": [
+        {
+          "index": 0,
+          "kind": "localized",
+          "client_ids_s": 57.65,
+          "dequeue_s": 57.65,
+          "refresh_s": 119.99,
+          "create_ms": 0.71,
+          "qemu_windows": 3,
+          "commits_s": 57.71,
+          "replaced_s": 0.0,
+          "qemu_copy_ms": 1.95
+        },
+        {
+          "index": 1,
+          "kind": "full-field",
+          "client_ids_s": 38.84,
+          "dequeue_s": 38.9,
+          "refresh_s": 98.64,
+          "create_ms": 1.98,
+          "qemu_windows": 3,
+          "commits_s": 38.85,
+          "replaced_s": 0.0,
+          "qemu_copy_ms": 3.17
+        },
+        {
+          "index": 2,
+          "kind": "localized",
+          "client_ids_s": 57.91,
+          "dequeue_s": 57.91,
+          "refresh_s": 120.21,
+          "create_ms": 0.69,
+          "qemu_windows": 3,
+          "commits_s": 57.87,
+          "replaced_s": 0.0,
+          "qemu_copy_ms": 1.91
+        },
+        {
+          "index": 3,
+          "kind": "full-field",
+          "client_ids_s": 39.25,
+          "dequeue_s": 39.3,
+          "refresh_s": 99.15,
+          "create_ms": 2.01,
+          "qemu_windows": 3,
+          "commits_s": 39.36,
+          "replaced_s": 0.0,
+          "qemu_copy_ms": 3.11
+        },
+        {
+          "index": 4,
+          "kind": "localized",
+          "client_ids_s": 57.87,
+          "dequeue_s": 57.87,
+          "refresh_s": 120.19,
+          "create_ms": 0.72,
+          "qemu_windows": 3,
+          "commits_s": 57.83,
+          "replaced_s": 0.0,
+          "qemu_copy_ms": 1.91
+        }
+      ],
+      "presenter": {
+        "localized_copied_fps_median": 57.77,
+        "fullfield_windows": 6,
+        "fullfield_copied_fps": 39.67,
+        "fullfield_dropped_s": 17.94,
+        "localized_timing": {
+          "lock_avg_ms": 3.23,
+          "rows_avg_ms": 1.63,
+          "snapshot_commit_avg_ms": 5.14,
+          "worker_total_avg_ms": 10.02,
+          "worker_total_max_ms": 18.02,
+          "windows": 12
+        },
+        "fullfield_timing": {
+          "lock_avg_ms": 4.16,
+          "rows_avg_ms": 3.06,
+          "snapshot_commit_avg_ms": 8.94,
+          "worker_total_avg_ms": 16.19,
+          "worker_total_max_ms": 28.8,
+          "windows": 12
+        }
+      }
+    },
+    "c444-d": {
+      "phases": [
+        {
+          "index": 0,
+          "kind": "localized",
+          "client_ids_s": 57.92,
+          "dequeue_s": 57.92,
+          "refresh_s": 120.25,
+          "create_ms": 0.68,
+          "qemu_windows": 3,
+          "commits_s": 57.93,
+          "replaced_s": 0.0,
+          "qemu_copy_ms": 1.86
+        },
+        {
+          "index": 1,
+          "kind": "full-field",
+          "client_ids_s": 39.29,
+          "dequeue_s": 53.11,
+          "refresh_s": 112.02,
+          "create_ms": 2.6,
+          "qemu_windows": 3,
+          "commits_s": 53.1,
+          "replaced_s": 0.0,
+          "qemu_copy_ms": 3.56
+        },
+        {
+          "index": 2,
+          "kind": "localized",
+          "client_ids_s": 58.01,
+          "dequeue_s": 58.01,
+          "refresh_s": 120.41,
+          "create_ms": 0.57,
+          "qemu_windows": 3,
+          "commits_s": 58.02,
+          "replaced_s": 0.0,
+          "qemu_copy_ms": 1.63
+        },
+        {
+          "index": 3,
+          "kind": "full-field",
+          "client_ids_s": 40.31,
+          "dequeue_s": 53.61,
+          "refresh_s": 112.35,
+          "create_ms": 2.55,
+          "qemu_windows": 3,
+          "commits_s": 53.65,
+          "replaced_s": 0.0,
+          "qemu_copy_ms": 3.52
+        },
+        {
+          "index": 4,
+          "kind": "localized",
+          "client_ids_s": 57.99,
+          "dequeue_s": 57.99,
+          "refresh_s": 120.43,
+          "create_ms": 0.56,
+          "qemu_windows": 3,
+          "commits_s": 57.94,
+          "replaced_s": 0.0,
+          "qemu_copy_ms": 1.63
+        }
+      ],
+      "presenter": {
+        "localized_copied_fps_median": 57.97,
+        "fullfield_windows": 1,
+        "fullfield_copied_fps": 51.94,
+        "fullfield_dropped_s": 5.99,
+        "localized_timing": {
+          "lock_avg_ms": 3.7,
+          "rows_avg_ms": 1.47,
+          "snapshot_commit_avg_ms": 3.54,
+          "worker_total_avg_ms": 8.72,
+          "worker_total_max_ms": 15.36,
+          "windows": 14
+        },
+        "fullfield_timing": {
+          "lock_avg_ms": 4.51,
+          "rows_avg_ms": 2.95,
+          "snapshot_commit_avg_ms": 5.25,
+          "worker_total_avg_ms": 12.73,
+          "worker_total_max_ms": 21.04,
+          "windows": 4
+        }
+      }
+    },
+    "c444-f": {
+      "phases": [
+        {
+          "index": 0,
+          "kind": "localized",
+          "client_ids_s": 57.23,
+          "dequeue_s": 57.23,
+          "refresh_s": 119.69,
+          "create_ms": 0.55,
+          "qemu_windows": 2,
+          "commits_s": 57.31,
+          "replaced_s": 0.0,
+          "qemu_copy_ms": 1.52
+        },
+        {
+          "index": 1,
+          "kind": "full-field",
+          "client_ids_s": 41.35,
+          "dequeue_s": 52.09,
+          "refresh_s": 111.02,
+          "create_ms": 2.57,
+          "qemu_windows": 2,
+          "commits_s": 52.18,
+          "replaced_s": 0.0,
+          "qemu_copy_ms": 3.57
+        },
+        {
+          "index": 2,
+          "kind": "localized",
+          "client_ids_s": 57.32,
+          "dequeue_s": 57.32,
+          "refresh_s": 119.82,
+          "create_ms": 0.55,
+          "qemu_windows": 2,
+          "commits_s": 57.33,
+          "replaced_s": 0.0,
+          "qemu_copy_ms": 1.55
+        },
+        {
+          "index": 3,
+          "kind": "full-field",
+          "client_ids_s": 41.62,
+          "dequeue_s": 52.09,
+          "refresh_s": 111.18,
+          "create_ms": 2.58,
+          "qemu_windows": 2,
+          "commits_s": 51.81,
+          "replaced_s": 0.0,
+          "qemu_copy_ms": 3.6
+        },
+        {
+          "index": 4,
+          "kind": "localized",
+          "client_ids_s": 57.29,
+          "dequeue_s": 57.29,
+          "refresh_s": 119.74,
+          "create_ms": 0.56,
+          "qemu_windows": 3,
+          "commits_s": 57.33,
+          "replaced_s": 0.0,
+          "qemu_copy_ms": 1.54
+        }
+      ],
+      "presenter": {
+        "localized_copied_fps_median": 57.4,
+        "fullfield_windows": 2,
+        "fullfield_copied_fps": 48.44,
+        "fullfield_dropped_s": 8.77,
+        "localized_timing": {
+          "lock_avg_ms": 3.69,
+          "rows_avg_ms": 1.38,
+          "snapshot_commit_avg_ms": 3.37,
+          "worker_total_avg_ms": 8.46,
+          "worker_total_max_ms": 14.02,
+          "windows": 38
+        },
+        "fullfield_timing": {
+          "lock_avg_ms": 4.82,
+          "rows_avg_ms": 3.06,
+          "snapshot_commit_avg_ms": 5.57,
+          "worker_total_avg_ms": 13.47,
+          "worker_total_max_ms": 21.67,
+          "windows": 10
+        }
+      }
+    },
+    "c444-e": {
+      "phases": [
+        {
+          "index": 0,
+          "kind": "localized",
+          "client_ids_s": 57.98,
+          "dequeue_s": 57.98,
+          "refresh_s": 120.38,
+          "create_ms": 0.64,
+          "qemu_windows": 2,
+          "commits_s": 58.0,
+          "replaced_s": 0.0,
+          "qemu_copy_ms": 1.78
+        },
+        {
+          "index": 1,
+          "kind": "full-field",
+          "client_ids_s": 34.31,
+          "dequeue_s": 53.24,
+          "refresh_s": 112.22,
+          "create_ms": 2.6,
+          "qemu_windows": 2,
+          "commits_s": 53.61,
+          "replaced_s": 0.0,
+          "qemu_copy_ms": 3.22
+        },
+        {
+          "index": 2,
+          "kind": "localized",
+          "client_ids_s": 57.4,
+          "dequeue_s": 57.4,
+          "refresh_s": 119.75,
+          "create_ms": 0.63,
+          "qemu_windows": 2,
+          "commits_s": 57.25,
+          "replaced_s": 0.0,
+          "qemu_copy_ms": 1.75
+        },
+        {
+          "index": 3,
+          "kind": "full-field",
+          "client_ids_s": 35.46,
+          "dequeue_s": 51.38,
+          "refresh_s": 110.44,
+          "create_ms": 2.59,
+          "qemu_windows": 2,
+          "commits_s": 50.74,
+          "replaced_s": 0.0,
+          "qemu_copy_ms": 3.43
+        },
+        {
+          "index": 4,
+          "kind": "localized",
+          "client_ids_s": 57.66,
+          "dequeue_s": 57.66,
+          "refresh_s": 120.0,
+          "create_ms": 0.69,
+          "qemu_windows": 3,
+          "commits_s": 57.66,
+          "replaced_s": 0.0,
+          "qemu_copy_ms": 1.86
+        }
+      ],
+      "presenter": {
+        "localized_copied_fps_median": 57.79,
+        "fullfield_windows": 0,
+        "fullfield_copied_fps": null,
+        "fullfield_dropped_s": null,
+        "localized_timing": {
+          "lock_avg_ms": 3.63,
+          "rows_avg_ms": 1.44,
+          "snapshot_commit_avg_ms": 3.46,
+          "worker_total_avg_ms": 8.55,
+          "worker_total_max_ms": 14.36,
+          "windows": 26
+        },
+        "fullfield_timing": {
+          "lock_avg_ms": 4.73,
+          "rows_avg_ms": 2.97,
+          "snapshot_commit_avg_ms": 5.42,
+          "worker_total_avg_ms": 13.15,
+          "worker_total_max_ms": 21.23,
+          "windows": 7
+        }
+      }
+    },
+    "c444-8": {
+      "phases": [
+        {
+          "index": 0,
+          "kind": "localized",
+          "client_ids_s": 57.17,
+          "dequeue_s": 57.17,
+          "refresh_s": 119.64,
+          "create_ms": 0.56,
+          "qemu_windows": 0,
+          "commits_s": null,
+          "replaced_s": null,
+          "qemu_copy_ms": 0.0
+        },
+        {
+          "index": 1,
+          "kind": "full-field",
+          "client_ids_s": 41.35,
+          "dequeue_s": 51.92,
+          "refresh_s": 110.64,
+          "create_ms": 2.61,
+          "qemu_windows": 0,
+          "commits_s": null,
+          "replaced_s": null,
+          "qemu_copy_ms": 0.0
+        },
+        {
+          "index": 2,
+          "kind": "localized",
+          "client_ids_s": 57.27,
+          "dequeue_s": 57.27,
+          "refresh_s": 119.71,
+          "create_ms": 0.54,
+          "qemu_windows": 0,
+          "commits_s": null,
+          "replaced_s": null,
+          "qemu_copy_ms": 0.0
+        },
+        {
+          "index": 3,
+          "kind": "full-field",
+          "client_ids_s": 41.89,
+          "dequeue_s": 51.74,
+          "refresh_s": 110.92,
+          "create_ms": 2.52,
+          "qemu_windows": 0,
+          "commits_s": null,
+          "replaced_s": null,
+          "qemu_copy_ms": 0.0
+        },
+        {
+          "index": 4,
+          "kind": "localized",
+          "client_ids_s": 57.28,
+          "dequeue_s": 57.28,
+          "refresh_s": 119.68,
+          "create_ms": 0.54,
+          "qemu_windows": 0,
+          "commits_s": null,
+          "replaced_s": null,
+          "qemu_copy_ms": 0.0
+        }
+      ],
+      "presenter": {
+        "localized_copied_fps_median": 57.33,
+        "fullfield_windows": 5,
+        "fullfield_copied_fps": 49.26,
+        "fullfield_dropped_s": 8.14,
+        "localized_timing": {
+          "lock_avg_ms": 3.71,
+          "rows_avg_ms": 1.34,
+          "snapshot_commit_avg_ms": 3.29,
+          "worker_total_avg_ms": 8.36,
+          "worker_total_max_ms": 13.53,
+          "windows": 63
+        },
+        "fullfield_timing": {
+          "lock_avg_ms": 4.96,
+          "rows_avg_ms": 3.33,
+          "snapshot_commit_avg_ms": 5.72,
+          "worker_total_avg_ms": 14.03,
+          "worker_total_max_ms": 21.62,
+          "windows": 17
+        }
+      }
+    },
+    "c444-4": {
+      "phases": [
+        {
+          "index": 0,
+          "kind": "localized",
+          "client_ids_s": 57.33,
+          "dequeue_s": 57.33,
+          "refresh_s": 119.73,
+          "create_ms": 0.63,
+          "qemu_windows": 0,
+          "commits_s": null,
+          "replaced_s": null,
+          "qemu_copy_ms": 0.0
+        },
+        {
+          "index": 1,
+          "kind": "full-field",
+          "client_ids_s": 50.35,
+          "dequeue_s": 52.47,
+          "refresh_s": 111.61,
+          "create_ms": 2.44,
+          "qemu_windows": 0,
+          "commits_s": null,
+          "replaced_s": null,
+          "qemu_copy_ms": 0.0
+        },
+        {
+          "index": 2,
+          "kind": "localized",
+          "client_ids_s": 57.34,
+          "dequeue_s": 57.34,
+          "refresh_s": 119.75,
+          "create_ms": 0.63,
+          "qemu_windows": 0,
+          "commits_s": null,
+          "replaced_s": null,
+          "qemu_copy_ms": 0.0
+        },
+        {
+          "index": 3,
+          "kind": "full-field",
+          "client_ids_s": 49.79,
+          "dequeue_s": 52.18,
+          "refresh_s": 111.6,
+          "create_ms": 2.24,
+          "qemu_windows": 0,
+          "commits_s": null,
+          "replaced_s": null,
+          "qemu_copy_ms": 0.0
+        },
+        {
+          "index": 4,
+          "kind": "localized",
+          "client_ids_s": 57.31,
+          "dequeue_s": 57.31,
+          "refresh_s": 119.74,
+          "create_ms": 0.64,
+          "qemu_windows": 0,
+          "commits_s": null,
+          "replaced_s": null,
+          "qemu_copy_ms": 0.0
+        }
+      ],
+      "presenter": {
+        "localized_copied_fps_median": 57.29,
+        "fullfield_windows": 7,
+        "fullfield_copied_fps": 47.45,
+        "fullfield_dropped_s": 9.86,
+        "localized_timing": {
+          "lock_avg_ms": 3.81,
+          "rows_avg_ms": 1.41,
+          "snapshot_commit_avg_ms": 3.39,
+          "worker_total_avg_ms": 8.62,
+          "worker_total_max_ms": 14.1,
+          "windows": 101
+        },
+        "fullfield_timing": {
+          "lock_avg_ms": 4.99,
+          "rows_avg_ms": 3.09,
+          "snapshot_commit_avg_ms": 5.5,
+          "worker_total_avg_ms": 13.6,
+          "worker_total_max_ms": 21.81,
+          "windows": 28
+        }
+      }
+    }
+  },
+  "lifecycle": {
+    "candidate-443-attempt-budget-d-results": {
+      "verdict": "CORE_PROBE_PASS",
+      "outcome": "capture-abort-after-request",
+      "observed": "exited-after-guest-request",
+      "captures": [
+        "immediate-stop",
+        "immediate-stop"
+      ],
+      "private_terminal_verified": false,
+      "errors": [
+        "stopped container inspection unavailable or mismatched"
+      ],
+      "recovery": "recovered",
+      "authorizes_launch": true
+    },
+    "candidate-444-results": {
+      "verdict": "CORE_PROBE_PASS",
+      "outcome": "exited-after-guest-request",
+      "observed": "exited-after-guest-request",
+      "captures": [
+        "natural-container-exit",
+        "natural-container-exit"
+      ],
+      "private_terminal_verified": true,
+      "errors": [
+        "stopped container inspection unavailable or mismatched"
+      ],
+      "recovery": "recovered",
+      "authorizes_launch": true
+    },
+    "candidate-444-attempt-unlocked-b-results": {
+      "verdict": "CORE_PROBE_PASS",
+      "outcome": "exited-after-guest-request",
+      "observed": "exited-after-guest-request",
+      "captures": [
+        "natural-container-exit",
+        "natural-container-exit"
+      ],
+      "private_terminal_verified": true,
+      "errors": [
+        "stopped container inspection unavailable or mismatched"
+      ],
+      "recovery": "recovered",
+      "authorizes_launch": true
+    },
+    "candidate-444-attempt-publish-c-results": {
+      "verdict": "CORE_PROBE_PASS",
+      "outcome": "exited-after-guest-request",
+      "observed": "exited-after-guest-request",
+      "captures": [
+        "natural-container-exit",
+        "natural-container-exit"
+      ],
+      "private_terminal_verified": true,
+      "errors": [
+        "stopped container inspection unavailable or mismatched"
+      ],
+      "recovery": "recovered",
+      "authorizes_launch": true
+    },
+    "candidate-444-attempt-unlocked-d-results": {
+      "verdict": "CORE_PROBE_PASS",
+      "outcome": "exited-after-guest-request",
+      "observed": "exited-after-guest-request",
+      "captures": [
+        "natural-container-exit",
+        "natural-container-exit"
+      ],
+      "private_terminal_verified": true,
+      "errors": [
+        "stopped container inspection unavailable or mismatched"
+      ],
+      "recovery": "recovered",
+      "authorizes_launch": true
+    }
+  },
+  "artifacts": {
+    "c443-d-perf-cadence.jsonl": "e4986937a2d2dc1b733e07b24771bb6c82f71904d149546337ef2ac26befe896",
+    "c443-d-perf-spice-timing.trace": "57d51cd689599afdc1463aa02fc773c88e564e151069e7bcb9868d5095d09995",
+    "c443-d-perf-presenter-log.txt": "0f860f0cb6fdc46f7cb934177b1823fbcfabd21b80dedfc3240dd55ddd8df6a3",
+    "c443-d-qemu-domain.log": "eaea557647db89bdafd6802feab06a19a2dc6fde76866308ade7af7015e45a9e",
+    "c443-d-perf-pipeline-analysis.json": "1cb8df290100d88385df34fc2ebe4729414cbfde26058ac970ec82bebeec4d69",
+    "c443-d-perf-source.txt": "055032498debb24c86b0f107d38b65220bffdc83aa8c94b1a4b070d6e2596d71",
+    "c444-a-perf-cadence.jsonl": "0dd59d274fca36ce1caa35e2b3ede7dc0190dee1705cdd140b46ae86295e30f3",
+    "c444-a-perf-spice-timing.trace": "42255eb472ba1cd80b41a4364bdadfd96873dff89175011206520b29a6b55e5c",
+    "c444-a-perf-presenter-log.txt": "636dc2183654614c69017e83abefea57c63d765253b6d49f769fd6c80740a620",
+    "c444-a-qemu-domain.log": "facd583d2817cf6668285fb60c953f90fff6002b206673257bca8a3f5c4c7a5b",
+    "c444-a-perf-pipeline-analysis.json": "33a65a0f1e57d45183a2ea5adf75717a8892986b93c2662cf2d7cfb24ea8b90f",
+    "c444-a-perf-source.txt": "c74c9e57f891a0ff3e38ba1a247857ca4a5f835f69919b6a57b70e67cd3ba2e3",
+    "c444-b-perf-cadence.jsonl": "68b5ce0cb4b6d0c75dfc12e93fe22d9216d2a6ae5a5ecec62bd6cbb3a1583c00",
+    "c444-b-perf-spice-timing.trace": "618dd69273f7515dfb834154e4e3aa2520e83f77db6c76e255ede90824fb5440",
+    "c444-b-perf-presenter-log.txt": "178aaead243bcc34428f3e35fb51dd2c2329117a9c93a8dda80329ad19e6669a",
+    "c444-b-qemu-domain.log": "4b45bfd4b22452544f8893c16a120ba02110efe8775f78d6c3f847282513fa6d",
+    "c444-b-perf-pipeline-analysis.json": "fd0024094cafb343a7cd8d91690b16862b0f883f491ce34dd68c0f87977dcb09",
+    "c444-b-perf-source.txt": "ac5f2e519c528d23887e55234efc9f8d9249936c1a0b1349d7e54c63fd07f2bb",
+    "c444-c-perf-cadence.jsonl": "bbef49ed66b56e307d26bb65ffa0828648d7d3b2db2e28e90512a8af44469371",
+    "c444-c-perf-spice-timing.trace": "98a18cbae4c8f36e5a3b4e5242ddacf9f9a4a3fc3c63fa7bdf77047a794abae4",
+    "c444-c-perf-presenter-log.txt": "e24cb6d27c4e119454dee98e914470bfaaa7ae744ecb8795203ff8be458875a3",
+    "c444-c-qemu-domain.log": "bbd0ba9ea041406a80730e8d2e27806638e8de59e5578527911fd162ca6815fe",
+    "c444-c-perf-pipeline-analysis.json": "ac09e737d1881804839f41c5aa3a80cb17a13eac60ff6c7d13e378bb6bb74ae3",
+    "c444-c-perf-source.txt": "48d30c83f6f57bec3ced6b57e4b81cc3a714b1f25039447e7f6429bac04de304",
+    "c444-d-perf-cadence.jsonl": "48616430923801032c1d1260a4392d2ab295872b1357b2aa6a089b172610e946",
+    "c444-d-perf-spice-timing.trace": "870ac6a675c9aef2e9277d2e4ea1a3cb0f87d855f1472e13d7ab4a2c2415b89e",
+    "c444-d-perf-presenter-log.txt": "48beda8e496f271c852ce07594cd4d67cdce367222b87a4e7298a0ff34112e8c",
+    "c444-d-qemu-domain.log": "682f9e70b00c8ed642afc514e7fbcacfc0d873f5b9455a077fb87f64642c5970",
+    "c444-d-perf-pipeline-analysis.json": "73813e8436838816211f3d9164c91741741fd9deb6fee176611907cfc01a1ab2",
+    "c444-d-perf-source.txt": "b44ece5d035938549d0c6f0c110ef3646a89237c33485c1a48e3b1c0d41ee588",
+    "c444-f-perf-cadence.jsonl": "35d940669b8080103ec9a80b048c705c89edcbaa5c78220b3b450a3a0ce8256e",
+    "c444-f-perf-spice-timing.trace": "f97b74c2c62c1f089a1acd38f71607c33e869f6f4256af596590f322da76d210",
+    "c444-f-perf-presenter-log.txt": "a5ea5bbb6ba5ac8cba836b0a78cc13d42adae6a76dd6d4458c940b487d387cc9",
+    "c444-f-qemu-domain.log": "3ed5f7674e7499449b3815a0c0192f9cc2657c7503edb96e89a76c456e487e71",
+    "c444-f-perf-pipeline-analysis.json": "6ceb2967a61908b1a026f67c94c0a98dc0e040959196c4ec0507484505152fb2",
+    "c444-f-perf-source.txt": "688e2994852b6d42e2a5b917efcb7e93c0359f90331bf87371b1f2279213f526",
+    "c444-e-perf-cadence.jsonl": "48866a55ae4487b531075271352be938ec00533808fc359905f3b7deb875d80a",
+    "c444-e-perf-spice-timing.trace": "1211a1b1dceb5edc0fe1875f5f8294834cc7d9f1d93e1af0fcf136ddb94e45a7",
+    "c444-e-perf-presenter-log.txt": "5be140e254221ad2e3c4d8e15c0b7516a46515e1a8b5a9419c9149265bf8acad",
+    "c444-e-qemu-domain.log": "261183379bbaeb4126fe4198cc1cb93018b830bf18a2549ea03b26df895b64bc",
+    "c444-e-perf-pipeline-analysis.json": "afdbb1fb9918190a7ad89eea4699d859cceebff0d22dbed88eb4fbb60d81abb3",
+    "c444-e-perf-source.txt": "49aa4d50a64c2784965a74791682cf7faa16271a8ab40ad1536b538669727032",
+    "c444-8-perf-cadence.jsonl": "860096b360e99937d5e43390e0667ec96df7fdd66bdf6d9123638127c0a28ce8",
+    "c444-8-perf-spice-timing.trace": "b29a96660951f48ee7b7b8998f3b41c9d9ec6c273aa1255c2736afbd30f45912",
+    "c444-8-perf-presenter-log.txt": "13d5d3a1ac9991fd753e919e4b3ab5ba08d52ca807b15e484f6247446f2a5360",
+    "c444-8-qemu-domain.log": "d6f883c373b9754ec0edc12a8738906c50246e5bf9d0fff72b4cab1279173a9c",
+    "c444-8-perf-pipeline-analysis.json": "a6acdf3d157200fef890516faddb43ea7a055ab64252f4c3547ec8f58dd2e1cd",
+    "c444-8-perf-source.txt": "719f47dae0ce9e4304fcc953454f107cee054a577dec457edd73f6f255bf099d",
+    "c444-4-perf-cadence.jsonl": "319c6e03d3b0dba77bdc526a3e2be68940ee466bafa6f5d671ec6fbb301428bd",
+    "c444-4-perf-spice-timing.trace": "ee66001f757abb32e09261b6279a5d009530d6ba03497475a53bc3fec3525eef",
+    "c444-4-perf-presenter-log.txt": "854311347914eb38ec6e0c3ecd9717c2d513077ebf08c9cd19097b981ecbc84f",
+    "c444-4-qemu-domain.log": "634b4ebb5b06fe8c1fdf082c2da4bcc0345ea0fd94f6e0b8ca5ce6794561c238",
+    "c444-4-perf-pipeline-analysis.json": "262cf5286b29fda5cfa9aa0d34e4002580a4405dc8f002c5b6fc03b01fbda950",
+    "c444-4-perf-source.txt": "3bf560164fe772f7f1a3aeaa7891e986686198e2edd036f7dcdc5c61c9fe852b",
+    "readbacks-window-3.jsonl": "18153a35cb1e1797addd08155d76a0a9927a6c2ce569f391508202ef5d2ed68c"
+  },
+  "moving_check_window_3": {
+    "requested": 100,
+    "completed": 100,
+    "valid": 100,
+    "unique": 100,
+    "strictly_increasing": true
+  }
+}
