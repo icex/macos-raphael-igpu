@@ -36,3 +36,7 @@ Exact60 remains the goal: if useful, higher-resolution/fractional scheduling mus
 follow.17ms is not a substitute completion criterion or a60Hz qualification. No
 hardware result or new feature publication yet; candidate439 has authorizing
 recovery receipt. Defaults/other modes remain unqualified outside prior scope.
+
+Review scope: arithmetic tests do not prove listener integration. Outside-callback
+zero-interval reset with mixed listeners does not recompute all minima; that case
+remains unqualified and is not present in the fixed sole-SPICE experiment.

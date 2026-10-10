@@ -177,5 +177,6 @@
   "critical_replay_quiesce": {
     "version": 1
   },
-  "interactive_hold_seconds": 3000
+  "interactive_hold_seconds": 3000,
+  "raphael_source_commit": "50a9de65b9953386ae31364d2300e645d4d046f8"
 }
