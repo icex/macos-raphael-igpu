@@ -77,6 +77,19 @@ class SnapshotLauncherTests(unittest.TestCase):
                 except ProcessLookupError:pass
                 process.wait(timeout=3)
 
+    def test_ready_native_framebuffer_suppresses_capture_helpers(self):
+        # Execute the actual early guard with ioreg output selected by class.
+        source=(ROOT/'tools/console-support-launcher.sh').read_text()
+        guard=source[source.index('native=$(ioreg'):source.index('bridge=$(ioreg')]
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);tool=root/'ioreg'
+            tool.write_text("#!/bin/sh\nprintf %s '\"NativeConsoleReady\" = Yes'\n");tool.chmod(0o700)
+            env=dict(os.environ,PATH=str(root)+os.pathsep+os.environ['PATH'])
+            result=subprocess.run(['bash','-c',guard+'\nprintf UNEXPECTED_CONTINUATION'],env=env,capture_output=True,text=True,timeout=3)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('exclusive native mode ownership',result.stdout)
+            self.assertNotIn('UNEXPECTED_CONTINUATION',result.stdout)
+
     def test_restartable_overrides_inherited_disable_and_wc(self):
         self.run_launcher(1,1,'0','1')
 

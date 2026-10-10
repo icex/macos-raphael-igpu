@@ -1,4 +1,15 @@
-# Live status — 2026-10-10 — native EDID accepts120Hz but VBL stays30Hz
+# Live status — 2026-10-10 — native framebuffer prototype offline
+
+
+Candidate433 implements an opt-in native IOFramebuffer with detailed timing,
+capacity-bounded60/120 modes and serialized softwareVBL callbacks. ABI builds
+compiled/linked; kernel matching, display timing, output and teardown remain
+untested. The external support launcher suppresses competing holder/presenter
+when the native driver is ready. Preparation cardmetal227 keeps native disabled
+and must install this launcher guard before a later opt-in cycle. Host remains
+awake; no GPU VM is running. Source/policy and callback-lifetime audit complete;
+full regression checks and sealed preparation build are next.
+[Plan](findings/research/console-native-framebuffer-plan-20261010.md).
 
 Candidate432 attempt b, runc81e8cb4dd4835f93a655a26322341fb, completed.
 QEMU EDID adds native2560×1440/120Hz and1280×720 HiDPI. Same-process mode

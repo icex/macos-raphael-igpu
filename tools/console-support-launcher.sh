@@ -1,6 +1,13 @@
 #!/bin/bash
 # Rendered with an exact, owned external payload path by console-support-install.
 set -euo pipefail
+# An owned native framebuffer supplies its own mode/VBL path. Starting the
+# holder or SCK publisher here would create a second authority over Bochs mode.
+native=$(ioreg -r -c RaphaelFramebuffer -d 1)
+if printf '%s\n' "$native" | grep -Eq '"NativeConsoleReady" = (Yes|true)[[:space:]]*$'; then
+ printf '{"event":"native-framebuffer","capture_helpers":"suppressed","reason":"exclusive native mode ownership"}\n'
+ exit 0
+fi
 bridge=$(ioreg -r -c RaphaelConsole -d 1)
 printf '%s\n' "$bridge" | grep -q 'RaphaelConsole' || exit 0
 # The sealed presenter already supports ABI1 snapshots. Select them only when
