@@ -1,33 +1,50 @@
-# Live status — 2026-10-10 — 4K QEMU performance
+# Live status — 2026-10-10 — full-field4K QEMU performance
 
-Only full-field4K performance active; keep host viewer normal1440×900/GDK1,
-no auto input grabs/USB redirection. Other roadmap work halted. Host awake.
+Only 4K performance active; other roadmap work on hold. Host viewer stays normal,
+1440×900/GDK1; no automatic input grabs or USB redirection. Host awake blocker up.
 
-438/metal232 run683a808b91d8c4fa8655e0b3f6077eea CORE_PROBE_PASS, sourceGPU
-unchanged d1deade..., build4de0edff55ad4cdb9543eeac776c0f96. Image646b5fc... rebuilds
-matchingSPICE0.16.0 with environment-gated Unix LZ4 research support.25 upstream
-tests passed for baseline and patched;1550hosttests passed8skipped before run.
+439/metal233 run0b1d233c6a38a5fa92d30e1296164cba CORE_PROBE_PASS. GPU source
+unchanged d1deade..., build9020975c77324d2eb31486f8a44e9b46, MODE2334. Runtime
+image085d8ac... maps exact reviewed SPICE library fde040d7...; QEMU437 unchanged.
+Unix effectiveLZ4 permitted; default/OFF/other codecs remain raw. Under pinned
+serverOFF configuration this is client opt-in. No broader environment pass-through.
 
-A explicitOFF control, Retina1920×1080logical/3840×2160backing scale2/source60,
-normal1440×900GDK1: localized55.83–56.30, full-field22.89/22.75 clientIDs/s versus
-45.79/45.51 QEMUcreate/dequeue commands/s.0 queue-busy skips.38startup-invalid,
-0post-start-invalid,1duplicate. Raw behavior reproduces437 traced controls.
+C valid traced Retina60 /1920logical→3840backing scale2: localized55.83–56.06,
+full-field23.47/23.50 client IDs/s versus44.33/43.11 create/dequeue commands/s.
+48startup-invalid,0post-start/duplicates; full-field queue-busy91/109. Native live
+client request supported (preference cap true), bytes~195MB/s versus prior raw
+~747MB/s. This does not materially improve full-field delivery or identify actual
+wireLZ4 versus losslessLZ fallback. Stored session preference alone is not receipt.
 
-B intendedLZ4 trial excluded: viewer geometry changed2160×1381 after readiness,
-observer stopped sampler-error before valid token. Owned viewer/source stopped.
-Runtime QEMU environment receipt shows RGPU_SPICE_UNIX_LOSSLESS MISSING despite
-imageENV=1: libvirt sanitizes its environment. Thus438 never exercised compression,
-and its bytes/performance cannot qualify LZ4. No pixel-integrity trial performed.
-Next: use explicit clientLZ4 preference itself as the narrow research opt-in,
-keeping all other Unix preferences raw; retest same compiled server OFF/LZ4.
-No broader environment passthrough or host safety changes are needed.
+D untraced rawX11, with45s userspace profiler: full-field27.04, localized55.68/56.02.
+E untraced rawWayland: full-field24.39, localized54.44/55.14. Both60s observations,
+actual Retina geometry/source60,0post-start invalid/duplicates; short final phases
+excluded. Sequential host activity/profile differences prevent regression/gain
+claims. Backend switch did not solve sustained60. Perf exact ELF/raw offsets
+retained; original function names wrongly resolve libc and are excluded. Mixed
+sample attribution shows QEMU main Pixman stores/comparisons and vCPU copying,
+not proof of CPU saturation or downstream cause.
+
+Full3840×2160 RGB comparisons: controlled color pattern and dedicated high-entropy
+pattern exactly match stable QEMU before/after snapshots (8,294,400pixels each).
+High-entropy center4095unique/4096pixels, stddev~74 eachchannel. This qualifies
+server→client RGB for those static images, not guest→capture, alpha, moving-frame
+integrity, physical scanout or GPUFPS. The first late entropy attempt captured
+ordinary desktop instead; explicitly excluded from high-entropy qualification.
+A window-lock attempt and B API-name/no-source diagnostic yield no throughput.
 
 Guest-requested shutdown, natural capture exits, private terminal verification;
-stopped-container reconciliation inspection unavailable/mismatched retained.
-Recovery recovered/authorizes_launch=true. Original runner preserved. No VM up.
-Artifacts ~/macos-vm/run/candidate-438-results/,c438-fourk-a-pipeline-analysis.json,
-c438-qemu-spice-runtime-env.json and c438-fourk-b-cadence.jsonl.summary.json.
+stopped-container inspection reconciliation unavailable/mismatched retained.
+Recovery recovered/authorizes_launch=true. No VM running, original runner preserved.
+Artifacts ~/macos-vm/run/candidate-439-results/,c439-fourk-c-pipeline-analysis.json,
+c439-fourk-{d,e}-analysis.json,c439-static-stage0-check.json,c439-entropy-check.json,
+c439-lz4-c-byte-analysis.json and retained raw/ELF/profile provenance.
 
-Sustained4K Retina60 deliveredFPS remains unqualified. No comparable historical
-regression established. No new milestone published; dev e240b38... CI38040411149
-green, main unchanged. Native framebuffer investigation remains disabled/paused.
+Next discriminator: QEMU gui_update schedules the next refresh from completion,
+adding work to16ms interval (observed~49full/~58local). Test callback-start pacing
+with skipped missed ticks and a conservative17ms SPICE60 period so no configured
+rate is exceeded. Exact60 will require finer-resolution/fractional scheduling if
+this is useful. It remains a hypothesis, not a fixed display or achieved target.
+1552hosttests8skip,25upstreamSPICEtests passed before439. No new milestone published.
+Last dev e240b38... has green hostedCI38040411149; main unchanged. Sustained4K60
+remains unqualified. Native framebuffer/120/5K work remains disabled/on hold.
