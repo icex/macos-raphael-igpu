@@ -1,0 +1,60 @@
+{
+  "run_id": "0132fd022f53f29a9ce1d0f3c7f687b8",
+  "artifacts": [
+    {
+      "path": "/home/bogdan/macos-vm/run/c435-guest-graphics-state.txt",
+      "sha256": "9502b8c8763fa186bb95f81b12dd3e640203b3c2556563f33891c52a1dd15da6",
+      "bytes": 1383
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c435-launcher-install.txt",
+      "sha256": "d6cbe78502c6f81d3b4c6a8b1d67792cbe9d09b75fdf62893b77fa7a8a1baf9c",
+      "bytes": 866
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c435-restored-display.txt",
+      "sha256": "966a0611f32a2b7369726c33452e25dae07d8f4d8045d988d88c385b36477039",
+      "bytes": 12979
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c435-native-load.txt",
+      "sha256": "07fffd3d6fd69d8162e75ac9a28aa0c577a32bbcce51051961a9a81905777685",
+      "bytes": 649
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c435-fullscreen-geometry.jsonl",
+      "sha256": "ef638f2d801061fc4637df6759b706a398842fba1366f1e13694f6f567b0b583",
+      "bytes": 1068
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c435-full-suite.log",
+      "sha256": "bc5e64e21ff5ed7c6e45877370462eb409a1f85e01149098fe210858de645161",
+      "bytes": 14097
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-435-results/probe.json",
+      "sha256": "0d9cf06374cb4347faccb9cbeb0b38ec2b56362537fd1f7ef6e0b3a14068c0f0",
+      "bytes": 470336
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-435-results/verdict.json",
+      "sha256": "4b4cecd90aee636ed545c93f6a68cefed20b8b859ba06db625a2e8f3d17966ef",
+      "bytes": 50028
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-435-results/shutdown.json",
+      "sha256": "2f6d2c39ac1e1c1d3cb3199723aa2e169a691e1eda75b33d19b55856b0007d8e",
+      "bytes": 176
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-435-results/recovery.json",
+      "sha256": "13a598947293ed859bf515ddcc87be79fc64c1482b402c7e19041d77010c6b61",
+      "bytes": 17594
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-435-results/serial.txt",
+      "sha256": "d61b2fbcc22b1faabbcd6f43e743714835ec864159372e31127b0c88f66b3d61",
+      "bytes": 472010
+    }
+  ]
+}
