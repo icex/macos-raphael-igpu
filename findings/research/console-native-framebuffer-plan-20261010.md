@@ -52,3 +52,18 @@ presenter absent, then read mode/pixel-clock properties and actual display-link
 cadence. Any unknown framebuffer identity, mixed mode owners, missing capture,
 hang or failed cleanup prevents qualification. A120Hz synthetic VBL clock still
 does not prove120 distinct delivered frames or physical scanout.
+
+## First preparation run
+
+433 run4061015c26310a92abfa72f4c0a4a077 panicked during OSKext::start before a
+build marker. Native option absent; disabling probe does not isolate link/import
+changes. Archive has1.0.433 kmod and normal RX text; panic lists1.0.3/8192bytes.
+Fault0x10 is a non-present instruction fetch, not proven NX protection rejection.
+Investigate injected/prelinked metadata and dependencies before altering segment
+permissions or guest caches. Launcher guard installation did not occur.
+
+Exact supervisor stop preserved the runner; wrapper capture was INVALID. Normal
+recovery lacked critical readiness. Separate supported schema9 stopped/noqueue
+recovery returned recovered/authorizes_launch=true with no host faults. See
+`console-native-framebuffer-loading-evidence-20261010.json`. Tests and the sealed
+build do not qualify kernel loading or native framebuffer functionality.

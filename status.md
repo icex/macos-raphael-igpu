@@ -1,44 +1,36 @@
-# Live status — 2026-10-10 — native framebuffer prototype offline
+# Live status — 2026-10-10 — native framebuffer loading failure
 
+Candidate433 run4061015c26310a92abfa72f4c0a4a077 panicked during OSKext::start,
+before any new build/route marker. The native framebuffer boot option was absent.
+No native display/VBL qualification or launcher installation occurred. Archive
+kmod version is1.0.433; panic lists as.rgpu.RaphaelGPU1.0.3,8192bytes. That runtime
+identity mismatch needs investigation before another native build. Fault0x10 is
+non-present instruction fetch, not proven NX permission failure. New subclass
+adds IOFramebuffer imports even while its probe is disabled; loading changed.
 
-Candidate433 implements an opt-in native IOFramebuffer with detailed timing,
-capacity-bounded60/120 modes and serialized softwareVBL callbacks. ABI builds
-compiled/linked; kernel matching, display timing, output and teardown remain
-untested. The external support launcher suppresses competing holder/presenter
-when the native driver is ready. Preparation cardmetal227 keeps native disabled
-and must install this launcher guard before a later opt-in cycle. Host remains
-awake; no GPU VM is running. Source/policy and callback-lifetime audit complete;
-full regression checks and sealed preparation build are next.
-[Plan](findings/research/console-native-framebuffer-plan-20261010.md).
+Capture: INVALID/identity_or_route_missing. No core/desktop probe completed.
+Shutdown: exact supervisor stop, forced-after-shutdown-error; runner retained.
+Normal recovery failed because critical producer readiness was absent. Supported
+stopped/noqueue inspection found idle queues and no host faults; execute returned
+schema9 recovered, authorizes_launch=true. No reboot or driver rebind.
+Receipt: ~/macos-vm/run/c433-noqueue-recovery.json. Run results:
+~/macos-vm/run/candidate-433-results/. Host remains awake, vfio-pci, power/control=on;
+no GPU VM running. Commit this status before the next cycle.
 
-Candidate432 attempt b, runc81e8cb4dd4835f93a655a26322341fb, completed.
-QEMU EDID adds native2560×1440/120Hz and1280×720 HiDPI. Same-process mode
-readback120Hz and CVDisplayLink period33,333,333ns demonstrate that EDID labels
-do not supply120Hz pacing. Source fixture599 draws/20seconds started on native
-HiDPI, but mode reverted to saved1080p/85Hz before its final readback. Sustained
-native1440p120 output is unqualified; that reversion's cause remains open.
-Real-client screenshots establish changing native desktop content at1080p.
+Native framebuffer prototype supplies detailed timing,60/120 modes and serialized
+softwareVBL callbacks; builds/link and1539hosttests pass (8 skipped). It remains
+unqualified. Launcher guard prevents concurrent native and capture mode ownership,
+but is not installed in the guest yet. Dynamic Retina resize and5K transport are
+unfinished;431's64MiB prototype is offline. Next inspect injected/prelinked kmod
+identity, dependencies and duplicate bundle metadata; preserve the working baseline.
+[Prototype plan](findings/research/console-native-framebuffer-plan-20261010.md).
 
-Capture: INCONCLUSIVE/probe_completion_missing. Root helper preparation overlapped
-harness gx relay before probe completion; probe.json contains the compile reply,
-not a Metal result. This cannot establish a GPU regression or passing core probe.
-Future guest commands must wait for recorded probe completion, not only container
-startup. Separate native mode/clock evidence remains in raw captures.
-Shutdown: request sent, forced stop. Recovery: recovered, authorizes_launch=true.
-Host awake, vfio-pci retained, power/control=on; no GPU VM running.
-Receipts: ~/macos-vm/run/candidate-432-attempt-b-results/.
-[Evidence](findings/research/console-native-edid-result-20261010.md).
+432 verified native2560×1440/120 EDID acceptance, while same-process display clock
+stayed30Hz. Mode reverted during long tests; sustainednative120 is unqualified.
+430 baseline has correct4K Retina picture at120metadata, actualsource60Hz and
+clientabout60/s localized/27/s full-field. Native1080p Metal readbacks passed.
 
-Next: native framebuffer timing/VBL and mode implementation; preserve the existing
-holder until Retina sizing, refresh, and capture are qualified. Candidate431's
-uncommitted64MiB/5K prototype is offline. Native arbitrary resize and true120fps
-remain open. Candidate430 baseline: correct4K Retina120 metadata, actualsource60,
-clientabout60/s localized and27/s full-field; valid core capture, forced shutdown,
-authorizing recovery. Native presenter-only1080p Metal readbacks previously passed.
-
-432 tests1536 passed (8 skipped). Local research only; no new milestone publication.
-Published dev/origin/dev e240b38ae1d878d429369e41ab5b1179108c2a26 has clipboard/
+Published dev/origin/dev e240b38ae1d878d429369e41ab5b1179108c2a26 retains clipboard/
 GUI USB and1.0.428 binary; hosted CI38040411149 passed test/build. Main unchanged
-at861ba5e. VirtualBox deferred. Prior432 launch refused before domain creation
-because supervisor omitted EDID; forwarding fix is tested. MODE2 resets325–327
-passed; first two attempts produced no guest output.
+at861ba5e.433 is local experimental work; no milestone publication. VirtualBox
+remains deferred. Native120 clock and actual120fps delivery remain open.
