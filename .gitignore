@@ -7,3 +7,6 @@ src/rlc_fw.h
 .termdesk.toml
 .termdesk-workspace.toml
 .aider*
+
+# Isolated candidate research builds
+.research/

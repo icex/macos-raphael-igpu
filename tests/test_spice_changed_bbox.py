@@ -14,6 +14,7 @@ class Rect(ctypes.Structure):
     _fields_ = [(key, ctypes.c_int) for key in ('left', 'top', 'right', 'bottom')]
 
 class ChangedBBox(unittest.TestCase):
+    EXTRA_PATCHES = ()
     @classmethod
     def setUpClass(cls):
         cc = shutil.which('cc')
@@ -22,7 +23,11 @@ class ChangedBBox(unittest.TestCase):
         header = '\n'.join(line[1:] for line in text.splitlines() if line.startswith('+'))+'\n'
         cls.temp = tempfile.TemporaryDirectory()
         root = pathlib.Path(cls.temp.name)
-        (root/'spice-diff-bbox.h').write_text(header)
+        (root/'ui').mkdir()
+        (root/'ui'/'spice-diff-bbox.h').write_text(header)
+        for extra in cls.EXTRA_PATCHES:
+            subprocess.run(['patch', '-p1', '-i', str(extra)], cwd=root, check=True, capture_output=True)
+        (root/'spice-diff-bbox.h').write_text((root/'ui'/'spice-diff-bbox.h').read_text())
         (root/'test.c').write_text('''#include "spice-diff-bbox.h"
 int test_bbox(const uint8_t *s, size_t n, size_t stride,
  const uint8_t *m, size_t mn, size_t ms, int w, int h,
