@@ -3,8 +3,11 @@
 Candidate430 attempt473eac7e5a065ff55bf9c389dda76737 reset323 succeeded, then
 outer launcher refused its remaining SPICE60 guard before creating QEMU. No guest
 result; wrapper INVALID/capture_loss, no recovery receipt. An unused ledger
-reservation remains and must be reconciled by the supported pre-exposure path
-before retry. Fix includes outer and inner launcher coverage. Host remains awake.
+reservation remains as failed-attempt audit, not GPU exposure. The existing
+pre-systemd reservation reconciler does not cover this post-systemd guard refusal.
+Retry uses the supported schema8 stopped/noqueue admission path, which checks
+live host and all queue gates; no receipt is fabricated or ledger row deleted.
+Fix includes outer and inner launcher coverage. Host remains awake.
 
 
 Candidate428 run817dfe19b8e46522c6b350fb21dc0bd4 completed. Native X11
