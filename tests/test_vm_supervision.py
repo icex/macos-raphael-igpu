@@ -672,6 +672,7 @@ class SupervisionTests(unittest.TestCase):
     def test_graphics_policy_is_explicitly_forwarded_without_extra(self):
         self.env["GENERIC_GRAPHICS"] = "off"
         self.env["CONSOLE_REFRESH"] = "60"
+        self.env["CONSOLE_EDID"] = "1440p120"
         self.env["CONSOLE_FULL_REFRESH"] = "on"
         self.env["CONSOLE_SNAPSHOT"] = "on"
         self.fixture["logind_inhibited"] = True
@@ -684,6 +685,7 @@ class SupervisionTests(unittest.TestCase):
                       and any(a.startswith("--unit=rgpu-launch-") for a in args))
         self.assertIn("--setenv=GENERIC_GRAPHICS=off", launch)
         self.assertIn("--setenv=CONSOLE_REFRESH=60", launch)
+        self.assertIn("--setenv=CONSOLE_EDID=1440p120", launch)
         self.assertIn("--setenv=CONSOLE_FULL_REFRESH=on", launch)
         self.assertIn("--setenv=CONSOLE_SNAPSHOT=on", launch)
         self.assertIn("--setenv=EXTRA=", launch)
