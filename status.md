@@ -1,31 +1,38 @@
-# Live status — 2026-10-10 — focus only on4K QEMU performance
+# Live status — 2026-10-10 — 4K QEMU performance
 
-User priority: full-screen4K guest performance; all native-framebuffer/120Hz/5K,
-clipboard/USB and other roadmap work is on hold. Keep the QEMU viewer in a normal
-host window; no host fullscreen or automatic input capture while user tests other
-applications. Performance tests use a full-field4K guest workload in that window.
+Only full-field 4K QEMU performance is active; other roadmap work is on hold.
+Keep the host viewer in a normal window, with no automatic input grabs or USB
+redirection. The host user's other applications remain untouched.
 
-435 run0132fd022f53f29a9ce1d0f3c7f687b8 restored original GPU dependencies and
-passed its identity-bound Metal probe. Active1920×1080 logical/3840×2160 backing
-was verified; capture app/seal unchanged after external launcher-guard install.
-Standalone driver load was refused by OSapproval; it is not qualified or enabled,
-and that investigation is halted. IOGraphicsFamily599 is loaded after desktopboot.
+Candidate 436 / metal-230 / run 8192b942c66179da66fcda9d9cc957a8 completed.
+Its identity-bound Metal probe passed. Two 100-second normal-window controls
+used actual 3840×2160 scale-1 guest content, source approximately 60 draws/s,
+1440×900 GDK1 scaled viewer and the unchanged candidate-402 pool image.
+Localized updates reached 55–57 decoded IDs/s; full-field phases 24.86–26.64.
+Both controls had zero invalid or duplicate decoded tokens. These observations
+are sampled token delivery, not full-frame integrity, GPU FPS or host scanout.
 
-The guest subsequently emitted poweroff/systemWillShutdown before the planned
-interactive deadline; original cause is not established. Capture hooks immediate-
-stopped, wrapperINVALID/serialcapture-not-running; do notcallclean shutdown.
-Recovery returned recovered, authorizes_launch=true. No GPU VM is running; host
-awake, vfio-pci/powercontrolon. Receipts ~/macos-vm/run/candidate-435-results/.
+No comparable new performance regression is established: these results repeat
+397/399/402/430's longstanding approximately 25–27/s full-field limit. The Retina
+attempt initially selected 1920×1080 logical / 3840×2160 backing, then reverted
+to scale 1 and produced invalid tokens; exclude it from throughput qualification.
+Sustained 4K Retina at 60 delivered frames/s remains unqualified.
 
-The requested matched-fullscreen measurement did not complete. X11 sees one
-combined3840×1080/GDK2 monitor (7680×2160 physical), Wayland onecombined5120×1440/
-GDK2; exact1920×1080 viewport checks refused. No performance numbers from those
-attempts. Owned fullscreen viewers stopped; next cycle uses only a normal window.
+QEMU profiling and exact container ELF offset decoding identify rgpu_diff_bbox's
+per-pixel border comparisons as a candidate hot path. Original perf symbol names
+resolved against host DSOs and are excluded. Profiling during the failed Retina
+attempt establishes execution cost, not a comparable Retina performance control.
+Next discriminator: optimize border comparisons while preserving the exact dirty
+rectangle, test against a brute-force oracle, then repeat the valid 4K control.
 
-History:397/399/402/4304K mixed workloads scaled into1440×900 show full-field
-about25–27 decodedIDs/s and localizedabout49–60; no comparable newregression
-established.381 matchedphysical4K viewport observed34.5–34.9 full-field vs14.4
-scaled, but olderQEMU/transport differs. Fresh windowed control+stage attribution
-is next. Countsource/capture/publication/client separately, retain integrity limits.
-1538hosttests passed before435; current publisheddev e240b38ae1d878d429369e41ab5b1179108c2a26
-has green hostedCI38040411149. No new feature publication. Main unchanged.
+Shutdown receipt: exited-after-guest-request; capture receipts natural-container-
+exit. Container inspection reconciliation reported unavailable/mismatched, while
+private terminal receipts verified. Recovery recovered / authorizes_launch=true;
+retain that limitation rather than calling every shutdown check clean.
+Artifacts: ~/macos-vm/run/candidate-436-results/, c436-fourk-b-analysis.json,
+c436-retina-c-analysis.json, c436-retina-e-cadence.jsonl.summary.json and
+c436-qemu-perf-raw.txt. Research audit contains the comparison and limitations.
+
+1538 host tests passed, 8 skipped before this run. No new verified milestone was
+published. Last published dev e240b38ae1d878d429369e41ab5b1179108c2a26 has green
+hosted CI 38040411149. Main unchanged. Native framebuffer work remains disabled.
