@@ -1,24 +1,28 @@
-# Live status — 2026-10-10 — clipboard works; USB topology investigation
+# Live status — 2026-10-10 — native virt-manager clipboard and USB verified
 
-Candidate421 run03771bffaa898236a0023c1de3e480a0 completed. Bidirectional
-synthetic text clipboard works through native virt-manager, including Unicode and
-multiline text. Host-to-guest ASCII and reconnect transfers passed. The external
-427 holder compiled and kept the signed capture app unchanged; its maximum/native
-mode is now3840×2160. The presenter remained running after installation and through
-multiple viewer reconnects; no general resize-stability claim yet.
+Candidate428 run817dfe19b8e46522c6b350fb21dc0bd4 completed. Native X11
+virt-manager clipboard passed fresh ASCII and Unicode text in both directions.
+Kingston0951:1666 redirected through the GUI, enumerated as USB3 storage in macOS,
+and passed two matching 1MiB read-only test reads. The user confirmed seeing it.
+Arctis1038:22a5 enumerated and completed stereo output callbacks; audible output
+was not tested at the user's request. Normal chooser detach restores its Linux
+drivers; abrupt viewer termination did not, so crash restoration is unqualified.
 
-USB selection uses virt-manager's existing Redirect USB device dialog. The user
-selected Arctis Nova7X1038:22a5. Linux interfaces were claimed and the client reports
-connected, but macOS repeatedly fails enumeration behind QEMU's automatic hub.
-Headset returned to Linux. Next428 tests enough direct xHCI ports to avoid that hub.
+Window resize requests1280×720,1101×703 and1600×900 reached the guest, with
+holder/presenter running and display-awake assertions present. Wayland background
+clipboard delivery was delayed; only the X11 backend is qualified by these tests.
+Current virtual transport remains capped at3840×2160/60Hz. Next: standard Retina
+modes through5K, fixed2× automatic window sizing,120Hz configuration and measured
+capture/client cadence. Physical HDMI4K120 evidence does not measure SPICE delivery.
 
-Capture: valid CORE_PROBE_PASS, separate from desktop/USB qualification. Earlier
-presenter reconfiguration exit is retained; combined error does not establish its
-exact cause. One overlapping guest-relay clipboard recheck is excluded as invalid.
-Shutdown: exited-after-guest-request; recovery recovered, authorizes_launch=true.
-Receipts: ~/macos-vm/run/candidate-421-results/. Clipboard and USB evidence:
-~/macos-vm/run/c421-clipboard-*/ and c421-usb-enumeration.txt.
+Capture: valid CORE_PROBE_PASS, separate from desktop/USB qualification.
+Shutdown: guest_shutdown lifecycle event and exited-after-guest-request observed;
+wrapper outcome capture-abort-after-request prevents clean lifecycle qualification.
+Recovery: recovered, authorizes_launch=true. Kingston returned to Linux usb-storage;
+Arctis interfaces restored. No GPU VM is running; development sleep inhibitor remains.
+Receipts: ~/macos-vm/run/candidate-428-results/. Clipboard evidence:
+~/macos-vm/run/c428-x11-tests/events.jsonl; USB read evidence:
+~/macos-vm/run/c428-kingston-read-eject.json; helpers: c428-final-helpers.txt.
 
-Published dev remains4fdd0f3 (hosted tests/build passed38000293238). Current421–427
-changes remain candidate-only pending integration and completed milestone checks.
-VirtualBox deferred; QEMU/virt-manager clipboard, USB, resize and usability are focus.
+Published dev remains4fdd0f3 pending candidate429 documentation/binary integration
+and hosted CI. Main unchanged. VirtualBox remains deferred.
