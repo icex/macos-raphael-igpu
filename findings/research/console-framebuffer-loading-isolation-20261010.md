@@ -27,3 +27,15 @@ ABI against24G830. Neither outcome qualifies the native120 display path.
 Root owns hardware. Wait for identity-bound probe completion before any gx helper
 command. Only after a working baseline may the external launcher guard be installed,
 without signing or changing the capture app. Preserve every shutdown/recovery receipt.
+
+Result: run358fb6dbb31ef9c2bb1e26aee5995fb2 repeatedly failed dependency resolution:
+`library kext com.apple.iokit.IOGraphicsFamily not found`, error0xdc00800e. No new
+class imports are needed for this failure. Native code cannot be qualified until
+the main GPU plugin again loads. Restore its original dependencies and isolate
+the framebuffer in a distinct IOKit bundle. The433 later panic/runtime metadata
+mismatch is not fully explained by this comparison.
+
+Exact supervisor stop preserved runner receipts; wrapper INVALID, no core probe.
+Normal recovery lacked producer readiness; schema9 stopped/noqueue recovery
+authorized same-boot reuse with no host faults. Tests1537 passed/8 skipped.
+Evidence: `console-framebuffer-dependency-evidence-20261010.json`.

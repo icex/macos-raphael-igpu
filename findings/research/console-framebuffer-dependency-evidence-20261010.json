@@ -1,0 +1,60 @@
+{
+  "run_id": "358fb6dbb31ef9c2bb1e26aee5995fb2",
+  "artifacts": [
+    {
+      "path": "/home/bogdan/macos-vm/run/c433-efi-readback-audit.json",
+      "sha256": "23f0a27948960a38cdccd711f84054b5d2d5836c559223fbbfd976d7f56ff892",
+      "bytes": 324
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c434-full-suite.log",
+      "sha256": "189fa9ea30f3947c09698a0e7a182696c452ec7c0aef9bedc4257eba2c82d346",
+      "bytes": 14096
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c434-noqueue-inspection.json",
+      "sha256": "9662d42afa5c28c58778343cfc559762c0caafa61e1e09618e59fbdc922c99f0",
+      "bytes": 19111
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c434-noqueue-recovery.json",
+      "sha256": "d31beae616339324291623c584062855a025668f859fac91c8c2264d6d5e68d4",
+      "bytes": 37823
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/c434-supervised-stop.json",
+      "sha256": "2690d8a2b6eae8117c1d46b710a5813448079c58125e556f816c64e8206340bd",
+      "bytes": 142
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-434-results/serial.txt",
+      "sha256": "789b1508cbc103e4a9bcfd718e0ea13a0faf4b9bba831666ead048e0d34ec609",
+      "bytes": 21489
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-434-results/critical.txt",
+      "sha256": "d0e7e1b728b507056300cc41f806b1617f53babe729f75a6a5c83089f7008edf",
+      "bytes": 304
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-434-results/verdict.json",
+      "sha256": "413aa674d2b9ae758da842fb2a0c7ebc043aeaf1fb96ee8a7c397f89672348bd",
+      "bytes": 638
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-434-results/shutdown.json",
+      "sha256": "09d496c3ba2d8e447faa56d2aaf03b27494835eb467d9ef13b25a75d79861a7f",
+      "bytes": 112
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-434-results/recovery.json",
+      "sha256": "a0c2ac968f67fad207d44e1aa18a39d21156704210e9ef4d7fb303e7d502014c",
+      "bytes": 114
+    },
+    {
+      "path": "/home/bogdan/macos-vm/run/candidate-434-results/manifest.json",
+      "sha256": "8583886abec9642dbe1245e7c22c6e240194374d90a212535d33a32c73f88a78",
+      "bytes": 12836
+    }
+  ]
+}

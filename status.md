@@ -1,36 +1,33 @@
-# Live status — 2026-10-10 — native framebuffer loading failure
+# Live status — 2026-10-10 — graphics dependency blocks early GPU plugin load
 
-Candidate433 run4061015c26310a92abfa72f4c0a4a077 panicked during OSKext::start,
-before any new build/route marker. The native framebuffer boot option was absent.
-No native display/VBL qualification or launcher installation occurred. Archive
-kmod version is1.0.433; panic lists as.rgpu.RaphaelGPU1.0.3,8192bytes. That runtime
-identity mismatch needs investigation before another native build. Fault0x10 is
-non-present instruction fetch, not proven NX permission failure. New subclass
-adds IOFramebuffer imports even while its probe is disabled; loading changed.
+Candidate434 run358fb6dbb31ef9c2bb1e26aee5995fb2 isolated433's added dependency:
+exact last-working432 GPU source, no native framebuffer class/personality/imports,
+but IOGraphicsFamily2.0.0 still in plugin Info.plist. macOS repeatedly reports
+"library kext com.apple.iokit.IOGraphicsFamily not found" and refuses RaphaelGPU
+with0xdc00800e. No build marker or Metal result. The new class is unnecessary to
+reproduce a loading failure. This does not establish that433's later panic had
+an identical full cause; runtime1.0.3/8192-byte metadata mismatch remains open.
 
-Capture: INVALID/identity_or_route_missing. No core/desktop probe completed.
-Shutdown: exact supervisor stop, forced-after-shutdown-error; runner retained.
-Normal recovery failed because critical producer readiness was absent. Supported
-stopped/noqueue inspection found idle queues and no host faults; execute returned
-schema9 recovered, authorizes_launch=true. No reboot or driver rebind.
-Receipt: ~/macos-vm/run/c433-noqueue-recovery.json. Run results:
-~/macos-vm/run/candidate-433-results/. Host remains awake, vfio-pci, power/control=on;
-no GPU VM running. Commit this status before the next cycle.
+Function: no accelerated desktop qualification. Capture: INVALID/identity_or_route_missing.
+Stop: exact supervisor forced stop; wrapper reportsalready-stopped, not cleanshutdown.
+Normal recovery lacks critical producer readiness. Supported schema9 stopped/noqueue
+inspection+execute returned recovered, authorizes_launch=true, no host faults.
+Receipt: ~/macos-vm/run/c434-noqueue-recovery.json; runresults:
+~/macos-vm/run/candidate-434-results/. Host awake, GPU vfio-pci/powercontrolon;
+no GPU VM running.1537hosttests passed (8 skipped) before the run.
 
-Native framebuffer prototype supplies detailed timing,60/120 modes and serialized
-softwareVBL callbacks; builds/link and1539hosttests pass (8 skipped). It remains
-unqualified. Launcher guard prevents concurrent native and capture mode ownership,
-but is not installed in the guest yet. Dynamic Retina resize and5K transport are
-unfinished;431's64MiB prototype is offline. Next inspect injected/prelinked kmod
-identity, dependencies and duplicate bundle metadata; preserve the working baseline.
-[Prototype plan](findings/research/console-native-framebuffer-plan-20261010.md).
+Next: restore original GPU-plugin dependency set; package native framebuffer as a
+separate IOKit kext with its own identity and loading evidence. Inspect guest
+IOGraphics/KC state after baselineprobe completion before choosing runtime install
+or boot injection. Install the external launcher ownership guard before enabling
+native framebuffer matching. Preserve full prototype on433; current434 is only
+an isolation branch. Native120VBL, dynamic Retina resize and5K remain unqualified.
 
-432 verified native2560×1440/120 EDID acceptance, while same-process display clock
-stayed30Hz. Mode reverted during long tests; sustainednative120 is unqualified.
-430 baseline has correct4K Retina picture at120metadata, actualsource60Hz and
-clientabout60/s localized/27/s full-field. Native1080p Metal readbacks passed.
-
-Published dev/origin/dev e240b38ae1d878d429369e41ab5b1179108c2a26 retains clipboard/
-GUI USB and1.0.428 binary; hosted CI38040411149 passed test/build. Main unchanged
-at861ba5e.433 is local experimental work; no milestone publication. VirtualBox
-remains deferred. Native120 clock and actual120fps delivery remain open.
+Offline audit: staged433 archive matches, one OCAdd entry; all88 IOFramebuffer
+imports exist in24G830 KDK externalsymbols. SDK base IOFramebuffer size0x1d0
+matches actual24G830 MetaClass size, but this is not full vtable/relocation proof.
+432 accepted native120 EDID while CVDisplayLink remained30Hz.430 baseline has
+correct4K Retina picture, source60/clientabout60localized27fullfield.
+Published dev e240b38ae1d878d429369e41ab5b1179108c2a26 retains working clipboard/
+GUI USB and1.0.428; hostedCI38040411149 passed. Main861ba5e unchanged. No new
+milestone publication; virtualBox deferred.
