@@ -29,6 +29,16 @@ The runner label is explicitly Intel, as listed in the
 
 ## Checked-in experimental executable
 
+Candidate 441 improves full-field decoded cadence with an opt-in private host
+GTK GPU renderer (37.74–41.80 versus Cairo 23.73–23.85 IDs/s in the compared
+intervals). It does not replace the checked-in candidate 428 bundle below or
+qualify sustained 4K60. Trailing observer errors, moving-image/input limits and
+static bilinear output checks are retained in the
+[441 report](../findings/research/console-raw-gpu-scaling-20261010.md).
+Candidate 440 pacing is retained as rejected research, not the active client
+configuration; 441 uses the 439 server image without that pacing change.
+Native framebuffer, 120 Hz, 5K and other roadmap work are on hold.
+
 `kext/bin/RaphaelGPU` contains the exact hardware-tested candidate 428 executable,
 build `3b413b25e1ce4f7eb6bb8e1a27384d7c`, from clean source
 `68f247c745fd5d73a268f856ed472270f139a7cf`, SHA256
@@ -46,7 +56,7 @@ the final receipt is `capture-abort-after-request`; GPU recovery passed. See the
 The prior 402 performance results remain the baseline; this milestone does not
 establish sustained 4K60, 5K or 120 Hz virtual presentation.
 
-**Current priority: Retina sizing and refresh support in QEMU/virt-manager.**
+**Current priority: full-field 4K performance in a normal QEMU/virt-manager window.**
 VirtualBox work is deferred at the user’s request. Candidate 417 was stopped during
 early boot at the earlier pause.
 The controller helper forced poweroff, then unregistered the VM on its first

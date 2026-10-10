@@ -1,5 +1,28 @@
 # Raphael iGPU acceleration roadmap
 
+**October 10, candidate 441: optional host GPU scaling improves full-field 4K.**
+In the same boot, the private GTK client’s raw-primary GL renderer observed
+37.74–41.80 decoded token IDs/s during full-field phases, versus 23.73–23.85
+with Cairo. Localized phases remained about 56 IDs/s. Both used a 1920×1080
+logical desktop with 3840×2160 backing, approximately 60 source draws/s, raw
+SPICE transport and a normal 1440×900/GDK1 host window.
+
+No invalid tokens occurred within the compared source intervals. The nominal
+100-second observers started late and outlasted the 110-second fixtures, producing 32 GL
+and 36 Cairo trailing missing-border samples; these are not clean 100-second
+runs. A static native GL framebuffer matched the scaled CPU image’s bilinear
+RGB oracle exactly, including black letterboxing. Moving whole-frame integrity,
+quality equivalence to Cairo and input behavior with this renderer remain
+unqualified. These are decoded observations, not scanout FPS or sustained 4K60.
+
+The renderer is an opt-in private host-client experiment, not the default client,
+not a new guest GPU transport and not included in the checked-in candidate 428
+kext bundle. Only full-field 4K performance is active; native framebuffer, 120 Hz,
+5K and other roadmap work remain on hold. The harness completed
+guest-requested shutdown and recovered the GPU with reuse authorized; capture
+and reconciliation details remain in the run evidence.
+[441 evidence](../findings/research/console-raw-gpu-scaling-20261010.md).
+
 **October 10, candidate 428: native virt-manager clipboard and USB milestone.**
 Fresh ASCII and Unicode/multiline text passes in both directions using the tested
 X11 client backend. The existing USB chooser redirects the Kingston DataTraveler:
@@ -10,11 +33,11 @@ Normal Arctis chooser detach restores host drivers; abrupt viewer failure does
 not have the same recovery guarantee. Kingston eject attempts remained busy.
 Guest shutdown was observed, but capture forced an abort; GPU recovery passed.
 
-**Next: full Retina window sizing, standard 4K/5K backing modes and 120 Hz.**
+**Earlier Retina/refresh investigation (now on hold).**
 
 Candidate432 native EDID adds2560×1440/120Hz with a HiDPI variant, but a same-process
 probe still reports33.33ms CVDisplayLink timing. EDID alone cannot provide120Hz
-pacing. Native framebuffer timing/VBL and dynamic modes are the next driver work;
+pacing. Native framebuffer timing/VBL and dynamic modes were proposed follow-up work, now on hold;
 the current holder remains available. Mode reversion and sustained native120 output
 are unqualified. [Evidence](../findings/research/console-native-edid-result-20261010.md).
 The current virtual snapshot transport is still capped at 4K/60. Physical HDMI
@@ -302,6 +325,11 @@ Games and Metal3 conformance remain unqualified. Do not infer application suppor
 from device enumeration or passing microbenchmarks.
 
 ## Next work, in order
+
+Only full-field 4K performance is active: qualify and repeat the 441 GPU scaling
+gain, preserve filtering quality, measure rendered-frame delivery, then address
+the remaining sustained 60 Hz gap. All other roadmap tasks are on hold. The
+following dated entries retain earlier evidence and do not supersede this priority.
 
 **Current user priority (October9): an accelerated macOS desktop in a VM-manager
 window, without physical HDMI.** Candidate341d passes native Metal/WindowServer

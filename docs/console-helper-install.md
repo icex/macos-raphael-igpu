@@ -1,5 +1,16 @@
 # Console helper source package
 
+Current work targets full-field 4K performance in a normal host window.
+Candidate 441’s optional raw-primary GL renderer is a private **host GTK client**
+change; this guest installer does not enable or ship it, and the checked-in kext
+bundle remains candidate 428. The native comparison improved full-field decoded
+cadence to 37.74–41.80 IDs/s from Cairo’s 23.73–23.85, with the same 4K backing.
+Static bilinear output passed, but moving whole-frame quality and renderer input
+behavior remain unqualified; the observers also retain trailing fixture-end
+errors. Do not infer sustained 4K60 or a new GPU transport from this result.
+[441 scope and evidence](../findings/research/console-raw-gpu-scaling-20261010.md).
+Native framebuffer/120 Hz/5K work remains on hold.
+
 This artifact supplies the installer, transaction coordinator and three exact guest helper sources and the shared source-token header together. It is not a
 kext installer or a prequalified clean-guest deployment. The manifest identifies
 source commit, whether the packaging tree was clean, and each input's byte count

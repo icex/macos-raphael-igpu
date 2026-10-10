@@ -1,0 +1,183 @@
+{
+  "scope": "private host client build, no system install; benchmark must attest loaded maps",
+  "baseline": "c424 patched spice-gtk0.42 preserving USB and stationary-pointer fixes",
+  "baseline_files": {
+    "meson.build": "7303384367bc2b9aa68bbce6f37395e0ef4cd4fadb84fa4e16430494f71a2211",
+    "spice-widget.c": "2ad6e77ebb68c1efd4c19a2f5f3031ec72726b36288a00a1add4b5888044d85f",
+    "spice-widget-priv.h": "083917656eabcf1f996654c02e3f41fbb0422bd42991193a2a783057ff581ec3"
+  },
+  "patch_sha256": "67871d8e5193d214ea49ad32ce5f72130ca481abfdf51532bcbf000ccf5d4fdd",
+  "libraries": {
+    "libspice-client-glib-2.0.so.8.8.2": {
+      "baseline_sha256": "be48c620184c1025585880ab5f09cf681f6ec83f085c15b4d95740248a60606d",
+      "new_sha256": "1f3835b281f0953e024404550f05ddf066a30f66c767d9d4151b5df75957d375",
+      "exports_equal": true,
+      "exports": 172
+    },
+    "libspice-client-gtk-3.0.so.5.1.1": {
+      "baseline_sha256": "d77c0ed01390facbcd6a4aa1ed9f6afb5ae8cec81c694d62825fd448dc9ec935",
+      "new_sha256": "ea604719b41346a8646ae2c2e13dea432ff8fa3e91460ee77637dd430b14ca18",
+      "exports_equal": true,
+      "exports": 28
+    }
+  },
+  "upstream_tests": {
+    "passed": 13,
+    "failed": 0,
+    "log_sha256": "5ac546ff5906543e385b3dff22cbd07e57f4556ff710bb845b766bfcc743edf8"
+  },
+  "synthetic_checks": {
+    "exact": {
+      "shape": [
+        481,
+        641,
+        3
+      ],
+      "mismatched_pixels": 0,
+      "max_error": 0,
+      "scope": "synthetic CPU primary to actual GtkGLArea FBO, padded stride, 1:1 RGB; no guest or input qualification"
+    },
+    "scaled": {
+      "viewport": [
+        480,
+        300
+      ],
+      "content": [
+        40,
+        0,
+        400,
+        300
+      ],
+      "max_rgb_error": 1.0,
+      "mean_rgb_error": 0.03625,
+      "pixels_error_gt_1": 0,
+      "letterbox_nonblack": 0,
+      "scope": "synthetic renderer GPU FBO vs bilinear pixel-center oracle"
+    }
+  },
+  "native_phase_comparison": {
+    "scope": "Native same-boot sequential full-field phase controls, 1second interior margin. Decoded CPU token IDs, not GL displayed-frame IDs or physicalscanout. Both100second observers outlast110second sources; trailing missing-token samples retained, no100second zeroinvalid qualification. Host activity uncontrolled.",
+    "a": {
+      "renderer": "GL",
+      "phases": [
+        {
+          "index": 1,
+          "kind": "full-field",
+          "decoded_unique_per_second": 37.744867124086234,
+          "observed_seconds": 17.962707293976564,
+          "source_draw_per_second": 59.97403519434445
+        },
+        {
+          "index": 2,
+          "kind": "localized",
+          "decoded_unique_per_second": 55.73610809185764,
+          "observed_seconds": 17.941690481005935,
+          "source_draw_per_second": 59.374194403007905
+        },
+        {
+          "index": 3,
+          "kind": "full-field",
+          "decoded_unique_per_second": 41.80014257865065,
+          "observed_seconds": 17.966445893980563,
+          "source_draw_per_second": 60.00038860535261
+        },
+        {
+          "index": 4,
+          "kind": "localized",
+          "decoded_unique_per_second": 56.221484338027764,
+          "observed_seconds": 17.98244944799808,
+          "source_draw_per_second": 60.00014462286735
+        }
+      ],
+      "trailing_invalid": 32,
+      "last_valid_id": 6578,
+      "source_completed_id": 6580,
+      "within_source_invalid": 0,
+      "input_sha256": {
+        "/home/bogdan/macos-vm/run/c441-fourk-a-source.txt": "1c485db5b57246f4f8a3471fbd699bab552499d870f8b7e1bf083b337ae80373",
+        "/home/bogdan/macos-vm/run/c441-fourk-a-cadence.jsonl": "6dc4cd76c659a9af2d41bfff9b21462f6086a9c3b833000f4bae06c20c5278dc"
+      }
+    },
+    "b": {
+      "renderer": "Cairo",
+      "phases": [
+        {
+          "index": 1,
+          "kind": "full-field",
+          "decoded_unique_per_second": 23.72623821691569,
+          "observed_seconds": 17.954805818997556,
+          "source_draw_per_second": 60.00350820344467
+        },
+        {
+          "index": 2,
+          "kind": "localized",
+          "decoded_unique_per_second": 56.58932330734933,
+          "observed_seconds": 17.971587934996933,
+          "source_draw_per_second": 59.99714702707341
+        },
+        {
+          "index": 3,
+          "kind": "full-field",
+          "decoded_unique_per_second": 23.852659411293352,
+          "observed_seconds": 17.985415906994604,
+          "source_draw_per_second": 60.00033198048577
+        },
+        {
+          "index": 4,
+          "kind": "localized",
+          "decoded_unique_per_second": 56.26063183625843,
+          "observed_seconds": 17.969936827983474,
+          "source_draw_per_second": 59.99710826848284
+        }
+      ],
+      "trailing_invalid": 36,
+      "last_valid_id": 6597,
+      "source_completed_id": 6597,
+      "within_source_invalid": 0,
+      "input_sha256": {
+        "/home/bogdan/macos-vm/run/c441-fourk-b-source.txt": "9cb07086cdbf23f3249c13f8112d223ce6e043cbc843a1caf855b754a32fb535",
+        "/home/bogdan/macos-vm/run/c441-fourk-b-cadence.jsonl": "4e57b14e4672e9d4365e6b39b2372ae2bb4715b837271676008d486806aa00f7"
+      }
+    }
+  },
+  "native_static_gl": {
+    "source": [
+      3840,
+      2160
+    ],
+    "viewport": [
+      1280,
+      800
+    ],
+    "content": [
+      0,
+      40,
+      1280,
+      720
+    ],
+    "max_rgb_error": 0.0,
+    "pixels_error_gt_1": 0,
+    "letterbox_nonblack": 0,
+    "scope": "Actual macOS static primary CPU pixbuf to native GtkGLArea FBO vs bilinear oracle; no moving-frame integrity or Cairo-quality equivalence"
+  },
+  "run": {
+    "run_id": "19088a4a33e92ee4b5653807671d66be",
+    "boot_id": "ba51b3c6-9420-4510-af69-38a42b3c79c7",
+    "build_id": "1ce9c016abef451ba4252674e3a4693d",
+    "mode2": 336,
+    "verdict": "CORE_PROBE_PASS",
+    "shutdown": "exited-after-guest-request",
+    "capture": "natural exit console/critical, private terminal verified; stopped-container inspection unavailable/mismatched warning retained",
+    "recovery": "recovered",
+    "authorizes_launch": true,
+    "image": "sha256:085d8ac0e59a1ca44eec9dce8c1159607ba91f36c66af4317c8e7999c2733dec"
+  },
+  "runtime_artifact_sha256": {
+    "/home/bogdan/macos-vm/run/c441-manager-a-maps.txt": "23421e63469ae5faf4c4c96b9b70e0bedcce996709261fd02f2a4d2f1dfb6df3",
+    "/home/bogdan/macos-vm/run/c441-native-phase-comparison.json": "865bccc26bd92060d2c4f149acf4f9c8d4760a0546866651c2b0ffda1d0dcfd9",
+    "/home/bogdan/macos-vm/run/c441-native-gl-pixels-check.json": "0a7e4b99d01cb6ac02adee54c80d448e6477c4f10f869f79aa06e86d97fb4c83",
+    "/home/bogdan/macos-vm/run/candidate-441-results/recovery.json": "09a1606e705a8f5b71b30c3e44fafd453095642cd0ca9c33c8cb178d0cf4c490",
+    "/home/bogdan/macos-vm/run/candidate-441-results/shutdown.json": "e3d76bced0a2bf33a3b6d5617ed684ea9684ca403c2d8cf6cb9f69717b36087e",
+    "/home/bogdan/macos-vm/run/candidate-441-results/verdict.json": "05a8d5b718379d8a3abec5a2d00b9df99066f8c8b041387302e84064236c3cc4"
+  }
+}
