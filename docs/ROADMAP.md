@@ -11,6 +11,12 @@ not have the same recovery guarantee. Kingston eject attempts remained busy.
 Guest shutdown was observed, but capture forced an abort; GPU recovery passed.
 
 **Next: full Retina window sizing, standard 4K/5K backing modes and 120 Hz.**
+
+Candidate432 native EDID adds2560×1440/120Hz with a HiDPI variant, but a same-process
+probe still reports33.33ms CVDisplayLink timing. EDID alone cannot provide120Hz
+pacing. Native framebuffer timing/VBL and dynamic modes are the next driver work;
+the current holder remains available. Mode reversion and sustained native120 output
+are unqualified. [Evidence](../findings/research/console-native-edid-result-20261010.md).
 The current virtual snapshot transport is still capped at 4K/60. Physical HDMI
 4K120 does not establish 120 Hz delivery through the virtual copy/SPICE path.
 [Native evidence](../findings/research/virt-manager-clipboard-usb-native-20261010.md).
