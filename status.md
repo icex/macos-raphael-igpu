@@ -1,46 +1,33 @@
-# Live status — 2026-10-10 —120Hz prelaunch guard correction
+# Live status — 2026-10-10 — display holder comparison
 
-Candidate430 attempt473eac7e5a065ff55bf9c389dda76737 reset323 succeeded, then
-outer launcher refused its remaining SPICE60 guard before creating QEMU. No guest
-result; wrapper INVALID/capture_loss, no recovery receipt. An unused ledger
-reservation remains as failed-attempt audit, not GPU exposure. The existing
-pre-systemd reservation reconciler does not cover this post-systemd guard refusal.
-Retry uses the supported schema8 stopped/noqueue admission path, which checks
-live host and all queue gates; no receipt is fabricated or ledger row deleted.
-Fix includes outer and inner launcher coverage. Host remains awake.
+Candidate430 attempt b, run3c4adbc6a0588d091ba5c367ffc9809b, completed.
+Extra virtual display at1920×1080 logical /3840×2160 backing reports120Hz,
+with correct picture/colors. Actual test source clock was60Hz; real-client
+cadence was about60/s for localized changes and27/s for full-screen changes.
+True120fps delivery remains unqualified. macOS Displays exposes the existing
+AppleBochVGAFB85Hz metadata, not evidence of the requested transport cadence.
 
+Removing both holder and presenter produced a black window. Keeping the original
+signed presenter, explicitly capturing only the existing native display, produced
+correct1920×1080 desktop and changing fixture images in actual virt-manager
+screenshots. Metal probe passed all48 parent/child readback cases; window drawable
+readback also matched. Parent desktop-capture preflight was false, so its capture
+result is separate. The holder is unnecessary for this1080p output, but native
+CVDisplayLink ran30Hz despite the85Hz label. Native modes lack4K and120Hz;
+arbitrary Retina resize and5K transport remain unfinished.
 
-Candidate428 run817dfe19b8e46522c6b350fb21dc0bd4 completed. Native X11
-virt-manager clipboard passed fresh ASCII and Unicode text in both directions.
-Kingston0951:1666 redirected through the GUI, enumerated as USB3 storage in macOS,
-and passed two matching 1MiB read-only test reads. The user confirmed seeing it.
-Arctis1038:22a5 enumerated and completed stereo output callbacks; audible output
-was not tested at the user's request. Normal chooser detach restores its Linux
-drivers; abrupt viewer termination did not, so crash restoration is unqualified.
+Capture: valid CORE_PROBE_PASS. Shutdown: guest request sent, bounded grace expired,
+forced stop; not a clean guest shutdown. Recovery: recovered, authorizes_launch=true.
+Host remains awake; GPU stays vfio-pci with power/control=on. No GPU VM is running.
+Evidence: ~/macos-vm/run/candidate-430-attempt-b-results/ and
+[holder comparison](findings/research/console-holder-comparison-20261010.md).
 
-Window resize requests1280×720,1101×703 and1600×900 reached the guest, with
-holder/presenter running and display-awake assertions present. Wayland background
-clipboard delivery was delayed; only the X11 backend is qualified by these tests.
-Current virtual transport remains capped at3840×2160/60Hz. Next: standard Retina
-modes through5K, fixed2× automatic window sizing,120Hz configuration and measured
-capture/client cadence. Physical HDMI4K120 evidence does not measure SPICE delivery.
+Next: evaluate native QEMU EDID mode configuration before changing Apple code;
+retain the working holder until Retina sizing/refresh requirements are covered.
+Candidate431 has uncommitted offline64MiB/5K snapshot-capacity work, not launched.
+A future native-only support option must preserve clipboard, resize and restoration.
 
-Capture: valid CORE_PROBE_PASS, separate from desktop/USB qualification.
-Shutdown: guest_shutdown lifecycle event and exited-after-guest-request observed;
-wrapper outcome capture-abort-after-request prevents clean lifecycle qualification.
-Recovery: recovered, authorizes_launch=true. Kingston returned to Linux usb-storage;
-Arctis interfaces restored. No GPU VM is running; development sleep inhibitor remains.
-Receipts: ~/macos-vm/run/candidate-428-results/. Clipboard evidence:
-~/macos-vm/run/c428-x11-tests/events.jsonl; USB read evidence:
-~/macos-vm/run/c428-kingston-read-eject.json; helpers: c428-final-helpers.txt.
-
-Candidate429 integrates the completed clipboard/USB milestone and checked-in1.0.428
-binary for dev publication. Host suite passes; hosted CI remains pending.
-Main unchanged. VirtualBox remains deferred. Candidate430 prepares4K/120 testing.
-
-
-## One-command GPU test
-
-- Output: `/home/bogdan/macos-vm/run/candidate-430-results`
-- Verdict: `INVALID`
-- Boundary: `identity_or_route_missing`
+Published dev/origin/dev is e240b38ae1d878d429369e41ab5b1179108c2a26:
+clipboard/GUI USB milestone and checked-in1.0.428 binary; hosted CI38040411149
+passed test/build. Main unchanged at861ba5e. Candidate430 remains local research;
+1533 host tests passed (8 skipped) before this run. VirtualBox remains deferred.
