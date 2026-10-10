@@ -40,3 +40,28 @@ recovery receipt. Defaults/other modes remain unqualified outside prior scope.
 Review scope: arithmetic tests do not prove listener integration. Outside-callback
 zero-interval reset with mixed listeners does not recompute all minima; that case
 remains unqualified and is not present in the fixed sole-SPICE experiment.
+
+## Completed candidate440: scheduling changes polling, not delivery
+
+Run7735f915a55c10b180a6960fe8aeb5b4, MODE2335, MetalprobePASS; build9cfef702a0db4472b509e1c69f2f8a63,
+sourceGPUd1deade... unchanged.1555hosttests8skip. Actual scale2 Retina source60,
+normal1440×900/GDK1 X11, same sealed presenter and439SPICE, explicitOFF channel
+preference,4s startup settle and strict subsequent geometry checks.100sec test
+4364unique,13startup-invalid,0post-start,1duplicate; short final phase excluded.
+
+Fullfield phase interiors refresh58.07/58.13, create/dequeue44.26/44.10, client
+21.94/21.88 IDs/s. Localized55.58–56.26, queuebusy0. Thus start-relative scheduling
+worked at polling layer, but did not close downstream delivery gap. It rejects
+completion-relative timer as sufficient/dominant fix for this configuration; does
+not establish regression versus prior sequential traced runs. No exact60 claim.
+
+Primary source audit: pixman0.46.4 sse2_blt4676 andcopy_area4802 preserve raw4bytes;
+no X normalization in that observed path. SPICE0.16 display-channel.cpp482–499
+can replace pending opaque same-region draws, removing unsent client pipe items
+376–385. Dequeue is not marshalling/display. Historical380 software measured this
+and large Cairo scaling cost; current native renderer remains next discriminator.
+
+Guest-requested exit/natural captures/private terminal verified, stopped-container
+inspection reconciliation unavailable/mismatched; recoveryauthorizes=true.
+Artifacts c440-fourk-a-pipeline-analysis.json withraw hashes, source/cadence/trace,
+shared-clock proof and~/macos-vm/run/candidate-440-results/. No release.
