@@ -127,9 +127,9 @@ case "${GENERIC_GRAPHICS}" in on|off) ;; *) die "unknown generic graphics settin
 case "${VM_CONSOLE}" in off|bochs|bochs-spice) ;; *) die "unknown VM_CONSOLE" ;; esac
 case "${CONSOLE_VDAGENT}" in off) ;; on) [[ "${VM_MANAGER}" == libvirt && "${VM_CONSOLE}" == bochs-spice && "${GENERIC_GRAPHICS}" == off ]] || die "vdagent requires native libvirt SPICE" ;; *) die "unknown CONSOLE_VDAGENT" ;; esac
 case "${CONSOLE_USBREDIR}" in off) ;; on) [[ "${VM_MANAGER}" == libvirt && "${VM_CONSOLE}" == bochs-spice && "${GENERIC_GRAPHICS}" == off ]] || die "USB redirection requires native libvirt SPICE" ;; *) die "unknown CONSOLE_USBREDIR" ;; esac
-case "${CONSOLE_SNAPSHOT}" in off) ;; on|restart|restart-timing|restart-timing-pool) [[ "${VM_MANAGER}" == libvirt && "${VM_CONSOLE}" == bochs-spice && "${CONSOLE_REFRESH}" == 60 && "${CONSOLE_FULL_REFRESH}" == on && "${GENERIC_GRAPHICS}" == off ]] || die "snapshot requires native libvirt SPICE60 full refresh" ;; *) die "unknown CONSOLE_SNAPSHOT" ;; esac
-case "${CONSOLE_FULL_REFRESH}" in off) ;; on) [[ "${VM_MANAGER}" == libvirt && "${VM_CONSOLE}" == bochs-spice && "${CONSOLE_REFRESH}" == 60 ]] || die "full refresh requires explicit libvirt SPICE60" ;; *) die "unknown CONSOLE_FULL_REFRESH" ;; esac
-case "${CONSOLE_REFRESH}" in default|60) ;; *) die "unknown CONSOLE_REFRESH" ;; esac
+case "${CONSOLE_SNAPSHOT}" in off) ;; on|restart|restart-timing|restart-timing-pool) [[ "${VM_MANAGER}" == libvirt && "${VM_CONSOLE}" == bochs-spice && ( "${CONSOLE_REFRESH}" == 60 || "${CONSOLE_REFRESH}" == 120 ) && "${CONSOLE_FULL_REFRESH}" == on && "${GENERIC_GRAPHICS}" == off ]] || die "snapshot requires native libvirt SPICE60/120 full refresh" ;; *) die "unknown CONSOLE_SNAPSHOT" ;; esac
+case "${CONSOLE_FULL_REFRESH}" in off) ;; on) [[ "${VM_MANAGER}" == libvirt && "${VM_CONSOLE}" == bochs-spice && ( "${CONSOLE_REFRESH}" == 60 || "${CONSOLE_REFRESH}" == 120 ) ]] || die "full refresh requires explicit libvirt SPICE60/120" ;; *) die "unknown CONSOLE_FULL_REFRESH" ;; esac
+case "${CONSOLE_REFRESH}" in default|60|120) ;; *) die "unknown CONSOLE_REFRESH" ;; esac
 [[ "${CONSOLE_REFRESH}" == default || "${VM_MANAGER}" == libvirt ]] || die "explicit refresh requires libvirt profile"
 case "${VM_MANAGER}" in
     direct) ;;

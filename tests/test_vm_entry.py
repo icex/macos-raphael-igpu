@@ -80,6 +80,19 @@ class VmEntryTests(unittest.TestCase):
                 self.assertEqual(',x-debug-snapshot-timing=on' in result.stdout,env['CONSOLE_SNAPSHOT'] in ('restart-timing','restart-timing-pool'))
                 self.assertEqual(',x-debug-snapshot-pool=on' in result.stdout,env['CONSOLE_SNAPSHOT']=='restart-timing-pool')
 
+    def test_outer_launcher_refresh_profile_matches_inner_guard(self):
+        source=(ROOT/'tools/macos-vm.sh').read_text()
+        start=source.index('case "${GENERIC_GRAPHICS}"')
+        block=source[start:source.index('case "${VM_MANAGER}"',start)]
+        base=dict(os.environ,GENERIC_GRAPHICS='off',VM_CONSOLE='bochs-spice',
+                  VM_MANAGER='libvirt',CONSOLE_VDAGENT='on',CONSOLE_USBREDIR='on',
+                  CONSOLE_SNAPSHOT='restart-timing-pool',CONSOLE_FULL_REFRESH='on')
+        for rate,manager,ok in [('60','libvirt',True),('120','libvirt',True),
+                                ('120','direct',False),('144','libvirt',False),('default','libvirt',False)]:
+            result=subprocess.run(['bash','-c','die() { echo "$*" >&2; exit 1; };\n'+block],
+                env=dict(base,CONSOLE_REFRESH=rate,VM_MANAGER=manager),capture_output=True,text=True,timeout=3)
+            with self.subTest(rate=rate,manager=manager):self.assertEqual(result.returncode==0,ok,result.stderr)
+
     def test_console_refresh_shell_selector_preserves_endpoint_and_refuses_other_profiles(self):
         source=ENTRY.read_text();block=source[source.index('# Explicit presentation-only console:'):source.index('if [[ -n "${LAN_TAP_NODE:-}" ]]')]
         for rate,manager,accepted in [('default','direct',True),('60','libvirt',True),('60','direct',False),('120','libvirt',True),('120','direct',False),('144','libvirt',False)]:

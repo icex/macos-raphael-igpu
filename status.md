@@ -1,4 +1,11 @@
-# Live status — 2026-10-10 — native virt-manager clipboard and USB verified
+# Live status — 2026-10-10 —120Hz prelaunch guard correction
+
+Candidate430 attempt473eac7e5a065ff55bf9c389dda76737 reset323 succeeded, then
+outer launcher refused its remaining SPICE60 guard before creating QEMU. No guest
+result; wrapper INVALID/capture_loss, no recovery receipt. An unused ledger
+reservation remains and must be reconciled by the supported pre-exposure path
+before retry. Fix includes outer and inner launcher coverage. Host remains awake.
+
 
 Candidate428 run817dfe19b8e46522c6b350fb21dc0bd4 completed. Native X11
 virt-manager clipboard passed fresh ASCII and Unicode text in both directions.
@@ -27,3 +34,10 @@ Receipts: ~/macos-vm/run/candidate-428-results/. Clipboard evidence:
 Candidate429 integrates the completed clipboard/USB milestone and checked-in1.0.428
 binary for dev publication. Host suite passes; hosted CI remains pending.
 Main unchanged. VirtualBox remains deferred. Candidate430 prepares4K/120 testing.
+
+
+## One-command GPU test
+
+- Output: `/home/bogdan/macos-vm/run/candidate-430-results`
+- Verdict: `INVALID`
+- Boundary: `identity_or_route_missing`
