@@ -1,0 +1,4 @@
+{
+  "status": "failed",
+  "error": "RecoveryError: guest host-KIQ lifetime reservation is absent or invalid"
+}

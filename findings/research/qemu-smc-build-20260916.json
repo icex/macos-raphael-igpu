@@ -1,0 +1,27 @@
+{
+  "qemu_version": "10.1.2",
+  "binary_sha256": "1d48acdf0f831e5fe7fc801c988113a9e9f8065c9edb9f826ba3589999ca441d",
+  "image_id": "sha256:2ada1bb2323f4eefe430a9ea5f0e2f65cad6914aca4f9364c50b0ec3d694654c",
+  "base_image_id": "sha256:3a3c82c79bc4e73531f819ccdfa4053b3084efd7c1f645678dbf8b4b3a24369c",
+  "patch_sha256": "489fd5478ba68a2885a8b86f5eb3fcf5a76b98d81b236fcef49a548c396b089a",
+  "configure": "--prefix=/usr --target-list=x86_64-softmmu --disable-docs --disable-werror --disable-guest-agent --disable-download --enable-slirp --enable-kvm --enable-vnc",
+  "qtest": {
+    "passed": true,
+    "keys": [
+      "MSSD",
+      "MSSP",
+      "NATJ",
+      "OSK1",
+      "OSK0",
+      "REV "
+    ],
+    "checks": [
+      "enumeration",
+      "end-of-list",
+      "large-index",
+      "existing-read",
+      "error-recovery",
+      "interruption"
+    ]
+  }
+}

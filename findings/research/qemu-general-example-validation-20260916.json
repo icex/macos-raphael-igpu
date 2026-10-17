@@ -1,0 +1,7 @@
+{
+  "returncode": 0,
+  "qmp": "{\"QMP\": {\"version\": {\"qemu\": {\"micro\": 1, \"minor\": 1, \"major\": 11}, \"package\": \"\"}, \"capabilities\": [\"oob\"]}}\n{\"return\": {}}\n{\"return\": {\"status\": \"prelaunch\", \"running\": false}}\n{\"timestamp\": {\"seconds\": 1789574188, \"microseconds\": 61308}, \"event\": \"SHUTDOWN\", \"data\": {\"guest\": false, \"reason\": \"host-qmp-quit\"}}\n{\"return\": {}}\n",
+  "stderr": "",
+  "scope": "Paused TCG config/device initialization with dummy disks and dummy SMC key. No macOS boot, VFIO or physical GPU. KVM/Haswell boot and recovery not validated by this smoke test.",
+  "source_sha256": "fef15ea8104d46f059cc3805edaf41efd5eb80ce2c9016e198474f4f85b2bb12"
+}

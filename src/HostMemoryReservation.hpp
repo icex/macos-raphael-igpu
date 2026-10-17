@@ -1,0 +1,66 @@
+#pragma once
+#include <stdint.h>
+#include <stddef.h>
+
+namespace RaphaelHostMemory {
+struct Window { uint64_t address, bytes; };
+struct Plan { uint64_t limit, reserved, additional; };
+// Only for an independently proven empty/held DMCUB. There is no executable
+// host firmware to preserve. Retire validated inactive mailbox windows while
+// retaining every byte already reserved by the native allocator.
+inline bool emptyFirmwarePlan(uint64_t mcBase, uint64_t physicalBase,
+                              uint64_t total, uint64_t visible, uint64_t existing,
+                              const Window *mailboxes, size_t count, Plan &out) {
+    if (!mcBase || !physicalBase || !total || !visible || visible > total ||
+        existing > total-visible || !mailboxes || count != 4) return false;
+    for (size_t i=0; i<count; ++i) {
+        const auto &w=mailboxes[i];
+        if (!w.address && !w.bytes) continue;
+        if (!w.bytes) return false;
+        uint64_t off;
+        if (w.address>=mcBase && w.address-mcBase<total) off=w.address-mcBase;
+        else if (w.address>=physicalBase && w.address-physicalBase<total) off=w.address-physicalBase;
+        else return false;
+        if (w.bytes>total-off) return false;
+    }
+    out={total-existing,existing,0};
+    return true;
+}
+// Firmware code uses CPU-physical offsets; mailbox windows use MC addresses.
+// Preserve the entire 32MiB-aligned tail containing every live host window.
+inline bool plan(uint64_t mcBase, uint64_t physicalBase, uint64_t total,
+                 uint64_t visible, uint64_t existing, const Window *windows,
+                 size_t count, Plan &out, bool reloadHeldSecure=false,
+                 bool consoleHeldMailboxes=false) {
+    if (!mcBase || !physicalBase || !total || !visible || visible > total ||
+        existing > total || !windows || count < 2 || ((reloadHeldSecure || consoleHeldMailboxes) && count!=6) ||
+        (reloadHeldSecure && consoleHeldMailboxes)) return false;
+    uint64_t lowest = total;
+    for (size_t i = 0; i < count; ++i) {
+        uint64_t off;
+        const auto &w = windows[i];
+        if (!w.bytes) return false;
+        if (w.address >= mcBase && w.address - mcBase < total)
+            off = w.address - mcBase;
+        else if (w.address >= physicalBase && w.address - physicalBase < total)
+            off = w.address - physicalBase;
+        else return false;
+        if (w.bytes > total - off) return false;
+        // The caller proves CW0/1 are held and will be replaced through PSP.
+        // Still validate their addresses, but do not preserve obsolete TMR storage.
+        // Console keeps DMCUB disabled under CPU+interface reset. Old guest
+        // mailboxes are inactive; retain secure CW0/1, validate but retire CW3-6.
+        // The caller must recheck the reset hold immediately before PSP use.
+        const bool preserve = (!reloadHeldSecure || i>=2) &&
+                              (!consoleHeldMailboxes || i<2);
+        if (preserve && off < lowest) lowest = off;
+    }
+    const uint64_t cap = lowest & ~uint64_t(0x1ffffff);
+    if (cap < visible || cap >= total) return false;
+    const uint64_t reserve = total - cap;
+    const uint64_t chosen = existing > reserve ? existing : reserve;
+    if (chosen > total - visible) return false;
+    out = {total - chosen, chosen, chosen - existing};
+    return true;
+}
+}

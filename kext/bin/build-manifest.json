@@ -1,0 +1,41 @@
+{
+  "firmware_header_sha256": "52336baf242e03cd71887550338d67a4bc3af0eacccfa200b6c271eb689b8f10",
+  "mac_kernel_sdk_commit": "05094e5e88cec7caedbfb35e8449ed0db94bf95b",
+  "lilu_version": "1.6.8",
+  "lilu_archive_sha256": "cf658a77e21575f99e0629df3aad282c2c51824d203f4e0b2260c769913815cd",
+  "sdk_tree_sha256": "39036632f485a027f8b75fe5a8cfb18fab79d5c7531adae9dc165096e7e14666",
+  "lilu_resources_sha256": "a30b171d2fcf0cbf835ab85b82d9a9857f36d582bf5b317e14033a096ffba38c",
+  "version": "1.0.428",
+  "source_commit": "68f247c745fd5d73a268f856ed472270f139a7cf",
+  "source_clean": true,
+  "build_id": "3b413b25e1ce4f7eb6bb8e1a27384d7c",
+  "source_sha256": "d1deadebe29f9527a63404eba136085e644b482e833c47e9d10fb22034ddc843",
+  "info_sha256": "47690e46d52dbcb98b0df9e4996cd87aa7a892759f2282599c36aa4ff8870b85",
+  "executable_sha256": "39aabe6038a5e5cb6f086e44ed51530d0abacb8c249a9cad30cc46be7cddbf72",
+  "metal_execution_verified": false,
+  "verified_playable_games": 0,
+  "debug_symbols": {
+    "schema": 1,
+    "flags": [
+      "-O2",
+      "-g",
+      "-gdwarf-4"
+    ],
+    "private_build_script_sha256": "b8b43364538cd42b195d5a99562391883d62fb009121ffa50848d0d70975da37",
+    "canonical_inputs_before": {
+      "build_script_sha256": "e8b8367052f16a8c81f5d0f3143959ae24ff8cd30eac00e1712b94bda76fb3d2",
+      "tracked_source_sha256": "d1deadebe29f9527a63404eba136085e644b482e833c47e9d10fb22034ddc843",
+      "inputs_sha256": "a73cbdf5221015f32c35d47e9c6938761d74afb110d1200518a3ef6b29f05cc2"
+    },
+    "executable_uuid": "33a6b8ee62713f079af6e7d713ae7c95",
+    "executable_sha256": "39aabe6038a5e5cb6f086e44ed51530d0abacb8c249a9cad30cc46be7cddbf72",
+    "dsym_uuid": "33a6b8ee62713f079af6e7d713ae7c95",
+    "dsym_dwarf_sha256": "a98d6c0925077d0de3da8631274a8632bbb1704a6522fd66f8a83098c26d8de2",
+    "debug_source_sha256": "00bc48cb61a4b2947d8a2b04e5255f8c25b1b76a8c8141471ad305fa5e30c217",
+    "canonical_inputs_after": {
+      "build_script_sha256": "e8b8367052f16a8c81f5d0f3143959ae24ff8cd30eac00e1712b94bda76fb3d2",
+      "tracked_source_sha256": "d1deadebe29f9527a63404eba136085e644b482e833c47e9d10fb22034ddc843",
+      "inputs_sha256": "a73cbdf5221015f32c35d47e9c6938761d74afb110d1200518a3ef6b29f05cc2"
+    }
+  }
+}

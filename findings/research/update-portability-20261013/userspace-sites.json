@@ -1,0 +1,81 @@
+[
+  {
+    "name": "texture",
+    "path": "/System/Library/Extensions/AMDRadeonX6000MTLDriver.bundle/Contents/MacOS/AMDRadeonX6000MTLDriver",
+    "reference": 1288161,
+    "target_delta": 6,
+    "bytes": "4821c64809ce48b8000070ff010000004809f0488907418b8ecc000000c1e90983e10148c1e1214821d04809c8488907418b8ea0000000d1e983e10148c1e12248baffdf7cff0380ffff4821c24809ca48b800000000e01e00004809d0488907",
+    "mask": "ffffffffffffffff0000000000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff0000000000000000ffffffffffff",
+    "length": 96,
+    "instruction_size": 10
+  },
+  {
+    "name": "feedback",
+    "path": "/System/Library/Extensions/AMDRadeonX6000MTLDriver.bundle/Contents/MacOS/AMDRadeonX6000MTLDriver",
+    "reference": 1522371,
+    "target_delta": 0,
+    "bytes": "85f60f94c24008fa0f85be020000894dd40d00400000418986f04500004d8da618360000498d8608310000488945b031db4c8d0d95b5743a4c896db84c8965a84c897588410fb786383900000fa3d80f8322020000b801000000c46261f7f84d8b5e08",
+    "mask": "ffff000000ffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffff",
+    "length": 99,
+    "instruction_size": 8,
+    "alternatives": [
+      {
+        "bytes": "85f60f94c24008fa0f85b1020000894dd40d00400000418986f04500004d8da61836000031db4c8d0dc6617b324c896db84c8965b04c897590410fb786383900000fa3d80f8320020000b801000000c46261f7f84d8b5e084c8d149b49c1e2044f8b2414",
+        "mask": "ffff000000ffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "target_delta": 0,
+        "length": 100,
+        "audit": "Same feedback instruction/expansion semantics; current compiler stack/register allocation and unused temporary removal. Native object offsets remain exact."
+      }
+    ]
+  },
+  {
+    "name": "vcn-dpm",
+    "path": "/System/Library/Extensions/AMDRadeonVADriver2.bundle/Contents/MacOS/AMDRadeonVADriver2",
+    "reference": 251382,
+    "target_delta": 0,
+    "bytes": "554889e5b0015dc3554889e54156534881ece00000004889fb488b4708488bb8600400008bbf940000000fbae70e720731c0e912010000c5f857c0c5fc1145c8c5fc1145b0c5fc114590c5fc118570ffffffc5fc11853cffffffc5fc118530ffffff",
+    "mask": "ffffffffff00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "length": 98,
+    "instruction_size": 8
+  },
+  {
+    "name": "vcn-preset",
+    "path": "/System/Library/Extensions/AMDRadeonVADriver2.bundle/Contents/MacOS/AMDRadeonVADriver2",
+    "reference": 316504,
+    "target_delta": 0,
+    "bytes": "8b77308d86fafffffe83f802770a31d231c95de97cfffeff31c05dc30000554889e5488d87d80000005dc390554889e5488d87a00500005dc390554889e5488d87200600005dc300554889e553504889fbe8e6efffff488d05b3e7c538488903",
+    "mask": "0000000000000000000000000000ffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffff00000000ffffff",
+    "length": 96,
+    "instruction_size": 14
+  },
+  {
+    "name": "vcn-hevc",
+    "path": "/System/Library/Extensions/AMDRadeonVADriver2.bundle/Contents/MacOS/AMDRadeonVADriver2",
+    "reference": 318836,
+    "target_delta": 0,
+    "bytes": "41807c241c01750b4889dfe8d0f6ffff4101c64889dfbe0300000131d231c9e854f6feff4401f0488b4db8488b55c089449108837b3400740f44037dd44101c7488b45c8448978044883c4285b415c415d415e415f5dc390554889e5488d8ff0070000",
+    "mask": "ffffffffffff0000ffffffff00000000ffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "length": 99,
+    "instruction_size": 8
+  },
+  {
+    "name": "vcn-avc",
+    "path": "/System/Library/Extensions/AMDRadeonVADriver2.bundle/Contents/MacOS/AMDRadeonVADriver2",
+    "reference": 317580,
+    "target_delta": 0,
+    "bytes": "41807c241c01750b4889dfe8b8fbffff4101c64889dfbe0300000131d231c9e83cfbfeff4401f0488b4db8488b55c089449108837b3400740f44037dd44101c7488b45c8448978044883c4285b415c415d415e415f5dc390554889e5488d8f20070000",
+    "mask": "ffffffffffff0000ffffffff00000000ffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "length": 99,
+    "instruction_size": 8
+  },
+  {
+    "name": "ge-pc-oversub",
+    "path": "/System/Library/Extensions/AMDRadeonX6000MTLDriver.bundle/Contents/MacOS/AMDRadeonX6000MTLDriver",
+    "reference": 1288235,
+    "target_delta": 80,
+    "bytes": "4821c64809ce48b8000070ff010000004809f0488907418b8ecc000000c1e90983e10148c1e1214821d04809c8488907418b8ea0000000d1e983e10148c1e12248baffdf7cff0380ffff4821c24809ca48b800000000e01e00004809d0488907",
+    "mask": "ffffffffffffffff0000000000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff0000000000000000ffffffffffff",
+    "length": 96,
+    "instruction_size": 10
+  }
+]

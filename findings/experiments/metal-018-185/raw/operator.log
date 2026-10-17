@@ -1,0 +1,14 @@
+{
+  "valid": false,
+  "verdict": "INVALID",
+  "earliest_failure": "identity_or_route_missing",
+  "evidence": [
+    "capture_loss",
+    "capture_loss"
+  ],
+  "next_action": "repair observation before another experiment",
+  "warm_reuse": "failed",
+  "functional_boundary": "identity_or_route_missing",
+  "termination_reason": "RuntimeError: critical capture remained incomplete at exposure deadline",
+  "error": "RuntimeError: critical capture remained incomplete at exposure deadline"
+}

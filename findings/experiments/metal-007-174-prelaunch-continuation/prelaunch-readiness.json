@@ -1,0 +1,108 @@
+{
+  "schema": 1,
+  "purpose": "bounded read-only prelaunch HDP readiness",
+  "run_id": "e583a1b2d97a4ad3b607c1d20a29a812",
+  "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+  "started_epoch": 1788935958.8304553,
+  "writes_permitted": false,
+  "marker_created": false,
+  "failure": "RuntimeError: HDP remap 0x385c != 0x7f000",
+  "before_host": {
+    "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+    "kernel": "7.2.3-1-cachyos-bore",
+    "driver": "vfio-pci",
+    "device": "1002:13c0",
+    "iommu_group": "31",
+    "amdgpu_initialized": true,
+    "watchdogs": {
+      "watchdog": "1",
+      "nmi_watchdog": "1",
+      "hardlockup_panic": "1"
+    },
+    "watchdogs_verified": true,
+    "capture_ready": true,
+    "pstore_files": null,
+    "device_pinned_awake": true,
+    "device_accessible": true,
+    "reset_methods": [],
+    "active_vm": false,
+    "sleep_inhibited": true
+  },
+  "before_pci": {
+    "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+    "active_vm": false,
+    "driver": "vfio-pci",
+    "device": "1002:13c0",
+    "iommu_group": "31",
+    "pci_command": 3,
+    "reset_methods": []
+  },
+  "active_launch_units": [],
+  "kernel_cursor_before": "s=98f6cb2295dc45898ee97031451ba7c8;i=3db39;b=5d6f45d043844340b8197751bc26ebb3;m=9725ee6f;t=65b06f8b8239b;x=b09751441ac83733",
+  "kernel_messages_before": [],
+  "kernel_faults_before": [],
+  "ledger_sha256": "2d15f0cbb73d71e8efaf2a951f13c707726e9b98279a0e85208253f1941410d3",
+  "constructor": "ok",
+  "descriptor": {
+    "version": 1,
+    "state": 1145980240,
+    "heap_limit": 251658240,
+    "reservation_start": 251658240,
+    "scratch_start": 252706816,
+    "reservation_end": 268435456,
+    "run_id": "e583a1b2d97a4ad3b607c1d20a29a812",
+    "checksum": 7964443459700718149
+  },
+  "hdp_remap_offset_register": 14428,
+  "hdp_remap_expected": 520192,
+  "hdp_remap_valid": false,
+  "config_memsize": 512,
+  "config_memsize_valid": true,
+  "vfio_region": {
+    "index": 5,
+    "size": 524288,
+    "offset": 5497558138880,
+    "read": true,
+    "write": true,
+    "mmap": true,
+    "regions": {
+      "0": {
+        "index": 0,
+        "size": 268435456,
+        "offset": 0,
+        "read": true,
+        "write": true,
+        "mmap": true
+      },
+      "2": {
+        "index": 2,
+        "size": 2097152,
+        "offset": 2199023255552,
+        "read": true,
+        "write": true,
+        "mmap": true
+      },
+      "5": {
+        "index": 5,
+        "size": 524288,
+        "offset": 5497558138880,
+        "read": true,
+        "write": true,
+        "mmap": true
+      }
+    }
+  },
+  "traceback": "Traceback (most recent call last):\n  File \"<stdin>\", line 44, in <module>\nRuntimeError: HDP remap 0x385c != 0x7f000\n",
+  "failure_after_pci": {
+    "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+    "active_vm": false,
+    "driver": "vfio-pci",
+    "device": "1002:13c0",
+    "iommu_group": "31",
+    "pci_command": 3,
+    "reset_methods": []
+  },
+  "failure_kernel_cursor": "s=98f6cb2295dc45898ee97031451ba7c8;i=3db39;b=5d6f45d043844340b8197751bc26ebb3;m=9725ee6f;t=65b06f8b8239b;x=b09751441ac83733",
+  "failure_kernel_messages": [],
+  "failure_kernel_faults": []
+}

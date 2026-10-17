@@ -1,0 +1,848 @@
+# Experimental releases
+
+The active local release is **candidate 490**, with macOS 26.7.1 as the desktop
+default and 15.8.1 retained as a rollback image. Dynamic compatibility, matched
+GPU performance, capture scope and cleanup receipts are documented in the
+[latest release matrix](../findings/research/update-portability-20261013/latest-release-matrix.md)
+and [performance report](../findings/research/update-portability-20261013/performance-latest.md).
+The checked-in historical executable below is not the installed candidate 490
+release. The local release archive and debug symbols remain in
+`~/macos-vm/run/candidate-490-dist/`.
+
+GitHub Actions runs host-independent tests on `main`, `dev`, pull requests and `v*` tags.
+The Linux test job needs full Git history for historical identity regressions and
+`g++-multilib mtools qemu-system-x86 python3-numpy python3-pil` (Ubuntu packages).
+Run `python3 -B -m unittest discover -s tests` from a full checkout. Lilu validation
+and launcher tests create temporary fixtures; they require neither a local Lilu
+build nor access to `/dev/kvm` or a running host audio server. The launcher fixture
+stubs `pactl info` alongside Docker so CI never starts host audio services. The separate software-UART qualification uses QEMU
+software emulation. The macOS job then builds the kext from pinned dependencies.
+After verifying the upstream Lilu archive, it applies
+`build-support/lilu-1.6.8-fileless-headers.patch` to reproduce the existing pinned
+resource tree. These ABI additions match the custom Lilu used by this project;
+stock Lilu is not a runtime substitute. The build still verifies the complete
+SDK and patched Lilu resource digests before compiling.
+It compiles an x86_64 `MH_KEXT_BUNDLE` from the checked-out source using pinned
+MacKernelSDK and Lilu build inputs, then uploads a ZIP and SHA-256 checksum file.
+A `v*` tag publishes the verified build assets as a GitHub **prerelease** only after
+both test and build jobs pass. Untagged builds produce workflow artifacts.
+
+The ZIP includes `RaphaelGPU.kext`, documentation, AMD firmware licence and a build
+manifest containing the source commit and executable/input hashes. The build never
+falls back to `kext/bin/RaphaelGPU`. It does not start a VM, access PCI hardware,
+install a driver, sign a host kernel or change boot configuration. Hosted CI cannot
+validate this machine's KDK offsets, physical GPU execution or host stability.
+
+The runner label is explicitly Intel, as listed in the
+[GitHub runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+
+## Checked-in experimental executable
+
+Candidate 441 improves full-field decoded cadence with an opt-in private host
+GTK GPU renderer (37.74–41.80 versus Cairo 23.73–23.85 IDs/s in the compared
+intervals). It does not replace the checked-in candidate 428 bundle below or
+qualify sustained 4K60. Trailing observer errors, moving-image/input limits and
+static bilinear output checks are retained in the
+[441 report](../findings/research/console-raw-gpu-scaling-20261010.md).
+Candidate 440 pacing is retained as rejected research, not the active client
+configuration; 441 uses the 439 server image without that pacing change.
+Native framebuffer, 120 Hz, 5K and other roadmap work are on hold.
+
+`kext/bin/RaphaelGPU` contains the exact hardware-tested candidate 428 executable,
+build `3b413b25e1ce4f7eb6bb8e1a27384d7c`, from clean source
+`68f247c745fd5d73a268f856ed472270f139a7cf`, SHA256
+`39aabe6038a5e5cb6f086e44ed51530d0abacb8c249a9cad30cc46be7cddbf72`.
+The canonical archive build manifest is copied unchanged. Card 224 requires the
+pinned experimental QEMU image and exact `restart-timing-pool` profile. This
+version changes support integration, not the GPU rendering implementation.
+
+Native virt-manager text clipboard and GUI USB redirection now have scoped
+runtime evidence. Kingston storage enumeration and repeated read-only I/O pass;
+Arctis output callbacks pass without an audible-playback claim. Kingston eject remained busy; abrupt viewer
+failure did not restore all Arctis interfaces. Guest shutdown was observed, but
+the final receipt is `capture-abort-after-request`; GPU recovery passed. See the
+[428 evidence](../findings/research/virt-manager-clipboard-usb-native-20261010.md).
+The prior 402 performance results remain the baseline; this milestone does not
+establish sustained 4K60, 5K or 120 Hz virtual presentation.
+
+**Current priority: full-field 4K performance in a normal QEMU/virt-manager window.**
+VirtualBox work is deferred at the user’s request. Candidate 417 was stopped during
+early boot at the earlier pause.
+The controller helper forced poweroff, then unregistered the VM on its first
+attempt without a reported cleanup error. This was not clean guest shutdown;
+no desktop, root response or process-admission receipt qualified the hardened
+process fix. No GPU was exposed. Candidate 420 retains source investigation only.
+[417 pause result](../findings/research/virtualbox-relay-pause-20261010.md) ·
+[420 resume points](../findings/research/virtualbox-pgm-lease-paused-20261010.md).
+
+Candidate 410 separately returns verified stock-VMSVGA registry evidence over a
+small FAT disk, including the still-attached boot framebuffer. Natural shutdown
+and medium closure are independently verified; the original controller state-query
+error remains. There is no VirtualBox GPU acceleration or presentation adapter.
+Candidates 416/418 additionally compile baseline and patched VirtualBox userland
+in isolated directories; neither build was installed or run. Optional GUI/OpenGL,
+kernel-module builds and packaging were excluded. The initial missing-UAPI build
+failure remains recorded; corrected production definitions and ABI checks pass.
+This is compile coverage, not PGM lifetime or passthrough qualification. Candidate
+415’s network interface worked, but its root relay refused HTTP 403 before any
+payload ran; natural shutdown passed. The boot-framebuffer
+suppression plan is likewise not a qualified takeover.
+[410 evidence](../findings/research/virtualbox-fat-exchange-native-20261010.md) ·
+[DMA limits](../findings/research/virtualbox-dma-ram-lease-20261010.md).
+Previous published baseline `0ecc1715950ea6db3c256fb4930191830bd9ef1b` passed hosted test and
+macOS build in [run 37998445036](https://github.com/icex/macos-raphael-igpu/actions/runs/37998445036);
+the untagged release job was skipped. The new integration requires its own hosted CI result.
+Main's physical 330 baseline is unchanged. Exact-commit publication checks are
+tracked in [GitHub Actions](https://github.com/icex/macos-raphael-igpu/actions).
+
+### Historical console qualifications
+
+Candidate379 adds synchronous same-channel event observation and a bounded QEMU
+trace: full-field HiDPI bitmap-creation entries are38–39/s while client updates
+remain14–15/s. Three rare post-start HiDPI token errors remain unresolved; native
+1080p has none in this window. This is diagnostic progress, not a corruption or
+performance fix. Default stereo capture, ordinary fallback, retired-access
+refusal, natural guest exit and recovery pass.
+[Current evidence](../findings/research/console-event-native-20261009.md).
+
+Candidate376 retains14,265 valid post-startup manager token samples across330s
+of mixed workloads and300s observation. Full-screen HiDPI performance remains
+limited and timer sampling itself slows; do not equate sampled rates with FPS.
+Source CRC timed out before the fixtures. Retired-buffer access-refusal controls,
+ordinary fallback, stereo sample-capture retry and natural shutdown/recovery pass.
+The first audio-route attempt failed safely and restored;374's forced-stop race
+remains unresolved. [Prior mixed-motion evidence](../findings/research/console-mixed-motion-native-20261009.md).
+
+Candidate370 adds opt-in immutable host snapshots and one SPICE update rectangle:
+three native/HiDPI token windows have no invalid samples after startup, with audio
+capture and ordinary fallback startup passing.60Hz/full-frame atomicity remain
+unqualified. Its genuine guest shutdown/recovery pass is separate from capture
+witness137/immediate-stop during container teardown; do not claim natural capture.
+Candidate374 improves observed HiDPI localized-workload cadence to52.6/51.2 IDs/s
+with3553 valid post-startup samples across three modes. Audio/fallback pass, but
+its initial D-state capture refusal forces container exit137 with no private
+terminal. Recovery succeeds independently; no clean-shutdown claim is made.
+These results do not qualify60Hz, all VM managers or VirtualBox.
+
+The adjacent `build-manifest.json` records input hashes and executable SHA-256.
+The source tree and `kext/Info.plist` match that driver build; subsequent user-space
+helper changes have separate history. Source builds never use this binary as a
+fallback. The executable alone is not an installable bundle: use the matching
+Info.plist, Lilu and tested VM setup. The matching snapshot card is metal-208 with
+`--pins experiments/pins-bochs-snapshot-changed.json`, explicit SPICE60,
+`CONSOLE_FULL_REFRESH=on` and `CONSOLE_SNAPSHOT=on`. The presenter separately
+requires `RGPU_CONSOLE_SNAPSHOT=1`; ordinary BAR0 remains default. Do not interchange exact launch contracts.
+[Console setup and scope](virtual-console.md)
+· [Native356 evidence](../findings/research/libvirt-reset-native-20261009.md)
+· [Native361 audio/input evidence](../findings/research/console-default-audio-input-20261009.md)
+· [Native364 installer/lifecycle evidence](../findings/research/console-install-native-20261009.md)
+· [Native366 persistence/cadence evidence](../findings/research/console-cadence-native-20261009.md)
+· [Native370 snapshot evidence](../findings/research/console-snapshot-native-20261009.md)
+· [Native374 comparison](../findings/research/console-changed-bbox-native-20261009.md).
+
+Candidate330 remains the independently tested Samsung HDMI HiDPI120/audio
+baseline, available on `main` at861ba5e. Candidate381's physical HDMI behavior
+has not been independently rerun. Do not relabel330's evidence as a381 HDMI test.
+
+## Local build
+
+With the Linux cross-toolchain prepared by `tools/bootstrap-toolchain.sh`:
+
+```sh
+python3 -B tools/build-release.py --toolchain /path/to/toolchain --output /tmp/rgpu-dist
+```
+
+On macOS, prepare `MacKernelSDK-master` and `liludbg` using the workflow's pinned
+inputs (directory-content hashes are checked on both platforms), and set `KEXT_LD="$(xcrun --find ld)"`. The generated firmware header is
+validated against `build-support/inputs.json`; no firmware or KDK downloads are
+required during compilation.
+
+## Validation and installation limits
+
+The release is a research snapshot. Candidate280 has passing Metal compute/render,
+texture, memory, depth/stencil, codec and sampled remote-desktop checks, with the
+reproduced transparency corruption fixed. Candidates321–330 additionally demonstrate
+correct Samsung HDMI picture, HiDPI120 and audible HDMI audio; see [scope and setup](hdmi-status.md).
+HDCP, DisplayPort, full desktop acceptance,
+independent-host-boot durability, performance and games remain unqualified.
+See [live status](../status.md) for the hardware-tested executable identity and
+[roadmap](ROADMAP.md) for exact coverage; a newly built artifact is not automatically
+hardware-qualified.
+The 24G830 KDK remains the audited reference for instruction contracts.
+Candidate486 also validates the live guest collections and userspace images
+through a sealed, disk-bound GPU-less inspection before experimental deployment.
+OpenCore must inject both Lilu and RaphaelGPU into the boot kernel collection;
+`-lilubetaall` is required for the tested Sequoia setup. The kext alone does not
+configure the required VBIOS graft, device spoofing or patch mask. Do not use historical
+AuxKC deployment instructions as the primary delivery path.
+
+Host passthrough restrictions remain binding: amdgpu must initialize the iGPU this boot,
+no driver cycling, no virgin VFIO override, no forced HQD clear or platform reset.
+Release build success is not a Metal test result.
+
+For stock QEMU, also configure [VirtualSMC and the OpenCore SMC handoff](stock-qemu-smc.md).
+The RaphaelGPU build is unchanged by that solution; the matching boot configuration
+is what replaces the previous emulator enumeration patch.
+
+
+## Licence and source notices
+
+Original project code is BSD-3-Clause. Third-party material retains its own terms.
+The following notices are included here because this document is shipped in the
+existing release ZIP. AMD firmware terms are shipped as `build-support/LICENSE.amdgpu`.
+See [third-party inventory](../THIRD_PARTY_NOTICES.md) for scope and unresolved items.
+
+Source Code of MacKernelSDK Covered Code is available under APSL-2.0 at
+https://github.com/acidanthera/MacKernelSDK/tree/05094e5e88cec7caedbfb35e8449ed0db94bf95b
+(including `Library/kmod`). These documentation notices do not satisfy or verify
+any executable-embedded notice requirement. The kmod source carries an Apple
+OS-licence restriction; distribution compliance remains under review.
+
+Lilu startup source: https://github.com/acidanthera/Lilu/tree/1.6.8
+`plugin_start.cpp`: Copyright © 2016-2017 vit9696. All rights reserved.
+
+### Original project code
+
+```text
+Copyright (c) 2026, icex and contributors
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
+
+### Lilu 1.6.8
+
+```text
+Copyright (c) 2016-2018, vit9696
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
+
+### MacKernelSDK kmod source notices
+
+```text
+Library/kmod/c_start.c
+/*
+ * Copyright (c) 2000 Apple Computer, Inc. All rights reserved.
+ *
+ * @APPLE_OSREFERENCE_LICENSE_HEADER_START@
+ *
+ * This file contains Original Code and/or Modifications of Original Code
+ * as defined in and that are subject to the Apple Public Source License
+ * Version 2.0 (the 'License'). You may not use this file except in
+ * compliance with the License. The rights granted to you under the License
+ * may not be used to create, or enable the creation or redistribution of,
+ * unlawful or unlicensed copies of an Apple operating system, or to
+ * circumvent, violate, or enable the circumvention or violation of, any
+ * terms of an Apple operating system software license agreement.
+ *
+ * Please obtain a copy of the License at
+ * http://www.opensource.apple.com/apsl/ and read it before using this file.
+ *
+ * The Original Code and all software distributed under the License are
+ * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+ * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
+ * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
+ * Please see the License for the specific language governing rights and
+ * limitations under the License.
+ *
+ * @APPLE_OSREFERENCE_LICENSE_HEADER_END@
+ */
+
+Library/kmod/c_stop.c
+/*
+ * Copyright (c) 2000 Apple Computer, Inc. All rights reserved.
+ *
+ * @APPLE_OSREFERENCE_LICENSE_HEADER_START@
+ *
+ * This file contains Original Code and/or Modifications of Original Code
+ * as defined in and that are subject to the Apple Public Source License
+ * Version 2.0 (the 'License'). You may not use this file except in
+ * compliance with the License. The rights granted to you under the License
+ * may not be used to create, or enable the creation or redistribution of,
+ * unlawful or unlicensed copies of an Apple operating system, or to
+ * circumvent, violate, or enable the circumvention or violation of, any
+ * terms of an Apple operating system software license agreement.
+ *
+ * Please obtain a copy of the License at
+ * http://www.opensource.apple.com/apsl/ and read it before using this file.
+ *
+ * The Original Code and all software distributed under the License are
+ * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+ * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
+ * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
+ * Please see the License for the specific language governing rights and
+ * limitations under the License.
+ *
+ * @APPLE_OSREFERENCE_LICENSE_HEADER_END@
+ */
+
+Library/kmod/cplus_start.c
+/*
+ * Copyright (c) 2000,2008-2012 Apple Inc. All rights reserved.
+ *
+ * @APPLE_OSREFERENCE_LICENSE_HEADER_START@
+ *
+ * This file contains Original Code and/or Modifications of Original Code
+ * as defined in and that are subject to the Apple Public Source License
+ * Version 2.0 (the 'License'). You may not use this file except in
+ * compliance with the License. The rights granted to you under the License
+ * may not be used to create, or enable the creation or redistribution of,
+ * unlawful or unlicensed copies of an Apple operating system, or to
+ * circumvent, violate, or enable the circumvention or violation of, any
+ * terms of an Apple operating system software license agreement.
+ *
+ * Please obtain a copy of the License at
+ * http://www.opensource.apple.com/apsl/ and read it before using this file.
+ *
+ * The Original Code and all software distributed under the License are
+ * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+ * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
+ * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
+ * Please see the License for the specific language governing rights and
+ * limitations under the License.
+ *
+ * @APPLE_OSREFERENCE_LICENSE_HEADER_END@
+ */
+
+Library/kmod/cplus_stop.c
+/*
+ * Copyright (c) 2000,2008-2012 Apple Inc. All rights reserved.
+ *
+ * @APPLE_OSREFERENCE_LICENSE_HEADER_START@
+ *
+ * This file contains Original Code and/or Modifications of Original Code
+ * as defined in and that are subject to the Apple Public Source License
+ * Version 2.0 (the 'License'). You may not use this file except in
+ * compliance with the License. The rights granted to you under the License
+ * may not be used to create, or enable the creation or redistribution of,
+ * unlawful or unlicensed copies of an Apple operating system, or to
+ * circumvent, violate, or enable the circumvention or violation of, any
+ * terms of an Apple operating system software license agreement.
+ *
+ * Please obtain a copy of the License at
+ * http://www.opensource.apple.com/apsl/ and read it before using this file.
+ *
+ * The Original Code and all software distributed under the License are
+ * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+ * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
+ * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
+ * Please see the License for the specific language governing rights and
+ * limitations under the License.
+ *
+ * @APPLE_OSREFERENCE_LICENSE_HEADER_END@
+ */
+```
+
+### Apple Public Source License 2.0
+
+```text
+APPLE PUBLIC SOURCE LICENSE
+Version 2.0 - August 6, 2003
+
+Please read this License carefully before downloading this software.
+By downloading or using this software, you are agreeing to be bound by
+the terms of this License. If you do not or cannot agree to the terms
+of this License, please do not download or use the software.
+
+1. General; Definitions. This License applies to any program or other
+work which Apple Computer, Inc. ("Apple") makes publicly available and
+which contains a notice placed by Apple identifying such program or
+work as "Original Code" and stating that it is subject to the terms of
+this Apple Public Source License version 2.0 ("License"). As used in
+this License:
+
+1.1 "Applicable Patent Rights" mean: (a) in the case where Apple is
+the grantor of rights, (i) claims of patents that are now or hereafter
+acquired, owned by or assigned to Apple and (ii) that cover subject
+matter contained in the Original Code, but only to the extent
+necessary to use, reproduce and/or distribute the Original Code
+without infringement; and (b) in the case where You are the grantor of
+rights, (i) claims of patents that are now or hereafter acquired,
+owned by or assigned to You and (ii) that cover subject matter in Your
+Modifications, taken alone or in combination with Original Code.
+
+1.2 "Contributor" means any person or entity that creates or
+contributes to the creation of Modifications.
+
+1.3 "Covered Code" means the Original Code, Modifications, the
+combination of Original Code and any Modifications, and/or any
+respective portions thereof.
+
+1.4 "Externally Deploy" means: (a) to sublicense, distribute or
+otherwise make Covered Code available, directly or indirectly, to
+anyone other than You; and/or (b) to use Covered Code, alone or as
+part of a Larger Work, in any way to provide a service, including but
+not limited to delivery of content, through electronic communication
+with a client other than You.
+
+1.5 "Larger Work" means a work which combines Covered Code or portions
+thereof with code not governed by the terms of this License.
+
+1.6 "Modifications" mean any addition to, deletion from, and/or change
+to, the substance and/or structure of the Original Code, any previous
+Modifications, the combination of Original Code and any previous
+Modifications, and/or any respective portions thereof. When code is
+released as a series of files, a Modification is: (a) any addition to
+or deletion from the contents of a file containing Covered Code;
+and/or (b) any new file or other representation of computer program
+statements that contains any part of Covered Code.
+
+1.7 "Original Code" means (a) the Source Code of a program or other
+work as originally made available by Apple under this License,
+including the Source Code of any updates or upgrades to such programs
+or works made available by Apple under this License, and that has been
+expressly identified by Apple as such in the header file(s) of such
+work; and (b) the object code compiled from such Source Code and
+originally made available by Apple under this License.
+
+1.8 "Source Code" means the human readable form of a program or other
+work that is suitable for making modifications to it, including all
+modules it contains, plus any associated interface definition files,
+scripts used to control compilation and installation of an executable
+(object code).
+
+1.9 "You" or "Your" means an individual or a legal entity exercising
+rights under this License. For legal entities, "You" or "Your"
+includes any entity which controls, is controlled by, or is under
+common control with, You, where "control" means (a) the power, direct
+or indirect, to cause the direction or management of such entity,
+whether by contract or otherwise, or (b) ownership of fifty percent
+(50%) or more of the outstanding shares or beneficial ownership of
+such entity.
+
+2. Permitted Uses; Conditions & Restrictions. Subject to the terms
+and conditions of this License, Apple hereby grants You, effective on
+the date You accept this License and download the Original Code, a
+world-wide, royalty-free, non-exclusive license, to the extent of
+Apple's Applicable Patent Rights and copyrights covering the Original
+Code, to do the following:
+
+2.1 Unmodified Code. You may use, reproduce, display, perform,
+internally distribute within Your organization, and Externally Deploy
+verbatim, unmodified copies of the Original Code, for commercial or
+non-commercial purposes, provided that in each instance:
+
+(a) You must retain and reproduce in all copies of Original Code the
+copyright and other proprietary notices and disclaimers of Apple as
+they appear in the Original Code, and keep intact all notices in the
+Original Code that refer to this License; and
+
+(b) You must include a copy of this License with every copy of Source
+Code of Covered Code and documentation You distribute or Externally
+Deploy, and You may not offer or impose any terms on such Source Code
+that alter or restrict this License or the recipients' rights
+hereunder, except as permitted under Section 6.
+
+2.2 Modified Code. You may modify Covered Code and use, reproduce,
+display, perform, internally distribute within Your organization, and
+Externally Deploy Your Modifications and Covered Code, for commercial
+or non-commercial purposes, provided that in each instance You also
+meet all of these conditions:
+
+(a) You must satisfy all the conditions of Section 2.1 with respect to
+the Source Code of the Covered Code;
+
+(b) You must duplicate, to the extent it does not already exist, the
+notice in Exhibit A in each file of the Source Code of all Your
+Modifications, and cause the modified files to carry prominent notices
+stating that You changed the files and the date of any change; and
+
+(c) If You Externally Deploy Your Modifications, You must make
+Source Code of all Your Externally Deployed Modifications either
+available to those to whom You have Externally Deployed Your
+Modifications, or publicly available. Source Code of Your Externally
+Deployed Modifications must be released under the terms set forth in
+this License, including the license grants set forth in Section 3
+below, for as long as you Externally Deploy the Covered Code or twelve
+(12) months from the date of initial External Deployment, whichever is
+longer. You should preferably distribute the Source Code of Your
+Externally Deployed Modifications electronically (e.g. download from a
+web site).
+
+2.3 Distribution of Executable Versions. In addition, if You
+Externally Deploy Covered Code (Original Code and/or Modifications) in
+object code, executable form only, You must include a prominent
+notice, in the code itself as well as in related documentation,
+stating that Source Code of the Covered Code is available under the
+terms of this License with information on how and where to obtain such
+Source Code.
+
+2.4 Third Party Rights. You expressly acknowledge and agree that
+although Apple and each Contributor grants the licenses to their
+respective portions of the Covered Code set forth herein, no
+assurances are provided by Apple or any Contributor that the Covered
+Code does not infringe the patent or other intellectual property
+rights of any other entity. Apple and each Contributor disclaim any
+liability to You for claims brought by any other entity based on
+infringement of intellectual property rights or otherwise. As a
+condition to exercising the rights and licenses granted hereunder, You
+hereby assume sole responsibility to secure any other intellectual
+property rights needed, if any. For example, if a third party patent
+license is required to allow You to distribute the Covered Code, it is
+Your responsibility to acquire that license before distributing the
+Covered Code.
+
+3. Your Grants. In consideration of, and as a condition to, the
+licenses granted to You under this License, You hereby grant to any
+person or entity receiving or distributing Covered Code under this
+License a non-exclusive, royalty-free, perpetual, irrevocable license,
+under Your Applicable Patent Rights and other intellectual property
+rights (other than patent) owned or controlled by You, to use,
+reproduce, display, perform, modify, sublicense, distribute and
+Externally Deploy Your Modifications of the same scope and extent as
+Apple's licenses under Sections 2.1 and 2.2 above.
+
+4. Larger Works. You may create a Larger Work by combining Covered
+Code with other code not governed by the terms of this License and
+distribute the Larger Work as a single product. In each such instance,
+You must make sure the requirements of this License are fulfilled for
+the Covered Code or any portion thereof.
+
+5. Limitations on Patent License. Except as expressly stated in
+Section 2, no other patent rights, express or implied, are granted by
+Apple herein. Modifications and/or Larger Works may require additional
+patent licenses from Apple which Apple may grant in its sole
+discretion.
+
+6. Additional Terms. You may choose to offer, and to charge a fee for,
+warranty, support, indemnity or liability obligations and/or other
+rights consistent with the scope of the license granted herein
+("Additional Terms") to one or more recipients of Covered Code.
+However, You may do so only on Your own behalf and as Your sole
+responsibility, and not on behalf of Apple or any Contributor. You
+must obtain the recipient's agreement that any such Additional Terms
+are offered by You alone, and You hereby agree to indemnify, defend
+and hold Apple and every Contributor harmless for any liability
+incurred by or claims asserted against Apple or such Contributor by
+reason of any such Additional Terms.
+
+7. Versions of the License. Apple may publish revised and/or new
+versions of this License from time to time. Each version will be given
+a distinguishing version number. Once Original Code has been published
+under a particular version of this License, You may continue to use it
+under the terms of that version. You may also choose to use such
+Original Code under the terms of any subsequent version of this
+License published by Apple. No one other than Apple has the right to
+modify the terms applicable to Covered Code created under this
+License.
+
+8. NO WARRANTY OR SUPPORT. The Covered Code may contain in whole or in
+part pre-release, untested, or not fully tested works. The Covered
+Code may contain errors that could cause failures or loss of data, and
+may be incomplete or contain inaccuracies. You expressly acknowledge
+and agree that use of the Covered Code, or any portion thereof, is at
+Your sole and entire risk. THE COVERED CODE IS PROVIDED "AS IS" AND
+WITHOUT WARRANTY, UPGRADES OR SUPPORT OF ANY KIND AND APPLE AND
+APPLE'S LICENSOR(S) (COLLECTIVELY REFERRED TO AS "APPLE" FOR THE
+PURPOSES OF SECTIONS 8 AND 9) AND ALL CONTRIBUTORS EXPRESSLY DISCLAIM
+ALL WARRANTIES AND/OR CONDITIONS, EXPRESS OR IMPLIED, INCLUDING, BUT
+NOT LIMITED TO, THE IMPLIED WARRANTIES AND/OR CONDITIONS OF
+MERCHANTABILITY, OF SATISFACTORY QUALITY, OF FITNESS FOR A PARTICULAR
+PURPOSE, OF ACCURACY, OF QUIET ENJOYMENT, AND NONINFRINGEMENT OF THIRD
+PARTY RIGHTS. APPLE AND EACH CONTRIBUTOR DOES NOT WARRANT AGAINST
+INTERFERENCE WITH YOUR ENJOYMENT OF THE COVERED CODE, THAT THE
+FUNCTIONS CONTAINED IN THE COVERED CODE WILL MEET YOUR REQUIREMENTS,
+THAT THE OPERATION OF THE COVERED CODE WILL BE UNINTERRUPTED OR
+ERROR-FREE, OR THAT DEFECTS IN THE COVERED CODE WILL BE CORRECTED. NO
+ORAL OR WRITTEN INFORMATION OR ADVICE GIVEN BY APPLE, AN APPLE
+AUTHORIZED REPRESENTATIVE OR ANY CONTRIBUTOR SHALL CREATE A WARRANTY.
+You acknowledge that the Covered Code is not intended for use in the
+operation of nuclear facilities, aircraft navigation, communication
+systems, or air traffic control machines in which case the failure of
+the Covered Code could lead to death, personal injury, or severe
+physical or environmental damage.
+
+9. LIMITATION OF LIABILITY. TO THE EXTENT NOT PROHIBITED BY LAW, IN NO
+EVENT SHALL APPLE OR ANY CONTRIBUTOR BE LIABLE FOR ANY INCIDENTAL,
+SPECIAL, INDIRECT OR CONSEQUENTIAL DAMAGES ARISING OUT OF OR RELATING
+TO THIS LICENSE OR YOUR USE OR INABILITY TO USE THE COVERED CODE, OR
+ANY PORTION THEREOF, WHETHER UNDER A THEORY OF CONTRACT, WARRANTY,
+TORT (INCLUDING NEGLIGENCE), PRODUCTS LIABILITY OR OTHERWISE, EVEN IF
+APPLE OR SUCH CONTRIBUTOR HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH
+DAMAGES AND NOTWITHSTANDING THE FAILURE OF ESSENTIAL PURPOSE OF ANY
+REMEDY. SOME JURISDICTIONS DO NOT ALLOW THE LIMITATION OF LIABILITY OF
+INCIDENTAL OR CONSEQUENTIAL DAMAGES, SO THIS LIMITATION MAY NOT APPLY
+TO YOU. In no event shall Apple's total liability to You for all
+damages (other than as may be required by applicable law) under this
+License exceed the amount of fifty dollars ($50.00).
+
+10. Trademarks. This License does not grant any rights to use the
+trademarks or trade names "Apple", "Apple Computer", "Mac", "Mac OS",
+"QuickTime", "QuickTime Streaming Server" or any other trademarks,
+service marks, logos or trade names belonging to Apple (collectively
+"Apple Marks") or to any trademark, service mark, logo or trade name
+belonging to any Contributor. You agree not to use any Apple Marks in
+or as part of the name of products derived from the Original Code or
+to endorse or promote products derived from the Original Code other
+than as expressly permitted by and in strict compliance at all times
+with Apple's third party trademark usage guidelines which are posted
+at http://www.apple.com/legal/guidelinesfor3rdparties.html.
+
+11. Ownership. Subject to the licenses granted under this License,
+each Contributor retains all rights, title and interest in and to any
+Modifications made by such Contributor. Apple retains all rights,
+title and interest in and to the Original Code and any Modifications
+made by or on behalf of Apple ("Apple Modifications"), and such Apple
+Modifications will not be automatically subject to this License. Apple
+may, at its sole discretion, choose to license such Apple
+Modifications under this License, or on different terms from those
+contained in this License or may choose not to license them at all.
+
+12. Termination.
+
+12.1 Termination. This License and the rights granted hereunder will
+terminate:
+
+(a) automatically without notice from Apple if You fail to comply with
+any term(s) of this License and fail to cure such breach within 30
+days of becoming aware of such breach;
+
+(b) immediately in the event of the circumstances described in Section
+13.5(b); or
+
+(c) automatically without notice from Apple if You, at any time during
+the term of this License, commence an action for patent infringement
+against Apple; provided that Apple did not first commence
+an action for patent infringement against You in that instance.
+
+12.2 Effect of Termination. Upon termination, You agree to immediately
+stop any further use, reproduction, modification, sublicensing and
+distribution of the Covered Code. All sublicenses to the Covered Code
+which have been properly granted prior to termination shall survive
+any termination of this License. Provisions which, by their nature,
+should remain in effect beyond the termination of this License shall
+survive, including but not limited to Sections 3, 5, 8, 9, 10, 11,
+12.2 and 13. No party will be liable to any other for compensation,
+indemnity or damages of any sort solely as a result of terminating
+this License in accordance with its terms, and termination of this
+License will be without prejudice to any other right or remedy of
+any party.
+
+13. Miscellaneous.
+
+13.1 Government End Users. The Covered Code is a "commercial item" as
+defined in FAR 2.101. Government software and technical data rights in
+the Covered Code include only those rights customarily provided to the
+public as defined in this License. This customary commercial license
+in technical data and software is provided in accordance with FAR
+12.211 (Technical Data) and 12.212 (Computer Software) and, for
+Department of Defense purchases, DFAR 252.227-7015 (Technical Data --
+Commercial Items) and 227.7202-3 (Rights in Commercial Computer
+Software or Computer Software Documentation). Accordingly, all U.S.
+Government End Users acquire Covered Code with only those rights set
+forth herein.
+
+13.2 Relationship of Parties. This License will not be construed as
+creating an agency, partnership, joint venture or any other form of
+legal association between or among You, Apple or any Contributor, and
+You will not represent to the contrary, whether expressly, by
+implication, appearance or otherwise.
+
+13.3 Independent Development. Nothing in this License will impair
+Apple's right to acquire, license, develop, have others develop for
+it, market and/or distribute technology or products that perform the
+same or similar functions as, or otherwise compete with,
+Modifications, Larger Works, technology or products that You may
+develop, produce, market or distribute.
+
+13.4 Waiver; Construction. Failure by Apple or any Contributor to
+enforce any provision of this License will not be deemed a waiver of
+future enforcement of that or any other provision. Any law or
+regulation which provides that the language of a contract shall be
+construed against the drafter will not apply to this License.
+
+13.5 Severability. (a) If for any reason a court of competent
+jurisdiction finds any provision of this License, or portion thereof,
+to be unenforceable, that provision of the License will be enforced to
+the maximum extent permissible so as to effect the economic benefits
+and intent of the parties, and the remainder of this License will
+continue in full force and effect. (b) Notwithstanding the foregoing,
+if applicable law prohibits or restricts You from fully and/or
+specifically complying with Sections 2 and/or 3 or prevents the
+enforceability of either of those Sections, this License will
+immediately terminate and You must immediately discontinue any use of
+the Covered Code and destroy all copies of it that are in your
+possession or control.
+
+13.6 Dispute Resolution. Any litigation or other dispute resolution
+between You and Apple relating to this License shall take place in the
+Northern District of California, and You and Apple hereby consent to
+the personal jurisdiction of, and venue in, the state and federal
+courts within that District with respect to this License. The
+application of the United Nations Convention on Contracts for the
+International Sale of Goods is expressly excluded.
+
+13.7 Entire Agreement; Governing Law. This License constitutes the
+entire agreement between the parties with respect to the subject
+matter hereof. This License shall be governed by the laws of the
+United States and the State of California, except that body of
+California law concerning conflicts of law.
+
+Where You are located in the province of Quebec, Canada, the following
+clause applies: The parties hereby confirm that they have requested
+that this License and all related documents be drafted in English. Les
+parties ont exige que le present contrat et tous les documents
+connexes soient rediges en anglais.
+
+EXHIBIT A.
+
+"Portions Copyright (c) 1999-2003 Apple Computer, Inc. All Rights
+Reserved.
+
+This file contains Original Code and/or Modifications of Original Code
+as defined in and that are subject to the Apple Public Source License
+Version 2.0 (the 'License'). You may not use this file except in
+compliance with the License. Please obtain a copy of the License at
+http://www.opensource.apple.com/apsl/ and read it before using this
+file.
+
+The Original Code and all software distributed under the License are
+distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
+INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
+Please see the License for the specific language governing rights and
+limitations under the License."
+```
+
+### Reviewed Linux AMDGPU reference notices
+
+```text
+linux-gmc.c (Linux v6.12; see THIRD_PARTY_NOTICES.md)
+/*
+ * Copyright 2019 Advanced Micro Devices, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE COPYRIGHT HOLDER(S) OR AUTHOR(S) BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
+ *
+ */
+
+linux-sdma.c (Linux v6.12; see THIRD_PARTY_NOTICES.md)
+/*
+ * Copyright 2019 Advanced Micro Devices, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE COPYRIGHT HOLDER(S) OR AUTHOR(S) BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
+ *
+ */
+
+linux-amdgpu_gmc.c (Linux v6.12; see THIRD_PARTY_NOTICES.md)
+/*
+ * Copyright 2018 Advanced Micro Devices, Inc.
+ * All Rights Reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the
+ * "Software"), to deal in the Software without restriction, including
+ * without limitation the rights to use, copy, modify, merge, publish,
+ * distribute, sub license, and/or sell copies of the Software, and to
+ * permit persons to whom the Software is furnished to do so, subject to
+ * the following conditions:
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL
+ * THE COPYRIGHT HOLDERS, AUTHORS AND/OR ITS SUPPLIERS BE LIABLE FOR ANY CLAIM,
+ * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+ * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+ * USE OR OTHER DEALINGS IN THE SOFTWARE.
+ *
+ * The above copyright notice and this permission notice (including the
+ * next paragraph) shall be included in all copies or substantial portions
+ * of the Software.
+ *
+ */
+
+linux-gfx_v10_0.c (Linux v6.12; see THIRD_PARTY_NOTICES.md)
+/*
+ * Copyright 2019 Advanced Micro Devices, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE COPYRIGHT HOLDER(S) OR AUTHOR(S) BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
+ *
+ */
+```
+
+## Installed resize helper qualification (candidate386)
+
+The external support payload introduced in385 starts on the next guest boot in386
+without changing the signed capture application, its receipt, or CDHash. Dynamic
+mode control and USB-tablet input coexist with the resize agent connected under
+explicit `agent-mouse=off`. This is an existing-user qualification, not a clean-user
+installer or adaptive-DPI release. The checked-in executable provenance is
+recorded above; helper payload identity is recorded separately in the native report.
+Candidate386 natural shutdown and authorizing recovery pass.
+[Evidence](../findings/research/console-installed-resize-native-20261009.md).
+
+Current installed-resize admission is **even physical640..3840 ×480..2160**,
+with fixed HiDPI2. Actual386 host GDK1 requests with odd pixel dimensions are
+refused. Adaptive DPI selection and an explicit odd-size policy remain open.
+Candidate386's independent audio restoration checks all pass; reconnect surfaces
+1502×960→1440×960 match, with five-hit/exact-text reconnect input passing; natural shutdown and authorizing recovery pass, with the partial capture tail retained.

@@ -1,0 +1,101 @@
+--- a/hw/display/bochs-display.c
++++ b/hw/display/bochs-display.c
+@@ -62,6 +62,7 @@
+     uint32_t         snapshot_pending_seq, snapshot_published_seq;
+     uint32_t         snapshot_replaced, snapshot_published;
+     bool             snapshot_committing;
++    QEMUBH           *snapshot_publish_bh;
+ 
+     /* device config */
+     uint64_t         vgamem;
+@@ -178,6 +179,15 @@
+     bst_clear(stats, t[3]);
+ }
+ 
++static void bochs_snapshot_publish_bh(void *opaque)
++{
++    BochsDisplayState *s = opaque;
++
++    if (s->snapshot_pending) {
++        qemu_console_refresh_now(s->con);
++    }
++}
++
+ static void bochs_snapshot_write(void *opaque, hwaddr addr, uint64_t val,
+                                  unsigned size)
+ {
+@@ -287,6 +297,7 @@
+            (size_t)w * h * 4);
+     bql_lock();
+     s->snapshot_committing = false;
++    pending = s->snapshot_pending != NULL;
+     if (s->snapshot_state != 1 || s->snapshot_active_epoch != epoch ||
+         val != s->snapshot_ack + 1) {
+         qemu_free_displaysurface(fresh);
+@@ -307,6 +318,9 @@
+     s->snapshot_pending_seq = val;
+     s->snapshot_error = 0;
+     s->snapshot_ack = val;
++    /* Publish promptly instead of waiting for the next listener timer tick,
++     * which may fall after the next commit and replace this snapshot. */
++    qemu_bh_schedule(s->snapshot_publish_bh);
+     if (timed) {
+         bochs_snapshot_timing_record(s, w, h, pending, timing);
+     }
+@@ -578,6 +592,7 @@
+     }
+ #endif
+     s->con = graphic_console_init(DEVICE(dev), 0, &bochs_display_gfx_ops, s);
++    s->snapshot_publish_bh = qemu_bh_new(bochs_snapshot_publish_bh, s);
+ 
+     memory_region_init_ram(&s->vram, obj, "bochs-display-vram", s->vgamem,
+                            &error_fatal);
+@@ -663,6 +678,8 @@
+     }
+ #endif
+ 
++    qemu_bh_delete(s->snapshot_publish_bh);
++    s->snapshot_publish_bh = NULL;
+     qemu_free_displaysurface(s->snapshot_pending);
+     s->snapshot_pending = NULL;
+     graphic_console_close(s->con);
+--- a/ui/console.c
++++ b/ui/console.c
+@@ -871,6 +871,27 @@
+     return true;
+ }
+ 
++/* Run the refresh of the listeners showing @con now, outside the timer. */
++void qemu_console_refresh_now(QemuConsole *con)
++{
++    DisplayState *s = con ? con->ds : NULL;
++    DisplayChangeListener *dcl;
++
++    if (!s || s->refreshing) {
++        return;
++    }
++    s->refreshing = true;
++    QLIST_FOREACH(dcl, &s->listeners, next) {
++        if (dcl->con && dcl->con != con) {
++            continue;
++        }
++        if (dcl->ops->dpy_refresh) {
++            dcl->ops->dpy_refresh(dcl);
++        }
++    }
++    s->refreshing = false;
++}
++
+ static void dpy_refresh(DisplayState *s)
+ {
+     DisplayChangeListener *dcl;
+--- a/include/ui/console.h
++++ b/include/ui/console.h
+@@ -382,6 +382,7 @@
+ void graphic_console_close(QemuConsole *con);
+ 
+ void graphic_hw_update(QemuConsole *con);
++void qemu_console_refresh_now(QemuConsole *con);
+ void graphic_hw_update_done(QemuConsole *con);
+ void graphic_hw_invalidate(QemuConsole *con);
+ void graphic_hw_text_update(QemuConsole *con, console_ch_t *chardata);

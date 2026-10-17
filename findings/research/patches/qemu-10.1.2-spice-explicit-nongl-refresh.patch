@@ -1,0 +1,42 @@
+--- a/include/ui/spice-display.h
++++ b/include/ui/spice-display.h
+@@ -156,6 +156,7 @@
+ extern bool spice_opengl;
+ extern bool spice_remote_client;
+ extern int spice_max_refresh_rate;
++extern bool spice_max_refresh_rate_explicit;
+ 
+ int qemu_spice_rect_is_empty(const QXLRect* r);
+ void qemu_spice_rect_union(QXLRect *dest, const QXLRect *r);
+--- a/ui/spice-core.c
++++ b/ui/spice-core.c
+@@ -805,6 +805,8 @@
+         spice_server_set_streaming_video(spice_server, SPICE_STREAM_VIDEO_OFF);
+     }
+ 
++    spice_max_refresh_rate_explicit =
++        qemu_opt_get(opts, "max-refresh-rate") != NULL;
+     spice_max_refresh_rate = qemu_opt_get_number(opts, "max-refresh-rate",
+                                                  DEFAULT_MAX_REFRESH_RATE);
+     if (spice_max_refresh_rate <= 0) {
+--- a/ui/spice-display.c
++++ b/ui/spice-display.c
+@@ -33,6 +33,7 @@
+ bool spice_opengl;
+ bool spice_remote_client;
+ int spice_max_refresh_rate;
++bool spice_max_refresh_rate_explicit;
+ 
+ int qemu_spice_rect_is_empty(const QXLRect* r)
+ {
+@@ -1397,6 +1398,10 @@
+     qemu_spice_display_init_common(ssd);
+ 
+     ssd->dcl.ops = &display_listener_ops;
++    /* Keep the historical nongl default unless explicitly overridden. */
++    if (!spice_opengl && spice_max_refresh_rate_explicit) {
++        ssd->dcl.update_interval = MAX(1, 1000 / spice_max_refresh_rate);
++    }
+ #ifdef HAVE_SPICE_GL
+     if (spice_opengl) {
+         ssd->dcl.ops = &display_listener_gl_ops;

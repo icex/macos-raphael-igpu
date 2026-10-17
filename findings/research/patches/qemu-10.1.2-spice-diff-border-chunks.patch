@@ -1,0 +1,47 @@
+--- a/ui/spice-diff-bbox.h
++++ b/ui/spice-diff-bbox.h
+@@ -9,6 +9,15 @@
+ #include <string.h>
+ 
+ typedef struct RGPUDiffRect { int left, top, right, bottom; } RGPUDiffRect;
++
++/* Safe for arbitrary byte alignment; memcpy folds to a 32-bit load. */
++static int rgpu_pixel_equal(const uint8_t *a, const uint8_t *b)
++{
++    uint32_t av, bv;
++    memcpy(&av, a, sizeof(av));
++    memcpy(&bv, b, sizeof(bv));
++    return av == bv;
++}
+ 
+ /* -1 invalid input (caller sends full surface), 0 identical, 1 changed bbox. */
+ static int rgpu_diff_bbox(const uint8_t *source, size_t source_bytes,
+@@ -42,12 +51,25 @@
+             continue;
+         }
+         left = dirty.left;
+-        while (!memcmp(a + (size_t)left * 4, b + (size_t)left * 4, 4)) {
++        /* The row differs: skip equal borders in bounded 16-pixel chunks,
++         * then find the exact boundary. Never read outside the dirty span. */
++        while (dirty.right - left >= 16 &&
++               !memcmp(a + (size_t)left * 4, b + (size_t)left * 4, 64)) {
++            left += 16;
++        }
++        while (left < dirty.right &&
++               rgpu_pixel_equal(a + (size_t)left * 4, b + (size_t)left * 4)) {
+             left++;
+         }
+         right = dirty.right;
+-        while (!memcmp(a + (size_t)(right - 1) * 4,
+-                       b + (size_t)(right - 1) * 4, 4)) {
++        while (right - left >= 16 &&
++               !memcmp(a + (size_t)(right - 16) * 4,
++                       b + (size_t)(right - 16) * 4, 64)) {
++            right -= 16;
++        }
++        while (right > left &&
++               rgpu_pixel_equal(a + (size_t)(right - 1) * 4,
++                                b + (size_t)(right - 1) * 4)) {
+             right--;
+         }
+         if (left < out->left) out->left = left;

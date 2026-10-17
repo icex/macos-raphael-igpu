@@ -1,0 +1,16 @@
+{
+  "valid": true,
+  "verdict": "GUEST_PANIC",
+  "earliest_failure": "guest_panic:createAccelChannels+0x278",
+  "evidence": [
+    "BUILD: identity=69ba1ae965234124a3506f8820923da2",
+    "SD: topology routes=ok count=5 entries-match=1",
+    "HY: HWLibs hybrid trace route=ok entries-match=1 (max 8 calls)",
+    "HY: SDMA selector trace route=ok entries-match=1 (max 8 hybrid calls)",
+    "SD: topology applied: discovered=1 kept=SDMA0 removed=SDMA1 before initialize",
+    "SD: AMDHardware::initializeHWEngines -> 1 (topology-applied=1)",
+    "Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff7f94b246f0, CR2: 0x0",
+    "capture_loss"
+  ],
+  "next_action": "decode the symbolicated fault and repair it offline; no retry"
+}

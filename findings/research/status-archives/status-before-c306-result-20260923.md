@@ -1,0 +1,135 @@
+# Live status — 2026-09-23
+
+## Candidate 305: firmware query fails before guest TMR changes on fresh boot
+
+Run `b6daacf9f42f33bf735a2167855b110b`, metal-153, source `2c9e33e`,
+boot `5074c0e5-b2f6-46da-99b2-299ba322b41e`, MODE2 #226.
+
+- **Functional:** GPINT GET_FW_VERSION times out before guest TMR unload:
+  input0x80000->0x10010000, response0, CNTL0x1900c6, CNTL2=0. Later queries
+  also time out. Host inbox retains four sane command headers, and native tail
+  reservation succeeds. Delivery refuses without a live firmware acknowledgment.
+  Normal display-idle exit is accepted but does not restore GPINT response.
+  No HDMI output established. This fresh-boot observation moves the earliest
+  failure before guest TMR changes; reboot/bind alone did not fix it.
+- **Capture:** CORE_PROBE_PASS; inspect final critical record count 449.
+- **Shutdown/recovery:** exited-after-guest-request, recovered,
+  authorizes_launch=true. Post-run SMU version query OK; no guest running.
+- **Next:** compare read-only firmware-code bytes at CW0 with the installed host
+  firmware image to distinguish lost code from a processor/control-path failure.
+  Investigate host unbind and MODE2 separately; do not claim either causal yet.
+  No further identical reboot/bind requested; same-boot reuse is authorized.
+
+Evidence: `~/macos-vm/run/candidate-305-results/`,
+`~/macos-vm/run/c305-post-mode2-probe.json`.
+[Source audit](findings/research/host-dmcub-tmr-overlap-20260923.md).
+Development uses dev directly in candidate worktrees, with remote pulls and SSH
+pushes. Main unchanged. Host suite: 1007 tests OK, three skipped.
+
+## Verified progress
+
+| Area | Evidence and scope |
+|---|---|
+| Managed texture ownership | 96 cases;111,658,032 pixel comparisons; synchronized CPU writes and retained LOAD color contents, zero mismatches |
+| Cross-process GPU events | Typed XPC import;33 consumer-first transfers,25,453,131 correct pixels |
+| Two-process IOSurface | 32 bidirectional GPU-copy rounds;49,363,648 pixels, zero mismatches; host completion orders transfers |
+| Depth/stencil/MSAA | 128 cases at1×/4× and64×64/1003×769;49,625,792 correct pixels |
+| Main10 decode | 32 frames, 720p/1080p, 71,884,800 full-plane luma/chroma samples, exact software-reference match |
+| Buffer/address reuse | 512 measured rounds, 2,147,483,648 correct values; all 6,144 measured address assignments reused earlier ranges; allocation returns exactly to 544,768 bytes |
+| Larger allocations | 192 MiB live resources, four measured rounds, 67,108,864 correct values, exact allocation return |
+| Native reclaim | 81 traced calls: 41 true, 40 false; all 40 false returns followed by same-thread/map success; 1,525 internal wire failures observed |
+| GPU fences | 128 untracked blit/compute/blit rounds, 134,217,728 correct values; prior cross-queue shared-event checks also pass |
+| Native desktop | Three minutes of moving/resizing native material windows; four clean raw RFB captures |
+| Safari | Two-minute transparency/blur/scrolling page; three clean captures plus clean desktop after larger-buffer pressure |
+| Stock QEMU / PerfPowerServices | OpenCore/VirtualSMC fix passes two guest boots,0.0% CPU, latest0.86s; prior patched-QEMU evidence retained separately |
+| Host regression | 965 tests OK, three skipped |
+
+Earlier texture recreation (144 cases / 131,031,576 pixels), feedback rendering
+(48 cases / 5,280,000 pixels), and hardware H.264/HEVC encode/decode retain their
+separately documented passing scopes. Explicit decoder GPU-ID selection remains
+a selection limitation on the built-in topology; automatic required-hardware selection works.
+
+Prior qualified280 driver build `51bfd732cf824249b70981f0c36fe314`; executable SHA256
+`7d06082f35959f900b5c59cb5f6d9e2efc67df13e935d338d7783524df63259b`.
+Current stock QEMU image `sha256:3a3c82c79bc4e73531f819ccdfa4053b3084efd7c1f645678dbf8b4b3a24369c`.
+Default experiment pin now selects this stock image. VirtualSMC1.3.7/gen2 and the
+exact OpenCore DSDT ownership patch are required; prior media backups remain available.
+[Address/desktop qualification](findings/research/address-reclaim-desktop-20260916.md),
+[artifact hashes](findings/research/address-reclaim-desktop-evidence-20260916.json),
+[native retry analysis](findings/research/allocation-retry-analysis-20260916.md),
+[visual fix](findings/research/feedback-decompression-20260916.md).
+
+
+## Remaining roadmap
+
+1. Sustained4K remote delivery and input latency; preserve crisp Retina60Hz,
+   then qualify login persistence.90/120Hz modes remain unproven.
+2. Guest-crash/command-channel failure, repeated lifecycle and independent-host-boot
+   qualification. Existing clean stops do not qualify every failure mode.
+3. Broader applications, render hazards, interprocess synchronization and page-table
+   release. Historical direct OpenGL hang and live Metal validation crash remain open.
+4. Physical DCN output, other hypervisors and measured performance/release qualification.
+
+StockQEMU10.1.2/OpenCore/VirtualSMC1.3.7 works in this tested setup;
+PerfPowerServices was0.0% CPU on two guest boots. Automatic required-hardware HEVC
+decode works; explicit GPU-ID selection remains limited. Main10 decode has scoped
+passes; hardware encode is Main8. [Roadmap](docs/ROADMAP.md).
+
+After milestones update current docs, integrate/push dev and synchronize the local
+checkout. Do not push main without new authorization. Prior live entries are [archived](findings/research/status-archives/status-before-display-port-20260917.md)
+and [earlier](findings/research/status-archives/status-before-night-close-20260916.md).
+
+
+
+
+
+
+
+
+## One-command GPU test
+
+- Output: `/home/user/macos-vm/run/candidate-299-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
+
+
+## One-command GPU test
+
+- Output: `/home/user/macos-vm/run/candidate-300-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
+
+
+## One-command GPU test
+
+- Output: `/home/user/macos-vm/run/candidate-302-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
+
+
+## One-command GPU test
+
+- Output: `/home/user/macos-vm/run/candidate-303-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
+
+
+## One-command GPU test
+
+- Output: `/home/user/macos-vm/run/candidate-304-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
+
+
+## One-command GPU test
+
+- Output: `/home/user/macos-vm/run/candidate-305-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`
+
+
+## One-command GPU test
+
+- Output: `/home/user/macos-vm/run/candidate-306-results`
+- Verdict: `CORE_PROBE_PASS`
+- Boundary: `None`

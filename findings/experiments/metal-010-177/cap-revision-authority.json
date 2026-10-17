@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "kind": "same-boot-qualification-cap-revision",
+  "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+  "ledger_preimage_sha256": "0f45b2c01b5ea6863b01bc0777824d8da3c7ee7ea5d1b900616d44cd3a1c95da",
+  "prior_run_id": "e02fbed46a6a4df4ae48d7c1d8597985",
+  "recovery_id": "11602bc7c6f84c75afb1f2cb617a319c",
+  "canonical_recovery_receipt_sha256": "4e6c1519f18c0bb60efeb816045eb3aedf6231a0ef8746a530c768996e7e6676",
+  "run_recovery_receipt_sha256": "77b0931dcefe4c710db724d6cedbda22acf42c3c43de2f0aba25546d396ea180",
+  "range_audit_sha256": "a6ad51f95e3608f47afd951f970c3f4ed849db8ad0e0aee225790c1d26875ae2",
+  "candidate176_consumer_sha256": "055e44ca0cd7c06e37a98739ccbed67e3b0578c4416c7e24fb90f2b3db0929be",
+  "candidate176_recovery_producer_sha256": "8ff51636013da702fed170933ef69f62ae15bbf91d1e59011dc140b9782ee39d",
+  "design_sha256": "ec51e5307933cf0ee08f1c4bab5714c399c87dad33f2ee2903187ffd69e4d476",
+  "candidate177_experiment_py_sha256": "937492cce4b57a9f544513c1086154e24484e02b191cf5e5e4f2ead71a7dde7e",
+  "candidate177_recovery_producer_sha256": "1212c60b706f1c55b688bd45ba97fc28f28b75c08c996275041c1a7b71983453",
+  "manifest_sha256": "d6df93018e721dc42165e8318d879b915e1d880592798478075efc3a469ec821",
+  "next_run_id": "ff2eb6e2492a4c5c96c6c6a847ed0c26",
+  "from_max_launches": 3,
+  "to_max_launches": 4,
+  "additional_launches": 1,
+  "automatic_extension": false,
+  "purpose": "m7-normal-recovery-qualification"
+}

@@ -1,0 +1,348 @@
+{
+  "time": 1791721492.695919,
+  "bars": {
+    "0": "0x90000000",
+    "2": "0xf0000000",
+    "5": "0x80000000"
+  },
+  "info_pci": " 0, device   6, function 0:\r\n    VGA controller: PCI device 1002:73ff\r\n      PCI subsystem 1462:7e59\r\n      IRQ 22, pin A\r\n      BAR0: 64 bit prefetchable memory at 0x90000000 [0x9fffffff]\r\n      BAR2: 64 bit prefetchable memory at 0xf0000000 [0xf01fffff]\r\n      BAR4: I/O at 0x6000 [0x60ff]\r\n      BAR5: 32 bit memory at 0x80000000 [0x8007ffff]\r\n      BAR6: 32 bit memory (not mapped)\r\n      id \"\"\r\n  ",
+  "global_regs": {
+    "DCN_VM_FB_LOCATION_BASE": "0xf400",
+    "DCN_VM_FB_LOCATION_TOP": "0xf47f",
+    "DCN_VM_FB_OFFSET": "0x7e0",
+    "DCN_VM_AGP_BOT": "0x0",
+    "DCN_VM_AGP_TOP": "0x0",
+    "DCN_VM_AGP_BASE": "0x0"
+  },
+  "samples": [
+    {
+      "t": 236484.768894073,
+      "hubp": {
+        "0": {
+          "SURFACE_CONFIG": "0xa",
+          "ADDR_CONFIG": "0x1002",
+          "TILING_CONFIG": "0x9b",
+          "PRI_VIEWPORT_START": "0x0",
+          "PRI_VIEWPORT_DIMENSION": "0x8700f00",
+          "DCHUBP_CNTL": "0x300f0102",
+          "SURFACE_PITCH": "0xfff0eff",
+          "VMID_SETTINGS_0": "0x0",
+          "PRIMARY_SURFACE_ADDRESS": "0x323d0000",
+          "PRIMARY_SURFACE_ADDRESS_HIGH": "0xf4",
+          "SURFACE_CONTROL": "0x606",
+          "FLIP_CONTROL": "0x4100000",
+          "SURFACE_INUSE": "0x0",
+          "SURFACE_EARLIEST_INUSE": "0x2e340000",
+          "HUBPRET_CONTROL": "0xe40000"
+        },
+        "1": {
+          "SURFACE_CONFIG": "0x0",
+          "ADDR_CONFIG": "0x0",
+          "TILING_CONFIG": "0x0",
+          "PRI_VIEWPORT_START": "0x0",
+          "PRI_VIEWPORT_DIMENSION": "0x0",
+          "DCHUBP_CNTL": "0x0",
+          "SURFACE_PITCH": "0x0",
+          "VMID_SETTINGS_0": "0x0",
+          "PRIMARY_SURFACE_ADDRESS": "0x0",
+          "PRIMARY_SURFACE_ADDRESS_HIGH": "0x0",
+          "SURFACE_CONTROL": "0x0",
+          "FLIP_CONTROL": "0x0",
+          "SURFACE_INUSE": "0x0",
+          "SURFACE_EARLIEST_INUSE": "0x0",
+          "HUBPRET_CONTROL": "0x0"
+        },
+        "2": {
+          "SURFACE_CONFIG": "0x0",
+          "ADDR_CONFIG": "0x0",
+          "TILING_CONFIG": "0x0",
+          "PRI_VIEWPORT_START": "0x0",
+          "PRI_VIEWPORT_DIMENSION": "0x0",
+          "DCHUBP_CNTL": "0x0",
+          "SURFACE_PITCH": "0x0",
+          "VMID_SETTINGS_0": "0x0",
+          "PRIMARY_SURFACE_ADDRESS": "0x0",
+          "PRIMARY_SURFACE_ADDRESS_HIGH": "0x0",
+          "SURFACE_CONTROL": "0x0",
+          "FLIP_CONTROL": "0x0",
+          "SURFACE_INUSE": "0x0",
+          "SURFACE_EARLIEST_INUSE": "0x0",
+          "HUBPRET_CONTROL": "0x0"
+        },
+        "3": {
+          "SURFACE_CONFIG": "0x0",
+          "ADDR_CONFIG": "0x0",
+          "TILING_CONFIG": "0x0",
+          "PRI_VIEWPORT_START": "0x0",
+          "PRI_VIEWPORT_DIMENSION": "0x0",
+          "DCHUBP_CNTL": "0x0",
+          "SURFACE_PITCH": "0x0",
+          "VMID_SETTINGS_0": "0x0",
+          "PRIMARY_SURFACE_ADDRESS": "0x0",
+          "PRIMARY_SURFACE_ADDRESS_HIGH": "0x0",
+          "SURFACE_CONTROL": "0x0",
+          "FLIP_CONTROL": "0x0",
+          "SURFACE_INUSE": "0x0",
+          "SURFACE_EARLIEST_INUSE": "0x0",
+          "HUBPRET_CONTROL": "0x0"
+        }
+      },
+      "otg": {
+        "0": {
+          "H_TOTAL": "0x112f",
+          "V_TOTAL": "0x8c9",
+          "CONTROL": "0x10301",
+          "STATUS": "0x20002",
+          "STATUS_POSITION": "0x7920096",
+          "STATUS_FRAME_COUNT": "0x4575"
+        },
+        "1": {
+          "H_TOTAL": "0x0",
+          "V_TOTAL": "0x0",
+          "CONTROL": "0x300",
+          "STATUS": "0x10021",
+          "STATUS_POSITION": "0x0",
+          "STATUS_FRAME_COUNT": "0x0"
+        },
+        "2": {
+          "H_TOTAL": "0x0",
+          "V_TOTAL": "0x0",
+          "CONTROL": "0x300",
+          "STATUS": "0x10021",
+          "STATUS_POSITION": "0x0",
+          "STATUS_FRAME_COUNT": "0x0"
+        },
+        "3": {
+          "H_TOTAL": "0x0",
+          "V_TOTAL": "0x0",
+          "CONTROL": "0x300",
+          "STATUS": "0x10021",
+          "STATUS_POSITION": "0x0",
+          "STATUS_FRAME_COUNT": "0x0"
+        }
+      }
+    },
+    {
+      "t": 236485.032386883,
+      "hubp": {
+        "0": {
+          "SURFACE_CONFIG": "0xa",
+          "ADDR_CONFIG": "0x1002",
+          "TILING_CONFIG": "0x9b",
+          "PRI_VIEWPORT_START": "0x0",
+          "PRI_VIEWPORT_DIMENSION": "0x8700f00",
+          "DCHUBP_CNTL": "0x300f0102",
+          "SURFACE_PITCH": "0xfff0eff",
+          "VMID_SETTINGS_0": "0x0",
+          "PRIMARY_SURFACE_ADDRESS": "0x323d0000",
+          "PRIMARY_SURFACE_ADDRESS_HIGH": "0xf4",
+          "SURFACE_CONTROL": "0x606",
+          "FLIP_CONTROL": "0x4100000",
+          "SURFACE_INUSE": "0x0",
+          "SURFACE_EARLIEST_INUSE": "0x2e340000",
+          "HUBPRET_CONTROL": "0xe40000"
+        },
+        "1": {
+          "SURFACE_CONFIG": "0x0",
+          "ADDR_CONFIG": "0x0",
+          "TILING_CONFIG": "0x0",
+          "PRI_VIEWPORT_START": "0x0",
+          "PRI_VIEWPORT_DIMENSION": "0x0",
+          "DCHUBP_CNTL": "0x0",
+          "SURFACE_PITCH": "0x0",
+          "VMID_SETTINGS_0": "0x0",
+          "PRIMARY_SURFACE_ADDRESS": "0x0",
+          "PRIMARY_SURFACE_ADDRESS_HIGH": "0x0",
+          "SURFACE_CONTROL": "0x0",
+          "FLIP_CONTROL": "0x0",
+          "SURFACE_INUSE": "0x0",
+          "SURFACE_EARLIEST_INUSE": "0x0",
+          "HUBPRET_CONTROL": "0x0"
+        },
+        "2": {
+          "SURFACE_CONFIG": "0x0",
+          "ADDR_CONFIG": "0x0",
+          "TILING_CONFIG": "0x0",
+          "PRI_VIEWPORT_START": "0x0",
+          "PRI_VIEWPORT_DIMENSION": "0x0",
+          "DCHUBP_CNTL": "0x0",
+          "SURFACE_PITCH": "0x0",
+          "VMID_SETTINGS_0": "0x0",
+          "PRIMARY_SURFACE_ADDRESS": "0x0",
+          "PRIMARY_SURFACE_ADDRESS_HIGH": "0x0",
+          "SURFACE_CONTROL": "0x0",
+          "FLIP_CONTROL": "0x0",
+          "SURFACE_INUSE": "0x0",
+          "SURFACE_EARLIEST_INUSE": "0x0",
+          "HUBPRET_CONTROL": "0x0"
+        },
+        "3": {
+          "SURFACE_CONFIG": "0x0",
+          "ADDR_CONFIG": "0x0",
+          "TILING_CONFIG": "0x0",
+          "PRI_VIEWPORT_START": "0x0",
+          "PRI_VIEWPORT_DIMENSION": "0x0",
+          "DCHUBP_CNTL": "0x0",
+          "SURFACE_PITCH": "0x0",
+          "VMID_SETTINGS_0": "0x0",
+          "PRIMARY_SURFACE_ADDRESS": "0x0",
+          "PRIMARY_SURFACE_ADDRESS_HIGH": "0x0",
+          "SURFACE_CONTROL": "0x0",
+          "FLIP_CONTROL": "0x0",
+          "SURFACE_INUSE": "0x0",
+          "SURFACE_EARLIEST_INUSE": "0x0",
+          "HUBPRET_CONTROL": "0x0"
+        }
+      },
+      "otg": {
+        "0": {
+          "H_TOTAL": "0x112f",
+          "V_TOTAL": "0x8c9",
+          "CONTROL": "0x10301",
+          "STATUS": "0x20002",
+          "STATUS_POSITION": "0x64300ae",
+          "STATUS_FRAME_COUNT": "0x4595"
+        },
+        "1": {
+          "H_TOTAL": "0x0",
+          "V_TOTAL": "0x0",
+          "CONTROL": "0x300",
+          "STATUS": "0x10021",
+          "STATUS_POSITION": "0x0",
+          "STATUS_FRAME_COUNT": "0x0"
+        },
+        "2": {
+          "H_TOTAL": "0x0",
+          "V_TOTAL": "0x0",
+          "CONTROL": "0x300",
+          "STATUS": "0x10021",
+          "STATUS_POSITION": "0x0",
+          "STATUS_FRAME_COUNT": "0x0"
+        },
+        "3": {
+          "H_TOTAL": "0x0",
+          "V_TOTAL": "0x0",
+          "CONTROL": "0x300",
+          "STATUS": "0x10021",
+          "STATUS_POSITION": "0x0",
+          "STATUS_FRAME_COUNT": "0x0"
+        }
+      }
+    },
+    {
+      "t": 236485.296206464,
+      "hubp": {
+        "0": {
+          "SURFACE_CONFIG": "0xa",
+          "ADDR_CONFIG": "0x1002",
+          "TILING_CONFIG": "0x9b",
+          "PRI_VIEWPORT_START": "0x0",
+          "PRI_VIEWPORT_DIMENSION": "0x8700f00",
+          "DCHUBP_CNTL": "0x300f0102",
+          "SURFACE_PITCH": "0xfff0eff",
+          "VMID_SETTINGS_0": "0x0",
+          "PRIMARY_SURFACE_ADDRESS": "0x323d0000",
+          "PRIMARY_SURFACE_ADDRESS_HIGH": "0xf4",
+          "SURFACE_CONTROL": "0x606",
+          "FLIP_CONTROL": "0x4100000",
+          "SURFACE_INUSE": "0x0",
+          "SURFACE_EARLIEST_INUSE": "0x2e340000",
+          "HUBPRET_CONTROL": "0xe40000"
+        },
+        "1": {
+          "SURFACE_CONFIG": "0x0",
+          "ADDR_CONFIG": "0x0",
+          "TILING_CONFIG": "0x0",
+          "PRI_VIEWPORT_START": "0x0",
+          "PRI_VIEWPORT_DIMENSION": "0x0",
+          "DCHUBP_CNTL": "0x0",
+          "SURFACE_PITCH": "0x0",
+          "VMID_SETTINGS_0": "0x0",
+          "PRIMARY_SURFACE_ADDRESS": "0x0",
+          "PRIMARY_SURFACE_ADDRESS_HIGH": "0x0",
+          "SURFACE_CONTROL": "0x0",
+          "FLIP_CONTROL": "0x0",
+          "SURFACE_INUSE": "0x0",
+          "SURFACE_EARLIEST_INUSE": "0x0",
+          "HUBPRET_CONTROL": "0x0"
+        },
+        "2": {
+          "SURFACE_CONFIG": "0x0",
+          "ADDR_CONFIG": "0x0",
+          "TILING_CONFIG": "0x0",
+          "PRI_VIEWPORT_START": "0x0",
+          "PRI_VIEWPORT_DIMENSION": "0x0",
+          "DCHUBP_CNTL": "0x0",
+          "SURFACE_PITCH": "0x0",
+          "VMID_SETTINGS_0": "0x0",
+          "PRIMARY_SURFACE_ADDRESS": "0x0",
+          "PRIMARY_SURFACE_ADDRESS_HIGH": "0x0",
+          "SURFACE_CONTROL": "0x0",
+          "FLIP_CONTROL": "0x0",
+          "SURFACE_INUSE": "0x0",
+          "SURFACE_EARLIEST_INUSE": "0x0",
+          "HUBPRET_CONTROL": "0x0"
+        },
+        "3": {
+          "SURFACE_CONFIG": "0x0",
+          "ADDR_CONFIG": "0x0",
+          "TILING_CONFIG": "0x0",
+          "PRI_VIEWPORT_START": "0x0",
+          "PRI_VIEWPORT_DIMENSION": "0x0",
+          "DCHUBP_CNTL": "0x0",
+          "SURFACE_PITCH": "0x0",
+          "VMID_SETTINGS_0": "0x0",
+          "PRIMARY_SURFACE_ADDRESS": "0x0",
+          "PRIMARY_SURFACE_ADDRESS_HIGH": "0x0",
+          "SURFACE_CONTROL": "0x0",
+          "FLIP_CONTROL": "0x0",
+          "SURFACE_INUSE": "0x0",
+          "SURFACE_EARLIEST_INUSE": "0x0",
+          "HUBPRET_CONTROL": "0x0"
+        }
+      },
+      "otg": {
+        "0": {
+          "H_TOTAL": "0x112f",
+          "V_TOTAL": "0x8c9",
+          "CONTROL": "0x10301",
+          "STATUS": "0x20002",
+          "STATUS_POSITION": "0x82300a5",
+          "STATUS_FRAME_COUNT": "0x45b5"
+        },
+        "1": {
+          "H_TOTAL": "0x0",
+          "V_TOTAL": "0x0",
+          "CONTROL": "0x300",
+          "STATUS": "0x10021",
+          "STATUS_POSITION": "0x0",
+          "STATUS_FRAME_COUNT": "0x0"
+        },
+        "2": {
+          "H_TOTAL": "0x0",
+          "V_TOTAL": "0x0",
+          "CONTROL": "0x300",
+          "STATUS": "0x10021",
+          "STATUS_POSITION": "0x0",
+          "STATUS_FRAME_COUNT": "0x0"
+        },
+        "3": {
+          "H_TOTAL": "0x0",
+          "V_TOTAL": "0x0",
+          "CONTROL": "0x300",
+          "STATUS": "0x10021",
+          "STATUS_POSITION": "0x0",
+          "STATUS_FRAME_COUNT": "0x0"
+        }
+      }
+    }
+  ],
+  "surfaces": [
+    {
+      "hubp": 0,
+      "mc_address": "0xf4323d0000",
+      "fb_offset": "0x323d0000",
+      "in_bar0": false
+    }
+  ]
+}

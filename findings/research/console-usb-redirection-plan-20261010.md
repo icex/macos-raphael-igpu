@@ -1,0 +1,29 @@
+# Opt-in virt-manager USB redirection (candidate 422)
+
+Implemented offline, not yet a native device qualification. `CONSOLE_USBREDIR=on` admits exactly two empty SPICE `usbredir` channels and two `usb-redir` devices on the existing `xhci.0` bus. No host USB device, physical path, storage mapping or USB-node container mount is added. Default off preserves existing topology. The native qualification card is 1.0.421 / metal-223; historical staging pairs remain off-only.
+
+The selector passes through manifest validation, launcher environment forwarding, strict native argument planning, hashed admission, paused-plan binding and running topology verification. The independent complete-argv verifier rebuilds the planner and therefore checks every USB argument. Unknown/partial/duplicate channels, changed buses and `usb-host` additions refuse. Existing identity, capture, deadline and recovery contracts remain intact.
+
+## Actual manager UI and automatic attachment
+
+Installed virt-manager 5.1.0 `virtManager/details/viewers.py:750–761` creates its existing `SpiceClientGtk.UsbDeviceWidget` from the same SPICE session. `vmwindow.py:609` enables the USB menu based on the viewer's USB-device manager; it does not require libvirt XML `<redirdev>` entries. Channels are retained as reviewed QEMU arguments because the existing xHCI controller is also raw QEMU configuration. The device chooser is the stock UI, not a replacement or a second SPICE connection.
+
+**The installed schema defaults `/console/auto-redirect` to true.** Adding channels without controlling that setting could redirect eligible newly inserted client devices. `tools/console-manager-usbredir.py` starts an owned private D-Bus session, uses process-local memory settings with auto-redirection false, then verifies `auto-usbredir=false`, `auto-connect=false`, and no `redirect-on-connect` filter before connection. It does not change installed manager source or persistent user preferences. Manual chooser behavior remains available. The private session avoids delegating the request to an already-running unguarded manager.
+
+Use the existing isolated virt-manager environment (PYTHONPATH, typelib/library/schema paths, and owned libvirt connection URI), replacing its entrypoint with this script and the same `--no-fork --connect ... --show-domain-console ...` arguments. This does not start a VM. For root-owned diagnostics already inside a private D-Bus session, import the script and call `run_manager(on_session=callback)`. The callback receives `(viewer, spice_session, gtk_session)` after policy validation, before connection; it runs once per newly constructed session, so a one-viewer diagnostic must reject subsequent sessions itself. No callback is provided by default.
+
+The underlying spice-gtk 0.42 source documents `auto-connect` as newly plugged device redirection and GTK `auto-usbredir` as its controller (`src/usb-device-manager.c:464–477`). `redirect-on-connect` is an independent path and is cleared too. Existing QEMU build logs resolve libusbredirparser 0.15.0; root separately confirmed `usb-redir` and xHCI are exposed by the pinned native image's device help. This is capability evidence, not USB transfer proof.
+
+## Checks and remaining native acceptance
+
+The final full host suite passed 1,505 tests / 8 skipped in 57.121 seconds; the earlier pre-final suite passed 1,501 tests / 8 skipped. Eight focused USB tests and 92 staging tests pass. Subsequent focused additions cover complete generated-argv tampering, actual shell slot emission, private-bus re-exec and exact staging-pair admission. The installed Gio schema was checked with its memory backend: default true, successful local override false. No viewer, guest, physical USB device or VM was connected by this work.
+
+Native acceptance still needs: exact image/manifest/paused/running topology proof; actual manual chooser visible with automatic policy false; a specifically selected spare noncritical device; guest enumeration and relevant I/O; manual detach/reconnect; viewer closure leaves VM and host device ownership correct; existing tablet, keyboard and audio regression; ordinary harness cleanup. Host USB permissions and the selected device's macOS driver remain unqualified. Do not attach the host keyboard, Bluetooth controller, audio interface or storage merely to prove the menu exists. The root agent owns native operations and device selection.
+
+This implements an opt-in configuration and safe owned UI entrypoint. It does not claim arbitrary-device compatibility, a general hotplug installer, or completed USB qualification.
+
+## Selected-device permission audit
+
+The user subsequently selected Arctis Nova 7X (`1038:22a5`) for root-owned native testing. No attachment was performed by this agent. The installed `/usr/lib/spice-client-glib-usb-acl-helper` is root-owned mode 0755 with `cap_fowner=ep`; its installed `org.spice-space.lowlevelusbaccess` polkit policy allows active sessions and denies inactive sessions. Source `spice-client-glib-usb-acl-helper.c` requests authorization with user interaction, grants a per-user ACL and removes it when its owning helper connection closes. The ordinary supported path does not require sudo. An isolated rebuilt spice prefix may need `SPICE_USB_ACL_BINARY=/usr/lib/spice-client-glib-usb-acl-helper` to select the installed capability-bearing helper (only when built with polkit support). Actual active-session recognition, attachment, ACL restoration and host audio restoration require native observation; neither permissions nor device state were changed in this audit.
+
+Root subsequently audited the existing candidate 393 isolated spice-gtk build: USB redirection and polkit were disabled. That prefix cannot qualify the manual chooser. A separate isolated client rebuild retaining the pointer-coordinate fix and enabling USB redirection/polkit is required; no existing prefix or system library should be overwritten.

@@ -1,0 +1,44 @@
+Linux Raphael iGPU read-only baseline (raw concise capture)
+Capture timestamps: 2026-09-13T13:52:49Z, 13:53:02Z, 13:54Z (local UTC+03:00)
+Device: 0000:7b:00.0
+
+[identity]
+driver=/sys/bus/pci/drivers/amdgpu during device-specific reads (recheck at 13:54:27Z found vfio-pci after concurrent host binding)
+vendor=0x1002 device=0x13c0 class=0x030000
+
+[PCI resources]
+BAR0=0x000000fc20000000-0x000000fc2fffffff (0x10000000 = 256 MiB)
+BAR2=0x00000000dd400000-0x00000000dd5fffff (2 MiB)
+BAR4=0x000000000000d000-0x000000000000d0ff (256 B I/O)
+BAR5=0x00000000dd900000-0x00000000dd97ffff (512 KiB MMIO)
+
+[VRAM sysfs]
+/sys/bus/pci/devices/0000:7b:00.0/mem_info_vram_total=536870912
+/sys/bus/pci/devices/0000:7b:00.0/mem_info_vram_used=63836160
+/sys/bus/pci/devices/0000:7b:00.0/mem_info_vis_vram_total=536870912
+/sys/bus/pci/devices/0000:7b:00.0/mem_info_vis_vram_used=63836160
+
+[DRM / EDID]
+card0 is 0000:7b:00.0; HDMI-A-3=connected, enabled=disabled, EDID=256 bytes
+DP-3/DP-4/DP-5=disconnected; EDID files readable but 0 bytes
+HDMI-A-3 EDID sha256=b7b277f882e5fa7df2ca542dee25d7684456a93e0bbd6a7ae3cf31e71da82bc5
+
+[IP / firmware / memory evidence from kernel journal]
+IP DISCOVERY 0x1002:0x13C0 0x1462:0x7E59 0xCB
+IP blocks: common_v1_0_0, gmc_v10_0_0, ih_v5_0_0, psp_v13_0_0, smu_v13_0_0, dce_v1_0_0, gfx_v10_0_0, sdma_v5_2_0, vcn_v3_0_0, jpeg_v3_0_0
+MMIO base=0xDD900000 size=524288; VBIOS=VFCT; ATOM BIOS=102-RAPHAEL-008 build 612127 ver 032.019.000.008.000000 date 2022/09/26
+VRAM=512M; kernel reported Detected VRAM RAM=512M, BAR=512M; GART=1024M; GTT=15474M
+DMUB firmware loaded via PSP version=0x05003300; VCN firmware ENC=1.33 DEC=4 VEP=0 Revision=15
+SMU initialized successfully; Display Core v3.2.384 on DCN 3.1.5; DMUB hardware initialized
+
+[journal / watchdog / pstore]
+2026-09-13T16:45:21+03:00 amdgpu 0000:7b:00.0: REG_WAIT timeout 1us * 100000 tries - optc31_disable_crtc line:146
+This timeout predates this baseline capture (baseline began 16:52:49+03:00 local) and is recorded as preexisting.
+pstore directory had no files; boot journal: pstore EFI backend registered, crash compression=deflate
+boot journal: NMI watchdog enabled; MCE decoding enabled; no BUG/Oops/lockup/MCE hardware error matched
+
+[final state transition]
+2026-09-13T13:54:27Z (16:54:27+03:00): final noninvasive driver-link check=/sys/bus/pci/drivers/vfio-pci. Device-specific reads stopped after detecting this change.
+
+[read-only scope]
+No sudo, MMIO or /dev/vfio opens, writes, bind/unbind, reset, or other device mutation performed.

@@ -1,0 +1,41 @@
+--- a/hw/display/bochs-display.c
++++ b/hw/display/bochs-display.c
+@@ -45,6 +45,7 @@
+     /* device config */
+     uint64_t         vgamem;
+     bool             enable_edid;
++    bool             x_debug_full_refresh;
+     qemu_edid_info   edid_info;
+     uint8_t          edid_blob[256];
+ 
+@@ -228,7 +229,8 @@
+         full_update = true;
+     }
+ 
+-    if (full_update) {
++    if (full_update || s->x_debug_full_refresh) {
++        /* Diagnostic: publish every refresh without clearing VGA dirty pages. */
+         dpy_gfx_update_full(s->con);
+     } else {
+         snap = memory_region_snapshot_and_clear_dirty(&s->vram,
+@@ -308,7 +310,10 @@
+         dev->cap_present &= ~QEMU_PCI_CAP_EXPRESS;
+     }
+ 
+-    memory_region_set_log(&s->vram, true, DIRTY_MEMORY_VGA);
++    /* Only the display logging client changes; migration logging is untouched. */
++    if (!s->x_debug_full_refresh) {
++        memory_region_set_log(&s->vram, true, DIRTY_MEMORY_VGA);
++    }
+ }
+ 
+ static bool bochs_display_get_big_endian_fb(Object *obj, Error **errp)
+@@ -348,6 +353,8 @@
+ static const Property bochs_display_properties[] = {
+     DEFINE_PROP_SIZE("vgamem", BochsDisplayState, vgamem, 16 * MiB),
+     DEFINE_PROP_BOOL("edid", BochsDisplayState, enable_edid, true),
++    DEFINE_PROP_BOOL("x-debug-full-refresh", BochsDisplayState,
++                     x_debug_full_refresh, false),
+     DEFINE_EDID_PROPERTIES(BochsDisplayState, edid_info),
+ };
+ 

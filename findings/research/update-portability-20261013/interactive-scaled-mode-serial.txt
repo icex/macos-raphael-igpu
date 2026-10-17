@@ -1,0 +1,62 @@
+RaphaelGPU      rgpu: @ SDMACOPY: rgpusdmacopy=2 scanout copy (replaces writeback)
+RaphaelGPU      rgpu: @ d019| SDMACOPY: rgpusdmacopy=2 scanout copy (replaces writeback)
+RaphaelGPU      rgpu: @ SDMACOPY: scanout DCC off (GPUDCCDisplayable bit) -> ok
+RaphaelGPU      rgpu: @ SDMACOPY: copy poller armed (1 ms)
+RaphaelGPU      rgpu: @ SDMACOPY: RLC0 up (idle=1), ring MC 0xf480001000, SDMA GB_ADDR_CONFIG 0x42
+RaphaelGPU      rgpu: @ SDMACOPY: refused surface 0 fmt=8 sw=0 dcc=0 pitch=1 for 5120x2880
+RaphaelGPU      rgpu: @ SDMACOPY: geometry 5120x2880 fmt 10 pitch 5120 sw=27 addrcfg HUBP 0x1002 SDMA 0x42
+RaphaelGPU      rgpu: @ SDMACOPY: 123 frames in 10 s, mean copy 4298 us
+RaphaelGPU      rgpu: @ SDMACOPY: 181 frames in 10 s, mean copy 4304 us
+RaphaelGPU      rgpu: @ SDMACOPY: 100 frames in 10 s, mean copy 3846 us
+RaphaelGPU      rgpu: @ SDMACOPY: 143 frames in 10 s, mean copy 3886 us
+RaphaelGPU      rgpu: @ SDMACOPY: 111 frames in 10 s, mean copy 4349 us
+RaphaelGPU      rgpu: @ SDMACOPY: 156 frames in 10 s, mean copy 3937 us
+RaphaelGPU      rgpu: @ SDMACOPY: 134 frames in 10 s, mean copy 3841 us
+RaphaelGPU      rgpu: @ SDMACOPY: 371 frames in 10 s, mean copy 3746 us
+RaphaelGPU      rgpu: @ SDMACOPY: 201 frames in 10 s, mean copy 3823 us
+RaphaelGPU      rgpu: @ SDMACOPY: 252 frames in 10 s, mean copy 4238 us
+RaphaelGPU      rgpu: @ SDMACOPY: slow copy seq=2812 STATUS=0x44d87222 CTX=0x80 RPTR=0x19284c WPTR=0x192960
+RaphaelGPU      rgpu: @ SDMACOPY: refused surface 0xf41ad70000 fmt=10 sw=27 dcc=0 pitch=4096 for 5120x2880
+RaphaelGPU      rgpu: @ SDMACOPY: refused surface 0xf417340000 fmt=10 sw=27 dcc=0 pitch=4096 for 5120x2880
+RaphaelGPU      rgpu: @ SDMACOPY: refused surface 0xf426070000 fmt=10 sw=27 dcc=0 pitch=4096 for 5120x2880
+RaphaelGPU      rgpu: @ SDMACOPY: 127 frames in 10 s, mean copy 5725 us
+RaphaelGPU      rgpu: @ SDMACOPY: 0 frames in 10 s, mean copy 0 us
+RaphaelGPU      rgpu: @ SDMACOPY: 0 frames in 10 s, mean copy 0 us
+RaphaelGPU      rgpu: @ SDMACOPY: 0 frames in 10 s, mean copy 0 us
+RaphaelGPU      rgpu: @ SDMACOPY: 0 frames in 10 s, mean copy 0 us
+RaphaelGPU      rgpu: @ SDMACOPY: 0 frames in 10 s, mean copy 0 us
+RaphaelGPU      rgpu: @ SDMACOPY: 0 frames in 10 s, mean copy 0 us
+RaphaelGPU      rgpu: @ SDMACOPY: 0 frames in 10 s, mean copy 0 us
+RaphaelGPU      rgpu: @ SDMACOPY: 0 frames in 10 s, mean copy 0 us
+RaphaelGPU      rgpu: @ SDMACOPY: 0 frames in 10 s, mean copy 0 us
+RaphaelGPU      rgpu: @ SDMACOPY: 0 frames in 10 s, mean copy 0 us
+RaphaelGPU      rgpu: @ SDMACOPY: 0 frames in 10 s, mean copy 0 us
+RaphaelGPU      rgpu: @ SDMACOPY: 0 frames in 10 s, mean copy 0 us
+RaphaelGPU      rgpu: @ SDMACOPY: 0 frames in 10 s, mean copy 0 us
+RaphaelGPU      rgpu: @ SDMACOPY: 0 frames in 10 s, mean copy 0 us
+RaphaelGPU      rgpu: @ SDMACOPY: 0 frames in 10 s, mean copy 0 us
+RaphaelGPU      rgpu: @ SDMACOPY: 0 frames in 10 s, mean copy 0 us
+RaphaelGPU      rgpu: @ SDMACOPY: 0 frames in 10 s, mean copy 0 us
+RaphaelGPU      rgpu: @ SDMACOPY: 0 frames in 10 s, mean copy 0 us
+RaphaelGPU      rgpu: @ SDMACOPY: 0 frames in 10 s, mean copy 0 us
+RaphaelGPU      rgpu: @ SDMACOPY: 0 frames in 10 s, mean copy 0 us
+RaphaelGPU      rgpu: @ SDMACOPY: 0 frames in 10 s, mean copy 0 us
+RaphaelGPU      rgpu: @ SDMACOPY: 0 frames in 10 s, mean copy 0 us
+RaphaelGPU      rgpu: @ SDMACOPY: 0 frames in 10 s, mean copy 0 us
+RaphaelGPU      rgpu: @ SDMACOPY: 0 frames in 10 s, mean copy 0 us
+RaphaelGPU      rgpu: @ SDMACOPY: 0 frames in 10 s, mean copy 0 us
+RaphaelGPU      rgpu: @ SDMACOPY: 0 frames in 10 s, mean copy 0 us
+RaphaelGPU      rgpu: @ SDMACOPY: 0 frames in 10 s, mean copy 0 us
+RaphaelGPU      rgpu: @ SDMACOPY: 0 frames in 10 s, mean copy 0 us
+RaphaelGPU      rgpu: @ SDMACOPY: 0 frames in 10 s, mean copy 0 us
+RaphaelGPU      rgpu: @ SDMACOPY: 0 frames in 10 s, mean copy 0 us
+RaphaelGPU      rgpu: @ SDMACOPY: geometry 3840x2160 fmt 8 pitch 3840 sw=27 addrcfg HUBP 0x1002 SDMA 0x42
+RaphaelGPU      rgpu: @ SDMACOPY: 2 frames in 10 s, mean copy 2899 us
+RaphaelGPU      rgpu: @ SDMACOPY: 103 frames in 10 s, mean copy 2293 us
+RaphaelGPU      rgpu: @ SDMACOPY: 99 frames in 10 s, mean copy 2284 us
+RaphaelGPU      rgpu: @ SDMACOPY: 114 frames in 10 s, mean copy 2304 us
+RaphaelGPU      rgpu: @ SDMACOPY: 99 frames in 10 s, mean copy 2342 us
+RaphaelGPU      rgpu: @ SDMACOPY: 101 frames in 10 s, mean copy 2293 us
+RaphaelGPU      rgpu: @ SDMACOPY: 99 frames in 10 s, mean copy 2298 us
+RaphaelGPU      rgpu: @ SDMACOPY: 101 frames in 10 s, mean copy 2311 us
+RaphaelGPU      rgpu: @ SDMACOPY: 99 frames in 10 s, mean copy 2322 us

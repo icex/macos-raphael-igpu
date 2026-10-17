@@ -1,0 +1,10 @@
+{
+  "source": "/usr/lib/firmware/amdgpu/vcn_3_1_2.bin.zst",
+  "linux_firmware_sha256": "fe9f9507fa505b6d2f1f47f47d7846609dacfa0fa12993d873a2c5b1c4b44af9",
+  "payload_sha256": "d22915b1e6f16e5b44cd39b3bd503bc607312e4c94e34546b4935d3a6a5b4f9a",
+  "linux_outer_header_removed_bytes": 256,
+  "payload_size": 574032,
+  "version": "0x4121015",
+  "signed_amd_header_preserved": true,
+  "hardware_status": "untested"
+}

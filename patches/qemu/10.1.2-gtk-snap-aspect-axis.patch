@@ -1,0 +1,52 @@
+--- a/ui/gtk.c
++++ b/ui/gtk.c
+@@ -332,8 +332,10 @@
+ /*
+  * Zoom-to-fit, with RGPU_SNAP_ASPECT=1: snap the window to the guest scanout's aspect so
+  * the picture fills it without bars. A window-manager aspect hint made corner drags stick (KWin enforces it
+- * on every motion), so the drag stays free and the height snaps once the size has been
+- * still for 300 ms. Maximized and fullscreen windows are left alone.
++ * on every motion), so the drag stays free and the window snaps once the size has been
++ * still for 150 ms: the axis the user changed most leads and the other follows, so a
++ * top/bottom edge drag resizes proportionally instead of snapping back. Maximized and
++ * fullscreen windows are left alone.
+  */
+ static gboolean gd_snap_aspect(gpointer opaque)
+ {
+@@ -353,7 +355,20 @@
+     if (a.width <= 1 || a.height <= 1 || wh < a.height) {
+         return G_SOURCE_REMOVE;
+     }
++    if (vc->gfx.snap_w > 0 && vc->gfx.snap_h > 0 &&
++        abs(a.height - vc->gfx.snap_h) * vc->gfx.keep_w > abs(a.width - vc->gfx.snap_w) * vc->gfx.keep_h) {
++        /* Mostly a height change: the width follows. */
++        want = (int)((int64_t)a.height * vc->gfx.keep_w / vc->gfx.keep_h);
++        vc->gfx.snap_w = want;
++        vc->gfx.snap_h = a.height;
++        if (abs(want - a.width) > 1) {
++            gtk_window_resize(win, ww - a.width + want, wh);
++        }
++        return G_SOURCE_REMOVE;
++    }
+     want = (int)((int64_t)a.width * vc->gfx.keep_h / vc->gfx.keep_w);
++    vc->gfx.snap_w = a.width;
++    vc->gfx.snap_h = want;
+     if (abs(want - a.height) > 1) {
+         gtk_window_resize(win, ww, wh - a.height + want);
+     }
+@@ -367,7 +382,7 @@
+     if (vc->gfx.snap_source) {
+         g_source_remove(vc->gfx.snap_source);
+     }
+-    vc->gfx.snap_source = g_timeout_add(300, gd_snap_aspect, vc);
++    vc->gfx.snap_source = g_timeout_add(150, gd_snap_aspect, vc);
+ }
+ 
+ void gd_keep_aspect(VirtualConsole *vc, int width, int height)
+--- a/include/ui/gtk.h
++++ b/include/ui/gtk.h
+@@ -45,3 +45,4 @@
+     int keep_w, keep_h;   /* zoom-to-fit: guest scanout aspect the window snaps to */
++    int snap_w, snap_h;   /* drawing-area size after the last snap: which axis moved */
+     guint snap_source;
+     bool snap_connected;

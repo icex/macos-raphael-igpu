@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "policy": "dynamic-sites-v1",
+  "compiled_source": "1123584ce6d16d6a0e2a777d47fa4a9349e51e13",
+  "scope": "Read-only installer inputs; hardware evidence is separate",
+  "builds": [
+    {
+      "build": "24G720",
+      "version": "15.7.7",
+      "kernel_supported": true,
+      "kernel_site_count": 163,
+      "moved_sites": 0,
+      "collection_sha256": "f4757e5b6190ffe89ad311bc1f8c65d23f8994375a5bfc11f4b868f440a14346",
+      "catalog_sha256": "efc4c9878ccf9119161b3b6418a4eb72db893995e62fdc7ac35da94afd342911",
+      "userspace_production_locator_pass": true,
+      "userspace_images": [
+        {
+          "name": "AMDRadeonVADriver2",
+          "uuid": "68e7b924-36e7-3ccc-b2ea-5b70430593e8",
+          "sha256": "eb7ef37733932f350caa4e7db9a0b5fca376c956aac6a42b351d1a28dff72311"
+        },
+        {
+          "name": "AMDRadeonX6000MTLDriver",
+          "uuid": "a4d03d76-f607-343b-aae9-da2e604881b5",
+          "sha256": "f2910fcf647a9106387ccbd5c095854fb306b81c3664385ab763a13262493eae"
+        }
+      ]
+    },
+    {
+      "build": "24H23",
+      "version": "15.8",
+      "kernel_supported": true,
+      "kernel_site_count": 163,
+      "moved_sites": 45,
+      "collection_sha256": "7e76b09910e754b1b6b824c350d315a660aa2735231777c6dbf4bebbd77bb283",
+      "catalog_sha256": "efc4c9878ccf9119161b3b6418a4eb72db893995e62fdc7ac35da94afd342911",
+      "userspace_production_locator_pass": true,
+      "userspace_images": [
+        {
+          "name": "AMDRadeonVADriver2",
+          "uuid": "662187e4-9f38-375b-9bf6-ccac3f60979a",
+          "sha256": "c7ca4b6eae7e2b782b708fd860007b99fc0caeceecf54b29f9dfe2feb7912ad3"
+        },
+        {
+          "name": "AMDRadeonX6000MTLDriver",
+          "uuid": "5f347564-2f8d-3a49-a50c-5220b43f5ceb",
+          "sha256": "1d38f67363faef7956f5376bc033c97fc2c26fe99017457e726ef6f22db5da51"
+        }
+      ]
+    }
+  ]
+}

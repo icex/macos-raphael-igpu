@@ -1,0 +1,16 @@
+{
+  "_comment": "Candidate513: v17 plus usb-audio accepting any whole-frame packet size up to 2 ms (macOS sends 47-frame packets to track drift; QEMU dropped them = audible gaps) and once-per-second packet statistics on stderr. patches: 10.1.2-vfio-rgpu-display, gtk-zoom-keep-aspect, gtk-usb-menu, gtk-snap-aspect-axis, usb-audio-variable-packets",
+  "schema": 1,
+  "vm_dir": "/home/user/macos-vm",
+  "gpu_bdf": "0000:7b:00.0",
+  "gpu_id": "0x73ff",
+  "gpu_rom": "run/gpu-patched.rom",
+  "inhibitor_container": "rgpu-inhibit",
+  "image_id": "sha256:90c6720e976d1e32358c03c997768c7c44370bdbbe7ee7a6823c9552cdc51e7a",
+  "lilu": {
+    "bundle": "run/headless-lilu-verified-1df50f512b55/Lilu.kext",
+    "executable_sha256": "1df50f512b55b4f6ec873a18ff4b0db78b11b7fe9022ee195e50466e8573b7f2",
+    "info_sha256": "6714fee51444238c0540814729767485572441435bcf36a158571cf78317a669",
+    "build_manifest_sha256": "52918857d61ac640980c53fd597aac22e0fcb8cdd50de2a09e3dfe1eeeb54f76"
+  }
+}

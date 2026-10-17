@@ -1,0 +1,6 @@
+{
+  "schema": 1,
+  "reason": "The current boot journal rotated past device initialization. Candidate489 captured the device-specific successful amdgpu initialization directly from the journal before its verified Tahoe Metal run and native recovery. This pins only that historical fact; all live identity, fault, MODE2 and recovery admission checks remain mandatory.",
+  "snapshot": "/home/user/macos-vm/run/candidate-489-results/host-before.json",
+  "snapshot_sha256": "4b7cf5bb6e8ae20ca64888ff903c6b7e105a4e780ed46c34c6b433df86c76f64"
+}

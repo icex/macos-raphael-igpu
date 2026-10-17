@@ -1,0 +1,177 @@
+{
+  "schema": 1,
+  "run_id": "e5d5d205577125364146f54224bbd3f6",
+  "scope": "Candidate386 completed installed resize, input, audio, and lifecycle evidence; ordinary presenter, snapshot unarmed",
+  "artifacts": [
+    {
+      "path": "/home/user/macos-vm/run/c386-audio-restored-independent.json",
+      "bytes": 99,
+      "sha256": "b8f254659d9904b96789868fa8f77ce466562297fc1d4b49f1d53b4466a0cf49"
+    },
+    {
+      "path": "/home/user/macos-vm/run/c386-audio-result.txt",
+      "bytes": 624,
+      "sha256": "a133dd0ed71b7fbe453fe7273627c16d5a5b2893f3fbca38abacce8ce9c657ef"
+    },
+    {
+      "path": "/home/user/macos-vm/run/c386-final-capture-identity-user.txt",
+      "bytes": 310,
+      "sha256": "ea39158cd1498c95b3a01bf66a2d246acbd39b6ab9414ea998cca46924118f77"
+    },
+    {
+      "path": "/home/user/macos-vm/run/c386-final-capture-identity.txt",
+      "bytes": 1088,
+      "sha256": "74b09dec52fdc5013a77539241c6102f1e1737f45b999887b8d6ad48f75817e9"
+    },
+    {
+      "path": "/home/user/macos-vm/run/c386-final-display.log",
+      "bytes": 4482,
+      "sha256": "75772ef1a5e5d97025ef09c6237ef454193be429bf6382e5ebcd2c1b95063c5c"
+    },
+    {
+      "path": "/home/user/macos-vm/run/c386-final-input.log",
+      "bytes": 4046,
+      "sha256": "4308ec5a1303ef8b21ed20976be5d748508bc0ecfcab396688173dffcd73d5a0"
+    },
+    {
+      "path": "/home/user/macos-vm/run/c386-final-launcher.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/user/macos-vm/run/c386-final-presenter.log",
+      "bytes": 66629,
+      "sha256": "7d961bae1991f178bf767d020b16603e15a6f8c1f12526aff2c28094d817efb0"
+    },
+    {
+      "path": "/home/user/macos-vm/run/c386-final-state.txt",
+      "bytes": 12868,
+      "sha256": "86342b5765c32912b88be35ba6affd3e7e9251bff63096e91a05f4ca795eeeb4"
+    },
+    {
+      "path": "/home/user/macos-vm/run/c386-final-vdagent.log",
+      "bytes": 6839,
+      "sha256": "1181b0089f986b709349b3120872ac8eca2661dd617f50405975cd4235892b39"
+    },
+    {
+      "path": "/home/user/macos-vm/run/c386-input-manager-events.jsonl",
+      "bytes": 49877,
+      "sha256": "512b3db2e7d5db39cf3ef814a51e70dae56e903e4dec492e4bcc08a16c1ea71d"
+    },
+    {
+      "path": "/home/user/macos-vm/run/c386-input-negative-injection.jsonl",
+      "bytes": 1038,
+      "sha256": "a694d68b5075c486f508e8eacdae0378fe3301e60fb0d39fbbc4faea2f2205a0"
+    },
+    {
+      "path": "/home/user/macos-vm/run/c386-input-negative-result.txt",
+      "bytes": 11014,
+      "sha256": "fe8d5b71f0f8d4cbf97ee858713aa9240e2f826b19c4c4b5c24dae08daca9f28"
+    },
+    {
+      "path": "/home/user/macos-vm/run/c386-input-positive-injection.jsonl",
+      "bytes": 1034,
+      "sha256": "17005e47e1097057de00b4f5bbbf24bc08a8a8a7fab268fab5d21e25d9ab2211"
+    },
+    {
+      "path": "/home/user/macos-vm/run/c386-input-positive-result.txt",
+      "bytes": 4403,
+      "sha256": "9c213d5284a98a6e4f28aa4a7efa9de83d75934740390d43523633ff0b871d87"
+    },
+    {
+      "path": "/home/user/macos-vm/run/c386-input-reconnect-injection.jsonl",
+      "bytes": 1032,
+      "sha256": "2714c5cf7106ed89303f21dc24e23f3f1e22a7d6d3c2753b2bec3eb96a29b8cc"
+    },
+    {
+      "path": "/home/user/macos-vm/run/c386-input-reconnect-result.txt",
+      "bytes": 6097,
+      "sha256": "8e3e529a0af5e8def81b551892a1bfd7a8015428975fe4720c90145e68bed1e2"
+    },
+    {
+      "path": "/home/user/macos-vm/run/c386-negative-geometry.txt",
+      "bytes": 622,
+      "sha256": "e019cb788b83cb81bd05c8b84b7e748e9913c1ac45a3c04e01426e06ee7c7e41"
+    },
+    {
+      "path": "/home/user/macos-vm/run/c386-persistence.txt",
+      "bytes": 2550,
+      "sha256": "ee352292ec76b2da9235f4221118315110862e6f5ca50a21f65c42a00029fe1c"
+    },
+    {
+      "path": "/home/user/macos-vm/run/c386-reconnect-manager-events.jsonl",
+      "bytes": 25792,
+      "sha256": "abc1ef51c67f3040134b64c3b518f9eb42c79b055e95090abb3383e00fbe8b81"
+    },
+    {
+      "path": "/home/user/macos-vm/run/c386-viewer-close-alive.json",
+      "bytes": 739,
+      "sha256": "8b60953db4c3e0c41930c1abbedb5ab589b30d7c83aacf4f1fb6c5add75011da"
+    },
+    {
+      "path": "/home/user/macos-vm/run/c386-docker-events.jsonl",
+      "bytes": 446234,
+      "sha256": "47d34b19efbff22eabec8fcae62e44165e9d3d03ea69f329c1a650c543cb7c6a"
+    },
+    {
+      "path": "/home/user/macos-vm/run/candidate-386-results/manifest.json",
+      "bytes": 12812,
+      "sha256": "c203ad006233491539abf7bc6c690ec1e552084557a789fc218ae5c9101b1c8b"
+    },
+    {
+      "path": "/home/user/macos-vm/run/candidate-386-results/verdict.json",
+      "bytes": 47222,
+      "sha256": "24d42a8c081b8e992dbae37fe8a5658cd3011a3063509b20abb15fe45d824b44"
+    },
+    {
+      "path": "/home/user/macos-vm/run/candidate-386-results/shutdown.json",
+      "bytes": 236,
+      "sha256": "f61206784f222e02abab337f9a18b3fcaa5422a72a71cece3e88a67222fbc38b"
+    },
+    {
+      "path": "/home/user/macos-vm/run/candidate-386-results/recovery.json",
+      "bytes": 17576,
+      "sha256": "451b98a21ca990fb3763d0b69434268d49e6f63d202eadbe0267bcc69706f693"
+    },
+    {
+      "path": "/home/user/macos-vm/run/candidate-386-results/critical-quiesce.json",
+      "bytes": 706,
+      "sha256": "2e6d27ba49a31bb8812b6ef98a9420c0e6cb39b8ed991ab392f3abff02e0ed8f"
+    },
+    {
+      "path": "/home/user/macos-vm/run/candidate-386-results/events.jsonl",
+      "bytes": 98653,
+      "sha256": "a95dcf07fb775471b9f72e6600b78df593c7308e2f184aa4f643712327e6c9f2"
+    },
+    {
+      "path": "/home/user/macos-vm/run/candidate-386-results/running-identity.json",
+      "bytes": 3000,
+      "sha256": "9995e414f267f55d37f08d1c838d5b56d691dd594ad33c965d8925986ff5db7a"
+    },
+    {
+      "path": "/home/user/macos-vm/run/candidate-386-results/vm-launch.log",
+      "bytes": 2871,
+      "sha256": "2898ef8922256476ba3be24882cf63283972e9c6e554fb7988b1b048be5411d5"
+    },
+    {
+      "path": "/home/user/macos-vm/run/candidate-386-results/capture-exit-d48e8367ab000bbaf108ff97810e446fc270c4535c95b777a1ad01a784fce33c-1588048.json",
+      "bytes": 474,
+      "sha256": "2e19de8b14dfe182fd71d0503786c59ced627598b1b4226139ffa8d865662388"
+    },
+    {
+      "path": "/home/user/macos-vm/run/candidate-386-results/capture-exit-d48e8367ab000bbaf108ff97810e446fc270c4535c95b777a1ad01a784fce33c-1588046.json",
+      "bytes": 472,
+      "sha256": "5176e84aa5999eb25ac2a2c243f02c4cbacda83b124046d9384f3fb40b41ae64"
+    },
+    {
+      "path": "/home/user/macos-vm/run/libvirt-e5d5d205577125364146f54224bbd3f6/terminal.json",
+      "bytes": 515,
+      "sha256": "f1125228abc0e1cdf5621be33517bbba45f5d19e976bcf52c28cec44f824aa2d"
+    },
+    {
+      "path": "/home/user/macos-vm/run/libvirt-e5d5d205577125364146f54224bbd3f6/events.jsonl",
+      "bytes": 4696,
+      "sha256": "53ab048a8302a4eb2a0d4186935b45f66f03aa23b9ab4966662271f21ace4875"
+    }
+  ]
+}

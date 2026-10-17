@@ -1,0 +1,8 @@
+{
+  "locate_texture_setting.py": "bc19a419732767de8036ad316499a8f450dd031591a40e2346cf3eeec096cfb2",
+  "test_locator.py": "42d701da4b36a6eb761e16eef537e86a89e9293d808042e68a72b813aee22097",
+  "locator-results.json": "5470755b45fa6accdcfa44b6892c69052aaf49dbaa87c098572cd19f0095747c",
+  "kernel-audit.md": "7cc9af735e51c9f2bb544caa4413a53e8db0f43f8004c55b5532cae880f62f25",
+  "userspace-audit.md": "bdbac2cd3bc850aea714ead18af360dc09d433fae260745203b3178ac56255d4",
+  "report.md": "8d0a3b088efda6afb7476d2e2d39288ffabc54c2725756ad0647d06ed88cd1c6"
+}

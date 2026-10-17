@@ -1,0 +1,51 @@
+{
+  "id": "metal-011",
+  "question": "Does one identical candidate 178 build preserve lifecycle integrity across two separately approved same-boot runs while identifying the final memory-map preparation phase that rejects submission?",
+  "candidate_version": "1.0.178",
+  "requested_diagnostic": "rgpusubmit=1",
+  "behavior_change": "extend candidate 177's existing safe 24G830 batchMemoryMapPrepare observer with bounded pre/post prepared-map count, prepare count, map flags and raw GPU virtual-address snapshots; use one identical binary, configuration and unchanged 45-second Metal probe in runs 178-A and 178-B; preserve functional boot arguments, five routes, startup and shutdown behavior",
+  "required_observations": [
+    "loaded_build",
+    "route_guards",
+    "kiq_stamps",
+    "hybrid_enter",
+    "hybrid_exit",
+    "engine_start",
+    "sdma_topology",
+    "sdma_channel_remap",
+    "submission_trace",
+    "submission_map_phase",
+    "sdma_vm_program",
+    "vmid2_root_repair"
+  ],
+  "max_seconds": 180,
+  "prerequisites": [
+    "same_boot_candidate178_two_run_qualification_authority_implemented_and_reviewed",
+    "candidate178_A_and_B_exact_manifests_bound_before_A_reservation",
+    "submission_trace_routes_and_workers_offline_validated",
+    "memory_map_phase_observer_initial_summary_seen_before_probe",
+    "amdgpu_initialized_this_boot",
+    "reset_methods_disabled",
+    "sleep_inhibitor_active",
+    "watchdog_and_pstore_verified"
+  ],
+  "repeat_policy": "exactly two separately reviewed reservations, 178-A then conditional 178-B, with no automatic retry; each VM exposure is bounded to 180 seconds and runs the unchanged 45-second probe once; binary, configuration, functional boot arguments and workload must not drift; both exact manifests must be bound before A is reserved; B may be activated only after review accepts A's startup, capture, shutdown, new authorizing schema-6 recovery receipt and five-row ledger; the expected unchanged Metal NoMemory result is diagnostic evidence rather than a lifecycle veto; classify only the final blocking phase after native fallback retries",
+  "abort_on": [
+    "identity_mismatch",
+    "capture_loss",
+    "submission_trace_route_failure",
+    "submission_trace_worker_missing",
+    "submission_map_phase_worker_missing",
+    "submission_map_phase_worker_malformed",
+    "bar0_mapping_unavailable",
+    "root_repair_refused",
+    "prepared_root_mismatch",
+    "guest_panic",
+    "terminal_kiq_submit_failure",
+    "sdma_page_timeout",
+    "host_fault",
+    "incomplete_gc_quiesce"
+  ],
+  "outcome_table": "docs/ROADMAP.md M4-M7",
+  "run_probe_only_after_native_start": true
+}

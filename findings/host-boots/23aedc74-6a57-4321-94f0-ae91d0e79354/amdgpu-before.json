@@ -1,0 +1,97 @@
+{
+  "boot_id": "23aedc74-6a57-4321-94f0-ae91d0e79354",
+  "kernel": "7.2.3-1-cachyos-bore",
+  "driver": "amdgpu",
+  "iommu_group": "31",
+  "watchdogs": {
+    "watchdog": "1",
+    "nmi_watchdog": "1",
+    "hardlockup_panic": "1"
+  },
+  "devices": {
+    "0000:7b:00.0": {
+      "driver": "amdgpu",
+      "vendor": "0x1002",
+      "device": "0x13c0",
+      "power/control": "on",
+      "power/runtime_status": "active"
+    },
+    "0000:7b:00.1": {
+      "driver": "snd_hda_intel",
+      "vendor": "0x1002",
+      "device": "0x1640",
+      "power/control": "auto",
+      "power/runtime_status": "suspended"
+    },
+    "0000:03:00.0": {
+      "driver": "amdgpu",
+      "vendor": "0x1002",
+      "device": "0x7550",
+      "power/control": "on",
+      "power/runtime_status": "active"
+    }
+  },
+  "drm": {
+    "card1-DP-6": {
+      "status": "connected",
+      "enabled": "enabled",
+      "modes": "7680x2160\n7680x2160\n3840x1080\n3840x2160\n3840x2160\n3840x2160\n3840x2160\n3840x2160\n5120x1440\n5120x1440\n3840x1080\n2560x1440\n2560x1440\n1920x1080\n1920x1080\n1920x1080\n1920x1080\n1680x1050\n1600x900\n1280x1024\n1280x1024\n1440x900\n1280x800\n1152x864\n1280x720\n1280x720\n1280x720\n1024x768\n1024x768\n1024x768\n800x600\n800x600\n800x600\n720x480\n720x480\n640x480\n640x480\n640x480"
+    },
+    "card1-HDMI-A-1": {
+      "status": "connected",
+      "enabled": "disabled",
+      "modes": "1920x1080\n1680x1050\n1680x945\n1400x1050\n1400x1050\n1600x900\n1280x1024\n1280x1024\n1440x900\n1440x900\n1280x960\n1366x768\n1360x768\n1280x800\n1280x800\n1152x864\n1280x768\n1280x768\n1280x720\n1024x768\n1024x768\n1024x768\n1024x576\n800x600\n800x600\n800x600\n800x600\n848x480\n640x480\n640x480\n640x480"
+    },
+    "card1-DP-2": {
+      "status": "disconnected",
+      "enabled": "disabled",
+      "modes": ""
+    },
+    "card0-DP-4": {
+      "status": "disconnected",
+      "enabled": "disabled",
+      "modes": ""
+    },
+    "card0-Writeback-2": {
+      "status": "unknown",
+      "enabled": "disabled",
+      "modes": ""
+    },
+    "card1-Writeback-1": {
+      "status": "unknown",
+      "enabled": "disabled",
+      "modes": ""
+    },
+    "card1-DP-7": {
+      "status": "disconnected",
+      "enabled": "disabled",
+      "modes": ""
+    },
+    "card1-HDMI-A-2": {
+      "status": "disconnected",
+      "enabled": "disabled",
+      "modes": ""
+    },
+    "card0-DP-5": {
+      "status": "disconnected",
+      "enabled": "disabled",
+      "modes": ""
+    },
+    "card1-DP-1": {
+      "status": "disconnected",
+      "enabled": "disabled",
+      "modes": ""
+    },
+    "card0-DP-3": {
+      "status": "disconnected",
+      "enabled": "disabled",
+      "modes": ""
+    },
+    "card0-HDMI-A-3": {
+      "status": "disconnected",
+      "enabled": "disabled",
+      "modes": ""
+    }
+  },
+  "pstore_files": "unknown: permission denied"
+}

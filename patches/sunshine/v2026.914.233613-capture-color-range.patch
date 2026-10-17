@@ -1,0 +1,101 @@
+--- a/src/platform/macos/display.mm
++++ b/src/platform/macos/display.mm
+@@ -51,8 +51,17 @@
+
+     OSType videotoolbox_pixel_format(const video::config_t &config) {
+       const auto colorspace {video::colorspace_from_client_config(config, false)};
++      if (colorspace.full_range) {
++        return colorspace.bit_depth == 10 ? kCVPixelFormatType_420YpCbCr10BiPlanarFullRange : kCVPixelFormatType_420YpCbCr8BiPlanarFullRange;
++      }
+       return colorspace.bit_depth == 10 ? kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange : kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange;
+     }
++
++    // Whether a pixel format is one of the full-range NV12/P010 zero-copy formats.
++    bool is_full_range_nv12_format(OSType pixel_format) {
++      return pixel_format == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange ||
++             pixel_format == kCVPixelFormatType_420YpCbCr10BiPlanarFullRange;
++    }
+   }  // namespace
+
+   /**
+@@ -62,6 +71,7 @@
+     AVVideo *av_capture {};  ///< AV capture.
+     CGDirectDisplayID display_id {};  ///< Display ID.
+     std::atomic_bool zero_copy_nv12 {};  ///< Set only by the VideoToolbox NV12/P010 path.
++    bool full_range_capture {};  ///< Whether the negotiated client color range is full range; mirrors the capture pixel format chosen in display().
+     std::unique_ptr<display_device::DisplayPowerGuardInterface> display_power_guard;  ///< Display power guard.
+
+     ~av_display_t() override {
+@@ -75,7 +85,9 @@
+         const OSType pixel_format = CVPixelBufferGetPixelFormatType(CMSampleBufferGetImageBuffer(new_sample_buffer->buf));
+         const bool zero_copy = zero_copy_nv12.load(std::memory_order_acquire) &&
+           (pixel_format == kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange ||
+-           pixel_format == kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange);
++           pixel_format == kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange ||
++           pixel_format == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange ||
++           pixel_format == kCVPixelFormatType_420YpCbCr10BiPlanarFullRange);
+         auto new_pixel_buffer = std::make_shared<av_pixel_buf_t>(new_sample_buffer->buf, !zero_copy);
+         if (!zero_copy && !new_pixel_buffer->locked) { lock_failed = true; return false; }
+
+@@ -144,7 +156,7 @@
+         zero_copy_nv12.store(true, std::memory_order_release);
+         auto device = std::make_unique<nv12_zero_device>();
+
+-        device->init(static_cast<void *>(av_capture), pix_fmt, setResolution, setPixelFormat);
++        device->init(static_cast<void *>(av_capture), pix_fmt, setResolution, setPixelFormat, full_range_capture);
+
+         return device;
+       } else {
+@@ -174,7 +186,9 @@
+         const OSType pixel_format = CVPixelBufferGetPixelFormatType(CMSampleBufferGetImageBuffer(new_sample_buffer->buf));
+         const bool zero_copy = zero_copy_nv12.load(std::memory_order_acquire) &&
+           (pixel_format == kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange ||
+-           pixel_format == kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange);
++           pixel_format == kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange ||
++           pixel_format == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange ||
++           pixel_format == kCVPixelFormatType_420YpCbCr10BiPlanarFullRange);
+         auto new_pixel_buffer = std::make_shared<av_pixel_buf_t>(new_sample_buffer->buf, !zero_copy);
+         if (!zero_copy && !new_pixel_buffer->locked) { lock_failed = true; return false; }
+
+@@ -290,6 +304,7 @@
+
+     if (hwdevice_type == platf::mem_type_e::videotoolbox) {
+       const auto pixel_format {videotoolbox_pixel_format(config)};
++      display->full_range_capture = is_full_range_nv12_format(pixel_format);
+       [display->av_capture setFrameWidth:config.width frameHeight:config.height];
+       display->av_capture.pixelFormat = pixel_format;
+     }
+--- a/src/platform/macos/nv12_zero_device.h
++++ b/src/platform/macos/nv12_zero_device.h
+@@ -45,9 +45,10 @@
+      * @param pix_fmt Sunshine pixel format to convert or allocate for.
+      * @param resolution_fn Callback used to resize the AVFoundation capture output.
+      * @param pixel_format_fn Pixel format.
++     * @param full_range Whether to select the full-range NV12/P010 variant instead of video (limited) range.
+      * @return 0 on success; nonzero or negative platform status on failure.
+      */
+-    int init(void *display, pix_fmt_e pix_fmt, resolution_fn_t resolution_fn, const pixel_format_fn_t &pixel_format_fn);
++    int init(void *display, pix_fmt_e pix_fmt, resolution_fn_t resolution_fn, const pixel_format_fn_t &pixel_format_fn, bool full_range);
+
+     /**
+      * @brief Forward a captured AVFoundation frame to FFmpeg without copying.
+--- a/src/platform/macos/nv12_zero_device.cpp
++++ b/src/platform/macos/nv12_zero_device.cpp
+@@ -64,8 +64,15 @@
+     return 0;
+   }
+
+-  int nv12_zero_device::init(void *display, pix_fmt_e pix_fmt, resolution_fn_t resolution_fn, const pixel_format_fn_t &pixel_format_fn) {
+-    pixel_format_fn(display, pix_fmt == pix_fmt_e::nv12 ? kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange : kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange);
++  int nv12_zero_device::init(void *display, pix_fmt_e pix_fmt, resolution_fn_t resolution_fn, const pixel_format_fn_t &pixel_format_fn, bool full_range) {
++    const bool is_10_bit = pix_fmt == pix_fmt_e::p010;
++    OSType pixel_format;
++    if (full_range) {
++      pixel_format = is_10_bit ? kCVPixelFormatType_420YpCbCr10BiPlanarFullRange : kCVPixelFormatType_420YpCbCr8BiPlanarFullRange;
++    } else {
++      pixel_format = is_10_bit ? kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange : kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange;
++    }
++    pixel_format_fn(display, pixel_format);
+
+     this->display = display;
+     this->resolution_fn = std::move(resolution_fn);

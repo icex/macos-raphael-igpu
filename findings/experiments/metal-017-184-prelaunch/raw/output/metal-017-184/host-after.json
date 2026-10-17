@@ -1,0 +1,21 @@
+{
+  "boot_id": "73ad3355-80a7-48f1-a8dd-e6f770b41de8",
+  "kernel": "7.2.3-1-cachyos-bore",
+  "driver": "vfio-pci",
+  "device": "1002:13c0",
+  "iommu_group": "31",
+  "amdgpu_initialized": true,
+  "watchdogs": {
+    "watchdog": "1",
+    "nmi_watchdog": "1",
+    "hardlockup_panic": "1"
+  },
+  "watchdogs_verified": true,
+  "capture_ready": true,
+  "pstore_files": null,
+  "device_pinned_awake": true,
+  "device_accessible": true,
+  "reset_methods": [],
+  "active_vm": false,
+  "sleep_inhibited": true
+}

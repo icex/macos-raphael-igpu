@@ -1,0 +1,109 @@
+--- a/ui/spice-display.c
++++ b/ui/spice-display.c
+@@ -133,6 +133,9 @@
+     int bw, bh;
+     struct timespec time_space;
+     pixman_image_t *dest;
++    bool timed = TRACE_QEMU_SPICE_COPY_TIMING_BACKEND_DSTATE();
++    int64_t start = timed ? g_get_monotonic_time() : 0;
++    int64_t allocated = 0, mirrored = 0, copied = 0;
+ 
+     trace_qemu_spice_create_update(
+            rect->left, rect->right,
+@@ -146,6 +149,7 @@
+     bw       = rect->right - rect->left;
+     bh       = rect->bottom - rect->top;
+     update->bitmap = g_malloc(bw * bh * 4);
++    if (timed) allocated = g_get_monotonic_time();
+ 
+     drawable->bbox            = *rect;
+     drawable->clip.type       = SPICE_CLIP_TYPE_NONE;
+@@ -180,10 +184,17 @@
+     pixman_image_composite(PIXMAN_OP_SRC, ssd->surface, NULL, ssd->mirror,
+                            rect->left, rect->top, 0, 0,
+                            rect->left, rect->top, bw, bh);
++    if (timed) mirrored = g_get_monotonic_time();
+     pixman_image_composite(PIXMAN_OP_SRC, ssd->mirror, NULL, dest,
+                            rect->left, rect->top, 0, 0,
+                            0, 0, bw, bh);
+     pixman_image_unref(dest);
++    if (timed) {
++        copied = g_get_monotonic_time();
++        trace_qemu_spice_copy_timing(ssd->qxl.id, start, bw, bh,
++                                    allocated - start, mirrored - allocated,
++                                    copied - mirrored);
++    }
+ 
+     cmd->type = QXL_CMD_DRAW;
+     cmd->data = (uintptr_t)drawable;
+@@ -202,6 +213,8 @@
+     int mirror_stride = pixman_image_get_stride(ssd->mirror);
+     QXLRect update = { .left = 0, .top = 0, .right = width, .bottom = height };
+     int changed = -1;
++    bool timed = TRACE_QEMU_SPICE_DIFF_TIMING_BACKEND_DSTATE();
++    int64_t start = timed ? g_get_monotonic_time() : 0;
+ 
+     /* A fresh primary is not initialized by merely allocating a mirror.
+      * Always publish the complete first frame after size/format reset. */
+@@ -220,6 +233,10 @@
+             update = (QXLRect){ .left = box.left, .top = box.top,
+                                .right = box.right, .bottom = box.bottom };
+         }
++    }
++    if (timed) {
++        trace_qemu_spice_diff_timing(ssd->qxl.id, start, width, height, changed,
++                                    g_get_monotonic_time() - start);
+     }
+     if (changed != 0) {
+         /* Exactly ONE update including every changed pixel, or conservative
+@@ -465,15 +482,25 @@
+ 
+ void qemu_spice_display_refresh(SimpleSpiceDisplay *ssd)
+ {
++    bool timed = TRACE_QEMU_SPICE_REFRESH_TIMING_BACKEND_DSTATE();
++    int64_t start = timed ? g_get_monotonic_time() : 0;
++    int64_t updated;
++    bool busy;
+     graphic_hw_update(ssd->dcl.con);
++    updated = timed ? g_get_monotonic_time() : 0;
+ 
+     WITH_QEMU_LOCK_GUARD(&ssd->lock) {
+-        if (QTAILQ_EMPTY(&ssd->updates) && ssd->ds) {
++        busy = !QTAILQ_EMPTY(&ssd->updates);
++        if (!busy && ssd->ds) {
+             qemu_spice_create_update(ssd);
+             ssd->notify++;
+         }
+     }
+ 
++    if (timed) {
++        trace_qemu_spice_refresh_timing(ssd->qxl.id, start, updated - start,
++                                       g_get_monotonic_time() - updated, busy);
++    }
+     trace_qemu_spice_display_refresh(ssd->qxl.id, ssd->notify);
+     if (ssd->notify) {
+         ssd->notify = 0;
+@@ -524,6 +551,11 @@
+     if (update != NULL) {
+         QTAILQ_REMOVE(&ssd->updates, update, next);
+         *ext = update->ext;
++        if (TRACE_QEMU_SPICE_COMMAND_DEQUEUE_BACKEND_DSTATE()) {
++            trace_qemu_spice_command_dequeue(ssd->qxl.id, g_get_monotonic_time(),
++                                            update->drawable.bbox.right - update->drawable.bbox.left,
++                                            update->drawable.bbox.bottom - update->drawable.bbox.top);
++        }
+         ret = true;
+     }
+     qemu_mutex_unlock(&ssd->lock);
+--- a/ui/trace-events
++++ b/ui/trace-events
+@@ -184,3 +184,9 @@
+ 
+ # egl-helpers.c
+ egl_init_d3d11_device(void *p) "d3d device: %p"
++
++# Research timing: server dequeue is not client delivery. Enable only during diagnosis.
++qemu_spice_copy_timing(int qid, int64_t start_us, int w, int h, int64_t alloc_us, int64_t mirror_us, int64_t bitmap_us) "qid=%d start_us=%" PRId64 " w=%d h=%d alloc_us=%" PRId64 " mirror_us=%" PRId64 " bitmap_us=%" PRId64
++qemu_spice_diff_timing(int qid, int64_t start_us, int w, int h, int changed, int64_t diff_us) "qid=%d start_us=%" PRId64 " w=%d h=%d changed=%d diff_us=%" PRId64
++qemu_spice_refresh_timing(int qid, int64_t start_us, int64_t hw_us, int64_t create_us, bool busy) "qid=%d start_us=%" PRId64 " hw_us=%" PRId64 " create_us=%" PRId64 " busy=%d"
++qemu_spice_command_dequeue(int qid, int64_t at_us, int w, int h) "qid=%d at_us=%" PRId64 " w=%d h=%d"

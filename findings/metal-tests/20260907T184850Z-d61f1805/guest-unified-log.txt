@@ -1,0 +1,16 @@
+Timestamp               Ty Process[PID:TID]
+2026-09-07 21:47:17.962 Df syspolicyd[208:455] [com.apple.syspolicy.kext:default] canLoadKernelExtension - direct, evaluate, Kext ((null), as.rgpu.RaphaelGPU) version: 85170f5032d785dfd889855b8631c2758b633439
+2026-09-07 21:47:18.012 Df syspolicyd[208:455] [com.apple.syspolicy.kext:default] Kernel Extension ALLOWED: Kext ((null), as.rgpu.RaphaelGPU) version: 85170f5032d785dfd889855b8631c2758b633439
+2026-09-07 21:47:18.016 Df kernelmanagerd[120:24d] installation check: bundle for as.rgpu.RaphaelGPU is at /Library/Extensions/RaphaelGPU.kext
+2026-09-07 21:47:18.021 E  kernelmanagerd[120:24d] error: tried to insert an invalid codeful kernel extension in the restricted lookup table: Kext as.rgpu.RaphaelGPU v1.0.4 in executable kext bundle as.rgpu.RaphaelGPU at /Library/Extensions/RaphaelGPU.kext
+2026-09-07 21:47:18.365 Df kernel[0:24d] Refusing new kext as.rgpu.RaphaelGPU, v1.0.3: already have loaded v1.0.155.
+2026-09-07 21:47:18.489 Df kernelmanagerd[120:24d] [com.apple.kernelmanagerd.logging:Kernel] (kernel): Refusing new kext as.rgpu.RaphaelGPU, v1.0.3: already have loaded v1.0.155.
+2026-09-07 21:47:18.815 Df kernel[0:60e] Boot args: -v keepsyms=1 tlbto_us=0 vti=9 serial=3 debug=0x108 -lilubetaall rgpudump=40000 rgpu=0xfffa5981 rgpuvmm=3 rgpumem=2 rgpuptb=1 rgpumqd=2
+2026-09-07 21:47:18.815 Df kernel[0:608] Boot args: -v keepsyms=1 tlbto_us=0 vti=9 serial=3 debug=0x108 -lilubetaall rgpudump=40000 rgpu=0xfffa5981 rgpuvmm=3 rgpumem=2 rgpuptb=1 rgpumqd=2
+2026-09-07 21:47:19.204 Df backgroundtaskmanagementd[280:696] [com.apple.backgroundtaskmanagement:main]     #1: 16.as.rgpu.agent
+2026-09-07 21:47:19.204 Df backgroundtaskmanagementd[280:696] [com.apple.backgroundtaskmanagement:main]            Identifier: 16.as.rgpu.agent
+2026-09-07 21:47:19.204 Df backgroundtaskmanagementd[280:696] [com.apple.backgroundtaskmanagement:main]                   URL: file:///Library/LaunchDaemons/as.rgpu.agent.plist
+2026-09-07 21:47:19.204 Df backgroundtaskmanagementd[280:696] [com.apple.backgroundtaskmanagement:main]     #1: 16.as.rgpu.agent
+2026-09-07 21:47:19.228 Df xpcproxy[282:6a2] Launch constraint set on 00000000-0000-0000-0000-000000000000 /Library/LaunchDaemons/as.rgpu.agent.plist
+2026-09-07 21:47:19.392 Df kernelmanagerd[120:3ed] Received kext load notification: as.rgpu.RaphaelGPU
+2026-09-07 21:47:52.406 Df kernel[0:2a1] (AMDRadeonX6000) Stamp Timeout for KIQ Submission!

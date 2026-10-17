@@ -1,0 +1,47 @@
+--- a/ui/gtk.c
++++ b/ui/gtk.c
+@@ -1477,6 +1477,30 @@
+     qmp_system_powerdown(NULL);
+ }
+ 
++/*
++ * Raphael desktop: QEMU runs in a container and cannot open host dialogs. "USB Devices..."
++ * rewrites the file named by RGPU_USB_REQUEST (in the run directory shared with the host);
++ * a host path unit opens the USB picker when it changes. No data is read from it.
++ */
++static void gd_menu_usb_request(GtkMenuItem *item, void *opaque)
++{
++    const char *path = g_getenv("RGPU_USB_REQUEST");
++    int fd;
++
++    if (!path || path[0] != '/') {
++        return;
++    }
++    fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW | O_CLOEXEC, 0600);
++    if (fd < 0) {
++        warn_report("rgpu: cannot write USB picker request %s", path);
++        return;
++    }
++    if (write(fd, "usb\n", 4) != 4) {
++        warn_report("rgpu: short write to USB picker request %s", path);
++    }
++    close(fd);
++}
++
+ static void gd_menu_quit(GtkMenuItem *item, void *opaque)
+ {
+     qmp_quit(NULL);
+@@ -2283,6 +2307,13 @@
+     s->powerdown_item = gtk_menu_item_new_with_mnemonic(_("Power _Down"));
+     gtk_menu_shell_append(GTK_MENU_SHELL(machine_menu), s->powerdown_item);
+ 
++    if (g_getenv("RGPU_USB_REQUEST")) {
++        GtkWidget *usb_item = gtk_menu_item_new_with_mnemonic(_("_USB Devices..."));
++        g_signal_connect(usb_item, "activate", G_CALLBACK(gd_menu_usb_request), s);
++        separator = gtk_separator_menu_item_new();
++        gtk_menu_shell_append(GTK_MENU_SHELL(machine_menu), separator);
++        gtk_menu_shell_append(GTK_MENU_SHELL(machine_menu), usb_item);
++    }
+ 
+     separator = gtk_separator_menu_item_new();
+     gtk_menu_shell_append(GTK_MENU_SHELL(machine_menu), separator);

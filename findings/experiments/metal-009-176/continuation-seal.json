@@ -1,0 +1,41 @@
+{
+  "approved_for_one_launch": true,
+  "binary_sha256": "0933daeb474adf99906d9f0068eca6553acc0add6d72618a5c2e6f67c913e38a",
+  "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+  "bootdisk_sha256": "0c388a9327f22475116e68cceac4f029b300fdfd2f4aebac9a79b1ef7451c686",
+  "build_id": "ac3732d072174d2d847dacec4e9982c2",
+  "evidence_sha256": {
+    "doorbell_zero": "3ac3511b9b302c873b2b205be45b9b4135703844506f971a766923f4fb096b2e",
+    "global_close": "173c020e378c74dbb647adcca15e4ebe26e146a694351ac8bbb3d28c8f684756",
+    "idle": "589278713643fc52db7f5a0a8ef7f4f5bab0a8e38aec5a209fa27b8ff9ffe42d",
+    "observation": "f0282d7b51ad2a6f962c03c0bb467c9e5058784a0055a427697bbb4e31eee4f8",
+    "preparation": "99bb203ee46b24c1adf55c38366dadbaa238776508cf9d1d46842e125ebbd8ea",
+    "receipt": "9cf80653e198faa09c6f4da456e8495e07a045015c6ac0b64a7561ffbfc85fc7",
+    "recovery": "117d2d4cea6b007c49fc797af7c64ef78bfeb4da8acebaa245abd945372e3e4d"
+  },
+  "info_sha256": "849df353aecc20db06e9af73d4e0c82872214d509280e27f9f980c2010b6b45d",
+  "kind": "reviewed-candidate176-retained-kiq-seal",
+  "ledger_sha256": "69b8e1464a6866d3da2518e5db7222b0d557e0eb7f3ac3c27ebffbec139b9d15",
+  "manifest_path": "run/metal-009-176-manifest.json",
+  "manifest_sha256": "cf32ce0df512b388e97975eff05351dc2bae93a613e2f02957d7ff890b208b76",
+  "next_run_id": "e02fbed46a6a4df4ae48d7c1d8597985",
+  "prior_run_id": "1a065e4f5f674cc0a26d4e9dbdf59649",
+  "schema": 1,
+  "source_commit": "5792fa7abe26fceea4be42074e3323c259da5bf1",
+  "source_hashes": {
+    "experiments/metal-009.json": "2a30ec87b0d6bfeed52088401d666c2fee3e3a11b8f44905493d5ed3981f33cf",
+    "src/KiqQueuePreparation.hpp": "5ac003686f501991f87258594eeac3643a18c8b6f67d1b16be7083ddbc661e33",
+    "src/RaphaelGPU.cpp": "48cea55577b7c7ee9ba4a9fc69a1ed6c12987368e56e9e3bfae62f73eb324b8a",
+    "tools/close-retained-kiq-global-doorbell.py": "1e44e1342a0104c72694103d8749cfec4d28e2ecc294f52f6f2be2b12cc72428",
+    "tools/experiment.py": "5834d763ac37c7689083fa83ee87ff3dd862a3c2599385b9d09985df5bf31613",
+    "tools/inspect-retained-idle.py": "0c4f4bc9bd87aa41630349616dbc545d3114018ee93f80ab9c0a82da5f649e79",
+    "tools/inspect-retained-kiq.py": "cf6513926a9c9fbf5f11df3cd1980ca3de90a786d8ef4c5f21d8764d5755b3d9",
+    "tools/kiq-recovery-proof.py": "271054235be401c4dbfaeb997c6fc7f86d85b98380b80496601f2897a58ca642",
+    "tools/prepare-retained-kiq.py": "45535eeaff653ca60ae880cc32530016886a94985a3d30b6bff51d10cefb7085",
+    "tools/retained-kiq-continuation.py": "8d90f067704bbb6b5350fdb7e0f7a86fc41955e8a0733a5bcc1cef488873dbb7",
+    "tools/retained-kiq-doorbell-zero.py": "eb9257a9ed0d9453e171a4be86466d690f40b525444ce99d5ae248aaa30f4d30",
+    "tools/vfio-recover.py": "8ff51636013da702fed170933ef69f62ae15bbf91d1e59011dc140b9782ee39d"
+  },
+  "source_sha256": "1acc13c83a526a71d34d7004cba7ed1ede870c0a4cec7a771f90e49d9958eefb",
+  "target_version": "1.0.176"
+}

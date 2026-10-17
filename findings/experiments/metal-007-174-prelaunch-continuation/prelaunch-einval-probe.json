@@ -1,0 +1,116 @@
+{
+  "after": {
+    "active_vm": false,
+    "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+    "device": "1002:13c0",
+    "driver": "vfio-pci",
+    "iommu_group": "31",
+    "pci_command": 3,
+    "reset_methods": []
+  },
+  "before": {
+    "active_vm": false,
+    "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+    "device": "1002:13c0",
+    "driver": "vfio-pci",
+    "iommu_group": "31",
+    "pci_command": 3,
+    "reset_methods": []
+  },
+  "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+  "constructor": "ok",
+  "descriptor": {
+    "exact_pending_match": true,
+    "expected_sha256": "20f99b8aa61d89baba051b968de89ea75c029f9af19acf26820e403c5fba18fe",
+    "expected_size": 72,
+    "observed_sha256": "20f99b8aa61d89baba051b968de89ea75c029f9af19acf26820e403c5fba18fe",
+    "size": 72
+  },
+  "failure": null,
+  "kernel_messages": [],
+  "post_faults": [],
+  "pre_faults": [],
+  "purpose": "locate prelaunch EINVAL without writes",
+  "run_id": "e583a1b2d97a4ad3b607c1d20a29a812",
+  "schema": 1,
+  "stages": [
+    {
+      "operation": "ioctl",
+      "request": "0x3b64",
+      "result": 0,
+      "status": "ok"
+    },
+    {
+      "operation": "ioctl",
+      "request": "0x3b65",
+      "result": 1,
+      "status": "ok"
+    },
+    {
+      "operation": "ioctl",
+      "request": "0x3b67",
+      "result": 0,
+      "status": "ok"
+    },
+    {
+      "operation": "ioctl",
+      "request": "0x3b68",
+      "result": 0,
+      "status": "ok"
+    },
+    {
+      "operation": "ioctl",
+      "request": "0x3b66",
+      "result": 0,
+      "status": "ok"
+    },
+    {
+      "operation": "ioctl",
+      "request": "0x3b6a",
+      "result": 5,
+      "status": "ok"
+    },
+    {
+      "operation": "ioctl",
+      "request": "0x3b6c",
+      "result": 0,
+      "status": "ok"
+    },
+    {
+      "length": 268435456,
+      "offset": 0,
+      "operation": "mmap",
+      "status": "ok"
+    },
+    {
+      "operation": "ioctl",
+      "request": "0x3b6c",
+      "result": 0,
+      "status": "ok"
+    },
+    {
+      "length": 2097152,
+      "offset": 2199023255552,
+      "operation": "mmap",
+      "status": "ok"
+    },
+    {
+      "operation": "ioctl",
+      "request": "0x3b6c",
+      "result": 0,
+      "status": "ok"
+    },
+    {
+      "length": 524288,
+      "offset": 5497558138880,
+      "operation": "mmap",
+      "status": "ok"
+    },
+    {
+      "operation": "ioctl",
+      "request": "0x3b69",
+      "result": 0,
+      "status": "ok"
+    }
+  ]
+}

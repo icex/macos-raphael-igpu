@@ -1,0 +1,1198 @@
+diff --git a/src/platform/macos/display.mm b/src/platform/macos/display.mm
+index 514ee69..47f2c2c 100644
+--- a/src/platform/macos/display.mm
++++ b/src/platform/macos/display.mm
+@@ -4,11 +4,15 @@
+  */
+ 
+ // standard includes
++#include <algorithm>
++#include <atomic>
+ #include <charconv>
+ #include <chrono>
+-#include <atomic>
++#include <cstdint>
++#include <cstring>
+ #include <optional>
+ #include <string_view>
++#include <thread>
+ 
+ // local includes
+ #include "src/config.h"
+@@ -19,6 +23,8 @@
+ #include "src/platform/macos/av_video.h"
+ #include "src/platform/macos/misc.h"
+ #include "src/platform/macos/nv12_zero_device.h"
++#import "src/platform/macos/sc_capture.h"
++#include "src/utility.h"
+ 
+ // Avoid conflict between AVFoundation and libavutil both defining AVMediaType
+ /**
+@@ -62,6 +68,175 @@ bool is_full_range_nv12_format(OSType pixel_format) {
+       return pixel_format == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange ||
+              pixel_format == kCVPixelFormatType_420YpCbCr10BiPlanarFullRange;
+     }
++
++    // Whether a delivered pixel format is one of the four NV12/P010 zero-copy formats
++    // (video range or full range, 8-bit or 10-bit).
++    bool is_zero_copy_nv12_format(OSType pixel_format) {
++      return pixel_format == kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange ||
++             pixel_format == kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange ||
++             pixel_format == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange ||
++             pixel_format == kCVPixelFormatType_420YpCbCr10BiPlanarFullRange;
++    }
++
++    /**
++     * @brief Derive a steady_clock capture timestamp from a sample buffer's presentation timestamp.
++     *
++     * The PTS is on the mach host clock, so back-dating steady_clock::now() by the frame's age on
++     * that clock includes AVFoundation's internal queueing delay in the reported frame latency.
++     * @param sample_buffer Sample buffer received from AVFoundation.
++     * @return Capture timestamp for the frame.
++     */
++    std::chrono::steady_clock::time_point frame_timestamp_from_pts(CMSampleBufferRef sample_buffer) {
++      auto timestamp = std::chrono::steady_clock::now();
++      const CMTime pts = CMSampleBufferGetPresentationTimeStamp(sample_buffer);
++      if (CMTIME_IS_NUMERIC(pts)) {
++        const CMTime frame_age = CMTimeSubtract(CMClockGetTime(CMClockGetHostTimeClock()), pts);
++        const double frame_age_s = CMTimeGetSeconds(frame_age);
++        if (frame_age_s > 0) {
++          timestamp -= std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(frame_age_s));
++        }
++      }
++      return timestamp;
++    }
++
++    // Upper bound on how long the ScreenCaptureKit capture loop waits for a frame
++    // before checking for interrupt requests again.
++    constexpr auto SCKIT_FRAME_POLL_INTERVAL_NS = NSEC_PER_SEC / 60;
++
++    /**
++     * @brief Wrap a captured sample buffer into a Sunshine image.
++     *
++     * Locks the CPU base address only when `zero_copy` is false: hardware NV12/P010
++     * buffers destined for the VideoToolbox zero-copy path must never be CPU-locked.
++     * @param sample_buffer Sample buffer received from the capture backend.
++     * @param img Image object to populate.
++     * @param zero_copy Whether the active encode device consumes this buffer without a CPU copy.
++     * @param lock_failed Optional output set to true when a required CPU lock could not be acquired.
++     * @return `true` when the sample buffer contained a usable pixel buffer.
++     */
++    bool process_frame(CMSampleBufferRef sample_buffer, img_t *img, bool zero_copy, bool *lock_failed = nullptr) {
++      auto pixel_buffer = CMSampleBufferGetImageBuffer(sample_buffer);
++      if (!pixel_buffer) {
++        return false;
++      }
++
++      const OSType pixel_format = CVPixelBufferGetPixelFormatType(pixel_buffer);
++      const bool use_zero_copy = zero_copy && is_zero_copy_nv12_format(pixel_format);
++
++      auto new_sample_buffer = std::make_shared<av_sample_buf_t>(sample_buffer);
++      auto new_pixel_buffer = std::make_shared<av_pixel_buf_t>(new_sample_buffer->buf, !use_zero_copy);
++      if (!use_zero_copy && !new_pixel_buffer->locked) {
++        if (lock_failed) {
++          *lock_failed = true;
++        }
++        return false;
++      }
++
++      auto av_img = (av_img_t *) img;
++
++      auto old_data_retainer = std::make_shared<temp_retain_av_img_t>(
++        av_img->sample_buffer,
++        av_img->pixel_buffer,
++        img->data
++      );
++
++      av_img->sample_buffer = new_sample_buffer;
++      av_img->pixel_buffer = new_pixel_buffer;
++      img->data = new_pixel_buffer->data();
++
++      img->width = (int) CVPixelBufferGetWidth(new_pixel_buffer->buf);
++      img->height = (int) CVPixelBufferGetHeight(new_pixel_buffer->buf);
++      img->row_pitch = CVPixelBufferIsPlanar(new_pixel_buffer->buf) ?
++                         (int) CVPixelBufferGetBytesPerRowOfPlane(new_pixel_buffer->buf, 0) :
++                         (int) CVPixelBufferGetBytesPerRow(new_pixel_buffer->buf);
++      img->pixel_pitch = img->row_pitch / img->width;
++      img->frame_timestamp = frame_timestamp_from_pts(sample_buffer);
++
++      old_data_retainer = nullptr;
++      return true;
++    }
++
++    /**
++     * @brief Zero-fill all planes of a pixel buffer.
++     *
++     * @param pixel_buffer Pixel buffer to clear.
++     */
++    void clear_pixel_buffer(CVPixelBufferRef pixel_buffer) {
++      CVPixelBufferLockBaseAddress(pixel_buffer, 0);
++
++      if (CVPixelBufferIsPlanar(pixel_buffer)) {
++        for (size_t plane = 0; plane < CVPixelBufferGetPlaneCount(pixel_buffer); ++plane) {
++          auto *base = static_cast<std::uint8_t *>(CVPixelBufferGetBaseAddressOfPlane(pixel_buffer, plane));
++          auto bytes_per_row = CVPixelBufferGetBytesPerRowOfPlane(pixel_buffer, plane);
++          auto height = CVPixelBufferGetHeightOfPlane(pixel_buffer, plane);
++          std::memset(base, 0, bytes_per_row * height);
++        }
++      } else {
++        auto *base = static_cast<std::uint8_t *>(CVPixelBufferGetBaseAddress(pixel_buffer));
++        std::memset(base, 0, CVPixelBufferGetBytesPerRow(pixel_buffer) * CVPixelBufferGetHeight(pixel_buffer));
++      }
++
++      CVPixelBufferUnlockBaseAddress(pixel_buffer, 0);
++    }
++
++    /**
++     * @brief Synthesize a blank frame for capture backends that only deliver frames on screen changes.
++     *
++     * @param img Image object to populate.
++     * @param width Frame width in pixels.
++     * @param height Frame height in pixels.
++     * @param pixel_format Pixel format of the synthesized frame.
++     * @param zero_copy Whether the active encode device consumes this buffer without a CPU copy.
++     * @param backend_name Capture backend name used in log messages.
++     * @return 0 on success; nonzero on failure.
++     */
++    int make_dummy_img(img_t *img, int width, int height, OSType pixel_format, bool zero_copy, std::string_view backend_name) {
++      CVPixelBufferRef pixel_buffer = nullptr;
++      NSDictionary *attrs = @{
++        (NSString *) kCVPixelBufferIOSurfacePropertiesKey: @ {},
++      };
++
++      auto status = CVPixelBufferCreate(
++        kCFAllocatorDefault,
++        width,
++        height,
++        pixel_format,
++        (__bridge CFDictionaryRef) attrs,
++        &pixel_buffer
++      );
++
++      if (status != kCVReturnSuccess || !pixel_buffer) {
++        BOOST_LOG(error) << backend_name << " dummy_img: failed to create pixel buffer"sv;
++        return 1;
++      }
++
++      clear_pixel_buffer(pixel_buffer);
++
++      CMVideoFormatDescriptionRef format_desc = nullptr;
++      status = CMVideoFormatDescriptionCreateForImageBuffer(kCFAllocatorDefault, pixel_buffer, &format_desc);
++      if (status != noErr || !format_desc) {
++        CVPixelBufferRelease(pixel_buffer);
++        BOOST_LOG(error) << backend_name << " dummy_img: failed to create format description"sv;
++        return 1;
++      }
++
++      CMSampleTimingInfo timing = {kCMTimeInvalid, kCMTimeInvalid, kCMTimeInvalid};
++      CMSampleBufferRef sample_buffer = nullptr;
++      status = CMSampleBufferCreateForImageBuffer(kCFAllocatorDefault, pixel_buffer, YES, nullptr, nullptr, format_desc, &timing, &sample_buffer);
++      CFRelease(format_desc);
++
++      if (status != noErr || !sample_buffer) {
++        CVPixelBufferRelease(pixel_buffer);
++        BOOST_LOG(error) << backend_name << " dummy_img: failed to create sample buffer"sv;
++        return 1;
++      }
++
++      auto ret = process_frame(sample_buffer, img, zero_copy) ? 0 : 1;
++      CFRelease(sample_buffer);
++      CVPixelBufferRelease(pixel_buffer);
++
++      return ret;
++    }
+   }  // namespace
+ 
+   /**
+@@ -81,13 +256,10 @@ bool is_full_range_nv12_format(OSType pixel_format) {
+     capture_e capture(const push_captured_image_cb_t &push_captured_image_cb, const pull_free_image_cb_t &pull_free_image_cb, bool *cursor) override {
+       __block bool lock_failed = false;
+       auto signal = [av_capture capture:^(CMSampleBufferRef sampleBuffer) {
++        const auto frame_timestamp = frame_timestamp_from_pts(sampleBuffer);
+         auto new_sample_buffer = std::make_shared<av_sample_buf_t>(sampleBuffer);
+         const OSType pixel_format = CVPixelBufferGetPixelFormatType(CMSampleBufferGetImageBuffer(new_sample_buffer->buf));
+-        const bool zero_copy = zero_copy_nv12.load(std::memory_order_acquire) &&
+-          (pixel_format == kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange ||
+-           pixel_format == kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange ||
+-           pixel_format == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange ||
+-           pixel_format == kCVPixelFormatType_420YpCbCr10BiPlanarFullRange);
++        const bool zero_copy = zero_copy_nv12.load(std::memory_order_acquire) && is_zero_copy_nv12_format(pixel_format);
+         auto new_pixel_buffer = std::make_shared<av_pixel_buf_t>(new_sample_buffer->buf, !zero_copy);
+         if (!zero_copy && !new_pixel_buffer->locked) { lock_failed = true; return false; }
+ 
+@@ -113,6 +285,7 @@ capture_e capture(const push_captured_image_cb_t &push_captured_image_cb, const
+         img_out->height = (int) CVPixelBufferGetHeight(new_pixel_buffer->buf);
+         img_out->row_pitch = (int) CVPixelBufferGetBytesPerRow(new_pixel_buffer->buf);
+         img_out->pixel_pitch = img_out->row_pitch / img_out->width;
++        img_out->frame_timestamp = frame_timestamp;
+ 
+         old_data_retainer = nullptr;
+ 
+@@ -184,11 +357,7 @@ int dummy_img(img_t *img) override {
+       auto signal = [av_capture capture:^(CMSampleBufferRef sampleBuffer) {
+         auto new_sample_buffer = std::make_shared<av_sample_buf_t>(sampleBuffer);
+         const OSType pixel_format = CVPixelBufferGetPixelFormatType(CMSampleBufferGetImageBuffer(new_sample_buffer->buf));
+-        const bool zero_copy = zero_copy_nv12.load(std::memory_order_acquire) &&
+-          (pixel_format == kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange ||
+-           pixel_format == kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange ||
+-           pixel_format == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange ||
+-           pixel_format == kCVPixelFormatType_420YpCbCr10BiPlanarFullRange);
++        const bool zero_copy = zero_copy_nv12.load(std::memory_order_acquire) && is_zero_copy_nv12_format(pixel_format);
+         auto new_pixel_buffer = std::make_shared<av_pixel_buf_t>(new_sample_buffer->buf, !zero_copy);
+         if (!zero_copy && !new_pixel_buffer->locked) { lock_failed = true; return false; }
+ 
+@@ -245,35 +414,196 @@ static void setPixelFormat(void *display, OSType pixelFormat) {
+     }
+   };
+ 
++  /**
++   * @brief ScreenCaptureKit-based macOS display capture source.
++   */
++  struct sc_display_t: public display_t {
++    SCCapture *sc_capture {};  ///< ScreenCaptureKit capture controller.
++    CGDirectDisplayID display_id {};  ///< Display ID.
++    std::atomic_bool zero_copy_nv12 {};  ///< Set only by the VideoToolbox NV12/P010 path.
++    bool full_range_capture {};  ///< Whether the negotiated client color range is full range; mirrors the capture pixel format chosen in display().
++    std::unique_ptr<display_device::DisplayPowerGuardInterface> display_power_guard;  ///< Display power guard.
++
++    ~sc_display_t() override {
++      [sc_capture stopCapture];
++      [sc_capture release];
++    }
++
++    capture_e capture(const push_captured_image_cb_t &push_captured_image_cb, const pull_free_image_cb_t &pull_free_image_cb, bool *cursor) override {
++      auto signal = [sc_capture captureVideo];
++      if (!signal) {
++        BOOST_LOG(error) << "SCCapture failed to start video capture"sv;
++        return capture_e::error;
++      }
++      dispatch_retain(signal);
++
++      auto frame_signal = sc_capture.frameSignal;
++      if (!frame_signal) {
++        BOOST_LOG(error) << "SCCapture failed to create frame signal"sv;
++        dispatch_release(signal);
++        [sc_capture stopCapture];
++        return capture_e::error;
++      }
++      dispatch_retain(frame_signal);
++
++      auto release_signals = util::fail_guard([signal, frame_signal]() {
++        dispatch_release(frame_signal);
++        dispatch_release(signal);
++      });
++
++      bool lock_failed = false;
++
++      while (true) {
++        // The stream pushes frames on its own; wait for the next one, waking periodically
++        // to check for interrupt requests.
++        auto frame_status = dispatch_semaphore_wait(frame_signal, dispatch_time(DISPATCH_TIME_NOW, SCKIT_FRAME_POLL_INTERVAL_NS));
++        (void) frame_status;
++        if (dispatch_semaphore_wait(signal, DISPATCH_TIME_NOW) == 0) {
++          break;
++        }
++
++        CMSampleBufferRef sample_buffer = [sc_capture copyLatestSampleBuffer];
++
++        if (!sample_buffer) {
++          std::shared_ptr<img_t> probe_img;
++          if (!pull_free_image_cb(probe_img)) {
++            [sc_capture stopCapture];
++            break;
++          }
++          continue;
++        }
++
++        auto release_sample_buffer = util::fail_guard([sample_buffer]() {
++          CFRelease(sample_buffer);
++        });
++
++        std::shared_ptr<img_t> img_out;
++        if (!pull_free_image_cb(img_out)) {
++          [sc_capture stopCapture];
++          break;
++        }
++
++        // Zero-copy NV12/P010 buffers must never be CPU-locked; a genuine lock failure on
++        // the software (BGRA) path aborts capture the same way the AVFoundation backend does.
++        if (!process_frame(sample_buffer, img_out.get(), zero_copy_nv12.load(std::memory_order_acquire), &lock_failed)) {
++          if (lock_failed) {
++            [sc_capture stopCapture];
++            break;
++          }
++          continue;
++        }
++
++        if (!push_captured_image_cb(std::move(img_out), true)) {
++          [sc_capture stopCapture];
++          break;
++        }
++      }
++
++      return lock_failed ? capture_e::error : capture_e::ok;
++    }
++
++    /**
++     * @brief Allocate an image buffer compatible with this display backend.
++     *
++     * @return Allocated img object, or null when unavailable.
++     */
++    std::shared_ptr<img_t> alloc_img() override {
++      return std::make_shared<av_img_t>();
++    }
++
++    /**
++     * @brief Create AVCodec encode device.
++     *
++     * @param pix_fmt Sunshine pixel format to convert or allocate for.
++     * @return Constructed AVCodec encode device object.
++     */
++    std::unique_ptr<avcodec_encode_device_t> make_avcodec_encode_device(pix_fmt_e pix_fmt) override {
++      if (pix_fmt == pix_fmt_e::yuv420p) {
++        zero_copy_nv12.store(false, std::memory_order_release);
++        sc_capture.pixelFormat = kCVPixelFormatType_32BGRA;
++
++        return std::make_unique<avcodec_encode_device_t>();
++      } else if (pix_fmt == pix_fmt_e::nv12 || pix_fmt == pix_fmt_e::p010) {
++        zero_copy_nv12.store(true, std::memory_order_release);
++        auto device = std::make_unique<nv12_zero_device>();
++
++        device->init(static_cast<void *>(sc_capture), pix_fmt, setResolution, setPixelFormat, full_range_capture);
++
++        return device;
++      } else {
++        zero_copy_nv12.store(false, std::memory_order_release);
++        BOOST_LOG(error) << "Unsupported Pixel Format."sv;
++        return nullptr;
++      }
++    }
++
++    /**
++     * @brief Populate a fallback image when real capture data is unavailable.
++     *
++     * @param img Image or frame object to read from or populate.
++     * @return Capture status reported to the streaming pipeline.
++     */
++    int dummy_img(img_t *img) override {
++      if (!platf::is_screen_capture_allowed()) {
++        // A non-zero return value indicates failure to the calling function.
++        return 1;
++      }
++
++      // ScreenCaptureKit only delivers frames on screen updates, so synthesize a blank frame
++      // instead of waiting for one.
++      return make_dummy_img(img, sc_capture.frameWidth, sc_capture.frameHeight, sc_capture.pixelFormat,
++                             zero_copy_nv12.load(std::memory_order_acquire), "SCCapture"sv);
++    }
++
++    /**
++     * @brief Set the capture output resolution.
++     *
++     * @param display Display object or identifier associated with the operation.
++     * @param width Frame or display width in pixels.
++     * @param height Frame or display height in pixels.
++     */
++    static void setResolution(void *display, int width, int height) {
++      [static_cast<SCCapture *>(display) setFrameWidth:width frameHeight:height];
++    }
++
++    /**
++     * @brief Set pixel format.
++     *
++     * @param display Display object or identifier associated with the operation.
++     * @param pixelFormat Pixel format.
++     */
++    static void setPixelFormat(void *display, OSType pixelFormat) {
++      static_cast<SCCapture *>(display).pixelFormat = pixelFormat;
++    }
++  };
++
+   std::shared_ptr<display_t> display(platf::mem_type_e hwdevice_type, const std::string &display_name, const video::config_t &config) {
+     if (hwdevice_type != platf::mem_type_e::system && hwdevice_type != platf::mem_type_e::videotoolbox) {
+       BOOST_LOG(error) << "Could not initialize display with the given hw device type."sv;
+       return nullptr;
+     }
+ 
+-    auto display = std::make_shared<av_display_t>();
+-
+     BOOST_LOG(debug) << "Waking display for capture selector ["sv << display_name << ']';
+     if (!display_device::wake_display(display_name, 1s)) {
+       BOOST_LOG(debug) << "Display wake attempt did not expose the requested display ["sv << display_name << ']';
+     }
+ 
+-    display->display_power_guard = display_device::keep_display_awake("Sunshine display capture");
+-    if (display->display_power_guard) {
++    auto display_power_guard = display_device::keep_display_awake("Sunshine display capture");
++    if (display_power_guard) {
+       BOOST_LOG(debug) << "Keeping display awake for capture"sv;
+     } else {
+       BOOST_LOG(debug) << "Unable to create display sleep prevention assertion"sv;
+     }
+ 
+     // Default to main display
+-    display->display_id = CGMainDisplayID();
++    CGDirectDisplayID display_id = CGMainDisplayID();
+ 
+     if (const auto configured_display_id {parse_display_id(display_name)}) {
+-      display->display_id = *configured_display_id;
++      display_id = *configured_display_id;
+     } else if (!display_name.empty()) {
+       BOOST_LOG(warning) << "Configured display ["sv << display_name
+                          << "] is not a valid macOS capture display id. Falling back to main display ["sv
+-                         << display->display_id << "]."sv;
++                         << display_id << "]."sv;
+     }
+ 
+     // Print all displays available with their names and ids
+@@ -287,7 +617,43 @@ static void setPixelFormat(void *display, OSType pixelFormat) {
+                        << " (id: "sv << device.m_display_name << ") connected: true"sv;
+     }
+ 
+-    BOOST_LOG(info) << "Configuring selected display ("sv << display->display_id << ") to stream"sv;
++    BOOST_LOG(info) << "Configuring selected display ("sv << display_id << ") to stream"sv;
++
++    // Prefer ScreenCaptureKit: it composites the cursor into frames server-side, which avoids
++    // an AVCaptureScreenInput bug where a hidden cursor never reappears in the captured frames.
++    if (@available(macOS 14.0, *)) {
++      if ([SCCapture isAvailable]) {
++        auto display = std::make_shared<sc_display_t>();
++        display->display_id = display_id;
++        display->display_power_guard = std::move(display_power_guard);
++        display->sc_capture = [[SCCapture alloc] initWithDisplay:display_id frameRate:config.framerate];
++
++        if (display->sc_capture) {
++          display->width = display->sc_capture.frameWidth;
++          display->height = display->sc_capture.frameHeight;
++          // We also need set env_width and env_height for absolute mouse coordinates
++          display->env_width = display->width;
++          display->env_height = display->height;
++
++          if (hwdevice_type == platf::mem_type_e::videotoolbox) {
++            const auto pixel_format {videotoolbox_pixel_format(config)};
++            display->full_range_capture = is_full_range_nv12_format(pixel_format);
++            [display->sc_capture setFrameWidth:config.width frameHeight:config.height];
++            display->sc_capture.pixelFormat = pixel_format;
++          }
++
++          BOOST_LOG(info) << "Using ScreenCaptureKit for display capture"sv;
++          return display;
++        }
++
++        display_power_guard = std::move(display->display_power_guard);
++        BOOST_LOG(error) << "SCCapture setup failed, trying AVFoundation..."sv;
++      }
++    }
++
++    auto display = std::make_shared<av_display_t>();
++    display->display_id = display_id;
++    display->display_power_guard = std::move(display_power_guard);
+ 
+     display->av_capture = [[AVVideo alloc] initWithDisplay:display->display_id frameRate:config.framerate];
+ 
+@@ -309,6 +675,8 @@ static void setPixelFormat(void *display, OSType pixelFormat) {
+       display->av_capture.pixelFormat = pixel_format;
+     }
+ 
++    BOOST_LOG(info) << "Using AVFoundation for display capture"sv;
++
+     return display;
+   }
+ 
+diff --git a/src/video.cpp b/src/video.cpp
+index 843a19a..c99ea98 100644
+--- a/src/video.cpp
++++ b/src/video.cpp
+@@ -476,6 +476,7 @@ namespace video {
+       replacements = std::move(other.replacements);
+       sps = std::move(other.sps);
+       vps = std::move(other.vps);
++      frame_timestamps = std::move(other.frame_timestamps);
+ 
+       inject = other.inject;
+ 
+@@ -538,6 +539,8 @@ namespace video {
+ 
+     // inject sps/vps data into idr pictures
+     int inject;  ///< Number of upcoming IDR frames that should receive rewritten parameter sets.
++
++    frame_timestamp_queue_t frame_timestamps;  ///< Capture timestamps of in-flight frames keyed by pts, awaiting their encoded packets.
+   };
+ 
+   /**
+@@ -1813,6 +1816,49 @@ namespace video {
+     }
+   }
+ 
++  /**
++   * @brief Remember a submitted frame's capture timestamp until its encoded packet surfaces.
++   *
++   * Encoders may deliver packets one or more frames behind submission, so the timestamp is
++   * kept keyed by pts until the corresponding packet arrives.
++   * @param timestamps Queue of outstanding capture timestamps.
++   * @param frame_nr Monotonic frame index assigned by the video pipeline, used as the frame pts.
++   * @param frame_timestamp Capture timestamp associated with the frame, when known.
++   */
++  void remember_frame_timestamp(frame_timestamp_queue_t &timestamps, int64_t frame_nr, const std::optional<std::chrono::steady_clock::time_point> &frame_timestamp) {
++    if (!frame_timestamp) {
++      return;
++    }
++
++    timestamps.emplace_back(frame_nr, *frame_timestamp);
++    if (timestamps.size() > 128) {
++      timestamps.pop_front();
++    }
++  }
++
++  /**
++   * @brief Match an encoded packet to the capture timestamp of the frame it encodes.
++   *
++   * Entries for older frames whose packets never surfaced (e.g. dropped by the encoder)
++   * are discarded.
++   * @param timestamps Queue of outstanding capture timestamps.
++   * @param pts Presentation timestamp of the received packet.
++   * @return Capture timestamp of the packet's frame, when known.
++   */
++  std::optional<std::chrono::steady_clock::time_point> match_frame_timestamp(frame_timestamp_queue_t &timestamps, int64_t pts) {
++    while (!timestamps.empty() && timestamps.front().first < pts) {
++      timestamps.pop_front();
++    }
++
++    if (!timestamps.empty() && timestamps.front().first == pts) {
++      auto timestamp = timestamps.front().second;
++      timestamps.pop_front();
++      return timestamp;
++    }
++
++    return std::nullopt;
++  }
++
+   /**
+    * @brief Drain encoded packets from an FFmpeg encoder session.
+    *
+@@ -1827,6 +1873,8 @@ namespace video {
+     auto &frame = session.device->frame;
+     frame->pts = frame_nr;
+ 
++    remember_frame_timestamp(session.frame_timestamps, frame_nr, frame_timestamp);
++
+     auto &ctx = session.avcodec_ctx;
+ 
+     auto &sps = session.sps;
+@@ -1885,9 +1933,7 @@ namespace video {
+         );
+       }
+ 
+-      if (av_packet && av_packet->pts == frame_nr) {
+-        packet->frame_timestamp = frame_timestamp;
+-      }
++      packet->frame_timestamp = match_frame_timestamp(session.frame_timestamps, av_packet->pts);
+ 
+       packet->replacements = &session.replacements;
+       packet->channel_data = channel_data;
+diff --git a/src/video.h b/src/video.h
+index 63f3cf5..53af4e1 100644
+--- a/src/video.h
++++ b/src/video.h
+@@ -6,7 +6,10 @@
+ 
+ // standard includes
+ #include <chrono>
++#include <deque>
++#include <optional>
+ #include <string_view>
++#include <utility>
+ 
+ // local includes
+ #include "input.h"
+@@ -187,6 +190,34 @@ namespace video {
+     int offsetH;  ///< Offset h.
+   };
+ 
++  /**
++   * @brief Capture timestamps of in-flight frames keyed by pts, awaiting their encoded packets.
++   */
++  using frame_timestamp_queue_t = std::deque<std::pair<int64_t, std::chrono::steady_clock::time_point>>;
++
++  /**
++   * @brief Remember a submitted frame's capture timestamp until its encoded packet surfaces.
++   *
++   * Encoders may deliver packets one or more frames behind submission, so the timestamp is
++   * kept keyed by pts until the corresponding packet arrives. The queue is bounded: once
++   * 128 timestamps are outstanding, the oldest entry is evicted per insertion.
++   * @param timestamps Queue of outstanding capture timestamps.
++   * @param frame_nr Monotonic frame index assigned by the video pipeline, used as the frame pts.
++   * @param frame_timestamp Capture timestamp associated with the frame, when known.
++   */
++  void remember_frame_timestamp(frame_timestamp_queue_t &timestamps, int64_t frame_nr, const std::optional<std::chrono::steady_clock::time_point> &frame_timestamp);
++
++  /**
++   * @brief Match an encoded packet to the capture timestamp of the frame it encodes.
++   *
++   * Entries for older frames whose packets never surfaced (e.g. dropped by the encoder)
++   * are discarded; a packet is never paired with another frame's timestamp.
++   * @param timestamps Queue of outstanding capture timestamps.
++   * @param pts Presentation timestamp of the received packet.
++   * @return Capture timestamp of the packet's frame, when known.
++   */
++  std::optional<std::chrono::steady_clock::time_point> match_frame_timestamp(frame_timestamp_queue_t &timestamps, int64_t pts);
++
+   /**
+    * @brief Pixel formats supported by one encoder backend.
+    */
+diff --git a/cmake/compile_definitions/macos.cmake b/cmake/compile_definitions/macos.cmake
+index acf336c..11dd39d 100644
+--- a/cmake/compile_definitions/macos.cmake
++++ b/cmake/compile_definitions/macos.cmake
+@@ -36,6 +36,7 @@ list(APPEND SUNSHINE_EXTERNAL_LIBRARIES
+         ${CORE_VIDEO_LIBRARY}
+         ${FOUNDATION_LIBRARY}
+         ${IOKIT_LIBRARY}
++        ${SCREEN_CAPTURE_KIT_LIBRARY}
+         ${VIDEO_TOOLBOX_LIBRARY})
+ 
+ set(APPLE_PLIST_TEMPLATE "${SUNSHINE_SOURCE_ASSETS_DIR}/macos/build/Info.plist.in")
+@@ -57,6 +58,8 @@ set(PLATFORM_TARGET_FILES
+         "${CMAKE_SOURCE_DIR}/src/platform/macos/nv12_zero_device.cpp"
+         "${CMAKE_SOURCE_DIR}/src/platform/macos/nv12_zero_device.h"
+         "${CMAKE_SOURCE_DIR}/src/platform/macos/publish.cpp"
++        "${CMAKE_SOURCE_DIR}/src/platform/macos/sc_capture.h"
++        "${CMAKE_SOURCE_DIR}/src/platform/macos/sc_capture.mm"
+         "${CMAKE_SOURCE_DIR}/third-party/TPCircularBuffer/TPCircularBuffer.c"
+         "${CMAKE_SOURCE_DIR}/third-party/TPCircularBuffer/TPCircularBuffer.h"
+         ${APPLE_ENTITLEMENTS_FILE}
+diff --git a/cmake/dependencies/macos.cmake b/cmake/dependencies/macos.cmake
+index 4a027ef..2d46fb2 100644
+--- a/cmake/dependencies/macos.cmake
++++ b/cmake/dependencies/macos.cmake
+@@ -10,6 +10,7 @@ FIND_LIBRARY(CORE_MEDIA_LIBRARY CoreMedia)
+ FIND_LIBRARY(CORE_VIDEO_LIBRARY CoreVideo)
+ FIND_LIBRARY(FOUNDATION_LIBRARY Foundation)
+ FIND_LIBRARY(IOKIT_LIBRARY IOKit)
++FIND_LIBRARY(SCREEN_CAPTURE_KIT_LIBRARY ScreenCaptureKit)
+ FIND_LIBRARY(VIDEO_TOOLBOX_LIBRARY VideoToolbox)
+ 
+ if(SUNSHINE_ENABLE_TRAY)
+diff --git a/src/platform/macos/sc_capture.h b/src/platform/macos/sc_capture.h
+new file mode 100644
+index 0000000..ee9fad6
+--- /dev/null
++++ b/src/platform/macos/sc_capture.h
+@@ -0,0 +1,145 @@
++/**
++ * @file src/platform/macos/sc_capture.h
++ * @brief Declarations for ScreenCaptureKit-based display capture on macOS.
++ */
++#pragma once
++
++// platform includes
++#import <AppKit/AppKit.h>
++#import <CoreMedia/CoreMedia.h>
++#import <CoreVideo/CoreVideo.h>
++#import <ScreenCaptureKit/ScreenCaptureKit.h>
++
++/**
++ * @brief ScreenCaptureKit display capture controller used by the macOS backend.
++ *
++ * Frames are delivered by an SCStream and latched into a single latest-wins slot; the
++ * capture loop consumes the newest frame and the encoder duplicates the previous frame
++ * when the screen is static. Delivery reliability depends on configuration discipline
++ * (matching OBS's): `minimumFrameInterval` must sit ~10% below the target interval or
++ * frames get suppressed by clock beating, `queueDepth` must exceed the number of sample
++ * buffers the pipeline holds concurrently or WindowServer stalls delivery entirely, and
++ * frames must never be filtered by SCFrameStatus.
++ */
++API_AVAILABLE(macos(14.0))
++@interface SCCapture: NSObject <SCStreamDelegate, SCStreamOutput>
++
++/**
++ * @def kMaxDisplays
++ * @brief Maximum number of displays queried from CoreGraphics.
++ */
++#define kMaxDisplays 32
++
++/**
++ * @brief Display ID property.
++ */
++@property (nonatomic, assign) CGDirectDisplayID displayID;
++/**
++ * @brief Capture frame rate property.
++ */
++@property (nonatomic, assign) int frameRate;
++/**
++ * @brief Output pixel format property.
++ */
++@property (nonatomic, assign) OSType pixelFormat;
++/**
++ * @brief Output frame width property.
++ */
++@property (nonatomic, assign) int frameWidth;
++/**
++ * @brief Output frame height property.
++ */
++@property (nonatomic, assign) int frameHeight;
++
++/**
++ * @brief Content filter selecting the captured display.
++ */
++@property (nonatomic, strong) SCContentFilter *contentFilter;
++/**
++ * @brief Stream configuration used for the capture stream.
++ */
++@property (nonatomic, strong) SCStreamConfiguration *streamConfiguration;
++/**
++ * @brief Active capture stream delivering frames, or nil when stopped.
++ */
++@property (nonatomic, strong) SCStream *stream;
++/**
++ * @brief Cached shareable content used for display lookup.
++ */
++@property (nonatomic, strong) SCShareableContent *shareableContent;
++
++/**
++ * @brief Semaphore signalled when capture stops.
++ */
++@property (nonatomic, assign) dispatch_semaphore_t captureSignal;
++/**
++ * @brief Semaphore signalled when a new frame is available.
++ */
++@property (nonatomic, assign) dispatch_semaphore_t frameSignal;
++/**
++ * @brief Whether the capture is shutting down.
++ */
++@property (nonatomic, assign) BOOL stopping;
++/**
++ * @brief Latest captured sample buffer, replaced as newer frames arrive.
++ */
++@property (nonatomic, assign) CMSampleBufferRef latestSampleBuffer;
++
++/**
++ * @brief Check whether ScreenCaptureKit screenshot capture is available on this system.
++ *
++ * @return `YES` when the running macOS version supports the capture backend.
++ */
+++ (BOOL)isAvailable;
++/**
++ * @brief Enumerate active displays.
++ *
++ * @return Array of dictionaries describing each active display.
++ */
+++ (NSArray<NSDictionary *> *)displayNames;
++/**
++ * @brief Look up the localized name of a display.
++ *
++ * @param displayID Display to look up.
++ * @return Localized display name, or nil when unknown.
++ */
+++ (NSString *)getDisplayName:(CGDirectDisplayID)displayID;
++
++/**
++ * @brief Initialize capture for a display.
++ *
++ * @param displayID Display to capture.
++ * @param frameRate Requested capture frame rate.
++ * @return Initialized instance, or nil on failure.
++ */
++- (instancetype)initWithDisplay:(CGDirectDisplayID)displayID
++                      frameRate:(int)frameRate;
++
++/**
++ * @brief Set the capture output dimensions.
++ *
++ * @param frameWidth Output frame width in pixels.
++ * @param frameHeight Output frame height in pixels.
++ */
++- (void)setFrameWidth:(int)frameWidth frameHeight:(int)frameHeight;
++/**
++ * @brief Create, configure, and start the capture stream.
++ *
++ * When a 10-bit capture format is rejected by the runtime, capture falls back to
++ * 8-bit and the encoder continues the negotiated session with 8-bit-sourced frames.
++ *
++ * @return Semaphore signalled when capture stops, or nil on failure.
++ */
++- (dispatch_semaphore_t)captureVideo;
++/**
++ * @brief Take ownership of the most recent captured frame.
++ *
++ * @return Retained sample buffer, or NULL when no new frame is available.
++ */
++- (CMSampleBufferRef)copyLatestSampleBuffer;
++/**
++ * @brief Stop capture and release capture state.
++ */
++- (void)stopCapture;
++
++@end
+diff --git a/src/platform/macos/sc_capture.mm b/src/platform/macos/sc_capture.mm
+new file mode 100644
+index 0000000..10178be
+--- /dev/null
++++ b/src/platform/macos/sc_capture.mm
+@@ -0,0 +1,366 @@
++/**
++ * @file src/platform/macos/sc_capture.mm
++ * @brief ScreenCaptureKit-based display capture implementation.
++ */
++#import "sc_capture.h"
++
++// local includes
++#include "src/logging.h"
++
++using namespace std::literals;
++
++/**
++ * @brief Describe an NSError for logging.
++ *
++ * @param error Error to describe, or nil.
++ * @return UTF-8 description of the error.
++ */
++static const char *error_description(NSError *error) {
++  return error && error.localizedDescription ? error.localizedDescription.UTF8String : "unknown error";
++}
++
++static SCShareableContent *copyShareableContent(void) {
++  __block SCShareableContent *shareableContent = nil;
++  dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
++
++  [SCShareableContent getShareableContentWithCompletionHandler:^(SCShareableContent *content, NSError *content_error) {
++    if (content_error) {
++      BOOST_LOG(error) << "SCCapture failed to get shareable content: "sv << error_description(content_error);
++    } else {
++      shareableContent = [content retain];
++    }
++
++    dispatch_semaphore_signal(semaphore);
++  }];
++
++  dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
++  dispatch_release(semaphore);
++
++  return shareableContent;
++}
++
++static BOOL isUsableImageSampleBuffer(CMSampleBufferRef sampleBuffer) {
++  return sampleBuffer && CMSampleBufferIsValid(sampleBuffer) && CMSampleBufferGetImageBuffer(sampleBuffer);
++}
++
++API_AVAILABLE(macos(14.0))
++@implementation SCCapture
++
+++ (BOOL)isAvailable {
++  if (@available(macOS 14.0, *)) {
++    return YES;
++  }
++  return NO;
++}
++
+++ (NSArray<NSDictionary *> *)displayNames {
++  CGDirectDisplayID displays[kMaxDisplays];
++  uint32_t count;
++  if (CGGetActiveDisplayList(kMaxDisplays, displays, &count) != kCGErrorSuccess) {
++    return [NSArray array];
++  }
++
++  NSMutableArray *result = [NSMutableArray array];
++
++  for (uint32_t i = 0; i < count; i++) {
++    [result addObject:@{
++      @"id": [NSNumber numberWithUnsignedInt:displays[i]],
++      @"name": [NSString stringWithFormat:@"%d", displays[i]],
++      @"displayName": [self getDisplayName:displays[i]] ?: @"Unknown Display",
++    }];
++  }
++
++  return [NSArray arrayWithArray:result];
++}
++
+++ (NSString *)getDisplayName:(CGDirectDisplayID)displayID {
++  for (NSScreen *screen in [NSScreen screens]) {
++    if ([screen.deviceDescription[@"NSScreenNumber"] isEqualToNumber:[NSNumber numberWithUnsignedInt:displayID]]) {
++      return screen.localizedName;
++    }
++  }
++
++  return nil;
++}
++
++- (instancetype)initWithDisplay:(CGDirectDisplayID)displayID
++                      frameRate:(int)frameRate {
++  self = [super init];
++  if (self) {
++    CGDisplayModeRef mode = CGDisplayCopyDisplayMode(displayID);
++
++    self.displayID = displayID;
++    self.frameRate = frameRate;
++    self.pixelFormat = kCVPixelFormatType_32BGRA;
++
++    if (mode) {
++      self.frameWidth = (int) CGDisplayModeGetPixelWidth(mode);
++      self.frameHeight = (int) CGDisplayModeGetPixelHeight(mode);
++      CFRelease(mode);
++    } else {
++      self.frameWidth = (int) CGDisplayPixelsWide(displayID);
++      self.frameHeight = (int) CGDisplayPixelsHigh(displayID);
++    }
++
++    SCShareableContent *content = copyShareableContent();
++    if (!content) {
++      [self release];
++      return nil;
++    }
++
++    self.shareableContent = content;
++    [content release];
++  }
++
++  return self;
++}
++
++- (void)dealloc {
++  [self stopCapture];
++  self.shareableContent = nil;
++
++  [super dealloc];
++}
++
++- (void)setFrameWidth:(int)frameWidth frameHeight:(int)frameHeight {
++  self.frameWidth = frameWidth;
++  self.frameHeight = frameHeight;
++}
++
++- (SCDisplay *)findDisplayWithID:(CGDirectDisplayID)displayID {
++  for (SCDisplay *display in self.shareableContent.displays) {
++    if (display.displayID == displayID) {
++      return display;
++    }
++  }
++
++  return nil;
++}
++
++- (SCDisplay *)findDisplayWithIDRetrying:(CGDirectDisplayID)displayID {
++  SCDisplay *display = [self findDisplayWithID:displayID];
++  if (display) {
++    return display;
++  }
++
++  for (int attempt = 1; attempt <= 3; attempt++) {
++    BOOST_LOG(warning) << "SCCapture display "sv << displayID << " not found in SCShareableContent, refreshing (attempt "sv << attempt << "/3)"sv;
++    [NSThread sleepForTimeInterval:1.0];
++
++    SCShareableContent *content = copyShareableContent();
++    if (!content) {
++      continue;
++    }
++
++    self.shareableContent = content;
++    [content release];
++
++    display = [self findDisplayWithID:displayID];
++    if (display) {
++      BOOST_LOG(info) << "SCCapture found display "sv << displayID << " after refresh"sv;
++      return display;
++    }
++  }
++
++  return nil;
++}
++
++- (void)releaseCaptureSignals {
++  if (self.frameSignal) {
++    dispatch_semaphore_signal(self.frameSignal);
++    dispatch_release(self.frameSignal);
++    self.frameSignal = NULL;
++  }
++
++  if (self.captureSignal) {
++    dispatch_semaphore_signal(self.captureSignal);
++    dispatch_release(self.captureSignal);
++    self.captureSignal = NULL;
++  }
++}
++
++- (void)clearLatestSampleBuffer {
++  if (self.latestSampleBuffer) {
++    CFRelease(self.latestSampleBuffer);
++    self.latestSampleBuffer = NULL;
++  }
++}
++
++- (void)storeSampleBuffer:(CMSampleBufferRef)sampleBuffer {
++  @synchronized(self) {
++    if (self.stopping) {
++      return;
++    }
++
++    BOOL shouldSignal = self.latestSampleBuffer == NULL;
++
++    [self clearLatestSampleBuffer];
++    self.latestSampleBuffer = (CMSampleBufferRef) CFRetain(sampleBuffer);
++
++    if (shouldSignal && self.frameSignal) {
++      dispatch_semaphore_signal(self.frameSignal);
++    }
++  }
++}
++
++/**
++ * @brief Create and start a capture stream for the current filter and configuration.
++ *
++ * @return Started stream (retained), or nil on failure.
++ */
++- (SCStream *)startConfiguredStream {
++  SCStream *stream = [[SCStream alloc] initWithFilter:self.contentFilter configuration:self.streamConfiguration delegate:self];
++  NSError *output_error = nil;
++  if (!stream || ![stream addStreamOutput:self type:SCStreamOutputTypeScreen sampleHandlerQueue:nil error:&output_error]) {
++    BOOST_LOG(error) << "SCCapture failed to create stream output: "sv << error_description(output_error);
++    [stream release];
++    return nil;
++  }
++
++  __block NSError *start_error = nil;
++  dispatch_semaphore_t started = dispatch_semaphore_create(0);
++  [stream startCaptureWithCompletionHandler:^(NSError *completion_error) {
++    start_error = [completion_error retain];
++    dispatch_semaphore_signal(started);
++  }];
++  dispatch_semaphore_wait(started, DISPATCH_TIME_FOREVER);
++  dispatch_release(started);
++
++  if (start_error) {
++    BOOST_LOG(error) << "SCCapture failed to start capture stream: "sv << error_description(start_error);
++    [start_error release];
++    [stream release];
++    return nil;
++  }
++
++  return stream;
++}
++
++- (dispatch_semaphore_t)captureVideo {
++  dispatch_semaphore_t capture_signal = nil;
++
++  @synchronized(self) {
++    [self clearLatestSampleBuffer];
++    [self releaseCaptureSignals];
++
++    self.stopping = NO;
++    self.captureSignal = dispatch_semaphore_create(0);
++    self.frameSignal = dispatch_semaphore_create(0);
++
++    SCDisplay *display = [self findDisplayWithIDRetrying:self.displayID];
++    if (!display) {
++      BOOST_LOG(error) << "SCCapture display not found after retries: "sv << self.displayID;
++      [self releaseCaptureSignals];
++      return nil;
++    }
++
++    SCContentFilter *filter = [[SCContentFilter alloc] initWithDisplay:display excludingWindows:@[]];
++    self.contentFilter = filter;
++    [filter release];
++
++    SCStreamConfiguration *config = [[SCStreamConfiguration alloc] init];
++    config.width = self.frameWidth;
++    config.height = self.frameHeight;
++    config.pixelFormat = self.pixelFormat;
++    config.showsCursor = YES;
++    config.captureResolution = SCCaptureResolutionBest;
++    config.preservesAspectRatio = YES;
++    // Slightly below the target interval: an interval of exactly 1/fps beats against
++    // WindowServer's delivery clock and suppresses frames that arrive marginally early.
++    const int fps = MAX(self.frameRate, 1);
++    config.minimumFrameInterval = CMTimeMake(9, fps * 10);
++    // Must exceed the number of sample buffers the pipeline holds at once (latest-wins
++    // slot, encoder in-flight, transient retains), or WindowServer runs out of surfaces
++    // and stops delivering until one is returned.
++    config.queueDepth = 8;
++    self.streamConfiguration = config;
++    [config release];
++
++    capture_signal = self.captureSignal;
++  }
++
++  // Start the stream outside the lock: delivery callbacks synchronize on self.
++  SCStream *stream = [self startConfiguredStream];
++
++  // Apple documents only BGRA, l10r, 420v and 420f for SCStreamConfiguration.pixelFormat;
++  // 10-bit sessions request the undocumented (but in practice accepted) x420. If the
++  // runtime rejects it, retry with 8-bit 420v: VideoToolbox accepts 8-bit input into a
++  // Main10 encode session, so the negotiated stream survives with 8-bit-sourced content.
++  if (!stream && self.pixelFormat == kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange) {
++    BOOST_LOG(warning) << "SCCapture 10-bit capture format was rejected, falling back to 8-bit capture"sv;
++    @synchronized(self) {
++      self.pixelFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange;
++      self.streamConfiguration.pixelFormat = self.pixelFormat;
++    }
++    stream = [self startConfiguredStream];
++  }
++
++  if (!stream) {
++    @synchronized(self) {
++      [self releaseCaptureSignals];
++    }
++    return nil;
++  }
++
++  self.stream = stream;
++  [stream release];
++
++  BOOST_LOG(info) << "SCCapture stream configured: "sv << self.frameWidth << 'x' << self.frameHeight << " @ "sv << self.frameRate << " fps"sv;
++
++  return capture_signal;
++}
++
++- (CMSampleBufferRef)copyLatestSampleBuffer {
++  @synchronized(self) {
++    CMSampleBufferRef sampleBuffer = self.latestSampleBuffer;
++    self.latestSampleBuffer = NULL;
++    return sampleBuffer;
++  }
++}
++
++- (void)stream:(SCStream *)stream didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer ofType:(SCStreamOutputType)type {
++  if (type != SCStreamOutputTypeScreen) {
++    return;
++  }
++
++  // No SCFrameStatus filtering: any sample buffer carrying pixels is a real update.
++  if (!isUsableImageSampleBuffer(sampleBuffer)) {
++    return;
++  }
++
++  [self storeSampleBuffer:sampleBuffer];
++}
++
++- (void)stream:(SCStream *)stream didStopWithError:(NSError *)stop_error {
++  BOOST_LOG(error) << "SCCapture stream stopped: "sv << error_description(stop_error);
++  @synchronized(self) {
++    if (!self.stopping && self.captureSignal) {
++      // Wake the capture loop so the pipeline tears down and reinitializes.
++      dispatch_semaphore_signal(self.captureSignal);
++    }
++  }
++}
++
++- (void)stopCapture {
++  SCStream *stream = nil;
++
++  @synchronized(self) {
++    self.stopping = YES;
++
++    stream = [self.stream retain];
++    self.stream = nil;
++    self.contentFilter = nil;
++    self.streamConfiguration = nil;
++
++    [self clearLatestSampleBuffer];
++    [self releaseCaptureSignals];
++  }
++
++  if (stream) {
++    [stream stopCaptureWithCompletionHandler:^(NSError *stop_error) {
++    }];
++    [stream release];
++  }
++}
++
++@end

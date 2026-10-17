@@ -1,0 +1,12 @@
+# Generated at build time by tools/mkrlcfw.py from /lib/firmware/amdgpu (1.1 MB of C).
+# Regenerate with tools/mkrlcfw.py; not worth versioning.
+rlc_fw.h
+src/rlc_fw.h
+
+# Terminal workspace state
+.termdesk.toml
+.termdesk-workspace.toml
+.aider*
+
+# Isolated candidate research builds
+.research/

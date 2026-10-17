@@ -1,0 +1,51 @@
+<domain xmlns:qemu="http://libvirt.org/schemas/domain/qemu/1.0" type="qemu">
+  <name>rgpu-console-software-test</name>
+  <uuid>966b6339-aaff-4138-9433-012f00000339</uuid>
+  <memory unit="MiB">128</memory>
+  <vcpu>1</vcpu>
+  <os>
+    <type arch="x86_64" machine="q35">hvm</type>
+  </os>
+  <features>
+    <acpi />
+    <apic />
+  </features>
+  <devices>
+    <emulator>/usr/sbin/qemu-system-x86_64</emulator>
+    <controller type="pci" index="0" model="pcie-root" />
+    <controller type="usb" model="none" />
+    <memballoon model="none" />
+    <video>
+      <model type="none" />
+    </video>
+    <graphics type="spice">
+      <listen type="socket" socket="/run/rgpu-libvirt/console.spice" />
+      <image compression="off" />
+      <gl enable="no" />
+    </graphics>
+  </devices>
+  <qemu:commandline>
+    <qemu:arg value="-cpu" />
+    <qemu:arg value="qemu64,vendor=GenuineIntel,vmware-cpuid-freq=on" />
+    <qemu:arg value="-vga" />
+    <qemu:arg value="none" />
+    <qemu:arg value="-display" />
+    <qemu:arg value="none" />
+    <qemu:arg value="-device" />
+    <qemu:arg value="qemu-xhci,id=xhci" />
+    <qemu:arg value="-device" />
+    <qemu:arg value="usb-kbd,bus=xhci.0" />
+    <qemu:arg value="-device" />
+    <qemu:arg value="usb-tablet,bus=xhci.0" />
+    <qemu:arg value="-device" />
+    <qemu:arg value="bochs-display,id=rgpu_present,bus=pcie.0,addr=0x7,vgamem=64M" />
+    <qemu:arg value="-vnc" />
+    <qemu:arg value="unix:/run/rgpu-libvirt/console-vnc.sock" />
+    <qemu:arg value="-qtest" />
+    <qemu:arg value="unix:/run/rgpu-libvirt/qtest.sock,server=on,wait=off" />
+    <qemu:arg value="-netdev" />
+    <qemu:arg value="hubport,id=rgpu_guest_port,hubid=341" />
+    <qemu:arg value="-device" />
+    <qemu:arg value="vmxnet3,netdev=rgpu_guest_port,id=rgpu_nic_proof,bus=pcie.0,addr=0x9,mac=52:54:00:34:10:01" />
+  </qemu:commandline>
+</domain>

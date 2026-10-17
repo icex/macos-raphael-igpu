@@ -1,0 +1,5 @@
+new-file whitespace check passed: 11 files
+8105707580a4d89b2e883be90730e1e84ad32f42e69a0310264f3e5431f0260f  findings/experiments/metal-011-178-b/used-gpu-boot-ledger.json
+fc1c08c831cd0b95862ae397f0ac60f09e312bba6316bac67c9cceae609e956c  findings/experiments/metal-011-178-b/canonical-recovery-receipt.json
+ea9f41341b5d0f5ff08f7ef72ee44bd052c2a823ebeaae267c57798b5dd789d5  findings/experiments/metal-011-178-b/recovery.json
+frozen 178-B digest and shape checks passed

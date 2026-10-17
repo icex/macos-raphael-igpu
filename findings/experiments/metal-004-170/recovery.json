@@ -1,0 +1,132 @@
+{
+  "schema": 2,
+  "status": "incomplete",
+  "authorizes_launch": false,
+  "boot_id": "c3d9b5f0-4f84-432c-9221-b4792a083829",
+  "prior_run_id": "f948faf804be48b8a61e2a3e3b17e1a3",
+  "device": "0000:7b:00.0",
+  "iommu_group": "31",
+  "driver": "vfio-pci",
+  "pci_command_before": 3,
+  "pci_command_after": 3,
+  "reset_methods_before": [],
+  "reset_methods_after": [],
+  "bar5": {
+    "index": 5,
+    "size": 524288,
+    "offset": 5497558138880,
+    "read": true,
+    "write": true,
+    "mmap": true
+  },
+  "gc_quiesce": {
+    "status": "quiesced",
+    "active_before": 9,
+    "dequeued": 1,
+    "dequeue_timeouts": 8,
+    "forced_inactive": 8,
+    "queues": [
+      {
+        "me": 2,
+        "pipe": 0,
+        "queue": 0,
+        "selector": 8,
+        "polls": 1
+      },
+      {
+        "me": 2,
+        "pipe": 1,
+        "queue": 0,
+        "selector": 9,
+        "polls": 50
+      },
+      {
+        "me": 2,
+        "pipe": 1,
+        "queue": 2,
+        "selector": 521,
+        "polls": 50
+      },
+      {
+        "me": 2,
+        "pipe": 1,
+        "queue": 4,
+        "selector": 1033,
+        "polls": 50
+      },
+      {
+        "me": 2,
+        "pipe": 1,
+        "queue": 6,
+        "selector": 1545,
+        "polls": 50
+      },
+      {
+        "me": 2,
+        "pipe": 3,
+        "queue": 0,
+        "selector": 11,
+        "polls": 50
+      },
+      {
+        "me": 2,
+        "pipe": 3,
+        "queue": 2,
+        "selector": 523,
+        "polls": 50
+      },
+      {
+        "me": 2,
+        "pipe": 3,
+        "queue": 4,
+        "selector": 1035,
+        "polls": 50
+      },
+      {
+        "me": 2,
+        "pipe": 3,
+        "queue": 6,
+        "selector": 1547,
+        "polls": 50
+      }
+    ],
+    "cp_me_before": 352321536,
+    "cp_me_after": 352321536,
+    "cp_mec_before": 0,
+    "cp_mec_after": 1342177280,
+    "cp_stat_after": 2215085568,
+    "cp_cpc_busy_after": 134742016,
+    "sdma0_cntl_before": 262339,
+    "sdma0_cntl_after": 195,
+    "sdma0_rb_before": 2156331041,
+    "sdma0_rb_after": 2156331040,
+    "sdma0_ib_before": 257,
+    "sdma0_ib_after": 256,
+    "sdma0_before": 0,
+    "sdma0_after": 1,
+    "active_after": 0
+  },
+  "commands": [
+    {
+      "label": "destroy all rings",
+      "command": 196608,
+      "before": 2147549184,
+      "response": 2147680256,
+      "polls": 6,
+      "confirmed": true
+    },
+    {
+      "label": "destroy GPCOM ring",
+      "command": 786432,
+      "before": 2147680256,
+      "response": 2148270080,
+      "polls": 1,
+      "confirmed": true
+    }
+  ],
+  "kernel_cursor_before": "s=98f6cb2295dc45898ee97031451ba7c8;i=39057;b=c3d9b5f04f84432c9221b4792a083829;m=1bfd585a;t=65afbed8a1c40;x=4200564f008bfa93",
+  "kernel_cursor_after": "s=98f6cb2295dc45898ee97031451ba7c8;i=39057;b=c3d9b5f04f84432c9221b4792a083829;m=1bfd585a;t=65afbed8a1c40;x=4200564f008bfa93",
+  "kernel_messages": [],
+  "recovery_id": "40fc0f0bcb834607b692d4203a254040",
+  "created_epoch": 1788887929.3014014
+}

@@ -1,0 +1,48 @@
+{
+  "id": "metal-010",
+  "question": "Where does candidate 177 reject the first unchanged Metal compute submission before the missing VMID-2/SDMA callbacks?",
+  "candidate_version": "1.0.177",
+  "requested_diagnostic": "rgpusubmit=1",
+  "behavior_change": "add bounded observation-only tracing at five exact 24G830 X6000 pre-submission boundaries; preserve candidate 176's workload, functional boot arguments, BAR0 early-owner repair, VMID-2 root diagnostic, KIQ preparation, startup behavior and shutdown path",
+  "required_observations": [
+    "loaded_build",
+    "route_guards",
+    "kiq_stamps",
+    "hybrid_enter",
+    "hybrid_exit",
+    "engine_start",
+    "sdma_topology",
+    "sdma_channel_remap",
+    "submission_trace",
+    "sdma_vm_program",
+    "vmid2_root_repair"
+  ],
+  "max_seconds": 180,
+  "prerequisites": [
+    "same_boot_candidate177_one_use_authorization",
+    "submission_trace_routes_and_worker_offline_validated",
+    "inactive_kiq_pointer_guard_hardware_validated",
+    "bar0_early_owner_retry_hardware_validated",
+    "amdgpu_initialized_this_boot",
+    "reset_methods_disabled",
+    "sleep_inhibitor_active",
+    "watchdog_and_pstore_verified"
+  ],
+  "repeat_policy": "one authorized run only; require exact candidate and ordinary route identity, complete capture, successful native KIQ/SDMA/engine and outer accelerator startup, plus all five submission routes and an initial worker summary before one unchanged prepared probe; require workload-dependent VMID-2 and SDMA evidence only for the final verdict",
+  "abort_on": [
+    "identity_mismatch",
+    "capture_loss",
+    "submission_trace_route_failure",
+    "submission_trace_worker_missing",
+    "bar0_mapping_unavailable",
+    "root_repair_refused",
+    "prepared_root_mismatch",
+    "guest_panic",
+    "terminal_kiq_submit_failure",
+    "sdma_page_timeout",
+    "host_fault",
+    "incomplete_gc_quiesce"
+  ],
+  "outcome_table": "docs/ROADMAP.md M4-M7",
+  "run_probe_only_after_native_start": true
+}

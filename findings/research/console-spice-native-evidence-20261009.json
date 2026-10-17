@@ -1,0 +1,63 @@
+{
+  "run_id": "892ec42661ae367e299f60d55c9da9ee",
+  "build_id": "f5f8285a85f2437285c0aa6a5daa29e1",
+  "candidate": "1.0.340",
+  "artifact_root": "/home/user/macos-vm/run",
+  "files": {
+    "candidate-340-results/verdict.json": "7c3c1fdc85b6f6f37bd9900f15f77e6bddfb82c8b1de39e477b73f744ae47dfd",
+    "candidate-340-results/probe.json": "6edb5548bb3f217ead17cecbb1eaef4b613dc816ef1a8aff16659ceb1bbe6ffb",
+    "candidate-340-results/shutdown.json": "8599dcd8ae9466ed5b593a9e58c0abb062354e2c2f206c7dd3161a987791c22c",
+    "candidate-340-results/recovery.json": "23565dcb4653340d638574d0cd65c15b7793d42287417e722af63c251a84ba9f",
+    "candidate-340-results/capture-sha256.json": "f81a123c47a4aa00db0c1eb53046cf8f508af7d2e7c2039e05367531a4999473",
+    "c340-spice-desktop.png": "b18c961bb22d9bd56841b9612284e675808e11ce3b6e96aca2252154581df58e",
+    "c340-material-result.txt": "71f89ab9c2056504497a2acbafe19684da0518cae26509bd8823cbb33ed9d65f",
+    "c341-keyboard-final.txt": "741a37fba9a76ed58a08434480f62d3c2d6381a18253a7f93e8d492d4cc9f1a5",
+    "c341-keyboard-timed.png": "8768f271c5254cb4690ee89758835ec04079b67b06f0fb2573361b22ed64662a",
+    "c340-mouse-result.txt": "235357dc13f3e955dfd3f99a24dc46b7c5ea9acfbdce86d451ef9d149450504a",
+    "c340-mouse-input.png": "7f42a747b30071f9f54cb600a25aba8233e55fe161c20c54eaa4b05f374ee5c7",
+    "c340-input-final-and-awake.txt": "c66bceeaedf3ccd3722aaaff3aac6e5dba2d8b36d49f09c4ec5c61067090889b",
+    "c340-c-awake-presenter.txt": "4ad1e7bda596ec139546736aa540fedd31b84c4261c68b6d447cbc62727d2c6b",
+    "c340-c-presenter-log.txt": "8c5f925facdd671c233224d521bbbbe5ab8578b972c1842050b9768207470f79",
+    "c340-c-spice-native-desktop.png": "55919841146699a93589877220e5eaa06de9dc00370f9fd372525a44bc4f3f4a",
+    "candidate-340-attempt-c-results/verdict.json": "1f5763dec3cfdb98cd6a1b9cef92c8455c7700b0ac6e53472c0bdb9de815cf25",
+    "candidate-340-attempt-c-results/shutdown.json": "3acf9ca7b177a40ea5097b48b833a0855423035813762e6f351728e2573d9177",
+    "candidate-340-attempt-c-results/recovery.json": "feaf0c96c6bdbc923070ee969c88234a64bc85c8f1347fad0965d2c3f5e7649e",
+    "candidate-340-attempt-c-results/probe.json": "ef1669a03843b9c1353e9b4e62edbe09abe2521c01f554f75308a2d5277fd96a",
+    "candidate-340-attempt-c-results/capture-sha256.json": "136ae108445b49d834f807b98c4017f3387c2e347ccac452357470975136a076"
+  },
+  "scope": {
+    "native_desktop_metal": true,
+    "spice_desktop_pixels": [
+      3840,
+      2160
+    ],
+    "keyboard_exact": "RGPU336",
+    "mouse_window_point": [
+      295,
+      130
+    ],
+    "material_event_iterations": 2066,
+    "end_to_end_fps": null,
+    "libvirt_macos_lifecycle": false,
+    "shutdown": "exited-after-guest-request",
+    "recovery_authorizes_launch": true
+  },
+  "limitations": [
+    "c341-prefixed input artifacts identify isolated X display341, not driver341",
+    "Mouse test was manually unloaded after its click log, before its45-second text completion; keyboard pass is the separate completed test",
+    "Initial input trials were confounded by focus and expired viewer/probe lifetimes",
+    "launchctl submit unexpectedly restarted the material app; only its first completed180-second interval is counted; owned job/processes subsequently removed"
+  ],
+  "repeat": {
+    "run_id": "23ac0eeacee8dffe827be1a645e6416c",
+    "mode2_index": 278,
+    "automatic_presenter": true,
+    "native_desktop_metal": true,
+    "final_shutdown_recovery": {
+      "verdict": "CORE_PROBE_PASS",
+      "shutdown": "exited-after-guest-request",
+      "recovery": "recovered",
+      "authorizes_launch": true
+    }
+  }
+}

@@ -1,0 +1,39 @@
+--- a/server/dcc-send.cpp
++++ b/server/dcc-send.cpp
+@@ -21,6 +21,7 @@
+ #include <common/generated_server_marshallers.h>
+ 
+ #include "dcc-private.h"
++#include "rgpu-unix-lossless-client.h"
+ #include "display-channel-private.h"
+ #include "red-qxl.h"
+ 
+@@ -436,7 +437,10 @@
+         /* Images must be added to the cache only after they are compressed
+            in order to prevent starvation in the client between pixmap_cache and
+            global dictionary (in cases of multiple monitors) */
+-        if (red_stream_get_family(dcc->get_stream()) == AF_UNIX ||
++        /* Research opt-in is the client's explicit lossless LZ4 request.
++         * Every other Unix preference retains the existing raw path. */
++        if (!rgpu_unix_client_compression_allowed(red_stream_get_family(dcc->get_stream()),
++                                                 dcc->priv->image_compression) ||
+             !dcc_compress_image(dcc, &image, &simage->u.bitmap,
+                                 drawable, can_lossy, &comp_send_data)) {
+             SpicePalette *palette;
+--- /dev/null
++++ b/server/rgpu-unix-lossless-client.h
+@@ -0,0 +1,14 @@
++/* SPDX-License-Identifier: LGPL-2.1-or-later
++ * Research policy: explicit client LZ4 only; default Unix remains raw.
++ */
++#ifndef RGPU_UNIX_LOSSLESS_CLIENT_H
++#define RGPU_UNIX_LOSSLESS_CLIENT_H
++#include <sys/socket.h>
++#include <spice/enums.h>
++
++static inline bool rgpu_unix_client_compression_allowed(int family,
++                                                       SpiceImageCompression codec)
++{
++    return family != AF_UNIX || codec == SPICE_IMAGE_COMPRESSION_LZ4;
++}
++#endif

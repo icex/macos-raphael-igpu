@@ -1,0 +1,79 @@
+// Existing-mode control only. No virtual display creation, capture or TCC APIs.
+// clang -O2 -Wall -Wextra -framework Foundation -framework CoreGraphics source.m -o helper
+#import <Foundation/Foundation.h>
+#import <CoreGraphics/CoreGraphics.h>
+#include <signal.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <errno.h>
+static void expired(int sig) {(void)sig;_exit(124);}
+static void emit(NSDictionary *row) {
+ NSData *data=[NSJSONSerialization dataWithJSONObject:row options:0 error:nil];
+ fwrite(data.bytes,1,data.length,stdout);putchar('\n');
+}
+static NSDictionary *info(CGDisplayModeRef m) {
+ return @{@"width":@(CGDisplayModeGetWidth(m)),@"height":@(CGDisplayModeGetHeight(m)),
+          @"pixel_width":@(CGDisplayModeGetPixelWidth(m)),@"pixel_height":@(CGDisplayModeGetPixelHeight(m)),
+          @"mode_id":@(CGDisplayModeGetIODisplayModeID(m)),@"refresh":@(CGDisplayModeGetRefreshRate(m))};
+}
+static bool number(const char *s,unsigned *value) {
+ char *end=NULL;errno=0;unsigned long n=strtoul(s,&end,10);
+ if(errno||!s[0]||*end||n>3840)return false;*value=(unsigned)n;return true;
+}
+int main(int argc,char **argv) {@autoreleasepool {
+ signal(SIGALRM,expired);alarm(5);
+ bool apply=argc==4&&!strcmp(argv[1],"--set");
+ bool current=argc==2&&!strcmp(argv[1],"--current");unsigned w=0,h=0;
+ if(!(argc==2&&!strcmp(argv[1],"--list")) && !apply && !current)return 2;
+ if(apply&&(!number(argv[2],&w)||!number(argv[3],&h)||w<320||h<200||h>2160))return 2;
+ CGDirectDisplayID ids[64],target=0;uint32_t n=0;
+ if(CGGetOnlineDisplayList(64,ids,&n)!=kCGErrorSuccess||n>=64)return 3;
+ for(unsigned i=0;i<n;i++)if(CGDisplayVendorNumber(ids[i])==0x5250&&CGDisplayModelNumber(ids[i])==0x3453){if(target)return 3;target=ids[i];}
+ if(!target)return 3;
+ CGRect beforeBounds=CGDisplayBounds(target);
+ if(current){
+  CGDisplayModeRef m=CGDisplayCopyDisplayMode(target);if(!m)return 3;
+  NSMutableDictionary *actual=[info(m) mutableCopy];
+  actual[@"origin_x"]=@(beforeBounds.origin.x);actual[@"origin_y"]=@(beforeBounds.origin.y);
+  emit(@{@"display":@(target),@"actual":actual,@"scope":@"independent current mode read only"});
+  CFRelease(m);return 0;
+ }
+ if(apply&&(beforeBounds.origin.x!=0||beforeBounds.origin.y!=0)){emit(@{@"passed":@NO,@"reason":@"target-origin-not-zero"});return 4;}
+ CFArrayRef modes=CGDisplayCopyAllDisplayModes(target,(__bridge CFDictionaryRef)@{(id)kCGDisplayShowDuplicateLowResolutionModes:@YES});
+ if(!modes)return 3;
+ NSMutableArray *list=[NSMutableArray new];CGDisplayModeRef choice=NULL;bool bestHi=false;
+ for(CFIndex i=0;i<CFArrayGetCount(modes);i++){
+  CGDisplayModeRef m=(CGDisplayModeRef)CFArrayGetValueAtIndex(modes,i);[list addObject:info(m)];
+  if(CGDisplayModeGetPixelWidth(m)!=w||CGDisplayModeGetPixelHeight(m)!=h)continue;
+  bool hi=CGDisplayModeGetWidth(m)*2==w&&CGDisplayModeGetHeight(m)*2==h;
+  if(!choice||(hi&&!bestHi)){choice=m;bestHi=hi;}
+ }
+ if(!apply){emit(@{@"display":@(target),@"modes":list});CFRelease(modes);return 0;}
+ if(!choice){emit(@{@"passed":@NO,@"reason":@"no-existing-exact-physical-mode"});CFRelease(modes);return 4;}
+ // CGDisplaySetDisplayMode is application-lifetime only; this helper exits.
+ // https://developer.apple.com/documentation/coregraphics/cgdisplaysetdisplaymode(_:_:_:)
+ // https://developer.apple.com/documentation/coregraphics/cgconfigureoption/forsession
+ // Configure this target only; do not change mirrors, origins or other displays.
+ CGDisplayModeRef currentMode=CGDisplayCopyDisplayMode(target);
+ bool already=currentMode&&CGDisplayModeGetIODisplayModeID(currentMode)==CGDisplayModeGetIODisplayModeID(choice)&&
+  CGDisplayModeGetPixelWidth(currentMode)==w&&CGDisplayModeGetPixelHeight(currentMode)==h&&
+  CGDisplayVendorNumber(target)==0x5250&&CGDisplayModelNumber(target)==0x3453;
+ if(currentMode)CFRelease(currentMode);
+ CGError error=kCGErrorSuccess;
+ if(!already){
+  CGDisplayConfigRef config=NULL;
+  error=CGBeginDisplayConfiguration(&config);
+  if(error==kCGErrorSuccess){
+   error=CGConfigureDisplayWithDisplayMode(config,target,choice,NULL);
+   if(error==kCGErrorSuccess)error=CGCompleteDisplayConfiguration(config,kCGConfigureForSession);
+   else CGCancelDisplayConfiguration(config);
+  }
+ }
+ CGDisplayModeRef actual=CGDisplayCopyDisplayMode(target);
+ CGRect afterBounds=CGDisplayBounds(target);
+ bool passed=afterBounds.origin.x==0&&afterBounds.origin.y==0&&error==kCGErrorSuccess&&actual&&CGDisplayModeGetIODisplayModeID(actual)==CGDisplayModeGetIODisplayModeID(choice)&&CGDisplayModeGetPixelWidth(actual)==w&&CGDisplayModeGetPixelHeight(actual)==h&&CGDisplayVendorNumber(target)==0x5250&&CGDisplayModelNumber(target)==0x3453;
+ NSMutableDictionary *actualInfo=actual?[info(actual) mutableCopy]:[NSMutableDictionary new];
+ actualInfo[@"origin_x"]=@(afterBounds.origin.x);actualInfo[@"origin_y"]=@(afterBounds.origin.y);
+ emit(@{@"passed":@(passed),@"changed":@(!already&&error==kCGErrorSuccess),@"display":@(target),@"error":@(error),@"selected":info(choice),@"actual":actualInfo,@"scope":@"session existing virtual display mode and zero origin only; no DPI changes; independent post-exit query required"});
+ if(actual)CFRelease(actual);CFRelease(modes);return passed?0:5;
+}}

@@ -1,0 +1,47 @@
+ XD: rgpuhangdump=1 (dump CP header/IB state, ring and IB memory at the first stalled gfx ring observation)
+ XB: pending command report route entries-match=1 route=ok (org=0xffffff8009e1ef8b)
+ XD: gfx hang dump 0 at KIQ observation: RB0 RPTR=0x1f31 static 50 ms, WPTR=0_00002100 BASE=0_ffbfe000 (ring va 0xffbfe00000, 0x20000 dwords, valid=1) CNTL=0xa00e10 VMID=0 GRBM_GFX_CNTL=0
+ XD: CP_PFP_HEADER_DUMP x8: c0001700 c00d1000 c0071000 c0065800 c0004600 c0065800 c0012d00 c0017900
+ XD: CP_ME_HEADER_DUMP x8: c0053c00 c0064900 c0033700 c0067600 c0067600 c0017600 c0017600 c0017900
+ XD: CP_CE_HEADER_DUMP x8: c0008b00 ffff1000 ffff1000 ffff1000 ffff1000 ffff1000 ffff1000 ffff1000
+ XD: CP_IB1 BASE=0x4_001d0000 BUFSZ=0 OFFSET=0
+ XD: CP_IB2 BASE=0_00000000 BUFSZ=0 OFFSET=0
+ XD: CP_CE_IB1 BASE=0_00000000 BUFSZ=0 OFFSET=0
+ XD: CP_CE_IB2 BASE=0_00000000 BUFSZ=0 OFFSET=0
+ XD: GRBM_STATUS=0xe7f10028 STATUS2=0x54000008 STATUS3=0x2000 STATUS_SE0=0xed400000 CP_STAT=0x94079200 STALLED_STAT1=0xc00 2=0x230000 3=0x800 BUSY_STAT=0x448000
+ XD: PA_SC_FIFO_SIZE=0 SPI_DEBUG_BUSY=unavailable (no GC 10.3 offset) instr PFP 0xb21->0xb21 ME 0x5e8->0x619 CE 0x61c->0x61c fault=0 addr=0_00000000
+ XD: gfx hang dump 0 memory: ring va=0xffbfe00000 RPTR=0x1f31 WPTR=0x2100 window [0x1ef1..RPTR+32)
+ XD: ring page va=0xffbfe07000 via gart -> system 0x3ff9ff000 (entry 0x30003ff9ff077) read=1
+ XD: ring vmid=0 [0x1ef1] ffff1000 ffff1000 ffff1000 ffff1000 ffff1000 ffff1000 ffff1000 ffff1000
+ XD: ring vmid=0 [0x1ef9] ffff1000 ffff1000 ffff1000 ffff1000 ffff1000 c0008b00 00000000 c0032200
+ XD: ring vmid=0 [0x1f01] bfde001c 000000ff 00000000 00000079 c0044000 00010209 00000000 00000000
+ XD: ring vmid=0 [0x1f09] bfe803e0 000000ff c0033700 00000000 0000a2a4 00000000 00000016 c0065800
+ XD: ring vmid=0 [0x1f11] 86287fc3 ffffffff 000000ff 00000000 00000000 00000010 0001c3c1 c0017900
+ XD: ring vmid=0 [0x1f19] 00000074 00000000 c0053c00 00000003 0000c07f 00000000 00000000 80000000
+ XD: ring vmid=0 [0x1f21] 0000000a ffff1000 ffff1000 ffff1000 ffff1000 ffff1000 ffff1000 ffff1000
+ XD: ring vmid=0 [0x1f29] ffff1000 ffff1000 ffff1000 ffff1000 c0023f00 001d0000 00000004 03000d10
+ XD: ring vmid=0 [0x1f31] ffff1000 ffff1000 ffff1000 ffff1000 ffff1000 ffff1000 ffff1000 ffff1000
+ XD: ring vmid=0 [0x1f39] ffff1000 ffff1000 ffff1000 ffff1000 c0064900 00000528 60000000 bfe803e8
+ XD: ring vmid=0 [0x1f41] 000000ff 00000000 00000000 f0000000 c0064900 0030c514 22000000 bfde0000
+ XD: ring vmid=0 [0x1f49] 000000ff 0000003f 00000000 f0000000 ffff1000 ffff1000 ffff1000 ffff1000
+ XD: ring[0x1f2d] INDIRECT_BUFFER va=0x4001d0000 length=0xd10 vmid=3 control=0x3000d10 before RPTR covers-IB1=1
+ XD: IB1 vmid=3 va=0x4001d0000 length=0xd10 OFFSET=0 BUFSZ=0 cursor offset=1:0 remaining=1:0xd10
+ XD: vmid 3 va 0x4001d0000 unresolved: ctl=0x3b root=0x85b01e000 start=0x400000000 last-entry=0
+ XD: IB1 page va=0x4001d0000 via client -> vram 0 (entry 0) read=0
+ XD: IB1 vmid=3 [0] -------- -------- -------- -------- -------- -------- -------- --------
+ XD: IB1 vmid=3 [0x8] -------- -------- -------- -------- -------- -------- -------- --------
+ XD: vmid 3 va 0x4001d3000 unresolved: ctl=0x3b root=0x85b01e000 start=0x400000000 last-entry=0
+ XD: IB1 page va=0x4001d3000 via client -> vram 0 (entry 0) read=0
+ XD: IB1 vmid=3 [0xce0] -------- -------- -------- -------- -------- -------- -------- --------
+ XD: IB1 vmid=3 [0xce8] -------- -------- -------- -------- -------- -------- -------- --------
+ XD: IB1 vmid=3 [0xcf0] -------- -------- -------- -------- -------- -------- -------- --------
+ XD: IB1 vmid=3 [0xcf8] -------- -------- -------- -------- -------- -------- -------- --------
+ XD: IB1 vmid=3 [0xd00] -------- -------- -------- -------- -------- -------- -------- --------
+ XD: IB1 vmid=3 [0xd08] -------- -------- -------- -------- -------- -------- -------- --------
+ XD: gfx hang dump 0 memory complete
+ XB: pending CB 0 va=0x4001d0000 size=0xd10 copied=0xd10 waits=1
+ XB: pending CB 0 wait 0 at=0xbcf fn=3 mem=1 oper=0 eng=0 addr=0x400001000 second=0x4 ref=0x11111115 mask=0xffffffff interval=0xa sampled=0 values=0,0,0
+ XB: pending CB 0 wait 0 ctx [0x0bb7] 00000000 00000000 00000000 c0067600 00000030 00000000 00000000 00000000
+ XB: pending CB 0 wait 0 ctx [0x0bbf] 00000000 00000000 00000000 c0033700 00100100 00001000 00000004 00000004
+ XB: pending CB 0 wait 0 ctx [0x0bc7] c0064900 00000514 20000000 00001000 00000004 11111115 00000000 00000000
+ XB: pending CB 0 wait 0 ctx [0x0bcf] c0053c00 00000013 00001000 00000004 11111115 ffffffff 0000000a

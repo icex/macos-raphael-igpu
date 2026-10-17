@@ -1,0 +1,16 @@
+{
+  "_comment": "Candidate473: aspect hold uses the menu bar height as base size and leaves maximized windows alone (472 derived a 1920-px base from a maximized window and squeezed the picture). patches/qemu/10.1.2-vfio-rgpu-display.patch, 10.1.2-gtk-zoom-keep-aspect.patch",
+  "schema": 1,
+  "vm_dir": "/home/user/macos-vm",
+  "gpu_bdf": "0000:7b:00.0",
+  "gpu_id": "0x73ff",
+  "gpu_rom": "run/gpu-patched.rom",
+  "inhibitor_container": "rgpu-inhibit",
+  "image_id": "sha256:731532f3af345347be1f217ef57018454b5ae38b3c07e7155a4395b9e25850bc",
+  "lilu": {
+    "bundle": "run/headless-lilu-verified-1df50f512b55/Lilu.kext",
+    "executable_sha256": "1df50f512b55b4f6ec873a18ff4b0db78b11b7fe9022ee195e50466e8573b7f2",
+    "info_sha256": "6714fee51444238c0540814729767485572441435bcf36a158571cf78317a669",
+    "build_manifest_sha256": "52918857d61ac640980c53fd597aac22e0fcb8cdd50de2a09e3dfe1eeeb54f76"
+  }
+}

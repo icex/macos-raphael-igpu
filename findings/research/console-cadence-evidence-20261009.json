@@ -1,0 +1,155 @@
+{
+  "run_id": "00bad24a728429d67f21519fb472a563",
+  "candidate": "1.0.342",
+  "card": "metal-188",
+  "build_id": "24d88f85ac304af5a7502bb73ca411c0",
+  "boot_id": "ba51b3c6-9420-4510-af69-38a42b3c79c7",
+  "mode2": 283,
+  "functional": {
+    "native_metal": true,
+    "windowserver_accelerator_client": true,
+    "virt_manager_rendered": true,
+    "capabilities_x86_64": true,
+    "manager_xml_unchanged": true,
+    "guest_tokens_completed": {
+      "native_draws": 3028,
+      "hidpi_draws": 1993
+    },
+    "cadence": {
+      "native": {
+        "summary": {
+          "reason": "completed",
+          "nonce": "cd8afde89d47f6f2",
+          "unique": 895,
+          "duplicates": 966,
+          "invalid": 16,
+          "elapsed": 30.01026278200152,
+          "sampled_unique_per_second": 29.823131056912008,
+          "max_observed_stale_seconds": 0.09638335199997528,
+          "max_sampling_seconds": 0.023552050995931495,
+          "scope": "Sampling lower bound; full pixbuf copying may reduce measured throughput. No GPU FPS, host scanout, or absolute latency claim."
+        },
+        "median_sampling_ms": 2.2429180025937967,
+        "median_unique_gap_ms": 32.1134340010758,
+        "p95_unique_gap_ms": 64.22698799724458,
+        "draw_ids_skipped_between_samples": 604,
+        "invalid_after_first": {
+          "checksum mismatch; missing token border": 6,
+          "torn cell; missing token border": 2
+        },
+        "geometry": [
+          1920,
+          1080
+        ]
+      },
+      "hidpi": {
+        "summary": {
+          "reason": "completed",
+          "nonce": "4a5730a50537b958",
+          "unique": 555,
+          "duplicates": 1294,
+          "invalid": 28,
+          "elapsed": 30.005903161996685,
+          "sampled_unique_per_second": 18.496360432933844,
+          "max_observed_stale_seconds": 0.12846892199740978,
+          "max_sampling_seconds": 0.01960560600127792,
+          "scope": "Sampling lower bound; full pixbuf copying may reduce measured throughput. No GPU FPS, host scanout, or absolute latency claim."
+        },
+        "median_sampling_ms": 5.277390999253839,
+        "median_unique_gap_ms": 64.21443599901977,
+        "p95_unique_gap_ms": 96.34741899935761,
+        "draw_ids_skipped_between_samples": 437,
+        "invalid_after_first": {
+          "missing token border; torn cell": 4,
+          "missing token border; checksum mismatch": 14
+        },
+        "geometry": [
+          3840,
+          2160
+        ]
+      }
+    }
+  },
+  "capture": {
+    "valid": true,
+    "verdict": "CORE_PROBE_PASS",
+    "earliest_failure": null
+  },
+  "shutdown": {
+    "cid": "14c900c15db9efed3cfd28341131987a113112c939f1df21d2bb47eb4b733cd5",
+    "outcome": "exited-after-guest-request",
+    "guest_boot_uuid": "D81F5694-6223-4A81-ABC8-4ABBBDE49FDD",
+    "request_id": "1adb55adb2eb4106ac2ea8a95751e088"
+  },
+  "recovery": {
+    "status": "recovered",
+    "authorizes_launch": true
+  },
+  "libvirt_terminal_receipt": false,
+  "capture_exit_receipts": [
+    {
+      "cid": "14c900c15db9efed3cfd28341131987a113112c939f1df21d2bb47eb4b733cd5",
+      "deferred": false,
+      "elapsed_seconds": 0.34201124999526655,
+      "error_type": "RuntimeError",
+      "outcome": "immediate-stop",
+      "run_id": "00bad24a728429d67f21519fb472a563",
+      "started_at": "2026-10-09T09:24:49.986979209Z"
+    },
+    {
+      "cid": "14c900c15db9efed3cfd28341131987a113112c939f1df21d2bb47eb4b733cd5",
+      "deferred": false,
+      "elapsed_seconds": 0.34203566100040916,
+      "error_type": "RuntimeError",
+      "outcome": "immediate-stop",
+      "run_id": "00bad24a728429d67f21519fb472a563",
+      "started_at": "2026-10-09T09:24:49.986979209Z"
+    }
+  ],
+  "limitations": [
+    "Both capture hooks refused grace with RuntimeError; exact cause was not preserved. No native controller exit qualification.",
+    "Manager-buffer cadence is sampled lower bound, not GPU FPS, scanout or absolute latency.",
+    "Eight native and eighteen HiDPI samples after first valid token fail cell/checksum validation; atomic presentation is not established.",
+    "Manager default storage pool creation fails on a client-local path inside the container, then undefines the pool; domain XML unchanged."
+  ],
+  "artifacts": {
+    "candidate-342-results/manifest.json": "3bd4271935daf801383147bf068831d2932fb41f7a5ebda1044724cc2a727b84",
+    "candidate-342-results/probe.json": "02465b6fbd294faa0f3a5aa5a968577ef79318809257499ced9e2941f3ec1da2",
+    "candidate-342-results/running-identity.json": "c5f33aee90acdedbc1b3dcd09a9662a75c988e56f124ccef2b6b4fd020af9255",
+    "candidate-342-results/verdict.json": "929b824abce06b1c1b2e96514a5eb81365c0847c9c0d61f558b4b8474500164e",
+    "candidate-342-results/shutdown.json": "0e755ad2906aae98298c34e64a03c7950edbd0cebebc7b6c4c3711be97fcf617",
+    "candidate-342-results/recovery.json": "127c2aff8b7a7f5dafddb1b63aba9122953baa3f4ac46f39465d817b05d13544",
+    "candidate-342-results/critical-quiesce.json": "6f4d97889bc7d9c03c1a4672273d46afa2ee94328424a180b9dbbf9670773386",
+    "candidate-342-results/capture-sha256.json": "0b0f497d7d9892820ec241ecbc98f8889ef9696b8fb943cfb399044fda72e7d2",
+    "candidate-342-results/launcher.log": "ace451ff8604f7b7c38ed84ab6de4d4fb798c115a4c25028f5484049e3b4afe3",
+    "c342-cadence-analysis.json": "0197f4e08e911cec62765c8158fc2df705fecf59b73764de8506b088dec784cd",
+    "c342-native-cadence.jsonl": "80a45c4d2af331f77742ecd92dd18c44c70ae12ecc150ab5622873184e6f3554",
+    "c342-native-cadence.jsonl.summary.json": "56429f82b0ca108ac85859e4c1f7297776b97d07d78da56f26cb66d48893f9f7",
+    "c342-hidpi-cadence.jsonl": "cadf03e69e2810985876b61f66ddcdd8cddafe3fd1fb6e9fb153b553b82bad3b",
+    "c342-hidpi-cadence.jsonl.summary.json": "14db70e4eb5ba205758b3fbc5b39bd7e21de07c6c4962d75095c02a074ada1c4",
+    "c342-native-token.log": "cb5c48b0cecbdf850ac44308ee2522b74f5f2ee8b31389c87a80815248b6a769",
+    "c342-hidpi-token.log": "a5efd99cedb9aa0e8601cce3a04670dec3a2fdeb895df5b3c504357718a73c34",
+    "c342-guest-compile-awake.txt": "8819593cd6f90c2ab8a3663eed73fa483e7b62371f1f0d1c79e1a25b40d16588",
+    "c342-native-mode.txt": "9355f97c47dd7ad358f47820228e81a696e75289a3dece040e97b53f92a41f4c",
+    "c342-hidpi-mode.txt": "42bce57c1516e13df3615630f9901d08c85b27c053702ee520979690e640132f",
+    "c342-native-token-window.png": "2dafd53a4915c4370fde905a1a1e16e21551bc2b885fb8fcd4ba89d5801d209a",
+    "c342-hidpi-token-window.png": "3c555eb24eac05443c762a3857c86ade46de9c0a9173d109a08e459b08ef0df2",
+    "c342-final-desktop.png": "f7fb8fa871877b7eca9bcbf24d062dfce911b3b8cac42e8ac4e480cc290aeb14",
+    "c342-presenter-final.txt": "a5b3a62c1309857a9316175f49a0c82742ac22df10b224543fede85a4a59b222",
+    "c342-final-awake.txt": "378da37a203106009d6dddfe44c302c17e1b49c660d3ea3a21edc68344a56a3e",
+    "c342-capabilities.xml": "45ad7e936c00643c9ec7bd3ad04dda48ff4d8691a5480b150695eb811508189e",
+    "c342-manager-before.xml": "2ec709522db149e5861d5c0f2a83f9423dc6fc96c1bc5993d6bc3d2b8d2a8d0d",
+    "c342-manager-after.xml": "2ec709522db149e5861d5c0f2a83f9423dc6fc96c1bc5993d6bc3d2b8d2a8d0d",
+    "c342-manager-close-identity.txt": "db34aaf4ffe3d1badf297066d58976966bdd5eb5652e718a984868f8d611ac18",
+    "c342-native-manager.log": "47403cc2fc3af02cda038e951e5ef80dbc31a21b20f5eba47f1d320677979c25",
+    "c342-hidpi-manager.log": "1fa3a0fe8d128d18c3e7d384f65a9696e49924f22bdb8af069ab0f8c86023406",
+    "c342-final-host-tests.log": "60f58ccb5275199297a5cf1623190e1c29f50c332e021cb55065169c3240ae35",
+    "libvirt-00bad24a728429d67f21519fb472a563/admission.json": "76694c08fe41a6b87c183e5e3578afa066ac3bbe5b39f7132a089f525d26c620",
+    "libvirt-00bad24a728429d67f21519fb472a563/paused.json": "23fb1af834e3504d180db34860c4c6fa5dfa09433b605978ea7072339c297096",
+    "libvirt-00bad24a728429d67f21519fb472a563/resume.json": "aaa13a3723e44b3bba3722b0919ac79eb66b5297ab5179910c43a4d67b10b758",
+    "libvirt-00bad24a728429d67f21519fb472a563/running.json": "ad8730a3cd7f0ed99134f1e7866a6aaa9638768e3926592e189e9ff1ef8eb19b",
+    "libvirt-00bad24a728429d67f21519fb472a563/events.jsonl": "be4578af818147a86acae263c6e0632dd13da544564343de7982cd2c421c885a",
+    "capture-exit-14c900c15db9efed3cfd28341131987a113112c939f1df21d2bb47eb4b733cd5-560706.json": "7392c13513e1293b3ac905b52ed4f4a6657fb2395be2804a3712f5080932051e",
+    "capture-exit-14c900c15db9efed3cfd28341131987a113112c939f1df21d2bb47eb4b733cd5-560708.json": "a84c6a7a0d912808739af0fc77e93625a568515171d5a9bc62f8374bfb2cd28f"
+  }
+}

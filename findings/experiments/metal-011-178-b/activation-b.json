@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "kind": "two-run-warm-qualification-activation",
+  "stage": "B",
+  "boot_id": "5d6f45d0-4384-4340-b819-7751bc26ebb3",
+  "policy_sha256": "411bb1f98638401753db824b12deb6632e98b03281ea36ec6a545f6c014a2bdf",
+  "ledger_preimage_sha256": "5748a6f05c9029fb132609f97e05c321c439dec22d8582b17599238984bee8b5",
+  "manifest_sha256": "2e0138dc2aa39928f8897a61da05ed42dd62e1ccf9cd1dd0d04a58b9c6bf7f9c",
+  "run_id": "4a45f4a4c1dd49c69fab2dc37e2e4898",
+  "prior_run_id": "f103e47500ed4a06ae346df23250d95d",
+  "recovery_id": "0975a837f47b47389c032cdb9a3e9a14",
+  "canonical_recovery_receipt_sha256": "528a400f4c059bb150ed98f480434599e27fbe3648fc9b6b4f635d6f47b24f4e",
+  "run_recovery_receipt_sha256": "e696db64544372dd986df8319c9bd931bf7e2e81a0c89db4ea0eaebeb34a4fd5",
+  "automatic_retry": false,
+  "a_output_sha256": "1a3c55af81c71d80036b7fae3cbb04252039689efa7b7f37f6128fb95b3e35f3",
+  "a_activation_sha256": "3ab02bfee41d6984cffc7eed9f8869d4414665ec221f1dad32a1117a484a0c8e"
+}

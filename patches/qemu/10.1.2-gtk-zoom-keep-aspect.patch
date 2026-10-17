@@ -1,0 +1,175 @@
+diff --git a/include/ui/gtk.h b/include/ui/gtk.h
+index 3e6ce3cb4..36cc89aa7 100644
+--- a/include/ui/gtk.h
++++ b/include/ui/gtk.h
+@@ -44,6 +44,9 @@ typedef struct VirtualGfxConsole {
+     double preferred_scale;
+     double scale_x;
+     double scale_y;
++    int keep_w, keep_h;   /* zoom-to-fit: guest scanout aspect the window snaps to */
++    guint snap_source;
++    bool snap_connected;
+ #if defined(CONFIG_OPENGL)
+     QemuGLShader *gls;
+     EGLContext ectx;
+@@ -157,6 +160,7 @@ extern bool gtk_use_gl_area;
+ 
+ /* ui/gtk.c */
+ void gd_update_windowsize(VirtualConsole *vc);
++void gd_keep_aspect(VirtualConsole *vc, int width, int height);
+ void gd_update_monitor_refresh_rate(VirtualConsole *vc, GtkWidget *widget);
+ void gd_hw_gl_flushed(void *vc);
+ 
+diff --git a/ui/egl-helpers.c b/ui/egl-helpers.c
+index e3f2872cc..fbd940cfe 100644
+--- a/ui/egl-helpers.c
++++ b/ui/egl-helpers.c
+@@ -196,7 +196,8 @@ void egl_fb_read_rect(DisplaySurface *dst, egl_fb *src, int x, int y, int w, int
+ void egl_texture_blit(QemuGLShader *gls, egl_fb *dst, egl_fb *src, bool flip)
+ {
+     glBindFramebuffer(GL_FRAMEBUFFER_EXT, dst->framebuffer);
+-    glViewport(0, 0, dst->width, dst->height);
++    /* dst->x/y place the picture inside the window (zoom-to-fit centring). */
++    glViewport(dst->x, dst->y, dst->width, dst->height);
+     glEnable(GL_TEXTURE_2D);
+     glBindTexture(GL_TEXTURE_2D, src->texture);
+     qemu_gl_run_texture_blit(gls, flip);
+@@ -209,9 +210,9 @@ void egl_texture_blend(QemuGLShader *gls, egl_fb *dst, egl_fb *src, bool flip,
+     int w = scale_x * src->width;
+     int h = scale_y * src->height;
+     if (flip) {
+-        glViewport(x, y, w, h);
++        glViewport(dst->x + x, dst->y + y, w, h);
+     } else {
+-        glViewport(x, dst->height - h - y, w, h);
++        glViewport(dst->x + x, dst->y + dst->height - h - y, w, h);
+     }
+     glEnable(GL_TEXTURE_2D);
+     glBindTexture(GL_TEXTURE_2D, src->texture);
+diff --git a/ui/gtk-egl.c b/ui/gtk-egl.c
+index 0b787bea2..f9b33dfe7 100644
+--- a/ui/gtk-egl.c
++++ b/ui/gtk-egl.c
+@@ -265,6 +265,7 @@ void gd_egl_scanout_texture(DisplayChangeListener *dcl,
+     gtk_egl_set_scanout_mode(vc, true);
+     egl_fb_setup_for_tex(&vc->gfx.guest_fb, backing_width, backing_height,
+                          backing_id, false);
++    gd_keep_aspect(vc, w, h);
+ }
+ 
+ void gd_egl_scanout_dmabuf(DisplayChangeListener *dcl,
+@@ -381,6 +382,15 @@ void gd_egl_scanout_flush(DisplayChangeListener *dcl,
+         py_offset = (ph_widget - ph_surface) / 2;
+     }
+ 
++    /*
++     * Letterbox: the picture is centred and keeps its aspect, so clear the whole window
++     * first; otherwise the bars show stale contents of the swapped back buffer.
++     */
++    glBindFramebuffer(GL_FRAMEBUFFER, 0);
++    glViewport(0, 0, pw_widget, ph_widget);
++    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
++    glClear(GL_COLOR_BUFFER_BIT);
++
+     egl_fb_setup_default(&vc->gfx.win_fb, pw_surface, ph_surface,
+                          px_offset, py_offset);
+     if (vc->gfx.cursor_fb.texture) {
+diff --git a/ui/gtk.c b/ui/gtk.c
+index e91d093a4..e67072a42 100644
+--- a/ui/gtk.c
++++ b/ui/gtk.c
+@@ -277,6 +277,11 @@ static void gd_update_geometry_hints(VirtualConsole *vc)
+         double scale_y = s->free_scale ? VC_SCALE_MIN : vc->gfx.scale_y;
+         geo.min_width  = surface_width(vc->gfx.ds) * scale_x;
+         geo.min_height = surface_height(vc->gfx.ds) * scale_y;
++        if (s->free_scale) {
++            /* A quarter of a 5K guest is 1280x720: keep small windows possible. */
++            geo.min_width = MIN(geo.min_width, 640);
++            geo.min_height = MIN(geo.min_height, 360);
++        }
+         mask |= GDK_HINT_MIN_SIZE;
+         geo_widget = vc->gfx.drawing_area;
+         gtk_widget_set_size_request(geo_widget, geo.min_width, geo.min_height);
+@@ -324,6 +329,67 @@ static void gd_update_geometry_hints(VirtualConsole *vc)
+     gtk_window_set_geometry_hints(geo_window, geo_widget, &geo, mask);
+ }
+ 
++/*
++ * Zoom-to-fit, with RGPU_SNAP_ASPECT=1: snap the window to the guest scanout's aspect so
++ * the picture fills it without bars. A window-manager aspect hint made corner drags stick (KWin enforces it
++ * on every motion), so the drag stays free and the height snaps once the size has been
++ * still for 300 ms. Maximized and fullscreen windows are left alone.
++ */
++static gboolean gd_snap_aspect(gpointer opaque)
++{
++    VirtualConsole *vc = opaque;
++    GtkDisplayState *s = vc->s;
++    GtkWindow *win = GTK_WINDOW(vc->window ? vc->window : s->window);
++    GtkAllocation a;
++    int ww, wh, want;
++
++    vc->gfx.snap_source = 0;
++    if (!s->free_scale || s->full_screen || vc->gfx.keep_w <= 0 || vc->gfx.keep_h <= 0 ||
++        !gtk_widget_get_realized(vc->gfx.drawing_area) || gtk_window_is_maximized(win)) {
++        return G_SOURCE_REMOVE;
++    }
++    gtk_window_get_size(win, &ww, &wh);
++    gtk_widget_get_allocation(vc->gfx.drawing_area, &a);
++    if (a.width <= 1 || a.height <= 1 || wh < a.height) {
++        return G_SOURCE_REMOVE;
++    }
++    want = (int)((int64_t)a.width * vc->gfx.keep_h / vc->gfx.keep_w);
++    if (abs(want - a.height) > 1) {
++        gtk_window_resize(win, ww, wh - a.height + want);
++    }
++    return G_SOURCE_REMOVE;
++}
++
++static void gd_snap_aspect_later(GtkWidget *widget, GdkRectangle *allocation, gpointer opaque)
++{
++    VirtualConsole *vc = opaque;
++
++    if (vc->gfx.snap_source) {
++        g_source_remove(vc->gfx.snap_source);
++    }
++    vc->gfx.snap_source = g_timeout_add(300, gd_snap_aspect, vc);
++}
++
++void gd_keep_aspect(VirtualConsole *vc, int width, int height)
++{
++    if (vc->type != GD_VC_GFX || width <= 0 || height <= 0 ||
++        (vc->gfx.keep_w == width && vc->gfx.keep_h == height)) {
++        return;
++    }
++    vc->gfx.keep_w = width;
++    vc->gfx.keep_h = height;
++    /* Opt-in: by default the window keeps any shape and the picture letterboxes. */
++    if (g_strcmp0(g_getenv("RGPU_SNAP_ASPECT"), "1") != 0) {
++        return;
++    }
++    if (!vc->gfx.snap_connected) {
++        g_signal_connect(vc->gfx.drawing_area, "size-allocate",
++                         G_CALLBACK(gd_snap_aspect_later), vc);
++        vc->gfx.snap_connected = true;
++    }
++    gd_snap_aspect_later(NULL, NULL, vc);
++}
++
+ void gd_update_windowsize(VirtualConsole *vc)
+ {
+     GtkDisplayState *s = vc->s;
+@@ -817,10 +883,12 @@ void gd_update_scale(VirtualConsole *vc, int ww, int wh, int fbw, int fbh)
+         return;
+     }
+ 
+-    if (vc->s->full_screen) {
++    if (vc->s->full_screen && !vc->s->keep_aspect_ratio) {
+         vc->gfx.scale_x = (double)ww / fbw;
+         vc->gfx.scale_y = (double)wh / fbh;
+-    } else if (vc->s->free_scale) {
++    } else if (vc->s->full_screen || vc->s->free_scale) {
++        /* Fullscreen keeps the guest's aspect too (letterboxed, centred) unless the
++         * user turned keep-aspect off. */
+         double sx, sy;
+ 
+         sx = (double)ww / fbw;

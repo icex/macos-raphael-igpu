@@ -1,0 +1,1769 @@
+[
+  {
+    "owner": "HWLibs",
+    "reference": 45984,
+    "symbol": "_gc_check_register_equal_ext",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "4885ff7433554889e553504889fb488b3f8b7308ba0b000000b901000000e8d501000023430c8a4b10d3e83943140f94c04883c4085b5dc331c0c3554889e54885ff741b31c04883ff0174184889f948d1e9",
+    "mask": "ffffffff00ffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffff00ffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 46240,
+    "symbol": "_gc_cgs_write_register_ext",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54c8b4708498b80000100004885c07407498b78085dffe0488d15f3302400488d0d063124004c8d0df13e240031f641b82b0000005de9ebeaffff554889e54c8b4708498b40384885c07407498b7808",
+    "mask": "ffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffff00000000ffffff00000000ffffff00000000ffffffffffffffffffff00000000ffffffffffffffffffffffffffffffff00ffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 46302,
+    "symbol": "_gc_cgs_write_register",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54c8b4708498b40384885c07407498b78085dffe0488d15e8302400488d0dcb3024004c8d0db63e240031f641b8390000005de9b0eaffff554889e54c8b4f08498b81200100004885c07407498b7908",
+    "mask": "ffffffffffffffffffffffffffffffff00ffffffffffffffffffff00000000ffffff00000000ffffff00000000ffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffff00ffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 46361,
+    "symbol": "_gc_cgs_write_register_ext2",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54c8b4f08498b81200100004885c07407498b79085dffe0488d15c0302400488d0d8d3024004c8d0d783e240031f641b8450000005de972eaffff554889e5488b4f08488b41404885c07407488b7908",
+    "mask": "ffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffff00000000ffffff00000000ffffff00000000ffffffffffffffffffff00000000ffffffffffffffffffffffffffffffff00ffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 46488,
+    "symbol": "_gc_cgs_read_register_ext2",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54c8b4708498b80180100004885c07407498b78085dffe0488d1571302400488d0d0e3024004c8d0d273e240031f641b85f000000e8f4e9ffffb8ffffffff5dc3554889e5488b4708488b7808",
+    "mask": "ffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffff00000000ffffff00000000ffffff00000000ffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 62897,
+    "symbol": "_gc_fw_autoload_is_completed",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54156534889fb8bb7380b0000ba0b000000b901000000e8c8bfffff4189c68bb33c0b00004889dfba0b000000b901000000e8adbfffff31c980bb26030000000f94c181c90000008021c831c8",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 103000,
+    "symbol": "_gvm_get_ip_function",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54156534585c974764589c94d8d50204531db89cb4c8d356d00000031c06641397ae0754c66413972e2754566413952e4753e83f90377394963049e4c01f0ffe04b8d049b498d04c04883c008",
+    "mask": "ffffffffffffffffffffff00ffffffffffffffffffffffffffffff00000000ffffffffffffffff00ffffffffffff00ffffffffffff00ffffffff00ffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 209776,
+    "symbol": "_vm_10_1_get_uma_physical_fb_offset",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54156534883ec104889fb48c745e000000000c745ec00000000f6470c18744a488b83100500008bb040070000488b3bba0b000000e8fa73feff85c0751a488b83100500008bb098070000488b3b",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffff00000000ffffff00ffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 212682,
+    "symbol": "_vm_10_3_hw_init",
+    "symbol_delta": 320,
+    "target_delta": 0,
+    "bytes": "4c89f7e8985700004189c485c075754c89f7e88ff4ffff418b8e18010000f6c104750d418b07f6c108740e83c820eb06418b0783c810418907094310c7431830000000498b861002000048894320c7434003000000",
+    "mask": "ffffffff00000000ffffffffffff00ffffffff00000000ffffffffffffffffffffff00ffffffffffffff00ffffffff00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 221731,
+    "symbol": "_mmhub_2_3_0_initialize_registers",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5415741564155415453504c8bb710050000488b3fbe1b000000e82f48feff4d85f60f84fe0400004889c34885c00f84f20400004c8975d04d8dbeb403000049c7c480ffffff4531f64531ed4889df",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffff00000000ffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 223067,
+    "symbol": "_mmhub_2_1_0_initialize_registers",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5415741564155415453504c8bb710050000488b3fbe1b000000e8f742feff4d85f60f846e0400004889c34885c00f84620400004c8975d04d8dbeb403000049c7c4e0ffffff4531ed4531f64889df",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffff00000000ffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 333518,
+    "symbol": "_psp_cgs_read_register",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54c8b4708498b40404885c0740f89d20374975c498b780889ca5dffe0b8ffffffff5dc3554889e54c8b4f08498b41384885c0741289d20374975c498b790889ca4489c15dffe05dc3554889e5",
+    "mask": "ffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 333557,
+    "symbol": "_psp_cgs_write_register",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54c8b4f08498b41384885c0741289d20374975c498b790889ca4489c15dffe05dc3554889e54883ec2048c745e800000000488b7f084c8b8fb00000004d85c97429488d45e048893089500848894810",
+    "mask": "ffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 336766,
+    "symbol": "_psp_cmd_km_submit",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415641554154534883ec184989cd4989d74989f44989fe488d75d0c70600000000e85efeffffbb0200000085c0756f4c897dc84d8dbe40070000488d55d04c89f74c89e6e81c01000085c0",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffff00000000ffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 337129,
+    "symbol": "_psp_cmd_km_buf_prep",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e55350b8010000004885d20f84d50100008b0a4883f90f0f87c90100008b168d42ff83f80f7755486bc938488b9c0f60070000488d0db6010000486304814801c8ffe031c083fa010f95c08d0440",
+    "mask": "ffffffffffffffffffffffffffffffff00000000ffffffffffffffff00000000ffffffffffffffffff00ffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 338877,
+    "symbol": "_psp_tmr_init",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415641554154534881ec880300004889fb488b05cd145000488b00488945d0488dbd58fcffffbe14030000e8000000004531f64c8975c84c8975c04c8975b84c8975b04c8975a84c8975a0",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 339687,
+    "symbol": "_psp_tmr_unload",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e541574156534881ec880300004889fb488b05a7115000488b00488945e0488dbd6cfcffffbe10030000e8000000004531f64c8975d84c8975d04c8975c84c8975c04c8975b84c8975b04c8975a8",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 340044,
+    "symbol": "_psp_np_fw_init",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5415741564155415453504189d64989f74889fb488b7f10488db3d8200000ba500a0000e8d1dfffff4489b3a03400004489f048c1e003488d1480488dbb082c00004c89fee80000000083bba034000000",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 340350,
+    "symbol": "_psp_np_fw_load_capability_check",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e58b8f947d000083c1fdb00183f90177230fb68f2039000083f927730431c0eb1383f92f770e83fe2a0f94c183fe0e0f94c008c883fe2d75098a4f28d0e920c189c85dc3554889e55350ffce83fe35",
+    "mask": "ffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffff00ffffff00ffffffff00ffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 376499,
+    "symbol": "_psp_ring_create_11_0",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415641554154534883ec284189f74889fb31c0488945c8488945c0488945b8488945b083fe01741f41bd010000004183ff020f852d0200004c8db3c002000041bd00000200eb1d41bd04000000",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffff00000000ffffffffffffffffffffffffffff00ffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 393868,
+    "symbol": "_sdma_5_2_fw_autoload_is_completed",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5be8d4e0000ba01000000b90b00000041b801000000e820e0ffffc1e81f5dc3554889e54156534885ff0f84200300004889fb448b771880bf7e020000000f84fc0200004889dfe85cfeffff4183fe4b",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffff00000000ffffffff00000000ffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 394026,
+    "symbol": "_sdma_5_2_start_engine",
+    "symbol_delta": 122,
+    "target_delta": 1,
+    "bytes": "41b801000000e896dfffff89c183c90239c8741b4889dfbe1c06000031d241b82400000041b901000000e812e0ffff4889dfbe3c06000031d2b92400000041b801000000e858dfffff25c1f1ffff8d88120e0000",
+    "mask": "ffffffffffffff00000000ffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 461153,
+    "symbol": "_smu_set_fw_entry_info_from_file",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54156534883ec10b802000000f687d80200004075604889f34989fe31c0488d75e048894608488906488d1530d31d00e82dffffff85c0753dc603018b45e0894304488b75e8488973088b55e4",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffff00000000ff00000000ffffff00ffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 469811,
+    "symbol": "_smu_init_function_pointer_list",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415653504889fb4889f74889d6e861fbffff4189c78983c8020000488db3c0060000baf00000004889dfe876d8ffff4889dfe8d0fcffff0fb783d8020000a80175234183ff0a77684489f8",
+    "mask": "ffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffff00000000ffffffffffffffffffff00ffffffffff00ffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 473647,
+    "symbol": "_smu_update_function_pointers",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5488d0588feffff488987c8060000488d05fafdffff488987d8060000488d0507ffffff488987f0060000488d054bffffff48898708070000488d0545ffffff48898700070000488d053fffffff",
+    "mask": "ffffffffffffff00000000ffffffffffffffffffff00000000ffffffffffffffffffff00000000ffffffffffffffffffff00000000ffffffffffffffffffff00000000ffffffffffffffffffff00000000",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 549610,
+    "symbol": "_vcn_hw_init",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415653504889d34989f74989fee89c08000089c14d85f60f94c04d85ff0f94c208c24885db0f94c008d00fb6d08d041280fa01741081f9ffff020077084c89f7e8531a000085c00f850c010000",
+    "mask": "ffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffff00ffffffff00000000ffffffff00000000",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 550472,
+    "symbol": "_internal_cos_read_fw",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54883ec2048c745f000000000c745f80000000031c04885ff743d4885f67438488b4f08488b5610488d45e0488910488b16488950088b5608895010488b7908488d55f84889c6ff91a0000000",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffff00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 550927,
+    "symbol": "_internal_cgs_write_register",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5488b07488b7f1089f60354b734488b7808488b403889d689cab90c0000005dffe0",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text",
+    "audit": "Complete unchanged target function; removed neighboring-function bytes."
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 550964,
+    "symbol": "_internal_cgs_read_register",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5488b07488b4f1089f60354b134488b7808488b404089d6ba0c0000005dffe0",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text",
+    "audit": "Complete unchanged target function; removed neighboring-function bytes."
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 551124,
+    "symbol": "_internal_cgs_query_fw_load_status",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54156534883ec1031c948894de848894de0bb010000004885ff74404989d64885d274384889f8488b7f08488d55e0ff90d000000083f803741d85c0751e488b45e8498946088a45e141884601",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffff00ffffffffffffffffffffffffffffffffffffffffff00ffffff00ffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 551485,
+    "symbol": "_vcn_wait_on_reg_read",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54883ec20488d45e848893889700889500c89481044894014488b7f08488d35130000004889c2b988130000e863fbffff4883c4205dc3554889e553504889fb488b3f8b73088b530ce8a6fdffff",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffff00000000",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 551582,
+    "symbol": "_vcn_wait_on_reg_read_ms",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54883ec20488d45e848893889700889500c89481044894014488b7f08488d35b2ffffff4889c24489c9e804fbffff4883c4205dc3554889e54883ec20488d45e848893889700889500c894810",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 551854,
+    "symbol": "_internal_read_config_setting",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e541574156534883ec28488d5de4c7030100000089f04889c148c1e1084c8d34c14c8d3d078f48004b8d04374883c004488d75c848890648b800000000040000004889460848895e10e8aafaffff",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 555253,
+    "symbol": "_engine_hw_init",
+    "symbol_delta": 890,
+    "target_delta": 0,
+    "bytes": "49c781680300005800000041c7818003000002000000498b3e4d8d81780300004981c190030000c7042400000000be58000000ba00010000b902000000e803eeffff4989c7498b4e1048898188030000",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 556148,
+    "symbol": "_engine_initialize",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54156534883ec204889fb488b4f10f60120750983b9e002000000743b4889dfff91f80300004189c685c07562488b43104889dfff9030040000488b43104531f6f64001407448c680d803000000",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffff00ffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 558161,
+    "symbol": "_vcn_start_queue",
+    "symbol_delta": 49,
+    "target_delta": 0,
+    "bytes": "4189c785c0750e488b4308488b40108308014531ff8b03a801752a83c8018903488b4308488b4018ff00498b4610f60002740c4c89f7ff90280400004189c74889dfff53784489f84883c4085b415e415f",
+    "mask": "ffffffffffff00ffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 602360,
+    "symbol": "_engine_3_0_static_initialize",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54156534883ec204889fb488d75d848c746100000000048893eb80100000089460c488b4f108b89a8020000894e08894610488b07488b7808ff5060488b3bbe84c70009e87637ffff83e0fe488b3b",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 602554,
+    "symbol": "_engine_3_0_static_initialize",
+    "symbol_delta": 194,
+    "target_delta": 0,
+    "bytes": "4889dfbe01000000baa1000000e86836ffff83e0fd4889dfbe01000000baa100000089c1e82c36ffff4889dfbe01000000baa6040000e83f36ffff25fffeffff4889dfbe01000000baa604000089c1e80136ffff",
+    "mask": "ffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffff00000000",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 604702,
+    "symbol": "_engine_3_0_enable_power_gating",
+    "symbol_delta": 77,
+    "target_delta": 0,
+    "bytes": "4889dfbe01000000ba01000000b9aaaa2a2a41b8ffff3f3fe80230ffff31c04883c4085b5dc3554889e54156534889fb31f6e8390300004889dfbe01000000ba56010000b90002f01f4531c0e89e030000",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffff00000000",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 606045,
+    "symbol": "_engine_3_0_add_to_dpg_sram",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54889f0488b771089d2034c9634c1e10281e1fcff0f008d910006feff81fa00260000723b8d910008feff81faff050000770a81c10008010089caeb238d91007efbff81fa0026000072158db10080fbff",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffff00ffffffffffffffffff00ffffffffffffffffffffffffff00ffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 606275,
+    "symbol": "_engine_3_0_decode_sram_secure_initialize",
+    "symbol_delta": 116,
+    "target_delta": 0,
+    "bytes": "4889df4889c6ba01000000b98c00000041b801000000e8fffeffff4889df4889c6ba01000000b98e0000004531c0e8e7feffff4889df4889c6ba01000000b95601000041b80002f01fe8ccfeffff4889df",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffff00000000ffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 607057,
+    "symbol": "_engine_3_0_decode_sram_secure_initialize",
+    "symbol_delta": 898,
+    "target_delta": 0,
+    "bytes": "4889df4889c6ba01000000b9a604000041b800003e00e8f1fbffff41bf020000004889df4889c6ba01000000b9a100000041b802000000e8d0fbffff4889df4889c6ba01000000b9a90000004531c0e8b8fbffff",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffff00000000",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 607084,
+    "symbol": "_engine_3_0_decode_sram_secure_initialize",
+    "symbol_delta": 925,
+    "target_delta": 0,
+    "bytes": "41bf020000004889df4889c6ba01000000b9a100000041b802000000e8d0fbffff4889df4889c6ba01000000b9a90000004531c0e8b8fbffff488b4b10482b814003000089815803000089c048398120030000",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 607183,
+    "symbol": "_engine_3_0_dpg_secure_initialize",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5534883ec184889fb488d75e048c746100000000048893ec7460c01000000488b47108b80a8020000894608488b07488b7808ff5060488b3bbe84c70009e8a524ffff83e0fe488b3bbe84c70009",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 610211,
+    "symbol": "_queue_decode_3_0_hw_init_ring",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e541574156415453488b470831db80782c000f85820100004989fe48837f38000f846f010000488b40104c8ba08803000031db41895e50418b7e54410faf7e58e82f1cffff41bf01000000ba01000000",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 611920,
+    "symbol": "_queue_decode_3_0_submit_frame",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415653504889fb4c8b7f088b57584889d048c1e8028b7f50480faff848c1e70248037b38e8000000008b4350448b7358ffc031c93b43540f42c8894b5041c1ee02440faff1498b47108b00",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 612020,
+    "symbol": "_queue_decode_3_0_submit_frame",
+    "symbol_delta": 100,
+    "target_delta": 0,
+    "bytes": "4489f181c900000080894834be01000000ba16000000e84011ffff498b47108b00a8407518488b7b08be01000000bae10200004489f1e82011ffffeb0f4889dfe82233ffff488b436044893031c04883c408",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffff00ffffffffffffffffffffffffffffffffffff00000000ff00ffffffff00000000ffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 624491,
+    "symbol": "_TtlCreateHybridEngine",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e541574156415541545350bb020000004885ff0f84b80000004989f74885f60f84ac0000004989d64885d20f84a00000004989fce899720100bb0400000084c00f848b0000004c89e7e8baf3ffff",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffff00000000ffffffffffffffff00000000ffffffff00000000ffffffffffffffffff00000000ffffffff00000000",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 648689,
+    "symbol": "_ReadIndirectRegister",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "4885ff7420554889e5535089f3488b3fe87095ffff4889c789de4883c4085b5de9e82d000031c0c34885ff7425554889e541565389d34189f6488b3fe84495ffff4889c74489f689da5b415e5de9992d0000",
+    "mask": "ffffffff00ffffffffffffffffffffffff00000000ffffffffffffffffffffffff00000000ffffffffffffff00ffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffff00000000",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 648729,
+    "symbol": "_WriteIndirectRegister",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "4885ff7425554889e541565389d34189f6488b3fe84495ffff4889c74489f689da5b415e5de9992d0000c3",
+    "mask": "ffffffff00ffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffff00000000ff",
+    "section": "__text",
+    "audit": "Complete unchanged target function; removed neighboring-function bytes."
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 684818,
+    "symbol": "_IpiSdmaFindInstanceByEngineIndexAndType",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5448b472c4531c989d14d85c07438488b574041ba01000000448b5c8a584439de450f42d9b800000000480f42c24429de4d39c273134881c2d800000049ffc24885c074d4eb0231c08b57304885d2",
+    "mask": "ffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffff00ff00ffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 716845,
+    "symbol": "_ttlSetDeviceCapabilityEntry",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5415741564155415453504989ce4989d44989f54989ffe8688bfeff4885c074254889c34c89ef4c89e64c89f2e87e0000004989c64885c074104c89b3e80000004c89f7eb4031c0eb574c89ff",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffff00ffffffffffffffffffffffffff00000000ffffffffffffff00ffffffffffffffffffffff00ffffff00ffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 719424,
+    "symbol": "_ttlIsHwAvailable",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e553504889fbe86681feff4885c07409f680b00000000175314889dfe85081feff4885c07409f680b000000002751b4889dfe83a81feff4889c1b0014885c9740bf681b000000004740231c04883c408",
+    "mask": "ffffffffffffffffffff00000000ffffffff00ffffffffffffffff00ffffffff00000000ffffffff00ffffffffffffffff00ffffffff00000000ffffffffffffffffff00ffffffffffffffff00ffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 723984,
+    "symbol": "__ZN20AMDFirmwareDirectory11getFirmwareE16_AMD_DEVICE_TYPEPKc",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415641554154535083fe087f5189f0488d0440837cc7040074444989d64c8d24c74983c40431db4531ed498b44240c4a8b04e84c8b384c89ffe8000000004c89ff4c89f64889c2e800000000",
+    "mask": "ffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffff00000000",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 726416,
+    "symbol": "__ZN14AmdTtlServices24gmmCbSetMemoryAttributesEPv16_TtlCbMemoryTypeP22_TtlCbMemoryAttributes",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54156534885d2747283fe020f84800000004989d64889fb83fe010f848800000085f60f85b3000000b80200000041f64604010f84f6000000498b4e08483b8ba00400000f83b8000000488d3d9cc71900",
+    "mask": "ffffffffffffffffffffff00ffffffffff00000000ffffffffffffffffffffff00000000ffffffff00000000ffffffffffffffffffffffff00000000ffffffffffffffffffffffffff00000000ffffff00000000",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 731472,
+    "symbol": "__ZN14AmdTtlServices20gmmCbReserveFbMemoryEPvP24_TtlGmmReserveFbMemInput",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54156534989f64889fb4885ff742d4d85f6742831c049833e007447498b4e084885c9743e4881c1ffff0f004881e10000f0ff48018bd0040000eb27488d3deab3190031c0e800000000488d3d8fab1a00",
+    "mask": "ffffffffffffffffffffffffffffffffff00ffffffff00ffffffffffffff00ffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffff00ffffff00000000ffffff00000000ffffff00000000",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 734832,
+    "symbol": "__ZN14AmdTtlServices22cosReleaseMemoryHandleEPvS0_",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54885ff74124885f67424488b064889f7ff502831c05dc3488d3deea6190031c0e800000000488d3d5cab1a00eb15488d3dd7a6190031c0e800000000488d3d78ab1a0031c0e800000000b802000000",
+    "mask": "ffffffffffffffff00ffffffff00ffffffffffffffffffffffffffffffff00000000ffffff00000000ffffff00000000ff00ffffff00000000ffffff00000000ffffff00000000ffffff00000000ffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 2313708,
+    "symbol": "_bcs_get_device_inf",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e589f0488d0cc0488d0c494801c14801f931c083fe0b480f42c15dc3b8010000004885ff743d4885f67438554889e54883ec10488b8f48010000488d45f0c7400c00000000488930895008488b7908",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffff00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 2316188,
+    "symbol": "_bcs_read_mmr",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5488b8740010000488b7808488b40405dffe0554889e5488b8740010000488b7808488b40385dffe0554889e5488b8740010000488b7808488b80100100005dffe04189c989d083fe08740983fe07",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 2332977,
+    "symbol": "_bif_ip_create",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415641554154535041be01000000833e42752f4889d34989f74989fc41be01000000ba00040000be010000004889d9e8bbb0ffff85c0741c48c703000000004189c64489f04883c4085b",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffff00ffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 2334962,
+    "symbol": "_bif_doorbell_aperture_control",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e55350bb010000004885ff74568b0683f802742083f801743885c07546488b87780300004885c0743abe01000000ffd031dbeb2f488b76084885f67426488b87800300004885c0741a4883c408",
+    "mask": "ffffffffffffffffffffffffffffff00ffffffffffff00ffffffff00ffffff00ffffffffffffffffffffff00ffffffffffffffffffff00ffffffffffffffff00ffffffffffffffffffffff00ffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 2337819,
+    "symbol": "_bif50_enable_doorbell_aperture",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54156534189f64889fb488b3fbe01150000ba03000000e862abffff89c283e2fe4409f239c275055b415e5dc3488b3bbe01150000b9030000005b415e5de951abffff554889e553504889fb488b3f",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 2340391,
+    "symbol": "_bif6_1_enable_doorbell_aperture",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415653504189f74989fe488b3fbbc0000000418b763c01deba42000000e84da1ffff89c283e2fe4409fa39c2750b4883c4085b415e415f5dc3498b3e41035e3c89deb9420000004883c408",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 2343467,
+    "symbol": "_bif6_2_enable_doorbell_aperture",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415653504189f74989fe488b3fbbc0000000418b763c01deba42000000e84995ffff89c283e2fe4409fa39c2750b4883c4085b415e415f5dc3498b3e41035e3c89deb9420000004883c408",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 2350539,
+    "symbol": "_nbio2_3_enable_doorbell_aperture",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415653504189f74989fe488b3fbbc0000000418b763c01deba42000000e8a979ffff89c283e2fe4409fa39c2750b4883c4085b415e415f5dc3498b3e41035e3c89deb9420000004883c408",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 2364286,
+    "symbol": "_nbio7_2_enable_doorbell_aperture",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415653504189f74989fe488b3fbbc0000000418b763c01deba42000000e8f643ffff89c283e2fe4409fa39c2750b4883c4085b415e415f5dc3498b3e41035e3c89deb9420000004883c408",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 2364378,
+    "symbol": "_nbio7_2_set_doorbell_aperture_range",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54156534989f64889fb8b0e83f905742783f9047460b80100000085c90f8581000000498b46104883f8ff74754983c608bec03b4001eb51498b46104883f8ff741fb9ff03000041234e0883e01f",
+    "mask": "ffffffffffffffffffffffffffffffffffffff00ffffffff00ffffffffffffffffff00000000ffffffffffffffffff00ffffffffffffffffffff00ffffffffffffffffff00ffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 2379840,
+    "symbol": "_ipconfig_get_ip_discovery_info",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e58b4f1c4885c974164889f84883c0203930740d48056002000048ffc975f131c05dc3554889e5813a6402000075098972045de96b050000b8020000005dc3554889e55de93c06000031c081feaf000000",
+    "mask": "ffffffffffffffffffffff00ffffffffffffffffffff00ffffffffffffffffffff00ffffffffffffffffffffffffffffff00ffffffffff00000000ffffffffffffffffffffffffff00000000ffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 2386510,
+    "symbol": "_check_pcie_link_status",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415641554154534883ec184889fb66c745d6000031c08945d08945cc488b3fe87feffeff488b3b85c00f84e3000000be06000000e804eefeff4189c7488b3b41be01000000be01000000",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffff00000000ffffffffffff00000000ffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 3988916,
+    "symbol": null,
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "1200000003000000020000000100000005000000060000000400000004000000210000002200000008000000090000000a0000000d0000000e000000170000000f000000100000000b0000000c00000007000000190000001400000015000000160000001a0000003000000031000000320000001b0000001c0000001d0000004100000042000000330000003400000035000000360000003700000038000000",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__const"
+  },
+  {
+    "owner": "FB",
+    "reference": 57460,
+    "symbol": "__ZN35AMDRadeonX6000_AmdRadeonFramebuffer27reportCapabilities_LinkInfoEv",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415641554154534883ec184889fb4531f6448975d4448975d0488b87c88100004439b0d000000074210fb6b0ec000000488bbb408a0000488b07ff90e80800004989c6488b83c8810000",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "FB",
+    "reference": 65952,
+    "symbol": "__ZN33AMDRadeonX6000_AmdPowerPlayHelper7powerUpEv",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5415741564154534883ec104889fbe8390200004989c6488b034889dfff901801000084c07445488b7b204c8da318010000488b07be030000004c89e231c94531c0ff90000a00004189c785c0",
+    "mask": "ffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "FB",
+    "reference": 89898,
+    "symbol": "__ZN35AMDRadeonX6000_AmdRadeonFramebuffer16connectionChangeEv",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415653504889fbf687a48900002074084889dfe8ec010000488bbb308a0000488b8bc8810000488b07be18000000ba03000000ff9068010000488bbb308a0000488b8bd0810000488b07",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffff00ffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "FB",
+    "reference": 118556,
+    "symbol": "__ZN18AmdTimingUtilities19validateTimingRangeEPK28AmdDetailedTimingInformationPK22IODisplayTimingRangeV2j",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e583fa0183d200488b4728488b4e28480fafca4839c80f8791000000480faf56204839d00f82830000008b47403b4674777b3b467072768b4f443b4e7c776e3b4e7872698b4f483b8e84000000",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffff00000000ffffffffffffff00ffffffff00ffffffffffffff00ffffffff00ffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "FB",
+    "reference": 241322,
+    "symbol": "__ZNK31AMDRadeonX6000_AmdAsicInfoNavi213getCapabilityE22AsicCapabilitySelector",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54156534189f64889fb488b7f20488b07ff9048090000b900800000418d56f983fa02725e4183fe12743c4183fe0d75594885c07410488b084889c7ff911801000084c0745b488b7b20488b07",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffff00ffffffffff00ffffffff00ffffffffffffffffffffffffffffff00ffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "FB",
+    "reference": 242656,
+    "symbol": "__ZN31AMDRadeonX6000_AmdAsicInfoNavi218populateXGmiConfigEv",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54156534889fb488b7f28488b07be67a80100ff904001000089c183e10f898b38010000c1e80483e00fffc089833c010000488b7b28488b07be68a80100ff904001000025ffff0100898348010000",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "FB",
+    "reference": 245218,
+    "symbol": "__ZNK26AMDRadeonX6000_AmdAsicInfo13getCapabilityE22AsicCapabilitySelector",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5535083fe120f87210100004889fb89f0488d0df7010000486304814801c8ffe0488b7b20488b07ff9050090000488b084889c7ff91680100008b00e9c6010000b800010000e9bc010000488b7b20",
+    "mask": "ffffffffffffffffffffff00000000ffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffff00000000ffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "FB",
+    "reference": 286880,
+    "symbol": "__ZN22AMDRadeonX6000_AmdLink16commitLinkStatusEP18DetectedLinkStatus",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "807f4000742c554889e553504889fb4885f674248b06448b43184439c07539488dbbd0080000ba40040000e800000000eb22b8bc0200e0c3c683d40800000048c783d808000000000000c783100d0000ffffffff",
+    "mask": "ffffffffff00ffffffffffffffffffffffffff00ffffffffffffffffffff00ffffffffffffffffffffffffff00000000ff00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text",
+    "alternatives": [
+      {
+        "symbol_delta": 0,
+        "target_delta": 0,
+        "bytes": "b8bc0200e0f64740010f848c000000554889e553504889fb4885f6741e8b06448b43184439c07533488dbbd0080000ba40040000e8275e07f4eb1cc683d40800000048c783d808000000000000c783100d0000ffffffff",
+        "mask": "ffffffffffffffffffffff00000000ffffffffffffffffffffffffff00ffffffffffffffffffff00ffffffffffffffffffffffffff00000000ff00ffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "audit": "Equivalent typed function ABI with audited compiler boolean/loop/stack code; object offsets and call slots remain exact."
+      }
+    ]
+  },
+  {
+    "owner": "FB",
+    "reference": 295082,
+    "symbol": "__ZN35AMDRadeonX6000_AmdRadeonFramebuffer22validateDetailedTimingEPvy",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415641554154534881ec380200004989d54989f64889fb488dbde0feffffbea0000000e80000000031c048894598488945904889458848894580c745a000000000488dbda8fdffffbe38010000",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text",
+    "alternatives": [
+      {
+        "symbol_delta": 0,
+        "target_delta": 0,
+        "bytes": "554889e54157415641554154534881ec380200004989d54989f64889fb488dbde0feffffbea0000000e8e03d07f431c0488945a0488945984889459048894588c745a800000000488dbda8fdffffbe38010000",
+        "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "audit": "Equivalent typed function ABI with audited compiler boolean/loop/stack code; object offsets and call slots remain exact."
+      }
+    ]
+  },
+  {
+    "owner": "FB",
+    "reference": 300496,
+    "symbol": "__ZNK27AMDRadeonX6000_AmdDalHelper23translateLinkDescriptorER17AmdLinkDescriptorRK18_DalLinkDescriptor",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e58b0289068b42108946108b42148946148b420c89460c8b42088946080fb74a1883e1018b461883e0fe09c8668946180fb74a1883e10283e0fd09c8668946180fb74a1883e11083e0ef09c866894618",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "FB",
+    "reference": 429884,
+    "symbol": null,
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5415741564154534883bf48060000000f84a70000004989d64885d20f84dc0000004989f44889fbe8eafcffff4885c00f84090100004989c7488bbb50070000e8000000004c89ffe8ead51200",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffff00000000ffffffffffffff00000000ffffffffff00000000ffffffffffffffffffffff00000000ffffffff00000000",
+    "section": "__text"
+  },
+  {
+    "owner": "FB",
+    "reference": 477914,
+    "symbol": null,
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415641554154534881ec2802000041bf010000004885f60f846f0300004989d64885d20f84630300004989f4488b9f480100004c8b6b18bf28000000e800000000488b73184889c3418b0c24",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "FB",
+    "reference": 719677,
+    "symbol": null,
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415641554154534883ec484c8945b04989ca4989f78b87d801000080bee0010000027212ffc883f802410f92c3c745a400000000eb1483f801410f94c380bfdc010000000f95c08945a4",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "FB",
+    "reference": 749736,
+    "symbol": null,
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5415741564154534889f34c8b7608488b87e80300004c8ba0200100004889f7e8e0e9ffff498b04244c8d7b544c89e74c89feff1089c1b80500000084c97431498bbe58010000488b074889de",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "FB",
+    "reference": 823457,
+    "symbol": null,
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415641554154534883ec184889fb8b3e8b4614ffc84c8b7b08498b0f488b89f0030000448b4960b9cdcccccc480fafcf48c1e9234531f6488d3d9bac16004531c041390c38770741394c3804",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffff00ffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "FB",
+    "reference": 1033534,
+    "symbol": null,
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e553504889fb8b878c09000085c07f3c488d3db06c1000488d352c9f110031c0e800000000488d3ddc6c1000488d35559f1100488d153d9f1100b97000000031c0e8000000008b838c090000ffc8",
+    "mask": "ffffffffffffffffffffffffffffffffffff00ffffff00000000ffffff00000000ffffff00000000ffffff00000000ffffff00000000ffffff00000000ffffffffffffffff00000000ffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "FB",
+    "reference": 1033672,
+    "symbol": null,
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e553504889fbbf90090000e8df17f7ff4885c0745d488b4b084885c9744c8b13891048898878090000488b8948010000488988800900008b53108990d00800008a531488902609000048c780c808000000000000",
+    "mask": "ffffffffffffffffffffffffffffff00000000ffffffff00ffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "FB",
+    "reference": 1043038,
+    "symbol": null,
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e541574156534883ec184989febf48ea0000e842f3f6ff4885c00f84ab0100004889c341837e6003754e4889df4c89f6e88303000084c00f847e010000488d0579611000488903488d05c1961400",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffff00000000ffffffffffffffffff00ffffffffffffff00000000ffffffff00000000ffffff00000000ffffffffffff00000000",
+    "section": "__text"
+  },
+  {
+    "owner": "FB",
+    "reference": 1044563,
+    "symbol": null,
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415641554154534883ec284889fb488b05bab01800488b00488945d031c0488945c8488945c0c745bc000000000fb68f7803000085c9747031d289d2488bb4d380030000817e3880000000",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "FB",
+    "reference": 1066285,
+    "symbol": null,
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54889772831c04885f60f95c08947345dc3554889e54156538b47204885c074164889fb4531f64a3934f3742849ffc64c39f075f2eb5d488d3d82731100488d35f51a1100bad110000031c05b",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffff00ffffffffffffff00ff00ffffff00000000ffffff00000000ffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "FB",
+    "reference": 1117143,
+    "symbol": null,
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415641554154534883ec384589cd4589c6894dc88955cc8975d08b5520488b4d18448b7d1048897dc0488b87880000004885c0743280780800742c450faffd66c7401104008b4dd0894815",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffff00ffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "FB",
+    "reference": 1505177,
+    "symbol": null,
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415641554154534881ec980000004189f54989f84c8bb740010000498b86e00300000fb688e00100004885c9741731d2488b34d080beeb05000000752f48ffc24839d175eb4585ed7430",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffff00ffffffffffffff00ffffffff00",
+    "section": "__text"
+  },
+  {
+    "owner": "FB",
+    "reference": 1771230,
+    "symbol": null,
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5415741564154534989f64889fb4c8b3f4c8b67584c89ffe8826df2ff85c0744b83f802751f4889dfe8470000004889dfe8800000004c89ff4c89f6e85e6df2ff85c07427498b7c2410488d15cb370700",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffff00ffffffff00ffffffff00000000ffffffff00000000ffffffffffffff00000000ffffff00ffffffffffffffff00000000",
+    "section": "__text"
+  },
+  {
+    "owner": "FB",
+    "reference": 1771350,
+    "symbol": null,
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54156534889fb488b3f4c8b7358e8e26df2ff85c07422498b7e10488d15a937070031f689c131c0e8fd93fbff4889df5b415e5de94b0000005b415e5dc3554889e54156534889fb488b3f4c8b7358",
+    "mask": "ffffffffffffffffffffffffffffffffffff00000000ffffff00ffffffffffffff00000000ffffffffffffff00000000ffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "FB",
+    "reference": 1771415,
+    "symbol": null,
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54156534889fb488b3f4c8b7358bea0860100e8196ef2ff85c07422498b7e10488d158d37070031f689c131c0e8b793fbff4889df5b415e5de9050000005b415e5dc3554889e5415741564155",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffff00000000ffffff00ffffffffffffff00000000ffffffffffffff00000000ffffffffffffffff00000000ffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 7882,
+    "symbol": "__ZN37AMDRadeonX6000_AMDGraphicsAccelerator5startEP9IOService",
+    "symbol_delta": 1580,
+    "target_delta": 0,
+    "bytes": "0f8480000000488bbb381a00004885ff746b488b07ff90c0030000a840745e31c04c8d75c0498946084989064c89f7be10000000e8000000004c8bbb801e00004983c704488d3dfba41800e800000000",
+    "mask": "ffff00000000ffffffffffffffffffffff00ffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffff00000000ff00000000",
+    "section": "__text",
+    "scope_end_symbol": "__ZN37AMDRadeonX6000_AMDGraphicsAccelerator14loadSlotNumberEv",
+    "audit": "Unique interior instruction contract scanned only inside the verified owning function."
+  },
+  {
+    "owner": "X6000",
+    "reference": 19980,
+    "symbol": "__ZN37AMDRadeonX6000_AMDGraphicsAccelerator9powerUpHWEv",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415641554154534883ec284889fb488b0501241500488b00488945d0488bbf381a00004885ff746b488b07ff90c0030000a840745e31c04c8d75c0498946084989064c89f7be10000000",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 25936,
+    "symbol": "__ZN37AMDRadeonX6000_AMDGraphicsAccelerator21batchMemoryMapPrepareEP16IOAccelMemoryMap",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415653504889f34989fe4889f7e80000000041b70185c00f85c10000004181beb01f0000ff0300000f87ad000000488b034889dfff903801000084c0742a488b034889dfff5020498b86a81f0000",
+    "mask": "ffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffff00000000ffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 28758,
+    "symbol": "__ZN37AMDRadeonX6000_AMDGraphicsAccelerator13sendPMCommandEPv",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e541574156535041bed70200e0f687780c000005740e4489f04883c4085b415e415f5dc34989ff488bbf7803000041bebc0200e04885ff74dd4889f3e80000000085c074d1498bbf7803000031f6",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffff00000000ffffff00ffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 40102,
+    "symbol": "__ZN35AMDRadeonX6000_AMDAccelCommandQueue20processCommandBufferEjj",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5415741564154534189d64189f74889fb488bbfb80500004c8ba328070000e8000000004889832807000083bb24060000007515488b83c0050000488b8b20070000488988081a0000488b05bfd41400",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffffffff00000000",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 47166,
+    "symbol": "__ZN30AMDRadeonX6000_AMDAccelChannel12submitBufferEP24IOAccelCommandDescriptor",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415641554154534881ec080100004989f64889fb4c8bbf8000000031c0488d55d489028945c8488b0731f6ff90500100004d8b6e084d8ba560020000488b05f1b91400f700f7ffffff742a",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffff00",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 55632,
+    "symbol": "__ZN30AMDRadeonX6000_AMDAccelChannel38writePendingCommandInfoDiagnosisReportERPcRjP18AMD_COMMAND_BUFFERP11IOAccelTask",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415641554154534883ec384989cf4889d34989f64989fc488b3e4885ff74308b334883fe027228498b4f10458b4704488d150e730f0031c0e80000000085c07e0e8b0b39c80f43c1490106",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffff00ffffffffffffffffffffff00000000ffffff00000000ffffff00ffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 60580,
+    "symbol": "__ZN29AMDRadeonX6000_AMDAccelDevice15getHardwareInfoEP24_sAMD_GET_HW_INFO_VALUES",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5415741564154534885f60f84ae0100004989f64889fb4c8bbf080100004d8da7900000004c89e7e800000000498bbf88000000e8000000004c89e7e8000000004c89ffe800000000498b07488d35fb570f00",
+    "mask": "ffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffff00000000ffffffff00000000ffffffff00000000ffffffffffff00000000",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 98902,
+    "symbol": "__ZN31AMDRadeonX6000_AMDAccelResource20BatchPrepareMappingsEP37AMDRadeonX6000_AMDGraphicsAcceleratorPKPS_j",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415641554154534883ec1889d34989f74989fce830e2feff85db0f84bd0100004c8965c84189dd4531f64f8b24f74d85e40f848501000041837c2428000f857901000041807c2414010f846d010000",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffff00000000ffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffff00000000ffffffffffffffff00000000",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 99544,
+    "symbol": "__ZN31AMDRadeonX6000_AMDAccelResource12BatchPrepareEP37AMDRadeonX6000_AMDGraphicsAcceleratorPKPS_j",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415641554154534883ec68488b0538ed1300488b00488945d0b00185d20f84670100004189d64989f448897d804531ff4c897dc84c897dc04c897db84c897db04c897da84c897da04c897d98",
+    "mask": "ffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text",
+    "alternatives": [
+      {
+        "symbol_delta": 0,
+        "target_delta": 0,
+        "bytes": "554889e54157415641554154534883ec68488b0560f81300488b00488945d041b40185d20f846b0100004189d64889f348897d804531ed4c896dc84c896dc04c896db84c896db04c896da84c896da04c896d98",
+        "mask": "ffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "audit": "Equivalent typed function ABI with audited compiler boolean/loop/stack code; object offsets and call slots remain exact."
+      }
+    ]
+  },
+  {
+    "owner": "X6000",
+    "reference": 136196,
+    "symbol": "__ZN29AMDRadeonX6000_AMDAccelShared19SetVcnPMClientStateEjjyjj",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415641554154534883ec6844894dd0448945d44989cc4189d54189f64889fb4531ff488d45c84c8938488b4778488bb8081f0000e800000000488d8578ffffff4c8978104c8978184c897828",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 136403,
+    "symbol": "__ZN29AMDRadeonX6000_AMDAccelShared19SetVcnPMClientStateEjjyjj",
+    "symbol_delta": 207,
+    "target_delta": 0,
+    "bytes": "90554889e54157415641554154534881ecc80000004989ce4885f60f94c04883fa180f95c108c141bdc20200e00f858a0500004989f74889fb4c8b6f784d8da5900000004c89e7e800000000498bbd88000000",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 138144,
+    "symbol": "__ZN29AMDRadeonX6000_AMDAccelShared16CreateVcnContextEP23sVideoContextCreateInfoP23sVideoContextReturnInfo",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5415741564155415453504885f60f94c04885d20f94c141bfc20200e008c10f85cd0100004989d64989f44889fb4c8b7f784d8daf900000004c89efe800000000498bbf88000000e800000000",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffff00000000",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 139032,
+    "symbol": "__ZN29AMDRadeonX6000_AMDAccelShared16RemoveVcnContextEj",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5415741564154534189f64889fb4c8b7f784d8da7900000004c89e7e800000000498bbf88000000e8000000004c89e7e8000000004c89ffe800000000498b07488d3593250e004c89ff31d2ff9050080000",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffff00000000ffffffff00000000ffffffff00000000ffffffffffff00000000ffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 166188,
+    "symbol": "__ZN35AMDRadeonX6000_AMDAccelVideoContext9getHWInfoEP13sHardwareInfo",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "4885f60f84bb010000554889e54157415653504889f34989fe488bbff8100000488b07ff90c00100004989c7498bbef8100000488b07ff90b80100008903410fb707894304418b4708894308498bbef8100000",
+    "mask": "ffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 166197,
+    "symbol": "__ZN35AMDRadeonX6000_AMDAccelVideoContext9getHWInfoEP13sHardwareInfo",
+    "symbol_delta": 9,
+    "target_delta": 0,
+    "bytes": "554889e54157415653504889f34989fe488bbff8100000488b07ff90c00100004989c7498bbef8100000488b07ff90b80100008903410fb707894304418b4708894308498bbef8100000488b07ff9040010000",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 166990,
+    "symbol": "__ZN35AMDRadeonX6000_AMDAccelVideoContext13sendPMCommandEPvS0_yPy",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415641554154534883ec384989d74885f60f94c04885d20f94c241bec20200e008c20f85180100004989f54889fb48894dd04c8945c84c8bb7a80500004d8da6900000004c89e7e800000000",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 167536,
+    "symbol": "__ZN35AMDRadeonX6000_AMDAccelVideoContext19clientMemoryForTypeEjPjPP18IOMemoryDescriptor",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5415741564155415453504889cb4989d74989fe83fe037724488b0545e312004c89f74c89fa4889d94883c4085b415c415d415e415f5dffa03009000083fe040f85d00000004d8ba6a8050000",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 240246,
+    "symbol": "__ZN32AMDRadeonX6000_AMDAccelVidMemory13allocPhysicalEv",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415641554154534883ec184883bf180100000074084531e4e9c60100004989ff488d8718010000488945d0448bb728010000410fbae619410f93c4410fbae6110f8217010000410fbae612",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 242898,
+    "symbol": "__ZN32AMDRadeonX6000_AMDAccelMemoryMap22commitIntoGPUPageTableEv",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5415741564155415453504889fb488b879000000080b868020000010f8594000000488d8b3801000048894dd08b8b3801000089ca83e21083e120448d34ca4c8bb8600200004c8ba398000000",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text",
+    "alternatives": [
+      {
+        "symbol_delta": 0,
+        "target_delta": 0,
+        "bytes": "554889e5415741564155415453504889fb488b8790000000f68068020000010f84850000008b8b3801000089ca83e21083e1208d0cca894dd44c8bb8600200004c8ba398000000488b034c8b6b184889df",
+        "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "audit": "Equivalent typed function ABI with audited compiler boolean/loop/stack code; object offsets and call slots remain exact."
+      }
+    ]
+  },
+  {
+    "owner": "X6000",
+    "reference": 296792,
+    "symbol": "__ZN33AMDRadeonX6000_AMDAccelVCNContext9setClocksEv",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415641554154534881ec180200004889fb48c745d00400000031c048898500ffffff48898508ffffff48898510ffffff48898518ffffff48898520ffffff48898528ffffff48898530ffffff",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 297286,
+    "symbol": "__ZN33AMDRadeonX6000_AMDAccelVCNContext16activatePMClientEv",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e58b577885d20f94c0488b4f704885c9400f94c64084f074025dc3488b47408b77684889c741b8010000004531c95de92904feff90554889e54889f8488b7f304885ff74108b7054488b07488b8098020000",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 299666,
+    "symbol": "__ZN36AMDRadeonX6000_AMDNavi10VideoContext10newContextEP23sVideoContextCreateInfoP23sVideoContextReturnInfoyPy",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5415741564155415453504885f60f94c04885d20f94c141bdc20200e008c10f85380100004889d34989f44989ffbf98000000e83df1ffff4989c64889c7e846f1ffff4d85f60f84b900000048895dd0",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffff00000000ffffffffffffff00000000ffffffffff00000000ffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 300594,
+    "symbol": "__ZN36AMDRadeonX6000_AMDNavi10VideoContext11startEngineEP23sVideoContextEngineInfoy",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5415741564154534885f60f94c04883fa0c0f95c108c141bfc20200e00f85fd0000004989f64889fb4c8bbfa80500004d8da7900000004c89e7e800000000498bbf88000000e8000000004c89e7",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffff00000000ffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 312608,
+    "symbol": "__ZN27AMDRadeonX6000_AMDHWChannel14waitForHwStampEj",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e541574156534883ec2889f34989fe488b07ff905001000084c00f84a700000089d8412b868400000085c00f8e9a000000488d75e0c706404b4c004c8d7de441c70764000000498b064c89f74c89fa",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 316814,
+    "symbol": "__ZN28AMDRadeonX6000_IAMDHWChannel13mapCmdBuffersEP18AMD_COMMAND_BUFFERjP13AMD_MAPPED_CB",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "85f67474554889e5415741564155415453504889d34989fe4189f74983c6204531e44c8b2dc99c10004ac704e300000000498b46f84885c07424f6401010751e488b7818498b7500ba01000000e800000000",
+    "mask": "ffffff00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffff00ffffffffff00ffffffffffffffffffffffffffff00000000",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 316936,
+    "symbol": "__ZN28AMDRadeonX6000_IAMDHWChannel15unmapCmdBuffersEP18AMD_COMMAND_BUFFERjP13AMD_MAPPED_CB",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "85f67464554889e5415741564155415453504889d34989fe4189f74983c6184531e44c8b2d4f9c10004a833ce300741e498b06f64010107515488b7818498b7500e8000000004ac704e30000000049ffc4",
+    "mask": "ffffff00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffff00ffffffffffffffff00ffffffffffffffffff00000000ffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 337828,
+    "symbol": "__ZN26AMDRadeonX6000_AMDHWMemory12initVRAMInfoEv",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54156534883ec504889fb488b7f104885ff747e488b07ff90c00200004885c074704531f6488d75a84c8976404c8976384c8976304c8976284c8976204c8976184c8976104c8976084c8936488b08",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 338462,
+    "symbol": "__ZN26AMDRadeonX6000_AMDHWMemory17enableAllocationsEv",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415653504889fb488b7f684885ff0f849200000048837b70000f84870000004c8b7340488b5348488b73504939d6751d4c89f2e8000000004189c7488b7350488b7b704c89f2e800000000",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffff00000000ffffffffffffffffffffffffffffffff00ffffffff00000000ffffffffffffffffffffffffffffff00000000",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 340815,
+    "symbol": "__ZN26AMDRadeonX6000_AMDHWMemory19allocateLargeBlocksEP16AMDMemoryElementyyy15_eOP_ORIGINATOR9_eOP_TYPEb",
+    "symbol_delta": 409,
+    "target_delta": 0,
+    "bytes": "488b7318488b8bf00000004883c604488d3d636e0b004531ff4c89f24989c031c0e80000000048ff83d00000004c89bbd80000004c89bbe00000004489f84883c4085b415c415d415e415f5dc34c3b6dd0",
+    "mask": "ffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 340848,
+    "symbol": "__ZN26AMDRadeonX6000_AMDHWMemory19allocateLargeBlocksEP16AMDMemoryElementyyy15_eOP_ORIGINATOR9_eOP_TYPEb",
+    "symbol_delta": 442,
+    "target_delta": 0,
+    "bytes": "e80000000048ff83d00000004c89bbd80000004c89bbe00000004489f84883c4085b415c415d415e415f5dc34c3b6dd076864c89e149d1ed48ff83300100004883ec104889df4c89fe4c89f241b801000000",
+    "mask": "ff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 340853,
+    "symbol": "__ZN26AMDRadeonX6000_AMDHWMemory19allocateLargeBlocksEP16AMDMemoryElementyyy15_eOP_ORIGINATOR9_eOP_TYPEb",
+    "symbol_delta": 447,
+    "target_delta": 0,
+    "bytes": "48ff83d00000004c89bbd80000004c89bbe00000004489f84883c4085b415c415d415e415f5dc34c3b6dd076864c89e149d1ed48ff83300100004883ec104889df4c89fe4c89f241b8010000004531c9",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 341052,
+    "symbol": "__ZN26AMDRadeonX6000_AMDHWMemory7reserveEP16AMDMemoryElementyyb15_eOP_ORIGINATOR",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415641554154534883ec1848894dc84531f64885f60f84af0000004889fb48837f68000f84a10000004989d74989f54889df4589c6e81efbffff4989c4448975d444887060488b7b684889c6",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffff00000000ffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 351450,
+    "symbol": "__ZN29AMDRadeonX6000_AMDHWVMContext36updateContiguousPTEsWithDMAUsingAddrEyyyyy",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415641554154534883ec484c894dc04c8945b04989cf4989d64989f54889fb488b7f38488b07be02000000ff90480300004889c14d01f64c8975d0448b60044183e4fe4c89f031d249f7f4",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 355642,
+    "symbol": "__ZN23AMDRadeonX6000_AMDHWVMM4initEP30AMDRadeonX6000_IAMDHWInterfacej",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5415741564155415453504189d74989f44889fb488b064889f7ff90c8020000488b084c8d75d04c89f74889c6ff9170010000498b0648894348488b058a0410004889dfff90980000004189c6",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 358606,
+    "symbol": "__ZN23AMDRadeonX6000_AMDHWVMM20setVirtualSpaceReadyEb",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54156534889fb85f67437488b7b10488b07ba00004004be01000000b900100000ff90800100004883f8ff741b4989c6488b7b18488b07ff90e00100004c01f0eb0231c0488943505b415e5dc3",
+    "mask": "ffffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 358686,
+    "symbol": "__ZN23AMDRadeonX6000_AMDHWVMM27setMemoryAllocationsEnabledEb",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5415741564154534883ec104889fb85f60f844301000048837b20000f8565020000488b7b10488b07ff90c8020000488b084889c7ff915802000048894320488b7b10488b07ff90c80200004989c6",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text",
+    "alternatives": [
+      {
+        "symbol_delta": 0,
+        "target_delta": 0,
+        "bytes": "554889e5415741564155415453504889fb85f60f843e01000048837b20000f8560020000488b7b10488b07ff90c8020000488b084889c7ff915802000048894320488b7b10488b07ff90c80200004989c6",
+        "mask": "ffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "audit": "Equivalent typed function ABI with audited compiler boolean/loop/stack code; object offsets and call slots remain exact."
+      }
+    ]
+  },
+  {
+    "owner": "X6000",
+    "reference": 378646,
+    "symbol": "__ZN30AMDRadeonX6000_AMDKIQHWChannel14submitKIQFrameEv",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e553504889fb488b7f30488b07ff904001000084c0743eff8380000000488b7b30be20000000e86c6cfdff488b7b30488b07ff90580100008bb3800000004889dfe8c1fdfeffb30184c07519488d3d2fe50a00",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffff00ffffff00000000",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 394598,
+    "symbol": "__ZN33AMDRadeonX6000_AMDHWAlignManager224getPreferredSwizzleMode2EP33_ADDR2_COMPUTE_SURFACE_INFO_INPUT",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54156534883ec704989fe31db895dec48895de448895ddc48895dd448895dcc48895dc448895dbc895da848895da048895d9848895d90c745ac44000000c7458c200000008b46188945d08b461c",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 402432,
+    "symbol": "__ZN26AMDRadeonX6000_AMDGFX10VMM15fillVMRegistersEv",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5415741564154534889fb4c8db7a00b0000beb00600004c89f7e800000000488b7b10488b0731f6ff90f00200004989c4488b7b10488b07be01000000ff90f00200004989c74d85e40f95c04d85ff",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 402588,
+    "symbol": "__ZN26AMDRadeonX6000_AMDGFX10VMM26prepareVMInvalidateRequestEP25AMD_VM_INVALIDATE_REQUESTPK22AMD_VM_INVALIDATE_INFOb",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5415741564155415453504189cd4989d64889f34989fc8b028b72044869c0580300004c8d3c074981c7a00b0000807a2401757d488d04f6488d04404801f0418b4c0730890b418b4c0734894b08",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text",
+    "alternatives": [
+      {
+        "symbol_delta": 0,
+        "target_delta": 0,
+        "bytes": "554889e5415741564155415453504189cd4989d64889f34989fc8b028b72044869c0580300004c8d3c074981c7a00b0000f6422401747d488d04f6488d04404801f0418b4c0730890b418b4c0734894b08",
+        "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "audit": "Equivalent typed function ABI with audited compiler boolean/loop/stack code; object offsets and call slots remain exact."
+      }
+    ]
+  },
+  {
+    "owner": "X6000",
+    "reference": 403338,
+    "symbol": "__ZN26AMDRadeonX6000_AMDGFX10VMM22programAndInvalidateVMEPK22AMD_VM_INVALIDATE_INFO",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415641554154534883ec784989f74889fb488b7f10488b07ff90d00200004989c631c0488db560ffffff4889464848894640488946384889463048894628488946204889461848894610",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 403910,
+    "symbol": "__ZN26AMDRadeonX6000_AMDGFX10VMM11getPDEValueE15eAMD_VMPT_LEVELy",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5ffc68b87340b000039c6751689f148c1e1058b8c0fb80a000083c11448c1e13beb0231c948bfc0ffffffffff00004821fa31ff39c6400f97c748c1e7384809d7488d043948ffc05dc390554889e5",
+    "mask": "ffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 403988,
+    "symbol": "__ZN26AMDRadeonX6000_AMDGFX10VMM11getPTEValueE15eAMD_VMPT_LEVELyN24AMDRadeonX6000_IAMDHWVMM10VmMapFlagsEj",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e589c8c1e80283e0024189c941c1e9034183e1044109c189c883e0044189ca41c1e2054183e26049bb00f0ffffffff00004921d34183e01f41c1e007418d04814409d0418d1400ffc24c09da4531c0",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 421382,
+    "symbol": "__ZN34AMDRadeonX6000_AMDGFX10SDMAChannel27commitIndirectCommandBufferEP30AMD_SUBMIT_COMMAND_BUFFER_INFO",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e541574156534881ec080200004989f74989fe8b5e18488bb738010000488dbde8fdffffba00020000e800000000418b07a802756f418b4f144885c97466418b570431f685d2400f95c6c1e61f",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffff00ffffffffffffffff00ffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 430946,
+    "symbol": "__ZN32AMDRadeonX6000_AMDGFX10PM4Engine14initComputeMQDE18_eAMD_HW_RING_TYPE",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415641554154534883ec384189f44889fb4189f54a8b7cef50488d0578c61000488b30e8000000004989c7488b7b18488b07ff90d80200004989c648c745d0000000004183fc047421488b7b18",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 431402,
+    "symbol": "__ZN32AMDRadeonX6000_AMDGFX10PM4Engine15initGraphicsMQDEv",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415641554154534883ec684889fb488b7f18488b07ff90d802000048c745d0000000004885c00f84e40100004989c6488b004c89f7ff904801000084c00f84cd0100004c8ba350020000",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffff00000000ffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 458062,
+    "symbol": "__ZN26AMDRadeonX6000_AMDHardware19initializeHWEnginesEv",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415653504989fe4531ff31db4b8bbcfeb00300004885ff7413488b074c89f64489faff901801000084c0741c4983ff0a498d47010f93c34989c74883f80b75cc41bf00002000eb034531ff",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffff00ffffffffffffff00ffffff",
+    "section": "__text",
+    "alternatives": [
+      {
+        "symbol_delta": 0,
+        "target_delta": 0,
+        "bytes": "554889e54157415653504889fb4531f64a8bbcf3b00300004885ff7413488b074889de4489f2ff901801000084c0741449ffc64983fe0b75d741bf0000200041b601eb064531f64531ff488b7b18488b07",
+        "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffff00ffffffffffffffff00ffffffffffffffffffff00ffffffffffffffffffffffffff",
+        "audit": "Equivalent typed function ABI with audited compiler boolean/loop/stack code; object offsets and call slots remain exact."
+      }
+    ]
+  },
+  {
+    "owner": "X6000",
+    "reference": 458394,
+    "symbol": "__ZN26AMDRadeonX6000_AMDHardware16powerUpHWEnginesEv",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5415741564154534883ec104989fe4531ff31db4b8bbcfeb00300004885ff740d488b07ff903801000084c0741d4983ff0a498d47010f93c34989c74883f80b75d26641bc0001b301eb3e4d8b4620",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffff00ffffffffffffffff00ffffffff",
+    "section": "__text",
+    "alternatives": [
+      {
+        "symbol_delta": 0,
+        "target_delta": 0,
+        "bytes": "554889e54157415653504889fb4531f64a8bbcf3b00300004885ff740d488b07ff903801000084c0741349ffc64983fe0b75dd6641be000141b701eb414c8b43204983c004488d05a4bc11004a8b04f0",
+        "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffff00ffffffffffffffff00ffffffffffffffffff00ffffffffffffffffffffff00000000ffffffff",
+        "audit": "Equivalent typed function ABI with audited compiler boolean/loop/stack code; object offsets and call slots remain exact."
+      }
+    ]
+  },
+  {
+    "owner": "X6000",
+    "reference": 458584,
+    "symbol": "__ZN26AMDRadeonX6000_AMDHardware17powerOffHWEnginesEv",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415653504989fe4531ff31db4b8bbcfeb00300004885ff740d488b07ff904001000084c074194983ff0a498d47010f93c34989c74883f80b75d24531ffeb056641bf0001498b7e18488b07",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffff00ffffffff00ffffffffffffffffffffffff",
+    "section": "__text",
+    "alternatives": [
+      {
+        "symbol_delta": 0,
+        "target_delta": 0,
+        "bytes": "554889e54157415653504889fb4531f64a8bbcf3b00300004885ff740d488b07ff904001000084c0741149ffc64983fe0b75dd41b6014531ffeb086641bf00014531f6488b7b18488b07ff9078010000",
+        "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffff00ffffffffffffffff00ffffffffffffff00ffffffffffffffffffffffffffffffffffffffffff",
+        "audit": "Equivalent typed function ABI with audited compiler boolean/loop/stack code; object offsets and call slots remain exact."
+      }
+    ]
+  },
+  {
+    "owner": "X6000",
+    "reference": 458706,
+    "symbol": "__ZN26AMDRadeonX6000_AMDHardware14startHWEnginesEv",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5415741564154534889fb0fb687c20000004c8d3445020000004531c94d89cf4d39ce744f4a8bbcfbb80300004885ff7449488b07ff90480100004d8d4f0184c075da41ffc94c8b43204983c004",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffff00ffffffffffffffffffffffffffffffff00ffffffffffffffffffffff",
+    "section": "__text",
+    "alternatives": [
+      {
+        "symbol_delta": 0,
+        "target_delta": 0,
+        "bytes": "554889e5415741564154534889fb0fb687c200000083e0014c8d3445020000004531c94d89cf4d39ce744f4a8bbcfbb80300004885ff7449488b07ff90480100004d8d4f0184c075da41ffc94c8b4320",
+        "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffff00ffffffffffffffffffffffffffffffff00ffffffffffffff",
+        "audit": "Equivalent typed function ABI with audited compiler boolean/loop/stack code; object offsets and call slots remain exact."
+      }
+    ]
+  },
+  {
+    "owner": "X6000",
+    "reference": 458886,
+    "symbol": "__ZN26AMDRadeonX6000_AMDHardware13stopHWEnginesEv",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e54157415653504989fe4531ff31db4b8bbcfeb00300004885ff740d488b07ff905001000084c074194983ff0a498d47010f93c34989c74883f80b75d24531ffeb056641bf0002498b7e18488b07",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffff00ffffffff00ffffffffffffffffffffffff",
+    "section": "__text",
+    "alternatives": [
+      {
+        "symbol_delta": 0,
+        "target_delta": 0,
+        "bytes": "554889e54157415653504889fb4531f64a8bbcf3b00300004885ff740d488b07ff905001000084c0741149ffc64983fe0b75dd41b6014531ffeb086641bf00024531f6488b7b18488b07ff9078010000",
+        "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffff00ffffffffffffffff00ffffffffffffff00ffffffffffffffffffffffffffffffffffffffffff",
+        "audit": "Equivalent typed function ABI with audited compiler boolean/loop/stack code; object offsets and call slots remain exact."
+      }
+    ]
+  },
+  {
+    "owner": "X6000",
+    "reference": 459616,
+    "symbol": "__ZN26AMDRadeonX6000_AMDHardware8powerOffEv",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5415741564154534889fb80bf310500000175084889dfe871010000488bbb080602004885ff7437488b07ff9018020000488bbb08060200488b07ff906001000084c07410488bbb08060200488b07",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffff00ffffffff00000000ffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffff",
+    "section": "__text",
+    "alternatives": [
+      {
+        "symbol_delta": 0,
+        "target_delta": 0,
+        "bytes": "554889e5415741564154534889fbf687310500000174084889dfe871010000488bbb080602004885ff7437488b07ff9018020000488bbb08060200488b07ff906001000084c07410488bbb08060200488b07",
+        "mask": "ffffffffffffffffffffffffffffffffffffffffffff00ffffffff00000000ffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffff",
+        "audit": "Equivalent typed function ABI with audited compiler boolean/loop/stack code; object offsets and call slots remain exact."
+      }
+    ]
+  },
+  {
+    "owner": "X6000",
+    "reference": 461180,
+    "symbol": "__ZN26AMDRadeonX6000_AMDHardware12getHWChannelE20_eAMD_HW_ENGINE_TYPE18_eAMD_HW_RING_TYPE",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e589f0488bbcc7b00300004885ff740f488b07488b80a801000089d65dffe031c05dc3",
+    "mask": "ffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffff",
+    "section": "__text",
+    "audit": "Complete unchanged target function; removed neighboring-function bytes."
+  },
+  {
+    "owner": "X6000",
+    "reference": 469758,
+    "symbol": "__ZN26AMDRadeonX6000_AMDHardware26appendToReservedVRAMOffsetE28_eAMD_MEMORY_ALLOCATION_TYPEyj",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5415741564154534189ce4989d74889fb85f60f848d00000083fe010f85b9000000488bbb70030000488b07ff90d00100004989c4488bbb70030000488b07ff90d80100004939c4765c4c8ba350030000",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 474728,
+    "symbol": "__ZN31AMDRadeonX6000_AMDGFX10Hardware7powerUpEv",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5415741564154534989fe488d05f3121000ff901802000089c384c0745c4d8bbe68030000498b0749bc0b000001c54c00004c89ff4c89e6ff9048010000498b0f4c89ff89c6ff91180100004189c7",
+    "mask": "ffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 475936,
+    "symbol": "__ZN31AMDRadeonX6000_AMDGFX10Hardware14setVMRegistersEv",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5b8a00b000048038780030000488987380802005dc390554889e54157415653504889fb4c8db72c08020048c7872c08020000000000488b07ff90500100004189c7488b034889dfff90a8010000",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 562440,
+    "symbol": "__ZN29AMDRadeonX6000_AMDVCNHWEngine17requestCapabilityEP12sCodecEngCapPjjb",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5415741564154534589c74989d44989f64889fb85c975128b83ac0200003b83b40200000f83a30000008b83a80200008d4801898ba802000041890424bf30000000e800000000498b0e498b5608",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 582750,
+    "symbol": "__ZN35AMDRadeonX6000_AMDGFX10KIQHWChannel21submitMapQueuesPacketE18_eAMD_HW_RING_TYPEjyPK18AMD_PM4_QUEUE_SPECy",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5415741564155415453504d89cf4d89c44989ce4189d589f348897dd0e805e3fcff31c94889480c48894814c70000a205c031c983fb050f94c183c908c1e11a85dbba000000300f45d1895004",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 583280,
+    "symbol": "__ZN35AMDRadeonX6000_AMDGFX10KIQHWChannel8startKIQEyyPK18AMD_PM4_QUEUE_SPECPj",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5415741564154534883ec504889cb31c04c8d7590498946304c8d7dc849890749894708498947104c8b6730418b84248400000083e0fc41890641c7460480000000498b44244849894608498b8424b8000000",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 585166,
+    "symbol": "__ZN35AMDRadeonX6000_AMDGFX10HIQHWChannel20fillMapProcessPacketEP19PM4_MES_MAP_PROCESSyyjjj",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5415741564154534989cf4989d44889f34989fe8b451031c948894e3048894e3848894e2848894e2048894e1848894e1048894e08c70600a10ec0410fb7c98d910000001489c683e60fc1e612",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 628248,
+    "symbol": "__ZN32AMDRadeonX6000_AMDNavi23Hardware7powerUpEv",
+    "symbol_delta": 0,
+    "target_delta": 0,
+    "bytes": "554889e5415653b30180bf0f03000000753a4989fe488d05dc290e00ff901802000084c07424498bbeb0030000488d05eca90d00488b30e8000000004885c07409c6803002000001eb0231db89d85b415e",
+    "mask": "ffffffffffffffffffffffffffffffffff00ffffffffffff00000000ffffffffffffffffff00ffffffffffffffffffff00000000ffffffff00000000ffffffff00ffffffffffffffff00ffffffffffffff",
+    "section": "__text",
+    "alternatives": [
+      {
+        "symbol_delta": 0,
+        "target_delta": 0,
+        "bytes": "554889e5415653b301f6870f03000001753a4989fe488d055c3b0e00ff901802000084c07424498bbeb0030000488d056cbb0d00488b30e8aa6b1bf44885c07409c6803002000001eb0231db89d85b415e",
+        "mask": "ffffffffffffffffffffffffffffffffff00ffffffffffff00000000ffffffffffffffffff00ffffffffffffffffffff00000000ffffffff00000000ffffffff00ffffffffffffffff00ffffffffffffff",
+        "audit": "Equivalent typed function ABI with audited compiler boolean/loop/stack code; object offsets and call slots remain exact."
+      }
+    ]
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 212705,
+    "symbol": "_vm_10_3_hw_init",
+    "symbol_delta": 343,
+    "target_delta": 0,
+    "bytes": "418b8e18010000f6c104750d418b07f6c108740e83c820eb06418b0783c810418907094310c7431830000000498b861002000048894320c7434003000000488d5350488d4b484c8d45dc4c89f7be02000000",
+    "mask": "ffffffffffffffffffffff00ffffffffffffff00ffffffff00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 604731,
+    "symbol": "_engine_3_0_enable_power_gating",
+    "symbol_delta": 106,
+    "target_delta": 0,
+    "bytes": "31c04883c4085b5dc3554889e54156534889fb31f6e8390300004889dfbe01000000ba56010000b90002f01f4531c0e89e0300004889dfbe01000000baa100000031c94531c0e8870300004889dfbe01000000",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "HWLibs",
+    "reference": 686713,
+    "symbol": "_ipiSdmaCreateHybridQueue",
+    "symbol_delta": 82,
+    "target_delta": 0,
+    "bytes": "4885c074614989c54c8975d0b00131c94c8d34494b837cf53000745eb901000000a801b80000000075e6498b0424488b38e8f9fcfeff488b5870498b0424488b38e8e9fcfeff488b7808488d35d8461b00",
+    "mask": "ffffffff00ffffffffffffffffffffffffffffffffffffffffffff00ffffffffffffffffffffffffff00ffffffffffffffff00000000ffffffffffffffffffffffff00000000ffffffffffffff00000000",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 350684,
+    "symbol": "__ZN29AMDRadeonX6000_AMDHWVMContext7mapVMPTEP12AMD_VMPT_CTL15eAMD_VMPT_LEVELjyyy",
+    "symbol_delta": 976,
+    "target_delta": 0,
+    "bytes": "4889d941f6850801000080750541014c24308b45bc410985100100004d01bdf8000000488b5d984c29fb4d29bd00010000e98400000048c1e303488b45c0480358204d8b642420498b7d10488b07ff90d8020000",
+    "mask": "ffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 350834,
+    "symbol": "__ZN29AMDRadeonX6000_AMDHWVMContext7mapVMPTEP12AMD_VMPT_CTL15eAMD_VMPT_LEVELjyyy",
+    "symbol_delta": 1126,
+    "target_delta": 0,
+    "bytes": "b90100000041ff4424308b45bc4109851001000048c745a800000000488b5d984c8b75b04d01fe488b458801c8488945884885db0f85d4fcffff31c9eb0c4889d9488b5dd0eb0b4889d9488b5dd04c8b7dc8",
+    "mask": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000ffffff00ffffffffffffffff00ffffffffffffffffffffff",
+    "section": "__text"
+  },
+  {
+    "owner": "X6000",
+    "reference": 352758,
+    "symbol": "__ZN29AMDRadeonX6000_AMDHWVMContext9unmapVMPTEP12AMD_VMPT_CTL15eAMD_VMPT_LEVELjyyy",
+    "symbol_delta": 386,
+    "target_delta": 0,
+    "bytes": "488b7dd0837f30000f85aa000000488b77384885f64c8b7598742a498b87d8000000428b54300c48c1e20631db48895f38488d3d82c21300e800000000488b7dd048895f38498b87d8000000428b4c3014",
+    "mask": "ffffffffffffffffffff00000000ffffffffffffffffffffffff00ffffffffffffffffffffffffffffffffffffffffffffffffff00000000ff00000000ffffffffffffffffffffffffffffffffffffffff",
+    "section": "__text",
+    "scope_end_symbol": "__ZN29AMDRadeonX6000_AMDHWVMContext7unmapVAEyy",
+    "audit": "Unique interior instruction contract scanned only inside the verified owning function."
+  },
+  {
+    "owner": "X6000",
+    "reference": 8146,
+    "symbol": "__ZN37AMDRadeonX6000_AMDGraphicsAccelerator5startEP9IOService",
+    "symbol_delta": 1844,
+    "target_delta": 0,
+    "bytes": "4889dfe8cc0a000031c0488b0d45521500488b09483b4dd00f85040100004883c4285b415c415d415e415f5dc3",
+    "mask": "ffffffff00000000ffffffffff00000000ffffffffffffffffff00000000ffffffffffffffffffffffffffffff",
+    "section": "__text",
+    "scope_end_symbol": "__ZN37AMDRadeonX6000_AMDGraphicsAccelerator14loadSlotNumberEv",
+    "audit": "Common failed-start cleanup/false-return block, scoped to start; native cleanup call, stack canary and complete return epilogue guarded."
+  }
+]

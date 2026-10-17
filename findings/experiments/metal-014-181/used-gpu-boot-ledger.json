@@ -1,0 +1,21 @@
+{
+  "schema": 2,
+  "boot_id": "5aa7641a-6dd5-4cb6-a482-5bd1b15fa946",
+  "max_launches": 3,
+  "launches": [
+    {
+      "run_id": "7966fb1045ddeae71535030cd94deab1",
+      "reserved_epoch": 1789021035.0576186
+    },
+    {
+      "run_id": "8a6beaeb1b5f5800a7e01c1e1954c4b5",
+      "reserved_epoch": 1789024036.1490593,
+      "recovery_id": "74d7749f63c04cdaa0034df35c58d308",
+      "prior_run_id": "7966fb1045ddeae71535030cd94deab1",
+      "one_run_policy_sha256": "410e0e28c432ea1ad81ac1e66516550b23896b03aaedb3a41e5337f4f52495b9",
+      "one_run_activation_sha256": "dc37d4ef31e0642f4b91ea5c9763737f9073cab3d00671890ad8e58cb7fc1978",
+      "qualification": "candidate181-entry-conversion-one-run",
+      "qualification_ordinal": "ONLY"
+    }
+  ]
+}

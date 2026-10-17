@@ -1,0 +1,223 @@
+diff --git a/hw/vfio/meson.build b/hw/vfio/meson.build
+index 4f06b52b3..d6c954974 100644
+--- a/hw/vfio/meson.build
++++ b/hw/vfio/meson.build
+@@ -37,4 +37,5 @@ system_ss.add(when: 'CONFIG_IOMMUFD', if_false: files('iommufd-stubs.c'))
+ system_ss.add(when: 'CONFIG_VFIO_PCI', if_true: files(
+   'display.c',
+   'rgpu-display.c',
++  'rgpu-dma-guard.c',
+ ))
+diff --git a/hw/vfio/pci.c b/hw/vfio/pci.c
+index 9fc11ea79..7d57fec3d 100644
+--- a/hw/vfio/pci.c
++++ b/hw/vfio/pci.c
+@@ -2999,6 +2999,7 @@ bool vfio_pci_populate_device(VFIOPCIDevice *vdev, Error **errp)
+
+ void vfio_pci_put_device(VFIOPCIDevice *vdev)
+ {
++    vfio_rgpu_dma_guard_finalize(vdev);
+     vfio_rgpu_display_finalize(vdev);
+     vfio_display_finalize(vdev);
+     vfio_bars_finalize(vdev);
+@@ -3409,6 +3410,10 @@ static void vfio_pci_realize(PCIDevice *pdev, Error **errp)
+         goto error;
+     }
+
++    if (!vfio_rgpu_dma_guard_init(vdev, errp)) {
++        goto error;
++    }
++
+     if (!vfio_pci_config_setup(vdev, errp)) {
+         goto error;
+     }
+@@ -3529,6 +3534,8 @@ static void vfio_exitfn(PCIDevice *pdev)
+     VFIOPCIDevice *vdev = VFIO_PCI_BASE(pdev);
+     VFIODevice *vbasedev = &vdev->vbasedev;
+
++    vfio_rgpu_dma_guard_stop(vdev);
++
+     vfio_unregister_req_notifier(vdev);
+     vfio_unregister_err_notifier(vdev);
+     pci_device_set_intx_routing_notifier(&vdev->pdev, NULL);
+@@ -3664,6 +3671,8 @@ static const Property vfio_pci_dev_properties[] = {
+                             display, ON_OFF_AUTO_OFF),
+     DEFINE_PROP_UINT32("xres", VFIOPCIDevice, display_xres, 0),
+     DEFINE_PROP_BOOL("x-rgpu-display", VFIOPCIDevice, rgpu_display, false),
++    DEFINE_PROP_BOOL("x-rgpu-dma-guard", VFIOPCIDevice,
++                     rgpu_dma_guard_required, true),
+     DEFINE_PROP_UINT64("x-rgpu-display-gpa", VFIOPCIDevice, rgpu_display_gpa,
+                        RGPU_DISPLAY_DEFAULT_GPA),
+     DEFINE_PROP_UINT32("yres", VFIOPCIDevice, display_yres, 0),
+diff --git a/hw/vfio/pci.h b/hw/vfio/pci.h
+index 913844d85..a9d10d00a 100644
+--- a/hw/vfio/pci.h
++++ b/hw/vfio/pci.h
+@@ -189,6 +189,8 @@ struct VFIOPCIDevice {
+     bool skip_vsc_check;
+     VFIODisplay *dpy;
+     struct RgpuDisplay *rgpu;
++    struct RgpuDmaGuard *dma_guard;
++    bool rgpu_dma_guard_required;
+     bool rgpu_display;
+     uint64_t rgpu_display_gpa;
+     Notifier irqchip_change_notifier;
+@@ -269,4 +271,8 @@ void vfio_pci_register_err_notifier(VFIOPCIDevice *vdev);
+ void vfio_pci_register_req_notifier(VFIOPCIDevice *vdev);
+ void vfio_pci_teardown_msi(VFIOPCIDevice *vdev);
+
++bool vfio_rgpu_dma_guard_init(VFIOPCIDevice *vdev, Error **errp);
++void vfio_rgpu_dma_guard_stop(VFIOPCIDevice *vdev);
++void vfio_rgpu_dma_guard_finalize(VFIOPCIDevice *vdev);
++
+ #endif /* HW_VFIO_VFIO_PCI_H */
+diff --git a/hw/vfio/rgpu-display.c b/hw/vfio/rgpu-display.c
+index 8f1841e24..195c74b87 100644
+--- a/hw/vfio/rgpu-display.c
++++ b/hw/vfio/rgpu-display.c
+@@ -619,6 +619,7 @@ void vfio_rgpu_display_finalize(VFIOPCIDevice *vdev)
+     if (!r) {
+         return;
+     }
++    vfio_rgpu_dma_guard_stop(vdev);
+     timer_free(r->poll);
+     rgpu_release_cursor(r);
+     rgpu_release_buffers(r);
+diff --git a/hw/vfio/rgpu-dma-guard.c b/hw/vfio/rgpu-dma-guard.c
+new file mode 100644
+index 000000000..e13937316
+--- /dev/null
++++ b/hw/vfio/rgpu-dma-guard.c
+@@ -0,0 +1,132 @@
++/* Raphael DMA lifetime guard. SPDX-License-Identifier: GPL-2.0-or-later */
++#include "qemu/osdep.h"
++#include <sys/socket.h>
++#include <sys/un.h>
++#include "qemu/cutils.h"
++#include "qemu/error-report.h"
++#include "qapi/error.h"
++#include "system/cpus.h"
++#include "system/runstate.h"
++#include "system/system.h"
++#include "pci.h"
++
++struct RgpuDmaGuard {
++    VFIOPCIDevice *vdev;
++    int socket;
++    bool stopped;
++    Notifier exit;
++    VMChangeStateEntry *vmstate;
++};
++
++static G_NORETURN void guard_hold(const char *reason)
++{
++    error_report("rgpu-dma-guard: %s; retaining QEMU DMA ownership", reason);
++    for (;;) {
++        pause();
++    }
++}
++
++void vfio_rgpu_dma_guard_stop(VFIOPCIDevice *vdev)
++{
++    struct RgpuDmaGuard *guard = vdev->dma_guard;
++    char ack[4];
++    if (!guard || guard->stopped) {
++        return;
++    }
++    /* No guest can re-enable IH while the host is shutting it down. */
++    if (runstate_is_running()) {
++        vm_stop(RUN_STATE_PAUSED);
++    }
++    if (send(guard->socket, "STOP", 4, MSG_NOSIGNAL) != 4 ||
++        recv(guard->socket, ack, sizeof(ack), MSG_WAITALL) != 4 ||
++        memcmp(ack, "SAFE", 4)) {
++        guard_hold("missing quiescence acknowledgement");
++    }
++    guard->stopped = true;
++    close(guard->socket);
++    guard->socket = -1;
++    info_report("rgpu-dma-guard: IH and display writes stopped before DMA unmap");
++}
++
++static void guard_vmstate(void *opaque, bool running, RunState state)
++{
++    if (!running && state == RUN_STATE_SHUTDOWN) {
++        vfio_rgpu_dma_guard_stop(opaque);
++    }
++}
++
++static void guard_exit(Notifier *notifier, void *unused)
++{
++    struct RgpuDmaGuard *guard = container_of(notifier, struct RgpuDmaGuard, exit);
++    vfio_rgpu_dma_guard_stop(guard->vdev);
++}
++
++bool vfio_rgpu_dma_guard_init(VFIOPCIDevice *vdev, Error **errp)
++{
++    const char *path;
++    struct sockaddr_un address = { .sun_family = AF_UNIX };
++    struct RgpuDmaGuard *guard;
++    struct iovec iov = { .iov_base = "RIG1", .iov_len = 4 };
++    union {
++        struct cmsghdr alignment;
++        char bytes[CMSG_SPACE(sizeof(int))];
++    } control = { 0 };
++    struct msghdr message = { .msg_iov = &iov, .msg_iovlen = 1,
++        .msg_control = control.bytes, .msg_controllen = sizeof(control.bytes) };
++    struct cmsghdr *cmsg;
++    struct timeval timeout = { .tv_sec = 10 };
++    char ack[4];
++    int fd;
++    if (strcmp(vdev->vbasedev.name, "0000:7b:00.0")) {
++        return true;
++    }
++    path = getenv("RGPU_DMA_GUARD_SOCKET");
++    if (!vdev->rgpu_dma_guard_required || !vdev->vbasedev.group || !path || !path[0] ||
++        strlen(path) >= sizeof(address.sun_path)) {
++        error_setg(errp, "Raphael requires an independent legacy-VFIO DMA guard");
++        return false;
++    }
++    pstrcpy(address.sun_path, sizeof(address.sun_path), path);
++    fd = socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
++    if (fd < 0 || connect(fd, (struct sockaddr *)&address, sizeof(address))) {
++        error_setg_errno(errp, errno, "Raphael DMA guard connection");
++        if (fd >= 0) {
++            close(fd);
++        }
++        return false;
++    }
++    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
++    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
++    cmsg = CMSG_FIRSTHDR(&message);
++    cmsg->cmsg_level = SOL_SOCKET;
++    cmsg->cmsg_type = SCM_RIGHTS;
++    cmsg->cmsg_len = CMSG_LEN(sizeof(int));
++    memcpy(CMSG_DATA(cmsg), &vdev->vbasedev.fd, sizeof(int));
++    if (sendmsg(fd, &message, MSG_NOSIGNAL) != 4 ||
++        recv(fd, ack, sizeof(ack), MSG_WAITALL) != 4 || memcmp(ack, "ARM1", 4)) {
++        error_setg(errp, "Raphael DMA guard did not retain VFIO ownership");
++        close(fd);
++        return false;
++    }
++    guard = g_new0(struct RgpuDmaGuard, 1);
++    guard->vdev = vdev;
++    guard->socket = fd;
++    guard->exit.notify = guard_exit;
++    vdev->dma_guard = guard;
++    guard->vmstate = qemu_add_vm_change_state_handler(guard_vmstate, vdev);
++    qemu_add_exit_notifier(&guard->exit);
++    info_report("rgpu-dma-guard: independent VFIO owner armed");
++    return true;
++}
++
++void vfio_rgpu_dma_guard_finalize(VFIOPCIDevice *vdev)
++{
++    struct RgpuDmaGuard *guard = vdev->dma_guard;
++    if (guard) {
++        vfio_rgpu_dma_guard_stop(vdev);
++        qemu_del_vm_change_state_handler(guard->vmstate);
++        qemu_remove_exit_notifier(&guard->exit);
++        g_free(guard);
++        vdev->dma_guard = NULL;
++    }
++}

@@ -1,0 +1,228 @@
+--- a/server/meson.build
++++ b/server/meson.build
+@@ -65,6 +65,7 @@
+                                    h_template: 'spice-server-enums.h.tmpl')
+ 
+ spice_server_sources = [
++  'rgpu-study.cpp',
+   spice_server_headers,
+   spice_server_enums,
+   'agent-msg-filter.c',
+--- /dev/null
++++ b/server/rgpu-study.h
+@@ -0,0 +1,6 @@
++#pragma once
++#include <stdint.h>
++enum RGStudyCounter { RG_DRAW, RG_PARSED, RG_EQUAL, RG_PIPE_DROP, RG_EQUAL_DROP,
++ RG_MARSHAL, RG_MARSHAL_DONE, RG_MARSHAL_US, RG_SEND_BYTES, RG_SEND_DONE,
++ RG_SEND_DONE_BYTES, RG_EAGAIN, RG_BLOCKED_POLL, RG_ACK_POLL, RG_STUDY_COUNT };
++void rgpu_study_add(RGStudyCounter counter, uint64_t value = 1);
+--- /dev/null
++++ b/server/rgpu-study.cpp
+@@ -0,0 +1,63 @@
++// Diagnostic only. No exported ABI or drawing/queue policy changes.
++#include "config.h"
++#include "rgpu-study.h"
++#include <atomic>
++#include <cstdio>
++#include <cstdlib>
++#include <cstring>
++#include <glib.h>
++namespace {
++struct Study {
++    std::atomic<uint64_t> values[RG_STUDY_COUNT] {};
++    std::atomic<bool> reported {false};
++    bool enabled = false;
++    gint64 start = 0, end = 0;
++    static bool number(const char *s, unsigned max, unsigned *out) {
++        if (!s || !*s) return false;
++        unsigned n = 0;
++        for (; *s; ++s) {
++            if (*s < '0' || *s > '9' || n > max / 10) return false;
++            n = n * 10 + (*s - '0'); if (n > max) return false;
++        }
++        *out = n; return true;
++    }
++    Study() {
++        const char *s = std::getenv("RGPU_SPICE_STUDY_SECONDS");
++        if (!s) return;
++        unsigned seconds = 0, delay = 0;
++        const char *d = std::getenv("RGPU_SPICE_STUDY_DELAY");
++        if (!number(s,120,&seconds) || !seconds || (d && !number(d,30,&delay))) {
++            std::fprintf(stderr,"RGPU_SPICE_STUDY invalid_config=1\n"); return;
++        }
++        start = g_get_monotonic_time() + (gint64)delay * G_USEC_PER_SEC;
++        end = start + (gint64)seconds * G_USEC_PER_SEC; enabled = true;
++        g_timeout_add(20, [](gpointer p)->gboolean {
++            auto *s = static_cast<Study *>(p);
++            if (g_get_monotonic_time() < s->end) return G_SOURCE_CONTINUE;
++            s->report(true); return G_SOURCE_REMOVE;
++        },this);
++    }
++    void report(bool complete) {
++        if (!enabled || reported.exchange(true)) return;
++        static const char *names[] = {"draw_consumed","draw_parsed","opaque_equal_replacements",
++            "pending_pipe_removals","equal_pending_pipe_removals","draw_copy_marshal_entries",
++            "draw_copy_marshal_completed","draw_copy_marshal_us","display_write_bytes",
++            "display_outgoing_buffers_completed","display_completed_buffer_bytes",
++            "display_write_eagain","display_blocked_polls","display_ack_wait_polls"};
++        std::fprintf(stderr,"RGPU_SPICE_STUDY {\"schema\":1,\"complete\":%s,\"start_us\":%lld,\"end_us\":%lld,\"reported_us\":%lld",
++            complete?"true":"false",(long long)start,(long long)end,(long long)g_get_monotonic_time());
++        for (unsigned i=0;i<RG_STUDY_COUNT;i++)
++            std::fprintf(stderr,",\"%s\":%llu",names[i],(unsigned long long)values[i].load());
++        std::fprintf(stderr,"}\n"); std::fflush(stderr);
++    }
++    ~Study() { report(g_get_monotonic_time()>=end); }
++};
++Study &study() { static Study s; return s; }
++}
++void rgpu_study_add(RGStudyCounter counter, uint64_t value) {
++    Study &s = study();
++    if (!s.enabled || s.reported.load(std::memory_order_relaxed)) return;
++    gint64 now = g_get_monotonic_time();
++    if (now < s.start || now >= s.end) return;
++    s.values[counter].fetch_add(value,std::memory_order_relaxed);
++}
+--- a/server/red-worker.cpp
++++ b/server/red-worker.cpp
+@@ -16,6 +16,7 @@
+    License along with this library; if not, see <http://www.gnu.org/licenses/>.
+ */
+ #include <config.h>
++#include "rgpu-study.h"
+ 
+ #ifndef _GNU_SOURCE
+ #define _GNU_SOURCE
+@@ -192,11 +193,13 @@
+         worker->display_poll_tries = 0;
+         switch (ext_cmd.cmd.type) {
+         case QXL_CMD_DRAW: {
++            rgpu_study_add(RG_DRAW);
+             auto red_drawable = red_drawable_new(worker->qxl, &worker->mem_slots,
+                                                  ext_cmd.group_id, ext_cmd.cmd.data,
+                                                  ext_cmd.flags); // returns with 1 ref
+ 
+             if (red_drawable) {
++                rgpu_study_add(RG_PARSED);
+                 display_channel_process_draw(worker->display_channel, std::move(red_drawable),
+                                              worker->process_display_generation);
+             }
+--- a/server/display-channel.cpp
++++ b/server/display-channel.cpp
+@@ -15,6 +15,7 @@
+    License along with this library; if not, see <http://www.gnu.org/licenses/>.
+ */
+ #include <config.h>
++#include "rgpu-study.h"
+ 
+ #include <common/sw_canvas.h>
+ 
+@@ -373,7 +374,7 @@
+     drawable_unref(item);
+ }
+ 
+-static void drawable_remove_from_pipes(Drawable *drawable)
++static void drawable_remove_from_pipes(Drawable *drawable, bool equal = false)
+ {
+     RedDrawablePipeItem *dpi;
+ 
+@@ -381,6 +382,10 @@
+         RedChannelClient *rcc;
+ 
+         rcc = dpi->dcc;
++        if (rcc->pipe_item_is_linked(dpi)) {
++            rgpu_study_add(RG_PIPE_DROP);
++            if (equal) rgpu_study_add(RG_EQUAL_DROP);
++        }
+         rcc->pipe_remove_and_release(dpi);
+     }
+ }
+@@ -480,6 +485,7 @@
+     other_drawable = SPICE_CONTAINEROF(other_draw_item, Drawable, tree_item);
+ 
+     if (item->effect == QXL_EFFECT_OPAQUE) {
++        rgpu_study_add(RG_EQUAL);
+         /* check whether the new item can safely replace the other drawable at
+          * the same position in the pipe, or whether it should be added to the
+          * end of the queue */
+@@ -494,7 +500,7 @@
+         } else {
+             pipes_add_drawable(display, drawable);
+         }
+-        drawable_remove_from_pipes(other_drawable);
++        drawable_remove_from_pipes(other_drawable, true);
+         drawable_unref(other_drawable);
+         return TRUE;
+     }
+--- a/server/dcc-send.cpp
++++ b/server/dcc-send.cpp
+@@ -16,6 +16,7 @@
+    License along with this library; if not, see <http://www.gnu.org/licenses/>.
+ */
+ #include <config.h>
++#include "rgpu-study.h"
+ 
+ #include <common/marshaller.h>
+ #include <common/generated_server_marshallers.h>
+@@ -969,6 +970,8 @@
+     SpiceCopy copy;
+     FillBitsType src_send_type;
+ 
++    const gint64 rg_begin = g_get_monotonic_time();
++    rgpu_study_add(RG_MARSHAL);
+     dcc->init_send_data(SPICE_MSG_DISPLAY_DRAW_COPY);
+     fill_base(base_marshaller, item);
+     copy = drawable->u.copy;
+@@ -980,6 +983,8 @@
+     src_send_type = fill_bits(dcc, src_bitmap_out, copy.src_bitmap, item, src_allowed_lossy);
+     fill_mask(dcc, mask_bitmap_out, copy.mask.bitmap, item);
+ 
++    rgpu_study_add(RG_MARSHAL_DONE);
++    rgpu_study_add(RG_MARSHAL_US, g_get_monotonic_time()-rg_begin);
+     return src_send_type;
+ }
+ 
+--- a/server/red-channel-client.cpp
++++ b/server/red-channel-client.cpp
+@@ -16,6 +16,7 @@
+ */
+ 
+ #include <config.h>
++#include "rgpu-study.h"
+ 
+ #include <cerrno>
+ #include <cstdint>
+@@ -960,6 +961,7 @@
+         if (n == -1) {
+             switch (errno) {
+             case EAGAIN:
++                if (get_channel()->type()==SPICE_CHANNEL_DISPLAY) rgpu_study_add(RG_EAGAIN);
+                 priv->set_blocked();
+                 break;
+             case EINTR:
+@@ -974,9 +976,14 @@
+             }
+             return;
+         }
++        if (get_channel()->type()==SPICE_CHANNEL_DISPLAY) rgpu_study_add(RG_SEND_BYTES,n);
+         buffer->pos += n;
+         priv->data_sent(n);
+         if (buffer->pos == buffer->size) { // finished writing data
++            if (get_channel()->type()==SPICE_CHANNEL_DISPLAY) {
++                rgpu_study_add(RG_SEND_DONE);
++                rgpu_study_add(RG_SEND_DONE_BYTES,buffer->size);
++            }
+             /* reset buffer before calling on_msg_done, since it
+              * can trigger another call to RedChannelClient::handle_outgoing (when
+              * switching from the urgent marshaller to the main one */
+@@ -1139,6 +1146,10 @@
+ {
+     RedPipeItemPtr ret;
+ 
++    if (channel->type()==SPICE_CHANNEL_DISPLAY) {
++        if (send_data.blocked) rgpu_study_add(RG_BLOCKED_POLL);
++        if (waiting_for_ack()) rgpu_study_add(RG_ACK_POLL);
++    }
+     if (send_data.blocked || waiting_for_ack() || pipe.empty()) {
+         return ret;
+     }

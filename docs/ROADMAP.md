@@ -1,0 +1,673 @@
+# Raphael iGPU acceleration roadmap
+
+Publication privacy: source history is sanitized and publication checks reject
+personal paths, host/device identifiers, populated OpenCore identities and keys.
+Original raw evidence remains private; this does not add hardware qualification.
+
+**Private file sharing — 2026-10-17:** the Linux-mounted SSD and Nextcloud
+folder are mounted read/write in Finder over the VM's private connection.
+A separate SMB login, required SMB3 encryption and signing are verified in
+the live session. Guest/SMB2 requests and access through the VM's bridge IP
+were rejected. The SSD remains mounted on Linux. This setup does not change
+GPU startup or require a VM restart. [Configuration](file-sharing.md).
+
+**Desktop lifecycle — 2026-10-17:** the shortcut now owns the inhibitor
+container and logind blocker through startup, running and recovery. Failed
+startup and systemd service cleanup release them; the container uses
+`restart=no`. Ordinary desktop use no longer requires a persistent awake
+development session. Systemd termination/failure checks verify release.
+The release-519 desktop card requests no startup workload; identity, capture,
+shutdown and recovery checks remain active. Ordinary sessions receive a
+desktop-session result rather than a Metal test pass. The installed ordinary
+desktop card has no exposure timer or automatic session shutdown; bounded
+experiment cards retain their explicit deadlines.
+The attached Intel 1.9 TB USB SSD is redirected through the existing USB menu;
+its encrypted APFS volume mounted after the owner unlocked it in macOS.
+
+**Current delivery — 2026-10-15:** releases 510–519. The VRAM cache of freed allocations (the
+accelerator's second, unlimited orphan pool) is released under pressure through Apple's own
+routine, so VRAM no longer fills in real use (512; 508 had capped only the system-memory pool).
+QEMU's window snaps to the display's aspect when a resize settles, following the dragged edge
+(510, QEMU pins v17+). QEMU's USB audio uses 48 kHz, larger buffers and accepts variable packet
+sizes (510/513, pins v18); the installer now deploys `vm-entry.sh`. An earlier
+audio dropout at about 120 fps did not recur during a 290-second 4K/120 tone
+capture or a foreground CoreAudio playback with QEMU window resizing on 515;
+its old raw WAV is unavailable and cause unproved. Release 515 guards IH,
+display, GC and SDMA before QEMU unmaps guest RAM; a separate stopped-device
+MODE2/no-queue receipt completes recovery when ordinary queue retirement is
+blocked by that halt. Two native and two QEMU-death lifecycles passed; the
+installed shortcut also passed a readable desktop, Metal probe, normal stop and
+authorizing recovery. Guest integrity passed bounded post-crash pmap and hash
+checks after a corrupt symbolication cache was quarantined. The exact earlier
+`heap` pmap panic cause remains unproved. [Memory evidence](../findings/research/guest-memory-corruption-20261015.md) · [audio evidence](../findings/research/audio-dropout-20261015.md).
+
+**2026-10-14:** release 509 makes window drags smooth at 120 Hz: the scanout copy delivers every
+flipped frame to QEMU's window (119.9 fps against 9 before). Release 507 fixes the clipboard on
+the iGPU display and restores QEMU's USB menu.
+
+**Earlier on 2026-10-14:** release 506 fixed the Tahoe desktop freeze. Apple's
+Navi2x GE parameter-cache oversubscription deadlocked Raphael's 256-line parameter cache
+on attribute-heavy late-Z draws, and the resulting restart storms wedged VCN. The driver now
+clears `allowGePcAllocOverSub` dynamically. The fix was verified on 26.7.1 with a 40-minute
+soak: Weather map, 3D apps and hardware encode, with ordinary recovery.
+[Evidence](../findings/research/tahoe-gfx-deadlock-20261014.md) · [Current status](../status.md).
+The previous delivery was candidate 490 on 2026-10-13
+([performance and raw samples](../findings/research/update-portability-20261013/performance-latest.md)).
+
+Unused installer extracts, test images, old builds and clean worktrees were
+removed, reclaiming about 283 GiB. Current release/runtime pins, source branches,
+raw results, uploads, ledger and recovery receipts remain intact.
+
+Tahoe interactive mode check: 3840×2160 at 60 Hz is usable after restoring
+logical 1920×1080. Release 519 fixes the QEMU copy freeze at logical 2048×1152 /
+physical 4096×2304 and 120 Hz by copying from the validated four-pipe source
+viewport geometry. Two supervised mode-switch runs and the installed launcher
+passed Metal, native shutdown, guard release and authorizing stopped-device
+recovery. [Scaled-mode evidence](../findings/research/scaled-mode-copy-20261015.md).
+
+Remaining gates include long-term and fresh-host-boot memory qualification,
+unlocked Tahoe presentation beyond
+the 120 Hz window-drag test, full-field 4K120 transport, physical output, codec
+coverage and general crash/fresh-boot qualification. Earlier configuration-
+specific progress is retained in the
+[progress archive](../findings/research/status-archives/20261013-roadmap-progress.md).
+
+The guest-corruption investigation found orphan IH DMA after QEMU exit and
+persisted IH records in a Tahoe cache. Release 515 closes the measured
+pre-unmap IH/display/GC/SDMA boundary and quarantines the known bad cache.
+Two crash/recovery sequences and their following guest stress/hash/native
+checks passed. Exact-commit hosted test/build CI passed on `ce5bfe8`; audio
+stress and a foreground player also passed bounded revalidation. The older
+pmap panic's cause and unmeasured DMA sources remain open. See the
+[fresh evidence](../findings/research/guest-memory-corruption-20261015.md).
+
+The installed QEMU v20 fit/cursor image was tested at 5K/120: the guest mode fitted the
+host work area and the pointer stayed visible, both user-confirmed. Safari
+YouTube audio stutters during fast page scrolling, while the same page in PiP
+and Brave did not stutter. Slow manual host-window resizing can still halt
+guest-wide audio. The user classified both audio issues as lower priority;
+broader desktop and integrity qualification remain ahead of them.
+
+## Progress and remaining gates
+
+| Milestone | State | Evidence and remaining work |
+|---|---|---|
+| M0 — Experiment identity and supervision | Implemented; maintained | Immutable manifests, loaded-build checks, capture, deadlines and cleanup. Fixed cycle image selection so preparation and admission use the same pinned emulator. Pre381 and delivery host suite: 1318 tests, OK (8 skipped); prior379 staging suite: 88 pass. |
+| M1 — Controlled starting state | Demonstrated for current workflow | One-way amdgpu→vfio-pci handoff, power/control=on, fresh MODE2 and clean-state receipts. Broad independent-host-boot qualification remains open. |
+| M2 — Native startup failure localization | Completed for original blocker | False second SDMA instance and subsequent channel routing were traced; historical evidence retained. |
+| M3 — Native engine startup repair | Demonstrated | Raphael topology/address adaptations reach native startup and completed Metal work. Preserve these fixes while diagnosing desktop rendering. |
+| M4 — First correct Metal compute | Achieved | Candidate 194 checked 196,608 values and 4,096 rendered pixels; its overall capture remained inconclusive. Current280 desktop Metal baselines complete with verified device/build identity. |
+| M5 — Rendering, memory and synchronization | Partial | Managed-texture copy correction retained; private/managed/IOSurface and multiple-format readback probes pass. Candidate280 passes48 BGRA8 feedback cases across four distinct-seed processes, including two concurrent clients. 32 measured buffer-reclamation rounds return process-local allocation to baseline with134,217,728 correct values. 144 texture recreation cases and32 cross-queue GPU-event rounds pass. Global VRAM/GART counters return near baseline after exit; GPU VA and long-duration qualification remain open. |
+| M6 — Desktop and physical display | Visual fix verified; broader qualification open | Candidate279 fixes the reproduced feedback corruption. Fresh pixel checks, user observation and unobstructed native RFB captures on280 pass; longer desktop qualification remains. Candidate321 gives a full HiDPI60 picture;322 fixes native1080p interleaving. User confirms60Hz and reports120Hz appears to work; HDMI audio works (323);330 adds correct-color HiDPI 120 Hz and retains audio through tested60↔120 switches. |
+| M7 — Lifecycle and host protection | Guarded same-boot lifecycle demonstrated; broader qualification open | Release 515 stops measured IH/display/GC/SDMA inputs before guest RAM unmaps. Two native and two exact QEMU-death runs produced guard release plus separate authorizing recovery; two post-crash guest stress/hash/native controls passed. The installed desktop launcher passed normal stop and recovery. Fresh-host-boot, the prior pmap panic mechanism and unmeasured autonomous DMA remain open. |
+| M8 — Performance and release | Not qualified | Correctness first; no release, Metal3 conformance, game-support or full-desktop claim. The current experimental snapshot is published to main at the user’s request; development continues on dev. Publication does not close acceptance gates. |
+
+## Blocker revalidation — 2026-09-16
+
+| Previously listed issue | Current classification | Revalidation |
+|---|---|---|
+| HEVC decode fails before kernel context creation | Resolved for automatic required-hardware selection | Fresh 120-frame hardware encode/decode pass; original 7-case/9,600-frame artifact hashes rechecked. |
+| 4K /1080p HiDPI default | Scoped setup works; boot and transport qualification open | Isolated no-redundant-switch helper yields a crisp 1920×1080 logical / 3840×2160 backing desktop at nominal 60 Hz. A raw vncdotool black frame in the same working user session is a limited oracle; a prior mixed 90/120 Hz sequence did produce user-black and was cleanly restored. Requested 90/120 Hz are not proven modes. [Evidence](../findings/research/remote-retina-20260916.md). |
+| PerfPowerServices continuously consumes a CPU core | Resolved on stock QEMU via OpenCore/VirtualSMC | Two fresh guest boots: one verified VirtualSMC provider,69 keys/end-of-list0xb8,0.0% CPU before/after work and after a service restart. Prior patched-QEMU passes retained; independent-host-boot durability remains open. |
+| Green/purple transparency and smearing | Fixed for reproduced feedback defect in279 | Reversible native A/B intervention, fresh279/280 pixel passes, unobstructed280 native RFB panels and user reports clean Screen Sharing. Longer desktop qualification remains open. |
+| Critical-event record overflow | Resolved for tested280 workload; finite capacity retained | Earlier smcpmio/279 overflow preserved as failures. Candidate280 finishes with398/512records,0drops and authorizing recovery; strict loss checks unchanged. |
+| Explicit HEVC decoder GPU registry-ID selection | Confirmed remaining limitation | Fresh explicit-ID request returns -12906; automatic hardware request succeeds. Does not block automatic decoding. |
+| No Metal execution / initial SDMA startup failure / pre-submit allocation failure | Superseded as current-baseline blockers | Current280 probe passed, completed GPU work and has a WindowServer accelerator client. Broader memory coverage remains open. |
+| Same-boot restart impossible / reboot required after every run | Superseded as a blanket claim | Recorded guest-request shutdowns, authorizing recovery and subsequent starts. This is not universal crash or host stability qualification. |
+| Candidate 278 direct OpenGL hang | Historical reproduced failure, not revalidated on current280 | Workload intentionally excluded pending first-draw diagnosis; do not claim it is fixed or a current280 reproduction. |
+| Native large-block allocation diagnostics | Observed recoverable reclaim/retry for tested workloads | Native trace links all40 failed reclaim returns to subsequent same-thread/map success; CPU readbacks pass. Reclamation cost and broader failure cases remain open. |
+| Live Metal validation crashes | Unresolved diagnostic limitation | Earlier CoreDisplay initialization crash; no successful validation verdict, no fresh repeat. |
+| Main10/chroma | Short Main10 decode cases pass; hardware encoding limited to Main8 | 32 frames720p/1080p, full-plane luma/chroma exactly match software. Native GVA encoder advertises Main8 only and rejects Main10 before frames. Longer/arbitrary-content coverage remains open. |
+| Physical output, broader concurrent resources/codecs, independent-host-boot lifecycle | Qualification gaps | Existing scoped passes do not establish these broader criteria. |
+
+[Audit artifact hashes](../findings/research/blocker-revalidation-20260916.json).
+Historical failures remain in findings; the active blocker list reflects the tested
+current baseline. A closed root cause does not close broader acceptance criteria.
+
+## Verified codec and CPU progress
+
+**Hardware codecs:** H.264 decode/encode and HEVC encode/decode have reproduced
+successes. Candidate 277 fixes HEVC decode by renaming only the marked Raphael PCI
+IOService node from S30 to GFX0 before engine initialization. The prior claim that
+this required an Apple XPC interposer or a topology redesign was incorrect.
+
+Seven sustained cases completed **9,600 frames across two fresh guest boots on one
+host boot**, with hardware decoder selection verified and every frame accounted for.
+Those sustained cases cover Main8 4:2:0 synthetic patterns at720p/1080p. Additional
+Main10 decode tests now pass32 frames at those sizes:71,884,800 full-plane luma/chroma
+samples exactly match software. Native hardware HEVC encoder advertises Main8 only
+and rejects Main10 before frames. Arbitrary media/HDR, long Main10 sequences,
+concurrent codecs and guest-crash workloads remain unqualified.
+[Main10 evidence](../findings/research/main10-qualification-20260916.md).
+Explicit RequiredDecoderGPURegistryID still fails; automatic selection with
+RequireHardwareAcceleratedVideoDecoder works.
+A fresh audit on the corrected QEMU also passed 120 HEVC and 120 H.264 hardware
+encode/decode frames at 720p; these are additional checks, not part of the original 9,600.
+[Codec evidence](../findings/research/hevc-decode-qualification-20260916.json),
+[resolver analysis](../findings/research/hevc-decode-appleGVA-20260916.md).
+
+**Current stock-QEMU solution:** VirtualSMC1.3.7/gen2 plus an exact OpenCore patch
+marking only QEMU SMC ACPI presence absent. Keep QEMU's device for boot-time access.
+Two fresh guest boots verify the sole AppleSMC belongs to VirtualSMC,69 keys with
+correct end-of-list,0.0% PerfPowerServices, Metal,480 total hardware codec frames,
+remote pixels and clean recovery. No additional GPU driver patch is required.
+[Setup and compatibility matrix](stock-qemu-smc.md),
+[evidence](../findings/research/smc-opencore-handoff-20260916.md).
+
+**Earlier emulator remedy:** the 100% CPU loop was caused by missing QEMU AppleSMC key
+index enumeration. The corrected emulator implements command 0x12, returns a key
+after four index bytes, and returns 0xb8 past the last key. Native AppleSMC calls
+verified all six keys and both tested out-of-range indices. On the fresh smcpmio
+guest, PerfPowerServices was 0.0% CPU; after a service restart it was 0.1% CPU with
+0.54 s cumulative CPU time, later 0.0% with the same cumulative time. No Apple service is disabled and no guest binary or
+security setting was patched. Candidate279 and280 supply second through eleventh measured guest boots (all0.0% CPU, latest0.76s cumulative).
+Longer observation and independent-host-boot durability remain open. The first emulator patch incorrectly waited for a length
+byte and failed native testing; it is superseded.
+[Root cause and native results](../findings/research/perfpower-smc-enumeration-20260916.md),
+[emulator build identity](../findings/research/qemu-smc-pmio-build-20260916.json).
+
+## M5 acceptance: memory and rendering
+
+- [x] Independently checked compute and offscreen render/readback.
+- [x] Targeted storage/format, upload/copy, blur and interpolation probes.
+- [x] Bounded texture recreation: 144 cases across private/managed/IOSurface storage,
+  BGRA8/RGBA8, two sizes and three distinct-seed clients; zero pixel/padding errors.
+- [x] GPU-only cross-queue ordering: 32 shared-event rounds, consumer submitted first,
+  33,554,432 correct values.
+- [x] Explicit untracked-resource blit/compute/blit fences: 128 rounds,
+  134,217,728 correct values on one queue.
+- [x] Bounded Depth32Float_Stencil8 transitions and1×/4× color resolve:
+  128 cases,49,625,792 pixels, zero mismatches.
+  [Method/scope](../findings/research/depth-stencil-20260916.md).
+- [x] Two-process IOSurface GPU visibility with host completion/pipe ordering:
+  32 bidirectional rounds,49,363,648 pixels, zero mismatches.
+  [Method/scope](../findings/research/iosurface-process-20260916.md).
+- [x] Bounded GPU-only cross-process event sharing over typed XPC:33 consumer-first
+  transfers,25,453,131 correct pixels; helper exit and VM recovery checks pass.
+  [Evidence/scope](../findings/research/xpc-event-20260916.md).
+- [ ] Broaden formats, cross-pass depth hazards and concurrent interprocess writers.
+- [x] Exercise sequential independent processes, then concurrent clients with
+  distinct data and bounded allocations:280, seeds3/7 sequential and11/29
+  concurrent;48 BGRA8 feedback cases. Broader multi-queue coverage remains open.
+- [x] Measure process-local managed/private buffer reclamation:32 measured rounds,
+  48 MiB live resources, allocation returns exactly to544,768bytes;134,217,728
+  values verified. [Method and limits](../findings/research/resource-reclamation-20260916.md).
+- [x] Observe global backing counters respond to texture pressure and return near
+  baseline after client exit; non-reusable orphan counters stay zero.
+- [x] Observe GPU-buffer address recycling: 512 measured rounds, 6,144 recurring
+  address assignments, 2,147,483,648 correct values; exact allocation return.
+- [x] Larger 192 MiB buffer workload: four measured rounds, zero errors; native
+  trace shows failed map/reclaim attempts followed by success.
+- [ ] Prove page-table release beyond cached address recycling; broaden duration,
+  formats and concurrent pressure, accounting for global background activity.
+
+- [ ] Attribute a failure to its actual engine before making an SDMA/GFX diagnosis.
+
+[Texture, global-accounting and event evidence](../findings/research/texture-memory-and-events-20260916.md).
+
+Pass requires completed command buffers, correct CPU-checked results, no native
+fault/timeout or cross-client contamination, and measured resource reclamation.
+Passing isolated shaders does not establish correct desktop composition.
+
+## M6 acceptance: correct desktop, then physical output
+
+- [x] Verify actual WindowServer use of this accelerator.
+- [x] Establish a native colored NSVisualEffectView reproducer and raw RFB capture.
+- [x] Isolate and fix compressed render-target feedback corruption (candidate279).
+- [x] Bounded Screen Sharing composition checks: three minutes of native window
+  movement/resizing and two minutes of Safari transparency/scrolling; seven clean
+  raw captures plus a clean post-pressure capture.
+- [ ] Broaden ordinary application use and sustained desktop interaction beyond
+  these sampled workloads; keep independent-boot and physical-output gates open.
+- [x] Confirm the feedback repair on fresh279 and280 guest boots with working Metal
+  and hardware H.264/HEVC encode/decode.
+- [x] Map DCN 3.1.5 differences against Apple's DCN 3.02 path (registers, fields, power
+  domains, clock manager, DMUB, VBIOS tables): see the display port plan.
+  Hardware confirmation now covers the Samsung HDMI path; other outputs remain open.
+- [x] Bring up DMCUB through native PSP with verified guest TMR placement and
+  fresh firmware replies (candidate314,2026-09-24).
+- [x] Deliver HDMI VBIOS commands and observe firmware consumption (candidate315).
+- [x] Confirm a physically visible hardware test pattern on the Samsung (candidate318).
+- [x] Restore native framebuffer fetch and confirm a visible HiDPI image (candidate320).
+- [x] Restore full HiDPI60 picture and correct native1080p interleaving (321/322).
+- [x] Enable actual HDMI audio; user confirms sound through Samsung audio output (323 and330).
+- [x] Expose 1080 HiDPI at 120 Hz with correct colors and audible audio (329/330);
+  retain audio through tested 120→60→120 switches. Broader lifecycle coverage remains open.
+- [ ] Qualify modes, reconnection and higher resolutions after first stable output.
+
+The historical pre-279 investigation placed corrupt pixels in the scanout/DisplayStream path before
+remote encoding. A native screenshot can be clean while raw RFB remains corrupt;
+therefore a screenshot alone is insufficient. Plain-alpha windows are clean in
+the targeted comparison; colored native visual-effect panels reproduce diagonal
+artifacts. Native blur, varying-half gradients and offset-viewport replays pass,
+but do not reproduce the complete failing compositor state.
+
+Candidate 278's linear-swizzle change did not fix the defect and is rejected.
+Its direct OpenGL probe hung; do not repeat it without a diagnosis. Candidate280 is the
+qualified reference for these broader rendering checks. Temporary precision, binning, filter-merging and dirty-region
+controls did not resolve the corruption; their coverage limits are recorded.
+The live validation attempt crashed during CoreDisplay initialization, so it gives
+no validation verdict on the original defect. Candidate279 uses the native expansion path before render-target feedback.
+Its single-pass reproducer passes12cases/1,320,000pixels after previously failing
+private/native-barrier cases. Controlled native panels clear with the patch and
+fail after restoration. The initial279 panel captures were obscured. Fresh280 foreground native panels
+are unobstructed and clean in raw RFB captures0/2, after different animation frames.
+Four distinct-seed280 processes pass48cases/5,280,000pixels, including two concurrent
+clients. The later addressreuse run adds native moving/resizing windows and Safari blur/scrolling;
+longer application use remains an acceptance gate. See [fix evidence](../findings/research/feedback-decompression-20260916.md).
+[Display evidence](../findings/research/transparency-live-composition-20260916.md)
+(probes are also retained in the candidate 278 research worktree).
+
+## M7 acceptance: shutdown, recovery and independent boots
+
+Retain distinct outcomes for functional output, identity/capture, shutdown/recovery
+and overall qualification. An active run has **cleanup pending**, even when its
+functional probe passes.
+
+- [x] Identity-bound guest-request shutdown and independent full-container deadline.
+- [x] Authorizing recovery receipts and successful bounded same-boot reinitialization.
+- [x] Reject incomplete cleanup, forced HQD clears, nonzero CP status or missing proofs.
+- [ ] Repeat representative desktop/codec workloads across independently initialized
+  host boots and verify each complete lifecycle.
+- [ ] Qualify guest-crash/QEMU-closure paths and command-channel-unavailable fallback.
+- [ ] Preserve host-fault evidence and resolve remaining host-stability limits without
+  intentionally provoking a host lockup.
+
+No vfio-pci→amdgpu cycling within a boot; power/control stays on. Use tools/cycle.py
+and candidate worktrees. Fresh MODE2 and the prior run's valid recovery receipt admit
+additional exposure automatically; a reset receipt alone is not authorization, and
+there is no flag or status.md allowance note. No host sudo on the normal path.
+Preserve every identity, capture-fatal, host-fault,
+shutdown and recovery abort. Current authorized runs allow up to 6000 seconds with
+manual stop; this replaces the historical 180-second limit. See
+[host safety](host-safety.md) and [experiment procedure](running-an-experiment.md).
+
+## M8 acceptance: measured usability and release
+
+- [ ] Measure GPU and wall time only after visual correctness; separate shader
+  compilation, transfers and execution.
+- [ ] Record fixed-resolution desktop frame times, duration and visual defects.
+- [ ] Require three independently initialized host-boot sessions with the core suite,
+  plus three successful bounded lifecycle cycles after M7 qualification.
+- [ ] Publish exact build hashes, tested features and unresolved limitations.
+
+Games and Metal3 conformance remain unqualified. Do not infer application support
+from device enumeration or passing microbenchmarks.
+
+## Next work, in order
+
+Only full-field 4K performance is active. Candidate 444 located the full-field loss
+(presenter commits held behind SPICE update creation on QEMU's global lock), removed it in
+QEMU research images and removed one client copy: ~50 full-field decoded IDs/s in the
+1440×900 window. Next: overlap the presenter's capture lock with its commit (presenter
+rebuild, one consent renewal), reduce the client's remaining copy/upload, then qualify
+input/resize/fallback with these changes; Moonlight pairing of the host client is pending
+the user. All other roadmap tasks are on hold. The
+following dated entries retain earlier evidence and do not supersede this priority.
+
+**Current user priority (October9): an accelerated macOS desktop in a VM-manager
+window, without physical HDMI.** Candidate341d passes native Metal/WindowServer
+ownership,3840×2160 console pixels, actual virt-manager keyboard/mouse input,
+bridged LAN traffic and a180-second moving-material workload. Domain XML remains
+unchanged; disconnecting/reconnecting viewers preserves the guest. Capture passes,
+outer shutdown records guest-request exit and native recovery authorizes reuse.
+Candidate343 now preserves the native controller terminal receipt on guest
+shutdown, with both EOF hooks recording natural container exit and authorizing
+GPU recovery. It omits unused container SSH; strict process visibility and
+immediate stop for live-QEMU capture loss remain unchanged. One native shutdown
+passes; crash and independent-boot coverage remain open.
+[Native terminal evidence](../findings/research/libvirt-native-terminal-20261009.md).
+
+Candidate342 verifies the PATH fix and measures895/555 distinct tokens over30s
+at native1080p/HiDPI respectively (29.82/18.50 updates/s in the sampled manager
+buffer). Eight/18 partially invalid token samples keep atomic presentation open.
+The missing controller terminal receipt in342 is superseded by343’s native
+shutdown pass.345 separately tests explicit QEMU refresh scheduling; partial-region
+presentation remains open.
+[Measured evidence](../findings/research/console-cadence-20261009.md).
+
+Candidate345's opt-in QEMU refresh image improves sampled native1080p/HiDPI
+delivery to49.993/22.529updates/s, with35/113 intermediate invalid token samples.
+Capture and GPU recovery pass, but original QEMU stateZ causes immediate cleanup
+before terminal.json.347 adds a software-qualified completed-process proof and
+qualifies the smaller observer in the actual manager. Default image
+pins stay stock; the refresh image has separate opt-in pins.
+[Native refresh evidence](../findings/research/native-refresh-20261009.md).
+
+Candidate347 repeats a native clean controller exit, capture and authorizing recovery.
+Both hooks see QEMU already reaped; the completed-zombie branch is not exercised.
+Fresh paired full/ROI measurements:30.497/30.323updates/s native and19.664/25.198
+HiDPI; sampling cost drops2.228→1.363ms and5.222→1.452ms respectively. All fixtures
+finish and the normal desktop returns. Partial samples persist;345's50updates/s
+native result is not reproduced in347. Later351–353 measurements below separate
+the guest presenter's lock/copy costs and compare display dirty tracking.
+[Paired native evidence](../findings/research/console-roi-native-20261009.md).
+
+The same-image353 OFF versus352 ON comparison uses the same O2 presenter,
+explicitSPICE60 and matched30-second full/ROI observations. HiDPI sampled delivery
+rises23.531→31.758 (full) and22.363→34.882 (ROI) updates/s; row copy falls about
+16→1.5ms. Native1080p changes49.918→44.186 and49.188→50.084 respectively, so there
+is no uniform native gain. QEMU process CPU is lower in all four ON cases;
+whole-host CPU and completed-frame60Hz delivery are not qualified. Partial-region
+samples remain.352/353 capture/recovery pass while the strict EOF proof sees a
+zombie leader with another task and loses the controller terminal receipt.
+Candidate356 subsequently records a real guest-shutdown/process-exited terminal
+after distinct critical recv-reset104 and console clean EOF, with natural
+container exit and authorizing recovery. Its hooks find the original process
+already reaped; candidate364 later exercises the bounded event-wait branch in both
+hooks and records natural exit, genuine terminal and recovery. This is one positive
+case, without separately retained initial task IDs.
+Normal and fullscreen input pass; the small-window transition retains two missed
+clicks. Candidate358 then verifies explicit-device USB audio through QEMU into isolated
+Pulse capture, with correct stereo frequency/channel/silence and exact restoration.
+Default-application output and endpoint audibility were unqualified in358. Its GTK
+trace confirms an initial enter+button without motion still misclicks outside the
+fixture; later five-target success does not qualify the transition. Candidate361
+subsequently passes ordinary afplay default output and continuous
+pointer entry into a resized1000×760 viewport (five targets/token, no misses).
+This does not erase the missing-motion failure or qualify stationary-pointer
+resize, every application, endpoint audibility or A/V synchronization. Next
+qualify optimized helper installation and clean-user/second-boot behavior.
+[Native361 result](../findings/research/console-default-audio-input-20261009.md).
+[Native358 audio/input result](../findings/research/console-audio-native-20261009.md). Default pins remain stock.
+[Native356 result](../findings/research/libvirt-reset-native-20261009.md).
+[Paired result and limits](../findings/research/bochs-full-refresh-paired-20261009.md).
+
+Candidate364 also verifies existing-user optimized source-package installation,
+strict signing, active-session refusal and identical reinstall. The changed ad-hoc
+app requires normal consent renewal; identical rebuild retains consent. Sixteen
+transaction tests pass in macOS disposable directories, not a power-loss test of
+the installed app. Default audio and visible desktop pass; input is not rerun.
+Candidate366 subsequently retains the installed app/hash and capture consent
+on the next guest boot; fresh-user/console-only first setup and permission-loss
+presentation remain open.
+[Installer/lifecycle result](../findings/research/console-install-native-20261009.md).
+
+Candidate366 source-cadence ABBA reaches60.000/60.001 paced draw calls/s, but
+manager valid unique IDs vary35.300/24.900 per second with partial tokens. Baseline
+draws33.063/53.647 give23.633/25.967 valid IDs/s. Neither stable speedup nor60Hz
+output is established; draw calls are not completed composition. Next validate
+actual readonly SCK source tokens before blaming VRAM/QEMU/SPICE.
+[Persistence and cadence evidence](../findings/research/console-cadence-native-20261009.md).
+
+Candidate368 checks tokens in actual readonly-locked SCK buffers before copying.
+Complete 30-second windows contain 1,742 HiDPI and 1,738 native valid samples, zero
+source invalids. Bracketed manager samples still contain 633/1,065 and 35/1,116
+invalids. This narrows investigation beyond checked source regions, without proving
+source stability after checking or isolating framebuffer versus QEMU versus SPICE.
+Normal consent renewal and diagnostic-off restoration pass; genuine shutdown and
+recovery authorize reuse. Next: exclusive staging memory and acknowledged immutable
+host snapshot proof before a native transport comparison.
+[Source-token evidence](../findings/research/console-source-token-native-20261009.md).
+
+Candidate370 combines exclusive staging/acknowledged immutable snapshots and one
+SPICE update rectangle. Actual-manager HiDPI/native/HiDPI-repeat samples are
+389/851/384 valid, zero invalid after startup. First source window has1284 valid
+decoded tokens and17 unavailable observations. Desktop screenshot, USB audio
+capture/routing and ordinary fallback startup pass. Observer14.24/41.01/14.31
+unique IDs/s are lower bounds; no60Hz/full-frame/GPU FPS claim. Genuine guest
+shutdown and authorizing recovery pass, but capture witnesses exit137 during
+container teardown and take immediate-stop; natural capture exit is not claimed.
+Next: bounded witness-exit race fix, software-qualified changed-pixel single
+rectangle and native comparison, then one-shot crash/re-ARM lifecycle checks.
+[Snapshot evidence](../findings/research/console-snapshot-native-20261009.md).
+
+Candidate383 verifies live AppleVirtIOConsole attachment and bidirectional standard
+SPICE agent transport after fixing the supervisor environment-forwarding omission
+that aborted382. The final bounded, idempotent guest agent follows actual manager
+requests for existing2560×1440 and3840×2160 HiDPI modes. Independent guest mode,
+presenter geometry, monitor-map and viewer pixel-area checks agree after settling;
+redundant exact-mode requests avoid new configuration transactions. Port ownership
+is released on exit. Invalid GI primary metadata is explicitly excluded.
+Guarded default stereo capture and independent route restoration pass; the first
+capture's cleanup refusal and explicit recovery remain recorded. The private
+guest-shutdown/process-exit terminal, Docker exit0 without kill/stop, both natural
+container-exit capture receipts and authorizing recovery pass. Persistent
+installation, arbitrary resolutions, multi-monitor layout, stationary-pointer
+resize and broader lifecycle are still open. This is not new input or60Hz
+qualification. [Native transport and resize evidence](../findings/research/console-vdagent-native-20261009.md).
+
+Candidate381 qualifies explicit physical viewport matching in the actual manager:
+2560×1440 guest pixels into1280×720 logical/GDK2 reaches57.5 observed IDs/s across
+mixed phases. Same3840×2160 source into1920×1080 logical/GDK2 improves full-field
+observations14.4→34.5–34.9/s. Guest ACK rates also change, so this is a configuration
+result, not a fixed-production benchmark. Three windows retain14,160 valid tokens,
+zero post-start errors and22 startup errors;379 rare errors remain open. No
+universal60Hz, arbitrary-window automatic sizing or full-frame integrity claim.
+Audio retry/restoration, ordinary fallback, guest-shutdown terminal and authorizing
+recovery pass; capture witness137 belongs to the helper and its receipt reports
+container-stopped-during-shutdown-wait; independent Docker exit0/no-kill events
+corroborate natural exit despite partial terminal capture. Broader forced-stop/crash lifecycle remains
+open. [Viewport evidence](../findings/research/console-viewport-native-20261009.md).
+
+Candidate379 adds synchronous same-channel invalidation observations and a bounded
+QEMU bitmap-creation trace. In full-field HiDPI interiors, publications and creation
+entries both reach about38–39/s, but client invalidations are14–15/s. This rejects
+pre-create queue gating and timer sampling alone as the dominant explanation.
+Three post-start HiDPI token errors remain, with no source-check overlap covering
+them; native1080p has none in this window. One native observer callback stalls
+before ROI decoding. Default audio, ordinary fallback, retired-access refusal,
+natural shutdown and authorizing recovery pass. Next: software-only server
+consumption/coalescing/send measurements, then native comparison; retain source
+integrity and viewer rendering cost as separate questions.
+[Current evidence](../findings/research/console-event-native-20261009.md).
+
+Candidate376 extends this to three110s alternating localized/full-field workloads:
+14265 manager samples valid after startup, with lower sampled rates during
+full-field motion. HiDPI~52/~18 and native~58/~44 localized/full-field rates are
+not true delivery/scanout. Counter observations show~39 QEMU publications/s while
+the manager timer observer itself falls~20 callbacks/s; next use synchronous
+channel invalidations with measured observer cost. The source CRC window timed
+out before the fixtures and does not qualify capture-source integrity here.
+Corrected retired-buffer positive/negative controls, ordinary fallback, stereo
+audio retry/restoration and clean shutdown pass;374's D-state race remains open.
+[Native mixed-motion evidence](../findings/research/console-mixed-motion-native-20261009.md).
+
+Candidate374 changes only the SPICE update rectangle to the union of changed
+pixels while retaining immutable snapshot ownership and the same presenter.
+Observed HiDPI cadence improves14.24/14.31→52.56/51.24 distinct IDs/s, native
+41.01→57.86;3553 samples valid after startup. Audio and normal fallback pass.
+These are localized-workload sampling lower bounds, not sustained60Hz/full-frame
+qualification. Regrant access was denied but the checker expected a different
+error and failed. Capture witnesses refuse initial PID D state, force container
+exit137 and leave no private terminal; outer shutdown text is not clean proof.
+Recovery authorizes reuse independently. Next: read-only refusal diagnostics,
+corrected mapping positive control, sustained mixed-motion and crash lifecycle.
+[Native comparison](../findings/research/console-changed-bbox-native-20261009.md).
+
+
+
+Host-window resize, repeated crash recovery, independent host boots and broader
+desktop coverage follow. Both host sleep and idle blocking remain required during
+development. VirtualBox requires separately qualified rendering access and console integration.
+[Implementation and measured scope](virtual-console.md).
+
+0. **Physical display and HDMI audio (user priority, 2026-09-17).**
+   [Port plan and evidence](../findings/research/display-dcn315-port-20260917.md),
+   [HDMI audio plan](../findings/research/hdmi-audio-passthrough-20260917.md),
+   [host freeze analysis](../findings/research/dcn315-dmcub-host-crash-20260917.md).
+   - DCN3.02 register translation and Samsung EDID reads work. Native PSP DMCUB
+     reload/start and HDMI command delivery are demonstrated (314/315).
+   - Candidate318 produces a physically visible RGB test pattern at native1080p60.
+     The historical fuzziness/interleaving was subsequently fixed in321/322.
+     [Evidence](../findings/research/visible-hdmi-pattern-20260924.md).
+   - Fetch and native1080p layout now work (320–322). Native120Hz appears to work
+     according to the user;329/330 add confirmed correct-color1080HiDPI 120 Hz and audible audio.
+   - Verify guest awake assertions and active HDMI before every physical observation.
+     Keep native host-safety, capture, shutdown and recovery checks intact.
+   - HDMI audio works on323 and330: function7b:00.1 is paired with the GPU;
+     same-slot pairing, passthrough and audible playback are confirmed through
+     the Samsung headphone output (2 channels, 48 kHz).
+1. **Full 4K remote desktop streaming (user priority, updated 2026-09-17).** 4K at 60 Hz is
+   now stable. Three fixes got there: the VCN preset patch (candidate 284, encode 11ms at 4K,
+   equal to Linux), a 2GB BIOS UMA carve-out (no allocation failures; host tools detect the
+   carve-out automatically), and Sunshine ScreenCaptureKit capture with session-range NV12
+   (no Sunshine GPU transfers; the user reports no stutter at 60fps).
+   [Evidence](../findings/research/encoder-pipeline-20260917.md). Remaining, in order:
+   a. **Permanent 120Hz virtual display.** macOS CoreDisplay fills every virtual display
+      mode's integer refresh with 60 and derives vsync from it. A live WindowServer memory
+      poke proved true 120Hz (8.33ms VBL, 112–122 capture frames/s). Build the designed
+      98-byte guarded COW patch in `_CGXVirtualDisplayApply` (CoreDisplay UUID
+      `B52FFBDE-B5F7-3F53-8D5E-2A822E7EE75E`, TEXT+0x371de) as a candidate 285 target
+      applied in WindowServer, then verify the VBL delta and 1440p120/1080p120 stream rates.
+   b. Persist the 120Hz CGVirtualDisplay holder as a LaunchAgent (currently a test
+      holder in `/var/tmp`), and Sunshine's high priority (renice -20, taskpolicy tier 0).
+   c. 4K above ~66–83fps is limited by the serialized VT plugin path (Metal pre-pass
+      ~5ms + VCN ~10ms). Only pursue this if 4K90 matters; 4K120 is beyond this VCN.
+   d. Login persistence of the display helper and physical output remain separate gates.
+2. Qualify supervised QEMU closure and guest-crash/command-channel failure paths,
+   then representative workloads on independently initialized host boots.
+   Supervised HMP quit now has positive cleanup evidence: five queues dequeued,
+   graphics ring retired, CP_STAT=0, authorizing recovery. Strict overall verdict
+   remains INVALID due truncated terminal capture. A fresh post-closure guest now
+   passes the desktop probe, clean shutdown and authorizing recovery.
+   Panic/fallback/repetition/independent host boots remain open.
+   [Closure evidence](../findings/research/supervised-qemu-closure-result-20260916.md).
+3. Broaden desktop applications, formats and interprocess synchronization; measure
+   reclamation cost and page-table release beyond observed address recycling.
+4. Progress physical display and measured performance qualification after those gates.
+
+Allocation failure messages have now been traced through native reclaim/retry:
+all 40 failed reclaim calls in the larger-buffer capture are followed by success
+for the same thread/map, while all CPU readbacks pass. The message alone is not a
+reproduced correctness blocker for these workloads; performance cost remains open.
+[Native analysis](../findings/research/allocation-retry-analysis-20260916.md).
+
+Candidate 280 closes the immediate capture-loss blocker: 398, 370, 387 and 372
+critical records in four completed runs, no loss, guest-request shutdown and
+authorizing recovery. [Latest address/desktop qualification](../findings/research/address-reclaim-desktop-20260916.md),
+[artifact hashes](../findings/research/address-reclaim-desktop-evidence-20260916.json).
+
+One owner controls hardware and the guest command channel. Review the hypothesis,
+baseline and evidence after three experiments on an unexplained failure; repeated
+non-discriminating toggles are not progress. Report observed results and scope,
+not an invented completion percentage. Historical investigations and review records
+remain available in the archived roadmap and findings.
+
+## Source basis for remaining driver work
+
+Use the user-provided `macos-vm/re/decompiled-24G830` sources, checking inferred
+prototypes against matching disassembly and vtables before implementation. The
+allocation investigation already combines those sources with live native tracing.
+Physical HDMI bring-up now has a working Samsung HiDPI 120 Hz/audio path. The native
+`reportCapabilities_LinkInfo` at +0xe074 omitted FRL signal cases; candidate330
+publishes HDMI audio metadata while preserving the native transport. DCN315 clock
+selection and infoframe SRAM wake were independently required for correct output.
+[Source audit, Linux references and physical evidence](../findings/research/hdmi-hidpi120-20260924.md).
+
+The earlier [boot-path analysis](../findings/research/display-boot-path-20260916.md)
+and [clock/wait audit](../findings/research/display-clock-wait-20260916.md) remain
+historical evidence. Their proposed first-picture probes are superseded by this
+milestone. Remaining work includes HDCP errors and broader lifecycle/monitor testing.
+
+## Portability: remove the patched-QEMU dependency
+
+The immediate QEMU source-patch dependency is removed for the tested setup.
+OpenCore hides QEMU SMC's ACPI presence while VirtualSMC supplies the native service;
+QEMU's device remains available for boot-time key access. No RaphaelGPU binary change.
+
+- [x] Audit the repository's host patch: its only QEMU modification implements SMC
+  enumeration; GPU topology uses standard VFIO options and guest adaptations.
+- [x] Implement guest-side ownership with VirtualSMC1.3.7/gen2 and a guarded
+  OpenCore DSDT patch, retaining PerfPowerServices and existing GPU capabilities.
+- [x] Verify on stock QEMU10.1.2/Sequoia24G830: two guest boots on one host boot,
+  sole VirtualSMC-backed AppleSMC, bounded enumeration/end-of-list, low CPU before
+  and after work/restart, Metal/codec/remote-desktop checks and clean recovery.
+- [x] Publish the [stock-QEMU setup and compatibility matrix](stock-qemu-smc.md);
+  preserve the older patched-QEMU/config pair for rollback.
+- [ ] Broaden duration, independent host boots and QEMU/macOS versions. Successful
+  login/desktop boot is observed; comprehensive secure-service testing remains open.
+- [ ] Record per-hypervisor prerequisites: physical PCIe exposure, BAR mappings,
+  interrupts, DMA/IOMMU, ROM/OpenCore delivery and reset/cleanup support.
+- [ ] Investigate VirtualBox separately: virtual display adapters are not Raphael
+  passthrough. Verify actual version/build support before promising acceleration.
+
+[Native evidence and exact source/binary identities](../findings/research/smc-opencore-handoff-20260916.md).
+General example files alone are not hardware validation. All other hypervisors stay
+unqualified. These passes do not establish physical sensor accuracy or power management.
+
+## Reims source-audit follow-ups
+
+Research complete at Reims `69a57dd69a6958e946c03b73e02db331f330f435`, with
+its pinned QEMU submodule also reviewed. [Audit and source references](../findings/research/reims-vgpu-audit-20260916.md).
+These are independently implemented qualification tasks, not confirmed Raphael bugs.
+No external code was imported or runtime results reproduced; the translator dependency
+was not audited. The tested stock-QEMU/SMC path is now verified; broader portability remains open.
+
+- [ ] **M6: expected content versus remote pixels.** Add declared regions and visible
+  frame tokens to composition checks; compare raw RFB captures against independent
+  expected patterns. Reject stale frames and wrong geometry in host-only instrument
+  checks. Account for scale/color transfer and verify retained areas after updates.
+- [x] **M5: mixed CPU/GPU ownership — managed textures.** 96 fresh-resource cases
+  across two seeded processes pass RGBA8/BGRA8 at64×64/1003×769: explicit GPU-to-CPU
+  sync, partial CPU update and LOAD-only/CPU-only/combined controls preserve changed
+  and untouched regions.111,658,032 pixel comparisons, zero pixel/padding mismatches;
+  valid strict capture and clean shutdown/recovery. Every control includes initial
+  texture synchronization/readback; this does not qualify IOSurface ownership or
+  retained depth. [Evidence](../findings/research/texture-ownership-20260916.md).
+- [ ] **M5: plane and subresource isolation.** Import biplanar IOSurfaces through public
+  APIs as R8/RG8 textures; check per-plane geometry, pitch and distinct content. Add
+  mip/slice views and prove changing one leaves other subresources unchanged.
+- [ ] **M5: retained depth/stencil.** Write in one pass, LOAD in another and verify a
+  CPU-known comparison mask. Keep depth resolve, aspect copies and independent-client
+  isolation as distinct cases; current color-resolve passes do not establish them.
+- [ ] **M5: bounded heap alias lifetime.** Complete work before making a resource
+  aliasable, prove reuse of its heap offset and verify new content. Keep actual
+  page-table release dependent on native unmap/invalidate and backing evidence.
+
+Use supported AMD storage modes and native synchronization contracts. Give cases
+stable semantic IDs, bounded waits and mandatory result accounting; retain capture,
+shutdown and recovery checks. Existing cross-process consumer-first GPU events already
+have stronger local evidence than importing Reims' basic event tests would add.
+
+Reims' virtual GOP, Vulkan/Metal translation and custom QEMU device do not establish
+Raphael DCN output, VCN support, VFIO recovery or VirtualBox passthrough. Its pinned
+AppleSMC still lacks key-index enumeration; our separately tested OpenCore/VirtualSMC
+solution closes that dependency for stock QEMU. Other roadmap gates remain open. Root and
+Cargo license metadata differ; resolve applicable terms before considering source reuse.
+
+## Licensing and distribution follow-up
+
+- Implement the [audited vendor-only firmware sourcing plan](../findings/research/licensing-audit-20260916.md)
+  after authorization; preserve exact bytes and all existing match checks.
+- Resolve SDK per-file/OS restrictions and executable source-notice obligations;
+  review other native patterns/excerpts and historical release assets.
+- BSD-3-Clause and verified third-party licence documents are now included.
+  Documentation work does not establish complete legal or hardware qualification.
+
+Candidate282's streaming investigation ended with valid capture, a clean
+guest-request shutdown and authorizing recovery. Motion performance remains
+open; the final120FPS-request/60Hz-display trace requires a matching4K at 60 Hz control.
+[Final evidence](../findings/research/safari-motion-20260916.json).
+
+## Physical HDMI milestone — 2026-09-24
+
+Candidates 321–323 establish a full 1920×1080 logical / 3840×2160 backing
+HDMI picture at 60 Hz, correct native 1920×1080 at 60 Hz, and audible HDMI
+audio through the Samsung headphone output. Native 1080p at 120 Hz is listed
+and the user reports it appears to work; sustained timing is not qualified.
+Candidate330 now provides that HiDPI 120 Hz link with correct colors and audible
+HDMI audio. Default audio routing and playback survive tested120→60→120 switches.
+[Evidence and residual log errors](../findings/research/hdmi-hidpi120-20260924.md).
+DisplayPort, HDR, broader monitors and independent-host-boot durability remain open.
+
+[Current setup and scope](hdmi-status.md) ·
+[Historical bring-up](../findings/research/status-archives/hdmi-bringup-roadmap-20260924.md).
+
+### Installed resize and pointer coexistence (candidate386)
+
+The installed external helper payload starts on the next guest boot with the
+sealed capture application unchanged. Actual manager1460×960→1440×960 requests
+and five input targets/exact text pass with the resize agent still attached;
+`agent-mouse=off` preserves USB-tablet routing. Candidate385 separately exercised
+eleven sizes and bounded eight-mode LRU eviction. A negative input control rejects
+four intermediate geometry changes despite restored final geometry. Fixed HiDPI2
+still needs an adaptive host-DPI policy; other managers/VirtualBox and universal60Hz
+remain unqualified. Candidate386 natural shutdown and authorizing recovery pass.
+[Native evidence](../findings/research/console-installed-resize-native-20261009.md).
+
+Current installed-resize admission is **even physical640..3840 ×480..2160**,
+with fixed HiDPI2. Actual386 host GDK1 requests with odd pixel dimensions are
+refused. Adaptive DPI selection and an explicit odd-size policy remain open.
+Candidate386's independent audio restoration checks all pass; reconnect surfaces
+1502×960→1440×960 match, with five-hit/exact-text reconnect input passing; natural shutdown and authorizing recovery pass, with the partial capture tail retained.

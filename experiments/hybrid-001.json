@@ -1,0 +1,14 @@
+{
+  "id": "hybrid-001",
+  "question": "Where does native hybrid creation first fail after KIQ setup?",
+  "candidate_version": "1.0.163",
+  "requested_diagnostic": "rgpuhybrid=1",
+  "behavior_change": "no intended GPU behavior change; availability snapshot and concurrent diagnostic storage",
+  "required_observations": ["loaded_build", "route_guards", "kiq_stamps", "hybrid_enter", "hybrid_exit", "engine_start"],
+  "max_seconds": 180,
+  "prerequisites": ["T2", "T3", "T4", "fresh_amdgpu_first_boot"],
+  "repeat_policy": "no unchanged retry",
+  "abort_on": ["identity_mismatch", "capture_loss", "kiq_dequeue_timeout", "host_fault"],
+  "outcome_table": "docs/ROADMAP.md M2",
+  "run_probe_only_after_native_start": true
+}

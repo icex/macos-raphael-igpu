@@ -1,0 +1,36 @@
+{
+  "id": "metal-003",
+  "question": "Does candidate 169 repair the measured 36-bit framebuffer address in each SDMA paging indirect-buffer template and complete the checked Metal compute/render probe?",
+  "candidate_version": "1.0.169",
+  "requested_diagnostic": "rgpusdma=1",
+  "behavior_change": "translate only an SDMA indirect-buffer address in the exact low-36-bit image of Raphael's software framebuffer aperture into the validated physical MC aperture before native submission",
+  "required_observations": [
+    "loaded_build",
+    "route_guards",
+    "kiq_stamps",
+    "hybrid_enter",
+    "hybrid_exit",
+    "engine_start",
+    "sdma_topology",
+    "sdma_channel_remap",
+    "sdma_ib_address_repair"
+  ],
+  "max_seconds": 180,
+  "prerequisites": [
+    "candidate_168_reset_free_recovery",
+    "same_boot_recovery_receipt",
+    "reset_methods_disabled"
+  ],
+  "repeat_policy": "do not retry unchanged after an SDMA0_PAGE timeout; after recovery, one warm qualification run is allowed only if the checked probe passes",
+  "abort_on": [
+    "identity_mismatch",
+    "capture_loss",
+    "guest_panic",
+    "kiq_dequeue_timeout",
+    "sdma_page_timeout",
+    "host_fault",
+    "gc_quiesce_failure"
+  ],
+  "outcome_table": "docs/ROADMAP.md M4-M7",
+  "run_probe_only_after_native_start": true
+}

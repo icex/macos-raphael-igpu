@@ -1,0 +1,21 @@
+--- a/ui/spice-display.c
++++ b/ui/spice-display.c
+@@ -489,6 +489,10 @@
+     graphic_hw_update(ssd->dcl.con);
+     updated = timed ? g_get_monotonic_time() : 0;
+ 
++    /* Diff and copy the published surface without the BQL so guest commits
++     * are not held behind update creation. Surface switches and update
++     * consumption take ssd->lock, which is held throughout. */
++    bql_unlock();
+     WITH_QEMU_LOCK_GUARD(&ssd->lock) {
+         busy = !QTAILQ_EMPTY(&ssd->updates);
+         if (!busy && ssd->ds) {
+@@ -496,6 +500,7 @@
+             ssd->notify++;
+         }
+     }
++    bql_lock();
+ 
+     if (timed) {
+         trace_qemu_spice_refresh_timing(ssd->qxl.id, start, updated - start,

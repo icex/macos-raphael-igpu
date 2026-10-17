@@ -1,0 +1,77 @@
+diff --git a/ui/gtk-egl.c b/ui/gtk-egl.c
+index f9b33dfe7..3e5b2ab0f 100644
+--- a/ui/gtk-egl.c
++++ b/ui/gtk-egl.c
+@@ -393,7 +393,8 @@ void gd_egl_scanout_flush(DisplayChangeListener *dcl,
+ 
+     egl_fb_setup_default(&vc->gfx.win_fb, pw_surface, ph_surface,
+                          px_offset, py_offset);
+-    if (vc->gfx.cursor_fb.texture) {
++    if (vc->gfx.cursor_fb.texture &&
++        g_strcmp0(g_getenv("RGPU_HOST_CURSOR"), "1") != 0) {
+         egl_texture_blit(vc->gfx.gls, &vc->gfx.win_fb, &vc->gfx.guest_fb,
+                          vc->gfx.y0_top);
+         egl_texture_blend(vc->gfx.gls, &vc->gfx.win_fb, &vc->gfx.cursor_fb,
+diff --git a/ui/gtk.c b/ui/gtk.c
+index c6970aedd..1e3a7d831 100644
+--- a/ui/gtk.c
++++ b/ui/gtk.c
+@@ -387,12 +387,48 @@ static void gd_snap_aspect_later(GtkWidget *widget, GdkRectangle *allocation, gp
+ 
+ void gd_keep_aspect(VirtualConsole *vc, int width, int height)
+ {
++    GtkDisplayState *s = vc->s;
++    GtkWindow *win = GTK_WINDOW(vc->window ? vc->window : s->window);
++    GdkWindow *gwin;
++    GdkMonitor *monitor;
++    GdkRectangle workarea;
++    int win_w, win_h, area_w, area_h, chrome_w, chrome_h;
++    int max_w, max_h, fit_w, fit_h;
++
+     if (vc->type != GD_VC_GFX || width <= 0 || height <= 0 ||
+         (vc->gfx.keep_w == width && vc->gfx.keep_h == height)) {
+         return;
+     }
+     vc->gfx.keep_w = width;
+     vc->gfx.keep_h = height;
++    if (g_strcmp0(g_getenv("RGPU_AUTO_FIT"), "1") == 0 &&
++        !s->full_screen && !gtk_window_is_maximized(win) &&
++        gtk_widget_get_realized(GTK_WIDGET(win))) {
++        gwin = gtk_widget_get_window(GTK_WIDGET(win));
++        monitor = gdk_display_get_monitor_at_window(gdk_window_get_display(gwin),
++                                                     gwin);
++        if (monitor) {
++            gdk_monitor_get_workarea(monitor, &workarea);
++            gtk_window_get_size(win, &win_w, &win_h);
++            area_w = gtk_widget_get_allocated_width(vc->gfx.drawing_area);
++            area_h = gtk_widget_get_allocated_height(vc->gfx.drawing_area);
++            chrome_w = MAX(0, win_w - area_w);
++            chrome_h = MAX(0, win_h - area_h);
++            max_w = MAX(1, workarea.width - chrome_w - 48);
++            max_h = MAX(1, workarea.height - chrome_h - 48);
++            fit_w = MIN(width, max_w);
++            fit_h = MIN(height, max_h);
++            if ((int64_t)fit_w * height > (int64_t)fit_h * width) {
++                fit_w = MAX(1, (int)((int64_t)fit_h * width / height));
++            } else {
++                fit_h = MAX(1, (int)((int64_t)fit_w * height / width));
++            }
++            gtk_window_resize(win, fit_w + chrome_w, fit_h + chrome_h);
++            fprintf(stderr, "rgpu-auto-fit guest=%dx%d workarea=%dx%d window=%dx%d\n",
++                    width, height, workarea.width, workarea.height,
++                    fit_w + chrome_w, fit_h + chrome_h);
++        }
++    }
+     /* Opt-in: by default the window keeps any shape and the picture letterboxes. */
+     if (g_strcmp0(g_getenv("RGPU_SNAP_ASPECT"), "1") != 0) {
+         return;
+@@ -2653,7 +2689,8 @@ static void gtk_display_init(DisplayState *ds, DisplayOptions *opts)
+     textdomain("qemu");
+ 
+     window_display = gtk_widget_get_display(s->window);
+-    if (s->opts->has_show_cursor && s->opts->show_cursor) {
++    if ((s->opts->has_show_cursor && s->opts->show_cursor) ||
++        g_strcmp0(g_getenv("RGPU_HOST_CURSOR"), "1") == 0) {
+         s->null_cursor = NULL; /* default pointer */
+     } else {
+         s->null_cursor = gdk_cursor_new_for_display(window_display,

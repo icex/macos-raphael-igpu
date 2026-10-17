@@ -1,0 +1,122 @@
+name: Test and build experimental kext
+on:
+  push:
+    branches: [main, dev]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  privacy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check publication privacy
+        run: python3 -B tools/privacy-check.py
+      - name: Scan full history for secrets
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz -o "$RUNNER_TEMP/gitleaks.tar.gz"
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  $RUNNER_TEMP/gitleaks.tar.gz" | sha256sum -c -
+          tar xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP" gitleaks
+          "$RUNNER_TEMP/gitleaks" git . --log-opts='--all --full-history' --redact=100 --ignore-gitleaks-allow --max-archive-depth=3 --no-banner
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install test utilities
+        run: sudo apt-get update && sudo apt-get install -y g++-multilib mtools qemu-system-x86 python3-numpy python3-pil
+      - run: python3 -B -m unittest discover -s tests -v
+      - name: Validate producer quiesce over a real software UART
+        env:
+          RGPU_REQUIRE_QEMU_QUALIFICATION: '1'
+          RGPU_TRANSPORT_ARTIFACT_DIR: ${{ runner.temp }}/rgpu-transport-evidence
+        run: |
+          python3 -B tests/qualify_critical_transport.py \
+            CriticalTransportQualification.test_real_qemu_quiesce_is_newer_acknowledged_and_silent \
+            CriticalTransportQualification.test_real_qemu_ignored_token_hits_boundary_and_cleans_up -v
+      - name: Retain software UART evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: software-uart-evidence
+          path: ${{ runner.temp }}/rgpu-transport-evidence
+          if-no-files-found: ignore
+      - name: Validate address arithmetic
+        run: |
+          for source in tests/test_gart_addresses.cpp tests/test_kiq_addresses.cpp tests/test_kiq_queue_preparation.cpp tests/test_sdma_topology.cpp tests/test_sdma_addresses.cpp tests/test_gpu_vm_diagnostics.cpp tests/test_engine_lifecycle.cpp tests/test_recovery_reservation.cpp tests/test_submission_trace.cpp tests/test_gfx_hang_dump.cpp tests/test_texture_setting_locator.cpp; do
+            g++ -std=c++14 -Wall -Wextra -Werror -fsanitize=undefined "$source" -o /tmp/address-test
+            /tmp/address-test
+          done
+      - name: Validate concurrent diagnostic records
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror -pthread -fsanitize=address,undefined tests/test_diagnostic_records.cpp -o /tmp/record-test
+          /tmp/record-test
+          g++ -std=c++17 -Wall -Wextra -Werror -pthread -fsanitize=address,undefined tests/test_backing_trace.cpp -o /tmp/backing-trace-test
+          /tmp/backing-trace-test
+          g++ -std=c++17 -Wall -Wextra -Werror -pthread -fsanitize=address,undefined tests/test_recovery_lease.cpp -o /tmp/recovery-lease-test
+          /tmp/recovery-lease-test
+          g++ -std=c++17 -Wall -Wextra -Werror -pthread -fsanitize=address,undefined tests/test_critical_replay.cpp -o /tmp/critical-replay-test
+          /tmp/critical-replay-test
+          g++ -std=c++17 -Wall -Wextra -Werror -fsanitize=address,undefined tests/test_critical_uart.cpp -o /tmp/critical-uart-test
+          ASAN_OPTIONS=detect_leaks=1 /tmp/critical-uart-test
+          g++ -std=c++17 -Wall -Wextra -Werror -pthread -fsanitize=address,undefined tests/test_recovery_lifetime.cpp -o /tmp/recovery-lifetime-test
+          /tmp/recovery-lifetime-test
+          g++ -std=c++17 -Wall -Wextra -Werror -fsanitize=address,undefined tests/test_vm_entry_update.cpp -o /tmp/vm-entry-update-test
+          ASAN_OPTIONS=detect_leaks=1 /tmp/vm-entry-update-test
+          g++ -std=c++17 -Wall -Wextra -Werror -fsanitize=address,undefined tests/test_vm_program_correlation.cpp -o /tmp/vm-program-correlation-test
+          ASAN_OPTIONS=detect_leaks=1 /tmp/vm-program-correlation-test
+  build:
+    needs: [privacy, test]
+    runs-on: macos-15-intel
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch pinned build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/toolchain/liludbg"
+          SDK_COMMIT=$(python3 -c 'import json; print(json.load(open("build-support/inputs.json"))["mac_kernel_sdk_commit"])')
+          LILU_VERSION=$(python3 -c 'import json; print(json.load(open("build-support/inputs.json"))["lilu_version"])')
+          curl --fail --location --retry 3 "https://github.com/acidanthera/MacKernelSDK/archive/${SDK_COMMIT}.tar.gz" -o "$RUNNER_TEMP/sdk.tar.gz"
+          tar xzf "$RUNNER_TEMP/sdk.tar.gz" -C "$RUNNER_TEMP/toolchain"
+          mv "$RUNNER_TEMP/toolchain/MacKernelSDK-${SDK_COMMIT}" "$RUNNER_TEMP/toolchain/MacKernelSDK-master"
+          curl --fail --location --retry 3 "https://github.com/acidanthera/Lilu/releases/download/${LILU_VERSION}/Lilu-${LILU_VERSION}-DEBUG.zip" -o "$RUNNER_TEMP/lilu.zip"
+          LILU_SHA=$(python3 -c 'import json; print(json.load(open("build-support/inputs.json"))["lilu_archive_sha256"])')
+          echo "$LILU_SHA  $RUNNER_TEMP/lilu.zip" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/lilu.zip" -d "$RUNNER_TEMP/toolchain/liludbg"
+          patch -d "$RUNNER_TEMP/toolchain/liludbg/Lilu.kext/Contents/Resources" -p1 < build-support/lilu-1.6.8-fileless-headers.patch
+      - name: Compile release from source
+        shell: bash
+        run: |
+          export KEXT_LD="$(xcrun --find ld)"
+          python3 -B tools/build-release.py --toolchain "$RUNNER_TEMP/toolchain" --output dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: experimental-kext
+          path: dist/*
+          if-no-files-found: error
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: experimental-kext
+          path: dist
+      - name: Publish experimental prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: gh release create "$RELEASE_TAG" dist/* --verify-tag --prerelease --title "RaphaelGPU $RELEASE_TAG (experimental)" --notes-file docs/release-notes.md

@@ -1,0 +1,31 @@
+# Candidate398: independent clone, actual VirtualBox boot discriminator
+
+This is an offline preparation, not a boot result. Worktree starts from fetched dev `c1f64d0`, then fast-forwards to candidate397 `9d5bb8b`. The GPU owner created stopped-guest independent Btrfs reflinks in `run/c398-vbox-clones`; no backing chains. Only those clones are read. Separate VDIs preserve the original QCOW2 clones. `conversion.json` records source hashes before/after, output hashes and successful `qemu-img compare` across formats. Conversion is not an assertion that VirtualBox can boot macOS.
+
+## Loader facts and initial CPU proposal
+
+The cloned EFI config has leaf1 data `54060500000000000000000000000000`, mask `ffffff00000000000000000000000000` (signature 0x50654); DummyPowerManagement and ProvideCurrentCpuInfo are true. All five enabled kernel patches are restricted to Darwin17–22; none covers24.x. This is not a current AMD bare-metal patchset. VirtualSMC is enabled; OpenRuntime, OpenHfsPlus and OpenPartitionDxe are enabled. The existing boot arguments contain QEMU/Raphael experiment settings and a historical run identity: they must not be mistaken for a new admitted GPU run.
+
+Installed `VBoxManage list cpu-profiles` exposes Intel Core i7-6700K, i7-5600U and older Intel profiles, plus AMD profiles. Propose **Intel Core i7-6700K**, 8 vCPUs (matching the current loader context), no additional hand-invented CPUID overrides on the first software boot. Existing OpenCore signature spoof stays initially unchanged; retain actual guest CPUID/early panic evidence before any change. A profile is not an emulated instruction set: host execution features/MSR behavior still need runtime qualification. The stock host-AMD profile without current AMD kernel patches is not the preferred first test.
+
+## Minimal owned software boot
+
+Use a unique private VBOX_USER_HOME and VM UUID/name, EFI64 with a fresh VBox variable store (never reuse OVMF_VARS.fd), OS X64 type, ICH9/AHCI, VBoxVGA, bounded VRAM, USB keyboard/tablet, no3D, no shared folders/clipboard, no host-device passthrough and initially no network/audio. Attach only separate writable VDI descendants of the verified converted baselines; loader first, system second, preserving source/VDI baselines for subsequent experiments. Do not attach main images. Verify EFI fallback boot file and boot order; QEMU SATA2/SATA4 paths and slot6/7 DeviceProperties do not automatically map to VBox topology.
+
+Pinned VirtualBox7.2.18 commit `14841851fa211c7faf615978ba385d59947236c6`: `ConsoleImplConfigX86.cpp:1295–1313` enables its SMC for OS X guests, `111–160` selects the key source; `1565–1590` selects VBoxEFI-amd64.fd. `DevSmc.cpp:1461–1473` accepts DeviceKey/GetKeyFromRealSMC. Existing VirtualSMC means the first attempt must explicitly document the chosen SMC arrangement, not accidentally add an unrelated key or claim compatibility. Reuse the existing authorized secret privately if the VBox SMC path requires it; no key/serial values in console output or committed files.
+
+Controller requirements before root execution: fixed <=300-second deadline independent of screenshot/guest response; exact UUID + owned process identity; owned COM1/COM2 capture files; bounded screenshot attempts; record VM state/exit reason; on deadline use owned VM poweroff and verify stopped before unregistering. This is a software-only owner, not the physical-GPU ledger path. Raw VBox logs/config can contain DeviceKey and identity: directory0700/files0600, no stdout dumps, sanitized selected diagnostic extraction only. Do not use setuid strace; its prior hardening refusal is retained separately.
+
+First acceptance: actual VBox window/screenshot shows OpenCore picker, then macOS EFI framebuffer and responsive desktop if boot succeeds. Stop at the earliest concrete CPU/SMC/UEFI/storage failure and preserve UART/VBox diagnostics. No new transport driver is needed to test firmware pixels. The installed capture helper may fail without Raphael acceleration; that is not a reason to pretend boot framebuffer pixels qualify Metal.
+
+Only after boot: separate exact80ee:beef VBoxVGA adapter, bounded BAR0 and VBE I/O ports0x1ce/0x1cf, known-pattern readback plus independent VBox screenshot. Current Bochs BAR2 MMIO/snapshot interface cannot be assumed. Physical VFIO reset/DMA/ID/ROM questions remain in the separate pinned-source audit; this test opens none of those devices.
+
+## Derivative-only SMC configuration proposal
+
+Inspection confirms EFI/BOOT/BOOTx64.efi exists. The exact enabled ACPI patch is `Raphael: QEMU SMC ACPI handoff to VirtualSMC`, a DSDT SMC `_STA` replacement from0x0b to0x00. For a new writable loader descendant only, disable that exact patch and VirtualSMC.kext, add `-rgpuoff` (plugin disable declaration at src/RaphaelGPU.cpp:11156), and remove the now-unused vsmcgen option. Do not alter verified conversion baselines or main images. This selects native VBox SMC deliberately; it is a proposal, not an applied edit.
+
+Pinned `DevSmc.cpp:339–366` provides the small OSK/#KEY/REV and platform-key table. Name lookup751–794 returns explicit KEY_NOT_FOUND for absence; index bounds808–827 also return KEY_NOT_FOUND. A source caveat remains: the index count subtracts the two non-enumerable keys, but the array read uses `g_aSmcKeys[iKey]` without adding that offset. This deserves observed guest enumeration/PerfPower evidence if boot reaches it; it does not establish QEMU's previous failure or authorize a speculative SMC patch. No private key values were added to this report.
+
+## Completed offline preparation
+
+Both conversions completed with `qemu-img compare` reporting images identical and unchanged original clone hashes before/after. Output VDIs and receipt paths/digests are retained in `virtualbox-clone-preparation-evidence-20261009.json`. System virtual size is256GiB; this is content equivalence across formats, not a boot result. The extracted private EFI configuration and raw inspection copy remain restricted to mode0600. No VM was registered or started and no baseline disk was edited.

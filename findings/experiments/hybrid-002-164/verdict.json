@@ -1,0 +1,33 @@
+{
+  "valid": true,
+  "verdict": "HYBRID_QUEUE_SUSPECTED",
+  "earliest_failure": "hybrid",
+  "evidence": [
+    "BUILD: identity=79e17c018d744550bc435f2789174dde",
+    "HY: HWLibs hybrid trace route=ok entries-match=1 (max 8 calls)",
+    "HY: SDMA selector trace route=ok entries-match=1 (max 8 hybrid calls)",
+    "XJ: AMDGraphicsAccelerator::powerUpHW entry",
+    "HY: createHybridEngine enter: engine=12 available=1",
+    "HY: createHybridEngine exit: engine=12 valid=1 available-before=1 status=0",
+    "XJ:   waitForHwStamp(1) -> 1",
+    "HY: createHybridEngine enter: engine=13 available=1",
+    "HY: createHybridEngine exit: engine=13 valid=1 available-before=1 status=0",
+    "XJ:   waitForHwStamp(2) -> 1",
+    "XJ:   waitForHwStamp(3) -> 1",
+    "XJ:   waitForHwStamp(1) -> 1",
+    "XJ: AMDHardware::powerUpHWEngines -> 1",
+    "HY: createHybridEngine enter: engine=10 available=1",
+    "HY: SDMA select index=0 queue-type=0 found=1 counts=1,0,0,0 queues=1,1,2388860584 occupied=0 callback=0x62c9f",
+    "HY: createHybridEngine exit: engine=10 valid=1 available-before=1 status=0",
+    "HY: createHybridEngine enter: engine=11 available=1",
+    "HY: SDMA select index=0 queue-type=1 found=1 counts=1,0,0,0 queues=1,1,2388860584 occupied=1 callback=0x62c9f",
+    "HY: createHybridEngine exit: engine=11 valid=1 available-before=1 status=0",
+    "HY: createHybridEngine enter: engine=10 available=1",
+    "HY: SDMA select index=1 queue-type=0 found=0 counts=1,0,0,0 queues=0,0,0 occupied=0 callback=0xffffffffffffffff",
+    "HY: createHybridEngine exit: engine=10 valid=1 available-before=1 status=4",
+    "XJ: AMDHardware::startHWEngines -> 0",
+    "XJ: AMDGraphicsAccelerator::powerUpHW -> 0",
+    "XJ:   waitForHwStamp(1) -> 1"
+  ],
+  "next_action": "locate native rejecting branch; snapshot is not causal proof"
+}

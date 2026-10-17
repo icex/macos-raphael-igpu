@@ -1,0 +1,54 @@
+[2J[01;01H[=3h[2J[01;01H[2J[01;01H[=3h[2J[01;01HBdsDxe: loading Boot0001 "UEFI QEMU HARDDISK QM00017 " from PciRoot(0x0)/Pci(0x3,0x0)/Sata(0x2,0xFFFF,0x0)
+BdsDxe: starting Boot0001 "UEFI QEMU HARDDISK QM00017 " from PciRoot(0x0)/Pci(0x3,0x0)/Sata(0x2,0xFFFF,0x0)
+OCC: Missing compatible GOP - Not Found
+OCC: Missing GOP on ConOut - Unsupported
+OC: Changed resolution to 1920x1080@0 (max: 0, force: 0) from 1920x1080@32 - Unsupported
+OCUI: Failed to initialise output
+OCB: External interface ShowMenu failure, fallback to builtin - Unsupported
+[2J[01;01H[2J[01;01HOpenCore Boot Menu (REL-105-2025-07-07)
+
+* 1. MacOS[04;01H  2. Recovery 15.7.9 (dmg)[05;01H  3. UEFI Shell[06;01H
+ |Shutdown|  |Restart|
+
+Choose the Operating System: Timeout
+#[EB|LOG:VERBOSE] 2026-09-10T12:25:09
+#[EB.CSR.S|VAR] 0x00000067
+#[EB|OPT:BM] 0x80182
+#[EB|P:CPR] N
+#[EB|P:MPI] N
+#[EB|P:BPI] N
+#[EB.OPT.RKS|!] Err(0xE) <- BS.LocP EDB4A040-6D8A-11EC-8FAD-3E22FB93ADCF
+#[EB|KMR] 207597568
+#[EB.CS.CSKSD|+]
+#[EB.CS.CSKSD|!] Err(0xE) <- RT.GV boot-info-payload 8D63D4FE-BD3C-4AAD-881D-86FD974BC1DF
+#[EB|WL] 0 0 0x01 0x01   6 0x0E
+#[EB.CS.LFC|+]
+#[EB.LD.LF|IN] 0 1 <"System\\Library\\Caches\\com.apple.corestorage\\EncryptedRoot.plist.wipekey"> <"0">
+#[EB.FS.AGSVH|PU] 1219B857-6480-4B0E-A6B0-FB3201869365
+#[EB.FS.AGSVH|!] Err(0xE) <- BS.LocHB 59D76AE4-37E3-55A7-B460-EF13D46E6020
+#[EB.G.CS|-?] Ok(0)
+#[EB.LD.LF|IN] 0 1 <"<null string>"> <"1">
+#[EB.B.SBS|SZ] 723512
+#[EB|B:SHA] <f72e9812e04a5c4cf18a14c4652453073d2d9027>
+#[EB.WL.PWLFNV|!] Err(0xE) <- RT.GV wake-failure 7C436110-AB2A-4BBB-A880-FE41995C9F82
+#[EB.WL.DT|!] Err(0xE) <- EB.WL.PWLFNV
+#[EB|WL:DT] 0xffffffff
+#[EB.LD.LKC|D] <"boot\System\Library\KernelCollections\BootKernelExtensions.kc.development">
+#[EB.LD.OFS|OPEN!] Err(0xE) <"boot\\System\\Library\\KernelCollections\\BootKernelExtensions.kc.development">
+#[EB.LD.LKC|R.2] <"boot\System\Library\KernelCollections\BootKernelExtensions.kc">
+#[EB.LD.LKFS|-?] Ok(0)
+#[EB.LD.LKC|-?] Ok(0)
+#[EB|BST:REV1]
+#[EB|CSR:OUT] 0x00000067
+#[EB.BST.FBS|+]
+#[EB.BST.FBS|ADSZ] 0
+#[EB.BST.FBS|KSSZ] 0
+#[EB|SB:SBGMFNS] x86legacyap.im4m
+#[EB|RH:PF] usr\standalone\OS.dmg.root_hash
+#[EB|RH:MF] <"usr\\standalone\\OS.dmg.root_hash.x86legacyap.im4m">
+#[EB.LD.LF|IN] 0 1 <"usr\\standalone\\OS.dmg.root_hash"> <"0">
+#[EB.LD.LF|IN] 0 1 <"usr\\standalone\\OS.dmg.root_hash.x86legacyap.im4m"> <"0">
+#[EB.BST.FBS|RHPSZ] 229
+#[EB.BST.FBS|RHMSZ] 3658
+#[EB|LOG:DT] 2026-09-10T12:25:09
+#[EB|LOG:EXITBS:START] 2026-09-10T12:25:09

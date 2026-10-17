@@ -1,0 +1,108 @@
+{
+  "schema": 1,
+  "date": "2026-10-12",
+  "runs": {
+    "candidate-449-attempt-r2": {
+      "run_id": "fee8d65dbabb62b2ff8412e2ed8d4ffd",
+      "build_id": "2fb6761610de4312b483ee254e87999c",
+      "verdict": "CORE_PROBE_PASS",
+      "shutdown": "exit-unverified-after-request",
+      "recovery": "recovered",
+      "authorizes_launch": true
+    },
+    "candidate-450-attempt-b2": {
+      "run_id": "9c513928f10efe4e4344432c374fa0bd",
+      "build_id": "92c6197c29194c85ba1de529add8c024",
+      "verdict": "INVALID",
+      "shutdown": "already-stopped",
+      "recovery": "failed",
+      "authorizes_launch": null,
+      "noqueue_recovery": "recovered"
+    },
+    "candidate-450-attempt-b3": {
+      "run_id": "7558494c4aa57bf0488763fda6498f94",
+      "build_id": "92c6197c29194c85ba1de529add8c024",
+      "verdict": "CORE_PROBE_PASS",
+      "shutdown": "exit-unverified-after-request",
+      "recovery": "recovered",
+      "authorizes_launch": true
+    },
+    "candidate-451": {
+      "run_id": "fe808a72f2935526ead6555a3fae0e84",
+      "build_id": "bd9d53c60f1a45c7bd8b612f9c60978f",
+      "verdict": "CORE_PROBE_PASS",
+      "shutdown": "exit-unverified-after-request",
+      "recovery": "recovered",
+      "authorizes_launch": true
+    },
+    "candidate-452": {
+      "run_id": "0429d1867d30388514ed37391dee5dad",
+      "build_id": "32dd930335dd497595e1997a8c2fbd27",
+      "verdict": "CORE_PROBE_PASS",
+      "shutdown": "exit-unverified-after-request",
+      "recovery": "recovered",
+      "authorizes_launch": true
+    }
+  },
+  "measurements": {
+    "449_r2_10s": {
+      "seconds": 10.001,
+      "presented_per_s": 44.99,
+      "content_changes_per_s": 43.49
+    },
+    "449_r2_60s": {
+      "seconds": 60.001,
+      "presented_per_s": 41.73,
+      "content_changes_per_s": 0.27
+    },
+    "450_b3": {
+      "seconds": 20.001,
+      "presented_per_s": 45.0,
+      "content_changes_per_s": 0.8
+    },
+    "451": {
+      "seconds": 20.001,
+      "presented_per_s": 59.2,
+      "content_changes_per_s": 9.3
+    },
+    "452": {
+      "seconds": 15.001,
+      "presented_per_s": 60.0,
+      "content_changes_per_s": 0.93
+    },
+    "453_mixed_60s": {
+      "seconds": 60.001,
+      "presented_per_s": 60.0,
+      "content_changes_per_s": 25.37
+    },
+    "453_fullfield_15s": {
+      "seconds": 15.001,
+      "presented_per_s": 60.0,
+      "content_changes_per_s": 60.0
+    },
+    "453_fullfield_windows": [
+      "full-field window 20.5 {'seconds': 19.001, 'presented_per_s': 59.95, 'content_changes_per_s': 55.1}",
+      "full-field window 60.5 {'seconds': 19.001, 'presented_per_s': 60.0, 'content_changes_per_s': 55.1}",
+      "full-field window 100.5 {'seconds': 19.001, 'presented_per_s': 60.0, 'content_changes_per_s': 55.21}"
+    ]
+  },
+  "hidpi_policy": {
+    "3840x2160": "2x offered, default 1920x1080",
+    "3840x2400": "2x offered (1920x1200)",
+    "3200x1800": "1x only",
+    "3280x2160": "1x only",
+    "3360x2100": "1x only"
+  },
+  "images": {
+    "449": "sha256:b44b8c0d4fb308d568a43e01b463218614b337313851f496769480942665af93",
+    "450": "sha256:38a38f316cc8dd4da0f7cf4c6fe0bad5b7f4f1c89dbb12b652fe12336b4a8813",
+    "451": "sha256:ef8a2c77cfcca21855d3cfb0da6a9ab48070c721b34d91a616c4ba7398553c83",
+    "452-453": "sha256:076e6f386d1379ec1eaabb643ec7c2bbcd8891046f38e14323ea3fbe3a39bbc3"
+  },
+  "host_freeze": {
+    "boot": "ba51b3c6-9420-4510-af69-38a42b3c79c7",
+    "time": "2026-10-11T21:18:36+03:00",
+    "launch": "450 run 8ca2e8178e4ec95e524a6ec92aadce56",
+    "kernel_messages": "none after 21:18:12"
+  }
+}

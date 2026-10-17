@@ -1,0 +1,123 @@
+{
+  "audited_source_commit": "d045c7c388fc9dfc38e02528a5938e3d83e19aaf",
+  "upstream_repository": "https://gitlab.com/kernel-firmware/linux-firmware",
+  "upstream_commit": "ab23307cfe7f9366c819025ca3e4778299bc2db2",
+  "comparison": "Exact contiguous byte equality; no firmware disassembly or modification.",
+  "arrays": [
+    {
+      "array": "kAppleToc",
+      "length": 1536,
+      "sha256": "13f648ed9006941bb698e282c13f91ffbe665ac05255d530a3638da92e8ba6bd",
+      "upstream_matches": [
+        {
+          "file": "amdgpu/sienna_cichlid_sos.bin",
+          "file_sha256": "67706b9e1545bf68850bf9cea97660af5972574ecb0ca30041174efbb59fac37",
+          "offset": 220112
+        }
+      ]
+    },
+    {
+      "array": "kAppleToc2",
+      "length": 1536,
+      "sha256": "cf960a072c82cab19e406cc77e4180982a1b23f807e6465648173fbd807518c7",
+      "upstream_matches": [
+        {
+          "file": "amdgpu/dimgrey_cavefish_sos.bin",
+          "file_sha256": "ec4ac3c065b814ad164eb6d19f2009c225baed0eb52a7bcbaae324c4b0be11b2",
+          "offset": 203744
+        }
+      ]
+    },
+    {
+      "array": "kRaphaelToc",
+      "length": 1536,
+      "sha256": "92603c8e7e2f47987d39c8338bca85ba0b304cae4523e0d350064fb90481ab6f",
+      "upstream_matches": [
+        {
+          "file": "amdgpu/psp_13_0_5_toc.bin",
+          "file_sha256": "2dfcc2b4d6b7f072a471da3852164560ae709bb563626997c41ef1ef17588bbe",
+          "offset": 256
+        }
+      ]
+    },
+    {
+      "array": "kMecFw",
+      "length": 268336,
+      "sha256": "590dcb806de9ee8ab5afed58222ccbba246669a13cfe4e9837d66961b8701f08",
+      "upstream_matches": [
+        {
+          "file": "amdgpu/gc_10_3_6_mec.bin",
+          "file_sha256": "7003c4a77537e9edaf67064104cd9371fac38a84f71f948349140b28d3c210e8",
+          "offset": 256
+        }
+      ]
+    },
+    {
+      "array": "kRlcFw",
+      "length": 177104,
+      "sha256": "acfbac75c0dcfbfe40e222640ef17eb3dc8d206d30bc3863f275f2dd1cb132a5",
+      "upstream_matches": [
+        {
+          "file": "amdgpu/gc_10_3_6_rlc.bin",
+          "file_sha256": "acfbac75c0dcfbfe40e222640ef17eb3dc8d206d30bc3863f275f2dd1cb132a5",
+          "offset": 0
+        }
+      ]
+    },
+    {
+      "array": "kCpMeFw",
+      "length": 263168,
+      "sha256": "df5065b4babf0236f357e43e7e427dc50aa43a98b11f5b3bb627bb43d3f323cb",
+      "upstream_matches": [
+        {
+          "file": "amdgpu/gc_10_3_6_me.bin",
+          "file_sha256": "776d2299bc4f3abffd4a7999f5a21a4e38aced8b6b4c199a83610dbabf08176d",
+          "offset": 256
+        }
+      ]
+    },
+    {
+      "array": "kCpPfpFw",
+      "length": 263168,
+      "sha256": "a34d02869aea4f6ff988e1c826ead03bfae1d8ac411ed0f826d400fe9da767c7",
+      "upstream_matches": [
+        {
+          "file": "amdgpu/gc_10_3_6_pfp.bin",
+          "file_sha256": "042f5d2d223aac6a62b500a47d0d0bf33984200110da0ffca4fe5df9a96571c0",
+          "offset": 256
+        }
+      ]
+    },
+    {
+      "array": "kCpCeFw",
+      "length": 263040,
+      "sha256": "14aa0853ef8aab9b0d671618cd16475a737466814da7605c5e3cfe7b146bf2d3",
+      "upstream_matches": [
+        {
+          "file": "amdgpu/gc_10_3_6_ce.bin",
+          "file_sha256": "ed5fe8488d16ecc0923ff34afe8aa67177d5e1f3242e1de48ef1643b263ba33b",
+          "offset": 256
+        }
+      ]
+    },
+    {
+      "array": "raphaelVcnFirmware",
+      "length": 574032,
+      "sha256": "d22915b1e6f16e5b44cd39b3bd503bc607312e4c94e34546b4935d3a6a5b4f9a",
+      "upstream_matches": [
+        {
+          "file": "amdgpu/vcn_3_1_2.bin",
+          "commit": "cdca61c3e725b4eeefdea704b7f462a150f8eef9",
+          "file_sha256": "fe9f9507fa505b6d2f1f47f47d7846609dacfa0fa12993d873a2c5b1c4b44af9",
+          "offset": 256
+        }
+      ]
+    }
+  ],
+  "upstream_licence": {
+    "path": "LICENSES/LICENSE.amdgpu",
+    "sha256": "572872598565dc3513470de971a32bf9db301f47afeef3636345eadae33b2eee",
+    "identical_to_repository_licence": true
+  },
+  "whence_sha256": "9350832c1e9afc35df50fa8b9793b31d60d78ef963152eec903fc0dbc6b4a559"
+}

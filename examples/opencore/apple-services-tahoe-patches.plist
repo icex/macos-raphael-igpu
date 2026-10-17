@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<array>
+	<dict>
+		<key>Arch</key>
+		<string>x86_64</string>
+		<key>Base</key>
+		<string></string>
+		<key>Comment</key>
+		<string>Tahoe Apple services sysctl name swap 1/2</string>
+		<key>Count</key>
+		<integer>1</integer>
+		<key>Enabled</key>
+		<true/>
+		<key>Find</key>
+		<data>
+		Ym9vdCBzZXNzaW9uIFVVSUQAaHZfdm1tX3ByZXNlbnQA
+		</data>
+		<key>Identifier</key>
+		<string>kernel</string>
+		<key>Limit</key>
+		<integer>0</integer>
+		<key>Mask</key>
+		<data>
+		</data>
+		<key>MaxKernel</key>
+		<string>25.99.99</string>
+		<key>MinKernel</key>
+		<string>25.0.0</string>
+		<key>Replace</key>
+		<data>
+		Ym9vdCBzZXNzaW9uIFVVSUQAaGliZXJuYXRlY291bnQA
+		</data>
+		<key>ReplaceMask</key>
+		<data>
+		</data>
+		<key>Skip</key>
+		<integer>0</integer>
+	</dict>
+	<dict>
+		<key>Arch</key>
+		<string>x86_64</string>
+		<key>Base</key>
+		<string></string>
+		<key>Comment</key>
+		<string>Tahoe Apple services sysctl name swap 2/2</string>
+		<key>Count</key>
+		<integer>1</integer>
+		<key>Enabled</key>
+		<true/>
+		<key>Find</key>
+		<data>
+		aGliZXJuYXRlaGlkcmVhZHkAaGliZXJuYXRlY291bnQA
+		</data>
+		<key>Identifier</key>
+		<string>kernel</string>
+		<key>Limit</key>
+		<integer>0</integer>
+		<key>Mask</key>
+		<data>
+		</data>
+		<key>MaxKernel</key>
+		<string>25.99.99</string>
+		<key>MinKernel</key>
+		<string>25.0.0</string>
+		<key>Replace</key>
+		<data>
+		aGliZXJuYXRlaGlkcmVhZHkAaHZfdm1tX3ByZXNlbnQA
+		</data>
+		<key>ReplaceMask</key>
+		<data>
+		</data>
+		<key>Skip</key>
+		<integer>0</integer>
+	</dict>
+</array>
+</plist>

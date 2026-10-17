@@ -1,0 +1,116 @@
+--- a/ui/console.c
++++ b/ui/console.c
+@@ -24,6 +24,7 @@
+ 
+ #include "qemu/osdep.h"
+ #include "ui/console.h"
++#include "gui-start-pacing.h"
+ #include "hw/qdev-core.h"
+ #include "qapi/error.h"
+ #include "qapi/qapi-commands-ui.h"
+@@ -63,6 +64,7 @@
+     uint64_t last_update;
+     uint64_t update_interval;
+     bool refreshing;
++    bool start_relative_last_update;
+ 
+     QLIST_HEAD(, DisplayChangeListener) listeners;
+ };
+@@ -85,6 +87,8 @@
+     uint64_t dcl_interval;
+     DisplayState *ds = opaque;
+     DisplayChangeListener *dcl;
++    int64_t started = qemu_clock_get_ms(QEMU_CLOCK_REALTIME);
++    bool paced = false;
+ 
+     ds->refreshing = true;
+     dpy_refresh(ds);
+@@ -95,14 +99,21 @@
+             dcl->update_interval : GUI_REFRESH_INTERVAL_DEFAULT;
+         if (interval > dcl_interval) {
+             interval = dcl_interval;
++            paced = dcl->research_start_relative_refresh;
++        } else if (interval == dcl_interval &&
++                   dcl->research_start_relative_refresh) {
++            paced = true;
+         }
+     }
+     if (ds->update_interval != interval) {
+         ds->update_interval = interval;
+         trace_console_refresh(interval);
+     }
+-    ds->last_update = qemu_clock_get_ms(QEMU_CLOCK_REALTIME);
+-    timer_mod(ds->gui_timer, ds->last_update + interval);
++    int64_t now = qemu_clock_get_ms(QEMU_CLOCK_REALTIME);
++    ds->start_relative_last_update = paced;
++    ds->last_update = paced ? started : now;
++    timer_mod(ds->gui_timer, paced ? rgpu_gui_next_tick(started, now, interval)
++                                  : ds->last_update + interval);
+ }
+ 
+ static void gui_setup_refresh(DisplayState *ds)
+@@ -711,7 +722,16 @@
+ 
+     dcl->update_interval = interval;
+     if (!ds->refreshing && ds->update_interval > interval) {
+-        timer_mod(ds->gui_timer, ds->last_update + interval);
++        if (ds->start_relative_last_update ||
++            dcl->research_start_relative_refresh) {
++            timer_mod(ds->gui_timer,
++                      rgpu_gui_next_tick(ds->last_update,
++                                         qemu_clock_get_ms(QEMU_CLOCK_REALTIME),
++                                         interval ? interval :
++                                         GUI_REFRESH_INTERVAL_DEFAULT));
++        } else {
++            timer_mod(ds->gui_timer, ds->last_update + interval);
++        }
+     }
+ }
+ 
+--- a/include/ui/console.h
++++ b/include/ui/console.h
+@@ -269,6 +269,7 @@
+ 
+ struct DisplayChangeListener {
+     uint64_t update_interval;
++    bool research_start_relative_refresh;
+     const DisplayChangeListenerOps *ops;
+     DisplayState *ds;
+     QemuConsole *con;
+--- a/ui/spice-display.c
++++ b/ui/spice-display.c
+@@ -1408,6 +1408,12 @@
+     /* Keep the historical nongl default unless explicitly overridden. */
+     if (!spice_opengl && spice_max_refresh_rate_explicit) {
+         ssd->dcl.update_interval = MAX(1, 1000 / spice_max_refresh_rate);
++        if (spice_max_refresh_rate == 60) {
++            /* Conservative ms discriminator:17ms stays below configured60Hz.
++             * Finer scheduling is needed to qualify exact60Hz. */
++            ssd->dcl.update_interval = 17;
++            ssd->dcl.research_start_relative_refresh = true;
++        }
+     }
+ #ifdef HAVE_SPICE_GL
+     if (spice_opengl) {
+--- /dev/null
++++ b/ui/gui-start-pacing.h
+@@ -0,0 +1,19 @@
++/* SPDX-License-Identifier: MIT
++ * Experimental start-relative GUI scheduling. Skip expired ticks, never replay.
++ */
++#ifndef RGPU_GUI_START_PACING_H
++#define RGPU_GUI_START_PACING_H
++#include <stdint.h>
++#include <limits.h>
++
++static int64_t rgpu_gui_next_tick(int64_t start, int64_t now, uint64_t period)
++{
++    uint64_t ticks, origin;
++    if (!period || period > INT64_MAX || now < 0) return INT64_MAX;
++    if (start < 0 || start > now) start = now;
++    origin = (uint64_t)start;
++    ticks = ((uint64_t)now - origin) / period + 1;
++    if (ticks > ((uint64_t)INT64_MAX - origin) / period) return INT64_MAX;
++    return (int64_t)(origin + ticks * period);
++}
++#endif

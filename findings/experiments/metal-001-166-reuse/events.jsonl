@@ -1,0 +1,37 @@
+{"build": "a4de027a907844b89511619471892e9e", "seq": 0, "kind": "build", "raw": "BUILD: identity=a4de027a907844b89511619471892e9e"}
+{"build": "a4de027a907844b89511619471892e9e", "seq": 1, "kind": "other", "raw": "SD: route AMDHardware::initializeHWEngines -> ok (org=0xffffff8008c1d344)"}
+{"build": "a4de027a907844b89511619471892e9e", "seq": 2, "kind": "other", "raw": "SD: route AMDHardware::stopHWEngines -> ok (org=0xffffff8008c1d358)"}
+{"build": "a4de027a907844b89511619471892e9e", "seq": 3, "kind": "other", "raw": "SD: route AMDHardware::powerOffHWEngines -> ok (org=0xffffff8008c1d36c)"}
+{"build": "a4de027a907844b89511619471892e9e", "seq": 4, "kind": "other", "raw": "SD: route AMDHardware::powerOff -> ok (org=0xffffff8008c1d380)"}
+{"build": "a4de027a907844b89511619471892e9e", "seq": 5, "kind": "other", "raw": "SD: route AMDHardware::getHWChannel -> ok (org=0xffffff8008c1d394)"}
+{"build": "a4de027a907844b89511619471892e9e", "seq": 6, "kind": "sdma_topology_route", "raw": "SD: topology routes=ok count=6 entries-match=1", "count": 6, "ok": true}
+{"build": "a4de027a907844b89511619471892e9e", "seq": 7, "kind": "route", "raw": "HY: HWLibs hybrid trace route=ok entries-match=1 (max 8 calls)", "ok": true}
+{"build": "a4de027a907844b89511619471892e9e", "seq": 8, "kind": "sdma_route", "raw": "HY: SDMA selector trace route=ok entries-match=1 (max 8 hybrid calls)", "ok": true}
+{"build": "a4de027a907844b89511619471892e9e", "seq": 9, "kind": "sdma_topology", "raw": "SD: topology applied: discovered=1 kept=SDMA0 removed=SDMA1 before initialize", "applied": true}
+{"build": "a4de027a907844b89511619471892e9e", "seq": 10, "kind": "sdma_initialize", "raw": "SD: AMDHardware::initializeHWEngines -> 1 (topology-applied=1)", "result": 1, "applied": true}
+{"build": "a4de027a907844b89511619471892e9e", "seq": 11, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "a4de027a907844b89511619471892e9e", "seq": 12, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "a4de027a907844b89511619471892e9e", "seq": 13, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "a4de027a907844b89511619471892e9e", "seq": 14, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "a4de027a907844b89511619471892e9e", "seq": 15, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "a4de027a907844b89511619471892e9e", "seq": 16, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "a4de027a907844b89511619471892e9e", "seq": 17, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=1", "requested": 2, "selected": 1}
+{"build": "a4de027a907844b89511619471892e9e", "seq": 18, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "a4de027a907844b89511619471892e9e", "seq": 19, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=1", "requested": 2, "selected": 1}
+{"build": "a4de027a907844b89511619471892e9e", "seq": 20, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "a4de027a907844b89511619471892e9e", "seq": 21, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "a4de027a907844b89511619471892e9e", "seq": 22, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "a4de027a907844b89511619471892e9e", "seq": 23, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "a4de027a907844b89511619471892e9e", "seq": 24, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "a4de027a907844b89511619471892e9e", "seq": 25, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=0", "requested": 2, "selected": 1}
+{"build": "a4de027a907844b89511619471892e9e", "seq": 26, "kind": "sdma_engine_remap", "raw": "SD: channel engine remap 2 -> 1 ring=1", "requested": 2, "selected": 1}
+{"build": "a4de027a907844b89511619471892e9e", "seq": 27, "kind": "other", "raw": "XJ: AMDGraphicsAccelerator::powerUpHW entry"}
+{"build": "a4de027a907844b89511619471892e9e", "seq": 28, "kind": "hybrid_enter", "raw": "HY: createHybridEngine enter: engine=12 available=1", "engine": 12, "available": 1}
+{"build": "a4de027a907844b89511619471892e9e", "seq": 29, "kind": "hybrid_exit", "raw": "HY: createHybridEngine exit: engine=12 valid=1 available-before=1 status=0", "engine": 12, "arguments_valid": 1, "available": 1, "result": 0}
+{"build": "a4de027a907844b89511619471892e9e", "seq": 30, "kind": "kiq", "raw": "XJ:   waitForHwStamp(1) -> 1", "stamp": 1, "result": 1}
+{"build": "a4de027a907844b89511619471892e9e", "seq": 31, "kind": "hybrid_enter", "raw": "HY: createHybridEngine enter: engine=13 available=1", "engine": 13, "available": 1}
+{"build": "a4de027a907844b89511619471892e9e", "seq": 32, "kind": "hybrid_exit", "raw": "HY: createHybridEngine exit: engine=13 valid=1 available-before=1 status=0", "engine": 13, "arguments_valid": 1, "available": 1, "result": 0}
+{"build": "a4de027a907844b89511619471892e9e", "seq": 33, "kind": "kiq", "raw": "XJ:   waitForHwStamp(2) -> 1", "stamp": 2, "result": 1}
+{"build": "a4de027a907844b89511619471892e9e", "seq": 34, "kind": "kiq", "raw": "XJ:   waitForHwStamp(3) -> 1", "stamp": 3, "result": 1}
+{"kind": "guest_panic", "build": "a4de027a907844b89511619471892e9e", "seq": 3120, "raw": "Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff8004fee210, CR2: 0xffffff8004fee210", "trap": "0xe", "rip": 18446743524037550608, "cr2": 18446743524037550608}
+{"kind": "guest_panic", "build": "a4de027a907844b89511619471892e9e", "seq": 3418, "raw": "Debugger: Unexpected kernel trap number: 0xe, RIP: 0xffffff8004fee210, CR2: 0xffffff8004fee210", "trap": "0xe", "rip": 18446743524037550608, "cr2": 18446743524037550608}

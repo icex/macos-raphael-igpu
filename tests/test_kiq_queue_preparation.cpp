@@ -1,0 +1,517 @@
+#include <array>
+#include <algorithm>
+#include <cstdio>
+#include <cstdlib>
+#include <vector>
+#include "../src/KiqQueuePreparation.hpp"
+
+static void require(bool condition, const char *message) {
+    if (!condition) {
+        std::fprintf(stderr, "FAIL: %s\n", message);
+        std::exit(1);
+    }
+}
+
+struct FakeQueue {
+    using Register = RaphaelKiq::QueueRegister;
+    std::array<uint32_t, 7> value {};
+    std::vector<Register> writes;
+    bool retireOnDequeue {true};
+    bool ignoreWptrLoClear {false};
+    bool ignoreDoorbellDisable {false};
+    bool reactivateAfterPointerClear {false};
+
+    uint32_t read(Register reg) const {
+        return value[static_cast<unsigned>(reg)];
+    }
+
+    void write(Register reg, uint32_t next) {
+        writes.push_back(reg);
+        if (reg == Register::Doorbell && ignoreDoorbellDisable) return;
+        if (reg == Register::WptrLo && ignoreWptrLoClear) return;
+        value[static_cast<unsigned>(reg)] = next;
+        if (reg == Register::Dequeue && next == 1 && retireOnDequeue)
+            value[static_cast<unsigned>(Register::Active)] = 0;
+        if (reg == Register::WptrLo && reactivateAfterPointerClear)
+            value[static_cast<unsigned>(Register::Active)] = 1;
+    }
+
+    unsigned pointerWrites() const {
+        unsigned count = 0;
+        for (auto reg : writes)
+            if (reg == Register::Rptr || reg == Register::WptrHi || reg == Register::WptrLo)
+                ++count;
+        return count;
+    }
+};
+
+struct FakeEop {
+    using Register = RaphaelKiq::EopRegister;
+    std::array<uint32_t, 3> value {};
+    std::vector<Register> writes;
+    bool ignoreWrites {false};
+
+    uint32_t read(Register reg) const { return value[static_cast<unsigned>(reg)]; }
+    void write(Register reg, uint32_t next) {
+        writes.push_back(reg);
+        if (!ignoreWrites) value[static_cast<unsigned>(reg)] = next;
+    }
+};
+
+struct FakeHalted {
+    using Register = RaphaelKiq::HaltedRegister;
+    std::array<uint32_t, 8> value {};
+    std::vector<Register> writes;
+    bool ignoreHalt {false};
+    bool ignoreQueue {false};
+    bool ignoreRestore {false};
+    bool partialHalt {false};
+    uint32_t read(Register reg) const { return value[static_cast<unsigned>(reg)]; }
+    void write(Register reg, uint32_t next) {
+        writes.push_back(reg);
+        if (reg == Register::MecControl && ignoreHalt) return;
+        if (reg == Register::MecControl && ignoreRestore &&
+            (next & RaphaelKiq::kMecHaltMask) != RaphaelKiq::kMecHaltMask) return;
+        if (reg != Register::MecControl && ignoreQueue) return;
+        if (reg == Register::MecControl && partialHalt &&
+            (next & RaphaelKiq::kMecHaltMask) == RaphaelKiq::kMecHaltMask)
+            next &= ~(1U << 30);
+        value[static_cast<unsigned>(reg)] = next;
+    }
+};
+
+static RaphaelKiq::QueuePreparation prepare(FakeQueue &queue, unsigned &nativeCalls) {
+    auto result = RaphaelKiq::prepareQueueForNativeStart(
+        [&](RaphaelKiq::QueueRegister reg) { return queue.read(reg); },
+        [&](RaphaelKiq::QueueRegister reg, uint32_t value) { queue.write(reg, value); },
+        [](unsigned) {}, 100, 10);
+    if (result.ready()) ++nativeCalls;
+    return result;
+}
+
+int main() {
+    using RaphaelKiq::QueuePreparationStatus;
+    using Register = RaphaelKiq::QueueRegister;
+
+    FakeEop eop;
+    require(RaphaelKiq::programEopForNativeStart(
+                [&](RaphaelKiq::EopRegister reg) { return eop.read(reg); },
+                [&](RaphaelKiq::EopRegister reg, uint32_t value) { eop.write(reg, value); },
+                0x8400000800ULL),
+            "mode-2 EOP programming succeeds with readable registers");
+    require(eop.writes == std::vector<FakeEop::Register> {
+                FakeEop::Register::BaseLo, FakeEop::Register::BaseHi,
+                FakeEop::Register::Control} &&
+                eop.read(FakeEop::Register::BaseLo) == 0x84000008U &&
+                eop.read(FakeEop::Register::BaseHi) == 0U &&
+                eop.read(FakeEop::Register::Control) == 6U,
+            "EOP writes use encoded base low/high and the native v10 control");
+    require(std::all_of(eop.writes.begin(), eop.writes.end(), [](FakeEop::Register reg) {
+                return reg == FakeEop::Register::BaseLo || reg == FakeEop::Register::BaseHi ||
+                    reg == FakeEop::Register::Control;
+            }),
+            "mode-2 EOP programming never changes speculative doorbell bits");
+    FakeEop rejected;
+    rejected.ignoreWrites = true;
+    require(!RaphaelKiq::programEopForNativeStart(
+                 [&](RaphaelKiq::EopRegister reg) { return rejected.read(reg); },
+                 [&](RaphaelKiq::EopRegister reg, uint32_t value) { rejected.write(reg, value); },
+                 0x8400000800ULL),
+            "EOP readback failure blocks native submission");
+
+    FakeQueue clean;
+    unsigned nativeCalls = 0;
+    auto result = prepare(clean, nativeCalls);
+    require(result.status == QueuePreparationStatus::Ready && nativeCalls == 1,
+            "a clean inactive queue reaches native initialization");
+    require(clean.pointerWrites() == 0,
+            "an already-zero queue does not receive redundant pointer writes");
+
+    FakeQueue stale;
+    stale.value[static_cast<unsigned>(Register::WptrLo)] = 256;
+    nativeCalls = 0;
+    result = prepare(stale, nativeCalls);
+    require(result.status == QueuePreparationStatus::Ready && nativeCalls == 1,
+            "an inactive queue with an old producer pointer is normalized");
+    require(stale.pointerWrites() == 3 && stale.read(Register::Rptr) == 0 &&
+                stale.read(Register::WptrHi) == 0 && stale.read(Register::WptrLo) == 0,
+            "normalization clears RPTR, WPTR_HI and WPTR_LO");
+    auto pointer = stale.writes.end() - 3;
+    require(pointer[0] == Register::Rptr && pointer[1] == Register::WptrHi &&
+                pointer[2] == Register::WptrLo,
+            "pointer reset mirrors Apple's active-branch write order");
+
+    FakeQueue retired;
+    retired.value[static_cast<unsigned>(Register::Active)] = 1;
+    retired.value[static_cast<unsigned>(Register::WptrLo)] = 256;
+    nativeCalls = 0;
+    result = prepare(retired, nativeCalls);
+    require(result.status == QueuePreparationStatus::Ready && result.elapsedUs == 10 &&
+                nativeCalls == 1,
+            "a genuinely retired active queue reaches native initialization");
+    auto dequeueStart = retired.writes.begin() + 2;
+    require(dequeueStart[0] == Register::Dequeue && dequeueStart[1] == Register::Dequeue &&
+                dequeueStart[2] == Register::Rptr && dequeueStart[3] == Register::WptrHi &&
+                dequeueStart[4] == Register::WptrLo,
+            "dequeue completion precedes pointer normalization");
+    for (auto reg : retired.writes)
+        require(reg != Register::Active, "preparation never manually clears ACTIVE");
+
+    FakeQueue ignored;
+    ignored.value[static_cast<unsigned>(Register::WptrLo)] = 256;
+    ignored.ignoreWptrLoClear = true;
+    nativeCalls = 0;
+    result = prepare(ignored, nativeCalls);
+    require(result.status == QueuePreparationStatus::PointerResetFailed && nativeCalls == 0,
+            "an ignored pointer write blocks native activation");
+
+    FakeQueue lateActive;
+    lateActive.value[static_cast<unsigned>(Register::WptrLo)] = 256;
+    lateActive.reactivateAfterPointerClear = true;
+    nativeCalls = 0;
+    result = prepare(lateActive, nativeCalls);
+    require(result.status == QueuePreparationStatus::QueueNotIdle && nativeCalls == 0,
+            "a queue that becomes active during normalization cannot reach native activation");
+
+    FakeQueue liveIngress;
+    liveIngress.value[static_cast<unsigned>(Register::Doorbell)] = 1U << 30;
+    liveIngress.ignoreDoorbellDisable = true;
+    nativeCalls = 0;
+    result = prepare(liveIngress, nativeCalls);
+    require(result.status == QueuePreparationStatus::IngressNotDisabled &&
+                liveIngress.pointerWrites() == 0 && nativeCalls == 0,
+            "an ingress gate that does not close blocks normalization and native activation");
+
+    FakeQueue timeout;
+    timeout.value[static_cast<unsigned>(Register::Active)] = 1;
+    timeout.retireOnDequeue = false;
+    nativeCalls = 0;
+    result = prepare(timeout, nativeCalls);
+    require(result.status == QueuePreparationStatus::DequeueTimeout &&
+                result.elapsedUs == 100 && timeout.pointerWrites() == 0 && nativeCalls == 0,
+            "a genuine dequeue timeout blocks pointer writes and native activation");
+
+    const RaphaelKiq::QueueState timeoutState {1, 1, 0x86, 0, 0xa0, 0, 0};
+    require(RaphaelKiq::timeoutNativeRestoreEligible(
+                true, 0x8400000000ULL, 0x8400000800ULL,
+                0x8400000000ULL, 0x8400000800ULL, timeoutState, true, true, true),
+            "opt-in native restore admits exact active timeout with owned identity");
+    require(!RaphaelKiq::timeoutNativeRestoreEligible(
+                 false, 0x8400000000ULL, 0x8400000800ULL,
+                 0x8400000000ULL, 0x8400000800ULL, timeoutState, true, true, true),
+            "native restore flag is required");
+    require(!RaphaelKiq::timeoutNativeRestoreEligible(
+                 true, 0x8400001000ULL, 0x8400001800ULL,
+                 0x8400000000ULL, 0x8400000800ULL, timeoutState, true, true, true),
+            "native restore rejects wrong argument addresses");
+    require(!RaphaelKiq::timeoutNativeRestoreEligible(
+                 true, 0x8400000000ULL, 0x8400000800ULL,
+                 0x8400000000ULL, 0x8400000800ULL, timeoutState, false, true, true),
+            "native restore rejects an invalid lease");
+    require(!RaphaelKiq::timeoutNativeRestoreEligible(
+                 true, 0x8400000000ULL, 0x8400000800ULL,
+                 0x8400000000ULL, 0x8400000800ULL, timeoutState, true, false, true),
+            "native restore rejects changed owner identity");
+    require(!RaphaelKiq::timeoutNativeRestoreEligible(
+                 true, 0x8400000000ULL, 0x8400000800ULL,
+                 0x8400000000ULL, 0x8400000800ULL, timeoutState, true, true, false),
+            "native restore rejects a non-native embedded MQD/EOP image");
+    const RaphaelKiq::QueueState ingressState {1, 1, 0x86, 0, 0xa0, 1U << 31, 0};
+    require(!RaphaelKiq::timeoutNativeRestoreEligible(
+                 true, 0x8400000000ULL, 0x8400000800ULL,
+                 0x8400000000ULL, 0x8400000800ULL, ingressState, true, true, true),
+            "native restore rejects poll ingress still enabled");
+    const RaphaelKiq::QueueState doorbellState {1, 1, 0x86, 0, 0xa0, 0, 1U << 30};
+    require(!RaphaelKiq::timeoutNativeRestoreEligible(
+                 true, 0x8400000000ULL, 0x8400000800ULL,
+                 0x8400000000ULL, 0x8400000800ULL, doorbellState, true, true, true),
+            "native restore rejects doorbell ingress still enabled");
+    const RaphaelKiq::QueueState wrongDequeue {1, 0, 0x86, 0, 0xa0, 0, 0};
+    require(!RaphaelKiq::timeoutNativeRestoreEligible(
+                 true, 0x8400000000ULL, 0x8400000800ULL,
+                 0x8400000000ULL, 0x8400000800ULL, wrongDequeue, true, true, true),
+            "native restore rejects a non-pending dequeue state");
+    const RaphaelKiq::QueueState inactive {0, 1, 0x86, 0, 0xa0, 0, 0};
+    require(!RaphaelKiq::timeoutNativeRestoreEligible(
+                 true, 0x8400000000ULL, 0x8400000800ULL,
+                 0x8400000000ULL, 0x8400000800ULL, inactive, true, true, true),
+            "native restore rejects an inactive timeout state");
+    const RaphaelKiq::QueueState inaccessibleState {0xffffffffU, 1, 0, 0, 0, 0, 0};
+    require(!RaphaelKiq::timeoutNativeRestoreEligible(
+                 true, 0x8400000000ULL, 0x8400000800ULL,
+                 0x8400000000ULL, 0x8400000800ULL, inaccessibleState, true, true, true),
+            "native restore rejects inaccessible timeout state");
+    const RaphaelKiq::QueueState retainedState {0, 0, 0, 0, 0x20, 0, 0};
+    require(RaphaelKiq::inactiveRetainedProbeEligible(
+                true, 0x8400000000ULL, 0x8400000800ULL,
+                0x8400000000ULL, 0x8400000800ULL, retainedState, true, true, true),
+            "mode-3 probe admits inactive retained-WPTR state");
+    const RaphaelKiq::QueueState exact207State {0, 0, 0, 0, 0x20, 0, 0x80000000};
+    require(RaphaelKiq::inactiveRetainedProbeEligible(
+                true, 0x8400000000ULL, 0x8400000800ULL,
+                0x8400000000ULL, 0x8400000800ULL, exact207State, true, true, true),
+            "mode-3 probe admits the exact candidate-207 doorbell readback");
+    require(!RaphaelKiq::inactiveRetainedProbeEligible(
+                 true, 0x8400000000ULL, 0x8400000800ULL,
+                 0x8400000000ULL, 0x8400000800ULL, retainedState, false, true, true),
+            "inactive retained probe rejects missing lease");
+    require(!RaphaelKiq::inactiveRetainedProbeEligible(
+                 false, 0x8400000000ULL, 0x8400000800ULL,
+                 0x8400000000ULL, 0x8400000800ULL, retainedState, true, true, true),
+            "inactive retained probe rejects disabled mode");
+    require(!RaphaelKiq::inactiveRetainedProbeEligible(
+                 true, 0x8400000000ULL, 0x8400000800ULL,
+                 0x8400000000ULL, 0x8400000800ULL, retainedState, true, false, true),
+            "inactive retained probe rejects wrong owner");
+    require(!RaphaelKiq::inactiveRetainedProbeEligible(
+                 true, 0x8400000001ULL, 0x8400000800ULL,
+                 0x8400000000ULL, 0x8400000800ULL, retainedState, true, true, true),
+            "inactive retained probe rejects mismatched MQD address");
+    require(!RaphaelKiq::inactiveRetainedProbeEligible(
+                 true, 0x8400000000ULL, 0x8400000800ULL,
+                 0x8400000000ULL, 0x8400000900ULL, retainedState, true, true, true),
+            "inactive retained probe rejects mismatched EOP address");
+    const RaphaelKiq::QueueState inaccessibleRetainedState {0, 0, 0, 0, 0xffffffffU, 0, 0};
+    require(!RaphaelKiq::inactiveRetainedProbeEligible(
+                 true, 0x8400000000ULL, 0x8400000800ULL,
+                 0x8400000000ULL, 0x8400000800ULL, inaccessibleRetainedState, true, true, true),
+            "inactive retained probe rejects inaccessible WPTR");
+    const RaphaelKiq::QueueState ingressRetainedState {0, 0, 0, 0, 0x20, 1U << 31, 0};
+    require(!RaphaelKiq::inactiveRetainedProbeEligible(
+                 true, 0x8400000000ULL, 0x8400000800ULL,
+                 0x8400000000ULL, 0x8400000800ULL, ingressRetainedState, true, true, true),
+            "inactive retained probe rejects active ingress");
+    for (const RaphaelKiq::QueueState bad : {
+             RaphaelKiq::QueueState {1, 0, 0, 0, 0x20, 0, 0},
+             RaphaelKiq::QueueState {0, 1, 0, 0, 0x20, 0, 0},
+             RaphaelKiq::QueueState {0, 0, 1, 0, 0x20, 0, 0},
+             RaphaelKiq::QueueState {0, 0, 0, 1, 0x20, 0, 0},
+             RaphaelKiq::QueueState {0, 0, 0, 0, 0x20, 0, 1U << 30}})
+        require(!RaphaelKiq::inactiveRetainedProbeEligible(
+                     true, 0x8400000000ULL, 0x8400000800ULL,
+                     0x8400000000ULL, 0x8400000800ULL, bad, true, true, true),
+                "inactive retained probe rejects unsafe queue state");
+
+    FakeHalted halted;
+    halted.value[static_cast<unsigned>(FakeHalted::Register::MecControl)] = 0x1234;
+    RaphaelKiq::HaltedNativeTransaction transaction;
+    unsigned delays = 0;
+    require(RaphaelKiq::beginHaltedNative(
+                transaction,
+                [&](FakeHalted::Register reg) { return halted.read(reg); },
+                [&](FakeHalted::Register reg, uint32_t value) { halted.write(reg, value); },
+                [&](unsigned us) { delays += us; }),
+            "halted-native setup succeeds with readable halt and queue state");
+    require(transaction.held && delays == 50 &&
+                halted.writes.size() == 6 &&
+                halted.writes[0] == FakeHalted::Register::MecControl &&
+                halted.writes[1] == FakeHalted::Register::Active &&
+                halted.writes[5] == FakeHalted::Register::WptrLo,
+            "native is armed only after MEC halt and pointer clearing");
+            require(!RaphaelKiq::releaseHaltedNative(
+                 transaction,
+                 [&](FakeHalted::Register reg) { return halted.read(reg); },
+                 [&](FakeHalted::Register reg, uint32_t value) { halted.write(reg, value); },
+                 [&](unsigned us) { delays += us; }, false, true) && transaction.held,
+            "native failure leaves MEC transaction held");
+    require(halted.read(FakeHalted::Register::MecControl) ==
+                (0x1234U | RaphaelKiq::kMecHaltMask),
+            "failed native verification reasserts the saved MEC halt bits");
+    require(RaphaelKiq::releaseHaltedNative(
+                transaction,
+                [&](FakeHalted::Register reg) { return halted.read(reg); },
+                [&](FakeHalted::Register reg, uint32_t value) { halted.write(reg, value); },
+                [&](unsigned us) { delays += us; }, true, true) && !transaction.held &&
+                halted.read(FakeHalted::Register::MecControl) == 0x1234,
+            "verified native success restores saved MEC control");
+
+    FakeHalted retained;
+    retained.value[static_cast<unsigned>(FakeHalted::Register::MecControl)] = 0x1234;
+    retained.value[static_cast<unsigned>(FakeHalted::Register::WptrLo)] = 0x20;
+    transaction = {};
+    require(RaphaelKiq::beginHaltedNative(
+                transaction,
+                [&](FakeHalted::Register reg) { return retained.read(reg); },
+                [&](FakeHalted::Register reg, uint32_t value) { retained.write(reg, value); },
+                [](unsigned) {}, true) && transaction.initialWptrLo == 0x20 &&
+                retained.read(FakeHalted::Register::WptrLo) == 0x20,
+            "probe setup preserves a finite retained WPTR while MEC is halted");
+    FakeHalted zeroRetained;
+    zeroRetained.value[static_cast<unsigned>(FakeHalted::Register::MecControl)] = 0x1234;
+    transaction = {};
+    require(RaphaelKiq::beginHaltedNative(
+                transaction,
+                [&](FakeHalted::Register reg) { return zeroRetained.read(reg); },
+                [&](FakeHalted::Register reg, uint32_t value) { zeroRetained.write(reg, value); },
+                [](unsigned) {}, true) && transaction.initialWptrLo == 0,
+            "probe setup also accepts a valid zero WPTR snapshot");
+    require(!RaphaelKiq::haltedNativeResultVerified(
+                 true, 0x50000000, 1, 0, 0, 0x84, 0xffbfea00, 0,
+                 0x84000008, 0, 6, 0, 0, 0x20, 0x8400000000ULL, 0xffbfea00ULL,
+                 0x8400000800ULL),
+            "default result verification rejects retained WPTR");
+    require(RaphaelKiq::haltedNativeResultVerified(
+                true, 0x50000000, 1, 0, 0, 0x84, 0xffbfea00, 0,
+                0x84000008, 0, 6, 0, 0, 0x20, 0x8400000000ULL, 0xffbfea00ULL,
+                0x8400000800ULL, 0x20, true),
+            "probe result accepts only the retained WPTR snapshot");
+    require(!RaphaelKiq::haltedNativeResultVerified(
+                 false, 0x50000000, 1, 0, 0, 0x84, 0xffbfea00, 0,
+                 0x84000008, 0, 6, 0, 0, 0x20, 0x8400000000ULL, 0xffbfea00ULL,
+                 0x8400000800ULL, 0x20, true),
+            "native probe failure never authorizes release");
+    require(RaphaelKiq::preserveNativeMecHalt(
+                3, 2, true, RaphaelKiq::kNativeMecHaltCaller,
+                RaphaelKiq::kNativeMecControlRegister, 0xb, 1, true, true),
+            "mode-3 native MEC guard preserves the exact audited write");
+    require(!RaphaelKiq::preserveNativeMecHalt(
+                 2, 2, true, RaphaelKiq::kNativeMecHaltCaller,
+                RaphaelKiq::kNativeMecControlRegister, 0xb, 1, true, true),
+            "mode-2 native MEC guard remains disabled");
+    require(!RaphaelKiq::preserveNativeMecHalt(
+                 3, 2, false, RaphaelKiq::kNativeMecHaltCaller,
+                RaphaelKiq::kNativeMecControlRegister, 0xb, 1, true, true),
+            "unarmed native MEC guard remains disabled");
+    require(!RaphaelKiq::preserveNativeMecHalt(
+                 3, 2, true, RaphaelKiq::kNativeMecHaltCaller,
+                RaphaelKiq::kNativeMecControlRegister + 1, 0xb, 1, true, true),
+            "wrong native register remains untouched");
+    require(!RaphaelKiq::preserveNativeMecHalt(
+                 3, 2, true, RaphaelKiq::kNativeMecHaltCaller + 1,
+                 RaphaelKiq::kNativeMecControlRegister, 0xb, 1, true, true),
+            "wrong native caller remains untouched");
+    require(!RaphaelKiq::preserveNativeMecHalt(
+                 3, 2, true, RaphaelKiq::kNativeMecHaltCaller,
+                 RaphaelKiq::kNativeMecControlRegister, 0xa, 1, true, true),
+            "wrong native client remains untouched");
+    require(!RaphaelKiq::preserveNativeMecHalt(
+                 3, 2, true, RaphaelKiq::kNativeMecHaltCaller,
+                 RaphaelKiq::kNativeMecControlRegister, 0xb, 2, true, true),
+            "wrong native flag remains untouched");
+    require(!RaphaelKiq::preserveNativeMecHalt(
+                 3, 2, true, RaphaelKiq::kNativeMecHaltCaller,
+                 RaphaelKiq::kNativeMecControlRegister, 0xb, 1, true, false),
+            "wrong native context remains untouched");
+    FakeHalted inaccessibleRetained;
+    inaccessibleRetained.value[static_cast<unsigned>(FakeHalted::Register::MecControl)] = 0x1234;
+    inaccessibleRetained.value[static_cast<unsigned>(FakeHalted::Register::WptrLo)] = 0xffffffffU;
+    require(!RaphaelKiq::beginHaltedNative(
+                 transaction,
+                 [&](FakeHalted::Register reg) { return inaccessibleRetained.read(reg); },
+                 [&](FakeHalted::Register reg, uint32_t value) { inaccessibleRetained.write(reg, value); },
+                 [](unsigned) {}, true),
+            "inaccessible retained WPTR blocks the probe before queue writes");
+
+    FakeHalted inaccessibleHalt;
+    inaccessibleHalt.value[static_cast<unsigned>(FakeHalted::Register::MecControl)] = 0xffffffffU;
+    transaction = {};
+    require(!RaphaelKiq::beginHaltedNative(
+                 transaction,
+                 [&](FakeHalted::Register reg) { return inaccessibleHalt.read(reg); },
+                 [&](FakeHalted::Register reg, uint32_t value) { inaccessibleHalt.write(reg, value); },
+                 [](unsigned) {}),
+            "inaccessible MEC control blocks setup before queue writes");
+    require(inaccessibleHalt.writes.empty(), "inaccessible halt has no speculative queue writes");
+
+    FakeHalted ignoredHalt;
+    ignoredHalt.value[static_cast<unsigned>(FakeHalted::Register::MecControl)] = 0x1234;
+    ignoredHalt.ignoreHalt = true;
+    transaction = {};
+    require(!RaphaelKiq::beginHaltedNative(
+                 transaction,
+                 [&](FakeHalted::Register reg) { return ignoredHalt.read(reg); },
+                 [&](FakeHalted::Register reg, uint32_t value) { ignoredHalt.write(reg, value); },
+                 [](unsigned) {}),
+            "ignored MEC halt readback blocks setup before queue writes");
+    require(ignoredHalt.writes.size() == 1, "ignored halt performs no queue writes");
+    FakeHalted ignoredQueue;
+    for (bool rejectRestore : {false, true}) {
+        FakeHalted partial;
+        partial.value[static_cast<unsigned>(FakeHalted::Register::MecControl)] = 0x1234;
+        partial.partialHalt = true;
+        partial.ignoreRestore = rejectRestore;
+        transaction = {};
+        require(!RaphaelKiq::beginHaltedNative(
+                    transaction,
+                    [&](FakeHalted::Register reg) { return partial.read(reg); },
+                    [&](FakeHalted::Register reg, uint32_t value) { partial.write(reg, value); },
+                    [](unsigned) {}), "partial halt must never admit native initialization");
+        require(partial.writes.size() == 2 &&
+                    partial.writes[1] == FakeHalted::Register::MecControl,
+                "partial halt attempts restoration before returning, without queue writes");
+        require(transaction.held == rejectRestore,
+                "unverified rollback keeps the transaction outstanding");
+        if (!rejectRestore)
+            require(partial.read(FakeHalted::Register::MecControl) == 0x1234,
+                    "partial halt restores exact prior MEC state");
+    }
+    ignoredQueue.value[static_cast<unsigned>(FakeHalted::Register::MecControl)] = 0x1234;
+    ignoredQueue.value[static_cast<unsigned>(FakeHalted::Register::Active)] = 1;
+    ignoredQueue.ignoreQueue = true;
+    transaction = {};
+    require(!RaphaelKiq::beginHaltedNative(
+                 transaction,
+                 [&](FakeHalted::Register reg) { return ignoredQueue.read(reg); },
+                 [&](FakeHalted::Register reg, uint32_t value) { ignoredQueue.write(reg, value); },
+                 [](unsigned) {}) && !transaction.held &&
+                ignoredQueue.read(FakeHalted::Register::MecControl) == 0x1234,
+            "ignored ACTIVE clear blocks setup and restores the saved MEC control");
+    FakeHalted stuckRestore;
+    stuckRestore.value[static_cast<unsigned>(FakeHalted::Register::MecControl)] = 0x1234;
+    stuckRestore.value[static_cast<unsigned>(FakeHalted::Register::Active)] = 1;
+    stuckRestore.ignoreQueue = true;
+    stuckRestore.ignoreRestore = true;
+    transaction = {};
+    require(!RaphaelKiq::beginHaltedNative(
+                 transaction,
+                 [&](FakeHalted::Register reg) { return stuckRestore.read(reg); },
+                 [&](FakeHalted::Register reg, uint32_t value) { stuckRestore.write(reg, value); },
+                 [](unsigned) {}) && transaction.held &&
+                stuckRestore.read(FakeHalted::Register::MecControl) ==
+                    (0x1234U | RaphaelKiq::kMecHaltMask),
+            "a failed MEC restore after setup failure keeps the transaction held");
+    require(RaphaelKiq::haltedNativeResultVerified(
+                true, 0x50000000, 1, 0, 0, 0x84, 0xffbfea00, 0,
+                0x84000008, 0, 6, 0, 0, 0, 0x8400000000ULL, 0xffbfea00ULL,
+                0x8400000800ULL),
+            "verified native result permits release");
+    require(!RaphaelKiq::haltedNativeResultVerified(
+                 true, 0xffffffffU, 1, 0, 0, 0x84, 0xffbfea00, 0,
+                 0x84000008, 0, 6, 0, 0, 0, 0x8400000000ULL, 0xffbfea00ULL,
+                 0x8400000800ULL),
+            "inaccessible MEC readback blocks release");
+    require(!RaphaelKiq::haltedNativeResultVerified(
+                 true, 0x50000000, 0xffffffffU, 0, 0, 0x84, 0xffbfea00, 0,
+                 0x84000008, 0, 6, 0, 0, 0, 0x8400000000ULL, 0xffbfea00ULL,
+                 0x8400000800ULL),
+            "inaccessible ACTIVE readback blocks release");
+    require(!RaphaelKiq::haltedNativeResultVerified(
+                 false, 0x50000000, 1, 0, 0, 0x84, 0xffbfea00, 0,
+                 0x84000008, 0, 6, 0, 0, 0, 0x8400000000ULL, 0xffbfea00ULL,
+                 0x8400000800ULL),
+            "native failure blocks release");
+    require(!RaphaelKiq::haltedNativeResultVerified(
+                 true, 0x50000000, 1, 0, 1, 0x84, 0xffbfea00, 0,
+                 0x84000008, 0, 6, 0, 0, 0, 0x8400000000ULL, 0xffbfea00ULL,
+                 0x8400000800ULL),
+            "MQD mismatch blocks release");
+    require(!RaphaelKiq::haltedNativeResultVerified(
+                 true, 0x50000000, 1, 0, 0, 0x84, 0xffbfea00, 0,
+                 0xffffffffU, 0, 6, 0, 0, 0, 0x8400000000ULL, 0xffbfea00ULL,
+                 0x8400000800ULL),
+            "inaccessible EOP readback blocks release");
+    require(!RaphaelKiq::haltedNativeResultVerified(
+                 true, 0x50000000, 1, 0, 0, 0x84, 0, 0,
+                 0x84000008, 0, 6, 0, 0, 0, 0x8400000000ULL, 0xffbfea00ULL,
+                 0x8400000800ULL),
+            "empty PQ readback blocks release");
+
+    FakeQueue inaccessible;
+    inaccessible.value[static_cast<unsigned>(Register::WptrHi)] = 0xffffffffU;
+    nativeCalls = 0;
+    result = prepare(inaccessible, nativeCalls);
+    require(result.status == QueuePreparationStatus::Inaccessible && nativeCalls == 0,
+            "all-ones queue state fails closed");
+
+    std::puts("KIQ queue preparation fixtures passed");
+}

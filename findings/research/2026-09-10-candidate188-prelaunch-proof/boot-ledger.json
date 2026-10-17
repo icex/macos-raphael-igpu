@@ -1,0 +1,11 @@
+{
+  "schema": 2,
+  "boot_id": "3bca3e47-1f28-4f78-af00-5dbf76b00620",
+  "max_launches": 3,
+  "launches": [
+    {
+      "run_id": "cb1d0aadd8186205d867a23fe175c336",
+      "reserved_epoch": 1789060599.6137867
+    }
+  ]
+}

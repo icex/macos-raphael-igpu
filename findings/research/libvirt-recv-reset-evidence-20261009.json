@@ -1,0 +1,1778 @@
+{
+  "tcg": {
+    "passed": true,
+    "cases": [
+      {
+        "case": "guest-s5-reset",
+        "cid": "03abc8108601f659a0205fe3ee6060f50f4bc9845c05419f7e125c909714871e",
+        "image": "sha256:3a3c82c79bc4e73531f819ccdfa4053b3084efd7c1f645678dbf8b4b3a24369c",
+        "started_at": "2026-10-09T12:41:09.513147519Z",
+        "finished_at": "2026-10-09T12:41:10.362303233Z",
+        "exit_code": 0,
+        "gate": {
+          "cid": "03abc8108601f659a0205fe3ee6060f50f4bc9845c05419f7e125c909714871e",
+          "started_at": "2026-10-09T12:41:09.513147519Z",
+          "run_id": "7f777c5e12fe14d8d05e3c2d824e3083",
+          "deferred": true,
+          "budget_origin": "transport-observation",
+          "transport_end_monotonic": 64662.194788108,
+          "channel": "console",
+          "transport_end_kind": "recv-reset",
+          "completed_original_zombie": false,
+          "shutdown_event_wait": false,
+          "outcome": "natural-container-exit",
+          "elapsed_seconds": 0.29140458500478417
+        },
+        "terminal": {
+          "cid": "03abc8108601f659a0205fe3ee6060f50f4bc9845c05419f7e125c909714871e",
+          "identity": {
+            "name": "rgpu-7f777c5e12fe14d8d05e3c2d824e3083",
+            "pid": 47,
+            "run_id": "7f777c5e12fe14d8d05e3c2d824e3083",
+            "start_ticks": 34449354,
+            "uuid": "00000000-0000-0000-0000-000000000000"
+          },
+          "process_exited": true,
+          "reason": "guest-shutdown",
+          "run_id": "7f777c5e12fe14d8d05e3c2d824e3083",
+          "scope": {
+            "device": 5,
+            "init_start_ticks": 34449314,
+            "inode": 4026533263,
+            "kind": "pid-namespace"
+          },
+          "started_at": "2026-10-09T12:41:09.513147519Z"
+        },
+        "transport_end_monotonic": 64662.194788108,
+        "guest_shutdown_observed_before_transport_end": true
+      },
+      {
+        "case": "live-qemu-reset",
+        "cid": "b4ab19280066c53ebe250d15dc9e04add34c0d150bd4a78db638466be04ad61d",
+        "image": "sha256:3a3c82c79bc4e73531f819ccdfa4053b3084efd7c1f645678dbf8b4b3a24369c",
+        "started_at": "2026-10-09T12:41:10.523202898Z",
+        "finished_at": "2026-10-09T12:41:11.237615552Z",
+        "exit_code": 1,
+        "gate": {
+          "cid": "b4ab19280066c53ebe250d15dc9e04add34c0d150bd4a78db638466be04ad61d",
+          "started_at": "2026-10-09T12:41:10.523202898Z",
+          "run_id": "a05a82a656ee30f150b617aa2bc045c7",
+          "deferred": false,
+          "budget_origin": "transport-observation",
+          "transport_end_monotonic": 64663.204028705,
+          "channel": "console",
+          "transport_end_kind": "recv-reset",
+          "proof_refusal": {
+            "stage": "original-process",
+            "code": "original-pid-present",
+            "pid": 47,
+            "state": "S"
+          },
+          "outcome": "immediate-stop",
+          "error_type": "RuntimeError",
+          "refusal_stage": "exit-proof",
+          "refusal_code": "refused",
+          "elapsed_seconds": 0.13657711599807953
+        },
+        "terminal": null,
+        "transport_end_monotonic": 64663.204028705,
+        "guest_shutdown_observed_before_transport_end": false
+      }
+    ],
+    "scope": "Real TCG S5 closes QEMU serial with unread reverse bytes and production collector records recv-reset104/exit1, never clean EOF. Live TCG negative uses a separate socketpair peer close with unread reverse data to produce actual RST while QEMU remains running. No KVM/GPU/host network; isolated TAP only. Connect-only collector adapter; systemd wiring remains separately tested.",
+    "result_sha256": "7c55ebb1827c0de913afa24335fd44bef7420e69c1204fa563f532ebed303e5e"
+  },
+  "worker": {
+    "passed": true,
+    "scope": "Real pthread exit state, synthetic recv-reset/admission/libvirt event and Docker adapter.\n\nNo VM, KVM, GPU or network. This isolates the approved wait state machine; it\ncannot establish real libvirt event ordering or real container disappearance.\n",
+    "cases": [
+      {
+        "case": "delayed-worker",
+        "pid": 857694,
+        "start_ticks": 34449500,
+        "transport_end_monotonic": 64663.462095989,
+        "gate": {
+          "cid": "ff6d7be2bba826633c9604ed0c7fd44a0cb1791669e5a6deb1552c28240ed278",
+          "started_at": "software-adapter",
+          "run_id": "1117d6d2038f586719acf74ad7d0be0b",
+          "deferred": true,
+          "budget_origin": "transport-observation",
+          "transport_end_monotonic": 64663.462095989,
+          "channel": "console",
+          "transport_end_kind": "recv-reset",
+          "completed_original_zombie": true,
+          "shutdown_event_wait": true,
+          "outcome": "natural-container-exit",
+          "elapsed_seconds": 0.7088437900019926
+        },
+        "proofs": [
+          {
+            "at": 64663.462965291,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64663.462074059,
+              "transport_end_monotonic": 64663.462095989,
+              "completed_zombie": false,
+              "run_id": "1117d6d2038f586719acf74ad7d0be0b",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-1117d6d2038f586719acf74ad7d0be0b",
+                "uuid": "zero",
+                "run_id": "1117d6d2038f586719acf74ad7d0be0b",
+                "pid": 857694,
+                "start_ticks": 34449500
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "a0f7c5fa27e676f5e35f116e99b0298b6b654e2c22dd60f2c4bdf278908f9d93",
+              "cid": "ff6d7be2bba826633c9604ed0c7fd44a0cb1791669e5a6deb1552c28240ed278",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549691
+            }
+          },
+          {
+            "at": 64663.513430005,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64663.462074059,
+              "transport_end_monotonic": 64663.462095989,
+              "completed_zombie": false,
+              "run_id": "1117d6d2038f586719acf74ad7d0be0b",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-1117d6d2038f586719acf74ad7d0be0b",
+                "uuid": "zero",
+                "run_id": "1117d6d2038f586719acf74ad7d0be0b",
+                "pid": 857694,
+                "start_ticks": 34449500
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "a0f7c5fa27e676f5e35f116e99b0298b6b654e2c22dd60f2c4bdf278908f9d93",
+              "cid": "ff6d7be2bba826633c9604ed0c7fd44a0cb1791669e5a6deb1552c28240ed278",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549691
+            }
+          },
+          {
+            "at": 64663.563913719,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64663.462074059,
+              "transport_end_monotonic": 64663.462095989,
+              "completed_zombie": false,
+              "run_id": "1117d6d2038f586719acf74ad7d0be0b",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-1117d6d2038f586719acf74ad7d0be0b",
+                "uuid": "zero",
+                "run_id": "1117d6d2038f586719acf74ad7d0be0b",
+                "pid": 857694,
+                "start_ticks": 34449500
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "a0f7c5fa27e676f5e35f116e99b0298b6b654e2c22dd60f2c4bdf278908f9d93",
+              "cid": "ff6d7be2bba826633c9604ed0c7fd44a0cb1791669e5a6deb1552c28240ed278",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549691
+            }
+          },
+          {
+            "at": 64663.614359273,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64663.462074059,
+              "transport_end_monotonic": 64663.462095989,
+              "completed_zombie": false,
+              "run_id": "1117d6d2038f586719acf74ad7d0be0b",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-1117d6d2038f586719acf74ad7d0be0b",
+                "uuid": "zero",
+                "run_id": "1117d6d2038f586719acf74ad7d0be0b",
+                "pid": 857694,
+                "start_ticks": 34449500
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "a0f7c5fa27e676f5e35f116e99b0298b6b654e2c22dd60f2c4bdf278908f9d93",
+              "cid": "ff6d7be2bba826633c9604ed0c7fd44a0cb1791669e5a6deb1552c28240ed278",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549691
+            }
+          },
+          {
+            "at": 64663.664832877,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64663.462074059,
+              "transport_end_monotonic": 64663.462095989,
+              "completed_zombie": false,
+              "run_id": "1117d6d2038f586719acf74ad7d0be0b",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-1117d6d2038f586719acf74ad7d0be0b",
+                "uuid": "zero",
+                "run_id": "1117d6d2038f586719acf74ad7d0be0b",
+                "pid": 857694,
+                "start_ticks": 34449500
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "a0f7c5fa27e676f5e35f116e99b0298b6b654e2c22dd60f2c4bdf278908f9d93",
+              "cid": "ff6d7be2bba826633c9604ed0c7fd44a0cb1791669e5a6deb1552c28240ed278",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549691
+            }
+          },
+          {
+            "at": 64663.715351751,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64663.462074059,
+              "transport_end_monotonic": 64663.462095989,
+              "completed_zombie": false,
+              "run_id": "1117d6d2038f586719acf74ad7d0be0b",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-1117d6d2038f586719acf74ad7d0be0b",
+                "uuid": "zero",
+                "run_id": "1117d6d2038f586719acf74ad7d0be0b",
+                "pid": 857694,
+                "start_ticks": 34449500
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "a0f7c5fa27e676f5e35f116e99b0298b6b654e2c22dd60f2c4bdf278908f9d93",
+              "cid": "ff6d7be2bba826633c9604ed0c7fd44a0cb1791669e5a6deb1552c28240ed278",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549691
+            }
+          },
+          {
+            "at": 64663.765831295,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64663.462074059,
+              "transport_end_monotonic": 64663.462095989,
+              "completed_zombie": false,
+              "run_id": "1117d6d2038f586719acf74ad7d0be0b",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-1117d6d2038f586719acf74ad7d0be0b",
+                "uuid": "zero",
+                "run_id": "1117d6d2038f586719acf74ad7d0be0b",
+                "pid": 857694,
+                "start_ticks": 34449500
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "a0f7c5fa27e676f5e35f116e99b0298b6b654e2c22dd60f2c4bdf278908f9d93",
+              "cid": "ff6d7be2bba826633c9604ed0c7fd44a0cb1791669e5a6deb1552c28240ed278",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549691
+            }
+          },
+          {
+            "at": 64663.81673618,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64663.462074059,
+              "transport_end_monotonic": 64663.462095989,
+              "completed_zombie": false,
+              "run_id": "1117d6d2038f586719acf74ad7d0be0b",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-1117d6d2038f586719acf74ad7d0be0b",
+                "uuid": "zero",
+                "run_id": "1117d6d2038f586719acf74ad7d0be0b",
+                "pid": 857694,
+                "start_ticks": 34449500
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "a0f7c5fa27e676f5e35f116e99b0298b6b654e2c22dd60f2c4bdf278908f9d93",
+              "cid": "ff6d7be2bba826633c9604ed0c7fd44a0cb1791669e5a6deb1552c28240ed278",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549691
+            }
+          },
+          {
+            "at": 64663.867235784,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64663.462074059,
+              "transport_end_monotonic": 64663.462095989,
+              "completed_zombie": false,
+              "run_id": "1117d6d2038f586719acf74ad7d0be0b",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-1117d6d2038f586719acf74ad7d0be0b",
+                "uuid": "zero",
+                "run_id": "1117d6d2038f586719acf74ad7d0be0b",
+                "pid": 857694,
+                "start_ticks": 34449500
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "a0f7c5fa27e676f5e35f116e99b0298b6b654e2c22dd60f2c4bdf278908f9d93",
+              "cid": "ff6d7be2bba826633c9604ed0c7fd44a0cb1791669e5a6deb1552c28240ed278",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549691
+            }
+          },
+          {
+            "at": 64663.918094469,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64663.462074059,
+              "transport_end_monotonic": 64663.462095989,
+              "completed_zombie": false,
+              "run_id": "1117d6d2038f586719acf74ad7d0be0b",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-1117d6d2038f586719acf74ad7d0be0b",
+                "uuid": "zero",
+                "run_id": "1117d6d2038f586719acf74ad7d0be0b",
+                "pid": 857694,
+                "start_ticks": 34449500
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "a0f7c5fa27e676f5e35f116e99b0298b6b654e2c22dd60f2c4bdf278908f9d93",
+              "cid": "ff6d7be2bba826633c9604ed0c7fd44a0cb1791669e5a6deb1552c28240ed278",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549691
+            }
+          },
+          {
+            "at": 64663.968959354,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64663.462074059,
+              "transport_end_monotonic": 64663.462095989,
+              "completed_zombie": false,
+              "run_id": "1117d6d2038f586719acf74ad7d0be0b",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-1117d6d2038f586719acf74ad7d0be0b",
+                "uuid": "zero",
+                "run_id": "1117d6d2038f586719acf74ad7d0be0b",
+                "pid": 857694,
+                "start_ticks": 34449500
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "a0f7c5fa27e676f5e35f116e99b0298b6b654e2c22dd60f2c4bdf278908f9d93",
+              "cid": "ff6d7be2bba826633c9604ed0c7fd44a0cb1791669e5a6deb1552c28240ed278",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549691
+            }
+          },
+          {
+            "at": 64664.019783188,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64663.462074059,
+              "transport_end_monotonic": 64663.462095989,
+              "completed_zombie": false,
+              "run_id": "1117d6d2038f586719acf74ad7d0be0b",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-1117d6d2038f586719acf74ad7d0be0b",
+                "uuid": "zero",
+                "run_id": "1117d6d2038f586719acf74ad7d0be0b",
+                "pid": 857694,
+                "start_ticks": 34449500
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "a0f7c5fa27e676f5e35f116e99b0298b6b654e2c22dd60f2c4bdf278908f9d93",
+              "cid": "ff6d7be2bba826633c9604ed0c7fd44a0cb1791669e5a6deb1552c28240ed278",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549691
+            }
+          },
+          {
+            "at": 64664.070239592,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64663.462074059,
+              "transport_end_monotonic": 64663.462095989,
+              "completed_zombie": false,
+              "run_id": "1117d6d2038f586719acf74ad7d0be0b",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-1117d6d2038f586719acf74ad7d0be0b",
+                "uuid": "zero",
+                "run_id": "1117d6d2038f586719acf74ad7d0be0b",
+                "pid": 857694,
+                "start_ticks": 34449500
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "a0f7c5fa27e676f5e35f116e99b0298b6b654e2c22dd60f2c4bdf278908f9d93",
+              "cid": "ff6d7be2bba826633c9604ed0c7fd44a0cb1791669e5a6deb1552c28240ed278",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549691
+            }
+          },
+          {
+            "at": 64664.120715346,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64663.462074059,
+              "transport_end_monotonic": 64663.462095989,
+              "completed_zombie": false,
+              "run_id": "1117d6d2038f586719acf74ad7d0be0b",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-1117d6d2038f586719acf74ad7d0be0b",
+                "uuid": "zero",
+                "run_id": "1117d6d2038f586719acf74ad7d0be0b",
+                "pid": 857694,
+                "start_ticks": 34449500
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "a0f7c5fa27e676f5e35f116e99b0298b6b654e2c22dd60f2c4bdf278908f9d93",
+              "cid": "ff6d7be2bba826633c9604ed0c7fd44a0cb1791669e5a6deb1552c28240ed278",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549691
+            }
+          },
+          {
+            "at": 64664.17112941,
+            "proof": {
+              "exited": true,
+              "shutdown_wait": false,
+              "shutdown_observed_monotonic": null,
+              "transport_end_monotonic": 64663.462095989,
+              "completed_zombie": true,
+              "run_id": "1117d6d2038f586719acf74ad7d0be0b",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-1117d6d2038f586719acf74ad7d0be0b",
+                "uuid": "zero",
+                "run_id": "1117d6d2038f586719acf74ad7d0be0b",
+                "pid": 857694,
+                "start_ticks": 34449500
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "a0f7c5fa27e676f5e35f116e99b0298b6b654e2c22dd60f2c4bdf278908f9d93",
+              "cid": "ff6d7be2bba826633c9604ed0c7fd44a0cb1791669e5a6deb1552c28240ed278",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549691
+            }
+          }
+        ],
+        "stops": [],
+        "terminal_synthesized": false
+      },
+      {
+        "case": "expired-worker",
+        "pid": 857743,
+        "start_ticks": 34449571,
+        "transport_end_monotonic": 64664.178310198,
+        "gate": {
+          "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+          "started_at": "software-adapter",
+          "run_id": "31774cdf78be20766e7afa0775345bbb",
+          "deferred": true,
+          "budget_origin": "transport-observation",
+          "transport_end_monotonic": 64664.178310198,
+          "channel": "console",
+          "transport_end_kind": "recv-reset",
+          "completed_original_zombie": false,
+          "shutdown_event_wait": true,
+          "outcome": "shutdown-wait-expired",
+          "elapsed_seconds": 2.0009719759982545
+        },
+        "proofs": [
+          {
+            "at": 64664.178960709,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64664.229414733,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64664.279909117,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64664.330384791,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64664.380863725,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64664.43172466,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64664.482259854,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64664.532724258,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64664.583271722,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64664.633763656,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64664.684316051,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64664.734807475,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64664.78564932,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64664.836171154,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64664.886625897,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64664.937098851,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64664.987573735,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64665.03805382,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64665.088515423,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64665.138992877,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64665.189500161,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64665.239949035,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64665.290432899,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64665.341217434,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64665.391703368,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64665.442411833,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64665.492889037,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64665.543384401,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64665.593868495,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64665.644348749,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64665.694840253,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64665.745573737,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64665.796146572,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64665.846906026,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64665.897417001,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64665.947906165,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64665.998403109,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64666.049178474,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64666.099676468,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          },
+          {
+            "at": 64666.150350912,
+            "proof": {
+              "exited": false,
+              "shutdown_wait": true,
+              "shutdown_observed_monotonic": 64664.178290928,
+              "transport_end_monotonic": 64664.178310198,
+              "completed_zombie": false,
+              "run_id": "31774cdf78be20766e7afa0775345bbb",
+              "admission_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "identity": {
+                "name": "rgpu-31774cdf78be20766e7afa0775345bbb",
+                "uuid": "zero",
+                "run_id": "31774cdf78be20766e7afa0775345bbb",
+                "pid": 857743,
+                "start_ticks": 34449571
+              },
+              "scope": {
+                "kind": "pid-namespace",
+                "device": 5,
+                "inode": 4026531836,
+                "init_start_ticks": 9
+              },
+              "plan_sha256": "b881c3bcf989d8ccf308c85b39dffec6d853ce45dc71f7631c08a4edca6b3491",
+              "cid": "1e3e5c3f3f60ace074ff8f5397481a825fb6aa4b23f7b5a2b39c2c4034a957f3",
+              "started_at": "software-adapter",
+              "deadline_epoch": 1791549692
+            }
+          }
+        ],
+        "stops": [
+          64666.178398291
+        ],
+        "terminal_synthesized": false
+      },
+      {
+        "case": "missing-event",
+        "pid": 857857,
+        "start_ticks": 34449772,
+        "transport_end_monotonic": 64666.186812882,
+        "gate": {
+          "cid": "e80eeb1045398d8632ac0a07b628a04eaefdad19bca3f9a41883a925f118ce03",
+          "started_at": "software-adapter",
+          "run_id": "01fa364f71ecb4da251bbf6afa1cea88",
+          "deferred": false,
+          "budget_origin": "transport-observation",
+          "transport_end_monotonic": 64666.186812882,
+          "channel": "console",
+          "transport_end_kind": "recv-reset",
+          "proof_refusal": {
+            "stage": "shutdown-event",
+            "code": "validation-refused"
+          },
+          "outcome": "immediate-stop",
+          "error_type": "RuntimeError",
+          "refusal_stage": "exit-proof",
+          "refusal_code": "refused",
+          "elapsed_seconds": 0.0014552840002579615
+        },
+        "proofs": [
+          {
+            "at": 64666.187389703,
+            "proof": {
+              "exited": false,
+              "refusal": {
+                "stage": "shutdown-event",
+                "code": "validation-refused"
+              }
+            }
+          }
+        ],
+        "stops": [
+          64666.187420393
+        ],
+        "terminal_synthesized": false
+      }
+    ],
+    "result_sha256": "d78c4397fdbfae850b079b22d98649f572533bd2f391a298d4afc48a80662c41"
+  }
+}

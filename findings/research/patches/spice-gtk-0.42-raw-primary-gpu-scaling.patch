@@ -1,0 +1,400 @@
+--- /dev/null
++++ b/src/spice-widget-raw-gl.c
+@@ -0,0 +1,300 @@
++/* SPDX-License-Identifier: LGPL-2.1-or-later
++ * Research opt-in GPU scaling of an ordinary decoded CPU primary.
++ * No server GL, DMA-BUF, PBO or persistent source pointer. */
++#include "config.h"
++#include <epoxy/gl.h>
++#include <glib/gstdio.h>
++#include <fcntl.h>
++#include <unistd.h>
++#include <string.h>
++#include <stdint.h>
++#include <errno.h>
++#include "spice-widget-priv.h"
++
++static gboolean source_ok(SpiceDisplay *display)
++{
++    SpiceDisplayPrivate *d = display->priv;
++    return d->raw_gl.requested && !d->raw_gl.failed && !d->egl.enabled &&
++           d->mouse_mode == SPICE_MOUSE_MODE_CLIENT &&
++           !d->canvas.convert && d->canvas.format == SPICE_SURFACE_FMT_32_xRGB &&
++           d->canvas.data_origin && d->canvas.width > 0 &&
++           d->canvas.width <= G_MAXINT / 4 && d->canvas.height > 0 &&
++           d->canvas.stride >= d->canvas.width * 4 && d->canvas.stride % 4 == 0 &&
++           (gsize)d->canvas.height <= G_MAXSIZE / (gsize)d->canvas.stride &&
++           d->area.x >= 0 && d->area.y >= 0 && d->area.width > 0 && d->area.height > 0 &&
++           d->area.x <= d->canvas.width - d->area.width &&
++           d->area.y <= d->canvas.height - d->area.height;
++}
++
++static void fallback(SpiceDisplay *display, const gchar *reason)
++{
++    SpiceDisplayPrivate *d = display->priv;
++    if (!d->raw_gl.failed) g_warning("RGPU_RAW_GL fallback: %s", reason);
++    d->raw_gl.failed = TRUE;
++    d->raw_gl.active = FALSE;
++    gtk_stack_set_visible_child_name(d->stack, "draw-area");
++    gtk_widget_queue_draw(GTK_WIDGET(display));
++}
++
++static GLuint shader(GLenum type, const gchar *source)
++{
++    GLuint id = glCreateShader(type);
++    GLint ok = 0;
++    if (!id) return 0;
++    glShaderSource(id, 1, &source, NULL);
++    glCompileShader(id);
++    glGetShaderiv(id, GL_COMPILE_STATUS, &ok);
++    if (!ok) {
++        gchar log[1024];
++        glGetShaderInfoLog(id, sizeof(log), NULL, log);
++        g_warning("RGPU_RAW_GL shader: %s", log);
++        glDeleteShader(id);
++        return 0;
++    }
++    return id;
++}
++
++static gboolean setup(SpiceDisplay *display)
++{
++    SpiceDisplayPrivate *d = display->priv;
++    const gchar *renderer = (const gchar *)glGetString(GL_RENDERER);
++    static const gchar *vs = "#version 150\nin vec2 position; in vec2 uv; out vec2 tc;\nvoid main(){tc=uv;gl_Position=vec4(position,0,1);}";
++    static const gchar *fs = "#version 150\nuniform sampler2D image; uniform vec2 uv_min,uv_max; in vec2 tc; out vec4 color;\nvoid main(){color=vec4(texture(image,clamp(tc,uv_min,uv_max)).rgb,1);}";
++    GLuint vertex, fragment;
++    GLint ok = 0;
++    if (!renderer || strstr(renderer,"llvmpipe") || strstr(renderer,"softpipe")) {
++        fallback(display, "hardware GL renderer unavailable");
++        return FALSE;
++    }
++    vertex = shader(GL_VERTEX_SHADER,vs); fragment = shader(GL_FRAGMENT_SHADER,fs);
++    if (!vertex || !fragment) {
++        if (vertex) glDeleteShader(vertex);
++        if (fragment) glDeleteShader(fragment);
++        fallback(display,"shader compilation"); return FALSE;
++    }
++    d->raw_gl.program = glCreateProgram();
++    glAttachShader(d->raw_gl.program,vertex); glAttachShader(d->raw_gl.program,fragment);
++    glBindAttribLocation(d->raw_gl.program,0,"position");
++    glBindAttribLocation(d->raw_gl.program,1,"uv");
++    glLinkProgram(d->raw_gl.program);
++    glDeleteShader(vertex); glDeleteShader(fragment);
++    glGetProgramiv(d->raw_gl.program,GL_LINK_STATUS,&ok);
++    if (!ok) { fallback(display,"program link"); return FALSE; }
++    glGenTextures(1,&d->raw_gl.texture);
++    glBindTexture(GL_TEXTURE_2D,d->raw_gl.texture);
++    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
++    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
++    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
++    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
++    glGenVertexArrays(1,&d->raw_gl.vao); glGenBuffers(1,&d->raw_gl.vbo);
++    d->raw_gl.full_upload = TRUE;
++    d->raw_gl.window_start = g_get_monotonic_time();
++    g_message("RGPU_RAW_GL active renderer=%s version=%s", renderer,glGetString(GL_VERSION));
++    return glGetError() == GL_NO_ERROR;
++}
++
++static gboolean write_all(gint fd, const void *data, gsize length)
++{
++    const guchar *cursor = data;
++    while (length) {
++        ssize_t count = write(fd, cursor, length);
++        if (count < 0 && errno == EINTR) continue;
++        if (count <= 0) return FALSE;
++        cursor += count;
++        length -= count;
++    }
++    return TRUE;
++}
++
++static void verify_frame(SpiceDisplay *display, gint width, gint height)
++{
++    SpiceDisplayPrivate *d = display->priv;
++    gchar *request_path, request[19], *path, *partial;
++    gsize length = 0;
++    guchar *rgb;
++    gint fd, row, alignment, row_length, skip_rows, skip_pixels, pbo;
++    gboolean ok;
++    if (!d->raw_gl.verify_dir) return;
++    request_path = g_build_filename(d->raw_gl.verify_dir, "request", NULL);
++    fd = g_open(request_path, O_RDONLY | O_NONBLOCK | O_CLOEXEC, 0);
++    g_free(request_path);
++    if (fd < 0) return;
++    while (length < 18) {
++        ssize_t count = read(fd, request + length, 18 - length);
++        if (count < 0 && errno == EINTR) continue;
++        if (count < 0) { close(fd); return; }
++        if (count == 0) break;
++        length += count;
++    }
++    close(fd);
++    if (length != 16 && !(length == 17 && request[16] == '\n')) return;
++    for (row = 0; row < 16; row++) if (!g_ascii_isxdigit(request[row])) return;
++    request[16] = 0;
++    if (g_strcmp0(request, d->raw_gl.last_request) == 0) return;
++    if (width <= 0 || height <= 0 || (gsize)width > G_MAXSIZE / 3 / (gsize)height) return;
++    path = g_strdup_printf("%s/frame-%s.ppm", d->raw_gl.verify_dir, request);
++    partial = g_strconcat(path, ".partial", NULL);
++    fd = g_open(partial, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
++    if (fd < 0) { g_free(partial); g_free(path); return; }
++    rgb = g_malloc((gsize)width * height * 3);
++    glGetIntegerv(GL_PACK_ALIGNMENT, &alignment);
++    glGetIntegerv(GL_PACK_ROW_LENGTH, &row_length);
++    glGetIntegerv(GL_PACK_SKIP_ROWS, &skip_rows);
++    glGetIntegerv(GL_PACK_SKIP_PIXELS, &skip_pixels);
++    glGetIntegerv(GL_PIXEL_PACK_BUFFER_BINDING, &pbo);
++    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
++    glPixelStorei(GL_PACK_ALIGNMENT, 1);
++    glPixelStorei(GL_PACK_ROW_LENGTH, 0);
++    glPixelStorei(GL_PACK_SKIP_ROWS, 0);
++    glPixelStorei(GL_PACK_SKIP_PIXELS, 0);
++    glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, rgb);
++    ok = glGetError() == GL_NO_ERROR;
++    glPixelStorei(GL_PACK_ALIGNMENT, alignment);
++    glPixelStorei(GL_PACK_ROW_LENGTH, row_length);
++    glPixelStorei(GL_PACK_SKIP_ROWS, skip_rows);
++    glPixelStorei(GL_PACK_SKIP_PIXELS, skip_pixels);
++    glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo);
++    if (ok) {
++        gchar header[64];
++        gint n = g_snprintf(header, sizeof(header), "P6\n%d %d\n255\n", width, height);
++        ok = write_all(fd, header, n);
++        for (row = height - 1; row >= 0 && ok; row--)
++            ok = write_all(fd, rgb + (gsize)row * width * 3, (gsize)width * 3);
++    }
++    if (close(fd) != 0) ok = FALSE;
++    /* link publishes only a complete closed file and never replaces an existing result. */
++    if (ok) ok = link(partial, path) == 0;
++    g_unlink(partial);
++    if (ok) {
++        g_free(d->raw_gl.last_request);
++        d->raw_gl.last_request = g_strdup(request);
++        g_message("RGPU_RAW_GL framebuffer=%s pixels=%dx%d", path, width, height);
++    }
++    g_free(rgb); g_free(partial); g_free(path);
++}
++
++static gboolean render(GtkGLArea *area, GdkGLContext *context, gpointer opaque)
++{
++    SpiceDisplay *display=opaque;SpiceDisplayPrivate *d=display->priv;
++    gint width,height,x,y,w,h,limit;
++    GLint alignment,row_length,skip_rows,skip_pixels,pbo;
++    gint64 began=g_get_monotonic_time(), upload_start;
++    GdkRectangle dirty;
++    GLfloat vertices[16], left,right,top,bottom,u0,u1,v0,v1;
++    (void)context;
++    if (!d->raw_gl.active) return TRUE;
++    if (!source_ok(display)) { spice_raw_gl_changed(display); return TRUE; }
++    if(gtk_gl_area_get_error(area)){fallback(display,"GtkGLArea context");return TRUE;}
++    if(!d->raw_gl.program && !setup(display)){fallback(display,"GL initialization");return TRUE;}
++    width=gtk_widget_get_allocated_width(GTK_WIDGET(area))*gtk_widget_get_scale_factor(GTK_WIDGET(area));
++    height=gtk_widget_get_allocated_height(GTK_WIDGET(area))*gtk_widget_get_scale_factor(GTK_WIDGET(area));
++    if(width<=0||height<=0)return TRUE;
++    glGetIntegerv(GL_MAX_TEXTURE_SIZE,&limit);
++    if(d->canvas.width>limit||d->canvas.height>limit){fallback(display,"texture limits");return TRUE;}
++    glBindTexture(GL_TEXTURE_2D,d->raw_gl.texture);
++    if(d->raw_gl.texture_width!=d->canvas.width||d->raw_gl.texture_height!=d->canvas.height){
++        glGetIntegerv(GL_PIXEL_UNPACK_BUFFER_BINDING,&pbo);
++        glBindBuffer(GL_PIXEL_UNPACK_BUFFER,0);
++        glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,d->canvas.width,d->canvas.height,0,GL_BGRA,GL_UNSIGNED_BYTE,NULL);
++        glBindBuffer(GL_PIXEL_UNPACK_BUFFER,pbo);
++        d->raw_gl.texture_width=d->canvas.width;d->raw_gl.texture_height=d->canvas.height;d->raw_gl.full_upload=TRUE;
++    }
++    if(d->raw_gl.full_upload||d->raw_gl.dirty){
++        dirty=d->raw_gl.full_upload?(GdkRectangle){0,0,d->canvas.width,d->canvas.height}:d->raw_gl.damage;
++        glGetIntegerv(GL_UNPACK_ALIGNMENT,&alignment);glGetIntegerv(GL_UNPACK_ROW_LENGTH,&row_length);
++        glGetIntegerv(GL_UNPACK_SKIP_ROWS,&skip_rows);glGetIntegerv(GL_UNPACK_SKIP_PIXELS,&skip_pixels);
++        glGetIntegerv(GL_PIXEL_UNPACK_BUFFER_BINDING,&pbo);
++        glBindBuffer(GL_PIXEL_UNPACK_BUFFER,0);glPixelStorei(GL_UNPACK_ALIGNMENT,4);
++        glPixelStorei(GL_UNPACK_ROW_LENGTH,d->canvas.stride/4);glPixelStorei(GL_UNPACK_SKIP_ROWS,0);glPixelStorei(GL_UNPACK_SKIP_PIXELS,0);
++        upload_start=g_get_monotonic_time();
++        glTexSubImage2D(GL_TEXTURE_2D,0,dirty.x,dirty.y,dirty.width,dirty.height,GL_BGRA,GL_UNSIGNED_BYTE,
++                       (guchar*)d->canvas.data_origin+(gsize)dirty.y*d->canvas.stride+(gsize)dirty.x*4);
++        d->raw_gl.upload_us+=g_get_monotonic_time()-upload_start;d->raw_gl.uploads++;
++        d->raw_gl.bytes+=(guint64)dirty.width*dirty.height*4;
++        glPixelStorei(GL_UNPACK_ALIGNMENT,alignment);glPixelStorei(GL_UNPACK_ROW_LENGTH,row_length);
++        glPixelStorei(GL_UNPACK_SKIP_ROWS,skip_rows);glPixelStorei(GL_UNPACK_SKIP_PIXELS,skip_pixels);glBindBuffer(GL_PIXEL_UNPACK_BUFFER,pbo);
++        d->raw_gl.full_upload=FALSE;d->raw_gl.dirty=FALSE;
++    }
++    spice_display_get_scaling(display,NULL,&x,&y,&w,&h);
++    left=2.f*x/width-1;right=2.f*(x+w)/width-1;top=1-2.f*y/height;bottom=1-2.f*(y+h)/height;
++    u0=(float)d->area.x/d->canvas.width;u1=(float)(d->area.x+d->area.width)/d->canvas.width;
++    v0=(float)d->area.y/d->canvas.height;v1=(float)(d->area.y+d->area.height)/d->canvas.height;
++    {GLfloat quad[16]={left,top,u0,v0,left,bottom,u0,v1,right,top,u1,v0,right,bottom,u1,v1};memcpy(vertices,quad,sizeof(quad));}
++    glViewport(0,0,width,height);glDisable(GL_SCISSOR_TEST);glDisable(GL_BLEND);glDisable(GL_DEPTH_TEST);glDisable(GL_DITHER);glDisable(GL_FRAMEBUFFER_SRGB);
++    glClearColor(0,0,0,1);glClear(GL_COLOR_BUFFER_BIT);glUseProgram(d->raw_gl.program);glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,d->raw_gl.texture);
++    glUniform1i(glGetUniformLocation(d->raw_gl.program,"image"),0);
++    glUniform2f(glGetUniformLocation(d->raw_gl.program,"uv_min"),(d->area.x+.5f)/d->canvas.width,(d->area.y+.5f)/d->canvas.height);
++    glUniform2f(glGetUniformLocation(d->raw_gl.program,"uv_max"),(d->area.x+d->area.width-.5f)/d->canvas.width,(d->area.y+d->area.height-.5f)/d->canvas.height);
++    glBindVertexArray(d->raw_gl.vao);glBindBuffer(GL_ARRAY_BUFFER,d->raw_gl.vbo);glBufferData(GL_ARRAY_BUFFER,sizeof(vertices),vertices,GL_STREAM_DRAW);
++    glEnableVertexAttribArray(0);glEnableVertexAttribArray(1);glVertexAttribPointer(0,2,GL_FLOAT,GL_FALSE,4*sizeof(GLfloat),(void*)0);glVertexAttribPointer(1,2,GL_FLOAT,GL_FALSE,4*sizeof(GLfloat),(void*)(2*sizeof(GLfloat)));
++    glDrawArrays(GL_TRIANGLE_STRIP,0,4);
++    if(glGetError()!=GL_NO_ERROR){fallback(display,"upload/draw error");return TRUE;}
++    d->raw_gl.renders++;d->raw_gl.render_us+=g_get_monotonic_time()-began;
++    verify_frame(display,width,height);
++    if(g_get_monotonic_time()-d->raw_gl.window_start>=5000000){
++        g_message("RGPU_RAW_GL timing span_us=%"G_GINT64_FORMAT" renders=%"G_GUINT64_FORMAT" uploads=%"G_GUINT64_FORMAT" bytes=%"G_GUINT64_FORMAT" upload_us=%"G_GUINT64_FORMAT" render_us=%"G_GUINT64_FORMAT,
++                  g_get_monotonic_time()-d->raw_gl.window_start,d->raw_gl.renders,d->raw_gl.uploads,d->raw_gl.bytes,d->raw_gl.upload_us,d->raw_gl.render_us);
++        d->raw_gl.window_start=g_get_monotonic_time();d->raw_gl.renders=d->raw_gl.uploads=d->raw_gl.bytes=d->raw_gl.upload_us=d->raw_gl.render_us=0;
++    }
++    return TRUE;
++}
++
++static void unrealize(GtkGLArea *area, gpointer opaque)
++{
++    SpiceDisplay *display=opaque;SpiceDisplayPrivate *d=display->priv;
++    gtk_gl_area_make_current(area);
++    if(!gtk_gl_area_get_error(area)){
++        if(d->raw_gl.texture)glDeleteTextures(1,&d->raw_gl.texture);
++        if(d->raw_gl.program)glDeleteProgram(d->raw_gl.program);
++        if(d->raw_gl.vao)glDeleteVertexArrays(1,&d->raw_gl.vao);
++        if(d->raw_gl.vbo)glDeleteBuffers(1,&d->raw_gl.vbo);
++    }
++    d->raw_gl.texture=d->raw_gl.program=d->raw_gl.vao=d->raw_gl.vbo=0;
++    d->raw_gl.texture_width=d->raw_gl.texture_height=0;d->raw_gl.full_upload=TRUE;
++    g_clear_pointer(&d->raw_gl.verify_dir,g_free);g_clear_pointer(&d->raw_gl.last_request,g_free);
++}
++
++static void realize(GtkGLArea *area, gpointer opaque)
++{
++    SpiceDisplay *display=opaque;
++    if (!display->priv->raw_gl.verify_dir)
++        display->priv->raw_gl.verify_dir=g_strdup(g_getenv("RGPU_RAW_GL_CHECK_DIR"));
++    gtk_gl_area_make_current(area);
++    if(gtk_gl_area_get_error(area)) fallback(display,"context creation failed");
++}
++
++void spice_raw_gl_init(SpiceDisplay *display)
++{
++    SpiceDisplayPrivate *d=display->priv;GtkWidget *area;
++    d->raw_gl.requested=g_strcmp0(g_getenv("RGPU_RAW_TEXTURE"),"1")==0;
++    if(!d->raw_gl.requested)return;
++    area=gtk_gl_area_new();d->raw_gl.area=area;
++    gtk_gl_area_set_required_version(GTK_GL_AREA(area),3,2);gtk_gl_area_set_use_es(GTK_GL_AREA(area),FALSE);
++    gtk_gl_area_set_auto_render(GTK_GL_AREA(area),FALSE);gtk_widget_set_can_focus(area,FALSE);
++    g_signal_connect(area,"render",G_CALLBACK(render),display);g_signal_connect(area,"realize",G_CALLBACK(realize),display);g_signal_connect(area,"unrealize",G_CALLBACK(unrealize),display);
++    gtk_stack_add_named(d->stack,area,"raw-gl-area");
++    d->raw_gl.verify_dir=g_strdup(g_getenv("RGPU_RAW_GL_CHECK_DIR"));
++}
++
++void spice_raw_gl_changed(SpiceDisplay *display)
++{
++    SpiceDisplayPrivate *d=display->priv;
++    if(!d->raw_gl.requested)return;
++    d->raw_gl.full_upload=TRUE;d->raw_gl.dirty=FALSE;
++    if(!source_ok(display)&&d->raw_gl.active){
++        d->raw_gl.active=FALSE;gtk_stack_set_visible_child_name(d->stack,"draw-area");
++        gtk_widget_queue_draw(GTK_WIDGET(display));
++    } else if(d->raw_gl.active) {
++        gtk_gl_area_queue_render(GTK_GL_AREA(d->raw_gl.area));
++    }
++}
++
++gboolean spice_raw_gl_invalidate(SpiceDisplay *display,const GdkRectangle *rect)
++{
++    SpiceDisplayPrivate *d=display->priv;GdkRectangle bounds={0,0,d->canvas.width,d->canvas.height},clipped;
++    if(!source_ok(display)){spice_raw_gl_changed(display);return FALSE;}
++    if(!gdk_rectangle_intersect(rect,&bounds,&clipped))return FALSE;
++    if(!d->raw_gl.active){d->raw_gl.active=TRUE;d->raw_gl.full_upload=TRUE;gtk_stack_set_visible_child_name(d->stack,"raw-gl-area");}
++    if(d->raw_gl.dirty)gdk_rectangle_union(&d->raw_gl.damage,&clipped,&d->raw_gl.damage);else d->raw_gl.damage=clipped;
++    d->raw_gl.dirty=TRUE;gtk_gl_area_queue_render(GTK_GL_AREA(d->raw_gl.area));return TRUE;
++}
+--- a/src/spice-widget-priv.h
++++ b/src/spice-widget-priv.h
+@@ -151,6 +151,18 @@
+         SpiceGlScanout      scanout;
+     } egl;
+ #endif // HAVE_EGL
++#ifdef HAVE_EGL
++    struct {
++        GtkWidget *area;
++        gboolean requested, active, failed, full_upload, dirty;
++        GdkRectangle damage;
++        guint texture, program, vao, vbo;
++        gint texture_width, texture_height;
++        gint64 window_start;
++        guint64 renders, uploads, bytes, upload_us, render_us;
++        gchar *verify_dir, *last_request;
++    } raw_gl;
++#endif
+     double scroll_delta_y;
+     GWeakRef overlay_weak_ref;
+ };
+@@ -176,4 +188,9 @@
+ #endif
+ void     spice_display_widget_update_monitor_area(SpiceDisplay *display);
+ 
++#ifdef HAVE_EGL
++void spice_raw_gl_init(SpiceDisplay *display);
++void spice_raw_gl_changed(SpiceDisplay *display);
++gboolean spice_raw_gl_invalidate(SpiceDisplay *display, const GdkRectangle *rect);
++#endif
+ G_END_DECLS
+--- a/src/spice-widget.c
++++ b/src/spice-widget.c
+@@ -677,6 +677,7 @@
+                      "signal::realize", gl_area_realize, display,
+                      NULL);
+     gtk_stack_add_named(d->stack, area, "gl-area");
++    spice_raw_gl_init(display);
+ #endif
+     area = gtk_drawing_area_new();
+     gtk_stack_add_named(d->stack, area, "gst-area");
+@@ -1461,6 +1462,11 @@
+ {
+     SpiceDisplayPrivate *d = display->priv;
+ 
++    if (enabled && d->raw_gl.active) {
++        d->raw_gl.active = FALSE;
++        d->raw_gl.full_upload = TRUE;
++        gtk_stack_set_visible_child_name(d->stack, "draw-area");
++    }
+     if (egl_enabled(d) == enabled)
+         return;
+ 
+@@ -2747,6 +2753,9 @@
+     update_size_request(display);
+ 
+     set_monitor_ready(display, true);
++#ifdef HAVE_EGL
++    spice_raw_gl_changed(display);
++#endif
+ }
+ 
+ static void primary_create(SpiceChannel *channel, gint format,
+@@ -2776,6 +2785,9 @@
+     d->canvas.stride = 0;
+     d->canvas.data = NULL;
+     d->canvas.data_origin = NULL;
++#ifdef HAVE_EGL
++    spice_raw_gl_changed(display);
++#endif
+     set_monitor_ready(display, false);
+ }
+ 
+@@ -2971,6 +2983,12 @@
+ 
+     if (d->canvas.convert)
+         do_color_convert(display, &rect);
++#ifdef HAVE_EGL
++    if (spice_raw_gl_invalidate(display, &rect)) {
++        update_mouse_pointer(display);
++        return;
++    }
++#endif
+ 
+     scale_factor = gtk_widget_get_scale_factor(GTK_WIDGET(display));
+     spice_display_get_scaling(display, &s,
+--- a/src/meson.build
++++ b/src/meson.build
+@@ -296,7 +296,7 @@
+   ]
+ 
+   if spice_gtk_has_egl
+-    spice_client_gtk_sources += 'spice-widget-egl.c'
++    spice_client_gtk_sources += ['spice-widget-egl.c', 'spice-widget-raw-gl.c']
+   endif
+ 
+   # keymaps

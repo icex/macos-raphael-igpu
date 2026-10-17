@@ -1,0 +1,18 @@
+title = "Publication secret scan"
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Reviewed literal artifact digests, viewport marker and local backup identifier"
+regexTarget = "secret"
+regexes = [
+  '^2dafd53a4915c4370fde905a1a1e16e21551bc2b885fb8fcd4ba89d5801d209a$',
+  '^3c555eb24eac05443c762a3857c86ade46de9c0a9173d109a08e459b08ef0df2$',
+  '^670e12c05ea14d5cb4936b2b5284d562$',
+  '^67987f0947609621ffce94d4bcea5c82c76144da03cfda3bb34f41c5cae96492$',
+  '^787310746e27d9071739d74feee440e2a7b865af1d89f9d8e8188ac5250fb79a$',
+  '^RGPUB013D5C7$',
+  '^a5efd99cedb9aa0e8601cce3a04670dec3a2fdeb895df5b3c504357718a73c34$',
+  '^cb5c48b0cecbdf850ac44308ee2522b74f5f2ee8b31389c87a80815248b6a769$',
+  '^f6b411f8b174358959f3d46fe3b099b0c8f8ca3e453d6668620782d26831311c$',
+]

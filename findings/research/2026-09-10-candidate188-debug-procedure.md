@@ -1,0 +1,128 @@
+# Candidate 188 debug procedure
+
+This is a command recipe for coordinator review. Do not execute until the coordinator
+has audited the clean worktree, build identity record, host boot, and one-run
+authority. It performs no automatic retry and does not imply Metal success.
+
+## Build from the private clean worktree
+
+Confirm the worktree is clean and record its exact commit before building:
+
+```sh
+cd /home/user/macos-vm/run/worktrees/candidate-188
+git status --porcelain
+git rev-parse HEAD
+python3 -B tools/build-release.py \
+  --toolchain /home/user/macos-vm/build \
+  --output /home/user/macos-vm/run/candidate-188-dist \
+  --debug-symbols
+```
+
+The build must produce the release archive and
+`candidate-188-dist/debug-symbols/{RaphaelGPU.dSYM,build-kext-debug.sh,debug-manifest.json}`.
+Retain the generated `build-manifest.json`, debug manifest, archive, build log,
+and the candidate build identity JSON. The manifests must bind the executable
+and dSYM UUID, executable/DWARF hashes, exact debug flags, private script hash,
+debug source hash, and equal canonical input hashes before and after the build.
+
+## Stage after independent identity review
+
+Use the exact commit, card digest, identity-record digest, and pinned Docker
+image recorded by the build review. The current card digest is
+`1bb8a0bcb6bbe8567417a1ce2908f1c52622f457a6296385e4223285e1444843`; replace
+the placeholder identity/image values only with reviewed values.
+
+```sh
+cd /home/user/macos-vm/run/worktrees/candidate-188
+python3 -B tools/stage-candidate.py --execute \
+  --candidate-version 1.0.188 --card-id metal-021 \
+  --expected-commit <candidate-188-commit> \
+  --expected-boot-id 3bca3e47-1f28-4f78-af00-5dbf76b00620 \
+  --expected-card-sha256 1bb8a0bcb6bbe8567417a1ce2908f1c52622f457a6296385e4223285e1444843 \
+  --expected-identities-sha256 <candidate-188-build-identities-sha256> \
+  --image-id sha256:<reviewed-docker-image-digest> \
+  --lilu-bundle /home/user/macos-vm/run/headless-lilu-verified-53b5a19812e6/Lilu.kext \
+  --expected-lilu-executable-sha256 53b5a19812e66eeea3d3b874fe642f441cbfeccd171fb5ba05dc2e0ced3b8887 \
+  --expected-lilu-info-sha256 6714fee51444238c0540814729767485572441435bcf36a158571cf78317a669 \
+  --expected-lilu-build-manifest-sha256 e5d2554d29658699dd9535a9b8dd38ca9aae5aa5a12f65508b083d3c519cf378
+```
+
+Staging must be from the clean candidate worktree and must leave the exact
+candidate 187 rollback/readback protections intact. It creates the run ID and
+prepared manifest; do not launch from an unreviewed or manually edited record.
+
+## Prepare the run manifest
+
+After staging has produced the reviewed manifest and run ID, prepare exactly
+once with the same VM directory and card specification:
+
+```sh
+python3 -B tools/experiment.py prepare \
+  --vm-dir /home/user/macos-vm \
+  --spec /home/user/src/macos-raphael-igpu/experiments/metal-021.json \
+  --output /home/user/macos-vm/run/metal-021-188 \
+  --run-id <32-lowercase-hex-run-id>
+```
+
+The card requires the existing headless/no-graphics topology plus `GDB=on`.
+The 180-second exposure, 45-second probe gate, COM2 critical transport,
+recovery lease, and cleanup gates remain unchanged. GDB observations are
+diagnostic evidence only: VMID1 correlation and any native mapping result must
+be established by the captured evidence rather than assumed.
+
+## Continuation capture evidence and correction
+
+The continuation authenticated build `fbfd23fe695d4c5dab219f6f5822d409` at
+kmod base `0xffffff800ce7c000`. The wrapper entry hit with self
+`0xffffff94ee4c6280`, destination `0xf40b6f4060`, count `1`, source
+`0xf40a71b000`, template `0x271`, and increment `0x10000`. These GPU addresses
+were not dereferenced. The destination belongs to the previously observed
+eligible VMID2 table, not the hypothesized missing VMID1 entry at
+`0xf40b702c00`. The entry-time `decision` print preceded initialization and is
+invalid evidence.
+
+Another QEMU CPU hit a native boundary first. QEMU CPU identity is not XNU call
+identity, so the helper refused to attribute outgoing arguments and detached.
+The frozen transcript SHA-256 is
+`c68ee25233af98ec41aa8b28588a478c8fdefc685f69bbe60ed79a8ef1eabbdb`;
+the successful error-detach record SHA-256 is
+`dab5bd29f8939e89efd494121b5091fb0a83b251e8c89d738c9a8bb2083ad955`.
+
+The corrected helper pairs the native stop by the exact wrapper frame and saved
+return address, while requiring self, destination, count, template and increment
+to match; source may change through conversion. Native breakpoints remain
+disabled until the selected entry hits. Return capture uses an explicit
+breakpoint conditioned on the saved stack position. Decision locals are
+requested only at the initialized native-call boundary.
+
+The optional next filter targets `0xf40b702c00`, derived from the repeated 187
+and 188 VMID1 fault evidence. It selects the first overflow-safe update range
+covering that GPU address. This is a hypothesis filter: no observed update does
+not prove causality, and an observed update may be an unmap or invalid template.
+The capture must report template, decision and outgoing source. CPU return still
+does not establish GPU completion or an atomic snapshot.
+
+## Candidate 189 VMID1-root capture input
+
+Candidate 189 must use the previously qualified isolated kernel executable at
+`/home/user/macos-vm/run/gdb-source-kext-prep-20260910T204500Z/kernel.symbols`
+(SHA-256 `04a501246caf768356f4090a8fd662daf5bbc949993353526c66771f5ba1d8e4`).
+Its directory contains no adjacent kernel dSYM. Do not point GDB at the KDK's
+`kernel.development`: its adjacent DWARF5 dSYM previously crashed this GDB.
+
+After the candidate 189 binary and matching dSYM exist, generate and inspect the
+`vmid1-root` script against those actual artifacts before calling the debugger
+path ready. The bounded runner invocation must pass the isolated executable as
+`--kernel-symbols`, the candidate 189 binary/dSYM, its actual build identity,
+and `--scenario vmid1-root`. This scenario takes no `--target-gpu-address`.
+It records CPU request/native-copy/prepared values; it does not establish the
+eventual context-register value or GPU completion.
+
+The runner must start immediately after the coordinator publishes a valid
+`supervision.json`. It derives the live `run/serial.log` from the exact
+CID-bearing `serial_ready` record and waits for fresh kernel text plus the exact
+build identity inside the unchanged experiment deadline. Do not pass the
+post-run `output/serial.txt`; that file is frozen only when the coordinator
+finishes. This removes the candidate 190 path delay, but it does not guarantee
+that attachment precedes the first VMID1 prepare call. A deterministic pre-init
+rendezvous remains separate future work.

@@ -1,0 +1,62 @@
+--- a/hw/display/bochs-display.c
++++ b/hw/display/bochs-display.c
+@@ -23,6 +23,7 @@
+ #include "bochs-snapshot-pool.h"
+ #endif
+ #include "qom/object.h"
++#include "qemu/main-loop.h"
+ 
+ typedef struct BochsDisplayMode {
+     pixman_format_code_t format;
+@@ -60,6 +61,7 @@
+     uint32_t         snapshot_ack, snapshot_error;
+     uint32_t         snapshot_pending_seq, snapshot_published_seq;
+     uint32_t         snapshot_replaced, snapshot_published;
++    bool             snapshot_committing;
+ 
+     /* device config */
+     uint64_t         vgamem;
+@@ -183,6 +185,7 @@
+     DisplaySurface *fresh;
+     int64_t timing[4] = { 0 };
+     bool timed, pending;
++    uint32_t epoch;
+     uint32_t w = s->snapshot_width, h = s->snapshot_height;
+ 
+     /* Default MMIO dispatch is under BQL; gfx_update runs under the same lock.
+@@ -242,6 +245,10 @@
+         s->snapshot_error = 4;
+         return;
+     }
++    if (s->snapshot_committing) {
++        s->snapshot_error = 6;
++        return;
++    }
+     timed = s->x_debug_snapshot_timing &&
+             s->snapshot_timing.windows < BST_WINDOWS;
+     pending = s->snapshot_pending != NULL;
+@@ -268,8 +275,24 @@
+     if (timed) {
+         timing[1] = g_get_monotonic_time();
+     }
++    /* Copy without the BQL so SPICE refresh and display updates are not held
++     * behind a 4K copy. The committing presenter does not write staging until
++     * this access returns, and no DisplaySurface references staging. A second
++     * commit during the copy is refused; state is revalidated afterwards. */
++    assert(bql_locked());
++    epoch = s->snapshot_active_epoch;
++    s->snapshot_committing = true;
++    bql_unlock();
+     memcpy(surface_data(fresh), memory_region_get_ram_ptr(&s->staging),
+            (size_t)w * h * 4);
++    bql_lock();
++    s->snapshot_committing = false;
++    if (s->snapshot_state != 1 || s->snapshot_active_epoch != epoch ||
++        val != s->snapshot_ack + 1) {
++        qemu_free_displaysurface(fresh);
++        s->snapshot_error = 7;
++        return;
++    }
+     if (timed) {
+         timing[2] = g_get_monotonic_time();
+     }

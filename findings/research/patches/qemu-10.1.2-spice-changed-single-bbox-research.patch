@@ -1,0 +1,130 @@
+--- a/include/ui/spice-display.h
++++ b/include/ui/spice-display.h
+@@ -92,6 +92,7 @@
+     uint32_t unique;
+     pixman_image_t *surface;
+     pixman_image_t *mirror;
++    bool diff_mirror_initialized;
+     int32_t num_surfaces;
+ 
+     QXLRect dirty;
+--- a/ui/spice-display.c
++++ b/ui/spice-display.c
+@@ -27,6 +27,7 @@
+ #include "trace.h"
+ 
+ #include "ui/spice-display.h"
++#include "spice-diff-bbox.h"
+ 
+ #include "standard-headers/drm/drm_fourcc.h"
+ 
+@@ -196,7 +197,36 @@
+     if (qemu_spice_rect_is_empty(&ssd->dirty)) {
+         return;
+     }
+-    qemu_spice_create_one_update(ssd, &ssd->dirty);
++    int width = surface_width(ssd->ds), height = surface_height(ssd->ds);
++    int stride = surface_stride(ssd->ds);
++    int mirror_stride = pixman_image_get_stride(ssd->mirror);
++    QXLRect update = { .left = 0, .top = 0, .right = width, .bottom = height };
++    int changed = -1;
++
++    /* A fresh primary is not initialized by merely allocating a mirror.
++     * Always publish the complete first frame after size/format reset. */
++    if (ssd->diff_mirror_initialized && stride > 0 && mirror_stride > 0 &&
++        surface_format(ssd->ds) == PIXMAN_LE_x8r8g8b8 &&
++        pixman_image_get_format(ssd->mirror) == PIXMAN_LE_x8r8g8b8 &&
++        pixman_image_get_width(ssd->mirror) == width &&
++        pixman_image_get_height(ssd->mirror) == height) {
++        RGPUDiffRect dirty = { ssd->dirty.left, ssd->dirty.top,
++                              ssd->dirty.right, ssd->dirty.bottom }, box;
++        changed = rgpu_diff_bbox(surface_data(ssd->ds), (size_t)stride * height,
++                                stride, (void *)pixman_image_get_data(ssd->mirror),
++                                (size_t)mirror_stride * height, mirror_stride,
++                                width, height, dirty, &box);
++        if (changed == 1) {
++            update = (QXLRect){ .left = box.left, .top = box.top,
++                               .right = box.right, .bottom = box.bottom };
++        }
++    }
++    if (changed != 0) {
++        /* Exactly ONE update including every changed pixel, or conservative
++         * full surface when format/geometry/initialization is unsupported. */
++        qemu_spice_create_one_update(ssd, &update);
++        ssd->diff_mirror_initialized = true;
++    }
+     memset(&ssd->dirty, 0, sizeof(ssd->dirty));
+ }
+ 
+@@ -360,6 +390,7 @@
+     }
+ 
+     /* full mode switch */
++    ssd->diff_mirror_initialized = false;
+     trace_qemu_spice_display_surface(ssd->qxl.id,
+                                      surface_width(surface),
+                                      surface_height(surface),
+--- /dev/null
++++ b/ui/spice-diff-bbox.h
+@@ -0,0 +1,61 @@
++/* SPDX-License-Identifier: GPL-2.0-or-later
++ * Research helper: union of changed packed xRGB pixels, never a list of tiles.
++ * No memory mutation; caller owns stable source and initialized mirror.
++ */
++#ifndef RGPU_SPICE_DIFF_BBOX_H
++#define RGPU_SPICE_DIFF_BBOX_H
++#include <stdint.h>
++#include <stddef.h>
++#include <string.h>
++
++typedef struct RGPUDiffRect { int left, top, right, bottom; } RGPUDiffRect;
++
++/* -1 invalid input (caller sends full surface), 0 identical, 1 changed bbox. */
++static int rgpu_diff_bbox(const uint8_t *source, size_t source_bytes,
++                         size_t source_stride, const uint8_t *mirror,
++                         size_t mirror_bytes, size_t mirror_stride,
++                         int width, int height, RGPUDiffRect dirty,
++                         RGPUDiffRect *out)
++{
++    size_t row_bytes;
++    int y, left, right, found = 0;
++    if (!source || !mirror || !out || width <= 0 || height <= 0 ||
++        width > 3840 || height > 2160 || dirty.left < 0 || dirty.top < 0 ||
++        dirty.right > width || dirty.bottom > height ||
++        dirty.left >= dirty.right || dirty.top >= dirty.bottom) {
++        return -1;
++    }
++    row_bytes = (size_t)width * 4;
++    if (source_stride < row_bytes || mirror_stride < row_bytes ||
++        source_stride > SIZE_MAX / (size_t)height ||
++        mirror_stride > SIZE_MAX / (size_t)height ||
++        source_bytes < source_stride * (size_t)height ||
++        mirror_bytes < mirror_stride * (size_t)height) {
++        return -1;
++    }
++    *out = (RGPUDiffRect){dirty.right, dirty.bottom, dirty.left, dirty.top};
++    for (y = dirty.top; y < dirty.bottom; y++) {
++        const uint8_t *a = source + (size_t)y * source_stride;
++        const uint8_t *b = mirror + (size_t)y * mirror_stride;
++        if (!memcmp(a + (size_t)dirty.left * 4, b + (size_t)dirty.left * 4,
++                    (size_t)(dirty.right - dirty.left) * 4)) {
++            continue;
++        }
++        left = dirty.left;
++        while (!memcmp(a + (size_t)left * 4, b + (size_t)left * 4, 4)) {
++            left++;
++        }
++        right = dirty.right;
++        while (!memcmp(a + (size_t)(right - 1) * 4,
++                       b + (size_t)(right - 1) * 4, 4)) {
++            right--;
++        }
++        if (left < out->left) out->left = left;
++        if (right > out->right) out->right = right;
++        if (!found) out->top = y;
++        out->bottom = y + 1;
++        found = 1;
++    }
++    return found;
++}
++#endif

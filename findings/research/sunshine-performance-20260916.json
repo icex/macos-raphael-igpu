@@ -1,0 +1,14 @@
+{
+  "run_id": "2456747451ac073cf5fa0ea1657590cf",
+  "boot_id": "2508eb6d-ddf3-497d-9774-00a7ecebe3ed",
+  "user_observation": "4K HEVC about4FPS, slower than Apple Screen Sharing",
+  "sample_scope": "Sunshine3488 and VTEncoderXPCService3490, active session20:58:31; sequential5-second sampling windows; native reclaim12-second trace has observer overhead",
+  "artifacts_sha256": {
+    "sunshine-active-sample-output.txt": "6e068f0a541bc85331c6a02425074687170ec78597eedc5714167e76bbcb8566",
+    "sunshine-reclaim-timing-output.txt": "6bdee8efb054b624ff3f373c43a4073d00a56bffa79a1d49b75018dbb9532569",
+    "sunshine-performance-first-output.txt": "cb580a882aa6642ae3c17f2196c0a9621fcc23f9cdf7caf8562c0f2c61775f48",
+    "sunshine-encode-timing-output.txt": "36a9960fe14314088a602ac4bfc60312cbd94773f70dd26ed813f6a3440bb3ba",
+    "sunshine-allocation-cost-output.txt": "1cada4a919f8f07f5e254f3dfd9143b413e4eaf7cc98c62fcf6ebc1918fdacb7",
+    "sunshine-total-free-cost-output.txt": "80532b0347d456938fd4d513eee7889bc9434bc3012b6f2e14c3100486ec1a75"
+  }
+}

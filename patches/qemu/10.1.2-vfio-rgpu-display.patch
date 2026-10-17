@@ -1,0 +1,808 @@
+diff --git a/hw/vfio/meson.build b/hw/vfio/meson.build
+index bfaf6be80..4f06b52b3 100644
+--- a/hw/vfio/meson.build
++++ b/hw/vfio/meson.build
+@@ -36,4 +36,5 @@ system_ss.add(when: ['CONFIG_VFIO', 'CONFIG_IOMMUFD'], if_true: files(
+ system_ss.add(when: 'CONFIG_IOMMUFD', if_false: files('iommufd-stubs.c'))
+ system_ss.add(when: 'CONFIG_VFIO_PCI', if_true: files(
+   'display.c',
++  'rgpu-display.c',
+ ))
+diff --git a/hw/vfio/pci.c b/hw/vfio/pci.c
+index 07257d0fa..9fc11ea79 100644
+--- a/hw/vfio/pci.c
++++ b/hw/vfio/pci.c
+@@ -2999,6 +2999,7 @@ bool vfio_pci_populate_device(VFIOPCIDevice *vdev, Error **errp)
+ 
+ void vfio_pci_put_device(VFIOPCIDevice *vdev)
+ {
++    vfio_rgpu_display_finalize(vdev);
+     vfio_display_finalize(vdev);
+     vfio_bars_finalize(vdev);
+     vfio_cpr_pci_unregister_device(vdev);
+@@ -3443,6 +3444,15 @@ static void vfio_pci_realize(PCIDevice *pdev, Error **errp)
+             goto out_deregister;
+         }
+     }
++    if (vdev->rgpu_display) {
++        if (vdev->display != ON_OFF_AUTO_OFF) {
++            error_setg(errp, "x-rgpu-display excludes display=on");
++            goto out_deregister;
++        }
++        if (!vfio_rgpu_display_init(vdev, errp)) {
++            goto out_deregister;
++        }
++    }
+     if (vdev->enable_ramfb && vdev->dpy == NULL) {
+         error_setg(errp, "ramfb=on requires display=on");
+         goto out_deregister;
+@@ -3653,6 +3663,9 @@ static const Property vfio_pci_dev_properties[] = {
+     DEFINE_PROP_ON_OFF_AUTO("display", VFIOPCIDevice,
+                             display, ON_OFF_AUTO_OFF),
+     DEFINE_PROP_UINT32("xres", VFIOPCIDevice, display_xres, 0),
++    DEFINE_PROP_BOOL("x-rgpu-display", VFIOPCIDevice, rgpu_display, false),
++    DEFINE_PROP_UINT64("x-rgpu-display-gpa", VFIOPCIDevice, rgpu_display_gpa,
++                       RGPU_DISPLAY_DEFAULT_GPA),
+     DEFINE_PROP_UINT32("yres", VFIOPCIDevice, display_yres, 0),
+     DEFINE_PROP_UINT32("x-intx-mmap-timeout-ms", VFIOPCIDevice,
+                        intx.mmap_timeout, 1100),
+diff --git a/hw/vfio/pci.h b/hw/vfio/pci.h
+index 810a842f4..913844d85 100644
+--- a/hw/vfio/pci.h
++++ b/hw/vfio/pci.h
+@@ -23,6 +23,7 @@
+ #include "qom/object.h"
+ #include "system/kvm.h"
+ #include "vfio-display.h"
++#include "rgpu-display.h"
+ 
+ #define PCI_ANY_ID (~0)
+ 
+@@ -187,6 +188,9 @@ struct VFIOPCIDevice {
+     bool clear_parent_atomics_on_exit;
+     bool skip_vsc_check;
+     VFIODisplay *dpy;
++    struct RgpuDisplay *rgpu;
++    bool rgpu_display;
++    uint64_t rgpu_display_gpa;
+     Notifier irqchip_change_notifier;
+     VFIOPCICPR cpr;
+ };
+diff --git a/hw/vfio/rgpu-display.c b/hw/vfio/rgpu-display.c
+new file mode 100644
+index 000000000..8f1841e24
+--- /dev/null
++++ b/hw/vfio/rgpu-display.c
+@@ -0,0 +1,632 @@
++/*
++ * Raphael iGPU writeback display for vfio-pci (see rgpu-display.h).
++ *
++ * SPDX-License-Identifier: GPL-2.0-or-later
++ */
++
++#include "qemu/osdep.h"
++#include <sys/ioctl.h>
++
++#include "qemu/error-report.h"
++#include "qemu/memfd.h"
++#include "qemu/timer.h"
++#include "qapi/error.h"
++#include "system/address-spaces.h"
++#include "system/system.h"
++#include "ui/console.h"
++#include "ui/dmabuf.h"
++#include "hw/display/ramfb.h"
++#include "standard-headers/drm/drm_fourcc.h"
++#include "standard-headers/linux/udmabuf.h"
++#include "pci.h"
++#include "rgpu-display.h"
++
++struct RgpuDisplay {
++    MemoryRegion mr;
++    int memfd;
++    uint8_t *host;
++    uint64_t size;
++    QemuConsole *con;
++    Notifier init_done;
++    /* Accepted guest geometry. */
++    bool configured;
++    bool gl;
++    uint32_t seq, width, height, pitch, fourcc, nbuf;
++    uint32_t status_bar, status_offset, status_shift, status_mask, status_lag, status_base;
++    QemuDmaBuf *bufs[RGPU_DISPLAY_MAX_BUFFERS];
++    int shown;
++    /* Hardware cursor overlay (GL consoles only). */
++    QemuDmaBuf *cursor;
++    uint32_t cursor_seq, cursor_pos_seq;
++    bool cursor_shown;
++    VFIOPCIDevice *vdev;
++    int64_t stopped_since_ms;
++    Notifier exit;
++    QEMUTimer *poll;
++    /* Firmware/boot output (OVMF GOP, OpenCore, boot.efi) until the guest driver runs. */
++    RAMFBState *ramfb;
++};
++
++static RgpuDisplayCtl *rgpu_ctl(RgpuDisplay *r)
++{
++    return (RgpuDisplayCtl *)r->host;
++}
++
++static pixman_format_code_t rgpu_pixman_format(uint32_t fourcc)
++{
++    switch (fourcc) {
++    case DRM_FORMAT_XRGB8888:
++    case DRM_FORMAT_ARGB8888:
++        return PIXMAN_x8r8g8b8;
++    case DRM_FORMAT_XBGR8888:
++    case DRM_FORMAT_ABGR8888:
++        return PIXMAN_x8b8g8r8;
++    case DRM_FORMAT_XRGB2101010:
++    case DRM_FORMAT_ARGB2101010:
++        return PIXMAN_x2r10g10b10;
++    case DRM_FORMAT_XBGR2101010:
++    case DRM_FORMAT_ABGR2101010:
++        return PIXMAN_x2b10g10r10;
++    default:
++        return 0;
++    }
++}
++
++static uint32_t rgpu_opaque_fourcc(uint32_t fourcc)
++{
++    /* Writeback alpha is not meaningful; present every format as opaque. */
++    switch (fourcc) {
++    case DRM_FORMAT_ARGB8888:    return DRM_FORMAT_XRGB8888;
++    case DRM_FORMAT_ABGR8888:    return DRM_FORMAT_XBGR8888;
++    case DRM_FORMAT_ARGB2101010: return DRM_FORMAT_XRGB2101010;
++    case DRM_FORMAT_ABGR2101010: return DRM_FORMAT_XBGR2101010;
++    default:                     return fourcc;
++    }
++}
++
++static void rgpu_release_buffers(RgpuDisplay *r)
++{
++    for (int i = 0; i < RGPU_DISPLAY_MAX_BUFFERS; i++) {
++        if (!r->bufs[i]) {
++            continue;
++        }
++        dpy_gl_release_dmabuf(r->con, r->bufs[i]);
++        qemu_dmabuf_close(r->bufs[i]);
++        qemu_dmabuf_free(r->bufs[i]);
++        r->bufs[i] = NULL;
++    }
++}
++
++static void rgpu_release_cursor(RgpuDisplay *r)
++{
++    if (r->cursor_shown) {
++        dpy_gl_cursor_dmabuf(r->con, NULL, false, 0, 0);
++        r->cursor_shown = false;
++    }
++    if (r->cursor) {
++        dpy_gl_release_dmabuf(r->con, r->cursor);
++        qemu_dmabuf_close(r->cursor);
++        qemu_dmabuf_free(r->cursor);
++        r->cursor = NULL;
++    }
++    /* Rebuild from the guest's current image on the next update. */
++    r->cursor_seq = rgpu_ctl(r)->cursor_seq - 1;
++}
++
++/*
++ * Mirror the guest's hardware cursor plane as the console's GL cursor overlay, which
++ * the UI scales with the frame. Returns true when the window needs a redraw.
++ */
++static bool rgpu_update_cursor(RgpuDisplay *r)
++{
++    RgpuDisplayCtl *c = rgpu_ctl(r);
++    uint32_t seq = qatomic_load_acquire(&c->cursor_seq);
++    uint32_t pos_seq = qatomic_load_acquire(&c->cursor_pos_seq);
++    bool redraw = false;
++
++    if (!r->gl || !r->configured) {
++        return false;
++    }
++    if (seq != r->cursor_seq) {
++        /* Each field is fetched once and validated before use. */
++        uint32_t w = qatomic_read(&c->cursor_width), h = qatomic_read(&c->cursor_height);
++        uint32_t pitch = qatomic_read(&c->cursor_pitch);
++
++        r->cursor_seq = seq;
++        if (w && h && w <= RGPU_CURSOR_MAX_DIM && h <= RGPU_CURSOR_MAX_DIM &&
++            pitch >= w * 4 && pitch <= RGPU_CURSOR_MAX_DIM * 4 && !(pitch & 3)) {
++            struct udmabuf_create create = {
++                .memfd = r->memfd,
++                .flags = UDMABUF_FLAGS_CLOEXEC,
++                .offset = RGPU_CURSOR_OFFSET,
++                .size = ROUND_UP((uint64_t)RGPU_CURSOR_MAX_DIM * RGPU_CURSOR_MAX_DIM * 4,
++                                 qemu_real_host_page_size()),
++            };
++            int32_t fd = ioctl(udmabuf_fd(), UDMABUF_CREATE, &create);
++            uint32_t offset = 0;
++
++            if (fd >= 0) {
++                QemuDmaBuf *old = r->cursor;
++
++                r->cursor = qemu_dmabuf_new(w, h, &offset, &pitch, 0, 0, w, h,
++                                            DRM_FORMAT_ARGB8888, DRM_FORMAT_MOD_LINEAR,
++                                            &fd, 1, false, false);
++                if (qatomic_read(&c->cursor_enabled)) {
++                    dpy_gl_cursor_dmabuf(r->con, r->cursor, false, 0, 0);
++                    r->cursor_shown = true;
++                }
++                if (old) {
++                    dpy_gl_release_dmabuf(r->con, old);
++                    qemu_dmabuf_close(old);
++                    qemu_dmabuf_free(old);
++                }
++                r->cursor_pos_seq = pos_seq - 1;   /* re-send the position */
++                redraw = true;
++            }
++        }
++    }
++    if (pos_seq != r->cursor_pos_seq && r->cursor) {
++        uint32_t x = qatomic_read(&c->cursor_x), y = qatomic_read(&c->cursor_y);
++        uint32_t hx = qatomic_read(&c->cursor_hot_x), hy = qatomic_read(&c->cursor_hot_y);
++        bool on = qatomic_read(&c->cursor_enabled);
++
++        r->cursor_pos_seq = pos_seq;
++        if (on && !r->cursor_shown) {
++            dpy_gl_cursor_dmabuf(r->con, r->cursor, false, 0, 0);
++            r->cursor_shown = true;
++        } else if (!on && r->cursor_shown) {
++            dpy_gl_cursor_dmabuf(r->con, NULL, false, 0, 0);
++            r->cursor_shown = false;
++        }
++        /* The overlay cannot start left of or above the surface: clamp at the edge. */
++        x = MIN(x, r->width);
++        y = MIN(y, r->height);
++        dpy_gl_cursor_position(r->con, x > hx ? x - hx : 0, y > hy ? y - hy : 0);
++        redraw = true;
++    }
++    return redraw;
++}
++
++static void rgpu_show_waiting(RgpuDisplay *r, const char *msg)
++{
++    if (r->configured && r->gl) {
++        dpy_gl_scanout_disable(r->con);
++    }
++    rgpu_release_cursor(r);
++    rgpu_release_buffers(r);
++    r->configured = false;
++    r->shown = -1;
++    dpy_gfx_replace_surface(r->con,
++        qemu_create_placeholder_surface(1280, 720, msg));
++}
++
++static uint32_t rgpu_buffer_offset(uint32_t i)
++{
++    return RGPU_DISPLAY_CTL_BYTES + i * RGPU_DISPLAY_BUFFER_BYTES;
++}
++
++static bool rgpu_status_valid(VFIOPCIDevice *vdev, uint32_t bar, uint32_t off)
++{
++    /* 64-bit arithmetic: a guest offset near 4 GiB must not wrap past the check. */
++    return bar < PCI_ROM_SLOT && vdev->bars[bar].size && !vdev->bars[bar].ioport &&
++           !(off & 3) && (uint64_t)off + 4 <= (uint64_t)vdev->bars[bar].size;
++}
++
++static volatile uint32_t *rgpu_bar_word(VFIOPCIDevice *vdev, uint32_t bar,
++                                        uint32_t offset)
++{
++    VFIORegion *region = &vdev->bars[bar].region;
++
++    for (uint32_t i = 0; i < region->nr_mmaps; i++) {
++        VFIOMmap *m = &region->mmaps[i];
++        if (m->mmap && (uint64_t)offset >= (uint64_t)m->offset &&
++            (uint64_t)offset + 4 <= (uint64_t)m->offset + m->size) {
++            return (volatile uint32_t *)((uint8_t *)m->mmap + offset - m->offset);
++        }
++    }
++    return NULL;
++}
++
++static uint32_t rgpu_bar_read(VFIOPCIDevice *vdev, uint32_t bar, uint32_t offset)
++{
++    volatile uint32_t *word = rgpu_bar_word(vdev, bar, offset);
++
++    return word ? *word : vfio_region_read(&vdev->bars[bar].region, offset, 4);
++}
++
++static void rgpu_bar_write(VFIOPCIDevice *vdev, uint32_t bar, uint32_t offset,
++                           uint32_t value)
++{
++    volatile uint32_t *word = rgpu_bar_word(vdev, bar, offset);
++
++    if (word) {
++        *word = value;
++    } else {
++        vfio_region_write(&vdev->bars[bar].region, offset, value, 4);
++    }
++}
++
++/* Status BAR 0xff: a word in the control page written by a device DMA (SDMA fence). */
++#define RGPU_STATUS_CONTROL_PAGE 0xff
++
++static uint32_t rgpu_read_status(VFIOPCIDevice *vdev, RgpuDisplay *r)
++{
++    if (r->status_bar == RGPU_STATUS_CONTROL_PAGE) {
++        volatile uint32_t *word = (volatile uint32_t *)(r->host + r->status_offset);
++#if defined(__x86_64__)
++        __asm__ volatile("mfence; clflush %0; mfence" :: "m"(*(volatile char *)word));
++#endif
++        return *word;
++    }
++    return rgpu_bar_read(vdev, r->status_bar, r->status_offset);
++}
++
++/*
++ * The device keeps writing frames until its writeback is stopped; once QEMU is
++ * gone those writes would hit unmapped IOMMU addresses. Clear the enable bits
++ * the guest listed before the container and mappings are torn down.
++ */
++static void rgpu_stop_device_writes(Notifier *n, void *data)
++{
++    RgpuDisplay *r = container_of(n, RgpuDisplay, exit);
++    RgpuDisplayCtl *c = rgpu_ctl(r);
++    uint32_t requested = qatomic_read(&c->stop_count);      /* fetched once */
++    uint32_t count = MIN(requested, ARRAY_SIZE(c->stop));
++
++    if (c->guest_magic != RGPU_DISPLAY_MAGIC) {
++        return;
++    }
++    for (uint32_t i = 0; i < count; i++) {
++        uint32_t bar = qatomic_read(&c->stop[i].bar), offset = qatomic_read(&c->stop[i].offset);
++        uint32_t clear = qatomic_read(&c->stop[i].clear_mask);
++        if (!rgpu_status_valid(r->vdev, bar, offset)) {
++            continue;
++        }
++        rgpu_bar_write(r->vdev, bar, offset,
++                       rgpu_bar_read(r->vdev, bar, offset) & ~clear);
++    }
++    c->active = 0;
++}
++
++/* Validate and accept the guest's geometry; false keeps the waiting screen. */
++static bool rgpu_configure(VFIOPCIDevice *vdev, RgpuDisplay *r,
++                           const RgpuDisplayCtl *shared, uint32_t seq)
++{
++    /*
++     * The guest can rewrite the control page at any time: validate and use one private
++     * snapshot so no field is fetched twice (a later fetch could bypass the bounds checks).
++     */
++    RgpuDisplayCtl snapshot;
++    const RgpuDisplayCtl *c = &snapshot;
++    memcpy(&snapshot, (const void *)shared, sizeof(snapshot));
++    smp_mb();
++    uint32_t w = c->width, h = c->height, pitch = c->pitch, nbuf = c->nbuf;
++    uint32_t fourcc = c->drm_fourcc;
++    uint64_t bytes = (uint64_t)pitch * h;
++    pixman_format_code_t pf = rgpu_pixman_format(fourcc);
++
++    if (!w || !h || w > 8192 || h > 8192 || !pf || pitch < w * 4 ||
++        (pitch & 63) || bytes > RGPU_DISPLAY_BUFFER_BYTES ||
++        !nbuf || nbuf > RGPU_DISPLAY_MAX_BUFFERS ||
++        !(c->status_bar == RGPU_STATUS_CONTROL_PAGE ?
++          (c->status_offset >= 0x100 && c->status_offset < 0x1000 && !(c->status_offset & 3)) :
++          rgpu_status_valid(vdev, c->status_bar, c->status_offset)) ||
++        c->status_shift > 31 || !c->status_mask || c->status_lag > 1 || c->status_base > 1) {
++        rgpu_ctl(r)->host_error = seq;
++        return false;
++    }
++
++    if (r->configured && r->gl) {
++        dpy_gl_scanout_disable(r->con);
++    }
++    rgpu_release_cursor(r);
++    rgpu_release_buffers(r);
++
++    r->seq = seq;
++    r->width = w;
++    r->height = h;
++    r->pitch = pitch;
++    r->fourcc = rgpu_opaque_fourcc(fourcc);
++    r->nbuf = nbuf;
++    r->status_bar = c->status_bar;
++    r->status_offset = c->status_offset;
++    r->status_shift = c->status_shift;
++    r->status_mask = c->status_mask;
++    r->status_lag = c->status_lag;
++    r->status_base = c->status_base;
++    r->shown = -1;
++    r->gl = console_has_gl(r->con) && udmabuf_fd() >= 0;
++
++    if (r->gl) {
++        for (uint32_t i = 0; i < nbuf; i++) {
++            struct udmabuf_create create = {
++                .memfd = r->memfd,
++                .flags = UDMABUF_FLAGS_CLOEXEC,
++                .offset = rgpu_buffer_offset(i),
++                .size = ROUND_UP(bytes, qemu_real_host_page_size()),
++            };
++            int32_t fd = ioctl(udmabuf_fd(), UDMABUF_CREATE, &create);
++            uint32_t offset = 0;
++
++            if (fd < 0) {
++                warn_report("rgpu-display: UDMABUF_CREATE: %s; using copies",
++                            strerror(errno));
++                rgpu_release_buffers(r);
++                r->gl = false;
++                break;
++            }
++            r->bufs[i] = qemu_dmabuf_new(w, h, &offset, &pitch, 0, 0, w, h,
++                                         r->fourcc, DRM_FORMAT_MOD_LINEAR,
++                                         &fd, 1, false, false);
++        }
++    }
++    qemu_console_resize(r->con, w, h);
++    r->configured = true;
++    info_report("rgpu-display: %ux%u pitch %u fourcc %08x, %u buffers, %s",
++                w, h, pitch, fourcc, nbuf, r->gl ? "dmabuf" : "surface");
++    return true;
++}
++
++/*
++ * Sparse 32x18 grid checksum of a presented buffer, for frame-delivery evidence.
++ * The GPU writes do not snoop, so each sampled line is flushed before and after
++ * the read: no stale line is consumed and none stays behind for the host GPU.
++ */
++static uint32_t rgpu_sample_crc(RgpuDisplay *r, int index)
++{
++    const uint8_t *base = r->host + rgpu_buffer_offset(index);
++    uint32_t crc = 0x811c9dc5;
++
++    for (uint32_t gy = 0; gy < 18; gy++) {
++        for (uint32_t gx = 0; gx < 32; gx++) {
++            const uint8_t *px = base + (uint64_t)(r->height * (2 * gy + 1) / 36) * r->pitch +
++                                (r->width * (2 * gx + 1) / 64) * 4;
++            uint32_t v;
++#if defined(__x86_64__)
++            __asm__ volatile("clflush %0; mfence" :: "m"(*(volatile const char *)px));
++#endif
++            v = *(volatile const uint32_t *)px;
++#if defined(__x86_64__)
++            __asm__ volatile("mfence; clflush %0" :: "m"(*(volatile const char *)px));
++#endif
++            crc = (crc ^ v) * 0x01000193;
++        }
++    }
++    return crc;
++}
++
++static void rgpu_present(VFIOPCIDevice *vdev, RgpuDisplay *r);
++
++static void rgpu_gfx_update(void *opaque)
++{
++    VFIOPCIDevice *vdev = opaque;
++    RgpuDisplay *r = vdev->rgpu;
++    RgpuDisplayCtl *c = rgpu_ctl(r);
++    uint32_t seq;
++
++    c->viewer_active = 1;
++    c->host_polls++;
++    c->host_heartbeat_ns = qemu_clock_get_ns(QEMU_CLOCK_REALTIME);
++
++    seq = qatomic_load_acquire(&c->guest_seq);
++    if (c->guest_magic != RGPU_DISPLAY_MAGIC || !c->active) {
++        /*
++         * A guest mode change turns the output off for a moment; keep the
++         * last frame on screen and only fall back to the placeholder when
++         * writeback stays off (display asleep, guest shut down).
++         */
++        int64_t now = qemu_clock_get_ms(QEMU_CLOCK_REALTIME);
++        if (!r->stopped_since_ms) {
++            r->stopped_since_ms = now;
++        }
++        if (r->configured && now - r->stopped_since_ms > 10000) {
++            rgpu_show_waiting(r, "Raphael display: writeback stopped");
++        }
++        /* Before the driver (and after it stops), show the firmware's ramfb output. */
++        if (!r->configured && r->ramfb) {
++            ramfb_display_update(r->con, r->ramfb);
++        }
++        return;
++    }
++    r->stopped_since_ms = 0;
++    if (!r->configured || seq != r->seq) {
++        if (r->configured || seq != c->host_error) {
++            if (!rgpu_configure(vdev, r, c, seq)) {
++                rgpu_show_waiting(r, "Raphael display: invalid writeback setup");
++                return;
++            }
++        } else {
++            return;
++        }
++    }
++
++    rgpu_present(vdev, r);
++}
++
++/*
++ * Present the newest completed buffer. Called from the console refresh and from
++ * a 2 ms realtime poll, so a finished frame reaches the UI within ~2 ms instead
++ * of waiting for (and aliasing with) the UI's own refresh tick.
++ */
++static void rgpu_present(VFIOPCIDevice *vdev, RgpuDisplay *r)
++{
++    RgpuDisplayCtl *c = rgpu_ctl(r);
++    uint32_t idx;
++    int show;
++
++    if (!r->configured) {
++        return;
++    }
++    idx = (rgpu_read_status(vdev, r) >> r->status_shift) & r->status_mask;
++    if (idx < r->status_base || idx >= r->status_base + r->nbuf) {
++        return; /* unreadable or resetting device: keep the last frame */
++    }
++    show = (idx - r->status_base + r->nbuf - r->status_lag) % r->nbuf;
++    if (show == r->shown) {
++        if (rgpu_update_cursor(r) && r->shown >= 0) {
++            dpy_gl_update(r->con, 0, 0, r->width, r->height);
++        }
++        return;
++    }
++
++    if (r->gl) {
++        dpy_gl_scanout_dmabuf(r->con, r->bufs[show]);
++        rgpu_update_cursor(r);
++        dpy_gl_update(r->con, 0, 0, r->width, r->height);
++    } else {
++#if defined(__x86_64__)
++        uint8_t *base = r->host + rgpu_buffer_offset(show);
++        for (uint64_t off = 0; off < (uint64_t)r->pitch * r->height; off += 64) {
++            __asm__ volatile("clflushopt %0" :: "m"(*(volatile char *)(base + off)));
++        }
++        __asm__ volatile("sfence" ::: "memory");
++#endif
++        dpy_gfx_replace_surface(r->con, qemu_create_displaysurface_from(
++            r->width, r->height, rgpu_pixman_format(r->fourcc), r->pitch,
++            r->host + rgpu_buffer_offset(show)));
++        dpy_gfx_update_full(r->con);
++    }
++    r->shown = show;
++    c->host_frames++;
++    {
++        uint32_t crc = rgpu_sample_crc(r, show);
++        if (crc != c->sample_crc) {
++            c->crc_changes++;
++        }
++        c->sample_crc = crc;
++        c->sampled_frames++;
++    }
++}
++
++static void rgpu_poll(void *opaque)
++{
++    VFIOPCIDevice *vdev = opaque;
++    RgpuDisplay *r = vdev->rgpu;
++
++    rgpu_present(vdev, r);
++    timer_mod(r->poll, qemu_clock_get_ms(QEMU_CLOCK_REALTIME) + 2);
++}
++
++static void rgpu_ui_info(void *opaque, uint32_t head, QemuUIInfo *info)
++{
++    VFIOPCIDevice *vdev = opaque;
++    RgpuDisplayCtl *c = rgpu_ctl(vdev->rgpu);
++
++    if (head || !info->width || !info->height) {
++        return;
++    }
++    c->req_width = info->width;
++    c->req_height = info->height;
++    c->req_refresh_mhz = info->refresh_rate;
++    qatomic_store_release(&c->host_seq, c->host_seq + 1);
++}
++
++static const GraphicHwOps rgpu_display_ops = {
++    .gfx_update = rgpu_gfx_update,
++    .ui_info    = rgpu_ui_info,
++};
++
++/*
++ * The GPU's writes may not snoop the CPU caches. The kernel zeroed these
++ * pages through the cache when vfio pinned them, so write back and drop
++ * every line once, after the IOMMU mapping exists and before writeback runs.
++ * QEMU never writes the buffers with the CPU afterwards.
++ */
++static void rgpu_flush_buffers(Notifier *n, void *data)
++{
++    RgpuDisplay *r = container_of(n, RgpuDisplay, init_done);
++
++#if defined(__x86_64__)
++    for (uint64_t off = RGPU_DISPLAY_CTL_BYTES; off < r->size; off += 64) {
++        __asm__ volatile("clflush %0" :: "m"(*(volatile char *)(r->host + off)));
++    }
++    __asm__ volatile("mfence" ::: "memory");
++#endif
++}
++
++bool vfio_rgpu_display_init(VFIOPCIDevice *vdev, Error **errp)
++{
++    RgpuDisplay *r = g_new0(RgpuDisplay, 1);
++    RgpuDisplayCtl *c;
++
++    r->size = RGPU_DISPLAY_CTL_BYTES +
++              (uint64_t)RGPU_DISPLAY_MAX_BUFFERS * RGPU_DISPLAY_BUFFER_BYTES;
++    r->memfd = qemu_memfd_create("rgpu-display", r->size, false, 0,
++                                 F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL,
++                                 errp);
++    if (r->memfd < 0) {
++        g_free(r);
++        return false;
++    }
++    if (!memory_region_init_ram_from_fd(&r->mr, OBJECT(vdev), "rgpu-display",
++                                        r->size, RAM_SHARED, r->memfd, 0,
++                                        errp)) {
++        close(r->memfd);
++        g_free(r);
++        return false;
++    }
++    r->host = memory_region_get_ram_ptr(&r->mr);
++    r->shown = -1;
++
++    c = rgpu_ctl(r);
++    memset(c, 0, sizeof(*c));
++    c->version = RGPU_DISPLAY_VERSION;
++    c->region_gpa = vdev->rgpu_display_gpa;
++    c->region_size = r->size;
++    c->buffer_offset = RGPU_DISPLAY_CTL_BYTES;
++    c->buffer_stride = RGPU_DISPLAY_BUFFER_BYTES;
++    c->max_buffers = RGPU_DISPLAY_MAX_BUFFERS;
++    c->max_bytes = RGPU_DISPLAY_BUFFER_BYTES;
++    qatomic_store_release(&c->magic, RGPU_DISPLAY_MAGIC);
++
++    /* Not in the firmware memory map: only the guest driver knows it. */
++    memory_region_add_subregion(get_system_memory(), vdev->rgpu_display_gpa,
++                                &r->mr);
++
++    vdev->rgpu = r;
++    r->con = graphic_console_init(DEVICE(vdev), 0, &rgpu_display_ops, vdev);
++    /*
++     * A ramfb gives the firmware a GOP (and macOS no device, so no second display): the
++     * boot picker and Apple logo appear here until the iGPU path is configured.
++     */
++    {
++        Error *err = NULL;
++
++        r->ramfb = ramfb_setup(false, &err);
++        if (!r->ramfb) {
++            warn_report_err(err);
++        }
++    }
++    dpy_gfx_replace_surface(r->con,
++        qemu_create_placeholder_surface(1280, 720,
++                                        "Raphael display: waiting for guest"));
++    r->init_done.notify = rgpu_flush_buffers;
++    qemu_add_machine_init_done_notifier(&r->init_done);
++    r->vdev = vdev;
++    r->poll = timer_new_ms(QEMU_CLOCK_REALTIME, rgpu_poll, vdev);
++    timer_mod(r->poll, qemu_clock_get_ms(QEMU_CLOCK_REALTIME) + 2);
++    r->exit.notify = rgpu_stop_device_writes;
++    qemu_add_exit_notifier(&r->exit);
++    info_report("rgpu-display: %" PRIu64 " MiB at guest-physical 0x%" PRIx64,
++                r->size >> 20, vdev->rgpu_display_gpa);
++    return true;
++}
++
++void vfio_rgpu_display_finalize(VFIOPCIDevice *vdev)
++{
++    RgpuDisplay *r = vdev->rgpu;
++
++    if (!r) {
++        return;
++    }
++    timer_free(r->poll);
++    rgpu_release_cursor(r);
++    rgpu_release_buffers(r);
++    graphic_console_close(r->con);
++    qemu_remove_machine_init_done_notifier(&r->init_done);
++    rgpu_stop_device_writes(&r->exit, NULL);
++    qemu_remove_exit_notifier(&r->exit);
++    memory_region_del_subregion(get_system_memory(), &r->mr);
++    object_unparent(OBJECT(&r->mr));
++    vdev->rgpu = NULL;
++}
+diff --git a/hw/vfio/rgpu-display.h b/hw/vfio/rgpu-display.h
+new file mode 100644
+index 000000000..cc42a2759
+--- /dev/null
++++ b/hw/vfio/rgpu-display.h
+@@ -0,0 +1,94 @@
++/*
++ * Raphael iGPU writeback display for vfio-pci.
++ *
++ * The passed-through GPU's display writeback engine writes each composited
++ * frame into a RAM region that QEMU places in guest-physical space but does
++ * not describe to the guest firmware. The guest driver programs writeback
++ * from the control page at the start of that region; QEMU presents the
++ * buffers in its own console without any emulated display adapter.
++ *
++ * SPDX-License-Identifier: GPL-2.0-or-later
++ */
++
++#ifndef HW_VFIO_RGPU_DISPLAY_H
++#define HW_VFIO_RGPU_DISPLAY_H
++
++#define RGPU_DISPLAY_MAGIC        0x31445052u /* "RPD1" */
++#define RGPU_DISPLAY_VERSION      1u
++#define RGPU_DISPLAY_CTL_BYTES    (2u << 20)
++#define RGPU_DISPLAY_MAX_BUFFERS  4u
++#define RGPU_DISPLAY_BUFFER_BYTES (64u << 20)
++#define RGPU_CURSOR_OFFSET        0x100000u   /* inside the control area */
++#define RGPU_CURSOR_MAX_DIM       256u
++#define RGPU_DISPLAY_DEFAULT_GPA  0x4000000000ULL
++
++/* Little-endian control page at offset 0 of the region. */
++typedef struct RgpuDisplayCtl {
++    /* Written by QEMU; read-only for the guest. */
++    uint32_t magic;            /* 0x000 */
++    uint32_t version;          /* 0x004 */
++    uint64_t region_gpa;       /* 0x008 */
++    uint64_t region_size;      /* 0x010 */
++    uint32_t buffer_offset;    /* 0x018 offset of buffer 0 in the region */
++    uint32_t buffer_stride;    /* 0x01c */
++    uint32_t max_buffers;      /* 0x020 */
++    uint32_t max_bytes;        /* 0x024 per buffer */
++    uint32_t host_seq;         /* 0x028 bumped after req_* change */
++    uint32_t req_width;        /* 0x02c host window size, device pixels */
++    uint32_t req_height;       /* 0x030 */
++    uint32_t req_refresh_mhz;  /* 0x034 host monitor refresh */
++    uint32_t viewer_active;    /* 0x038 nonzero while the console refreshes */
++    uint32_t host_frames;      /* 0x03c distinct buffers presented */
++    uint64_t host_heartbeat_ns;/* 0x040 realtime clock at last refresh */
++    uint32_t host_polls;       /* 0x048 console refresh callbacks */
++    uint32_t host_error;       /* 0x04c last rejected guest configuration */
++    uint32_t sample_crc;       /* 0x050 sparse content checksum, last frame */
++    uint32_t crc_changes;      /* 0x054 presented frames whose checksum changed */
++    uint32_t sampled_frames;   /* 0x058 presented frames that were sampled */
++    uint8_t  reserved0[0x100 - 0x5c];
++    /* Written by the guest. guest_seq is written last, after the fields. */
++    uint32_t guest_magic;      /* 0x100 RGPU_DISPLAY_MAGIC when valid */
++    uint32_t guest_seq;        /* 0x104 */
++    uint32_t active;           /* 0x108 writeback running */
++    uint32_t width;            /* 0x10c */
++    uint32_t height;           /* 0x110 */
++    uint32_t pitch;            /* 0x114 bytes */
++    uint32_t drm_fourcc;       /* 0x118 */
++    uint32_t nbuf;             /* 0x11c ring size, 1..RGPU_DISPLAY_MAX_BUFFERS */
++    uint32_t status_bar;       /* 0x120 BAR holding the buffer status register */
++    uint32_t status_offset;    /* 0x124 byte offset in that BAR */
++    uint32_t status_shift;     /* 0x128 */
++    uint32_t status_mask;      /* 0x12c index field mask after shift */
++    uint32_t status_lag;       /* 0x130 0: field is the last completed buffer,
++                                        1: field is the buffer being written */
++    uint32_t ack_host_seq;     /* 0x134 last host_seq the guest acted on */
++    uint32_t guest_frames;     /* 0x138 optional guest frame counter */
++    uint32_t stop_count;       /* 0x13c entries in stop[], cleared on QEMU exit */
++    struct {
++        uint32_t bar, offset, clear_mask, pad;
++    } stop[4];                 /* 0x140 read-modify-write, stops device DMA */
++    uint32_t status_base;      /* 0x180 value of the field for buffer 0 (MCIF_WB: 1) */
++    uint32_t sdma_fence;       /* 0x184 status word written by a device DMA (bar 0xff) */
++    /*
++     * Hardware cursor plane: linear ARGB8888 image at RGPU_CURSOR_OFFSET in the region.
++     * cursor_seq changes after a new image landed, cursor_pos_seq after a position change.
++     */
++    uint32_t cursor_seq;       /* 0x188 */
++    uint32_t cursor_width;     /* 0x18c */
++    uint32_t cursor_height;    /* 0x190 */
++    uint32_t cursor_pitch;     /* 0x194 bytes */
++    uint32_t cursor_pos_seq;   /* 0x198 */
++    uint32_t cursor_x;         /* 0x19c surface pixels, hot spot not subtracted */
++    uint32_t cursor_y;         /* 0x1a0 */
++    uint32_t cursor_hot_x;     /* 0x1a4 */
++    uint32_t cursor_hot_y;     /* 0x1a8 */
++    uint32_t cursor_enabled;   /* 0x1ac */
++    uint8_t  reserved1[0x1000 - 0x1b0];
++} RgpuDisplayCtl;
++
++typedef struct VFIOPCIDevice VFIOPCIDevice;
++typedef struct RgpuDisplay RgpuDisplay;
++bool vfio_rgpu_display_init(VFIOPCIDevice *vdev, Error **errp);
++void vfio_rgpu_display_finalize(VFIOPCIDevice *vdev);
++
++#endif /* HW_VFIO_RGPU_DISPLAY_H */

@@ -1,0 +1,139 @@
+--- a/subprojects/spice-common/common/canvas_base.c
++++ b/subprojects/spice-common/common/canvas_base.c
+@@ -122,6 +122,7 @@
+ 
+ typedef struct CanvasBase {
+     SpiceCanvas parent;
++    int rgpu_wrap_ok;
+     uint32_t color_shift;
+     uint32_t color_mask;
+     QuicData quic_data;
+@@ -694,6 +695,37 @@
+                                           bitmap->format == SPICE_BITMAP_FMT_RGBA);
+     }
+ 
++    /* RGPU: wrap uncached, single-chunk, top-down 32-bit raw bitmaps in place
++     * instead of copying them; the message outlives this synchronous draw. */
++    if (bitmap->x >= 3000 && getenv("RGPU_WRAP_DEBUG")) {
++        static int logged;
++        if (logged++ < 3) {
++            fprintf(stderr, "RGPU_WRAP ok=%d chunks=%u fmt=%d flags=0x%x pixfmt=0x%x stride=%d x=%d y=%d len=%zu align=%u\n",
++                    canvas->rgpu_wrap_ok, bitmap->data->num_chunks, bitmap->format, bitmap->flags,
++                    (unsigned)format, bitmap->stride, bitmap->x, bitmap->y,
++                    (size_t)bitmap->data->chunk[0].len, (unsigned)((uintptr_t)src & 63));
++        }
++    }
++    if (bitmap->data->num_chunks == 1 && bitmap->format == SPICE_BITMAP_FMT_32BIT &&
++        bitmap->data->chunk[0].len >= (1 << 20)) {
++        extern int rgpu_large_misalign;
++        rgpu_large_misalign = (int)((uintptr_t)src & 3);
++    }
++    if (canvas->rgpu_wrap_ok && bitmap->data->num_chunks == 1 &&
++        bitmap->format == SPICE_BITMAP_FMT_32BIT &&
++        (bitmap->flags & SPICE_BITMAP_FLAGS_TOP_DOWN) &&
++        format == PIXMAN_x8r8g8b8 && bitmap->stride % 4 == 0 &&
++        bitmap->stride >= bitmap->x * 4 &&
++        (size_t)bitmap->stride * bitmap->y <= bitmap->data->chunk[0].len &&
++        ((uintptr_t)src & 3) == 0) {
++        image = pixman_image_create_bits(format, bitmap->x, bitmap->y,
++                                         (uint32_t *)src, bitmap->stride);
++        if (image != NULL) {
++            spice_pixman_image_set_format(image, format); /* no owned data */
++            return image;
++        }
++    }
++
+     image = surface_create(format,
+                            bitmap->x, bitmap->y, FALSE);
+     if (image == NULL) {
+@@ -1178,7 +1210,14 @@
+         want_original = TRUE;
+     }
+ 
++    canvas->rgpu_wrap_ok = real_get && !saved_want_original &&
++        !(descriptor->flags & SPICE_IMAGE_FLAGS_CACHE_ME) &&
++#ifdef SW_CANVAS_CACHE
++        !(descriptor->flags & SPICE_IMAGE_FLAGS_CACHE_REPLACE_ME) &&
++#endif
++        !(descriptor->flags & SPICE_IMAGE_FLAGS_HIGH_BITS_SET);
+     surface = get_surface_from_canvas(canvas, image, want_original);
++    canvas->rgpu_wrap_ok = FALSE;
+ 
+     spice_return_val_if_fail(surface != NULL, NULL);
+     spice_return_val_if_fail(spice_pixman_image_get_format(surface, &surface_format), NULL);
+--- a/src/spice-channel.c
++++ b/src/spice-channel.c
+@@ -528,6 +528,35 @@
+     in->refcount++;
+ }
+ 
++#define RGPU_LARGE_MSG (1 << 20)
++int rgpu_large_misalign; /* set by the canvas for wrapped-candidate raw bitmaps */
++static int rgpu_large_shift;
++static uint8_t *rgpu_large_cached;
++static size_t rgpu_large_cached_size;
++
++static uint8_t *rgpu_large_take(size_t size, size_t *out_size)
++{
++    if (rgpu_large_cached && rgpu_large_cached_size >= size) {
++        uint8_t *p = rgpu_large_cached;
++        *out_size = rgpu_large_cached_size;
++        rgpu_large_cached = NULL;
++        return p;
++    }
++    *out_size = size;
++    return g_malloc(size);
++}
++
++static void rgpu_large_release(uint8_t *p, size_t size)
++{
++    if (!rgpu_large_cached || rgpu_large_cached_size < size) {
++        g_free(rgpu_large_cached);
++        rgpu_large_cached = p;
++        rgpu_large_cached_size = size;
++    } else {
++        g_free(p);
++    }
++}
++
+ G_GNUC_INTERNAL
+ void spice_msg_in_unref(SpiceMsgIn *in)
+ {
+@@ -540,6 +569,8 @@
+         in->pfree(in->parsed);
+     if (in->parent) {
+         spice_msg_in_unref(in->parent);
++    } else if (in->alloc) {
++        rgpu_large_release(in->alloc, in->alloc_size);
+     } else {
+         g_free(in->data);
+     }
+@@ -2102,7 +2133,16 @@
+     /* FIXME: do not allow others to take ref on in, and use realloc here?
+      * this would avoid malloc/free on each message?
+      */
+-    in->data = g_malloc0(msg_size);
++    if (msg_size >= RGPU_LARGE_MSG) {
++        /* RGPU: reuse one large receive buffer instead of a fresh mmap per
++         * 4K frame, and shift it so raw pixel data lands 4-byte aligned. */
++        rgpu_large_shift = (rgpu_large_shift - rgpu_large_misalign) & 3;
++        rgpu_large_misalign = 0;
++        in->alloc = rgpu_large_take((size_t)msg_size + 4, &in->alloc_size);
++        in->data = in->alloc + rgpu_large_shift;
++    } else {
++        in->data = g_malloc0(msg_size);
++    }
+     spice_channel_read(channel, in->data, msg_size);
+     if (c->has_error)
+         goto end;
+--- a/src/spice-channel-priv.h
++++ b/src/spice-channel-priv.h
+@@ -57,6 +57,8 @@
+     SpiceChannel          *channel;
+     uint8_t               header[MAX_SPICE_DATA_HEADER_SIZE];
+     uint8_t               *data;
++    uint8_t               *alloc;   /* RGPU: large-message allocation base */
++    size_t                alloc_size;
+     int                   dpos;
+     uint8_t               *parsed;
+     size_t                psize;
